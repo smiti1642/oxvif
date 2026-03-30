@@ -1,10 +1,20 @@
+//! SOAP 1.2 envelope builder.
+//!
+//! [`SoapEnvelope`] constructs a fully-namespaced `<s:Envelope>` string ready
+//! to be posted over HTTP. All ONVIF-relevant XML namespace prefixes are
+//! declared on the root element so that body fragments can use any prefix
+//! without declaring it locally.
+//!
+//! `<s:Header>` is emitted only when a [`WsSecurityToken`] or a `<wsa:To>`
+//! address is provided; otherwise the envelope has no header element.
+
 use crate::soap::security::WsSecurityToken;
 use std::fmt::Write;
 
-// ── Namespace 清單（唯一需要維護的地方）─────────────────────────────────────────
+// ── Namespace declarations ────────────────────────────────────────────────────
 
-/// 所有 ONVIF SOAP 請求共用的 namespace 宣告。
-/// 要新增服務只需在這裡加一行。
+/// All ONVIF-relevant XML namespace prefix→URI pairs declared on every
+/// envelope. Add new service namespaces here; no other change is required.
 const NAMESPACES: &[(&str, &str)] = &[
     ("s", "http://www.w3.org/2003/05/soap-envelope"),
     ("enc", "http://www.w3.org/2003/05/soap-encoding"),
@@ -31,17 +41,34 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("ter", "http://www.onvif.org/ver10/error"),
 ];
 
-// ── SoapEnvelope ───────────────────────────────────────────────────────────────
+// ── SoapEnvelope ──────────────────────────────────────────────────────────────
 
+/// Builder for a SOAP 1.2 envelope.
+///
+/// # Example
+///
+/// ```
+/// use oxvif::soap::{SoapEnvelope, WsSecurityToken};
+///
+/// let token = WsSecurityToken::from_parts("admin", "digest==", "nonce==", "2024-01-01T00:00:00Z");
+/// let xml = SoapEnvelope::new("<tds:GetCapabilities/>".into())
+///     .with_security(token)
+///     .build();
+///
+/// assert!(xml.contains("<wsse:Security>"));
+/// assert!(xml.contains("<s:Body>"));
+/// ```
 pub struct SoapEnvelope {
+    /// Optional WS-Security UsernameToken placed in `<s:Header>`.
     security: Option<WsSecurityToken>,
-    /// `<s:Body>` 內的 XML 內容（由呼叫者提供）
+    /// Raw XML fragment placed inside `<s:Body>`.
     body_content: String,
-    /// `<wsa:To>` 位址（可選，部分裝置需要）
+    /// Optional `<wsa:To>` address placed in `<s:Header>`.
     wsa_to: Option<String>,
 }
 
 impl SoapEnvelope {
+    /// Create an envelope with the given body fragment.
     pub fn new(body_content: String) -> Self {
         Self {
             security: None,
@@ -50,31 +77,33 @@ impl SoapEnvelope {
         }
     }
 
+    /// Attach a WS-Security `UsernameToken` to the SOAP header.
     pub fn with_security(mut self, token: WsSecurityToken) -> Self {
         self.security = Some(token);
         self
     }
 
+    /// Set the `<wsa:To>` WS-Addressing destination in the SOAP header.
+    /// Some devices require this to match the service endpoint URL.
     pub fn with_wsa_to(mut self, to: impl Into<String>) -> Self {
         self.wsa_to = Some(to.into());
         self
     }
 
-    /// 建構完整的 SOAP Envelope XML 字串
+    /// Serialise the envelope to a UTF-8 XML string.
     pub fn build(self) -> String {
         let mut out = String::with_capacity(2048);
 
-        // XML 宣告
         out.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
 
-        // <s:Envelope> 開頭，帶上所有 namespace
+        // Root element with all namespace declarations
         out.push_str("<s:Envelope");
         for (prefix, uri) in NAMESPACES {
             write!(out, r#" xmlns:{prefix}="{uri}""#).unwrap();
         }
         out.push('>');
 
-        // <s:Header>（只有 security 或 wsa:To 時才輸出）
+        // Header — emitted only when there is content to put inside
         let has_header = self.security.is_some() || self.wsa_to.is_some();
         if has_header {
             out.push_str("<s:Header>");
@@ -87,29 +116,25 @@ impl SoapEnvelope {
             out.push_str("</s:Header>");
         }
 
-        // <s:Body>
         out.push_str("<s:Body>");
         out.push_str(&self.body_content);
         out.push_str("</s:Body>");
-
         out.push_str("</s:Envelope>");
+
         out
     }
 }
 
-// ── 單元測試 ────────────────────────────────────────────────────────────────────
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::soap::security::WsSecurityToken;
 
-    // 解析輔助：用 quick-xml 驗證 XML 可被正確解析
     fn parse_ok(xml: &str) -> bool {
         crate::soap::xml::XmlNode::parse(xml).is_ok()
     }
-
-    // ── 基本結構 ───────────────────────────────────────────────────────────────
 
     #[test]
     fn test_build_produces_valid_xml() {
@@ -139,20 +164,15 @@ mod tests {
         assert!(xml.contains("</s:Body>"));
     }
 
-    // ── Namespace ──────────────────────────────────────────────────────────────
-
     #[test]
     fn test_required_namespaces_present() {
         let xml = SoapEnvelope::new(String::new()).build();
-        // 核心 namespace 必須存在
         assert!(xml.contains(r#"xmlns:s="http://www.w3.org/2003/05/soap-envelope""#));
         assert!(xml.contains(r#"xmlns:tt="http://www.onvif.org/ver10/schema""#));
         assert!(xml.contains(r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#));
         assert!(xml.contains(r#"xmlns:wsse=""#));
         assert!(xml.contains(r#"xmlns:wsu=""#));
     }
-
-    // ── Header 輸出規則 ────────────────────────────────────────────────────────
 
     #[test]
     fn test_no_header_when_no_security_no_wsa() {
@@ -191,14 +211,11 @@ mod tests {
         let xml = SoapEnvelope::new(String::new())
             .with_security(token)
             .build();
-
         assert!(xml.contains("<wsse:Username>operator</wsse:Username>"));
         assert!(xml.contains(">Zm9vYmFy</wsse:Password>"));
         assert!(xml.contains(">bm9uY2U=</wsse:Nonce>"));
         assert!(xml.contains(">2024-06-15T08:00:00Z</wsu:Created>"));
     }
-
-    // ── 完整 round-trip 驗證 ───────────────────────────────────────────────────
 
     #[test]
     fn test_full_envelope_is_parseable_and_navigable() {
@@ -212,14 +229,11 @@ mod tests {
         .with_security(token)
         .build();
 
-        // XML 必須可被解析
         assert!(parse_ok(&envelope));
 
-        // Body 必須可找到
         let body = parse_soap_body(&envelope).unwrap();
         assert_eq!(body.local_name, "Body");
 
-        // request body 節點可被導覽
         let req = find_response(&body, "GetCapabilities").unwrap();
         assert_eq!(req.child("Category").unwrap().text(), "All");
     }

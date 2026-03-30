@@ -1,7 +1,11 @@
 [package]
-name = "rust_ht"
+name = "oxvif"
 version = "0.1.0"
 edition = "2024"
+description = "Async Rust client library for the ONVIF IP camera protocol"
+license = "MIT"
+keywords = ["onvif", "camera", "rtsp", "soap", "ip-camera"]
+categories = ["network-programming", "multimedia"]
 
 [dependencies]
 quick-xml  = "0.36"

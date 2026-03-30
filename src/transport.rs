@@ -1,23 +1,54 @@
+//! HTTP transport abstraction for SOAP over HTTP/HTTPS.
+//!
+//! [`Transport`] is a thin async trait that isolates the network layer from
+//! SOAP encoding and ONVIF business logic. The default implementation,
+//! [`HttpTransport`], uses `reqwest` with `rustls`. In unit tests you can
+//! swap in any mock that implements the trait via
+//! [`OnvifClient::with_transport`](crate::client::OnvifClient::with_transport).
+//!
+//! ## HTTP status handling
+//!
+//! | Status | Returned as |
+//! |--------|-------------|
+//! | 200    | `Ok(body)`  |
+//! | 500    | `Ok(body)`  — SOAP Fault; the SOAP layer parses the fault detail |
+//! | other  | `Err(TransportError::HttpStatus { status, body })` |
+
 use async_trait::async_trait;
 use thiserror::Error;
 
-// ── 錯誤型別 ───────────────────────────────────────────────────────────────────
+// ── Error ─────────────────────────────────────────────────────────────────────
 
+/// Errors produced by the transport layer before SOAP parsing begins.
 #[derive(Debug, Error)]
 pub enum TransportError {
+    /// The underlying HTTP client returned an error (connection refused, TLS
+    /// handshake failure, timeout, etc.).
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
-    /// 非 200/500 的 HTTP 狀態（500 含 SOAP Fault，讓 SOAP 層自己解析）
+    /// The server responded with an unexpected HTTP status code.
+    ///
+    /// HTTP 500 is **not** included here; it is passed up as `Ok` so the SOAP
+    /// layer can extract the `<s:Fault>` detail.
     #[error("HTTP {status}: {body}")]
     HttpStatus { status: u16, body: String },
 }
 
-// ── Trait ──────────────────────────────────────────────────────────────────────
+// ── Trait ─────────────────────────────────────────────────────────────────────
 
-/// 可被 mock 替換的 HTTP 傳輸層
+/// Mockable HTTP transport for SOAP requests.
+///
+/// Implement this trait to replace the default `reqwest`-based transport,
+/// for example to add retry logic, custom TLS roots, or test mocks.
 #[async_trait]
 pub trait Transport: Send + Sync {
+    /// Send a SOAP request and return the raw response body.
+    ///
+    /// # Arguments
+    /// * `url`    – Full endpoint URL (e.g. `http://192.168.1.1/onvif/device_service`)
+    /// * `action` – SOAP action URI placed in the `Content-Type` header
+    /// * `body`   – Complete serialised SOAP envelope
     async fn soap_post(
         &self,
         url: &str,
@@ -26,13 +57,15 @@ pub trait Transport: Send + Sync {
     ) -> Result<String, TransportError>;
 }
 
-// ── 真實實作 ────────────────────────────────────────────────────────────────────
+// ── HttpTransport ─────────────────────────────────────────────────────────────
 
+/// Production HTTP transport backed by [`reqwest`] with `rustls`.
 pub struct HttpTransport {
     client: reqwest::Client,
 }
 
 impl HttpTransport {
+    /// Create a new transport with default settings.
     pub fn new() -> Self {
         Self {
             client: reqwest::Client::new(),
@@ -54,14 +87,15 @@ impl Transport for HttpTransport {
         action: &str,
         body: String,
     ) -> Result<String, TransportError> {
-        // 原始 C 碼格式：Content-Type 裡夾帶 action
+        // ONVIF spec §5.2: the SOAPAction is carried in the Content-Type
+        // parameter rather than a separate header (SOAP 1.2 style).
         let content_type = format!("application/soap+xml; charset=utf-8; action=\"{action}\"");
 
         let response = self
             .client
             .post(url)
             .header("Content-Type", content_type)
-            .header("User-Agent", "rust_ht onvif client/0.1")
+            .header("User-Agent", "oxvif/0.1")
             .body(body)
             .send()
             .await?;
@@ -69,7 +103,8 @@ impl Transport for HttpTransport {
         let status = response.status().as_u16();
         let text = response.text().await?;
 
-        // 200 = 正常回應；500 = SOAP Fault（讓 SOAP 層解析）；其他 = 真正的 HTTP 錯誤
+        // HTTP 500 carries a SOAP Fault body; return it as Ok so the SOAP
+        // layer can parse the fault code and reason.
         if status == 200 || status == 500 {
             Ok(text)
         } else {
@@ -78,7 +113,7 @@ impl Transport for HttpTransport {
     }
 }
 
-// ── 單元測試 ────────────────────────────────────────────────────────────────────
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -91,7 +126,6 @@ mod tests {
         r#"<s:Envelope><s:Body><tds:GetCapabilitiesResponse/></s:Body></s:Envelope>"#
     }
 
-    // ── 200 回應正常傳回 ────────────────────────────────────────────────────────
     #[tokio::test]
     async fn test_200_returns_body() {
         let mut server = mockito::Server::new_async().await;
@@ -117,7 +151,6 @@ mod tests {
         mock.assert_async().await;
     }
 
-    // ── 500 含 SOAP Fault，傳回 Ok 讓 SOAP 層處理 ──────────────────────────────
     #[tokio::test]
     async fn test_500_returns_ok_for_soap_fault() {
         let fault_xml = r#"<s:Envelope><s:Body><s:Fault><s:Code><s:Value>s:Sender</s:Value></s:Code></s:Fault></s:Body></s:Envelope>"#;
@@ -141,13 +174,12 @@ mod tests {
 
         assert!(
             result.is_ok(),
-            "500 should be Ok so SOAP layer can parse Fault"
+            "HTTP 500 should be Ok so SOAP layer can parse the Fault"
         );
         assert_eq!(result.unwrap(), fault_xml);
         mock.assert_async().await;
     }
 
-    // ── 非 200/500 的狀態碼回傳 Err ────────────────────────────────────────────
     #[tokio::test]
     async fn test_non_soap_status_returns_err() {
         let mut server = mockito::Server::new_async().await;
@@ -174,7 +206,6 @@ mod tests {
         mock.assert_async().await;
     }
 
-    // ── Content-Type header 包含 action ────────────────────────────────────────
     #[tokio::test]
     async fn test_content_type_contains_action() {
         let expected_ct = format!("application/soap+xml; charset=utf-8; action=\"{ACTION}\"");
@@ -200,7 +231,6 @@ mod tests {
         mock.assert_async().await;
     }
 
-    // ── request body 原封不動送出 ──────────────────────────────────────────────
     #[tokio::test]
     async fn test_body_is_sent_as_is() {
         let mut server = mockito::Server::new_async().await;

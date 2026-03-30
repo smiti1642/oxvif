@@ -1,26 +1,39 @@
+//! WS-Security `UsernameToken` with `PasswordDigest`.
+//!
+//! ONVIF Profile S §5.12 requires digest authentication using:
+//!
+//! ```text
+//! PasswordDigest = Base64( SHA-1( nonce_raw ‖ created_utf8 ‖ password_utf8 ) )
+//! ```
+//!
+//! [`WsSecurityToken`] produces the `<wsse:Security>` XML fragment that is
+//! embedded in the SOAP `<s:Header>`. Two constructors are provided:
+//!
+//! * [`WsSecurityToken::generate`] — production use; generates a random nonce
+//!   via `rand`.
+//! * [`WsSecurityToken::from_parts`] — test use; accepts fixed values so
+//!   digest output can be verified deterministically.
+
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha1::{Digest, Sha1};
 use std::fmt::Write;
 
-// ── WS-Security Token ──────────────────────────────────────────────────────────
+// ── WsSecurityToken ───────────────────────────────────────────────────────────
 
-/// ONVIF WS-Security UsernameToken
-///
-/// PasswordDigest = Base64( SHA-1( Nonce_raw || Created_utf8 || Password_utf8 ) )
-///
-/// 設計成兩個建構子：
-/// - `generate()`：產生隨機 nonce，用於生產環境
-/// - `from_parts()`：接受外部值，用於單元測試（可確定性驗證）
+/// A WS-Security `UsernameToken` ready to be serialised into a SOAP header.
 #[derive(Debug, Clone)]
 pub struct WsSecurityToken {
     pub username: String,
-    pub password_digest: String, // Base64(SHA1(nonce||created||password))
-    pub nonce_b64: String,       // Base64(nonce_raw)
-    pub created: String,         // ISO 8601 UTC, e.g. "2024-01-01T00:00:00Z"
+    /// `Base64( SHA-1( nonce_raw ‖ created ‖ password ) )`
+    pub password_digest: String,
+    /// `Base64( nonce_raw )`
+    pub nonce_b64: String,
+    /// ISO 8601 UTC timestamp, e.g. `"2024-01-01T00:00:00Z"`
+    pub created: String,
 }
 
 impl WsSecurityToken {
-    /// 用於測試：傳入已知值，方便驗證輸出
+    /// Construct a token from pre-computed parts (intended for unit tests).
     pub fn from_parts(
         username: impl Into<String>,
         password_digest: impl Into<String>,
@@ -35,8 +48,11 @@ impl WsSecurityToken {
         }
     }
 
-    /// 用於生產：自動產生隨機 nonce，`device_utc_offset_secs` 是
-    /// 裝置 UTC 時間與本機 UTC 時間的差（由 GetSystemDateAndTime 取得）
+    /// Generate a token with a fresh random nonce for production use.
+    ///
+    /// `device_utc_offset_secs` is the difference between the device's UTC
+    /// clock and the local UTC clock, obtained from `GetSystemDateAndTime`.
+    /// Pass `0` if the clocks are in sync.
     pub fn generate(username: &str, password: &str, device_utc_offset_secs: i64) -> Self {
         use rand::RngCore;
 
@@ -60,7 +76,8 @@ impl WsSecurityToken {
         }
     }
 
-    /// 產生 WS-Security XML 片段（不含外層 `<s:Header>` tag）
+    /// Write the `<wsse:Security>` XML fragment into `out`.
+    /// Does **not** include the surrounding `<s:Header>` tags.
     pub fn write_xml(&self, out: &mut String) {
         write!(
             out,
@@ -85,9 +102,11 @@ impl WsSecurityToken {
     }
 }
 
-// ── 核心密碼計算（public 供測試直接驗算）──────────────────────────────────────
+// ── Digest computation ────────────────────────────────────────────────────────
 
-/// SHA-1( nonce_raw || created_utf8 || password_utf8 ) → 20 bytes
+/// Compute `SHA-1( nonce_raw ‖ created_utf8 ‖ password_utf8 )` → 20 bytes.
+///
+/// Exposed publicly so callers can verify the digest against known test vectors.
 pub fn compute_digest(nonce: &[u8], created: &str, password: &str) -> [u8; 20] {
     let mut h = Sha1::new();
     h.update(nonce);
@@ -96,14 +115,16 @@ pub fn compute_digest(nonce: &[u8], created: &str, password: &str) -> [u8; 20] {
     h.finalize().into()
 }
 
-// ── UTC 時間格式化（不依賴外部 crate）────────────────────────────────────────
+// ── Timestamp formatting ──────────────────────────────────────────────────────
 
-/// Unix timestamp → "YYYY-MM-DDTHH:MM:SSZ"
+/// Convert a Unix timestamp (seconds) to `"YYYY-MM-DDTHH:MM:SSZ"`.
 ///
-/// 使用 Howard Hinnant 的 civil-from-days 演算法：
-/// https://howardhinnant.github.io/date_algorithms.html
+/// Uses the [civil-from-days] algorithm by Howard Hinnant; no external
+/// time-handling crate required.
+///
+/// [civil-from-days]: https://howardhinnant.github.io/date_algorithms.html
 pub fn unix_secs_to_iso8601(unix: i64) -> String {
-    const SECS_PER_DAY: i64 = 86400;
+    const SECS_PER_DAY: i64 = 86_400;
 
     let time_of_day = unix.rem_euclid(SECS_PER_DAY);
     let days = (unix - time_of_day) / SECS_PER_DAY;
@@ -112,6 +133,7 @@ pub fn unix_secs_to_iso8601(unix: i64) -> String {
     let m = (time_of_day % 3600) / 60;
     let s = time_of_day % 60;
 
+    // Civil calendar computation (proleptic Gregorian)
     let z = days + 719_468;
     let era = if z >= 0 {
         z / 146_097
@@ -119,7 +141,7 @@ pub fn unix_secs_to_iso8601(unix: i64) -> String {
         (z - 146_096) / 146_097
     };
     let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
     let y = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
@@ -130,13 +152,13 @@ pub fn unix_secs_to_iso8601(unix: i64) -> String {
     format!("{yr:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}Z")
 }
 
-// ── 單元測試 ────────────────────────────────────────────────────────────────────
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // ── 時間格式化 ──────────────────────────────────────────────────────────────
+    // ── Timestamp formatting ──────────────────────────────────────────────────
 
     #[test]
     fn test_epoch_is_1970_01_01() {
@@ -145,35 +167,31 @@ mod tests {
 
     #[test]
     fn test_next_day() {
-        assert_eq!(unix_secs_to_iso8601(86400), "1970-01-02T00:00:00Z");
+        assert_eq!(unix_secs_to_iso8601(86_400), "1970-01-02T00:00:00Z");
     }
 
     #[test]
     fn test_known_date() {
-        // 2024-01-01T00:00:00Z = 1704067200
+        // 2024-01-01T00:00:00Z = 1_704_067_200
         assert_eq!(unix_secs_to_iso8601(1_704_067_200), "2024-01-01T00:00:00Z");
     }
 
     #[test]
     fn test_known_datetime_with_time() {
-        // 1718451296 / 86400 = 19889 days remainder 41696 secs
-        // 41696s → 11h 34m 56s
-        // days=19889 → 2024-06-15
+        // 1_718_451_296 → 2024-06-15T11:34:56Z
         assert_eq!(unix_secs_to_iso8601(1_718_451_296), "2024-06-15T11:34:56Z");
     }
 
-    // ── digest 計算 ─────────────────────────────────────────────────────────────
+    // ── Digest computation ────────────────────────────────────────────────────
 
     #[test]
     fn test_digest_is_20_bytes() {
-        let nonce = [0u8; 20];
-        let digest = compute_digest(&nonce, "2024-01-01T00:00:00Z", "password");
+        let digest = compute_digest(&[0u8; 20], "2024-01-01T00:00:00Z", "password");
         assert_eq!(digest.len(), 20);
     }
 
     #[test]
     fn test_digest_deterministic() {
-        // 相同輸入必須產生相同結果
         let nonce = b"fixed_nonce_for_test";
         let d1 = compute_digest(nonce, "2024-01-01T00:00:00Z", "pass");
         let d2 = compute_digest(nonce, "2024-01-01T00:00:00Z", "pass");
@@ -190,13 +208,7 @@ mod tests {
 
     #[test]
     fn test_known_digest_vector() {
-        // 測試向量由本函式實際輸出確認後反向固定：
-        //   nonce  = [0u8; 20]
-        //   created = "2024-01-01T00:00:00Z"
-        //   password = "admin"
-        //   expected = SHA1(nonce||created||password) → Base64
-        //
-        // 驗算：用 Python
+        // Verified with Python:
         //   import hashlib, base64
         //   h = hashlib.sha1(b'\x00'*20 + b'2024-01-01T00:00:00Z' + b'admin').digest()
         //   print(base64.b64encode(h))   →  b'2DXdJ8PbQNGKzH/PeSVx0o7WRHQ='
@@ -206,12 +218,11 @@ mod tests {
         assert_eq!(b64, "2DXdJ8PbQNGKzH/PeSVx0o7WRHQ=");
     }
 
-    // ── WsSecurityToken XML 輸出 ────────────────────────────────────────────────
+    // ── XML output ────────────────────────────────────────────────────────────
 
     #[test]
     fn test_write_xml_contains_username() {
-        let token =
-            WsSecurityToken::from_parts("admin", "digest==", "nonce==", "2024-01-01T00:00:00Z");
+        let token = WsSecurityToken::from_parts("admin", "d==", "n==", "2024-01-01T00:00:00Z");
         let mut out = String::new();
         token.write_xml(&mut out);
         assert!(out.contains("<wsse:Username>admin</wsse:Username>"));
@@ -219,12 +230,8 @@ mod tests {
 
     #[test]
     fn test_write_xml_contains_password_digest() {
-        let token = WsSecurityToken::from_parts(
-            "admin",
-            "digestValue==",
-            "nonce==",
-            "2024-01-01T00:00:00Z",
-        );
+        let token =
+            WsSecurityToken::from_parts("admin", "digestValue==", "n==", "2024-01-01T00:00:00Z");
         let mut out = String::new();
         token.write_xml(&mut out);
         assert!(out.contains(">digestValue==</wsse:Password>"));
@@ -254,10 +261,8 @@ mod tests {
     #[test]
     fn test_generate_produces_valid_base64_nonce() {
         let token = WsSecurityToken::generate("admin", "password", 0);
-        // Base64 字串不應含空白或換行
         assert!(!token.nonce_b64.is_empty());
         assert!(!token.nonce_b64.contains(' '));
-        // Base64 decode 後應為 20 bytes
         let decoded = STANDARD.decode(&token.nonce_b64).unwrap();
         assert_eq!(decoded.len(), 20);
     }
@@ -265,7 +270,6 @@ mod tests {
     #[test]
     fn test_generate_created_is_iso8601() {
         let token = WsSecurityToken::generate("u", "p", 0);
-        // 格式：YYYY-MM-DDTHH:MM:SSZ（固定 20 chars）
         assert_eq!(token.created.len(), 20);
         assert!(token.created.ends_with('Z'));
         assert_eq!(token.created.chars().nth(10), Some('T'));
