@@ -16,6 +16,7 @@ reqwest    = { version = "0.12", default-features = false, features = ["rustls-t
 tokio      = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 thiserror  = "2"
 async-trait = "0.1"
+dotenvy = "0.15"
 
 [dev-dependencies]
 mockito = "1"
