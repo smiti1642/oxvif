@@ -25,12 +25,17 @@ impl Config {
         // Load .env file if present; ignore error if it doesn't exist.
         let _ = dotenvy::dotenv();
 
-        let camera_url = env::var("ONVIF_URL")
-            .expect("ONVIF_URL is not set. Copy .env.example to .env and fill in your camera details.");
+        let camera_url = env::var("ONVIF_URL").expect(
+            "ONVIF_URL is not set. Copy .env.example to .env and fill in your camera details.",
+        );
         let username = env::var("ONVIF_USERNAME").unwrap_or_else(|_| "admin".to_string());
         let password = env::var("ONVIF_PASSWORD").unwrap_or_else(|_| String::new());
 
-        Self { camera_url, username, password }
+        Self {
+            camera_url,
+            username,
+            password,
+        }
     }
 }
 
@@ -43,10 +48,10 @@ async fn main() {
     let cfg = Config::from_env();
 
     let result = match example.as_str() {
-        "full-workflow"   => full_workflow(&cfg).await,
-        "device-info"     => device_info_example(&cfg).await,
-        "stream-uris"     => stream_uris(&cfg).await,
-        "error-handling"  => error_handling_example(&cfg).await,
+        "full-workflow" => full_workflow(&cfg).await,
+        "device-info" => device_info_example(&cfg).await,
+        "stream-uris" => stream_uris(&cfg).await,
+        "error-handling" => error_handling_example(&cfg).await,
         _ => {
             print_help();
             return;
@@ -107,7 +112,7 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
         println!(
             "  [{token}] {name}  (fixed={fixed})",
             token = p.token,
-            name  = p.name,
+            name = p.name,
             fixed = p.fixed,
         );
     }
@@ -141,7 +146,7 @@ fn print_capabilities(caps: &Capabilities) {
 fn print_optional(label: &str, value: &Option<String>) {
     match value {
         Some(v) => println!("{label}: {v}"),
-        None    => println!("{label}: (not supported)"),
+        None => println!("{label}: (not supported)"),
     }
 }
 
@@ -199,7 +204,7 @@ async fn stream_uris(cfg: &Config) -> Result<(), OnvifError> {
     for profile in &profiles {
         match client.get_stream_uri(&media_url, &profile.token).await {
             Ok(uri) => println!("{:<20} {}", profile.name, uri.uri),
-            Err(e)  => println!("{:<20} ERROR: {e}", profile.name),
+            Err(e) => println!("{:<20} ERROR: {e}", profile.name),
         }
     }
 
