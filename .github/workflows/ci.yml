@@ -1,11 +1,10 @@
 name: CI
 
-# 只對 main 分支的 push 與 PR 觸發
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
