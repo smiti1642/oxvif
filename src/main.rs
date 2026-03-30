@@ -198,7 +198,7 @@ async fn stream_uris(cfg: &Config) -> Result<(), OnvifError> {
         return Ok(());
     }
 
-    println!("{:<20} {}", "Profile", "RTSP URI");
+    println!("{:<20} RTSP URI", "Profile");
     println!("{}", "-".repeat(80));
 
     for profile in &profiles {
