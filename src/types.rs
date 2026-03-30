@@ -137,7 +137,7 @@ impl MediaProfile {
             .children_named("Profiles")
             .map(|p| Self {
                 token: p.attr("token").unwrap_or("").to_string(),
-                fixed: p.attr("fixed").map_or(false, |v| v == "true"),
+                fixed: p.attr("fixed") == Some("true"),
                 name: p
                     .child("Name")
                     .map(|n| n.text().to_string())
@@ -179,10 +179,10 @@ impl StreamUri {
             uri,
             invalid_after_connect: media_uri
                 .child("InvalidAfterConnect")
-                .map_or(false, |n| n.text() == "true"),
+                .is_some_and(|n| n.text() == "true"),
             invalid_after_reboot: media_uri
                 .child("InvalidAfterReboot")
-                .map_or(false, |n| n.text() == "true"),
+                .is_some_and(|n| n.text() == "true"),
             timeout: media_uri
                 .child("Timeout")
                 .map(|n| n.text().to_string())
