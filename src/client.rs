@@ -27,7 +27,9 @@ use std::sync::Arc;
 use crate::error::OnvifError;
 use crate::soap::{SoapEnvelope, WsSecurityToken, find_response, parse_soap_body};
 use crate::transport::{HttpTransport, Transport};
-use crate::types::{Capabilities, DeviceInfo, MediaProfile, StreamUri};
+use crate::types::{
+    Capabilities, DeviceInfo, MediaProfile, PtzPreset, SnapshotUri, StreamUri, SystemDateTime,
+};
 
 // ── OnvifClient ───────────────────────────────────────────────────────────────
 
@@ -141,6 +143,30 @@ impl OnvifClient {
         Capabilities::from_xml(resp)
     }
 
+    /// Retrieve the device clock and compute the UTC offset for WS-Security.
+    ///
+    /// Call this before [`with_utc_offset`](Self::with_utc_offset) when the
+    /// device clock may differ from local UTC:
+    ///
+    /// ```no_run
+    /// # use oxvif::{OnvifClient, OnvifError};
+    /// # async fn run() -> Result<(), OnvifError> {
+    /// let client = OnvifClient::new("http://192.168.1.1/onvif/device_service");
+    /// let dt     = client.get_system_date_and_time().await?;
+    /// let client = client.with_credentials("admin", "pass")
+    ///                    .with_utc_offset(dt.utc_offset_secs());
+    /// # Ok(()) }
+    /// ```
+    pub async fn get_system_date_and_time(&self) -> Result<SystemDateTime, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetSystemDateAndTime";
+        const BODY: &str = "<tds:GetSystemDateAndTime/>";
+
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body = parse_soap_body(&xml)?;
+        let resp = find_response(&body, "GetSystemDateAndTimeResponse")?;
+        SystemDateTime::from_xml(resp)
+    }
+
     /// Retrieve manufacturer, model, firmware version, and serial number.
     pub async fn get_device_info(&self) -> Result<DeviceInfo, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetDeviceInformation";
@@ -195,6 +221,174 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetStreamUriResponse")?;
         StreamUri::from_xml(resp)
+    }
+
+    /// Retrieve an HTTP snapshot URI for the given media profile.
+    ///
+    /// `media_url` comes from [`get_capabilities`](Self::get_capabilities);
+    /// `profile_token` comes from a [`MediaProfile`] returned by
+    /// [`get_profiles`](Self::get_profiles).
+    pub async fn get_snapshot_uri(
+        &self,
+        media_url: &str,
+        profile_token: &str,
+    ) -> Result<SnapshotUri, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri";
+
+        let body = format!(
+            "<trt:GetSnapshotUri>\
+               <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
+             </trt:GetSnapshotUri>"
+        );
+
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetSnapshotUriResponse")?;
+        SnapshotUri::from_xml(resp)
+    }
+
+    // ── PTZ Service ───────────────────────────────────────────────────────────
+
+    /// Move the camera to an absolute position.
+    ///
+    /// Coordinates are in the normalised range `[-1.0, 1.0]` for pan/tilt
+    /// and `[0.0, 1.0]` for zoom. `ptz_url` comes from
+    /// [`get_capabilities`](Self::get_capabilities).
+    pub async fn ptz_absolute_move(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        pan: f32,
+        tilt: f32,
+        zoom: f32,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/AbsoluteMove";
+        let body = format!(
+            "<tptz:AbsoluteMove>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+               <tptz:Position>\
+                 <tt:PanTilt x=\"{pan}\" y=\"{tilt}\"/>\
+                 <tt:Zoom x=\"{zoom}\"/>\
+               </tptz:Position>\
+             </tptz:AbsoluteMove>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "AbsoluteMoveResponse")?;
+        Ok(())
+    }
+
+    /// Move the camera by a relative offset from the current position.
+    ///
+    /// Values are in the normalised range `[-1.0, 1.0]` for pan/tilt
+    /// and `[-1.0, 1.0]` for zoom.
+    pub async fn ptz_relative_move(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        pan: f32,
+        tilt: f32,
+        zoom: f32,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/RelativeMove";
+        let body = format!(
+            "<tptz:RelativeMove>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+               <tptz:Translation>\
+                 <tt:PanTilt x=\"{pan}\" y=\"{tilt}\"/>\
+                 <tt:Zoom x=\"{zoom}\"/>\
+               </tptz:Translation>\
+             </tptz:RelativeMove>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "RelativeMoveResponse")?;
+        Ok(())
+    }
+
+    /// Start continuous pan/tilt/zoom movement at the given velocities.
+    ///
+    /// Values are in the normalised range `[-1.0, 1.0]`. Call
+    /// [`ptz_stop`](Self::ptz_stop) to halt movement.
+    pub async fn ptz_continuous_move(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        pan: f32,
+        tilt: f32,
+        zoom: f32,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/ContinuousMove";
+        let body = format!(
+            "<tptz:ContinuousMove>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+               <tptz:Velocity>\
+                 <tt:PanTilt x=\"{pan}\" y=\"{tilt}\"/>\
+                 <tt:Zoom x=\"{zoom}\"/>\
+               </tptz:Velocity>\
+             </tptz:ContinuousMove>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "ContinuousMoveResponse")?;
+        Ok(())
+    }
+
+    /// Stop all ongoing PTZ movement.
+    pub async fn ptz_stop(&self, ptz_url: &str, profile_token: &str) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/Stop";
+        let body = format!(
+            "<tptz:Stop>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+               <tptz:PanTilt>true</tptz:PanTilt>\
+               <tptz:Zoom>true</tptz:Zoom>\
+             </tptz:Stop>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "StopResponse")?;
+        Ok(())
+    }
+
+    /// List all saved PTZ presets for the given profile.
+    pub async fn ptz_get_presets(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+    ) -> Result<Vec<PtzPreset>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetPresets";
+        let body = format!(
+            "<tptz:GetPresets>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+             </tptz:GetPresets>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetPresetsResponse")?;
+        PtzPreset::vec_from_xml(resp)
+    }
+
+    /// Move the camera to a saved PTZ preset.
+    ///
+    /// `preset_token` comes from a [`PtzPreset`] returned by
+    /// [`ptz_get_presets`](Self::ptz_get_presets).
+    pub async fn ptz_goto_preset(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        preset_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GotoPreset";
+        let body = format!(
+            "<tptz:GotoPreset>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+               <tptz:PresetToken>{preset_token}</tptz:PresetToken>\
+             </tptz:GotoPreset>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "GotoPresetResponse")?;
+        Ok(())
     }
 }
 

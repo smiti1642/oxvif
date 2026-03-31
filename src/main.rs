@@ -141,10 +141,18 @@ fn print_capabilities(caps: &Capabilities) {
     print_optional("  Events   ", &caps.events.url);
     print_optional("  Imaging  ", &caps.imaging_url);
     print_optional("  Analytics", &caps.analytics.url);
-    if caps.media.streaming.rtp_rtsp_tcp { println!("  Streaming : RTSP/TCP"); }
-    if caps.media.streaming.rtp_multicast { println!("  Streaming : RTP Multicast"); }
-    if let Some(n) = caps.media.max_profiles { println!("  Max profiles: {n}"); }
-    if caps.events.ws_pull_point { println!("  Events: WS-PullPoint"); }
+    if caps.media.streaming.rtp_rtsp_tcp {
+        println!("  Streaming : RTSP/TCP");
+    }
+    if caps.media.streaming.rtp_multicast {
+        println!("  Streaming : RTP Multicast");
+    }
+    if let Some(n) = caps.media.max_profiles {
+        println!("  Max profiles: {n}");
+    }
+    if caps.events.ws_pull_point {
+        println!("  Events: WS-PullPoint");
+    }
 }
 
 fn print_optional(label: &str, value: &Option<String>) {

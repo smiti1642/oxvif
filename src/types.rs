@@ -199,12 +199,22 @@ impl Capabilities {
                 .child("Analytics")
                 .map(parse_analytics_caps)
                 .unwrap_or_default(),
-            ptz_url:      caps.path(&["PTZ",     "XAddr"]).map(|n| n.text().to_string()),
-            imaging_url:  caps.path(&["Imaging", "XAddr"]).map(|n| n.text().to_string()),
-            recording_url: caps.path(&["Extension", "Recording", "XAddr"]).map(|n| n.text().to_string()),
-            search_url:    caps.path(&["Extension", "Search",    "XAddr"]).map(|n| n.text().to_string()),
-            replay_url:    caps.path(&["Extension", "Replay",    "XAddr"]).map(|n| n.text().to_string()),
-            device_io_url: caps.path(&["Extension", "DeviceIO",  "XAddr"]).map(|n| n.text().to_string()),
+            ptz_url: caps.path(&["PTZ", "XAddr"]).map(|n| n.text().to_string()),
+            imaging_url: caps
+                .path(&["Imaging", "XAddr"])
+                .map(|n| n.text().to_string()),
+            recording_url: caps
+                .path(&["Extension", "Recording", "XAddr"])
+                .map(|n| n.text().to_string()),
+            search_url: caps
+                .path(&["Extension", "Search", "XAddr"])
+                .map(|n| n.text().to_string()),
+            replay_url: caps
+                .path(&["Extension", "Replay", "XAddr"])
+                .map(|n| n.text().to_string()),
+            device_io_url: caps
+                .path(&["Extension", "DeviceIO", "XAddr"])
+                .map(|n| n.text().to_string()),
         })
     }
 }
@@ -212,58 +222,73 @@ impl Capabilities {
 fn parse_device_caps(d: &XmlNode) -> DeviceCapabilities {
     DeviceCapabilities {
         url: xml_str(d, "XAddr"),
-        network: d.child("Network").map(|n| NetworkCapabilities {
-            ip_filter:          xml_bool(n, "IPFilter"),
-            zero_configuration: xml_bool(n, "ZeroConfiguration"),
-            ip_version6:        xml_bool(n, "IPVersion6"),
-            dyn_dns:            xml_bool(n, "DynDNS"),
-        }).unwrap_or_default(),
-        system: d.child("System").map(|n| SystemCapabilities {
-            discovery_resolve: xml_bool(n, "DiscoveryResolve"),
-            discovery_bye:     xml_bool(n, "DiscoveryBye"),
-            remote_discovery:  xml_bool(n, "RemoteDiscovery"),
-            system_backup:     xml_bool(n, "SystemBackup"),
-            system_logging:    xml_bool(n, "SystemLogging"),
-            firmware_upgrade:  xml_bool(n, "FirmwareUpgrade"),
-        }).unwrap_or_default(),
-        io: d.child("IO").map(|n| IoCapabilities {
-            input_connectors: xml_u32(n, "InputConnectors"),
-            relay_outputs:    xml_u32(n, "RelayOutputs"),
-        }).unwrap_or_default(),
-        security: d.child("Security").map(|n| SecurityCapabilities {
-            tls_1_2:               xml_bool(n, "TLS1.2"),
-            onboard_key_generation: xml_bool(n, "OnboardKeyGeneration"),
-            access_policy_config:  xml_bool(n, "AccessPolicyConfig"),
-            x509_token:            xml_bool(n, "X.509Token"),
-            username_token:        xml_bool(n, "UsernameToken"),
-        }).unwrap_or_default(),
+        network: d
+            .child("Network")
+            .map(|n| NetworkCapabilities {
+                ip_filter: xml_bool(n, "IPFilter"),
+                zero_configuration: xml_bool(n, "ZeroConfiguration"),
+                ip_version6: xml_bool(n, "IPVersion6"),
+                dyn_dns: xml_bool(n, "DynDNS"),
+            })
+            .unwrap_or_default(),
+        system: d
+            .child("System")
+            .map(|n| SystemCapabilities {
+                discovery_resolve: xml_bool(n, "DiscoveryResolve"),
+                discovery_bye: xml_bool(n, "DiscoveryBye"),
+                remote_discovery: xml_bool(n, "RemoteDiscovery"),
+                system_backup: xml_bool(n, "SystemBackup"),
+                system_logging: xml_bool(n, "SystemLogging"),
+                firmware_upgrade: xml_bool(n, "FirmwareUpgrade"),
+            })
+            .unwrap_or_default(),
+        io: d
+            .child("IO")
+            .map(|n| IoCapabilities {
+                input_connectors: xml_u32(n, "InputConnectors"),
+                relay_outputs: xml_u32(n, "RelayOutputs"),
+            })
+            .unwrap_or_default(),
+        security: d
+            .child("Security")
+            .map(|n| SecurityCapabilities {
+                tls_1_2: xml_bool(n, "TLS1.2"),
+                onboard_key_generation: xml_bool(n, "OnboardKeyGeneration"),
+                access_policy_config: xml_bool(n, "AccessPolicyConfig"),
+                x509_token: xml_bool(n, "X.509Token"),
+                username_token: xml_bool(n, "UsernameToken"),
+            })
+            .unwrap_or_default(),
     }
 }
 
 fn parse_media_caps(m: &XmlNode) -> MediaCapabilities {
     MediaCapabilities {
         url: xml_str(m, "XAddr"),
-        streaming: m.child("StreamingCapabilities").map(|n| StreamingCapabilities {
-            rtp_multicast: xml_bool(n, "RTPMulticast"),
-            rtp_tcp:       xml_bool(n, "RTP_TCP"),
-            rtp_rtsp_tcp:  xml_bool(n, "RTP_RTSP_TCP"),
-        }).unwrap_or_default(),
+        streaming: m
+            .child("StreamingCapabilities")
+            .map(|n| StreamingCapabilities {
+                rtp_multicast: xml_bool(n, "RTPMulticast"),
+                rtp_tcp: xml_bool(n, "RTP_TCP"),
+                rtp_rtsp_tcp: xml_bool(n, "RTP_RTSP_TCP"),
+            })
+            .unwrap_or_default(),
         max_profiles: xml_u32(m, "MaximumNumberOfProfiles"),
     }
 }
 
 fn parse_events_caps(e: &XmlNode) -> EventsCapabilities {
     EventsCapabilities {
-        url:                    xml_str(e, "XAddr"),
+        url: xml_str(e, "XAddr"),
         ws_subscription_policy: xml_bool(e, "WSSubscriptionPolicySupport"),
-        ws_pull_point:          xml_bool(e, "WSPullPointSupport"),
+        ws_pull_point: xml_bool(e, "WSPullPointSupport"),
     }
 }
 
 fn parse_analytics_caps(a: &XmlNode) -> AnalyticsCapabilities {
     AnalyticsCapabilities {
-        url:                      xml_str(a, "XAddr"),
-        rule_support:             xml_bool(a, "RuleSupport"),
+        url: xml_str(a, "XAddr"),
+        rule_support: xml_bool(a, "RuleSupport"),
         analytics_module_support: xml_bool(a, "AnalyticsModuleSupport"),
     }
 }
@@ -286,11 +311,11 @@ impl DeviceInfo {
     /// Parse from a `GetDeviceInformationResponse` node.
     pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
         Ok(Self {
-            manufacturer:     xml_str(resp, "Manufacturer").unwrap_or_default(),
-            model:            xml_str(resp, "Model").unwrap_or_default(),
+            manufacturer: xml_str(resp, "Manufacturer").unwrap_or_default(),
+            model: xml_str(resp, "Model").unwrap_or_default(),
             firmware_version: xml_str(resp, "FirmwareVersion").unwrap_or_default(),
-            serial_number:    xml_str(resp, "SerialNumber").unwrap_or_default(),
-            hardware_id:      xml_str(resp, "HardwareId").unwrap_or_default(),
+            serial_number: xml_str(resp, "SerialNumber").unwrap_or_default(),
+            hardware_id: xml_str(resp, "HardwareId").unwrap_or_default(),
         })
     }
 }
@@ -320,7 +345,7 @@ impl MediaProfile {
             .map(|p| Self {
                 token: p.attr("token").unwrap_or("").to_string(),
                 fixed: p.attr("fixed") == Some("true"),
-                name:  xml_str(p, "Name").unwrap_or_default(),
+                name: xml_str(p, "Name").unwrap_or_default(),
             })
             .collect())
     }
@@ -357,9 +382,187 @@ impl StreamUri {
         Ok(Self {
             uri,
             invalid_after_connect: xml_bool(media_uri, "InvalidAfterConnect"),
-            invalid_after_reboot:  xml_bool(media_uri, "InvalidAfterReboot"),
+            invalid_after_reboot: xml_bool(media_uri, "InvalidAfterReboot"),
             timeout: xml_str(media_uri, "Timeout").unwrap_or_default(),
         })
+    }
+}
+
+// ── SystemDateTime ────────────────────────────────────────────────────────────
+
+/// Device clock information returned by `GetSystemDateAndTime`.
+///
+/// The primary use-case is computing the UTC offset for WS-Security:
+///
+/// ```no_run
+/// # use oxvif::{OnvifClient, OnvifError};
+/// # async fn run() -> Result<(), OnvifError> {
+/// let client = OnvifClient::new("http://192.168.1.1/onvif/device_service");
+/// let dt     = client.get_system_date_and_time().await?;
+/// let client = client.with_utc_offset(dt.utc_offset_secs());
+/// # Ok(()) }
+/// ```
+#[derive(Debug, Clone)]
+pub struct SystemDateTime {
+    /// Device UTC clock as a Unix timestamp (seconds since 1970-01-01T00:00:00Z).
+    /// `None` if the response contained no `UTCDateTime` element.
+    pub utc_unix: Option<i64>,
+    /// POSIX timezone string (e.g. `"CST-8"`).  Empty if absent.
+    pub timezone: String,
+    /// Whether daylight saving time is currently active on the device.
+    pub daylight_savings: bool,
+}
+
+impl SystemDateTime {
+    /// Seconds between the device UTC clock and the local system UTC clock.
+    ///
+    /// Returns `0` when `utc_unix` is `None`.
+    /// Pass the result to [`OnvifClient::with_utc_offset`](crate::client::OnvifClient::with_utc_offset).
+    pub fn utc_offset_secs(&self) -> i64 {
+        match self.utc_unix {
+            Some(device_utc) => {
+                let local_utc = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                device_utc - local_utc
+            }
+            None => 0,
+        }
+    }
+
+    /// Parse from a `GetSystemDateAndTimeResponse` node.
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let sdt = resp
+            .child("SystemDateAndTime")
+            .ok_or_else(|| SoapError::missing("SystemDateAndTime"))?;
+
+        Ok(Self {
+            utc_unix: sdt.child("UTCDateTime").and_then(parse_datetime_node),
+            timezone: sdt
+                .path(&["TimeZone", "TZ"])
+                .map(|n| n.text().to_string())
+                .unwrap_or_default(),
+            daylight_savings: xml_bool(sdt, "DaylightSavings"),
+        })
+    }
+}
+
+/// Parse year/month/day/hour/minute/second from an ONVIF `DateTime` node and
+/// return a Unix timestamp (seconds since epoch).
+fn parse_datetime_node(node: &XmlNode) -> Option<i64> {
+    let year = node
+        .path(&["Date", "Year"])
+        .and_then(|n| n.text().parse::<i32>().ok())?;
+    let month = node
+        .path(&["Date", "Month"])
+        .and_then(|n| n.text().parse::<i32>().ok())?;
+    let day = node
+        .path(&["Date", "Day"])
+        .and_then(|n| n.text().parse::<i32>().ok())?;
+    let hour = node
+        .path(&["Time", "Hour"])
+        .and_then(|n| n.text().parse::<i32>().ok())?;
+    let min = node
+        .path(&["Time", "Minute"])
+        .and_then(|n| n.text().parse::<i32>().ok())?;
+    let sec = node
+        .path(&["Time", "Second"])
+        .and_then(|n| n.text().parse::<i32>().ok())?;
+    Some(civil_to_unix(year, month, day, hour, min, sec))
+}
+
+/// Convert a proleptic Gregorian calendar date + time to a Unix timestamp.
+/// Uses the Howard Hinnant days-from-civil algorithm.
+fn civil_to_unix(year: i32, month: i32, day: i32, hour: i32, min: i32, sec: i32) -> i64 {
+    let mut y = year as i64;
+    let m = month as i64;
+    if m <= 2 {
+        y -= 1;
+    }
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = if m > 2 { m - 3 } else { m + 9 };
+    let doy = (153 * mp + 2) / 5 + day as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    days * 86_400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64
+}
+
+// ── SnapshotUri ───────────────────────────────────────────────────────────────
+
+/// HTTP snapshot URI returned by `GetSnapshotUri`.
+///
+/// Fetch the URI with any HTTP client to retrieve a JPEG image.
+#[derive(Debug, Clone)]
+pub struct SnapshotUri {
+    /// HTTP URL of the JPEG snapshot endpoint.
+    pub uri: String,
+    /// If `true`, the URI becomes invalid after the first HTTP request.
+    pub invalid_after_connect: bool,
+    /// If `true`, the URI becomes invalid after the device reboots.
+    pub invalid_after_reboot: bool,
+    /// ISO 8601 duration until the URI expires (e.g. `"PT0S"` = no expiry).
+    pub timeout: String,
+}
+
+impl SnapshotUri {
+    /// Parse from a `GetSnapshotUriResponse` node.
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let media_uri = resp
+            .child("MediaUri")
+            .ok_or_else(|| SoapError::missing("MediaUri"))?;
+
+        let uri = media_uri
+            .child("Uri")
+            .map(|n| n.text().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| SoapError::missing("Uri"))?;
+
+        Ok(Self {
+            uri,
+            invalid_after_connect: xml_bool(media_uri, "InvalidAfterConnect"),
+            invalid_after_reboot: xml_bool(media_uri, "InvalidAfterReboot"),
+            timeout: xml_str(media_uri, "Timeout").unwrap_or_default(),
+        })
+    }
+}
+
+// ── PtzPreset ─────────────────────────────────────────────────────────────────
+
+/// A named PTZ preset position returned by `GetPresets`.
+#[derive(Debug, Clone)]
+pub struct PtzPreset {
+    /// Opaque preset identifier; pass to `ptz_goto_preset`.
+    pub token: String,
+    /// Human-readable preset name.
+    pub name: String,
+    /// Stored pan (x) and tilt (y) position, range `[-1.0, 1.0]`.
+    /// `None` if the preset has no stored position.
+    pub pan_tilt: Option<(f32, f32)>,
+    /// Stored zoom position, range `[0.0, 1.0]`.
+    /// `None` if the preset has no stored zoom.
+    pub zoom: Option<f32>,
+}
+
+impl PtzPreset {
+    /// Parse all `<Preset>` children from a `GetPresetsResponse` node.
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        Ok(resp
+            .children_named("Preset")
+            .map(|p| Self {
+                token: p.attr("token").unwrap_or("").to_string(),
+                name: xml_str(p, "Name").unwrap_or_default(),
+                pan_tilt: p.path(&["PTZPosition", "PanTilt"]).and_then(|n| {
+                    let x = n.attr("x")?.parse().ok()?;
+                    let y = n.attr("y")?.parse().ok()?;
+                    Some((x, y))
+                }),
+                zoom: p
+                    .path(&["PTZPosition", "Zoom"])
+                    .and_then(|n| n.attr("x")?.parse().ok()),
+            })
+            .collect())
     }
 }
 
@@ -447,21 +650,51 @@ mod tests {
         #[test]
         fn test_all_service_urls_parsed() {
             let caps = Capabilities::from_xml(&parse(FULL)).unwrap();
-            assert_eq!(caps.device.url.as_deref(),    Some("http://192.168.1.1/onvif/device_service"));
-            assert_eq!(caps.media.url.as_deref(),     Some("http://192.168.1.1/onvif/media_service"));
-            assert_eq!(caps.ptz_url.as_deref(),       Some("http://192.168.1.1/onvif/ptz_service"));
-            assert_eq!(caps.events.url.as_deref(),    Some("http://192.168.1.1/onvif/events_service"));
-            assert_eq!(caps.imaging_url.as_deref(),   Some("http://192.168.1.1/onvif/imaging_service"));
-            assert_eq!(caps.analytics.url.as_deref(), Some("http://192.168.1.1/onvif/analytics_service"));
+            assert_eq!(
+                caps.device.url.as_deref(),
+                Some("http://192.168.1.1/onvif/device_service")
+            );
+            assert_eq!(
+                caps.media.url.as_deref(),
+                Some("http://192.168.1.1/onvif/media_service")
+            );
+            assert_eq!(
+                caps.ptz_url.as_deref(),
+                Some("http://192.168.1.1/onvif/ptz_service")
+            );
+            assert_eq!(
+                caps.events.url.as_deref(),
+                Some("http://192.168.1.1/onvif/events_service")
+            );
+            assert_eq!(
+                caps.imaging_url.as_deref(),
+                Some("http://192.168.1.1/onvif/imaging_service")
+            );
+            assert_eq!(
+                caps.analytics.url.as_deref(),
+                Some("http://192.168.1.1/onvif/analytics_service")
+            );
         }
 
         #[test]
         fn test_extension_service_urls_parsed() {
             let caps = Capabilities::from_xml(&parse(FULL)).unwrap();
-            assert_eq!(caps.device_io_url.as_deref(),  Some("http://192.168.1.1/onvif/deviceio_service"));
-            assert_eq!(caps.recording_url.as_deref(),  Some("http://192.168.1.1/onvif/recording_service"));
-            assert_eq!(caps.search_url.as_deref(),     Some("http://192.168.1.1/onvif/search_service"));
-            assert_eq!(caps.replay_url.as_deref(),     Some("http://192.168.1.1/onvif/replay_service"));
+            assert_eq!(
+                caps.device_io_url.as_deref(),
+                Some("http://192.168.1.1/onvif/deviceio_service")
+            );
+            assert_eq!(
+                caps.recording_url.as_deref(),
+                Some("http://192.168.1.1/onvif/recording_service")
+            );
+            assert_eq!(
+                caps.search_url.as_deref(),
+                Some("http://192.168.1.1/onvif/search_service")
+            );
+            assert_eq!(
+                caps.replay_url.as_deref(),
+                Some("http://192.168.1.1/onvif/replay_service")
+            );
         }
 
         // ── Device sub-capabilities ───────────────────────────────────────────
@@ -738,6 +971,167 @@ mod tests {
             </GetStreamUriResponse>"#;
             let uri = StreamUri::from_xml(&parse(xml)).unwrap();
             assert_eq!(uri.timeout, "");
+        }
+    }
+
+    mod system_date_time {
+        use super::*;
+
+        const FULL: &str = r#"<GetSystemDateAndTimeResponse>
+          <SystemDateAndTime>
+            <DateTimeType>NTP</DateTimeType>
+            <DaylightSavings>true</DaylightSavings>
+            <TimeZone><TZ>CST-8</TZ></TimeZone>
+            <UTCDateTime>
+              <Time><Hour>10</Hour><Minute>30</Minute><Second>45</Second></Time>
+              <Date><Year>2024</Year><Month>6</Month><Day>15</Day></Date>
+            </UTCDateTime>
+          </SystemDateAndTime>
+        </GetSystemDateAndTimeResponse>"#;
+
+        #[test]
+        fn test_utc_unix_correct() {
+            let dt = SystemDateTime::from_xml(&parse(FULL)).unwrap();
+            // 2024-06-15T10:30:45Z = 1_718_447_445
+            assert_eq!(dt.utc_unix, Some(1_718_447_445));
+        }
+
+        #[test]
+        fn test_daylight_savings_parsed() {
+            let dt = SystemDateTime::from_xml(&parse(FULL)).unwrap();
+            assert!(dt.daylight_savings);
+        }
+
+        #[test]
+        fn test_timezone_parsed() {
+            let dt = SystemDateTime::from_xml(&parse(FULL)).unwrap();
+            assert_eq!(dt.timezone, "CST-8");
+        }
+
+        #[test]
+        fn test_missing_utc_datetime_gives_none() {
+            let xml = r#"<GetSystemDateAndTimeResponse>
+              <SystemDateAndTime>
+                <DaylightSavings>false</DaylightSavings>
+              </SystemDateAndTime>
+            </GetSystemDateAndTimeResponse>"#;
+            let dt = SystemDateTime::from_xml(&parse(xml)).unwrap();
+            assert!(dt.utc_unix.is_none());
+        }
+
+        #[test]
+        fn test_missing_system_date_and_time_is_error() {
+            let err =
+                SystemDateTime::from_xml(&parse("<GetSystemDateAndTimeResponse/>")).unwrap_err();
+            assert!(matches!(
+                err,
+                OnvifError::Soap(SoapError::MissingField("SystemDateAndTime"))
+            ));
+        }
+
+        #[test]
+        fn test_civil_to_unix_epoch() {
+            assert_eq!(civil_to_unix(1970, 1, 1, 0, 0, 0), 0);
+        }
+
+        #[test]
+        fn test_civil_to_unix_known_date() {
+            // 2024-01-01T00:00:00Z = 1_704_067_200
+            assert_eq!(civil_to_unix(2024, 1, 1, 0, 0, 0), 1_704_067_200);
+        }
+    }
+
+    mod snapshot_uri {
+        use super::*;
+
+        const FULL: &str = r#"<GetSnapshotUriResponse>
+          <MediaUri>
+            <Uri>http://192.168.1.1/onvif/snapshot?channel=1</Uri>
+            <InvalidAfterConnect>false</InvalidAfterConnect>
+            <InvalidAfterReboot>true</InvalidAfterReboot>
+            <Timeout>PT60S</Timeout>
+          </MediaUri>
+        </GetSnapshotUriResponse>"#;
+
+        #[test]
+        fn test_all_fields_parsed() {
+            let uri = SnapshotUri::from_xml(&parse(FULL)).unwrap();
+            assert_eq!(uri.uri, "http://192.168.1.1/onvif/snapshot?channel=1");
+            assert!(!uri.invalid_after_connect);
+            assert!(uri.invalid_after_reboot);
+            assert_eq!(uri.timeout, "PT60S");
+        }
+
+        #[test]
+        fn test_missing_media_uri_is_error() {
+            let err = SnapshotUri::from_xml(&parse("<GetSnapshotUriResponse/>")).unwrap_err();
+            assert!(matches!(
+                err,
+                OnvifError::Soap(SoapError::MissingField("MediaUri"))
+            ));
+        }
+
+        #[test]
+        fn test_empty_uri_is_error() {
+            let xml =
+                "<GetSnapshotUriResponse><MediaUri><Uri/></MediaUri></GetSnapshotUriResponse>";
+            let err = SnapshotUri::from_xml(&parse(xml)).unwrap_err();
+            assert!(matches!(
+                err,
+                OnvifError::Soap(SoapError::MissingField("Uri"))
+            ));
+        }
+    }
+
+    mod ptz_preset {
+        use super::*;
+
+        const TWO_PRESETS: &str = r#"<GetPresetsResponse>
+          <Preset token="1">
+            <Name>Front Gate</Name>
+            <PTZPosition>
+              <PanTilt x="0.1" y="-0.2"/>
+              <Zoom x="0.5"/>
+            </PTZPosition>
+          </Preset>
+          <Preset token="2">
+            <Name>Parking Lot</Name>
+          </Preset>
+        </GetPresetsResponse>"#;
+
+        #[test]
+        fn test_two_presets_returned() {
+            let presets = PtzPreset::vec_from_xml(&parse(TWO_PRESETS)).unwrap();
+            assert_eq!(presets.len(), 2);
+        }
+
+        #[test]
+        fn test_preset_fields() {
+            let presets = PtzPreset::vec_from_xml(&parse(TWO_PRESETS)).unwrap();
+            assert_eq!(presets[0].token, "1");
+            assert_eq!(presets[0].name, "Front Gate");
+        }
+
+        #[test]
+        fn test_preset_position_parsed() {
+            let presets = PtzPreset::vec_from_xml(&parse(TWO_PRESETS)).unwrap();
+            let (pan, tilt) = presets[0].pan_tilt.unwrap();
+            assert!((pan - 0.1).abs() < 1e-5);
+            assert!((tilt - (-0.2)).abs() < 1e-5);
+            assert!((presets[0].zoom.unwrap() - 0.5).abs() < 1e-5);
+        }
+
+        #[test]
+        fn test_preset_without_position_is_none() {
+            let presets = PtzPreset::vec_from_xml(&parse(TWO_PRESETS)).unwrap();
+            assert!(presets[1].pan_tilt.is_none());
+            assert!(presets[1].zoom.is_none());
+        }
+
+        #[test]
+        fn test_empty_response_returns_empty_vec() {
+            let presets = PtzPreset::vec_from_xml(&parse("<GetPresetsResponse/>")).unwrap();
+            assert!(presets.is_empty());
         }
     }
 }

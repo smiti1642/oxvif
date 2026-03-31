@@ -54,6 +54,7 @@ pub use client::OnvifClient;
 pub use error::OnvifError;
 pub use types::{
     AnalyticsCapabilities, Capabilities, DeviceCapabilities, DeviceInfo, EventsCapabilities,
-    IoCapabilities, MediaCapabilities, MediaProfile, NetworkCapabilities, SecurityCapabilities,
-    StreamUri, StreamingCapabilities, SystemCapabilities,
+    IoCapabilities, MediaCapabilities, MediaProfile, NetworkCapabilities, PtzPreset,
+    SecurityCapabilities, SnapshotUri, StreamUri, StreamingCapabilities, SystemCapabilities,
+    SystemDateTime,
 };
