@@ -12,10 +12,7 @@
 //! cargo run -- error-handling
 //! ```
 
-use oxvif::{
-    Capabilities, DeviceInfo, MediaProfile, OnvifClient, OnvifError, StreamUri,
-    SystemDateTime,
-};
+use oxvif::{Capabilities, DeviceInfo, MediaProfile, OnvifClient, OnvifError, SystemDateTime};
 use std::env;
 
 // ── Configuration ─────────────────────────────────────────────────────────────
@@ -147,46 +144,139 @@ async fn connect(cfg: &Config) -> Result<(OnvifClient, Capabilities), OnvifError
 
 // ── Example 1: full workflow ──────────────────────────────────────────────────
 
-/// End-to-end flow:
-///   1. Sync device clock (unauthenticated GetSystemDateAndTime)
-///   2. Fetch capabilities to discover service URLs
-///   3. List media profiles
-///   4. Fetch RTSP stream URI for each profile
+/// End-to-end flow exercising every implemented operation:
+///   1. Sync device clock → correct WS-Security timestamps
+///   2. GetCapabilities   → discover service URLs + feature flags
+///   3. GetDeviceInformation
+///   4. GetProfiles       → list media profiles
+///   5. GetStreamUri      → RTSP URI per profile
+///   6. GetSnapshotUri    → HTTP snapshot URI per profile
+///   7. GetPresets        → PTZ presets (skipped if no PTZ service)
 async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     println!("=== Full workflow ===");
     println!("Connecting to {}", cfg.camera_url);
 
-    let (client, caps) = connect(cfg).await?;
+    // ── 1. Clock sync ─────────────────────────────────────────────────────────
+    println!("\n-- GetSystemDateAndTime --");
+    let base = OnvifClient::new(&cfg.camera_url);
+    let utc_offset = match base.get_system_date_and_time().await {
+        Ok(dt) => {
+            let tz = if dt.timezone.is_empty() {
+                "(none)".into()
+            } else {
+                dt.timezone.clone()
+            };
+            println!(
+                "  Timezone: {tz}  DST: {}  UTC unix: {:?}",
+                dt.daylight_savings, dt.utc_unix
+            );
+            let off = dt.utc_offset_secs();
+            if off.abs() > 5 {
+                println!("  Clock skew {off:+}s — applying offset");
+            } else {
+                println!("  Clocks in sync");
+            }
+            off
+        }
+        Err(e) => {
+            println!("  (skipped — {e})");
+            0
+        }
+    };
+
+    let client = OnvifClient::new(&cfg.camera_url)
+        .with_credentials(&cfg.username, &cfg.password)
+        .with_utc_offset(utc_offset);
+
+    // ── 2. Capabilities ───────────────────────────────────────────────────────
+    println!("\n-- GetCapabilities --");
+    let caps = client.get_capabilities().await?;
     print_capabilities(&caps);
 
+    // ── 3. Device info ────────────────────────────────────────────────────────
+    println!("\n-- GetDeviceInformation --");
+    match client.get_device_info().await {
+        Ok(info) => {
+            println!(
+                "  {}/{} fw:{} sn:{}",
+                info.manufacturer, info.model, info.firmware_version, info.serial_number
+            );
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 4–6. Media ────────────────────────────────────────────────────────────
     let media_url = match &caps.media.url {
         Some(u) => u.clone(),
         None => {
-            println!("Device does not advertise a Media service — stopping.");
+            println!("\nDevice does not advertise a Media service — stopping.");
             return Ok(());
         }
     };
 
+    println!("\n-- GetProfiles --");
     let profiles: Vec<MediaProfile> = client.get_profiles(&media_url).await?;
-    println!("\nFound {} profile(s):", profiles.len());
+    println!("  Found {} profile(s)", profiles.len());
     for p in &profiles {
         println!(
-            "  [{token}] {name}  (fixed={fixed})",
+            "  [{token}] {name}  fixed={fixed}",
             token = p.token,
             name = p.name,
-            fixed = p.fixed,
+            fixed = p.fixed
         );
     }
 
-    println!();
+    println!("\n-- GetStreamUri --");
     for profile in &profiles {
-        let uri: StreamUri = client.get_stream_uri(&media_url, &profile.token).await?;
-        println!("Profile '{}' → {}", profile.name, uri.uri);
-        if uri.invalid_after_connect {
-            println!("  (URI expires after first RTSP connection)");
+        match client.get_stream_uri(&media_url, &profile.token).await {
+            Ok(uri) => {
+                println!("  '{}' → {}", profile.name, uri.uri);
+                if uri.invalid_after_connect {
+                    println!("    (one-time URI)");
+                }
+                if !uri.timeout.is_empty() && uri.timeout != "PT0S" {
+                    println!("    (timeout: {})", uri.timeout);
+                }
+            }
+            Err(e) => println!("  '{}' ERROR: {e}", profile.name),
         }
-        if !uri.timeout.is_empty() && uri.timeout != "PT0S" {
-            println!("  (URI timeout: {})", uri.timeout);
+    }
+
+    println!("\n-- GetSnapshotUri --");
+    for profile in &profiles {
+        match client.get_snapshot_uri(&media_url, &profile.token).await {
+            Ok(snap) => println!("  '{}' → {}", profile.name, snap.uri),
+            Err(e) => println!("  '{}' ERROR: {e}", profile.name),
+        }
+    }
+
+    // ── 7. PTZ ────────────────────────────────────────────────────────────────
+    println!("\n-- PTZ GetPresets --");
+    match &caps.ptz_url {
+        None => println!("  (no PTZ service)"),
+        Some(ptz_url) => {
+            for profile in &profiles {
+                match client.ptz_get_presets(ptz_url, &profile.token).await {
+                    Ok(presets) if presets.is_empty() => {
+                        println!("  '{}': (no presets)", profile.name);
+                    }
+                    Ok(presets) => {
+                        println!("  '{}': {} preset(s)", profile.name, presets.len());
+                        for p in &presets {
+                            let pt = p
+                                .pan_tilt
+                                .map(|(x, y)| format!("{x:+.3}/{y:+.3}"))
+                                .unwrap_or_else(|| "—".into());
+                            let z = p
+                                .zoom
+                                .map(|z| format!("{z:.3}"))
+                                .unwrap_or_else(|| "—".into());
+                            println!("    [{}] {}  pan/tilt={pt} zoom={z}", p.token, p.name);
+                        }
+                    }
+                    Err(e) => println!("  '{}' ERROR: {e}", profile.name),
+                }
+            }
         }
     }
 
