@@ -43,7 +43,7 @@ use crate::types::{Capabilities, DeviceInfo, MediaProfile, StreamUri};
 ///         .with_credentials("admin", "password");
 ///
 ///     let caps     = client.get_capabilities().await?;
-///     let media    = caps.media_url.as_deref().unwrap();
+///     let media    = caps.media.url.as_deref().unwrap();
 ///     let profiles = client.get_profiles(media).await?;
 ///     let uri      = client.get_stream_uri(media, &profiles[0].token).await?;
 ///
@@ -381,11 +381,11 @@ mod tests {
 
         let caps = client.get_capabilities().await.unwrap();
         assert_eq!(
-            caps.device_url.as_deref(),
+            caps.device.url.as_deref(),
             Some("http://192.168.1.1/onvif/device_service")
         );
         assert_eq!(
-            caps.media_url.as_deref(),
+            caps.media.url.as_deref(),
             Some("http://192.168.1.1/onvif/media_service")
         );
         assert_eq!(

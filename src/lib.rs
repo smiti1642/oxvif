@@ -31,7 +31,7 @@
 //!
 //!     // Discover service endpoints
 //!     let caps = client.get_capabilities().await?;
-//!     let media_url = caps.media_url.as_deref().unwrap();
+//!     let media_url = caps.media.url.as_deref().unwrap();
 //!
 //!     // List media profiles and get the first RTSP stream URI
 //!     let profiles = client.get_profiles(media_url).await?;
@@ -52,4 +52,8 @@ pub mod types;
 
 pub use client::OnvifClient;
 pub use error::OnvifError;
-pub use types::{Capabilities, DeviceInfo, MediaProfile, StreamUri};
+pub use types::{
+    AnalyticsCapabilities, Capabilities, DeviceCapabilities, DeviceInfo, EventsCapabilities,
+    IoCapabilities, MediaCapabilities, MediaProfile, NetworkCapabilities, SecurityCapabilities,
+    StreamUri, StreamingCapabilities, SystemCapabilities,
+};

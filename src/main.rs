@@ -97,7 +97,7 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     let caps: Capabilities = client.get_capabilities().await?;
     print_capabilities(&caps);
 
-    let media_url = match &caps.media_url {
+    let media_url = match &caps.media.url {
         Some(u) => u.clone(),
         None => {
             println!("Device does not advertise a Media service — stopping.");
@@ -135,12 +135,16 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
 
 fn print_capabilities(caps: &Capabilities) {
     println!("\nCapabilities:");
-    print_optional("  Device   ", &caps.device_url);
-    print_optional("  Media    ", &caps.media_url);
+    print_optional("  Device   ", &caps.device.url);
+    print_optional("  Media    ", &caps.media.url);
     print_optional("  PTZ      ", &caps.ptz_url);
-    print_optional("  Events   ", &caps.events_url);
+    print_optional("  Events   ", &caps.events.url);
     print_optional("  Imaging  ", &caps.imaging_url);
-    print_optional("  Analytics", &caps.analytics_url);
+    print_optional("  Analytics", &caps.analytics.url);
+    if caps.media.streaming.rtp_rtsp_tcp { println!("  Streaming : RTSP/TCP"); }
+    if caps.media.streaming.rtp_multicast { println!("  Streaming : RTP Multicast"); }
+    if let Some(n) = caps.media.max_profiles { println!("  Max profiles: {n}"); }
+    if caps.events.ws_pull_point { println!("  Events: WS-PullPoint"); }
 }
 
 fn print_optional(label: &str, value: &Option<String>) {
@@ -188,7 +192,8 @@ async fn stream_uris(cfg: &Config) -> Result<(), OnvifError> {
 
     let caps = client.get_capabilities().await?;
     let media_url = caps
-        .media_url
+        .media
+        .url
         .ok_or_else(|| oxvif::soap::SoapError::missing("Media service not found"))?;
 
     let profiles = client.get_profiles(&media_url).await?;
