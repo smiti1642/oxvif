@@ -6,10 +6,16 @@
 //! cargo run -- full-workflow
 //! cargo run -- device-info
 //! cargo run -- stream-uris
+//! cargo run -- snapshot-uris
+//! cargo run -- system-datetime
+//! cargo run -- ptz-presets
 //! cargo run -- error-handling
 //! ```
 
-use oxvif::{Capabilities, DeviceInfo, MediaProfile, OnvifClient, OnvifError, StreamUri};
+use oxvif::{
+    Capabilities, DeviceInfo, MediaProfile, OnvifClient, OnvifError, StreamUri,
+    SystemDateTime,
+};
 use std::env;
 
 // ── Configuration ─────────────────────────────────────────────────────────────
@@ -51,6 +57,9 @@ async fn main() {
         "full-workflow" => full_workflow(&cfg).await,
         "device-info" => device_info_example(&cfg).await,
         "stream-uris" => stream_uris(&cfg).await,
+        "snapshot-uris" => snapshot_uris(&cfg).await,
+        "system-datetime" => system_datetime(&cfg).await,
+        "ptz-presets" => ptz_presets(&cfg).await,
         "error-handling" => error_handling_example(&cfg).await,
         _ => {
             print_help();
@@ -71,67 +80,16 @@ fn print_help() {
     println!("  cargo run -- <example>");
     println!();
     println!("EXAMPLES:");
-    println!("  full-workflow    Discover capabilities, list profiles, fetch RTSP URIs");
-    println!("  device-info      Print manufacturer, model, and firmware version");
-    println!("  stream-uris      Print RTSP URIs for every media profile");
-    println!("  error-handling   Demonstrate typed error variants");
+    println!("  full-workflow    Capabilities → profiles → RTSP URIs");
+    println!("  device-info      Manufacturer, model, firmware version");
+    println!("  stream-uris      Tabular RTSP URI listing");
+    println!("  snapshot-uris    Tabular HTTP snapshot URI listing");
+    println!("  system-datetime  Device clock and UTC offset");
+    println!("  ptz-presets      List all PTZ presets (requires PTZ camera)");
+    println!("  error-handling   Typed error variant matching");
 }
 
-// ── Example 1: full workflow ──────────────────────────────────────────────────
-
-/// Typical end-to-end flow:
-///   1. Fetch device capabilities to discover service URLs
-///   2. Use the media URL to list media profiles
-///   3. Fetch the RTSP stream URI for each profile
-async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
-    println!("=== Full workflow ===");
-    println!("Connecting to {}", cfg.camera_url);
-
-    // Build client with credentials.  utc_offset can be obtained from
-    // GetSystemDateAndTime (not yet implemented); pass 0 if clocks are in sync.
-    let client = OnvifClient::new(&cfg.camera_url)
-        .with_credentials(&cfg.username, &cfg.password)
-        .with_utc_offset(0);
-
-    // Step 1 — capabilities
-    let caps: Capabilities = client.get_capabilities().await?;
-    print_capabilities(&caps);
-
-    let media_url = match &caps.media.url {
-        Some(u) => u.clone(),
-        None => {
-            println!("Device does not advertise a Media service — stopping.");
-            return Ok(());
-        }
-    };
-
-    // Step 2 — media profiles
-    let profiles: Vec<MediaProfile> = client.get_profiles(&media_url).await?;
-    println!("\nFound {} profile(s):", profiles.len());
-    for p in &profiles {
-        println!(
-            "  [{token}] {name}  (fixed={fixed})",
-            token = p.token,
-            name = p.name,
-            fixed = p.fixed,
-        );
-    }
-
-    // Step 3 — RTSP URIs
-    println!();
-    for profile in &profiles {
-        let uri: StreamUri = client.get_stream_uri(&media_url, &profile.token).await?;
-        println!("Profile '{}' → {}", profile.name, uri.uri);
-        if uri.invalid_after_connect {
-            println!("  (URI expires after first RTSP connection)");
-        }
-        if !uri.timeout.is_empty() && uri.timeout != "PT0S" {
-            println!("  (URI timeout: {})", uri.timeout);
-        }
-    }
-
-    Ok(())
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn print_capabilities(caps: &Capabilities) {
     println!("\nCapabilities:");
@@ -151,7 +109,13 @@ fn print_capabilities(caps: &Capabilities) {
         println!("  Max profiles: {n}");
     }
     if caps.events.ws_pull_point {
-        println!("  Events: WS-PullPoint");
+        println!("  Events    : WS-PullPoint");
+    }
+    if caps.device.security.username_token {
+        println!("  Auth      : UsernameToken");
+    }
+    if caps.device.system.firmware_upgrade {
+        println!("  System    : firmware upgrade supported");
     }
 }
 
@@ -160,6 +124,73 @@ fn print_optional(label: &str, value: &Option<String>) {
         Some(v) => println!("{label}: {v}"),
         None => println!("{label}: (not supported)"),
     }
+}
+
+// Retrieve capabilities and apply the device clock offset.
+// Returns (client_with_offset, capabilities).
+async fn connect(cfg: &Config) -> Result<(OnvifClient, Capabilities), OnvifError> {
+    // Step 1 — get clock without credentials (usually allowed unauthenticated)
+    let base = OnvifClient::new(&cfg.camera_url);
+    let utc_offset = match base.get_system_date_and_time().await {
+        Ok(dt) => dt.utc_offset_secs(),
+        Err(_) => 0,
+    };
+
+    // Step 2 — build authenticated client with corrected timestamp
+    let client = OnvifClient::new(&cfg.camera_url)
+        .with_credentials(&cfg.username, &cfg.password)
+        .with_utc_offset(utc_offset);
+
+    let caps = client.get_capabilities().await?;
+    Ok((client, caps))
+}
+
+// ── Example 1: full workflow ──────────────────────────────────────────────────
+
+/// End-to-end flow:
+///   1. Sync device clock (unauthenticated GetSystemDateAndTime)
+///   2. Fetch capabilities to discover service URLs
+///   3. List media profiles
+///   4. Fetch RTSP stream URI for each profile
+async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Full workflow ===");
+    println!("Connecting to {}", cfg.camera_url);
+
+    let (client, caps) = connect(cfg).await?;
+    print_capabilities(&caps);
+
+    let media_url = match &caps.media.url {
+        Some(u) => u.clone(),
+        None => {
+            println!("Device does not advertise a Media service — stopping.");
+            return Ok(());
+        }
+    };
+
+    let profiles: Vec<MediaProfile> = client.get_profiles(&media_url).await?;
+    println!("\nFound {} profile(s):", profiles.len());
+    for p in &profiles {
+        println!(
+            "  [{token}] {name}  (fixed={fixed})",
+            token = p.token,
+            name = p.name,
+            fixed = p.fixed,
+        );
+    }
+
+    println!();
+    for profile in &profiles {
+        let uri: StreamUri = client.get_stream_uri(&media_url, &profile.token).await?;
+        println!("Profile '{}' → {}", profile.name, uri.uri);
+        if uri.invalid_after_connect {
+            println!("  (URI expires after first RTSP connection)");
+        }
+        if !uri.timeout.is_empty() && uri.timeout != "PT0S" {
+            println!("  (URI timeout: {})", uri.timeout);
+        }
+    }
+
+    Ok(())
 }
 
 // ── Example 2: device info ────────────────────────────────────────────────────
@@ -192,13 +223,10 @@ async fn device_info_example(cfg: &Config) -> Result<(), OnvifError> {
 // ── Example 3: stream URIs ────────────────────────────────────────────────────
 
 /// Lists every media profile together with its RTSP URI.
-/// Useful for quickly discovering all streams a camera exposes.
 async fn stream_uris(cfg: &Config) -> Result<(), OnvifError> {
     println!("=== Stream URIs ===");
 
-    let client = OnvifClient::new(&cfg.camera_url).with_credentials(&cfg.username, &cfg.password);
-
-    let caps = client.get_capabilities().await?;
+    let (client, caps) = connect(cfg).await?;
     let media_url = caps
         .media
         .url
@@ -224,7 +252,164 @@ async fn stream_uris(cfg: &Config) -> Result<(), OnvifError> {
     Ok(())
 }
 
-// ── Example 4: error handling ─────────────────────────────────────────────────
+// ── Example 4: snapshot URIs ──────────────────────────────────────────────────
+
+/// Lists HTTP snapshot URIs for every media profile.
+/// Fetch any of these with curl or a browser to get a JPEG still image.
+async fn snapshot_uris(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Snapshot URIs ===");
+
+    let (client, caps) = connect(cfg).await?;
+    let media_url = caps
+        .media
+        .url
+        .ok_or_else(|| oxvif::soap::SoapError::missing("Media service not found"))?;
+
+    let profiles = client.get_profiles(&media_url).await?;
+
+    if profiles.is_empty() {
+        println!("No media profiles found.");
+        return Ok(());
+    }
+
+    println!("{:<20} Snapshot URI", "Profile");
+    println!("{}", "-".repeat(80));
+
+    for profile in &profiles {
+        match client.get_snapshot_uri(&media_url, &profile.token).await {
+            Ok(snap) => {
+                let flags = match (snap.invalid_after_connect, snap.invalid_after_reboot) {
+                    (true, _) => " [one-time]",
+                    (_, true) => " [reboot-reset]",
+                    _ => "",
+                };
+                println!("{:<20} {}{}", profile.name, snap.uri, flags);
+            }
+            Err(e) => println!("{:<20} ERROR: {e}", profile.name),
+        }
+    }
+
+    Ok(())
+}
+
+// ── Example 5: system date and time ──────────────────────────────────────────
+
+/// Prints the device clock, timezone, and the UTC offset used for WS-Security.
+async fn system_datetime(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== System date and time ===");
+
+    // GetSystemDateAndTime is typically accessible without credentials.
+    let client = OnvifClient::new(&cfg.camera_url);
+    let dt: SystemDateTime = match client.get_system_date_and_time().await {
+        Ok(dt) => dt,
+        Err(_) => {
+            println!("(unauthenticated request failed — retrying with credentials)");
+            OnvifClient::new(&cfg.camera_url)
+                .with_credentials(&cfg.username, &cfg.password)
+                .get_system_date_and_time()
+                .await?
+        }
+    };
+
+    match dt.utc_unix {
+        Some(unix) => {
+            println!("Device UTC   : Unix timestamp {unix}");
+            // Render as ISO 8601 using chrono if available; here we format manually.
+            let secs = unix % 60;
+            let mins = (unix / 60) % 60;
+            let hours = (unix / 3600) % 24;
+            let days = unix / 86_400;
+            println!("             : ~{days} days since epoch, {hours:02}:{mins:02}:{secs:02} UTC");
+        }
+        None => println!("Device UTC   : (not returned by device)"),
+    }
+
+    let tz = if dt.timezone.is_empty() {
+        "(none)".to_string()
+    } else {
+        dt.timezone.clone()
+    };
+    println!("Timezone     : {tz}");
+    println!("DST active   : {}", dt.daylight_savings);
+
+    let offset = dt.utc_offset_secs();
+    println!("UTC offset   : {offset:+} seconds (device − local)");
+    if offset.abs() > 5 {
+        println!(
+            "  ⚠  Clock skew detected. Use .with_utc_offset({offset}) to keep WS-Security valid."
+        );
+    } else {
+        println!("  Clocks are in sync — no offset needed.");
+    }
+
+    Ok(())
+}
+
+// ── Example 6: PTZ presets ────────────────────────────────────────────────────
+
+/// Lists all PTZ presets for every media profile that supports PTZ.
+/// Requires a camera with PTZ capability.
+async fn ptz_presets(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== PTZ presets ===");
+
+    let (client, caps) = connect(cfg).await?;
+
+    let ptz_url = match &caps.ptz_url {
+        Some(u) => u.clone(),
+        None => {
+            println!("Device does not advertise a PTZ service.");
+            return Ok(());
+        }
+    };
+    println!("PTZ service: {ptz_url}");
+
+    let media_url = match &caps.media.url {
+        Some(u) => u.clone(),
+        None => {
+            println!("No media service — cannot list profiles.");
+            return Ok(());
+        }
+    };
+
+    let profiles = client.get_profiles(&media_url).await?;
+    if profiles.is_empty() {
+        println!("No media profiles found.");
+        return Ok(());
+    }
+
+    for profile in &profiles {
+        println!("\nProfile '{}' (token: {}):", profile.name, profile.token);
+
+        match client.ptz_get_presets(&ptz_url, &profile.token).await {
+            Ok(presets) if presets.is_empty() => {
+                println!("  (no presets saved)");
+            }
+            Ok(presets) => {
+                println!(
+                    "  {:<8} {:<20} {:>12}  {:>8}",
+                    "Token", "Name", "Pan/Tilt", "Zoom"
+                );
+                println!("  {}", "-".repeat(52));
+                for p in &presets {
+                    let pt = match p.pan_tilt {
+                        Some((x, y)) => format!("{x:+.3}/{y:+.3}"),
+                        None => "—".to_string(),
+                    };
+                    let z = match p.zoom {
+                        Some(z) => format!("{z:.3}"),
+                        None => "—".to_string(),
+                    };
+                    println!("  {:<8} {:<20} {:>12}  {:>8}", p.token, p.name, pt, z);
+                }
+            }
+            Err(e) => println!("  ERROR: {e}"),
+        }
+    }
+
+    Ok(())
+}
+
+// ── Example 7: error handling ─────────────────────────────────────────────────
 
 /// Demonstrates how to match on typed OnvifError variants.
 async fn error_handling_example(cfg: &Config) -> Result<(), OnvifError> {

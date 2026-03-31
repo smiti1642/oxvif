@@ -3,16 +3,18 @@
 Async Rust client library for the [ONVIF](https://www.onvif.org/) IP camera protocol.
 
 ```
-SOAP/HTTP ──► OnvifClient ──► Capabilities
-                          ──► DeviceInfo
+SOAP/HTTP ──► OnvifClient ──► Capabilities / DeviceInfo
                           ──► Vec<MediaProfile>
-                          ──► StreamUri
+                          ──► StreamUri / SnapshotUri
+                          ──► SystemDateTime
+                          ──► PTZ (move / stop / presets)
 ```
 
 - Async-first (`tokio` + `reqwest`)
 - WS-Security `UsernameToken` with `PasswordDigest` (ONVIF Profile S §5.12)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
+- LF line endings enforced via `.gitattributes`
 
 ---
 
@@ -28,7 +30,7 @@ async fn main() -> Result<(), OnvifError> {
 
     // 1. Discover service URLs
     let caps = client.get_capabilities().await?;
-    let media_url = caps.media_url.as_deref().unwrap();
+    let media_url = caps.media.url.as_deref().unwrap();
 
     // 2. List media profiles
     let profiles = client.get_profiles(media_url).await?;
@@ -70,15 +72,18 @@ The main entry point. Stateless and cheaply cloneable — safe to wrap in `Arc` 
 | Method | Description |
 |--------|-------------|
 | `.with_credentials(username, password)` | Enable WS-Security `UsernameToken` authentication |
-| `.with_utc_offset(offset_secs: i64)` | Adjust WS-Security timestamp if device clock differs from local UTC. Obtain the offset from `GetSystemDateAndTime`. |
+| `.with_utc_offset(offset_secs: i64)` | Adjust WS-Security timestamp if device clock differs from local UTC |
 | `.with_transport(Arc<dyn Transport>)` | Replace the default HTTP transport (used for unit testing) |
 
 ### Example
 
 ```rust
-let client = OnvifClient::new("http://192.168.1.100/onvif/device_service")
+// Sync device clock before sending authenticated requests
+let client = OnvifClient::new("http://192.168.1.100/onvif/device_service");
+let dt = client.get_system_date_and_time().await?;
+let client = client
     .with_credentials("admin", "secret")
-    .with_utc_offset(-5);   // device is 5 seconds behind local UTC
+    .with_utc_offset(dt.utc_offset_secs());
 ```
 
 ---
@@ -87,18 +92,52 @@ let client = OnvifClient::new("http://192.168.1.100/onvif/device_service")
 
 ### `get_capabilities() -> Result<Capabilities, OnvifError>`
 
-Retrieves all service endpoint URLs from the device. **Always call this first** — the returned URLs are required by all subsequent media, PTZ, events, and imaging calls.
+Retrieves all service endpoint URLs and feature flags from the device.
+**Always call this first** — the returned URLs are required by all subsequent calls.
 
 ```rust
 let caps = client.get_capabilities().await?;
 
-// Returned fields — all Option<String>
-caps.device_url    // Device management service
-caps.media_url     // Media service (needed for profiles / stream URIs)
-caps.ptz_url       // PTZ service
-caps.events_url    // Events service
-caps.imaging_url   // Imaging service
-caps.analytics_url // Analytics service
+// Service URLs
+caps.device.url        // Device management service
+caps.media.url         // Media service (profiles / stream URIs)
+caps.ptz_url           // PTZ service
+caps.events.url        // Events service
+caps.imaging_url       // Imaging service
+caps.analytics.url     // Analytics service
+
+// Device capabilities
+caps.device.network.ip_version6
+caps.device.system.firmware_upgrade
+caps.device.security.username_token
+
+// Media capabilities
+caps.media.streaming.rtp_rtsp_tcp
+caps.media.streaming.rtp_multicast
+caps.media.max_profiles          // Option<u32>
+
+// Events capabilities
+caps.events.ws_pull_point
+caps.events.ws_subscription_policy
+```
+
+---
+
+### `get_system_date_and_time() -> Result<SystemDateTime, OnvifError>`
+
+Retrieves the device clock. Use the result to calibrate WS-Security timestamps.
+
+```rust
+let dt = client.get_system_date_and_time().await?;
+
+dt.utc_unix          // Option<i64>  Unix timestamp of the device UTC clock
+dt.timezone          // String       POSIX timezone (e.g. "CST-8")
+dt.daylight_savings  // bool
+
+// Compute offset and apply before sending authenticated requests
+let offset = dt.utc_offset_secs();   // device_utc − local_utc
+let client = client.with_credentials("admin", "pass")
+                   .with_utc_offset(offset);
 ```
 
 ---
@@ -121,12 +160,10 @@ info.hardware_id
 
 ### `get_profiles(media_url) -> Result<Vec<MediaProfile>, OnvifError>`
 
-Lists all media profiles available on the device. Each profile represents a stream configuration (resolution, codec, frame rate, etc.).
-
-`media_url` must be the value from `caps.media_url`.
+Lists all media profiles. Each profile represents a stream configuration (resolution, codec, frame rate, etc.).
 
 ```rust
-let profiles = client.get_profiles(&caps.media_url.unwrap()).await?;
+let profiles = client.get_profiles(&caps.media.url.unwrap()).await?;
 
 for p in &profiles {
     println!("{} — token: {}, fixed: {}", p.name, p.token, p.fixed);
@@ -137,7 +174,7 @@ for p in &profiles {
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `token` | `String` | Opaque identifier; pass to `get_stream_uri` |
+| `token` | `String` | Opaque identifier; pass to `get_stream_uri` / `get_snapshot_uri` / PTZ methods |
 | `name` | `String` | Human-readable name (e.g. `"mainStream"`) |
 | `fixed` | `bool` | `true` = profile cannot be deleted |
 
@@ -151,15 +188,103 @@ Returns the RTSP URI for the given media profile.
 let uri = client.get_stream_uri(media_url, &profiles[0].token).await?;
 
 uri.uri                    // e.g. "rtsp://192.168.1.100:554/Streaming/Channels/101"
-uri.invalid_after_connect  // true = URI one-time use only
+uri.invalid_after_connect  // true = URI is one-time use
 uri.invalid_after_reboot   // true = URI expires on reboot
-uri.timeout                // ISO 8601 duration, e.g. "PT60S", "PT0S" = no expiry
+uri.timeout                // ISO 8601 duration, e.g. "PT60S" ("PT0S" = no expiry)
 ```
 
 Play with VLC or ffmpeg:
 
 ```sh
 ffplay "rtsp://192.168.1.100:554/Streaming/Channels/101"
+```
+
+---
+
+### `get_snapshot_uri(media_url, profile_token) -> Result<SnapshotUri, OnvifError>`
+
+Returns the HTTP URL for fetching a JPEG snapshot from the given media profile.
+
+```rust
+let snap = client.get_snapshot_uri(media_url, &profiles[0].token).await?;
+
+snap.uri                    // e.g. "http://192.168.1.100/onvif/snapshot?channel=1"
+snap.invalid_after_connect  // true = URI is one-time use
+snap.invalid_after_reboot   // true = URI expires on reboot
+snap.timeout                // ISO 8601 expiry duration
+```
+
+Fetch the snapshot:
+
+```sh
+curl -o snapshot.jpg "http://192.168.1.100/onvif/snapshot?channel=1"
+```
+
+---
+
+## PTZ methods
+
+All PTZ methods take `ptz_url` from `caps.ptz_url`.
+Coordinates use the ONVIF normalised range: pan/tilt `[-1.0, 1.0]`, zoom `[0.0, 1.0]`.
+
+### `ptz_absolute_move(ptz_url, profile_token, pan, tilt, zoom)`
+
+Move to an absolute position.
+
+```rust
+// Centre frame, half zoom
+client.ptz_absolute_move(ptz_url, &token, 0.0, 0.0, 0.5).await?;
+```
+
+### `ptz_relative_move(ptz_url, profile_token, pan, tilt, zoom)`
+
+Move by an offset from the current position.
+
+```rust
+// Pan right slightly
+client.ptz_relative_move(ptz_url, &token, 0.1, 0.0, 0.0).await?;
+```
+
+### `ptz_continuous_move(ptz_url, profile_token, pan, tilt, zoom)`
+
+Start continuous movement at the given velocity. Call `ptz_stop` to halt.
+
+```rust
+client.ptz_continuous_move(ptz_url, &token, 0.5, 0.0, 0.0).await?;
+// ... wait ...
+client.ptz_stop(ptz_url, &token).await?;
+```
+
+### `ptz_stop(ptz_url, profile_token)`
+
+Stop all pan, tilt, and zoom movement.
+
+### `ptz_get_presets(ptz_url, profile_token) -> Result<Vec<PtzPreset>, OnvifError>`
+
+List all saved preset positions.
+
+```rust
+let presets = client.ptz_get_presets(ptz_url, &token).await?;
+for p in &presets {
+    println!("[{}] {} — pan/tilt: {:?}, zoom: {:?}", p.token, p.name, p.pan_tilt, p.zoom);
+}
+```
+
+**`PtzPreset` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `token` | `String` | Opaque identifier; pass to `ptz_goto_preset` |
+| `name` | `String` | Human-readable preset name |
+| `pan_tilt` | `Option<(f32, f32)>` | Stored pan (x) and tilt (y), or `None` if absent |
+| `zoom` | `Option<f32>` | Stored zoom, or `None` if absent |
+
+### `ptz_goto_preset(ptz_url, profile_token, preset_token)`
+
+Move to a saved preset position.
+
+```rust
+client.ptz_goto_preset(ptz_url, &profile_token, &presets[0].token).await?;
 ```
 
 ---
@@ -252,6 +377,12 @@ let client = OnvifClient::new("http://ignored")
 let caps = client.get_capabilities().await.unwrap();
 ```
 
+Run the built-in unit tests:
+
+```sh
+cargo test
+```
+
 ---
 
 ## Running the built-in examples
@@ -275,10 +406,13 @@ ONVIF_PASSWORD=your_password
 **Step 2** — run an example:
 
 ```sh
-cargo run -- full-workflow    # capabilities → profiles → RTSP URIs
-cargo run -- device-info      # manufacturer, model, firmware
-cargo run -- stream-uris      # tabular RTSP URI listing
-cargo run -- error-handling   # typed error matching demo
+cargo run -- full-workflow     # capabilities → profiles → RTSP URIs
+cargo run -- device-info       # manufacturer, model, firmware
+cargo run -- stream-uris       # tabular RTSP URI listing
+cargo run -- snapshot-uris     # tabular HTTP snapshot URI listing
+cargo run -- system-datetime   # device clock and UTC offset
+cargo run -- ptz-presets       # list all PTZ presets (requires PTZ camera)
+cargo run -- error-handling    # typed error matching demo
 ```
 
 `ONVIF_USERNAME` and `ONVIF_PASSWORD` are optional (default: `admin` / empty).
@@ -309,12 +443,18 @@ src/
 |-----------|---------|--------|
 | `GetCapabilities` | Device | ✓ |
 | `GetDeviceInformation` | Device | ✓ |
+| `GetSystemDateAndTime` | Device | ✓ |
 | `GetProfiles` | Media | ✓ |
 | `GetStreamUri` | Media | ✓ |
-| `GetSystemDateAndTime` | Device | planned |
-| `GetSnapshotUri` | Media | planned |
-| PTZ (Move / Stop / Preset) | PTZ | planned |
+| `GetSnapshotUri` | Media | ✓ |
+| `AbsoluteMove` | PTZ | ✓ |
+| `RelativeMove` | PTZ | ✓ |
+| `ContinuousMove` | PTZ | ✓ |
+| `Stop` | PTZ | ✓ |
+| `GetPresets` | PTZ | ✓ |
+| `GotoPreset` | PTZ | ✓ |
 | Events (Subscribe / Pull) | Events | planned |
+| `GetVideoEncoderConfigurations` | Media | planned |
 | WS-Discovery | UDP multicast | planned |
 
 ---
