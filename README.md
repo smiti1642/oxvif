@@ -450,6 +450,104 @@ if let Some(qr) = opts.quality_range {
 
 ---
 
+## Media2 methods
+
+ONVIF Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 support and a simplified encoder configuration structure. All Media2 methods take `media2_url` from `caps.media2_url`.
+
+### Media1 vs Media2 key differences
+
+| Feature | Media1 (`trt:`) | Media2 (`tr2:`) |
+|---------|----------------|----------------|
+| H.265 | Via `Other(String)` | Native `VideoEncoding::H265` |
+| Encoder config | Nested `H264`/`H265` sub-struct | **Flat** — `gov_length` and `profile` at top level |
+| Rate control | `frame_rate_limit` + `encoding_interval` + `bitrate_limit` | `frame_rate_limit` + `bitrate_limit` only |
+| `GetStreamUri` response | `<MediaUri>` wrapper with expiry fields | Just `<Uri>` string |
+| `Set` operations | Require `<ForcePersistence>true` | No `ForcePersistence` |
+| Encoder options | Separate JPEG/H264/H265 blocks | One `<Options>` element per encoding |
+
+### Discovering the Media2 URL
+
+Many cameras do not include the Media2 URL in `GetCapabilities`. Use `GetServices` as a fallback:
+
+```rust
+let caps = client.get_capabilities().await?;
+let media2_url = match caps.media2_url.clone() {
+    Some(url) => url,
+    None => client.get_services().await?
+        .into_iter()
+        .find(|s| s.is_media2())
+        .map(|s| s.url)
+        .ok_or_else(|| /* handle unsupported */ )?,
+};
+```
+
+### Media2 method reference
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_profiles_media2(url)` | `Vec<MediaProfile2>` | List profiles; includes bound video source / encoder tokens |
+| `get_stream_uri_media2(url, profile_token)` | `String` | RTSP URI |
+| `get_snapshot_uri_media2(url, profile_token)` | `String` | HTTP snapshot URI |
+| `get_video_source_configurations_media2(url)` | `Vec<VideoSourceConfiguration>` | Same type as Media1 |
+| `set_video_source_configuration_media2(url, config)` | `()` | No ForcePersistence |
+| `get_video_source_configuration_options_media2(url, token)` | `VideoSourceConfigurationOptions` | Same type as Media1 |
+| `get_video_encoder_configurations_media2(url)` | `Vec<VideoEncoderConfiguration2>` | Flat H.265-capable config |
+| `get_video_encoder_configuration_media2(url, token)` | `VideoEncoderConfiguration2` | Single config by token |
+| `set_video_encoder_configuration_media2(url, config)` | `()` | Write encoder config |
+| `get_video_encoder_configuration_options_media2(url, token)` | `VideoEncoderConfigurationOptions2` | Per-encoding option sets |
+| `get_video_encoder_instances_media2(url, config_token)` | `VideoEncoderInstances` | Encoder capacity per source |
+| `create_profile_media2(url, name)` | `String` | Create profile, returns new token |
+| `delete_profile_media2(url, token)` | `()` | Delete a non-fixed profile |
+
+### H.265 encoder config example
+
+```rust
+// Read all encoder configs
+let configs = client.get_video_encoder_configurations_media2(&media2_url).await?;
+
+// Find the H.265 stream and lower its bitrate
+let mut enc = configs.into_iter()
+    .find(|c| c.encoding == VideoEncoding::H265)
+    .expect("no H.265 encoder found");
+
+if let Some(rc) = enc.rate_control.as_mut() {
+    rc.bitrate_limit = 4096;   // 4 Mbps
+}
+client.set_video_encoder_configuration_media2(&media2_url, &enc).await?;
+```
+
+**`VideoEncoderConfiguration2` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `token` | `String` | Opaque config token |
+| `encoding` | `VideoEncoding` | `H264` / `H265` / `Jpeg` / `Other` |
+| `resolution` | `Resolution` | Output resolution |
+| `quality` | `f32` | Encoder quality (see options for range) |
+| `rate_control` | `Option<VideoRateControl2>` | `frame_rate_limit`, `bitrate_limit` (kbps) |
+| `gov_length` | `Option<u32>` | GOP / keyframe interval in frames |
+| `profile` | `Option<String>` | Codec profile: `"Main"`, `"High"`, etc. |
+
+### Encoder options example
+
+```rust
+let opts = client
+    .get_video_encoder_configuration_options_media2(&media2_url, None)
+    .await?;
+
+for opt in &opts.options {
+    println!("=== {} ===", opt.encoding);
+    for r in &opt.resolutions { print!("  {r}"); }
+    println!();
+    if let Some(br) = opt.bitrate_range {
+        println!("  bitrate: {} – {} kbps", br.min, br.max);
+    }
+    println!("  profiles: {}", opt.profiles.join(", "));
+}
+```
+
+---
+
 ## Error handling
 
 All API methods return `Result<T, OnvifError>`. The error has two variants:
@@ -573,8 +671,9 @@ cargo run -- stream-uris       # tabular RTSP URI listing
 cargo run -- snapshot-uris     # tabular HTTP snapshot URI listing
 cargo run -- system-datetime   # device clock and UTC offset
 cargo run -- ptz-presets       # list all PTZ presets (requires PTZ camera)
-cargo run -- video-config      # video sources, encoder configs and options
-cargo run -- error-handling    # typed error matching demo
+cargo run -- video-config         # video sources, encoder configs and options (Media1)
+cargo run -- video-config-media2  # H.265 encoder configs and options (Media2)
+cargo run -- error-handling       # typed error matching demo
 ```
 
 `ONVIF_USERNAME` and `ONVIF_PASSWORD` are optional (default: `admin` / empty).
@@ -613,6 +712,7 @@ src/
 | `RelativeMove` | PTZ | ✓ |
 | `ContinuousMove` | PTZ | ✓ |
 | `Stop` | PTZ | ✓ |
+| `GetServices` | Device | ✓ |
 | `GetPresets` | PTZ | ✓ |
 | `GotoPreset` | PTZ | ✓ |
 | `GetVideoSources` | Media | ✓ |
@@ -624,6 +724,19 @@ src/
 | `GetVideoEncoderConfiguration` | Media | ✓ |
 | `SetVideoEncoderConfiguration` | Media | ✓ |
 | `GetVideoEncoderConfigurationOptions` | Media | ✓ |
+| `GetProfiles` | Media2 | ✓ |
+| `GetStreamUri` | Media2 | ✓ |
+| `GetSnapshotUri` | Media2 | ✓ |
+| `GetVideoSourceConfigurations` | Media2 | ✓ |
+| `SetVideoSourceConfiguration` | Media2 | ✓ |
+| `GetVideoSourceConfigurationOptions` | Media2 | ✓ |
+| `GetVideoEncoderConfigurations` | Media2 | ✓ |
+| `GetVideoEncoderConfiguration` | Media2 | ✓ |
+| `SetVideoEncoderConfiguration` | Media2 | ✓ |
+| `GetVideoEncoderConfigurationOptions` | Media2 | ✓ |
+| `GetVideoEncoderInstances` | Media2 | ✓ |
+| `CreateProfile` | Media2 | ✓ |
+| `DeleteProfile` | Media2 | ✓ |
 | Events (Subscribe / Pull) | Events | planned |
 | `GetAudioSources` / encoder configs | Media | planned |
 | WS-Discovery | UDP multicast | planned |

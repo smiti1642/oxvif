@@ -28,9 +28,10 @@ use crate::error::OnvifError;
 use crate::soap::{SoapEnvelope, WsSecurityToken, find_response, parse_soap_body};
 use crate::transport::{HttpTransport, Transport};
 use crate::types::{
-    Capabilities, DeviceInfo, MediaProfile, PtzPreset, SnapshotUri, StreamUri, SystemDateTime,
-    VideoEncoderConfiguration, VideoEncoderConfigurationOptions, VideoSource,
-    VideoSourceConfiguration, VideoSourceConfigurationOptions,
+    Capabilities, DeviceInfo, MediaProfile, MediaProfile2, OnvifService, PtzPreset, SnapshotUri,
+    StreamUri, SystemDateTime, VideoEncoderConfiguration, VideoEncoderConfiguration2,
+    VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,
+    VideoSource, VideoSourceConfiguration, VideoSourceConfigurationOptions,
 };
 
 // ── OnvifClient ───────────────────────────────────────────────────────────────
@@ -143,6 +144,37 @@ impl OnvifClient {
         let body = parse_soap_body(&xml)?;
         let resp = find_response(&body, "GetCapabilitiesResponse")?;
         Capabilities::from_xml(resp)
+    }
+
+    /// Retrieve all service endpoints advertised by the device.
+    ///
+    /// `GetServices` is the correct ONVIF mechanism for discovering every
+    /// service URL, including Media2. Many devices do not include the Media2
+    /// URL in `GetCapabilities` — call this as a fallback:
+    ///
+    /// ```no_run
+    /// # use oxvif::{OnvifClient, OnvifError};
+    /// # async fn run() -> Result<(), OnvifError> {
+    /// let client = OnvifClient::new("http://192.168.1.1/onvif/device_service");
+    /// let caps   = client.get_capabilities().await?;
+    /// let media2_url = match caps.media2_url {
+    ///     Some(u) => u,
+    ///     None => client.get_services().await?
+    ///         .into_iter()
+    ///         .find(|s| s.is_media2())
+    ///         .map(|s| s.url)
+    ///         .expect("device does not support Media2"),
+    /// };
+    /// # Ok(()) }
+    /// ```
+    pub async fn get_services(&self) -> Result<Vec<OnvifService>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetServices";
+        const BODY: &str = "<tds:GetServices><tds:IncludeCapability>false</tds:IncludeCapability></tds:GetServices>";
+
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body = parse_soap_body(&xml)?;
+        let resp = find_response(&body, "GetServicesResponse")?;
+        OnvifService::vec_from_xml(resp)
     }
 
     /// Retrieve the device clock and compute the UTC offset for WS-Security.
@@ -584,6 +616,273 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetVideoEncoderConfigurationOptionsResponse")?;
         VideoEncoderConfigurationOptions::from_xml(resp)
+    }
+
+    // ── Media2 Service ────────────────────────────────────────────────────────
+
+    /// List all media profiles from the Media2 service.
+    ///
+    /// `media2_url` is obtained from `caps.media2_url` via
+    /// [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_profiles_media2(
+        &self,
+        media2_url: &str,
+    ) -> Result<Vec<MediaProfile2>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetProfiles";
+        const BODY: &str = "<tr2:GetProfiles/>";
+
+        let xml = self.call(media2_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetProfilesResponse")?;
+        MediaProfile2::vec_from_xml(resp)
+    }
+
+    /// Retrieve an RTSP stream URI via the Media2 service.
+    ///
+    /// Returns the URI string directly (no `MediaUri` wrapper, unlike Media1).
+    pub async fn get_stream_uri_media2(
+        &self,
+        media2_url: &str,
+        profile_token: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetStreamUri";
+        let body = format!(
+            "<tr2:GetStreamUri>\
+               <tr2:Protocol>RTSP</tr2:Protocol>\
+               <tr2:ProfileToken>{profile_token}</tr2:ProfileToken>\
+             </tr2:GetStreamUri>"
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetStreamUriResponse")?;
+        resp.child("Uri")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("Uri").into())
+    }
+
+    /// Retrieve an HTTP snapshot URI via the Media2 service.
+    ///
+    /// Returns the URI string directly (no `MediaUri` wrapper, unlike Media1).
+    pub async fn get_snapshot_uri_media2(
+        &self,
+        media2_url: &str,
+        profile_token: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetSnapshotUri";
+        let body = format!(
+            "<tr2:GetSnapshotUri>\
+               <tr2:ProfileToken>{profile_token}</tr2:ProfileToken>\
+             </tr2:GetSnapshotUri>"
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetSnapshotUriResponse")?;
+        resp.child("Uri")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("Uri").into())
+    }
+
+    /// List all video source configurations via the Media2 service.
+    pub async fn get_video_source_configurations_media2(
+        &self,
+        media2_url: &str,
+    ) -> Result<Vec<VideoSourceConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurations";
+        const BODY: &str = "<tr2:GetVideoSourceConfigurations/>";
+
+        let xml = self.call(media2_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoSourceConfigurationsResponse")?;
+        VideoSourceConfiguration::vec_from_xml(resp)
+    }
+
+    /// Apply a modified video source configuration via the Media2 service.
+    ///
+    /// Note: Media2 does not use `ForcePersistence`.
+    pub async fn set_video_source_configuration_media2(
+        &self,
+        media2_url: &str,
+        config: &VideoSourceConfiguration,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/SetVideoSourceConfiguration";
+        let body = format!(
+            "<tr2:SetVideoSourceConfiguration>{cfg}</tr2:SetVideoSourceConfiguration>",
+            cfg = config.to_xml_body_media2()
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetVideoSourceConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the valid parameter ranges for video source configuration via Media2.
+    pub async fn get_video_source_configuration_options_media2(
+        &self,
+        media2_url: &str,
+        config_token: Option<&str>,
+    ) -> Result<VideoSourceConfigurationOptions, OnvifError> {
+        const ACTION: &str =
+            "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions";
+        let inner = match config_token {
+            Some(tok) => format!("<tr2:ConfigurationToken>{tok}</tr2:ConfigurationToken>"),
+            None => String::new(),
+        };
+        let body = format!(
+            "<tr2:GetVideoSourceConfigurationOptions>{inner}</tr2:GetVideoSourceConfigurationOptions>"
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoSourceConfigurationOptionsResponse")?;
+        VideoSourceConfigurationOptions::from_xml(resp)
+    }
+
+    /// List all video encoder configurations from the Media2 service.
+    ///
+    /// Returns [`VideoEncoderConfiguration2`] which uses a flat layout with
+    /// native H.265 support.
+    pub async fn get_video_encoder_configurations_media2(
+        &self,
+        media2_url: &str,
+    ) -> Result<Vec<VideoEncoderConfiguration2>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurations";
+        const BODY: &str = "<tr2:GetVideoEncoderConfigurations/>";
+
+        let xml = self.call(media2_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoEncoderConfigurationsResponse")?;
+        VideoEncoderConfiguration2::vec_from_xml(resp)
+    }
+
+    /// Retrieve a single video encoder configuration by token from the Media2 service.
+    pub async fn get_video_encoder_configuration_media2(
+        &self,
+        media2_url: &str,
+        token: &str,
+    ) -> Result<VideoEncoderConfiguration2, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurations";
+        let body = format!(
+            "<tr2:GetVideoEncoderConfigurations>\
+               <tr2:ConfigurationToken>{token}</tr2:ConfigurationToken>\
+             </tr2:GetVideoEncoderConfigurations>"
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoEncoderConfigurationsResponse")?;
+        let configs = VideoEncoderConfiguration2::vec_from_xml(resp)?;
+        configs
+            .into_iter()
+            .next()
+            .ok_or_else(|| crate::soap::SoapError::missing("Configurations").into())
+    }
+
+    /// Apply a modified video encoder configuration via the Media2 service.
+    ///
+    /// Note: Media2 does not use `ForcePersistence`.
+    pub async fn set_video_encoder_configuration_media2(
+        &self,
+        media2_url: &str,
+        config: &VideoEncoderConfiguration2,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/SetVideoEncoderConfiguration";
+        let body = format!(
+            "<tr2:SetVideoEncoderConfiguration>{cfg}</tr2:SetVideoEncoderConfiguration>",
+            cfg = config.to_xml_body()
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetVideoEncoderConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the valid parameter ranges for video encoder configuration via Media2.
+    ///
+    /// Media2 returns one options entry per supported encoding type.
+    pub async fn get_video_encoder_configuration_options_media2(
+        &self,
+        media2_url: &str,
+        config_token: Option<&str>,
+    ) -> Result<VideoEncoderConfigurationOptions2, OnvifError> {
+        const ACTION: &str =
+            "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurationOptions";
+        let inner = match config_token {
+            Some(tok) => format!("<tr2:ConfigurationToken>{tok}</tr2:ConfigurationToken>"),
+            None => String::new(),
+        };
+        let body = format!(
+            "<tr2:GetVideoEncoderConfigurationOptions>{inner}</tr2:GetVideoEncoderConfigurationOptions>"
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoEncoderConfigurationOptionsResponse")?;
+        VideoEncoderConfigurationOptions2::from_xml(resp)
+    }
+
+    /// Retrieve encoder instance capacity info for a video source configuration (Media2).
+    pub async fn get_video_encoder_instances_media2(
+        &self,
+        media2_url: &str,
+        config_token: &str,
+    ) -> Result<VideoEncoderInstances, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderInstances";
+        let body = format!(
+            "<tr2:GetVideoEncoderInstances>\
+               <tr2:ConfigurationToken>{config_token}</tr2:ConfigurationToken>\
+             </tr2:GetVideoEncoderInstances>"
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoEncoderInstancesResponse")?;
+        VideoEncoderInstances::from_xml(resp)
+    }
+
+    /// Create a new media profile via the Media2 service.
+    ///
+    /// Returns the token of the newly created profile.
+    pub async fn create_profile_media2(
+        &self,
+        media2_url: &str,
+        name: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/CreateProfile";
+        let body = format!(
+            "<tr2:CreateProfile>\
+               <tr2:Name>{name}</tr2:Name>\
+             </tr2:CreateProfile>"
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "CreateProfileResponse")?;
+        resp.child("Token")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("Token").into())
+    }
+
+    /// Delete a media profile via the Media2 service.
+    pub async fn delete_profile_media2(
+        &self,
+        media2_url: &str,
+        token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/DeleteProfile";
+        let body = format!(
+            "<tr2:DeleteProfile>\
+               <tr2:Token>{token}</tr2:Token>\
+             </tr2:DeleteProfile>"
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "DeleteProfileResponse")?;
+        Ok(())
     }
 }
 
@@ -1198,5 +1497,202 @@ mod tests {
         assert_eq!(h264.profiles[1], "Main");
         let br = h264.bitrate_range.unwrap();
         assert_eq!(br.max, 16384);
+    }
+
+    // ── Media2 fixtures ───────────────────────────────────────────────────────
+
+    fn profiles_media2_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tr2:GetProfilesResponse>
+              <tr2:Profiles token="Profile_A" fixed="true">
+                <tt:Name>mainStream</tt:Name>
+                <tr2:Configurations>
+                  <tr2:VideoSource token="VSC_1"/>
+                  <tr2:VideoEncoder token="VEC_1"/>
+                </tr2:Configurations>
+              </tr2:Profiles>
+              <tr2:Profiles token="Profile_B" fixed="false">
+                <tt:Name>subStream</tt:Name>
+              </tr2:Profiles>
+            </tr2:GetProfilesResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    fn stream_uri_media2_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tr2="http://www.onvif.org/ver20/media/wsdl">
+          <s:Body>
+            <tr2:GetStreamUriResponse>
+              <tr2:Uri>rtsp://192.168.1.1:554/h265/ch1</tr2:Uri>
+            </tr2:GetStreamUriResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    fn video_encoder_configurations_media2_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tr2:GetVideoEncoderConfigurationsResponse>
+              <tr2:Configurations token="VEC_H265">
+                <tt:Name>H265Stream</tt:Name>
+                <tt:UseCount>1</tt:UseCount>
+                <tt:Encoding>H265</tt:Encoding>
+                <tt:Resolution><tt:Width>3840</tt:Width><tt:Height>2160</tt:Height></tt:Resolution>
+                <tt:Quality>7</tt:Quality>
+                <tt:RateControl>
+                  <tt:FrameRateLimit>30</tt:FrameRateLimit>
+                  <tt:BitrateLimit>8192</tt:BitrateLimit>
+                </tt:RateControl>
+                <tt:GovLength>60</tt:GovLength>
+                <tt:Profile>Main</tt:Profile>
+              </tr2:Configurations>
+            </tr2:GetVideoEncoderConfigurationsResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    fn video_encoder_configuration_options_media2_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tr2:GetVideoEncoderConfigurationOptionsResponse>
+              <tr2:Options>
+                <tt:Encoding>H264</tt:Encoding>
+                <tt:QualityRange><tt:Min>1</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
+                <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
+                <tt:BitrateRange><tt:Min>32</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
+                <tt:ProfilesSupported>Main</tt:ProfilesSupported>
+              </tr2:Options>
+              <tr2:Options>
+                <tt:Encoding>H265</tt:Encoding>
+                <tt:QualityRange><tt:Min>1</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
+                <tt:ResolutionsAvailable><tt:Width>3840</tt:Width><tt:Height>2160</tt:Height></tt:ResolutionsAvailable>
+                <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>32768</tt:Max></tt:BitrateRange>
+                <tt:ProfilesSupported>Main</tt:ProfilesSupported>
+                <tt:ProfilesSupported>Main10</tt:ProfilesSupported>
+              </tr2:Options>
+            </tr2:GetVideoEncoderConfigurationOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    fn video_encoder_instances_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tr2:GetVideoEncoderInstancesResponse>
+              <tr2:Info>
+                <tt:Total>4</tt:Total>
+                <tt:Encoding>
+                  <tt:Encoding>H264</tt:Encoding>
+                  <tt:Number>2</tt:Number>
+                </tt:Encoding>
+                <tt:Encoding>
+                  <tt:Encoding>H265</tt:Encoding>
+                  <tt:Number>2</tt:Number>
+                </tt:Encoding>
+              </tr2:Info>
+            </tr2:GetVideoEncoderInstancesResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    // ── Media2 tests ──────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_profiles_media2_returns_correct_fields() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(profiles_media2_xml()));
+
+        let profiles = client
+            .get_profiles_media2("http://192.168.1.1/onvif/media2_service")
+            .await
+            .unwrap();
+
+        assert_eq!(profiles.len(), 2);
+        assert_eq!(profiles[0].token, "Profile_A");
+        assert_eq!(profiles[0].name, "mainStream");
+        assert!(profiles[0].fixed);
+        assert_eq!(profiles[1].token, "Profile_B");
+        assert!(!profiles[1].fixed);
+    }
+
+    #[tokio::test]
+    async fn test_get_stream_uri_media2_returns_string() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(stream_uri_media2_xml()));
+
+        let uri = client
+            .get_stream_uri_media2("http://192.168.1.1/onvif/media2_service", "Profile_A")
+            .await
+            .unwrap();
+
+        assert_eq!(uri, "rtsp://192.168.1.1:554/h265/ch1");
+    }
+
+    #[tokio::test]
+    async fn test_get_video_encoder_configurations_media2_parses_h265() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(video_encoder_configurations_media2_xml()));
+
+        let cfgs = client
+            .get_video_encoder_configurations_media2("http://192.168.1.1/onvif/media2_service")
+            .await
+            .unwrap();
+
+        assert_eq!(cfgs.len(), 1);
+        assert_eq!(cfgs[0].token, "VEC_H265");
+        assert_eq!(cfgs[0].encoding, crate::types::VideoEncoding::H265);
+        assert_eq!(cfgs[0].gov_length, Some(60));
+        assert_eq!(cfgs[0].profile.as_deref(), Some("Main"));
+        let rc = cfgs[0].rate_control.as_ref().unwrap();
+        assert_eq!(rc.frame_rate_limit, 30);
+        assert_eq!(rc.bitrate_limit, 8192);
+    }
+
+    #[tokio::test]
+    async fn test_get_video_encoder_configuration_options_media2_parses_options() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(video_encoder_configuration_options_media2_xml()));
+
+        let opts = client
+            .get_video_encoder_configuration_options_media2(
+                "http://192.168.1.1/onvif/media2_service",
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(opts.options.len(), 2);
+        assert_eq!(opts.options[0].encoding, crate::types::VideoEncoding::H264);
+        assert_eq!(opts.options[1].encoding, crate::types::VideoEncoding::H265);
+        assert_eq!(opts.options[1].profiles.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_get_video_encoder_instances_parses_total() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(video_encoder_instances_xml()));
+
+        let inst = client
+            .get_video_encoder_instances_media2("http://192.168.1.1/onvif/media2_service", "VSC_1")
+            .await
+            .unwrap();
+
+        assert_eq!(inst.total, 4);
+        assert_eq!(inst.encodings.len(), 2);
+        assert_eq!(
+            inst.encodings[0].encoding,
+            crate::types::VideoEncoding::H264
+        );
+        assert_eq!(inst.encodings[0].number, 2);
     }
 }

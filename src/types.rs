@@ -173,6 +173,8 @@ pub struct Capabilities {
     pub replay_url: Option<String>,
     /// DeviceIO service endpoint URL (`None` if not supported).
     pub device_io_url: Option<String>,
+    /// Media2 service endpoint URL (`None` if device does not support Media2).
+    pub media2_url: Option<String>,
 }
 
 impl Capabilities {
@@ -214,6 +216,9 @@ impl Capabilities {
                 .map(|n| n.text().to_string()),
             device_io_url: caps
                 .path(&["Extension", "DeviceIO", "XAddr"])
+                .map(|n| n.text().to_string()),
+            media2_url: caps
+                .path(&["Extension", "Media2", "XAddr"])
                 .map(|n| n.text().to_string()),
         })
     }
@@ -719,6 +724,26 @@ impl VideoSourceConfiguration {
             h = self.bounds.height,
         )
     }
+
+    /// Serialise to a `<tr2:Configuration>` XML fragment for `SetVideoSourceConfiguration` (Media2).
+    pub(crate) fn to_xml_body_media2(&self) -> String {
+        format!(
+            "<tr2:Configuration token=\"{token}\">\
+               <tt:Name>{name}</tt:Name>\
+               <tt:UseCount>{use_count}</tt:UseCount>\
+               <tt:SourceToken>{source_token}</tt:SourceToken>\
+               <tt:Bounds x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\"/>\
+             </tr2:Configuration>",
+            token = self.token,
+            name = self.name,
+            use_count = self.use_count,
+            source_token = self.source_token,
+            x = self.bounds.x,
+            y = self.bounds.y,
+            w = self.bounds.width,
+            h = self.bounds.height,
+        )
+    }
 }
 
 // ── VideoSourceConfigurationOptions ──────────────────────────────────────────
@@ -1059,6 +1084,296 @@ impl VideoEncoderConfigurationOptions {
                     .collect(),
             }),
         })
+    }
+}
+
+// ── MediaProfile2 ─────────────────────────────────────────────────────────────
+
+/// A Media2 profile returned by `GetProfiles` (Media2).
+///
+/// Compared with [`MediaProfile`], this carries optional references to the
+/// video source and video encoder configurations currently bound to the profile.
+#[derive(Debug, Clone)]
+pub struct MediaProfile2 {
+    pub token: String,
+    pub name: String,
+    pub fixed: bool,
+    /// Token of the bound `VideoSourceConfiguration`, if any.
+    pub video_source_token: Option<String>,
+    /// Token of the bound `VideoEncoderConfiguration2`, if any.
+    pub video_encoder_token: Option<String>,
+}
+
+impl MediaProfile2 {
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        Ok(resp
+            .children_named("Profiles")
+            .map(|p| Self {
+                token: p.attr("token").unwrap_or("").to_string(),
+                name: xml_str(p, "Name").unwrap_or_default(),
+                fixed: p.attr("fixed") == Some("true"),
+                video_source_token: p
+                    .path(&["Configurations", "VideoSource"])
+                    .and_then(|n| n.attr("token"))
+                    .map(str::to_string),
+                video_encoder_token: p
+                    .path(&["Configurations", "VideoEncoder"])
+                    .and_then(|n| n.attr("token"))
+                    .map(str::to_string),
+            })
+            .collect())
+    }
+}
+
+// ── VideoEncoderConfiguration2 ────────────────────────────────────────────────
+
+/// Video encoder configuration for Media2 — flat structure with native H.265.
+///
+/// Unlike [`VideoEncoderConfiguration`] (Media1), this uses a **flat** layout:
+/// `gov_length` and `profile` are top-level fields, not nested under a codec
+/// sub-struct. Use with `get_video_encoder_configurations_media2` and
+/// `set_video_encoder_configuration_media2`.
+#[derive(Debug, Clone)]
+pub struct VideoEncoderConfiguration2 {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    pub encoding: VideoEncoding,
+    pub resolution: Resolution,
+    pub quality: f32,
+    /// Codec-specific rate control. `None` if the device omits it.
+    pub rate_control: Option<VideoRateControl2>,
+    /// Group-of-pictures length (keyframe interval in frames).
+    pub gov_length: Option<u32>,
+    /// Codec profile (e.g. `"High"` for H.264, `"Main"` for H.265).
+    pub profile: Option<String>,
+}
+
+/// Simplified rate control for Media2 (no `EncodingInterval`).
+#[derive(Debug, Clone)]
+pub struct VideoRateControl2 {
+    pub frame_rate_limit: u32,
+    pub bitrate_limit: u32,
+}
+
+impl VideoEncoderConfiguration2 {
+    pub(crate) fn from_xml(node: &XmlNode) -> Result<Self, OnvifError> {
+        Ok(Self {
+            token: node.attr("token").unwrap_or("").to_string(),
+            name: xml_str(node, "Name").unwrap_or_default(),
+            use_count: xml_u32(node, "UseCount").unwrap_or(0),
+            encoding: xml_str(node, "Encoding")
+                .map(|s| VideoEncoding::from_str(&s))
+                .unwrap_or_default(),
+            resolution: node
+                .child("Resolution")
+                .and_then(parse_resolution)
+                .unwrap_or_default(),
+            quality: node
+                .child("Quality")
+                .and_then(|n| n.text().parse().ok())
+                .unwrap_or(0.0),
+            rate_control: node.child("RateControl").map(|rc| VideoRateControl2 {
+                frame_rate_limit: xml_u32(rc, "FrameRateLimit").unwrap_or(0),
+                bitrate_limit: xml_u32(rc, "BitrateLimit").unwrap_or(0),
+            }),
+            gov_length: xml_u32(node, "GovLength"),
+            profile: xml_str(node, "Profile"),
+        })
+    }
+
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("Configurations")
+            .map(Self::from_xml)
+            .collect()
+    }
+
+    /// Serialise to a `<tr2:Configuration>` XML fragment for `SetVideoEncoderConfiguration` (Media2).
+    pub(crate) fn to_xml_body(&self) -> String {
+        let res = format!(
+            "<tt:Resolution><tt:Width>{}</tt:Width><tt:Height>{}</tt:Height></tt:Resolution>",
+            self.resolution.width, self.resolution.height
+        );
+        let rate = match &self.rate_control {
+            Some(rc) => format!(
+                "<tt:RateControl>\
+                   <tt:FrameRateLimit>{}</tt:FrameRateLimit>\
+                   <tt:BitrateLimit>{}</tt:BitrateLimit>\
+                 </tt:RateControl>",
+                rc.frame_rate_limit, rc.bitrate_limit
+            ),
+            None => String::new(),
+        };
+        let gov = self
+            .gov_length
+            .map(|g| format!("<tt:GovLength>{g}</tt:GovLength>"))
+            .unwrap_or_default();
+        let profile = self
+            .profile
+            .as_deref()
+            .map(|p| format!("<tt:Profile>{p}</tt:Profile>"))
+            .unwrap_or_default();
+        format!(
+            "<tr2:Configuration token=\"{token}\">\
+               <tt:Name>{name}</tt:Name>\
+               <tt:UseCount>{use_count}</tt:UseCount>\
+               <tt:Encoding>{encoding}</tt:Encoding>\
+               {res}{rate}{gov}{profile}\
+               <tt:Quality>{quality}</tt:Quality>\
+             </tr2:Configuration>",
+            token = self.token,
+            name = self.name,
+            use_count = self.use_count,
+            encoding = self.encoding,
+            quality = self.quality,
+        )
+    }
+}
+
+// ── VideoEncoderConfigurationOptions2 ────────────────────────────────────────
+
+/// Valid parameter ranges for `SetVideoEncoderConfiguration` (Media2).
+///
+/// Media2 returns one [`VideoEncoderOptions2`] entry per supported encoding.
+/// Match on `opts.options[i].encoding` to find the set relevant to you.
+#[derive(Debug, Clone, Default)]
+pub struct VideoEncoderConfigurationOptions2 {
+    /// One entry per encoding type the device supports (H264, H265, JPEG, …).
+    pub options: Vec<VideoEncoderOptions2>,
+}
+
+/// Per-encoding options entry within [`VideoEncoderConfigurationOptions2`].
+#[derive(Debug, Clone, Default)]
+pub struct VideoEncoderOptions2 {
+    pub encoding: VideoEncoding,
+    pub quality_range: Option<FloatRange>,
+    pub resolutions: Vec<Resolution>,
+    pub bitrate_range: Option<IntRange>,
+    /// Discrete supported frame rates (may be empty if range is used instead).
+    pub frame_rates: Vec<u32>,
+    pub frame_rate_range: Option<IntRange>,
+    pub gov_length_range: Option<IntRange>,
+    /// Supported codec profiles (e.g. `"Main"`, `"High"`).
+    pub profiles: Vec<String>,
+}
+
+impl VideoEncoderConfigurationOptions2 {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        Ok(Self {
+            options: resp
+                .children_named("Options")
+                .map(|opt| VideoEncoderOptions2 {
+                    encoding: xml_str(opt, "Encoding")
+                        .map(|s| VideoEncoding::from_str(&s))
+                        .unwrap_or_default(),
+                    quality_range: opt.child("QualityRange").map(|qr| FloatRange {
+                        min: qr
+                            .child("Min")
+                            .and_then(|n| n.text().parse().ok())
+                            .unwrap_or(0.0),
+                        max: qr
+                            .child("Max")
+                            .and_then(|n| n.text().parse().ok())
+                            .unwrap_or(0.0),
+                    }),
+                    resolutions: opt
+                        .children_named("ResolutionsAvailable")
+                        .filter_map(parse_resolution)
+                        .collect(),
+                    bitrate_range: opt.child("BitrateRange").map(parse_int_range_node),
+                    frame_rates: opt
+                        .children_named("FrameRatesSupported")
+                        .filter_map(|n| n.text().parse().ok())
+                        .collect(),
+                    frame_rate_range: opt.child("FrameRateRange").map(parse_int_range_node),
+                    gov_length_range: opt.child("GovLengthRange").map(parse_int_range_node),
+                    profiles: opt
+                        .children_named("ProfilesSupported")
+                        .map(|n| n.text().to_string())
+                        .collect(),
+                })
+                .collect(),
+        })
+    }
+}
+
+// ── VideoEncoderInstances ─────────────────────────────────────────────────────
+
+/// Encoder capacity info returned by `GetVideoEncoderInstances` (Media2).
+#[derive(Debug, Clone, Default)]
+pub struct VideoEncoderInstances {
+    /// Total number of encoder instances available on the source.
+    pub total: u32,
+    /// Per-encoding breakdown of available instances.
+    pub encodings: Vec<EncoderInstanceInfo>,
+}
+
+/// Available instance count for one encoding type.
+#[derive(Debug, Clone)]
+pub struct EncoderInstanceInfo {
+    pub encoding: VideoEncoding,
+    pub number: u32,
+}
+
+impl VideoEncoderInstances {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let info = resp
+            .child("Info")
+            .ok_or_else(|| SoapError::missing("Info"))?;
+        Ok(Self {
+            total: xml_u32(info, "Total").unwrap_or(0),
+            encodings: info
+                .children_named("Encoding")
+                .map(|e| EncoderInstanceInfo {
+                    encoding: xml_str(e, "Encoding")
+                        .map(|s| VideoEncoding::from_str(&s))
+                        .unwrap_or_default(),
+                    number: xml_u32(e, "Number").unwrap_or(0),
+                })
+                .collect(),
+        })
+    }
+}
+
+// ── OnvifService ─────────────────────────────────────────────────────────────
+
+/// A single service entry returned by `GetServices`.
+///
+/// `GetServices` is the proper ONVIF mechanism for discovering all service
+/// endpoints, including Media2. Use [`OnvifService::is_media2`] to identify
+/// the Media2 entry.
+#[derive(Debug, Clone)]
+pub struct OnvifService {
+    /// Service namespace URI, e.g. `"http://www.onvif.org/ver20/media/wsdl"`.
+    pub namespace: String,
+    /// Service endpoint URL.
+    pub url: String,
+    pub version_major: u32,
+    pub version_minor: u32,
+}
+
+impl OnvifService {
+    /// Returns `true` if this entry is the Media2 service.
+    pub fn is_media2(&self) -> bool {
+        self.namespace == "http://www.onvif.org/ver20/media/wsdl"
+    }
+
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        Ok(resp
+            .children_named("Service")
+            .map(|s| Self {
+                namespace: xml_str(s, "Namespace").unwrap_or_default(),
+                url: xml_str(s, "XAddr").unwrap_or_default(),
+                version_major: s
+                    .path(&["Version", "Major"])
+                    .and_then(|n| n.text().parse().ok())
+                    .unwrap_or(0),
+                version_minor: s
+                    .path(&["Version", "Minor"])
+                    .and_then(|n| n.text().parse().ok())
+                    .unwrap_or(0),
+            })
+            .collect())
     }
 }
 
@@ -1916,6 +2231,196 @@ mod tests {
             let glr = h264.gov_length_range.unwrap();
             assert_eq!(glr.max, 150);
             assert!(opts.h265.is_none());
+        }
+    }
+
+    mod media2 {
+        use super::*;
+
+        // ── MediaProfile2 ─────────────────────────────────────────────────────
+
+        const TWO_PROFILES2: &str = r#"<GetProfilesResponse>
+          <Profiles token="Profile_A" fixed="true">
+            <Name>mainStream</Name>
+            <Configurations>
+              <VideoSource token="VSC_1"/>
+              <VideoEncoder token="VEC_1"/>
+            </Configurations>
+          </Profiles>
+          <Profiles token="Profile_B" fixed="false">
+            <Name>subStream</Name>
+            <Configurations>
+              <VideoSource token="VSC_1"/>
+            </Configurations>
+          </Profiles>
+        </GetProfilesResponse>"#;
+
+        #[test]
+        fn test_media_profile2_vec_from_xml() {
+            let profiles = MediaProfile2::vec_from_xml(&parse(TWO_PROFILES2)).unwrap();
+            assert_eq!(profiles.len(), 2);
+            assert_eq!(profiles[0].token, "Profile_A");
+            assert_eq!(profiles[0].name, "mainStream");
+            assert!(profiles[0].fixed);
+            assert_eq!(profiles[0].video_source_token.as_deref(), Some("VSC_1"));
+            assert_eq!(profiles[0].video_encoder_token.as_deref(), Some("VEC_1"));
+            assert_eq!(profiles[1].token, "Profile_B");
+            assert_eq!(profiles[1].name, "subStream");
+            assert!(!profiles[1].fixed);
+            assert_eq!(profiles[1].video_source_token.as_deref(), Some("VSC_1"));
+            assert!(profiles[1].video_encoder_token.is_none());
+        }
+
+        // ── VideoEncoderConfiguration2 ────────────────────────────────────────
+
+        const H265_CONFIG: &str = r#"<Configurations token="VEC_H265">
+          <Name>H265Stream</Name>
+          <UseCount>1</UseCount>
+          <Encoding>H265</Encoding>
+          <Resolution><Width>3840</Width><Height>2160</Height></Resolution>
+          <Quality>7</Quality>
+          <RateControl>
+            <FrameRateLimit>30</FrameRateLimit>
+            <BitrateLimit>8192</BitrateLimit>
+          </RateControl>
+          <GovLength>60</GovLength>
+          <Profile>Main</Profile>
+        </Configurations>"#;
+
+        #[test]
+        fn test_video_encoder_configuration2_from_xml_h265() {
+            let cfg = VideoEncoderConfiguration2::from_xml(&parse(H265_CONFIG)).unwrap();
+            assert_eq!(cfg.token, "VEC_H265");
+            assert_eq!(cfg.name, "H265Stream");
+            assert_eq!(cfg.encoding, VideoEncoding::H265);
+            assert_eq!(
+                cfg.resolution,
+                Resolution {
+                    width: 3840,
+                    height: 2160
+                }
+            );
+            assert!((cfg.quality - 7.0).abs() < 1e-5);
+            let rc = cfg.rate_control.unwrap();
+            assert_eq!(rc.frame_rate_limit, 30);
+            assert_eq!(rc.bitrate_limit, 8192);
+            assert_eq!(cfg.gov_length, Some(60));
+            assert_eq!(cfg.profile.as_deref(), Some("Main"));
+        }
+
+        #[test]
+        fn test_video_encoder_configuration2_to_xml_body() {
+            let cfg = VideoEncoderConfiguration2 {
+                token: "enc2".into(),
+                name: "H265Main".into(),
+                use_count: 1,
+                encoding: VideoEncoding::H265,
+                resolution: Resolution {
+                    width: 1920,
+                    height: 1080,
+                },
+                quality: 6.0,
+                rate_control: Some(VideoRateControl2 {
+                    frame_rate_limit: 25,
+                    bitrate_limit: 4096,
+                }),
+                gov_length: Some(50),
+                profile: Some("Main".into()),
+            };
+            let xml = cfg.to_xml_body();
+            assert!(xml.contains("token=\"enc2\""));
+            assert!(xml.contains("<tt:Encoding>H265</tt:Encoding>"));
+            assert!(xml.contains("<tt:Width>1920</tt:Width>"));
+            assert!(xml.contains("<tt:FrameRateLimit>25</tt:FrameRateLimit>"));
+            assert!(xml.contains("<tt:BitrateLimit>4096</tt:BitrateLimit>"));
+            assert!(xml.contains("<tt:GovLength>50</tt:GovLength>"));
+            assert!(xml.contains("<tt:Profile>Main</tt:Profile>"));
+            // No EncodingInterval (Media2 only has FrameRateLimit + BitrateLimit)
+            assert!(!xml.contains("EncodingInterval"));
+        }
+
+        // ── VideoEncoderConfigurationOptions2 ────────────────────────────────
+
+        const OPTIONS2_XML: &str = r#"<GetVideoEncoderConfigurationOptionsResponse>
+          <Options>
+            <Encoding>H264</Encoding>
+            <QualityRange><Min>1</Min><Max>10</Max></QualityRange>
+            <ResolutionsAvailable><Width>1920</Width><Height>1080</Height></ResolutionsAvailable>
+            <ResolutionsAvailable><Width>1280</Width><Height>720</Height></ResolutionsAvailable>
+            <BitrateRange><Min>32</Min><Max>16384</Max></BitrateRange>
+            <GovLengthRange><Min>1</Min><Max>150</Max></GovLengthRange>
+            <ProfilesSupported>Baseline</ProfilesSupported>
+            <ProfilesSupported>Main</ProfilesSupported>
+            <ProfilesSupported>High</ProfilesSupported>
+          </Options>
+          <Options>
+            <Encoding>H265</Encoding>
+            <QualityRange><Min>1</Min><Max>10</Max></QualityRange>
+            <ResolutionsAvailable><Width>3840</Width><Height>2160</Height></ResolutionsAvailable>
+            <BitrateRange><Min>64</Min><Max>32768</Max></BitrateRange>
+            <GovLengthRange><Min>1</Min><Max>200</Max></GovLengthRange>
+            <ProfilesSupported>Main</ProfilesSupported>
+            <ProfilesSupported>Main10</ProfilesSupported>
+          </Options>
+        </GetVideoEncoderConfigurationOptionsResponse>"#;
+
+        #[test]
+        fn test_video_encoder_configuration_options2_from_xml() {
+            let opts = VideoEncoderConfigurationOptions2::from_xml(&parse(OPTIONS2_XML)).unwrap();
+            assert_eq!(opts.options.len(), 2);
+
+            let h264 = &opts.options[0];
+            assert_eq!(h264.encoding, VideoEncoding::H264);
+            let qr = h264.quality_range.unwrap();
+            assert!((qr.min - 1.0).abs() < 1e-5);
+            assert!((qr.max - 10.0).abs() < 1e-5);
+            assert_eq!(h264.resolutions.len(), 2);
+            assert_eq!(h264.profiles.len(), 3);
+            assert_eq!(h264.profiles[1], "Main");
+            let br = h264.bitrate_range.unwrap();
+            assert_eq!(br.max, 16384);
+
+            let h265 = &opts.options[1];
+            assert_eq!(h265.encoding, VideoEncoding::H265);
+            assert_eq!(h265.resolutions.len(), 1);
+            assert_eq!(
+                h265.resolutions[0],
+                Resolution {
+                    width: 3840,
+                    height: 2160
+                }
+            );
+            assert_eq!(h265.profiles.len(), 2);
+            assert_eq!(h265.profiles[0], "Main");
+            let glr = h265.gov_length_range.unwrap();
+            assert_eq!(glr.max, 200);
+        }
+
+        // ── VideoEncoderInstances ─────────────────────────────────────────────
+
+        const INSTANCES_XML: &str = r#"<GetVideoEncoderInstancesResponse>
+          <Info>
+            <Total>4</Total>
+            <Encoding>
+              <Encoding>H264</Encoding>
+              <Number>2</Number>
+            </Encoding>
+            <Encoding>
+              <Encoding>H265</Encoding>
+              <Number>2</Number>
+            </Encoding>
+          </Info>
+        </GetVideoEncoderInstancesResponse>"#;
+
+        #[test]
+        fn test_video_encoder_instances_from_xml() {
+            let inst = VideoEncoderInstances::from_xml(&parse(INSTANCES_XML)).unwrap();
+            assert_eq!(inst.total, 4);
+            assert_eq!(inst.encodings.len(), 2);
+            assert_eq!(inst.encodings[0].encoding, VideoEncoding::H264);
+            assert_eq!(inst.encodings[0].number, 2);
+            assert_eq!(inst.encodings[1].encoding, VideoEncoding::H265);
+            assert_eq!(inst.encodings[1].number, 2);
         }
     }
 }

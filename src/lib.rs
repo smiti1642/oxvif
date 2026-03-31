@@ -54,10 +54,12 @@ pub use client::OnvifClient;
 pub use error::OnvifError;
 pub use types::{
     AnalyticsCapabilities, BoundsRange, Capabilities, DeviceCapabilities, DeviceInfo,
-    EventsCapabilities, FloatRange, H264Configuration, H264Options, H265Configuration, H265Options,
-    IntRange, IoCapabilities, JpegOptions, MediaCapabilities, MediaProfile, NetworkCapabilities,
-    PtzPreset, Resolution, SecurityCapabilities, SnapshotUri, SourceBounds, StreamUri,
-    StreamingCapabilities, SystemCapabilities, SystemDateTime, VideoEncoderConfiguration,
-    VideoEncoderConfigurationOptions, VideoEncoding, VideoRateControl, VideoSource,
+    EncoderInstanceInfo, EventsCapabilities, FloatRange, H264Configuration, H264Options,
+    H265Configuration, H265Options, IntRange, IoCapabilities, JpegOptions, MediaCapabilities,
+    MediaProfile, MediaProfile2, NetworkCapabilities, OnvifService, PtzPreset, Resolution,
+    SecurityCapabilities, SnapshotUri, SourceBounds, StreamUri, StreamingCapabilities,
+    SystemCapabilities, SystemDateTime, VideoEncoderConfiguration, VideoEncoderConfiguration2,
+    VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,
+    VideoEncoderOptions2, VideoEncoding, VideoRateControl, VideoRateControl2, VideoSource,
     VideoSourceConfiguration, VideoSourceConfigurationOptions,
 };

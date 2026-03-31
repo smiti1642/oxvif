@@ -10,6 +10,7 @@
 //! cargo run -- system-datetime
 //! cargo run -- ptz-presets
 //! cargo run -- video-config
+//! cargo run -- video-config-media2
 //! cargo run -- error-handling
 //! ```
 
@@ -59,6 +60,7 @@ async fn main() {
         "system-datetime" => system_datetime(&cfg).await,
         "ptz-presets" => ptz_presets(&cfg).await,
         "video-config" => video_config(&cfg).await,
+        "video-config-media2" => video_config_media2(&cfg).await,
         "error-handling" => error_handling_example(&cfg).await,
         _ => {
             print_help();
@@ -86,6 +88,7 @@ fn print_help() {
     println!("  system-datetime  Device clock and UTC offset");
     println!("  ptz-presets      List all PTZ presets (requires PTZ camera)");
     println!("  video-config     Video sources, encoder configs and options");
+    println!("  video-config-media2  Media2 profiles, H.265 encoder configs and options");
     println!("  error-handling   Typed error variant matching");
 }
 
@@ -661,7 +664,158 @@ async fn video_config(cfg: &Config) -> Result<(), OnvifError> {
     Ok(())
 }
 
-// ── Example 8: error handling ─────────────────────────────────────────────────
+// ── Example 8: Media2 video configuration ────────────────────────────────────
+
+/// Prints Media2 profiles, H.265 encoder configurations, and encoder options
+/// using the Media2 (`tr2:`) service. Falls back gracefully if Media2 is not
+/// advertised in capabilities.
+async fn video_config_media2(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Media2 video configuration ===");
+
+    let (client, caps) = connect(cfg).await?;
+
+    // Try caps first; fall back to GetServices (many cameras omit it from GetCapabilities).
+    let media2_url = match caps.media2_url.clone() {
+        Some(u) => {
+            println!("Media2 URL (from GetCapabilities): {u}");
+            u
+        }
+        None => {
+            println!("Media2 not in GetCapabilities — trying GetServices...");
+            match client.get_services().await {
+                Ok(services) => match services.into_iter().find(|s| s.is_media2()) {
+                    Some(svc) => {
+                        println!("Media2 URL (from GetServices): {}", svc.url);
+                        svc.url
+                    }
+                    None => {
+                        println!("Device does not support Media2.");
+                        return Ok(());
+                    }
+                },
+                Err(e) => {
+                    println!("GetServices failed: {e}");
+                    println!("Device does not support Media2.");
+                    return Ok(());
+                }
+            }
+        }
+    };
+
+    // ── Media2 profiles ───────────────────────────────────────────────────────
+    println!("\n-- GetProfiles (Media2) --");
+    match client.get_profiles_media2(&media2_url).await {
+        Ok(profiles) => {
+            println!("  Found {} profile(s)", profiles.len());
+            for p in &profiles {
+                println!(
+                    "  [{token}] '{name}'  fixed={fixed}  vsc={vsc:?}  vec={vec:?}",
+                    token = p.token,
+                    name = p.name,
+                    fixed = p.fixed,
+                    vsc = p.video_source_token,
+                    vec = p.video_encoder_token,
+                );
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    // ── Media2 encoder configurations ─────────────────────────────────────────
+    println!("\n-- GetVideoEncoderConfigurations (Media2) --");
+    let enc_cfgs = match client
+        .get_video_encoder_configurations_media2(&media2_url)
+        .await
+    {
+        Ok(cfgs) => {
+            println!("  Found {} config(s)", cfgs.len());
+            for c in &cfgs {
+                let rc = c.rate_control.as_ref();
+                println!(
+                    "  [{}] '{}' → {} {}  fps:{}  bitrate:{}kbps  gop:{:?}  profile:{:?}",
+                    c.token,
+                    c.name,
+                    c.encoding,
+                    c.resolution,
+                    rc.map(|r| r.frame_rate_limit).unwrap_or(0),
+                    rc.map(|r| r.bitrate_limit).unwrap_or(0),
+                    c.gov_length,
+                    c.profile,
+                );
+            }
+            cfgs
+        }
+        Err(e) => {
+            println!("  ERROR: {e}");
+            vec![]
+        }
+    };
+
+    // ── Media2 encoder options ────────────────────────────────────────────────
+    println!("\n-- GetVideoEncoderConfigurationOptions (Media2) --");
+    match client
+        .get_video_encoder_configuration_options_media2(&media2_url, None)
+        .await
+    {
+        Ok(opts) => {
+            println!("  Found {} encoding option set(s)", opts.options.len());
+            for opt in &opts.options {
+                println!("  Encoding: {}", opt.encoding);
+                if !opt.resolutions.is_empty() {
+                    println!(
+                        "    Resolutions: {}",
+                        opt.resolutions
+                            .iter()
+                            .map(|r| r.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                if !opt.profiles.is_empty() {
+                    println!("    Profiles: {}", opt.profiles.join(", "));
+                }
+                if let Some(br) = opt.bitrate_range {
+                    println!("    Bitrate range: {}-{} kbps", br.min, br.max);
+                }
+                if let Some(glr) = opt.gov_length_range {
+                    println!("    GoP length range: {}-{}", glr.min, glr.max);
+                }
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    // ── Media2 encoder instances ──────────────────────────────────────────────
+    if let Some(first_vsc_token) = {
+        // Attempt to get video source configurations to find a token
+        client
+            .get_video_source_configurations_media2(&media2_url)
+            .await
+            .ok()
+            .and_then(|cfgs| cfgs.into_iter().next().map(|c| c.token))
+    } {
+        println!("\n-- GetVideoEncoderInstances (Media2) [vsc={first_vsc_token}] --");
+        match client
+            .get_video_encoder_instances_media2(&media2_url, &first_vsc_token)
+            .await
+        {
+            Ok(inst) => {
+                println!("  Total instances: {}", inst.total);
+                for enc in &inst.encodings {
+                    println!("    {}: {} instance(s)", enc.encoding, enc.number);
+                }
+            }
+            Err(e) => println!("  ERROR: {e}"),
+        }
+    }
+
+    // Suppress unused variable warning if enc_cfgs is empty
+    let _ = enc_cfgs;
+
+    Ok(())
+}
+
+// ── Example 9: error handling ─────────────────────────────────────────────────
 
 /// Demonstrates how to match on typed OnvifError variants.
 async fn error_handling_example(cfg: &Config) -> Result<(), OnvifError> {
