@@ -53,8 +53,11 @@ pub mod types;
 pub use client::OnvifClient;
 pub use error::OnvifError;
 pub use types::{
-    AnalyticsCapabilities, Capabilities, DeviceCapabilities, DeviceInfo, EventsCapabilities,
-    IoCapabilities, MediaCapabilities, MediaProfile, NetworkCapabilities, PtzPreset,
-    SecurityCapabilities, SnapshotUri, StreamUri, StreamingCapabilities, SystemCapabilities,
-    SystemDateTime,
+    AnalyticsCapabilities, BoundsRange, Capabilities, DeviceCapabilities, DeviceInfo,
+    EventsCapabilities, FloatRange, H264Configuration, H264Options, H265Configuration, H265Options,
+    IntRange, IoCapabilities, JpegOptions, MediaCapabilities, MediaProfile, NetworkCapabilities,
+    PtzPreset, Resolution, SecurityCapabilities, SnapshotUri, SourceBounds, StreamUri,
+    StreamingCapabilities, SystemCapabilities, SystemDateTime, VideoEncoderConfiguration,
+    VideoEncoderConfigurationOptions, VideoEncoding, VideoRateControl, VideoSource,
+    VideoSourceConfiguration, VideoSourceConfigurationOptions,
 };

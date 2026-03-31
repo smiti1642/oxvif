@@ -9,6 +9,7 @@
 //! cargo run -- snapshot-uris
 //! cargo run -- system-datetime
 //! cargo run -- ptz-presets
+//! cargo run -- video-config
 //! cargo run -- error-handling
 //! ```
 
@@ -57,6 +58,7 @@ async fn main() {
         "snapshot-uris" => snapshot_uris(&cfg).await,
         "system-datetime" => system_datetime(&cfg).await,
         "ptz-presets" => ptz_presets(&cfg).await,
+        "video-config" => video_config(&cfg).await,
         "error-handling" => error_handling_example(&cfg).await,
         _ => {
             print_help();
@@ -83,6 +85,7 @@ fn print_help() {
     println!("  snapshot-uris    Tabular HTTP snapshot URI listing");
     println!("  system-datetime  Device clock and UTC offset");
     println!("  ptz-presets      List all PTZ presets (requires PTZ camera)");
+    println!("  video-config     Video sources, encoder configs and options");
     println!("  error-handling   Typed error variant matching");
 }
 
@@ -499,7 +502,166 @@ async fn ptz_presets(cfg: &Config) -> Result<(), OnvifError> {
     Ok(())
 }
 
-// ── Example 7: error handling ─────────────────────────────────────────────────
+// ── Example 7: video configuration ───────────────────────────────────────────
+
+/// Prints all video sources, video source configurations, and video encoder
+/// configurations together with available encoding options.
+async fn video_config(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Video configuration ===");
+
+    let (client, caps) = connect(cfg).await?;
+    let media_url = match &caps.media.url {
+        Some(u) => u.clone(),
+        None => {
+            println!("No Media service advertised.");
+            return Ok(());
+        }
+    };
+
+    // ── Physical video inputs ─────────────────────────────────────────────────
+    println!("\n-- GetVideoSources --");
+    match client.get_video_sources(&media_url).await {
+        Ok(sources) => {
+            println!("  Found {} source(s)", sources.len());
+            for s in &sources {
+                println!(
+                    "  [{}]  {}  @ {:.0} fps",
+                    s.token, s.resolution, s.framerate
+                );
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    // ── Video source configurations ───────────────────────────────────────────
+    println!("\n-- GetVideoSourceConfigurations --");
+    match client.get_video_source_configurations(&media_url).await {
+        Ok(cfgs) => {
+            println!("  Found {} config(s)", cfgs.len());
+            for c in &cfgs {
+                println!(
+                    "  [{}] '{}' → source:{} bounds:{}x{}+{}+{}",
+                    c.token,
+                    c.name,
+                    c.source_token,
+                    c.bounds.width,
+                    c.bounds.height,
+                    c.bounds.x,
+                    c.bounds.y
+                );
+
+                // Options for first config only (to avoid flooding output)
+                if c.token == cfgs[0].token {
+                    match client
+                        .get_video_source_configuration_options(&media_url, Some(&c.token))
+                        .await
+                    {
+                        Ok(opts) => {
+                            if let Some(br) = &opts.bounds_range {
+                                println!(
+                                    "    bounds range: w=[{}-{}] h=[{}-{}]",
+                                    br.width_range.min,
+                                    br.width_range.max,
+                                    br.height_range.min,
+                                    br.height_range.max,
+                                );
+                            }
+                        }
+                        Err(e) => println!("    options ERROR: {e}"),
+                    }
+                }
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    // ── Video encoder configurations ──────────────────────────────────────────
+    println!("\n-- GetVideoEncoderConfigurations --");
+    match client.get_video_encoder_configurations(&media_url).await {
+        Ok(cfgs) => {
+            println!("  Found {} config(s)", cfgs.len());
+            for c in &cfgs {
+                let rc = c.rate_control.as_ref();
+                println!(
+                    "  [{}] '{}' → {} {}  fps:{} bitrate:{}kbps",
+                    c.token,
+                    c.name,
+                    c.encoding,
+                    c.resolution,
+                    rc.map(|r| r.frame_rate_limit).unwrap_or(0),
+                    rc.map(|r| r.bitrate_limit).unwrap_or(0),
+                );
+                if let Some(h) = &c.h264 {
+                    println!("    H.264: profile={} gop={}", h.profile, h.gov_length);
+                }
+                if let Some(h) = &c.h265 {
+                    println!("    H.265: profile={} gop={}", h.profile, h.gov_length);
+                }
+            }
+
+            // Options for first encoder config
+            if let Some(first) = cfgs.first() {
+                println!(
+                    "\n-- GetVideoEncoderConfigurationOptions [{}] --",
+                    first.token
+                );
+                match client
+                    .get_video_encoder_configuration_options(&media_url, Some(&first.token))
+                    .await
+                {
+                    Ok(opts) => {
+                        if let Some(qr) = opts.quality_range {
+                            println!("  Quality range: {:.0}–{:.0}", qr.min, qr.max);
+                        }
+                        if let Some(h264) = &opts.h264 {
+                            println!(
+                                "  H.264 resolutions: {}",
+                                h264.resolutions
+                                    .iter()
+                                    .map(|r| r.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
+                            println!("  H.264 profiles: {}", h264.profiles.join(", "));
+                            if let Some(br) = h264.frame_rate_range {
+                                println!("  H.264 fps range: {}-{}", br.min, br.max);
+                            }
+                            if let Some(br) = h264.bitrate_range {
+                                println!("  H.264 bitrate range: {}-{} kbps", br.min, br.max);
+                            }
+                        }
+                        if let Some(h265) = &opts.h265 {
+                            println!(
+                                "  H.265 resolutions: {}",
+                                h265.resolutions
+                                    .iter()
+                                    .map(|r| r.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
+                        }
+                        if let Some(jpeg) = &opts.jpeg {
+                            println!(
+                                "  JPEG resolutions: {}",
+                                jpeg.resolutions
+                                    .iter()
+                                    .map(|r| r.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            );
+                        }
+                    }
+                    Err(e) => println!("  ERROR: {e}"),
+                }
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    Ok(())
+}
+
+// ── Example 8: error handling ─────────────────────────────────────────────────
 
 /// Demonstrates how to match on typed OnvifError variants.
 async fn error_handling_example(cfg: &Config) -> Result<(), OnvifError> {

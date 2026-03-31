@@ -289,6 +289,167 @@ client.ptz_goto_preset(ptz_url, &profile_token, &presets[0].token).await?;
 
 ---
 
+## Video Source methods
+
+All video source methods use `media_url` from `caps.media.url`.
+
+### `get_video_sources(media_url) -> Result<Vec<VideoSource>, OnvifError>`
+
+Lists all physical video input channels on the device.
+
+```rust
+let sources = client.get_video_sources(media_url).await?;
+for s in &sources {
+    println!("[{}]  {}  @ {:.0} fps", s.token, s.resolution, s.framerate);
+}
+```
+
+**`VideoSource` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `token` | `String` | Opaque identifier for this physical input |
+| `framerate` | `f32` | Maximum frame rate this input can deliver |
+| `resolution` | `Resolution` | Native sensor resolution (`width` × `height`) |
+
+---
+
+### `get_video_source_configurations(media_url) -> Result<Vec<VideoSourceConfiguration>, OnvifError>`
+
+Lists all crop/position windows applied to video sources.
+
+### `get_video_source_configuration(media_url, token) -> Result<VideoSourceConfiguration, OnvifError>`
+
+Retrieves a single `VideoSourceConfiguration` by token.
+
+```rust
+let vsc = client.get_video_source_configuration(media_url, &token).await?;
+println!("{} → source:{} bounds:{}x{}+{}+{}",
+    vsc.name, vsc.source_token,
+    vsc.bounds.width, vsc.bounds.height, vsc.bounds.x, vsc.bounds.y);
+```
+
+**`VideoSourceConfiguration` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `token` | `String` | Opaque config token |
+| `name` | `String` | Human-readable name |
+| `use_count` | `u32` | Number of profiles referencing this config |
+| `source_token` | `String` | Token of the physical `VideoSource` |
+| `bounds` | `SourceBounds` | Crop window: `x`, `y`, `width`, `height` in pixels |
+
+---
+
+### `set_video_source_configuration(media_url, config) -> Result<(), OnvifError>`
+
+Writes a modified `VideoSourceConfiguration` back to the device.
+
+```rust
+let mut vsc = client.get_video_source_configuration(media_url, &token).await?;
+vsc.bounds.width = 1280;
+vsc.bounds.height = 720;
+client.set_video_source_configuration(media_url, &vsc).await?;
+```
+
+---
+
+### `get_video_source_configuration_options(media_url, config_token) -> Result<VideoSourceConfigurationOptions, OnvifError>`
+
+Returns valid ranges for `SetVideoSourceConfiguration`. `config_token` is `Option<&str>` — pass `None` to get options for all configurations.
+
+```rust
+let opts = client.get_video_source_configuration_options(media_url, Some(&token)).await?;
+if let Some(br) = &opts.bounds_range {
+    println!("width:  [{} – {}]", br.width_range.min, br.width_range.max);
+    println!("height: [{} – {}]", br.height_range.min, br.height_range.max);
+}
+```
+
+---
+
+## Video Encoder methods
+
+### `get_video_encoder_configurations(media_url) -> Result<Vec<VideoEncoderConfiguration>, OnvifError>`
+
+Lists all encoder configurations (codec, resolution, frame rate, bitrate).
+
+### `get_video_encoder_configuration(media_url, token) -> Result<VideoEncoderConfiguration, OnvifError>`
+
+Retrieves a single encoder configuration by token.
+
+```rust
+let enc = client.get_video_encoder_configuration(media_url, &token).await?;
+println!("{} {} @ {} fps, {} kbps",
+    enc.encoding, enc.resolution,
+    enc.rate_control.as_ref().map(|r| r.frame_rate_limit).unwrap_or(0),
+    enc.rate_control.as_ref().map(|r| r.bitrate_limit).unwrap_or(0));
+if let Some(h) = &enc.h264 {
+    println!("  H.264 profile={} gop={}", h.profile, h.gov_length);
+}
+```
+
+**`VideoEncoderConfiguration` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `token` | `String` | Opaque config token |
+| `name` | `String` | Human-readable name |
+| `encoding` | `VideoEncoding` | `Jpeg` / `H264` / `H265` / `Other(String)` |
+| `resolution` | `Resolution` | Output resolution |
+| `quality` | `f32` | Encoder quality level (range from options) |
+| `rate_control` | `Option<VideoRateControl>` | `frame_rate_limit`, `encoding_interval`, `bitrate_limit` (kbps) |
+| `h264` | `Option<H264Configuration>` | `gov_length`, `profile` (e.g. `"High"`) |
+| `h265` | `Option<H265Configuration>` | `gov_length`, `profile` |
+
+---
+
+### `set_video_encoder_configuration(media_url, config) -> Result<(), OnvifError>`
+
+Writes a modified `VideoEncoderConfiguration` back to the device.
+
+```rust
+let mut enc = client.get_video_encoder_configuration(media_url, &token).await?;
+if let Some(rc) = enc.rate_control.as_mut() {
+    rc.bitrate_limit = 2048;   // 2 Mbps
+    rc.frame_rate_limit = 15;
+}
+client.set_video_encoder_configuration(media_url, &enc).await?;
+```
+
+---
+
+### `get_video_encoder_configuration_options(media_url, config_token) -> Result<VideoEncoderConfigurationOptions, OnvifError>`
+
+Returns valid parameter ranges for `SetVideoEncoderConfiguration`. `config_token` is `Option<&str>`.
+
+```rust
+let opts = client.get_video_encoder_configuration_options(media_url, Some(&token)).await?;
+
+if let Some(h264) = &opts.h264 {
+    println!("Resolutions: {}", h264.resolutions.iter()
+        .map(|r| r.to_string()).collect::<Vec<_>>().join(", "));
+    println!("Profiles: {}", h264.profiles.join(", "));
+    if let Some(br) = h264.bitrate_range {
+        println!("Bitrate: {} – {} kbps", br.min, br.max);
+    }
+}
+if let Some(qr) = opts.quality_range {
+    println!("Quality: {:.0} – {:.0}", qr.min, qr.max);
+}
+```
+
+**`VideoEncoderConfigurationOptions` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `quality_range` | `Option<FloatRange>` | Valid quality values (`min`, `max`) |
+| `jpeg` | `Option<JpegOptions>` | JPEG resolutions, frame rate range, interval range |
+| `h264` | `Option<H264Options>` | H.264 resolutions, profiles, gop/fps/bitrate ranges |
+| `h265` | `Option<H265Options>` | H.265 resolutions, profiles, gop/fps/bitrate ranges |
+
+---
+
 ## Error handling
 
 All API methods return `Result<T, OnvifError>`. The error has two variants:
@@ -412,6 +573,7 @@ cargo run -- stream-uris       # tabular RTSP URI listing
 cargo run -- snapshot-uris     # tabular HTTP snapshot URI listing
 cargo run -- system-datetime   # device clock and UTC offset
 cargo run -- ptz-presets       # list all PTZ presets (requires PTZ camera)
+cargo run -- video-config      # video sources, encoder configs and options
 cargo run -- error-handling    # typed error matching demo
 ```
 
@@ -453,8 +615,17 @@ src/
 | `Stop` | PTZ | ✓ |
 | `GetPresets` | PTZ | ✓ |
 | `GotoPreset` | PTZ | ✓ |
+| `GetVideoSources` | Media | ✓ |
+| `GetVideoSourceConfigurations` | Media | ✓ |
+| `GetVideoSourceConfiguration` | Media | ✓ |
+| `SetVideoSourceConfiguration` | Media | ✓ |
+| `GetVideoSourceConfigurationOptions` | Media | ✓ |
+| `GetVideoEncoderConfigurations` | Media | ✓ |
+| `GetVideoEncoderConfiguration` | Media | ✓ |
+| `SetVideoEncoderConfiguration` | Media | ✓ |
+| `GetVideoEncoderConfigurationOptions` | Media | ✓ |
 | Events (Subscribe / Pull) | Events | planned |
-| `GetVideoEncoderConfigurations` | Media | planned |
+| `GetAudioSources` / encoder configs | Media | planned |
 | WS-Discovery | UDP multicast | planned |
 
 ---

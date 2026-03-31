@@ -29,6 +29,8 @@ use crate::soap::{SoapEnvelope, WsSecurityToken, find_response, parse_soap_body}
 use crate::transport::{HttpTransport, Transport};
 use crate::types::{
     Capabilities, DeviceInfo, MediaProfile, PtzPreset, SnapshotUri, StreamUri, SystemDateTime,
+    VideoEncoderConfiguration, VideoEncoderConfigurationOptions, VideoSource,
+    VideoSourceConfiguration, VideoSourceConfigurationOptions,
 };
 
 // ── OnvifClient ───────────────────────────────────────────────────────────────
@@ -389,6 +391,199 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         find_response(&body_node, "GotoPresetResponse")?;
         Ok(())
+    }
+
+    // ── Video Source Service ──────────────────────────────────────────────────
+
+    /// List all physical video sources available on the device.
+    ///
+    /// `media_url` is obtained from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_video_sources(&self, media_url: &str) -> Result<Vec<VideoSource>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetVideoSources";
+        const BODY: &str = "<trt:GetVideoSources/>";
+
+        let xml = self.call(media_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoSourcesResponse")?;
+        VideoSource::vec_from_xml(resp)
+    }
+
+    /// List all video source configurations on the device.
+    ///
+    /// `media_url` is obtained from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_video_source_configurations(
+        &self,
+        media_url: &str,
+    ) -> Result<Vec<VideoSourceConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurations";
+        const BODY: &str = "<trt:GetVideoSourceConfigurations/>";
+
+        let xml = self.call(media_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoSourceConfigurationsResponse")?;
+        VideoSourceConfiguration::vec_from_xml(resp)
+    }
+
+    /// Retrieve a single video source configuration by token.
+    ///
+    /// `media_url` is obtained from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_video_source_configuration(
+        &self,
+        media_url: &str,
+        token: &str,
+    ) -> Result<VideoSourceConfiguration, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfiguration";
+        let body = format!(
+            "<trt:GetVideoSourceConfiguration>\
+               <trt:ConfigurationToken>{token}</trt:ConfigurationToken>\
+             </trt:GetVideoSourceConfiguration>"
+        );
+
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoSourceConfigurationResponse")?;
+        let node = resp
+            .child("Configuration")
+            .ok_or_else(|| crate::soap::SoapError::missing("Configuration"))?;
+        VideoSourceConfiguration::from_xml(node)
+    }
+
+    /// Apply a modified video source configuration to the device.
+    ///
+    /// `media_url` is obtained from [`get_capabilities`](Self::get_capabilities).
+    pub async fn set_video_source_configuration(
+        &self,
+        media_url: &str,
+        config: &VideoSourceConfiguration,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/SetVideoSourceConfiguration";
+        let body = format!(
+            "<trt:SetVideoSourceConfiguration>\
+               {cfg}\
+               <trt:ForcePersistence>true</trt:ForcePersistence>\
+             </trt:SetVideoSourceConfiguration>",
+            cfg = config.to_xml_body()
+        );
+
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetVideoSourceConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the valid parameter ranges for video source configuration.
+    ///
+    /// Pass `config_token` to narrow the options to a specific configuration,
+    /// or `None` to retrieve options valid for all configurations.
+    pub async fn get_video_source_configuration_options(
+        &self,
+        media_url: &str,
+        config_token: Option<&str>,
+    ) -> Result<VideoSourceConfigurationOptions, OnvifError> {
+        const ACTION: &str =
+            "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurationOptions";
+        let inner = match config_token {
+            Some(tok) => format!("<trt:ConfigurationToken>{tok}</trt:ConfigurationToken>"),
+            None => String::new(),
+        };
+        let body = format!(
+            "<trt:GetVideoSourceConfigurationOptions>{inner}</trt:GetVideoSourceConfigurationOptions>"
+        );
+
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoSourceConfigurationOptionsResponse")?;
+        VideoSourceConfigurationOptions::from_xml(resp)
+    }
+
+    // ── Video Encoder Service ─────────────────────────────────────────────────
+
+    /// List all video encoder configurations on the device.
+    ///
+    /// `media_url` is obtained from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_video_encoder_configurations(
+        &self,
+        media_url: &str,
+    ) -> Result<Vec<VideoEncoderConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurations";
+        const BODY: &str = "<trt:GetVideoEncoderConfigurations/>";
+
+        let xml = self.call(media_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoEncoderConfigurationsResponse")?;
+        VideoEncoderConfiguration::vec_from_xml(resp)
+    }
+
+    /// Retrieve a single video encoder configuration by token.
+    ///
+    /// `media_url` is obtained from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_video_encoder_configuration(
+        &self,
+        media_url: &str,
+        token: &str,
+    ) -> Result<VideoEncoderConfiguration, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfiguration";
+        let body = format!(
+            "<trt:GetVideoEncoderConfiguration>\
+               <trt:ConfigurationToken>{token}</trt:ConfigurationToken>\
+             </trt:GetVideoEncoderConfiguration>"
+        );
+
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoEncoderConfigurationResponse")?;
+        let node = resp
+            .child("Configuration")
+            .ok_or_else(|| crate::soap::SoapError::missing("Configuration"))?;
+        VideoEncoderConfiguration::from_xml(node)
+    }
+
+    /// Apply a modified video encoder configuration to the device.
+    ///
+    /// `media_url` is obtained from [`get_capabilities`](Self::get_capabilities).
+    pub async fn set_video_encoder_configuration(
+        &self,
+        media_url: &str,
+        config: &VideoEncoderConfiguration,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/SetVideoEncoderConfiguration";
+        let body = format!(
+            "<trt:SetVideoEncoderConfiguration>\
+               {cfg}\
+               <trt:ForcePersistence>true</trt:ForcePersistence>\
+             </trt:SetVideoEncoderConfiguration>",
+            cfg = config.to_xml_body()
+        );
+
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetVideoEncoderConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the valid parameter ranges for video encoder configuration.
+    ///
+    /// Pass `config_token` to narrow the options to a specific configuration,
+    /// or `None` to retrieve options valid for all configurations.
+    pub async fn get_video_encoder_configuration_options(
+        &self,
+        media_url: &str,
+        config_token: Option<&str>,
+    ) -> Result<VideoEncoderConfigurationOptions, OnvifError> {
+        const ACTION: &str =
+            "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurationOptions";
+        let inner = match config_token {
+            Some(tok) => format!("<trt:ConfigurationToken>{tok}</trt:ConfigurationToken>"),
+            None => String::new(),
+        };
+        let body = format!(
+            "<trt:GetVideoEncoderConfigurationOptions>{inner}</trt:GetVideoEncoderConfigurationOptions>"
+        );
+
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetVideoEncoderConfigurationOptionsResponse")?;
+        VideoEncoderConfigurationOptions::from_xml(resp)
     }
 }
 
@@ -778,5 +973,230 @@ mod tests {
             c.action,
             "http://www.onvif.org/ver10/media/wsdl/GetStreamUri"
         );
+    }
+
+    // ── video source / encoder fixtures ──────────────────────────────────────
+
+    fn video_sources_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetVideoSourcesResponse>
+              <trt:VideoSources token="VS_1">
+                <tt:Framerate>25</tt:Framerate>
+                <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+              </trt:VideoSources>
+              <trt:VideoSources token="VS_2">
+                <tt:Framerate>15</tt:Framerate>
+                <tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>
+              </trt:VideoSources>
+            </trt:GetVideoSourcesResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    fn video_source_configurations_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetVideoSourceConfigurationsResponse>
+              <trt:Configurations token="VSC_1">
+                <tt:Name>VSConfig1</tt:Name>
+                <tt:UseCount>2</tt:UseCount>
+                <tt:SourceToken>VS_1</tt:SourceToken>
+                <tt:Bounds x="0" y="0" width="1920" height="1080"/>
+              </trt:Configurations>
+              <trt:Configurations token="VSC_2">
+                <tt:Name>VSConfig2</tt:Name>
+                <tt:UseCount>1</tt:UseCount>
+                <tt:SourceToken>VS_2</tt:SourceToken>
+                <tt:Bounds x="0" y="0" width="1280" height="720"/>
+              </trt:Configurations>
+            </trt:GetVideoSourceConfigurationsResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    fn video_encoder_configurations_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetVideoEncoderConfigurationsResponse>
+              <trt:Configurations token="VEC_1">
+                <tt:Name>MainStream</tt:Name>
+                <tt:UseCount>1</tt:UseCount>
+                <tt:Encoding>H264</tt:Encoding>
+                <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+                <tt:Quality>5</tt:Quality>
+              </trt:Configurations>
+              <trt:Configurations token="VEC_2">
+                <tt:Name>SubStream</tt:Name>
+                <tt:UseCount>1</tt:UseCount>
+                <tt:Encoding>JPEG</tt:Encoding>
+                <tt:Resolution><tt:Width>640</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
+                <tt:Quality>3</tt:Quality>
+              </trt:Configurations>
+            </trt:GetVideoEncoderConfigurationsResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    fn video_encoder_configuration_single_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetVideoEncoderConfigurationResponse>
+              <trt:Configuration token="VEC_1">
+                <tt:Name>MainStream</tt:Name>
+                <tt:UseCount>1</tt:UseCount>
+                <tt:Encoding>H264</tt:Encoding>
+                <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+                <tt:Quality>5</tt:Quality>
+                <tt:RateControl>
+                  <tt:FrameRateLimit>25</tt:FrameRateLimit>
+                  <tt:EncodingInterval>1</tt:EncodingInterval>
+                  <tt:BitrateLimit>4096</tt:BitrateLimit>
+                </tt:RateControl>
+                <tt:H264>
+                  <tt:GovLength>30</tt:GovLength>
+                  <tt:H264Profile>Main</tt:H264Profile>
+                </tt:H264>
+              </trt:Configuration>
+            </trt:GetVideoEncoderConfigurationResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    fn video_encoder_configuration_options_xml() -> &'static str {
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetVideoEncoderConfigurationOptionsResponse>
+              <trt:Options>
+                <tt:QualityRange><tt:Min>1</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
+                <tt:H264>
+                  <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
+                  <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>150</tt:Max></tt:GovLengthRange>
+                  <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
+                  <tt:EncodingIntervalRange><tt:Min>1</tt:Min><tt:Max>1</tt:Max></tt:EncodingIntervalRange>
+                  <tt:BitrateRange><tt:Min>32</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
+                  <tt:H264ProfilesSupported>Baseline</tt:H264ProfilesSupported>
+                  <tt:H264ProfilesSupported>Main</tt:H264ProfilesSupported>
+                  <tt:H264ProfilesSupported>High</tt:H264ProfilesSupported>
+                </tt:H264>
+              </trt:Options>
+            </trt:GetVideoEncoderConfigurationOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#
+    }
+
+    // ── get_video_sources ─────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_video_sources_returns_correct_fields() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(video_sources_xml()));
+
+        let sources = client
+            .get_video_sources("http://192.168.1.1/onvif/media_service")
+            .await
+            .unwrap();
+
+        assert_eq!(sources.len(), 2);
+        assert_eq!(sources[0].token, "VS_1");
+        assert!((sources[0].framerate - 25.0).abs() < 1e-5);
+        assert_eq!(
+            sources[0].resolution,
+            crate::types::Resolution {
+                width: 1920,
+                height: 1080
+            }
+        );
+        assert_eq!(sources[1].token, "VS_2");
+    }
+
+    // ── get_video_source_configurations ──────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_video_source_configurations_returns_all() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(video_source_configurations_xml()));
+
+        let cfgs = client
+            .get_video_source_configurations("http://192.168.1.1/onvif/media_service")
+            .await
+            .unwrap();
+
+        assert_eq!(cfgs.len(), 2);
+        assert_eq!(cfgs[0].token, "VSC_1");
+        assert_eq!(cfgs[0].source_token, "VS_1");
+        assert_eq!(cfgs[1].token, "VSC_2");
+    }
+
+    // ── get_video_encoder_configurations ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_video_encoder_configurations_returns_all() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(video_encoder_configurations_xml()));
+
+        let cfgs = client
+            .get_video_encoder_configurations("http://192.168.1.1/onvif/media_service")
+            .await
+            .unwrap();
+
+        assert_eq!(cfgs.len(), 2);
+        assert_eq!(cfgs[0].token, "VEC_1");
+        assert_eq!(cfgs[0].encoding, crate::types::VideoEncoding::H264);
+        assert_eq!(cfgs[1].encoding, crate::types::VideoEncoding::Jpeg);
+    }
+
+    // ── get_video_encoder_configuration (single) ──────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_video_encoder_configuration_single() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(video_encoder_configuration_single_xml()));
+
+        let cfg = client
+            .get_video_encoder_configuration("http://192.168.1.1/onvif/media_service", "VEC_1")
+            .await
+            .unwrap();
+
+        assert_eq!(cfg.token, "VEC_1");
+        assert_eq!(cfg.encoding, crate::types::VideoEncoding::H264);
+        let rc = cfg.rate_control.unwrap();
+        assert_eq!(rc.frame_rate_limit, 25);
+        assert_eq!(rc.bitrate_limit, 4096);
+        let h264 = cfg.h264.unwrap();
+        assert_eq!(h264.gov_length, 30);
+        assert_eq!(h264.profile, "Main");
+    }
+
+    // ── get_video_encoder_configuration_options ───────────────────────────────
+
+    #[tokio::test]
+    async fn test_get_video_encoder_configuration_options_parses_h264() {
+        let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+            .with_transport(mock(video_encoder_configuration_options_xml()));
+
+        let opts = client
+            .get_video_encoder_configuration_options("http://192.168.1.1/onvif/media_service", None)
+            .await
+            .unwrap();
+
+        let qr = opts.quality_range.unwrap();
+        assert!((qr.min - 1.0).abs() < 1e-5);
+        assert!((qr.max - 10.0).abs() < 1e-5);
+        let h264 = opts.h264.unwrap();
+        assert_eq!(h264.profiles.len(), 3);
+        assert_eq!(h264.profiles[1], "Main");
+        let br = h264.bitrate_range.unwrap();
+        assert_eq!(br.max, 16384);
     }
 }

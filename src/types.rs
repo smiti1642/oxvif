@@ -566,6 +566,502 @@ impl PtzPreset {
     }
 }
 
+// ── Shared primitives ─────────────────────────────────────────────────────────
+
+/// Width × height in pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Resolution {
+    pub width: u32,
+    pub height: u32,
+}
+
+impl std::fmt::Display for Resolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}x{}", self.width, self.height)
+    }
+}
+
+/// Integer min/max range (inclusive).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IntRange {
+    pub min: i32,
+    pub max: i32,
+}
+
+/// Floating-point min/max range (inclusive).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FloatRange {
+    pub min: f32,
+    pub max: f32,
+}
+
+fn parse_resolution(node: &XmlNode) -> Option<Resolution> {
+    Some(Resolution {
+        width: xml_u32(node, "Width")?,
+        height: xml_u32(node, "Height")?,
+    })
+}
+
+fn parse_int_range_node(node: &XmlNode) -> IntRange {
+    IntRange {
+        min: node
+            .child("Min")
+            .and_then(|n| n.text().parse().ok())
+            .unwrap_or(0),
+        max: node
+            .child("Max")
+            .and_then(|n| n.text().parse().ok())
+            .unwrap_or(0),
+    }
+}
+
+// ── VideoSource ───────────────────────────────────────────────────────────────
+
+/// A physical video input channel returned by `GetVideoSources`.
+#[derive(Debug, Clone)]
+pub struct VideoSource {
+    /// Opaque token identifying this physical input.
+    pub token: String,
+    /// Maximum frame rate this input can deliver.
+    pub framerate: f32,
+    /// Native resolution of this input.
+    pub resolution: Resolution,
+}
+
+impl VideoSource {
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        Ok(resp
+            .children_named("VideoSources")
+            .map(|n| Self {
+                token: n.attr("token").unwrap_or("").to_string(),
+                framerate: n
+                    .child("Framerate")
+                    .and_then(|f| f.text().parse().ok())
+                    .unwrap_or(0.0),
+                resolution: n
+                    .child("Resolution")
+                    .and_then(parse_resolution)
+                    .unwrap_or_default(),
+            })
+            .collect())
+    }
+}
+
+// ── VideoSourceConfiguration ──────────────────────────────────────────────────
+
+/// Rectangular crop/position window applied to a physical video source.
+///
+/// Returned by `GetVideoSourceConfiguration(s)`.
+/// Pass a modified copy to `SetVideoSourceConfiguration`.
+#[derive(Debug, Clone)]
+pub struct VideoSourceConfiguration {
+    /// Opaque token for this configuration.
+    pub token: String,
+    pub name: String,
+    /// Number of profiles currently referencing this configuration.
+    pub use_count: u32,
+    /// Token of the physical `VideoSource` this config reads from.
+    pub source_token: String,
+    /// Crop window within the physical sensor.
+    pub bounds: SourceBounds,
+}
+
+/// Rectangular region within a video source, in pixels.
+#[derive(Debug, Clone, Default)]
+pub struct SourceBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl VideoSourceConfiguration {
+    pub(crate) fn from_xml(node: &XmlNode) -> Result<Self, OnvifError> {
+        Ok(Self {
+            token: node.attr("token").unwrap_or("").to_string(),
+            name: xml_str(node, "Name").unwrap_or_default(),
+            use_count: xml_u32(node, "UseCount").unwrap_or(0),
+            source_token: xml_str(node, "SourceToken").unwrap_or_default(),
+            bounds: node
+                .child("Bounds")
+                .map(|b| SourceBounds {
+                    x: b.attr("x").and_then(|v| v.parse().ok()).unwrap_or(0),
+                    y: b.attr("y").and_then(|v| v.parse().ok()).unwrap_or(0),
+                    width: b.attr("width").and_then(|v| v.parse().ok()).unwrap_or(0),
+                    height: b.attr("height").and_then(|v| v.parse().ok()).unwrap_or(0),
+                })
+                .unwrap_or_default(),
+        })
+    }
+
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("Configurations")
+            .map(Self::from_xml)
+            .collect()
+    }
+
+    /// Serialise to a `<trt:Configuration>` XML fragment for `SetVideoSourceConfiguration`.
+    pub(crate) fn to_xml_body(&self) -> String {
+        format!(
+            "<trt:Configuration token=\"{token}\">\
+               <tt:Name>{name}</tt:Name>\
+               <tt:UseCount>{use_count}</tt:UseCount>\
+               <tt:SourceToken>{source_token}</tt:SourceToken>\
+               <tt:Bounds x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\"/>\
+             </trt:Configuration>",
+            token = self.token,
+            name = self.name,
+            use_count = self.use_count,
+            source_token = self.source_token,
+            x = self.bounds.x,
+            y = self.bounds.y,
+            w = self.bounds.width,
+            h = self.bounds.height,
+        )
+    }
+}
+
+// ── VideoSourceConfigurationOptions ──────────────────────────────────────────
+
+/// Valid parameter ranges for `SetVideoSourceConfiguration`.
+#[derive(Debug, Clone, Default)]
+pub struct VideoSourceConfigurationOptions {
+    /// Available video source tokens that can be referenced.
+    pub source_tokens: Vec<String>,
+    /// Maximum profiles that may reference a single video source configuration.
+    pub max_limit: Option<u32>,
+    /// Valid ranges for the `bounds` crop window.
+    pub bounds_range: Option<BoundsRange>,
+}
+
+/// Valid coordinate ranges for `SourceBounds`.
+#[derive(Debug, Clone, Default)]
+pub struct BoundsRange {
+    pub x_range: IntRange,
+    pub y_range: IntRange,
+    pub width_range: IntRange,
+    pub height_range: IntRange,
+}
+
+impl VideoSourceConfigurationOptions {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let opts = resp
+            .child("Options")
+            .ok_or_else(|| SoapError::missing("Options"))?;
+        Ok(Self {
+            max_limit: xml_u32(opts, "MaximumNumberOfProfiles"),
+            bounds_range: opts.child("BoundsRange").map(|br| BoundsRange {
+                x_range: br
+                    .child("XRange")
+                    .map(parse_int_range_node)
+                    .unwrap_or_default(),
+                y_range: br
+                    .child("YRange")
+                    .map(parse_int_range_node)
+                    .unwrap_or_default(),
+                width_range: br
+                    .child("WidthRange")
+                    .map(parse_int_range_node)
+                    .unwrap_or_default(),
+                height_range: br
+                    .child("HeightRange")
+                    .map(parse_int_range_node)
+                    .unwrap_or_default(),
+            }),
+            source_tokens: opts
+                .children_named("VideoSourceTokensAvailable")
+                .map(|n| n.text().to_string())
+                .collect(),
+        })
+    }
+}
+
+// ── VideoEncoding ─────────────────────────────────────────────────────────────
+
+/// Video compression format.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum VideoEncoding {
+    Jpeg,
+    #[default]
+    H264,
+    H265,
+    Other(String),
+}
+
+impl VideoEncoding {
+    fn from_str(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "JPEG" => Self::Jpeg,
+            "H264" => Self::H264,
+            "H265" | "H.265" => Self::H265,
+            _ => Self::Other(s.to_string()),
+        }
+    }
+
+    /// Returns the ONVIF wire string for this encoding (e.g. `"H264"`).
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Jpeg => "JPEG",
+            Self::H264 => "H264",
+            Self::H265 => "H265",
+            Self::Other(s) => s.as_str(),
+        }
+    }
+}
+
+impl std::fmt::Display for VideoEncoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+// ── VideoEncoderConfiguration ─────────────────────────────────────────────────
+
+/// Video codec settings for one stream, returned by `GetVideoEncoderConfiguration(s)`.
+///
+/// Pass a modified copy to `SetVideoEncoderConfiguration` to change resolution,
+/// frame rate, bitrate, or codec profile.
+#[derive(Debug, Clone)]
+pub struct VideoEncoderConfiguration {
+    /// Opaque token for this configuration.
+    pub token: String,
+    pub name: String,
+    /// Number of profiles currently referencing this configuration.
+    pub use_count: u32,
+    pub encoding: VideoEncoding,
+    pub resolution: Resolution,
+    /// Encoder quality level. Valid range is device-specific; see `GetVideoEncoderConfigurationOptions`.
+    pub quality: f32,
+    pub rate_control: Option<VideoRateControl>,
+    /// H.264 specific settings; `None` when `encoding != H264`.
+    pub h264: Option<H264Configuration>,
+    /// H.265 specific settings; `None` when `encoding != H265`.
+    pub h265: Option<H265Configuration>,
+}
+
+/// Frame rate, encoding interval, and bitrate limits.
+#[derive(Debug, Clone)]
+pub struct VideoRateControl {
+    /// Maximum frames per second the encoder produces.
+    pub frame_rate_limit: u32,
+    /// Encode every Nth frame (1 = all frames).
+    pub encoding_interval: u32,
+    /// Maximum bitrate in kbps.
+    pub bitrate_limit: u32,
+}
+
+/// H.264-specific codec settings.
+#[derive(Debug, Clone)]
+pub struct H264Configuration {
+    /// Group-of-pictures length (keyframe interval in frames).
+    pub gov_length: u32,
+    /// H.264 profile: `"Baseline"`, `"Main"`, `"High"`, or `"Extended"`.
+    pub profile: String,
+}
+
+/// H.265-specific codec settings.
+#[derive(Debug, Clone)]
+pub struct H265Configuration {
+    /// Group-of-pictures length (keyframe interval in frames).
+    pub gov_length: u32,
+    /// H.265 profile: `"Main"`, `"Main10"`, etc.
+    pub profile: String,
+}
+
+impl VideoEncoderConfiguration {
+    pub(crate) fn from_xml(node: &XmlNode) -> Result<Self, OnvifError> {
+        Ok(Self {
+            token: node.attr("token").unwrap_or("").to_string(),
+            name: xml_str(node, "Name").unwrap_or_default(),
+            use_count: xml_u32(node, "UseCount").unwrap_or(0),
+            encoding: xml_str(node, "Encoding")
+                .map(|s| VideoEncoding::from_str(&s))
+                .unwrap_or_default(),
+            resolution: node
+                .child("Resolution")
+                .and_then(parse_resolution)
+                .unwrap_or_default(),
+            quality: node
+                .child("Quality")
+                .and_then(|n| n.text().parse().ok())
+                .unwrap_or(0.0),
+            rate_control: node.child("RateControl").map(|rc| VideoRateControl {
+                frame_rate_limit: xml_u32(rc, "FrameRateLimit").unwrap_or(0),
+                encoding_interval: xml_u32(rc, "EncodingInterval").unwrap_or(1),
+                bitrate_limit: xml_u32(rc, "BitrateLimit").unwrap_or(0),
+            }),
+            h264: node.child("H264").map(|n| H264Configuration {
+                gov_length: xml_u32(n, "GovLength").unwrap_or(0),
+                profile: xml_str(n, "H264Profile").unwrap_or_default(),
+            }),
+            h265: node.child("H265").map(|n| H265Configuration {
+                gov_length: xml_u32(n, "GovLength").unwrap_or(0),
+                profile: xml_str(n, "H265Profile").unwrap_or_default(),
+            }),
+        })
+    }
+
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("Configurations")
+            .map(Self::from_xml)
+            .collect()
+    }
+
+    /// Serialise to a `<trt:Configuration>` XML fragment for `SetVideoEncoderConfiguration`.
+    pub(crate) fn to_xml_body(&self) -> String {
+        let res = format!(
+            "<tt:Resolution><tt:Width>{}</tt:Width><tt:Height>{}</tt:Height></tt:Resolution>",
+            self.resolution.width, self.resolution.height
+        );
+        let rate = match &self.rate_control {
+            Some(rc) => format!(
+                "<tt:RateControl>\
+                   <tt:FrameRateLimit>{}</tt:FrameRateLimit>\
+                   <tt:EncodingInterval>{}</tt:EncodingInterval>\
+                   <tt:BitrateLimit>{}</tt:BitrateLimit>\
+                 </tt:RateControl>",
+                rc.frame_rate_limit, rc.encoding_interval, rc.bitrate_limit
+            ),
+            None => String::new(),
+        };
+        let h264 = match &self.h264 {
+            Some(h) => format!(
+                "<tt:H264>\
+                   <tt:GovLength>{}</tt:GovLength>\
+                   <tt:H264Profile>{}</tt:H264Profile>\
+                 </tt:H264>",
+                h.gov_length, h.profile
+            ),
+            None => String::new(),
+        };
+        let h265 = match &self.h265 {
+            Some(h) => format!(
+                "<tt:H265>\
+                   <tt:GovLength>{}</tt:GovLength>\
+                   <tt:H265Profile>{}</tt:H265Profile>\
+                 </tt:H265>",
+                h.gov_length, h.profile
+            ),
+            None => String::new(),
+        };
+        format!(
+            "<trt:Configuration token=\"{token}\">\
+               <tt:Name>{name}</tt:Name>\
+               <tt:UseCount>{use_count}</tt:UseCount>\
+               <tt:Encoding>{encoding}</tt:Encoding>\
+               {res}{rate}{h264}{h265}\
+               <tt:Quality>{quality}</tt:Quality>\
+             </trt:Configuration>",
+            token = self.token,
+            name = self.name,
+            use_count = self.use_count,
+            encoding = self.encoding,
+            quality = self.quality,
+        )
+    }
+}
+
+// ── VideoEncoderConfigurationOptions ─────────────────────────────────────────
+
+/// Valid parameter ranges for `SetVideoEncoderConfiguration`.
+#[derive(Debug, Clone, Default)]
+pub struct VideoEncoderConfigurationOptions {
+    pub quality_range: Option<FloatRange>,
+    pub jpeg: Option<JpegOptions>,
+    pub h264: Option<H264Options>,
+    pub h265: Option<H265Options>,
+}
+
+/// Valid options for JPEG encoding.
+#[derive(Debug, Clone, Default)]
+pub struct JpegOptions {
+    pub resolutions: Vec<Resolution>,
+    pub frame_rate_range: Option<IntRange>,
+    pub encoding_interval_range: Option<IntRange>,
+}
+
+/// Valid options for H.264 encoding.
+#[derive(Debug, Clone, Default)]
+pub struct H264Options {
+    pub resolutions: Vec<Resolution>,
+    pub gov_length_range: Option<IntRange>,
+    pub frame_rate_range: Option<IntRange>,
+    pub encoding_interval_range: Option<IntRange>,
+    pub bitrate_range: Option<IntRange>,
+    /// Supported H.264 profiles (e.g. `"Baseline"`, `"Main"`, `"High"`).
+    pub profiles: Vec<String>,
+}
+
+/// Valid options for H.265 encoding.
+#[derive(Debug, Clone, Default)]
+pub struct H265Options {
+    pub resolutions: Vec<Resolution>,
+    pub gov_length_range: Option<IntRange>,
+    pub frame_rate_range: Option<IntRange>,
+    pub encoding_interval_range: Option<IntRange>,
+    pub bitrate_range: Option<IntRange>,
+    /// Supported H.265 profiles.
+    pub profiles: Vec<String>,
+}
+
+impl VideoEncoderConfigurationOptions {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let opts = resp
+            .child("Options")
+            .ok_or_else(|| SoapError::missing("Options"))?;
+        Ok(Self {
+            quality_range: opts.child("QualityRange").map(|qr| FloatRange {
+                min: qr
+                    .child("Min")
+                    .and_then(|n| n.text().parse().ok())
+                    .unwrap_or(0.0),
+                max: qr
+                    .child("Max")
+                    .and_then(|n| n.text().parse().ok())
+                    .unwrap_or(0.0),
+            }),
+            jpeg: opts.child("JPEG").map(|jpeg| JpegOptions {
+                resolutions: jpeg
+                    .children_named("ResolutionsAvailable")
+                    .filter_map(parse_resolution)
+                    .collect(),
+                frame_rate_range: jpeg.child("FrameRateRange").map(parse_int_range_node),
+                encoding_interval_range: jpeg
+                    .child("EncodingIntervalRange")
+                    .map(parse_int_range_node),
+            }),
+            h264: opts.child("H264").map(|h| H264Options {
+                resolutions: h
+                    .children_named("ResolutionsAvailable")
+                    .filter_map(parse_resolution)
+                    .collect(),
+                gov_length_range: h.child("GovLengthRange").map(parse_int_range_node),
+                frame_rate_range: h.child("FrameRateRange").map(parse_int_range_node),
+                encoding_interval_range: h.child("EncodingIntervalRange").map(parse_int_range_node),
+                bitrate_range: h.child("BitrateRange").map(parse_int_range_node),
+                profiles: h
+                    .children_named("H264ProfilesSupported")
+                    .map(|n| n.text().to_string())
+                    .collect(),
+            }),
+            h265: opts.child("H265").map(|h| H265Options {
+                resolutions: h
+                    .children_named("ResolutionsAvailable")
+                    .filter_map(parse_resolution)
+                    .collect(),
+                gov_length_range: h.child("GovLengthRange").map(parse_int_range_node),
+                frame_rate_range: h.child("FrameRateRange").map(parse_int_range_node),
+                encoding_interval_range: h.child("EncodingIntervalRange").map(parse_int_range_node),
+                bitrate_range: h.child("BitrateRange").map(parse_int_range_node),
+                profiles: h
+                    .children_named("H265ProfilesSupported")
+                    .map(|n| n.text().to_string())
+                    .collect(),
+            }),
+        })
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1132,6 +1628,294 @@ mod tests {
         fn test_empty_response_returns_empty_vec() {
             let presets = PtzPreset::vec_from_xml(&parse("<GetPresetsResponse/>")).unwrap();
             assert!(presets.is_empty());
+        }
+    }
+
+    mod video {
+        use super::*;
+
+        // ── VideoSource ───────────────────────────────────────────────────────
+
+        const TWO_SOURCES: &str = r#"<GetVideoSourcesResponse>
+          <VideoSources token="VideoSource_1">
+            <Framerate>25</Framerate>
+            <Resolution><Width>1920</Width><Height>1080</Height></Resolution>
+          </VideoSources>
+          <VideoSources token="VideoSource_2">
+            <Framerate>15</Framerate>
+            <Resolution><Width>1280</Width><Height>720</Height></Resolution>
+          </VideoSources>
+        </GetVideoSourcesResponse>"#;
+
+        #[test]
+        fn test_video_sources_count() {
+            let sources = VideoSource::vec_from_xml(&parse(TWO_SOURCES)).unwrap();
+            assert_eq!(sources.len(), 2);
+        }
+
+        #[test]
+        fn test_video_sources_fields() {
+            let sources = VideoSource::vec_from_xml(&parse(TWO_SOURCES)).unwrap();
+            assert_eq!(sources[0].token, "VideoSource_1");
+            assert!((sources[0].framerate - 25.0).abs() < 1e-5);
+            assert_eq!(
+                sources[0].resolution,
+                Resolution {
+                    width: 1920,
+                    height: 1080
+                }
+            );
+            assert_eq!(sources[1].token, "VideoSource_2");
+            assert_eq!(
+                sources[1].resolution,
+                Resolution {
+                    width: 1280,
+                    height: 720
+                }
+            );
+        }
+
+        // ── VideoSourceConfiguration ──────────────────────────────────────────
+
+        const VSC_XML: &str = r#"<Configuration token="VSC_1">
+          <Name>VideoSourceConfig</Name>
+          <UseCount>2</UseCount>
+          <SourceToken>VideoSource_1</SourceToken>
+          <Bounds x="0" y="0" width="1920" height="1080"/>
+        </Configuration>"#;
+
+        #[test]
+        fn test_video_source_configuration_from_xml() {
+            let cfg = VideoSourceConfiguration::from_xml(&parse(VSC_XML)).unwrap();
+            assert_eq!(cfg.token, "VSC_1");
+            assert_eq!(cfg.name, "VideoSourceConfig");
+            assert_eq!(cfg.use_count, 2);
+            assert_eq!(cfg.source_token, "VideoSource_1");
+            assert_eq!(cfg.bounds.x, 0);
+            assert_eq!(cfg.bounds.y, 0);
+            assert_eq!(cfg.bounds.width, 1920);
+            assert_eq!(cfg.bounds.height, 1080);
+        }
+
+        #[test]
+        fn test_video_source_configuration_to_xml_body_round_trip() {
+            let cfg = VideoSourceConfiguration {
+                token: "tok1".into(),
+                name: "MyCfg".into(),
+                use_count: 1,
+                source_token: "src1".into(),
+                bounds: SourceBounds {
+                    x: 10,
+                    y: 20,
+                    width: 640,
+                    height: 480,
+                },
+            };
+            let xml = cfg.to_xml_body();
+            assert!(xml.contains("token=\"tok1\""));
+            assert!(xml.contains("<tt:Name>MyCfg</tt:Name>"));
+            assert!(xml.contains("<tt:SourceToken>src1</tt:SourceToken>"));
+            assert!(xml.contains("x=\"10\""));
+            assert!(xml.contains("y=\"20\""));
+            assert!(xml.contains("width=\"640\""));
+            assert!(xml.contains("height=\"480\""));
+        }
+
+        // ── VideoSourceConfigurationOptions ───────────────────────────────────
+
+        const VSCO_XML: &str = r#"<GetVideoSourceConfigurationOptionsResponse>
+          <Options>
+            <MaximumNumberOfProfiles>5</MaximumNumberOfProfiles>
+            <BoundsRange>
+              <XRange><Min>0</Min><Max>0</Max></XRange>
+              <YRange><Min>0</Min><Max>0</Max></YRange>
+              <WidthRange><Min>320</Min><Max>1920</Max></WidthRange>
+              <HeightRange><Min>240</Min><Max>1080</Max></HeightRange>
+            </BoundsRange>
+            <VideoSourceTokensAvailable>VideoSource_1</VideoSourceTokensAvailable>
+            <VideoSourceTokensAvailable>VideoSource_2</VideoSourceTokensAvailable>
+          </Options>
+        </GetVideoSourceConfigurationOptionsResponse>"#;
+
+        #[test]
+        fn test_video_source_configuration_options_from_xml() {
+            let opts = VideoSourceConfigurationOptions::from_xml(&parse(VSCO_XML)).unwrap();
+            assert_eq!(opts.max_limit, Some(5));
+            assert_eq!(opts.source_tokens.len(), 2);
+            assert_eq!(opts.source_tokens[0], "VideoSource_1");
+            let br = opts.bounds_range.unwrap();
+            assert_eq!(br.width_range.min, 320);
+            assert_eq!(br.width_range.max, 1920);
+            assert_eq!(br.height_range.min, 240);
+            assert_eq!(br.height_range.max, 1080);
+        }
+
+        // ── VideoEncoding ─────────────────────────────────────────────────────
+
+        #[test]
+        fn test_video_encoding_from_str() {
+            assert_eq!(VideoEncoding::from_str("JPEG"), VideoEncoding::Jpeg);
+            assert_eq!(VideoEncoding::from_str("H264"), VideoEncoding::H264);
+            assert_eq!(VideoEncoding::from_str("H265"), VideoEncoding::H265);
+            assert_eq!(VideoEncoding::from_str("H.265"), VideoEncoding::H265);
+            assert_eq!(
+                VideoEncoding::from_str("MPEG4"),
+                VideoEncoding::Other("MPEG4".into())
+            );
+        }
+
+        // ── VideoEncoderConfiguration ─────────────────────────────────────────
+
+        const VEC_XML: &str = r#"<Configuration token="VideoEncoder_1">
+          <Name>MainStream</Name>
+          <UseCount>1</UseCount>
+          <Encoding>H264</Encoding>
+          <Resolution><Width>1920</Width><Height>1080</Height></Resolution>
+          <Quality>5</Quality>
+          <RateControl>
+            <FrameRateLimit>25</FrameRateLimit>
+            <EncodingInterval>1</EncodingInterval>
+            <BitrateLimit>4096</BitrateLimit>
+          </RateControl>
+          <H264>
+            <GovLength>30</GovLength>
+            <H264Profile>Main</H264Profile>
+          </H264>
+        </Configuration>"#;
+
+        #[test]
+        fn test_video_encoder_configuration_from_xml() {
+            let cfg = VideoEncoderConfiguration::from_xml(&parse(VEC_XML)).unwrap();
+            assert_eq!(cfg.token, "VideoEncoder_1");
+            assert_eq!(cfg.name, "MainStream");
+            assert_eq!(cfg.use_count, 1);
+            assert_eq!(cfg.encoding, VideoEncoding::H264);
+            assert_eq!(
+                cfg.resolution,
+                Resolution {
+                    width: 1920,
+                    height: 1080
+                }
+            );
+            assert!((cfg.quality - 5.0).abs() < 1e-5);
+            let rc = cfg.rate_control.unwrap();
+            assert_eq!(rc.frame_rate_limit, 25);
+            assert_eq!(rc.encoding_interval, 1);
+            assert_eq!(rc.bitrate_limit, 4096);
+            let h264 = cfg.h264.unwrap();
+            assert_eq!(h264.gov_length, 30);
+            assert_eq!(h264.profile, "Main");
+            assert!(cfg.h265.is_none());
+        }
+
+        const TWO_VEC_XML: &str = r#"<GetVideoEncoderConfigurationsResponse>
+          <Configurations token="VideoEncoder_1">
+            <Name>MainStream</Name>
+            <UseCount>1</UseCount>
+            <Encoding>H264</Encoding>
+            <Resolution><Width>1920</Width><Height>1080</Height></Resolution>
+            <Quality>5</Quality>
+          </Configurations>
+          <Configurations token="VideoEncoder_2">
+            <Name>SubStream</Name>
+            <UseCount>1</UseCount>
+            <Encoding>JPEG</Encoding>
+            <Resolution><Width>640</Width><Height>480</Height></Resolution>
+            <Quality>3</Quality>
+          </Configurations>
+        </GetVideoEncoderConfigurationsResponse>"#;
+
+        #[test]
+        fn test_video_encoder_configuration_vec_from_xml() {
+            let cfgs = VideoEncoderConfiguration::vec_from_xml(&parse(TWO_VEC_XML)).unwrap();
+            assert_eq!(cfgs.len(), 2);
+            assert_eq!(cfgs[0].token, "VideoEncoder_1");
+            assert_eq!(cfgs[1].encoding, VideoEncoding::Jpeg);
+        }
+
+        #[test]
+        fn test_video_encoder_configuration_to_xml_body_round_trip() {
+            let cfg = VideoEncoderConfiguration {
+                token: "enc1".into(),
+                name: "Main".into(),
+                use_count: 1,
+                encoding: VideoEncoding::H264,
+                resolution: Resolution {
+                    width: 1280,
+                    height: 720,
+                },
+                quality: 4.0,
+                rate_control: Some(VideoRateControl {
+                    frame_rate_limit: 30,
+                    encoding_interval: 1,
+                    bitrate_limit: 2048,
+                }),
+                h264: Some(H264Configuration {
+                    gov_length: 25,
+                    profile: "Baseline".into(),
+                }),
+                h265: None,
+            };
+            let xml = cfg.to_xml_body();
+            assert!(xml.contains("token=\"enc1\""));
+            assert!(xml.contains("<tt:Encoding>H264</tt:Encoding>"));
+            assert!(xml.contains("<tt:Width>1280</tt:Width>"));
+            assert!(xml.contains("<tt:FrameRateLimit>30</tt:FrameRateLimit>"));
+            assert!(xml.contains("<tt:GovLength>25</tt:GovLength>"));
+            assert!(xml.contains("<tt:H264Profile>Baseline</tt:H264Profile>"));
+        }
+
+        // ── VideoEncoderConfigurationOptions ──────────────────────────────────
+
+        const VECO_XML: &str = r#"<GetVideoEncoderConfigurationOptionsResponse>
+          <Options>
+            <QualityRange><Min>1</Min><Max>10</Max></QualityRange>
+            <JPEG>
+              <ResolutionsAvailable><Width>1920</Width><Height>1080</Height></ResolutionsAvailable>
+              <ResolutionsAvailable><Width>1280</Width><Height>720</Height></ResolutionsAvailable>
+              <FrameRateRange><Min>1</Min><Max>30</Max></FrameRateRange>
+              <EncodingIntervalRange><Min>1</Min><Max>1</Max></EncodingIntervalRange>
+            </JPEG>
+            <H264>
+              <ResolutionsAvailable><Width>1920</Width><Height>1080</Height></ResolutionsAvailable>
+              <GovLengthRange><Min>1</Min><Max>150</Max></GovLengthRange>
+              <FrameRateRange><Min>1</Min><Max>30</Max></FrameRateRange>
+              <EncodingIntervalRange><Min>1</Min><Max>1</Max></EncodingIntervalRange>
+              <BitrateRange><Min>32</Min><Max>16384</Max></BitrateRange>
+              <H264ProfilesSupported>Baseline</H264ProfilesSupported>
+              <H264ProfilesSupported>Main</H264ProfilesSupported>
+              <H264ProfilesSupported>High</H264ProfilesSupported>
+            </H264>
+          </Options>
+        </GetVideoEncoderConfigurationOptionsResponse>"#;
+
+        #[test]
+        fn test_video_encoder_configuration_options_from_xml() {
+            let opts = VideoEncoderConfigurationOptions::from_xml(&parse(VECO_XML)).unwrap();
+            let qr = opts.quality_range.unwrap();
+            assert!((qr.min - 1.0).abs() < 1e-5);
+            assert!((qr.max - 10.0).abs() < 1e-5);
+            let jpeg = opts.jpeg.unwrap();
+            assert_eq!(jpeg.resolutions.len(), 2);
+            assert_eq!(
+                jpeg.resolutions[0],
+                Resolution {
+                    width: 1920,
+                    height: 1080
+                }
+            );
+            let fr = jpeg.frame_rate_range.unwrap();
+            assert_eq!(fr.min, 1);
+            assert_eq!(fr.max, 30);
+            let h264 = opts.h264.unwrap();
+            assert_eq!(h264.profiles.len(), 3);
+            assert_eq!(h264.profiles[0], "Baseline");
+            let br = h264.bitrate_range.unwrap();
+            assert_eq!(br.min, 32);
+            assert_eq!(br.max, 16384);
+            let glr = h264.gov_length_range.unwrap();
+            assert_eq!(glr.max, 150);
+            assert!(opts.h265.is_none());
         }
     }
 }
