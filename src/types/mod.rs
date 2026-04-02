@@ -2,12 +2,14 @@
 
 mod capabilities;
 mod device;
+mod imaging;
 mod media;
 mod ptz;
 mod video;
 
 pub use capabilities::*;
 pub use device::*;
+pub use imaging::*;
 pub use media::*;
 pub use ptz::*;
 pub use video::*;

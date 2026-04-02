@@ -28,8 +28,9 @@ use crate::error::OnvifError;
 use crate::soap::{SoapEnvelope, WsSecurityToken, find_response, parse_soap_body};
 use crate::transport::{HttpTransport, Transport};
 use crate::types::{
-    Capabilities, DeviceInfo, MediaProfile, MediaProfile2, OnvifService, PtzPreset, SnapshotUri,
-    StreamUri, SystemDateTime, VideoEncoderConfiguration, VideoEncoderConfiguration2,
+    Capabilities, DeviceInfo, Hostname, ImagingOptions, ImagingSettings, MediaProfile,
+    MediaProfile2, NtpInfo, OnvifService, PtzPreset, PtzStatus, SnapshotUri, StreamUri,
+    SystemDateTime, VideoEncoderConfiguration, VideoEncoderConfiguration2,
     VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,
     VideoSource, VideoSourceConfiguration, VideoSourceConfigurationOptions,
 };
@@ -212,6 +213,89 @@ impl OnvifClient {
         DeviceInfo::from_xml(resp)
     }
 
+    /// Retrieve the device hostname and whether it is assigned by DHCP.
+    pub async fn get_hostname(&self) -> Result<Hostname, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+        const BODY: &str = "<tds:GetHostname/>";
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetHostnameResponse")?;
+        Hostname::from_xml(resp)
+    }
+
+    /// Set the device hostname.
+    ///
+    /// Most devices require a reboot for the change to take effect.
+    pub async fn set_hostname(&self, name: &str) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetHostname";
+        let body = format!("<tds:SetHostname><tds:Name>{name}</tds:Name></tds:SetHostname>");
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetHostnameResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the NTP server configuration.
+    ///
+    /// Returns whether servers come from DHCP and the list of manually
+    /// configured server addresses.
+    pub async fn get_ntp(&self) -> Result<NtpInfo, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetNTP";
+        const BODY: &str = "<tds:GetNTP/>";
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetNTPResponse")?;
+        NtpInfo::from_xml(resp)
+    }
+
+    /// Set the NTP server configuration.
+    ///
+    /// When `from_dhcp` is `true`, `servers` is ignored; DHCP provides the
+    /// NTP servers. When `false`, each entry in `servers` is sent as a
+    /// `NTPManual` element (accepted as either a DNS hostname or an IP
+    /// address string).
+    pub async fn set_ntp(&self, from_dhcp: bool, servers: &[&str]) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetNTP";
+        let from_dhcp_str = if from_dhcp { "true" } else { "false" };
+        let server_els: String = servers
+            .iter()
+            .map(|s| {
+                format!(
+                    "<tds:NTPManual>\
+                       <tt:Type>DNS</tt:Type>\
+                       <tt:DNSname>{s}</tt:DNSname>\
+                     </tds:NTPManual>"
+                )
+            })
+            .collect();
+        let body = format!(
+            "<tds:SetNTP>\
+               <tds:FromDHCP>{from_dhcp_str}</tds:FromDHCP>\
+               {server_els}\
+             </tds:SetNTP>"
+        );
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetNTPResponse")?;
+        Ok(())
+    }
+
+    /// Initiate a device reboot.
+    ///
+    /// Returns the device's informational reboot message (e.g.
+    /// `"Rebooting in 30 seconds"`). The connection will drop shortly after.
+    pub async fn system_reboot(&self) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SystemReboot";
+        const BODY: &str = "<tds:SystemReboot/>";
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "SystemRebootResponse")?;
+        Ok(resp
+            .child("Message")
+            .map(|n| n.text().to_string())
+            .unwrap_or_default())
+    }
+
     // ── Media Service ─────────────────────────────────────────────────────────
 
     /// List all media profiles available on the device.
@@ -279,6 +363,159 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetSnapshotUriResponse")?;
         SnapshotUri::from_xml(resp)
+    }
+
+    /// Create a new, initially empty media profile.
+    ///
+    /// `token` is optional; if omitted the device assigns one. Returns the
+    /// newly created [`MediaProfile`] including the assigned token.
+    pub async fn create_profile(
+        &self,
+        media_url: &str,
+        name: &str,
+        token: Option<&str>,
+    ) -> Result<MediaProfile, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/CreateProfile";
+        let token_el = token
+            .map(|t| format!("<trt:Token>{t}</trt:Token>"))
+            .unwrap_or_default();
+        let body = format!(
+            "<trt:CreateProfile>\
+               <trt:Name>{name}</trt:Name>\
+               {token_el}\
+             </trt:CreateProfile>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "CreateProfileResponse")?;
+        let p = resp
+            .child("Profile")
+            .ok_or_else(|| crate::soap::SoapError::missing("Profile"))?;
+        Ok(MediaProfile::from_xml(p))
+    }
+
+    /// Delete a non-fixed media profile.
+    ///
+    /// Fixed profiles (where `profile.fixed == true`) cannot be deleted.
+    pub async fn delete_profile(
+        &self,
+        media_url: &str,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/DeleteProfile";
+        let body = format!(
+            "<trt:DeleteProfile>\
+               <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
+             </trt:DeleteProfile>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "DeleteProfileResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve a single media profile by token.
+    pub async fn get_profile(
+        &self,
+        media_url: &str,
+        profile_token: &str,
+    ) -> Result<MediaProfile, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetProfile";
+        let body = format!(
+            "<trt:GetProfile>\
+               <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
+             </trt:GetProfile>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetProfileResponse")?;
+        let p = resp
+            .child("Profile")
+            .ok_or_else(|| crate::soap::SoapError::missing("Profile"))?;
+        Ok(MediaProfile::from_xml(p))
+    }
+
+    /// Bind a video encoder configuration to a media profile.
+    ///
+    /// `config_token` comes from a [`VideoEncoderConfiguration`] returned by
+    /// [`get_video_encoder_configurations`](Self::get_video_encoder_configurations).
+    pub async fn add_video_encoder_configuration(
+        &self,
+        media_url: &str,
+        profile_token: &str,
+        config_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/AddVideoEncoderConfiguration";
+        let body = format!(
+            "<trt:AddVideoEncoderConfiguration>\
+               <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
+               <trt:ConfigurationToken>{config_token}</trt:ConfigurationToken>\
+             </trt:AddVideoEncoderConfiguration>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "AddVideoEncoderConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Remove the video encoder configuration from a media profile.
+    pub async fn remove_video_encoder_configuration(
+        &self,
+        media_url: &str,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str =
+            "http://www.onvif.org/ver10/media/wsdl/RemoveVideoEncoderConfiguration";
+        let body = format!(
+            "<trt:RemoveVideoEncoderConfiguration>\
+               <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
+             </trt:RemoveVideoEncoderConfiguration>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "RemoveVideoEncoderConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Bind a video source configuration to a media profile.
+    ///
+    /// `config_token` comes from a [`VideoSourceConfiguration`] returned by
+    /// [`get_video_source_configurations`](Self::get_video_source_configurations).
+    pub async fn add_video_source_configuration(
+        &self,
+        media_url: &str,
+        profile_token: &str,
+        config_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/AddVideoSourceConfiguration";
+        let body = format!(
+            "<trt:AddVideoSourceConfiguration>\
+               <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
+               <trt:ConfigurationToken>{config_token}</trt:ConfigurationToken>\
+             </trt:AddVideoSourceConfiguration>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "AddVideoSourceConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Remove the video source configuration from a media profile.
+    pub async fn remove_video_source_configuration(
+        &self,
+        media_url: &str,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/RemoveVideoSourceConfiguration";
+        let body = format!(
+            "<trt:RemoveVideoSourceConfiguration>\
+               <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
+             </trt:RemoveVideoSourceConfiguration>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "RemoveVideoSourceConfigurationResponse")?;
+        Ok(())
     }
 
     // ── PTZ Service ───────────────────────────────────────────────────────────
@@ -423,6 +660,83 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         find_response(&body_node, "GotoPresetResponse")?;
         Ok(())
+    }
+
+    /// Save the current camera position as a named preset.
+    ///
+    /// Pass `preset_name` to label the preset and `preset_token` to overwrite
+    /// an existing preset rather than create a new one. Returns the token of
+    /// the saved (or updated) preset.
+    pub async fn ptz_set_preset(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        preset_name: Option<&str>,
+        preset_token: Option<&str>,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/SetPreset";
+        let name_el = preset_name
+            .map(|n| format!("<tptz:PresetName>{n}</tptz:PresetName>"))
+            .unwrap_or_default();
+        let token_el = preset_token
+            .map(|t| format!("<tptz:PresetToken>{t}</tptz:PresetToken>"))
+            .unwrap_or_default();
+        let body = format!(
+            "<tptz:SetPreset>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+               {name_el}{token_el}\
+             </tptz:SetPreset>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "SetPresetResponse")?;
+        resp.child("PresetToken")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("PresetToken").into())
+    }
+
+    /// Delete a saved PTZ preset.
+    ///
+    /// `preset_token` comes from a [`PtzPreset`] returned by
+    /// [`ptz_get_presets`](Self::ptz_get_presets).
+    pub async fn ptz_remove_preset(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        preset_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/RemovePreset";
+        let body = format!(
+            "<tptz:RemovePreset>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+               <tptz:PresetToken>{preset_token}</tptz:PresetToken>\
+             </tptz:RemovePreset>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "RemovePresetResponse")?;
+        Ok(())
+    }
+
+    /// Query the current PTZ position and movement state.
+    ///
+    /// Returns a [`PtzStatus`] with the normalised pan, tilt, and zoom
+    /// positions, and a movement state string (`"IDLE"` or `"MOVING"`).
+    pub async fn ptz_get_status(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+    ) -> Result<PtzStatus, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetStatus";
+        let body = format!(
+            "<tptz:GetStatus>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+             </tptz:GetStatus>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetStatusResponse")?;
+        PtzStatus::from_xml(resp)
     }
 
     // ── Video Source Service ──────────────────────────────────────────────────
@@ -616,6 +930,78 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetVideoEncoderConfigurationOptionsResponse")?;
         VideoEncoderConfigurationOptions::from_xml(resp)
+    }
+
+    // ── Imaging Service ───────────────────────────────────────────────────────
+
+    /// Retrieve the current image quality settings for a video source.
+    ///
+    /// `imaging_url` is obtained from
+    /// [`get_capabilities`](Self::get_capabilities) via `caps.imaging_url`.
+    /// `video_source_token` comes from a [`VideoSource`] returned by
+    /// [`get_video_sources`](Self::get_video_sources).
+    pub async fn get_imaging_settings(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+    ) -> Result<ImagingSettings, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetImagingSettings";
+        let body = format!(
+            "<timg:GetImagingSettings>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+             </timg:GetImagingSettings>"
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetImagingSettingsResponse")?;
+        ImagingSettings::from_xml(resp)
+    }
+
+    /// Apply modified image quality settings to a video source.
+    ///
+    /// Obtain the current settings with
+    /// [`get_imaging_settings`](Self::get_imaging_settings), modify the
+    /// fields you want to change, then pass the result here.
+    pub async fn set_imaging_settings(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+        settings: &ImagingSettings,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/SetImagingSettings";
+        let body = format!(
+            "<timg:SetImagingSettings>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+               {settings_xml}\
+               <timg:ForcePersistence>true</timg:ForcePersistence>\
+             </timg:SetImagingSettings>",
+            settings_xml = settings.to_xml_body()
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetImagingSettingsResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the valid parameter ranges for `set_imaging_settings`.
+    ///
+    /// Use the returned [`ImagingOptions`] to validate or clamp values before
+    /// calling [`set_imaging_settings`](Self::set_imaging_settings).
+    pub async fn get_imaging_options(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+    ) -> Result<ImagingOptions, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetOptions";
+        let body = format!(
+            "<timg:GetOptions>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+             </timg:GetOptions>"
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetOptionsResponse")?;
+        ImagingOptions::from_xml(resp)
     }
 
     // ── Media2 Service ────────────────────────────────────────────────────────

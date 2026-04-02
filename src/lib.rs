@@ -55,8 +55,9 @@ pub use error::OnvifError;
 pub use types::{
     AnalyticsCapabilities, BoundsRange, Capabilities, DeviceCapabilities, DeviceInfo,
     EncoderInstanceInfo, EventsCapabilities, FloatRange, H264Configuration, H264Options,
-    H265Configuration, H265Options, IntRange, IoCapabilities, JpegOptions, MediaCapabilities,
-    MediaProfile, MediaProfile2, NetworkCapabilities, OnvifService, PtzPreset, Resolution,
+    H265Configuration, H265Options, Hostname, ImagingOptions, ImagingSettings, IntRange,
+    IoCapabilities, JpegOptions, MediaCapabilities, MediaProfile, MediaProfile2,
+    NetworkCapabilities, NtpInfo, OnvifService, PtzPreset, PtzStatus, Resolution,
     SecurityCapabilities, SnapshotUri, SourceBounds, StreamUri, StreamingCapabilities,
     SystemCapabilities, SystemDateTime, VideoEncoderConfiguration, VideoEncoderConfiguration2,
     VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,

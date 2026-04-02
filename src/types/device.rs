@@ -130,6 +130,65 @@ pub(crate) fn civil_to_unix(year: i32, month: i32, day: i32, hour: i32, min: i32
     days * 86_400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64
 }
 
+// ── Hostname ──────────────────────────────────────────────────────────────────
+
+/// Hostname configuration returned by `GetHostname`.
+#[derive(Debug, Clone)]
+pub struct Hostname {
+    /// `true` if the hostname is assigned by DHCP rather than set manually.
+    pub from_dhcp: bool,
+    /// The configured hostname. `None` if no hostname is set.
+    pub name: Option<String>,
+}
+
+impl Hostname {
+    /// Parse from a `GetHostnameResponse` node.
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let info = resp
+            .child("HostnameInformation")
+            .ok_or_else(|| SoapError::missing("HostnameInformation"))?;
+        Ok(Self {
+            from_dhcp: xml_bool(info, "FromDHCP"),
+            name: xml_str(info, "Name").filter(|s| !s.is_empty()),
+        })
+    }
+}
+
+// ── NtpInfo ───────────────────────────────────────────────────────────────────
+
+/// NTP configuration returned by `GetNTP`.
+#[derive(Debug, Clone)]
+pub struct NtpInfo {
+    /// `true` if NTP servers are obtained from DHCP rather than set manually.
+    pub from_dhcp: bool,
+    /// Manually configured NTP server addresses (DNS names or IP strings).
+    /// Empty when `from_dhcp` is `true` or no servers are configured.
+    pub servers: Vec<String>,
+}
+
+impl NtpInfo {
+    /// Parse from a `GetNTPResponse` node.
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let info = resp
+            .child("NTPInformation")
+            .ok_or_else(|| SoapError::missing("NTPInformation"))?;
+        Ok(Self {
+            from_dhcp: xml_bool(info, "FromDHCP"),
+            servers: info
+                .children_named("NTPManual")
+                .chain(info.children_named("NTPFromDHCP"))
+                .filter_map(|entry| {
+                    // Prefer DNS name, then IPv4, then IPv6
+                    xml_str(entry, "DNSname")
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| xml_str(entry, "IPv4Address").filter(|s| !s.is_empty()))
+                        .or_else(|| xml_str(entry, "IPv6Address").filter(|s| !s.is_empty()))
+                })
+                .collect(),
+        })
+    }
+}
+
 // ── OnvifService ─────────────────────────────────────────────────────────────
 
 /// A single service entry returned by `GetServices`.

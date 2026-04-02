@@ -19,16 +19,22 @@ pub struct MediaProfile {
 }
 
 impl MediaProfile {
+    /// Parse a single `<Profile>` node (e.g. from `CreateProfileResponse` or
+    /// `GetProfileResponse`).
+    pub(crate) fn from_xml(p: &XmlNode) -> Self {
+        Self {
+            token: p.attr("token").unwrap_or("").to_string(),
+            fixed: p.attr("fixed") == Some("true"),
+            name: xml_str(p, "Name").unwrap_or_default(),
+        }
+    }
+
     /// Parse all `<trt:Profiles>` children from a `GetProfilesResponse` node.
     /// Returns an empty `Vec` if the response contains no profiles.
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
         Ok(resp
             .children_named("Profiles")
-            .map(|p| Self {
-                token: p.attr("token").unwrap_or("").to_string(),
-                fixed: p.attr("fixed") == Some("true"),
-                name: xml_str(p, "Name").unwrap_or_default(),
-            })
+            .map(Self::from_xml)
             .collect())
     }
 }
