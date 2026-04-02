@@ -401,7 +401,7 @@ impl OnvifClient {
         let p = resp
             .child("Profile")
             .ok_or_else(|| crate::soap::SoapError::missing("Profile"))?;
-        Ok(MediaProfile::from_xml(p))
+        MediaProfile::from_xml(p)
     }
 
     /// Delete a non-fixed media profile.
@@ -442,7 +442,7 @@ impl OnvifClient {
         let p = resp
             .child("Profile")
             .ok_or_else(|| crate::soap::SoapError::missing("Profile"))?;
-        Ok(MediaProfile::from_xml(p))
+        MediaProfile::from_xml(p)
     }
 
     /// Bind a video encoder configuration to a media profile.

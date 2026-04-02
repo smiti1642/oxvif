@@ -1959,3 +1959,160 @@ async fn test_unsubscribe_posts_to_subscription_url_with_correct_action() {
         "http://www.onvif.org/ver10/events/wsdl/SubscriptionManager/UnsubscribeRequest"
     );
 }
+
+// ── Negative / error-path tests ───────────────────────────────────────────────
+
+// ── Malformed XML ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_get_capabilities_malformed_xml_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock("this is not xml at all"));
+    let result = client.get_capabilities().await;
+    assert!(result.is_err(), "expected Err on malformed XML");
+}
+
+#[tokio::test]
+async fn test_get_profiles_malformed_xml_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock("<unclosed"));
+    let result = client
+        .get_profiles("http://192.168.1.1/onvif/media_service")
+        .await;
+    assert!(result.is_err(), "expected Err on malformed XML");
+}
+
+// ── SOAP Fault ────────────────────────────────────────────────────────────
+
+fn make_soap_fault_xml(code: &str, reason: &str) -> String {
+    format!(
+        r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+             <s:Body>
+               <s:Fault>
+                 <s:Code><s:Value>{code}</s:Value></s:Code>
+                 <s:Reason><s:Text xml:lang="en">{reason}</s:Text></s:Reason>
+               </s:Fault>
+             </s:Body>
+           </s:Envelope>"#
+    )
+}
+
+#[tokio::test]
+async fn test_get_capabilities_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
+        &make_soap_fault_xml("s:Sender", "Sender not Authorized"),
+    ));
+    let result = client.get_capabilities().await;
+    assert!(
+        matches!(
+            result,
+            Err(OnvifError::Soap(crate::soap::SoapError::Fault { ref code, .. }))
+            if code == "s:Sender"
+        ),
+        "expected SOAP Fault error, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_get_device_info_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
+        &make_soap_fault_xml("s:Sender", "Action not supported"),
+    ));
+    let result = client.get_device_info().await;
+    assert!(result.is_err());
+}
+
+// ── Missing required fields ───────────────────────────────────────────────
+
+fn get_profiles_response_missing_token() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                  xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                  xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <trt:GetProfilesResponse>
+             <trt:Profiles>
+               <tt:Name>MainStream</tt:Name>
+             </trt:Profiles>
+           </trt:GetProfilesResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_profiles_missing_token_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_profiles_response_missing_token()));
+    let result = client
+        .get_profiles("http://192.168.1.1/onvif/media_service")
+        .await;
+    assert!(
+        result.is_err(),
+        "expected Err when profile token is missing"
+    );
+}
+
+fn get_profile_response_missing_token() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                  xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                  xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <trt:GetProfileResponse>
+             <trt:Profile>
+               <tt:Name>MainStream</tt:Name>
+             </trt:Profile>
+           </trt:GetProfileResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_profile_missing_token_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_profile_response_missing_token()));
+    let result = client
+        .get_profile("http://192.168.1.1/onvif/media_service", "Profile_1")
+        .await;
+    assert!(
+        result.is_err(),
+        "expected Err when profile token attribute is absent"
+    );
+}
+
+fn get_stream_uri_missing_uri() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                  xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+         <s:Body>
+           <trt:GetStreamUriResponse>
+             <trt:MediaUri/>
+           </trt:GetStreamUriResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_stream_uri_missing_uri_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_stream_uri_missing_uri()));
+    let result = client
+        .get_stream_uri("http://192.168.1.1/onvif/media_service", "Profile_1")
+        .await;
+    assert!(result.is_err(), "expected Err when Uri element is missing");
+}
+
+// ── HTTP transport error ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_get_capabilities_http_error_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(Arc::new(ErrorTransport { status: 401 }));
+    let result = client.get_capabilities().await;
+    assert!(
+        matches!(
+            result,
+            Err(OnvifError::Transport(
+                crate::transport::TransportError::HttpStatus { status: 401, .. }
+            ))
+        ),
+        "expected HTTP 401 transport error"
+    );
+}

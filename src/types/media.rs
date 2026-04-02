@@ -21,21 +21,25 @@ pub struct MediaProfile {
 impl MediaProfile {
     /// Parse a single `<Profile>` node (e.g. from `CreateProfileResponse` or
     /// `GetProfileResponse`).
-    pub(crate) fn from_xml(p: &XmlNode) -> Self {
-        Self {
-            token: p.attr("token").unwrap_or("").to_string(),
+    pub(crate) fn from_xml(p: &XmlNode) -> Result<Self, OnvifError> {
+        let token = p
+            .attr("token")
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| SoapError::missing("Profile/@token"))?
+            .to_string();
+        Ok(Self {
+            token,
             fixed: p.attr("fixed") == Some("true"),
             name: xml_str(p, "Name").unwrap_or_default(),
-        }
+        })
     }
 
     /// Parse all `<trt:Profiles>` children from a `GetProfilesResponse` node.
     /// Returns an empty `Vec` if the response contains no profiles.
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
-        Ok(resp
-            .children_named("Profiles")
+        resp.children_named("Profiles")
             .map(Self::from_xml)
-            .collect())
+            .collect()
     }
 }
 
@@ -134,21 +138,27 @@ pub struct MediaProfile2 {
 
 impl MediaProfile2 {
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
-        Ok(resp
-            .children_named("Profiles")
-            .map(|p| Self {
-                token: p.attr("token").unwrap_or("").to_string(),
-                name: xml_str(p, "Name").unwrap_or_default(),
-                fixed: p.attr("fixed") == Some("true"),
-                video_source_token: p
-                    .path(&["Configurations", "VideoSource"])
-                    .and_then(|n| n.attr("token"))
-                    .map(str::to_string),
-                video_encoder_token: p
-                    .path(&["Configurations", "VideoEncoder"])
-                    .and_then(|n| n.attr("token"))
-                    .map(str::to_string),
+        resp.children_named("Profiles")
+            .map(|p| {
+                let token = p
+                    .attr("token")
+                    .filter(|t| !t.is_empty())
+                    .ok_or_else(|| SoapError::missing("Profile/@token"))?
+                    .to_string();
+                Ok(Self {
+                    token,
+                    name: xml_str(p, "Name").unwrap_or_default(),
+                    fixed: p.attr("fixed") == Some("true"),
+                    video_source_token: p
+                        .path(&["Configurations", "VideoSource"])
+                        .and_then(|n| n.attr("token"))
+                        .map(str::to_string),
+                    video_encoder_token: p
+                        .path(&["Configurations", "VideoEncoder"])
+                        .and_then(|n| n.attr("token"))
+                        .map(str::to_string),
+                })
             })
-            .collect())
+            .collect()
     }
 }
