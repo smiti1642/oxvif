@@ -29,8 +29,9 @@ use crate::soap::{SoapEnvelope, WsSecurityToken, find_response, parse_soap_body}
 use crate::transport::{HttpTransport, Transport};
 use crate::types::{
     AudioEncoderConfiguration, AudioEncoderConfigurationOptions, AudioSource,
-    AudioSourceConfiguration, Capabilities, DeviceInfo, EventProperties, Hostname, ImagingOptions,
-    ImagingSettings, MediaProfile, MediaProfile2, NotificationMessage, NtpInfo, OnvifService,
+    AudioSourceConfiguration, Capabilities, DeviceInfo, EventProperties, FocusMove, Hostname,
+    ImagingMoveOptions, ImagingOptions, ImagingSettings, ImagingStatus, MediaProfile,
+    MediaProfile2, NotificationMessage, NtpInfo, OnvifService, OsdConfiguration, OsdOptions,
     PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus,
     PullPointSubscription, SnapshotUri, StreamUri, SystemDateTime, VideoEncoderConfiguration,
     VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
@@ -751,6 +752,47 @@ impl OnvifClient {
         PtzStatus::from_xml(resp)
     }
 
+    /// Move the camera to its configured home position.
+    pub async fn ptz_goto_home_position(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        speed: Option<f32>,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GotoHomePosition";
+        let speed_el = speed
+            .map(|s| format!("<tptz:Speed><tt:Zoom x=\"{s}\"/></tptz:Speed>"))
+            .unwrap_or_default();
+        let body = format!(
+            "<tptz:GotoHomePosition>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+               {speed_el}\
+             </tptz:GotoHomePosition>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "GotoHomePositionResponse")?;
+        Ok(())
+    }
+
+    /// Set the current PTZ position as the home position.
+    pub async fn ptz_set_home_position(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/SetHomePosition";
+        let body = format!(
+            "<tptz:SetHomePosition>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+             </tptz:SetHomePosition>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetHomePositionResponse")?;
+        Ok(())
+    }
+
     // ── Video Source Service ──────────────────────────────────────────────────
 
     /// List all physical video sources available on the device.
@@ -1014,6 +1056,179 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetOptionsResponse")?;
         ImagingOptions::from_xml(resp)
+    }
+
+    /// Move the focus to an absolute position, by a relative distance, or start
+    /// continuous movement.
+    ///
+    /// Build the command with [`FocusMove`]. Call
+    /// [`imaging_stop`](Self::imaging_stop) to halt continuous movement.
+    pub async fn imaging_move(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+        focus: &FocusMove,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/Move";
+        let body = format!(
+            "<timg:Move>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+               <timg:Focus>{}</timg:Focus>\
+             </timg:Move>",
+            focus.to_xml_body()
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "MoveResponse")?;
+        Ok(())
+    }
+
+    /// Stop any ongoing focus movement.
+    pub async fn imaging_stop(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/Stop";
+        let body = format!(
+            "<timg:Stop>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+             </timg:Stop>"
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "StopResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the valid focus movement ranges for a video source.
+    pub async fn imaging_get_move_options(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+    ) -> Result<ImagingMoveOptions, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetMoveOptions";
+        let body = format!(
+            "<timg:GetMoveOptions>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+             </timg:GetMoveOptions>"
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetMoveOptionsResponse")?;
+        ImagingMoveOptions::from_xml(resp)
+    }
+
+    /// Retrieve the current focus position and movement state.
+    pub async fn imaging_get_status(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+    ) -> Result<ImagingStatus, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetStatus";
+        let body = format!(
+            "<timg:GetStatus>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+             </timg:GetStatus>"
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetStatusResponse")?;
+        ImagingStatus::from_xml(resp)
+    }
+
+    // ── OSD Service ───────────────────────────────────────────────────────────────
+
+    /// List all OSD elements attached to a video source configuration.
+    ///
+    /// Pass `None` for `config_token` to list all OSDs on the device.
+    pub async fn get_osds(
+        &self,
+        media_url: &str,
+        config_token: Option<&str>,
+    ) -> Result<Vec<OsdConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSDs";
+        let inner = config_token
+            .map(|t| format!("<trt:OSDToken>{t}</trt:OSDToken>"))
+            .unwrap_or_default();
+        let body = format!("<trt:GetOSDs>{inner}</trt:GetOSDs>");
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetOSDsResponse")?;
+        OsdConfiguration::vec_from_xml(resp)
+    }
+
+    /// Retrieve a single OSD element by token.
+    pub async fn get_osd(
+        &self,
+        media_url: &str,
+        osd_token: &str,
+    ) -> Result<OsdConfiguration, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSD";
+        let body = format!("<trt:GetOSD><trt:OSDToken>{osd_token}</trt:OSDToken></trt:GetOSD>");
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetOSDResponse")?;
+        resp.child("OSDConfiguration")
+            .ok_or_else(|| crate::soap::SoapError::missing("OSDConfiguration").into())
+            .and_then(OsdConfiguration::from_xml)
+    }
+
+    /// Update an existing OSD element.
+    pub async fn set_osd(&self, media_url: &str, osd: &OsdConfiguration) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/SetOSD";
+        let body = format!("<trt:SetOSD>{}</trt:SetOSD>", osd.to_xml_body());
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetOSDResponse")?;
+        Ok(())
+    }
+
+    /// Create a new OSD element and return the assigned token.
+    ///
+    /// Set `osd.token` to an empty string; the device assigns the token.
+    pub async fn create_osd(
+        &self,
+        media_url: &str,
+        osd: &OsdConfiguration,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/CreateOSD";
+        let body = format!("<trt:CreateOSD>{}</trt:CreateOSD>", osd.to_xml_body());
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "CreateOSDResponse")?;
+        resp.child("OSDToken")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("OSDToken").into())
+    }
+
+    /// Delete an OSD element.
+    pub async fn delete_osd(&self, media_url: &str, osd_token: &str) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/DeleteOSD";
+        let body =
+            format!("<trt:DeleteOSD><trt:OSDToken>{osd_token}</trt:OSDToken></trt:DeleteOSD>");
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "DeleteOSDResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the valid OSD configuration options for a video source configuration.
+    pub async fn get_osd_options(
+        &self,
+        media_url: &str,
+        config_token: &str,
+    ) -> Result<OsdOptions, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSDOptions";
+        let body = format!(
+            "<trt:GetOSDOptions>\
+               <trt:ConfigurationToken>{config_token}</trt:ConfigurationToken>\
+             </trt:GetOSDOptions>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetOSDOptionsResponse")?;
+        OsdOptions::from_xml(resp)
     }
 
     // ── Media2 Service ────────────────────────────────────────────────────────

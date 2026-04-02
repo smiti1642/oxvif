@@ -163,3 +163,139 @@ impl ImagingOptions {
         })
     }
 }
+
+// ── ImagingStatus ─────────────────────────────────────────────────────────────
+
+/// Current imaging / focus status returned by `imaging_get_status`.
+#[derive(Debug, Clone, Default)]
+pub struct ImagingStatus {
+    /// Current focus position in the device's native range.
+    pub focus_position: Option<f32>,
+    /// Focus move state: `"IDLE"`, `"MOVING"`, or `"UNKNOWN"`.
+    pub focus_move_status: String,
+}
+
+impl ImagingStatus {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let status = resp
+            .child("Status")
+            .ok_or_else(|| SoapError::missing("Status"))?;
+        Ok(Self {
+            focus_position: status
+                .path(&["FocusStatus20", "Position"])
+                .and_then(|n| n.text().parse().ok()),
+            focus_move_status: status
+                .path(&["FocusStatus20", "MoveStatus"])
+                .map(|n| n.text().to_string())
+                .unwrap_or_else(|| "UNKNOWN".to_string()),
+        })
+    }
+}
+
+// ── ImagingMoveOptions ────────────────────────────────────────────────────────
+
+/// Valid focus movement ranges returned by `imaging_get_move_options`.
+#[derive(Debug, Clone, Default)]
+pub struct ImagingMoveOptions {
+    /// Valid absolute focus position range.
+    pub absolute_position_range: Option<FloatRange>,
+    /// Valid absolute focus speed range.
+    pub absolute_speed_range: Option<FloatRange>,
+    /// Valid relative focus distance range.
+    pub relative_distance_range: Option<FloatRange>,
+    /// Valid relative focus speed range.
+    pub relative_speed_range: Option<FloatRange>,
+    /// Valid continuous focus speed range.
+    pub continuous_speed_range: Option<FloatRange>,
+}
+
+impl ImagingMoveOptions {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let opts = resp
+            .child("MoveOptions")
+            .ok_or_else(|| SoapError::missing("MoveOptions"))?;
+
+        let range = |parent: &str, child: &str| {
+            opts.child(parent)
+                .and_then(|p| p.child(child))
+                .map(|n| FloatRange {
+                    min: n
+                        .child("Min")
+                        .and_then(|m| m.text().parse().ok())
+                        .unwrap_or(0.0),
+                    max: n
+                        .child("Max")
+                        .and_then(|m| m.text().parse().ok())
+                        .unwrap_or(0.0),
+                })
+        };
+
+        Ok(Self {
+            absolute_position_range: range("Absolute", "PositionSpace"),
+            absolute_speed_range: range("Absolute", "SpeedSpace"),
+            relative_distance_range: range("Relative", "DistanceSpace"),
+            relative_speed_range: range("Relative", "SpeedSpace"),
+            continuous_speed_range: range("Continuous", "SpeedSpace"),
+        })
+    }
+}
+
+// ── FocusMove ─────────────────────────────────────────────────────────────────
+
+/// Focus movement command passed to `imaging_move`.
+#[derive(Debug, Clone)]
+pub enum FocusMove {
+    /// Move focus to an absolute position.
+    Absolute {
+        /// Target focus position in the device's native range.
+        position: f32,
+        /// Movement speed. `None` uses the device default.
+        speed: Option<f32>,
+    },
+    /// Move focus by a relative distance.
+    Relative {
+        /// Distance to move (positive = far, negative = near).
+        distance: f32,
+        /// Movement speed. `None` uses the device default.
+        speed: Option<f32>,
+    },
+    /// Start continuous focus movement at a given speed.
+    ///
+    /// Call `imaging_stop` to halt.
+    Continuous {
+        /// Movement speed: positive = far, negative = near.
+        speed: f32,
+    },
+}
+
+impl FocusMove {
+    pub(crate) fn to_xml_body(&self) -> String {
+        match self {
+            Self::Absolute { position, speed } => {
+                let speed_el = speed
+                    .map(|s| format!("<timg:Speed>{s}</timg:Speed>"))
+                    .unwrap_or_default();
+                format!(
+                    "<timg:Absolute>\
+                       <timg:Position>{position}</timg:Position>\
+                       {speed_el}\
+                     </timg:Absolute>"
+                )
+            }
+            Self::Relative { distance, speed } => {
+                let speed_el = speed
+                    .map(|s| format!("<timg:Speed>{s}</timg:Speed>"))
+                    .unwrap_or_default();
+                format!(
+                    "<timg:Relative>\
+                       <timg:Distance>{distance}</timg:Distance>\
+                       {speed_el}\
+                     </timg:Relative>"
+                )
+            }
+            Self::Continuous { speed } => {
+                format!("<timg:Continuous><timg:Speed>{speed}</timg:Speed></timg:Continuous>")
+            }
+        }
+    }
+}
