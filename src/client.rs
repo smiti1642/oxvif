@@ -58,6 +58,7 @@ use crate::types::{
 ///     Ok(())
 /// }
 /// ```
+#[derive(Clone)]
 pub struct OnvifClient {
     device_url: String,
     credentials: Option<(String, String)>,
@@ -107,6 +108,11 @@ impl OnvifClient {
     pub fn with_transport(mut self, transport: Arc<dyn Transport>) -> Self {
         self.transport = transport;
         self
+    }
+
+    /// Return the device service URL this client was constructed with.
+    pub fn device_url(&self) -> &str {
+        &self.device_url
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
