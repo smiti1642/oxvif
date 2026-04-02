@@ -137,7 +137,11 @@ All three must pass cleanly.
 8. Bump version in `Cargo.toml` (patch = bug fix, minor = new feature).
 9. Add entry to `CHANGELOG.md` at the top.
 10. Run `cargo publish --dry-run` — must succeed with no errors.
-11. Commit, merge to `master`, then `cargo publish`.
+11. Commit, merge to `master`.
+12. Tag the release commit: `git tag v<version>` (e.g. `git tag v0.4.1`).
+    Tags appear in GitHub Desktop next to commits — useful for version-based debugging.
+13. Push tags to GitHub: `git push origin --tags`.
+14. `cargo publish`.
 
 ## Rust 2024 edition notes
 
@@ -154,3 +158,5 @@ All three must pass cleanly.
 - [ ] `README.md` installation version updated + content updated
 - [ ] `examples/camera.rs` updated (new command + `full_workflow` sections)
 - [ ] Committed and on `master` branch
+- [ ] `git tag v<version>` — tag the release commit
+- [ ] `git push origin --tags` — push tags to GitHub (visible in GitHub Desktop + useful for version debugging)
