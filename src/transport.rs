@@ -65,10 +65,13 @@ pub struct HttpTransport {
 }
 
 impl HttpTransport {
-    /// Create a new transport with default settings.
+    /// Create a new transport with a 10-second connection/read timeout.
     pub fn new() -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .expect("failed to build reqwest client"),
         }
     }
 }
@@ -95,7 +98,7 @@ impl Transport for HttpTransport {
             .client
             .post(url)
             .header("Content-Type", content_type)
-            .header("User-Agent", "oxvif/0.1")
+            .header("User-Agent", concat!("oxvif/", env!("CARGO_PKG_VERSION")))
             .body(body)
             .send()
             .await?;

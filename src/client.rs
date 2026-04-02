@@ -129,7 +129,7 @@ impl OnvifClient {
     /// Build a SOAP envelope, attach a WS-Security header if credentials are
     /// set, serialise to XML, and POST to `url`.
     async fn call(&self, url: &str, action: &str, body: &str) -> Result<String, OnvifError> {
-        let mut envelope = SoapEnvelope::new(body.to_string());
+        let mut envelope = SoapEnvelope::new(body.to_string()).with_wsa_to(url);
         if let Some(token) = self.security_token() {
             envelope = envelope.with_security(token);
         }
@@ -354,7 +354,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<StreamUri, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetStreamUri";
-
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<trt:GetStreamUri>\
                <trt:StreamSetup>\
@@ -382,7 +382,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<SnapshotUri, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri";
-
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<trt:GetSnapshotUri>\
                <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
@@ -434,6 +434,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/DeleteProfile";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<trt:DeleteProfile>\
                <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
@@ -452,6 +453,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<MediaProfile, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetProfile";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<trt:GetProfile>\
                <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
@@ -477,6 +479,8 @@ impl OnvifClient {
         config_token: &str,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/AddVideoEncoderConfiguration";
+        let profile_token = xml_escape(profile_token);
+        let config_token = xml_escape(config_token);
         let body = format!(
             "<trt:AddVideoEncoderConfiguration>\
                <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
@@ -497,6 +501,7 @@ impl OnvifClient {
     ) -> Result<(), OnvifError> {
         const ACTION: &str =
             "http://www.onvif.org/ver10/media/wsdl/RemoveVideoEncoderConfiguration";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<trt:RemoveVideoEncoderConfiguration>\
                <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
@@ -519,6 +524,8 @@ impl OnvifClient {
         config_token: &str,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/AddVideoSourceConfiguration";
+        let profile_token = xml_escape(profile_token);
+        let config_token = xml_escape(config_token);
         let body = format!(
             "<trt:AddVideoSourceConfiguration>\
                <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
@@ -538,6 +545,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/RemoveVideoSourceConfiguration";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<trt:RemoveVideoSourceConfiguration>\
                <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
@@ -565,6 +573,7 @@ impl OnvifClient {
         zoom: f32,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/AbsoluteMove";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<tptz:AbsoluteMove>\
                <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
@@ -593,6 +602,7 @@ impl OnvifClient {
         zoom: f32,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/RelativeMove";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<tptz:RelativeMove>\
                <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
@@ -621,6 +631,7 @@ impl OnvifClient {
         zoom: f32,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/ContinuousMove";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<tptz:ContinuousMove>\
                <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
@@ -639,6 +650,7 @@ impl OnvifClient {
     /// Stop all ongoing PTZ movement.
     pub async fn ptz_stop(&self, ptz_url: &str, profile_token: &str) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/Stop";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<tptz:Stop>\
                <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
@@ -659,6 +671,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<Vec<PtzPreset>, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetPresets";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<tptz:GetPresets>\
                <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
@@ -681,6 +694,8 @@ impl OnvifClient {
         preset_token: &str,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GotoPreset";
+        let profile_token = xml_escape(profile_token);
+        let preset_token = xml_escape(preset_token);
         let body = format!(
             "<tptz:GotoPreset>\
                <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
@@ -706,6 +721,7 @@ impl OnvifClient {
         preset_token: Option<&str>,
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/SetPreset";
+        let profile_token = xml_escape(profile_token);
         let name_el = preset_name
             .map(|n| format!("<tptz:PresetName>{}</tptz:PresetName>", xml_escape(n)))
             .unwrap_or_default();
@@ -737,6 +753,8 @@ impl OnvifClient {
         preset_token: &str,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/RemovePreset";
+        let profile_token = xml_escape(profile_token);
+        let preset_token = xml_escape(preset_token);
         let body = format!(
             "<tptz:RemovePreset>\
                <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
@@ -759,6 +777,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<PtzStatus, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetStatus";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<tptz:GetStatus>\
                <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
@@ -778,6 +797,7 @@ impl OnvifClient {
         speed: Option<f32>,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GotoHomePosition";
+        let profile_token = xml_escape(profile_token);
         let speed_el = speed
             .map(|s| format!("<tptz:Speed><tt:Zoom x=\"{s}\"/></tptz:Speed>"))
             .unwrap_or_default();
@@ -800,6 +820,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/SetHomePosition";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<tptz:SetHomePosition>\
                <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
@@ -851,6 +872,7 @@ impl OnvifClient {
         token: &str,
     ) -> Result<VideoSourceConfiguration, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfiguration";
+        let token = xml_escape(token);
         let body = format!(
             "<trt:GetVideoSourceConfiguration>\
                <trt:ConfigurationToken>{token}</trt:ConfigurationToken>\
@@ -901,7 +923,10 @@ impl OnvifClient {
         const ACTION: &str =
             "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurationOptions";
         let inner = match config_token {
-            Some(tok) => format!("<trt:ConfigurationToken>{tok}</trt:ConfigurationToken>"),
+            Some(tok) => format!(
+                "<trt:ConfigurationToken>{}</trt:ConfigurationToken>",
+                xml_escape(tok)
+            ),
             None => String::new(),
         };
         let body = format!(
@@ -941,6 +966,7 @@ impl OnvifClient {
         token: &str,
     ) -> Result<VideoEncoderConfiguration, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfiguration";
+        let token = xml_escape(token);
         let body = format!(
             "<trt:GetVideoEncoderConfiguration>\
                <trt:ConfigurationToken>{token}</trt:ConfigurationToken>\
@@ -991,7 +1017,10 @@ impl OnvifClient {
         const ACTION: &str =
             "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurationOptions";
         let inner = match config_token {
-            Some(tok) => format!("<trt:ConfigurationToken>{tok}</trt:ConfigurationToken>"),
+            Some(tok) => format!(
+                "<trt:ConfigurationToken>{}</trt:ConfigurationToken>",
+                xml_escape(tok)
+            ),
             None => String::new(),
         };
         let body = format!(
@@ -1018,6 +1047,7 @@ impl OnvifClient {
         video_source_token: &str,
     ) -> Result<ImagingSettings, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetImagingSettings";
+        let video_source_token = xml_escape(video_source_token);
         let body = format!(
             "<timg:GetImagingSettings>\
                <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
@@ -1041,6 +1071,7 @@ impl OnvifClient {
         settings: &ImagingSettings,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/SetImagingSettings";
+        let video_source_token = xml_escape(video_source_token);
         let body = format!(
             "<timg:SetImagingSettings>\
                <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
@@ -1065,6 +1096,7 @@ impl OnvifClient {
         video_source_token: &str,
     ) -> Result<ImagingOptions, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetOptions";
+        let video_source_token = xml_escape(video_source_token);
         let body = format!(
             "<timg:GetOptions>\
                <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
@@ -1088,6 +1120,7 @@ impl OnvifClient {
         focus: &FocusMove,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/Move";
+        let video_source_token = xml_escape(video_source_token);
         let body = format!(
             "<timg:Move>\
                <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
@@ -1108,6 +1141,7 @@ impl OnvifClient {
         video_source_token: &str,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/Stop";
+        let video_source_token = xml_escape(video_source_token);
         let body = format!(
             "<timg:Stop>\
                <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
@@ -1126,6 +1160,7 @@ impl OnvifClient {
         video_source_token: &str,
     ) -> Result<ImagingMoveOptions, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetMoveOptions";
+        let video_source_token = xml_escape(video_source_token);
         let body = format!(
             "<timg:GetMoveOptions>\
                <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
@@ -1144,6 +1179,7 @@ impl OnvifClient {
         video_source_token: &str,
     ) -> Result<ImagingStatus, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetStatus";
+        let video_source_token = xml_escape(video_source_token);
         let body = format!(
             "<timg:GetStatus>\
                <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
@@ -1167,7 +1203,7 @@ impl OnvifClient {
     ) -> Result<Vec<OsdConfiguration>, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSDs";
         let inner = config_token
-            .map(|t| format!("<trt:OSDToken>{t}</trt:OSDToken>"))
+            .map(|t| format!("<trt:OSDToken>{}</trt:OSDToken>", xml_escape(t)))
             .unwrap_or_default();
         let body = format!("<trt:GetOSDs>{inner}</trt:GetOSDs>");
         let xml = self.call(media_url, ACTION, &body).await?;
@@ -1183,6 +1219,7 @@ impl OnvifClient {
         osd_token: &str,
     ) -> Result<OsdConfiguration, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSD";
+        let osd_token = xml_escape(osd_token);
         let body = format!("<trt:GetOSD><trt:OSDToken>{osd_token}</trt:OSDToken></trt:GetOSD>");
         let xml = self.call(media_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;
@@ -1223,6 +1260,7 @@ impl OnvifClient {
     /// Delete an OSD element.
     pub async fn delete_osd(&self, media_url: &str, osd_token: &str) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/DeleteOSD";
+        let osd_token = xml_escape(osd_token);
         let body =
             format!("<trt:DeleteOSD><trt:OSDToken>{osd_token}</trt:OSDToken></trt:DeleteOSD>");
         let xml = self.call(media_url, ACTION, &body).await?;
@@ -1238,6 +1276,7 @@ impl OnvifClient {
         config_token: &str,
     ) -> Result<OsdOptions, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSDOptions";
+        let config_token = xml_escape(config_token);
         let body = format!(
             "<trt:GetOSDOptions>\
                <trt:ConfigurationToken>{config_token}</trt:ConfigurationToken>\
@@ -1277,6 +1316,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetStreamUri";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<tr2:GetStreamUri>\
                <tr2:Protocol>RTSP</tr2:Protocol>\
@@ -1301,6 +1341,7 @@ impl OnvifClient {
         profile_token: &str,
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetSnapshotUri";
+        let profile_token = xml_escape(profile_token);
         let body = format!(
             "<tr2:GetSnapshotUri>\
                <tr2:ProfileToken>{profile_token}</tr2:ProfileToken>\
@@ -1358,7 +1399,10 @@ impl OnvifClient {
         const ACTION: &str =
             "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions";
         let inner = match config_token {
-            Some(tok) => format!("<tr2:ConfigurationToken>{tok}</tr2:ConfigurationToken>"),
+            Some(tok) => format!(
+                "<tr2:ConfigurationToken>{}</tr2:ConfigurationToken>",
+                xml_escape(tok)
+            ),
             None => String::new(),
         };
         let body = format!(
@@ -1395,6 +1439,7 @@ impl OnvifClient {
         token: &str,
     ) -> Result<VideoEncoderConfiguration2, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurations";
+        let token = xml_escape(token);
         let body = format!(
             "<tr2:GetVideoEncoderConfigurations>\
                <tr2:ConfigurationToken>{token}</tr2:ConfigurationToken>\
@@ -1442,7 +1487,10 @@ impl OnvifClient {
         const ACTION: &str =
             "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurationOptions";
         let inner = match config_token {
-            Some(tok) => format!("<tr2:ConfigurationToken>{tok}</tr2:ConfigurationToken>"),
+            Some(tok) => format!(
+                "<tr2:ConfigurationToken>{}</tr2:ConfigurationToken>",
+                xml_escape(tok)
+            ),
             None => String::new(),
         };
         let body = format!(
@@ -1462,6 +1510,7 @@ impl OnvifClient {
         config_token: &str,
     ) -> Result<VideoEncoderInstances, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderInstances";
+        let config_token = xml_escape(config_token);
         let body = format!(
             "<tr2:GetVideoEncoderInstances>\
                <tr2:ConfigurationToken>{config_token}</tr2:ConfigurationToken>\
@@ -1483,6 +1532,7 @@ impl OnvifClient {
         name: &str,
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/CreateProfile";
+        let name = xml_escape(name);
         let body = format!(
             "<tr2:CreateProfile>\
                <tr2:Name>{name}</tr2:Name>\
@@ -1504,6 +1554,7 @@ impl OnvifClient {
         token: &str,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/DeleteProfile";
+        let token = xml_escape(token);
         let body = format!(
             "<tr2:DeleteProfile>\
                <tr2:Token>{token}</tr2:Token>\
@@ -1936,6 +1987,7 @@ impl OnvifClient {
         wait_time: &str,
     ) -> Result<FindRecordingResults, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/search/wsdl/GetRecordingSearchResults";
+        let search_token = xml_escape(search_token);
         let body = format!(
             "<tse:GetRecordingSearchResults>\
                <tse:SearchToken>{search_token}</tse:SearchToken>\
@@ -1956,6 +2008,7 @@ impl OnvifClient {
     /// [`get_recording_search_results`](Self::get_recording_search_results).
     pub async fn end_search(&self, search_url: &str, search_token: &str) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/search/wsdl/EndSearch";
+        let search_token = xml_escape(search_token);
         let body = format!(
             "<tse:EndSearch>\
                <tse:SearchToken>{search_token}</tse:SearchToken>\
@@ -1984,6 +2037,9 @@ impl OnvifClient {
         protocol: &str,
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/replay/wsdl/GetReplayUri";
+        let recording_token = xml_escape(recording_token);
+        let stream_type = xml_escape(stream_type);
+        let protocol = xml_escape(protocol);
         let body = format!(
             "<trp:GetReplayUri>\
                <trp:StreamSetup>\

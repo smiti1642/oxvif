@@ -82,18 +82,26 @@ impl RecordingItem {
 
                 let ri = item.child("RecordingInformation");
 
-                let tracks = item
+                let tracks: Vec<RecordingTrack> = item
                     .child("Tracks")
-                    .map(|tracks_node| {
+                    .map(|tracks_node| -> Result<Vec<RecordingTrack>, OnvifError> {
                         tracks_node
                             .children_named("Track")
-                            .map(|t| RecordingTrack {
-                                token: t.attr("token").unwrap_or_default().to_string(),
-                                track_type: xml_str(t, "TrackType").unwrap_or_default(),
-                                description: xml_str(t, "Description").unwrap_or_default(),
+                            .map(|t| {
+                                let token = t
+                                    .attr("token")
+                                    .filter(|s| !s.is_empty())
+                                    .ok_or_else(|| SoapError::missing("Track/@token"))?
+                                    .to_string();
+                                Ok(RecordingTrack {
+                                    token,
+                                    track_type: xml_str(t, "TrackType").unwrap_or_default(),
+                                    description: xml_str(t, "Description").unwrap_or_default(),
+                                })
                             })
                             .collect()
                     })
+                    .transpose()?
                     .unwrap_or_default();
 
                 Ok(Self {
@@ -141,13 +149,15 @@ pub struct RecordingInformation {
 
 impl RecordingInformation {
     fn from_xml(node: &XmlNode) -> Self {
-        let src = node.child("Source").unwrap_or(node);
         Self {
             recording_token: node
                 .child("RecordingToken")
                 .map(|n| n.text().to_string())
                 .unwrap_or_default(),
-            source_name: xml_str(src, "Name").unwrap_or_default(),
+            source_name: node
+                .child("Source")
+                .and_then(|s| xml_str(s, "Name"))
+                .unwrap_or_default(),
             earliest_recording: node
                 .child("EarliestRecording")
                 .map(|n| n.text().to_string()),

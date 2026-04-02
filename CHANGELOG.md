@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.2] - 2026-04-02
+
+### Fixed
+- All `&str` parameters interpolated into SOAP request bodies are now
+  XML-escaped via `xml_escape()` — previously token and identifier parameters
+  in Media1, Media2, PTZ, Imaging, OSD, Recording, Search, and Replay methods
+  were not escaped
+- `RecordingTrack/@token` now returns `Err(SoapError::missing(...))` when the
+  attribute is absent, instead of silently defaulting to an empty string
+- `RecordingInformation::source_name` no longer falls back to reading from the
+  parent node when `<Source>` is absent; returns empty string correctly
+- `HttpTransport` now enforces a 10-second timeout on all requests
+- `User-Agent` header now reflects the actual crate version via
+  `env!("CARGO_PKG_VERSION")` instead of the hardcoded `"oxvif/0.1"`
+- `<wsa:To>` WS-Addressing header is now included in every SOAP request,
+  required by some strict ONVIF devices
+
+---
+
 ## [0.4.1] - 2026-04-02
 
 ### Changed
