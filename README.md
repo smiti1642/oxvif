@@ -454,20 +454,20 @@ cp .env.example .env   # fill in ONVIF_URL, ONVIF_USERNAME, ONVIF_PASSWORD
 ```
 
 ```sh
-cargo run -- full-workflow          # end-to-end: all implemented operations
-cargo run -- device-info            # manufacturer, model, firmware
-cargo run -- device-management      # hostname, NTP, GetServices
-cargo run -- stream-uris            # tabular RTSP URI listing
-cargo run -- snapshot-uris          # tabular HTTP snapshot URI listing
-cargo run -- system-datetime        # device clock and UTC offset
-cargo run -- ptz-presets            # list all PTZ presets
-cargo run -- ptz-status             # current pan/tilt/zoom position
-cargo run -- video-config           # video sources, encoder configs (Media1)
-cargo run -- video-config-media2    # H.265 encoder configs (Media2)
-cargo run -- imaging                # brightness, contrast, exposure settings
-cargo run -- events                 # subscribe, pull, renew, unsubscribe
-cargo run -- discovery              # WS-Discovery UDP multicast probe
-cargo run -- error-handling         # typed error variant matching demo
+cargo run --example camera -- full-workflow          # end-to-end: all implemented operations
+cargo run --example camera -- device-info            # manufacturer, model, firmware
+cargo run --example camera -- device-management      # hostname, NTP, GetServices
+cargo run --example camera -- stream-uris            # tabular RTSP URI listing
+cargo run --example camera -- snapshot-uris          # tabular HTTP snapshot URI listing
+cargo run --example camera -- system-datetime        # device clock and UTC offset
+cargo run --example camera -- ptz-presets            # list all PTZ presets
+cargo run --example camera -- ptz-status             # current pan/tilt/zoom position
+cargo run --example camera -- video-config           # video sources, encoder configs (Media1)
+cargo run --example camera -- video-config-media2    # H.265 encoder configs (Media2)
+cargo run --example camera -- imaging                # brightness, contrast, exposure settings
+cargo run --example camera -- events                 # subscribe, pull, renew, unsubscribe
+cargo run --example camera -- discovery              # WS-Discovery UDP multicast probe
+cargo run --example camera -- error-handling         # typed error variant matching demo
 ```
 
 ---

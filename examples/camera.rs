@@ -3,20 +3,20 @@
 //! Copy `.env.example` to `.env`, fill in your camera details, then run:
 //!
 //! ```sh
-//! cargo run -- full-workflow
-//! cargo run -- device-info
-//! cargo run -- device-management
-//! cargo run -- stream-uris
-//! cargo run -- snapshot-uris
-//! cargo run -- system-datetime
-//! cargo run -- ptz-presets
-//! cargo run -- ptz-status
-//! cargo run -- video-config
-//! cargo run -- video-config-media2
-//! cargo run -- imaging
-//! cargo run -- events
-//! cargo run -- discovery
-//! cargo run -- error-handling
+//! cargo run --example camera -- full-workflow
+//! cargo run --example camera -- device-info
+//! cargo run --example camera -- device-management
+//! cargo run --example camera -- stream-uris
+//! cargo run --example camera -- snapshot-uris
+//! cargo run --example camera -- system-datetime
+//! cargo run --example camera -- ptz-presets
+//! cargo run --example camera -- ptz-status
+//! cargo run --example camera -- video-config
+//! cargo run --example camera -- video-config-media2
+//! cargo run --example camera -- imaging
+//! cargo run --example camera -- events
+//! cargo run --example camera -- discovery
+//! cargo run --example camera -- error-handling
 //! ```
 
 use std::time::Duration;
