@@ -7,9 +7,9 @@ UDP multicast ──► discovery::probe() ──► Vec<DiscoveredDevice>
                                                   │
                                                   ▼ XAddr
 SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hostname, NTP, reboot)
-                             ──► Media1   (profiles, RTSP/snapshot URIs, encoder configs)
+                             ──► Media1   (profiles, RTSP/snapshot URIs, video + audio configs)
                              ──► Media2   (H.265 native, flat encoder config)
-                             ──► PTZ      (move, stop, presets, status)
+                             ──► PTZ      (move, stop, presets, status, configurations, nodes)
                              ──► Imaging  (brightness, contrast, exposure, IR cut)
                              ──► Events   (subscribe, pull, renew, unsubscribe)
 ```
@@ -19,7 +19,7 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 181 unit tests + 9 doc tests
+- 202 unit tests + 9 doc tests
 
 ---
 
@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-oxvif = "0.1.3"
+oxvif = "0.2.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -291,6 +291,11 @@ All PTZ methods use `ptz_url` from `caps.ptz_url`. Coordinates use the ONVIF nor
 | `ptz_set_preset(ptz_url, profile_token, name, token)` | Save current position as preset |
 | `ptz_remove_preset(ptz_url, profile_token, preset_token)` | Delete a preset |
 | `ptz_get_status(ptz_url, profile_token)` | Current pan/tilt/zoom position and move state |
+| `ptz_get_configurations(ptz_url)` | List all PTZ configurations |
+| `ptz_get_configuration(ptz_url, token)` | Single PTZ configuration by token |
+| `ptz_set_configuration(ptz_url, config, force_persist)` | Write PTZ configuration back to device |
+| `ptz_get_configuration_options(ptz_url, token)` | Valid timeout ranges for a PTZ configuration |
+| `ptz_get_nodes(ptz_url)` | List PTZ nodes (capabilities, preset count, home support) |
 
 ```rust
 // Save current position
@@ -303,6 +308,34 @@ println!("pan={:?} tilt={:?} zoom={:?} state={}",
 ```
 
 **`PtzStatus` fields:** `pan`, `tilt`, `zoom` (`Option<f32>`), `pan_tilt_status`, `zoom_status` (`String` — `"IDLE"` or `"MOVING"`).
+
+---
+
+## Audio Service methods
+
+All audio methods use `media_url` from `caps.media.url`.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_audio_sources(media_url)` | `Vec<AudioSource>` | Physical audio inputs (microphones) |
+| `get_audio_source_configurations(media_url)` | `Vec<AudioSourceConfiguration>` | Audio source configs |
+| `get_audio_encoder_configurations(media_url)` | `Vec<AudioEncoderConfiguration>` | Codec / bitrate / sample rate configs |
+| `get_audio_encoder_configuration(media_url, token)` | `AudioEncoderConfiguration` | Single config by token |
+| `set_audio_encoder_configuration(media_url, config)` | `()` | Write config back to device |
+| `get_audio_encoder_configuration_options(media_url, token)` | `AudioEncoderConfigurationOptions` | Valid encoding / bitrate / sample rate options |
+
+```rust
+let sources = client.get_audio_sources(&media_url).await?;
+println!("Audio inputs: {}", sources.len());
+
+let mut enc = client.get_audio_encoder_configuration(&media_url, &token).await?;
+enc.bitrate = 128;
+client.set_audio_encoder_configuration(&media_url, &enc).await?;
+```
+
+**`AudioEncoderConfiguration` fields:** `token`, `name`, `use_count`, `encoding` (`AudioEncoding`), `bitrate` (kbps), `sample_rate` (kHz).
+
+**`AudioEncoding` variants:** `G711`, `G726`, `Aac`, `Other(String)`.
 
 ---
 
@@ -496,7 +529,7 @@ src/
 │   ├── ptz.rs           PtzPreset, PtzStatus
 │   └── video.rs         VideoSource, VideoEncoder configs and options
 └── tests/
-    ├── client_tests.rs  181 unit tests covering all client methods
+    ├── client_tests.rs  202 unit tests covering all client methods
     └── types_tests.rs   XML parsing unit tests
 ```
 
@@ -533,7 +566,11 @@ src/
 | `GetVideoEncoderConfigurations` / `GetVideoEncoderConfiguration` | ✓ |
 | `SetVideoEncoderConfiguration` | ✓ |
 | `GetVideoEncoderConfigurationOptions` | ✓ |
-| Audio source / encoder operations | — |
+| `GetAudioSources` | ✓ |
+| `GetAudioSourceConfigurations` | ✓ |
+| `GetAudioEncoderConfigurations` / `GetAudioEncoderConfiguration` | ✓ |
+| `SetAudioEncoderConfiguration` | ✓ |
+| `GetAudioEncoderConfigurationOptions` | ✓ |
 
 ### Media2 Service
 
@@ -558,7 +595,9 @@ src/
 | `GetPresets` / `GotoPreset` | ✓ |
 | `SetPreset` / `RemovePreset` | ✓ |
 | `GetStatus` | ✓ |
-| `GetConfigurations` / `SetConfiguration` / `GetConfigurationOptions` | — |
+| `GetConfigurations` / `GetConfiguration` | ✓ |
+| `SetConfiguration` / `GetConfigurationOptions` | ✓ |
+| `GetNodes` | ✓ |
 
 ### Imaging Service
 

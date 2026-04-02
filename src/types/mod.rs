@@ -1,19 +1,23 @@
 //! Typed response structs for all ONVIF operations.
 
+mod audio;
 mod capabilities;
 mod device;
 mod events;
 mod imaging;
 mod media;
 mod ptz;
+mod ptz_config;
 mod video;
 
+pub use audio::*;
 pub use capabilities::*;
 pub use device::*;
 pub use events::*;
 pub use imaging::*;
 pub use media::*;
 pub use ptz::*;
+pub use ptz_config::*;
 pub use video::*;
 
 use crate::soap::XmlNode;

@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.2.0] - 2026-04-02
+
+### Added
+- **Audio Service**: `get_audio_sources`, `get_audio_source_configurations`,
+  `get_audio_encoder_configurations`, `get_audio_encoder_configuration`,
+  `set_audio_encoder_configuration`, `get_audio_encoder_configuration_options`
+- **PTZ Configuration**: `ptz_get_configurations`, `ptz_get_configuration`,
+  `ptz_set_configuration`, `ptz_get_configuration_options`, `ptz_get_nodes`
+- New types: `AudioSource`, `AudioSourceConfiguration`, `AudioEncoding`,
+  `AudioEncoderConfiguration`, `AudioEncoderConfigurationOptions`,
+  `AudioEncoderOptions`, `PtzConfiguration`, `PtzConfigurationOptions`,
+  `PtzNode`, `PtzSpaceRange`
+- 13 new unit tests (positive + negative paths for all new methods)
+
+---
+
 ## [0.1.3] - 2026-04-02
 
 ### Fixed
