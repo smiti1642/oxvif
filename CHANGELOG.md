@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.1.3] - 2026-04-02
+
+### Fixed
+- `PtzPreset`, `VideoSource`, `VideoSourceConfiguration`,
+  `VideoEncoderConfiguration`, and `VideoEncoderConfiguration2` now return
+  `Err(SoapError::missing(...))` when the required `token` attribute is absent,
+  instead of silently defaulting to an empty string
+
+---
+
 ## [0.1.2] - 2026-04-02
 
 ### Fixed

@@ -66,20 +66,26 @@ pub struct VideoSource {
 
 impl VideoSource {
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
-        Ok(resp
-            .children_named("VideoSources")
-            .map(|n| Self {
-                token: n.attr("token").unwrap_or("").to_string(),
-                framerate: n
-                    .child("Framerate")
-                    .and_then(|f| f.text().parse().ok())
-                    .unwrap_or(0.0),
-                resolution: n
-                    .child("Resolution")
-                    .and_then(parse_resolution)
-                    .unwrap_or_default(),
+        resp.children_named("VideoSources")
+            .map(|n| {
+                let token = n
+                    .attr("token")
+                    .filter(|t| !t.is_empty())
+                    .ok_or_else(|| SoapError::missing("VideoSources/@token"))?
+                    .to_string();
+                Ok(Self {
+                    token,
+                    framerate: n
+                        .child("Framerate")
+                        .and_then(|f| f.text().parse().ok())
+                        .unwrap_or(0.0),
+                    resolution: n
+                        .child("Resolution")
+                        .and_then(parse_resolution)
+                        .unwrap_or_default(),
+                })
             })
-            .collect())
+            .collect()
     }
 }
 
@@ -113,8 +119,13 @@ pub struct SourceBounds {
 
 impl VideoSourceConfiguration {
     pub(crate) fn from_xml(node: &XmlNode) -> Result<Self, OnvifError> {
+        let token = node
+            .attr("token")
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| SoapError::missing("Configuration/@token"))?
+            .to_string();
         Ok(Self {
-            token: node.attr("token").unwrap_or("").to_string(),
+            token,
             name: xml_str(node, "Name").unwrap_or_default(),
             use_count: xml_u32(node, "UseCount").unwrap_or(0),
             source_token: xml_str(node, "SourceToken").unwrap_or_default(),
@@ -326,8 +337,13 @@ pub struct H265Configuration {
 
 impl VideoEncoderConfiguration {
     pub(crate) fn from_xml(node: &XmlNode) -> Result<Self, OnvifError> {
+        let token = node
+            .attr("token")
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| SoapError::missing("Configuration/@token"))?
+            .to_string();
         Ok(Self {
-            token: node.attr("token").unwrap_or("").to_string(),
+            token,
             name: xml_str(node, "Name").unwrap_or_default(),
             use_count: xml_u32(node, "UseCount").unwrap_or(0),
             encoding: xml_str(node, "Encoding")
@@ -553,8 +569,13 @@ pub struct VideoRateControl2 {
 
 impl VideoEncoderConfiguration2 {
     pub(crate) fn from_xml(node: &XmlNode) -> Result<Self, OnvifError> {
+        let token = node
+            .attr("token")
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| SoapError::missing("Configuration/@token"))?
+            .to_string();
         Ok(Self {
-            token: node.attr("token").unwrap_or("").to_string(),
+            token,
             name: xml_str(node, "Name").unwrap_or_default(),
             use_count: xml_u32(node, "UseCount").unwrap_or(0),
             encoding: xml_str(node, "Encoding")

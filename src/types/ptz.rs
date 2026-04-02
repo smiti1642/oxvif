@@ -22,21 +22,27 @@ pub struct PtzPreset {
 impl PtzPreset {
     /// Parse all `<Preset>` children from a `GetPresetsResponse` node.
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
-        Ok(resp
-            .children_named("Preset")
-            .map(|p| Self {
-                token: p.attr("token").unwrap_or("").to_string(),
-                name: xml_str(p, "Name").unwrap_or_default(),
-                pan_tilt: p.path(&["PTZPosition", "PanTilt"]).and_then(|n| {
-                    let x = n.attr("x")?.parse().ok()?;
-                    let y = n.attr("y")?.parse().ok()?;
-                    Some((x, y))
-                }),
-                zoom: p
-                    .path(&["PTZPosition", "Zoom"])
-                    .and_then(|n| n.attr("x")?.parse().ok()),
+        resp.children_named("Preset")
+            .map(|p| {
+                let token = p
+                    .attr("token")
+                    .filter(|t| !t.is_empty())
+                    .ok_or_else(|| SoapError::missing("Preset/@token"))?
+                    .to_string();
+                Ok(Self {
+                    token,
+                    name: xml_str(p, "Name").unwrap_or_default(),
+                    pan_tilt: p.path(&["PTZPosition", "PanTilt"]).and_then(|n| {
+                        let x = n.attr("x")?.parse().ok()?;
+                        let y = n.attr("y")?.parse().ok()?;
+                        Some((x, y))
+                    }),
+                    zoom: p
+                        .path(&["PTZPosition", "Zoom"])
+                        .and_then(|n| n.attr("x")?.parse().ok()),
+                })
             })
-            .collect())
+            .collect()
     }
 }
 
