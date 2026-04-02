@@ -6,8 +6,10 @@ mod device;
 mod events;
 mod imaging;
 mod media;
+mod osd;
 mod ptz;
 mod ptz_config;
+mod recording;
 mod video;
 
 pub use audio::*;
@@ -16,8 +18,10 @@ pub use device::*;
 pub use events::*;
 pub use imaging::*;
 pub use media::*;
+pub use osd::*;
 pub use ptz::*;
 pub use ptz_config::*;
+pub use recording::*;
 pub use video::*;
 
 use crate::soap::XmlNode;

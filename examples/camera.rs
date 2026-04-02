@@ -12,11 +12,15 @@
 //! cargo run --example camera -- ptz-presets
 //! cargo run --example camera -- ptz-status
 //! cargo run --example camera -- ptz-config
+//! cargo run --example camera -- ptz-home
 //! cargo run --example camera -- audio
+//! cargo run --example camera -- imaging-focus
+//! cargo run --example camera -- osd
 //! cargo run --example camera -- video-config
 //! cargo run --example camera -- video-config-media2
 //! cargo run --example camera -- imaging
 //! cargo run --example camera -- events
+//! cargo run --example camera -- recording
 //! cargo run --example camera -- discovery
 //! cargo run --example camera -- error-handling
 //! ```
@@ -24,8 +28,8 @@
 use std::time::Duration;
 
 use oxvif::{
-    Capabilities, DeviceInfo, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
-    SystemDateTime,
+    Capabilities, DeviceInfo, FocusMove, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
+    OsdConfiguration, OsdPosition, OsdTextString, SystemDateTime,
 };
 use std::env;
 
@@ -73,11 +77,15 @@ async fn main() {
         "ptz-presets" => ptz_presets(&cfg).await,
         "ptz-status" => ptz_status(&cfg).await,
         "ptz-config" => ptz_config(&cfg).await,
+        "ptz-home" => ptz_home_example(&cfg).await,
         "audio" => audio_example(&cfg).await,
+        "imaging-focus" => imaging_focus(&cfg).await,
+        "osd" => osd_example(&cfg).await,
         "video-config" => video_config(&cfg).await,
         "video-config-media2" => video_config_media2(&cfg).await,
         "imaging" => imaging(&cfg).await,
         "events" => events(&cfg).await,
+        "recording" => recording_example(&cfg).await,
         "discovery" => discovery_example().await,
         "error-handling" => error_handling_example(&cfg).await,
         _ => {
@@ -108,11 +116,15 @@ fn print_help() {
     println!("  ptz-presets          List all PTZ presets");
     println!("  ptz-status           Current PTZ pan/tilt/zoom position");
     println!("  ptz-config           PTZ configurations and nodes");
+    println!("  ptz-home             Go to / set the PTZ home position");
     println!("  audio                Audio sources and encoder configurations");
+    println!("  imaging-focus        Focus status, move options, move/stop");
+    println!("  osd                  On-screen display elements (list, create, delete)");
     println!("  video-config         Video sources, encoder configs, options (Media1)");
     println!("  video-config-media2  Media2 profiles, H.265 encoder configs");
     println!("  imaging              Imaging settings and parameter ranges");
     println!("  events               Subscribe, pull, and unsubscribe ONVIF events");
+    println!("  recording            List recordings, search, and get replay URI");
     println!("  discovery            WS-Discovery UDP multicast probe");
     println!("  error-handling       Typed error variant matching demo");
 }
@@ -611,6 +623,140 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
                         c.token, c.name, c.node_token, c.default_ptz_timeout
                     );
                 }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
+    // ── 19. Imaging Focus ─────────────────────────────────────────────────────
+    if let (Some(ref imaging_url), Some(ref source_token)) = (caps.imaging_url.clone(), {
+        let sources = client
+            .get_video_sources(caps.media.url.as_deref().unwrap_or(""))
+            .await
+            .ok();
+        sources.and_then(|v| v.into_iter().next().map(|s| s.token))
+    }) {
+        section("ImagingGetStatus");
+        match client.imaging_get_status(imaging_url, source_token).await {
+            Ok(s) => println!(
+                "  focus={:?}  state={}",
+                s.focus_position, s.focus_move_status
+            ),
+            Err(e) => println!("  (skipped — {e})"),
+        }
+
+        section("ImagingGetMoveOptions");
+        match client
+            .imaging_get_move_options(imaging_url, source_token)
+            .await
+        {
+            Ok(opts) => {
+                if let Some(r) = opts.absolute_position_range {
+                    println!("  absolute position: {}–{}", r.min, r.max);
+                }
+                if let Some(r) = opts.continuous_speed_range {
+                    println!("  continuous speed: {}–{}", r.min, r.max);
+                }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
+    // ── 20. OSD ───────────────────────────────────────────────────────────────
+    section("GetOSDs");
+    let media_url = caps.media.url.as_deref().unwrap_or("");
+    match client.get_osds(media_url, None).await {
+        Ok(osds) => {
+            println!("  Found {} OSD element(s)", osds.len());
+            for o in &osds {
+                println!(
+                    "  [{}] type={} position={}",
+                    o.token, o.type_, o.position.type_
+                );
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 21. GetScopes ─────────────────────────────────────────────────────────
+    section("GetScopes");
+    match client.get_scopes().await {
+        Ok(scopes) => {
+            println!("  Found {} scope(s)", scopes.len());
+            for s in &scopes {
+                println!("  {s}");
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 22. Recording / Search / Replay ───────────────────────────────────────
+    let services = client.get_services().await.unwrap_or_default();
+    let recording_url = services
+        .iter()
+        .find(|s| s.namespace.contains("recording"))
+        .map(|s| s.url.clone());
+    let search_url = services
+        .iter()
+        .find(|s| s.namespace.contains("search"))
+        .map(|s| s.url.clone());
+    let replay_url = services
+        .iter()
+        .find(|s| s.namespace.contains("replay"))
+        .map(|s| s.url.clone());
+
+    if let Some(ref rec_url) = recording_url {
+        section("GetRecordings");
+        match client.get_recordings(rec_url).await {
+            Ok(recs) => {
+                println!("  Found {} recording(s)", recs.len());
+                for r in recs.iter().take(3) {
+                    println!(
+                        "  [{}] {} — {} to {}",
+                        r.token,
+                        r.source.name,
+                        r.earliest_recording.as_deref().unwrap_or("?"),
+                        r.latest_recording.as_deref().unwrap_or("?")
+                    );
+                }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
+    if let (Some(ref srch_url), Some(ref rpl_url)) = (search_url, replay_url) {
+        section("FindRecordings + GetReplayUri");
+        match client.find_recordings(srch_url, Some(5), "PT30S").await {
+            Ok(token) => {
+                println!("  Search token: {token}");
+                match client
+                    .get_recording_search_results(srch_url, &token, 5, "PT5S")
+                    .await
+                {
+                    Ok(results) => {
+                        println!(
+                            "  State={} recordings={}",
+                            results.search_state,
+                            results.recording_information.len()
+                        );
+                        if let Some(first) = results.recording_information.first() {
+                            match client
+                                .get_replay_uri(
+                                    rpl_url,
+                                    &first.recording_token,
+                                    "RTP-Unicast",
+                                    "RTSP",
+                                )
+                                .await
+                            {
+                                Ok(uri) => println!("  Replay URI: {uri}"),
+                                Err(e) => println!("  GetReplayUri skipped — {e}"),
+                            }
+                        }
+                    }
+                    Err(e) => println!("  GetRecordingSearchResults skipped — {e}"),
+                }
+                let _ = client.end_search(srch_url, &token).await;
             }
             Err(e) => println!("  (skipped — {e})"),
         }
@@ -1806,6 +1952,307 @@ async fn audio_example(cfg: &Config) -> Result<(), OnvifError> {
             }
         }
         Err(e) => println!("  GetAudioEncoderConfigurations not supported: {e}"),
+    }
+
+    Ok(())
+}
+
+// ── PTZ Home ─────────────────────────────────────────────────────────────────
+
+async fn ptz_home_example(cfg: &Config) -> Result<(), OnvifError> {
+    let (client, caps) = connect(cfg).await?;
+    let ptz_url = match caps.ptz_url.as_deref() {
+        Some(u) => u.to_string(),
+        None => {
+            println!("PTZ service not available.");
+            return Ok(());
+        }
+    };
+    let media_url = caps.media.url.as_deref().unwrap_or("").to_string();
+    let profiles = client.get_profiles(&media_url).await?;
+    let profile = match profiles.first() {
+        Some(p) => p.token.clone(),
+        None => {
+            println!("No profiles found.");
+            return Ok(());
+        }
+    };
+
+    println!("=== PTZ Home Position ===");
+    println!("Profile: {profile}");
+
+    println!("\nGotoHomePosition …");
+    match client
+        .ptz_goto_home_position(&ptz_url, &profile, None)
+        .await
+    {
+        Ok(()) => println!("  Moved to home position."),
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    println!("\nSetHomePosition (saves current position as home) …");
+    match client.ptz_set_home_position(&ptz_url, &profile).await {
+        Ok(()) => println!("  Home position saved."),
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    Ok(())
+}
+
+// ── Imaging Focus ─────────────────────────────────────────────────────────────
+
+async fn imaging_focus(cfg: &Config) -> Result<(), OnvifError> {
+    let (client, caps) = connect(cfg).await?;
+    let imaging_url = match caps.imaging_url.as_deref() {
+        Some(u) => u.to_string(),
+        None => {
+            println!("Imaging service not available.");
+            return Ok(());
+        }
+    };
+    let media_url = caps.media.url.as_deref().unwrap_or("").to_string();
+    let source_token = client
+        .get_video_sources(&media_url)
+        .await?
+        .into_iter()
+        .next()
+        .map(|s| s.token)
+        .unwrap_or_default();
+
+    println!("=== Imaging Focus ===");
+    println!("Source: {source_token}");
+
+    println!("\n-- GetStatus --");
+    match client.imaging_get_status(&imaging_url, &source_token).await {
+        Ok(s) => println!(
+            "  focus={:?}  state={}",
+            s.focus_position, s.focus_move_status
+        ),
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    println!("\n-- GetMoveOptions --");
+    match client
+        .imaging_get_move_options(&imaging_url, &source_token)
+        .await
+    {
+        Ok(opts) => {
+            if let Some(r) = opts.absolute_position_range {
+                println!("  Absolute position: {}–{}", r.min, r.max);
+            }
+            if let Some(r) = opts.absolute_speed_range {
+                println!("  Absolute speed   : {}–{}", r.min, r.max);
+            }
+            if let Some(r) = opts.relative_distance_range {
+                println!("  Relative distance: {}–{}", r.min, r.max);
+            }
+            if let Some(r) = opts.continuous_speed_range {
+                println!("  Continuous speed : {}–{}", r.min, r.max);
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    println!("\n-- Move (Continuous speed=0.2) then Stop --");
+    match client
+        .imaging_move(
+            &imaging_url,
+            &source_token,
+            &FocusMove::Continuous { speed: 0.2 },
+        )
+        .await
+    {
+        Ok(()) => {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            match client.imaging_stop(&imaging_url, &source_token).await {
+                Ok(()) => println!("  Moved and stopped."),
+                Err(e) => println!("  Stop failed: {e}"),
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    Ok(())
+}
+
+// ── OSD ───────────────────────────────────────────────────────────────────────
+
+async fn osd_example(cfg: &Config) -> Result<(), OnvifError> {
+    let (client, caps) = connect(cfg).await?;
+    let media_url = caps.media.url.as_deref().unwrap_or("").to_string();
+
+    // Get video source config token for OSD binding
+    let vsc_token = client
+        .get_video_source_configurations(&media_url)
+        .await
+        .ok()
+        .and_then(|v| v.into_iter().next().map(|c| c.token))
+        .unwrap_or_default();
+
+    println!("=== OSD ===");
+    println!("Video source config: {vsc_token}");
+
+    println!("\n-- GetOSDOptions --");
+    match client.get_osd_options(&media_url, &vsc_token).await {
+        Ok(opts) => {
+            println!("  Max OSDs  : {}", opts.max_osd);
+            println!("  Types     : {:?}", opts.types);
+            println!("  Positions : {:?}", opts.position_types);
+            println!("  Text types: {:?}", opts.text_types);
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    println!("\n-- GetOSDs --");
+    let osds = match client.get_osds(&media_url, None).await {
+        Ok(v) => {
+            println!("  Found {} OSD element(s)", v.len());
+            for o in &v {
+                println!(
+                    "  [{}] type={} position={}",
+                    o.token, o.type_, o.position.type_
+                );
+                if let Some(ref ts) = o.text_string {
+                    println!("    text_type={} plain={:?}", ts.type_, ts.plain_text);
+                }
+            }
+            v
+        }
+        Err(e) => {
+            println!("  (skipped — {e})");
+            return Ok(());
+        }
+    };
+
+    // Lifecycle test: create → verify → delete
+    println!("\n-- CreateOSD + DeleteOSD (lifecycle test) --");
+    let new_osd = OsdConfiguration {
+        token: String::new(),
+        video_source_config_token: vsc_token.clone(),
+        type_: "Text".into(),
+        position: OsdPosition {
+            type_: "UpperLeft".into(),
+            x: None,
+            y: None,
+        },
+        text_string: Some(OsdTextString {
+            type_: "DateAndTime".into(),
+            plain_text: None,
+            date_format: Some("MM/DD/YYYY".into()),
+            time_format: Some("HH:mm:ss".into()),
+            font_size: None,
+        }),
+        image_path: None,
+    };
+
+    match client.create_osd(&media_url, &new_osd).await {
+        Ok(token) => {
+            println!("  Created  [{token}] 'DateAndTime OSD'");
+            match client.delete_osd(&media_url, &token).await {
+                Ok(()) => println!("  Deleted  [{token}] — device state restored"),
+                Err(e) => println!("  Delete failed: {e}"),
+            }
+        }
+        Err(e) => println!("  CreateOSD not supported: {e}"),
+    }
+
+    let _ = osds;
+    Ok(())
+}
+
+// ── Recording / Search / Replay ───────────────────────────────────────────────
+
+async fn recording_example(cfg: &Config) -> Result<(), OnvifError> {
+    let (client, _caps) = connect(cfg).await?;
+
+    let services = client.get_services().await?;
+    let recording_url = services
+        .iter()
+        .find(|s| s.namespace.contains("recording"))
+        .map(|s| s.url.clone());
+    let search_url = services
+        .iter()
+        .find(|s| s.namespace.contains("search"))
+        .map(|s| s.url.clone());
+    let replay_url = services
+        .iter()
+        .find(|s| s.namespace.contains("replay"))
+        .map(|s| s.url.clone());
+
+    // ── GetRecordings ──────────────────────────────────────────────────────
+    if let Some(ref url) = recording_url {
+        println!("=== GetRecordings ===");
+        match client.get_recordings(url).await {
+            Ok(recs) => {
+                println!("  Found {} recording(s)", recs.len());
+                for r in &recs {
+                    println!(
+                        "  [{}] source='{}' status={}",
+                        r.token, r.source.name, r.recording_status
+                    );
+                    println!(
+                        "    earliest={} latest={}",
+                        r.earliest_recording.as_deref().unwrap_or("—"),
+                        r.latest_recording.as_deref().unwrap_or("—")
+                    );
+                    for t in &r.tracks {
+                        println!("    track [{}] type={}", t.token, t.track_type);
+                    }
+                }
+            }
+            Err(e) => println!("  Not supported: {e}"),
+        }
+    } else {
+        println!("Recording service not found in GetServices response.");
+    }
+
+    // ── FindRecordings → GetRecordingSearchResults → EndSearch ────────────
+    if let (Some(ref srch_url), Some(ref rpl_url)) = (search_url, replay_url) {
+        println!("\n=== FindRecordings ===");
+        match client.find_recordings(srch_url, Some(10), "PT60S").await {
+            Ok(token) => {
+                println!("  Search token: {token}");
+
+                println!("\n=== GetRecordingSearchResults ===");
+                match client
+                    .get_recording_search_results(srch_url, &token, 10, "PT5S")
+                    .await
+                {
+                    Ok(results) => {
+                        println!("  State: {}", results.search_state);
+                        println!("  Found {} result(s)", results.recording_information.len());
+                        for ri in &results.recording_information {
+                            println!(
+                                "  [{}] '{}' {} → {}",
+                                ri.recording_token,
+                                ri.source_name,
+                                ri.earliest_recording.as_deref().unwrap_or("?"),
+                                ri.latest_recording.as_deref().unwrap_or("?")
+                            );
+
+                            println!("\n=== GetReplayUri [{}] ===", ri.recording_token);
+                            match client
+                                .get_replay_uri(rpl_url, &ri.recording_token, "RTP-Unicast", "RTSP")
+                                .await
+                            {
+                                Ok(uri) => println!("  {uri}"),
+                                Err(e) => println!("  Not supported: {e}"),
+                            }
+                        }
+                    }
+                    Err(e) => println!("  Not supported: {e}"),
+                }
+
+                println!("\n=== EndSearch ===");
+                match client.end_search(srch_url, &token).await {
+                    Ok(()) => println!("  Search session released."),
+                    Err(e) => println!("  {e}"),
+                }
+            }
+            Err(e) => println!("  Not supported: {e}"),
+        }
+    } else {
+        println!("\nSearch/Replay services not found in GetServices response.");
     }
 
     Ok(())

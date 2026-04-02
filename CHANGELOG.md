@@ -5,6 +5,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.1] - 2026-04-02
+
+### Changed
+- Expanded crate-level docs (`lib.rs`): ONVIF Profile coverage table,
+  supported services list, updated Quick start with clock-sync step,
+  added `MockTransport` doc-test example
+
+---
+
+## [0.4.0] - 2026-04-02
+
+### Added
+- **Device Service**: `get_scopes` — completes ONVIF Profile S coverage
+- **Recording Service**: `get_recordings`
+- **Search Service**: `find_recordings`, `get_recording_search_results`, `end_search`
+- **Replay Service**: `get_replay_uri`
+- New types: `RecordingItem`, `RecordingSourceInformation`, `RecordingTrack`,
+  `RecordingInformation`, `FindRecordingResults`
+- 12 new unit tests (228 total)
+
+---
+
+## [0.3.0] - 2026-04-02
+
+### Added
+- **PTZ Home**: `ptz_goto_home_position`, `ptz_set_home_position`
+- **Imaging Focus**: `imaging_move` (`FocusMove::Absolute/Relative/Continuous`),
+  `imaging_stop`, `imaging_get_move_options`, `imaging_get_status`
+- **OSD Service**: `get_osds`, `get_osd`, `set_osd`, `create_osd`, `delete_osd`,
+  `get_osd_options`
+- New types: `FocusMove`, `ImagingStatus`, `ImagingMoveOptions`,
+  `OsdConfiguration`, `OsdPosition`, `OsdTextString`, `OsdOptions`
+- 16 new unit tests (positive + negative paths for all new methods)
+
+---
+
 ## [0.2.0] - 2026-04-02
 
 ### Added

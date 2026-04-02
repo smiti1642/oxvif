@@ -9,9 +9,13 @@ UDP multicast ──► discovery::probe() ──► Vec<DiscoveredDevice>
 SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hostname, NTP, reboot)
                              ──► Media1   (profiles, RTSP/snapshot URIs, video + audio configs)
                              ──► Media2   (H.265 native, flat encoder config)
-                             ──► PTZ      (move, stop, presets, status, configurations, nodes)
-                             ──► Imaging  (brightness, contrast, exposure, IR cut)
+                             ──► PTZ      (move, stop, presets, home, status, configurations, nodes)
+                             ──► Imaging  (brightness, contrast, exposure, IR cut, focus move/stop)
+                             ──► OSD      (create, read, update, delete on-screen display elements)
                              ──► Events   (subscribe, pull, renew, unsubscribe)
+                             ──► Recording (list stored recordings)
+                             ──► Search   (find recordings by time/scope)
+                             ──► Replay   (RTSP URI for playback)
 ```
 
 - Async-first (`tokio` + `reqwest`)
@@ -19,7 +23,7 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 202 unit tests + 9 doc tests
+- 228 unit tests + 9 doc tests
 
 ---
 
@@ -53,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-oxvif = "0.2.0"
+oxvif = "0.4.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -188,6 +192,19 @@ let info = client.get_device_info().await?;
 
 Initiates a device reboot. Returns the device's informational message.
 
+### `get_scopes() -> Result<Vec<String>, OnvifError>`
+
+Returns the device's scope URIs — strings that describe the device's name,
+location, hardware model, and capabilities
+(e.g. `"onvif://www.onvif.org/name/Camera1"`). Completes Profile S coverage.
+
+```rust
+let scopes = client.get_scopes().await?;
+for s in &scopes {
+    println!("{s}");
+}
+```
+
 ---
 
 ## Media Service (Media1) methods
@@ -296,6 +313,8 @@ All PTZ methods use `ptz_url` from `caps.ptz_url`. Coordinates use the ONVIF nor
 | `ptz_set_configuration(ptz_url, config, force_persist)` | Write PTZ configuration back to device |
 | `ptz_get_configuration_options(ptz_url, token)` | Valid timeout ranges for a PTZ configuration |
 | `ptz_get_nodes(ptz_url)` | List PTZ nodes (capabilities, preset count, home support) |
+| `ptz_goto_home_position(ptz_url, profile_token, speed)` | Move to the configured home position |
+| `ptz_set_home_position(ptz_url, profile_token)` | Save current position as home |
 
 ```rust
 // Save current position
@@ -348,6 +367,10 @@ All imaging methods use `imaging_url` from `caps.imaging_url` and require a `vid
 | `get_imaging_settings(imaging_url, source_token)` | Current brightness, contrast, IR cut, white balance, exposure |
 | `set_imaging_settings(imaging_url, source_token, settings)` | Write modified settings back |
 | `get_imaging_options(imaging_url, source_token)` | Valid ranges for each setting |
+| `imaging_get_status(imaging_url, source_token)` | Current focus position and move state |
+| `imaging_get_move_options(imaging_url, source_token)` | Valid focus movement ranges |
+| `imaging_move(imaging_url, source_token, focus)` | Move focus: `FocusMove::Absolute`, `Relative`, or `Continuous` |
+| `imaging_stop(imaging_url, source_token)` | Stop ongoing focus movement |
 
 ```rust
 let mut s = client.get_imaging_settings(&imaging_url, &source_token).await?;
@@ -357,6 +380,68 @@ client.set_imaging_settings(&imaging_url, &source_token, &s).await?;
 ```
 
 **`ImagingSettings` fields:** `brightness`, `color_saturation`, `contrast`, `sharpness` (`Option<f32>`), `ir_cut_filter`, `white_balance_mode`, `exposure_mode` (`Option<String>`).
+
+```rust
+// Move focus to an absolute position
+client.imaging_move(&imaging_url, &source_token,
+    &FocusMove::Absolute { position: 0.5, speed: None }).await?;
+
+// Start continuous autofocus sweep
+client.imaging_move(&imaging_url, &source_token,
+    &FocusMove::Continuous { speed: 0.3 }).await?;
+client.imaging_stop(&imaging_url, &source_token).await?;
+
+// Query focus state
+let status = client.imaging_get_status(&imaging_url, &source_token).await?;
+println!("focus={:?}  state={}", status.focus_position, status.focus_move_status);
+```
+
+---
+
+## OSD Service methods
+
+On-screen display (OSD) elements overlay text or images on the video stream. All OSD methods use `media_url` from `caps.media.url`.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_osds(media_url, config_token)` | `Vec<OsdConfiguration>` | List all OSD elements (pass `None` for all) |
+| `get_osd(media_url, osd_token)` | `OsdConfiguration` | Get a single OSD by token |
+| `set_osd(media_url, osd)` | `()` | Update an existing OSD |
+| `create_osd(media_url, osd)` | `String` | Create a new OSD, returns its token |
+| `delete_osd(media_url, osd_token)` | `()` | Delete an OSD element |
+| `get_osd_options(media_url, config_token)` | `OsdOptions` | Valid OSD types and position options |
+
+```rust
+use oxvif::{OsdConfiguration, OsdPosition, OsdTextString};
+
+// Create a date/time overlay in the upper-left corner
+let osd = OsdConfiguration {
+    token: String::new(),                           // empty = device assigns token
+    video_source_config_token: vsc_token.clone(),
+    type_: "Text".into(),
+    position: OsdPosition { type_: "UpperLeft".into(), x: None, y: None },
+    text_string: Some(OsdTextString {
+        type_: "DateAndTime".into(),
+        date_format: Some("MM/DD/YYYY".into()),
+        time_format: Some("HH:mm:ss".into()),
+        plain_text: None,
+        font_size: Some(28),
+    }),
+    image_path: None,
+};
+let token = client.create_osd(&media_url, &osd).await?;
+println!("Created OSD token: {token}");
+
+// List all OSDs
+let osds = client.get_osds(&media_url, None).await?;
+for o in &osds {
+    println!("[{}] type={} position={}", o.token, o.type_, o.position.type_);
+}
+```
+
+**`OsdConfiguration` fields:** `token`, `video_source_config_token`, `type_` (`"Text"` or `"Image"`), `position` (`OsdPosition`), `text_string` (`Option<OsdTextString>`), `image_path` (`Option<String>`).
+
+**`OsdOptions` fields:** `max_osd` (`u32`), `types` (`Vec<String>`), `position_types` (`Vec<String>`), `text_types` (`Vec<String>`).
 
 ---
 
@@ -413,6 +498,80 @@ client.unsubscribe(&sub.reference_url).await?;
 | Field | Type | Description |
 |-------|------|-------------|
 | `topics` | `Vec<String>` | Flattened topic paths (e.g. `"VideoSource/MotionAlarm"`, `"RuleEngine/Cell/Motion"`) |
+
+---
+
+## Recording Service methods
+
+Access recordings stored on the device (NVR/DVR). Obtain `recording_url` from
+`get_services()` — look for the service with namespace
+`http://www.onvif.org/ver10/recording/wsdl`.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_recordings(recording_url)` | `Vec<RecordingItem>` | List all stored recordings |
+
+**`RecordingItem` fields:** `token`, `source` (`RecordingSourceInformation`), `content`, `earliest_recording`, `latest_recording` (`Option<String>` ISO-8601), `recording_status` (`"Recording"`, `"Stopped"`, etc.), `tracks` (`Vec<RecordingTrack>`).
+
+---
+
+## Search Service methods
+
+Search through stored recordings. Obtain `search_url` from `get_services()` —
+namespace `http://www.onvif.org/ver10/search/wsdl`.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `find_recordings(search_url, max_matches, keep_alive)` | `String` (search token) | Start an async recording search |
+| `get_recording_search_results(search_url, token, max_results, wait_time)` | `FindRecordingResults` | Poll results (call until `search_state == "Completed"`) |
+| `end_search(search_url, token)` | `()` | Release search session on device |
+
+```rust
+// Find all recordings, collect results, play back the first one
+let search_url   = /* from get_services() */;
+let replay_url   = /* from get_services() */;
+
+let token = client.find_recordings(&search_url, None, "PT60S").await?;
+
+let results = loop {
+    let r = client.get_recording_search_results(&search_url, &token, 100, "PT5S").await?;
+    if r.search_state == "Completed" { break r; }
+};
+client.end_search(&search_url, &token).await?;
+
+for rec in &results.recording_information {
+    println!("[{}] {} — {} to {}",
+        rec.recording_token, rec.source_name,
+        rec.earliest_recording.as_deref().unwrap_or("?"),
+        rec.latest_recording.as_deref().unwrap_or("?"));
+}
+```
+
+**`FindRecordingResults` fields:** `search_state` (`"Queued"`, `"Searching"`, `"Completed"`), `recording_information` (`Vec<RecordingInformation>`).
+
+**`RecordingInformation` fields:** `recording_token`, `source_name`, `earliest_recording`, `latest_recording`, `content`, `recording_status`.
+
+---
+
+## Replay Service methods
+
+Stream a stored recording over RTSP. Obtain `replay_url` from `get_services()` —
+namespace `http://www.onvif.org/ver10/replay/wsdl`.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_replay_uri(replay_url, recording_token, stream_type, protocol)` | `String` | RTSP URI for playback |
+
+```rust
+let uri = client.get_replay_uri(
+    &replay_url,
+    &rec.recording_token,
+    "RTP-Unicast",
+    "RTSP",
+).await?;
+println!("Playback: {uri}");
+// Open in VLC: vlc "{uri}"
+```
 
 ---
 

@@ -2496,3 +2496,642 @@ async fn test_ptz_get_nodes_missing_token_returns_err() {
         .await;
     assert!(result.is_err());
 }
+
+// ── ptz_goto_home_position / ptz_set_home_position ────────────────────────────
+
+#[tokio::test]
+async fn test_ptz_goto_home_position_ok() {
+    let xml = empty_response_xml("GotoHomePositionResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_goto_home_position("http://192.168.1.1/onvif/ptz", "Profile_1", None)
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver20/ptz/wsdl/GotoHomePosition"
+    );
+    assert!(c.body.contains("Profile_1"));
+}
+
+#[tokio::test]
+async fn test_ptz_goto_home_position_soap_fault() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
+        &make_soap_fault_xml("env:Receiver", "Not Implemented"),
+    ));
+
+    let err = client
+        .ptz_goto_home_position("http://192.168.1.1/onvif/ptz", "Profile_1", None)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+#[tokio::test]
+async fn test_ptz_set_home_position_ok() {
+    let xml = empty_response_xml("SetHomePositionResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_set_home_position("http://192.168.1.1/onvif/ptz", "Profile_1")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver20/ptz/wsdl/SetHomePosition"
+    );
+    assert!(c.body.contains("Profile_1"));
+}
+
+#[tokio::test]
+async fn test_ptz_set_home_position_soap_fault() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
+        &make_soap_fault_xml("env:Receiver", "Not Implemented"),
+    ));
+
+    let err = client
+        .ptz_set_home_position("http://192.168.1.1/onvif/ptz", "Profile_1")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+// ── imaging_move / imaging_stop ───────────────────────────────────────────────
+
+fn imaging_get_status_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl">
+          <s:Body>
+            <timg:GetStatusResponse>
+              <timg:Status>
+                <tt:FocusStatus20 xmlns:tt="http://www.onvif.org/ver10/schema">
+                  <tt:Position>0.5</tt:Position>
+                  <tt:MoveStatus>IDLE</tt:MoveStatus>
+                </tt:FocusStatus20>
+              </timg:Status>
+            </timg:GetStatusResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+fn imaging_move_options_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl">
+          <s:Body>
+            <timg:GetMoveOptionsResponse>
+              <timg:MoveOptions>
+                <tt:Absolute xmlns:tt="http://www.onvif.org/ver10/schema">
+                  <tt:PositionSpace><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:PositionSpace>
+                  <tt:SpeedSpace><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:SpeedSpace>
+                </tt:Absolute>
+                <tt:Continuous xmlns:tt="http://www.onvif.org/ver10/schema">
+                  <tt:SpeedSpace><tt:Min>-1.0</tt:Min><tt:Max>1.0</tt:Max></tt:SpeedSpace>
+                </tt:Continuous>
+              </timg:MoveOptions>
+            </timg:GetMoveOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_imaging_get_status_parses_focus() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(imaging_get_status_xml()));
+
+    let status = client
+        .imaging_get_status("http://192.168.1.1/onvif/imaging", "video_source")
+        .await
+        .unwrap();
+
+    assert!((status.focus_position.unwrap() - 0.5).abs() < 0.001);
+    assert_eq!(status.focus_move_status, "IDLE");
+}
+
+#[tokio::test]
+async fn test_imaging_get_status_missing_status_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+                   <s:Body><timg:GetStatusResponse/></s:Body>
+                 </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .imaging_get_status("http://192.168.1.1/onvif/imaging", "video_source")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+#[tokio::test]
+async fn test_imaging_move_sends_absolute_body() {
+    let xml = empty_response_xml("MoveResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .imaging_move(
+            "http://192.168.1.1/onvif/imaging",
+            "video_source",
+            &crate::FocusMove::Absolute {
+                position: 0.8,
+                speed: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert!(captured.lock().unwrap().body.contains("0.8"));
+}
+
+#[tokio::test]
+async fn test_imaging_stop_ok() {
+    let xml = empty_response_xml("StopResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .imaging_stop("http://192.168.1.1/onvif/imaging", "video_source")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        captured.lock().unwrap().action,
+        "http://www.onvif.org/ver20/imaging/wsdl/Stop"
+    );
+}
+
+#[tokio::test]
+async fn test_imaging_get_move_options_parses_ranges() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(imaging_move_options_xml()));
+
+    let opts = client
+        .imaging_get_move_options("http://192.168.1.1/onvif/imaging", "video_source")
+        .await
+        .unwrap();
+
+    let abs = opts.absolute_position_range.unwrap();
+    assert!((abs.min - 0.0).abs() < 0.001);
+    assert!((abs.max - 1.0).abs() < 0.001);
+    let cont = opts.continuous_speed_range.unwrap();
+    assert!((cont.min - -1.0).abs() < 0.001);
+}
+
+#[tokio::test]
+async fn test_imaging_get_move_options_missing_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+                   <s:Body><timg:GetMoveOptionsResponse/></s:Body>
+                 </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .imaging_get_move_options("http://192.168.1.1/onvif/imaging", "video_source")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+// ── OSD ───────────────────────────────────────────────────────────────────────
+
+fn get_osds_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetOSDsResponse>
+              <trt:OSDConfiguration token="osd_1">
+                <tt:VideoSourceConfigurationToken>vsc_1</tt:VideoSourceConfigurationToken>
+                <tt:Type>Text</tt:Type>
+                <tt:Position>
+                  <tt:Type>UpperLeft</tt:Type>
+                </tt:Position>
+                <tt:TextString>
+                  <tt:Type>DateAndTime</tt:Type>
+                  <tt:DateFormat>MM/DD/YYYY</tt:DateFormat>
+                </tt:TextString>
+              </trt:OSDConfiguration>
+            </trt:GetOSDsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+fn get_osd_options_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetOSDOptionsResponse>
+              <trt:OSDOptions>
+                <tt:MaximumNumberOfOSDs>4</tt:MaximumNumberOfOSDs>
+                <tt:Type>Text</tt:Type>
+                <tt:Type>Image</tt:Type>
+              </trt:OSDOptions>
+            </trt:GetOSDOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+fn create_osd_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+          <s:Body>
+            <trt:CreateOSDResponse>
+              <trt:OSDToken>osd_new_1</trt:OSDToken>
+            </trt:CreateOSDResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_osds_parses_configuration() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_osds_xml()));
+
+    let osds = client
+        .get_osds("http://192.168.1.1/onvif/media", None)
+        .await
+        .unwrap();
+
+    assert_eq!(osds.len(), 1);
+    assert_eq!(osds[0].token, "osd_1");
+    assert_eq!(osds[0].video_source_config_token, "vsc_1");
+    assert_eq!(osds[0].type_, "Text");
+    assert_eq!(osds[0].position.type_, "UpperLeft");
+    let ts = osds[0].text_string.as_ref().unwrap();
+    assert_eq!(ts.type_, "DateAndTime");
+    assert_eq!(ts.date_format.as_deref(), Some("MM/DD/YYYY"));
+}
+
+#[tokio::test]
+async fn test_get_osds_missing_token_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+          <s:Body>
+            <trt:GetOSDsResponse>
+              <trt:OSDConfiguration>
+                <tt:Type xmlns:tt="http://www.onvif.org/ver10/schema">Text</tt:Type>
+              </trt:OSDConfiguration>
+            </trt:GetOSDsResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .get_osds("http://192.168.1.1/onvif/media", None)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+#[tokio::test]
+async fn test_create_osd_returns_token() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(create_osd_xml()));
+
+    let osd = crate::OsdConfiguration {
+        token: String::new(),
+        video_source_config_token: "vsc_1".to_string(),
+        type_: "Text".to_string(),
+        position: crate::OsdPosition {
+            type_: "UpperLeft".to_string(),
+            x: None,
+            y: None,
+        },
+        text_string: None,
+        image_path: None,
+    };
+
+    let token = client
+        .create_osd("http://192.168.1.1/onvif/media", &osd)
+        .await
+        .unwrap();
+
+    assert_eq!(token, "osd_new_1");
+}
+
+#[tokio::test]
+async fn test_delete_osd_ok() {
+    let xml = empty_response_xml("DeleteOSDResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .delete_osd("http://192.168.1.1/onvif/media", "osd_1")
+        .await
+        .unwrap();
+
+    assert!(captured.lock().unwrap().body.contains("osd_1"));
+}
+
+#[tokio::test]
+async fn test_get_osd_options_parses_max_and_types() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_osd_options_xml()));
+
+    let opts = client
+        .get_osd_options("http://192.168.1.1/onvif/media", "vsc_1")
+        .await
+        .unwrap();
+
+    assert_eq!(opts.max_osd, 4);
+    assert_eq!(opts.types, vec!["Text", "Image"]);
+}
+
+#[tokio::test]
+async fn test_get_osd_options_missing_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+                   <s:Body><trt:GetOSDOptionsResponse/></s:Body>
+                 </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .get_osd_options("http://192.168.1.1/onvif/media", "vsc_1")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+// ── get_scopes ────────────────────────────────────────────────────────────────
+
+fn get_scopes_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tds:GetScopesResponse>
+              <tds:Scopes>
+                <tt:ScopeAttribute>Fixed</tt:ScopeAttribute>
+                <tt:ScopeItem>onvif://www.onvif.org/name/Camera1</tt:ScopeItem>
+              </tds:Scopes>
+              <tds:Scopes>
+                <tt:ScopeAttribute>Fixed</tt:ScopeAttribute>
+                <tt:ScopeItem>onvif://www.onvif.org/location/country/taiwan</tt:ScopeItem>
+              </tds:Scopes>
+            </tds:GetScopesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_scopes_returns_uris() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_scopes_xml()));
+
+    let scopes = client.get_scopes().await.unwrap();
+
+    assert_eq!(scopes.len(), 2);
+    assert!(scopes[0].contains("name/Camera1"));
+    assert!(scopes[1].contains("country/taiwan"));
+}
+
+#[tokio::test]
+async fn test_get_scopes_soap_fault() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
+        &make_soap_fault_xml("env:Receiver", "Not Implemented"),
+    ));
+
+    let err = client.get_scopes().await.unwrap_err();
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+// ── get_recordings ────────────────────────────────────────────────────────────
+
+fn get_recordings_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trc="http://www.onvif.org/ver10/recording/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trc:GetRecordingsResponse>
+              <trc:RecordingItems Token="rec_001">
+                <trc:RecordingInformation>
+                  <tt:Source>
+                    <tt:SourceId>urn:uuid:source-1</tt:SourceId>
+                    <tt:Name>Channel 1</tt:Name>
+                    <tt:Location>Entrance</tt:Location>
+                    <tt:Description>Front door camera</tt:Description>
+                  </tt:Source>
+                  <tt:EarliestRecording>2026-01-01T00:00:00Z</tt:EarliestRecording>
+                  <tt:LatestRecording>2026-01-02T00:00:00Z</tt:LatestRecording>
+                  <tt:Content>Motion event</tt:Content>
+                  <tt:RecordingStatus>Stopped</tt:RecordingStatus>
+                </trc:RecordingInformation>
+              </trc:RecordingItems>
+            </trc:GetRecordingsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_recordings_parses_item() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_recordings_xml()));
+
+    let recs = client
+        .get_recordings("http://192.168.1.1/onvif/recording")
+        .await
+        .unwrap();
+
+    assert_eq!(recs.len(), 1);
+    assert_eq!(recs[0].token, "rec_001");
+    assert_eq!(recs[0].source.name, "Channel 1");
+    assert_eq!(recs[0].recording_status, "Stopped");
+    assert_eq!(
+        recs[0].earliest_recording.as_deref(),
+        Some("2026-01-01T00:00:00Z")
+    );
+}
+
+#[tokio::test]
+async fn test_get_recordings_missing_token_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trc="http://www.onvif.org/ver10/recording/wsdl">
+          <s:Body>
+            <trc:GetRecordingsResponse>
+              <trc:RecordingItems>
+              </trc:RecordingItems>
+            </trc:GetRecordingsResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .get_recordings("http://192.168.1.1/onvif/recording")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+// ── find_recordings / get_recording_search_results / end_search ───────────────
+
+fn find_recordings_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tse="http://www.onvif.org/ver10/search/wsdl">
+          <s:Body>
+            <tse:FindRecordingsResponse>
+              <tse:SearchToken>search_abc123</tse:SearchToken>
+            </tse:FindRecordingsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+fn recording_search_results_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tse="http://www.onvif.org/ver10/search/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tse:GetRecordingSearchResultsResponse>
+              <tse:SearchState>Completed</tse:SearchState>
+              <tse:RecordingInformation>
+                <tt:RecordingToken>rec_001</tt:RecordingToken>
+                <tt:Source>
+                  <tt:Name>Channel 1</tt:Name>
+                </tt:Source>
+                <tt:EarliestRecording>2026-01-01T00:00:00Z</tt:EarliestRecording>
+                <tt:LatestRecording>2026-01-02T00:00:00Z</tt:LatestRecording>
+                <tt:Content>Motion event</tt:Content>
+                <tt:RecordingStatus>Stopped</tt:RecordingStatus>
+              </tse:RecordingInformation>
+            </tse:GetRecordingSearchResultsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_find_recordings_returns_token() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(find_recordings_xml()));
+
+    let token = client
+        .find_recordings("http://192.168.1.1/onvif/search", None, "PT60S")
+        .await
+        .unwrap();
+
+    assert_eq!(token, "search_abc123");
+}
+
+#[tokio::test]
+async fn test_find_recordings_missing_token_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+                   <s:Body><tse:FindRecordingsResponse/></s:Body>
+                 </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .find_recordings("http://192.168.1.1/onvif/search", None, "PT60S")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+#[tokio::test]
+async fn test_get_recording_search_results_parses_completed() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(recording_search_results_xml()));
+
+    let results = client
+        .get_recording_search_results(
+            "http://192.168.1.1/onvif/search",
+            "search_abc123",
+            100,
+            "PT5S",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(results.search_state, "Completed");
+    assert_eq!(results.recording_information.len(), 1);
+    assert_eq!(results.recording_information[0].recording_token, "rec_001");
+    assert_eq!(results.recording_information[0].source_name, "Channel 1");
+}
+
+#[tokio::test]
+async fn test_end_search_ok() {
+    let xml = empty_response_xml("EndSearchResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .end_search("http://192.168.1.1/onvif/search", "search_abc123")
+        .await
+        .unwrap();
+
+    assert!(captured.lock().unwrap().body.contains("search_abc123"));
+}
+
+// ── get_replay_uri ────────────────────────────────────────────────────────────
+
+fn get_replay_uri_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trp="http://www.onvif.org/ver10/replay/wsdl">
+          <s:Body>
+            <trp:GetReplayUriResponse>
+              <trp:Uri>rtsp://192.168.1.1/replay/rec_001</trp:Uri>
+            </trp:GetReplayUriResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_replay_uri_returns_rtsp() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_replay_uri_xml()));
+
+    let uri = client
+        .get_replay_uri(
+            "http://192.168.1.1/onvif/replay",
+            "rec_001",
+            "RTP-Unicast",
+            "RTSP",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(uri, "rtsp://192.168.1.1/replay/rec_001");
+}
+
+#[tokio::test]
+async fn test_get_replay_uri_missing_uri_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+                   <s:Body><trp:GetReplayUriResponse/></s:Body>
+                 </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .get_replay_uri(
+            "http://192.168.1.1/onvif/replay",
+            "rec_001",
+            "RTP-Unicast",
+            "RTSP",
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}

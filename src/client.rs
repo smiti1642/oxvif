@@ -29,11 +29,12 @@ use crate::soap::{SoapEnvelope, WsSecurityToken, find_response, parse_soap_body}
 use crate::transport::{HttpTransport, Transport};
 use crate::types::{
     AudioEncoderConfiguration, AudioEncoderConfigurationOptions, AudioSource,
-    AudioSourceConfiguration, Capabilities, DeviceInfo, EventProperties, Hostname, ImagingOptions,
-    ImagingSettings, MediaProfile, MediaProfile2, NotificationMessage, NtpInfo, OnvifService,
-    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus,
-    PullPointSubscription, SnapshotUri, StreamUri, SystemDateTime, VideoEncoderConfiguration,
-    VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
+    AudioSourceConfiguration, Capabilities, DeviceInfo, EventProperties, FindRecordingResults,
+    FocusMove, Hostname, ImagingMoveOptions, ImagingOptions, ImagingSettings, ImagingStatus,
+    MediaProfile, MediaProfile2, NotificationMessage, NtpInfo, OnvifService, OsdConfiguration,
+    OsdOptions, PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus,
+    PullPointSubscription, RecordingItem, SnapshotUri, StreamUri, SystemDateTime,
+    VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
     VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
     VideoSourceConfiguration, VideoSourceConfigurationOptions, xml_escape,
 };
@@ -305,6 +306,24 @@ impl OnvifClient {
             .child("Message")
             .map(|n| n.text().to_string())
             .unwrap_or_default())
+    }
+
+    /// Retrieve the device's scope URIs.
+    ///
+    /// Scopes describe device metadata such as name, location, and hardware model
+    /// (e.g. `"onvif://www.onvif.org/name/Camera1"`). Use them for device
+    /// filtering in WS-Discovery.
+    pub async fn get_scopes(&self) -> Result<Vec<String>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetScopes";
+        const BODY: &str = "<tds:GetScopes/>";
+
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetScopesResponse")?;
+        Ok(resp
+            .children_named("Scopes")
+            .filter_map(|n| n.child("ScopeItem").map(|s| s.text().to_string()))
+            .collect())
     }
 
     // ── Media Service ─────────────────────────────────────────────────────────
@@ -751,6 +770,47 @@ impl OnvifClient {
         PtzStatus::from_xml(resp)
     }
 
+    /// Move the camera to its configured home position.
+    pub async fn ptz_goto_home_position(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        speed: Option<f32>,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GotoHomePosition";
+        let speed_el = speed
+            .map(|s| format!("<tptz:Speed><tt:Zoom x=\"{s}\"/></tptz:Speed>"))
+            .unwrap_or_default();
+        let body = format!(
+            "<tptz:GotoHomePosition>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+               {speed_el}\
+             </tptz:GotoHomePosition>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "GotoHomePositionResponse")?;
+        Ok(())
+    }
+
+    /// Set the current PTZ position as the home position.
+    pub async fn ptz_set_home_position(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/SetHomePosition";
+        let body = format!(
+            "<tptz:SetHomePosition>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+             </tptz:SetHomePosition>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetHomePositionResponse")?;
+        Ok(())
+    }
+
     // ── Video Source Service ──────────────────────────────────────────────────
 
     /// List all physical video sources available on the device.
@@ -1014,6 +1074,179 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetOptionsResponse")?;
         ImagingOptions::from_xml(resp)
+    }
+
+    /// Move the focus to an absolute position, by a relative distance, or start
+    /// continuous movement.
+    ///
+    /// Build the command with [`FocusMove`]. Call
+    /// [`imaging_stop`](Self::imaging_stop) to halt continuous movement.
+    pub async fn imaging_move(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+        focus: &FocusMove,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/Move";
+        let body = format!(
+            "<timg:Move>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+               <timg:Focus>{}</timg:Focus>\
+             </timg:Move>",
+            focus.to_xml_body()
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "MoveResponse")?;
+        Ok(())
+    }
+
+    /// Stop any ongoing focus movement.
+    pub async fn imaging_stop(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/Stop";
+        let body = format!(
+            "<timg:Stop>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+             </timg:Stop>"
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "StopResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the valid focus movement ranges for a video source.
+    pub async fn imaging_get_move_options(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+    ) -> Result<ImagingMoveOptions, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetMoveOptions";
+        let body = format!(
+            "<timg:GetMoveOptions>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+             </timg:GetMoveOptions>"
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetMoveOptionsResponse")?;
+        ImagingMoveOptions::from_xml(resp)
+    }
+
+    /// Retrieve the current focus position and movement state.
+    pub async fn imaging_get_status(
+        &self,
+        imaging_url: &str,
+        video_source_token: &str,
+    ) -> Result<ImagingStatus, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetStatus";
+        let body = format!(
+            "<timg:GetStatus>\
+               <timg:VideoSourceToken>{video_source_token}</timg:VideoSourceToken>\
+             </timg:GetStatus>"
+        );
+        let xml = self.call(imaging_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetStatusResponse")?;
+        ImagingStatus::from_xml(resp)
+    }
+
+    // ── OSD Service ───────────────────────────────────────────────────────────────
+
+    /// List all OSD elements attached to a video source configuration.
+    ///
+    /// Pass `None` for `config_token` to list all OSDs on the device.
+    pub async fn get_osds(
+        &self,
+        media_url: &str,
+        config_token: Option<&str>,
+    ) -> Result<Vec<OsdConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSDs";
+        let inner = config_token
+            .map(|t| format!("<trt:OSDToken>{t}</trt:OSDToken>"))
+            .unwrap_or_default();
+        let body = format!("<trt:GetOSDs>{inner}</trt:GetOSDs>");
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetOSDsResponse")?;
+        OsdConfiguration::vec_from_xml(resp)
+    }
+
+    /// Retrieve a single OSD element by token.
+    pub async fn get_osd(
+        &self,
+        media_url: &str,
+        osd_token: &str,
+    ) -> Result<OsdConfiguration, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSD";
+        let body = format!("<trt:GetOSD><trt:OSDToken>{osd_token}</trt:OSDToken></trt:GetOSD>");
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetOSDResponse")?;
+        resp.child("OSDConfiguration")
+            .ok_or_else(|| crate::soap::SoapError::missing("OSDConfiguration").into())
+            .and_then(OsdConfiguration::from_xml)
+    }
+
+    /// Update an existing OSD element.
+    pub async fn set_osd(&self, media_url: &str, osd: &OsdConfiguration) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/SetOSD";
+        let body = format!("<trt:SetOSD>{}</trt:SetOSD>", osd.to_xml_body());
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetOSDResponse")?;
+        Ok(())
+    }
+
+    /// Create a new OSD element and return the assigned token.
+    ///
+    /// Set `osd.token` to an empty string; the device assigns the token.
+    pub async fn create_osd(
+        &self,
+        media_url: &str,
+        osd: &OsdConfiguration,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/CreateOSD";
+        let body = format!("<trt:CreateOSD>{}</trt:CreateOSD>", osd.to_xml_body());
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "CreateOSDResponse")?;
+        resp.child("OSDToken")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("OSDToken").into())
+    }
+
+    /// Delete an OSD element.
+    pub async fn delete_osd(&self, media_url: &str, osd_token: &str) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/DeleteOSD";
+        let body =
+            format!("<trt:DeleteOSD><trt:OSDToken>{osd_token}</trt:OSDToken></trt:DeleteOSD>");
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "DeleteOSDResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve the valid OSD configuration options for a video source configuration.
+    pub async fn get_osd_options(
+        &self,
+        media_url: &str,
+        config_token: &str,
+    ) -> Result<OsdOptions, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSDOptions";
+        let body = format!(
+            "<trt:GetOSDOptions>\
+               <trt:ConfigurationToken>{config_token}</trt:ConfigurationToken>\
+             </trt:GetOSDOptions>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetOSDOptionsResponse")?;
+        OsdOptions::from_xml(resp)
     }
 
     // ── Media2 Service ────────────────────────────────────────────────────────
@@ -1634,6 +1867,139 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetNodesResponse")?;
         PtzNode::vec_from_xml(resp)
+    }
+
+    // ── Recording Service ─────────────────────────────────────────────────────────
+
+    /// List all recordings stored on the device.
+    ///
+    /// `recording_url` is obtained from `GetServices` — look for the service
+    /// with namespace `http://www.onvif.org/ver10/recording/wsdl`.
+    pub async fn get_recordings(
+        &self,
+        recording_url: &str,
+    ) -> Result<Vec<RecordingItem>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/GetRecordings";
+        const BODY: &str = "<trc:GetRecordings/>";
+
+        let xml = self.call(recording_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetRecordingsResponse")?;
+        RecordingItem::vec_from_xml(resp)
+    }
+
+    // ── Search Service ────────────────────────────────────────────────────────────
+
+    /// Start an asynchronous search for recordings.
+    ///
+    /// Returns a search token string; pass it to
+    /// [`get_recording_search_results`](Self::get_recording_search_results).
+    ///
+    /// - `max_matches` — upper bound on results (`None` = device default).
+    /// - `keep_alive_timeout` — how long the search is kept open on the device
+    ///   (ISO 8601 duration, e.g. `"PT60S"`).
+    pub async fn find_recordings(
+        &self,
+        search_url: &str,
+        max_matches: Option<u32>,
+        keep_alive_timeout: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/search/wsdl/FindRecordings";
+        let max_el = max_matches
+            .map(|m| format!("<tse:MaxMatches>{m}</tse:MaxMatches>"))
+            .unwrap_or_default();
+        let body = format!(
+            "<tse:FindRecordings>\
+               {max_el}\
+               <tse:KeepAliveTime>{keep_alive_timeout}</tse:KeepAliveTime>\
+             </tse:FindRecordings>"
+        );
+
+        let xml = self.call(search_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "FindRecordingsResponse")?;
+        resp.child("SearchToken")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("SearchToken").into())
+    }
+
+    /// Retrieve search results for a recording search started by
+    /// [`find_recordings`](Self::find_recordings).
+    ///
+    /// Call repeatedly until `results.search_state == "Completed"`.
+    /// Then call [`end_search`](Self::end_search) to release server resources.
+    pub async fn get_recording_search_results(
+        &self,
+        search_url: &str,
+        search_token: &str,
+        max_results: u32,
+        wait_time: &str,
+    ) -> Result<FindRecordingResults, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/search/wsdl/GetRecordingSearchResults";
+        let body = format!(
+            "<tse:GetRecordingSearchResults>\
+               <tse:SearchToken>{search_token}</tse:SearchToken>\
+               <tse:MaxResults>{max_results}</tse:MaxResults>\
+               <tse:WaitTime>{wait_time}</tse:WaitTime>\
+             </tse:GetRecordingSearchResults>"
+        );
+
+        let xml = self.call(search_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetRecordingSearchResultsResponse")?;
+        FindRecordingResults::from_xml(resp)
+    }
+
+    /// Release a search session on the device.
+    ///
+    /// Always call this after you have finished reading results from
+    /// [`get_recording_search_results`](Self::get_recording_search_results).
+    pub async fn end_search(&self, search_url: &str, search_token: &str) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/search/wsdl/EndSearch";
+        let body = format!(
+            "<tse:EndSearch>\
+               <tse:SearchToken>{search_token}</tse:SearchToken>\
+             </tse:EndSearch>"
+        );
+
+        let xml = self.call(search_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "EndSearchResponse")?;
+        Ok(())
+    }
+
+    // ── Replay Service ────────────────────────────────────────────────────────────
+
+    /// Retrieve an RTSP URI for replaying a stored recording.
+    ///
+    /// - `recording_token` — from [`get_recordings`](Self::get_recordings) or
+    ///   [`get_recording_search_results`](Self::get_recording_search_results).
+    /// - `stream_type` — `"RTP-Unicast"` or `"RTP-Multicast"`.
+    /// - `protocol` — `"RTSP"` or `"RtspOverHttp"`.
+    pub async fn get_replay_uri(
+        &self,
+        replay_url: &str,
+        recording_token: &str,
+        stream_type: &str,
+        protocol: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/replay/wsdl/GetReplayUri";
+        let body = format!(
+            "<trp:GetReplayUri>\
+               <trp:StreamSetup>\
+                 <tt:Stream>{stream_type}</tt:Stream>\
+                 <tt:Transport><tt:Protocol>{protocol}</tt:Protocol></tt:Transport>\
+               </trp:StreamSetup>\
+               <trp:RecordingToken>{recording_token}</trp:RecordingToken>\
+             </trp:GetReplayUri>"
+        );
+
+        let xml = self.call(replay_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetReplayUriResponse")?;
+        resp.child("Uri")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("Uri").into())
     }
 }
 
