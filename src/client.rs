@@ -28,8 +28,10 @@ use crate::error::OnvifError;
 use crate::soap::{SoapEnvelope, WsSecurityToken, find_response, parse_soap_body};
 use crate::transport::{HttpTransport, Transport};
 use crate::types::{
-    Capabilities, DeviceInfo, EventProperties, Hostname, ImagingOptions, ImagingSettings,
-    MediaProfile, MediaProfile2, NotificationMessage, NtpInfo, OnvifService, PtzPreset, PtzStatus,
+    AudioEncoderConfiguration, AudioEncoderConfigurationOptions, AudioSource,
+    AudioSourceConfiguration, Capabilities, DeviceInfo, EventProperties, Hostname, ImagingOptions,
+    ImagingSettings, MediaProfile, MediaProfile2, NotificationMessage, NtpInfo, OnvifService,
+    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus,
     PullPointSubscription, SnapshotUri, StreamUri, SystemDateTime, VideoEncoderConfiguration,
     VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
     VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
@@ -1417,6 +1419,221 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         find_response(&body_node, "UnsubscribeResponse")?;
         Ok(())
+    }
+
+    // ── Audio Service ─────────────────────────────────────────────────────────
+
+    /// List all physical audio inputs on the device.
+    ///
+    /// `media_url` comes from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_audio_sources(&self, media_url: &str) -> Result<Vec<AudioSource>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetAudioSources";
+        const BODY: &str = "<trt:GetAudioSources/>";
+        let xml = self.call(media_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetAudioSourcesResponse")?;
+        AudioSource::vec_from_xml(resp)
+    }
+
+    /// List all audio source configurations.
+    ///
+    /// `media_url` comes from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_audio_source_configurations(
+        &self,
+        media_url: &str,
+    ) -> Result<Vec<AudioSourceConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetAudioSourceConfigurations";
+        const BODY: &str = "<trt:GetAudioSourceConfigurations/>";
+        let xml = self.call(media_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetAudioSourceConfigurationsResponse")?;
+        AudioSourceConfiguration::vec_from_xml(resp)
+    }
+
+    /// List all audio encoder configurations.
+    ///
+    /// `media_url` comes from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_audio_encoder_configurations(
+        &self,
+        media_url: &str,
+    ) -> Result<Vec<AudioEncoderConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurations";
+        const BODY: &str = "<trt:GetAudioEncoderConfigurations/>";
+        let xml = self.call(media_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetAudioEncoderConfigurationsResponse")?;
+        AudioEncoderConfiguration::vec_from_xml(resp)
+    }
+
+    /// Retrieve a single audio encoder configuration by token.
+    ///
+    /// `media_url` comes from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_audio_encoder_configuration(
+        &self,
+        media_url: &str,
+        config_token: &str,
+    ) -> Result<AudioEncoderConfiguration, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfiguration";
+        let body = format!(
+            "<trt:GetAudioEncoderConfiguration>\
+               <trt:ConfigurationToken>{}</trt:ConfigurationToken>\
+             </trt:GetAudioEncoderConfiguration>",
+            xml_escape(config_token)
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetAudioEncoderConfigurationResponse")?;
+        let node = resp
+            .child("Configuration")
+            .ok_or_else(|| crate::soap::SoapError::missing("Configuration"))?;
+        AudioEncoderConfiguration::from_xml(node)
+    }
+
+    /// Write an audio encoder configuration back to the device.
+    ///
+    /// Obtain the current config via
+    /// [`get_audio_encoder_configuration`](Self::get_audio_encoder_configuration),
+    /// modify the fields you want to change, then call this method.
+    pub async fn set_audio_encoder_configuration(
+        &self,
+        media_url: &str,
+        config: &AudioEncoderConfiguration,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/SetAudioEncoderConfiguration";
+        let body = format!(
+            "<trt:SetAudioEncoderConfiguration>\
+               {}\
+               <trt:ForcePersistence>true</trt:ForcePersistence>\
+             </trt:SetAudioEncoderConfiguration>",
+            config.to_xml_body()
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetAudioEncoderConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve valid parameter ranges for an audio encoder configuration.
+    ///
+    /// `media_url` comes from [`get_capabilities`](Self::get_capabilities).
+    pub async fn get_audio_encoder_configuration_options(
+        &self,
+        media_url: &str,
+        config_token: &str,
+    ) -> Result<AudioEncoderConfigurationOptions, OnvifError> {
+        const ACTION: &str =
+            "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurationOptions";
+        let body = format!(
+            "<trt:GetAudioEncoderConfigurationOptions>\
+               <trt:ConfigurationToken>{}</trt:ConfigurationToken>\
+             </trt:GetAudioEncoderConfigurationOptions>",
+            xml_escape(config_token)
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetAudioEncoderConfigurationOptionsResponse")?;
+        AudioEncoderConfigurationOptions::from_xml(resp)
+    }
+
+    // ── PTZ Configuration ─────────────────────────────────────────────────────
+
+    /// List all PTZ configurations on the device.
+    ///
+    /// `ptz_url` comes from `caps.ptz_url` returned by
+    /// [`get_capabilities`](Self::get_capabilities).
+    pub async fn ptz_get_configurations(
+        &self,
+        ptz_url: &str,
+    ) -> Result<Vec<PtzConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetConfigurations";
+        const BODY: &str = "<tptz:GetConfigurations/>";
+        let xml = self.call(ptz_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetConfigurationsResponse")?;
+        PtzConfiguration::vec_from_xml(resp)
+    }
+
+    /// Retrieve a single PTZ configuration by token.
+    ///
+    /// `ptz_url` comes from `caps.ptz_url`.
+    pub async fn ptz_get_configuration(
+        &self,
+        ptz_url: &str,
+        config_token: &str,
+    ) -> Result<PtzConfiguration, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetConfiguration";
+        let body = format!(
+            "<tptz:GetConfiguration>\
+               <tptz:PTZConfigurationToken>{}</tptz:PTZConfigurationToken>\
+             </tptz:GetConfiguration>",
+            xml_escape(config_token)
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetConfigurationResponse")?;
+        let node = resp
+            .child("PTZConfiguration")
+            .ok_or_else(|| crate::soap::SoapError::missing("PTZConfiguration"))?;
+        PtzConfiguration::from_xml(node)
+    }
+
+    /// Write a PTZ configuration back to the device.
+    ///
+    /// Obtain the current config via
+    /// [`ptz_get_configuration`](Self::ptz_get_configuration),
+    /// modify the fields, then call this method.
+    pub async fn ptz_set_configuration(
+        &self,
+        ptz_url: &str,
+        config: &PtzConfiguration,
+        force_persist: bool,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/SetConfiguration";
+        let persist = if force_persist { "true" } else { "false" };
+        let body = format!(
+            "<tptz:SetConfiguration>\
+               {}\
+               <tptz:ForcePersistence>{persist}</tptz:ForcePersistence>\
+             </tptz:SetConfiguration>",
+            config.to_xml_body()
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve valid parameter ranges for a PTZ configuration.
+    ///
+    /// `ptz_url` comes from `caps.ptz_url`.
+    pub async fn ptz_get_configuration_options(
+        &self,
+        ptz_url: &str,
+        config_token: &str,
+    ) -> Result<PtzConfigurationOptions, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetConfigurationOptions";
+        let body = format!(
+            "<tptz:GetConfigurationOptions>\
+               <tptz:ConfigurationToken>{}</tptz:ConfigurationToken>\
+             </tptz:GetConfigurationOptions>",
+            xml_escape(config_token)
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetConfigurationOptionsResponse")?;
+        PtzConfigurationOptions::from_xml(resp)
+    }
+
+    /// List all PTZ nodes on the device.
+    ///
+    /// `ptz_url` comes from `caps.ptz_url`.
+    pub async fn ptz_get_nodes(&self, ptz_url: &str) -> Result<Vec<PtzNode>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetNodes";
+        const BODY: &str = "<tptz:GetNodes/>";
+        let xml = self.call(ptz_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetNodesResponse")?;
+        PtzNode::vec_from_xml(resp)
     }
 }
 
