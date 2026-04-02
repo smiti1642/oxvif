@@ -3,18 +3,23 @@
 Async Rust client library for the [ONVIF](https://www.onvif.org/) IP camera protocol.
 
 ```
-SOAP/HTTP ──► OnvifClient ──► Capabilities / DeviceInfo
-                          ──► Vec<MediaProfile>
-                          ──► StreamUri / SnapshotUri
-                          ──► SystemDateTime
-                          ──► PTZ (move / stop / presets)
+UDP multicast ──► discovery::probe() ──► Vec<DiscoveredDevice>
+                                                  │
+                                                  ▼ XAddr
+SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hostname, NTP, reboot)
+                             ──► Media1   (profiles, RTSP/snapshot URIs, encoder configs)
+                             ──► Media2   (H.265 native, flat encoder config)
+                             ──► PTZ      (move, stop, presets, status)
+                             ──► Imaging  (brightness, contrast, exposure, IR cut)
+                             ──► Events   (subscribe, pull, renew, unsubscribe)
 ```
 
 - Async-first (`tokio` + `reqwest`)
 - WS-Security `UsernameToken` with `PasswordDigest` (ONVIF Profile S §5.12)
+- WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- LF line endings enforced via `.gitattributes`
+- 181 unit tests + 9 doc tests
 
 ---
 
@@ -47,8 +52,6 @@ async fn main() -> Result<(), OnvifError> {
 
 ## Installation
 
-Add to `Cargo.toml`:
-
 ```toml
 [dependencies]
 oxvif = { path = "." }   # local path until published to crates.io
@@ -61,21 +64,14 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 The main entry point. Stateless and cheaply cloneable — safe to wrap in `Arc` and share across threads.
 
-### Constructors
+### Constructors and builder methods
 
 | Method | Description |
 |--------|-------------|
 | `OnvifClient::new(device_url)` | Connect to device at `device_url` (e.g. `http://192.168.1.100/onvif/device_service`) |
-
-### Builder methods
-
-| Method | Description |
-|--------|-------------|
 | `.with_credentials(username, password)` | Enable WS-Security `UsernameToken` authentication |
 | `.with_utc_offset(offset_secs: i64)` | Adjust WS-Security timestamp if device clock differs from local UTC |
 | `.with_transport(Arc<dyn Transport>)` | Replace the default HTTP transport (used for unit testing) |
-
-### Example
 
 ```rust
 // Sync device clock before sending authenticated requests
@@ -88,469 +84,309 @@ let client = client
 
 ---
 
-## API methods
+## WS-Discovery
+
+Find ONVIF cameras on your local network without knowing their IP addresses.
+
+```rust
+use std::time::Duration;
+use oxvif::discovery;
+
+let devices = discovery::probe(Duration::from_secs(3)).await;
+
+for d in &devices {
+    println!("Found: {}", d.endpoint);
+    for addr in &d.xaddrs {
+        println!("  XAddr: {addr}");          // use this as device_url
+    }
+    for scope in &d.scopes {
+        println!("  Scope: {scope}");         // e.g. "onvif://www.onvif.org/name/Camera1"
+    }
+}
+```
+
+**`DiscoveredDevice` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `endpoint` | `String` | Unique endpoint URN (e.g. `uuid:...`) |
+| `types` | `Vec<String>` | WS-Discovery types (e.g. `NetworkVideoTransmitter`) |
+| `scopes` | `Vec<String>` | ONVIF scopes (name, location, hardware, etc.) |
+| `xaddrs` | `Vec<String>` | Device service URLs — pass the first to `OnvifClient::new` |
+
+`probe` returns an empty `Vec` on I/O errors; it never panics.
+
+---
+
+## Device Service methods
 
 ### `get_capabilities() -> Result<Capabilities, OnvifError>`
 
-Retrieves all service endpoint URLs and feature flags from the device.
-**Always call this first** — the returned URLs are required by all subsequent calls.
+Retrieves all service endpoint URLs and feature flags. **Always call this first.**
 
 ```rust
 let caps = client.get_capabilities().await?;
 
-// Service URLs
 caps.device.url        // Device management service
 caps.media.url         // Media service (profiles / stream URIs)
 caps.ptz_url           // PTZ service
 caps.events.url        // Events service
 caps.imaging_url       // Imaging service
 caps.analytics.url     // Analytics service
+caps.media2_url        // Media2 service (None on many cameras — use GetServices)
 
-// Device capabilities
-caps.device.network.ip_version6
 caps.device.system.firmware_upgrade
 caps.device.security.username_token
-
-// Media capabilities
 caps.media.streaming.rtp_rtsp_tcp
-caps.media.streaming.rtp_multicast
-caps.media.max_profiles          // Option<u32>
-
-// Events capabilities
 caps.events.ws_pull_point
-caps.events.ws_subscription_policy
 ```
 
----
+### `get_services() -> Result<Vec<OnvifService>, OnvifError>`
+
+Use as a fallback when `caps.media2_url` is `None`:
+
+```rust
+let caps = client.get_capabilities().await?;
+let media2_url = caps.media2_url.clone().or_else(|| {
+    client.get_services().await.ok()?
+        .into_iter()
+        .find(|s| s.is_media2())
+        .map(|s| s.url)
+});
+```
 
 ### `get_system_date_and_time() -> Result<SystemDateTime, OnvifError>`
 
-Retrieves the device clock. Use the result to calibrate WS-Security timestamps.
+Retrieves the device clock. Compute the offset to keep WS-Security timestamps in sync.
 
 ```rust
 let dt = client.get_system_date_and_time().await?;
-
-dt.utc_unix          // Option<i64>  Unix timestamp of the device UTC clock
-dt.timezone          // String       POSIX timezone (e.g. "CST-8")
-dt.daylight_savings  // bool
-
-// Compute offset and apply before sending authenticated requests
 let offset = dt.utc_offset_secs();   // device_utc − local_utc
-let client = client.with_credentials("admin", "pass")
-                   .with_utc_offset(offset);
 ```
-
----
 
 ### `get_device_info() -> Result<DeviceInfo, OnvifError>`
 
-Returns hardware and firmware metadata. Many cameras expose this without authentication.
-
 ```rust
 let info = client.get_device_info().await?;
-
-info.manufacturer    // e.g. "Hikvision"
-info.model           // e.g. "DS-2CD2085G1-I"
-info.firmware_version
-info.serial_number
-info.hardware_id
+// info.manufacturer, info.model, info.firmware_version, info.serial_number
 ```
+
+### Hostname methods
+
+| Method | Description |
+|--------|-------------|
+| `get_hostname()` | Returns `Hostname { from_dhcp: bool, name: Option<String> }` |
+| `set_hostname(name: &str)` | Set a static hostname |
+
+### NTP methods
+
+| Method | Description |
+|--------|-------------|
+| `get_ntp()` | Returns `NtpInfo { from_dhcp: bool, servers: Vec<String> }` |
+| `set_ntp(from_dhcp: bool, servers: &[&str])` | Configure NTP servers |
+
+### `system_reboot() -> Result<String, OnvifError>`
+
+Initiates a device reboot. Returns the device's informational message.
 
 ---
 
-### `get_profiles(media_url) -> Result<Vec<MediaProfile>, OnvifError>`
+## Media Service (Media1) methods
 
-Lists all media profiles. Each profile represents a stream configuration (resolution, codec, frame rate, etc.).
+All Media1 methods use `media_url` from `caps.media.url`.
 
-```rust
-let profiles = client.get_profiles(&caps.media.url.unwrap()).await?;
+### Profile management
 
-for p in &profiles {
-    println!("{} — token: {}, fixed: {}", p.name, p.token, p.fixed);
-}
-```
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_profiles(media_url)` | `Vec<MediaProfile>` | List all profiles |
+| `get_profile(media_url, token)` | `MediaProfile` | Get a single profile |
+| `create_profile(media_url, name, token)` | `MediaProfile` | Create a new empty profile |
+| `delete_profile(media_url, token)` | `()` | Delete a non-fixed profile |
+| `add_video_encoder_configuration(media_url, profile_token, config_token)` | `()` | Bind encoder config to profile |
+| `remove_video_encoder_configuration(media_url, profile_token)` | `()` | Unbind encoder config |
+| `add_video_source_configuration(media_url, profile_token, config_token)` | `()` | Bind video source to profile |
+| `remove_video_source_configuration(media_url, profile_token)` | `()` | Unbind video source |
 
-**`MediaProfile` fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `token` | `String` | Opaque identifier; pass to `get_stream_uri` / `get_snapshot_uri` / PTZ methods |
-| `name` | `String` | Human-readable name (e.g. `"mainStream"`) |
-| `fixed` | `bool` | `true` = profile cannot be deleted |
-
----
-
-### `get_stream_uri(media_url, profile_token) -> Result<StreamUri, OnvifError>`
-
-Returns the RTSP URI for the given media profile.
+### Streaming
 
 ```rust
-let uri = client.get_stream_uri(media_url, &profiles[0].token).await?;
+let profiles = client.get_profiles(&media_url).await?;
 
-uri.uri                    // e.g. "rtsp://192.168.1.100:554/Streaming/Channels/101"
-uri.invalid_after_connect  // true = URI is one-time use
-uri.invalid_after_reboot   // true = URI expires on reboot
-uri.timeout                // ISO 8601 duration, e.g. "PT60S" ("PT0S" = no expiry)
+let rtsp = client.get_stream_uri(&media_url, &profiles[0].token).await?;
+println!("RTSP: {}", rtsp.uri);
+
+let snap = client.get_snapshot_uri(&media_url, &profiles[0].token).await?;
+println!("Snapshot: {}", snap.uri);
 ```
 
-Play with VLC or ffmpeg:
-
-```sh
-ffplay "rtsp://192.168.1.100:554/Streaming/Channels/101"
-```
-
----
-
-### `get_snapshot_uri(media_url, profile_token) -> Result<SnapshotUri, OnvifError>`
-
-Returns the HTTP URL for fetching a JPEG snapshot from the given media profile.
-
-```rust
-let snap = client.get_snapshot_uri(media_url, &profiles[0].token).await?;
-
-snap.uri                    // e.g. "http://192.168.1.100/onvif/snapshot?channel=1"
-snap.invalid_after_connect  // true = URI is one-time use
-snap.invalid_after_reboot   // true = URI expires on reboot
-snap.timeout                // ISO 8601 expiry duration
-```
-
-Fetch the snapshot:
-
-```sh
-curl -o snapshot.jpg "http://192.168.1.100/onvif/snapshot?channel=1"
-```
-
----
-
-## PTZ methods
-
-All PTZ methods take `ptz_url` from `caps.ptz_url`.
-Coordinates use the ONVIF normalised range: pan/tilt `[-1.0, 1.0]`, zoom `[0.0, 1.0]`.
-
-### `ptz_absolute_move(ptz_url, profile_token, pan, tilt, zoom)`
-
-Move to an absolute position.
-
-```rust
-// Centre frame, half zoom
-client.ptz_absolute_move(ptz_url, &token, 0.0, 0.0, 0.5).await?;
-```
-
-### `ptz_relative_move(ptz_url, profile_token, pan, tilt, zoom)`
-
-Move by an offset from the current position.
-
-```rust
-// Pan right slightly
-client.ptz_relative_move(ptz_url, &token, 0.1, 0.0, 0.0).await?;
-```
-
-### `ptz_continuous_move(ptz_url, profile_token, pan, tilt, zoom)`
-
-Start continuous movement at the given velocity. Call `ptz_stop` to halt.
-
-```rust
-client.ptz_continuous_move(ptz_url, &token, 0.5, 0.0, 0.0).await?;
-// ... wait ...
-client.ptz_stop(ptz_url, &token).await?;
-```
-
-### `ptz_stop(ptz_url, profile_token)`
-
-Stop all pan, tilt, and zoom movement.
-
-### `ptz_get_presets(ptz_url, profile_token) -> Result<Vec<PtzPreset>, OnvifError>`
-
-List all saved preset positions.
-
-```rust
-let presets = client.ptz_get_presets(ptz_url, &token).await?;
-for p in &presets {
-    println!("[{}] {} — pan/tilt: {:?}, zoom: {:?}", p.token, p.name, p.pan_tilt, p.zoom);
-}
-```
-
-**`PtzPreset` fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `token` | `String` | Opaque identifier; pass to `ptz_goto_preset` |
-| `name` | `String` | Human-readable preset name |
-| `pan_tilt` | `Option<(f32, f32)>` | Stored pan (x) and tilt (y), or `None` if absent |
-| `zoom` | `Option<f32>` | Stored zoom, or `None` if absent |
-
-### `ptz_goto_preset(ptz_url, profile_token, preset_token)`
-
-Move to a saved preset position.
-
-```rust
-client.ptz_goto_preset(ptz_url, &profile_token, &presets[0].token).await?;
-```
-
----
-
-## Video Source methods
-
-All video source methods use `media_url` from `caps.media.url`.
-
-### `get_video_sources(media_url) -> Result<Vec<VideoSource>, OnvifError>`
-
-Lists all physical video input channels on the device.
-
-```rust
-let sources = client.get_video_sources(media_url).await?;
-for s in &sources {
-    println!("[{}]  {}  @ {:.0} fps", s.token, s.resolution, s.framerate);
-}
-```
-
-**`VideoSource` fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `token` | `String` | Opaque identifier for this physical input |
-| `framerate` | `f32` | Maximum frame rate this input can deliver |
-| `resolution` | `Resolution` | Native sensor resolution (`width` × `height`) |
-
----
-
-### `get_video_source_configurations(media_url) -> Result<Vec<VideoSourceConfiguration>, OnvifError>`
-
-Lists all crop/position windows applied to video sources.
-
-### `get_video_source_configuration(media_url, token) -> Result<VideoSourceConfiguration, OnvifError>`
-
-Retrieves a single `VideoSourceConfiguration` by token.
-
-```rust
-let vsc = client.get_video_source_configuration(media_url, &token).await?;
-println!("{} → source:{} bounds:{}x{}+{}+{}",
-    vsc.name, vsc.source_token,
-    vsc.bounds.width, vsc.bounds.height, vsc.bounds.x, vsc.bounds.y);
-```
-
-**`VideoSourceConfiguration` fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `token` | `String` | Opaque config token |
-| `name` | `String` | Human-readable name |
-| `use_count` | `u32` | Number of profiles referencing this config |
-| `source_token` | `String` | Token of the physical `VideoSource` |
-| `bounds` | `SourceBounds` | Crop window: `x`, `y`, `width`, `height` in pixels |
-
----
-
-### `set_video_source_configuration(media_url, config) -> Result<(), OnvifError>`
-
-Writes a modified `VideoSourceConfiguration` back to the device.
-
-```rust
-let mut vsc = client.get_video_source_configuration(media_url, &token).await?;
-vsc.bounds.width = 1280;
-vsc.bounds.height = 720;
-client.set_video_source_configuration(media_url, &vsc).await?;
-```
-
----
-
-### `get_video_source_configuration_options(media_url, config_token) -> Result<VideoSourceConfigurationOptions, OnvifError>`
-
-Returns valid ranges for `SetVideoSourceConfiguration`. `config_token` is `Option<&str>` — pass `None` to get options for all configurations.
-
-```rust
-let opts = client.get_video_source_configuration_options(media_url, Some(&token)).await?;
-if let Some(br) = &opts.bounds_range {
-    println!("width:  [{} – {}]", br.width_range.min, br.width_range.max);
-    println!("height: [{} – {}]", br.height_range.min, br.height_range.max);
-}
-```
-
----
-
-## Video Encoder methods
-
-### `get_video_encoder_configurations(media_url) -> Result<Vec<VideoEncoderConfiguration>, OnvifError>`
-
-Lists all encoder configurations (codec, resolution, frame rate, bitrate).
-
-### `get_video_encoder_configuration(media_url, token) -> Result<VideoEncoderConfiguration, OnvifError>`
-
-Retrieves a single encoder configuration by token.
-
-```rust
-let enc = client.get_video_encoder_configuration(media_url, &token).await?;
-println!("{} {} @ {} fps, {} kbps",
-    enc.encoding, enc.resolution,
-    enc.rate_control.as_ref().map(|r| r.frame_rate_limit).unwrap_or(0),
-    enc.rate_control.as_ref().map(|r| r.bitrate_limit).unwrap_or(0));
-if let Some(h) = &enc.h264 {
-    println!("  H.264 profile={} gop={}", h.profile, h.gov_length);
-}
-```
-
-**`VideoEncoderConfiguration` fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `token` | `String` | Opaque config token |
-| `name` | `String` | Human-readable name |
-| `encoding` | `VideoEncoding` | `Jpeg` / `H264` / `H265` / `Other(String)` |
-| `resolution` | `Resolution` | Output resolution |
-| `quality` | `f32` | Encoder quality level (range from options) |
-| `rate_control` | `Option<VideoRateControl>` | `frame_rate_limit`, `encoding_interval`, `bitrate_limit` (kbps) |
-| `h264` | `Option<H264Configuration>` | `gov_length`, `profile` (e.g. `"High"`) |
-| `h265` | `Option<H265Configuration>` | `gov_length`, `profile` |
-
----
-
-### `set_video_encoder_configuration(media_url, config) -> Result<(), OnvifError>`
-
-Writes a modified `VideoEncoderConfiguration` back to the device.
+### Video source and encoder configurations
+
+| Method | Description |
+|--------|-------------|
+| `get_video_sources(media_url)` | Physical video inputs |
+| `get_video_source_configurations(media_url)` | Crop/position window configs |
+| `get_video_source_configuration(media_url, token)` | Single VSC by token |
+| `set_video_source_configuration(media_url, config)` | Write VSC back to device |
+| `get_video_source_configuration_options(media_url, token)` | Valid bounds ranges |
+| `get_video_encoder_configurations(media_url)` | Codec / resolution / bitrate configs |
+| `get_video_encoder_configuration(media_url, token)` | Single VEC by token |
+| `set_video_encoder_configuration(media_url, config)` | Write VEC back to device |
+| `get_video_encoder_configuration_options(media_url, token)` | Valid resolution/bitrate/fps ranges |
 
 ```rust
 let mut enc = client.get_video_encoder_configuration(media_url, &token).await?;
 if let Some(rc) = enc.rate_control.as_mut() {
     rc.bitrate_limit = 2048;   // 2 Mbps
-    rc.frame_rate_limit = 15;
 }
 client.set_video_encoder_configuration(media_url, &enc).await?;
 ```
 
 ---
 
-### `get_video_encoder_configuration_options(media_url, config_token) -> Result<VideoEncoderConfigurationOptions, OnvifError>`
-
-Returns valid parameter ranges for `SetVideoEncoderConfiguration`. `config_token` is `Option<&str>`.
-
-```rust
-let opts = client.get_video_encoder_configuration_options(media_url, Some(&token)).await?;
-
-if let Some(h264) = &opts.h264 {
-    println!("Resolutions: {}", h264.resolutions.iter()
-        .map(|r| r.to_string()).collect::<Vec<_>>().join(", "));
-    println!("Profiles: {}", h264.profiles.join(", "));
-    if let Some(br) = h264.bitrate_range {
-        println!("Bitrate: {} – {} kbps", br.min, br.max);
-    }
-}
-if let Some(qr) = opts.quality_range {
-    println!("Quality: {:.0} – {:.0}", qr.min, qr.max);
-}
-```
-
-**`VideoEncoderConfigurationOptions` fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `quality_range` | `Option<FloatRange>` | Valid quality values (`min`, `max`) |
-| `jpeg` | `Option<JpegOptions>` | JPEG resolutions, frame rate range, interval range |
-| `h264` | `Option<H264Options>` | H.264 resolutions, profiles, gop/fps/bitrate ranges |
-| `h265` | `Option<H265Options>` | H.265 resolutions, profiles, gop/fps/bitrate ranges |
-
----
-
 ## Media2 methods
 
-ONVIF Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 support and a simplified encoder configuration structure. All Media2 methods take `media2_url` from `caps.media2_url`.
+Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 support and a simplified encoder config structure. All Media2 methods use `media2_url`.
 
 ### Media1 vs Media2 key differences
 
-| Feature | Media1 (`trt:`) | Media2 (`tr2:`) |
-|---------|----------------|----------------|
+| Feature | Media1 | Media2 |
+|---------|--------|--------|
 | H.265 | Via `Other(String)` | Native `VideoEncoding::H265` |
-| Encoder config | Nested `H264`/`H265` sub-struct | **Flat** — `gov_length` and `profile` at top level |
-| Rate control | `frame_rate_limit` + `encoding_interval` + `bitrate_limit` | `frame_rate_limit` + `bitrate_limit` only |
-| `GetStreamUri` response | `<MediaUri>` wrapper with expiry fields | Just `<Uri>` string |
-| `Set` operations | Require `<ForcePersistence>true` | No `ForcePersistence` |
-| Encoder options | Separate JPEG/H264/H265 blocks | One `<Options>` element per encoding |
-
-### Discovering the Media2 URL
-
-Many cameras do not include the Media2 URL in `GetCapabilities`. Use `GetServices` as a fallback:
-
-```rust
-let caps = client.get_capabilities().await?;
-let media2_url = match caps.media2_url.clone() {
-    Some(url) => url,
-    None => client.get_services().await?
-        .into_iter()
-        .find(|s| s.is_media2())
-        .map(|s| s.url)
-        .ok_or_else(|| /* handle unsupported */ )?,
-};
-```
+| Encoder config | Nested `H264`/`H265` sub-struct | Flat — `gov_length` and `profile` at top level |
+| `GetStreamUri` response | `<MediaUri>` wrapper | Just `<Uri>` string |
+| Write operations | Require `<ForcePersistence>true` | No `ForcePersistence` |
 
 ### Media2 method reference
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `get_profiles_media2(url)` | `Vec<MediaProfile2>` | List profiles; includes bound video source / encoder tokens |
-| `get_stream_uri_media2(url, profile_token)` | `String` | RTSP URI |
-| `get_snapshot_uri_media2(url, profile_token)` | `String` | HTTP snapshot URI |
-| `get_video_source_configurations_media2(url)` | `Vec<VideoSourceConfiguration>` | Same type as Media1 |
-| `set_video_source_configuration_media2(url, config)` | `()` | No ForcePersistence |
-| `get_video_source_configuration_options_media2(url, token)` | `VideoSourceConfigurationOptions` | Same type as Media1 |
+| `get_profiles_media2(url)` | `Vec<MediaProfile2>` | List profiles |
+| `get_stream_uri_media2(url, token)` | `String` | RTSP URI |
+| `get_snapshot_uri_media2(url, token)` | `String` | HTTP snapshot URI |
+| `get_video_source_configurations_media2(url)` | `Vec<VideoSourceConfiguration>` | |
+| `set_video_source_configuration_media2(url, config)` | `()` | |
+| `get_video_source_configuration_options_media2(url, token)` | `VideoSourceConfigurationOptions` | |
 | `get_video_encoder_configurations_media2(url)` | `Vec<VideoEncoderConfiguration2>` | Flat H.265-capable config |
-| `get_video_encoder_configuration_media2(url, token)` | `VideoEncoderConfiguration2` | Single config by token |
-| `set_video_encoder_configuration_media2(url, config)` | `()` | Write encoder config |
-| `get_video_encoder_configuration_options_media2(url, token)` | `VideoEncoderConfigurationOptions2` | Per-encoding option sets |
-| `get_video_encoder_instances_media2(url, config_token)` | `VideoEncoderInstances` | Encoder capacity per source |
+| `get_video_encoder_configuration_media2(url, token)` | `VideoEncoderConfiguration2` | |
+| `set_video_encoder_configuration_media2(url, config)` | `()` | |
+| `get_video_encoder_configuration_options_media2(url, token)` | `VideoEncoderConfigurationOptions2` | |
+| `get_video_encoder_instances_media2(url, config_token)` | `VideoEncoderInstances` | Encoder capacity |
 | `create_profile_media2(url, name)` | `String` | Create profile, returns new token |
-| `delete_profile_media2(url, token)` | `()` | Delete a non-fixed profile |
+| `delete_profile_media2(url, token)` | `()` | |
 
-### H.265 encoder config example
+---
+
+## PTZ methods
+
+All PTZ methods use `ptz_url` from `caps.ptz_url`. Coordinates use the ONVIF normalised range: pan/tilt `[-1.0, 1.0]`, zoom `[0.0, 1.0]`.
+
+| Method | Description |
+|--------|-------------|
+| `ptz_absolute_move(ptz_url, profile_token, pan, tilt, zoom)` | Move to an absolute position |
+| `ptz_relative_move(ptz_url, profile_token, pan, tilt, zoom)` | Move by an offset |
+| `ptz_continuous_move(ptz_url, profile_token, pan, tilt, zoom)` | Start continuous movement |
+| `ptz_stop(ptz_url, profile_token)` | Stop all movement |
+| `ptz_get_presets(ptz_url, profile_token)` | List all saved preset positions |
+| `ptz_goto_preset(ptz_url, profile_token, preset_token)` | Move to a saved preset |
+| `ptz_set_preset(ptz_url, profile_token, name, token)` | Save current position as preset |
+| `ptz_remove_preset(ptz_url, profile_token, preset_token)` | Delete a preset |
+| `ptz_get_status(ptz_url, profile_token)` | Current pan/tilt/zoom position and move state |
 
 ```rust
-// Read all encoder configs
-let configs = client.get_video_encoder_configurations_media2(&media2_url).await?;
+// Save current position
+let token = client.ptz_set_preset(ptz_url, &profile, Some("Entrance"), None).await?;
 
-// Find the H.265 stream and lower its bitrate
-let mut enc = configs.into_iter()
-    .find(|c| c.encoding == VideoEncoding::H265)
-    .expect("no H.265 encoder found");
-
-if let Some(rc) = enc.rate_control.as_mut() {
-    rc.bitrate_limit = 4096;   // 4 Mbps
-}
-client.set_video_encoder_configuration_media2(&media2_url, &enc).await?;
+// Query position
+let status = client.ptz_get_status(ptz_url, &profile).await?;
+println!("pan={:?} tilt={:?} zoom={:?} state={}",
+    status.pan, status.tilt, status.zoom, status.pan_tilt_status);
 ```
 
-**`VideoEncoderConfiguration2` fields:**
+**`PtzStatus` fields:** `pan`, `tilt`, `zoom` (`Option<f32>`), `pan_tilt_status`, `zoom_status` (`String` — `"IDLE"` or `"MOVING"`).
+
+---
+
+## Imaging Service methods
+
+All imaging methods use `imaging_url` from `caps.imaging_url` and require a `video_source_token`.
+
+| Method | Description |
+|--------|-------------|
+| `get_imaging_settings(imaging_url, source_token)` | Current brightness, contrast, IR cut, white balance, exposure |
+| `set_imaging_settings(imaging_url, source_token, settings)` | Write modified settings back |
+| `get_imaging_options(imaging_url, source_token)` | Valid ranges for each setting |
+
+```rust
+let mut s = client.get_imaging_settings(&imaging_url, &source_token).await?;
+s.brightness = Some(70.0);
+s.ir_cut_filter = Some("AUTO".into());
+client.set_imaging_settings(&imaging_url, &source_token, &s).await?;
+```
+
+**`ImagingSettings` fields:** `brightness`, `color_saturation`, `contrast`, `sharpness` (`Option<f32>`), `ir_cut_filter`, `white_balance_mode`, `exposure_mode` (`Option<String>`).
+
+---
+
+## Events Service methods
+
+ONVIF Events use a pull-point subscription model. All operations start with `events_url` from `caps.events.url`.
+
+```rust
+// 1. Discover available topics
+let props = client.get_event_properties(&events_url).await?;
+for topic in &props.topics {
+    println!("Topic: {topic}");    // e.g. "VideoSource/MotionAlarm"
+}
+
+// 2. Subscribe
+let sub = client.create_pull_point_subscription(
+    &events_url,
+    None,           // filter: None = all topics
+    Some("PT60S"),  // expire after 60 seconds
+).await?;
+println!("Subscription URL: {}", sub.reference_url);
+
+// 3. Poll for events
+let msgs = client.pull_messages(&sub.reference_url, "PT5S", 50).await?;
+for m in &msgs {
+    println!("[{}] {} — data={:?}", m.utc_time, m.topic, m.data);
+}
+
+// 4. Extend subscription
+let new_time = client.renew_subscription(&sub.reference_url, "PT60S").await?;
+
+// 5. Cancel
+client.unsubscribe(&sub.reference_url).await?;
+```
+
+**`PullPointSubscription` fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `token` | `String` | Opaque config token |
-| `encoding` | `VideoEncoding` | `H264` / `H265` / `Jpeg` / `Other` |
-| `resolution` | `Resolution` | Output resolution |
-| `quality` | `f32` | Encoder quality (see options for range) |
-| `rate_control` | `Option<VideoRateControl2>` | `frame_rate_limit`, `bitrate_limit` (kbps) |
-| `gov_length` | `Option<u32>` | GOP / keyframe interval in frames |
-| `profile` | `Option<String>` | Codec profile: `"Main"`, `"High"`, etc. |
+| `reference_url` | `String` | Endpoint for `pull_messages`, `renew_subscription`, `unsubscribe` |
+| `termination_time` | `String` | ISO-8601 timestamp when the subscription expires |
 
-### Encoder options example
+**`NotificationMessage` fields:**
 
-```rust
-let opts = client
-    .get_video_encoder_configuration_options_media2(&media2_url, None)
-    .await?;
+| Field | Type | Description |
+|-------|------|-------------|
+| `topic` | `String` | Event topic path (e.g. `tns1:VideoSource/MotionAlarm`) |
+| `utc_time` | `String` | Event timestamp from `Message/@UtcTime` |
+| `source` | `HashMap<String, String>` | Source `SimpleItem` pairs (e.g. `VideoSourceToken = "VideoSource_1"`) |
+| `data` | `HashMap<String, String>` | Data `SimpleItem` pairs (e.g. `IsMotion = "true"`) |
 
-for opt in &opts.options {
-    println!("=== {} ===", opt.encoding);
-    for r in &opt.resolutions { print!("  {r}"); }
-    println!();
-    if let Some(br) = opt.bitrate_range {
-        println!("  bitrate: {} – {} kbps", br.min, br.max);
-    }
-    println!("  profiles: {}", opt.profiles.join(", "));
-}
-```
+**`EventProperties` fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `topics` | `Vec<String>` | Flattened topic paths (e.g. `"VideoSource/MotionAlarm"`, `"RuleEngine/Cell/Motion"`) |
 
 ---
 
 ## Error handling
 
-All API methods return `Result<T, OnvifError>`. The error has two variants:
+All API methods return `Result<T, OnvifError>`:
 
 ```rust
 pub enum OnvifError {
@@ -559,8 +395,6 @@ pub enum OnvifError {
 }
 ```
 
-### Full match example
-
 ```rust
 use oxvif::error::OnvifError;
 use oxvif::soap::SoapError;
@@ -568,51 +402,24 @@ use oxvif::transport::TransportError;
 
 match client.get_capabilities().await {
     Ok(caps) => { /* use caps */ }
-
-    // Network unreachable, TLS error, timeout, etc.
-    Err(OnvifError::Transport(TransportError::Http(e))) => {
-        eprintln!("Network error: {e}");
-    }
-
-    // Server replied with 401, 403, 404, etc.
+    Err(OnvifError::Transport(TransportError::Http(e))) => eprintln!("Network: {e}"),
     Err(OnvifError::Transport(TransportError::HttpStatus { status, body })) => {
         eprintln!("HTTP {status}: {body}");
     }
-
-    // Device returned a SOAP <s:Fault> (wrong credentials, unsupported operation)
     Err(OnvifError::Soap(SoapError::Fault { code, reason })) => {
         eprintln!("SOAP Fault [{code}]: {reason}");
     }
-
-    Err(e) => eprintln!("Other error: {e}"),
+    Err(e) => eprintln!("Other: {e}"),
 }
 ```
 
-### `TransportError` variants
-
-| Variant | Trigger |
-|---------|---------|
-| `Http(reqwest::Error)` | Network failure, TLS handshake error, timeout |
-| `HttpStatus { status, body }` | HTTP response other than 200 or 500 |
-
-> HTTP 500 is passed through as `Ok` so the SOAP layer can extract the `<s:Fault>` detail.
-
-### `SoapError` variants
-
-| Variant | Meaning |
-|---------|---------|
-| `XmlParse(String)` | Malformed XML in the response |
-| `MissingBody` | Response envelope has no `<s:Body>` |
-| `MissingField(&'static str)` | Expected XML element was absent |
-| `UnexpectedResponse(String)` | Response element name did not match |
-| `Fault { code, reason }` | Device returned `<s:Fault>` |
-| `InvalidValue(String)` | A field value could not be parsed |
+> HTTP 500 is treated as `Ok` so the SOAP layer can parse the `<s:Fault>` detail.
 
 ---
 
 ## Testing without a real camera
 
-Implement the `Transport` trait to inject any response you like:
+Implement the `Transport` trait to inject any response:
 
 ```rust
 use oxvif::transport::{Transport, TransportError};
@@ -632,11 +439,7 @@ impl Transport for MockTransport {
 
 let client = OnvifClient::new("http://ignored")
     .with_transport(Arc::new(MockTransport { xml: MY_FIXTURE_XML.into() }));
-
-let caps = client.get_capabilities().await.unwrap();
 ```
-
-Run the built-in unit tests:
 
 ```sh
 cargo test
@@ -646,37 +449,26 @@ cargo test
 
 ## Running the built-in examples
 
-**Step 1** — copy the example env file and fill in your camera details:
-
 ```sh
-cp .env.example .env
+cp .env.example .env   # fill in ONVIF_URL, ONVIF_USERNAME, ONVIF_PASSWORD
 ```
 
-`.env` contents:
-
 ```sh
-ONVIF_URL=http://192.168.1.100/onvif/device_service
-ONVIF_USERNAME=admin
-ONVIF_PASSWORD=your_password
+cargo run -- full-workflow          # end-to-end: all implemented operations
+cargo run -- device-info            # manufacturer, model, firmware
+cargo run -- device-management      # hostname, NTP, GetServices
+cargo run -- stream-uris            # tabular RTSP URI listing
+cargo run -- snapshot-uris          # tabular HTTP snapshot URI listing
+cargo run -- system-datetime        # device clock and UTC offset
+cargo run -- ptz-presets            # list all PTZ presets
+cargo run -- ptz-status             # current pan/tilt/zoom position
+cargo run -- video-config           # video sources, encoder configs (Media1)
+cargo run -- video-config-media2    # H.265 encoder configs (Media2)
+cargo run -- imaging                # brightness, contrast, exposure settings
+cargo run -- events                 # subscribe, pull, renew, unsubscribe
+cargo run -- discovery              # WS-Discovery UDP multicast probe
+cargo run -- error-handling         # typed error variant matching demo
 ```
-
-`.env` is listed in `.gitignore` and will never be committed.
-
-**Step 2** — run an example:
-
-```sh
-cargo run -- full-workflow     # capabilities → profiles → RTSP URIs
-cargo run -- device-info       # manufacturer, model, firmware
-cargo run -- stream-uris       # tabular RTSP URI listing
-cargo run -- snapshot-uris     # tabular HTTP snapshot URI listing
-cargo run -- system-datetime   # device clock and UTC offset
-cargo run -- ptz-presets       # list all PTZ presets (requires PTZ camera)
-cargo run -- video-config         # video sources, encoder configs and options (Media1)
-cargo run -- video-config-media2  # H.265 encoder configs and options (Media2)
-cargo run -- error-handling       # typed error matching demo
-```
-
-`ONVIF_USERNAME` and `ONVIF_PASSWORD` are optional (default: `admin` / empty).
 
 ---
 
@@ -684,62 +476,116 @@ cargo run -- error-handling       # typed error matching demo
 
 ```
 src/
-├── lib.rs            Public API surface and crate-level docs
-├── client.rs         OnvifClient — all ONVIF operations
-├── types.rs          Response structs (Capabilities, DeviceInfo, …)
-├── error.rs          OnvifError unified error type
-├── transport.rs      Transport trait + HttpTransport (reqwest + rustls)
-└── soap/
-    ├── envelope.rs   SOAP 1.2 envelope builder
-    ├── security.rs   WS-Security UsernameToken / PasswordDigest
-    ├── xml.rs        Namespace-stripping XML parser (XmlNode)
-    └── error.rs      SoapError
+├── lib.rs               Public API surface and re-exports
+├── client.rs            OnvifClient — all ONVIF operations
+├── discovery.rs         WS-Discovery UDP multicast probe
+├── error.rs             OnvifError unified error type
+├── transport.rs         Transport trait + HttpTransport (reqwest + rustls)
+├── soap/
+│   ├── mod.rs
+│   ├── envelope.rs      SOAP 1.2 envelope builder
+│   ├── security.rs      WS-Security UsernameToken / PasswordDigest
+│   ├── xml.rs           Namespace-stripping XML parser (XmlNode)
+│   └── error.rs         SoapError
+├── types/
+│   ├── mod.rs           XML helper functions
+│   ├── capabilities.rs  Capabilities, service sub-structs
+│   ├── device.rs        DeviceInfo, SystemDateTime, Hostname, NtpInfo
+│   ├── events.rs        PullPointSubscription, NotificationMessage, EventProperties
+│   ├── imaging.rs       ImagingSettings, ImagingOptions
+│   ├── media.rs         MediaProfile, StreamUri, SnapshotUri
+│   ├── ptz.rs           PtzPreset, PtzStatus
+│   └── video.rs         VideoSource, VideoEncoder configs and options
+└── tests/
+    ├── client_tests.rs  181 unit tests covering all client methods
+    └── types_tests.rs   XML parsing unit tests
 ```
 
 ---
 
 ## Implemented ONVIF operations
 
-| Operation | Service | Status |
-|-----------|---------|--------|
-| `GetCapabilities` | Device | ✓ |
-| `GetDeviceInformation` | Device | ✓ |
-| `GetSystemDateAndTime` | Device | ✓ |
-| `GetProfiles` | Media | ✓ |
-| `GetStreamUri` | Media | ✓ |
-| `GetSnapshotUri` | Media | ✓ |
-| `AbsoluteMove` | PTZ | ✓ |
-| `RelativeMove` | PTZ | ✓ |
-| `ContinuousMove` | PTZ | ✓ |
-| `Stop` | PTZ | ✓ |
-| `GetServices` | Device | ✓ |
-| `GetPresets` | PTZ | ✓ |
-| `GotoPreset` | PTZ | ✓ |
-| `GetVideoSources` | Media | ✓ |
-| `GetVideoSourceConfigurations` | Media | ✓ |
-| `GetVideoSourceConfiguration` | Media | ✓ |
-| `SetVideoSourceConfiguration` | Media | ✓ |
-| `GetVideoSourceConfigurationOptions` | Media | ✓ |
-| `GetVideoEncoderConfigurations` | Media | ✓ |
-| `GetVideoEncoderConfiguration` | Media | ✓ |
-| `SetVideoEncoderConfiguration` | Media | ✓ |
-| `GetVideoEncoderConfigurationOptions` | Media | ✓ |
-| `GetProfiles` | Media2 | ✓ |
-| `GetStreamUri` | Media2 | ✓ |
-| `GetSnapshotUri` | Media2 | ✓ |
-| `GetVideoSourceConfigurations` | Media2 | ✓ |
-| `SetVideoSourceConfiguration` | Media2 | ✓ |
-| `GetVideoSourceConfigurationOptions` | Media2 | ✓ |
-| `GetVideoEncoderConfigurations` | Media2 | ✓ |
-| `GetVideoEncoderConfiguration` | Media2 | ✓ |
-| `SetVideoEncoderConfiguration` | Media2 | ✓ |
-| `GetVideoEncoderConfigurationOptions` | Media2 | ✓ |
-| `GetVideoEncoderInstances` | Media2 | ✓ |
-| `CreateProfile` | Media2 | ✓ |
-| `DeleteProfile` | Media2 | ✓ |
-| Events (Subscribe / Pull) | Events | planned |
-| `GetAudioSources` / encoder configs | Media | planned |
-| WS-Discovery | UDP multicast | planned |
+### Device Service
+
+| Operation | Status |
+|-----------|--------|
+| `GetCapabilities` | ✓ |
+| `GetServices` | ✓ |
+| `GetDeviceInformation` | ✓ |
+| `GetSystemDateAndTime` | ✓ |
+| `GetHostname` / `SetHostname` | ✓ |
+| `GetNTP` / `SetNTP` | ✓ |
+| `SystemReboot` | ✓ |
+
+### Media Service (Media1)
+
+| Operation | Status |
+|-----------|--------|
+| `GetProfiles` / `GetProfile` | ✓ |
+| `CreateProfile` / `DeleteProfile` | ✓ |
+| `AddVideoEncoderConfiguration` / `RemoveVideoEncoderConfiguration` | ✓ |
+| `AddVideoSourceConfiguration` / `RemoveVideoSourceConfiguration` | ✓ |
+| `GetStreamUri` | ✓ |
+| `GetSnapshotUri` | ✓ |
+| `GetVideoSources` | ✓ |
+| `GetVideoSourceConfigurations` / `GetVideoSourceConfiguration` | ✓ |
+| `SetVideoSourceConfiguration` | ✓ |
+| `GetVideoSourceConfigurationOptions` | ✓ |
+| `GetVideoEncoderConfigurations` / `GetVideoEncoderConfiguration` | ✓ |
+| `SetVideoEncoderConfiguration` | ✓ |
+| `GetVideoEncoderConfigurationOptions` | ✓ |
+| Audio source / encoder operations | — |
+
+### Media2 Service
+
+| Operation | Status |
+|-----------|--------|
+| `GetProfiles` | ✓ |
+| `CreateProfile` / `DeleteProfile` | ✓ |
+| `GetStreamUri` / `GetSnapshotUri` | ✓ |
+| `GetVideoSourceConfigurations` / `SetVideoSourceConfiguration` | ✓ |
+| `GetVideoSourceConfigurationOptions` | ✓ |
+| `GetVideoEncoderConfigurations` / `GetVideoEncoderConfiguration` | ✓ |
+| `SetVideoEncoderConfiguration` | ✓ |
+| `GetVideoEncoderConfigurationOptions` | ✓ |
+| `GetVideoEncoderInstances` | ✓ |
+
+### PTZ Service
+
+| Operation | Status |
+|-----------|--------|
+| `AbsoluteMove` / `RelativeMove` / `ContinuousMove` | ✓ |
+| `Stop` | ✓ |
+| `GetPresets` / `GotoPreset` | ✓ |
+| `SetPreset` / `RemovePreset` | ✓ |
+| `GetStatus` | ✓ |
+| `GetConfigurations` / `SetConfiguration` / `GetConfigurationOptions` | — |
+
+### Imaging Service
+
+| Operation | Status |
+|-----------|--------|
+| `GetImagingSettings` / `SetImagingSettings` | ✓ |
+| `GetOptions` | ✓ |
+| `Move` (focus/iris) | — |
+
+### Events Service
+
+| Operation | Status |
+|-----------|--------|
+| `GetEventProperties` | ✓ |
+| `CreatePullPointSubscription` | ✓ |
+| `PullMessages` | ✓ |
+| `Renew` | ✓ |
+| `Unsubscribe` | ✓ |
+| WS-BaseNotification push (Subscribe) | — |
+
+### WS-Discovery
+
+| Operation | Status |
+|-----------|--------|
+| UDP multicast `Probe` | ✓ |
+| `Hello` / `Bye` passive listening | — |
 
 ---
 
