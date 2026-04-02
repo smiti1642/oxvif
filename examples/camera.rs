@@ -11,6 +11,8 @@
 //! cargo run --example camera -- system-datetime
 //! cargo run --example camera -- ptz-presets
 //! cargo run --example camera -- ptz-status
+//! cargo run --example camera -- ptz-config
+//! cargo run --example camera -- audio
 //! cargo run --example camera -- video-config
 //! cargo run --example camera -- video-config-media2
 //! cargo run --example camera -- imaging
@@ -70,6 +72,8 @@ async fn main() {
         "system-datetime" => system_datetime(&cfg).await,
         "ptz-presets" => ptz_presets(&cfg).await,
         "ptz-status" => ptz_status(&cfg).await,
+        "ptz-config" => ptz_config(&cfg).await,
+        "audio" => audio_example(&cfg).await,
         "video-config" => video_config(&cfg).await,
         "video-config-media2" => video_config_media2(&cfg).await,
         "imaging" => imaging(&cfg).await,
@@ -103,6 +107,8 @@ fn print_help() {
     println!("  system-datetime      Device clock and UTC offset");
     println!("  ptz-presets          List all PTZ presets");
     println!("  ptz-status           Current PTZ pan/tilt/zoom position");
+    println!("  ptz-config           PTZ configurations and nodes");
+    println!("  audio                Audio sources and encoder configurations");
     println!("  video-config         Video sources, encoder configs, options (Media1)");
     println!("  video-config-media2  Media2 profiles, H.265 encoder configs");
     println!("  imaging              Imaging settings and parameter ranges");
@@ -1625,6 +1631,122 @@ async fn error_handling_example(cfg: &Config) -> Result<(), OnvifError> {
         Err(e) => {
             eprintln!("Unexpected error: {e}");
         }
+    }
+
+    Ok(())
+}
+
+// ── PTZ Configuration ─────────────────────────────────────────────────────────
+
+async fn ptz_config(cfg: &Config) -> Result<(), OnvifError> {
+    let (client, caps) = connect(cfg).await?;
+    let ptz_url = match &caps.ptz_url {
+        Some(url) => url.clone(),
+        None => {
+            println!("PTZ service not available on this device.");
+            return Ok(());
+        }
+    };
+
+    println!("=== PTZ Nodes ===");
+    match client.ptz_get_nodes(&ptz_url).await {
+        Ok(nodes) => {
+            for n in &nodes {
+                println!(
+                    "  [{}] {} — max_presets={} home_supported={}",
+                    n.token, n.name, n.max_presets, n.home_supported
+                );
+            }
+        }
+        Err(e) => println!("  GetNodes not supported: {e}"),
+    }
+
+    println!("\n=== PTZ Configurations ===");
+    let cfgs = client.ptz_get_configurations(&ptz_url).await?;
+    for c in &cfgs {
+        println!(
+            "  [{}] {} — node={} timeout={:?}",
+            c.token, c.name, c.node_token, c.default_ptz_timeout
+        );
+        if let Some(ref opts) = c.pan_tilt_limits {
+            println!("    pan_tilt x={:?} y={:?}", opts.x_range, opts.y_range);
+        }
+    }
+
+    if let Some(first) = cfgs.first() {
+        println!("\n=== PTZ Configuration Options ({}) ===", first.token);
+        match client
+            .ptz_get_configuration_options(&ptz_url, &first.token)
+            .await
+        {
+            Ok(opts) => println!(
+                "  timeout min={:?} max={:?}",
+                opts.ptz_timeout_min, opts.ptz_timeout_max
+            ),
+            Err(e) => println!("  GetConfigurationOptions not supported: {e}"),
+        }
+    }
+
+    Ok(())
+}
+
+// ── Audio ─────────────────────────────────────────────────────────────────────
+
+async fn audio_example(cfg: &Config) -> Result<(), OnvifError> {
+    let (client, caps) = connect(cfg).await?;
+    let media_url = caps.media.url.as_deref().unwrap_or("").to_string();
+
+    println!("=== Audio Sources ===");
+    match client.get_audio_sources(&media_url).await {
+        Ok(sources) => {
+            if sources.is_empty() {
+                println!("  No audio sources found.");
+            }
+            for s in &sources {
+                println!("  [{}] channels={}", s.token, s.channels);
+            }
+        }
+        Err(e) => println!("  GetAudioSources not supported: {e}"),
+    }
+
+    println!("\n=== Audio Source Configurations ===");
+    match client.get_audio_source_configurations(&media_url).await {
+        Ok(cfgs) => {
+            for c in &cfgs {
+                println!("  [{}] {} — source={}", c.token, c.name, c.source_token);
+            }
+        }
+        Err(e) => println!("  GetAudioSourceConfigurations not supported: {e}"),
+    }
+
+    println!("\n=== Audio Encoder Configurations ===");
+    match client.get_audio_encoder_configurations(&media_url).await {
+        Ok(cfgs) => {
+            for c in &cfgs {
+                println!(
+                    "  [{}] {} — encoding={} bitrate={}kbps sample_rate={}kHz",
+                    c.token, c.name, c.encoding, c.bitrate, c.sample_rate
+                );
+            }
+            if let Some(first) = cfgs.first() {
+                println!("\n=== Audio Encoder Options ({}) ===", first.token);
+                match client
+                    .get_audio_encoder_configuration_options(&media_url, &first.token)
+                    .await
+                {
+                    Ok(opts) => {
+                        for o in &opts.options {
+                            println!(
+                                "  {} bitrates={:?} sample_rates={:?}",
+                                o.encoding, o.bitrate_list, o.sample_rate_list
+                            );
+                        }
+                    }
+                    Err(e) => println!("  GetAudioEncoderConfigurationOptions not supported: {e}"),
+                }
+            }
+        }
+        Err(e) => println!("  GetAudioEncoderConfigurations not supported: {e}"),
     }
 
     Ok(())
