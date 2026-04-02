@@ -13,6 +13,9 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
                              ──► Imaging  (brightness, contrast, exposure, IR cut, focus move/stop)
                              ──► OSD      (create, read, update, delete on-screen display elements)
                              ──► Events   (subscribe, pull, renew, unsubscribe)
+                             ──► Recording (list stored recordings)
+                             ──► Search   (find recordings by time/scope)
+                             ──► Replay   (RTSP URI for playback)
 ```
 
 - Async-first (`tokio` + `reqwest`)
@@ -20,7 +23,7 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 218 unit tests + 9 doc tests
+- 228 unit tests + 9 doc tests
 
 ---
 
@@ -54,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-oxvif = "0.3.0"
+oxvif = "0.4.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -188,6 +191,19 @@ let info = client.get_device_info().await?;
 ### `system_reboot() -> Result<String, OnvifError>`
 
 Initiates a device reboot. Returns the device's informational message.
+
+### `get_scopes() -> Result<Vec<String>, OnvifError>`
+
+Returns the device's scope URIs — strings that describe the device's name,
+location, hardware model, and capabilities
+(e.g. `"onvif://www.onvif.org/name/Camera1"`). Completes Profile S coverage.
+
+```rust
+let scopes = client.get_scopes().await?;
+for s in &scopes {
+    println!("{s}");
+}
+```
 
 ---
 
@@ -482,6 +498,80 @@ client.unsubscribe(&sub.reference_url).await?;
 | Field | Type | Description |
 |-------|------|-------------|
 | `topics` | `Vec<String>` | Flattened topic paths (e.g. `"VideoSource/MotionAlarm"`, `"RuleEngine/Cell/Motion"`) |
+
+---
+
+## Recording Service methods
+
+Access recordings stored on the device (NVR/DVR). Obtain `recording_url` from
+`get_services()` — look for the service with namespace
+`http://www.onvif.org/ver10/recording/wsdl`.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_recordings(recording_url)` | `Vec<RecordingItem>` | List all stored recordings |
+
+**`RecordingItem` fields:** `token`, `source` (`RecordingSourceInformation`), `content`, `earliest_recording`, `latest_recording` (`Option<String>` ISO-8601), `recording_status` (`"Recording"`, `"Stopped"`, etc.), `tracks` (`Vec<RecordingTrack>`).
+
+---
+
+## Search Service methods
+
+Search through stored recordings. Obtain `search_url` from `get_services()` —
+namespace `http://www.onvif.org/ver10/search/wsdl`.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `find_recordings(search_url, max_matches, keep_alive)` | `String` (search token) | Start an async recording search |
+| `get_recording_search_results(search_url, token, max_results, wait_time)` | `FindRecordingResults` | Poll results (call until `search_state == "Completed"`) |
+| `end_search(search_url, token)` | `()` | Release search session on device |
+
+```rust
+// Find all recordings, collect results, play back the first one
+let search_url   = /* from get_services() */;
+let replay_url   = /* from get_services() */;
+
+let token = client.find_recordings(&search_url, None, "PT60S").await?;
+
+let results = loop {
+    let r = client.get_recording_search_results(&search_url, &token, 100, "PT5S").await?;
+    if r.search_state == "Completed" { break r; }
+};
+client.end_search(&search_url, &token).await?;
+
+for rec in &results.recording_information {
+    println!("[{}] {} — {} to {}",
+        rec.recording_token, rec.source_name,
+        rec.earliest_recording.as_deref().unwrap_or("?"),
+        rec.latest_recording.as_deref().unwrap_or("?"));
+}
+```
+
+**`FindRecordingResults` fields:** `search_state` (`"Queued"`, `"Searching"`, `"Completed"`), `recording_information` (`Vec<RecordingInformation>`).
+
+**`RecordingInformation` fields:** `recording_token`, `source_name`, `earliest_recording`, `latest_recording`, `content`, `recording_status`.
+
+---
+
+## Replay Service methods
+
+Stream a stored recording over RTSP. Obtain `replay_url` from `get_services()` —
+namespace `http://www.onvif.org/ver10/replay/wsdl`.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get_replay_uri(replay_url, recording_token, stream_type, protocol)` | `String` | RTSP URI for playback |
+
+```rust
+let uri = client.get_replay_uri(
+    &replay_url,
+    &rec.recording_token,
+    "RTP-Unicast",
+    "RTSP",
+).await?;
+println!("Playback: {uri}");
+// Open in VLC: vlc "{uri}"
+```
 
 ---
 

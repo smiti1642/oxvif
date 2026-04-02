@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.0] - 2026-04-02
+
+### Added
+- **Device Service**: `get_scopes` — completes ONVIF Profile S coverage
+- **Recording Service**: `get_recordings`
+- **Search Service**: `find_recordings`, `get_recording_search_results`, `end_search`
+- **Replay Service**: `get_replay_uri`
+- New types: `RecordingItem`, `RecordingSourceInformation`, `RecordingTrack`,
+  `RecordingInformation`, `FindRecordingResults`
+- 12 new unit tests (228 total)
+
+---
+
 ## [0.3.0] - 2026-04-02
 
 ### Added

@@ -9,6 +9,7 @@ mod media;
 mod osd;
 mod ptz;
 mod ptz_config;
+mod recording;
 mod video;
 
 pub use audio::*;
@@ -20,6 +21,7 @@ pub use media::*;
 pub use osd::*;
 pub use ptz::*;
 pub use ptz_config::*;
+pub use recording::*;
 pub use video::*;
 
 use crate::soap::XmlNode;

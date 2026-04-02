@@ -20,6 +20,7 @@
 //! cargo run --example camera -- video-config-media2
 //! cargo run --example camera -- imaging
 //! cargo run --example camera -- events
+//! cargo run --example camera -- recording
 //! cargo run --example camera -- discovery
 //! cargo run --example camera -- error-handling
 //! ```
@@ -84,6 +85,7 @@ async fn main() {
         "video-config-media2" => video_config_media2(&cfg).await,
         "imaging" => imaging(&cfg).await,
         "events" => events(&cfg).await,
+        "recording" => recording_example(&cfg).await,
         "discovery" => discovery_example().await,
         "error-handling" => error_handling_example(&cfg).await,
         _ => {
@@ -122,6 +124,7 @@ fn print_help() {
     println!("  video-config-media2  Media2 profiles, H.265 encoder configs");
     println!("  imaging              Imaging settings and parameter ranges");
     println!("  events               Subscribe, pull, and unsubscribe ONVIF events");
+    println!("  recording            List recordings, search, and get replay URI");
     println!("  discovery            WS-Discovery UDP multicast probe");
     println!("  error-handling       Typed error variant matching demo");
 }
@@ -673,6 +676,90 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
             }
         }
         Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 21. GetScopes ─────────────────────────────────────────────────────────
+    section("GetScopes");
+    match client.get_scopes().await {
+        Ok(scopes) => {
+            println!("  Found {} scope(s)", scopes.len());
+            for s in &scopes {
+                println!("  {s}");
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 22. Recording / Search / Replay ───────────────────────────────────────
+    let services = client.get_services().await.unwrap_or_default();
+    let recording_url = services
+        .iter()
+        .find(|s| s.namespace.contains("recording"))
+        .map(|s| s.url.clone());
+    let search_url = services
+        .iter()
+        .find(|s| s.namespace.contains("search"))
+        .map(|s| s.url.clone());
+    let replay_url = services
+        .iter()
+        .find(|s| s.namespace.contains("replay"))
+        .map(|s| s.url.clone());
+
+    if let Some(ref rec_url) = recording_url {
+        section("GetRecordings");
+        match client.get_recordings(rec_url).await {
+            Ok(recs) => {
+                println!("  Found {} recording(s)", recs.len());
+                for r in recs.iter().take(3) {
+                    println!(
+                        "  [{}] {} — {} to {}",
+                        r.token,
+                        r.source.name,
+                        r.earliest_recording.as_deref().unwrap_or("?"),
+                        r.latest_recording.as_deref().unwrap_or("?")
+                    );
+                }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
+    if let (Some(ref srch_url), Some(ref rpl_url)) = (search_url, replay_url) {
+        section("FindRecordings + GetReplayUri");
+        match client.find_recordings(srch_url, Some(5), "PT30S").await {
+            Ok(token) => {
+                println!("  Search token: {token}");
+                match client
+                    .get_recording_search_results(srch_url, &token, 5, "PT5S")
+                    .await
+                {
+                    Ok(results) => {
+                        println!(
+                            "  State={} recordings={}",
+                            results.search_state,
+                            results.recording_information.len()
+                        );
+                        if let Some(first) = results.recording_information.first() {
+                            match client
+                                .get_replay_uri(
+                                    rpl_url,
+                                    &first.recording_token,
+                                    "RTP-Unicast",
+                                    "RTSP",
+                                )
+                                .await
+                            {
+                                Ok(uri) => println!("  Replay URI: {uri}"),
+                                Err(e) => println!("  GetReplayUri skipped — {e}"),
+                            }
+                        }
+                    }
+                    Err(e) => println!("  GetRecordingSearchResults skipped — {e}"),
+                }
+                let _ = client.end_search(srch_url, &token).await;
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
     }
 
     println!("\n=== Full workflow complete ===");
@@ -2070,5 +2157,103 @@ async fn osd_example(cfg: &Config) -> Result<(), OnvifError> {
     }
 
     let _ = osds;
+    Ok(())
+}
+
+// ── Recording / Search / Replay ───────────────────────────────────────────────
+
+async fn recording_example(cfg: &Config) -> Result<(), OnvifError> {
+    let (client, _caps) = connect(cfg).await?;
+
+    let services = client.get_services().await?;
+    let recording_url = services
+        .iter()
+        .find(|s| s.namespace.contains("recording"))
+        .map(|s| s.url.clone());
+    let search_url = services
+        .iter()
+        .find(|s| s.namespace.contains("search"))
+        .map(|s| s.url.clone());
+    let replay_url = services
+        .iter()
+        .find(|s| s.namespace.contains("replay"))
+        .map(|s| s.url.clone());
+
+    // ── GetRecordings ──────────────────────────────────────────────────────
+    if let Some(ref url) = recording_url {
+        println!("=== GetRecordings ===");
+        match client.get_recordings(url).await {
+            Ok(recs) => {
+                println!("  Found {} recording(s)", recs.len());
+                for r in &recs {
+                    println!(
+                        "  [{}] source='{}' status={}",
+                        r.token, r.source.name, r.recording_status
+                    );
+                    println!(
+                        "    earliest={} latest={}",
+                        r.earliest_recording.as_deref().unwrap_or("—"),
+                        r.latest_recording.as_deref().unwrap_or("—")
+                    );
+                    for t in &r.tracks {
+                        println!("    track [{}] type={}", t.token, t.track_type);
+                    }
+                }
+            }
+            Err(e) => println!("  Not supported: {e}"),
+        }
+    } else {
+        println!("Recording service not found in GetServices response.");
+    }
+
+    // ── FindRecordings → GetRecordingSearchResults → EndSearch ────────────
+    if let (Some(ref srch_url), Some(ref rpl_url)) = (search_url, replay_url) {
+        println!("\n=== FindRecordings ===");
+        match client.find_recordings(srch_url, Some(10), "PT60S").await {
+            Ok(token) => {
+                println!("  Search token: {token}");
+
+                println!("\n=== GetRecordingSearchResults ===");
+                match client
+                    .get_recording_search_results(srch_url, &token, 10, "PT5S")
+                    .await
+                {
+                    Ok(results) => {
+                        println!("  State: {}", results.search_state);
+                        println!("  Found {} result(s)", results.recording_information.len());
+                        for ri in &results.recording_information {
+                            println!(
+                                "  [{}] '{}' {} → {}",
+                                ri.recording_token,
+                                ri.source_name,
+                                ri.earliest_recording.as_deref().unwrap_or("?"),
+                                ri.latest_recording.as_deref().unwrap_or("?")
+                            );
+
+                            println!("\n=== GetReplayUri [{}] ===", ri.recording_token);
+                            match client
+                                .get_replay_uri(rpl_url, &ri.recording_token, "RTP-Unicast", "RTSP")
+                                .await
+                            {
+                                Ok(uri) => println!("  {uri}"),
+                                Err(e) => println!("  Not supported: {e}"),
+                            }
+                        }
+                    }
+                    Err(e) => println!("  Not supported: {e}"),
+                }
+
+                println!("\n=== EndSearch ===");
+                match client.end_search(srch_url, &token).await {
+                    Ok(()) => println!("  Search session released."),
+                    Err(e) => println!("  {e}"),
+                }
+            }
+            Err(e) => println!("  Not supported: {e}"),
+        }
+    } else {
+        println!("\nSearch/Replay services not found in GetServices response.");
+    }
+
     Ok(())
 }
