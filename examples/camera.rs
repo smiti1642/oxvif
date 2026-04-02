@@ -557,6 +557,65 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
         }
     }
 
+    // ── 17. Audio ─────────────────────────────────────────────────────────────
+    let media_url = caps.media.url.as_deref().unwrap_or("").to_string();
+
+    section("GetAudioSources");
+    match client.get_audio_sources(&media_url).await {
+        Ok(sources) => {
+            println!("  Found {} audio source(s)", sources.len());
+            for s in &sources {
+                println!("  [{}] channels={}", s.token, s.channels);
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    section("GetAudioEncoderConfigurations");
+    match client.get_audio_encoder_configurations(&media_url).await {
+        Ok(cfgs) => {
+            println!("  Found {} audio encoder config(s)", cfgs.len());
+            for c in &cfgs {
+                println!(
+                    "  [{}] {} encoding={} bitrate={}kbps sample_rate={}kHz",
+                    c.token, c.name, c.encoding, c.bitrate, c.sample_rate
+                );
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 18. PTZ Configuration ─────────────────────────────────────────────────
+    if let Some(ref ptz_url) = caps.ptz_url {
+        section("GetNodes");
+        match client.ptz_get_nodes(ptz_url).await {
+            Ok(nodes) => {
+                println!("  Found {} PTZ node(s)", nodes.len());
+                for n in &nodes {
+                    println!(
+                        "  [{}] {} max_presets={} home_supported={}",
+                        n.token, n.name, n.max_presets, n.home_supported
+                    );
+                }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+
+        section("GetConfigurations (PTZ)");
+        match client.ptz_get_configurations(ptz_url).await {
+            Ok(cfgs) => {
+                println!("  Found {} PTZ configuration(s)", cfgs.len());
+                for c in &cfgs {
+                    println!(
+                        "  [{}] {} node={} timeout={:?}",
+                        c.token, c.name, c.node_token, c.default_ptz_timeout
+                    );
+                }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
     println!("\n=== Full workflow complete ===");
     Ok(())
 }

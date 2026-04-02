@@ -86,16 +86,58 @@ resp.children_named("Foo").map(|n| {
   error tests.
 - Negative SOAP Fault tests: use `make_soap_fault_xml(code, reason)`.
 
-## Adding a new ONVIF service
+## Adding a new ONVIF service — step-by-step SOP
+
+### Implementation
 
 1. Create `src/types/<service>.rs` with all response structs.
-2. All `from_xml` returning structs with required fields → `Result<Self, OnvifError>`.
-3. Add `mod <service>;` and `pub use <service>::*;` to `src/types/mod.rs`.
-4. Add methods to `src/client.rs` following existing patterns.
-5. Re-export new public types from `src/lib.rs`.
-6. Add tests to `src/tests/client_tests.rs`.
-7. Update `CHANGELOG.md` and bump version in `Cargo.toml`.
-8. Update version in `README.md` installation section.
+   - All `from_xml` / `vec_from_xml` that parse required fields → `Result<Self, OnvifError>`
+   - Token attributes → `.ok_or_else(|| SoapError::missing("Elem/@token"))?`
+   - `to_xml_body()` string fields → `xml_escape(&self.field)`
+2. Add `mod <service>;` and `pub use <service>::*;` to `src/types/mod.rs`.
+3. Add methods to `src/client.rs`:
+   - Add new types to the `use crate::types::{ ... }` import list
+   - All `&str` params interpolated into XML → `xml_escape(param)`
+4. Re-export all new public types from `src/lib.rs`.
+
+### Testing
+
+5. Append tests to `src/tests/client_tests.rs`:
+   - At least one positive test per method (fixture XML + assert fields)
+   - At least one negative test per method (missing token or SOAP Fault)
+   - For write methods: use `RecordingTransport` and assert `c.action` + `c.body`
+
+### Quality gate (run before every commit)
+
+```
+cargo fmt
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+All three must pass cleanly.
+
+### Documentation
+
+6. Update `README.md`:
+   - Architecture diagram (top of file) if a new service is added
+   - Add a new `## <Service> methods` section with method table and code example
+   - Update the `Implemented ONVIF operations` status table (— → ✓)
+   - Update test count (`N unit tests`)
+   - Update installation version number
+7. Update `examples/camera.rs`:
+   - Add new command to the doc comment at the top
+   - Add new arm to the `match` in `main()`
+   - Add to `print_help()`
+   - Add the async function implementing the example
+   - Add relevant sections to `full_workflow()` (sections 17, 18, …)
+
+### Version and release
+
+8. Bump version in `Cargo.toml` (patch = bug fix, minor = new feature).
+9. Add entry to `CHANGELOG.md` at the top.
+10. Run `cargo publish --dry-run` — must succeed with no errors.
+11. Commit, merge to `master`, then `cargo publish`.
 
 ## Rust 2024 edition notes
 
@@ -107,7 +149,8 @@ resp.children_named("Foo").map(|n| {
 - [ ] `cargo fmt && cargo clippy --all-targets -- -D warnings` clean
 - [ ] `cargo test` — all tests pass
 - [ ] `cargo publish --dry-run` — no errors
-- [ ] `CHANGELOG.md` updated
+- [ ] `CHANGELOG.md` updated with new version entry
 - [ ] `Cargo.toml` version bumped
-- [ ] `README.md` installation version updated
+- [ ] `README.md` installation version updated + content updated
+- [ ] `examples/camera.rs` updated (new command + `full_workflow` sections)
 - [ ] Committed and on `master` branch
