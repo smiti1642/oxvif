@@ -14,8 +14,12 @@
 //! cargo run -- video-config
 //! cargo run -- video-config-media2
 //! cargo run -- imaging
+//! cargo run -- events
+//! cargo run -- discovery
 //! cargo run -- error-handling
 //! ```
+
+use std::time::Duration;
 
 use oxvif::{
     Capabilities, DeviceInfo, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
@@ -69,6 +73,8 @@ async fn main() {
         "video-config" => video_config(&cfg).await,
         "video-config-media2" => video_config_media2(&cfg).await,
         "imaging" => imaging(&cfg).await,
+        "events" => events(&cfg).await,
+        "discovery" => discovery_example().await,
         "error-handling" => error_handling_example(&cfg).await,
         _ => {
             print_help();
@@ -100,6 +106,8 @@ fn print_help() {
     println!("  video-config         Video sources, encoder configs, options (Media1)");
     println!("  video-config-media2  Media2 profiles, H.265 encoder configs");
     println!("  imaging              Imaging settings and parameter ranges");
+    println!("  events               Subscribe, pull, and unsubscribe ONVIF events");
+    println!("  discovery            WS-Discovery UDP multicast probe");
     println!("  error-handling       Typed error variant matching demo");
 }
 
@@ -648,6 +656,58 @@ async fn device_management(cfg: &Config) -> Result<(), OnvifError> {
     println!("  FirmwareUpgrade    : {}", sys.firmware_upgrade);
     println!("  SystemLogging      : {}", sys.system_logging);
     println!("  SystemBackup       : {}", sys.system_backup);
+
+    // ── Events ────────────────────────────────────────────────────────────────
+    if let Some(events_url) = &caps.events.url {
+        section("Events — GetEventProperties");
+        match client.get_event_properties(events_url).await {
+            Ok(props) => {
+                println!("  {} topic(s) available", props.topics.len());
+                for t in props.topics.iter().take(8) {
+                    println!("  - {t}");
+                }
+                if props.topics.len() > 8 {
+                    println!("  … ({} more)", props.topics.len() - 8);
+                }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+
+        if caps.events.ws_pull_point {
+            section("Events — CreatePullPointSubscription / PullMessages / Unsubscribe");
+            match client
+                .create_pull_point_subscription(events_url, None, Some("PT30S"))
+                .await
+            {
+                Ok(sub) => {
+                    println!("  Subscription URL : {}", sub.reference_url);
+                    println!("  Termination time : {}", sub.termination_time);
+                    match client.pull_messages(&sub.reference_url, "PT2S", 10).await {
+                        Ok(msgs) => {
+                            if msgs.is_empty() {
+                                println!("  No pending events");
+                            } else {
+                                println!("  {} event(s) received:", msgs.len());
+                                for m in &msgs {
+                                    println!(
+                                        "  [{}] {}  src={:?}  data={:?}",
+                                        m.utc_time, m.topic, m.source, m.data
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => println!("  PullMessages skipped — {e}"),
+                    }
+                    if let Err(e) = client.unsubscribe(&sub.reference_url).await {
+                        println!("  Unsubscribe skipped — {e}");
+                    } else {
+                        println!("  Unsubscribed successfully");
+                    }
+                }
+                Err(e) => println!("  (skipped — {e})"),
+            }
+        }
+    }
 
     Ok(())
 }
@@ -1425,7 +1485,113 @@ fn print_imaging_settings(s: &ImagingSettings) {
     );
 }
 
-// ── Example 12: error handling ────────────────────────────────────────────────
+// ── Example 12: events ────────────────────────────────────────────────────────
+
+async fn events(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Events ===");
+
+    let (client, caps) = connect(cfg).await?;
+    let events_url = caps
+        .events
+        .url
+        .ok_or_else(|| oxvif::soap::SoapError::missing("Events service not found"))?;
+
+    // GetEventProperties
+    section("GetEventProperties");
+    match client.get_event_properties(&events_url).await {
+        Ok(props) => {
+            println!("  {} topic(s) available", props.topics.len());
+            for t in &props.topics {
+                println!("  - {t}");
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    if !caps.events.ws_pull_point {
+        println!("\nDevice does not support WS-PullPoint — skipping subscription.");
+        return Ok(());
+    }
+
+    // CreatePullPointSubscription
+    section("CreatePullPointSubscription");
+    let sub = client
+        .create_pull_point_subscription(&events_url, None, Some("PT60S"))
+        .await?;
+    println!("  Subscription URL : {}", sub.reference_url);
+    println!("  Termination time : {}", sub.termination_time);
+
+    // PullMessages
+    section("PullMessages (PT5S timeout)");
+    match client.pull_messages(&sub.reference_url, "PT5S", 50).await {
+        Ok(msgs) => {
+            if msgs.is_empty() {
+                println!("  No pending events in 5 seconds");
+            } else {
+                println!("  {} event(s) received:", msgs.len());
+                for m in &msgs {
+                    println!("  Topic   : {}", m.topic);
+                    println!("  UtcTime : {}", m.utc_time);
+                    for (k, v) in &m.source {
+                        println!("  Source  : {k} = {v}");
+                    }
+                    for (k, v) in &m.data {
+                        println!("  Data    : {k} = {v}");
+                    }
+                    println!();
+                }
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    // Renew
+    section("Renew");
+    match client.renew_subscription(&sub.reference_url, "PT60S").await {
+        Ok(new_time) => println!("  New termination time: {new_time}"),
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // Unsubscribe
+    section("Unsubscribe");
+    match client.unsubscribe(&sub.reference_url).await {
+        Ok(()) => println!("  Unsubscribed successfully"),
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    Ok(())
+}
+
+// ── Example 13: WS-Discovery ──────────────────────────────────────────────────
+
+async fn discovery_example() -> Result<(), OnvifError> {
+    println!("=== WS-Discovery (3 second probe) ===");
+    println!("Sending multicast Probe to 239.255.255.250:3702 ...");
+
+    let devices = oxvif::discovery::probe(Duration::from_secs(3)).await;
+
+    if devices.is_empty() {
+        println!("No ONVIF devices found on local network.");
+        println!("Tip: ensure the camera is on the same L2 segment and responds to WS-Discovery.");
+    } else {
+        println!("Found {} device(s):", devices.len());
+        for (i, d) in devices.iter().enumerate() {
+            println!("\n  [{i}] {}", d.endpoint);
+            for addr in &d.xaddrs {
+                println!("      XAddr : {addr}");
+            }
+            for scope in &d.scopes {
+                if scope.contains("onvif.org") {
+                    println!("      Scope : {scope}");
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ── Example 14: error handling ────────────────────────────────────────────────
 
 async fn error_handling_example(cfg: &Config) -> Result<(), OnvifError> {
     use oxvif::error::OnvifError as Err_;

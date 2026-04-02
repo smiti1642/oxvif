@@ -1600,3 +1600,362 @@ async fn test_get_imaging_options_parses_ranges_and_modes() {
     assert_eq!(opts.white_balance_modes, ["AUTO", "MANUAL"]);
     assert_eq!(opts.exposure_modes, ["AUTO", "MANUAL"]);
 }
+
+// ── Events service fixtures ───────────────────────────────────────────────
+
+fn event_properties_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tev="http://www.onvif.org/ver10/events/wsdl">
+          <s:Body>
+            <tev:GetEventPropertiesResponse>
+              <tev:TopicSet>
+                <tns1:VideoSource xmlns:tns1="http://www.onvif.org/ver10/topics">
+                  <tns1:MotionAlarm/>
+                  <tns1:ImageTooBlurry/>
+                </tns1:VideoSource>
+                <tns1:RuleEngine xmlns:tns1="http://www.onvif.org/ver10/topics">
+                  <tns1:Cell>
+                    <tns1:Motion/>
+                  </tns1:Cell>
+                </tns1:RuleEngine>
+              </tev:TopicSet>
+            </tev:GetEventPropertiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+fn create_pull_point_subscription_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tev="http://www.onvif.org/ver10/events/wsdl"
+                      xmlns:wsa="http://www.w3.org/2005/08/addressing">
+          <s:Body>
+            <tev:CreatePullPointSubscriptionResponse>
+              <tev:SubscriptionReference>
+                <wsa:Address>http://192.168.1.1/onvif/events/subscription_1</wsa:Address>
+              </tev:SubscriptionReference>
+              <tev:CurrentTime>2024-01-01T00:00:00Z</tev:CurrentTime>
+              <tev:TerminationTime>2024-01-01T00:01:00Z</tev:TerminationTime>
+            </tev:CreatePullPointSubscriptionResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+fn pull_messages_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tev="http://www.onvif.org/ver10/events/wsdl"
+                      xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tev:PullMessagesResponse>
+              <tev:CurrentTime>2024-01-01T00:00:10Z</tev:CurrentTime>
+              <tev:TerminationTime>2024-01-01T00:01:00Z</tev:TerminationTime>
+              <wsnt:NotificationMessage>
+                <wsnt:Topic>tns1:VideoSource/MotionAlarm</wsnt:Topic>
+                <wsnt:Message>
+                  <tt:Message UtcTime="2024-01-01T00:00:09Z">
+                    <tt:Source>
+                      <tt:SimpleItem Name="VideoSourceToken" Value="VideoSource_1"/>
+                    </tt:Source>
+                    <tt:Data>
+                      <tt:SimpleItem Name="IsMotion" Value="true"/>
+                    </tt:Data>
+                  </tt:Message>
+                </wsnt:Message>
+              </wsnt:NotificationMessage>
+            </tev:PullMessagesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+fn pull_messages_empty_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tev="http://www.onvif.org/ver10/events/wsdl">
+          <s:Body>
+            <tev:PullMessagesResponse>
+              <tev:CurrentTime>2024-01-01T00:00:10Z</tev:CurrentTime>
+              <tev:TerminationTime>2024-01-01T00:01:00Z</tev:TerminationTime>
+            </tev:PullMessagesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+fn renew_subscription_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2">
+          <s:Body>
+            <wsnt:RenewResponse>
+              <wsnt:TerminationTime>2024-01-01T00:02:00Z</wsnt:TerminationTime>
+            </wsnt:RenewResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+fn unsubscribe_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2">
+          <s:Body>
+            <wsnt:UnsubscribeResponse/>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+// ── get_event_properties ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_get_event_properties_flattens_topics() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(event_properties_xml()));
+
+    let props = client
+        .get_event_properties("http://192.168.1.1/onvif/events_service")
+        .await
+        .unwrap();
+
+    assert!(
+        props.topics.iter().any(|t| t.contains("MotionAlarm")),
+        "topics should contain MotionAlarm"
+    );
+    assert!(
+        props.topics.iter().any(|t| t.contains("Motion")),
+        "topics should contain nested Motion topic"
+    );
+}
+
+#[tokio::test]
+async fn test_get_event_properties_uses_correct_action() {
+    let (transport, captured) = RecordingTransport::new(event_properties_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .get_event_properties("http://192.168.1.1/onvif/events_service")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        captured.lock().unwrap().action,
+        "http://www.onvif.org/ver10/events/wsdl/EventPortType/GetEventPropertiesRequest"
+    );
+}
+
+// ── create_pull_point_subscription ────────────────────────────────────────
+
+#[tokio::test]
+async fn test_create_pull_point_subscription_returns_reference_url() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(create_pull_point_subscription_xml()));
+
+    let sub = client
+        .create_pull_point_subscription(
+            "http://192.168.1.1/onvif/events_service",
+            None,
+            Some("PT60S"),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        sub.reference_url,
+        "http://192.168.1.1/onvif/events/subscription_1"
+    );
+    assert_eq!(sub.termination_time, "2024-01-01T00:01:00Z");
+}
+
+#[tokio::test]
+async fn test_create_pull_point_subscription_with_filter() {
+    let (transport, captured) = RecordingTransport::new(create_pull_point_subscription_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .create_pull_point_subscription(
+            "http://192.168.1.1/onvif/events_service",
+            Some("tns1:VideoSource/MotionAlarm"),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("tns1:VideoSource/MotionAlarm"));
+    assert!(body.contains("TopicExpression"));
+}
+
+#[tokio::test]
+async fn test_create_pull_point_subscription_without_filter_omits_filter_el() {
+    let (transport, captured) = RecordingTransport::new(create_pull_point_subscription_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .create_pull_point_subscription("http://192.168.1.1/onvif/events_service", None, None)
+        .await
+        .unwrap();
+
+    assert!(!captured.lock().unwrap().body.contains("Filter"));
+}
+
+#[tokio::test]
+async fn test_create_pull_point_subscription_uses_correct_action() {
+    let (transport, captured) = RecordingTransport::new(create_pull_point_subscription_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .create_pull_point_subscription("http://192.168.1.1/onvif/events_service", None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        captured.lock().unwrap().action,
+        "http://www.onvif.org/ver10/events/wsdl/EventPortType/CreatePullPointSubscriptionRequest"
+    );
+}
+
+// ── pull_messages ─────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_pull_messages_parses_notification() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(pull_messages_xml()));
+
+    let msgs = client
+        .pull_messages(
+            "http://192.168.1.1/onvif/events/subscription_1",
+            "PT5S",
+            100,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(msgs.len(), 1);
+    assert!(msgs[0].topic.contains("MotionAlarm"));
+    assert_eq!(msgs[0].utc_time, "2024-01-01T00:00:09Z");
+    assert_eq!(
+        msgs[0].source.get("VideoSourceToken").map(String::as_str),
+        Some("VideoSource_1")
+    );
+    assert_eq!(
+        msgs[0].data.get("IsMotion").map(String::as_str),
+        Some("true")
+    );
+}
+
+#[tokio::test]
+async fn test_pull_messages_empty_returns_empty_vec() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(pull_messages_empty_xml()));
+
+    let msgs = client
+        .pull_messages(
+            "http://192.168.1.1/onvif/events/subscription_1",
+            "PT5S",
+            100,
+        )
+        .await
+        .unwrap();
+
+    assert!(msgs.is_empty());
+}
+
+#[tokio::test]
+async fn test_pull_messages_sends_timeout_and_limit() {
+    let (transport, captured) = RecordingTransport::new(pull_messages_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .pull_messages(
+            "http://192.168.1.1/onvif/events/subscription_1",
+            "PT10S",
+            50,
+        )
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("PT10S"));
+    assert!(body.contains("50"));
+}
+
+#[tokio::test]
+async fn test_pull_messages_posts_to_subscription_url() {
+    let (transport, captured) = RecordingTransport::new(pull_messages_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .pull_messages(
+            "http://192.168.1.1/onvif/events/subscription_1",
+            "PT5S",
+            100,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        captured.lock().unwrap().url,
+        "http://192.168.1.1/onvif/events/subscription_1"
+    );
+}
+
+// ── renew_subscription ────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_renew_subscription_returns_new_termination_time() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(renew_subscription_xml()));
+
+    let new_time = client
+        .renew_subscription("http://192.168.1.1/onvif/events/subscription_1", "PT60S")
+        .await
+        .unwrap();
+
+    assert_eq!(new_time, "2024-01-01T00:02:00Z");
+}
+
+#[tokio::test]
+async fn test_renew_subscription_sends_termination_time() {
+    let (transport, captured) = RecordingTransport::new(renew_subscription_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .renew_subscription("http://192.168.1.1/onvif/events/subscription_1", "PT120S")
+        .await
+        .unwrap();
+
+    assert!(captured.lock().unwrap().body.contains("PT120S"));
+}
+
+// ── unsubscribe ───────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_unsubscribe_ok() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(unsubscribe_xml()));
+
+    client
+        .unsubscribe("http://192.168.1.1/onvif/events/subscription_1")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_unsubscribe_posts_to_subscription_url_with_correct_action() {
+    let (transport, captured) = RecordingTransport::new(unsubscribe_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .unsubscribe("http://192.168.1.1/onvif/events/subscription_1")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.url, "http://192.168.1.1/onvif/events/subscription_1");
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/events/wsdl/SubscriptionManager/UnsubscribeRequest"
+    );
+}

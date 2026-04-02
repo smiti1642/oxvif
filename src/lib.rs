@@ -45,22 +45,25 @@
 //! [ONVIF]: https://www.onvif.org
 
 pub mod client;
+pub mod discovery;
 pub mod error;
 pub mod soap;
 pub mod transport;
 pub mod types;
 
 pub use client::OnvifClient;
+pub use discovery::DiscoveredDevice;
 pub use error::OnvifError;
 pub use types::{
     AnalyticsCapabilities, BoundsRange, Capabilities, DeviceCapabilities, DeviceInfo,
-    EncoderInstanceInfo, EventsCapabilities, FloatRange, H264Configuration, H264Options,
-    H265Configuration, H265Options, Hostname, ImagingOptions, ImagingSettings, IntRange,
-    IoCapabilities, JpegOptions, MediaCapabilities, MediaProfile, MediaProfile2,
-    NetworkCapabilities, NtpInfo, OnvifService, PtzPreset, PtzStatus, Resolution,
-    SecurityCapabilities, SnapshotUri, SourceBounds, StreamUri, StreamingCapabilities,
-    SystemCapabilities, SystemDateTime, VideoEncoderConfiguration, VideoEncoderConfiguration2,
-    VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,
-    VideoEncoderOptions2, VideoEncoding, VideoRateControl, VideoRateControl2, VideoSource,
-    VideoSourceConfiguration, VideoSourceConfigurationOptions,
+    EncoderInstanceInfo, EventProperties, EventsCapabilities, FloatRange, H264Configuration,
+    H264Options, H265Configuration, H265Options, Hostname, ImagingOptions, ImagingSettings,
+    IntRange, IoCapabilities, JpegOptions, MediaCapabilities, MediaProfile, MediaProfile2,
+    NetworkCapabilities, NotificationMessage, NtpInfo, OnvifService, PtzPreset, PtzStatus,
+    PullPointSubscription, Resolution, SecurityCapabilities, SnapshotUri, SourceBounds, StreamUri,
+    StreamingCapabilities, SystemCapabilities, SystemDateTime, VideoEncoderConfiguration,
+    VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
+    VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoEncoderOptions2, VideoEncoding,
+    VideoRateControl, VideoRateControl2, VideoSource, VideoSourceConfiguration,
+    VideoSourceConfigurationOptions,
 };
