@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.1] - 2026-04-02
+
+### Changed
+- Expanded crate-level docs (`lib.rs`): ONVIF Profile coverage table,
+  supported services list, updated Quick start with clock-sync step,
+  added `MockTransport` doc-test example
+
+---
+
 ## [0.4.0] - 2026-04-02
 
 ### Added
