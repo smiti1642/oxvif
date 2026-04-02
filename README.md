@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-oxvif = "0.1.1"
+oxvif = "0.1.2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
