@@ -1,4 +1,4 @@
-use super::{FloatRange, xml_str};
+use super::{FloatRange, xml_escape, xml_str};
 use crate::error::OnvifError;
 use crate::soap::{SoapError, XmlNode};
 
@@ -72,16 +72,21 @@ impl ImagingSettings {
             out.push_str(&format!("<tt:Sharpness>{v}</tt:Sharpness>"));
         }
         if let Some(ref v) = self.ir_cut_filter {
-            out.push_str(&format!("<tt:IrCutFilter>{v}</tt:IrCutFilter>"));
+            out.push_str(&format!(
+                "<tt:IrCutFilter>{}</tt:IrCutFilter>",
+                xml_escape(v)
+            ));
         }
         if let Some(ref m) = self.white_balance_mode {
             out.push_str(&format!(
-                "<tt:WhiteBalance><tt:Mode>{m}</tt:Mode></tt:WhiteBalance>"
+                "<tt:WhiteBalance><tt:Mode>{}</tt:Mode></tt:WhiteBalance>",
+                xml_escape(m)
             ));
         }
         if let Some(ref m) = self.exposure_mode {
             out.push_str(&format!(
-                "<tt:Exposure><tt:Mode>{m}</tt:Mode></tt:Exposure>"
+                "<tt:Exposure><tt:Mode>{}</tt:Mode></tt:Exposure>",
+                xml_escape(m)
             ));
         }
         out.push_str("</timg:ImagingSettings>");

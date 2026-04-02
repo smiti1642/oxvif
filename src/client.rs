@@ -33,7 +33,7 @@ use crate::types::{
     PullPointSubscription, SnapshotUri, StreamUri, SystemDateTime, VideoEncoderConfiguration,
     VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
     VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
-    VideoSourceConfiguration, VideoSourceConfigurationOptions,
+    VideoSourceConfiguration, VideoSourceConfigurationOptions, xml_escape,
 };
 
 // ── OnvifClient ───────────────────────────────────────────────────────────────
@@ -235,6 +235,7 @@ impl OnvifClient {
     /// Most devices require a reboot for the change to take effect.
     pub async fn set_hostname(&self, name: &str) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetHostname";
+        let name = xml_escape(name);
         let body = format!("<tds:SetHostname><tds:Name>{name}</tds:Name></tds:SetHostname>");
         let xml = self.call(&self.device_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;
@@ -270,8 +271,9 @@ impl OnvifClient {
                 format!(
                     "<tds:NTPManual>\
                        <tt:Type>DNS</tt:Type>\
-                       <tt:DNSname>{s}</tt:DNSname>\
-                     </tds:NTPManual>"
+                       <tt:DNSname>{}</tt:DNSname>\
+                     </tds:NTPManual>",
+                    xml_escape(s)
                 )
             })
             .collect();
@@ -384,13 +386,14 @@ impl OnvifClient {
     ) -> Result<MediaProfile, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/CreateProfile";
         let token_el = token
-            .map(|t| format!("<trt:Token>{t}</trt:Token>"))
+            .map(|t| format!("<trt:Token>{}</trt:Token>", xml_escape(t)))
             .unwrap_or_default();
         let body = format!(
             "<trt:CreateProfile>\
-               <trt:Name>{name}</trt:Name>\
+               <trt:Name>{}</trt:Name>\
                {token_el}\
-             </trt:CreateProfile>"
+             </trt:CreateProfile>",
+            xml_escape(name)
         );
         let xml = self.call(media_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;
@@ -683,10 +686,10 @@ impl OnvifClient {
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/SetPreset";
         let name_el = preset_name
-            .map(|n| format!("<tptz:PresetName>{n}</tptz:PresetName>"))
+            .map(|n| format!("<tptz:PresetName>{}</tptz:PresetName>", xml_escape(n)))
             .unwrap_or_default();
         let token_el = preset_token
-            .map(|t| format!("<tptz:PresetToken>{t}</tptz:PresetToken>"))
+            .map(|t| format!("<tptz:PresetToken>{}</tptz:PresetToken>", xml_escape(t)))
             .unwrap_or_default();
         let body = format!(
             "<tptz:SetPreset>\

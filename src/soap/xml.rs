@@ -112,7 +112,9 @@ impl XmlNode {
                     if stack.is_empty() {
                         return Ok(finished);
                     }
-                    stack.last_mut().unwrap().children.push(finished);
+                    if let Some(parent) = stack.last_mut() {
+                        parent.children.push(finished);
+                    }
                 }
 
                 Ok(Event::Text(ref e)) => {

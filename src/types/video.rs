@@ -1,4 +1,4 @@
-use super::{xml_str, xml_u32};
+use super::{xml_escape, xml_str, xml_u32};
 use crate::error::OnvifError;
 use crate::soap::{SoapError, XmlNode};
 
@@ -145,10 +145,10 @@ impl VideoSourceConfiguration {
                <tt:SourceToken>{source_token}</tt:SourceToken>\
                <tt:Bounds x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\"/>\
              </trt:Configuration>",
-            token = self.token,
-            name = self.name,
+            token = xml_escape(&self.token),
+            name = xml_escape(&self.name),
             use_count = self.use_count,
-            source_token = self.source_token,
+            source_token = xml_escape(&self.source_token),
             x = self.bounds.x,
             y = self.bounds.y,
             w = self.bounds.width,
@@ -165,10 +165,10 @@ impl VideoSourceConfiguration {
                <tt:SourceToken>{source_token}</tt:SourceToken>\
                <tt:Bounds x=\"{x}\" y=\"{y}\" width=\"{w}\" height=\"{h}\"/>\
              </tr2:Configuration>",
-            token = self.token,
-            name = self.name,
+            token = xml_escape(&self.token),
+            name = xml_escape(&self.name),
             use_count = self.use_count,
-            source_token = self.source_token,
+            source_token = xml_escape(&self.source_token),
             x = self.bounds.x,
             y = self.bounds.y,
             w = self.bounds.width,
@@ -386,7 +386,8 @@ impl VideoEncoderConfiguration {
                    <tt:GovLength>{}</tt:GovLength>\
                    <tt:H264Profile>{}</tt:H264Profile>\
                  </tt:H264>",
-                h.gov_length, h.profile
+                h.gov_length,
+                xml_escape(&h.profile)
             ),
             None => String::new(),
         };
@@ -396,7 +397,8 @@ impl VideoEncoderConfiguration {
                    <tt:GovLength>{}</tt:GovLength>\
                    <tt:H265Profile>{}</tt:H265Profile>\
                  </tt:H265>",
-                h.gov_length, h.profile
+                h.gov_length,
+                xml_escape(&h.profile)
             ),
             None => String::new(),
         };
@@ -408,8 +410,8 @@ impl VideoEncoderConfiguration {
                {res}{rate}{h264}{h265}\
                <tt:Quality>{quality}</tt:Quality>\
              </trt:Configuration>",
-            token = self.token,
-            name = self.name,
+            token = xml_escape(&self.token),
+            name = xml_escape(&self.name),
             use_count = self.use_count,
             encoding = self.encoding,
             quality = self.quality,
@@ -604,7 +606,7 @@ impl VideoEncoderConfiguration2 {
         let profile = self
             .profile
             .as_deref()
-            .map(|p| format!("<tt:Profile>{p}</tt:Profile>"))
+            .map(|p| format!("<tt:Profile>{}</tt:Profile>", xml_escape(p)))
             .unwrap_or_default();
         format!(
             "<tr2:Configuration token=\"{token}\">\
@@ -614,8 +616,8 @@ impl VideoEncoderConfiguration2 {
                {res}{rate}{gov}{profile}\
                <tt:Quality>{quality}</tt:Quality>\
              </tr2:Configuration>",
-            token = self.token,
-            name = self.name,
+            token = xml_escape(&self.token),
+            name = xml_escape(&self.name),
             use_count = self.use_count,
             encoding = self.encoding,
             quality = self.quality,

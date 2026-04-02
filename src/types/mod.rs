@@ -45,6 +45,22 @@ pub(crate) fn xml_str(node: &XmlNode, child: &str) -> Option<String> {
     node.child(child).map(|n| n.text().to_string())
 }
 
+/// Escape XML special characters for safe embedding in element content or attributes.
+pub(crate) fn xml_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

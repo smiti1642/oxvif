@@ -30,6 +30,8 @@ use crate::soap::XmlNode;
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const WSD_MULTICAST: &str = "239.255.255.250:3702";
+/// Maximum UDP datagram size (IPv4 theoretical maximum).
+const UDP_MAX_SIZE: usize = 65_535;
 
 // ── DiscoveredDevice ──────────────────────────────────────────────────────────
 
@@ -104,7 +106,7 @@ async fn probe_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveredDev
     let xml = build_probe(&message_id);
     socket.send_to(xml.as_bytes(), WSD_MULTICAST).await?;
 
-    let mut buf = vec![0u8; 65535];
+    let mut buf = vec![0u8; UDP_MAX_SIZE];
     let mut devices: Vec<DiscoveredDevice> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     let deadline = Instant::now() + timeout_dur;
