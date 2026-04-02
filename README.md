@@ -26,22 +26,21 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
 ## Quick start
 
 ```rust
-use oxvif::{OnvifClient, OnvifError};
+use oxvif::OnvifClient;
 
 #[tokio::main]
-async fn main() -> Result<(), OnvifError> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = OnvifClient::new("http://192.168.1.100/onvif/device_service")
         .with_credentials("admin", "password");
 
-    // 1. Discover service URLs
+    let info = client.get_device_info().await?;
+    println!("Model: {} {}", info.manufacturer, info.model);
+
     let caps = client.get_capabilities().await?;
-    let media_url = caps.media.url.as_deref().unwrap();
+    let media_url = caps.media.url.unwrap();
 
-    // 2. List media profiles
-    let profiles = client.get_profiles(media_url).await?;
-
-    // 3. Get RTSP URI for the first profile
-    let uri = client.get_stream_uri(media_url, &profiles[0].token).await?;
+    let profiles = client.get_profiles(&media_url).await?;
+    let uri = client.get_stream_uri(&media_url, &profiles[0].token).await?;
     println!("RTSP: {}", uri.uri);
 
     Ok(())
