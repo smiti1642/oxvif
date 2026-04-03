@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.7.1] - 2026-04-03
+
+### Changed
+- Expanded crate-level docs: added dedicated `OnvifSession` section to
+  `README.md` with builder example, side-by-side comparison with
+  `OnvifClient`, and method/accessor tables
+
+---
+
 ## [0.7.0] - 2026-04-03
 
 ### Added
