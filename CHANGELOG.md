@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.7.3] - 2026-04-03
+
+### Changed
+- Bumped all direct dependencies to latest versions:
+  - `quick-xml` 0.36 → 0.39 (API: `BytesText::unescape()` replaced by `xml_content()`)
+  - `sha1` 0.10 → 0.11
+  - `rand` 0.8 → 0.10 (`thread_rng().fill_bytes()` replaced by `rng().fill_bytes()`)
+  - `reqwest` 0.12 → 0.13 (`rustls-tls` feature replaced by `rustls` + `rustls-native-certs`)
+  - `tokio` patch update to 1.51
+  - `axum` (dev) 0.7 → 0.8
+
+---
+
 ## [0.7.2] - 2026-04-03
 
 ### Changed

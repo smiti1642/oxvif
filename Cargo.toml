@@ -1,6 +1,6 @@
 [package]
 name = "oxvif"
-version = "0.7.2"
+version = "0.7.3"
 edition = "2024"
 rust-version = "1.85"
 description = "Async Rust client library for the ONVIF IP camera protocol"
@@ -14,11 +14,11 @@ readme = "README.md"
 exclude = [".env", ".env.example"]
 
 [dependencies]
-quick-xml   = "0.36"
-sha1        = "0.10"
+quick-xml   = "0.39"
+sha1        = "0.11"
 base64      = "0.22"
-rand        = "0.8"
-reqwest     = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+rand        = "0.10"
+reqwest     = { version = "0.13", default-features = false, features = ["rustls", "rustls-native-certs"] }
 tokio       = { version = "1", features = ["rt", "rt-multi-thread", "macros", "net", "time"] }
 thiserror   = "2"
 async-trait = "0.1"
@@ -27,4 +27,4 @@ async-trait = "0.1"
 mockito = "1"
 dotenvy = "0.15"
 tokio   = { version = "1", features = ["rt-multi-thread", "macros"] }
-axum    = "0.7"
+axum    = "0.8"

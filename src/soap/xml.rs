@@ -117,9 +117,9 @@ impl XmlNode {
                     }
                 }
 
-                Ok(Event::Text(ref e)) => {
+                Ok(Event::Text(e)) => {
                     if let Some(node) = stack.last_mut() {
-                        let cow = e.unescape().unwrap_or_default();
+                        let cow = e.xml_content().unwrap_or_default();
                         let trimmed = cow.trim().to_string();
                         if !trimmed.is_empty() {
                             node.text = Some(trimmed);

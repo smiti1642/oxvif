@@ -54,10 +54,10 @@ impl WsSecurityToken {
     /// clock and the local UTC clock, obtained from `GetSystemDateAndTime`.
     /// Pass `0` if the clocks are in sync.
     pub fn generate(username: &str, password: &str, device_utc_offset_secs: i64) -> Self {
-        use rand::RngCore;
+        use rand::Rng;
 
         let mut nonce = [0u8; 20];
-        rand::thread_rng().fill_bytes(&mut nonce);
+        rand::rng().fill_bytes(&mut nonce);
 
         let unix_now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
