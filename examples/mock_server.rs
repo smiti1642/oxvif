@@ -23,11 +23,11 @@
 //! etc.) return plausible canned responses without actually persisting state.
 
 use axum::{
+    Router,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::post,
-    Router,
 };
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
@@ -119,7 +119,9 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver10/media/wsdl/GetStreamUri" => resp_stream_uri(),
         "http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri" => resp_snapshot_uri(),
         "http://www.onvif.org/ver10/media/wsdl/CreateProfile" => resp_create_profile(),
-        "http://www.onvif.org/ver10/media/wsdl/DeleteProfile" => resp_empty("trt", "DeleteProfileResponse"),
+        "http://www.onvif.org/ver10/media/wsdl/DeleteProfile" => {
+            resp_empty("trt", "DeleteProfileResponse")
+        }
         "http://www.onvif.org/ver10/media/wsdl/GetVideoSources" => resp_video_sources(),
         "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurations" => {
             resp_video_source_configurations()
@@ -192,10 +194,7 @@ fn dispatch(action: &str, base: &str) -> String {
         // ── Unknown ───────────────────────────────────────────────────────────
         other => {
             eprintln!("  [WARN] unhandled action: {other}");
-            resp_soap_fault(
-                "s:Receiver",
-                &format!("Not implemented: {other}"),
-            )
+            resp_soap_fault("s:Receiver", &format!("Not implemented: {other}"))
         }
     }
 }
