@@ -15,6 +15,15 @@ cargo test
 
 All three must pass cleanly before committing.
 
+## Before every publish (additional checks)
+
+```
+cargo test --doc          # verify all doc examples compile and run
+cargo doc --no-deps       # verify HTML docs generate cleanly (mirrors docs.rs)
+cargo audit               # zero vulnerabilities required
+cargo outdated --depth 1  # review; upgrade direct deps if significantly behind
+```
+
 ## Coding rules
 
 ### Required fields must return `Result`
@@ -165,6 +174,8 @@ All three must pass cleanly.
 
 - [ ] `cargo fmt && cargo clippy --all-targets -- -D warnings` clean
 - [ ] `cargo test` — all tests pass
+- [ ] `cargo test --doc` — all doc examples pass
+- [ ] `cargo doc --no-deps` — HTML docs generate without errors or broken links
 - [ ] `cargo publish --dry-run` — no errors
 - [ ] `cargo audit` — zero vulnerabilities
 - [ ] `cargo outdated --depth 1` — review; upgrade direct deps if significantly behind
