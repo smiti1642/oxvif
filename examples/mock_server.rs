@@ -112,6 +112,29 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver10/device/wsdl/GetHostname" => resp_hostname(),
         "http://www.onvif.org/ver10/device/wsdl/GetNTP" => resp_ntp(),
         "http://www.onvif.org/ver10/device/wsdl/GetScopes" => resp_scopes(),
+        "http://www.onvif.org/ver10/device/wsdl/GetUsers" => resp_users(),
+        "http://www.onvif.org/ver10/device/wsdl/CreateUsers" => {
+            resp_empty("tds", "CreateUsersResponse")
+        }
+        "http://www.onvif.org/ver10/device/wsdl/DeleteUsers" => {
+            resp_empty("tds", "DeleteUsersResponse")
+        }
+        "http://www.onvif.org/ver10/device/wsdl/SetUser" => resp_empty("tds", "SetUserResponse"),
+        "http://www.onvif.org/ver10/device/wsdl/GetNetworkInterfaces" => resp_network_interfaces(),
+        "http://www.onvif.org/ver10/device/wsdl/SetNetworkInterfaces" => {
+            resp_set_network_interfaces()
+        }
+        "http://www.onvif.org/ver10/device/wsdl/GetNetworkProtocols" => resp_network_protocols(),
+        "http://www.onvif.org/ver10/device/wsdl/GetDNS" => resp_dns(),
+        "http://www.onvif.org/ver10/device/wsdl/SetDNS" => resp_empty("tds", "SetDNSResponse"),
+        "http://www.onvif.org/ver10/device/wsdl/GetNetworkDefaultGateway" => {
+            resp_network_default_gateway()
+        }
+        "http://www.onvif.org/ver10/device/wsdl/GetSystemLog" => resp_system_log(),
+        "http://www.onvif.org/ver10/device/wsdl/GetRelayOutputs" => resp_relay_outputs(),
+        "http://www.onvif.org/ver10/device/wsdl/SetRelayOutputState" => {
+            resp_empty("tds", "SetRelayOutputStateResponse")
+        }
 
         // ── Media1 ────────────────────────────────────────────────────────────
         "http://www.onvif.org/ver10/media/wsdl/GetProfiles" => resp_profiles(),
@@ -381,6 +404,136 @@ fn resp_scopes() -> String {
             <tt:ScopeItem>onvif://www.onvif.org/location/country/taiwan</tt:ScopeItem>
           </tds:Scopes>
         </tds:GetScopesResponse>"#,
+    )
+}
+
+fn resp_users() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:GetUsersResponse>
+          <tds:User>
+            <tt:Username>admin</tt:Username>
+            <tt:UserLevel>Administrator</tt:UserLevel>
+          </tds:User>
+          <tds:User>
+            <tt:Username>operator</tt:Username>
+            <tt:UserLevel>Operator</tt:UserLevel>
+          </tds:User>
+        </tds:GetUsersResponse>"#,
+    )
+}
+
+fn resp_network_interfaces() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:GetNetworkInterfacesResponse>
+          <tds:NetworkInterfaces token="eth0">
+            <tt:Enabled>true</tt:Enabled>
+            <tt:Info>
+              <tt:Name>eth0</tt:Name>
+              <tt:HwAddress>00:11:22:33:44:55</tt:HwAddress>
+              <tt:MTU>1500</tt:MTU>
+            </tt:Info>
+            <tt:IPv4>
+              <tt:Enabled>true</tt:Enabled>
+              <tt:Config>
+                <tt:FromDHCP>false</tt:FromDHCP>
+                <tt:Manual>
+                  <tt:Address>192.168.1.100</tt:Address>
+                  <tt:PrefixLength>24</tt:PrefixLength>
+                </tt:Manual>
+              </tt:Config>
+            </tt:IPv4>
+          </tds:NetworkInterfaces>
+        </tds:GetNetworkInterfacesResponse>"#,
+    )
+}
+
+fn resp_set_network_interfaces() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:SetNetworkInterfacesResponse>
+          <tds:RebootNeeded>false</tds:RebootNeeded>
+        </tds:SetNetworkInterfacesResponse>"#,
+    )
+}
+
+fn resp_network_protocols() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:GetNetworkProtocolsResponse>
+          <tds:NetworkProtocols>
+            <tt:Name>HTTP</tt:Name>
+            <tt:Enabled>true</tt:Enabled>
+            <tt:Port>80</tt:Port>
+          </tds:NetworkProtocols>
+          <tds:NetworkProtocols>
+            <tt:Name>HTTPS</tt:Name>
+            <tt:Enabled>true</tt:Enabled>
+            <tt:Port>443</tt:Port>
+          </tds:NetworkProtocols>
+          <tds:NetworkProtocols>
+            <tt:Name>RTSP</tt:Name>
+            <tt:Enabled>true</tt:Enabled>
+            <tt:Port>554</tt:Port>
+          </tds:NetworkProtocols>
+        </tds:GetNetworkProtocolsResponse>"#,
+    )
+}
+
+fn resp_dns() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:GetDNSResponse>
+          <tds:DNSInformation>
+            <tt:FromDHCP>false</tt:FromDHCP>
+            <tt:DNSManual>
+              <tt:Type>IPv4</tt:Type>
+              <tt:IPv4Address>8.8.8.8</tt:IPv4Address>
+            </tt:DNSManual>
+            <tt:DNSManual>
+              <tt:Type>IPv4</tt:Type>
+              <tt:IPv4Address>8.8.4.4</tt:IPv4Address>
+            </tt:DNSManual>
+          </tds:DNSInformation>
+        </tds:GetDNSResponse>"#,
+    )
+}
+
+fn resp_network_default_gateway() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:GetNetworkDefaultGatewayResponse>
+          <tds:NetworkGateway>
+            <tt:IPv4Address>192.168.1.1</tt:IPv4Address>
+          </tds:NetworkGateway>
+        </tds:GetNetworkDefaultGatewayResponse>"#,
+    )
+}
+
+fn resp_system_log() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:GetSystemLogResponse>
+          <tds:SystemLog>
+            <tt:String>2026-04-03 12:00:00 mock system started</tt:String>
+          </tds:SystemLog>
+        </tds:GetSystemLogResponse>"#,
+    )
+}
+
+fn resp_relay_outputs() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:GetRelayOutputsResponse>
+          <tds:RelayOutputs token="RelayOutput_1">
+            <tt:Properties>
+              <tt:Mode>Bistable</tt:Mode>
+              <tt:DelayTime>PT0S</tt:DelayTime>
+              <tt:IdleState>open</tt:IdleState>
+            </tt:Properties>
+          </tds:RelayOutputs>
+        </tds:GetRelayOutputsResponse>"#,
     )
 }
 

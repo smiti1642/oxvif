@@ -23,7 +23,7 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 250 unit tests + 11 doc tests
+- 276 unit tests + 11 doc tests
 
 ---
 
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-oxvif = "0.5.0"
+oxvif = "0.6.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -204,6 +204,34 @@ for s in &scopes {
     println!("{s}");
 }
 ```
+
+### User management
+
+| Method | Description |
+|--------|-------------|
+| `get_users()` | List all configured user accounts (usernames + access levels) |
+| `create_users(users)` | Create accounts — `users` is `&[(&str, &str, &str)]` (username, password, level) |
+| `delete_users(usernames)` | Delete accounts by username |
+| `set_user(username, password, level)` | Modify an existing account; `password = None` leaves it unchanged |
+
+### Network configuration
+
+| Method | Description |
+|--------|-------------|
+| `get_network_interfaces()` | List interfaces with IP/MAC/MTU info → `Vec<NetworkInterface>` |
+| `set_network_interfaces(token, enabled, addr, prefix, from_dhcp)` | Update IPv4 config; returns `RebootNeeded: bool` |
+| `get_network_protocols()` | List enabled protocols (HTTP/HTTPS/RTSP, ports) → `Vec<NetworkProtocol>` |
+| `get_dns()` | DNS servers + DHCP flag → `DnsInformation` |
+| `set_dns(from_dhcp, servers)` | Set DNS servers |
+| `get_network_default_gateway()` | Default gateway addresses → `NetworkGateway` |
+
+### System & I/O
+
+| Method | Description |
+|--------|-------------|
+| `get_system_log(log_type)` | Retrieve device log (`"System"` or `"Access"`) → `SystemLog` |
+| `get_relay_outputs()` | List relay output ports → `Vec<RelayOutput>` |
+| `set_relay_output_state(token, state)` | Set relay state (`"active"` / `"inactive"`) |
 
 ---
 
@@ -744,6 +772,14 @@ examples/
 | `GetHostname` / `SetHostname` | ✓ |
 | `GetNTP` / `SetNTP` | ✓ |
 | `SystemReboot` | ✓ |
+| `GetScopes` | ✓ |
+| `GetUsers` / `CreateUsers` / `DeleteUsers` / `SetUser` | ✓ |
+| `GetNetworkInterfaces` / `SetNetworkInterfaces` | ✓ |
+| `GetNetworkProtocols` | ✓ |
+| `GetDNS` / `SetDNS` | ✓ |
+| `GetNetworkDefaultGateway` | ✓ |
+| `GetSystemLog` | ✓ |
+| `GetRelayOutputs` / `SetRelayOutputState` | ✓ |
 
 ### Media Service (Media1)
 

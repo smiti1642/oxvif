@@ -230,3 +230,261 @@ impl OnvifService {
             .collect())
     }
 }
+
+// ── User ──────────────────────────────────────────────────────────────────────
+
+/// A device user account returned by `GetUsers`.
+#[derive(Debug, Clone)]
+pub struct User {
+    pub username: String,
+    /// Access level: `"Administrator"`, `"Operator"`, `"User"`, `"Anonymous"`, or `"Extended"`.
+    pub user_level: String,
+}
+
+impl User {
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("User")
+            .map(|n| {
+                let username = xml_str(n, "Username").unwrap_or_default();
+                let user_level = xml_str(n, "UserLevel").unwrap_or_default();
+                Ok(Self {
+                    username,
+                    user_level,
+                })
+            })
+            .collect()
+    }
+}
+
+// ── NetworkInterface ──────────────────────────────────────────────────────────
+
+/// Network interface configuration returned by `GetNetworkInterfaces`.
+#[derive(Debug, Clone)]
+pub struct NetworkInterface {
+    pub token: String,
+    pub enabled: bool,
+    pub name: String,
+    pub hw_address: String,
+    pub mtu: u32,
+    pub ipv4_enabled: bool,
+    /// Manual or DHCP-assigned IPv4 address. Empty when DHCP is active and no address is available.
+    pub ipv4_address: String,
+    pub ipv4_prefix_length: u32,
+    pub ipv4_from_dhcp: bool,
+}
+
+impl NetworkInterface {
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("NetworkInterfaces")
+            .map(|n| {
+                let token = n
+                    .attr("token")
+                    .filter(|t| !t.is_empty())
+                    .ok_or_else(|| SoapError::missing("NetworkInterfaces/@token"))?
+                    .to_string();
+                let enabled = xml_bool(n, "Enabled");
+                let name = n
+                    .path(&["Info", "Name"])
+                    .map(|x| x.text().to_string())
+                    .unwrap_or_default();
+                let hw_address = n
+                    .path(&["Info", "HwAddress"])
+                    .map(|x| x.text().to_string())
+                    .unwrap_or_default();
+                let mtu = n
+                    .path(&["Info", "MTU"])
+                    .and_then(|x| x.text().parse().ok())
+                    .unwrap_or(0);
+                let ipv4_enabled = n
+                    .path(&["IPv4", "Enabled"])
+                    .map(|x| x.text() == "true" || x.text() == "1")
+                    .unwrap_or(false);
+                let ipv4_from_dhcp = n
+                    .path(&["IPv4", "Config", "FromDHCP"])
+                    .map(|x| x.text() == "true" || x.text() == "1")
+                    .unwrap_or(false);
+                let ipv4_address = n
+                    .path(&["IPv4", "Config", "Manual", "Address"])
+                    .map(|x| x.text().to_string())
+                    .unwrap_or_default();
+                let ipv4_prefix_length = n
+                    .path(&["IPv4", "Config", "Manual", "PrefixLength"])
+                    .and_then(|x| x.text().parse().ok())
+                    .unwrap_or(0);
+                Ok(Self {
+                    token,
+                    enabled,
+                    name,
+                    hw_address,
+                    mtu,
+                    ipv4_enabled,
+                    ipv4_address,
+                    ipv4_prefix_length,
+                    ipv4_from_dhcp,
+                })
+            })
+            .collect()
+    }
+}
+
+// ── NetworkProtocol ───────────────────────────────────────────────────────────
+
+/// A network protocol entry returned by `GetNetworkProtocols`.
+#[derive(Debug, Clone)]
+pub struct NetworkProtocol {
+    /// Protocol name, e.g. `"HTTP"`, `"HTTPS"`, `"RTSP"`.
+    pub name: String,
+    pub enabled: bool,
+    /// Configured port numbers (typically one element).
+    pub ports: Vec<u32>,
+}
+
+impl NetworkProtocol {
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        Ok(resp
+            .children_named("NetworkProtocols")
+            .map(|n| Self {
+                name: xml_str(n, "Name").unwrap_or_default(),
+                enabled: xml_bool(n, "Enabled"),
+                ports: n
+                    .children_named("Port")
+                    .filter_map(|p| p.text().parse().ok())
+                    .collect(),
+            })
+            .collect())
+    }
+}
+
+// ── DnsInformation ────────────────────────────────────────────────────────────
+
+/// DNS configuration returned by `GetDNS`.
+#[derive(Debug, Clone)]
+pub struct DnsInformation {
+    pub from_dhcp: bool,
+    /// Manually configured DNS server addresses (IPv4 or IPv6 strings).
+    pub servers: Vec<String>,
+}
+
+impl DnsInformation {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let info = resp
+            .child("DNSInformation")
+            .ok_or_else(|| SoapError::missing("DNSInformation"))?;
+        Ok(Self {
+            from_dhcp: xml_bool(info, "FromDHCP"),
+            servers: info
+                .children_named("DNSManual")
+                .chain(info.children_named("DNSFromDHCP"))
+                .filter_map(|e| {
+                    xml_str(e, "IPv4Address")
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| xml_str(e, "IPv6Address").filter(|s| !s.is_empty()))
+                        .or_else(|| xml_str(e, "DNSname").filter(|s| !s.is_empty()))
+                })
+                .collect(),
+        })
+    }
+}
+
+// ── NetworkGateway ────────────────────────────────────────────────────────────
+
+/// Default gateway configuration returned by `GetNetworkDefaultGateway`.
+#[derive(Debug, Clone)]
+pub struct NetworkGateway {
+    pub ipv4_addresses: Vec<String>,
+    pub ipv6_addresses: Vec<String>,
+}
+
+impl NetworkGateway {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let gw = resp
+            .child("NetworkGateway")
+            .ok_or_else(|| SoapError::missing("NetworkGateway"))?;
+        Ok(Self {
+            ipv4_addresses: gw
+                .children_named("IPv4Address")
+                .filter_map(|n| {
+                    let t = n.text().to_string();
+                    if t.is_empty() { None } else { Some(t) }
+                })
+                .collect(),
+            ipv6_addresses: gw
+                .children_named("IPv6Address")
+                .filter_map(|n| {
+                    let t = n.text().to_string();
+                    if t.is_empty() { None } else { Some(t) }
+                })
+                .collect(),
+        })
+    }
+}
+
+// ── SystemLog ─────────────────────────────────────────────────────────────────
+
+/// System log content returned by `GetSystemLog`.
+#[derive(Debug, Clone)]
+pub struct SystemLog {
+    /// Plain-text log content. `None` if the device returned binary data only.
+    pub string: Option<String>,
+}
+
+impl SystemLog {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let log = resp
+            .child("SystemLog")
+            .ok_or_else(|| SoapError::missing("SystemLog"))?;
+        Ok(Self {
+            string: log
+                .child("String")
+                .map(|n| n.text().to_string())
+                .filter(|s| !s.is_empty()),
+        })
+    }
+}
+
+// ── RelayOutput ───────────────────────────────────────────────────────────────
+
+/// A relay output port returned by `GetRelayOutputs`.
+#[derive(Debug, Clone)]
+pub struct RelayOutput {
+    pub token: String,
+    /// `"Bistable"` (latching) or `"Monostable"` (timed).
+    pub mode: String,
+    /// ISO 8601 duration for monostable mode (e.g. `"PT1S"`).
+    pub delay_time: String,
+    /// Idle electrical state: `"closed"` or `"open"`.
+    pub idle_state: String,
+}
+
+impl RelayOutput {
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("RelayOutputs")
+            .map(|n| {
+                let token = n
+                    .attr("token")
+                    .filter(|t| !t.is_empty())
+                    .ok_or_else(|| SoapError::missing("RelayOutputs/@token"))?
+                    .to_string();
+                let props = n.child("Properties");
+                let mode = props
+                    .and_then(|p| p.child("Mode"))
+                    .map(|x| x.text().to_string())
+                    .unwrap_or_default();
+                let delay_time = props
+                    .and_then(|p| p.child("DelayTime"))
+                    .map(|x| x.text().to_string())
+                    .unwrap_or_default();
+                let idle_state = props
+                    .and_then(|p| p.child("IdleState"))
+                    .map(|x| x.text().to_string())
+                    .unwrap_or_default();
+                Ok(Self {
+                    token,
+                    mode,
+                    delay_time,
+                    idle_state,
+                })
+            })
+            .collect()
+    }
+}

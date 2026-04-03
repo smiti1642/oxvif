@@ -44,11 +44,12 @@ use crate::soap::SoapError;
 use crate::transport::Transport;
 use crate::types::{
     AudioEncoderConfiguration, AudioEncoderConfigurationOptions, AudioSource,
-    AudioSourceConfiguration, Capabilities, DeviceInfo, EventProperties, FindRecordingResults,
-    FocusMove, Hostname, ImagingMoveOptions, ImagingOptions, ImagingSettings, ImagingStatus,
-    MediaProfile, MediaProfile2, NotificationMessage, NtpInfo, OnvifService, OsdConfiguration,
-    OsdOptions, PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus,
-    PullPointSubscription, RecordingItem, SnapshotUri, StreamUri, SystemDateTime,
+    AudioSourceConfiguration, Capabilities, DeviceInfo, DnsInformation, EventProperties,
+    FindRecordingResults, FocusMove, Hostname, ImagingMoveOptions, ImagingOptions, ImagingSettings,
+    ImagingStatus, MediaProfile, MediaProfile2, NetworkGateway, NetworkInterface, NetworkProtocol,
+    NotificationMessage, NtpInfo, OnvifService, OsdConfiguration, OsdOptions, PtzConfiguration,
+    PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus, PullPointSubscription, RecordingItem,
+    RelayOutput, SnapshotUri, StreamUri, SystemDateTime, SystemLog, User,
     VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
     VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
     VideoSourceConfiguration, VideoSourceConfigurationOptions,
@@ -269,6 +270,89 @@ impl OnvifSession {
     /// Retrieve the device's scope URIs.
     pub async fn get_scopes(&self) -> Result<Vec<String>, OnvifError> {
         self.client.get_scopes().await
+    }
+
+    /// Retrieve user accounts configured on the device.
+    pub async fn get_users(&self) -> Result<Vec<User>, OnvifError> {
+        self.client.get_users().await
+    }
+
+    /// Create one or more user accounts.
+    pub async fn create_users(&self, users: &[(&str, &str, &str)]) -> Result<(), OnvifError> {
+        self.client.create_users(users).await
+    }
+
+    /// Delete user accounts by username.
+    pub async fn delete_users(&self, usernames: &[&str]) -> Result<(), OnvifError> {
+        self.client.delete_users(usernames).await
+    }
+
+    /// Modify an existing user account.
+    pub async fn set_user(
+        &self,
+        username: &str,
+        password: Option<&str>,
+        user_level: &str,
+    ) -> Result<(), OnvifError> {
+        self.client.set_user(username, password, user_level).await
+    }
+
+    /// Retrieve all network interfaces and their IPv4/IPv6 configuration.
+    pub async fn get_network_interfaces(&self) -> Result<Vec<NetworkInterface>, OnvifError> {
+        self.client.get_network_interfaces().await
+    }
+
+    /// Update the IPv4 configuration of a network interface.
+    pub async fn set_network_interfaces(
+        &self,
+        token: &str,
+        enabled: bool,
+        ipv4_address: &str,
+        prefix_length: u32,
+        from_dhcp: bool,
+    ) -> Result<bool, OnvifError> {
+        self.client
+            .set_network_interfaces(token, enabled, ipv4_address, prefix_length, from_dhcp)
+            .await
+    }
+
+    /// Retrieve the enabled network protocols.
+    pub async fn get_network_protocols(&self) -> Result<Vec<NetworkProtocol>, OnvifError> {
+        self.client.get_network_protocols().await
+    }
+
+    /// Retrieve the DNS server configuration.
+    pub async fn get_dns(&self) -> Result<DnsInformation, OnvifError> {
+        self.client.get_dns().await
+    }
+
+    /// Set the DNS server configuration.
+    pub async fn set_dns(&self, from_dhcp: bool, servers: &[&str]) -> Result<(), OnvifError> {
+        self.client.set_dns(from_dhcp, servers).await
+    }
+
+    /// Retrieve the default IPv4 and IPv6 gateway addresses.
+    pub async fn get_network_default_gateway(&self) -> Result<NetworkGateway, OnvifError> {
+        self.client.get_network_default_gateway().await
+    }
+
+    /// Retrieve the device system log.
+    pub async fn get_system_log(&self, log_type: &str) -> Result<SystemLog, OnvifError> {
+        self.client.get_system_log(log_type).await
+    }
+
+    /// Retrieve all relay output port configurations.
+    pub async fn get_relay_outputs(&self) -> Result<Vec<RelayOutput>, OnvifError> {
+        self.client.get_relay_outputs().await
+    }
+
+    /// Set the electrical state of a relay output port.
+    pub async fn set_relay_output_state(
+        &self,
+        relay_token: &str,
+        state: &str,
+    ) -> Result<(), OnvifError> {
+        self.client.set_relay_output_state(relay_token, state).await
     }
 
     // ── Media1 Service ────────────────────────────────────────────────────────

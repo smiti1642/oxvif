@@ -107,6 +107,15 @@ resp.children_named("Foo").map(|n| {
    - At least one negative test per method (missing token or SOAP Fault)
    - For write methods: use `RecordingTransport` and assert `c.action` + `c.body`
 
+### Mock server coverage
+
+5a. Add a handler for every new ONVIF action in `examples/mock_server.rs` —
+    including write/Set methods. This makes `mock_server` a full integration
+    harness that runs without a real device.
+    - Add the action URI to the `dispatch()` match block.
+    - Add a `resp_<operation>()` function returning a plausible canned response.
+    - Write methods that return `void` may share `resp_empty(prefix, tag)`.
+
 ### Quality gate (run before every commit)
 
 ```
