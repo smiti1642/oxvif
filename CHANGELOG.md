@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.7.2] - 2026-04-03
+
+### Changed
+- Updated crate-level docs (`lib.rs`): architecture diagram now shows
+  `OnvifSession` above `OnvifClient`; quick start rewritten to use
+  `OnvifSession`; added `OnvifClient` low-level section; Device service
+  list updated with all operations added in 0.6.0–0.7.0
+
+---
+
 ## [0.7.1] - 2026-04-03
 
 ### Changed

@@ -18,9 +18,12 @@
 //!
 //! ## Supported services
 //!
-//! - **Device** — capabilities, scopes, device info, hostname, NTP, reboot
+//! - **Device** — capabilities, scopes, device info, hostname, NTP, reboot,
+//!   user management, network interfaces/protocols/DNS/gateway, relay outputs,
+//!   storage configurations, system log/URIs, factory default, discovery mode
 //! - **Media1 / Media2** — profiles, RTSP/snapshot URIs, video + audio config, OSD
-//! - **PTZ** — absolute/relative/continuous move, presets, home position, status
+//! - **PTZ** — absolute/relative/continuous move, presets, home position, status,
+//!   configurations, nodes
 //! - **Imaging** — brightness/contrast/exposure settings, focus move/stop/status
 //! - **Events** — pull-point subscriptions, event polling, renew, unsubscribe
 //! - **Recording** — list stored recordings
@@ -32,7 +35,10 @@
 //!
 //! ```text
 //! ┌──────────────────────────────────────────────────────┐
-//! │                    OnvifClient                       │  ← public API
+//! │                  OnvifSession                        │  ← high-level API
+//! │     (caches service URLs, no URL params needed)      │
+//! ├──────────────────────────────────────────────────────┤
+//! │                   OnvifClient                        │  ← low-level API
 //! ├──────────────────────────────────────────────────────┤
 //! │    soap::SoapEnvelope  │  soap::WsSecurityToken      │  ← SOAP layer
 //! ├──────────────────────────────────────────────────────┤
@@ -41,7 +47,35 @@
 //! └──────────────────────────────────────────────────────┘
 //! ```
 //!
-//! ## Quick start
+//! ## Quick start — `OnvifSession` (recommended)
+//!
+//! [`OnvifSession`] calls `GetCapabilities` once at construction and caches all
+//! service URLs. No need to pass URL parameters to individual methods.
+//!
+//! ```no_run
+//! use oxvif::{OnvifSession, OnvifError};
+//!
+//! async fn run() -> Result<(), OnvifError> {
+//!     let session = OnvifSession::builder("http://192.168.1.100/onvif/device_service")
+//!         .with_credentials("admin", "password")
+//!         .with_clock_sync()  // syncs WS-Security timestamp with device clock
+//!         .build()
+//!         .await?;
+//!
+//!     let profiles = session.get_profiles().await?;
+//!     let uri = session.get_stream_uri(&profiles[0].token).await?;
+//!     println!("RTSP stream: {}", uri.uri);
+//!
+//!     let status = session.ptz_get_status(&profiles[0].token).await?;
+//!     println!("Pan: {:?}  Tilt: {:?}", status.pan, status.tilt);
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Low-level access — `OnvifClient`
+//!
+//! [`OnvifClient`] is stateless and gives direct control over every call.
+//! Use it when you need fine-grained URL routing or a custom transport.
 //!
 //! ```no_run
 //! use oxvif::{OnvifClient, OnvifError};
@@ -50,15 +84,12 @@
 //!     let client = OnvifClient::new("http://192.168.1.100/onvif/device_service")
 //!         .with_credentials("admin", "password");
 //!
-//!     // Sync device clock for WS-Security timestamps
 //!     let dt = client.get_system_date_and_time().await?;
 //!     let client = client.with_utc_offset(dt.utc_offset_secs());
 //!
-//!     // Discover service endpoints
 //!     let caps = client.get_capabilities().await?;
 //!     let media_url = caps.media.url.as_deref().unwrap();
 //!
-//!     // List media profiles and get the first RTSP stream URI
 //!     let profiles = client.get_profiles(media_url).await?;
 //!     let uri = client.get_stream_uri(media_url, &profiles[0].token).await?;
 //!     println!("RTSP stream: {}", uri.uri);
