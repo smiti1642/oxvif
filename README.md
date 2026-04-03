@@ -23,7 +23,7 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 292 unit tests + 11 doc tests
+- 306 unit tests + 11 doc tests
 
 ---
 
@@ -492,7 +492,7 @@ s.ir_cut_filter = Some("AUTO".into());
 client.set_imaging_settings(&imaging_url, &source_token, &s).await?;
 ```
 
-**`ImagingSettings` fields:** `brightness`, `color_saturation`, `contrast`, `sharpness` (`Option<f32>`), `ir_cut_filter`, `white_balance_mode`, `exposure_mode` (`Option<String>`).
+**`ImagingSettings` fields:** `brightness`, `color_saturation`, `contrast`, `sharpness`, `focus_default_speed`, `wide_dynamic_range_level` (`Option<f32>`); `ir_cut_filter`, `white_balance_mode`, `exposure_mode`, `backlight_compensation`, `focus_mode`, `wide_dynamic_range_mode`, `image_stabilization_mode`, `tone_compensation_mode` (`Option<String>`).
 
 ```rust
 // Move focus to an absolute position
@@ -539,6 +539,9 @@ let osd = OsdConfiguration {
         time_format: Some("HH:mm:ss".into()),
         plain_text: None,
         font_size: Some(28),
+        font_color: None,
+        background_color: None,
+        is_persistent_text: None,
     }),
     image_path: None,
 };
@@ -553,6 +556,8 @@ for o in &osds {
 ```
 
 **`OsdConfiguration` fields:** `token`, `video_source_config_token`, `type_` (`"Text"` or `"Image"`), `position` (`OsdPosition`), `text_string` (`Option<OsdTextString>`), `image_path` (`Option<String>`).
+
+**`OsdTextString` fields:** `type_`, `plain_text`, `date_format`, `time_format` (`Option<String>`), `font_size` (`Option<u32>`), `font_color`, `background_color` (`Option<OsdColor>`), `is_persistent_text` (`Option<bool>`). `OsdColor` carries `x`/`y`/`z` channel values, optional `colorspace` URI, and `transparent` level.
 
 **`OsdOptions` fields:** `max_osd` (`u32`), `types` (`Vec<String>`), `position_types` (`Vec<String>`), `text_types` (`Vec<String>`).
 
@@ -625,6 +630,10 @@ Access recordings stored on the device (NVR/DVR). Obtain `recording_url` from
 | `get_recordings(recording_url)` | `Vec<RecordingItem>` | List all stored recordings |
 
 **`RecordingItem` fields:** `token`, `source` (`RecordingSourceInformation`), `content`, `earliest_recording`, `latest_recording` (`Option<String>` ISO-8601), `recording_status` (`"Recording"`, `"Stopped"`, etc.), `tracks` (`Vec<RecordingTrack>`).
+
+**`RecordingSourceInformation` fields:** `source_id`, `name`, `location`, `description` (`String`), `address` (`Option<String>` — network address of the source device).
+
+**`RecordingTrack` fields:** `token`, `track_type` (`"Video"`, `"Audio"`, `"Metadata"`), `description` (`String`), `data_from`, `data_to` (`Option<String>` ISO-8601 — time bounds of recorded data in this track).
 
 ---
 

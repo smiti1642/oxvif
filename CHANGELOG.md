@@ -5,6 +5,49 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.7.5] - 2026-04-04
+
+### Changed
+- Extended existing response types with ONVIF spec fields that were previously omitted (second batch):
+  - `MediaProfile2`: `audio_source_token`, `audio_encoder_token`, `ptz_config_token`
+    (`Configurations/AudioSource`, `Audio`, `PTZ/@token`)
+  - `PtzConfiguration`: 6 default coordinate-space URI fields
+    (`DefaultAbsolutePanTiltPositionSpace`, `DefaultAbsoluteZoomPositionSpace`,
+    `DefaultRelativePanTiltTranslationSpace`, `DefaultRelativeZoomTranslationSpace`,
+    `DefaultContinuousPanTiltVelocitySpace`, `DefaultContinuousZoomVelocitySpace`)
+    + new `PtzSpeed` struct for `DefaultPTZSpeed` (`pan_tilt`/`zoom`)
+    + `to_xml_body` updated to serialise all new fields
+  - `ImagingSettings`: `focus_mode`, `focus_default_speed`, `wide_dynamic_range_mode`,
+    `wide_dynamic_range_level`, `image_stabilization_mode`, `tone_compensation_mode`
+    + `to_xml_body` updated
+  - `RecordingTrack`: `data_from`, `data_to` (track time bounds)
+  - `RecordingSourceInformation`: `address` (source device network address)
+  - `OsdTextString`: new `OsdColor` struct (`x`/`y`/`z`/`colorspace`/`transparent`),
+    `font_color`, `background_color`, `is_persistent_text` + `to_xml_body` updated
+- New public types: `OsdColor`, `PtzSpeed`, `MulticastConfiguration`
+- 5 new unit tests (301 → 306)
+
+---
+
+## [0.7.4] - 2026-04-04
+
+### Changed
+- Extended existing response types with ONVIF spec fields that were previously omitted (first batch):
+  - `MediaProfile`: `video_source_token`, `video_encoder_token`, `audio_source_token`,
+    `audio_encoder_token`, `ptz_config_token` (child element `@token` attributes)
+  - `PtzNode`: `pan_tilt_spaces`, `zoom_spaces` (`Vec<PtzSpaceRange>` from `SupportedPTZSpaces`)
+  - `PtzStatus`: `utc_time` (`PTZStatus/UtcTime`)
+  - `AudioEncoderConfiguration`: `channels` (`Channels` element); `to_xml_body` updated
+  - `DnsInformation`: `search_domains` (`Vec<String>` from `SearchDomain` elements)
+  - `VideoEncoderConfiguration`: new `MulticastConfiguration` struct + `multicast` field
+    (`Multicast/Address/IPv4Address`, `Port`, `TTL`, `AutoStart`); `to_xml_body` updated
+  - `ImagingSettings`: `backlight_compensation` (`BacklightCompensation/Mode`); `to_xml_body` updated
+  - `NetworkInterface`: `ipv6_enabled`, `ipv6_from_dhcp`, `ipv6_address`
+    (`IPv6/Enabled`, `IPv6/Config/DHCP`, `IPv6/Config/Manual|LinkLocal/Address`)
+- 9 new unit tests (292 → 301)
+
+---
+
 ## [0.7.3] - 2026-04-03
 
 ### Changed
