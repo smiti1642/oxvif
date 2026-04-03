@@ -3734,3 +3734,353 @@ async fn test_set_relay_output_state_soap_fault_returns_err() {
         OnvifError::Soap(crate::soap::SoapError::Fault { .. })
     ));
 }
+
+// ── set_relay_output_settings ─────────────────────────────────────────────────
+
+fn set_relay_output_settings_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetRelayOutputSettingsResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_set_relay_output_settings_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(set_relay_output_settings_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_relay_output_settings("Relay_1", "Monostable", "PT2S", "open")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/SetRelayOutputSettings"
+    );
+    assert!(
+        c.body
+            .contains("<tds:RelayOutputToken>Relay_1</tds:RelayOutputToken>")
+    );
+    assert!(c.body.contains("<tt:Mode>Monostable</tt:Mode>"));
+    assert!(c.body.contains("<tt:DelayTime>PT2S</tt:DelayTime>"));
+    assert!(c.body.contains("<tt:IdleState>open</tt:IdleState>"));
+}
+
+#[tokio::test]
+async fn test_set_relay_output_settings_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidToken")));
+    let err = client
+        .set_relay_output_settings("bad", "Bistable", "PT0S", "closed")
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── set_network_protocols ─────────────────────────────────────────────────────
+
+fn set_network_protocols_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetNetworkProtocolsResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_set_network_protocols_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(set_network_protocols_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_network_protocols(&[("HTTP", true, &[80u32]), ("RTSP", true, &[554u32])])
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/SetNetworkProtocols"
+    );
+    assert!(c.body.contains("<tt:Name>HTTP</tt:Name>"));
+    assert!(c.body.contains("<tt:Name>RTSP</tt:Name>"));
+    assert!(c.body.contains("<tt:Port>554</tt:Port>"));
+}
+
+#[tokio::test]
+async fn test_set_network_protocols_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotSupported")));
+    let err = client
+        .set_network_protocols(&[("HTTP", true, &[])])
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── set_system_factory_default ────────────────────────────────────────────────
+
+fn set_system_factory_default_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetSystemFactoryDefaultResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_set_system_factory_default_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(set_system_factory_default_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client.set_system_factory_default("Soft").await.unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/SetSystemFactoryDefault"
+    );
+    assert!(
+        c.body
+            .contains("<tds:FactoryDefault>Soft</tds:FactoryDefault>")
+    );
+}
+
+#[tokio::test]
+async fn test_set_system_factory_default_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotAuthorized")));
+    let err = client.set_system_factory_default("Hard").await.unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── get_storage_configurations ────────────────────────────────────────────────
+
+fn get_storage_configurations_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetStorageConfigurationsResponse>
+             <tds:StorageConfigurations token="SD_01">
+               <tt:StorageType>LocalStorage</tt:StorageType>
+               <tt:LocalPath>/mnt/sd</tt:LocalPath>
+               <tt:StorageUri></tt:StorageUri>
+               <tt:UserInfo>
+                 <tt:Username></tt:Username>
+                 <tt:UseAnonymous>true</tt:UseAnonymous>
+               </tt:UserInfo>
+             </tds:StorageConfigurations>
+           </tds:GetStorageConfigurationsResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_storage_configurations_returns_fields() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_storage_configurations_xml()));
+    let configs = client.get_storage_configurations().await.unwrap();
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs[0].token, "SD_01");
+    assert_eq!(configs[0].storage_type, "LocalStorage");
+    assert_eq!(configs[0].local_path, "/mnt/sd");
+    assert!(configs[0].use_anonymous);
+}
+
+#[tokio::test]
+async fn test_get_storage_configurations_missing_token_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetStorageConfigurationsResponse>
+             <tds:StorageConfigurations>
+               <tt:StorageType>LocalStorage</tt:StorageType>
+             </tds:StorageConfigurations>
+           </tds:GetStorageConfigurationsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let err = client.get_storage_configurations().await.unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::MissingField(_))
+    ));
+}
+
+// ── set_storage_configuration ─────────────────────────────────────────────────
+
+fn set_storage_configuration_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetStorageConfigurationResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_set_storage_configuration_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(set_storage_configuration_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_storage_configuration("SD_01", "LocalStorage", "/mnt/sd", "", "", true)
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/SetStorageConfiguration"
+    );
+    assert!(
+        c.body
+            .contains("<tt:StorageType>LocalStorage</tt:StorageType>")
+    );
+    assert!(c.body.contains("<tt:LocalPath>/mnt/sd</tt:LocalPath>"));
+    assert!(c.body.contains("<tt:UseAnonymous>true</tt:UseAnonymous>"));
+}
+
+#[tokio::test]
+async fn test_set_storage_configuration_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidToken")));
+    let err = client
+        .set_storage_configuration("bad", "LocalStorage", "/mnt/sd", "", "", false)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── get_system_uris ───────────────────────────────────────────────────────────
+
+fn get_system_uris_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body>
+           <tds:GetSystemUrisResponse>
+             <tds:FirmwareUpgrade>http://192.168.1.1/firmware</tds:FirmwareUpgrade>
+             <tds:SystemLog>http://192.168.1.1/log</tds:SystemLog>
+             <tds:SupportInfo>http://192.168.1.1/support</tds:SupportInfo>
+           </tds:GetSystemUrisResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_system_uris_returns_fields() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_system_uris_xml()));
+    let uris = client.get_system_uris().await.unwrap();
+    assert_eq!(
+        uris.firmware_upgrade_uri.as_deref(),
+        Some("http://192.168.1.1/firmware")
+    );
+    assert_eq!(
+        uris.system_log_uri.as_deref(),
+        Some("http://192.168.1.1/log")
+    );
+    assert_eq!(
+        uris.support_info_uri.as_deref(),
+        Some("http://192.168.1.1/support")
+    );
+}
+
+#[tokio::test]
+async fn test_get_system_uris_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotSupported")));
+    let err = client.get_system_uris().await.unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── get_discovery_mode ────────────────────────────────────────────────────────
+
+fn get_discovery_mode_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body>
+           <tds:GetDiscoveryModeResponse>
+             <tds:DiscoveryMode>Discoverable</tds:DiscoveryMode>
+           </tds:GetDiscoveryModeResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_discovery_mode_returns_value() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_discovery_mode_xml()));
+    let mode = client.get_discovery_mode().await.unwrap();
+    assert_eq!(mode, "Discoverable");
+}
+
+#[tokio::test]
+async fn test_get_discovery_mode_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotSupported")));
+    let err = client.get_discovery_mode().await.unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── set_discovery_mode ────────────────────────────────────────────────────────
+
+fn set_discovery_mode_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetDiscoveryModeResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_set_discovery_mode_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(set_discovery_mode_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client.set_discovery_mode("NonDiscoverable").await.unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/SetDiscoveryMode"
+    );
+    assert!(
+        c.body
+            .contains("<tds:DiscoveryMode>NonDiscoverable</tds:DiscoveryMode>")
+    );
+}
+
+#[tokio::test]
+async fn test_set_discovery_mode_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotAuthorized")));
+    let err = client.set_discovery_mode("Discoverable").await.unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}

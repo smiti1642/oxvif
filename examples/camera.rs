@@ -27,13 +27,16 @@
 //! cargo run --example camera -- users
 //! cargo run --example camera -- network-config
 //! cargo run --example camera -- relay-outputs
+//! cargo run --example camera -- storage
+//! cargo run --example camera -- discovery-mode
 //! ```
 
 use std::time::Duration;
 
 use oxvif::{
     Capabilities, DeviceInfo, FocusMove, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
-    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, SystemDateTime, User,
+    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, StorageConfiguration,
+    SystemDateTime, User,
 };
 use std::env;
 
@@ -96,6 +99,8 @@ async fn main() {
         "users" => users_example(&cfg).await,
         "network-config" => network_config(&cfg).await,
         "relay-outputs" => relay_outputs_example(&cfg).await,
+        "storage" => storage_example(&cfg).await,
+        "discovery-mode" => discovery_mode_example(&cfg).await,
         _ => {
             print_help();
             return;
@@ -139,6 +144,8 @@ fn print_help() {
     println!("  users                List, create, and delete device user accounts");
     println!("  network-config       Network interfaces, protocols, DNS, and gateway");
     println!("  relay-outputs        List relay outputs and trigger state change");
+    println!("  storage              List storage configurations (SD/NAS)");
+    println!("  discovery-mode       Show and toggle WS-Discovery mode");
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -869,6 +876,45 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
                 );
             }
         }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 26. Storage configurations ────────────────────────────────────────────
+    section("GetStorageConfigurations");
+    match client.get_storage_configurations().await {
+        Ok(configs) => {
+            println!("  Found {} storage config(s)", configs.len());
+            for c in &configs {
+                println!(
+                    "  [{}] type={} path={}",
+                    c.token, c.storage_type, c.local_path
+                );
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 27. System URIs ───────────────────────────────────────────────────────
+    section("GetSystemUris");
+    match client.get_system_uris().await {
+        Ok(uris) => {
+            if let Some(u) = &uris.firmware_upgrade_uri {
+                println!("  Firmware : {u}");
+            }
+            if let Some(u) = &uris.system_log_uri {
+                println!("  SysLog   : {u}");
+            }
+            if let Some(u) = &uris.support_info_uri {
+                println!("  Support  : {u}");
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 28. Discovery mode ────────────────────────────────────────────────────
+    section("GetDiscoveryMode");
+    match client.get_discovery_mode().await {
+        Ok(mode) => println!("  Mode: {mode}"),
         Err(e) => println!("  (skipped — {e})"),
     }
 
@@ -2625,6 +2671,51 @@ async fn relay_outputs_example(cfg: &Config) -> Result<(), OnvifError> {
             Err(e) => println!("  (skipped — {e})"),
         }
     }
+
+    Ok(())
+}
+
+// ── Example: storage ──────────────────────────────────────────────────────────
+
+/// List storage configurations and exercise set_storage_configuration.
+async fn storage_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Storage configurations ===");
+
+    let (client, _caps) = connect(cfg).await?;
+
+    section("GetStorageConfigurations");
+    let configs: Vec<StorageConfiguration> = client.get_storage_configurations().await?;
+    if configs.is_empty() {
+        println!("  (no storage configurations found)");
+    } else {
+        println!(
+            "  {:<12}  {:<14}  {:<20}  Anonymous",
+            "Token", "Type", "Local path"
+        );
+        println!("  {}", "-".repeat(65));
+        for c in &configs {
+            println!(
+                "  {:<12}  {:<14}  {:<20}  {}",
+                c.token, c.storage_type, c.local_path, c.use_anonymous
+            );
+        }
+    }
+
+    Ok(())
+}
+
+// ── Example: discovery mode ───────────────────────────────────────────────────
+
+/// Show the current WS-Discovery mode and optionally toggle it.
+/// Read-only by default — does not change the device.
+async fn discovery_mode_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== WS-Discovery mode ===");
+
+    let (client, _caps) = connect(cfg).await?;
+
+    section("GetDiscoveryMode");
+    let mode = client.get_discovery_mode().await?;
+    println!("  Current mode: {mode}");
 
     Ok(())
 }

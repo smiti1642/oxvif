@@ -23,7 +23,7 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 276 unit tests + 11 doc tests
+- 292 unit tests + 11 doc tests
 
 ---
 
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-oxvif = "0.6.0"
+oxvif = "0.7.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -221,17 +221,25 @@ for s in &scopes {
 | `get_network_interfaces()` | List interfaces with IP/MAC/MTU info → `Vec<NetworkInterface>` |
 | `set_network_interfaces(token, enabled, addr, prefix, from_dhcp)` | Update IPv4 config; returns `RebootNeeded: bool` |
 | `get_network_protocols()` | List enabled protocols (HTTP/HTTPS/RTSP, ports) → `Vec<NetworkProtocol>` |
+| `set_network_protocols(protocols)` | Enable/disable protocols — `protocols` is `&[(&str, bool, &[u32])]` |
 | `get_dns()` | DNS servers + DHCP flag → `DnsInformation` |
 | `set_dns(from_dhcp, servers)` | Set DNS servers |
 | `get_network_default_gateway()` | Default gateway addresses → `NetworkGateway` |
+| `get_discovery_mode()` | Current WS-Discovery mode (`"Discoverable"` / `"NonDiscoverable"`) |
+| `set_discovery_mode(mode)` | Change WS-Discovery mode |
 
 ### System & I/O
 
 | Method | Description |
 |--------|-------------|
 | `get_system_log(log_type)` | Retrieve device log (`"System"` or `"Access"`) → `SystemLog` |
+| `get_system_uris()` | Firmware-upgrade / syslog / support-info download URIs → `SystemUris` |
+| `set_system_factory_default(default_type)` | Factory reset — `"Hard"` (full) or `"Soft"` (keep network) |
 | `get_relay_outputs()` | List relay output ports → `Vec<RelayOutput>` |
-| `set_relay_output_state(token, state)` | Set relay state (`"active"` / `"inactive"`) |
+| `set_relay_output_state(token, state)` | Set relay electrical state (`"active"` / `"inactive"`) |
+| `set_relay_output_settings(token, mode, delay, idle)` | Configure relay mode/delay/idle-state |
+| `get_storage_configurations()` | List SD/NAS storage locations → `Vec<StorageConfiguration>` |
+| `set_storage_configuration(token, ...)` | Create or update a storage configuration entry |
 
 ---
 
@@ -775,11 +783,15 @@ examples/
 | `GetScopes` | ✓ |
 | `GetUsers` / `CreateUsers` / `DeleteUsers` / `SetUser` | ✓ |
 | `GetNetworkInterfaces` / `SetNetworkInterfaces` | ✓ |
-| `GetNetworkProtocols` | ✓ |
+| `GetNetworkProtocols` / `SetNetworkProtocols` | ✓ |
 | `GetDNS` / `SetDNS` | ✓ |
 | `GetNetworkDefaultGateway` | ✓ |
+| `GetDiscoveryMode` / `SetDiscoveryMode` | ✓ |
 | `GetSystemLog` | ✓ |
-| `GetRelayOutputs` / `SetRelayOutputState` | ✓ |
+| `GetSystemUris` | ✓ |
+| `SetSystemFactoryDefault` | ✓ |
+| `GetRelayOutputs` / `SetRelayOutputState` / `SetRelayOutputSettings` | ✓ |
+| `GetStorageConfigurations` / `SetStorageConfiguration` | ✓ |
 
 ### Media Service (Media1)
 

@@ -5,8 +5,8 @@ use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
     Capabilities, DeviceInfo, DnsInformation, Hostname, NetworkGateway, NetworkInterface,
-    NetworkProtocol, NtpInfo, OnvifService, RelayOutput, SystemDateTime, SystemLog, User,
-    xml_escape,
+    NetworkProtocol, NtpInfo, OnvifService, RelayOutput, StorageConfiguration, SystemDateTime,
+    SystemLog, SystemUris, User, xml_escape,
 };
 
 impl OnvifClient {
@@ -414,6 +414,39 @@ impl OnvifClient {
         RelayOutput::vec_from_xml(resp)
     }
 
+    /// Configure the properties of a relay output port.
+    ///
+    /// - `mode`: `"Bistable"` (latching) or `"Monostable"` (timed).
+    /// - `delay_time`: ISO 8601 duration for monostable mode, e.g. `"PT1S"`.
+    /// - `idle_state`: `"closed"` or `"open"`.
+    pub async fn set_relay_output_settings(
+        &self,
+        relay_token: &str,
+        mode: &str,
+        delay_time: &str,
+        idle_state: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetRelayOutputSettings";
+        let body = format!(
+            "<tds:SetRelayOutputSettings>\
+               <tds:RelayOutputToken>{}</tds:RelayOutputToken>\
+               <tds:Properties>\
+                 <tt:Mode>{}</tt:Mode>\
+                 <tt:DelayTime>{}</tt:DelayTime>\
+                 <tt:IdleState>{}</tt:IdleState>\
+               </tds:Properties>\
+             </tds:SetRelayOutputSettings>",
+            xml_escape(relay_token),
+            xml_escape(mode),
+            xml_escape(delay_time),
+            xml_escape(idle_state)
+        );
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetRelayOutputSettingsResponse")?;
+        Ok(())
+    }
+
     /// Set the electrical state of a relay output port.
     ///
     /// `state` must be `"active"` or `"inactive"`.
@@ -434,6 +467,154 @@ impl OnvifClient {
         let xml = self.call(&self.device_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;
         find_response(&body_node, "SetRelayOutputStateResponse")?;
+        Ok(())
+    }
+
+    /// Enable or disable network protocols (HTTP, HTTPS, RTSP, etc.).
+    ///
+    /// Each element of `protocols` is `(name, enabled, ports)`.
+    /// `name` is typically `"HTTP"`, `"HTTPS"`, or `"RTSP"`.
+    pub async fn set_network_protocols(
+        &self,
+        protocols: &[(&str, bool, &[u32])],
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetNetworkProtocols";
+        let proto_els: String = protocols
+            .iter()
+            .map(|(name, enabled, ports)| {
+                let port_els: String = ports
+                    .iter()
+                    .map(|p| format!("<tt:Port>{p}</tt:Port>"))
+                    .collect();
+                format!(
+                    "<tds:NetworkProtocols>\
+                       <tt:Name>{}</tt:Name>\
+                       <tt:Enabled>{enabled}</tt:Enabled>\
+                       {port_els}\
+                     </tds:NetworkProtocols>",
+                    xml_escape(name)
+                )
+            })
+            .collect();
+        let body = format!("<tds:SetNetworkProtocols>{proto_els}</tds:SetNetworkProtocols>");
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetNetworkProtocolsResponse")?;
+        Ok(())
+    }
+
+    /// Restore the device to factory defaults.
+    ///
+    /// `default_type` must be `"Hard"` (full reset, including network settings)
+    /// or `"Soft"` (reset configuration but keep network settings).
+    pub async fn set_system_factory_default(&self, default_type: &str) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetSystemFactoryDefault";
+        let body = format!(
+            "<tds:SetSystemFactoryDefault>\
+               <tds:FactoryDefault>{}</tds:FactoryDefault>\
+             </tds:SetSystemFactoryDefault>",
+            xml_escape(default_type)
+        );
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetSystemFactoryDefaultResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve all storage locations (SD card, NAS, etc.) configured on the device.
+    pub async fn get_storage_configurations(
+        &self,
+    ) -> Result<Vec<StorageConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetStorageConfigurations";
+        const BODY: &str = "<tds:GetStorageConfigurations/>";
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetStorageConfigurationsResponse")?;
+        StorageConfiguration::vec_from_xml(resp)
+    }
+
+    /// Create or update a storage configuration entry.
+    ///
+    /// Pass `token = ""` to create a new entry; supply an existing token to
+    /// update it.
+    pub async fn set_storage_configuration(
+        &self,
+        token: &str,
+        storage_type: &str,
+        local_path: &str,
+        storage_uri: &str,
+        user: &str,
+        use_anonymous: bool,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetStorageConfiguration";
+        let token_attr = if token.is_empty() {
+            String::new()
+        } else {
+            format!(" token=\"{}\"", xml_escape(token))
+        };
+        let use_anon_str = if use_anonymous { "true" } else { "false" };
+        let body = format!(
+            "<tds:SetStorageConfiguration>\
+               <tds:StorageConfiguration{token_attr}>\
+                 <tt:StorageType>{}</tt:StorageType>\
+                 <tt:LocalPath>{}</tt:LocalPath>\
+                 <tt:StorageUri>{}</tt:StorageUri>\
+                 <tt:UserInfo>\
+                   <tt:Username>{}</tt:Username>\
+                   <tt:UseAnonymous>{use_anon_str}</tt:UseAnonymous>\
+                 </tt:UserInfo>\
+               </tds:StorageConfiguration>\
+             </tds:SetStorageConfiguration>",
+            xml_escape(storage_type),
+            xml_escape(local_path),
+            xml_escape(storage_uri),
+            xml_escape(user)
+        );
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetStorageConfigurationResponse")?;
+        Ok(())
+    }
+
+    /// Retrieve HTTP URIs for firmware upgrade, system log, and support-info download.
+    pub async fn get_system_uris(&self) -> Result<SystemUris, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetSystemUris";
+        const BODY: &str = "<tds:GetSystemUris/>";
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetSystemUrisResponse")?;
+        SystemUris::from_xml(resp)
+    }
+
+    /// Retrieve the current WS-Discovery mode.
+    ///
+    /// Returns `"Discoverable"` or `"NonDiscoverable"`.
+    pub async fn get_discovery_mode(&self) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetDiscoveryMode";
+        const BODY: &str = "<tds:GetDiscoveryMode/>";
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetDiscoveryModeResponse")?;
+        Ok(resp
+            .child("DiscoveryMode")
+            .map(|n| n.text().to_string())
+            .unwrap_or_default())
+    }
+
+    /// Set the WS-Discovery mode.
+    ///
+    /// `mode` must be `"Discoverable"` or `"NonDiscoverable"`.
+    pub async fn set_discovery_mode(&self, mode: &str) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetDiscoveryMode";
+        let body = format!(
+            "<tds:SetDiscoveryMode>\
+               <tds:DiscoveryMode>{}</tds:DiscoveryMode>\
+             </tds:SetDiscoveryMode>",
+            xml_escape(mode)
+        );
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetDiscoveryModeResponse")?;
         Ok(())
     }
 }

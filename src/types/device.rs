@@ -488,3 +488,81 @@ impl RelayOutput {
             .collect()
     }
 }
+
+// ── StorageConfiguration ──────────────────────────────────────────────────────
+
+/// A storage location (SD card, NAS, etc.) returned by `GetStorageConfigurations`.
+#[derive(Debug, Clone)]
+pub struct StorageConfiguration {
+    pub token: String,
+    /// `"LocalStorage"` or `"NFS"`.
+    pub storage_type: String,
+    /// Mount path on the device (e.g. `"/mnt/sd"`).
+    pub local_path: String,
+    /// Network URI for NFS shares.
+    pub storage_uri: String,
+    /// Username for authenticated shares (empty if anonymous or local).
+    pub user: String,
+    /// Whether anonymous access is used.
+    pub use_anonymous: bool,
+}
+
+impl StorageConfiguration {
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("StorageConfigurations")
+            .map(|n| {
+                let token = n
+                    .attr("token")
+                    .filter(|t| !t.is_empty())
+                    .ok_or_else(|| SoapError::missing("StorageConfigurations/@token"))?
+                    .to_string();
+                let storage_type = xml_str(n, "StorageType").unwrap_or_default();
+                let local_path = xml_str(n, "LocalPath").unwrap_or_default();
+                let storage_uri = xml_str(n, "StorageUri").unwrap_or_default();
+                let user = n
+                    .child("UserInfo")
+                    .and_then(|u| u.child("Username"))
+                    .map(|x| x.text().to_string())
+                    .unwrap_or_default();
+                let use_anonymous = n
+                    .child("UserInfo")
+                    .and_then(|u| u.child("UseAnonymous"))
+                    .map(|x| x.text() == "true" || x.text() == "1")
+                    .unwrap_or(false);
+                Ok(Self {
+                    token,
+                    storage_type,
+                    local_path,
+                    storage_uri,
+                    user,
+                    use_anonymous,
+                })
+            })
+            .collect()
+    }
+}
+
+// ── SystemUris ────────────────────────────────────────────────────────────────
+
+/// HTTP URIs for system management tasks returned by `GetSystemUris`.
+#[derive(Debug, Clone)]
+pub struct SystemUris {
+    /// URI for uploading a firmware image.
+    pub firmware_upgrade_uri: Option<String>,
+    /// URI for downloading the system log.
+    pub system_log_uri: Option<String>,
+    /// URI for downloading a support-info bundle.
+    pub support_info_uri: Option<String>,
+}
+
+impl SystemUris {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        Ok(Self {
+            firmware_upgrade_uri: xml_str(resp, "FirmwareUpgrade")
+                .or_else(|| xml_str(resp, "FirmwareUpgradeUri")),
+            system_log_uri: xml_str(resp, "SystemLog").or_else(|| xml_str(resp, "SystemLogUri")),
+            support_info_uri: xml_str(resp, "SupportInfo")
+                .or_else(|| xml_str(resp, "SupportInfoUri")),
+        })
+    }
+}

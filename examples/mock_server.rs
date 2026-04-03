@@ -135,6 +135,26 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver10/device/wsdl/SetRelayOutputState" => {
             resp_empty("tds", "SetRelayOutputStateResponse")
         }
+        "http://www.onvif.org/ver10/device/wsdl/SetRelayOutputSettings" => {
+            resp_empty("tds", "SetRelayOutputSettingsResponse")
+        }
+        "http://www.onvif.org/ver10/device/wsdl/SetNetworkProtocols" => {
+            resp_empty("tds", "SetNetworkProtocolsResponse")
+        }
+        "http://www.onvif.org/ver10/device/wsdl/SetSystemFactoryDefault" => {
+            resp_empty("tds", "SetSystemFactoryDefaultResponse")
+        }
+        "http://www.onvif.org/ver10/device/wsdl/GetStorageConfigurations" => {
+            resp_storage_configurations()
+        }
+        "http://www.onvif.org/ver10/device/wsdl/SetStorageConfiguration" => {
+            resp_empty("tds", "SetStorageConfigurationResponse")
+        }
+        "http://www.onvif.org/ver10/device/wsdl/GetSystemUris" => resp_system_uris(base),
+        "http://www.onvif.org/ver10/device/wsdl/GetDiscoveryMode" => resp_discovery_mode(),
+        "http://www.onvif.org/ver10/device/wsdl/SetDiscoveryMode" => {
+            resp_empty("tds", "SetDiscoveryModeResponse")
+        }
 
         // ── Media1 ────────────────────────────────────────────────────────────
         "http://www.onvif.org/ver10/media/wsdl/GetProfiles" => resp_profiles(),
@@ -964,5 +984,47 @@ fn resp_replay_uri() -> String {
         r#"<trp:GetReplayUriResponse>
           <trp:Uri>rtsp://127.0.0.1:554/mock/replay/Rec_001</trp:Uri>
         </trp:GetReplayUriResponse>"#,
+    )
+}
+
+// ── Storage / system URI / discovery responses ────────────────────────────────
+
+fn resp_storage_configurations() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+             xmlns:tt="http://www.onvif.org/ver10/schema""#,
+        r#"<tds:GetStorageConfigurationsResponse>
+          <tds:StorageConfigurations token="SD_01">
+            <tt:StorageType>LocalStorage</tt:StorageType>
+            <tt:LocalPath>/mnt/sd</tt:LocalPath>
+            <tt:StorageUri></tt:StorageUri>
+            <tt:UserInfo>
+              <tt:Username></tt:Username>
+              <tt:UseAnonymous>true</tt:UseAnonymous>
+            </tt:UserInfo>
+          </tds:StorageConfigurations>
+        </tds:GetStorageConfigurationsResponse>"#,
+    )
+}
+
+fn resp_system_uris(base: &str) -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        &format!(
+            r#"<tds:GetSystemUrisResponse>
+          <tds:FirmwareUpgrade>{base}/firmware</tds:FirmwareUpgrade>
+          <tds:SystemLog>{base}/syslog</tds:SystemLog>
+          <tds:SupportInfo>{base}/support</tds:SupportInfo>
+        </tds:GetSystemUrisResponse>"#
+        ),
+    )
+}
+
+fn resp_discovery_mode() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:GetDiscoveryModeResponse>
+          <tds:DiscoveryMode>Discoverable</tds:DiscoveryMode>
+        </tds:GetDiscoveryModeResponse>"#,
     )
 }

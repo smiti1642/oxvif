@@ -49,10 +49,10 @@ use crate::types::{
     ImagingStatus, MediaProfile, MediaProfile2, NetworkGateway, NetworkInterface, NetworkProtocol,
     NotificationMessage, NtpInfo, OnvifService, OsdConfiguration, OsdOptions, PtzConfiguration,
     PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus, PullPointSubscription, RecordingItem,
-    RelayOutput, SnapshotUri, StreamUri, SystemDateTime, SystemLog, User,
-    VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
-    VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
-    VideoSourceConfiguration, VideoSourceConfigurationOptions,
+    RelayOutput, SnapshotUri, StorageConfiguration, StreamUri, SystemDateTime, SystemLog,
+    SystemUris, User, VideoEncoderConfiguration, VideoEncoderConfiguration2,
+    VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,
+    VideoSource, VideoSourceConfiguration, VideoSourceConfigurationOptions,
 };
 
 // ── OnvifSessionBuilder ───────────────────────────────────────────────────────
@@ -353,6 +353,76 @@ impl OnvifSession {
         state: &str,
     ) -> Result<(), OnvifError> {
         self.client.set_relay_output_state(relay_token, state).await
+    }
+
+    /// Configure the properties of a relay output port.
+    pub async fn set_relay_output_settings(
+        &self,
+        relay_token: &str,
+        mode: &str,
+        delay_time: &str,
+        idle_state: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .set_relay_output_settings(relay_token, mode, delay_time, idle_state)
+            .await
+    }
+
+    /// Enable or disable network protocols (HTTP, HTTPS, RTSP, etc.).
+    pub async fn set_network_protocols(
+        &self,
+        protocols: &[(&str, bool, &[u32])],
+    ) -> Result<(), OnvifError> {
+        self.client.set_network_protocols(protocols).await
+    }
+
+    /// Restore the device to factory defaults.
+    pub async fn set_system_factory_default(&self, default_type: &str) -> Result<(), OnvifError> {
+        self.client.set_system_factory_default(default_type).await
+    }
+
+    /// Retrieve all storage locations configured on the device.
+    pub async fn get_storage_configurations(
+        &self,
+    ) -> Result<Vec<StorageConfiguration>, OnvifError> {
+        self.client.get_storage_configurations().await
+    }
+
+    /// Create or update a storage configuration entry.
+    pub async fn set_storage_configuration(
+        &self,
+        token: &str,
+        storage_type: &str,
+        local_path: &str,
+        storage_uri: &str,
+        user: &str,
+        use_anonymous: bool,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .set_storage_configuration(
+                token,
+                storage_type,
+                local_path,
+                storage_uri,
+                user,
+                use_anonymous,
+            )
+            .await
+    }
+
+    /// Retrieve HTTP URIs for firmware upgrade, system log, and support-info download.
+    pub async fn get_system_uris(&self) -> Result<SystemUris, OnvifError> {
+        self.client.get_system_uris().await
+    }
+
+    /// Retrieve the current WS-Discovery mode.
+    pub async fn get_discovery_mode(&self) -> Result<String, OnvifError> {
+        self.client.get_discovery_mode().await
+    }
+
+    /// Set the WS-Discovery mode (`"Discoverable"` or `"NonDiscoverable"`).
+    pub async fn set_discovery_mode(&self, mode: &str) -> Result<(), OnvifError> {
+        self.client.set_discovery_mode(mode).await
     }
 
     // ── Media1 Service ────────────────────────────────────────────────────────

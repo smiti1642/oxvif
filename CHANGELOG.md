@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.7.0] - 2026-04-03
+
+### Added
+- **Device Service** — 8 additional operations completing device management coverage:
+  - **Network protocols**: `set_network_protocols`
+  - **Discovery**: `get_discovery_mode`, `set_discovery_mode`
+  - **System**: `get_system_uris`, `set_system_factory_default`
+  - **Relay config**: `set_relay_output_settings`
+  - **Storage**: `get_storage_configurations`, `set_storage_configuration`
+- New types: `StorageConfiguration`, `SystemUris`
+- All 8 operations exposed on `OnvifSession` as convenience delegates
+- All 8 operations covered by handlers in `examples/mock_server.rs`
+- 16 new unit tests (292 total)
+- `examples/camera.rs`: new `storage` and `discovery-mode` commands; extended
+  `full_workflow` with sections 26–28 (storage, system URIs, discovery mode)
+
+---
+
 ## [0.6.0] - 2026-04-03
 
 ### Added
