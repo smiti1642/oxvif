@@ -2401,6 +2401,13 @@ async fn test_ptz_set_configuration_ok() {
         use_count: 1,
         node_token: "PTZNode_1".to_string(),
         default_ptz_timeout: Some("PT5S".to_string()),
+        default_abs_pan_tilt_space: None,
+        default_abs_zoom_space: None,
+        default_rel_pan_tilt_space: None,
+        default_rel_zoom_space: None,
+        default_cont_pan_tilt_space: None,
+        default_cont_zoom_space: None,
+        default_ptz_speed: None,
         pan_tilt_limits: None,
         zoom_limits: None,
     };
@@ -4396,4 +4403,218 @@ async fn test_get_network_interfaces_parses_ipv6() {
     assert!(iface.ipv6_enabled);
     assert!(iface.ipv6_from_dhcp);
     assert_eq!(iface.ipv6_address.as_deref(), Some("2001:db8::1"));
+}
+
+// ── Round 2 new-field coverage tests ─────────────────────────────────────────
+
+#[tokio::test]
+async fn test_get_profiles_media2_parses_audio_ptz_tokens() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tr2:GetProfilesResponse>
+             <tr2:Profiles token="Profile_1" fixed="false">
+               <tt:Name>main</tt:Name>
+               <tt:Configurations>
+                 <tt:VideoSource token="VideoSrc_1"/>
+                 <tt:VideoEncoder token="VideoEnc_1"/>
+                 <tt:AudioSource token="AudioSrc_1"/>
+                 <tt:Audio token="AudioEnc_1"/>
+                 <tt:PTZ token="PTZConfig_1"/>
+               </tt:Configurations>
+             </tr2:Profiles>
+           </tr2:GetProfilesResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let profiles = client
+        .get_profiles_media2("http://192.168.1.1/onvif/media2_service")
+        .await
+        .unwrap();
+    let p = &profiles[0];
+    assert_eq!(p.audio_source_token.as_deref(), Some("AudioSrc_1"));
+    assert_eq!(p.audio_encoder_token.as_deref(), Some("AudioEnc_1"));
+    assert_eq!(p.ptz_config_token.as_deref(), Some("PTZConfig_1"));
+}
+
+#[tokio::test]
+async fn test_ptz_get_configuration_parses_default_spaces() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tptz:GetConfigurationResponse>
+             <tptz:PTZConfiguration token="PTZConfig_1">
+               <tt:Name>PTZConfig</tt:Name>
+               <tt:UseCount>1</tt:UseCount>
+               <tt:NodeToken>PTZNode_1</tt:NodeToken>
+               <tt:DefaultAbsolutePanTiltPositionSpace>http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace</tt:DefaultAbsolutePanTiltPositionSpace>
+               <tt:DefaultAbsoluteZoomPositionSpace>http://www.onvif.org/ver10/tptz/ZoomSpaces/PositionGenericSpace</tt:DefaultAbsoluteZoomPositionSpace>
+               <tt:DefaultRelativePanTiltTranslationSpace>http://www.onvif.org/ver10/tptz/PanTiltSpaces/TranslationGenericSpace</tt:DefaultRelativePanTiltTranslationSpace>
+               <tt:DefaultRelativeZoomTranslationSpace>http://www.onvif.org/ver10/tptz/ZoomSpaces/TranslationGenericSpace</tt:DefaultRelativeZoomTranslationSpace>
+               <tt:DefaultContinuousPanTiltVelocitySpace>http://www.onvif.org/ver10/tptz/PanTiltSpaces/VelocityGenericSpace</tt:DefaultContinuousPanTiltVelocitySpace>
+               <tt:DefaultContinuousZoomVelocitySpace>http://www.onvif.org/ver10/tptz/ZoomSpaces/VelocityGenericSpace</tt:DefaultContinuousZoomVelocitySpace>
+               <tt:DefaultPTZSpeed>
+                 <tt:PanTilt x="0.5" y="0.5"/>
+                 <tt:Zoom x="0.5"/>
+               </tt:DefaultPTZSpeed>
+             </tptz:PTZConfiguration>
+           </tptz:GetConfigurationResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let cfg = client
+        .ptz_get_configuration("http://192.168.1.1/onvif/ptz_service", "PTZConfig_1")
+        .await
+        .unwrap();
+    assert!(
+        cfg.default_abs_pan_tilt_space
+            .as_deref()
+            .unwrap()
+            .contains("PanTilt")
+    );
+    assert!(
+        cfg.default_abs_zoom_space
+            .as_deref()
+            .unwrap()
+            .contains("Zoom")
+    );
+    assert!(cfg.default_rel_pan_tilt_space.is_some());
+    assert!(cfg.default_cont_pan_tilt_space.is_some());
+    let speed = cfg.default_ptz_speed.expect("speed should be present");
+    assert_eq!(speed.pan_tilt, Some((0.5, 0.5)));
+    assert!((speed.zoom.unwrap() - 0.5).abs() < 1e-5);
+}
+
+#[tokio::test]
+async fn test_get_imaging_settings_parses_focus_wdr() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <timg:GetImagingSettingsResponse>
+             <timg:ImagingSettings>
+               <tt:Focus>
+                 <tt:AutoFocusMode>AUTO</tt:AutoFocusMode>
+                 <tt:DefaultSpeed>0.5</tt:DefaultSpeed>
+               </tt:Focus>
+               <tt:WideDynamicRange>
+                 <tt:Mode>ON</tt:Mode>
+                 <tt:Level>50</tt:Level>
+               </tt:WideDynamicRange>
+               <tt:ImageStabilization>
+                 <tt:Mode>ON</tt:Mode>
+               </tt:ImageStabilization>
+               <tt:ToneCompensation>
+                 <tt:Mode>Auto</tt:Mode>
+               </tt:ToneCompensation>
+             </timg:ImagingSettings>
+           </timg:GetImagingSettingsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let s = client
+        .get_imaging_settings("http://192.168.1.1/onvif/imaging_service", "VS_1")
+        .await
+        .unwrap();
+    assert_eq!(s.focus_mode.as_deref(), Some("AUTO"));
+    assert!((s.focus_default_speed.unwrap() - 0.5).abs() < 1e-5);
+    assert_eq!(s.wide_dynamic_range_mode.as_deref(), Some("ON"));
+    assert!((s.wide_dynamic_range_level.unwrap() - 50.0).abs() < 1e-5);
+    assert_eq!(s.image_stabilization_mode.as_deref(), Some("ON"));
+    assert_eq!(s.tone_compensation_mode.as_deref(), Some("Auto"));
+}
+
+#[tokio::test]
+async fn test_get_recordings_parses_track_times_and_address() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:trc="http://www.onvif.org/ver10/recording/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <trc:GetRecordingsResponse>
+             <trc:RecordingItems Token="Rec_001">
+               <tt:RecordingInformation>
+                 <tt:Source>
+                   <tt:SourceId>urn:uuid:camera-001</tt:SourceId>
+                   <tt:Name>Camera 1</tt:Name>
+                   <tt:Location>Entrance</tt:Location>
+                   <tt:Description>Front door</tt:Description>
+                   <tt:Address>rtsp://192.168.1.50/stream</tt:Address>
+                 </tt:Source>
+                 <tt:EarliestRecording>2024-01-01T00:00:00Z</tt:EarliestRecording>
+                 <tt:LatestRecording>2024-01-02T00:00:00Z</tt:LatestRecording>
+                 <tt:Content>Normal</tt:Content>
+                 <tt:RecordingStatus>Recording</tt:RecordingStatus>
+               </tt:RecordingInformation>
+               <tt:Tracks>
+                 <tt:Track token="Track_V1">
+                   <tt:TrackType>Video</tt:TrackType>
+                   <tt:Description>Main video</tt:Description>
+                   <tt:DataFrom>2024-01-01T00:00:00Z</tt:DataFrom>
+                   <tt:DataTo>2024-01-02T00:00:00Z</tt:DataTo>
+                 </tt:Track>
+               </tt:Tracks>
+             </trc:RecordingItems>
+           </trc:GetRecordingsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let recs = client
+        .get_recordings("http://192.168.1.1/onvif/recording_service")
+        .await
+        .unwrap();
+    assert_eq!(
+        recs[0].source.address.as_deref(),
+        Some("rtsp://192.168.1.50/stream")
+    );
+    let track = &recs[0].tracks[0];
+    assert_eq!(track.data_from.as_deref(), Some("2024-01-01T00:00:00Z"));
+    assert_eq!(track.data_to.as_deref(), Some("2024-01-02T00:00:00Z"));
+}
+
+#[tokio::test]
+async fn test_get_osd_parses_colors_and_persistence() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <trt:GetOSDResponse>
+             <trt:OSDConfiguration token="OSD_1">
+               <tt:VideoSourceConfigurationToken>VideoSrc_1</tt:VideoSourceConfigurationToken>
+               <tt:Type>Text</tt:Type>
+               <tt:Position><tt:Type>UpperLeft</tt:Type></tt:Position>
+               <tt:TextString>
+                 <tt:Type>Plain</tt:Type>
+                 <tt:PlainText>Hello</tt:PlainText>
+                 <tt:FontColor>
+                   <tt:Color X="1.0" Y="0.5" Z="0.5" Colorspace="http://www.onvif.org/ver10/colorspace/YCbCr"/>
+                   <tt:Transparent>0</tt:Transparent>
+                 </tt:FontColor>
+                 <tt:BackgroundColor>
+                   <tt:Color X="0.0" Y="0.5" Z="0.5"/>
+                 </tt:BackgroundColor>
+                 <tt:IsPersistentText>true</tt:IsPersistentText>
+               </tt:TextString>
+             </trt:OSDConfiguration>
+           </trt:GetOSDResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let osd = client
+        .get_osd("http://192.168.1.1/onvif/media_service", "OSD_1")
+        .await
+        .unwrap();
+    let ts = osd.text_string.expect("text_string should be present");
+    let fc = ts.font_color.expect("font_color should be present");
+    assert!((fc.x - 1.0).abs() < 1e-5);
+    assert!(fc.colorspace.as_deref().unwrap().contains("YCbCr"));
+    assert_eq!(fc.transparent, Some(0.0));
+    assert!(ts.background_color.is_some());
+    assert_eq!(ts.is_persistent_text, Some(true));
 }

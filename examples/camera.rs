@@ -2297,6 +2297,9 @@ async fn osd_example(cfg: &Config) -> Result<(), OnvifError> {
             date_format: Some("MM/DD/YYYY".into()),
             time_format: Some("HH:mm:ss".into()),
             font_size: None,
+            font_color: None,
+            background_color: None,
+            is_persistent_text: None,
         }),
         image_path: None,
     };

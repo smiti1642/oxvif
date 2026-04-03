@@ -15,6 +15,8 @@ pub struct RecordingSourceInformation {
     pub location: String,
     /// Free-text description.
     pub description: String,
+    /// Network address of the source device (IP address or URI), if reported.
+    pub address: Option<String>,
 }
 
 impl RecordingSourceInformation {
@@ -24,6 +26,7 @@ impl RecordingSourceInformation {
             name: xml_str(node, "Name").unwrap_or_default(),
             location: xml_str(node, "Location").unwrap_or_default(),
             description: xml_str(node, "Description").unwrap_or_default(),
+            address: xml_str(node, "Address").filter(|s| !s.is_empty()),
         }
     }
 }
@@ -39,6 +42,10 @@ pub struct RecordingTrack {
     pub track_type: String,
     /// Free-text description.
     pub description: String,
+    /// ISO-8601 timestamp of the first frame in this track.
+    pub data_from: Option<String>,
+    /// ISO-8601 timestamp of the last frame in this track.
+    pub data_to: Option<String>,
 }
 
 // ── RecordingItem ─────────────────────────────────────────────────────────────
@@ -97,6 +104,8 @@ impl RecordingItem {
                                     token,
                                     track_type: xml_str(t, "TrackType").unwrap_or_default(),
                                     description: xml_str(t, "Description").unwrap_or_default(),
+                                    data_from: t.child("DataFrom").map(|n| n.text().to_string()),
+                                    data_to: t.child("DataTo").map(|n| n.text().to_string()),
                                 })
                             })
                             .collect()

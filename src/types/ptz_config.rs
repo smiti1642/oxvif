@@ -50,6 +50,17 @@ fn parse_space_range(node: &XmlNode) -> PtzSpaceRange {
     }
 }
 
+// ── PtzSpeed ──────────────────────────────────────────────────────────────────
+
+/// Default PTZ movement speed stored in a `PtzConfiguration`.
+#[derive(Debug, Clone, Default)]
+pub struct PtzSpeed {
+    /// Default pan (x) and tilt (y) speed, normalised range `[0, 1]`.
+    pub pan_tilt: Option<(f32, f32)>,
+    /// Default zoom speed, normalised range `[0, 1]`.
+    pub zoom: Option<f32>,
+}
+
 // ── PtzConfiguration ──────────────────────────────────────────────────────────
 
 /// PTZ configuration returned by `GetConfigurations` / `GetConfiguration`.
@@ -66,6 +77,20 @@ pub struct PtzConfiguration {
     pub node_token: String,
     /// Default PTZ operation timeout as ISO 8601 duration (e.g. `"PT5S"`).
     pub default_ptz_timeout: Option<String>,
+    /// Default coordinate space URI for absolute pan/tilt moves.
+    pub default_abs_pan_tilt_space: Option<String>,
+    /// Default coordinate space URI for absolute zoom moves.
+    pub default_abs_zoom_space: Option<String>,
+    /// Default coordinate space URI for relative pan/tilt moves.
+    pub default_rel_pan_tilt_space: Option<String>,
+    /// Default coordinate space URI for relative zoom moves.
+    pub default_rel_zoom_space: Option<String>,
+    /// Default coordinate space URI for continuous pan/tilt velocity.
+    pub default_cont_pan_tilt_space: Option<String>,
+    /// Default coordinate space URI for continuous zoom velocity.
+    pub default_cont_zoom_space: Option<String>,
+    /// Default movement speed used when no speed is specified in a move command.
+    pub default_ptz_speed: Option<PtzSpeed>,
     /// Pan/tilt position limits, if set.
     pub pan_tilt_limits: Option<PtzSpaceRange>,
     /// Zoom position limits, if set.
@@ -85,6 +110,20 @@ impl PtzConfiguration {
             use_count: xml_u32(node, "UseCount").unwrap_or(0),
             node_token: xml_str(node, "NodeToken").unwrap_or_default(),
             default_ptz_timeout: xml_str(node, "DefaultPTZTimeout"),
+            default_abs_pan_tilt_space: xml_str(node, "DefaultAbsolutePanTiltPositionSpace"),
+            default_abs_zoom_space: xml_str(node, "DefaultAbsoluteZoomPositionSpace"),
+            default_rel_pan_tilt_space: xml_str(node, "DefaultRelativePanTiltTranslationSpace"),
+            default_rel_zoom_space: xml_str(node, "DefaultRelativeZoomTranslationSpace"),
+            default_cont_pan_tilt_space: xml_str(node, "DefaultContinuousPanTiltVelocitySpace"),
+            default_cont_zoom_space: xml_str(node, "DefaultContinuousZoomVelocitySpace"),
+            default_ptz_speed: node.child("DefaultPTZSpeed").map(|s| PtzSpeed {
+                pan_tilt: s.child("PanTilt").and_then(|n| {
+                    let x = n.attr("x")?.parse().ok()?;
+                    let y = n.attr("y")?.parse().ok()?;
+                    Some((x, y))
+                }),
+                zoom: s.child("Zoom").and_then(|n| n.attr("x")?.parse().ok()),
+            }),
             pan_tilt_limits: node
                 .path(&["PanTiltLimits", "Range"])
                 .map(parse_space_range),
@@ -101,22 +140,57 @@ impl PtzConfiguration {
     /// Serialise to a `<tptz:PTZConfiguration>` XML fragment for
     /// `SetConfiguration`.
     pub(crate) fn to_xml_body(&self) -> String {
-        let timeout_el = self
-            .default_ptz_timeout
-            .as_deref()
-            .map(|t| {
-                format!(
-                    "<tt:DefaultPTZTimeout>{}</tt:DefaultPTZTimeout>",
-                    xml_escape(t)
-                )
-            })
-            .unwrap_or_default();
+        let opt_str = |v: &Option<String>, tag: &str| -> String {
+            v.as_deref()
+                .map(|s| format!("<tt:{tag}>{}<tt:/{tag}>", xml_escape(s)))
+                .unwrap_or_default()
+        };
+        let timeout_el = opt_str(&self.default_ptz_timeout, "DefaultPTZTimeout");
+        let abs_pt = opt_str(
+            &self.default_abs_pan_tilt_space,
+            "DefaultAbsolutePanTiltPositionSpace",
+        );
+        let abs_z = opt_str(
+            &self.default_abs_zoom_space,
+            "DefaultAbsoluteZoomPositionSpace",
+        );
+        let rel_pt = opt_str(
+            &self.default_rel_pan_tilt_space,
+            "DefaultRelativePanTiltTranslationSpace",
+        );
+        let rel_z = opt_str(
+            &self.default_rel_zoom_space,
+            "DefaultRelativeZoomTranslationSpace",
+        );
+        let cont_pt = opt_str(
+            &self.default_cont_pan_tilt_space,
+            "DefaultContinuousPanTiltVelocitySpace",
+        );
+        let cont_z = opt_str(
+            &self.default_cont_zoom_space,
+            "DefaultContinuousZoomVelocitySpace",
+        );
+        let speed_el = match &self.default_ptz_speed {
+            Some(s) => {
+                let pt = s
+                    .pan_tilt
+                    .map(|(x, y)| format!("<tt:PanTilt x=\"{x}\" y=\"{y}\"/>"))
+                    .unwrap_or_default();
+                let z = s
+                    .zoom
+                    .map(|x| format!("<tt:Zoom x=\"{x}\"/>"))
+                    .unwrap_or_default();
+                format!("<tt:DefaultPTZSpeed>{pt}{z}</tt:DefaultPTZSpeed>")
+            }
+            None => String::new(),
+        };
         format!(
             "<tptz:PTZConfiguration token=\"{token}\">\
                <tt:Name>{name}</tt:Name>\
                <tt:UseCount>{use_count}</tt:UseCount>\
                <tt:NodeToken>{node_token}</tt:NodeToken>\
-               {timeout_el}\
+               {abs_pt}{abs_z}{rel_pt}{rel_z}{cont_pt}{cont_z}\
+               {speed_el}{timeout_el}\
              </tptz:PTZConfiguration>",
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),

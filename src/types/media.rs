@@ -154,7 +154,7 @@ impl SnapshotUri {
 /// A Media2 profile returned by `GetProfiles` (Media2).
 ///
 /// Compared with [`MediaProfile`], this carries optional references to the
-/// video source and video encoder configurations currently bound to the profile.
+/// configurations currently bound to the profile.
 #[derive(Debug, Clone)]
 pub struct MediaProfile2 {
     pub token: String,
@@ -164,6 +164,12 @@ pub struct MediaProfile2 {
     pub video_source_token: Option<String>,
     /// Token of the bound `VideoEncoderConfiguration2`, if any.
     pub video_encoder_token: Option<String>,
+    /// Token of the bound `AudioSourceConfiguration`, if any.
+    pub audio_source_token: Option<String>,
+    /// Token of the bound `AudioEncoderConfiguration`, if any.
+    pub audio_encoder_token: Option<String>,
+    /// Token of the bound `PTZConfiguration`, if any.
+    pub ptz_config_token: Option<String>,
 }
 
 impl MediaProfile2 {
@@ -185,6 +191,18 @@ impl MediaProfile2 {
                         .map(str::to_string),
                     video_encoder_token: p
                         .path(&["Configurations", "VideoEncoder"])
+                        .and_then(|n| n.attr("token"))
+                        .map(str::to_string),
+                    audio_source_token: p
+                        .path(&["Configurations", "AudioSource"])
+                        .and_then(|n| n.attr("token"))
+                        .map(str::to_string),
+                    audio_encoder_token: p
+                        .path(&["Configurations", "Audio"])
+                        .and_then(|n| n.attr("token"))
+                        .map(str::to_string),
+                    ptz_config_token: p
+                        .path(&["Configurations", "PTZ"])
                         .and_then(|n| n.attr("token"))
                         .map(str::to_string),
                 })

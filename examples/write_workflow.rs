@@ -618,6 +618,9 @@ async fn main() {
             date_format: None,
             time_format: None,
             font_size: None,
+            font_color: None,
+            background_color: None,
+            is_persistent_text: None,
         }),
         image_path: None,
     };

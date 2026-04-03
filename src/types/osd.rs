@@ -44,6 +44,63 @@ impl OsdPosition {
     }
 }
 
+// ── OsdColor ──────────────────────────────────────────────────────────────────
+
+/// A color value used in OSD font and background settings.
+///
+/// Channels (`x`, `y`, `z`) map to YCbCr or RGB depending on the device's
+/// colorspace URI. Most devices use YCbCr: X = luma, Y = Cb, Z = Cr.
+#[derive(Debug, Clone, Default)]
+pub struct OsdColor {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    /// Colorspace URI (e.g. `"http://www.onvif.org/ver10/colorspace/YCbCr"`).
+    pub colorspace: Option<String>,
+    /// Transparency level: `0.0` = fully opaque, `1.0` = fully transparent.
+    pub transparent: Option<f32>,
+}
+
+impl OsdColor {
+    fn from_xml(node: &XmlNode) -> Self {
+        let color = node.child("Color");
+        Self {
+            x: color
+                .and_then(|c| c.attr("X"))
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0.0),
+            y: color
+                .and_then(|c| c.attr("Y"))
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0.0),
+            z: color
+                .and_then(|c| c.attr("Z"))
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0.0),
+            colorspace: color.and_then(|c| c.attr("Colorspace")).map(str::to_string),
+            transparent: node
+                .child("Transparent")
+                .and_then(|n| n.text().parse().ok()),
+        }
+    }
+
+    pub(crate) fn to_xml_body(&self) -> String {
+        let cs = self
+            .colorspace
+            .as_deref()
+            .map(|s| format!(" Colorspace=\"{}\"", xml_escape(s)))
+            .unwrap_or_default();
+        let transparent_el = self
+            .transparent
+            .map(|t| format!("<tt:Transparent>{t}</tt:Transparent>"))
+            .unwrap_or_default();
+        format!(
+            "<tt:Color X=\"{}\" Y=\"{}\" Z=\"{}\"{cs}/>{transparent_el}",
+            self.x, self.y, self.z
+        )
+    }
+}
+
 // ── OsdTextString ─────────────────────────────────────────────────────────────
 
 /// Text content settings for an OSD element of type `"Text"`.
@@ -59,6 +116,12 @@ pub struct OsdTextString {
     pub time_format: Option<String>,
     /// Font size in points.
     pub font_size: Option<u32>,
+    /// Font color.
+    pub font_color: Option<OsdColor>,
+    /// Background color.
+    pub background_color: Option<OsdColor>,
+    /// If `true`, the text persists across device reboots.
+    pub is_persistent_text: Option<bool>,
 }
 
 impl OsdTextString {
@@ -72,6 +135,11 @@ impl OsdTextString {
             date_format: xml_str(node, "DateFormat"),
             time_format: xml_str(node, "TimeFormat"),
             font_size: xml_u32(node, "FontSize"),
+            font_color: node.child("FontColor").map(OsdColor::from_xml),
+            background_color: node.child("BackgroundColor").map(OsdColor::from_xml),
+            is_persistent_text: node
+                .child("IsPersistentText")
+                .map(|n| n.text() == "true" || n.text() == "1"),
         }
     }
 
@@ -95,10 +163,30 @@ impl OsdTextString {
             .font_size
             .map(|s| format!("<tt:FontSize>{s}</tt:FontSize>"))
             .unwrap_or_default();
+        let font_color_el = self
+            .font_color
+            .as_ref()
+            .map(|c| format!("<tt:FontColor>{}</tt:FontColor>", c.to_xml_body()))
+            .unwrap_or_default();
+        let bg_color_el = self
+            .background_color
+            .as_ref()
+            .map(|c| {
+                format!(
+                    "<tt:BackgroundColor>{}</tt:BackgroundColor>",
+                    c.to_xml_body()
+                )
+            })
+            .unwrap_or_default();
+        let persistent_el = self
+            .is_persistent_text
+            .map(|v| format!("<tt:IsPersistentText>{v}</tt:IsPersistentText>"))
+            .unwrap_or_default();
         format!(
             "<tt:TextString>\
                <tt:Type>{}</tt:Type>\
                {plain_el}{date_el}{time_el}{font_el}\
+               {font_color_el}{bg_color_el}{persistent_el}\
              </tt:TextString>",
             xml_escape(&self.type_)
         )

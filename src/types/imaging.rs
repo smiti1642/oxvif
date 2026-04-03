@@ -29,6 +29,18 @@ pub struct ImagingSettings {
     pub exposure_mode: Option<String>,
     /// Backlight compensation mode: `"OFF"` or `"ON"`.
     pub backlight_compensation: Option<String>,
+    /// Autofocus mode: `"AUTO"`, `"MANUAL"`, or `"OnePush"`.
+    pub focus_mode: Option<String>,
+    /// Default focus speed for autofocus operations (device-native range).
+    pub focus_default_speed: Option<f32>,
+    /// Wide dynamic range mode: `"OFF"` or `"ON"`.
+    pub wide_dynamic_range_mode: Option<String>,
+    /// Wide dynamic range intensity level (device-native range, typically 0–100).
+    pub wide_dynamic_range_level: Option<f32>,
+    /// Image stabilization mode: `"OFF"`, `"ON"`, or `"Extended"`.
+    pub image_stabilization_mode: Option<String>,
+    /// Tone compensation mode: `"OFF"`, `"ON"`, or `"Auto"`.
+    pub tone_compensation_mode: Option<String>,
 }
 
 impl ImagingSettings {
@@ -56,6 +68,28 @@ impl ImagingSettings {
                 .filter(|v| !v.is_empty()),
             backlight_compensation: s
                 .path(&["BacklightCompensation", "Mode"])
+                .map(|n| n.text().to_string())
+                .filter(|v| !v.is_empty()),
+            focus_mode: s
+                .path(&["Focus", "AutoFocusMode"])
+                .map(|n| n.text().to_string())
+                .filter(|v| !v.is_empty()),
+            focus_default_speed: s
+                .path(&["Focus", "DefaultSpeed"])
+                .and_then(|n| n.text().parse().ok()),
+            wide_dynamic_range_mode: s
+                .path(&["WideDynamicRange", "Mode"])
+                .map(|n| n.text().to_string())
+                .filter(|v| !v.is_empty()),
+            wide_dynamic_range_level: s
+                .path(&["WideDynamicRange", "Level"])
+                .and_then(|n| n.text().parse().ok()),
+            image_stabilization_mode: s
+                .path(&["ImageStabilization", "Mode"])
+                .map(|n| n.text().to_string())
+                .filter(|v| !v.is_empty()),
+            tone_compensation_mode: s
+                .path(&["ToneCompensation", "Mode"])
                 .map(|n| n.text().to_string())
                 .filter(|v| !v.is_empty()),
         })
@@ -98,6 +132,41 @@ impl ImagingSettings {
         if let Some(ref m) = self.backlight_compensation {
             out.push_str(&format!(
                 "<tt:BacklightCompensation><tt:Mode>{}</tt:Mode></tt:BacklightCompensation>",
+                xml_escape(m)
+            ));
+        }
+        if self.focus_mode.is_some() || self.focus_default_speed.is_some() {
+            out.push_str("<tt:Focus>");
+            if let Some(ref m) = self.focus_mode {
+                out.push_str(&format!(
+                    "<tt:AutoFocusMode>{}</tt:AutoFocusMode>",
+                    xml_escape(m)
+                ));
+            }
+            if let Some(v) = self.focus_default_speed {
+                out.push_str(&format!("<tt:DefaultSpeed>{v}</tt:DefaultSpeed>"));
+            }
+            out.push_str("</tt:Focus>");
+        }
+        if self.wide_dynamic_range_mode.is_some() || self.wide_dynamic_range_level.is_some() {
+            out.push_str("<tt:WideDynamicRange>");
+            if let Some(ref m) = self.wide_dynamic_range_mode {
+                out.push_str(&format!("<tt:Mode>{}</tt:Mode>", xml_escape(m)));
+            }
+            if let Some(v) = self.wide_dynamic_range_level {
+                out.push_str(&format!("<tt:Level>{v}</tt:Level>"));
+            }
+            out.push_str("</tt:WideDynamicRange>");
+        }
+        if let Some(ref m) = self.image_stabilization_mode {
+            out.push_str(&format!(
+                "<tt:ImageStabilization><tt:Mode>{}</tt:Mode></tt:ImageStabilization>",
+                xml_escape(m)
+            ));
+        }
+        if let Some(ref m) = self.tone_compensation_mode {
+            out.push_str(&format!(
+                "<tt:ToneCompensation><tt:Mode>{}</tt:Mode></tt:ToneCompensation>",
                 xml_escape(m)
             ));
         }
