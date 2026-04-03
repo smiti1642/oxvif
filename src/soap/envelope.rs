@@ -11,6 +11,21 @@
 use crate::soap::security::WsSecurityToken;
 use std::fmt::Write;
 
+/// Escape the five predefined XML entities in `s`.
+fn xml_escape_url(s: &str) -> std::borrow::Cow<'_, str> {
+    if s.bytes().any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\'')) {
+        std::borrow::Cow::Owned(
+            s.replace('&', "&amp;")
+                .replace('<', "&lt;")
+                .replace('>', "&gt;")
+                .replace('"', "&quot;")
+                .replace('\'', "&apos;"),
+        )
+    } else {
+        std::borrow::Cow::Borrowed(s)
+    }
+}
+
 // ── Namespace declarations ────────────────────────────────────────────────────
 
 /// All ONVIF-relevant XML namespace prefix→URI pairs declared on every
@@ -108,7 +123,7 @@ impl SoapEnvelope {
         if has_header {
             out.push_str("<s:Header>");
             if let Some(to) = &self.wsa_to {
-                write!(out, "<wsa:To>{to}</wsa:To>").unwrap();
+                write!(out, "<wsa:To>{}</wsa:To>", xml_escape_url(to)).unwrap();
             }
             if let Some(sec) = &self.security {
                 sec.write_xml(&mut out);
