@@ -146,11 +146,15 @@ All three must pass cleanly.
 8. Bump version in `Cargo.toml` (patch = bug fix, minor = new feature).
 9. Add entry to `CHANGELOG.md` at the top.
 10. Run `cargo publish --dry-run` — must succeed with no errors.
-11. Commit, merge to `master`.
-12. Tag the release commit: `git tag v<version>` (e.g. `git tag v0.4.1`).
+11. Run `cargo audit` — must return zero vulnerabilities.
+12. Consider running `cargo outdated --depth 1` — if direct dependencies are
+    significantly behind, upgrade before publishing so the crate ships with a
+    green dependency health indicator on lib.rs / crates.io.
+13. Commit, merge to `master`.
+14. Tag the release commit: `git tag v<version>` (e.g. `git tag v0.4.1`).
     Tags appear in GitHub Desktop next to commits — useful for version-based debugging.
-13. Push tags to GitHub: `git push origin --tags`.
-14. `cargo publish`.
+15. Push tags to GitHub: `git push origin --tags`.
+16. `cargo publish`.
 
 ## Rust 2024 edition notes
 
@@ -162,6 +166,8 @@ All three must pass cleanly.
 - [ ] `cargo fmt && cargo clippy --all-targets -- -D warnings` clean
 - [ ] `cargo test` — all tests pass
 - [ ] `cargo publish --dry-run` — no errors
+- [ ] `cargo audit` — zero vulnerabilities
+- [ ] `cargo outdated --depth 1` — review; upgrade direct deps if significantly behind
 - [ ] `CHANGELOG.md` updated with new version entry
 - [ ] `Cargo.toml` version bumped
 - [ ] `README.md` installation version updated + content updated
