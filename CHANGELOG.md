@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- `OnvifSession` high-level convenience wrapper — calls `GetCapabilities` once at
+  construction and caches service URLs so callers never need to pass endpoint URLs
+  to individual methods; built via `OnvifSession::builder(...).with_clock_sync().build()`
+- 20 new unit tests for `OnvifSession` (builder, missing-URL errors, delegate
+  methods, accessors) in `src/tests/session_tests.rs`
+- `examples/mock_server.rs` — stateless ONVIF HTTP mock server responding to
+  every operation exercised by `full-workflow`; default port 18080
+
+---
+
 ## [0.4.2] - 2026-04-02
 
 ### Fixed

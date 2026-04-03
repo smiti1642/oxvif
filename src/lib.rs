@@ -97,6 +97,7 @@
 pub mod client;
 pub mod discovery;
 pub mod error;
+pub mod session;
 pub mod soap;
 pub mod transport;
 pub mod types;
@@ -104,6 +105,7 @@ pub mod types;
 pub use client::OnvifClient;
 pub use discovery::DiscoveredDevice;
 pub use error::OnvifError;
+pub use session::{OnvifSession, OnvifSessionBuilder};
 pub use types::{
     AnalyticsCapabilities, AudioEncoderConfiguration, AudioEncoderConfigurationOptions,
     AudioEncoderOptions, AudioEncoding, AudioSource, AudioSourceConfiguration, BoundsRange,

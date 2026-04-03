@@ -23,13 +23,14 @@
 //! cargo run --example camera -- recording
 //! cargo run --example camera -- discovery
 //! cargo run --example camera -- error-handling
+//! cargo run --example camera -- session
 //! ```
 
 use std::time::Duration;
 
 use oxvif::{
     Capabilities, DeviceInfo, FocusMove, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
-    OsdConfiguration, OsdPosition, OsdTextString, SystemDateTime,
+    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, SystemDateTime,
 };
 use std::env;
 
@@ -88,6 +89,7 @@ async fn main() {
         "recording" => recording_example(&cfg).await,
         "discovery" => discovery_example().await,
         "error-handling" => error_handling_example(&cfg).await,
+        "session" => session_example(&cfg).await,
         _ => {
             print_help();
             return;
@@ -127,6 +129,7 @@ fn print_help() {
     println!("  recording            List recordings, search, and get replay URI");
     println!("  discovery            WS-Discovery UDP multicast probe");
     println!("  error-handling       Typed error variant matching demo");
+    println!("  session              Same workflow using OnvifSession convenience API");
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -2255,5 +2258,108 @@ async fn recording_example(cfg: &Config) -> Result<(), OnvifError> {
         println!("\nSearch/Replay services not found in GetServices response.");
     }
 
+    Ok(())
+}
+
+// ── Session example ───────────────────────────────────────────────────────────
+
+/// Demonstrates [`OnvifSession`]: build once, call methods without URLs.
+///
+/// This covers the same device/media/PTZ/recording operations as the other
+/// examples but uses the high-level session API instead of `OnvifClient`
+/// directly, so service URLs never appear in application code.
+async fn session_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== OnvifSession example ===");
+    println!("Connecting to {} ...", cfg.camera_url);
+
+    // ── Build session ─────────────────────────────────────────────────────────
+    // with_clock_sync() calls GetSystemDateAndTime before GetCapabilities so
+    // WS-Security timestamps stay in sync with the device clock.
+    let session = OnvifSession::builder(&cfg.camera_url)
+        .with_credentials(&cfg.username, &cfg.password)
+        .with_clock_sync()
+        .build()
+        .await?;
+
+    println!("Session ready.");
+
+    // ── Capabilities (already cached, no extra round-trip) ────────────────────
+    section("Cached Capabilities");
+    print_capabilities(session.capabilities());
+
+    // ── Device info ───────────────────────────────────────────────────────────
+    section("GetDeviceInformation");
+    match session.get_device_info().await {
+        Ok(info) => println!(
+            "  {}/{} fw:{} sn:{}",
+            info.manufacturer, info.model, info.firmware_version, info.serial_number
+        ),
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── Media profiles ────────────────────────────────────────────────────────
+    section("GetProfiles");
+    let profiles = match session.get_profiles().await {
+        Ok(p) => {
+            println!("  {} profile(s)", p.len());
+            for prof in &p {
+                println!("  [{}] {}", prof.token, prof.name);
+            }
+            p
+        }
+        Err(e) => {
+            println!("  (skipped — {e})");
+            vec![]
+        }
+    };
+
+    // ── RTSP stream URIs ──────────────────────────────────────────────────────
+    section("GetStreamUri");
+    for prof in &profiles {
+        match session.get_stream_uri(&prof.token).await {
+            Ok(uri) => println!("  [{}] {}", prof.token, uri.uri),
+            Err(e) => println!("  [{}] skipped — {e}", prof.token),
+        }
+    }
+
+    // ── PTZ status ────────────────────────────────────────────────────────────
+    section("PTZ status (first profile)");
+    if let Some(prof) = profiles.first() {
+        match session.ptz_get_status(&prof.token).await {
+            Ok(status) => {
+                let pan = status.pan.map(|v| format!("{v:+.4}")).unwrap_or("—".into());
+                let tilt = status
+                    .tilt
+                    .map(|v| format!("{v:+.4}"))
+                    .unwrap_or("—".into());
+                let zoom = status.zoom.map(|v| format!("{v:.4}")).unwrap_or("—".into());
+                println!(
+                    "  pan={pan}  tilt={tilt}  zoom={zoom}  pt_status={}  z_status={}",
+                    status.pan_tilt_status, status.zoom_status,
+                );
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
+    // ── Recordings ────────────────────────────────────────────────────────────
+    section("GetRecordings");
+    match session.get_recordings().await {
+        Ok(recs) => {
+            println!("  {} recording(s)", recs.len());
+            for rec in recs.iter().take(3) {
+                println!(
+                    "  [{}] status={} {} → {}",
+                    rec.token,
+                    rec.recording_status,
+                    rec.earliest_recording.as_deref().unwrap_or("?"),
+                    rec.latest_recording.as_deref().unwrap_or("?"),
+                );
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    println!("\nDone.");
     Ok(())
 }

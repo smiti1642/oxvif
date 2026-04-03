@@ -23,7 +23,7 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 228 unit tests + 9 doc tests
+- 250 unit tests + 11 doc tests
 
 ---
 
@@ -610,6 +610,26 @@ match client.get_capabilities().await {
 
 ## Testing without a real camera
 
+### Mock server
+
+`examples/mock_server.rs` is a stateless ONVIF server that responds to every
+operation exercised by `full-workflow`. Start it once and run any example
+against it — no camera required.
+
+```sh
+# Terminal 1 — start the mock server (default port 18080)
+cargo run --example mock_server
+
+# Terminal 2 — run any example against it
+ONVIF_URL=http://127.0.0.1:18080/onvif/device \
+cargo run --example camera -- full-workflow
+```
+
+Or copy `.env.example` to `.env` and set `ONVIF_URL=http://127.0.0.1:18080/onvif/device`
+so examples pick it up automatically via `dotenvy`.
+
+### Unit test transport mock
+
 Implement the `Transport` trait to inject any response:
 
 ```rust
@@ -646,6 +666,7 @@ cp .env.example .env   # fill in ONVIF_URL, ONVIF_USERNAME, ONVIF_PASSWORD
 
 ```sh
 cargo run --example camera -- full-workflow          # end-to-end: all implemented operations
+cargo run --example camera -- session                # same workflow via OnvifSession API
 cargo run --example camera -- device-info            # manufacturer, model, firmware
 cargo run --example camera -- device-management      # hostname, NTP, GetServices
 cargo run --example camera -- stream-uris            # tabular RTSP URI listing
@@ -661,6 +682,17 @@ cargo run --example camera -- discovery              # WS-Discovery UDP multicas
 cargo run --example camera -- error-handling         # typed error variant matching demo
 ```
 
+To run without a real camera, start the mock server first — see
+[Testing without a real camera](#testing-without-a-real-camera).
+
+### Mock server
+
+```sh
+# Default port 18080; pass a port number to override
+cargo run --example mock_server
+cargo run --example mock_server -- 19090
+```
+
 ---
 
 ## Project structure
@@ -668,7 +700,8 @@ cargo run --example camera -- error-handling         # typed error variant match
 ```
 src/
 ├── lib.rs               Public API surface and re-exports
-├── client.rs            OnvifClient — all ONVIF operations
+├── client.rs            OnvifClient — all ONVIF operations (protocol layer)
+├── session.rs           OnvifSession — convenience wrapper with cached service URLs
 ├── discovery.rs         WS-Discovery UDP multicast probe
 ├── error.rs             OnvifError unified error type
 ├── transport.rs         Transport trait + HttpTransport (reqwest + rustls)
@@ -688,8 +721,12 @@ src/
 │   ├── ptz.rs           PtzPreset, PtzStatus
 │   └── video.rs         VideoSource, VideoEncoder configs and options
 └── tests/
-    ├── client_tests.rs  202 unit tests covering all client methods
+    ├── client_tests.rs  unit tests covering all client methods
+    ├── session_tests.rs unit tests for OnvifSession builder and delegates
     └── types_tests.rs   XML parsing unit tests
+examples/
+├── camera.rs            Live camera integration examples (all commands)
+└── mock_server.rs       Stateless ONVIF mock server for offline development
 ```
 
 ---

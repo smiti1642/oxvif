@@ -27,3 +27,4 @@ async-trait = "0.1"
 mockito = "1"
 dotenvy = "0.15"
 tokio   = { version = "1", features = ["rt-multi-thread", "macros"] }
+axum    = "0.7"
