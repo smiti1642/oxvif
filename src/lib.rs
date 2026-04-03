@@ -10,11 +10,11 @@
 //!
 //! ## ONVIF Profile coverage
 //!
-//! | Profile | Description | Coverage |
-//! |---------|-------------|----------|
-//! | **Profile S** | Video streaming | ~100% |
-//! | **Profile T** | Advanced streaming (H.265, focus, OSD) | ~75% |
-//! | **Profile G** | Recording & playback | ~80% |
+//! | Profile | Description | Coverage | Notes |
+//! |---------|-------------|----------|-------|
+//! | **Profile S** | Video streaming | ~95% | All core operations implemented; PTZ move commands available but not shown in examples |
+//! | **Profile T** | Advanced streaming (H.265, focus, OSD, audio) | ~85% | Metadata RTP streaming excluded (not SOAP) |
+//! | **Profile G** | Recording & playback | ~55% | Read/search/replay fully covered; write management (CreateRecording, RecordingJobs) not yet implemented |
 //!
 //! ## Supported services
 //!
