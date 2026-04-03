@@ -24,13 +24,16 @@
 //! cargo run --example camera -- discovery
 //! cargo run --example camera -- error-handling
 //! cargo run --example camera -- session
+//! cargo run --example camera -- users
+//! cargo run --example camera -- network-config
+//! cargo run --example camera -- relay-outputs
 //! ```
 
 use std::time::Duration;
 
 use oxvif::{
     Capabilities, DeviceInfo, FocusMove, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
-    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, SystemDateTime,
+    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, SystemDateTime, User,
 };
 use std::env;
 
@@ -90,6 +93,9 @@ async fn main() {
         "discovery" => discovery_example().await,
         "error-handling" => error_handling_example(&cfg).await,
         "session" => session_example(&cfg).await,
+        "users" => users_example(&cfg).await,
+        "network-config" => network_config(&cfg).await,
+        "relay-outputs" => relay_outputs_example(&cfg).await,
         _ => {
             print_help();
             return;
@@ -130,6 +136,9 @@ fn print_help() {
     println!("  discovery            WS-Discovery UDP multicast probe");
     println!("  error-handling       Typed error variant matching demo");
     println!("  session              Same workflow using OnvifSession convenience API");
+    println!("  users                List, create, and delete device user accounts");
+    println!("  network-config       Network interfaces, protocols, DNS, and gateway");
+    println!("  relay-outputs        List relay outputs and trigger state change");
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -763,6 +772,104 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
             }
             Err(e) => println!("  (skipped — {e})"),
         }
+    }
+
+    // ── 23. Users ─────────────────────────────────────────────────────────────
+    section("GetUsers");
+    match client.get_users().await {
+        Ok(users) => {
+            println!("  Found {} user(s)", users.len());
+            for u in &users {
+                println!("  {} ({})", u.username, u.user_level);
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 24. Network config ────────────────────────────────────────────────────
+    section("GetNetworkInterfaces");
+    match client.get_network_interfaces().await {
+        Ok(ifaces) => {
+            println!("  Found {} interface(s)", ifaces.len());
+            for i in &ifaces {
+                println!(
+                    "  [{}] {} hw={} ip={}/{} dhcp={}",
+                    i.token,
+                    i.name,
+                    i.hw_address,
+                    i.ipv4_address,
+                    i.ipv4_prefix_length,
+                    i.ipv4_from_dhcp
+                );
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    section("GetNetworkProtocols");
+    match client.get_network_protocols().await {
+        Ok(protos) => {
+            for p in &protos {
+                let ports: Vec<String> = p.ports.iter().map(|n| n.to_string()).collect();
+                println!(
+                    "  {} enabled={} ports=[{}]",
+                    p.name,
+                    p.enabled,
+                    ports.join(", ")
+                );
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    section("GetDNS");
+    match client.get_dns().await {
+        Ok(dns) => {
+            let src = if dns.from_dhcp { "DHCP" } else { "manual" };
+            println!("  Source: {src}  Servers: {}", dns.servers.join(", "));
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    section("GetNetworkDefaultGateway");
+    match client.get_network_default_gateway().await {
+        Ok(gw) => {
+            if !gw.ipv4_addresses.is_empty() {
+                println!("  IPv4: {}", gw.ipv4_addresses.join(", "));
+            }
+            if !gw.ipv6_addresses.is_empty() {
+                println!("  IPv6: {}", gw.ipv6_addresses.join(", "));
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 25. System log & relay outputs ────────────────────────────────────────
+    section("GetSystemLog");
+    match client.get_system_log("System").await {
+        Ok(log) => {
+            if let Some(text) = &log.string {
+                let preview: String = text.lines().take(3).collect::<Vec<_>>().join(" | ");
+                println!("  {preview}");
+            } else {
+                println!("  (no text log returned)");
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    section("GetRelayOutputs");
+    match client.get_relay_outputs().await {
+        Ok(relays) => {
+            println!("  Found {} relay(s)", relays.len());
+            for r in &relays {
+                println!(
+                    "  [{}] mode={} delay={} idle={}",
+                    r.token, r.mode, r.delay_time, r.idle_state
+                );
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
     }
 
     println!("\n=== Full workflow complete ===");
@@ -2361,5 +2468,163 @@ async fn session_example(cfg: &Config) -> Result<(), OnvifError> {
     }
 
     println!("\nDone.");
+    Ok(())
+}
+
+// ── Example: users ────────────────────────────────────────────────────────────
+
+/// List all device user accounts.
+/// Creates and then immediately deletes a test account to exercise write paths.
+async fn users_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== User management ===");
+
+    let (client, _caps) = connect(cfg).await?;
+
+    section("GetUsers");
+    let users: Vec<User> = client.get_users().await?;
+    println!("  Found {} user(s)", users.len());
+    for u in &users {
+        println!("  {} ({})", u.username, u.user_level);
+    }
+
+    // Create a temporary test user, then delete it to leave state unchanged.
+    let test_user = "oxvif_test_user";
+    section("CreateUsers (test)");
+    match client
+        .create_users(&[(test_user, "TestPass1!", "User")])
+        .await
+    {
+        Ok(()) => {
+            println!("  Created '{test_user}'");
+            section("DeleteUsers (cleanup)");
+            match client.delete_users(&[test_user]).await {
+                Ok(()) => println!("  Deleted '{test_user}'"),
+                Err(e) => println!("  Delete failed — {e}"),
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    Ok(())
+}
+
+// ── Example: network config ───────────────────────────────────────────────────
+
+/// Show network interfaces, protocols, DNS configuration, and default gateway.
+/// Read-only — does not modify the device.
+async fn network_config(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Network configuration ===");
+
+    let (client, _caps) = connect(cfg).await?;
+
+    section("GetNetworkInterfaces");
+    match client.get_network_interfaces().await {
+        Ok(ifaces) => {
+            println!(
+                "  {:<12}  {:<18}  {:<20}  {:<18}  DHCP",
+                "Token", "Name", "IP/Prefix", "MAC"
+            );
+            println!("  {}", "-".repeat(80));
+            for i in &ifaces {
+                println!(
+                    "  {:<12}  {:<18}  {:<20}  {:<18}  {}",
+                    i.token,
+                    i.name,
+                    format!("{}/{}", i.ipv4_address, i.ipv4_prefix_length),
+                    i.hw_address,
+                    i.ipv4_from_dhcp,
+                );
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    section("GetNetworkProtocols");
+    match client.get_network_protocols().await {
+        Ok(protos) => {
+            for p in &protos {
+                let ports: Vec<String> = p.ports.iter().map(|n| n.to_string()).collect();
+                println!(
+                    "  {:<8}  enabled={:<5}  ports=[{}]",
+                    p.name,
+                    p.enabled,
+                    ports.join(", ")
+                );
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    section("GetDNS");
+    match client.get_dns().await {
+        Ok(dns) => {
+            let src = if dns.from_dhcp { "DHCP" } else { "manual" };
+            println!("  Source  : {src}");
+            if dns.servers.is_empty() {
+                println!("  Servers : (none configured)");
+            } else {
+                for (i, s) in dns.servers.iter().enumerate() {
+                    println!("  Server {i}: {s}");
+                }
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    section("GetNetworkDefaultGateway");
+    match client.get_network_default_gateway().await {
+        Ok(gw) => {
+            if gw.ipv4_addresses.is_empty() && gw.ipv6_addresses.is_empty() {
+                println!("  (no gateway configured)");
+            }
+            for addr in &gw.ipv4_addresses {
+                println!("  IPv4: {addr}");
+            }
+            for addr in &gw.ipv6_addresses {
+                println!("  IPv6: {addr}");
+            }
+        }
+        Err(e) => println!("  ERROR: {e}"),
+    }
+
+    Ok(())
+}
+
+// ── Example: relay outputs ────────────────────────────────────────────────────
+
+/// List all relay outputs and trigger the first one active then inactive.
+async fn relay_outputs_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Relay outputs ===");
+
+    let (client, _caps) = connect(cfg).await?;
+
+    section("GetRelayOutputs");
+    let relays = client.get_relay_outputs().await?;
+    println!("  Found {} relay output(s)", relays.len());
+    for r in &relays {
+        println!(
+            "  [{}] mode={} delay={} idle={}",
+            r.token, r.mode, r.delay_time, r.idle_state
+        );
+    }
+
+    if let Some(first) = relays.first() {
+        section(&format!("SetRelayOutputState [{}] → active", first.token));
+        match client.set_relay_output_state(&first.token, "active").await {
+            Ok(()) => {
+                println!("  Set active");
+                section(&format!("SetRelayOutputState [{}] → inactive", first.token));
+                match client
+                    .set_relay_output_state(&first.token, "inactive")
+                    .await
+                {
+                    Ok(()) => println!("  Reset to inactive"),
+                    Err(e) => println!("  Reset failed — {e}"),
+                }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
     Ok(())
 }
