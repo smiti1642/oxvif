@@ -3135,3 +3135,602 @@ async fn test_get_replay_uri_missing_uri_returns_err() {
 
     assert!(matches!(err, crate::error::OnvifError::Soap(_)));
 }
+
+// ── get_users ─────────────────────────────────────────────────────────────────
+
+fn get_users_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetUsersResponse>
+             <tds:User>
+               <tt:Username>admin</tt:Username>
+               <tt:UserLevel>Administrator</tt:UserLevel>
+             </tds:User>
+             <tds:User>
+               <tt:Username>operator</tt:Username>
+               <tt:UserLevel>Operator</tt:UserLevel>
+             </tds:User>
+           </tds:GetUsersResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_users_returns_list() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_users_xml()));
+
+    let users = client.get_users().await.unwrap();
+    assert_eq!(users.len(), 2);
+    assert_eq!(users[0].username, "admin");
+    assert_eq!(users[0].user_level, "Administrator");
+    assert_eq!(users[1].username, "operator");
+}
+
+#[tokio::test]
+async fn test_get_users_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Sender", "Not Authorized")));
+    let err = client.get_users().await.unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── create_users ──────────────────────────────────────────────────────────────
+
+fn create_users_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:CreateUsersResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_create_users_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(create_users_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .create_users(&[("newuser", "pass123", "Operator")])
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/CreateUsers"
+    );
+    assert!(c.body.contains("<tt:Username>newuser</tt:Username>"));
+    assert!(c.body.contains("<tt:UserLevel>Operator</tt:UserLevel>"));
+}
+
+#[tokio::test]
+async fn test_create_users_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Sender", "UsernameClash")));
+    let err = client
+        .create_users(&[("admin", "x", "Administrator")])
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── delete_users ──────────────────────────────────────────────────────────────
+
+fn delete_users_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:DeleteUsersResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_delete_users_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(delete_users_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client.delete_users(&["operator"]).await.unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/DeleteUsers"
+    );
+    assert!(c.body.contains("<tds:Username>operator</tds:Username>"));
+}
+
+#[tokio::test]
+async fn test_delete_users_transport_error() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(Arc::new(ErrorTransport { status: 500 }));
+    let err = client.delete_users(&["operator"]).await.unwrap_err();
+    assert!(matches!(err, OnvifError::Transport(_)));
+}
+
+// ── set_user ─────────────────────────────────────────────────────────────────
+
+fn set_user_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetUserResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_set_user_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(set_user_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_user("admin", Some("newpass"), "Administrator")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.action, "http://www.onvif.org/ver10/device/wsdl/SetUser");
+    assert!(c.body.contains("<tt:Username>admin</tt:Username>"));
+    assert!(c.body.contains("<tt:Password>newpass</tt:Password>"));
+    assert!(
+        c.body
+            .contains("<tt:UserLevel>Administrator</tt:UserLevel>")
+    );
+}
+
+#[tokio::test]
+async fn test_set_user_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidArgs")));
+    let err = client
+        .set_user("admin", None, "Operator")
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── get_network_interfaces ────────────────────────────────────────────────────
+
+fn get_network_interfaces_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetNetworkInterfacesResponse>
+             <tds:NetworkInterfaces token="eth0">
+               <tt:Enabled>true</tt:Enabled>
+               <tt:Info>
+                 <tt:Name>eth0</tt:Name>
+                 <tt:HwAddress>00:11:22:33:44:55</tt:HwAddress>
+                 <tt:MTU>1500</tt:MTU>
+               </tt:Info>
+               <tt:IPv4>
+                 <tt:Enabled>true</tt:Enabled>
+                 <tt:Config>
+                   <tt:FromDHCP>false</tt:FromDHCP>
+                   <tt:Manual>
+                     <tt:Address>192.168.1.100</tt:Address>
+                     <tt:PrefixLength>24</tt:PrefixLength>
+                   </tt:Manual>
+                 </tt:Config>
+               </tt:IPv4>
+             </tds:NetworkInterfaces>
+           </tds:GetNetworkInterfacesResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_network_interfaces_returns_fields() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_network_interfaces_xml()));
+
+    let ifaces = client.get_network_interfaces().await.unwrap();
+    assert_eq!(ifaces.len(), 1);
+    let iface = &ifaces[0];
+    assert_eq!(iface.token, "eth0");
+    assert!(iface.enabled);
+    assert_eq!(iface.name, "eth0");
+    assert_eq!(iface.hw_address, "00:11:22:33:44:55");
+    assert_eq!(iface.mtu, 1500);
+    assert_eq!(iface.ipv4_address, "192.168.1.100");
+    assert_eq!(iface.ipv4_prefix_length, 24);
+    assert!(!iface.ipv4_from_dhcp);
+}
+
+#[tokio::test]
+async fn test_get_network_interfaces_missing_token_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetNetworkInterfacesResponse>
+             <tds:NetworkInterfaces>
+               <tt:Enabled>true</tt:Enabled>
+             </tds:NetworkInterfaces>
+           </tds:GetNetworkInterfacesResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let err = client.get_network_interfaces().await.unwrap_err();
+    assert!(matches!(err, OnvifError::Soap(_)));
+}
+
+// ── set_network_interfaces ────────────────────────────────────────────────────
+
+fn set_network_interfaces_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:SetNetworkInterfacesResponse>
+             <tds:RebootNeeded>false</tds:RebootNeeded>
+           </tds:SetNetworkInterfacesResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_set_network_interfaces_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(set_network_interfaces_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let reboot = client
+        .set_network_interfaces("eth0", true, "192.168.1.200", 24, false)
+        .await
+        .unwrap();
+
+    assert!(!reboot);
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/SetNetworkInterfaces"
+    );
+    assert!(
+        c.body
+            .contains("<tds:InterfaceToken>eth0</tds:InterfaceToken>")
+    );
+    assert!(c.body.contains("192.168.1.200"));
+}
+
+#[tokio::test]
+async fn test_set_network_interfaces_reboot_needed() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body>
+           <tds:SetNetworkInterfacesResponse>
+             <tds:RebootNeeded>true</tds:RebootNeeded>
+           </tds:SetNetworkInterfacesResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let reboot = client
+        .set_network_interfaces("eth0", true, "10.0.0.1", 8, false)
+        .await
+        .unwrap();
+    assert!(reboot);
+}
+
+// ── get_network_protocols ─────────────────────────────────────────────────────
+
+fn get_network_protocols_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetNetworkProtocolsResponse>
+             <tds:NetworkProtocols>
+               <tt:Name>HTTP</tt:Name>
+               <tt:Enabled>true</tt:Enabled>
+               <tt:Port>80</tt:Port>
+             </tds:NetworkProtocols>
+             <tds:NetworkProtocols>
+               <tt:Name>RTSP</tt:Name>
+               <tt:Enabled>true</tt:Enabled>
+               <tt:Port>554</tt:Port>
+             </tds:NetworkProtocols>
+           </tds:GetNetworkProtocolsResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_network_protocols_returns_list() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_network_protocols_xml()));
+
+    let protos = client.get_network_protocols().await.unwrap();
+    assert_eq!(protos.len(), 2);
+    assert_eq!(protos[0].name, "HTTP");
+    assert!(protos[0].enabled);
+    assert_eq!(protos[0].ports, vec![80]);
+    assert_eq!(protos[1].name, "RTSP");
+    assert_eq!(protos[1].ports, vec![554]);
+}
+
+#[tokio::test]
+async fn test_get_network_protocols_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "Not Implemented")));
+    let err = client.get_network_protocols().await.unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── get_dns ───────────────────────────────────────────────────────────────────
+
+fn get_dns_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetDNSResponse>
+             <tds:DNSInformation>
+               <tt:FromDHCP>false</tt:FromDHCP>
+               <tt:DNSManual>
+                 <tt:Type>IPv4</tt:Type>
+                 <tt:IPv4Address>8.8.8.8</tt:IPv4Address>
+               </tt:DNSManual>
+               <tt:DNSManual>
+                 <tt:Type>IPv4</tt:Type>
+                 <tt:IPv4Address>8.8.4.4</tt:IPv4Address>
+               </tt:DNSManual>
+             </tds:DNSInformation>
+           </tds:GetDNSResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_dns_returns_servers() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_dns_xml()));
+
+    let dns = client.get_dns().await.unwrap();
+    assert!(!dns.from_dhcp);
+    assert_eq!(dns.servers, vec!["8.8.8.8", "8.8.4.4"]);
+}
+
+#[tokio::test]
+async fn test_get_dns_missing_dns_information_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:GetDNSResponse/></s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let err = client.get_dns().await.unwrap_err();
+    assert!(matches!(err, OnvifError::Soap(_)));
+}
+
+// ── set_dns ───────────────────────────────────────────────────────────────────
+
+fn set_dns_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetDNSResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_set_dns_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(set_dns_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_dns(false, &["1.1.1.1", "9.9.9.9"])
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.action, "http://www.onvif.org/ver10/device/wsdl/SetDNS");
+    assert!(c.body.contains("<tds:FromDHCP>false</tds:FromDHCP>"));
+    assert!(c.body.contains("<tt:IPv4Address>1.1.1.1</tt:IPv4Address>"));
+    assert!(c.body.contains("<tt:IPv4Address>9.9.9.9</tt:IPv4Address>"));
+}
+
+#[tokio::test]
+async fn test_set_dns_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidArgs")));
+    let err = client.set_dns(false, &["1.1.1.1"]).await.unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}
+
+// ── get_network_default_gateway ───────────────────────────────────────────────
+
+fn get_network_default_gateway_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetNetworkDefaultGatewayResponse>
+             <tds:NetworkGateway>
+               <tt:IPv4Address>192.168.1.1</tt:IPv4Address>
+             </tds:NetworkGateway>
+           </tds:GetNetworkDefaultGatewayResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_network_default_gateway_returns_address() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_network_default_gateway_xml()));
+
+    let gw = client.get_network_default_gateway().await.unwrap();
+    assert_eq!(gw.ipv4_addresses, vec!["192.168.1.1"]);
+    assert!(gw.ipv6_addresses.is_empty());
+}
+
+#[tokio::test]
+async fn test_get_network_default_gateway_missing_node_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:GetNetworkDefaultGatewayResponse/></s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let err = client.get_network_default_gateway().await.unwrap_err();
+    assert!(matches!(err, OnvifError::Soap(_)));
+}
+
+// ── get_system_log ────────────────────────────────────────────────────────────
+
+fn get_system_log_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetSystemLogResponse>
+             <tds:SystemLog>
+               <tt:String>2026-04-03 12:00:00 system started</tt:String>
+             </tds:SystemLog>
+           </tds:GetSystemLogResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_system_log_returns_string() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_system_log_xml()));
+
+    let log = client.get_system_log("System").await.unwrap();
+    assert_eq!(
+        log.string.as_deref(),
+        Some("2026-04-03 12:00:00 system started")
+    );
+}
+
+#[tokio::test]
+async fn test_get_system_log_missing_system_log_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:GetSystemLogResponse/></s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let err = client.get_system_log("System").await.unwrap_err();
+    assert!(matches!(err, OnvifError::Soap(_)));
+}
+
+// ── get_relay_outputs ─────────────────────────────────────────────────────────
+
+fn get_relay_outputs_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetRelayOutputsResponse>
+             <tds:RelayOutputs token="RelayOutput_1">
+               <tt:Properties>
+                 <tt:Mode>Bistable</tt:Mode>
+                 <tt:DelayTime>PT0S</tt:DelayTime>
+                 <tt:IdleState>open</tt:IdleState>
+               </tt:Properties>
+             </tds:RelayOutputs>
+           </tds:GetRelayOutputsResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_relay_outputs_returns_fields() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_relay_outputs_xml()));
+
+    let relays = client.get_relay_outputs().await.unwrap();
+    assert_eq!(relays.len(), 1);
+    assert_eq!(relays[0].token, "RelayOutput_1");
+    assert_eq!(relays[0].mode, "Bistable");
+    assert_eq!(relays[0].idle_state, "open");
+}
+
+#[tokio::test]
+async fn test_get_relay_outputs_missing_token_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetRelayOutputsResponse>
+             <tds:RelayOutputs>
+               <tt:Properties><tt:Mode>Bistable</tt:Mode></tt:Properties>
+             </tds:RelayOutputs>
+           </tds:GetRelayOutputsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let err = client.get_relay_outputs().await.unwrap_err();
+    assert!(matches!(err, OnvifError::Soap(_)));
+}
+
+// ── set_relay_output_state ────────────────────────────────────────────────────
+
+fn set_relay_output_state_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetRelayOutputStateResponse/></s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_set_relay_output_state_sends_correct_body() {
+    let (transport, captured) = RecordingTransport::new(set_relay_output_state_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_relay_output_state("RelayOutput_1", "active")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/SetRelayOutputState"
+    );
+    assert!(
+        c.body
+            .contains("<tds:RelayOutputToken>RelayOutput_1</tds:RelayOutputToken>")
+    );
+    assert!(
+        c.body
+            .contains("<tds:LogicalState>active</tds:LogicalState>")
+    );
+}
+
+#[tokio::test]
+async fn test_set_relay_output_state_soap_fault_returns_err() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidToken")));
+    let err = client
+        .set_relay_output_state("bad_token", "active")
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
+    ));
+}

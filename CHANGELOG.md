@@ -5,6 +5,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.6.0] - 2026-04-03
+
+### Added
+- **Device Service** — 13 new operations for full device management:
+  - **User management**: `get_users`, `create_users`, `delete_users`, `set_user`
+  - **Network config**: `get_network_interfaces`, `set_network_interfaces`,
+    `get_network_protocols`, `get_dns`, `set_dns`, `get_network_default_gateway`
+  - **System**: `get_system_log`
+  - **I/O**: `get_relay_outputs`, `set_relay_output_state`
+- New types: `User`, `NetworkInterface`, `NetworkProtocol`, `DnsInformation`,
+  `NetworkGateway`, `SystemLog`, `RelayOutput`
+- All 13 operations exposed on `OnvifSession` as convenience delegates
+- All 13 operations covered by handlers in `examples/mock_server.rs`
+- 26 new unit tests (276 total)
+- CLAUDE.md SOP: new rule requiring every new method to have a mock server handler
+
+---
+
 ## [0.5.0] - 2026-04-03
 
 ### Added
