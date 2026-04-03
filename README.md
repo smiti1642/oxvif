@@ -63,6 +63,83 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 ---
 
+## `OnvifSession` — recommended for most use-cases
+
+`OnvifSession` is a high-level convenience wrapper built on top of `OnvifClient`.
+It calls `GetCapabilities` once at construction, caches all service URLs internally,
+and exposes every operation as a simple one-liner — no URL parameters needed.
+
+### Why use `OnvifSession` instead of `OnvifClient`?
+
+With `OnvifClient` you must fetch and pass service URLs manually:
+
+```rust
+// OnvifClient — you manage the URLs
+let caps      = client.get_capabilities().await?;
+let media_url = caps.media.url.unwrap();
+let ptz_url   = caps.ptz_url.unwrap();
+
+let profiles = client.get_profiles(&media_url).await?;
+let status   = client.ptz_get_status(&ptz_url, &profiles[0].token).await?;
+```
+
+With `OnvifSession` the URLs are looked up automatically:
+
+```rust
+// OnvifSession — URLs are handled for you
+let profiles = session.get_profiles().await?;
+let status   = session.ptz_get_status(&profiles[0].token).await?;
+```
+
+### Building a session
+
+```rust
+use oxvif::{OnvifSession, OnvifError};
+
+#[tokio::main]
+async fn main() -> Result<(), OnvifError> {
+    let session = OnvifSession::builder("http://192.168.1.100/onvif/device_service")
+        .with_credentials("admin", "password")
+        .with_clock_sync()   // recommended: syncs WS-Security timestamp with device clock
+        .build()
+        .await?;
+
+    // Capabilities are already cached — no extra round-trip
+    let caps = session.capabilities();
+
+    let profiles = session.get_profiles().await?;
+    let uri      = session.get_stream_uri(&profiles[0].token).await?;
+    println!("RTSP: {}", uri.uri);
+
+    let status = session.ptz_get_status(&profiles[0].token).await?;
+    println!("Pan: {:?}  Tilt: {:?}", status.pan, status.tilt);
+
+    Ok(())
+}
+```
+
+### Builder methods
+
+| Method | Description |
+|--------|-------------|
+| `OnvifSession::builder(device_url)` | Start building a session |
+| `.with_credentials(username, password)` | Enable WS-Security `UsernameToken` authentication |
+| `.with_clock_sync()` | Call `GetSystemDateAndTime` first and apply UTC offset — prevents auth failures on devices with clock skew |
+| `.with_transport(transport)` | Replace HTTP transport (for unit testing) |
+| `.build().await` | Connect, sync clock (if set), call `GetCapabilities`, return `OnvifSession` |
+
+### Session accessors
+
+| Method | Description |
+|--------|-------------|
+| `session.capabilities()` | Returns the cached `&Capabilities` — no network call |
+| `session.client()` | Access the underlying `&OnvifClient` for operations not yet on `OnvifSession` |
+
+`OnvifSession` delegates every `OnvifClient` method — the full method list is in the
+sections below (Device, Media, PTZ, Imaging, OSD, Events, Recording, Search, Replay).
+
+---
+
 ## `OnvifClient`
 
 The main entry point. Stateless and cheaply cloneable — safe to wrap in `Arc` and share across threads.
