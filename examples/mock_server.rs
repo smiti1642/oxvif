@@ -155,6 +155,11 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver10/device/wsdl/SetDiscoveryMode" => {
             resp_empty("tds", "SetDiscoveryModeResponse")
         }
+        "http://www.onvif.org/ver10/device/wsdl/SetHostname" => {
+            resp_empty("tds", "SetHostnameResponse")
+        }
+        "http://www.onvif.org/ver10/device/wsdl/SetNTP" => resp_empty("tds", "SetNTPResponse"),
+        "http://www.onvif.org/ver10/device/wsdl/SystemReboot" => resp_system_reboot(),
 
         // ── Media1 ────────────────────────────────────────────────────────────
         "http://www.onvif.org/ver10/media/wsdl/GetProfiles" => resp_profiles(),
@@ -183,6 +188,41 @@ fn dispatch(action: &str, base: &str) -> String {
         | "http://www.onvif.org/ver10/media/wsdl/RemoveVideoSourceConfiguration" => {
             resp_empty("trt", "ConfigurationResponse")
         }
+        "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfiguration" => {
+            resp_video_source_configuration()
+        }
+        "http://www.onvif.org/ver10/media/wsdl/SetVideoSourceConfiguration" => {
+            resp_empty("trt", "SetVideoSourceConfigurationResponse")
+        }
+        "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurationOptions" => {
+            resp_video_source_configuration_options()
+        }
+        "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfiguration" => {
+            resp_video_encoder_configuration()
+        }
+        "http://www.onvif.org/ver10/media/wsdl/SetVideoEncoderConfiguration" => {
+            resp_empty("trt", "SetVideoEncoderConfigurationResponse")
+        }
+        "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurationOptions" => {
+            resp_video_encoder_configuration_options()
+        }
+        "http://www.onvif.org/ver10/media/wsdl/GetOSD" => resp_osd(),
+        "http://www.onvif.org/ver10/media/wsdl/SetOSD" => resp_empty("trt", "SetOSDResponse"),
+        "http://www.onvif.org/ver10/media/wsdl/CreateOSD" => resp_create_osd(),
+        "http://www.onvif.org/ver10/media/wsdl/DeleteOSD" => resp_empty("trt", "DeleteOSDResponse"),
+        "http://www.onvif.org/ver10/media/wsdl/GetOSDOptions" => resp_osd_options(),
+        "http://www.onvif.org/ver10/media/wsdl/GetAudioSourceConfigurations" => {
+            resp_audio_source_configurations()
+        }
+        "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfiguration" => {
+            resp_audio_encoder_configuration()
+        }
+        "http://www.onvif.org/ver10/media/wsdl/SetAudioEncoderConfiguration" => {
+            resp_empty("trt", "SetAudioEncoderConfigurationResponse")
+        }
+        "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurationOptions" => {
+            resp_audio_encoder_configuration_options()
+        }
 
         // ── Media2 ────────────────────────────────────────────────────────────
         "http://www.onvif.org/ver20/media/wsdl/GetProfiles" => resp_profiles_media2(),
@@ -191,6 +231,25 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver20/media/wsdl/DeleteProfile" => {
             resp_empty("tr2", "DeleteProfileResponse")
         }
+        "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurations" => {
+            resp_video_source_configurations_media2()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/SetVideoSourceConfiguration" => {
+            resp_empty("tr2", "SetVideoSourceConfigurationResponse")
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions" => {
+            resp_video_source_configuration_options_media2()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/SetVideoEncoderConfiguration" => {
+            resp_empty("tr2", "SetVideoEncoderConfigurationResponse")
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurationOptions" => {
+            resp_video_encoder_configuration_options_media2()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderInstances" => {
+            resp_video_encoder_instances()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/CreateProfile" => resp_create_profile_media2(),
 
         // ── PTZ ───────────────────────────────────────────────────────────────
         "http://www.onvif.org/ver20/ptz/wsdl/GetStatus" => resp_ptz_status(),
@@ -203,10 +262,16 @@ fn dispatch(action: &str, base: &str) -> String {
         | "http://www.onvif.org/ver20/ptz/wsdl/Stop"
         | "http://www.onvif.org/ver20/ptz/wsdl/GotoPreset"
         | "http://www.onvif.org/ver20/ptz/wsdl/GotoHomePosition"
-        | "http://www.onvif.org/ver20/ptz/wsdl/SetHomePosition" => {
-            resp_empty("tptz", "PTZResponse")
-        }
+        | "http://www.onvif.org/ver20/ptz/wsdl/SetHomePosition"
+        | "http://www.onvif.org/ver20/ptz/wsdl/RemovePreset" => resp_empty("tptz", "PTZResponse"),
         "http://www.onvif.org/ver20/ptz/wsdl/SetPreset" => resp_ptz_set_preset(),
+        "http://www.onvif.org/ver20/ptz/wsdl/GetConfiguration" => resp_ptz_configuration(),
+        "http://www.onvif.org/ver20/ptz/wsdl/SetConfiguration" => {
+            resp_empty("tptz", "SetConfigurationResponse")
+        }
+        "http://www.onvif.org/ver20/ptz/wsdl/GetConfigurationOptions" => {
+            resp_ptz_configuration_options()
+        }
 
         // ── Imaging ───────────────────────────────────────────────────────────
         "http://www.onvif.org/ver20/imaging/wsdl/GetImagingSettings" => resp_imaging_settings(),
@@ -1026,5 +1091,310 @@ fn resp_discovery_mode() -> String {
         r#"<tds:GetDiscoveryModeResponse>
           <tds:DiscoveryMode>Discoverable</tds:DiscoveryMode>
         </tds:GetDiscoveryModeResponse>"#,
+    )
+}
+
+fn resp_system_reboot() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:SystemRebootResponse>
+          <tds:Message>Rebooting in 30 seconds</tds:Message>
+        </tds:SystemRebootResponse>"#,
+    )
+}
+
+// ── Media1 single-item / write responses ─────────────────────────────────────
+
+fn resp_video_source_configuration() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetVideoSourceConfigurationResponse>
+          <trt:Configuration token="VSC_1">
+            <tt:Name>VSConfig1</tt:Name>
+            <tt:UseCount>2</tt:UseCount>
+            <tt:SourceToken>VS_1</tt:SourceToken>
+            <tt:Bounds x="0" y="0" width="1920" height="1080"/>
+          </trt:Configuration>
+        </trt:GetVideoSourceConfigurationResponse>"#,
+    )
+}
+
+fn resp_video_source_configuration_options() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetVideoSourceConfigurationOptionsResponse>
+          <trt:Options>
+            <tt:MaximumNumberOfProfiles>5</tt:MaximumNumberOfProfiles>
+            <tt:BoundsRange>
+              <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
+              <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
+              <tt:WidthRange><tt:Min>160</tt:Min><tt:Max>1920</tt:Max></tt:WidthRange>
+              <tt:HeightRange><tt:Min>90</tt:Min><tt:Max>1080</tt:Max></tt:HeightRange>
+            </tt:BoundsRange>
+            <tt:VideoSourceTokensAvailable>VS_1</tt:VideoSourceTokensAvailable>
+          </trt:Options>
+        </trt:GetVideoSourceConfigurationOptionsResponse>"#,
+    )
+}
+
+fn resp_video_encoder_configuration() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetVideoEncoderConfigurationResponse>
+          <trt:Configuration token="VEC_1">
+            <tt:Name>MainStream</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:Encoding>H264</tt:Encoding>
+            <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+            <tt:Quality>5</tt:Quality>
+            <tt:RateControl>
+              <tt:FrameRateLimit>25</tt:FrameRateLimit>
+              <tt:EncodingInterval>1</tt:EncodingInterval>
+              <tt:BitrateLimit>4096</tt:BitrateLimit>
+            </tt:RateControl>
+            <tt:H264>
+              <tt:GovLength>25</tt:GovLength>
+              <tt:H264Profile>Main</tt:H264Profile>
+            </tt:H264>
+          </trt:Configuration>
+        </trt:GetVideoEncoderConfigurationResponse>"#,
+    )
+}
+
+fn resp_video_encoder_configuration_options() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetVideoEncoderConfigurationOptionsResponse>
+          <trt:Options>
+            <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
+            <tt:H264>
+              <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
+              <tt:ResolutionsAvailable><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:ResolutionsAvailable>
+              <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
+              <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
+              <tt:EncodingIntervalRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:EncodingIntervalRange>
+              <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
+              <tt:H264ProfilesSupported>Baseline</tt:H264ProfilesSupported>
+              <tt:H264ProfilesSupported>Main</tt:H264ProfilesSupported>
+              <tt:H264ProfilesSupported>High</tt:H264ProfilesSupported>
+            </tt:H264>
+          </trt:Options>
+        </trt:GetVideoEncoderConfigurationOptionsResponse>"#,
+    )
+}
+
+fn resp_osd() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetOSDResponse>
+          <trt:OSDConfiguration token="OSD_1">
+            <tt:VideoSourceConfigurationToken>VSC_1</tt:VideoSourceConfigurationToken>
+            <tt:Type>Text</tt:Type>
+            <tt:Position><tt:Type>UpperLeft</tt:Type></tt:Position>
+            <tt:TextString>
+              <tt:Type>DateAndTime</tt:Type>
+            </tt:TextString>
+          </trt:OSDConfiguration>
+        </trt:GetOSDResponse>"#,
+    )
+}
+
+fn resp_create_osd() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:CreateOSDResponse>
+          <trt:OSDToken>OSD_2</trt:OSDToken>
+        </trt:CreateOSDResponse>"#,
+    )
+}
+
+fn resp_osd_options() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetOSDOptionsResponse>
+          <trt:OSDOptions>
+            <tt:MaximumNumberOfOSDs>8</tt:MaximumNumberOfOSDs>
+            <tt:Type>Text</tt:Type>
+            <tt:Type>Image</tt:Type>
+            <tt:PositionOption>
+              <tt:Type>UpperLeft</tt:Type>
+              <tt:Type>LowerRight</tt:Type>
+              <tt:Type>Custom</tt:Type>
+            </tt:PositionOption>
+            <tt:TextOption>
+              <tt:Type>Plain</tt:Type>
+              <tt:Type>Date</tt:Type>
+              <tt:Type>DateAndTime</tt:Type>
+            </tt:TextOption>
+          </trt:OSDOptions>
+        </trt:GetOSDOptionsResponse>"#,
+    )
+}
+
+fn resp_audio_source_configurations() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetAudioSourceConfigurationsResponse>
+          <trt:Configurations token="ASC_1">
+            <tt:Name>AudioSourceConfig1</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:SourceToken>AudioSource_1</tt:SourceToken>
+          </trt:Configurations>
+        </trt:GetAudioSourceConfigurationsResponse>"#,
+    )
+}
+
+fn resp_audio_encoder_configuration() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetAudioEncoderConfigurationResponse>
+          <trt:Configuration token="AEC_1">
+            <tt:Name>AudioEncoder</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:Encoding>G711</tt:Encoding>
+            <tt:Bitrate>64</tt:Bitrate>
+            <tt:SampleRate>8</tt:SampleRate>
+          </trt:Configuration>
+        </trt:GetAudioEncoderConfigurationResponse>"#,
+    )
+}
+
+fn resp_audio_encoder_configuration_options() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetAudioEncoderConfigurationOptionsResponse>
+          <trt:Options>
+            <tt:Encoding>G711</tt:Encoding>
+            <tt:BitrateList><tt:Items>64</tt:Items></tt:BitrateList>
+            <tt:SampleRateList><tt:Items>8</tt:Items></tt:SampleRateList>
+          </trt:Options>
+          <trt:Options>
+            <tt:Encoding>AAC</tt:Encoding>
+            <tt:BitrateList><tt:Items>64 128 256</tt:Items></tt:BitrateList>
+            <tt:SampleRateList><tt:Items>16 32 44</tt:Items></tt:SampleRateList>
+          </trt:Options>
+        </trt:GetAudioEncoderConfigurationOptionsResponse>"#,
+    )
+}
+
+// ── Media2 additional responses ───────────────────────────────────────────────
+
+fn resp_video_source_configurations_media2() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetVideoSourceConfigurationsResponse>
+          <tr2:Configurations token="VSC_1">
+            <tt:Name>VSConfig1</tt:Name>
+            <tt:UseCount>2</tt:UseCount>
+            <tt:SourceToken>VS_1</tt:SourceToken>
+            <tt:Bounds x="0" y="0" width="1920" height="1080"/>
+          </tr2:Configurations>
+        </tr2:GetVideoSourceConfigurationsResponse>"#,
+    )
+}
+
+fn resp_video_source_configuration_options_media2() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetVideoSourceConfigurationOptionsResponse>
+          <tr2:Options>
+            <tt:MaximumNumberOfProfiles>5</tt:MaximumNumberOfProfiles>
+            <tt:BoundsRange>
+              <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
+              <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
+              <tt:WidthRange><tt:Min>160</tt:Min><tt:Max>1920</tt:Max></tt:WidthRange>
+              <tt:HeightRange><tt:Min>90</tt:Min><tt:Max>1080</tt:Max></tt:HeightRange>
+            </tt:BoundsRange>
+            <tt:VideoSourceTokensAvailable>VS_1</tt:VideoSourceTokensAvailable>
+          </tr2:Options>
+        </tr2:GetVideoSourceConfigurationOptionsResponse>"#,
+    )
+}
+
+fn resp_video_encoder_configuration_options_media2() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetVideoEncoderConfigurationOptionsResponse>
+          <tr2:Options>
+            <tt:Encoding>H264</tt:Encoding>
+            <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
+            <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
+            <tt:ResolutionsAvailable><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:ResolutionsAvailable>
+            <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
+            <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
+            <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
+            <tt:ProfilesSupported>Baseline</tt:ProfilesSupported>
+            <tt:ProfilesSupported>Main</tt:ProfilesSupported>
+            <tt:ProfilesSupported>High</tt:ProfilesSupported>
+          </tr2:Options>
+          <tr2:Options>
+            <tt:Encoding>H265</tt:Encoding>
+            <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
+            <tt:ResolutionsAvailable><tt:Width>3840</tt:Width><tt:Height>2160</tt:Height></tt:ResolutionsAvailable>
+            <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
+            <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>32768</tt:Max></tt:BitrateRange>
+            <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>60</tt:Max></tt:FrameRateRange>
+            <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>600</tt:Max></tt:GovLengthRange>
+            <tt:ProfilesSupported>Main</tt:ProfilesSupported>
+          </tr2:Options>
+        </tr2:GetVideoEncoderConfigurationOptionsResponse>"#,
+    )
+}
+
+fn resp_video_encoder_instances() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetVideoEncoderInstancesResponse>
+          <tr2:Info>
+            <tt:Total>4</tt:Total>
+            <tt:Encoding>
+              <tt:Encoding>H264</tt:Encoding>
+              <tt:Number>2</tt:Number>
+            </tt:Encoding>
+            <tt:Encoding>
+              <tt:Encoding>H265</tt:Encoding>
+              <tt:Number>2</tt:Number>
+            </tt:Encoding>
+          </tr2:Info>
+        </tr2:GetVideoEncoderInstancesResponse>"#,
+    )
+}
+
+fn resp_create_profile_media2() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:CreateProfileResponse>
+          <tr2:Token>Profile_New_M2</tr2:Token>
+        </tr2:CreateProfileResponse>"#,
+    )
+}
+
+// ── PTZ single / write responses ─────────────────────────────────────────────
+
+fn resp_ptz_configuration() -> String {
+    soap(
+        r#"xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl""#,
+        r#"<tptz:GetConfigurationResponse>
+          <tptz:PTZConfiguration token="PTZConfig_1">
+            <tt:Name>PTZConfig</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:NodeToken>PTZNode_1</tt:NodeToken>
+            <tt:DefaultPTZTimeout>PT10S</tt:DefaultPTZTimeout>
+          </tptz:PTZConfiguration>
+        </tptz:GetConfigurationResponse>"#,
+    )
+}
+
+fn resp_ptz_configuration_options() -> String {
+    soap(
+        r#"xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl""#,
+        r#"<tptz:GetConfigurationOptionsResponse>
+          <tptz:PTZConfigurationOptions>
+            <tt:PTZTimeout>
+              <tt:Min>PT1S</tt:Min>
+              <tt:Max>PT60S</tt:Max>
+            </tt:PTZTimeout>
+          </tptz:PTZConfigurationOptions>
+        </tptz:GetConfigurationOptionsResponse>"#,
     )
 }
