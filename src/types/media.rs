@@ -16,6 +16,16 @@ pub struct MediaProfile {
     pub name: String,
     /// `true` if the profile is fixed and cannot be deleted.
     pub fixed: bool,
+    /// Token of the bound `VideoSourceConfiguration`, if any.
+    pub video_source_token: Option<String>,
+    /// Token of the bound `VideoEncoderConfiguration`, if any.
+    pub video_encoder_token: Option<String>,
+    /// Token of the bound `AudioSourceConfiguration`, if any.
+    pub audio_source_token: Option<String>,
+    /// Token of the bound `AudioEncoderConfiguration`, if any.
+    pub audio_encoder_token: Option<String>,
+    /// Token of the bound `PTZConfiguration`, if any.
+    pub ptz_config_token: Option<String>,
 }
 
 impl MediaProfile {
@@ -31,6 +41,26 @@ impl MediaProfile {
             token,
             fixed: p.attr("fixed") == Some("true"),
             name: xml_str(p, "Name").unwrap_or_default(),
+            video_source_token: p
+                .child("VideoSourceConfiguration")
+                .and_then(|n| n.attr("token"))
+                .map(str::to_string),
+            video_encoder_token: p
+                .child("VideoEncoderConfiguration")
+                .and_then(|n| n.attr("token"))
+                .map(str::to_string),
+            audio_source_token: p
+                .child("AudioSourceConfiguration")
+                .and_then(|n| n.attr("token"))
+                .map(str::to_string),
+            audio_encoder_token: p
+                .child("AudioEncoderConfiguration")
+                .and_then(|n| n.attr("token"))
+                .map(str::to_string),
+            ptz_config_token: p
+                .child("PTZConfiguration")
+                .and_then(|n| n.attr("token"))
+                .map(str::to_string),
         })
     }
 

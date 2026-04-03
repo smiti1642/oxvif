@@ -172,6 +172,10 @@ pub struct PtzNode {
     pub max_presets: u32,
     /// Auxiliary command strings supported by this node.
     pub aux_commands: Vec<String>,
+    /// Supported pan/tilt position and speed spaces.
+    pub pan_tilt_spaces: Vec<PtzSpaceRange>,
+    /// Supported zoom position and speed spaces.
+    pub zoom_spaces: Vec<PtzSpaceRange>,
 }
 
 impl PtzNode {
@@ -183,6 +187,27 @@ impl PtzNode {
                     .filter(|t| !t.is_empty())
                     .ok_or_else(|| SoapError::missing("PTZNode/@token"))?
                     .to_string();
+                let spaces = n.child("SupportedPTZSpaces");
+                let pan_tilt_spaces = spaces
+                    .map(|s| {
+                        s.children_named("AbsolutePanTiltPositionSpace")
+                            .chain(s.children_named("RelativePanTiltTranslationSpace"))
+                            .chain(s.children_named("ContinuousPanTiltVelocitySpace"))
+                            .chain(s.children_named("PanTiltSpeedSpace"))
+                            .map(parse_space_range)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let zoom_spaces = spaces
+                    .map(|s| {
+                        s.children_named("AbsoluteZoomPositionSpace")
+                            .chain(s.children_named("RelativeZoomTranslationSpace"))
+                            .chain(s.children_named("ContinuousZoomVelocitySpace"))
+                            .chain(s.children_named("ZoomSpeedSpace"))
+                            .map(parse_space_range)
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 Ok(Self {
                     token,
                     name: xml_str(n, "Name").unwrap_or_default(),
@@ -195,6 +220,8 @@ impl PtzNode {
                         .children_named("AuxiliaryCommands")
                         .map(|c| c.text().to_string())
                         .collect(),
+                    pan_tilt_spaces,
+                    zoom_spaces,
                 })
             })
             .collect()

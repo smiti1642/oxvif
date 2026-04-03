@@ -121,6 +121,8 @@ pub struct AudioEncoderConfiguration {
     pub bitrate: u32,
     /// Sample rate in kHz (e.g. 8).
     pub sample_rate: u32,
+    /// Number of audio channels (e.g. 1 for mono, 2 for stereo).
+    pub channels: u32,
 }
 
 impl AudioEncoderConfiguration {
@@ -139,6 +141,7 @@ impl AudioEncoderConfiguration {
                 .unwrap_or_default(),
             bitrate: xml_u32(node, "Bitrate").unwrap_or(0),
             sample_rate: xml_u32(node, "SampleRate").unwrap_or(0),
+            channels: xml_u32(node, "Channels").unwrap_or(1),
         })
     }
 
@@ -158,6 +161,7 @@ impl AudioEncoderConfiguration {
                <tt:Encoding>{encoding}</tt:Encoding>\
                <tt:Bitrate>{bitrate}</tt:Bitrate>\
                <tt:SampleRate>{sample_rate}</tt:SampleRate>\
+               <tt:Channels>{channels}</tt:Channels>\
              </trt:Configuration>",
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),
@@ -165,6 +169,7 @@ impl AudioEncoderConfiguration {
             encoding = self.encoding,
             bitrate = self.bitrate,
             sample_rate = self.sample_rate,
+            channels = self.channels,
         )
     }
 }

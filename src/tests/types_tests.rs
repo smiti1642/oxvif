@@ -784,6 +784,7 @@ mod video {
                 profile: "Baseline".into(),
             }),
             h265: None,
+            multicast: None,
         };
         let xml = cfg.to_xml_body();
         assert!(xml.contains("token=\"enc1\""));

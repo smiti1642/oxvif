@@ -27,6 +27,8 @@ pub struct ImagingSettings {
     pub white_balance_mode: Option<String>,
     /// Exposure mode: `"AUTO"` or `"MANUAL"`.
     pub exposure_mode: Option<String>,
+    /// Backlight compensation mode: `"OFF"` or `"ON"`.
+    pub backlight_compensation: Option<String>,
 }
 
 impl ImagingSettings {
@@ -50,6 +52,10 @@ impl ImagingSettings {
                 .filter(|v| !v.is_empty()),
             exposure_mode: s
                 .path(&["Exposure", "Mode"])
+                .map(|n| n.text().to_string())
+                .filter(|v| !v.is_empty()),
+            backlight_compensation: s
+                .path(&["BacklightCompensation", "Mode"])
                 .map(|n| n.text().to_string())
                 .filter(|v| !v.is_empty()),
         })
@@ -86,6 +92,12 @@ impl ImagingSettings {
         if let Some(ref m) = self.exposure_mode {
             out.push_str(&format!(
                 "<tt:Exposure><tt:Mode>{}</tt:Mode></tt:Exposure>",
+                xml_escape(m)
+            ));
+        }
+        if let Some(ref m) = self.backlight_compensation {
+            out.push_str(&format!(
+                "<tt:BacklightCompensation><tt:Mode>{}</tt:Mode></tt:BacklightCompensation>",
                 xml_escape(m)
             ));
         }

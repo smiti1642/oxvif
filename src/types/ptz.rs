@@ -64,6 +64,8 @@ pub struct PtzStatus {
     pub pan_tilt_status: String,
     /// Zoom movement state (e.g. `"IDLE"`, `"MOVING"`, `"UNKNOWN"`).
     pub zoom_status: String,
+    /// UTC timestamp of this status snapshot, if reported by the device.
+    pub utc_time: Option<String>,
 }
 
 impl PtzStatus {
@@ -98,6 +100,7 @@ impl PtzStatus {
                 .path(&["MoveStatus", "Zoom"])
                 .map(|n| n.text().to_string())
                 .unwrap_or_default(),
+            utc_time: status.child("UtcTime").map(|n| n.text().to_string()),
         })
     }
 }

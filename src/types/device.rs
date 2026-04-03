@@ -271,6 +271,12 @@ pub struct NetworkInterface {
     pub ipv4_address: String,
     pub ipv4_prefix_length: u32,
     pub ipv4_from_dhcp: bool,
+    /// `true` if the IPv6 stack is enabled on this interface.
+    pub ipv6_enabled: bool,
+    /// `true` if the IPv6 address is obtained via DHCPv6.
+    pub ipv6_from_dhcp: bool,
+    /// Manually configured or link-local IPv6 address, if available.
+    pub ipv6_address: Option<String>,
 }
 
 impl NetworkInterface {
@@ -311,6 +317,26 @@ impl NetworkInterface {
                     .path(&["IPv4", "Config", "Manual", "PrefixLength"])
                     .and_then(|x| x.text().parse().ok())
                     .unwrap_or(0);
+                let ipv6_enabled = n
+                    .path(&["IPv6", "Enabled"])
+                    .map(|x| x.text() == "true" || x.text() == "1")
+                    .unwrap_or(false);
+                let ipv6_from_dhcp = n
+                    .path(&["IPv6", "Config", "DHCP"])
+                    .map(|x| {
+                        let t = x.text();
+                        t == "Stateful" || t == "Stateless" || t == "Both"
+                    })
+                    .unwrap_or(false);
+                let ipv6_address = n
+                    .path(&["IPv6", "Config", "Manual", "Address"])
+                    .map(|x| x.text().to_string())
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| {
+                        n.path(&["IPv6", "Config", "LinkLocal", "Address"])
+                            .map(|x| x.text().to_string())
+                            .filter(|s| !s.is_empty())
+                    });
                 Ok(Self {
                     token,
                     enabled,
@@ -321,6 +347,9 @@ impl NetworkInterface {
                     ipv4_address,
                     ipv4_prefix_length,
                     ipv4_from_dhcp,
+                    ipv6_enabled,
+                    ipv6_from_dhcp,
+                    ipv6_address,
                 })
             })
             .collect()
@@ -363,6 +392,8 @@ pub struct DnsInformation {
     pub from_dhcp: bool,
     /// Manually configured DNS server addresses (IPv4 or IPv6 strings).
     pub servers: Vec<String>,
+    /// DNS search domain suffixes configured on the device.
+    pub search_domains: Vec<String>,
 }
 
 impl DnsInformation {
@@ -381,6 +412,11 @@ impl DnsInformation {
                         .or_else(|| xml_str(e, "IPv6Address").filter(|s| !s.is_empty()))
                         .or_else(|| xml_str(e, "DNSname").filter(|s| !s.is_empty()))
                 })
+                .collect(),
+            search_domains: info
+                .children_named("SearchDomain")
+                .map(|n| n.text().to_string())
+                .filter(|s| !s.is_empty())
                 .collect(),
         })
     }

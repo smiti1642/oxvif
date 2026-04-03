@@ -284,6 +284,19 @@ impl std::fmt::Display for VideoEncoding {
 
 // ── VideoEncoderConfiguration ─────────────────────────────────────────────────
 
+/// Multicast streaming configuration embedded in a video encoder configuration.
+#[derive(Debug, Clone)]
+pub struct MulticastConfiguration {
+    /// Multicast IPv4 (or IPv6) group address.
+    pub address: String,
+    /// Destination UDP port.
+    pub port: u32,
+    /// IP time-to-live for multicast packets.
+    pub ttl: u32,
+    /// `true` if the device starts streaming automatically on boot.
+    pub auto_start: bool,
+}
+
 /// Video codec settings for one stream, returned by `GetVideoEncoderConfiguration(s)`.
 ///
 /// Pass a modified copy to `SetVideoEncoderConfiguration` to change resolution,
@@ -304,6 +317,8 @@ pub struct VideoEncoderConfiguration {
     pub h264: Option<H264Configuration>,
     /// H.265 specific settings; `None` when `encoding != H265`.
     pub h265: Option<H265Configuration>,
+    /// Multicast streaming settings, if configured.
+    pub multicast: Option<MulticastConfiguration>,
 }
 
 /// Frame rate, encoding interval, and bitrate limits.
@@ -370,6 +385,21 @@ impl VideoEncoderConfiguration {
                 gov_length: xml_u32(n, "GovLength").unwrap_or(0),
                 profile: xml_str(n, "H265Profile").unwrap_or_default(),
             }),
+            multicast: node.child("Multicast").map(|m| MulticastConfiguration {
+                address: m
+                    .path(&["Address", "IPv4Address"])
+                    .map(|n| n.text().to_string())
+                    .or_else(|| {
+                        m.path(&["Address", "IPv6Address"])
+                            .map(|n| n.text().to_string())
+                    })
+                    .unwrap_or_default(),
+                port: xml_u32(m, "Port").unwrap_or(0),
+                ttl: xml_u32(m, "TTL").unwrap_or(0),
+                auto_start: m
+                    .child("AutoStart")
+                    .is_some_and(|n| n.text() == "true" || n.text() == "1"),
+            }),
         })
     }
 
@@ -418,12 +448,27 @@ impl VideoEncoderConfiguration {
             ),
             None => String::new(),
         };
+        let multicast = match &self.multicast {
+            Some(m) => format!(
+                "<tt:Multicast>\
+                   <tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>{}</tt:IPv4Address></tt:Address>\
+                   <tt:Port>{}</tt:Port>\
+                   <tt:TTL>{}</tt:TTL>\
+                   <tt:AutoStart>{}</tt:AutoStart>\
+                 </tt:Multicast>",
+                xml_escape(&m.address),
+                m.port,
+                m.ttl,
+                m.auto_start,
+            ),
+            None => String::new(),
+        };
         format!(
             "<trt:Configuration token=\"{token}\">\
                <tt:Name>{name}</tt:Name>\
                <tt:UseCount>{use_count}</tt:UseCount>\
                <tt:Encoding>{encoding}</tt:Encoding>\
-               {res}{rate}{h264}{h265}\
+               {res}{rate}{h264}{h265}{multicast}\
                <tt:Quality>{quality}</tt:Quality>\
              </trt:Configuration>",
             token = xml_escape(&self.token),

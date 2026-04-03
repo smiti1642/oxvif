@@ -2272,6 +2272,7 @@ async fn test_set_audio_encoder_configuration_ok() {
         encoding: AudioEncoding::G711,
         bitrate: 64,
         sample_rate: 8,
+        channels: 1,
     };
     client
         .set_audio_encoder_configuration("http://192.168.1.1/onvif/media_service", &cfg)
@@ -4083,4 +4084,316 @@ async fn test_set_discovery_mode_soap_fault_returns_err() {
         err,
         OnvifError::Soap(crate::soap::SoapError::Fault { .. })
     ));
+}
+
+// ── New-field coverage tests ──────────────────────────────────────────────────
+
+// MediaProfile config tokens
+
+#[tokio::test]
+async fn test_get_profiles_parses_config_tokens() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <trt:GetProfilesResponse>
+             <trt:Profiles token="Profile_1" fixed="false">
+               <tt:Name>main</tt:Name>
+               <tt:VideoSourceConfiguration token="VideoSrc_1"/>
+               <tt:VideoEncoderConfiguration token="VideoEnc_1"/>
+               <tt:AudioSourceConfiguration token="AudioSrc_1"/>
+               <tt:AudioEncoderConfiguration token="AudioEnc_1"/>
+               <tt:PTZConfiguration token="PTZConfig_1"/>
+             </trt:Profiles>
+           </trt:GetProfilesResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let profiles = client
+        .get_profiles("http://192.168.1.1/onvif/media_service")
+        .await
+        .unwrap();
+    assert_eq!(profiles.len(), 1);
+    let p = &profiles[0];
+    assert_eq!(p.video_source_token.as_deref(), Some("VideoSrc_1"));
+    assert_eq!(p.video_encoder_token.as_deref(), Some("VideoEnc_1"));
+    assert_eq!(p.audio_source_token.as_deref(), Some("AudioSrc_1"));
+    assert_eq!(p.audio_encoder_token.as_deref(), Some("AudioEnc_1"));
+    assert_eq!(p.ptz_config_token.as_deref(), Some("PTZConfig_1"));
+}
+
+#[tokio::test]
+async fn test_get_profiles_missing_configs_are_none() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+         <s:Body>
+           <trt:GetProfilesResponse>
+             <trt:Profiles token="Profile_2" fixed="true">
+               <tt:Name>sub</tt:Name>
+             </trt:Profiles>
+           </trt:GetProfilesResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let profiles = client
+        .get_profiles("http://192.168.1.1/onvif/media_service")
+        .await
+        .unwrap();
+    let p = &profiles[0];
+    assert!(p.video_source_token.is_none());
+    assert!(p.video_encoder_token.is_none());
+    assert!(p.audio_source_token.is_none());
+    assert!(p.audio_encoder_token.is_none());
+    assert!(p.ptz_config_token.is_none());
+}
+
+// PtzNode SupportedPTZSpaces
+
+#[tokio::test]
+async fn test_ptz_get_nodes_parses_spaces() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tptz:GetNodesResponse>
+             <tptz:PTZNode token="PTZNode_1" FixedHomePosition="false">
+               <tt:Name>PTZNode_1</tt:Name>
+               <tt:SupportedPTZSpaces>
+                 <tt:AbsolutePanTiltPositionSpace>
+                   <tt:URI>http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace</tt:URI>
+                   <tt:XRange><tt:Min>-1</tt:Min><tt:Max>1</tt:Max></tt:XRange>
+                   <tt:YRange><tt:Min>-1</tt:Min><tt:Max>1</tt:Max></tt:YRange>
+                 </tt:AbsolutePanTiltPositionSpace>
+                 <tt:AbsoluteZoomPositionSpace>
+                   <tt:URI>http://www.onvif.org/ver10/tptz/ZoomSpaces/PositionGenericSpace</tt:URI>
+                   <tt:XRange><tt:Min>0</tt:Min><tt:Max>1</tt:Max></tt:XRange>
+                 </tt:AbsoluteZoomPositionSpace>
+               </tt:SupportedPTZSpaces>
+               <tt:MaximumNumberOfPresets>100</tt:MaximumNumberOfPresets>
+               <tt:HomeSupported>true</tt:HomeSupported>
+             </tptz:PTZNode>
+           </tptz:GetNodesResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let nodes = client
+        .ptz_get_nodes("http://192.168.1.1/onvif/ptz_service")
+        .await
+        .unwrap();
+    assert_eq!(nodes[0].pan_tilt_spaces.len(), 1);
+    assert_eq!(nodes[0].zoom_spaces.len(), 1);
+    assert!(nodes[0].pan_tilt_spaces[0].uri.contains("PanTilt"));
+    assert_eq!(nodes[0].pan_tilt_spaces[0].x_range, (-1.0, 1.0));
+    assert!(nodes[0].pan_tilt_spaces[0].y_range.is_some());
+    assert!(nodes[0].zoom_spaces[0].y_range.is_none());
+}
+
+// PtzStatus utc_time
+
+#[tokio::test]
+async fn test_ptz_get_status_parses_utc_time() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tptz:GetStatusResponse>
+             <tptz:PTZStatus>
+               <tt:Position>
+                 <tt:PanTilt x="0.0" y="0.0"/>
+                 <tt:Zoom x="0.0"/>
+               </tt:Position>
+               <tt:MoveStatus>
+                 <tt:PanTilt>IDLE</tt:PanTilt>
+                 <tt:Zoom>IDLE</tt:Zoom>
+               </tt:MoveStatus>
+               <tt:UtcTime>2024-06-15T12:00:00Z</tt:UtcTime>
+             </tptz:PTZStatus>
+           </tptz:GetStatusResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let status = client
+        .ptz_get_status("http://192.168.1.1/onvif/ptz_service", "Profile_1")
+        .await
+        .unwrap();
+    assert_eq!(status.utc_time.as_deref(), Some("2024-06-15T12:00:00Z"));
+}
+
+// AudioEncoderConfiguration channels
+
+#[tokio::test]
+async fn test_get_audio_encoder_configuration_parses_channels() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <trt:GetAudioEncoderConfigurationResponse>
+             <trt:Configuration token="AudioEnc_1">
+               <tt:Name>Audio</tt:Name>
+               <tt:UseCount>1</tt:UseCount>
+               <tt:Encoding>AAC</tt:Encoding>
+               <tt:Bitrate>128</tt:Bitrate>
+               <tt:SampleRate>44</tt:SampleRate>
+               <tt:Channels>2</tt:Channels>
+             </trt:Configuration>
+           </trt:GetAudioEncoderConfigurationResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let cfg = client
+        .get_audio_encoder_configuration("http://192.168.1.1/onvif/media_service", "AudioEnc_1")
+        .await
+        .unwrap();
+    assert_eq!(cfg.channels, 2);
+    assert_eq!(cfg.encoding.as_str(), "AAC");
+}
+
+// DnsInformation search_domains
+
+#[tokio::test]
+async fn test_get_dns_parses_search_domains() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetDNSResponse>
+             <tds:DNSInformation>
+               <tt:FromDHCP>false</tt:FromDHCP>
+               <tt:SearchDomain>example.com</tt:SearchDomain>
+               <tt:SearchDomain>local</tt:SearchDomain>
+               <tt:DNSManual>
+                 <tt:Type>IPv4</tt:Type>
+                 <tt:IPv4Address>1.1.1.1</tt:IPv4Address>
+               </tt:DNSManual>
+             </tds:DNSInformation>
+           </tds:GetDNSResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let dns = client.get_dns().await.unwrap();
+    assert_eq!(dns.search_domains, vec!["example.com", "local"]);
+    assert_eq!(dns.servers, vec!["1.1.1.1"]);
+}
+
+// VideoEncoderConfiguration multicast
+
+#[tokio::test]
+async fn test_get_video_encoder_configuration_parses_multicast() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <trt:GetVideoEncoderConfigurationResponse>
+             <trt:Configuration token="VideoEnc_1">
+               <tt:Name>Main</tt:Name>
+               <tt:UseCount>1</tt:UseCount>
+               <tt:Encoding>H264</tt:Encoding>
+               <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+               <tt:Quality>4.0</tt:Quality>
+               <tt:Multicast>
+                 <tt:Address>
+                   <tt:Type>IPv4</tt:Type>
+                   <tt:IPv4Address>239.255.0.1</tt:IPv4Address>
+                 </tt:Address>
+                 <tt:Port>5000</tt:Port>
+                 <tt:TTL>5</tt:TTL>
+                 <tt:AutoStart>false</tt:AutoStart>
+               </tt:Multicast>
+             </trt:Configuration>
+           </trt:GetVideoEncoderConfigurationResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let cfg = client
+        .get_video_encoder_configuration("http://192.168.1.1/onvif/media_service", "VideoEnc_1")
+        .await
+        .unwrap();
+    let mc = cfg.multicast.expect("multicast should be present");
+    assert_eq!(mc.address, "239.255.0.1");
+    assert_eq!(mc.port, 5000);
+    assert_eq!(mc.ttl, 5);
+    assert!(!mc.auto_start);
+}
+
+// ImagingSettings backlight_compensation
+
+#[tokio::test]
+async fn test_get_imaging_settings_parses_backlight_compensation() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <timg:GetImagingSettingsResponse>
+             <timg:ImagingSettings>
+               <tt:Brightness>50</tt:Brightness>
+               <tt:BacklightCompensation>
+                 <tt:Mode>ON</tt:Mode>
+               </tt:BacklightCompensation>
+             </timg:ImagingSettings>
+           </timg:GetImagingSettingsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let s = client
+        .get_imaging_settings("http://192.168.1.1/onvif/imaging_service", "VS_1")
+        .await
+        .unwrap();
+    assert_eq!(s.backlight_compensation.as_deref(), Some("ON"));
+}
+
+// NetworkInterface IPv6
+
+#[tokio::test]
+async fn test_get_network_interfaces_parses_ipv6() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetNetworkInterfacesResponse>
+             <tds:NetworkInterfaces token="eth0">
+               <tt:Enabled>true</tt:Enabled>
+               <tt:Info>
+                 <tt:Name>eth0</tt:Name>
+                 <tt:HwAddress>AA:BB:CC:DD:EE:FF</tt:HwAddress>
+                 <tt:MTU>1500</tt:MTU>
+               </tt:Info>
+               <tt:IPv4>
+                 <tt:Enabled>true</tt:Enabled>
+                 <tt:Config>
+                   <tt:FromDHCP>false</tt:FromDHCP>
+                   <tt:Manual>
+                     <tt:Address>10.0.0.1</tt:Address>
+                     <tt:PrefixLength>8</tt:PrefixLength>
+                   </tt:Manual>
+                 </tt:Config>
+               </tt:IPv4>
+               <tt:IPv6>
+                 <tt:Enabled>true</tt:Enabled>
+                 <tt:Config>
+                   <tt:DHCP>Stateful</tt:DHCP>
+                   <tt:Manual>
+                     <tt:Address>2001:db8::1</tt:Address>
+                     <tt:PrefixLength>64</tt:PrefixLength>
+                   </tt:Manual>
+                 </tt:Config>
+               </tt:IPv6>
+             </tds:NetworkInterfaces>
+           </tds:GetNetworkInterfacesResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let ifaces = client.get_network_interfaces().await.unwrap();
+    let iface = &ifaces[0];
+    assert!(iface.ipv6_enabled);
+    assert!(iface.ipv6_from_dhcp);
+    assert_eq!(iface.ipv6_address.as_deref(), Some("2001:db8::1"));
 }
