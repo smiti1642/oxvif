@@ -5,6 +5,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.8.2] - 2026-04-04
+
+### Changed
+- **Breaking API fixes (pre-1.0 cleanup)**
+  - All service URLs unified to `caps.{service}.url` pattern
+    (`caps.ptz.url`, `caps.imaging.url`, `caps.recording.url`, etc.)
+  - `create_recording` now takes `&RecordingConfiguration` struct instead of
+    6 positional `&str` arguments
+- New convenience method: `search_recordings(search_url, max_matches)` —
+  wraps the find → poll → end_search loop into a single call
+- New re-exports: `PtzCapabilities`, `ImagingCapabilities`, `RecordingCapabilities`,
+  `SearchCapabilities`, `ReplayCapabilities`, `Media2Capabilities`,
+  `DeviceIoCapabilities`, `RecordingConfiguration`
+
+### Fixed
+- Stale `caps.*_url` references in doc comments across client modules
+
+### Tests
+- Added 12 missing tests: positive + negative for `delete_recording`,
+  `delete_track`, `delete_recording_job`, `search_recordings`; negative tests
+  for `create_recording_job`, `set_recording_job_mode`,
+  `get_recording_search_results`, `end_search` (304 unit tests total)
+
+---
+
 ## [0.8.1] - 2026-04-04
 
 ### Fixed
