@@ -163,7 +163,17 @@ All three must pass cleanly.
 14. Tag the release commit: `git tag v<version>` (e.g. `git tag v0.4.1`).
     Tags appear in GitHub Desktop next to commits — useful for version-based debugging.
 15. Push tags to GitHub: `git push origin --tags`.
-16. `cargo publish`.
+16. Create a GitHub release (notes = this version's CHANGELOG section):
+    ```sh
+    gh release create v<version> --title "v<version>" \
+      --notes "$(awk '/^## \[<version>\]/{found=1;next} found && /^## \[/{exit} found{print}' CHANGELOG.md)"
+    ```
+    e.g. for v0.8.0:
+    ```sh
+    gh release create v0.8.0 --title "v0.8.0" \
+      --notes "$(awk '/^## \[0\.8\.0\]/{found=1;next} found && /^## \[/{exit} found{print}' CHANGELOG.md)"
+    ```
+17. `cargo publish`.
 
 ## Rust 2024 edition notes
 
@@ -186,3 +196,4 @@ All three must pass cleanly.
 - [ ] Committed and on `master` branch
 - [ ] `git tag v<version>` — tag the release commit
 - [ ] `git push origin --tags` — push tags to GitHub (visible in GitHub Desktop + useful for version debugging)
+- [ ] `gh release create v<version> --title "v<version>" --notes "$(awk ...)"` — GitHub release with changelog notes
