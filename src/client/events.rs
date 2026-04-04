@@ -4,6 +4,7 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{EventProperties, NotificationMessage, PullPointSubscription};
+use futures_core::Stream;
 
 impl OnvifClient {
     /// Retrieve all event topics advertised by the device.
@@ -140,5 +141,48 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         find_response(&body_node, "UnsubscribeResponse")?;
         Ok(())
+    }
+
+    /// Wrap `pull_messages` polling into an infinite async stream of notification
+    /// messages.
+    ///
+    /// Each `pull_messages` call fetches up to `max_messages` events and waits
+    /// up to `wait_time` (ISO 8601 duration, e.g. `"PT5S"`) for at least one to
+    /// arrive before returning. The stream yields individual messages one at a
+    /// time; errors stop the stream.
+    ///
+    /// The stream is infinite — use [`futures::StreamExt::take`] or a `select!`
+    /// block to bound it, and call [`unsubscribe`](Self::unsubscribe) when done.
+    ///
+    /// # Example (requires `futures` in caller's `[dependencies]`)
+    ///
+    /// ```no_run
+    /// use futures::StreamExt as _;
+    ///
+    /// # async fn example(session: oxvif::OnvifSession) -> Result<(), oxvif::OnvifError> {
+    /// let sub = session.create_pull_point_subscription(None, Some("PT60S")).await?;
+    /// let mut stream = session.event_stream(&sub.reference_url, "PT5S", 10);
+    /// while let Some(Ok(msg)) = stream.next().await {
+    ///     println!("Event: {} {:?}", msg.topic, msg.data);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn event_stream<'a>(
+        &'a self,
+        subscription_url: &'a str,
+        timeout: &'a str,
+        max_messages: u32,
+    ) -> std::pin::Pin<Box<dyn Stream<Item = Result<NotificationMessage, OnvifError>> + 'a>> {
+        Box::pin(async_stream::try_stream! {
+            loop {
+                let messages = self
+                    .pull_messages(subscription_url, timeout, max_messages)
+                    .await?;
+                for msg in messages {
+                    yield msg;
+                }
+            }
+        })
     }
 }

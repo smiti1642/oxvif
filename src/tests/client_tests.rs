@@ -1,5 +1,6 @@
 use super::*;
 use async_trait::async_trait;
+use futures::StreamExt as _;
 use std::sync::{Arc, Mutex};
 
 use crate::transport::TransportError;
@@ -5177,4 +5178,32 @@ async fn test_create_recording_job_xml_escapes_token() {
         .unwrap();
     let c = captured.lock().unwrap();
     assert!(c.body.contains("Rec&lt;&amp;&gt;"));
+}
+
+// ── Direction-3: event_stream ─────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_event_stream_yields_notification_messages() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(pull_messages_xml()));
+    let mut stream = client.event_stream("http://192.168.1.1/onvif/subscription_1", "PT5S", 10);
+    let msg = stream.next().await.expect("stream should yield").unwrap();
+    assert!(msg.topic.contains("MotionAlarm"));
+}
+
+#[tokio::test]
+async fn test_event_stream_error_on_bad_response() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+         <s:Body>
+           <s:Fault>
+             <s:Code><s:Value>s:Receiver</s:Value></s:Code>
+             <s:Reason><s:Text>Subscription expired</s:Text></s:Reason>
+           </s:Fault>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let mut stream = client.event_stream("http://192.168.1.1/onvif/subscription_1", "PT5S", 10);
+    let result = stream.next().await.expect("stream should yield an error");
+    assert!(result.is_err());
 }

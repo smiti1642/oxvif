@@ -1075,6 +1075,39 @@ impl OnvifSession {
         self.client.unsubscribe(subscription_url).await
     }
 
+    /// Wrap `pull_messages` polling into an infinite async stream of notification
+    /// messages.
+    ///
+    /// `subscription_url` comes from [`PullPointSubscription::reference_url`].
+    /// `timeout` is an ISO 8601 long-poll duration (e.g. `"PT5S"`).
+    /// `max_messages` is the maximum number of events to fetch per poll.
+    ///
+    /// # Example (requires `futures` in caller's `[dependencies]`)
+    ///
+    /// ```no_run
+    /// use futures::StreamExt as _;
+    ///
+    /// # async fn example(session: oxvif::OnvifSession) -> Result<(), oxvif::OnvifError> {
+    /// let sub = session.create_pull_point_subscription(None, None).await?;
+    /// let mut stream = session.event_stream(&sub.reference_url, "PT5S", 10);
+    /// while let Some(Ok(msg)) = stream.next().await {
+    ///     println!("Event: {} {:?}", msg.topic, msg.data);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn event_stream<'a>(
+        &'a self,
+        subscription_url: &'a str,
+        timeout: &'a str,
+        max_messages: u32,
+    ) -> std::pin::Pin<
+        Box<dyn futures_core::Stream<Item = Result<NotificationMessage, OnvifError>> + 'a>,
+    > {
+        self.client
+            .event_stream(subscription_url, timeout, max_messages)
+    }
+
     // ── Recording Service ─────────────────────────────────────────────────────
 
     /// List all recordings stored on the device.
