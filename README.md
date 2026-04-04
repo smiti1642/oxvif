@@ -6,16 +6,18 @@ Async Rust client library for the [ONVIF](https://www.onvif.org/) IP camera prot
 UDP multicast ──► discovery::probe() ──► Vec<DiscoveredDevice>
                                                   │
                                                   ▼ XAddr
-SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hostname, NTP, reboot)
-                             ──► Media1   (profiles, RTSP/snapshot URIs, video + audio configs)
-                             ──► Media2   (H.265 native, flat encoder config)
-                             ──► PTZ      (move, stop, presets, home, status, configurations, nodes)
-                             ──► Imaging  (brightness, contrast, exposure, IR cut, focus move/stop)
-                             ──► OSD      (create, read, update, delete on-screen display elements)
-                             ──► Events   (subscribe, pull, renew, unsubscribe)
-                             ──► Recording (list stored recordings)
-                             ──► Search   (find recordings by time/scope)
-                             ──► Replay   (RTSP URI for playback)
+                      OnvifSession ─── caches service URLs, delegates every call
+                           │
+SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, hostname, NTP, reboot)
+                           ──► Media1    (profiles, RTSP/snapshot URIs, video + audio configs)
+                           ──► Media2    (H.265 native, flat encoder config)
+                           ──► PTZ       (move, stop, presets, home, status, configurations, nodes)
+                           ──► Imaging   (brightness, contrast, exposure, IR cut, focus move/stop)
+                           ──► OSD       (create, read, update, delete on-screen display elements)
+                           ──► Events    (subscribe, pull, renew, unsubscribe, continuous stream)
+                           ──► Recording (list, create/delete recordings and recording jobs)
+                           ──► Search    (find recordings by time/scope)
+                           ──► Replay    (RTSP URI for playback)
 ```
 
 - Async-first (`tokio` + `reqwest`)
@@ -23,22 +25,43 @@ SOAP/HTTP ──────► OnvifClient ──► Device  (capabilities, hos
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 306 unit tests + 11 doc tests
+- 292 unit tests + 14 doc tests
 
 ---
 
 ## Quick start
 
+Two ways to use oxvif — pick whichever suits your workflow.
+
+### `OnvifSession` — URL caching handled for you
+
 ```rust
-use oxvif::OnvifClient;
+use oxvif::{OnvifSession, OnvifError};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), OnvifError> {
+    let session = OnvifSession::builder("http://192.168.1.100/onvif/device_service")
+        .with_credentials("admin", "password")
+        .with_clock_sync()   // syncs WS-Security timestamp with device clock
+        .build()
+        .await?;
+
+    let profiles = session.get_profiles().await?;
+    let uri = session.get_stream_uri(&profiles[0].token).await?;
+    println!("RTSP: {}", uri.uri);
+    Ok(())
+}
+```
+
+### `OnvifClient` — direct control, you manage service URLs
+
+```rust
+use oxvif::{OnvifClient, OnvifError};
+
+#[tokio::main]
+async fn main() -> Result<(), OnvifError> {
     let client = OnvifClient::new("http://192.168.1.100/onvif/device_service")
         .with_credentials("admin", "password");
-
-    let info = client.get_device_info().await?;
-    println!("Model: {} {}", info.manufacturer, info.model);
 
     let caps = client.get_capabilities().await?;
     let media_url = caps.media.url.unwrap();
@@ -46,10 +69,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let profiles = client.get_profiles(&media_url).await?;
     let uri = client.get_stream_uri(&media_url, &profiles[0].token).await?;
     println!("RTSP: {}", uri.uri);
-
     Ok(())
 }
 ```
+
+`OnvifSession` calls `GetCapabilities` once on `build()` and caches all service URLs — no URL arguments needed for individual methods. `OnvifClient` is stateless; you forward the URL yourself for full routing control.
 
 ---
 
@@ -57,39 +81,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-oxvif = "0.7.3"
+oxvif = "0.8.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
 ---
 
-## `OnvifSession` — recommended for most use-cases
+## `OnvifSession`
 
-`OnvifSession` is a high-level convenience wrapper built on top of `OnvifClient`.
-It calls `GetCapabilities` once at construction, caches all service URLs internally,
-and exposes every operation as a simple one-liner — no URL parameters needed.
-
-### Why use `OnvifSession` instead of `OnvifClient`?
-
-With `OnvifClient` you must fetch and pass service URLs manually:
-
-```rust
-// OnvifClient — you manage the URLs
-let caps      = client.get_capabilities().await?;
-let media_url = caps.media.url.unwrap();
-let ptz_url   = caps.ptz_url.unwrap();
-
-let profiles = client.get_profiles(&media_url).await?;
-let status   = client.ptz_get_status(&ptz_url, &profiles[0].token).await?;
-```
-
-With `OnvifSession` the URLs are looked up automatically:
-
-```rust
-// OnvifSession — URLs are handled for you
-let profiles = session.get_profiles().await?;
-let status   = session.ptz_get_status(&profiles[0].token).await?;
-```
+`OnvifSession` calls `GetCapabilities` once at construction, caches all service
+URLs internally, and exposes every operation as a one-liner — no URL parameters
+needed anywhere.
 
 ### Building a session
 
@@ -142,7 +144,9 @@ sections below (Device, Media, PTZ, Imaging, OSD, Events, Recording, Search, Rep
 
 ## `OnvifClient`
 
-The main entry point. Stateless and cheaply cloneable — safe to wrap in `Arc` and share across threads.
+Stateless and cheaply cloneable — safe to wrap in `Arc` and share across threads.
+You manage the service URLs (obtained from `get_capabilities()` or `get_services()`),
+which gives you full control over per-call routing.
 
 ### Constructors and builder methods
 
@@ -439,7 +443,7 @@ println!("pan={:?} tilt={:?} zoom={:?} state={}",
     status.pan, status.tilt, status.zoom, status.pan_tilt_status);
 ```
 
-**`PtzStatus` fields:** `pan`, `tilt`, `zoom` (`Option<f32>`), `pan_tilt_status`, `zoom_status` (`String` — `"IDLE"` or `"MOVING"`).
+**`PtzStatus` fields:** `pan`, `tilt`, `zoom` (`Option<f32>`), `pan_tilt_status`, `zoom_status` (`String` — `"IDLE"` or `"MOVING"`), `utc_time` (`Option<String>`), `error` (`Option<String>` — device fault description if any).
 
 ---
 
@@ -465,7 +469,7 @@ enc.bitrate = 128;
 client.set_audio_encoder_configuration(&media_url, &enc).await?;
 ```
 
-**`AudioEncoderConfiguration` fields:** `token`, `name`, `use_count`, `encoding` (`AudioEncoding`), `bitrate` (kbps), `sample_rate` (kHz).
+**`AudioEncoderConfiguration` fields:** `token`, `name`, `use_count`, `encoding` (`AudioEncoding`), `bitrate` (kbps), `sample_rate` (kHz), `channels` (`Option<u32>`).
 
 **`AudioEncoding` variants:** `G711`, `G726`, `Aac`, `Other(String)`.
 
@@ -595,6 +599,23 @@ let new_time = client.renew_subscription(&sub.reference_url, "PT60S").await?;
 client.unsubscribe(&sub.reference_url).await?;
 ```
 
+### Continuous event stream
+
+`event_stream` wraps the polling loop into an infinite async `Stream` — each item
+is one `NotificationMessage`. Use `futures::StreamExt::take` or a `select!` block
+to bound it, and call `unsubscribe` when done.
+
+```rust
+use futures::StreamExt as _;
+
+let sub = client.create_pull_point_subscription(&events_url, None, Some("PT60S")).await?;
+let mut stream = client.event_stream(&sub.reference_url, "PT5S", 10);
+
+while let Some(Ok(msg)) = stream.next().await {
+    println!("[{}] {} {:?}", msg.utc_time, msg.topic, msg.data);
+}
+```
+
 **`PullPointSubscription` fields:**
 
 | Field | Type | Description |
@@ -621,19 +642,62 @@ client.unsubscribe(&sub.reference_url).await?;
 
 ## Recording Service methods
 
-Access recordings stored on the device (NVR/DVR). Obtain `recording_url` from
-`get_services()` — look for the service with namespace
-`http://www.onvif.org/ver10/recording/wsdl`.
+Access and manage recordings stored on the device (NVR/DVR). Obtain `recording_url`
+from `get_services()` — namespace `http://www.onvif.org/ver10/recording/wsdl`.
+
+### Read operations
 
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `get_recordings(recording_url)` | `Vec<RecordingItem>` | List all stored recordings |
+| `get_recording_jobs(recording_url)` | `Vec<RecordingJob>` | List all recording jobs |
+| `get_recording_job_state(recording_url, job_token)` | `RecordingJobState` | Current active state of a job |
+
+### Write operations
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `create_recording(recording_url, source_id, name, description, address)` | `String` | Create a new recording entry, returns token |
+| `delete_recording(recording_url, recording_token)` | `()` | Delete a recording and all its tracks |
+| `create_track(recording_url, recording_token, track_type, description)` | `String` | Add a track to a recording, returns track token |
+| `delete_track(recording_url, recording_token, track_token)` | `()` | Remove a track from a recording |
+| `create_recording_job(recording_url, config)` | `RecordingJob` | Create a new recording job |
+| `set_recording_job_mode(recording_url, job_token, mode)` | `()` | Set job mode (`"Active"` or `"Idle"`) |
+| `delete_recording_job(recording_url, job_token)` | `()` | Delete a recording job |
+
+```rust
+// Create a recording and start a job
+let rec_token = client.create_recording(
+    &recording_url, "src1", "Camera1", "Front door camera", "192.168.1.50"
+).await?;
+
+let track_token = client.create_track(
+    &recording_url, &rec_token, "Video", "Main stream"
+).await?;
+
+let config = RecordingJobConfiguration {
+    recording_token: rec_token.clone(),
+    mode: "Active".into(),
+    priority: 1,
+    source_token: "VideoSourceToken_0".into(),
+};
+let job = client.create_recording_job(&recording_url, &config).await?;
+println!("Job token: {}", job.token);
+
+// Check job state
+let state = client.get_recording_job_state(&recording_url, &job.token).await?;
+println!("Active state: {}", state.active_state);
+```
 
 **`RecordingItem` fields:** `token`, `source` (`RecordingSourceInformation`), `content`, `earliest_recording`, `latest_recording` (`Option<String>` ISO-8601), `recording_status` (`"Recording"`, `"Stopped"`, etc.), `tracks` (`Vec<RecordingTrack>`).
 
 **`RecordingSourceInformation` fields:** `source_id`, `name`, `location`, `description` (`String`), `address` (`Option<String>` — network address of the source device).
 
 **`RecordingTrack` fields:** `token`, `track_type` (`"Video"`, `"Audio"`, `"Metadata"`), `description` (`String`), `data_from`, `data_to` (`Option<String>` ISO-8601 — time bounds of recorded data in this track).
+
+**`RecordingJob` fields:** `token`, `recording_token`, `mode`, `priority` (`u32`), `source_token`.
+
+**`RecordingJobState` fields:** `token`, `active_state` (`"Active"`, `"Idle"`, or device-specific string).
 
 ---
 
@@ -841,6 +905,7 @@ src/
 │   ├── imaging.rs       ImagingSettings, ImagingOptions
 │   ├── media.rs         MediaProfile, StreamUri, SnapshotUri
 │   ├── ptz.rs           PtzPreset, PtzStatus
+│   ├── recording.rs     RecordingItem, RecordingJob, RecordingJobConfiguration, RecordingJobState
 │   └── video.rs         VideoSource, VideoEncoder configs and options
 └── tests/
     ├── client_tests.rs  unit tests covering all client methods
@@ -935,7 +1000,7 @@ examples/
 |-----------|--------|
 | `GetImagingSettings` / `SetImagingSettings` | ✓ |
 | `GetOptions` | ✓ |
-| `Move` (focus/iris) | — |
+| `Move` / `Stop` / `GetMoveOptions` / `GetStatus` | ✓ |
 
 ### Events Service
 
@@ -946,7 +1011,33 @@ examples/
 | `PullMessages` | ✓ |
 | `Renew` | ✓ |
 | `Unsubscribe` | ✓ |
+| `event_stream` (continuous poll stream) | ✓ |
 | WS-BaseNotification push (Subscribe) | — |
+
+### Recording Service
+
+| Operation | Status |
+|-----------|--------|
+| `GetRecordings` | ✓ |
+| `CreateRecording` / `DeleteRecording` | ✓ |
+| `CreateTrack` / `DeleteTrack` | ✓ |
+| `GetRecordingJobs` | ✓ |
+| `CreateRecordingJob` / `SetRecordingJobMode` / `DeleteRecordingJob` | ✓ |
+| `GetRecordingJobState` | ✓ |
+
+### Search Service
+
+| Operation | Status |
+|-----------|--------|
+| `FindRecordings` | ✓ |
+| `GetRecordingSearchResults` | ✓ |
+| `EndSearch` | ✓ |
+
+### Replay Service
+
+| Operation | Status |
+|-----------|--------|
+| `GetReplayUri` | ✓ |
 
 ### WS-Discovery
 

@@ -14,7 +14,7 @@
 //! |---------|-------------|----------|-------|
 //! | **Profile S** | Video streaming | ~95% | All core operations implemented; PTZ move commands available but not shown in examples |
 //! | **Profile T** | Advanced streaming (H.265, focus, OSD, audio) | ~85% | Metadata RTP streaming excluded (not SOAP) |
-//! | **Profile G** | Recording & playback | ~55% | Read/search/replay fully covered; write management (CreateRecording, RecordingJobs) not yet implemented |
+//! | **Profile G** | Recording & playback | ~85% | Read/search/replay + full recording/job write management; live-source job binding not yet implemented |
 //!
 //! ## Supported services
 //!
@@ -25,8 +25,8 @@
 //! - **PTZ** — absolute/relative/continuous move, presets, home position, status,
 //!   configurations, nodes
 //! - **Imaging** — brightness/contrast/exposure settings, focus move/stop/status
-//! - **Events** — pull-point subscriptions, event polling, renew, unsubscribe
-//! - **Recording** — list stored recordings
+//! - **Events** — pull-point subscriptions, event polling, renew, unsubscribe, continuous `event_stream`
+//! - **Recording** — list stored recordings; create/delete recordings, tracks, and recording jobs
 //! - **Search** — find recordings by scope, collect results, end search
 //! - **Replay** — get RTSP playback URI for a stored recording
 //! - **WS-Discovery** — UDP multicast probe to find cameras on the local network
@@ -35,10 +35,11 @@
 //!
 //! ```text
 //! ┌──────────────────────────────────────────────────────┐
-//! │                  OnvifSession                        │  ← high-level API
-//! │     (caches service URLs, no URL params needed)      │
+//! │                  OnvifSession                        │
+//! │     caches service URLs — delegates every call       │
 //! ├──────────────────────────────────────────────────────┤
-//! │                   OnvifClient                        │  ← low-level API
+//! │                   OnvifClient                        │
+//! │     stateless — you supply service URLs per call     │
 //! ├──────────────────────────────────────────────────────┤
 //! │    soap::SoapEnvelope  │  soap::WsSecurityToken      │  ← SOAP layer
 //! ├──────────────────────────────────────────────────────┤
@@ -47,10 +48,14 @@
 //! └──────────────────────────────────────────────────────┘
 //! ```
 //!
-//! ## Quick start — `OnvifSession` (recommended)
+//! ## Quick start
+//!
+//! Two ways to use oxvif — pick whichever suits your workflow.
+//!
+//! ### `OnvifSession` — URL caching handled for you
 //!
 //! [`OnvifSession`] calls `GetCapabilities` once at construction and caches all
-//! service URLs. No need to pass URL parameters to individual methods.
+//! service URLs. No URL parameters needed for individual methods.
 //!
 //! ```no_run
 //! use oxvif::{OnvifSession, OnvifError};
@@ -72,10 +77,10 @@
 //! }
 //! ```
 //!
-//! ## Low-level access — `OnvifClient`
+//! ### `OnvifClient` — direct control, you manage service URLs
 //!
 //! [`OnvifClient`] is stateless and gives direct control over every call.
-//! Use it when you need fine-grained URL routing or a custom transport.
+//! You fetch and forward service URLs yourself for full routing control.
 //!
 //! ```no_run
 //! use oxvif::{OnvifClient, OnvifError};

@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.8.0] - 2026-04-04
+
+### Added
+- **Recording Service write operations** — 9 new methods completing Profile G write coverage:
+  - `create_recording` / `delete_recording`
+  - `create_track` / `delete_track`
+  - `get_recording_jobs` / `create_recording_job` / `set_recording_job_mode` /
+    `delete_recording_job` / `get_recording_job_state`
+- New types: `RecordingJob`, `RecordingJobConfiguration`, `RecordingJobState`
+- All 9 methods exposed on `OnvifSession` as convenience delegates
+- All 9 methods covered by handlers in `examples/mock_server.rs`
+- **Events Service** — `event_stream(subscription_url, timeout, max_messages)` wraps
+  the `pull_messages` polling loop into an infinite `Pin<Box<dyn Stream<...>>>` —
+  yields individual `NotificationMessage` items; errors stop the stream
+- Added `trc` / `tse` / `trp` namespace declarations to the SOAP envelope — previously
+  omitted, making recording/search/replay request bodies technically invalid XML
+- New `async-stream = "0.3"` and `futures-core = "0.3"` runtime dependencies
+
+### Changed
+- Removed 38 low-value unit tests that only verified HTTP dispatch routing or duplicated
+  SOAP Fault coverage without exercising response parsing (314 → 292 unit tests)
+
+---
+
 ## [0.7.6] - 2026-04-04
 
 ### Changed

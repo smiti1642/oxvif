@@ -21,6 +21,8 @@
 //! cargo run --example camera -- imaging
 //! cargo run --example camera -- events
 //! cargo run --example camera -- recording
+//! cargo run --example camera -- recording-jobs
+//! cargo run --example camera -- event-stream
 //! cargo run --example camera -- discovery
 //! cargo run --example camera -- error-handling
 //! cargo run --example camera -- session
@@ -33,10 +35,11 @@
 
 use std::time::Duration;
 
+use futures::StreamExt as _;
 use oxvif::{
     Capabilities, DeviceInfo, FocusMove, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
-    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, StorageConfiguration,
-    SystemDateTime, User,
+    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, RecordingJobConfiguration,
+    StorageConfiguration, SystemDateTime, User,
 };
 use std::env;
 
@@ -92,7 +95,9 @@ async fn main() {
         "video-config-media2" => video_config_media2(&cfg).await,
         "imaging" => imaging(&cfg).await,
         "events" => events(&cfg).await,
+        "event-stream" => event_stream_example(&cfg).await,
         "recording" => recording_example(&cfg).await,
+        "recording-jobs" => recording_jobs_example(&cfg).await,
         "discovery" => discovery_example().await,
         "error-handling" => error_handling_example(&cfg).await,
         "session" => session_example(&cfg).await,
@@ -137,7 +142,9 @@ fn print_help() {
     println!("  video-config-media2  Media2 profiles, H.265 encoder configs");
     println!("  imaging              Imaging settings and parameter ranges");
     println!("  events               Subscribe, pull, and unsubscribe ONVIF events");
+    println!("  event-stream         Continuous event stream via event_stream()");
     println!("  recording            List recordings, search, and get replay URI");
+    println!("  recording-jobs       Recording jobs: list, create, set mode, delete");
     println!("  discovery            WS-Discovery UDP multicast probe");
     println!("  error-handling       Typed error variant matching demo");
     println!("  session              Same workflow using OnvifSession convenience API");
@@ -916,6 +923,58 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     match client.get_discovery_mode().await {
         Ok(mode) => println!("  Mode: {mode}"),
         Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── 29. Recording jobs ────────────────────────────────────────────────────
+    if let Some(ref rec_url) = recording_url {
+        section("GetRecordingJobs");
+        match client.get_recording_jobs(rec_url).await {
+            Ok(jobs) => {
+                println!("  {} job(s)", jobs.len());
+                for j in jobs.iter().take(3) {
+                    println!("  [{}] rec={} mode={}", j.token, j.recording_token, j.mode);
+                }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
+    // ── 30. Event stream (brief) ──────────────────────────────────────────────
+    if let Some(ref ev_url) = caps.events.url {
+        if caps.events.ws_pull_point {
+            section("event_stream (3 s probe)");
+            match client
+                .create_pull_point_subscription(ev_url, None, Some("PT60S"))
+                .await
+            {
+                Ok(sub) => {
+                    let mut stream = client.event_stream(&sub.reference_url, "PT2S", 5);
+                    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+                    let mut count = 0usize;
+                    loop {
+                        match tokio::time::timeout_at(deadline, stream.next()).await {
+                            Ok(Some(Ok(msg))) => {
+                                count += 1;
+                                println!("  Event: {}", msg.topic);
+                                if count >= 3 {
+                                    break;
+                                }
+                            }
+                            Ok(Some(Err(e))) => {
+                                println!("  (stream error — {e})");
+                                break;
+                            }
+                            Ok(None) | Err(_) => break,
+                        }
+                    }
+                    if count == 0 {
+                        println!("  No events in 3 s");
+                    }
+                    let _ = client.unsubscribe(&sub.reference_url).await;
+                }
+                Err(e) => println!("  (skipped — {e})"),
+            }
+        }
     }
 
     println!("\n=== Full workflow complete ===");
@@ -1929,6 +1988,71 @@ async fn events(cfg: &Config) -> Result<(), OnvifError> {
     Ok(())
 }
 
+// ── event-stream example ──────────────────────────────────────────────────────
+
+/// Demonstrates [`OnvifClient::event_stream`]: wraps pull-point polling into
+/// an infinite async `Stream`. This example listens for up to 10 seconds and
+/// prints the first 5 messages received, then unsubscribes.
+async fn event_stream_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== event_stream ===");
+
+    let (client, caps) = connect(cfg).await?;
+    let events_url = caps
+        .events
+        .url
+        .ok_or_else(|| oxvif::soap::SoapError::missing("Events service not found"))?;
+
+    if !caps.events.ws_pull_point {
+        println!("Device does not support WS-PullPoint — skipping.");
+        return Ok(());
+    }
+
+    section("CreatePullPointSubscription");
+    let sub = client
+        .create_pull_point_subscription(&events_url, None, Some("PT60S"))
+        .await?;
+    println!("  Subscription URL : {}", sub.reference_url);
+
+    section("event_stream (10 s window, up to 5 messages)");
+    let mut stream = client.event_stream(&sub.reference_url, "PT5S", 10);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let mut count = 0usize;
+
+    loop {
+        match tokio::time::timeout_at(deadline, stream.next()).await {
+            Ok(Some(Ok(msg))) => {
+                count += 1;
+                println!("  [{}] {} — data={:?}", msg.utc_time, msg.topic, msg.data);
+                if count >= 5 {
+                    println!("  (limit reached, stopping)");
+                    break;
+                }
+            }
+            Ok(Some(Err(e))) => {
+                println!("  Stream error: {e}");
+                break;
+            }
+            Ok(None) => break,
+            Err(_) => {
+                println!("  10 s window elapsed");
+                break;
+            }
+        }
+    }
+
+    if count == 0 {
+        println!("  No events received in 10 seconds.");
+    }
+
+    section("Unsubscribe");
+    match client.unsubscribe(&sub.reference_url).await {
+        Ok(()) => println!("  Unsubscribed."),
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    Ok(())
+}
+
 // ── Example 13: WS-Discovery ──────────────────────────────────────────────────
 
 async fn discovery_example() -> Result<(), OnvifError> {
@@ -2412,6 +2536,163 @@ async fn recording_example(cfg: &Config) -> Result<(), OnvifError> {
         }
     } else {
         println!("\nSearch/Replay services not found in GetServices response.");
+    }
+
+    Ok(())
+}
+
+// ── Recording jobs example ────────────────────────────────────────────────────
+
+/// Demonstrates Profile G write operations: `create_recording`, `create_track`,
+/// `create_recording_job`, `set_recording_job_mode`, then full cleanup.
+async fn recording_jobs_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Recording Jobs ===");
+
+    let (client, _caps) = connect(cfg).await?;
+    let services = client.get_services().await?;
+    let recording_url = match services
+        .iter()
+        .find(|s| s.namespace.contains("recording"))
+        .map(|s| s.url.clone())
+    {
+        Some(u) => u,
+        None => {
+            println!(
+                "Recording service not found in GetServices — device may not support Profile G."
+            );
+            return Ok(());
+        }
+    };
+
+    // ── List existing jobs ─────────────────────────────────────────────────
+    section("GetRecordingJobs");
+    match client.get_recording_jobs(&recording_url).await {
+        Ok(jobs) => {
+            println!("  {} existing job(s)", jobs.len());
+            for j in &jobs {
+                println!(
+                    "  [{}] rec={} mode={} priority={}",
+                    j.token, j.recording_token, j.mode, j.priority
+                );
+
+                section(&format!("GetRecordingJobState [{}]", j.token));
+                match client
+                    .get_recording_job_state(&recording_url, &j.token)
+                    .await
+                {
+                    Ok(state) => println!("  active_state={}", state.active_state),
+                    Err(e) => println!("  (skipped — {e})"),
+                }
+            }
+        }
+        Err(e) => println!("  (skipped — {e})"),
+    }
+
+    // ── Create → track → job → toggle → cleanup ────────────────────────────
+    section("CreateRecording");
+    let rec_token = match client
+        .create_recording(
+            &recording_url,
+            "oxvif-test",
+            "oxvif-src-1",
+            "",
+            "Created by oxvif example",
+            "",
+        )
+        .await
+    {
+        Ok(t) => {
+            println!("  token={t}");
+            t
+        }
+        Err(e) => {
+            println!("  Not supported or failed: {e}");
+            return Ok(());
+        }
+    };
+
+    section("CreateTrack (Video)");
+    let track_token = match client
+        .create_track(&recording_url, &rec_token, "Video", "Main video track")
+        .await
+    {
+        Ok(t) => {
+            println!("  track token={t}");
+            t
+        }
+        Err(e) => {
+            println!("  (skipped — {e})");
+            String::new()
+        }
+    };
+
+    section("CreateRecordingJob");
+    let job_token = match client
+        .create_recording_job(
+            &recording_url,
+            &RecordingJobConfiguration {
+                recording_token: rec_token.clone(),
+                mode: "Idle".into(),
+                priority: 1,
+                source_token: "VideoSourceToken_0".into(),
+            },
+        )
+        .await
+    {
+        Ok(token) => {
+            println!("  job token={token}");
+            token
+        }
+        Err(e) => {
+            println!("  (skipped — {e})");
+            String::new()
+        }
+    };
+
+    if !job_token.is_empty() {
+        section("SetRecordingJobMode → Active");
+        match client
+            .set_recording_job_mode(&recording_url, &job_token, "Active")
+            .await
+        {
+            Ok(()) => println!("  Mode set to Active"),
+            Err(e) => println!("  (skipped — {e})"),
+        }
+
+        section("SetRecordingJobMode → Idle");
+        match client
+            .set_recording_job_mode(&recording_url, &job_token, "Idle")
+            .await
+        {
+            Ok(()) => println!("  Mode set to Idle"),
+            Err(e) => println!("  (skipped — {e})"),
+        }
+
+        section("DeleteRecordingJob (cleanup)");
+        match client
+            .delete_recording_job(&recording_url, &job_token)
+            .await
+        {
+            Ok(()) => println!("  Job deleted"),
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
+    if !track_token.is_empty() {
+        section("DeleteTrack (cleanup)");
+        match client
+            .delete_track(&recording_url, &rec_token, &track_token)
+            .await
+        {
+            Ok(()) => println!("  Track deleted"),
+            Err(e) => println!("  (skipped — {e})"),
+        }
+    }
+
+    section("DeleteRecording (cleanup)");
+    match client.delete_recording(&recording_url, &rec_token).await {
+        Ok(()) => println!("  Recording deleted"),
+        Err(e) => println!("  (skipped — {e})"),
     }
 
     Ok(())
