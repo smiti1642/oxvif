@@ -87,7 +87,7 @@ mod capabilities {
             Some("http://192.168.1.1/onvif/media_service")
         );
         assert_eq!(
-            caps.ptz_url.as_deref(),
+            caps.ptz.url.as_deref(),
             Some("http://192.168.1.1/onvif/ptz_service")
         );
         assert_eq!(
@@ -95,7 +95,7 @@ mod capabilities {
             Some("http://192.168.1.1/onvif/events_service")
         );
         assert_eq!(
-            caps.imaging_url.as_deref(),
+            caps.imaging.url.as_deref(),
             Some("http://192.168.1.1/onvif/imaging_service")
         );
         assert_eq!(
@@ -108,19 +108,19 @@ mod capabilities {
     fn test_extension_service_urls_parsed() {
         let caps = Capabilities::from_xml(&parse(FULL)).unwrap();
         assert_eq!(
-            caps.device_io_url.as_deref(),
+            caps.device_io.url.as_deref(),
             Some("http://192.168.1.1/onvif/deviceio_service")
         );
         assert_eq!(
-            caps.recording_url.as_deref(),
+            caps.recording.url.as_deref(),
             Some("http://192.168.1.1/onvif/recording_service")
         );
         assert_eq!(
-            caps.search_url.as_deref(),
+            caps.search.url.as_deref(),
             Some("http://192.168.1.1/onvif/search_service")
         );
         assert_eq!(
-            caps.replay_url.as_deref(),
+            caps.replay.url.as_deref(),
             Some("http://192.168.1.1/onvif/replay_service")
         );
     }
@@ -208,11 +208,11 @@ mod capabilities {
               </Capabilities>
             </GetCapabilitiesResponse>"#;
         let caps = Capabilities::from_xml(&parse(xml)).unwrap();
-        assert!(caps.ptz_url.is_none());
+        assert!(caps.ptz.url.is_none());
         assert!(caps.events.url.is_none());
-        assert!(caps.imaging_url.is_none());
+        assert!(caps.imaging.url.is_none());
         assert!(caps.analytics.url.is_none());
-        assert!(caps.recording_url.is_none());
+        assert!(caps.recording.url.is_none());
     }
 
     #[test]

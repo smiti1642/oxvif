@@ -285,7 +285,7 @@ impl OnvifClient {
 
     /// List all PTZ configurations on the device.
     ///
-    /// `ptz_url` comes from `caps.ptz_url` returned by
+    /// `ptz_url` comes from `caps.ptz.url` returned by
     /// [`get_capabilities`](Self::get_capabilities).
     pub async fn ptz_get_configurations(
         &self,
@@ -301,7 +301,7 @@ impl OnvifClient {
 
     /// Retrieve a single PTZ configuration by token.
     ///
-    /// `ptz_url` comes from `caps.ptz_url`.
+    /// `ptz_url` comes from `caps.ptz.url`.
     pub async fn ptz_get_configuration(
         &self,
         ptz_url: &str,
@@ -351,7 +351,7 @@ impl OnvifClient {
 
     /// Retrieve valid parameter ranges for a PTZ configuration.
     ///
-    /// `ptz_url` comes from `caps.ptz_url`.
+    /// `ptz_url` comes from `caps.ptz.url`.
     pub async fn ptz_get_configuration_options(
         &self,
         ptz_url: &str,
@@ -372,7 +372,7 @@ impl OnvifClient {
 
     /// List all PTZ nodes on the device.
     ///
-    /// `ptz_url` comes from `caps.ptz_url`.
+    /// `ptz_url` comes from `caps.ptz.url`.
     pub async fn ptz_get_nodes(&self, ptz_url: &str) -> Result<Vec<PtzNode>, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetNodes";
         const BODY: &str = "<tptz:GetNodes/>";

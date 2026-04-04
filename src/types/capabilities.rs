@@ -93,6 +93,55 @@ pub struct AnalyticsCapabilities {
     pub analytics_module_support: bool,
 }
 
+/// PTZ service capabilities.
+#[derive(Debug, Clone, Default)]
+pub struct PtzCapabilities {
+    /// PTZ service endpoint URL (`None` if not supported).
+    pub url: Option<String>,
+}
+
+/// Imaging service capabilities.
+#[derive(Debug, Clone, Default)]
+pub struct ImagingCapabilities {
+    /// Imaging service endpoint URL (`None` if not supported).
+    pub url: Option<String>,
+}
+
+/// Recording service capabilities.
+#[derive(Debug, Clone, Default)]
+pub struct RecordingCapabilities {
+    /// Recording service endpoint URL (`None` if not supported).
+    pub url: Option<String>,
+}
+
+/// Search service capabilities.
+#[derive(Debug, Clone, Default)]
+pub struct SearchCapabilities {
+    /// Search service endpoint URL (`None` if not supported).
+    pub url: Option<String>,
+}
+
+/// Replay service capabilities.
+#[derive(Debug, Clone, Default)]
+pub struct ReplayCapabilities {
+    /// Replay service endpoint URL (`None` if not supported).
+    pub url: Option<String>,
+}
+
+/// Media2 service capabilities.
+#[derive(Debug, Clone, Default)]
+pub struct Media2Capabilities {
+    /// Media2 service endpoint URL (`None` if device does not support Media2).
+    pub url: Option<String>,
+}
+
+/// DeviceIO service capabilities.
+#[derive(Debug, Clone, Default)]
+pub struct DeviceIoCapabilities {
+    /// DeviceIO service endpoint URL (`None` if not supported).
+    pub url: Option<String>,
+}
+
 // ── Capabilities ──────────────────────────────────────────────────────────────
 
 /// Full device capabilities returned by `GetCapabilities`.
@@ -129,21 +178,13 @@ pub struct Capabilities {
     pub media: MediaCapabilities,
     pub events: EventsCapabilities,
     pub analytics: AnalyticsCapabilities,
-    /// PTZ service endpoint URL (`None` if not supported).
-    pub ptz_url: Option<String>,
-    /// Imaging service endpoint URL (`None` if not supported).
-    pub imaging_url: Option<String>,
-    // Extension services
-    /// Recording service endpoint URL (`None` if not supported).
-    pub recording_url: Option<String>,
-    /// Search service endpoint URL (`None` if not supported).
-    pub search_url: Option<String>,
-    /// Replay service endpoint URL (`None` if not supported).
-    pub replay_url: Option<String>,
-    /// DeviceIO service endpoint URL (`None` if not supported).
-    pub device_io_url: Option<String>,
-    /// Media2 service endpoint URL (`None` if device does not support Media2).
-    pub media2_url: Option<String>,
+    pub ptz: PtzCapabilities,
+    pub imaging: ImagingCapabilities,
+    pub recording: RecordingCapabilities,
+    pub search: SearchCapabilities,
+    pub replay: ReplayCapabilities,
+    pub media2: Media2Capabilities,
+    pub device_io: DeviceIoCapabilities,
 }
 
 impl Capabilities {
@@ -170,25 +211,39 @@ impl Capabilities {
                 .child("Analytics")
                 .map(parse_analytics_caps)
                 .unwrap_or_default(),
-            ptz_url: caps.path(&["PTZ", "XAddr"]).map(|n| n.text().to_string()),
-            imaging_url: caps
-                .path(&["Imaging", "XAddr"])
-                .map(|n| n.text().to_string()),
-            recording_url: caps
-                .path(&["Extension", "Recording", "XAddr"])
-                .map(|n| n.text().to_string()),
-            search_url: caps
-                .path(&["Extension", "Search", "XAddr"])
-                .map(|n| n.text().to_string()),
-            replay_url: caps
-                .path(&["Extension", "Replay", "XAddr"])
-                .map(|n| n.text().to_string()),
-            device_io_url: caps
-                .path(&["Extension", "DeviceIO", "XAddr"])
-                .map(|n| n.text().to_string()),
-            media2_url: caps
-                .path(&["Extension", "Media2", "XAddr"])
-                .map(|n| n.text().to_string()),
+            ptz: PtzCapabilities {
+                url: caps.path(&["PTZ", "XAddr"]).map(|n| n.text().to_string()),
+            },
+            imaging: ImagingCapabilities {
+                url: caps
+                    .path(&["Imaging", "XAddr"])
+                    .map(|n| n.text().to_string()),
+            },
+            recording: RecordingCapabilities {
+                url: caps
+                    .path(&["Extension", "Recording", "XAddr"])
+                    .map(|n| n.text().to_string()),
+            },
+            search: SearchCapabilities {
+                url: caps
+                    .path(&["Extension", "Search", "XAddr"])
+                    .map(|n| n.text().to_string()),
+            },
+            replay: ReplayCapabilities {
+                url: caps
+                    .path(&["Extension", "Replay", "XAddr"])
+                    .map(|n| n.text().to_string()),
+            },
+            device_io: DeviceIoCapabilities {
+                url: caps
+                    .path(&["Extension", "DeviceIO", "XAddr"])
+                    .map(|n| n.text().to_string()),
+            },
+            media2: Media2Capabilities {
+                url: caps
+                    .path(&["Extension", "Media2", "XAddr"])
+                    .map(|n| n.text().to_string()),
+            },
         })
     }
 }

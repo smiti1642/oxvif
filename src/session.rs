@@ -178,21 +178,24 @@ impl OnvifSession {
 
     fn media2_url(&self) -> Result<&str, OnvifError> {
         self.caps
-            .media2_url
+            .media2
+            .url
             .as_deref()
             .ok_or_else(|| SoapError::missing("Media2 service URL").into())
     }
 
     fn ptz_url(&self) -> Result<&str, OnvifError> {
         self.caps
-            .ptz_url
+            .ptz
+            .url
             .as_deref()
             .ok_or_else(|| SoapError::missing("PTZ service URL").into())
     }
 
     fn imaging_url(&self) -> Result<&str, OnvifError> {
         self.caps
-            .imaging_url
+            .imaging
+            .url
             .as_deref()
             .ok_or_else(|| SoapError::missing("Imaging service URL").into())
     }
@@ -207,21 +210,24 @@ impl OnvifSession {
 
     fn recording_url(&self) -> Result<&str, OnvifError> {
         self.caps
-            .recording_url
+            .recording
+            .url
             .as_deref()
             .ok_or_else(|| SoapError::missing("Recording service URL").into())
     }
 
     fn search_url(&self) -> Result<&str, OnvifError> {
         self.caps
-            .search_url
+            .search
+            .url
             .as_deref()
             .ok_or_else(|| SoapError::missing("Search service URL").into())
     }
 
     fn replay_url(&self) -> Result<&str, OnvifError> {
         self.caps
-            .replay_url
+            .replay
+            .url
             .as_deref()
             .ok_or_else(|| SoapError::missing("Replay service URL").into())
     }
@@ -1147,6 +1153,19 @@ impl OnvifSession {
             .await
     }
 
+    /// Search all recordings and return results in a single call.
+    ///
+    /// Combines `find_recordings`, repeated `get_recording_search_results`
+    /// polling, and `end_search` into one convenient method.
+    pub async fn search_recordings(
+        &self,
+        max_matches: Option<u32>,
+    ) -> Result<Vec<crate::types::RecordingInformation>, OnvifError> {
+        self.client
+            .search_recordings(self.search_url()?, max_matches)
+            .await
+    }
+
     // ── Replay Service ────────────────────────────────────────────────────────
 
     /// Retrieve an RTSP URI for replaying a stored recording.
@@ -1164,21 +1183,10 @@ impl OnvifSession {
     /// Create a new recording configuration on the device.
     pub async fn create_recording(
         &self,
-        source_name: &str,
-        source_id: &str,
-        location: &str,
-        description: &str,
-        content: &str,
+        config: &crate::types::RecordingConfiguration,
     ) -> Result<String, OnvifError> {
         self.client
-            .create_recording(
-                self.recording_url()?,
-                source_name,
-                source_id,
-                location,
-                description,
-                content,
-            )
+            .create_recording(self.recording_url()?, config)
             .await
     }
 

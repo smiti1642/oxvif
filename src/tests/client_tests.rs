@@ -187,7 +187,7 @@ async fn test_get_capabilities_returns_correct_urls() {
         Some("http://192.168.1.1/onvif/media_service")
     );
     assert_eq!(
-        caps.ptz_url.as_deref(),
+        caps.ptz.url.as_deref(),
         Some("http://192.168.1.1/onvif/ptz_service")
     );
 }
@@ -4330,11 +4330,13 @@ async fn test_create_recording_returns_token() {
     let token = client
         .create_recording(
             "http://192.168.1.1/onvif/recording_service",
-            "Camera A",
-            "urn:uuid:cam-a",
-            "Entrance",
-            "Front door cam",
-            "Normal",
+            &crate::types::RecordingConfiguration {
+                source_name: "Camera A".into(),
+                source_id: "urn:uuid:cam-a".into(),
+                location: "Entrance".into(),
+                description: "Front door cam".into(),
+                content: "Normal".into(),
+            },
         )
         .await
         .unwrap();
@@ -4354,11 +4356,11 @@ async fn test_create_recording_missing_token_returns_err() {
     let res = client
         .create_recording(
             "http://192.168.1.1/onvif/recording_service",
-            "Camera A",
-            "urn:uuid:cam-a",
-            "",
-            "",
-            "",
+            &crate::types::RecordingConfiguration {
+                source_name: "Camera A".into(),
+                source_id: "urn:uuid:cam-a".into(),
+                ..Default::default()
+            },
         )
         .await;
     assert!(res.is_err());

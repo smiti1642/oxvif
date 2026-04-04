@@ -205,6 +205,23 @@ impl FindRecordingResults {
 
 // ── RecordingJobConfiguration ─────────────────────────────────────────────────
 
+/// Parameters for creating a new recording entry on the device.
+///
+/// Pass to [`OnvifClient::create_recording`] or [`OnvifSession::create_recording`].
+#[derive(Debug, Clone, Default)]
+pub struct RecordingConfiguration {
+    /// Human-readable name for the recording source (e.g. `"Front Door Camera"`).
+    pub source_name: String,
+    /// Unique source identifier URI (e.g. `"urn:uuid:..."`).
+    pub source_id: String,
+    /// Physical location description (e.g. `"Building A, Floor 2"`).
+    pub location: String,
+    /// Free-text description of the recording.
+    pub description: String,
+    /// Content label (e.g. `"Motion events"`). Leave empty if not needed.
+    pub content: String,
+}
+
 /// Configuration for creating a recording job via `create_recording_job`.
 ///
 /// A recording job continuously writes media from a profile into a recording.

@@ -220,19 +220,19 @@ async fn test_builder_stores_capabilities() {
     let session = session_with(&[]).await;
     let caps = session.capabilities();
     assert_eq!(caps.media.url.as_deref(), Some("http://cam/onvif/media"));
-    assert_eq!(caps.ptz_url.as_deref(), Some("http://cam/onvif/ptz"));
+    assert_eq!(caps.ptz.url.as_deref(), Some("http://cam/onvif/ptz"));
     assert_eq!(
-        caps.imaging_url.as_deref(),
+        caps.imaging.url.as_deref(),
         Some("http://cam/onvif/imaging")
     );
     assert_eq!(caps.events.url.as_deref(), Some("http://cam/onvif/events"));
     assert_eq!(
-        caps.recording_url.as_deref(),
+        caps.recording.url.as_deref(),
         Some("http://cam/onvif/recording")
     );
-    assert_eq!(caps.search_url.as_deref(), Some("http://cam/onvif/search"));
-    assert_eq!(caps.replay_url.as_deref(), Some("http://cam/onvif/replay"));
-    assert_eq!(caps.media2_url.as_deref(), Some("http://cam/onvif/media2"));
+    assert_eq!(caps.search.url.as_deref(), Some("http://cam/onvif/search"));
+    assert_eq!(caps.replay.url.as_deref(), Some("http://cam/onvif/replay"));
+    assert_eq!(caps.media2.url.as_deref(), Some("http://cam/onvif/media2"));
 }
 
 #[tokio::test]

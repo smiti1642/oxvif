@@ -38,8 +38,8 @@ use std::time::Duration;
 use futures::StreamExt as _;
 use oxvif::{
     Capabilities, DeviceInfo, FocusMove, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
-    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, RecordingJobConfiguration,
-    StorageConfiguration, SystemDateTime, User,
+    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, RecordingConfiguration,
+    RecordingJobConfiguration, StorageConfiguration, SystemDateTime, User,
 };
 use std::env;
 
@@ -178,11 +178,11 @@ fn print_capabilities(caps: &Capabilities) {
     println!("\nCapabilities:");
     print_opt("  Device   ", &caps.device.url);
     print_opt("  Media    ", &caps.media.url);
-    print_opt("  PTZ      ", &caps.ptz_url);
-    print_opt("  Imaging  ", &caps.imaging_url);
+    print_opt("  PTZ      ", &caps.ptz.url);
+    print_opt("  Imaging  ", &caps.imaging.url);
     print_opt("  Events   ", &caps.events.url);
     print_opt("  Analytics", &caps.analytics.url);
-    print_opt("  Media2   ", &caps.media2_url);
+    print_opt("  Media2   ", &caps.media2.url);
     if caps.media.streaming.rtp_rtsp_tcp {
         println!("  Streaming : RTSP/TCP");
     }
@@ -446,7 +446,7 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     }
 
     // ── 13. Imaging settings (first video source) ─────────────────────────────
-    if let Some(imaging_url) = &caps.imaging_url {
+    if let Some(imaging_url) = &caps.imaging.url {
         if let Some(vs) = video_sources.first() {
             section(&format!("GetImagingSettings [{}]", vs.token));
             match client.get_imaging_settings(imaging_url, &vs.token).await {
@@ -490,7 +490,7 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     }
 
     // ── 14. PTZ ───────────────────────────────────────────────────────────────
-    if let Some(ptz_url) = &caps.ptz_url {
+    if let Some(ptz_url) = &caps.ptz.url {
         for profile in &profiles {
             section(&format!("PTZ GetStatus [{}]", profile.token));
             match client.ptz_get_status(ptz_url, &profile.token).await {
@@ -561,7 +561,7 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     // ── 16. Media2 ────────────────────────────────────────────────────────────
     // GetCapabilities often omits Media2; fall back to the URL found via
     // GetServices (step 3) when that happens.
-    let media2_url = caps.media2_url.clone().or_else(|| {
+    let media2_url = caps.media2.url.clone().or_else(|| {
         services
             .iter()
             .find(|s| s.is_media2())
@@ -624,7 +624,7 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     }
 
     // ── 18. PTZ Configuration ─────────────────────────────────────────────────
-    if let Some(ref ptz_url) = caps.ptz_url {
+    if let Some(ref ptz_url) = caps.ptz.url {
         section("GetNodes");
         match client.ptz_get_nodes(ptz_url).await {
             Ok(nodes) => {
@@ -655,7 +655,7 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     }
 
     // ── 19. Imaging Focus ─────────────────────────────────────────────────────
-    if let (Some(ref imaging_url), Some(ref source_token)) = (caps.imaging_url.clone(), {
+    if let (Some(ref imaging_url), Some(ref source_token)) = (caps.imaging.url.clone(), {
         let sources = client
             .get_video_sources(caps.media.url.as_deref().unwrap_or(""))
             .await
@@ -1165,7 +1165,7 @@ async fn stream_uris(cfg: &Config) -> Result<(), OnvifError> {
     }
 
     // Also try Media2 if available
-    if let Some(m2_url) = &caps.media2_url {
+    if let Some(m2_url) = &caps.media2.url {
         println!("\n{:<20} RTSP URI (Media2)", "Profile");
         println!("{}", "-".repeat(80));
         match client.get_profiles_media2(m2_url).await {
@@ -1276,7 +1276,7 @@ async fn ptz_presets(cfg: &Config) -> Result<(), OnvifError> {
 
     let (client, caps) = connect(cfg).await?;
 
-    let ptz_url = match caps.ptz_url.clone() {
+    let ptz_url = match caps.ptz.url.clone() {
         Some(u) => {
             println!("PTZ service: {u}");
             u
@@ -1342,7 +1342,7 @@ async fn ptz_status(cfg: &Config) -> Result<(), OnvifError> {
 
     let (client, caps) = connect(cfg).await?;
 
-    let ptz_url = match caps.ptz_url.clone() {
+    let ptz_url = match caps.ptz.url.clone() {
         Some(u) => {
             println!("PTZ service: {u}");
             u
@@ -1645,7 +1645,7 @@ async fn video_config_media2(cfg: &Config) -> Result<(), OnvifError> {
 
     let (client, caps) = connect(cfg).await?;
 
-    let media2_url = match caps.media2_url.clone() {
+    let media2_url = match caps.media2.url.clone() {
         Some(u) => {
             println!("Media2 URL (GetCapabilities): {u}");
             u
@@ -1811,7 +1811,7 @@ async fn imaging(cfg: &Config) -> Result<(), OnvifError> {
 
     let (client, caps) = connect(cfg).await?;
 
-    let imaging_url = match caps.imaging_url.clone() {
+    let imaging_url = match caps.imaging.url.clone() {
         Some(u) => {
             println!("Imaging service: {u}");
             u
@@ -2125,7 +2125,7 @@ async fn error_handling_example(cfg: &Config) -> Result<(), OnvifError> {
 
 async fn ptz_config(cfg: &Config) -> Result<(), OnvifError> {
     let (client, caps) = connect(cfg).await?;
-    let ptz_url = match &caps.ptz_url {
+    let ptz_url = match &caps.ptz.url {
         Some(url) => url.clone(),
         None => {
             println!("PTZ service not available on this device.");
@@ -2241,7 +2241,7 @@ async fn audio_example(cfg: &Config) -> Result<(), OnvifError> {
 
 async fn ptz_home_example(cfg: &Config) -> Result<(), OnvifError> {
     let (client, caps) = connect(cfg).await?;
-    let ptz_url = match caps.ptz_url.as_deref() {
+    let ptz_url = match caps.ptz.url.as_deref() {
         Some(u) => u.to_string(),
         None => {
             println!("PTZ service not available.");
@@ -2283,7 +2283,7 @@ async fn ptz_home_example(cfg: &Config) -> Result<(), OnvifError> {
 
 async fn imaging_focus(cfg: &Config) -> Result<(), OnvifError> {
     let (client, caps) = connect(cfg).await?;
-    let imaging_url = match caps.imaging_url.as_deref() {
+    let imaging_url = match caps.imaging.url.as_deref() {
         Some(u) => u.to_string(),
         None => {
             println!("Imaging service not available.");
@@ -2593,11 +2593,12 @@ async fn recording_jobs_example(cfg: &Config) -> Result<(), OnvifError> {
     let rec_token = match client
         .create_recording(
             &recording_url,
-            "oxvif-test",
-            "oxvif-src-1",
-            "",
-            "Created by oxvif example",
-            "",
+            &RecordingConfiguration {
+                source_name: "oxvif-test".into(),
+                source_id: "oxvif-src-1".into(),
+                description: "Created by oxvif example".into(),
+                ..Default::default()
+            },
         )
         .await
     {

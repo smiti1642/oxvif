@@ -11,7 +11,7 @@ use crate::types::{
 impl OnvifClient {
     /// List all media profiles from the Media2 service.
     ///
-    /// `media2_url` is obtained from `caps.media2_url` via
+    /// `media2_url` is obtained from `caps.media2.url` via
     /// [`get_capabilities`](Self::get_capabilities).
     pub async fn get_profiles_media2(
         &self,

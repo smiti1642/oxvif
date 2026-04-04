@@ -4,8 +4,8 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
-    FindRecordingResults, RecordingItem, RecordingJob, RecordingJobConfiguration,
-    RecordingJobState, xml_escape,
+    FindRecordingResults, RecordingConfiguration, RecordingInformation, RecordingItem,
+    RecordingJob, RecordingJobConfiguration, RecordingJobState, xml_escape,
 };
 
 impl OnvifClient {
@@ -29,20 +29,10 @@ impl OnvifClient {
     /// Create a new recording configuration on the device.
     ///
     /// Returns the opaque recording token assigned by the device.
-    ///
-    /// - `source_name` — human-readable label for the source stream.
-    /// - `source_id` — URI uniquely identifying the source (e.g. `"urn:uuid:camera-01"`).
-    /// - `location` — physical location string.
-    /// - `description` — free-text description.
-    /// - `content` — content type / label for the recording.
     pub async fn create_recording(
         &self,
         recording_url: &str,
-        source_name: &str,
-        source_id: &str,
-        location: &str,
-        description: &str,
-        content: &str,
+        config: &RecordingConfiguration,
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/CreateRecording";
         let body = format!(
@@ -57,11 +47,11 @@ impl OnvifClient {
                  <tt:Content>{content}</tt:Content>\
                </trc:RecordingConfiguration>\
              </trc:CreateRecording>",
-            source_id = xml_escape(source_id),
-            source_name = xml_escape(source_name),
-            location = xml_escape(location),
-            description = xml_escape(description),
-            content = xml_escape(content),
+            source_id = xml_escape(&config.source_id),
+            source_name = xml_escape(&config.source_name),
+            location = xml_escape(&config.location),
+            description = xml_escape(&config.description),
+            content = xml_escape(&config.content),
         );
         let xml = self.call(recording_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;
@@ -322,6 +312,39 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         find_response(&body_node, "EndSearchResponse")?;
         Ok(())
+    }
+
+    /// Search all recordings and return results in a single call.
+    ///
+    /// Combines [`find_recordings`](Self::find_recordings),
+    /// repeated [`get_recording_search_results`](Self::get_recording_search_results)
+    /// polling, and [`end_search`](Self::end_search) into one convenient method.
+    ///
+    /// - `max_matches` — upper bound on results (`None` = device default).
+    ///
+    /// Returns a flat `Vec<RecordingInformation>` with all matched recordings.
+    pub async fn search_recordings(
+        &self,
+        search_url: &str,
+        max_matches: Option<u32>,
+    ) -> Result<Vec<RecordingInformation>, OnvifError> {
+        let token = self
+            .find_recordings(search_url, max_matches, "PT60S")
+            .await?;
+
+        let mut all = Vec::new();
+        for _ in 0..20 {
+            let results = self
+                .get_recording_search_results(search_url, &token, 100, "PT5S")
+                .await?;
+            all.extend(results.recording_information);
+            if results.search_state == "Completed" {
+                break;
+            }
+        }
+
+        let _ = self.end_search(search_url, &token).await;
+        Ok(all)
     }
 
     // ── Replay Service ────────────────────────────────────────────────────────────

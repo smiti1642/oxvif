@@ -37,7 +37,7 @@ impl OnvifClient {
     /// # async fn run() -> Result<(), OnvifError> {
     /// let client = OnvifClient::new("http://192.168.1.1/onvif/device_service");
     /// let caps   = client.get_capabilities().await?;
-    /// let media2_url = match caps.media2_url {
+    /// let media2_url = match caps.media2.url {
     ///     Some(u) => u,
     ///     None => client.get_services().await?
     ///         .into_iter()

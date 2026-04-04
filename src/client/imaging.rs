@@ -11,7 +11,7 @@ impl OnvifClient {
     /// Retrieve the current image quality settings for a video source.
     ///
     /// `imaging_url` is obtained from
-    /// [`get_capabilities`](Self::get_capabilities) via `caps.imaging_url`.
+    /// [`get_capabilities`](Self::get_capabilities) via `caps.imaging.url`.
     /// `video_source_token` comes from a [`VideoSource`] returned by
     /// [`get_video_sources`](Self::get_video_sources).
     pub async fn get_imaging_settings(
