@@ -541,6 +541,8 @@ pub struct StorageConfiguration {
     pub user: String,
     /// Whether anonymous access is used.
     pub use_anonymous: bool,
+    /// Operational status of the storage location (e.g. `"Connected"`, `"NotConnected"`).
+    pub storage_status: Option<String>,
 }
 
 impl StorageConfiguration {
@@ -565,6 +567,7 @@ impl StorageConfiguration {
                     .and_then(|u| u.child("UseAnonymous"))
                     .map(|x| x.text() == "true" || x.text() == "1")
                     .unwrap_or(false);
+                let storage_status = xml_str(n, "StorageStatus").filter(|s| !s.is_empty());
                 Ok(Self {
                     token,
                     storage_type,
@@ -572,6 +575,7 @@ impl StorageConfiguration {
                     storage_uri,
                     user,
                     use_anonymous,
+                    storage_status,
                 })
             })
             .collect()

@@ -66,6 +66,8 @@ pub struct PtzStatus {
     pub zoom_status: String,
     /// UTC timestamp of this status snapshot, if reported by the device.
     pub utc_time: Option<String>,
+    /// Human-readable error description from `PTZStatus/Error`, if present.
+    pub error: Option<String>,
 }
 
 impl PtzStatus {
@@ -101,6 +103,7 @@ impl PtzStatus {
                 .map(|n| n.text().to_string())
                 .unwrap_or_default(),
             utc_time: status.child("UtcTime").map(|n| n.text().to_string()),
+            error: status.child("Error").map(|n| n.text().to_string()),
         })
     }
 }

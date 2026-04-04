@@ -319,6 +319,8 @@ pub struct VideoEncoderConfiguration {
     pub h265: Option<H265Configuration>,
     /// Multicast streaming settings, if configured.
     pub multicast: Option<MulticastConfiguration>,
+    /// When `true`, the device guarantees the configured frame rate even under load.
+    pub guaranteed_frame_rate: Option<bool>,
 }
 
 /// Frame rate, encoding interval, and bitrate limits.
@@ -400,6 +402,9 @@ impl VideoEncoderConfiguration {
                     .child("AutoStart")
                     .is_some_and(|n| n.text() == "true" || n.text() == "1"),
             }),
+            guaranteed_frame_rate: node
+                .child("GuaranteedFrameRate")
+                .map(|n| n.text() == "true" || n.text() == "1"),
         })
     }
 
@@ -463,12 +468,16 @@ impl VideoEncoderConfiguration {
             ),
             None => String::new(),
         };
+        let gfr = match self.guaranteed_frame_rate {
+            Some(v) => format!("<tt:GuaranteedFrameRate>{v}</tt:GuaranteedFrameRate>"),
+            None => String::new(),
+        };
         format!(
             "<trt:Configuration token=\"{token}\">\
                <tt:Name>{name}</tt:Name>\
                <tt:UseCount>{use_count}</tt:UseCount>\
                <tt:Encoding>{encoding}</tt:Encoding>\
-               {res}{rate}{h264}{h265}{multicast}\
+               {res}{rate}{h264}{h265}{multicast}{gfr}\
                <tt:Quality>{quality}</tt:Quality>\
              </trt:Configuration>",
             token = xml_escape(&self.token),

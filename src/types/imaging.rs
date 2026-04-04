@@ -194,6 +194,22 @@ pub struct ImagingOptions {
     pub white_balance_modes: Vec<String>,
     /// Supported exposure modes (e.g. `["AUTO", "MANUAL"]`).
     pub exposure_modes: Vec<String>,
+    /// Valid exposure time range in seconds (`Exposure/ExposureTime` Min/Max).
+    pub exposure_time_range: Option<FloatRange>,
+    /// Valid gain range in dB (`Exposure/Gain` Min/Max).
+    pub gain_range: Option<FloatRange>,
+    /// Valid iris range in F-number (`Exposure/Iris` Min/Max).
+    pub iris_range: Option<FloatRange>,
+    /// Supported auto-focus modes (e.g. `["AUTO", "MANUAL"]`) from `Focus/AFModes`.
+    pub focus_af_modes: Vec<String>,
+    /// Valid auto-focus speed range (`Focus/AutoFocusSpeed` Min/Max).
+    pub focus_speed_range: Option<FloatRange>,
+    /// Valid wide dynamic range level range (`WideDynamicRange/Level` Min/Max).
+    pub wdr_level_range: Option<FloatRange>,
+    /// Supported wide dynamic range modes (e.g. `["ON", "OFF"]`) from `WideDynamicRange/Mode`.
+    pub wdr_modes: Vec<String>,
+    /// Supported backlight compensation modes from `BacklightCompensation/Mode`.
+    pub backlight_compensation_modes: Vec<String>,
 }
 
 impl ImagingOptions {
@@ -216,6 +232,24 @@ impl ImagingOptions {
             })
         };
 
+        let parse_nested_range = |parent: Option<&XmlNode>, child: &str| {
+            parent.and_then(|p| p.child(child)).map(|n| FloatRange {
+                min: n
+                    .child("Min")
+                    .and_then(|m| m.text().parse().ok())
+                    .unwrap_or(0.0),
+                max: n
+                    .child("Max")
+                    .and_then(|m| m.text().parse().ok())
+                    .unwrap_or(0.0),
+            })
+        };
+
+        let exposure = opts.child("Exposure");
+        let focus = opts.child("Focus");
+        let wdr = opts.child("WideDynamicRange");
+        let blc = opts.child("BacklightCompensation");
+
         Ok(Self {
             brightness: parse_range("Brightness"),
             color_saturation: parse_range("ColorSaturation"),
@@ -233,10 +267,35 @@ impl ImagingOptions {
                         .collect()
                 })
                 .unwrap_or_default(),
-            exposure_modes: opts
-                .child("Exposure")
+            exposure_modes: exposure
                 .map(|e| {
                     e.children_named("Mode")
+                        .map(|n| n.text().to_string())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            exposure_time_range: parse_nested_range(exposure, "ExposureTime"),
+            gain_range: parse_nested_range(exposure, "Gain"),
+            iris_range: parse_nested_range(exposure, "Iris"),
+            focus_af_modes: focus
+                .map(|f| {
+                    f.children_named("AFModes")
+                        .map(|n| n.text().to_string())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            focus_speed_range: parse_nested_range(focus, "AutoFocusSpeed"),
+            wdr_level_range: parse_nested_range(wdr, "Level"),
+            wdr_modes: wdr
+                .map(|w| {
+                    w.children_named("Mode")
+                        .map(|n| n.text().to_string())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            backlight_compensation_modes: blc
+                .map(|b| {
+                    b.children_named("Mode")
                         .map(|n| n.text().to_string())
                         .collect()
                 })

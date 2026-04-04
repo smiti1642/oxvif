@@ -13,7 +13,9 @@ use std::fmt::Write;
 
 /// Escape the five predefined XML entities in `s`.
 fn xml_escape_url(s: &str) -> std::borrow::Cow<'_, str> {
-    if s.bytes().any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\'')) {
+    if s.bytes()
+        .any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''))
+    {
         std::borrow::Cow::Owned(
             s.replace('&', "&amp;")
                 .replace('<', "&lt;")

@@ -4618,3 +4618,236 @@ async fn test_get_osd_parses_colors_and_persistence() {
     assert!(ts.background_color.is_some());
     assert_eq!(ts.is_persistent_text, Some(true));
 }
+
+// ── Direction-4 new-field coverage tests ─────────────────────────────────────
+
+#[tokio::test]
+async fn test_ptz_get_status_parses_error() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tptz:GetStatusResponse>
+             <tptz:PTZStatus>
+               <tt:MoveStatus>
+                 <tt:PanTilt>IDLE</tt:PanTilt>
+                 <tt:Zoom>IDLE</tt:Zoom>
+               </tt:MoveStatus>
+               <tt:Error>ObstacleDetected</tt:Error>
+             </tptz:PTZStatus>
+           </tptz:GetStatusResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let status = client
+        .ptz_get_status("http://192.168.1.1/onvif/ptz_service", "Profile_1")
+        .await
+        .unwrap();
+    assert_eq!(status.error.as_deref(), Some("ObstacleDetected"));
+    assert!(status.utc_time.is_none());
+}
+
+#[tokio::test]
+async fn test_ptz_get_status_no_error_is_none() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tptz:GetStatusResponse>
+             <tptz:PTZStatus>
+               <tt:MoveStatus>
+                 <tt:PanTilt>IDLE</tt:PanTilt>
+                 <tt:Zoom>IDLE</tt:Zoom>
+               </tt:MoveStatus>
+             </tptz:PTZStatus>
+           </tptz:GetStatusResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let status = client
+        .ptz_get_status("http://192.168.1.1/onvif/ptz_service", "Profile_1")
+        .await
+        .unwrap();
+    assert!(status.error.is_none());
+}
+
+#[tokio::test]
+async fn test_get_video_encoder_configuration_parses_guaranteed_frame_rate() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <trt:GetVideoEncoderConfigurationResponse>
+             <trt:Configuration token="VideoEnc_1">
+               <tt:Name>Main</tt:Name>
+               <tt:UseCount>1</tt:UseCount>
+               <tt:Encoding>H264</tt:Encoding>
+               <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+               <tt:Quality>4.0</tt:Quality>
+               <tt:GuaranteedFrameRate>true</tt:GuaranteedFrameRate>
+             </trt:Configuration>
+           </trt:GetVideoEncoderConfigurationResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let cfg = client
+        .get_video_encoder_configuration("http://192.168.1.1/onvif/media_service", "VideoEnc_1")
+        .await
+        .unwrap();
+    assert_eq!(cfg.guaranteed_frame_rate, Some(true));
+}
+
+#[tokio::test]
+async fn test_get_video_encoder_configuration_no_guaranteed_frame_rate_is_none() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <trt:GetVideoEncoderConfigurationResponse>
+             <trt:Configuration token="VideoEnc_1">
+               <tt:Name>Main</tt:Name>
+               <tt:UseCount>1</tt:UseCount>
+               <tt:Encoding>H264</tt:Encoding>
+               <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+               <tt:Quality>4.0</tt:Quality>
+             </trt:Configuration>
+           </trt:GetVideoEncoderConfigurationResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let cfg = client
+        .get_video_encoder_configuration("http://192.168.1.1/onvif/media_service", "VideoEnc_1")
+        .await
+        .unwrap();
+    assert!(cfg.guaranteed_frame_rate.is_none());
+}
+
+#[tokio::test]
+async fn test_get_storage_configurations_parses_storage_status() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetStorageConfigurationsResponse>
+             <tds:StorageConfigurations token="SD_1">
+               <tt:StorageType>LocalStorage</tt:StorageType>
+               <tt:LocalPath>/mnt/sd</tt:LocalPath>
+               <tt:StorageStatus>Connected</tt:StorageStatus>
+             </tds:StorageConfigurations>
+           </tds:GetStorageConfigurationsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let cfgs = client.get_storage_configurations().await.unwrap();
+    assert_eq!(cfgs[0].storage_status.as_deref(), Some("Connected"));
+}
+
+#[tokio::test]
+async fn test_get_storage_configurations_no_status_is_none() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetStorageConfigurationsResponse>
+             <tds:StorageConfigurations token="SD_1">
+               <tt:StorageType>LocalStorage</tt:StorageType>
+               <tt:LocalPath>/mnt/sd</tt:LocalPath>
+             </tds:StorageConfigurations>
+           </tds:GetStorageConfigurationsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let cfgs = client.get_storage_configurations().await.unwrap();
+    assert!(cfgs[0].storage_status.is_none());
+}
+
+#[tokio::test]
+async fn test_get_imaging_options_parses_exposure_ranges() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <timg:GetOptionsResponse>
+             <timg:ImagingOptions>
+               <tt:Brightness><tt:Min>0</tt:Min><tt:Max>100</tt:Max></tt:Brightness>
+               <tt:Exposure>
+                 <tt:Mode>AUTO</tt:Mode>
+                 <tt:Mode>MANUAL</tt:Mode>
+                 <tt:ExposureTime><tt:Min>0.0001</tt:Min><tt:Max>0.1</tt:Max></tt:ExposureTime>
+                 <tt:Gain><tt:Min>0</tt:Min><tt:Max>40</tt:Max></tt:Gain>
+                 <tt:Iris><tt:Min>1.4</tt:Min><tt:Max>22</tt:Max></tt:Iris>
+               </tt:Exposure>
+               <tt:Focus>
+                 <tt:AFModes>AUTO</tt:AFModes>
+                 <tt:AFModes>MANUAL</tt:AFModes>
+                 <tt:AutoFocusSpeed><tt:Min>0</tt:Min><tt:Max>1</tt:Max></tt:AutoFocusSpeed>
+               </tt:Focus>
+               <tt:WideDynamicRange>
+                 <tt:Mode>ON</tt:Mode>
+                 <tt:Mode>OFF</tt:Mode>
+                 <tt:Level><tt:Min>0</tt:Min><tt:Max>100</tt:Max></tt:Level>
+               </tt:WideDynamicRange>
+               <tt:BacklightCompensation>
+                 <tt:Mode>ON</tt:Mode>
+                 <tt:Mode>OFF</tt:Mode>
+               </tt:BacklightCompensation>
+             </timg:ImagingOptions>
+           </timg:GetOptionsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let opts = client
+        .get_imaging_options("http://192.168.1.1/onvif/imaging_service", "VS_1")
+        .await
+        .unwrap();
+    let et = opts.exposure_time_range.expect("exposure_time_range");
+    assert!((et.min - 0.0001).abs() < 1e-7);
+    assert!((et.max - 0.1).abs() < 1e-7);
+    let gain = opts.gain_range.expect("gain_range");
+    assert!((gain.max - 40.0).abs() < 1e-5);
+    let iris = opts.iris_range.expect("iris_range");
+    assert!((iris.min - 1.4).abs() < 1e-5);
+    assert_eq!(opts.focus_af_modes, ["AUTO", "MANUAL"]);
+    let fs = opts.focus_speed_range.expect("focus_speed_range");
+    assert!((fs.max - 1.0).abs() < 1e-5);
+    let wdr = opts.wdr_level_range.expect("wdr_level_range");
+    assert!((wdr.max - 100.0).abs() < 1e-5);
+    assert_eq!(opts.wdr_modes, ["ON", "OFF"]);
+    assert_eq!(opts.backlight_compensation_modes, ["ON", "OFF"]);
+}
+
+#[tokio::test]
+async fn test_get_imaging_options_missing_optional_ranges_are_none() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <timg:GetOptionsResponse>
+             <timg:ImagingOptions>
+               <tt:Brightness><tt:Min>0</tt:Min><tt:Max>100</tt:Max></tt:Brightness>
+             </timg:ImagingOptions>
+           </timg:GetOptionsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let opts = client
+        .get_imaging_options("http://192.168.1.1/onvif/imaging_service", "VS_1")
+        .await
+        .unwrap();
+    assert!(opts.exposure_time_range.is_none());
+    assert!(opts.gain_range.is_none());
+    assert!(opts.iris_range.is_none());
+    assert!(opts.focus_speed_range.is_none());
+    assert!(opts.wdr_level_range.is_none());
+    assert!(opts.focus_af_modes.is_empty());
+    assert!(opts.wdr_modes.is_empty());
+    assert!(opts.backlight_compensation_modes.is_empty());
+}

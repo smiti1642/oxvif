@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.7.6] - 2026-04-04
+
+### Changed
+- Extended existing response/options types with remaining medium-priority ONVIF spec fields:
+  - `PtzStatus`: `error` (`PTZStatus/Error`) — human-readable fault description
+  - `VideoEncoderConfiguration`: `guaranteed_frame_rate` (`GuaranteedFrameRate` boolean);
+    `to_xml_body` updated to serialise the flag
+  - `StorageConfiguration`: `storage_status` (`StorageStatus`) — connection state string
+  - `ImagingOptions`: 8 new fields covering exposure detail ranges
+    (`exposure_time_range`, `gain_range`, `iris_range: Option<FloatRange>`),
+    focus options (`focus_af_modes: Vec<String>`, `focus_speed_range`),
+    WDR options (`wdr_level_range`, `wdr_modes`) and
+    backlight compensation modes (`backlight_compensation_modes`)
+- 8 new unit tests (306 → 314)
+
+---
+
 ## [0.7.5] - 2026-04-04
 
 ### Changed

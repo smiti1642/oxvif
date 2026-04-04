@@ -785,6 +785,7 @@ mod video {
             }),
             h265: None,
             multicast: None,
+            guaranteed_frame_rate: None,
         };
         let xml = cfg.to_xml_body();
         assert!(xml.contains("token=\"enc1\""));
