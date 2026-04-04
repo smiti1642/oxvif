@@ -54,7 +54,7 @@ async fn main() {
 
     let app = Router::new()
         // Single catch-all route — dispatch is done on the SOAPAction header.
-        .route("/*path", post(handle_soap))
+        .route("/{*path}", post(handle_soap))
         .with_state(state);
 
     let listener = TcpListener::bind(addr).await.expect("bind failed");
