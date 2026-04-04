@@ -102,7 +102,7 @@ use oxvif::{OnvifSession, OnvifError};
 async fn main() -> Result<(), OnvifError> {
     let session = OnvifSession::builder("http://192.168.1.100/onvif/device_service")
         .with_credentials("admin", "password")
-        .with_clock_sync()   // recommended: syncs WS-Security timestamp with device clock
+        .with_clock_sync()   // syncs WS-Security timestamp with device clock
         .build()
         .await?;
 
@@ -135,7 +135,7 @@ async fn main() -> Result<(), OnvifError> {
 | Method | Description |
 |--------|-------------|
 | `session.capabilities()` | Returns the cached `&Capabilities` — no network call |
-| `session.client()` | Access the underlying `&OnvifClient` for operations not yet on `OnvifSession` |
+| `session.client()` | Access the underlying `&OnvifClient` directly (e.g. for custom transport or fine-grained URL routing) |
 
 `OnvifSession` delegates every `OnvifClient` method — the full method list is in the
 sections below (Device, Media, PTZ, Imaging, OSD, Events, Recording, Search, Replay).
@@ -860,10 +860,23 @@ cargo run --example camera -- snapshot-uris          # tabular HTTP snapshot URI
 cargo run --example camera -- system-datetime        # device clock and UTC offset
 cargo run --example camera -- ptz-presets            # list all PTZ presets
 cargo run --example camera -- ptz-status             # current pan/tilt/zoom position
+cargo run --example camera -- ptz-config             # PTZ configurations and nodes
+cargo run --example camera -- ptz-home               # go to / set PTZ home position
+cargo run --example camera -- audio                  # audio sources and encoder configs
+cargo run --example camera -- imaging-focus          # focus status, move options, move/stop
+cargo run --example camera -- osd                    # on-screen display elements (list, create, delete)
 cargo run --example camera -- video-config           # video sources, encoder configs (Media1)
 cargo run --example camera -- video-config-media2    # H.265 encoder configs (Media2)
 cargo run --example camera -- imaging                # brightness, contrast, exposure settings
 cargo run --example camera -- events                 # subscribe, pull, renew, unsubscribe
+cargo run --example camera -- event-stream           # continuous event stream via event_stream()
+cargo run --example camera -- recording              # list recordings, search, get replay URI
+cargo run --example camera -- recording-jobs         # recording jobs: list, create, set mode, delete
+cargo run --example camera -- users                  # list, create, delete device user accounts
+cargo run --example camera -- network-config         # interfaces, protocols, DNS, gateway
+cargo run --example camera -- relay-outputs          # list relay outputs and trigger state change
+cargo run --example camera -- storage                # list storage configurations (SD/NAS)
+cargo run --example camera -- discovery-mode         # show and toggle WS-Discovery mode
 cargo run --example camera -- discovery              # WS-Discovery UDP multicast probe
 cargo run --example camera -- error-handling         # typed error variant matching demo
 ```
@@ -886,7 +899,15 @@ cargo run --example mock_server -- 19090
 ```
 src/
 ├── lib.rs               Public API surface and re-exports
-├── client.rs            OnvifClient — all ONVIF operations (protocol layer)
+├── client/
+│   ├── mod.rs           OnvifClient — constructor and builder methods
+│   ├── device.rs        Device service methods
+│   ├── events.rs        Events service methods (incl. event_stream)
+│   ├── imaging.rs       Imaging service methods
+│   ├── media.rs         Media1 service methods
+│   ├── media2.rs        Media2 service methods
+│   ├── ptz.rs           PTZ service methods
+│   └── recording.rs     Recording / Search / Replay service methods
 ├── session.rs           OnvifSession — convenience wrapper with cached service URLs
 ├── discovery.rs         WS-Discovery UDP multicast probe
 ├── error.rs             OnvifError unified error type
@@ -898,13 +919,16 @@ src/
 │   ├── xml.rs           Namespace-stripping XML parser (XmlNode)
 │   └── error.rs         SoapError
 ├── types/
-│   ├── mod.rs           XML helper functions
+│   ├── mod.rs           XML helper functions (xml_escape, xml_str, …)
+│   ├── audio.rs         AudioSource, AudioEncoderConfiguration, AudioEncoding
 │   ├── capabilities.rs  Capabilities, service sub-structs
-│   ├── device.rs        DeviceInfo, SystemDateTime, Hostname, NtpInfo
+│   ├── device.rs        DeviceInfo, SystemDateTime, Hostname, NtpInfo, StorageConfiguration
 │   ├── events.rs        PullPointSubscription, NotificationMessage, EventProperties
-│   ├── imaging.rs       ImagingSettings, ImagingOptions
-│   ├── media.rs         MediaProfile, StreamUri, SnapshotUri
+│   ├── imaging.rs       ImagingSettings, ImagingOptions, ImagingStatus
+│   ├── media.rs         MediaProfile, MediaProfile2, StreamUri, SnapshotUri
+│   ├── osd.rs           OsdConfiguration, OsdTextString, OsdColor, OsdOptions
 │   ├── ptz.rs           PtzPreset, PtzStatus
+│   ├── ptz_config.rs    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzSpeed
 │   ├── recording.rs     RecordingItem, RecordingJob, RecordingJobConfiguration, RecordingJobState
 │   └── video.rs         VideoSource, VideoEncoder configs and options
 └── tests/
@@ -913,7 +937,8 @@ src/
     └── types_tests.rs   XML parsing unit tests
 examples/
 ├── camera.rs            Live camera integration examples (all commands)
-└── mock_server.rs       Stateless ONVIF mock server for offline development
+├── mock_server.rs       Stateless ONVIF mock server for offline development
+└── write_workflow.rs    Write-operation workflow with embedded mock server
 ```
 
 ---
