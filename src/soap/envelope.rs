@@ -56,6 +56,9 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("timg", "http://www.onvif.org/ver20/imaging/wsdl"),
     ("tan", "http://www.onvif.org/ver20/analytics/wsdl"),
     ("ter", "http://www.onvif.org/ver10/error"),
+    ("trc", "http://www.onvif.org/ver10/recording/wsdl"),
+    ("tse", "http://www.onvif.org/ver10/search/wsdl"),
+    ("trp", "http://www.onvif.org/ver10/replay/wsdl"),
 ];
 
 // ── SoapEnvelope ──────────────────────────────────────────────────────────────

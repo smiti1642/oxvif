@@ -49,10 +49,11 @@ use crate::types::{
     ImagingStatus, MediaProfile, MediaProfile2, NetworkGateway, NetworkInterface, NetworkProtocol,
     NotificationMessage, NtpInfo, OnvifService, OsdConfiguration, OsdOptions, PtzConfiguration,
     PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus, PullPointSubscription, RecordingItem,
-    RelayOutput, SnapshotUri, StorageConfiguration, StreamUri, SystemDateTime, SystemLog,
-    SystemUris, User, VideoEncoderConfiguration, VideoEncoderConfiguration2,
-    VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,
-    VideoSource, VideoSourceConfiguration, VideoSourceConfigurationOptions,
+    RecordingJob, RecordingJobConfiguration, RecordingJobState, RelayOutput, SnapshotUri,
+    StorageConfiguration, StreamUri, SystemDateTime, SystemLog, SystemUris, User,
+    VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
+    VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
+    VideoSourceConfiguration, VideoSourceConfigurationOptions,
 };
 
 // ── OnvifSessionBuilder ───────────────────────────────────────────────────────
@@ -1124,6 +1125,105 @@ impl OnvifSession {
     ) -> Result<String, OnvifError> {
         self.client
             .get_replay_uri(self.replay_url()?, recording_token, stream_type, protocol)
+            .await
+    }
+
+    /// Create a new recording configuration on the device.
+    pub async fn create_recording(
+        &self,
+        source_name: &str,
+        source_id: &str,
+        location: &str,
+        description: &str,
+        content: &str,
+    ) -> Result<String, OnvifError> {
+        self.client
+            .create_recording(
+                self.recording_url()?,
+                source_name,
+                source_id,
+                location,
+                description,
+                content,
+            )
+            .await
+    }
+
+    /// Delete a recording and all its tracks from the device.
+    pub async fn delete_recording(&self, recording_token: &str) -> Result<(), OnvifError> {
+        self.client
+            .delete_recording(self.recording_url()?, recording_token)
+            .await
+    }
+
+    /// Add a new track to an existing recording.
+    pub async fn create_track(
+        &self,
+        recording_token: &str,
+        track_type: &str,
+        description: &str,
+    ) -> Result<String, OnvifError> {
+        self.client
+            .create_track(
+                self.recording_url()?,
+                recording_token,
+                track_type,
+                description,
+            )
+            .await
+    }
+
+    /// Remove a track from a recording.
+    pub async fn delete_track(
+        &self,
+        recording_token: &str,
+        track_token: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .delete_track(self.recording_url()?, recording_token, track_token)
+            .await
+    }
+
+    /// List all recording jobs on the device.
+    pub async fn get_recording_jobs(&self) -> Result<Vec<RecordingJob>, OnvifError> {
+        self.client.get_recording_jobs(self.recording_url()?).await
+    }
+
+    /// Create a new recording job.
+    pub async fn create_recording_job(
+        &self,
+        config: &RecordingJobConfiguration,
+    ) -> Result<String, OnvifError> {
+        self.client
+            .create_recording_job(self.recording_url()?, config)
+            .await
+    }
+
+    /// Enable or disable a recording job (`mode`: `"Active"` or `"Idle"`).
+    pub async fn set_recording_job_mode(
+        &self,
+        job_token: &str,
+        mode: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .set_recording_job_mode(self.recording_url()?, job_token, mode)
+            .await
+    }
+
+    /// Delete a recording job from the device.
+    pub async fn delete_recording_job(&self, job_token: &str) -> Result<(), OnvifError> {
+        self.client
+            .delete_recording_job(self.recording_url()?, job_token)
+            .await
+    }
+
+    /// Get the current operational state of a recording job.
+    pub async fn get_recording_job_state(
+        &self,
+        job_token: &str,
+    ) -> Result<RecordingJobState, OnvifError> {
+        self.client
+            .get_recording_job_state(self.recording_url()?, job_token)
             .await
     }
 }

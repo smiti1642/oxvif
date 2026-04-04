@@ -3,7 +3,10 @@
 use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
-use crate::types::{FindRecordingResults, RecordingItem, xml_escape};
+use crate::types::{
+    FindRecordingResults, RecordingItem, RecordingJob, RecordingJobConfiguration,
+    RecordingJobState, xml_escape,
+};
 
 impl OnvifClient {
     /// List all recordings stored on the device.
@@ -21,6 +24,222 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetRecordingsResponse")?;
         RecordingItem::vec_from_xml(resp)
+    }
+
+    /// Create a new recording configuration on the device.
+    ///
+    /// Returns the opaque recording token assigned by the device.
+    ///
+    /// - `source_name` — human-readable label for the source stream.
+    /// - `source_id` — URI uniquely identifying the source (e.g. `"urn:uuid:camera-01"`).
+    /// - `location` — physical location string.
+    /// - `description` — free-text description.
+    /// - `content` — content type / label for the recording.
+    pub async fn create_recording(
+        &self,
+        recording_url: &str,
+        source_name: &str,
+        source_id: &str,
+        location: &str,
+        description: &str,
+        content: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/CreateRecording";
+        let body = format!(
+            "<trc:CreateRecording>\
+               <trc:RecordingConfiguration>\
+                 <tt:Source>\
+                   <tt:SourceId>{source_id}</tt:SourceId>\
+                   <tt:Name>{source_name}</tt:Name>\
+                   <tt:Location>{location}</tt:Location>\
+                   <tt:Description>{description}</tt:Description>\
+                 </tt:Source>\
+                 <tt:Content>{content}</tt:Content>\
+               </trc:RecordingConfiguration>\
+             </trc:CreateRecording>",
+            source_id = xml_escape(source_id),
+            source_name = xml_escape(source_name),
+            location = xml_escape(location),
+            description = xml_escape(description),
+            content = xml_escape(content),
+        );
+        let xml = self.call(recording_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "CreateRecordingResponse")?;
+        resp.child("RecordingToken")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("RecordingToken").into())
+    }
+
+    /// Delete a recording and all its tracks from the device.
+    pub async fn delete_recording(
+        &self,
+        recording_url: &str,
+        recording_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/DeleteRecording";
+        let body = format!(
+            "<trc:DeleteRecording>\
+               <trc:RecordingToken>{}</trc:RecordingToken>\
+             </trc:DeleteRecording>",
+            xml_escape(recording_token)
+        );
+        let xml = self.call(recording_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "DeleteRecordingResponse")?;
+        Ok(())
+    }
+
+    /// Add a new track to an existing recording.
+    ///
+    /// Returns the track token assigned by the device.
+    ///
+    /// - `track_type` — `"Video"`, `"Audio"`, or `"Metadata"`.
+    /// - `description` — free-text description of the track.
+    pub async fn create_track(
+        &self,
+        recording_url: &str,
+        recording_token: &str,
+        track_type: &str,
+        description: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/CreateTrack";
+        let body = format!(
+            "<trc:CreateTrack>\
+               <trc:RecordingToken>{rt}</trc:RecordingToken>\
+               <trc:TrackConfiguration>\
+                 <tt:TrackType>{tt}</tt:TrackType>\
+                 <tt:Description>{desc}</tt:Description>\
+               </trc:TrackConfiguration>\
+             </trc:CreateTrack>",
+            rt = xml_escape(recording_token),
+            tt = xml_escape(track_type),
+            desc = xml_escape(description),
+        );
+        let xml = self.call(recording_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "CreateTrackResponse")?;
+        resp.child("TrackToken")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("TrackToken").into())
+    }
+
+    /// Remove a track from a recording.
+    pub async fn delete_track(
+        &self,
+        recording_url: &str,
+        recording_token: &str,
+        track_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/DeleteTrack";
+        let body = format!(
+            "<trc:DeleteTrack>\
+               <trc:RecordingToken>{rt}</trc:RecordingToken>\
+               <trc:TrackToken>{tt}</trc:TrackToken>\
+             </trc:DeleteTrack>",
+            rt = xml_escape(recording_token),
+            tt = xml_escape(track_token),
+        );
+        let xml = self.call(recording_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "DeleteTrackResponse")?;
+        Ok(())
+    }
+
+    /// List all recording jobs on the device.
+    pub async fn get_recording_jobs(
+        &self,
+        recording_url: &str,
+    ) -> Result<Vec<RecordingJob>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/GetRecordingJobs";
+        const BODY: &str = "<trc:GetRecordingJobs/>";
+        let xml = self.call(recording_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetRecordingJobsResponse")?;
+        RecordingJob::vec_from_xml(resp)
+    }
+
+    /// Create a new recording job that feeds a live stream into a recording.
+    ///
+    /// Returns the job token assigned by the device.
+    pub async fn create_recording_job(
+        &self,
+        recording_url: &str,
+        config: &RecordingJobConfiguration,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/CreateRecordingJob";
+        let body = format!(
+            "<trc:CreateRecordingJob>{}</trc:CreateRecordingJob>",
+            config.to_xml_body()
+        );
+        let xml = self.call(recording_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "CreateRecordingJobResponse")?;
+        resp.child("JobToken")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("JobToken").into())
+    }
+
+    /// Enable or disable a recording job.
+    ///
+    /// `mode` must be `"Active"` or `"Idle"`.
+    pub async fn set_recording_job_mode(
+        &self,
+        recording_url: &str,
+        job_token: &str,
+        mode: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/SetRecordingJobMode";
+        let body = format!(
+            "<trc:SetRecordingJobMode>\
+               <trc:JobToken>{jt}</trc:JobToken>\
+               <trc:Mode>{mode}</trc:Mode>\
+             </trc:SetRecordingJobMode>",
+            jt = xml_escape(job_token),
+            mode = xml_escape(mode),
+        );
+        let xml = self.call(recording_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetRecordingJobModeResponse")?;
+        Ok(())
+    }
+
+    /// Delete a recording job from the device.
+    pub async fn delete_recording_job(
+        &self,
+        recording_url: &str,
+        job_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/DeleteRecordingJob";
+        let body = format!(
+            "<trc:DeleteRecordingJob>\
+               <trc:JobToken>{}</trc:JobToken>\
+             </trc:DeleteRecordingJob>",
+            xml_escape(job_token)
+        );
+        let xml = self.call(recording_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "DeleteRecordingJobResponse")?;
+        Ok(())
+    }
+
+    /// Get the current operational state of a recording job.
+    pub async fn get_recording_job_state(
+        &self,
+        recording_url: &str,
+        job_token: &str,
+    ) -> Result<RecordingJobState, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/GetRecordingJobState";
+        let body = format!(
+            "<trc:GetRecordingJobState>\
+               <trc:JobToken>{}</trc:JobToken>\
+             </trc:GetRecordingJobState>",
+            xml_escape(job_token)
+        );
+        let xml = self.call(recording_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetRecordingJobStateResponse")?;
+        RecordingJobState::from_xml(resp)
     }
 
     // ── Search Service ────────────────────────────────────────────────────────────

@@ -286,6 +286,27 @@ fn dispatch(action: &str, base: &str) -> String {
 
         // ── Recording ─────────────────────────────────────────────────────────
         "http://www.onvif.org/ver10/recording/wsdl/GetRecordings" => resp_recordings(),
+        "http://www.onvif.org/ver10/recording/wsdl/CreateRecording" => resp_create_recording(),
+        "http://www.onvif.org/ver10/recording/wsdl/DeleteRecording" => {
+            resp_empty("trc", "DeleteRecordingResponse")
+        }
+        "http://www.onvif.org/ver10/recording/wsdl/CreateTrack" => resp_create_track(),
+        "http://www.onvif.org/ver10/recording/wsdl/DeleteTrack" => {
+            resp_empty("trc", "DeleteTrackResponse")
+        }
+        "http://www.onvif.org/ver10/recording/wsdl/GetRecordingJobs" => resp_recording_jobs(),
+        "http://www.onvif.org/ver10/recording/wsdl/CreateRecordingJob" => {
+            resp_create_recording_job()
+        }
+        "http://www.onvif.org/ver10/recording/wsdl/SetRecordingJobMode" => {
+            resp_empty("trc", "SetRecordingJobModeResponse")
+        }
+        "http://www.onvif.org/ver10/recording/wsdl/DeleteRecordingJob" => {
+            resp_empty("trc", "DeleteRecordingJobResponse")
+        }
+        "http://www.onvif.org/ver10/recording/wsdl/GetRecordingJobState" => {
+            resp_recording_job_state()
+        }
 
         // ── Search ────────────────────────────────────────────────────────────
         "http://www.onvif.org/ver10/search/wsdl/FindRecordings" => resp_find_recordings(),
@@ -1008,6 +1029,66 @@ fn resp_recordings() -> String {
             </trc:RecordingInformation>
           </trc:RecordingItems>
         </trc:GetRecordingsResponse>"#,
+    )
+}
+
+fn resp_create_recording() -> String {
+    soap(
+        r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
+        r#"<trc:CreateRecordingResponse>
+          <trc:RecordingToken>Rec_new</trc:RecordingToken>
+        </trc:CreateRecordingResponse>"#,
+    )
+}
+
+fn resp_create_track() -> String {
+    soap(
+        r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
+        r#"<trc:CreateTrackResponse>
+          <trc:TrackToken>Track_new</trc:TrackToken>
+        </trc:CreateTrackResponse>"#,
+    )
+}
+
+fn resp_recording_jobs() -> String {
+    soap(
+        r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
+        r#"<trc:GetRecordingJobsResponse>
+          <trc:JobItem>
+            <trc:JobToken>Job_001</trc:JobToken>
+            <trc:JobConfiguration>
+              <tt:RecordingToken>Rec_001</tt:RecordingToken>
+              <tt:Mode>Active</tt:Mode>
+              <tt:Priority>1</tt:Priority>
+              <tt:Source>
+                <tt:SourceToken>
+                  <tt:Token>Profile_1</tt:Token>
+                </tt:SourceToken>
+              </tt:Source>
+            </trc:JobConfiguration>
+          </trc:JobItem>
+        </trc:GetRecordingJobsResponse>"#,
+    )
+}
+
+fn resp_create_recording_job() -> String {
+    soap(
+        r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
+        r#"<trc:CreateRecordingJobResponse>
+          <trc:JobToken>Job_new</trc:JobToken>
+        </trc:CreateRecordingJobResponse>"#,
+    )
+}
+
+fn resp_recording_job_state() -> String {
+    soap(
+        r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
+        r#"<trc:GetRecordingJobStateResponse>
+          <trc:JobToken>Job_001</trc:JobToken>
+          <trc:State>
+            <tt:ActiveState>Active</tt:ActiveState>
+          </trc:State>
+        </trc:GetRecordingJobStateResponse>"#,
     )
 }
 

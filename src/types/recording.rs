@@ -1,4 +1,4 @@
-use super::xml_str;
+use super::{xml_escape, xml_str, xml_u32};
 use crate::error::OnvifError;
 use crate::soap::{SoapError, XmlNode};
 
@@ -199,6 +199,133 @@ impl FindRecordingResults {
                 .children_named("RecordingInformation")
                 .map(RecordingInformation::from_xml)
                 .collect(),
+        })
+    }
+}
+
+// ── RecordingJobConfiguration ─────────────────────────────────────────────────
+
+/// Configuration for creating a recording job via `create_recording_job`.
+///
+/// A recording job continuously writes media from a profile into a recording.
+#[derive(Debug, Clone)]
+pub struct RecordingJobConfiguration {
+    /// Token of the recording this job writes to.
+    pub recording_token: String,
+    /// Initial mode: `"Active"` (running) or `"Idle"` (paused).
+    pub mode: String,
+    /// Job scheduling priority; higher values win when resources are scarce.
+    pub priority: u32,
+    /// Media profile token that provides the live stream to record.
+    pub source_token: String,
+}
+
+impl RecordingJobConfiguration {
+    /// Serialise to an XML fragment usable inside a `<trc:CreateRecordingJob>` body.
+    pub(crate) fn to_xml_body(&self) -> String {
+        format!(
+            "<trc:JobConfiguration>\
+               <tt:RecordingToken>{rt}</tt:RecordingToken>\
+               <tt:Mode>{mode}</tt:Mode>\
+               <tt:Priority>{prio}</tt:Priority>\
+               <tt:Source>\
+                 <tt:SourceToken>\
+                   <tt:Token>{src}</tt:Token>\
+                 </tt:SourceToken>\
+               </tt:Source>\
+             </trc:JobConfiguration>",
+            rt = xml_escape(&self.recording_token),
+            mode = xml_escape(&self.mode),
+            prio = self.priority,
+            src = xml_escape(&self.source_token),
+        )
+    }
+
+    fn from_xml(node: &XmlNode) -> Self {
+        Self {
+            recording_token: xml_str(node, "RecordingToken").unwrap_or_default(),
+            mode: xml_str(node, "Mode").unwrap_or_default(),
+            priority: xml_u32(node, "Priority").unwrap_or(0),
+            source_token: node
+                .path(&["Source", "SourceToken", "Token"])
+                .map(|n| n.text().to_string())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+// ── RecordingJob ──────────────────────────────────────────────────────────────
+
+/// A recording job entry returned by `get_recording_jobs`.
+#[derive(Debug, Clone)]
+pub struct RecordingJob {
+    /// Opaque job token; pass to `set_recording_job_mode`, `delete_recording_job`, etc.
+    pub token: String,
+    /// Token of the target recording.
+    pub recording_token: String,
+    /// Current mode: `"Active"` or `"Idle"`.
+    pub mode: String,
+    /// Scheduling priority.
+    pub priority: u32,
+    /// Source profile token.
+    pub source_token: String,
+}
+
+impl RecordingJob {
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("JobItem")
+            .map(|item| {
+                let token = item
+                    .child("JobToken")
+                    .map(|n| n.text().to_string())
+                    .filter(|t| !t.is_empty())
+                    .ok_or_else(|| SoapError::missing("RecordingJob/JobToken"))?;
+                let cfg = item
+                    .child("JobConfiguration")
+                    .map(RecordingJobConfiguration::from_xml)
+                    .unwrap_or_else(|| RecordingJobConfiguration {
+                        recording_token: String::new(),
+                        mode: String::new(),
+                        priority: 0,
+                        source_token: String::new(),
+                    });
+                Ok(Self {
+                    token,
+                    recording_token: cfg.recording_token,
+                    mode: cfg.mode,
+                    priority: cfg.priority,
+                    source_token: cfg.source_token,
+                })
+            })
+            .collect()
+    }
+}
+
+// ── RecordingJobState ─────────────────────────────────────────────────────────
+
+/// Current operational state of a recording job returned by `get_recording_job_state`.
+#[derive(Debug, Clone)]
+pub struct RecordingJobState {
+    /// The job token this state belongs to.
+    pub token: String,
+    /// Active state: `"Active"`, `"PartiallyActive"`, or `"Idle"`.
+    pub active_state: String,
+}
+
+impl RecordingJobState {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let state = resp
+            .child("State")
+            .ok_or_else(|| SoapError::missing("RecordingJobStateResponse/State"))?;
+        Ok(Self {
+            token: resp
+                .child("JobToken")
+                .map(|n| n.text().to_string())
+                .unwrap_or_default(),
+            active_state: state
+                .child("ActiveState")
+                .map(|n| n.text().to_string())
+                .unwrap_or_else(|| "Idle".to_string()),
         })
     }
 }
