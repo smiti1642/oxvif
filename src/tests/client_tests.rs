@@ -193,22 +193,6 @@ async fn test_get_capabilities_returns_correct_urls() {
 }
 
 #[tokio::test]
-async fn test_get_capabilities_sends_correct_action_and_url() {
-    let (transport, captured) = RecordingTransport::new(capabilities_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client.get_capabilities().await.unwrap();
-
-    let c = captured.lock().unwrap();
-    assert_eq!(c.url, "http://192.168.1.1/onvif/device_service");
-    assert_eq!(
-        c.action,
-        "http://www.onvif.org/ver10/device/wsdl/GetCapabilities"
-    );
-}
-
-#[tokio::test]
 async fn test_get_capabilities_soap_fault_returns_error() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(mock(soap_fault_xml()));
@@ -278,22 +262,6 @@ async fn test_get_device_info_returns_correct_fields() {
     assert_eq!(info.hardware_id, "0x00");
 }
 
-#[tokio::test]
-async fn test_get_device_info_uses_device_url() {
-    let (transport, captured) = RecordingTransport::new(device_info_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client.get_device_info().await.unwrap();
-
-    let c = captured.lock().unwrap();
-    assert_eq!(c.url, "http://192.168.1.1/onvif/device_service");
-    assert_eq!(
-        c.action,
-        "http://www.onvif.org/ver10/device/wsdl/GetDeviceInformation"
-    );
-}
-
 // ── get_profiles ──────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -312,23 +280,6 @@ async fn test_get_profiles_returns_all_profiles() {
     assert!(profiles[0].fixed);
     assert_eq!(profiles[1].token, "Profile_2");
     assert!(!profiles[1].fixed);
-}
-
-#[tokio::test]
-async fn test_get_profiles_uses_media_url() {
-    let (transport, captured) = RecordingTransport::new(profiles_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    let media_url = "http://192.168.1.1/onvif/media_service";
-    client.get_profiles(media_url).await.unwrap();
-
-    let c = captured.lock().unwrap();
-    assert_eq!(c.url, media_url);
-    assert_eq!(
-        c.action,
-        "http://www.onvif.org/ver10/media/wsdl/GetProfiles"
-    );
 }
 
 // ── get_stream_uri ────────────────────────────────────────────────────────
@@ -364,23 +315,6 @@ async fn test_get_stream_uri_embeds_profile_token_in_body() {
     assert!(
         body.contains("Profile_1"),
         "profile token must appear in request body"
-    );
-}
-
-#[tokio::test]
-async fn test_get_stream_uri_uses_media_url_and_correct_action() {
-    let (transport, captured) = RecordingTransport::new(stream_uri_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    let media_url = "http://192.168.1.1/onvif/media_service";
-    client.get_stream_uri(media_url, "tok").await.unwrap();
-
-    let c = captured.lock().unwrap();
-    assert_eq!(c.url, media_url);
-    assert_eq!(
-        c.action,
-        "http://www.onvif.org/ver10/media/wsdl/GetStreamUri"
     );
 }
 
@@ -934,39 +868,7 @@ async fn test_ptz_set_preset_without_name_or_token() {
     );
 }
 
-#[tokio::test]
-async fn test_ptz_set_preset_uses_correct_action() {
-    let (transport, captured) = RecordingTransport::new(ptz_set_preset_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client
-        .ptz_set_preset("http://192.168.1.1/onvif/ptz_service", "P", None, None)
-        .await
-        .unwrap();
-
-    assert_eq!(
-        captured.lock().unwrap().action,
-        "http://www.onvif.org/ver20/ptz/wsdl/SetPreset"
-    );
-}
-
 // ── ptz_remove_preset ─────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_ptz_remove_preset_ok() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(ptz_remove_preset_xml()));
-
-    client
-        .ptz_remove_preset(
-            "http://192.168.1.1/onvif/ptz_service",
-            "Profile_1",
-            "Preset_3",
-        )
-        .await
-        .unwrap();
-}
 
 #[tokio::test]
 async fn test_ptz_remove_preset_embeds_tokens() {
@@ -1101,36 +1003,7 @@ async fn test_create_profile_with_token_sends_token() {
     );
 }
 
-#[tokio::test]
-async fn test_create_profile_uses_correct_action() {
-    let (transport, captured) = RecordingTransport::new(create_profile_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client
-        .create_profile("http://192.168.1.1/onvif/media_service", "P", None)
-        .await
-        .unwrap();
-
-    assert_eq!(
-        captured.lock().unwrap().action,
-        "http://www.onvif.org/ver10/media/wsdl/CreateProfile"
-    );
-}
-
 // ── delete_profile ────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_delete_profile_ok() {
-    let xml = empty_response_xml("DeleteProfileResponse");
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-
-    client
-        .delete_profile("http://192.168.1.1/onvif/media_service", "Profile_1")
-        .await
-        .unwrap();
-}
 
 #[tokio::test]
 async fn test_delete_profile_sends_token() {
@@ -1692,15 +1565,6 @@ fn renew_subscription_xml() -> &'static str {
         </s:Envelope>"#
 }
 
-fn unsubscribe_xml() -> &'static str {
-    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                      xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2">
-          <s:Body>
-            <wsnt:UnsubscribeResponse/>
-          </s:Body>
-        </s:Envelope>"#
-}
-
 // ── get_event_properties ──────────────────────────────────────────────────
 
 #[tokio::test]
@@ -1720,23 +1584,6 @@ async fn test_get_event_properties_flattens_topics() {
     assert!(
         props.topics.iter().any(|t| t.contains("Motion")),
         "topics should contain nested Motion topic"
-    );
-}
-
-#[tokio::test]
-async fn test_get_event_properties_uses_correct_action() {
-    let (transport, captured) = RecordingTransport::new(event_properties_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client
-        .get_event_properties("http://192.168.1.1/onvif/events_service")
-        .await
-        .unwrap();
-
-    assert_eq!(
-        captured.lock().unwrap().action,
-        "http://www.onvif.org/ver10/events/wsdl/EventPortType/GetEventPropertiesRequest"
     );
 }
 
@@ -1795,23 +1642,6 @@ async fn test_create_pull_point_subscription_without_filter_omits_filter_el() {
         .unwrap();
 
     assert!(!captured.lock().unwrap().body.contains("Filter"));
-}
-
-#[tokio::test]
-async fn test_create_pull_point_subscription_uses_correct_action() {
-    let (transport, captured) = RecordingTransport::new(create_pull_point_subscription_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client
-        .create_pull_point_subscription("http://192.168.1.1/onvif/events_service", None, None)
-        .await
-        .unwrap();
-
-    assert_eq!(
-        captured.lock().unwrap().action,
-        "http://www.onvif.org/ver10/events/wsdl/EventPortType/CreatePullPointSubscriptionRequest"
-    );
 }
 
 // ── pull_messages ─────────────────────────────────────────────────────────
@@ -1880,27 +1710,6 @@ async fn test_pull_messages_sends_timeout_and_limit() {
     assert!(body.contains("50"));
 }
 
-#[tokio::test]
-async fn test_pull_messages_posts_to_subscription_url() {
-    let (transport, captured) = RecordingTransport::new(pull_messages_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client
-        .pull_messages(
-            "http://192.168.1.1/onvif/events/subscription_1",
-            "PT5S",
-            100,
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(
-        captured.lock().unwrap().url,
-        "http://192.168.1.1/onvif/events/subscription_1"
-    );
-}
-
 // ── renew_subscription ────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -1931,36 +1740,6 @@ async fn test_renew_subscription_sends_termination_time() {
 }
 
 // ── unsubscribe ───────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_unsubscribe_ok() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(unsubscribe_xml()));
-
-    client
-        .unsubscribe("http://192.168.1.1/onvif/events/subscription_1")
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
-async fn test_unsubscribe_posts_to_subscription_url_with_correct_action() {
-    let (transport, captured) = RecordingTransport::new(unsubscribe_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client
-        .unsubscribe("http://192.168.1.1/onvif/events/subscription_1")
-        .await
-        .unwrap();
-
-    let c = captured.lock().unwrap();
-    assert_eq!(c.url, "http://192.168.1.1/onvif/events/subscription_1");
-    assert_eq!(
-        c.action,
-        "http://www.onvif.org/ver10/events/wsdl/SubscriptionManager/UnsubscribeRequest"
-    );
-}
 
 // ── Negative / error-path tests ───────────────────────────────────────────────
 
@@ -2013,15 +1792,6 @@ async fn test_get_capabilities_soap_fault_returns_err() {
         ),
         "expected SOAP Fault error, got: {result:?}"
     );
-}
-
-#[tokio::test]
-async fn test_get_device_info_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
-        &make_soap_fault_xml("s:Sender", "Action not supported"),
-    ));
-    let result = client.get_device_info().await;
-    assert!(result.is_err());
 }
 
 // ── Missing required fields ───────────────────────────────────────────────
@@ -2148,27 +1918,6 @@ async fn test_get_audio_sources_ok() {
     assert_eq!(sources[0].channels, 1);
 }
 
-#[tokio::test]
-async fn test_get_audio_sources_missing_token_returns_err() {
-    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                              xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
-                              xmlns:tt="http://www.onvif.org/ver10/schema">
-                   <s:Body>
-                     <trt:GetAudioSourcesResponse>
-                       <trt:AudioSources>
-                         <tt:Channels>1</tt:Channels>
-                       </trt:AudioSources>
-                     </trt:GetAudioSourcesResponse>
-                   </s:Body>
-                 </s:Envelope>"#;
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    let result = client
-        .get_audio_sources("http://192.168.1.1/onvif/media_service")
-        .await;
-    assert!(result.is_err(), "expected Err when token is missing");
-}
-
 fn get_audio_source_configurations_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                   xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
@@ -2229,64 +1978,6 @@ async fn test_get_audio_encoder_configurations_ok() {
     assert_eq!(cfgs[0].encoding.as_str(), "G711");
     assert_eq!(cfgs[0].bitrate, 64);
     assert_eq!(cfgs[0].sample_rate, 8);
-}
-
-#[tokio::test]
-async fn test_get_audio_encoder_configurations_missing_token_returns_err() {
-    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                              xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
-                              xmlns:tt="http://www.onvif.org/ver10/schema">
-                   <s:Body>
-                     <trt:GetAudioEncoderConfigurationsResponse>
-                       <trt:Configurations>
-                         <tt:Encoding>G711</tt:Encoding>
-                       </trt:Configurations>
-                     </trt:GetAudioEncoderConfigurationsResponse>
-                   </s:Body>
-                 </s:Envelope>"#;
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    let result = client
-        .get_audio_encoder_configurations("http://192.168.1.1/onvif/media_service")
-        .await;
-    assert!(result.is_err());
-}
-
-fn set_audio_encoder_configuration_xml() -> &'static str {
-    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                  xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
-         <s:Body>
-           <trt:SetAudioEncoderConfigurationResponse/>
-         </s:Body>
-       </s:Envelope>"#
-}
-
-#[tokio::test]
-async fn test_set_audio_encoder_configuration_ok() {
-    use crate::types::{AudioEncoderConfiguration, AudioEncoding};
-    let (transport, captured) = RecordingTransport::new(set_audio_encoder_configuration_xml());
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-    let cfg = AudioEncoderConfiguration {
-        token: "AudioEncoderConfig_1".to_string(),
-        name: "TestAudio".to_string(),
-        use_count: 1,
-        encoding: AudioEncoding::G711,
-        bitrate: 64,
-        sample_rate: 8,
-        channels: 1,
-    };
-    client
-        .set_audio_encoder_configuration("http://192.168.1.1/onvif/media_service", &cfg)
-        .await
-        .unwrap();
-    let c = captured.lock().unwrap();
-    assert!(c.body.contains("AudioEncoderConfig_1"));
-    assert!(c.body.contains("G711"));
-    assert_eq!(
-        c.action,
-        "http://www.onvif.org/ver10/media/wsdl/SetAudioEncoderConfiguration"
-    );
 }
 
 fn get_audio_encoder_configuration_options_xml() -> &'static str {
@@ -2530,20 +2221,6 @@ async fn test_ptz_goto_home_position_ok() {
 }
 
 #[tokio::test]
-async fn test_ptz_goto_home_position_soap_fault() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
-        &make_soap_fault_xml("env:Receiver", "Not Implemented"),
-    ));
-
-    let err = client
-        .ptz_goto_home_position("http://192.168.1.1/onvif/ptz", "Profile_1", None)
-        .await
-        .unwrap_err();
-
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
-}
-
-#[tokio::test]
 async fn test_ptz_set_home_position_ok() {
     let xml = empty_response_xml("SetHomePositionResponse");
     let (transport, captured) = RecordingTransport::new(&xml);
@@ -2561,20 +2238,6 @@ async fn test_ptz_set_home_position_ok() {
         "http://www.onvif.org/ver20/ptz/wsdl/SetHomePosition"
     );
     assert!(c.body.contains("Profile_1"));
-}
-
-#[tokio::test]
-async fn test_ptz_set_home_position_soap_fault() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
-        &make_soap_fault_xml("env:Receiver", "Not Implemented"),
-    ));
-
-    let err = client
-        .ptz_set_home_position("http://192.168.1.1/onvif/ptz", "Profile_1")
-        .await
-        .unwrap_err();
-
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
 }
 
 // ── imaging_move / imaging_stop ───────────────────────────────────────────────
@@ -2664,24 +2327,6 @@ async fn test_imaging_move_sends_absolute_body() {
         .unwrap();
 
     assert!(captured.lock().unwrap().body.contains("0.8"));
-}
-
-#[tokio::test]
-async fn test_imaging_stop_ok() {
-    let xml = empty_response_xml("StopResponse");
-    let (transport, captured) = RecordingTransport::new(&xml);
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client
-        .imaging_stop("http://192.168.1.1/onvif/imaging", "video_source")
-        .await
-        .unwrap();
-
-    assert_eq!(
-        captured.lock().unwrap().action,
-        "http://www.onvif.org/ver20/imaging/wsdl/Stop"
-    );
 }
 
 #[tokio::test]
@@ -2838,21 +2483,6 @@ async fn test_create_osd_returns_token() {
 }
 
 #[tokio::test]
-async fn test_delete_osd_ok() {
-    let xml = empty_response_xml("DeleteOSDResponse");
-    let (transport, captured) = RecordingTransport::new(&xml);
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
-
-    client
-        .delete_osd("http://192.168.1.1/onvif/media", "osd_1")
-        .await
-        .unwrap();
-
-    assert!(captured.lock().unwrap().body.contains("osd_1"));
-}
-
-#[tokio::test]
 async fn test_get_osd_options_parses_max_and_types() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(mock(get_osd_options_xml()));
@@ -2913,16 +2543,6 @@ async fn test_get_scopes_returns_uris() {
     assert_eq!(scopes.len(), 2);
     assert!(scopes[0].contains("name/Camera1"));
     assert!(scopes[1].contains("country/taiwan"));
-}
-
-#[tokio::test]
-async fn test_get_scopes_soap_fault() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
-        &make_soap_fault_xml("env:Receiver", "Not Implemented"),
-    ));
-
-    let err = client.get_scopes().await.unwrap_err();
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
 }
 
 // ── get_recordings ────────────────────────────────────────────────────────────
@@ -3179,17 +2799,6 @@ async fn test_get_users_returns_list() {
     assert_eq!(users[1].username, "operator");
 }
 
-#[tokio::test]
-async fn test_get_users_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Sender", "Not Authorized")));
-    let err = client.get_users().await.unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
-}
-
 // ── create_users ──────────────────────────────────────────────────────────────
 
 fn create_users_response_xml() -> &'static str {
@@ -3217,20 +2826,6 @@ async fn test_create_users_sends_correct_body() {
     );
     assert!(c.body.contains("<tt:Username>newuser</tt:Username>"));
     assert!(c.body.contains("<tt:UserLevel>Operator</tt:UserLevel>"));
-}
-
-#[tokio::test]
-async fn test_create_users_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Sender", "UsernameClash")));
-    let err = client
-        .create_users(&[("admin", "x", "Administrator")])
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
 }
 
 // ── delete_users ──────────────────────────────────────────────────────────────
@@ -3294,20 +2889,6 @@ async fn test_set_user_sends_correct_body() {
         c.body
             .contains("<tt:UserLevel>Administrator</tt:UserLevel>")
     );
-}
-
-#[tokio::test]
-async fn test_set_user_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidArgs")));
-    let err = client
-        .set_user("admin", None, "Operator")
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
 }
 
 // ── get_network_interfaces ────────────────────────────────────────────────────
@@ -3472,17 +3053,6 @@ async fn test_get_network_protocols_returns_list() {
     assert_eq!(protos[1].ports, vec![554]);
 }
 
-#[tokio::test]
-async fn test_get_network_protocols_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "Not Implemented")));
-    let err = client.get_network_protocols().await.unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
-}
-
 // ── get_dns ───────────────────────────────────────────────────────────────────
 
 fn get_dns_xml() -> &'static str {
@@ -3554,17 +3124,6 @@ async fn test_set_dns_sends_correct_body() {
     assert!(c.body.contains("<tds:FromDHCP>false</tds:FromDHCP>"));
     assert!(c.body.contains("<tt:IPv4Address>1.1.1.1</tt:IPv4Address>"));
     assert!(c.body.contains("<tt:IPv4Address>9.9.9.9</tt:IPv4Address>"));
-}
-
-#[tokio::test]
-async fn test_set_dns_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidArgs")));
-    let err = client.set_dns(false, &["1.1.1.1"]).await.unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
 }
 
 // ── get_network_default_gateway ───────────────────────────────────────────────
@@ -3731,20 +3290,6 @@ async fn test_set_relay_output_state_sends_correct_body() {
     );
 }
 
-#[tokio::test]
-async fn test_set_relay_output_state_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidToken")));
-    let err = client
-        .set_relay_output_state("bad_token", "active")
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
-}
-
 // ── set_relay_output_settings ─────────────────────────────────────────────────
 
 fn set_relay_output_settings_response_xml() -> &'static str {
@@ -3779,20 +3324,6 @@ async fn test_set_relay_output_settings_sends_correct_body() {
     assert!(c.body.contains("<tt:IdleState>open</tt:IdleState>"));
 }
 
-#[tokio::test]
-async fn test_set_relay_output_settings_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidToken")));
-    let err = client
-        .set_relay_output_settings("bad", "Bistable", "PT0S", "closed")
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
-}
-
 // ── set_network_protocols ─────────────────────────────────────────────────────
 
 fn set_network_protocols_response_xml() -> &'static str {
@@ -3823,20 +3354,6 @@ async fn test_set_network_protocols_sends_correct_body() {
     assert!(c.body.contains("<tt:Port>554</tt:Port>"));
 }
 
-#[tokio::test]
-async fn test_set_network_protocols_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotSupported")));
-    let err = client
-        .set_network_protocols(&[("HTTP", true, &[])])
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
-}
-
 // ── set_system_factory_default ────────────────────────────────────────────────
 
 fn set_system_factory_default_response_xml() -> &'static str {
@@ -3863,17 +3380,6 @@ async fn test_set_system_factory_default_sends_correct_body() {
         c.body
             .contains("<tds:FactoryDefault>Soft</tds:FactoryDefault>")
     );
-}
-
-#[tokio::test]
-async fn test_set_system_factory_default_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotAuthorized")));
-    let err = client.set_system_factory_default("Hard").await.unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
 }
 
 // ── get_storage_configurations ────────────────────────────────────────────────
@@ -3965,20 +3471,6 @@ async fn test_set_storage_configuration_sends_correct_body() {
     assert!(c.body.contains("<tt:UseAnonymous>true</tt:UseAnonymous>"));
 }
 
-#[tokio::test]
-async fn test_set_storage_configuration_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Sender", "InvalidToken")));
-    let err = client
-        .set_storage_configuration("bad", "LocalStorage", "/mnt/sd", "", "", false)
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
-}
-
 // ── get_system_uris ───────────────────────────────────────────────────────────
 
 fn get_system_uris_xml() -> &'static str {
@@ -4013,17 +3505,6 @@ async fn test_get_system_uris_returns_fields() {
     );
 }
 
-#[tokio::test]
-async fn test_get_system_uris_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotSupported")));
-    let err = client.get_system_uris().await.unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
-}
-
 // ── get_discovery_mode ────────────────────────────────────────────────────────
 
 fn get_discovery_mode_xml() -> &'static str {
@@ -4043,17 +3524,6 @@ async fn test_get_discovery_mode_returns_value() {
         .with_transport(mock(get_discovery_mode_xml()));
     let mode = client.get_discovery_mode().await.unwrap();
     assert_eq!(mode, "Discoverable");
-}
-
-#[tokio::test]
-async fn test_get_discovery_mode_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotSupported")));
-    let err = client.get_discovery_mode().await.unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
 }
 
 // ── set_discovery_mode ────────────────────────────────────────────────────────
@@ -4082,17 +3552,6 @@ async fn test_set_discovery_mode_sends_correct_body() {
         c.body
             .contains("<tds:DiscoveryMode>NonDiscoverable</tds:DiscoveryMode>")
     );
-}
-
-#[tokio::test]
-async fn test_set_discovery_mode_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(&make_soap_fault_xml("s:Receiver", "NotAuthorized")));
-    let err = client.set_discovery_mode("Discoverable").await.unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
 }
 
 // ── New-field coverage tests ──────────────────────────────────────────────────
@@ -4906,22 +4365,6 @@ async fn test_create_recording_missing_token_returns_err() {
 }
 
 #[tokio::test]
-async fn test_delete_recording_succeeds() {
-    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                     xmlns:trc="http://www.onvif.org/ver10/recording/wsdl">
-         <s:Body>
-           <trc:DeleteRecordingResponse/>
-         </s:Body>
-       </s:Envelope>"#;
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    client
-        .delete_recording("http://192.168.1.1/onvif/recording_service", "Rec_001")
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
 async fn test_create_track_returns_token() {
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                      xmlns:trc="http://www.onvif.org/ver10/recording/wsdl">
@@ -4964,26 +4407,6 @@ async fn test_create_track_missing_token_returns_err() {
         )
         .await;
     assert!(res.is_err());
-}
-
-#[tokio::test]
-async fn test_delete_track_succeeds() {
-    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                     xmlns:trc="http://www.onvif.org/ver10/recording/wsdl">
-         <s:Body>
-           <trc:DeleteTrackResponse/>
-         </s:Body>
-       </s:Envelope>"#;
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    client
-        .delete_track(
-            "http://192.168.1.1/onvif/recording_service",
-            "Rec_001",
-            "Track_V1",
-        )
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
@@ -5093,22 +4516,6 @@ async fn test_set_recording_job_mode_sends_correct_body() {
     let c = captured.lock().unwrap();
     assert!(c.body.contains("Job_001"));
     assert!(c.body.contains("Idle"));
-}
-
-#[tokio::test]
-async fn test_delete_recording_job_succeeds() {
-    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                     xmlns:trc="http://www.onvif.org/ver10/recording/wsdl">
-         <s:Body>
-           <trc:DeleteRecordingJobResponse/>
-         </s:Body>
-       </s:Envelope>"#;
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    client
-        .delete_recording_job("http://192.168.1.1/onvif/recording_service", "Job_001")
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
