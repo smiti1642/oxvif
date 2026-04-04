@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.8.1] - 2026-04-04
+
+### Fixed
+- README: project structure updated to reflect `client/` module directory
+  (was incorrectly shown as `client.rs`); added missing `types/audio.rs`,
+  `types/osd.rs`, `types/ptz_config.rs`, `examples/write_workflow.rs`
+- README: running examples list now includes all 29 commands (13 were missing)
+- README: removed residual `OnvifSession`-over-`OnvifClient` bias
+  (`// recommended:` comment, `session.client()` description)
+- `examples/mock_server.rs`: fixed axum 0.8 wildcard route syntax
+  (`/*path` → `/{*path}`)
+
+---
+
 ## [0.8.0] - 2026-04-04
 
 ### Added

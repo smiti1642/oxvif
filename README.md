@@ -81,7 +81,7 @@ async fn main() -> Result<(), OnvifError> {
 
 ```toml
 [dependencies]
-oxvif = "0.8.0"
+oxvif = "0.8.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
