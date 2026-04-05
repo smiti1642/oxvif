@@ -2589,9 +2589,7 @@ async fn test_set_scopes_soap_fault_returns_err() {
     let xml = make_soap_fault_xml("env:Sender", "InvalidScope");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client
-        .set_scopes(&["onvif://www.onvif.org/name/Bad"])
-        .await;
+    let res = client.set_scopes(&["onvif://www.onvif.org/name/Bad"]).await;
     assert!(res.is_err());
 }
 
@@ -4770,11 +4768,7 @@ async fn test_delete_track_soap_fault_returns_err() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
     let res = client
-        .delete_track(
-            "http://192.168.1.1/onvif/recording_service",
-            "bad",
-            "bad",
-        )
+        .delete_track("http://192.168.1.1/onvif/recording_service", "bad", "bad")
         .await;
     assert!(res.is_err());
 }
@@ -4849,12 +4843,7 @@ async fn test_get_recording_search_results_soap_fault_returns_err() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
     let res = client
-        .get_recording_search_results(
-            "http://192.168.1.1/onvif/search",
-            "bad_token",
-            10,
-            "PT5S",
-        )
+        .get_recording_search_results("http://192.168.1.1/onvif/search", "bad_token", 10, "PT5S")
         .await;
     assert!(res.is_err());
 }

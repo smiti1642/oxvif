@@ -3004,4 +3004,3 @@ async fn discovery_mode_example(cfg: &Config) -> Result<(), OnvifError> {
 
     Ok(())
 }
-
