@@ -25,7 +25,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 292 unit tests + 14 doc tests
+- 313 unit tests + 14 doc tests
 
 ---
 
@@ -81,7 +81,7 @@ async fn main() -> Result<(), OnvifError> {
 
 ```toml
 [dependencies]
-oxvif = "0.8.1"
+oxvif = "0.8.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -314,7 +314,7 @@ for s in &scopes {
 | Method | Description |
 |--------|-------------|
 | `get_system_log(log_type)` | Retrieve device log (`"System"` or `"Access"`) → `SystemLog` |
-| `get_system_uris()` | Firmware-upgrade / syslog / support-info download URIs → `SystemUris` |
+| `get_system_uris()` | Syslog / support-info / system-backup download URIs → `SystemUris` |
 | `set_system_factory_default(default_type)` | Factory reset — `"Hard"` (full) or `"Soft"` (keep network) |
 | `get_relay_outputs()` | List relay output ports → `Vec<RelayOutput>` |
 | `set_relay_output_state(token, state)` | Set relay electrical state (`"active"` / `"inactive"`) |
@@ -657,7 +657,7 @@ from `get_services()` — namespace `http://www.onvif.org/ver10/recording/wsdl`.
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `create_recording(recording_url, source_id, name, description, address)` | `String` | Create a new recording entry, returns token |
+| `create_recording(recording_url, config)` | `String` | Create a new recording entry (`config: &RecordingConfiguration`), returns token |
 | `delete_recording(recording_url, recording_token)` | `()` | Delete a recording and all its tracks |
 | `create_track(recording_url, recording_token, track_type, description)` | `String` | Add a track to a recording, returns track token |
 | `delete_track(recording_url, recording_token, track_token)` | `()` | Remove a track from a recording |
@@ -689,7 +689,7 @@ let state = client.get_recording_job_state(&recording_url, &job.token).await?;
 println!("Active state: {}", state.active_state);
 ```
 
-**`RecordingItem` fields:** `token`, `source` (`RecordingSourceInformation`), `content`, `earliest_recording`, `latest_recording` (`Option<String>` ISO-8601), `recording_status` (`"Recording"`, `"Stopped"`, etc.), `tracks` (`Vec<RecordingTrack>`).
+**`RecordingItem` fields:** `token`, `source` (`RecordingSourceInformation`), `content`, `tracks` (`Vec<RecordingTrack>`).
 
 **`RecordingSourceInformation` fields:** `source_id`, `name`, `location`, `description` (`String`), `address` (`Option<String>` — network address of the source device).
 
@@ -697,7 +697,7 @@ println!("Active state: {}", state.active_state);
 
 **`RecordingJob` fields:** `token`, `recording_token`, `mode`, `priority` (`u32`), `source_token`.
 
-**`RecordingJobState` fields:** `token`, `active_state` (`"Active"`, `"Idle"`, or device-specific string).
+**`RecordingJobState` fields:** `recording_token`, `active_state` (`"Active"`, `"Idle"`, or device-specific string).
 
 ---
 
