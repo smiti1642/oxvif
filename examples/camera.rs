@@ -39,8 +39,7 @@ use futures::StreamExt as _;
 use oxvif::{
     Capabilities, DeviceInfo, FocusMove, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
     OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, RecordingConfiguration,
-    RecordingJobConfiguration, SetDateTimeRequest, StorageConfiguration, SystemDateTime,
-    User, UtcDateTime,
+    RecordingJobConfiguration, StorageConfiguration, SystemDateTime, User,
 };
 use std::env;
 
@@ -107,8 +106,6 @@ async fn main() {
         "relay-outputs" => relay_outputs_example(&cfg).await,
         "storage" => storage_example(&cfg).await,
         "discovery-mode" => discovery_mode_example(&cfg).await,
-        "set-scopes" => set_scopes_example(&cfg).await,
-        "set-datetime" => set_datetime_example(&cfg).await,
         _ => {
             print_help();
             return;
@@ -156,8 +153,6 @@ fn print_help() {
     println!("  relay-outputs        List relay outputs and trigger state change");
     println!("  storage              List storage configurations (SD/NAS)");
     println!("  discovery-mode       Show and toggle WS-Discovery mode");
-    println!("  set-scopes           Replace device scope URIs");
-    println!("  set-datetime         Set device clock (Manual or NTP mode)");
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -3010,98 +3005,3 @@ async fn discovery_mode_example(cfg: &Config) -> Result<(), OnvifError> {
     Ok(())
 }
 
-// ── set-scopes ────────────────────────────────────────────────────────────────
-
-async fn set_scopes_example(cfg: &Config) -> Result<(), OnvifError> {
-    println!("=== Set Scopes ===");
-
-    let (client, _caps) = connect(cfg).await?;
-
-    section("GetScopes (before)");
-    let before = client.get_scopes().await?;
-    for s in &before {
-        println!("  {s}");
-    }
-
-    // Build a new scope list: keep all existing scopes, add an example entry.
-    let mut new_scopes: Vec<String> = before.clone();
-    let example_scope = "onvif://www.onvif.org/name/oxvif-example";
-    if !new_scopes.iter().any(|s| s == example_scope) {
-        new_scopes.push(example_scope.to_string());
-    }
-
-    section("SetScopes");
-    let scope_refs: Vec<&str> = new_scopes.iter().map(|s| s.as_str()).collect();
-    client.set_scopes(&scope_refs).await?;
-    println!("  Sent {} scope(s)", scope_refs.len());
-
-    section("GetScopes (after)");
-    let after = client.get_scopes().await?;
-    for s in &after {
-        println!("  {s}");
-    }
-
-    Ok(())
-}
-
-// ── set-datetime ──────────────────────────────────────────────────────────────
-
-async fn set_datetime_example(cfg: &Config) -> Result<(), OnvifError> {
-    println!("=== Set System Date/Time ===");
-
-    let (client, _caps) = connect(cfg).await?;
-
-    section("GetSystemDateAndTime (before)");
-    let before = client.get_system_date_and_time().await?;
-    if let Some(unix) = before.utc_unix {
-        println!("  Device UTC unix: {unix}");
-    }
-    println!("  Timezone: {}", before.timezone);
-
-    // Sync device clock to the host's current UTC time.
-    let now_secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let (year, month, day, hour, minute, second) = unix_to_civil(now_secs as i64);
-
-    section("SetSystemDateAndTime (Manual, sync to host UTC)");
-    client
-        .set_system_date_and_time(&SetDateTimeRequest {
-            datetime_type: "Manual".into(),
-            daylight_savings: false,
-            timezone: before.timezone.clone(),
-            utc_datetime: Some(UtcDateTime {
-                year: year as u16,
-                month: month as u8,
-                day: day as u8,
-                hour: hour as u8,
-                minute: minute as u8,
-                second: second as u8,
-            }),
-        })
-        .await?;
-    println!("  Clock set to {year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z");
-
-    Ok(())
-}
-
-/// Convert a Unix timestamp to (year, month, day, hour, minute, second) UTC.
-fn unix_to_civil(unix: i64) -> (i32, i32, i32, i32, i32, i32) {
-    let secs_of_day = unix.rem_euclid(86_400);
-    let days = (unix - secs_of_day) / 86_400;
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    let h = (secs_of_day / 3600) as i32;
-    let min = ((secs_of_day % 3600) / 60) as i32;
-    let sec = (secs_of_day % 60) as i32;
-    (y as i32, m as i32, d as i32, h, min, sec)
-}

@@ -22,7 +22,7 @@ use axum::{
     response::IntoResponse,
     routing::post,
 };
-use oxvif::{OsdConfiguration, OsdPosition, OsdTextString};
+use oxvif::{OsdConfiguration, OsdPosition, OsdTextString, SetDateTimeRequest, UtcDateTime};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 
@@ -94,6 +94,10 @@ fn dispatch(action: &str, base: &str) -> String {
         ),
         "http://www.onvif.org/ver10/device/wsdl/SetHostname" => empty("tds", "SetHostnameResponse"),
         "http://www.onvif.org/ver10/device/wsdl/SetNTP" => empty("tds", "SetNTPResponse"),
+        "http://www.onvif.org/ver10/device/wsdl/SetScopes" => empty("tds", "SetScopesResponse"),
+        "http://www.onvif.org/ver10/device/wsdl/SetSystemDateAndTime" => {
+            empty("tds", "SetSystemDateAndTimeResponse")
+        }
         "http://www.onvif.org/ver10/device/wsdl/SystemReboot" => soap(
             r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
             r#"<tds:SystemRebootResponse>
@@ -519,6 +523,29 @@ async fn main() {
     check(
         "set_discovery_mode(\"Discoverable\")",
         c.set_discovery_mode("Discoverable").await,
+    );
+
+    check(
+        "set_scopes([onvif://.../name/write-wf])",
+        c.set_scopes(&["onvif://www.onvif.org/name/write-wf"]).await,
+    );
+
+    check(
+        "set_system_date_and_time(Manual, UTC, 2026-04-05T00:00:00Z)",
+        c.set_system_date_and_time(&SetDateTimeRequest {
+            datetime_type: "Manual".into(),
+            daylight_savings: false,
+            timezone: "UTC".into(),
+            utc_datetime: Some(UtcDateTime {
+                year: 2026,
+                month: 4,
+                day: 5,
+                hour: 0,
+                minute: 0,
+                second: 0,
+            }),
+        })
+        .await,
     );
 
     check(
