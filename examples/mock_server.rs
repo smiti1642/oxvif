@@ -1011,28 +1011,28 @@ fn resp_recordings() -> String {
     soap(
         r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
         r#"<trc:GetRecordingsResponse>
-          <trc:RecordingItems Token="Rec_001">
-            <trc:RecordingInformation>
-              <tt:RecordingStatus>Recording</tt:RecordingStatus>
+          <trc:RecordingItems>
+            <trc:RecordingToken>Rec_001</trc:RecordingToken>
+            <trc:Configuration>
               <tt:Source>
                 <tt:SourceId>rtsp://mock/live</tt:SourceId>
                 <tt:Name>MockCamera</tt:Name>
                 <tt:Location>Lab</tt:Location>
                 <tt:Description>Mock recording</tt:Description>
               </tt:Source>
-              <tt:EarliestRecording>2026-01-01T00:00:00Z</tt:EarliestRecording>
-              <tt:LatestRecording>2026-04-01T00:00:00Z</tt:LatestRecording>
-            </trc:RecordingInformation>
+              <tt:Content>Normal</tt:Content>
+              <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
+            </trc:Configuration>
           </trc:RecordingItems>
-          <trc:RecordingItems Token="Rec_002">
-            <trc:RecordingInformation>
-              <tt:RecordingStatus>Stopped</tt:RecordingStatus>
+          <trc:RecordingItems>
+            <trc:RecordingToken>Rec_002</trc:RecordingToken>
+            <trc:Configuration>
               <tt:Source>
                 <tt:Name>MockCamera</tt:Name>
               </tt:Source>
-              <tt:EarliestRecording>2025-12-01T00:00:00Z</tt:EarliestRecording>
-              <tt:LatestRecording>2025-12-31T00:00:00Z</tt:LatestRecording>
-            </trc:RecordingInformation>
+              <tt:Content></tt:Content>
+              <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
+            </trc:Configuration>
           </trc:RecordingItems>
         </trc:GetRecordingsResponse>"#,
     )
@@ -1090,9 +1090,9 @@ fn resp_recording_job_state() -> String {
     soap(
         r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
         r#"<trc:GetRecordingJobStateResponse>
-          <trc:JobToken>Job_001</trc:JobToken>
           <trc:State>
-            <tt:ActiveState>Active</tt:ActiveState>
+            <tt:RecordingToken>Rec_001</tt:RecordingToken>
+            <tt:State>Active</tt:State>
           </trc:State>
         </trc:GetRecordingJobStateResponse>"#,
     )
@@ -1147,13 +1147,9 @@ fn resp_storage_configurations() -> String {
              xmlns:tt="http://www.onvif.org/ver10/schema""#,
         r#"<tds:GetStorageConfigurationsResponse>
           <tds:StorageConfigurations token="SD_01">
-            <tt:StorageType>LocalStorage</tt:StorageType>
-            <tt:LocalPath>/mnt/sd</tt:LocalPath>
-            <tt:StorageUri></tt:StorageUri>
-            <tt:UserInfo>
-              <tt:Username></tt:Username>
-              <tt:UseAnonymous>true</tt:UseAnonymous>
-            </tt:UserInfo>
+            <tt:Data type="LocalStorage">
+              <tt:LocalPath>/mnt/sd</tt:LocalPath>
+            </tt:Data>
           </tds:StorageConfigurations>
         </tds:GetStorageConfigurationsResponse>"#,
     )
@@ -1161,12 +1157,17 @@ fn resp_storage_configurations() -> String {
 
 fn resp_system_uris(base: &str) -> String {
     soap(
-        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+             xmlns:tt="http://www.onvif.org/ver10/schema""#,
         &format!(
             r#"<tds:GetSystemUrisResponse>
-          <tds:FirmwareUpgrade>{base}/firmware</tds:FirmwareUpgrade>
-          <tds:SystemLog>{base}/syslog</tds:SystemLog>
-          <tds:SupportInfo>{base}/support</tds:SupportInfo>
+          <tds:SystemLogUris>
+            <tt:SystemLogUri>
+              <tt:Uri>{base}/syslog</tt:Uri>
+              <tt:LogType>System</tt:LogType>
+            </tt:SystemLogUri>
+          </tds:SystemLogUris>
+          <tds:SupportInfoUri>{base}/support</tds:SupportInfoUri>
         </tds:GetSystemUrisResponse>"#
         ),
     )

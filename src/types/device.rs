@@ -564,21 +564,20 @@ impl RelayOutput {
 // ── StorageConfiguration ──────────────────────────────────────────────────────
 
 /// A storage location (SD card, NAS, etc.) returned by `GetStorageConfigurations`.
+///
+/// Per the ONVIF spec, all fields live inside the `<Data>` child element and
+/// `storage_type` is the `type` attribute of that element.
 #[derive(Debug, Clone)]
 pub struct StorageConfiguration {
     pub token: String,
-    /// `"LocalStorage"` or `"NFS"`.
+    /// `"LocalStorage"` or `"NFS"` — the `type` attribute of the `Data` element.
     pub storage_type: String,
     /// Mount path on the device (e.g. `"/mnt/sd"`).
     pub local_path: String,
-    /// Network URI for NFS shares.
+    /// Network URI for NFS / CIFS shares. Empty for local storage.
     pub storage_uri: String,
-    /// Username for authenticated shares (empty if anonymous or local).
+    /// Username for authenticated shares (empty if no credentials configured).
     pub user: String,
-    /// Whether anonymous access is used.
-    pub use_anonymous: bool,
-    /// Operational status of the storage location (e.g. `"Connected"`, `"NotConnected"`).
-    pub storage_status: Option<String>,
 }
 
 impl StorageConfiguration {
@@ -590,28 +589,30 @@ impl StorageConfiguration {
                     .filter(|t| !t.is_empty())
                     .ok_or_else(|| SoapError::missing("StorageConfigurations/@token"))?
                     .to_string();
-                let storage_type = xml_str(n, "StorageType").unwrap_or_default();
-                let local_path = xml_str(n, "LocalPath").unwrap_or_default();
-                let storage_uri = xml_str(n, "StorageUri").unwrap_or_default();
-                let user = n
-                    .child("UserInfo")
-                    .and_then(|u| u.child("Username"))
+                let data = n.child("Data");
+                let storage_type = data
+                    .and_then(|d| d.attr("type"))
+                    .unwrap_or_default()
+                    .to_string();
+                let local_path = data
+                    .and_then(|d| d.child("LocalPath"))
                     .map(|x| x.text().to_string())
                     .unwrap_or_default();
-                let use_anonymous = n
-                    .child("UserInfo")
-                    .and_then(|u| u.child("UseAnonymous"))
-                    .map(|x| x.text() == "true" || x.text() == "1")
-                    .unwrap_or(false);
-                let storage_status = xml_str(n, "StorageStatus").filter(|s| !s.is_empty());
+                let storage_uri = data
+                    .and_then(|d| d.child("StorageUri"))
+                    .map(|x| x.text().to_string())
+                    .unwrap_or_default();
+                let user = data
+                    .and_then(|d| d.child("User"))
+                    .and_then(|u| u.child("UserName"))
+                    .map(|x| x.text().to_string())
+                    .unwrap_or_default();
                 Ok(Self {
                     token,
                     storage_type,
                     local_path,
                     storage_uri,
                     user,
-                    use_anonymous,
-                    storage_status,
                 })
             })
             .collect()
@@ -621,24 +622,28 @@ impl StorageConfiguration {
 // ── SystemUris ────────────────────────────────────────────────────────────────
 
 /// HTTP URIs for system management tasks returned by `GetSystemUris`.
+///
+/// Per the ONVIF spec the response contains `SystemLogUris`, `SupportInfoUri`,
+/// and `SystemBackupUri`.  There is no firmware-upgrade URI in this response.
 #[derive(Debug, Clone)]
 pub struct SystemUris {
-    /// URI for uploading a firmware image.
-    pub firmware_upgrade_uri: Option<String>,
-    /// URI for downloading the system log.
+    /// URI of the first system-log entry reported by the device.
     pub system_log_uri: Option<String>,
     /// URI for downloading a support-info bundle.
     pub support_info_uri: Option<String>,
+    /// URI for downloading a system backup.
+    pub system_backup_uri: Option<String>,
 }
 
 impl SystemUris {
     pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
         Ok(Self {
-            firmware_upgrade_uri: xml_str(resp, "FirmwareUpgrade")
-                .or_else(|| xml_str(resp, "FirmwareUpgradeUri")),
-            system_log_uri: xml_str(resp, "SystemLog").or_else(|| xml_str(resp, "SystemLogUri")),
-            support_info_uri: xml_str(resp, "SupportInfo")
-                .or_else(|| xml_str(resp, "SupportInfoUri")),
+            system_log_uri: resp
+                .path(&["SystemLogUris", "SystemLogUri", "Uri"])
+                .map(|n| n.text().to_string())
+                .filter(|s| !s.is_empty()),
+            support_info_uri: xml_str(resp, "SupportInfoUri"),
+            system_backup_uri: xml_str(resp, "SystemBackupUri"),
         })
     }
 }

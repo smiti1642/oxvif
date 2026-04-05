@@ -627,7 +627,8 @@ impl OnvifClient {
     /// Create or update a storage configuration entry.
     ///
     /// Pass `token = ""` to create a new entry; supply an existing token to
-    /// update it.
+    /// update it.  `storage_type` is the `type` attribute of the `Data` element
+    /// (e.g. `"LocalStorage"` or `"NFS"`).
     pub async fn set_storage_configuration(
         &self,
         token: &str,
@@ -635,7 +636,6 @@ impl OnvifClient {
         local_path: &str,
         storage_uri: &str,
         user: &str,
-        use_anonymous: bool,
     ) -> Result<(), OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetStorageConfiguration";
         let token_attr = if token.is_empty() {
@@ -643,23 +643,33 @@ impl OnvifClient {
         } else {
             format!(" token=\"{}\"", xml_escape(token))
         };
-        let use_anon_str = if use_anonymous { "true" } else { "false" };
+        let user_el = if user.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<tt:User><tt:UserName>{}</tt:UserName></tt:User>",
+                xml_escape(user)
+            )
+        };
+        let local_path_el = if local_path.is_empty() {
+            String::new()
+        } else {
+            format!("<tt:LocalPath>{}</tt:LocalPath>", xml_escape(local_path))
+        };
+        let storage_uri_el = if storage_uri.is_empty() {
+            String::new()
+        } else {
+            format!("<tt:StorageUri>{}</tt:StorageUri>", xml_escape(storage_uri))
+        };
         let body = format!(
             "<tds:SetStorageConfiguration>\
                <tds:StorageConfiguration{token_attr}>\
-                 <tt:StorageType>{}</tt:StorageType>\
-                 <tt:LocalPath>{}</tt:LocalPath>\
-                 <tt:StorageUri>{}</tt:StorageUri>\
-                 <tt:UserInfo>\
-                   <tt:Username>{}</tt:Username>\
-                   <tt:UseAnonymous>{use_anon_str}</tt:UseAnonymous>\
-                 </tt:UserInfo>\
+                 <tt:Data type=\"{storage_type_escaped}\">\
+                   {local_path_el}{storage_uri_el}{user_el}\
+                 </tt:Data>\
                </tds:StorageConfiguration>\
              </tds:SetStorageConfiguration>",
-            xml_escape(storage_type),
-            xml_escape(local_path),
-            xml_escape(storage_uri),
-            xml_escape(user)
+            storage_type_escaped = xml_escape(storage_type),
         );
         let xml = self.call(&self.device_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;

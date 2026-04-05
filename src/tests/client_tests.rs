@@ -1741,6 +1741,40 @@ async fn test_renew_subscription_sends_termination_time() {
 
 // ── unsubscribe ───────────────────────────────────────────────────────────
 
+#[tokio::test]
+async fn test_renew_subscription_uses_oasis_action_uri() {
+    let (transport, captured) = RecordingTransport::new(renew_subscription_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+    client
+        .renew_subscription("http://192.168.1.1/onvif/events/subscription_1", "PT60S")
+        .await
+        .unwrap();
+    assert_eq!(
+        captured.lock().unwrap().action,
+        "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest"
+    );
+}
+
+#[tokio::test]
+async fn test_unsubscribe_uses_oasis_action_uri() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tev="http://www.onvif.org/ver10/events/wsdl">
+         <s:Body><tev:UnsubscribeResponse/></s:Body>
+       </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+    client
+        .unsubscribe("http://192.168.1.1/onvif/events/subscription_1")
+        .await
+        .unwrap();
+    assert_eq!(
+        captured.lock().unwrap().action,
+        "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/UnsubscribeRequest"
+    );
+}
+
 // ── Negative / error-path tests ───────────────────────────────────────────────
 
 // ── Malformed XML ──────────────────────────────────────────────────────────
@@ -2675,19 +2709,18 @@ fn get_recordings_xml() -> &'static str {
                       xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <trc:GetRecordingsResponse>
-              <trc:RecordingItems Token="rec_001">
-                <trc:RecordingInformation>
+              <trc:RecordingItems>
+                <trc:RecordingToken>rec_001</trc:RecordingToken>
+                <trc:Configuration>
                   <tt:Source>
                     <tt:SourceId>urn:uuid:source-1</tt:SourceId>
                     <tt:Name>Channel 1</tt:Name>
                     <tt:Location>Entrance</tt:Location>
                     <tt:Description>Front door camera</tt:Description>
                   </tt:Source>
-                  <tt:EarliestRecording>2026-01-01T00:00:00Z</tt:EarliestRecording>
-                  <tt:LatestRecording>2026-01-02T00:00:00Z</tt:LatestRecording>
                   <tt:Content>Motion event</tt:Content>
-                  <tt:RecordingStatus>Stopped</tt:RecordingStatus>
-                </trc:RecordingInformation>
+                  <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
+                </trc:Configuration>
               </trc:RecordingItems>
             </trc:GetRecordingsResponse>
           </s:Body>
@@ -2707,11 +2740,7 @@ async fn test_get_recordings_parses_item() {
     assert_eq!(recs.len(), 1);
     assert_eq!(recs[0].token, "rec_001");
     assert_eq!(recs[0].source.name, "Channel 1");
-    assert_eq!(recs[0].recording_status, "Stopped");
-    assert_eq!(
-        recs[0].earliest_recording.as_deref(),
-        Some("2026-01-01T00:00:00Z")
-    );
+    assert_eq!(recs[0].content, "Motion event");
 }
 
 #[tokio::test]
@@ -2721,6 +2750,7 @@ async fn test_get_recordings_missing_token_returns_err() {
           <s:Body>
             <trc:GetRecordingsResponse>
               <trc:RecordingItems>
+                <!-- no RecordingToken — should trigger missing-field error -->
               </trc:RecordingItems>
             </trc:GetRecordingsResponse>
           </s:Body>
@@ -3513,13 +3543,9 @@ fn get_storage_configurations_xml() -> &'static str {
          <s:Body>
            <tds:GetStorageConfigurationsResponse>
              <tds:StorageConfigurations token="SD_01">
-               <tt:StorageType>LocalStorage</tt:StorageType>
-               <tt:LocalPath>/mnt/sd</tt:LocalPath>
-               <tt:StorageUri></tt:StorageUri>
-               <tt:UserInfo>
-                 <tt:Username></tt:Username>
-                 <tt:UseAnonymous>true</tt:UseAnonymous>
-               </tt:UserInfo>
+               <tt:Data type="LocalStorage">
+                 <tt:LocalPath>/mnt/sd</tt:LocalPath>
+               </tt:Data>
              </tds:StorageConfigurations>
            </tds:GetStorageConfigurationsResponse>
          </s:Body>
@@ -3535,7 +3561,6 @@ async fn test_get_storage_configurations_returns_fields() {
     assert_eq!(configs[0].token, "SD_01");
     assert_eq!(configs[0].storage_type, "LocalStorage");
     assert_eq!(configs[0].local_path, "/mnt/sd");
-    assert!(configs[0].use_anonymous);
 }
 
 #[tokio::test]
@@ -3576,7 +3601,7 @@ async fn test_set_storage_configuration_sends_correct_body() {
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
 
     client
-        .set_storage_configuration("SD_01", "LocalStorage", "/mnt/sd", "", "", true)
+        .set_storage_configuration("SD_01", "LocalStorage", "/mnt/sd", "", "")
         .await
         .unwrap();
 
@@ -3585,24 +3610,26 @@ async fn test_set_storage_configuration_sends_correct_body() {
         c.action,
         "http://www.onvif.org/ver10/device/wsdl/SetStorageConfiguration"
     );
-    assert!(
-        c.body
-            .contains("<tt:StorageType>LocalStorage</tt:StorageType>")
-    );
+    assert!(c.body.contains("type=\"LocalStorage\""));
     assert!(c.body.contains("<tt:LocalPath>/mnt/sd</tt:LocalPath>"));
-    assert!(c.body.contains("<tt:UseAnonymous>true</tt:UseAnonymous>"));
 }
 
 // ── get_system_uris ───────────────────────────────────────────────────────────
 
 fn get_system_uris_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
          <s:Body>
            <tds:GetSystemUrisResponse>
-             <tds:FirmwareUpgrade>http://192.168.1.1/firmware</tds:FirmwareUpgrade>
-             <tds:SystemLog>http://192.168.1.1/log</tds:SystemLog>
-             <tds:SupportInfo>http://192.168.1.1/support</tds:SupportInfo>
+             <tds:SystemLogUris>
+               <tt:SystemLogUri>
+                 <tt:Uri>http://192.168.1.1/log</tt:Uri>
+                 <tt:LogType>System</tt:LogType>
+               </tt:SystemLogUri>
+             </tds:SystemLogUris>
+             <tds:SupportInfoUri>http://192.168.1.1/support</tds:SupportInfoUri>
+             <tds:SystemBackupUri>http://192.168.1.1/backup</tds:SystemBackupUri>
            </tds:GetSystemUrisResponse>
          </s:Body>
        </s:Envelope>"#
@@ -3614,16 +3641,16 @@ async fn test_get_system_uris_returns_fields() {
         .with_transport(mock(get_system_uris_xml()));
     let uris = client.get_system_uris().await.unwrap();
     assert_eq!(
-        uris.firmware_upgrade_uri.as_deref(),
-        Some("http://192.168.1.1/firmware")
-    );
-    assert_eq!(
         uris.system_log_uri.as_deref(),
         Some("http://192.168.1.1/log")
     );
     assert_eq!(
         uris.support_info_uri.as_deref(),
         Some("http://192.168.1.1/support")
+    );
+    assert_eq!(
+        uris.system_backup_uri.as_deref(),
+        Some("http://192.168.1.1/backup")
     );
 }
 
@@ -4158,8 +4185,9 @@ async fn test_get_recordings_parses_track_times_and_address() {
                      xmlns:tt="http://www.onvif.org/ver10/schema">
          <s:Body>
            <trc:GetRecordingsResponse>
-             <trc:RecordingItems Token="Rec_001">
-               <tt:RecordingInformation>
+             <trc:RecordingItems>
+               <trc:RecordingToken>Rec_001</trc:RecordingToken>
+               <trc:Configuration>
                  <tt:Source>
                    <tt:SourceId>urn:uuid:camera-001</tt:SourceId>
                    <tt:Name>Camera 1</tt:Name>
@@ -4167,19 +4195,17 @@ async fn test_get_recordings_parses_track_times_and_address() {
                    <tt:Description>Front door</tt:Description>
                    <tt:Address>rtsp://192.168.1.50/stream</tt:Address>
                  </tt:Source>
-                 <tt:EarliestRecording>2024-01-01T00:00:00Z</tt:EarliestRecording>
-                 <tt:LatestRecording>2024-01-02T00:00:00Z</tt:LatestRecording>
                  <tt:Content>Normal</tt:Content>
-                 <tt:RecordingStatus>Recording</tt:RecordingStatus>
-               </tt:RecordingInformation>
-               <tt:Tracks>
-                 <tt:Track token="Track_V1">
+                 <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
+               </trc:Configuration>
+               <trc:Tracks>
+                 <trc:Track token="Track_V1">
                    <tt:TrackType>Video</tt:TrackType>
                    <tt:Description>Main video</tt:Description>
                    <tt:DataFrom>2024-01-01T00:00:00Z</tt:DataFrom>
                    <tt:DataTo>2024-01-02T00:00:00Z</tt:DataTo>
-                 </tt:Track>
-               </tt:Tracks>
+                 </trc:Track>
+               </trc:Tracks>
              </trc:RecordingItems>
            </trc:GetRecordingsResponse>
          </s:Body>
@@ -4349,16 +4375,19 @@ async fn test_get_video_encoder_configuration_no_guaranteed_frame_rate_is_none()
 }
 
 #[tokio::test]
-async fn test_get_storage_configurations_parses_storage_status() {
+async fn test_get_storage_configurations_parses_user() {
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                      xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
                      xmlns:tt="http://www.onvif.org/ver10/schema">
          <s:Body>
            <tds:GetStorageConfigurationsResponse>
-             <tds:StorageConfigurations token="SD_1">
-               <tt:StorageType>LocalStorage</tt:StorageType>
-               <tt:LocalPath>/mnt/sd</tt:LocalPath>
-               <tt:StorageStatus>Connected</tt:StorageStatus>
+             <tds:StorageConfigurations token="NAS_1">
+               <tt:Data type="NFS">
+                 <tt:StorageUri>nfs://192.168.1.50/share</tt:StorageUri>
+                 <tt:User>
+                   <tt:UserName>admin</tt:UserName>
+                 </tt:User>
+               </tt:Data>
              </tds:StorageConfigurations>
            </tds:GetStorageConfigurationsResponse>
          </s:Body>
@@ -4366,19 +4395,22 @@ async fn test_get_storage_configurations_parses_storage_status() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let cfgs = client.get_storage_configurations().await.unwrap();
-    assert_eq!(cfgs[0].storage_status.as_deref(), Some("Connected"));
+    assert_eq!(cfgs[0].storage_type, "NFS");
+    assert_eq!(cfgs[0].storage_uri, "nfs://192.168.1.50/share");
+    assert_eq!(cfgs[0].user, "admin");
 }
 
 #[tokio::test]
-async fn test_get_storage_configurations_no_status_is_none() {
+async fn test_get_storage_configurations_no_user_is_empty() {
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                      xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
                      xmlns:tt="http://www.onvif.org/ver10/schema">
          <s:Body>
            <tds:GetStorageConfigurationsResponse>
              <tds:StorageConfigurations token="SD_1">
-               <tt:StorageType>LocalStorage</tt:StorageType>
-               <tt:LocalPath>/mnt/sd</tt:LocalPath>
+               <tt:Data type="LocalStorage">
+                 <tt:LocalPath>/mnt/sd</tt:LocalPath>
+               </tt:Data>
              </tds:StorageConfigurations>
            </tds:GetStorageConfigurationsResponse>
          </s:Body>
@@ -4386,7 +4418,7 @@ async fn test_get_storage_configurations_no_status_is_none() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let cfgs = client.get_storage_configurations().await.unwrap();
-    assert!(cfgs[0].storage_status.is_none());
+    assert!(cfgs[0].user.is_empty());
 }
 
 #[tokio::test]
@@ -4406,9 +4438,9 @@ async fn test_get_imaging_options_parses_exposure_ranges() {
                  <tt:Iris><tt:Min>1.4</tt:Min><tt:Max>22</tt:Max></tt:Iris>
                </tt:Exposure>
                <tt:Focus>
-                 <tt:AFModes>AUTO</tt:AFModes>
-                 <tt:AFModes>MANUAL</tt:AFModes>
-                 <tt:AutoFocusSpeed><tt:Min>0</tt:Min><tt:Max>1</tt:Max></tt:AutoFocusSpeed>
+                 <tt:AutoFocusModes>AUTO</tt:AutoFocusModes>
+                 <tt:AutoFocusModes>MANUAL</tt:AutoFocusModes>
+                 <tt:DefaultSpeed><tt:Min>0</tt:Min><tt:Max>1</tt:Max></tt:DefaultSpeed>
                </tt:Focus>
                <tt:WideDynamicRange>
                  <tt:Mode>ON</tt:Mode>
@@ -4497,6 +4529,7 @@ async fn test_create_recording_returns_token() {
                 location: "Entrance".into(),
                 description: "Front door cam".into(),
                 content: "Normal".into(),
+                maximum_retention_time: "P30D".into(),
             },
         )
         .await
@@ -4688,9 +4721,9 @@ async fn test_get_recording_job_state_parses_active_state() {
                      xmlns:tt="http://www.onvif.org/ver10/schema">
          <s:Body>
            <trc:GetRecordingJobStateResponse>
-             <trc:JobToken>Job_001</trc:JobToken>
              <trc:State>
-               <tt:ActiveState>Active</tt:ActiveState>
+               <tt:RecordingToken>Rec_001</tt:RecordingToken>
+               <tt:State>Active</tt:State>
              </trc:State>
            </trc:GetRecordingJobStateResponse>
          </s:Body>
@@ -4701,7 +4734,7 @@ async fn test_get_recording_job_state_parses_active_state() {
         .get_recording_job_state("http://192.168.1.1/onvif/recording_service", "Job_001")
         .await
         .unwrap();
-    assert_eq!(state.token, "Job_001");
+    assert_eq!(state.recording_token, "Rec_001");
     assert_eq!(state.active_state, "Active");
 }
 
@@ -4711,7 +4744,6 @@ async fn test_get_recording_job_state_missing_state_returns_err() {
                      xmlns:trc="http://www.onvif.org/ver10/recording/wsdl">
          <s:Body>
            <trc:GetRecordingJobStateResponse>
-             <trc:JobToken>Job_001</trc:JobToken>
            </trc:GetRecordingJobStateResponse>
          </s:Body>
        </s:Envelope>"#;

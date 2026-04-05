@@ -302,7 +302,9 @@ fn parse_media_caps(m: &XmlNode) -> MediaCapabilities {
                 rtp_rtsp_tcp: xml_bool(n, "RTP_RTSP_TCP"),
             })
             .unwrap_or_default(),
-        max_profiles: xml_u32(m, "MaximumNumberOfProfiles"),
+        max_profiles: m
+            .path(&["Extension", "ProfileCapabilities", "MaximumNumberOfProfiles"])
+            .and_then(|n| n.text().parse().ok()),
     }
 }
 

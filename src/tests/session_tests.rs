@@ -179,10 +179,13 @@ fn recordings_xml() -> &'static str {
                   xmlns:tt="http://www.onvif.org/ver10/schema">
       <s:Body>
         <trc:GetRecordingsResponse>
-          <trc:RecordingItems Token="rec1">
-            <trc:RecordingInformation>
-              <tt:RecordingStatus>Recording</tt:RecordingStatus>
-            </trc:RecordingInformation>
+          <trc:RecordingItems>
+            <trc:RecordingToken>rec1</trc:RecordingToken>
+            <trc:Configuration>
+              <tt:Source><tt:Name>Camera 1</tt:Name></tt:Source>
+              <tt:Content>Normal</tt:Content>
+              <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
+            </trc:Configuration>
           </trc:RecordingItems>
         </trc:GetRecordingsResponse>
       </s:Body>
@@ -435,7 +438,7 @@ async fn test_get_recordings_delegates_and_returns_items() {
     let recs = session.get_recordings().await.unwrap();
     assert_eq!(recs.len(), 1);
     assert_eq!(recs[0].token, "rec1");
-    assert_eq!(recs[0].recording_status, "Recording");
+    assert_eq!(recs[0].content, "Normal");
 }
 
 #[tokio::test]

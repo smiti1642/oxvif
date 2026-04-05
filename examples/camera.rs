@@ -738,11 +738,8 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
                 println!("  Found {} recording(s)", recs.len());
                 for r in recs.iter().take(3) {
                     println!(
-                        "  [{}] {} — {} to {}",
-                        r.token,
-                        r.source.name,
-                        r.earliest_recording.as_deref().unwrap_or("?"),
-                        r.latest_recording.as_deref().unwrap_or("?")
+                        "  [{}] {} — {}",
+                        r.token, r.source.name, r.content
                     );
                 }
             }
@@ -905,14 +902,14 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     section("GetSystemUris");
     match client.get_system_uris().await {
         Ok(uris) => {
-            if let Some(u) = &uris.firmware_upgrade_uri {
-                println!("  Firmware : {u}");
-            }
             if let Some(u) = &uris.system_log_uri {
                 println!("  SysLog   : {u}");
             }
             if let Some(u) = &uris.support_info_uri {
                 println!("  Support  : {u}");
+            }
+            if let Some(u) = &uris.system_backup_uri {
+                println!("  Backup   : {u}");
             }
         }
         Err(e) => println!("  (skipped — {e})"),
@@ -2470,13 +2467,8 @@ async fn recording_example(cfg: &Config) -> Result<(), OnvifError> {
                 println!("  Found {} recording(s)", recs.len());
                 for r in &recs {
                     println!(
-                        "  [{}] source='{}' status={}",
-                        r.token, r.source.name, r.recording_status
-                    );
-                    println!(
-                        "    earliest={} latest={}",
-                        r.earliest_recording.as_deref().unwrap_or("—"),
-                        r.latest_recording.as_deref().unwrap_or("—")
+                        "  [{}] source='{}' content={}",
+                        r.token, r.source.name, r.content
                     );
                     for t in &r.tracks {
                         println!("    track [{}] type={}", t.token, t.track_type);
@@ -2787,11 +2779,8 @@ async fn session_example(cfg: &Config) -> Result<(), OnvifError> {
             println!("  {} recording(s)", recs.len());
             for rec in recs.iter().take(3) {
                 println!(
-                    "  [{}] status={} {} → {}",
-                    rec.token,
-                    rec.recording_status,
-                    rec.earliest_recording.as_deref().unwrap_or("?"),
-                    rec.latest_recording.as_deref().unwrap_or("?"),
+                    "  [{}] source='{}' content={}",
+                    rec.token, rec.source.name, rec.content
                 );
             }
         }
@@ -2974,14 +2963,17 @@ async fn storage_example(cfg: &Config) -> Result<(), OnvifError> {
         println!("  (no storage configurations found)");
     } else {
         println!(
-            "  {:<12}  {:<14}  {:<20}  Anonymous",
+            "  {:<12}  {:<14}  {:<20}  User",
             "Token", "Type", "Local path"
         );
         println!("  {}", "-".repeat(65));
         for c in &configs {
             println!(
                 "  {:<12}  {:<14}  {:<20}  {}",
-                c.token, c.storage_type, c.local_path, c.use_anonymous
+                c.token,
+                c.storage_type,
+                c.local_path,
+                if c.user.is_empty() { "(none)" } else { &c.user }
             );
         }
     }

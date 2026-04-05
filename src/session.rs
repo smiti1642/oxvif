@@ -416,17 +416,9 @@ impl OnvifSession {
         local_path: &str,
         storage_uri: &str,
         user: &str,
-        use_anonymous: bool,
     ) -> Result<(), OnvifError> {
         self.client
-            .set_storage_configuration(
-                token,
-                storage_type,
-                local_path,
-                storage_uri,
-                user,
-                use_anonymous,
-            )
+            .set_storage_configuration(token, storage_type, local_path, storage_uri, user)
             .await
     }
 

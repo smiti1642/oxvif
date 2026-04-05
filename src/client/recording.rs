@@ -35,6 +35,11 @@ impl OnvifClient {
         config: &RecordingConfiguration,
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/CreateRecording";
+        let retention = if config.maximum_retention_time.is_empty() {
+            "PT0S".to_string()
+        } else {
+            xml_escape(&config.maximum_retention_time)
+        };
         let body = format!(
             "<trc:CreateRecording>\
                <trc:RecordingConfiguration>\
@@ -45,6 +50,7 @@ impl OnvifClient {
                    <tt:Description>{description}</tt:Description>\
                  </tt:Source>\
                  <tt:Content>{content}</tt:Content>\
+                 <tt:MaximumRetentionTime>{retention}</tt:MaximumRetentionTime>\
                </trc:RecordingConfiguration>\
              </trc:CreateRecording>",
             source_id = xml_escape(&config.source_id),

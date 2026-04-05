@@ -279,12 +279,12 @@ impl ImagingOptions {
             iris_range: parse_nested_range(exposure, "Iris"),
             focus_af_modes: focus
                 .map(|f| {
-                    f.children_named("AFModes")
+                    f.children_named("AutoFocusModes")
                         .map(|n| n.text().to_string())
                         .collect()
                 })
                 .unwrap_or_default(),
-            focus_speed_range: parse_nested_range(focus, "AutoFocusSpeed"),
+            focus_speed_range: parse_nested_range(focus, "DefaultSpeed"),
             wdr_level_range: parse_nested_range(wdr, "Level"),
             wdr_modes: wdr
                 .map(|w| {

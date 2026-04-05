@@ -46,7 +46,11 @@ mod capabilities {
                 <RTP_TCP>true</RTP_TCP>
                 <RTP_RTSP_TCP>true</RTP_RTSP_TCP>
               </StreamingCapabilities>
-              <MaximumNumberOfProfiles>5</MaximumNumberOfProfiles>
+              <Extension>
+                <ProfileCapabilities>
+                  <MaximumNumberOfProfiles>5</MaximumNumberOfProfiles>
+                </ProfileCapabilities>
+              </Extension>
             </Media>
             <PTZ>
               <XAddr>http://192.168.1.1/onvif/ptz_service</XAddr>

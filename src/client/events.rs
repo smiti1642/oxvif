@@ -112,7 +112,7 @@ impl OnvifClient {
         termination_time: &str,
     ) -> Result<String, OnvifError> {
         const ACTION: &str =
-            "http://www.onvif.org/ver10/events/wsdl/SubscriptionManager/RenewRequest";
+            "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest";
 
         let body = format!(
             "<wsnt:Renew>\
@@ -134,7 +134,7 @@ impl OnvifClient {
     /// `subscription_url` is the `reference_url` from [`PullPointSubscription`].
     pub async fn unsubscribe(&self, subscription_url: &str) -> Result<(), OnvifError> {
         const ACTION: &str =
-            "http://www.onvif.org/ver10/events/wsdl/SubscriptionManager/UnsubscribeRequest";
+            "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/UnsubscribeRequest";
         const BODY: &str = "<wsnt:Unsubscribe/>";
 
         let xml = self.call(subscription_url, ACTION, BODY).await?;

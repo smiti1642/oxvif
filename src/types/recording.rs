@@ -51,6 +51,11 @@ pub struct RecordingTrack {
 // ── RecordingItem ─────────────────────────────────────────────────────────────
 
 /// A recording entry returned by `get_recordings`.
+///
+/// Per the ONVIF spec (`GetRecordingsResponseItem`), time-range and status
+/// fields are not included in `GetRecordings` — use `search_recordings` /
+/// `get_recording_search_results` (which return [`RecordingInformation`]) to
+/// obtain `earliest_recording`, `latest_recording`, and `recording_status`.
 #[derive(Debug, Clone)]
 pub struct RecordingItem {
     /// Opaque recording token; pass to `get_replay_uri`.
@@ -59,13 +64,6 @@ pub struct RecordingItem {
     pub source: RecordingSourceInformation,
     /// Free-text content description.
     pub content: String,
-    /// ISO-8601 timestamp of the earliest recorded frame.
-    pub earliest_recording: Option<String>,
-    /// ISO-8601 timestamp of the latest recorded frame.
-    pub latest_recording: Option<String>,
-    /// Recording lifecycle state: `"Initiated"`, `"Recording"`, `"Stopped"`,
-    /// `"Removing"`, or `"Removed"`.
-    pub recording_status: String,
     /// Tracks contained in this recording.
     pub tracks: Vec<RecordingTrack>,
 }
@@ -74,20 +72,22 @@ impl RecordingItem {
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
         resp.children_named("RecordingItems")
             .map(|item| {
+                // Per spec: RecordingToken is a child element, not an attribute.
                 let token = item
-                    .attr("Token")
-                    .or_else(|| item.attr("token"))
+                    .child("RecordingToken")
+                    .map(|n| n.text().to_string())
                     .filter(|t| !t.is_empty())
-                    .ok_or_else(|| SoapError::missing("RecordingItem/@Token"))?
-                    .to_string();
+                    .ok_or_else(|| SoapError::missing("RecordingItems/RecordingToken"))?;
 
                 let source = item
-                    .child("RecordingInformation")
-                    .and_then(|ri| ri.child("Source"))
+                    .path(&["Configuration", "Source"])
                     .map(RecordingSourceInformation::from_xml)
                     .unwrap_or_default();
 
-                let ri = item.child("RecordingInformation");
+                let content = item
+                    .path(&["Configuration", "Content"])
+                    .map(|n| n.text().to_string())
+                    .unwrap_or_default();
 
                 let tracks: Vec<RecordingTrack> = item
                     .child("Tracks")
@@ -116,20 +116,7 @@ impl RecordingItem {
                 Ok(Self {
                     token,
                     source,
-                    content: ri
-                        .and_then(|r| r.child("Content"))
-                        .map(|n| n.text().to_string())
-                        .unwrap_or_default(),
-                    earliest_recording: ri
-                        .and_then(|r| r.child("EarliestRecording"))
-                        .map(|n| n.text().to_string()),
-                    latest_recording: ri
-                        .and_then(|r| r.child("LatestRecording"))
-                        .map(|n| n.text().to_string()),
-                    recording_status: ri
-                        .and_then(|r| r.child("RecordingStatus"))
-                        .map(|n| n.text().to_string())
-                        .unwrap_or_default(),
+                    content,
                     tracks,
                 })
             })
@@ -220,6 +207,9 @@ pub struct RecordingConfiguration {
     pub description: String,
     /// Content label (e.g. `"Motion events"`). Leave empty if not needed.
     pub content: String,
+    /// Maximum retention time as an ISO 8601 duration (e.g. `"P30D"` for 30 days).
+    /// `"PT0S"` means unlimited retention (device default).
+    pub maximum_retention_time: String,
 }
 
 /// Configuration for creating a recording job via `create_recording_job`.
@@ -323,24 +313,27 @@ impl RecordingJob {
 /// Current operational state of a recording job returned by `get_recording_job_state`.
 #[derive(Debug, Clone)]
 pub struct RecordingJobState {
-    /// The job token this state belongs to.
-    pub token: String,
+    /// Token of the recording being written by this job.
+    pub recording_token: String,
     /// Active state: `"Active"`, `"PartiallyActive"`, or `"Idle"`.
     pub active_state: String,
 }
 
 impl RecordingJobState {
     pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
-        let state = resp
+        // Per spec: GetRecordingJobStateResponse has a single <State> element of
+        // type RecordingJobStateInformation, which contains <RecordingToken> and
+        // a nested <State> with the job-state string.
+        let state_info = resp
             .child("State")
-            .ok_or_else(|| SoapError::missing("RecordingJobStateResponse/State"))?;
+            .ok_or_else(|| SoapError::missing("GetRecordingJobStateResponse/State"))?;
         Ok(Self {
-            token: resp
-                .child("JobToken")
+            recording_token: state_info
+                .child("RecordingToken")
                 .map(|n| n.text().to_string())
                 .unwrap_or_default(),
-            active_state: state
-                .child("ActiveState")
+            active_state: state_info
+                .child("State")
                 .map(|n| n.text().to_string())
                 .unwrap_or_else(|| "Idle".to_string()),
         })
