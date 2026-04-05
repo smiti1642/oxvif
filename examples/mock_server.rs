@@ -159,6 +159,12 @@ fn dispatch(action: &str, base: &str) -> String {
             resp_empty("tds", "SetHostnameResponse")
         }
         "http://www.onvif.org/ver10/device/wsdl/SetNTP" => resp_empty("tds", "SetNTPResponse"),
+        "http://www.onvif.org/ver10/device/wsdl/SetScopes" => {
+            resp_empty("tds", "SetScopesResponse")
+        }
+        "http://www.onvif.org/ver10/device/wsdl/SetSystemDateAndTime" => {
+            resp_empty("tds", "SetSystemDateAndTimeResponse")
+        }
         "http://www.onvif.org/ver10/device/wsdl/SystemReboot" => resp_system_reboot(),
 
         // ── Media1 ────────────────────────────────────────────────────────────
