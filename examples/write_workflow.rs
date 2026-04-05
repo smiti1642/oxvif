@@ -516,7 +516,7 @@ async fn main() {
 
     check(
         "set_storage_configuration(\"SD_01\", LocalStorage, /mnt/sd)",
-        c.set_storage_configuration("SD_01", "LocalStorage", "/mnt/sd", "", "", true)
+        c.set_storage_configuration("SD_01", "LocalStorage", "/mnt/sd", "", "")
             .await,
     );
 

@@ -5,6 +5,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.8.4] - 2026-04-05
+
+### Fixed
+- **ONVIF spec compliance — 11 parsing bugs corrected against official WSDL/XSD**
+  - `NetworkInterface`: IPv4 address now reads `Config/DHCP` for DHCP flag and
+    `Manual/Address` / `FromDHCP/Address` per spec (was misreading `FromDHCP` as
+    boolean text → produced `ip=/0` against real devices)
+  - `Capabilities`: `max_profiles` now reads from
+    `Extension/ProfileCapabilities/MaximumNumberOfProfiles`
+  - `StorageConfiguration`: removed non-spec `use_anonymous` / `storage_status`
+    fields; now reads `Data type=` attribute, `LocalPath`, `StorageUri`,
+    `Data/User/UserName` per spec
+  - `SystemUris`: removed non-spec `firmware_upgrade_uri`; added `system_backup_uri`;
+    `system_log_uri` now reads `SystemLogUris/SystemLogUri/Uri`;
+    `support_info_uri` reads `SupportInfoUri` per spec
+  - `RecordingConfiguration`: added `maximum_retention_time` field
+  - `RecordingItem`: removed non-spec `earliest_recording`, `latest_recording`,
+    `recording_status` fields; token now reads child element `RecordingToken`;
+    source/content read from `Configuration/Source` and `Configuration/Content`
+  - `RecordingJobState`: renamed `token` → `recording_token`; `active_state`
+    now reads `State/State` (was `State/ActiveState`)
+  - `FocusOptions20`: `focus_af_modes` reads `AutoFocusModes` (was `AFModes`);
+    `focus_speed_range` reads `DefaultSpeed` (was `AutoFocusSpeed`)
+  - `renew_subscription` / `unsubscribe` SOAP actions: corrected to OASIS-WSN
+    namespace (`docs.oasis-open.org/wsn/bw-2/SubscriptionManager/…`)
+  - `set_storage_configuration`: removed `use_anonymous` param; XML body now
+    uses spec-compliant `<tt:Data type="…">` wrapper
+
+### Tests
+- Updated all affected fixtures and assertions in `client_tests.rs`,
+  `session_tests.rs`, `types_tests.rs` to match spec-compliant XML
+- Added `test_renew_subscription_uses_oasis_action_uri` and
+  `test_unsubscribe_uses_oasis_action_uri`
+
+---
+
 ## [0.8.3] - 2026-04-05
 
 ### Added

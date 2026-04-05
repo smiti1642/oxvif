@@ -111,8 +111,7 @@ impl OnvifClient {
         subscription_url: &str,
         termination_time: &str,
     ) -> Result<String, OnvifError> {
-        const ACTION: &str =
-            "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest";
+        const ACTION: &str = "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest";
 
         let body = format!(
             "<wsnt:Renew>\

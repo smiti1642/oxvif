@@ -737,10 +737,7 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
             Ok(recs) => {
                 println!("  Found {} recording(s)", recs.len());
                 for r in recs.iter().take(3) {
-                    println!(
-                        "  [{}] {} — {}",
-                        r.token, r.source.name, r.content
-                    );
+                    println!("  [{}] {} — {}", r.token, r.source.name, r.content);
                 }
             }
             Err(e) => println!("  (skipped — {e})"),

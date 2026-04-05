@@ -303,7 +303,11 @@ fn parse_media_caps(m: &XmlNode) -> MediaCapabilities {
             })
             .unwrap_or_default(),
         max_profiles: m
-            .path(&["Extension", "ProfileCapabilities", "MaximumNumberOfProfiles"])
+            .path(&[
+                "Extension",
+                "ProfileCapabilities",
+                "MaximumNumberOfProfiles",
+            ])
             .and_then(|n| n.text().parse().ok()),
     }
 }
