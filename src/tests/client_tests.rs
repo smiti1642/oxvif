@@ -3031,11 +3031,11 @@ fn get_network_interfaces_xml() -> &'static str {
                <tt:IPv4>
                  <tt:Enabled>true</tt:Enabled>
                  <tt:Config>
-                   <tt:FromDHCP>false</tt:FromDHCP>
                    <tt:Manual>
                      <tt:Address>192.168.1.100</tt:Address>
                      <tt:PrefixLength>24</tt:PrefixLength>
                    </tt:Manual>
+                   <tt:DHCP>false</tt:DHCP>
                  </tt:Config>
                </tt:IPv4>
              </tds:NetworkInterfaces>
@@ -3958,11 +3958,11 @@ async fn test_get_network_interfaces_parses_ipv6() {
                <tt:IPv4>
                  <tt:Enabled>true</tt:Enabled>
                  <tt:Config>
-                   <tt:FromDHCP>false</tt:FromDHCP>
                    <tt:Manual>
                      <tt:Address>10.0.0.1</tt:Address>
                      <tt:PrefixLength>8</tt:PrefixLength>
                    </tt:Manual>
+                   <tt:DHCP>false</tt:DHCP>
                  </tt:Config>
                </tt:IPv4>
                <tt:IPv6>
@@ -3986,6 +3986,45 @@ async fn test_get_network_interfaces_parses_ipv6() {
     assert!(iface.ipv6_enabled);
     assert!(iface.ipv6_from_dhcp);
     assert_eq!(iface.ipv6_address.as_deref(), Some("2001:db8::1"));
+}
+
+// NetworkInterface DHCP address fallback (some vendors put IP under FromDHCP, not Manual)
+
+#[tokio::test]
+async fn test_get_network_interfaces_reads_address_from_dhcp_element() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetNetworkInterfacesResponse>
+             <tds:NetworkInterfaces token="eth0">
+               <tt:Enabled>true</tt:Enabled>
+               <tt:Info>
+                 <tt:Name>eth0</tt:Name>
+                 <tt:HwAddress>00:13:e2:24:01:c3</tt:HwAddress>
+                 <tt:MTU>1500</tt:MTU>
+               </tt:Info>
+               <tt:IPv4>
+                 <tt:Enabled>true</tt:Enabled>
+                 <tt:Config>
+                   <tt:FromDHCP>
+                     <tt:Address>192.168.50.18</tt:Address>
+                     <tt:PrefixLength>24</tt:PrefixLength>
+                   </tt:FromDHCP>
+                   <tt:DHCP>true</tt:DHCP>
+                 </tt:Config>
+               </tt:IPv4>
+             </tds:NetworkInterfaces>
+           </tds:GetNetworkInterfacesResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let ifaces = client.get_network_interfaces().await.unwrap();
+    let iface = &ifaces[0];
+    assert_eq!(iface.ipv4_address, "192.168.50.18");
+    assert_eq!(iface.ipv4_prefix_length, 24);
+    assert!(iface.ipv4_from_dhcp);
 }
 
 // ── Round 2 new-field coverage tests ─────────────────────────────────────────

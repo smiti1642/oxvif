@@ -332,16 +332,26 @@ impl NetworkInterface {
                     .map(|x| x.text() == "true" || x.text() == "1")
                     .unwrap_or(false);
                 let ipv4_from_dhcp = n
-                    .path(&["IPv4", "Config", "FromDHCP"])
+                    .path(&["IPv4", "Config", "DHCP"])
                     .map(|x| x.text() == "true" || x.text() == "1")
                     .unwrap_or(false);
                 let ipv4_address = n
                     .path(&["IPv4", "Config", "Manual", "Address"])
                     .map(|x| x.text().to_string())
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| {
+                        n.path(&["IPv4", "Config", "FromDHCP", "Address"])
+                            .map(|x| x.text().to_string())
+                            .filter(|s| !s.is_empty())
+                    })
                     .unwrap_or_default();
                 let ipv4_prefix_length = n
                     .path(&["IPv4", "Config", "Manual", "PrefixLength"])
                     .and_then(|x| x.text().parse().ok())
+                    .or_else(|| {
+                        n.path(&["IPv4", "Config", "FromDHCP", "PrefixLength"])
+                            .and_then(|x| x.text().parse().ok())
+                    })
                     .unwrap_or(0);
                 let ipv6_enabled = n
                     .path(&["IPv6", "Enabled"])
