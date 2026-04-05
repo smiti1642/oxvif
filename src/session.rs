@@ -244,6 +244,14 @@ impl OnvifSession {
         self.client.get_system_date_and_time().await
     }
 
+    /// Set the device clock.
+    pub async fn set_system_date_and_time(
+        &self,
+        req: &crate::types::SetDateTimeRequest,
+    ) -> Result<(), OnvifError> {
+        self.client.set_system_date_and_time(req).await
+    }
+
     /// Retrieve manufacturer, model, firmware version, and serial number.
     pub async fn get_device_info(&self) -> Result<DeviceInfo, OnvifError> {
         self.client.get_device_info().await
@@ -277,6 +285,11 @@ impl OnvifSession {
     /// Retrieve the device's scope URIs.
     pub async fn get_scopes(&self) -> Result<Vec<String>, OnvifError> {
         self.client.get_scopes().await
+    }
+
+    /// Replace all configurable scopes on the device.
+    pub async fn set_scopes(&self, scopes: &[&str]) -> Result<(), OnvifError> {
+        self.client.set_scopes(scopes).await
     }
 
     /// Retrieve user accounts configured on the device.

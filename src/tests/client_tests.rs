@@ -2545,6 +2545,130 @@ async fn test_get_scopes_returns_uris() {
     assert!(scopes[1].contains("country/taiwan"));
 }
 
+// ── set_scopes ────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_set_scopes_sends_scope_elements() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetScopesResponse/></s:Body>
+       </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+    client
+        .set_scopes(&[
+            "onvif://www.onvif.org/name/FrontDoor",
+            "onvif://www.onvif.org/location/Building1",
+        ])
+        .await
+        .unwrap();
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("onvif://www.onvif.org/name/FrontDoor"));
+    assert!(body.contains("onvif://www.onvif.org/location/Building1"));
+}
+
+#[tokio::test]
+async fn test_set_scopes_xml_escapes_value() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetScopesResponse/></s:Body>
+       </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+    client
+        .set_scopes(&["onvif://www.onvif.org/name/<&>"])
+        .await
+        .unwrap();
+    assert!(captured.lock().unwrap().body.contains("&lt;&amp;&gt;"));
+}
+
+#[tokio::test]
+async fn test_set_scopes_soap_fault_returns_err() {
+    let xml = make_soap_fault_xml("env:Sender", "InvalidScope");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+    let res = client
+        .set_scopes(&["onvif://www.onvif.org/name/Bad"])
+        .await;
+    assert!(res.is_err());
+}
+
+// ── set_system_date_and_time ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_set_system_date_and_time_manual_sends_utc_fields() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetSystemDateAndTimeResponse/></s:Body>
+       </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+    client
+        .set_system_date_and_time(&crate::types::SetDateTimeRequest {
+            datetime_type: "Manual".into(),
+            daylight_savings: false,
+            timezone: "CST-8".into(),
+            utc_datetime: Some(crate::types::UtcDateTime {
+                year: 2026,
+                month: 4,
+                day: 5,
+                hour: 10,
+                minute: 30,
+                second: 0,
+            }),
+        })
+        .await
+        .unwrap();
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("Manual"));
+    assert!(body.contains("CST-8"));
+    assert!(body.contains("2026"));
+    assert!(body.contains("10"));
+    assert!(body.contains("30"));
+}
+
+#[tokio::test]
+async fn test_set_system_date_and_time_ntp_omits_utc_element() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body><tds:SetSystemDateAndTimeResponse/></s:Body>
+       </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+    client
+        .set_system_date_and_time(&crate::types::SetDateTimeRequest {
+            datetime_type: "NTP".into(),
+            daylight_savings: false,
+            timezone: "UTC".into(),
+            utc_datetime: None,
+        })
+        .await
+        .unwrap();
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("NTP"));
+    assert!(!body.contains("UTCDateTime"));
+}
+
+#[tokio::test]
+async fn test_set_system_date_and_time_soap_fault_returns_err() {
+    let xml = make_soap_fault_xml("env:Sender", "InvalidDateTimeType");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+    let res = client
+        .set_system_date_and_time(&crate::types::SetDateTimeRequest {
+            datetime_type: "Manual".into(),
+            daylight_savings: false,
+            timezone: "UTC".into(),
+            utc_datetime: None,
+        })
+        .await;
+    assert!(res.is_err());
+}
+
 // ── get_recordings ────────────────────────────────────────────────────────────
 
 fn get_recordings_xml() -> &'static str {

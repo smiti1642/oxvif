@@ -5,8 +5,8 @@ use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
     Capabilities, DeviceInfo, DnsInformation, Hostname, NetworkGateway, NetworkInterface,
-    NetworkProtocol, NtpInfo, OnvifService, RelayOutput, StorageConfiguration, SystemDateTime,
-    SystemLog, SystemUris, User, xml_escape,
+    NetworkProtocol, NtpInfo, OnvifService, RelayOutput, SetDateTimeRequest, StorageConfiguration,
+    SystemDateTime, SystemLog, SystemUris, User, xml_escape,
 };
 
 impl OnvifClient {
@@ -79,6 +79,77 @@ impl OnvifClient {
         let body = parse_soap_body(&xml)?;
         let resp = find_response(&body, "GetSystemDateAndTimeResponse")?;
         SystemDateTime::from_xml(resp)
+    }
+
+    /// Set the device clock.
+    ///
+    /// - `req.datetime_type` — `"Manual"` or `"NTP"`.
+    /// - `req.timezone` — POSIX TZ string, e.g. `"CST-8"` for UTC+8.
+    /// - `req.utc_datetime` — required when `datetime_type == "Manual"`.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use oxvif::{OnvifClient, OnvifError, SetDateTimeRequest, UtcDateTime};
+    /// # async fn run() -> Result<(), OnvifError> {
+    /// let client = OnvifClient::new("http://192.168.1.1/onvif/device_service");
+    /// client.set_system_date_and_time(&SetDateTimeRequest {
+    ///     datetime_type: "Manual".into(),
+    ///     daylight_savings: false,
+    ///     timezone: "CST-8".into(),
+    ///     utc_datetime: Some(UtcDateTime {
+    ///         year: 2026, month: 4, day: 5,
+    ///         hour: 10, minute: 0, second: 0,
+    ///     }),
+    /// }).await?;
+    /// # Ok(()) }
+    /// ```
+    pub async fn set_system_date_and_time(
+        &self,
+        req: &SetDateTimeRequest,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetSystemDateAndTime";
+
+        let utc_el = if let Some(dt) = req.utc_datetime {
+            format!(
+                "<tds:UTCDateTime>\
+                   <tt:Time>\
+                     <tt:Hour>{h}</tt:Hour>\
+                     <tt:Minute>{m}</tt:Minute>\
+                     <tt:Second>{s}</tt:Second>\
+                   </tt:Time>\
+                   <tt:Date>\
+                     <tt:Year>{y}</tt:Year>\
+                     <tt:Month>{mo}</tt:Month>\
+                     <tt:Day>{d}</tt:Day>\
+                   </tt:Date>\
+                 </tds:UTCDateTime>",
+                h = dt.hour,
+                m = dt.minute,
+                s = dt.second,
+                y = dt.year,
+                mo = dt.month,
+                d = dt.day,
+            )
+        } else {
+            String::new()
+        };
+
+        let body = format!(
+            "<tds:SetSystemDateAndTime>\
+               <tds:DateTimeType>{dt_type}</tds:DateTimeType>\
+               <tds:DaylightSavings>{dst}</tds:DaylightSavings>\
+               <tds:TimeZone><tt:TZ>{tz}</tt:TZ></tds:TimeZone>\
+               {utc_el}\
+             </tds:SetSystemDateAndTime>",
+            dt_type = xml_escape(&req.datetime_type),
+            dst = req.daylight_savings,
+            tz = xml_escape(&req.timezone),
+        );
+
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetSystemDateAndTimeResponse")?;
+        Ok(())
     }
 
     /// Retrieve manufacturer, model, firmware version, and serial number.
@@ -193,6 +264,26 @@ impl OnvifClient {
             .children_named("Scopes")
             .filter_map(|n| n.child("ScopeItem").map(|s| s.text().to_string()))
             .collect())
+    }
+
+    /// Replace all configurable scopes on the device.
+    ///
+    /// Each entry should be a full scope URI, e.g.
+    /// `"onvif://www.onvif.org/name/FrontDoor"`.
+    /// Fixed (non-configurable) scopes reported by the device are not affected.
+    pub async fn set_scopes(&self, scopes: &[&str]) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetScopes";
+        use crate::types::xml_escape;
+        let scope_els: String = scopes
+            .iter()
+            .map(|s| format!("<tds:Scopes>{}</tds:Scopes>", xml_escape(s)))
+            .collect();
+        let body = format!("<tds:SetScopes>{scope_els}</tds:SetScopes>");
+
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetScopesResponse")?;
+        Ok(())
     }
 
     /// Retrieve user accounts configured on the device.

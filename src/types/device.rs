@@ -130,6 +130,32 @@ pub(crate) fn civil_to_unix(year: i32, month: i32, day: i32, hour: i32, min: i32
     days * 86_400 + hour as i64 * 3600 + min as i64 * 60 + sec as i64
 }
 
+// ── SetDateTimeRequest ────────────────────────────────────────────────────────
+
+/// UTC date and time components for [`SetDateTimeRequest`].
+#[derive(Debug, Clone, Copy)]
+pub struct UtcDateTime {
+    pub year: u16,
+    pub month: u8,
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+}
+
+/// Parameters for [`OnvifClient::set_system_date_and_time`].
+#[derive(Debug, Clone)]
+pub struct SetDateTimeRequest {
+    /// `"Manual"` (use `utc_datetime`) or `"NTP"` (device syncs automatically).
+    pub datetime_type: String,
+    /// Whether daylight saving time is active.
+    pub daylight_savings: bool,
+    /// POSIX timezone string, e.g. `"CST-8"` for Asia/Taipei.
+    pub timezone: String,
+    /// Required when `datetime_type == "Manual"`; ignored for NTP.
+    pub utc_datetime: Option<UtcDateTime>,
+}
+
 // ── Hostname ──────────────────────────────────────────────────────────────────
 
 /// Hostname configuration returned by `GetHostname`.
