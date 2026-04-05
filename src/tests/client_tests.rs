@@ -4996,3 +4996,104 @@ async fn test_event_stream_error_on_bad_response() {
     let result = stream.next().await.expect("stream should yield an error");
     assert!(result.is_err());
 }
+
+// ── Subscribe (WS-BaseNotification push) ─────────────────────────────────────
+
+fn subscribe_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2"
+                    xmlns:wsa="http://www.w3.org/2005/08/addressing">
+          <s:Body>
+            <wsnt:SubscribeResponse>
+              <wsnt:SubscriptionReference>
+                <wsa:Address>http://192.168.1.1/onvif/events/push_sub_1</wsa:Address>
+              </wsnt:SubscriptionReference>
+              <wsnt:CurrentTime>2026-04-05T00:00:00Z</wsnt:CurrentTime>
+              <wsnt:TerminationTime>2026-04-05T00:01:00Z</wsnt:TerminationTime>
+            </wsnt:SubscribeResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_subscribe_parses_push_subscription() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(subscribe_response_xml()));
+    let sub = client
+        .subscribe(
+            "http://192.168.1.1/onvif/events",
+            "http://192.168.1.50:8080/notify",
+            None,
+            Some("PT60S"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        sub.subscription_reference,
+        "http://192.168.1.1/onvif/events/push_sub_1"
+    );
+    assert_eq!(sub.current_time, "2026-04-05T00:00:00Z");
+    assert_eq!(sub.termination_time, "2026-04-05T00:01:00Z");
+}
+
+#[tokio::test]
+async fn test_subscribe_uses_oasis_action_uri() {
+    let (transport, captured) = RecordingTransport::new(subscribe_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+    let _ = client
+        .subscribe(
+            "http://192.168.1.1/onvif/events",
+            "http://192.168.1.50:8080/notify",
+            None,
+            Some("PT60S"),
+        )
+        .await;
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://docs.oasis-open.org/wsn/bw-2/NotificationProducer/SubscribeRequest"
+    );
+    assert!(c.body.contains("ConsumerReference"));
+    assert!(c.body.contains("192.168.1.50:8080/notify"));
+}
+
+#[tokio::test]
+async fn test_subscribe_with_filter_includes_topic_expression() {
+    let (transport, captured) = RecordingTransport::new(subscribe_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+    let _ = client
+        .subscribe(
+            "http://192.168.1.1/onvif/events",
+            "http://192.168.1.50:8080/notify",
+            Some("tns1:VideoSource/MotionAlarm"),
+            Some("PT60S"),
+        )
+        .await;
+    let c = captured.lock().unwrap();
+    assert!(c.body.contains("TopicExpression"));
+    assert!(c.body.contains("MotionAlarm"));
+}
+
+#[tokio::test]
+async fn test_subscribe_soap_fault_returns_error() {
+    let xml = make_soap_fault_xml("env:Sender", "InvalidConsumerReference");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+    let result = client
+        .subscribe(
+            "http://192.168.1.1/onvif/events",
+            "http://192.168.1.50:8080/notify",
+            None,
+            None,
+        )
+        .await;
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("InvalidConsumerReference")
+    );
+}

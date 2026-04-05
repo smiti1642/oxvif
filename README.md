@@ -25,7 +25,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 313 unit tests + 14 doc tests
+- 320 unit tests + 14 doc tests
 
 ---
 
@@ -1037,7 +1037,7 @@ examples/
 | `Renew` | ✓ |
 | `Unsubscribe` | ✓ |
 | `event_stream` (continuous poll stream) | ✓ |
-| WS-BaseNotification push (Subscribe) | — |
+| WS-BaseNotification push (`subscribe` + `notification_listener`) | ✓ |
 
 ### Recording Service
 
@@ -1069,7 +1069,7 @@ examples/
 | Operation | Status |
 |-----------|--------|
 | UDP multicast `Probe` | ✓ |
-| `Hello` / `Bye` passive listening | — |
+| `Hello` / `Bye` passive listening (`listen`) | ✓ |
 
 ---
 

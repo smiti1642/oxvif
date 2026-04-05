@@ -36,6 +36,8 @@ mod media2;
 mod ptz;
 mod recording;
 
+pub use events::notification_listener;
+
 // ── OnvifClient ───────────────────────────────────────────────────────────────
 
 /// Async ONVIF device client.

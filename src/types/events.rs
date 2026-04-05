@@ -36,6 +36,47 @@ impl PullPointSubscription {
     }
 }
 
+// ── PushSubscription ─────────────────────────────────────────────────────────
+
+/// A WS-BaseNotification push subscription returned by `subscribe`.
+///
+/// Use `subscription_reference` as the endpoint for
+/// [`renew_subscription`](crate::OnvifClient::renew_subscription) and
+/// [`unsubscribe`](crate::OnvifClient::unsubscribe).
+///
+/// The device will POST `Notify` messages to the `consumer_url` you supplied
+/// to [`subscribe`](crate::OnvifClient::subscribe). Use
+/// [`notification_listener`](crate::notification_listener) to receive them.
+#[derive(Debug, Clone)]
+pub struct PushSubscription {
+    /// Subscription manager endpoint URL — the device's subscription reference.
+    pub subscription_reference: String,
+    /// ISO-8601 current device time at the moment of subscription.
+    pub current_time: String,
+    /// ISO-8601 timestamp when the subscription expires.
+    pub termination_time: String,
+}
+
+impl PushSubscription {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let subscription_reference = resp
+            .path(&["SubscriptionReference", "Address"])
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| SoapError::missing("SubscriptionReference/Address"))?;
+        Ok(Self {
+            subscription_reference,
+            current_time: resp
+                .child("CurrentTime")
+                .map(|n| n.text().to_string())
+                .unwrap_or_default(),
+            termination_time: resp
+                .child("TerminationTime")
+                .map(|n| n.text().to_string())
+                .unwrap_or_default(),
+        })
+    }
+}
+
 // ── NotificationMessage ───────────────────────────────────────────────────────
 
 /// A single ONVIF event notification received via `PullMessages`.

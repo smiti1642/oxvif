@@ -138,8 +138,8 @@ pub mod soap;
 pub mod transport;
 pub mod types;
 
-pub use client::OnvifClient;
-pub use discovery::DiscoveredDevice;
+pub use client::{OnvifClient, notification_listener};
+pub use discovery::{DiscoveredDevice, DiscoveryEvent};
 pub use error::OnvifError;
 pub use session::{OnvifSession, OnvifSessionBuilder};
 pub use types::{
@@ -154,12 +154,12 @@ pub use types::{
     NetworkProtocol, NotificationMessage, NtpInfo, OnvifService, OsdColor, OsdConfiguration,
     OsdOptions, OsdPosition, OsdTextString, PtzCapabilities, PtzConfiguration,
     PtzConfigurationOptions, PtzNode, PtzPreset, PtzSpaceRange, PtzSpeed, PtzStatus,
-    PullPointSubscription, RecordingCapabilities, RecordingConfiguration, RecordingInformation,
-    RecordingItem, RecordingJob, RecordingJobConfiguration, RecordingJobState,
-    RecordingSourceInformation, RecordingTrack, RelayOutput, ReplayCapabilities, Resolution,
-    SearchCapabilities, SecurityCapabilities, SetDateTimeRequest, SnapshotUri, SourceBounds,
-    StorageConfiguration, StreamUri, StreamingCapabilities, SystemCapabilities, SystemDateTime,
-    SystemLog, SystemUris, User, UtcDateTime, VideoEncoderConfiguration,
+    PullPointSubscription, PushSubscription, RecordingCapabilities, RecordingConfiguration,
+    RecordingInformation, RecordingItem, RecordingJob, RecordingJobConfiguration,
+    RecordingJobState, RecordingSourceInformation, RecordingTrack, RelayOutput, ReplayCapabilities,
+    Resolution, SearchCapabilities, SecurityCapabilities, SetDateTimeRequest, SnapshotUri,
+    SourceBounds, StorageConfiguration, StreamUri, StreamingCapabilities, SystemCapabilities,
+    SystemDateTime, SystemLog, SystemUris, User, UtcDateTime, VideoEncoderConfiguration,
     VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
     VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoEncoderOptions2, VideoEncoding,
     VideoRateControl, VideoRateControl2, VideoSource, VideoSourceConfiguration,

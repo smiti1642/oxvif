@@ -81,6 +81,23 @@ impl DiscoveredDevice {
     }
 }
 
+// ── DiscoveryEvent ────────────────────────────────────────────────────────────
+
+/// An unsolicited WS-Discovery announcement received while listening on the
+/// multicast port.
+///
+/// Devices broadcast `Hello` on arrival and `Bye` on departure.
+#[derive(Debug, Clone)]
+pub enum DiscoveryEvent {
+    /// A device has announced itself on the network.
+    Hello(DiscoveredDevice),
+    /// A device has left the network.
+    Bye {
+        /// Unique endpoint address (typically `uuid:…` URN) of the departing device.
+        endpoint: String,
+    },
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Send a WS-Discovery `Probe` and collect all `ProbeMatch` responses.
@@ -94,6 +111,32 @@ impl DiscoveredDevice {
 /// found" rather than hard errors.
 pub async fn probe(timeout_dur: Duration) -> Vec<DiscoveredDevice> {
     probe_inner(timeout_dur).await.unwrap_or_default()
+}
+
+/// Listen passively for WS-Discovery `Hello` and `Bye` multicast announcements.
+///
+/// Binds to UDP port 3702 (the WS-Discovery multicast port), joins the ONVIF
+/// multicast group (`239.255.255.250`), and collects `Hello` / `Bye` datagrams
+/// for `timeout_dur`.
+///
+/// Returns an empty `Vec` on any I/O error (e.g. port 3702 already in use).
+///
+/// # Example
+///
+/// ```no_run
+/// use std::time::Duration;
+/// use oxvif::discovery;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let events = discovery::listen(Duration::from_secs(30)).await;
+///     for ev in &events {
+///         println!("{ev:?}");
+///     }
+/// }
+/// ```
+pub async fn listen(timeout_dur: Duration) -> Vec<DiscoveryEvent> {
+    listen_inner(timeout_dur).await.unwrap_or_default()
 }
 
 // ── Internal implementation ───────────────────────────────────────────────────
@@ -134,6 +177,62 @@ async fn probe_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveredDev
     }
 
     Ok(devices)
+}
+
+async fn listen_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveryEvent>> {
+    use std::net::Ipv4Addr;
+
+    let socket = UdpSocket::bind("0.0.0.0:3702").await?;
+    let multicast_addr: Ipv4Addr = "239.255.255.250".parse().unwrap();
+    socket.join_multicast_v4(multicast_addr, Ipv4Addr::UNSPECIFIED)?;
+
+    let mut buf = vec![0u8; UDP_MAX_SIZE];
+    let mut events: Vec<DiscoveryEvent> = Vec::new();
+    let deadline = Instant::now() + timeout_dur;
+
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match timeout(remaining, socket.recv_from(&mut buf)).await {
+            Ok(Ok((len, _addr))) => {
+                let Ok(text) = std::str::from_utf8(&buf[..len]) else {
+                    continue;
+                };
+                if let Ok(root) = XmlNode::parse(text) {
+                    events.extend(collect_discovery_events(&root));
+                }
+            }
+            _ => break,
+        }
+    }
+    Ok(events)
+}
+
+fn collect_discovery_events(root: &XmlNode) -> Vec<DiscoveryEvent> {
+    // Determine message type from the WS-Addressing Action header.
+    let action = root
+        .path(&["Header", "Action"])
+        .map(|n| n.text())
+        .unwrap_or("");
+
+    let body = root.child("Body").unwrap_or(root);
+
+    if action.ends_with("/Hello") {
+        if let Some(hello) = body.child("Hello") {
+            return vec![DiscoveryEvent::Hello(DiscoveredDevice::from_xml(hello))];
+        }
+    } else if action.ends_with("/Bye") {
+        if let Some(bye) = body.child("Bye") {
+            let endpoint = bye
+                .path(&["EndpointReference", "Address"])
+                .map(|n| n.text().to_string())
+                .unwrap_or_default();
+            return vec![DiscoveryEvent::Bye { endpoint }];
+        }
+    }
+    vec![]
 }
 
 fn collect_probe_matches(root: &XmlNode) -> Vec<DiscoveredDevice> {
@@ -263,5 +362,92 @@ mod tests {
         let uuid = new_uuid();
         let parts: Vec<&str> = uuid.split('-').collect();
         assert_eq!(parts.len(), 5, "UUID should have 5 dash-separated parts");
+    }
+
+    fn hello_xml(endpoint: &str, xaddrs: &str) -> String {
+        format!(
+            r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                          xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery"
+                          xmlns:wsa="http://www.w3.org/2005/08/addressing">
+               <s:Header>
+                 <wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Hello</wsa:Action>
+               </s:Header>
+               <s:Body>
+                 <wsd:Hello>
+                   <wsa:EndpointReference>
+                     <wsa:Address>{endpoint}</wsa:Address>
+                   </wsa:EndpointReference>
+                   <wsd:Types>dn:NetworkVideoTransmitter</wsd:Types>
+                   <wsd:Scopes>onvif://www.onvif.org/name/Camera1</wsd:Scopes>
+                   <wsd:XAddrs>{xaddrs}</wsd:XAddrs>
+                   <wsd:MetadataVersion>1</wsd:MetadataVersion>
+                 </wsd:Hello>
+               </s:Body>
+             </s:Envelope>"#
+        )
+    }
+
+    fn bye_xml(endpoint: &str) -> String {
+        format!(
+            r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                          xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery"
+                          xmlns:wsa="http://www.w3.org/2005/08/addressing">
+               <s:Header>
+                 <wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Bye</wsa:Action>
+               </s:Header>
+               <s:Body>
+                 <wsd:Bye>
+                   <wsa:EndpointReference>
+                     <wsa:Address>{endpoint}</wsa:Address>
+                   </wsa:EndpointReference>
+                 </wsd:Bye>
+               </s:Body>
+             </s:Envelope>"#
+        )
+    }
+
+    #[test]
+    fn test_collect_hello_event() {
+        let xml = hello_xml(
+            "uuid:aaaa-0000-0000-0000-000000000001",
+            "http://192.168.1.200/onvif/device_service",
+        );
+        let root = XmlNode::parse(&xml).unwrap();
+        let events = collect_discovery_events(&root);
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            DiscoveryEvent::Hello(d) => {
+                assert_eq!(d.endpoint, "uuid:aaaa-0000-0000-0000-000000000001");
+                assert_eq!(d.xaddrs, ["http://192.168.1.200/onvif/device_service"]);
+            }
+            DiscoveryEvent::Bye { .. } => panic!("expected Hello"),
+        }
+    }
+
+    #[test]
+    fn test_collect_bye_event() {
+        let xml = bye_xml("uuid:bbbb-0000-0000-0000-000000000002");
+        let root = XmlNode::parse(&xml).unwrap();
+        let events = collect_discovery_events(&root);
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            DiscoveryEvent::Bye { endpoint } => {
+                assert_eq!(endpoint, "uuid:bbbb-0000-0000-0000-000000000002");
+            }
+            DiscoveryEvent::Hello(_) => panic!("expected Bye"),
+        }
+    }
+
+    #[test]
+    fn test_collect_unknown_action_returns_empty() {
+        let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                                  xmlns:wsa="http://www.w3.org/2005/08/addressing">
+               <s:Header>
+                 <wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</wsa:Action>
+               </s:Header>
+               <s:Body/>
+             </s:Envelope>"#;
+        let root = XmlNode::parse(xml).unwrap();
+        assert!(collect_discovery_events(&root).is_empty());
     }
 }
