@@ -15,7 +15,7 @@
 //!
 //! ## Testing
 //!
-//! Inject a custom [`Transport`](crate::transport::Transport) via
+//! Inject a custom [`Transport`] via
 //! [`with_transport`] to unit-test without a real device.
 //!
 //! [`with_credentials`]: OnvifClient::with_credentials

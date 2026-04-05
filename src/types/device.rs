@@ -143,7 +143,7 @@ pub struct UtcDateTime {
     pub second: u8,
 }
 
-/// Parameters for [`OnvifClient::set_system_date_and_time`].
+/// Parameters for `OnvifClient::set_system_date_and_time`.
 #[derive(Debug, Clone)]
 pub struct SetDateTimeRequest {
     /// `"Manual"` (use `utc_datetime`) or `"NTP"` (device syncs automatically).

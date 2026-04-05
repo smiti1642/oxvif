@@ -151,7 +151,7 @@ impl OnvifClient {
     /// arrive before returning. The stream yields individual messages one at a
     /// time; errors stop the stream.
     ///
-    /// The stream is infinite — use [`futures::StreamExt::take`] or a `select!`
+    /// The stream is infinite — use `StreamExt::take` or a `select!`
     /// block to bound it, and call [`unsubscribe`](Self::unsubscribe) when done.
     ///
     /// # Example (requires `futures` in caller's `[dependencies]`)

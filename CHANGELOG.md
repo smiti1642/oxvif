@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.8.3] - 2026-04-05
+
+### Added
+- `set_scopes(device_url, scopes)` — replace the device's scope list
+- `set_system_date_and_time(device_url, req)` — set device clock;
+  takes `SetDateTimeRequest` (manual or NTP, UTC offset, datetime fields)
+- Both methods covered by handlers in `examples/mock_server.rs`
+- Both methods demonstrated in `examples/write_workflow.rs`
+
+### Fixed
+- Broken intra-doc links in `events.rs`, `imaging.rs`, `types/device.rs`,
+  `types/recording.rs`, `client/mod.rs` — resolves red version badge on lib.rs
+
+---
+
 ## [0.8.2] - 2026-04-04
 
 ### Changed

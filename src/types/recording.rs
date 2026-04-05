@@ -207,7 +207,7 @@ impl FindRecordingResults {
 
 /// Parameters for creating a new recording entry on the device.
 ///
-/// Pass to [`OnvifClient::create_recording`] or [`OnvifSession::create_recording`].
+/// Pass to `OnvifClient::create_recording` or `OnvifSession::create_recording`.
 #[derive(Debug, Clone, Default)]
 pub struct RecordingConfiguration {
     /// Human-readable name for the recording source (e.g. `"Front Door Camera"`).
