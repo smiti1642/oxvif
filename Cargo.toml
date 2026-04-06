@@ -1,6 +1,6 @@
 [package]
 name = "oxvif"
-version = "0.8.4"
+version = "0.8.5"
 edition = "2024"
 rust-version = "1.85"
 description = "Async Rust client library for the ONVIF IP camera protocol"
@@ -24,6 +24,8 @@ thiserror    = "2"
 async-trait  = "0.1"
 async-stream = "0.3"
 futures-core = "0.3"
+if-addrs     = "0.10"
+socket2      = "0.5"
 
 [dev-dependencies]
 mockito = "1"

@@ -110,7 +110,9 @@ pub enum DiscoveryEvent {
 /// Returns an empty `Vec` on any I/O error — treat failures as "no devices
 /// found" rather than hard errors.
 pub async fn probe(timeout_dur: Duration) -> Vec<DiscoveredDevice> {
-    probe_inner(timeout_dur).await.unwrap_or_default()
+    probe_inner(timeout_dur, WSD_MULTICAST)
+        .await
+        .unwrap_or_default()
 }
 
 /// Listen passively for WS-Discovery `Hello` and `Bye` multicast announcements.
@@ -141,42 +143,114 @@ pub async fn listen(timeout_dur: Duration) -> Vec<DiscoveryEvent> {
 
 // ── Internal implementation ───────────────────────────────────────────────────
 
-async fn probe_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveredDevice>> {
-    let socket = UdpSocket::bind("0.0.0.0:0").await?;
-    socket.set_multicast_ttl_v4(4)?;
+async fn probe_inner(
+    timeout_dur: Duration,
+    target: &str,
+) -> std::io::Result<Vec<DiscoveredDevice>> {
+    use std::net::{Ipv4Addr, SocketAddrV4};
+    use std::sync::{Arc, Mutex};
 
     let message_id = new_uuid();
-    let xml = build_probe(&message_id);
-    socket.send_to(xml.as_bytes(), WSD_MULTICAST).await?;
+    let xml = Arc::new(build_probe(&message_id));
 
-    let mut buf = vec![0u8; UDP_MAX_SIZE];
-    let mut devices: Vec<DiscoveredDevice> = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
-    let deadline = Instant::now() + timeout_dur;
+    // Send a Probe from every non-loopback IPv4 interface so cameras on any
+    // subnet receive it.  0.0.0.0 is always included first as a catch-all
+    // (also lets loopback targets work in tests).
+    let bind_ips: Vec<Ipv4Addr> = std::iter::once(Ipv4Addr::UNSPECIFIED)
+        .chain(local_ipv4_addrs())
+        .collect();
 
-    loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            break;
+    // Raw datagrams collected by per-interface listener tasks.
+    let received: Arc<Mutex<Vec<Vec<u8>>>> = Arc::new(Mutex::new(Vec::new()));
+    let mut handles = Vec::new();
+
+    for ip in bind_ips {
+        // Use socket2 to set IP_MULTICAST_IF before converting to tokio.
+        // Neither std::net::UdpSocket nor tokio::net::UdpSocket expose this
+        // option directly, but without it Windows routes the multicast probe
+        // through its default multicast interface (often Hyper-V or WSL
+        // virtual adapters) even when the socket is bound to a specific IP.
+        use socket2::{Domain, Protocol, Socket, Type};
+        let Ok(raw) = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)) else {
+            continue;
+        };
+        let addr: std::net::SocketAddr = SocketAddrV4::new(ip, 0).into();
+        if raw.bind(&addr.into()).is_err() {
+            continue;
         }
-        match timeout(remaining, socket.recv_from(&mut buf)).await {
-            Ok(Ok((len, _addr))) => {
-                let Ok(text) = std::str::from_utf8(&buf[..len]) else {
-                    continue;
-                };
-                if let Ok(root) = XmlNode::parse(text) {
-                    for d in collect_probe_matches(&root) {
-                        if seen.insert(d.endpoint.clone()) {
-                            devices.push(d);
-                        }
+        let _ = raw.set_multicast_ttl_v4(4);
+        if ip != Ipv4Addr::UNSPECIFIED {
+            let _ = raw.set_multicast_if_v4(&ip);
+        }
+        let _ = raw.set_nonblocking(true);
+        let Ok(sock) = UdpSocket::from_std(raw.into()) else {
+            continue;
+        };
+        let _ = sock.send_to(xml.as_bytes(), target).await;
+
+        let received = Arc::clone(&received);
+        let handle = tokio::task::spawn(async move {
+            let mut buf = vec![0u8; UDP_MAX_SIZE];
+            let deadline = Instant::now() + timeout_dur;
+            loop {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    break;
+                }
+                match timeout(remaining, sock.recv_from(&mut buf)).await {
+                    Ok(Ok((len, _))) => {
+                        received.lock().unwrap().push(buf[..len].to_vec());
                     }
+                    Ok(Err(_)) => continue, // WSAECONNRESET / transient error — keep waiting
+                    Err(_) => break,        // timeout elapsed
                 }
             }
-            _ => break,
+        });
+        handles.push(handle);
+    }
+
+    for h in handles {
+        let _ = h.await;
+    }
+
+    let raw = Arc::try_unwrap(received)
+        .unwrap_or_default()
+        .into_inner()
+        .unwrap_or_default();
+
+    let mut devices: Vec<DiscoveredDevice> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for data in raw {
+        let Ok(text) = std::str::from_utf8(&data) else {
+            continue;
+        };
+        if let Ok(root) = XmlNode::parse(text) {
+            for d in collect_probe_matches(&root) {
+                if seen.insert(d.endpoint.clone()) {
+                    devices.push(d);
+                }
+            }
         }
     }
 
     Ok(devices)
+}
+
+/// Returns all non-loopback IPv4 addresses assigned to local interfaces.
+fn local_ipv4_addrs() -> Vec<std::net::Ipv4Addr> {
+    if_addrs::get_if_addrs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|iface| {
+            if iface.is_loopback() {
+                return None;
+            }
+            match iface.addr {
+                if_addrs::IfAddr::V4(addr) => Some(addr.ip),
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 async fn listen_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveryEvent>> {
@@ -449,5 +523,107 @@ mod tests {
              </s:Envelope>"#;
         let root = XmlNode::parse(xml).unwrap();
         assert!(collect_discovery_events(&root).is_empty());
+    }
+
+    // ── End-to-end UDP probe test ─────────────────────────────────────────────
+
+    /// Spins up a local UDP mock that replies with a canned ProbeMatch,
+    /// then verifies that `probe_inner` finds exactly that device.
+    #[tokio::test]
+    async fn test_probe_inner_receives_probe_match() {
+        use std::time::Duration;
+        use tokio::net::UdpSocket;
+
+        // Bind mock on all interfaces (port 0 = OS assigns a free port).
+        let mock = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let mock_addr = mock.local_addr().unwrap();
+        let target = format!("127.0.0.1:{}", mock_addr.port());
+
+        let canned = probe_match_xml(
+            "uuid:mock-device-0001-0000-000000000001",
+            "http://192.168.1.200/onvif/device_service",
+        );
+
+        // Responder: receive one probe, send back the canned ProbeMatch.
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; UDP_MAX_SIZE];
+            if let Ok((_, src)) = mock.recv_from(&mut buf).await {
+                let _ = mock.send_to(canned.as_bytes(), src).await;
+            }
+        });
+
+        let devices = probe_inner(Duration::from_millis(500), &target)
+            .await
+            .unwrap();
+
+        assert_eq!(devices.len(), 1, "should find exactly one device");
+        assert_eq!(
+            devices[0].endpoint,
+            "uuid:mock-device-0001-0000-000000000001"
+        );
+        assert_eq!(
+            devices[0].xaddrs,
+            ["http://192.168.1.200/onvif/device_service"]
+        );
+        assert_eq!(devices[0].scopes, ["onvif://www.onvif.org/name/Camera1"]);
+    }
+
+    /// Verifies that duplicate ProbeMatch responses (same endpoint UUID)
+    /// are deduplicated into a single device entry.
+    #[tokio::test]
+    async fn test_probe_inner_deduplicates_responses() {
+        use std::time::Duration;
+        use tokio::net::UdpSocket;
+
+        let mock = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let mock_addr = mock.local_addr().unwrap();
+        let target = format!("127.0.0.1:{}", mock_addr.port());
+
+        let canned = probe_match_xml(
+            "uuid:mock-device-dup-0000-000000000002",
+            "http://192.168.1.201/onvif/device_service",
+        );
+
+        // Send the same ProbeMatch twice to simulate a duplicate response.
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; UDP_MAX_SIZE];
+            if let Ok((_, src)) = mock.recv_from(&mut buf).await {
+                let _ = mock.send_to(canned.as_bytes(), src).await;
+                let _ = mock.send_to(canned.as_bytes(), src).await;
+            }
+        });
+
+        let devices = probe_inner(Duration::from_millis(500), &target)
+            .await
+            .unwrap();
+
+        assert_eq!(devices.len(), 1, "duplicates should be merged into one");
+    }
+
+    /// Verifies that an empty / non-ONVIF UDP response is silently ignored.
+    #[tokio::test]
+    async fn test_probe_inner_ignores_garbage_response() {
+        use std::time::Duration;
+        use tokio::net::UdpSocket;
+
+        let mock = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let mock_addr = mock.local_addr().unwrap();
+        let target = format!("127.0.0.1:{}", mock_addr.port());
+
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; UDP_MAX_SIZE];
+            if let Ok((_, src)) = mock.recv_from(&mut buf).await {
+                let _ = mock.send_to(b"not xml at all !!!", src).await;
+            }
+        });
+
+        let devices = probe_inner(Duration::from_millis(300), &target)
+            .await
+            .unwrap();
+
+        assert!(
+            devices.is_empty(),
+            "garbage response should yield no devices"
+        );
     }
 }

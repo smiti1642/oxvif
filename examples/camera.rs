@@ -37,9 +37,9 @@ use std::time::Duration;
 
 use futures::StreamExt as _;
 use oxvif::{
-    Capabilities, DeviceInfo, FocusMove, ImagingSettings, MediaProfile, OnvifClient, OnvifError,
-    OnvifSession, OsdConfiguration, OsdPosition, OsdTextString, RecordingConfiguration,
-    RecordingJobConfiguration, StorageConfiguration, SystemDateTime, User,
+    Capabilities, DeviceInfo, DiscoveryEvent, FocusMove, ImagingSettings, MediaProfile,
+    OnvifClient, OnvifError, OnvifSession, OsdConfiguration, OsdPosition, OsdTextString,
+    RecordingConfiguration, RecordingJobConfiguration, StorageConfiguration, SystemDateTime, User,
 };
 use std::env;
 
@@ -99,6 +99,8 @@ async fn main() {
         "recording" => recording_example(&cfg).await,
         "recording-jobs" => recording_jobs_example(&cfg).await,
         "discovery" => discovery_example().await,
+        "discovery-listen" => discovery_listen_example().await,
+        "push-subscribe" => push_subscribe_example(&cfg).await,
         "error-handling" => error_handling_example(&cfg).await,
         "session" => session_example(&cfg).await,
         "users" => users_example(&cfg).await,
@@ -146,6 +148,8 @@ fn print_help() {
     println!("  recording            List recordings, search, and get replay URI");
     println!("  recording-jobs       Recording jobs: list, create, set mode, delete");
     println!("  discovery            WS-Discovery UDP multicast probe");
+    println!("  discovery-listen     Passively listen for Hello/Bye announcements (30 s)");
+    println!("  push-subscribe       WS-BaseNotification push subscribe (listen on :8899, 60 s)");
     println!("  error-handling       Typed error variant matching demo");
     println!("  session              Same workflow using OnvifSession convenience API");
     println!("  users                List, create, and delete device user accounts");
@@ -2070,6 +2074,112 @@ async fn discovery_example() -> Result<(), OnvifError> {
                     println!("      Scope : {scope}");
                 }
             }
+        }
+    }
+
+    Ok(())
+}
+
+async fn discovery_listen_example() -> Result<(), OnvifError> {
+    let secs = 30u64;
+    println!("=== WS-Discovery passive listen ({secs}s) ===");
+    println!("Binding UDP port 3702 and joining multicast 239.255.255.250 ...");
+    println!("Plug in or unplug ONVIF devices to see Hello / Bye events.\n");
+
+    let events = oxvif::discovery::listen(Duration::from_secs(secs)).await;
+
+    if events.is_empty() {
+        println!("No Hello/Bye announcements received within {secs}s.");
+        println!("Tip: some devices only send Hello on network join, not on power-on.");
+    } else {
+        println!("Received {} event(s):", events.len());
+        for ev in &events {
+            match ev {
+                DiscoveryEvent::Hello(d) => {
+                    println!("\n  [Hello] {}", d.endpoint);
+                    for addr in &d.xaddrs {
+                        println!("          XAddr : {addr}");
+                    }
+                }
+                DiscoveryEvent::Bye { endpoint } => {
+                    println!("\n  [Bye]   {endpoint}");
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn push_subscribe_example(cfg: &Config) -> Result<(), OnvifError> {
+    use std::net::SocketAddr;
+
+    let (client, caps) = connect(cfg).await?;
+    let events_url = match caps.events.url {
+        Some(u) => u,
+        None => {
+            println!("Camera does not advertise an Events service URL.");
+            return Ok(());
+        }
+    };
+
+    // Determine our local IP by peeking at an outbound connection.
+    let local_ip = {
+        let s = tokio::net::UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        s.connect("8.8.8.8:80").await.unwrap();
+        s.local_addr().unwrap().ip()
+    };
+    let bind_addr: SocketAddr = format!("{local_ip}:8899").parse().unwrap();
+    let consumer_url = format!("http://{bind_addr}/notify");
+
+    println!("=== WS-BaseNotification Push Subscribe ===");
+    println!("Local listener : {bind_addr}");
+    println!("Consumer URL   : {consumer_url}");
+    println!("Events URL     : {events_url}");
+    println!();
+
+    // Start the listener stream before subscribing so we don't miss early messages.
+    let mut stream = oxvif::notification_listener(bind_addr);
+
+    println!("Subscribing ...");
+    match client
+        .subscribe(&events_url, &consumer_url, None, Some("PT60S"))
+        .await
+    {
+        Ok(sub) => {
+            println!("  Subscription reference : {}", sub.subscription_reference);
+            println!("  Expires                : {}", sub.termination_time);
+            println!("\nWaiting for push events (60 s). Move camera or trigger motion ...\n");
+
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+            loop {
+                let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                if remaining.is_zero() {
+                    break;
+                }
+                match tokio::time::timeout(remaining, stream.next()).await {
+                    Ok(Some(msg)) => {
+                        println!("  [Push] topic={}", msg.topic);
+                        if !msg.utc_time.is_empty() {
+                            println!("         time ={}", msg.utc_time);
+                        }
+                        for (k, v) in &msg.data {
+                            println!("         data : {k}={v}");
+                        }
+                    }
+                    _ => break,
+                }
+            }
+
+            println!("\nUnsubscribing ...");
+            match client.unsubscribe(&sub.subscription_reference).await {
+                Ok(()) => println!("  Unsubscribed."),
+                Err(e) => println!("  Unsubscribe failed (device may have already expired): {e}"),
+            }
+        }
+        Err(e) => {
+            println!("  Subscribe failed: {e}");
+            println!("  This camera may only support PullPoint (use 'event-stream' instead).");
         }
     }
 

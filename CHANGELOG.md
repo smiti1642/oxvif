@@ -5,6 +5,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.8.5] - 2026-04-06
+
+### Added
+- `discovery::listen()` — passive WS-Discovery listener; joins the ONVIF
+  multicast group (`239.255.255.250:3702`) and collects `Hello` / `Bye`
+  announcements for a configurable duration
+- `DiscoveryEvent` enum (`Hello(DiscoveredDevice)` / `Bye { endpoint }`)
+  returned by `listen()`
+- `OnvifSession::subscribe()` + `notification_listener()` — WS-BaseNotification
+  push subscription; spawns a minimal tokio TCP server so the device can POST
+  `Notify` messages back to the consumer
+- `PushSubscription` type returned by `subscribe()`
+- `examples/camera` — new `discovery-listen` and `push-subscribe` sub-commands
+- `examples/odm_compat` — runs all ODM v2.2.250 ONVIF APIs against a real
+  camera and reports PASS / FAIL / SKIP / NOT_IMPL coverage summary
+- Mock server handlers for Events service (`GetEventProperties`,
+  `CreatePullPointSubscription`, `PullMessages`, `Subscribe`, `Renew`,
+  `Unsubscribe`)
+
+### Fixed
+- **WS-Discovery multicast NIC selection on Windows** — without
+  `IP_MULTICAST_IF` (`set_multicast_if_v4`) the OS routes the probe through
+  its default multicast interface (often a Hyper-V or WSL virtual adapter)
+  rather than the LAN NIC connected to the cameras. `probe_inner` now creates
+  one `socket2` socket per interface, sets `IP_MULTICAST_IF` on each, and
+  collects responses in parallel so cameras on any subnet are reachable.
+
+### Dependencies
+- Added `socket2 = "0.5"` (required for `IP_MULTICAST_IF`)
+
+### Tests
+- 7 new unit tests: subscribe action URI, filter body, SOAP fault path,
+  `Hello` / `Bye` XML parsing, probe deduplication, garbage-response handling
+- 3 end-to-end UDP tests for `probe_inner` (receive, dedup, garbage)
+
+---
+
 ## [0.8.4] - 2026-04-05
 
 ### Fixed
