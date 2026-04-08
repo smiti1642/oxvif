@@ -187,8 +187,13 @@ impl XmlNode {
 /// The namespace prefix on `Body` is ignored, so both `s:Body` and
 /// `SOAP-ENV:Body` are accepted.
 pub fn parse_soap_body(xml: &str) -> Result<XmlNode, SoapError> {
-    let root = XmlNode::parse(xml)?;
-    root.child("Body").cloned().ok_or(SoapError::MissingBody)
+    let mut root = XmlNode::parse(xml)?;
+    let idx = root
+        .children
+        .iter()
+        .position(|c| c.local_name == "Body")
+        .ok_or(SoapError::MissingBody)?;
+    Ok(root.children.swap_remove(idx))
 }
 
 /// Find the expected response element inside a `Body` node.
@@ -446,5 +451,22 @@ mod tests {
             caps.path(&["Media", "XAddr"]).unwrap().text(),
             "http://192.168.1.100/onvif/media_service"
         );
+    }
+
+    #[test]
+    fn test_parse_soap_body_with_header_before_body() {
+        // Verify swap_remove correctly extracts Body regardless of child order
+        let xml = r#"
+            <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+              <s:Header><wsa:Action xmlns:wsa="http://www.w3.org/2005/08/addressing">urn:test</wsa:Action></s:Header>
+              <s:Body>
+                <tds:Response xmlns:tds="http://example.com"><tds:Value>42</tds:Value></tds:Response>
+              </s:Body>
+            </s:Envelope>"#;
+
+        let body = parse_soap_body(xml).unwrap();
+        assert_eq!(body.local_name, "Body");
+        let resp = body.child("Response").unwrap();
+        assert_eq!(resp.child("Value").unwrap().text(), "42");
     }
 }

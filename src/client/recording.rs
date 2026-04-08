@@ -36,7 +36,7 @@ impl OnvifClient {
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/CreateRecording";
         let retention = if config.maximum_retention_time.is_empty() {
-            "PT0S".to_string()
+            std::borrow::Cow::Borrowed("PT0S")
         } else {
             xml_escape(&config.maximum_retention_time)
         };
@@ -258,6 +258,7 @@ impl OnvifClient {
         let max_el = max_matches
             .map(|m| format!("<tse:MaxMatches>{m}</tse:MaxMatches>"))
             .unwrap_or_default();
+        let keep_alive_timeout = xml_escape(keep_alive_timeout);
         let body = format!(
             "<tse:FindRecordings>\
                {max_el}\
@@ -287,6 +288,7 @@ impl OnvifClient {
     ) -> Result<FindRecordingResults, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/search/wsdl/GetRecordingSearchResults";
         let search_token = xml_escape(search_token);
+        let wait_time = xml_escape(wait_time);
         let body = format!(
             "<tse:GetRecordingSearchResults>\
                <tse:SearchToken>{search_token}</tse:SearchToken>\
@@ -339,6 +341,9 @@ impl OnvifClient {
             .await?;
 
         let mut all = Vec::new();
+        // Cap polling iterations to prevent unbounded loops when a device
+        // never reports `Completed`.  20 rounds × 100 results × PT5S wait
+        // covers up to 2 000 recordings with a ~100 s worst-case wall time.
         for _ in 0..20 {
             let results = self
                 .get_recording_search_results(search_url, &token, 100, "PT5S")

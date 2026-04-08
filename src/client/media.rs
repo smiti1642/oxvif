@@ -446,6 +446,9 @@ impl OnvifClient {
     /// List all OSD elements attached to a video source configuration.
     ///
     /// Pass `None` for `config_token` to list all OSDs on the device.
+    /// ONVIF Media WSDL §5.14: GetOSDs accepts an optional
+    /// `ConfigurationToken` (video source configuration reference) to filter
+    /// results.  This is distinct from `GetOSD` which takes an `OSDToken`.
     pub async fn get_osds(
         &self,
         media_url: &str,
@@ -453,7 +456,12 @@ impl OnvifClient {
     ) -> Result<Vec<OsdConfiguration>, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSDs";
         let inner = config_token
-            .map(|t| format!("<trt:OSDToken>{}</trt:OSDToken>", xml_escape(t)))
+            .map(|t| {
+                format!(
+                    "<trt:ConfigurationToken>{}</trt:ConfigurationToken>",
+                    xml_escape(t)
+                )
+            })
             .unwrap_or_default();
         let body = format!("<trt:GetOSDs>{inner}</trt:GetOSDs>");
         let xml = self.call(media_url, ACTION, &body).await?;

@@ -3,7 +3,9 @@
 use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
-use crate::types::{EventProperties, NotificationMessage, PullPointSubscription, PushSubscription};
+use crate::types::{
+    EventProperties, NotificationMessage, PullPointSubscription, PushSubscription, xml_escape,
+};
 use futures_core::Stream;
 
 impl OnvifClient {
@@ -44,20 +46,28 @@ impl OnvifClient {
     ) -> Result<PullPointSubscription, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/events/wsdl/EventPortType/CreatePullPointSubscriptionRequest";
 
+        // Topic filter expressions are XML-escaped per XML spec requirements;
+        // the device's XML parser will unescape them transparently.
         let filter_el = filter
             .map(|f| {
                 format!(
                     "<tev:Filter>\
                        <wsnt:TopicExpression \
                          Dialect=\"http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet\"\
-                       >{f}</wsnt:TopicExpression>\
-                     </tev:Filter>"
+                       >{}</wsnt:TopicExpression>\
+                     </tev:Filter>",
+                    xml_escape(f)
                 )
             })
             .unwrap_or_default();
 
         let termination_el = initial_termination_time
-            .map(|t| format!("<tev:InitialTerminationTime>{t}</tev:InitialTerminationTime>"))
+            .map(|t| {
+                format!(
+                    "<tev:InitialTerminationTime>{}</tev:InitialTerminationTime>",
+                    xml_escape(t)
+                )
+            })
             .unwrap_or_default();
 
         let body = format!(
@@ -86,6 +96,7 @@ impl OnvifClient {
         const ACTION: &str =
             "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest";
 
+        let timeout = xml_escape(timeout);
         let body = format!(
             "<tev:PullMessages>\
                <tev:Timeout>{timeout}</tev:Timeout>\
@@ -113,6 +124,7 @@ impl OnvifClient {
     ) -> Result<String, OnvifError> {
         const ACTION: &str = "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest";
 
+        let termination_time = xml_escape(termination_time);
         let body = format!(
             "<wsnt:Renew>\
                <wsnt:TerminationTime>{termination_time}</wsnt:TerminationTime>\
@@ -169,20 +181,27 @@ impl OnvifClient {
         const ACTION: &str =
             "http://docs.oasis-open.org/wsn/bw-2/NotificationProducer/SubscribeRequest";
 
+        let consumer_url = xml_escape(consumer_url);
         let filter_el = filter
             .map(|f| {
                 format!(
                     "<wsnt:Filter>\
                        <wsnt:TopicExpression \
                          Dialect=\"http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet\"\
-                       >{f}</wsnt:TopicExpression>\
-                     </wsnt:Filter>"
+                       >{}</wsnt:TopicExpression>\
+                     </wsnt:Filter>",
+                    xml_escape(f)
                 )
             })
             .unwrap_or_default();
 
         let termination_el = termination_time
-            .map(|t| format!("<wsnt:InitialTerminationTime>{t}</wsnt:InitialTerminationTime>"))
+            .map(|t| {
+                format!(
+                    "<wsnt:InitialTerminationTime>{}</wsnt:InitialTerminationTime>",
+                    xml_escape(t)
+                )
+            })
             .unwrap_or_default();
 
         let body = format!(
@@ -280,13 +299,29 @@ impl OnvifClient {
 pub fn notification_listener(
     bind_addr: std::net::SocketAddr,
 ) -> std::pin::Pin<Box<dyn futures_core::Stream<Item = NotificationMessage> + Send>> {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<NotificationMessage>(256);
+
+    // Spawn a background task that accepts connections concurrently so that
+    // rapid-fire notifications from one or more devices are not serialised.
+    tokio::spawn(async move {
+        let Ok(listener) = tokio::net::TcpListener::bind(bind_addr).await else {
+            return;
+        };
+        while let Ok((mut conn, _)) = listener.accept().await {
+            let tx = tx.clone();
+            tokio::spawn(async move {
+                for msg in handle_notify_connection(&mut conn).await {
+                    if tx.send(msg).await.is_err() {
+                        break; // receiver dropped — stream consumed
+                    }
+                }
+            });
+        }
+    });
+
     Box::pin(async_stream::stream! {
-        let Ok(listener) = tokio::net::TcpListener::bind(bind_addr).await else { return; };
-        loop {
-            let Ok((mut conn, _)) = listener.accept().await else { break; };
-            for msg in handle_notify_connection(&mut conn).await {
-                yield msg;
-            }
+        while let Some(msg) = rx.recv().await {
+            yield msg;
         }
     })
 }
@@ -314,6 +349,11 @@ async fn handle_notify_connection(conn: &mut tokio::net::TcpStream) -> Vec<Notif
     let notify = body_el.child("Notify").unwrap_or(body_el);
     NotificationMessage::vec_from_xml(notify)
 }
+
+/// Maximum accepted notification body size (1 MiB).  ONVIF Notify messages
+/// are small XML documents; anything larger is almost certainly not a
+/// legitimate notification.
+const MAX_NOTIFY_BODY: usize = 1_048_576;
 
 async fn read_http_body(conn: &mut tokio::net::TcpStream) -> std::io::Result<String> {
     use tokio::io::AsyncReadExt;
@@ -349,6 +389,13 @@ async fn read_http_body(conn: &mut tokio::net::TcpStream) -> std::io::Result<Str
         .and_then(|l| l.split_once(':').map(|x| x.1))
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(0);
+
+    if content_length > MAX_NOTIFY_BODY {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "notification body too large",
+        ));
+    }
 
     let already_read = buf.len() - header_end;
     if content_length > already_read {

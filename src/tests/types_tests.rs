@@ -1043,3 +1043,54 @@ mod media2 {
         assert_eq!(inst.encodings[1].number, 2);
     }
 }
+
+// ── xml_escape ────────────────────────────────────────────────────────────
+
+mod xml_escape_tests {
+    use super::*;
+    use std::borrow::Cow;
+
+    #[test]
+    fn test_xml_escape_borrows_when_no_special_chars() {
+        let result = xml_escape("Profile_1");
+        assert!(
+            matches!(result, Cow::Borrowed(_)),
+            "should borrow when no escaping needed"
+        );
+        assert_eq!(result, "Profile_1");
+    }
+
+    #[test]
+    fn test_xml_escape_escapes_all_five_entities() {
+        let result = xml_escape(r#"a&b<c>d"e'f"#);
+        assert_eq!(result, "a&amp;b&lt;c&gt;d&quot;e&apos;f");
+        assert!(matches!(result, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn test_xml_escape_empty_string() {
+        let result = xml_escape("");
+        assert!(matches!(result, Cow::Borrowed(_)));
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_xml_escape_only_special_chars() {
+        assert_eq!(xml_escape("&"), "&amp;");
+        assert_eq!(xml_escape("<"), "&lt;");
+        assert_eq!(xml_escape(">"), "&gt;");
+        assert_eq!(xml_escape("\""), "&quot;");
+        assert_eq!(xml_escape("'"), "&apos;");
+    }
+
+    #[test]
+    fn test_xml_escape_typical_values_are_borrowed() {
+        // Tokens, ISO durations, numeric strings — all common ONVIF values
+        for val in &["PT60S", "Profile_1", "192.168.1.100", "1920", "true"] {
+            assert!(
+                matches!(xml_escape(val), Cow::Borrowed(_)),
+                "typical ONVIF value '{val}' should not allocate"
+            );
+        }
+    }
+}

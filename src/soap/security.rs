@@ -18,6 +18,8 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha1::{Digest, Sha1};
 use std::fmt::Write;
 
+use crate::types::xml_escape;
+
 // ── WsSecurityToken ───────────────────────────────────────────────────────────
 
 /// A WS-Security `UsernameToken` ready to be serialised into a SOAP header.
@@ -79,6 +81,9 @@ impl WsSecurityToken {
     /// Write the `<wsse:Security>` XML fragment into `out`.
     /// Does **not** include the surrounding `<s:Header>` tags.
     pub fn write_xml(&self, out: &mut String) {
+        // password_digest, nonce_b64, and created are base64/ISO-8601 values
+        // that never contain XML special characters, so only the username
+        // requires escaping.
         write!(
             out,
             "<wsse:Security>\
@@ -93,7 +98,7 @@ impl WsSecurityToken {
                  <wsu:Created>{created}</wsu:Created>\
                </wsse:UsernameToken>\
              </wsse:Security>",
-            username = self.username,
+            username = xml_escape(&self.username),
             digest   = self.password_digest,
             nonce    = self.nonce_b64,
             created  = self.created,

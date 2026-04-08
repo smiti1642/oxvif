@@ -5,6 +5,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.8.6] - 2026-04-08
+
+### Fixed
+- **XML injection** — all user-supplied string parameters (`consumer_url`,
+  `filter`, `termination_time`, `timeout`, `keep_alive_timeout`, `wait_time`)
+  in the Events and Recording services are now XML-escaped before
+  interpolation into SOAP request bodies
+- **XML injection in WS-Security** — the `username` field in the
+  `UsernameToken` header is now XML-escaped
+- **`get_osds` sent wrong XML element** — was sending `<OSDToken>` but
+  ONVIF Media WSDL §5.14 specifies `<ConfigurationToken>` for the GetOSDs
+  request; devices that ignored unknown elements were silently returning
+  unfiltered results
+
+### Changed
+- `xml_escape()` now returns `Cow<str>` instead of `String`, avoiding
+  allocation when the input contains no XML-special characters (the common
+  case for tokens, ISO durations, and numeric values)
+- Removed duplicate `xml_escape_url()` in `soap::envelope`; all code now
+  uses the unified `xml_escape()` from `types`
+- `parse_soap_body()` extracts the `<Body>` node via `swap_remove` instead
+  of `.cloned()`, eliminating a deep clone of the entire SOAP body subtree
+  on every ONVIF call
+- `notification_listener()` now handles connections concurrently via
+  `tokio::spawn` + `mpsc` channel (previously sequential)
+- `notification_listener()` rejects notification bodies larger than 1 MiB
+- WS-Discovery `probe_inner` mutex access uses `unwrap_or_else` to recover
+  from poison instead of panicking
+- WS-Discovery multicast address uses `const Ipv4Addr` instead of runtime
+  `parse().unwrap()`
+
+### Dependencies
+- `tokio`: added `sync` feature (required for `mpsc` channel in
+  `notification_listener`)
+
+### Tests
+- 11 new unit tests: `xml_escape` Cow behavior (5), XML escape security for
+  profile token / consumer URL / username (3), `get_osds` sends correct
+  `ConfigurationToken` element (2), `parse_soap_body` with header (1)
+
+---
+
 ## [0.8.5] - 2026-04-06
 
 ### Added

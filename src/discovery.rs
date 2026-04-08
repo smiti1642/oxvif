@@ -30,6 +30,7 @@ use crate::soap::XmlNode;
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const WSD_MULTICAST: &str = "239.255.255.250:3702";
+const WSD_MULTICAST_ADDR: std::net::Ipv4Addr = std::net::Ipv4Addr::new(239, 255, 255, 250);
 /// Maximum UDP datagram size (IPv4 theoretical maximum).
 const UDP_MAX_SIZE: usize = 65_535;
 
@@ -199,7 +200,12 @@ async fn probe_inner(
                 }
                 match timeout(remaining, sock.recv_from(&mut buf)).await {
                     Ok(Ok((len, _))) => {
-                        received.lock().unwrap().push(buf[..len].to_vec());
+                        // Recover from mutex poison (another listener task panicked)
+                        // rather than propagating the panic across all listeners.
+                        received
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .push(buf[..len].to_vec());
                     }
                     Ok(Err(_)) => continue, // WSAECONNRESET / transient error — keep waiting
                     Err(_) => break,        // timeout elapsed
@@ -216,7 +222,7 @@ async fn probe_inner(
     let raw = Arc::try_unwrap(received)
         .unwrap_or_default()
         .into_inner()
-        .unwrap_or_default();
+        .unwrap_or_else(|e| e.into_inner());
 
     let mut devices: Vec<DiscoveredDevice> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
@@ -257,8 +263,7 @@ async fn listen_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveryEve
     use std::net::Ipv4Addr;
 
     let socket = UdpSocket::bind("0.0.0.0:3702").await?;
-    let multicast_addr: Ipv4Addr = "239.255.255.250".parse().unwrap();
-    socket.join_multicast_v4(multicast_addr, Ipv4Addr::UNSPECIFIED)?;
+    socket.join_multicast_v4(WSD_MULTICAST_ADDR, Ipv4Addr::UNSPECIFIED)?;
 
     let mut buf = vec![0u8; UDP_MAX_SIZE];
     let mut events: Vec<DiscoveryEvent> = Vec::new();

@@ -24,6 +24,8 @@ pub use ptz_config::*;
 pub use recording::*;
 pub use video::*;
 
+use std::borrow::Cow;
+
 use crate::soap::XmlNode;
 
 // Re-exported so that the `mod tests` submodule can reach them via `use super::*`.
@@ -54,19 +56,28 @@ pub(crate) fn xml_str(node: &XmlNode, child: &str) -> Option<String> {
 }
 
 /// Escape XML special characters for safe embedding in element content or attributes.
-pub(crate) fn xml_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&apos;"),
-            _ => out.push(c),
+///
+/// Returns a [`Cow::Borrowed`] reference when no escaping is needed, avoiding
+/// allocation in the common case (tokens, numeric strings, ISO durations, etc.).
+pub(crate) fn xml_escape(s: &str) -> Cow<'_, str> {
+    if s.bytes()
+        .any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''))
+    {
+        let mut out = String::with_capacity(s.len());
+        for c in s.chars() {
+            match c {
+                '&' => out.push_str("&amp;"),
+                '<' => out.push_str("&lt;"),
+                '>' => out.push_str("&gt;"),
+                '"' => out.push_str("&quot;"),
+                '\'' => out.push_str("&apos;"),
+                _ => out.push(c),
+            }
         }
+        Cow::Owned(out)
+    } else {
+        Cow::Borrowed(s)
     }
-    out
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

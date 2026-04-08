@@ -25,7 +25,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 320 unit tests + 14 doc tests
+- 334 unit tests + 17 doc tests
 
 ---
 
@@ -81,7 +81,7 @@ async fn main() -> Result<(), OnvifError> {
 
 ```toml
 [dependencies]
-oxvif = "0.8.5"
+oxvif = "0.8.6"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 

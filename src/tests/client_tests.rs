@@ -5097,3 +5097,125 @@ async fn test_subscribe_soap_fault_returns_error() {
             .contains("InvalidConsumerReference")
     );
 }
+
+// ── XML escape security tests ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_get_stream_uri_escapes_profile_token() {
+    let (transport, captured) = RecordingTransport::new(stream_uri_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .get_stream_uri("http://192.168.1.1/onvif/media_service", "tok<&>en")
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(
+        body.contains("tok&lt;&amp;&gt;en"),
+        "XML special chars in profile_token must be escaped: {body}"
+    );
+    assert!(
+        !body.contains("tok<&>en"),
+        "raw special chars must not appear in XML body"
+    );
+}
+
+#[tokio::test]
+async fn test_subscribe_escapes_consumer_url() {
+    let sub_xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2"
+                      xmlns:wsa="http://www.w3.org/2005/08/addressing">
+          <s:Body>
+            <wsnt:SubscribeResponse>
+              <wsnt:SubscriptionReference>
+                <wsa:Address>http://192.168.1.1/onvif/events/sub1</wsa:Address>
+              </wsnt:SubscriptionReference>
+              <wsnt:CurrentTime>2024-01-01T00:00:00Z</wsnt:CurrentTime>
+              <wsnt:TerminationTime>2024-01-01T01:00:00Z</wsnt:TerminationTime>
+            </wsnt:SubscribeResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(sub_xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .subscribe(
+            "http://192.168.1.1/onvif/events",
+            "http://evil.com/notify?a=1&b=2",
+            Some("tns1:Topic&Subtopic"),
+            Some("PT60S"),
+        )
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(
+        body.contains("a=1&amp;b=2"),
+        "consumer_url ampersand must be escaped: {body}"
+    );
+    assert!(
+        body.contains("Topic&amp;Subtopic"),
+        "filter ampersand must be escaped: {body}"
+    );
+}
+
+#[tokio::test]
+async fn test_ws_security_escapes_username() {
+    let (transport, captured) = RecordingTransport::new(capabilities_xml());
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_credentials("user<&>name", "password")
+        .with_transport(transport);
+
+    client.get_capabilities().await.unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(
+        body.contains("user&lt;&amp;&gt;name"),
+        "username with XML special chars must be escaped: {body}"
+    );
+}
+
+// ── get_osds sends ConfigurationToken (not OSDToken) ──────────────────────
+
+#[tokio::test]
+async fn test_get_osds_sends_configuration_token_element() {
+    let (transport, captured) = RecordingTransport::new(get_osds_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .get_osds("http://192.168.1.1/onvif/media", Some("VSC_1"))
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(
+        body.contains("<trt:ConfigurationToken>VSC_1</trt:ConfigurationToken>"),
+        "get_osds must use ConfigurationToken per ONVIF spec, not OSDToken: {body}"
+    );
+    assert!(
+        !body.contains("OSDToken"),
+        "OSDToken element must not appear in GetOSDs request"
+    );
+}
+
+#[tokio::test]
+async fn test_get_osds_without_filter_sends_no_token() {
+    let (transport, captured) = RecordingTransport::new(get_osds_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .get_osds("http://192.168.1.1/onvif/media", None)
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(
+        !body.contains("ConfigurationToken"),
+        "no filter token should be sent when config_token is None: {body}"
+    );
+}

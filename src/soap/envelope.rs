@@ -9,24 +9,8 @@
 //! address is provided; otherwise the envelope has no header element.
 
 use crate::soap::security::WsSecurityToken;
+use crate::types::xml_escape;
 use std::fmt::Write;
-
-/// Escape the five predefined XML entities in `s`.
-fn xml_escape_url(s: &str) -> std::borrow::Cow<'_, str> {
-    if s.bytes()
-        .any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''))
-    {
-        std::borrow::Cow::Owned(
-            s.replace('&', "&amp;")
-                .replace('<', "&lt;")
-                .replace('>', "&gt;")
-                .replace('"', "&quot;")
-                .replace('\'', "&apos;"),
-        )
-    } else {
-        std::borrow::Cow::Borrowed(s)
-    }
-}
 
 // ── Namespace declarations ────────────────────────────────────────────────────
 
@@ -128,7 +112,7 @@ impl SoapEnvelope {
         if has_header {
             out.push_str("<s:Header>");
             if let Some(to) = &self.wsa_to {
-                write!(out, "<wsa:To>{}</wsa:To>", xml_escape_url(to)).unwrap();
+                write!(out, "<wsa:To>{}</wsa:To>", xml_escape(to)).unwrap();
             }
             if let Some(sec) = &self.security {
                 sec.write_xml(&mut out);
