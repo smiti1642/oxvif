@@ -223,9 +223,10 @@ pub struct MetadataConfiguration {
     pub use_count: u32,
     /// Whether analytics events are embedded in the metadata stream.
     pub analytics: bool,
-    /// PTZ status delivery via metadata stream.
-    pub ptz_status_position: bool,
-    pub ptz_status_move_status: bool,
+    /// ONVIF `tt:PTZFilter/Status` — include PTZ move-status in metadata.
+    pub ptz_status: bool,
+    /// ONVIF `tt:PTZFilter/Position` — include PTZ position in metadata.
+    pub ptz_position: bool,
     /// Multicast settings, if any.
     pub multicast_address: Option<String>,
     pub multicast_port: Option<u32>,
@@ -247,8 +248,9 @@ impl MetadataConfiguration {
                 .and_then(|c| c.text().parse().ok())
                 .unwrap_or(0),
             analytics: xml_bool(n, "Analytics"),
-            ptz_status_position: ptz.is_some_and(|p| xml_bool(p, "Position")),
-            ptz_status_move_status: ptz.is_some_and(|p| xml_bool(p, "MoveStatus")),
+            // tt:PTZFilter — ONVIF schema defines Status + Position
+            ptz_status: ptz.is_some_and(|p| xml_bool(p, "Status")),
+            ptz_position: ptz.is_some_and(|p| xml_bool(p, "Position")),
             multicast_address: n
                 .path(&["Multicast", "Address", "IPv4Address"])
                 .map(|a| a.text().to_string()),
@@ -272,16 +274,16 @@ impl MetadataConfiguration {
                <tt:UseCount>{use_count}</tt:UseCount>\
                <tt:Analytics>{analytics}</tt:Analytics>\
                <tt:PTZStatus>\
+                 <tt:Status>{status}</tt:Status>\
                  <tt:Position>{pos}</tt:Position>\
-                 <tt:MoveStatus>{ms}</tt:MoveStatus>\
                </tt:PTZStatus>\
              </tr2:Configuration>",
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),
             use_count = self.use_count,
             analytics = self.analytics,
-            pos = self.ptz_status_position,
-            ms = self.ptz_status_move_status,
+            status = self.ptz_status,
+            pos = self.ptz_position,
         )
     }
 }

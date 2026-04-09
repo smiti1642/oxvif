@@ -1669,8 +1669,8 @@ fn resp_metadata_configurations() -> String {
             <tt:UseCount>1</tt:UseCount>
             <tt:Analytics>true</tt:Analytics>
             <tt:PTZStatus>
+              <tt:Status>false</tt:Status>
               <tt:Position>true</tt:Position>
-              <tt:MoveStatus>false</tt:MoveStatus>
             </tt:PTZStatus>
           </tr2:Configurations>
         </tr2:GetMetadataConfigurationsResponse>"#,

@@ -5452,8 +5452,8 @@ fn metadata_configs_xml() -> &'static str {
                 <tt:UseCount>1</tt:UseCount>
                 <tt:Analytics>true</tt:Analytics>
                 <tt:PTZStatus>
+                  <tt:Status>false</tt:Status>
                   <tt:Position>true</tt:Position>
-                  <tt:MoveStatus>false</tt:MoveStatus>
                 </tt:PTZStatus>
               </tr2:Configurations>
             </tr2:GetMetadataConfigurationsResponse>
@@ -5474,8 +5474,8 @@ async fn test_get_metadata_configurations_parses_response() {
     assert_eq!(configs.len(), 1);
     assert_eq!(configs[0].token, "MetaConf_1");
     assert!(configs[0].analytics);
-    assert!(configs[0].ptz_status_position);
-    assert!(!configs[0].ptz_status_move_status);
+    assert!(configs[0].ptz_position);
+    assert!(!configs[0].ptz_status);
 }
 
 #[tokio::test]
