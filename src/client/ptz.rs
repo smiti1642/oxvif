@@ -381,4 +381,52 @@ impl OnvifClient {
         let resp = find_response(&body_node, "GetNodesResponse")?;
         PtzNode::vec_from_xml(resp)
     }
+
+    /// Retrieve a single PTZ node by token.
+    ///
+    /// ONVIF PTZ WSDL `GetNode` — Profile T §8.2 (mandatory when PTZ
+    /// configuration is supported; client shall support at least one of
+    /// `GetNodes` or `GetNode`).
+    pub async fn ptz_get_node(
+        &self,
+        ptz_url: &str,
+        node_token: &str,
+    ) -> Result<PtzNode, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetNode";
+        let body = format!(
+            "<tptz:GetNode>\
+               <tptz:NodeToken>{}</tptz:NodeToken>\
+             </tptz:GetNode>",
+            xml_escape(node_token)
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetNodeResponse")?;
+        let node = resp
+            .child("PTZNode")
+            .ok_or_else(|| crate::soap::SoapError::missing("PTZNode"))?;
+        PtzNode::from_xml(node)
+    }
+
+    /// List PTZ configurations compatible with a given media profile.
+    ///
+    /// ONVIF PTZ WSDL `GetCompatibleConfigurations` — Profile T §8.1
+    /// (mandatory when PTZ profile configuration is supported).
+    pub async fn ptz_get_compatible_configurations(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+    ) -> Result<Vec<PtzConfiguration>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetCompatibleConfigurations";
+        let profile_token = xml_escape(profile_token);
+        let body = format!(
+            "<tptz:GetCompatibleConfigurations>\
+               <tptz:ProfileToken>{profile_token}</tptz:ProfileToken>\
+             </tptz:GetCompatibleConfigurations>"
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetCompatibleConfigurationsResponse")?;
+        PtzConfiguration::vec_from_xml(resp)
+    }
 }

@@ -130,6 +130,12 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver10/device/wsdl/GetNetworkDefaultGateway" => {
             resp_network_default_gateway()
         }
+        "http://www.onvif.org/ver10/device/wsdl/SetNetworkDefaultGateway" => {
+            resp_empty("tds", "SetNetworkDefaultGatewayResponse")
+        }
+        "http://www.onvif.org/ver10/device/wsdl/SendAuxiliaryCommand" => {
+            resp_send_auxiliary_command()
+        }
         "http://www.onvif.org/ver10/device/wsdl/GetSystemLog" => resp_system_log(),
         "http://www.onvif.org/ver10/device/wsdl/GetRelayOutputs" => resp_relay_outputs(),
         "http://www.onvif.org/ver10/device/wsdl/SetRelayOutputState" => {
@@ -261,7 +267,11 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver20/ptz/wsdl/GetStatus" => resp_ptz_status(),
         "http://www.onvif.org/ver20/ptz/wsdl/GetPresets" => resp_ptz_presets(),
         "http://www.onvif.org/ver20/ptz/wsdl/GetNodes" => resp_ptz_nodes(),
+        "http://www.onvif.org/ver20/ptz/wsdl/GetNode" => resp_ptz_node(),
         "http://www.onvif.org/ver20/ptz/wsdl/GetConfigurations" => resp_ptz_configurations(),
+        "http://www.onvif.org/ver20/ptz/wsdl/GetCompatibleConfigurations" => {
+            resp_ptz_configurations()
+        }
         "http://www.onvif.org/ver20/ptz/wsdl/AbsoluteMove"
         | "http://www.onvif.org/ver20/ptz/wsdl/RelativeMove"
         | "http://www.onvif.org/ver20/ptz/wsdl/ContinuousMove"
@@ -306,6 +316,9 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest" => resp_renew(),
         "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/UnsubscribeRequest" => {
             resp_empty("wsnt", "UnsubscribeResponse")
+        }
+        "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/SetSynchronizationPointRequest" => {
+            resp_empty("tev", "SetSynchronizationPointResponse")
         }
 
         // ── Recording ─────────────────────────────────────────────────────────
@@ -931,6 +944,29 @@ fn resp_ptz_nodes() -> String {
             <tt:HomeSupported>true</tt:HomeSupported>
           </tptz:PTZNode>
         </tptz:GetNodesResponse>"#,
+    )
+}
+
+fn resp_ptz_node() -> String {
+    soap(
+        r#"xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl""#,
+        r#"<tptz:GetNodeResponse>
+          <tptz:PTZNode token="PTZNode_1" FixedHomePosition="false">
+            <tt:Name>PTZNode</tt:Name>
+            <tt:SupportedPTZSpaces/>
+            <tt:MaximumNumberOfPresets>100</tt:MaximumNumberOfPresets>
+            <tt:HomeSupported>true</tt:HomeSupported>
+          </tptz:PTZNode>
+        </tptz:GetNodeResponse>"#,
+    )
+}
+
+fn resp_send_auxiliary_command() -> String {
+    soap(
+        r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        r#"<tds:SendAuxiliaryCommandResponse>
+          <tds:AuxiliaryCommandResponse>OK</tds:AuxiliaryCommandResponse>
+        </tds:SendAuxiliaryCommandResponse>"#,
     )
 }
 

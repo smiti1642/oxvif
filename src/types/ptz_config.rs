@@ -253,51 +253,51 @@ pub struct PtzNode {
 }
 
 impl PtzNode {
-    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
-        resp.children_named("PTZNode")
-            .map(|n| {
-                let token = n
-                    .attr("token")
-                    .filter(|t| !t.is_empty())
-                    .ok_or_else(|| SoapError::missing("PTZNode/@token"))?
-                    .to_string();
-                let spaces = n.child("SupportedPTZSpaces");
-                let pan_tilt_spaces = spaces
-                    .map(|s| {
-                        s.children_named("AbsolutePanTiltPositionSpace")
-                            .chain(s.children_named("RelativePanTiltTranslationSpace"))
-                            .chain(s.children_named("ContinuousPanTiltVelocitySpace"))
-                            .chain(s.children_named("PanTiltSpeedSpace"))
-                            .map(parse_space_range)
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                let zoom_spaces = spaces
-                    .map(|s| {
-                        s.children_named("AbsoluteZoomPositionSpace")
-                            .chain(s.children_named("RelativeZoomTranslationSpace"))
-                            .chain(s.children_named("ContinuousZoomVelocitySpace"))
-                            .chain(s.children_named("ZoomSpeedSpace"))
-                            .map(parse_space_range)
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                Ok(Self {
-                    token,
-                    name: xml_str(n, "Name").unwrap_or_default(),
-                    fixed_home_position: n.attr("FixedHomePosition") == Some("true"),
-                    home_supported: n
-                        .child("HomeSupported")
-                        .is_some_and(|h| h.text() == "true" || h.text() == "1"),
-                    max_presets: xml_u32(n, "MaximumNumberOfPresets").unwrap_or(0),
-                    aux_commands: n
-                        .children_named("AuxiliaryCommands")
-                        .map(|c| c.text().to_string())
-                        .collect(),
-                    pan_tilt_spaces,
-                    zoom_spaces,
-                })
+    pub(crate) fn from_xml(n: &XmlNode) -> Result<Self, OnvifError> {
+        let token = n
+            .attr("token")
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| SoapError::missing("PTZNode/@token"))?
+            .to_string();
+        let spaces = n.child("SupportedPTZSpaces");
+        let pan_tilt_spaces = spaces
+            .map(|s| {
+                s.children_named("AbsolutePanTiltPositionSpace")
+                    .chain(s.children_named("RelativePanTiltTranslationSpace"))
+                    .chain(s.children_named("ContinuousPanTiltVelocitySpace"))
+                    .chain(s.children_named("PanTiltSpeedSpace"))
+                    .map(parse_space_range)
+                    .collect()
             })
-            .collect()
+            .unwrap_or_default();
+        let zoom_spaces = spaces
+            .map(|s| {
+                s.children_named("AbsoluteZoomPositionSpace")
+                    .chain(s.children_named("RelativeZoomTranslationSpace"))
+                    .chain(s.children_named("ContinuousZoomVelocitySpace"))
+                    .chain(s.children_named("ZoomSpeedSpace"))
+                    .map(parse_space_range)
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(Self {
+            token,
+            name: xml_str(n, "Name").unwrap_or_default(),
+            fixed_home_position: n.attr("FixedHomePosition") == Some("true"),
+            home_supported: n
+                .child("HomeSupported")
+                .is_some_and(|h| h.text() == "true" || h.text() == "1"),
+            max_presets: xml_u32(n, "MaximumNumberOfPresets").unwrap_or(0),
+            aux_commands: n
+                .children_named("AuxiliaryCommands")
+                .map(|c| c.text().to_string())
+                .collect(),
+            pan_tilt_spaces,
+            zoom_spaces,
+        })
+    }
+
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("PTZNode").map(Self::from_xml).collect()
     }
 }

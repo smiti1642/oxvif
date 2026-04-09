@@ -356,6 +356,24 @@ impl OnvifSession {
         self.client.get_network_default_gateway().await
     }
 
+    /// Set the default IPv4 gateway address(es).
+    pub async fn set_network_default_gateway(
+        &self,
+        ipv4_addresses: &[&str],
+    ) -> Result<(), OnvifError> {
+        self.client
+            .set_network_default_gateway(ipv4_addresses)
+            .await
+    }
+
+    /// Send an auxiliary command (wiper, washer, IR lamp, etc.).
+    pub async fn send_auxiliary_command(
+        &self,
+        auxiliary_command: &str,
+    ) -> Result<String, OnvifError> {
+        self.client.send_auxiliary_command(auxiliary_command).await
+    }
+
     /// Retrieve the device system log.
     pub async fn get_system_log(&self, log_type: &str) -> Result<SystemLog, OnvifError> {
         self.client.get_system_log(log_type).await
@@ -966,6 +984,21 @@ impl OnvifSession {
         self.client.ptz_get_nodes(self.ptz_url()?).await
     }
 
+    /// Retrieve a single PTZ node by token.
+    pub async fn ptz_get_node(&self, node_token: &str) -> Result<PtzNode, OnvifError> {
+        self.client.ptz_get_node(self.ptz_url()?, node_token).await
+    }
+
+    /// List PTZ configurations compatible with a given media profile.
+    pub async fn ptz_get_compatible_configurations(
+        &self,
+        profile_token: &str,
+    ) -> Result<Vec<PtzConfiguration>, OnvifError> {
+        self.client
+            .ptz_get_compatible_configurations(self.ptz_url()?, profile_token)
+            .await
+    }
+
     // ── Imaging Service ───────────────────────────────────────────────────────
 
     /// Retrieve the current image quality settings for a video source.
@@ -1078,6 +1111,16 @@ impl OnvifSession {
     ) -> Result<String, OnvifError> {
         self.client
             .renew_subscription(subscription_url, termination_time)
+            .await
+    }
+
+    /// Request the device to generate a synchronisation point.
+    pub async fn set_synchronization_point(
+        &self,
+        subscription_url: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .set_synchronization_point(subscription_url)
             .await
     }
 

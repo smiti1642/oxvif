@@ -480,6 +480,51 @@ impl OnvifClient {
         NetworkGateway::from_xml(resp)
     }
 
+    /// Set the default IPv4 gateway address(es).
+    ///
+    /// ONVIF Device WSDL `SetNetworkDefaultGateway` — Profile T §7.4 (mandatory).
+    pub async fn set_network_default_gateway(
+        &self,
+        ipv4_addresses: &[&str],
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetNetworkDefaultGateway";
+        let addr_els: String = ipv4_addresses
+            .iter()
+            .map(|a| format!("<tds:IPv4Address>{}</tds:IPv4Address>", xml_escape(a)))
+            .collect();
+        let body =
+            format!("<tds:SetNetworkDefaultGateway>{addr_els}</tds:SetNetworkDefaultGateway>");
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetNetworkDefaultGatewayResponse")?;
+        Ok(())
+    }
+
+    /// Send an auxiliary command (wiper, washer, IR lamp, etc.).
+    ///
+    /// ONVIF Device WSDL `SendAuxiliaryCommand` — Profile T §8.17.
+    /// Common command values: `"tt:Wiper|On"`, `"tt:Wiper|Off"`,
+    /// `"tt:Washer|On"`, `"tt:IRLamp|Auto"`.
+    pub async fn send_auxiliary_command(
+        &self,
+        auxiliary_command: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SendAuxiliaryCommand";
+        let body = format!(
+            "<tds:SendAuxiliaryCommand>\
+               <tds:AuxiliaryCommand>{}</tds:AuxiliaryCommand>\
+             </tds:SendAuxiliaryCommand>",
+            xml_escape(auxiliary_command)
+        );
+        let xml = self.call(&self.device_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "SendAuxiliaryCommandResponse")?;
+        Ok(resp
+            .child("AuxiliaryCommandResponse")
+            .map(|n| n.text().to_string())
+            .unwrap_or_default())
+    }
+
     /// Retrieve the device system log.
     ///
     /// `log_type` is typically `"System"` or `"Access"`.

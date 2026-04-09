@@ -140,6 +140,28 @@ impl OnvifClient {
             .unwrap_or_default())
     }
 
+    /// Request the device to generate a synchronisation point for all
+    /// subscribed event sources.
+    ///
+    /// ONVIF Events WSDL `SetSynchronizationPoint` — Profile T §7.7 (mandatory).
+    /// After calling this, the next `PullMessages` (or push notification)
+    /// will contain the current state of all event sources, allowing the
+    /// client to synchronise its view of the world.
+    ///
+    /// `subscription_url` is the `reference_url` from [`PullPointSubscription`].
+    pub async fn set_synchronization_point(
+        &self,
+        subscription_url: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/SetSynchronizationPointRequest";
+        const BODY: &str = "<tev:SetSynchronizationPoint/>";
+
+        let xml = self.call(subscription_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetSynchronizationPointResponse")?;
+        Ok(())
+    }
+
     /// Cancel an active pull-point subscription.
     ///
     /// `subscription_url` is the `reference_url` from [`PullPointSubscription`].

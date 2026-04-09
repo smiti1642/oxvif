@@ -5219,3 +5219,175 @@ async fn test_get_osds_without_filter_sends_no_token() {
         "no filter token should be sent when config_token is None: {body}"
     );
 }
+
+// ── SetNetworkDefaultGateway ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_set_network_default_gateway_sends_addresses() {
+    let xml = empty_response_xml("SetNetworkDefaultGatewayResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_network_default_gateway(&["192.168.1.1", "10.0.0.1"])
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("192.168.1.1"));
+    assert!(body.contains("10.0.0.1"));
+}
+
+#[tokio::test]
+async fn test_set_network_default_gateway_soap_fault() {
+    let xml = make_soap_fault_xml("s:Sender", "Action not supported");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .set_network_default_gateway(&["192.168.1.1"])
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("Action not supported"));
+}
+
+// ── SendAuxiliaryCommand ──────────────────────────────────────────────────
+
+fn send_auxiliary_command_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+          <s:Body>
+            <tds:SendAuxiliaryCommandResponse>
+              <tds:AuxiliaryCommandResponse>OK</tds:AuxiliaryCommandResponse>
+            </tds:SendAuxiliaryCommandResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_send_auxiliary_command_returns_response() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(send_auxiliary_command_xml()));
+
+    let resp = client.send_auxiliary_command("tt:Wiper|On").await.unwrap();
+    assert_eq!(resp, "OK");
+}
+
+#[tokio::test]
+async fn test_send_auxiliary_command_escapes_input() {
+    let (transport, captured) = RecordingTransport::new(send_auxiliary_command_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .send_auxiliary_command("tt:Wiper|On&Off")
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("On&amp;Off"), "must escape: {body}");
+}
+
+// ── SetSynchronizationPoint ───────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_set_synchronization_point_ok() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tev="http://www.onvif.org/ver10/events/wsdl">
+          <s:Body><tev:SetSynchronizationPointResponse/></s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_synchronization_point("http://192.168.1.1/onvif/events/sub1")
+        .await
+        .unwrap();
+
+    let action = captured.lock().unwrap().action.clone();
+    assert!(action.contains("SetSynchronizationPoint"));
+}
+
+// ── PTZ GetNode ───────────────────────────────────────────────────────────
+
+fn ptz_node_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                    xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tptz:GetNodeResponse>
+              <tptz:PTZNode token="PTZNode_1" FixedHomePosition="false">
+                <tt:Name>PTZNode</tt:Name>
+                <tt:SupportedPTZSpaces/>
+                <tt:MaximumNumberOfPresets>100</tt:MaximumNumberOfPresets>
+                <tt:HomeSupported>true</tt:HomeSupported>
+              </tptz:PTZNode>
+            </tptz:GetNodeResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_ptz_get_node_parses_response() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(ptz_node_xml()));
+
+    let node = client
+        .ptz_get_node("http://192.168.1.1/onvif/ptz_service", "PTZNode_1")
+        .await
+        .unwrap();
+
+    assert_eq!(node.token, "PTZNode_1");
+    assert!(node.home_supported);
+}
+
+#[tokio::test]
+async fn test_ptz_get_node_sends_token() {
+    let (transport, captured) = RecordingTransport::new(ptz_node_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_get_node("http://192.168.1.1/onvif/ptz_service", "PTZNode_1")
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("PTZNode_1"));
+}
+
+// ── PTZ GetCompatibleConfigurations ───────────────────────────────────────
+
+#[tokio::test]
+async fn test_ptz_get_compatible_configurations_sends_profile_token() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                    xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tptz:GetCompatibleConfigurationsResponse>
+              <tptz:PTZConfiguration token="PTZConfig_1">
+                <tt:Name>PTZConfig</tt:Name>
+                <tt:UseCount>1</tt:UseCount>
+                <tt:NodeToken>PTZNode_1</tt:NodeToken>
+                <tt:DefaultPTZTimeout>PT10S</tt:DefaultPTZTimeout>
+              </tptz:PTZConfiguration>
+            </tptz:GetCompatibleConfigurationsResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let configs = client
+        .ptz_get_compatible_configurations("http://192.168.1.1/onvif/ptz_service", "Profile_1")
+        .await
+        .unwrap();
+
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs[0].token, "PTZConfig_1");
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("Profile_1"));
+}
