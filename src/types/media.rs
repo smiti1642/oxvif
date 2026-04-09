@@ -210,3 +210,228 @@ impl MediaProfile2 {
             .collect()
     }
 }
+
+// ── MetadataConfiguration ─────────────────────────────────────────────────────
+
+/// Metadata stream configuration returned by `GetMetadataConfigurations` (Media2).
+///
+/// ONVIF Media2 WSDL — Profile T §7.14/§7.15 (conditional).
+#[derive(Debug, Clone)]
+pub struct MetadataConfiguration {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    /// Whether analytics events are embedded in the metadata stream.
+    pub analytics: bool,
+    /// PTZ status delivery via metadata stream.
+    pub ptz_status_position: bool,
+    pub ptz_status_move_status: bool,
+    /// Multicast settings, if any.
+    pub multicast_address: Option<String>,
+    pub multicast_port: Option<u32>,
+}
+
+impl MetadataConfiguration {
+    pub(crate) fn from_xml(n: &XmlNode) -> Result<Self, OnvifError> {
+        let token = n
+            .attr("token")
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| SoapError::missing("MetadataConfiguration/@token"))?
+            .to_string();
+        let ptz = n.child("PTZStatus");
+        Ok(Self {
+            token,
+            name: xml_str(n, "Name").unwrap_or_default(),
+            use_count: n
+                .child("UseCount")
+                .and_then(|c| c.text().parse().ok())
+                .unwrap_or(0),
+            analytics: xml_bool(n, "Analytics"),
+            ptz_status_position: ptz.is_some_and(|p| xml_bool(p, "Position")),
+            ptz_status_move_status: ptz.is_some_and(|p| xml_bool(p, "MoveStatus")),
+            multicast_address: n
+                .path(&["Multicast", "Address", "IPv4Address"])
+                .map(|a| a.text().to_string()),
+            multicast_port: n
+                .path(&["Multicast", "Port"])
+                .and_then(|p| p.text().parse().ok()),
+        })
+    }
+
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("Configurations")
+            .map(Self::from_xml)
+            .collect()
+    }
+
+    pub(crate) fn to_xml_body(&self) -> String {
+        use super::xml_escape;
+        format!(
+            "<tr2:Configuration token=\"{token}\">\
+               <tt:Name>{name}</tt:Name>\
+               <tt:UseCount>{use_count}</tt:UseCount>\
+               <tt:Analytics>{analytics}</tt:Analytics>\
+               <tt:PTZStatus>\
+                 <tt:Position>{pos}</tt:Position>\
+                 <tt:MoveStatus>{ms}</tt:MoveStatus>\
+               </tt:PTZStatus>\
+             </tr2:Configuration>",
+            token = xml_escape(&self.token),
+            name = xml_escape(&self.name),
+            use_count = self.use_count,
+            analytics = self.analytics,
+            pos = self.ptz_status_position,
+            ms = self.ptz_status_move_status,
+        )
+    }
+}
+
+// ── MetadataConfigurationOptions ──────────────────────────────────────────────
+
+/// Valid ranges for metadata configuration returned by
+/// `GetMetadataConfigurationOptions` (Media2).
+#[derive(Debug, Clone)]
+pub struct MetadataConfigurationOptions {
+    pub ptz_status_filter_supported: bool,
+    pub analytics_supported: bool,
+}
+
+impl MetadataConfigurationOptions {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        let opts = resp.child("Options").unwrap_or(resp);
+        Ok(Self {
+            ptz_status_filter_supported: opts.child("PTZStatusFilterOptions").is_some(),
+            analytics_supported: opts
+                .path(&["Extension", "AnalyticsSupported"])
+                .is_some_and(|n| n.text() == "true" || n.text() == "1"),
+        })
+    }
+}
+
+// ── AudioDecoderConfiguration ─────────────────────────────────────────────────
+
+/// Audio decoder configuration for backchannel (audio output) returned by
+/// `GetAudioDecoderConfigurations` (Media2).
+///
+/// ONVIF Media2 WSDL — Profile T §8.13 (conditional).
+#[derive(Debug, Clone)]
+pub struct AudioDecoderConfiguration {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+}
+
+impl AudioDecoderConfiguration {
+    pub(crate) fn from_xml(n: &XmlNode) -> Result<Self, OnvifError> {
+        let token = n
+            .attr("token")
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| SoapError::missing("AudioDecoderConfiguration/@token"))?
+            .to_string();
+        Ok(Self {
+            token,
+            name: xml_str(n, "Name").unwrap_or_default(),
+            use_count: n
+                .child("UseCount")
+                .and_then(|c| c.text().parse().ok())
+                .unwrap_or(0),
+        })
+    }
+
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("Configurations")
+            .map(Self::from_xml)
+            .collect()
+    }
+}
+
+// ── AudioOutputConfiguration ──────────────────────────────────────────────────
+
+/// Audio output configuration returned by `GetAudioOutputConfigurations` (Media2).
+///
+/// ONVIF Media2 WSDL — Profile T §8.13 (conditional).
+#[derive(Debug, Clone)]
+pub struct AudioOutputConfiguration {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    pub output_token: String,
+    pub output_level: Option<u32>,
+}
+
+impl AudioOutputConfiguration {
+    pub(crate) fn from_xml(n: &XmlNode) -> Result<Self, OnvifError> {
+        let token = n
+            .attr("token")
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| SoapError::missing("AudioOutputConfiguration/@token"))?
+            .to_string();
+        Ok(Self {
+            token,
+            name: xml_str(n, "Name").unwrap_or_default(),
+            use_count: n
+                .child("UseCount")
+                .and_then(|c| c.text().parse().ok())
+                .unwrap_or(0),
+            output_token: xml_str(n, "OutputToken").unwrap_or_default(),
+            output_level: n.child("OutputLevel").and_then(|c| c.text().parse().ok()),
+        })
+    }
+
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("Configurations")
+            .map(Self::from_xml)
+            .collect()
+    }
+}
+
+// ── VideoSourceMode ───────────────────────────────────────────────────────────
+
+/// A video source mode returned by `GetVideoSourceModes` (Media2).
+///
+/// ONVIF Media2 WSDL — Profile T §8.7 (conditional).
+#[derive(Debug, Clone)]
+pub struct VideoSourceMode {
+    pub token: String,
+    pub max_framerate: f32,
+    pub max_resolution_width: u32,
+    pub max_resolution_height: u32,
+    pub encodings: Vec<String>,
+    pub reboot: bool,
+}
+
+impl VideoSourceMode {
+    pub(crate) fn from_xml(n: &XmlNode) -> Result<Self, OnvifError> {
+        let token = n
+            .attr("token")
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| SoapError::missing("VideoSourceMode/@token"))?
+            .to_string();
+        Ok(Self {
+            token,
+            max_framerate: n
+                .child("MaxFramerate")
+                .and_then(|c| c.text().parse().ok())
+                .unwrap_or(0.0),
+            max_resolution_width: n
+                .path(&["MaxResolution", "Width"])
+                .and_then(|c| c.text().parse().ok())
+                .unwrap_or(0),
+            max_resolution_height: n
+                .path(&["MaxResolution", "Height"])
+                .and_then(|c| c.text().parse().ok())
+                .unwrap_or(0),
+            encodings: n
+                .child("Encodings")
+                .map(|e| e.text().split_whitespace().map(str::to_string).collect())
+                .unwrap_or_default(),
+            reboot: xml_bool(n, "Reboot"),
+        })
+    }
+
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("VideoSourceModes")
+            .map(Self::from_xml)
+            .collect()
+    }
+}

@@ -43,17 +43,18 @@ use crate::error::OnvifError;
 use crate::soap::SoapError;
 use crate::transport::Transport;
 use crate::types::{
-    AudioEncoderConfiguration, AudioEncoderConfigurationOptions, AudioSource,
-    AudioSourceConfiguration, Capabilities, DeviceInfo, DnsInformation, EventProperties,
-    FindRecordingResults, FocusMove, Hostname, ImagingMoveOptions, ImagingOptions, ImagingSettings,
-    ImagingStatus, MediaProfile, MediaProfile2, NetworkGateway, NetworkInterface, NetworkProtocol,
-    NotificationMessage, NtpInfo, OnvifService, OsdConfiguration, OsdOptions, PtzConfiguration,
-    PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus, PullPointSubscription, RecordingItem,
-    RecordingJob, RecordingJobConfiguration, RecordingJobState, RelayOutput, SnapshotUri,
-    StorageConfiguration, StreamUri, SystemDateTime, SystemLog, SystemUris, User,
-    VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
-    VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
-    VideoSourceConfiguration, VideoSourceConfigurationOptions,
+    AudioDecoderConfiguration, AudioEncoderConfiguration, AudioEncoderConfigurationOptions,
+    AudioOutputConfiguration, AudioSource, AudioSourceConfiguration, Capabilities, DeviceInfo,
+    DnsInformation, EventProperties, FindRecordingResults, FocusMove, Hostname, ImagingMoveOptions,
+    ImagingOptions, ImagingSettings, ImagingStatus, MediaProfile, MediaProfile2,
+    MetadataConfiguration, MetadataConfigurationOptions, NetworkGateway, NetworkInterface,
+    NetworkProtocol, NotificationMessage, NtpInfo, OnvifService, OsdConfiguration, OsdOptions,
+    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus,
+    PullPointSubscription, RecordingItem, RecordingJob, RecordingJobConfiguration,
+    RecordingJobState, RelayOutput, SnapshotUri, StorageConfiguration, StreamUri, SystemDateTime,
+    SystemLog, SystemUris, User, VideoEncoderConfiguration, VideoEncoderConfiguration2,
+    VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,
+    VideoSource, VideoSourceConfiguration, VideoSourceConfigurationOptions, VideoSourceMode,
 };
 
 // ── OnvifSessionBuilder ───────────────────────────────────────────────────────
@@ -828,6 +829,145 @@ impl OnvifSession {
     pub async fn delete_profile_media2(&self, token: &str) -> Result<(), OnvifError> {
         self.client
             .delete_profile_media2(self.media2_url()?, token)
+            .await
+    }
+
+    /// Bind a configuration to a media profile (Media2).
+    pub async fn add_configuration_media2(
+        &self,
+        profile_token: &str,
+        config_type: &str,
+        config_token: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .add_configuration_media2(self.media2_url()?, profile_token, config_type, config_token)
+            .await
+    }
+
+    /// Remove a configuration from a media profile (Media2).
+    pub async fn remove_configuration_media2(
+        &self,
+        profile_token: &str,
+        config_type: &str,
+        config_token: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .remove_configuration_media2(
+                self.media2_url()?,
+                profile_token,
+                config_type,
+                config_token,
+            )
+            .await
+    }
+
+    /// List metadata configurations via Media2.
+    pub async fn get_metadata_configurations_media2(
+        &self,
+    ) -> Result<Vec<MetadataConfiguration>, OnvifError> {
+        self.client
+            .get_metadata_configurations_media2(self.media2_url()?, None, None)
+            .await
+    }
+
+    /// Apply a metadata configuration via Media2.
+    pub async fn set_metadata_configuration_media2(
+        &self,
+        config: &MetadataConfiguration,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .set_metadata_configuration_media2(self.media2_url()?, config)
+            .await
+    }
+
+    /// Retrieve metadata configuration options via Media2.
+    pub async fn get_metadata_configuration_options_media2(
+        &self,
+        config_token: Option<&str>,
+    ) -> Result<MetadataConfigurationOptions, OnvifError> {
+        self.client
+            .get_metadata_configuration_options_media2(self.media2_url()?, config_token, None)
+            .await
+    }
+
+    /// List audio source configurations via Media2.
+    pub async fn get_audio_source_configurations_media2(
+        &self,
+    ) -> Result<Vec<AudioSourceConfiguration>, OnvifError> {
+        self.client
+            .get_audio_source_configurations_media2(self.media2_url()?)
+            .await
+    }
+
+    /// List audio encoder configurations via Media2.
+    pub async fn get_audio_encoder_configurations_media2(
+        &self,
+    ) -> Result<Vec<AudioEncoderConfiguration>, OnvifError> {
+        self.client
+            .get_audio_encoder_configurations_media2(self.media2_url()?)
+            .await
+    }
+
+    /// Retrieve audio encoder configuration options via Media2.
+    pub async fn get_audio_encoder_configuration_options_media2(
+        &self,
+        config_token: Option<&str>,
+    ) -> Result<AudioEncoderConfigurationOptions, OnvifError> {
+        self.client
+            .get_audio_encoder_configuration_options_media2(self.media2_url()?, config_token)
+            .await
+    }
+
+    /// Apply an audio encoder configuration via Media2.
+    pub async fn set_audio_encoder_configuration_media2(
+        &self,
+        config: &AudioEncoderConfiguration,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .set_audio_encoder_configuration_media2(self.media2_url()?, config)
+            .await
+    }
+
+    /// List audio output configurations via Media2.
+    pub async fn get_audio_output_configurations_media2(
+        &self,
+    ) -> Result<Vec<AudioOutputConfiguration>, OnvifError> {
+        self.client
+            .get_audio_output_configurations_media2(self.media2_url()?)
+            .await
+    }
+
+    /// List audio decoder configurations via Media2.
+    pub async fn get_audio_decoder_configurations_media2(
+        &self,
+    ) -> Result<Vec<AudioDecoderConfiguration>, OnvifError> {
+        self.client
+            .get_audio_decoder_configurations_media2(self.media2_url()?)
+            .await
+    }
+
+    /// List available video source modes via Media2.
+    pub async fn get_video_source_modes_media2(
+        &self,
+        video_source_token: &str,
+    ) -> Result<Vec<VideoSourceMode>, OnvifError> {
+        self.client
+            .get_video_source_modes_media2(self.media2_url()?, video_source_token)
+            .await
+    }
+
+    /// Switch the video source to a different mode (Media2).
+    pub async fn set_video_source_mode_media2(
+        &self,
+        video_source_token: &str,
+        video_source_mode_token: &str,
+    ) -> Result<bool, OnvifError> {
+        self.client
+            .set_video_source_mode_media2(
+                self.media2_url()?,
+                video_source_token,
+                video_source_mode_token,
+            )
             .await
     }
 

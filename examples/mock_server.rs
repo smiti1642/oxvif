@@ -262,6 +262,41 @@ fn dispatch(action: &str, base: &str) -> String {
             resp_video_encoder_instances()
         }
         "http://www.onvif.org/ver20/media/wsdl/CreateProfile" => resp_create_profile_media2(),
+        "http://www.onvif.org/ver20/media/wsdl/AddConfiguration" => {
+            resp_empty("tr2", "AddConfigurationResponse")
+        }
+        "http://www.onvif.org/ver20/media/wsdl/RemoveConfiguration" => {
+            resp_empty("tr2", "RemoveConfigurationResponse")
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetMetadataConfigurations" => {
+            resp_metadata_configurations()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/SetMetadataConfiguration" => {
+            resp_empty("tr2", "SetMetadataConfigurationResponse")
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetMetadataConfigurationOptions" => {
+            resp_metadata_configuration_options()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetAudioSourceConfigurations" => {
+            resp_audio_source_configurations_media2()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetAudioEncoderConfigurations" => {
+            resp_audio_encoder_configurations_media2()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetAudioEncoderConfigurationOptions" => {
+            resp_audio_encoder_configuration_options_media2()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/SetAudioEncoderConfiguration" => {
+            resp_empty("tr2", "SetAudioEncoderConfigurationResponse")
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetAudioOutputConfigurations" => {
+            resp_audio_output_configurations()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetAudioDecoderConfigurations" => {
+            resp_audio_decoder_configurations()
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceModes" => resp_video_source_modes(),
+        "http://www.onvif.org/ver20/media/wsdl/SetVideoSourceMode" => resp_set_video_source_mode(),
 
         // ── PTZ ───────────────────────────────────────────────────────────────
         "http://www.onvif.org/ver20/ptz/wsdl/GetStatus" => resp_ptz_status(),
@@ -1620,5 +1655,127 @@ fn resp_ptz_configuration_options() -> String {
             </tt:PTZTimeout>
           </tptz:PTZConfigurationOptions>
         </tptz:GetConfigurationOptionsResponse>"#,
+    )
+}
+
+// ── Media2 new responses ─────────────────────────────────────────────────────
+
+fn resp_metadata_configurations() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetMetadataConfigurationsResponse>
+          <tr2:Configurations token="MetaConf_1">
+            <tt:Name>MetadataConfig</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:Analytics>true</tt:Analytics>
+            <tt:PTZStatus>
+              <tt:Position>true</tt:Position>
+              <tt:MoveStatus>false</tt:MoveStatus>
+            </tt:PTZStatus>
+          </tr2:Configurations>
+        </tr2:GetMetadataConfigurationsResponse>"#,
+    )
+}
+
+fn resp_metadata_configuration_options() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetMetadataConfigurationOptionsResponse>
+          <tr2:Options>
+            <tt:PTZStatusFilterOptions/>
+          </tr2:Options>
+        </tr2:GetMetadataConfigurationOptionsResponse>"#,
+    )
+}
+
+fn resp_audio_source_configurations_media2() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetAudioSourceConfigurationsResponse>
+          <tr2:Configurations token="ASC_1">
+            <tt:Name>AudioSourceConfig</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:SourceToken>AudioSrc_1</tt:SourceToken>
+          </tr2:Configurations>
+        </tr2:GetAudioSourceConfigurationsResponse>"#,
+    )
+}
+
+fn resp_audio_encoder_configurations_media2() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetAudioEncoderConfigurationsResponse>
+          <tr2:Configurations token="AEC_1">
+            <tt:Name>AudioEncoderConfig</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:Encoding>G711</tt:Encoding>
+            <tt:Bitrate>64</tt:Bitrate>
+            <tt:SampleRate>8</tt:SampleRate>
+          </tr2:Configurations>
+        </tr2:GetAudioEncoderConfigurationsResponse>"#,
+    )
+}
+
+fn resp_audio_encoder_configuration_options_media2() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetAudioEncoderConfigurationOptionsResponse>
+          <tr2:Options>
+            <tt:Options>
+              <tt:Encoding>G711</tt:Encoding>
+              <tt:BitrateList><tt:Items>64</tt:Items></tt:BitrateList>
+              <tt:SampleRateList><tt:Items>8</tt:Items></tt:SampleRateList>
+            </tt:Options>
+          </tr2:Options>
+        </tr2:GetAudioEncoderConfigurationOptionsResponse>"#,
+    )
+}
+
+fn resp_audio_output_configurations() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetAudioOutputConfigurationsResponse>
+          <tr2:Configurations token="AOC_1">
+            <tt:Name>AudioOutput</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:OutputToken>AudioOut_1</tt:OutputToken>
+            <tt:OutputLevel>50</tt:OutputLevel>
+          </tr2:Configurations>
+        </tr2:GetAudioOutputConfigurationsResponse>"#,
+    )
+}
+
+fn resp_audio_decoder_configurations() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetAudioDecoderConfigurationsResponse>
+          <tr2:Configurations token="ADC_1">
+            <tt:Name>AudioDecoder</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+          </tr2:Configurations>
+        </tr2:GetAudioDecoderConfigurationsResponse>"#,
+    )
+}
+
+fn resp_video_source_modes() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetVideoSourceModesResponse>
+          <tr2:VideoSourceModes token="Mode_1">
+            <tt:MaxFramerate>30</tt:MaxFramerate>
+            <tt:MaxResolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:MaxResolution>
+            <tt:Encodings>H264 H265</tt:Encodings>
+            <tt:Reboot>false</tt:Reboot>
+          </tr2:VideoSourceModes>
+        </tr2:GetVideoSourceModesResponse>"#,
+    )
+}
+
+fn resp_set_video_source_mode() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:SetVideoSourceModeResponse>
+          <tr2:Reboot>false</tr2:Reboot>
+        </tr2:SetVideoSourceModeResponse>"#,
     )
 }

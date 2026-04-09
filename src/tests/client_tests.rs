@@ -5391,3 +5391,242 @@ async fn test_ptz_get_compatible_configurations_sends_profile_token() {
     let body = captured.lock().unwrap().body.clone();
     assert!(body.contains("Profile_1"));
 }
+
+// ── Media2 AddConfiguration / RemoveConfiguration ─────────────────────────
+
+#[tokio::test]
+async fn test_add_configuration_media2_sends_type_and_token() {
+    let xml = empty_response_xml("AddConfigurationResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .add_configuration_media2(
+            "http://192.168.1.1/onvif/media2",
+            "Profile_1",
+            "VideoEncoder",
+            "VEC_1",
+        )
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("Profile_1"));
+    assert!(body.contains("VideoEncoder"));
+    assert!(body.contains("VEC_1"));
+}
+
+#[tokio::test]
+async fn test_remove_configuration_media2_sends_type_and_token() {
+    let xml = empty_response_xml("RemoveConfigurationResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .remove_configuration_media2(
+            "http://192.168.1.1/onvif/media2",
+            "Profile_1",
+            "Metadata",
+            "MetaConf_1",
+        )
+        .await
+        .unwrap();
+
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("Metadata"));
+    assert!(body.contains("MetaConf_1"));
+}
+
+// ── Media2 Metadata configurations ────────────────────────────────────────
+
+fn metadata_configs_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
+                    xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tr2:GetMetadataConfigurationsResponse>
+              <tr2:Configurations token="MetaConf_1">
+                <tt:Name>MetadataConfig</tt:Name>
+                <tt:UseCount>1</tt:UseCount>
+                <tt:Analytics>true</tt:Analytics>
+                <tt:PTZStatus>
+                  <tt:Position>true</tt:Position>
+                  <tt:MoveStatus>false</tt:MoveStatus>
+                </tt:PTZStatus>
+              </tr2:Configurations>
+            </tr2:GetMetadataConfigurationsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_metadata_configurations_parses_response() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(metadata_configs_xml()));
+
+    let configs = client
+        .get_metadata_configurations_media2("http://192.168.1.1/onvif/media2", None, None)
+        .await
+        .unwrap();
+
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs[0].token, "MetaConf_1");
+    assert!(configs[0].analytics);
+    assert!(configs[0].ptz_status_position);
+    assert!(!configs[0].ptz_status_move_status);
+}
+
+#[tokio::test]
+async fn test_get_metadata_configurations_missing_token_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tr2="http://www.onvif.org/ver20/media/wsdl">
+          <s:Body>
+            <tr2:GetMetadataConfigurationsResponse>
+              <tr2:Configurations>
+                <tt:Name xmlns:tt="http://www.onvif.org/ver10/schema">NoToken</tt:Name>
+              </tr2:Configurations>
+            </tr2:GetMetadataConfigurationsResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .get_metadata_configurations_media2("http://192.168.1.1/onvif/media2", None, None)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+// ── Media2 Audio decoder / output configurations ──────────────────────────
+
+fn audio_decoder_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
+                    xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tr2:GetAudioDecoderConfigurationsResponse>
+              <tr2:Configurations token="ADC_1">
+                <tt:Name>AudioDecoder</tt:Name>
+                <tt:UseCount>1</tt:UseCount>
+              </tr2:Configurations>
+            </tr2:GetAudioDecoderConfigurationsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_audio_decoder_configurations_parses_response() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(audio_decoder_xml()));
+
+    let configs = client
+        .get_audio_decoder_configurations_media2("http://192.168.1.1/onvif/media2")
+        .await
+        .unwrap();
+
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs[0].token, "ADC_1");
+    assert_eq!(configs[0].name, "AudioDecoder");
+}
+
+fn audio_output_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
+                    xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tr2:GetAudioOutputConfigurationsResponse>
+              <tr2:Configurations token="AOC_1">
+                <tt:Name>AudioOutput</tt:Name>
+                <tt:UseCount>1</tt:UseCount>
+                <tt:OutputToken>AudioOut_1</tt:OutputToken>
+                <tt:OutputLevel>50</tt:OutputLevel>
+              </tr2:Configurations>
+            </tr2:GetAudioOutputConfigurationsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_audio_output_configurations_parses_response() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(audio_output_xml()));
+
+    let configs = client
+        .get_audio_output_configurations_media2("http://192.168.1.1/onvif/media2")
+        .await
+        .unwrap();
+
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs[0].token, "AOC_1");
+    assert_eq!(configs[0].output_token, "AudioOut_1");
+    assert_eq!(configs[0].output_level, Some(50));
+}
+
+// ── Media2 Video source modes ─────────────────────────────────────────────
+
+fn video_source_modes_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
+                    xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tr2:GetVideoSourceModesResponse>
+              <tr2:VideoSourceModes token="Mode_1">
+                <tt:MaxFramerate>30</tt:MaxFramerate>
+                <tt:MaxResolution>
+                  <tt:Width>1920</tt:Width>
+                  <tt:Height>1080</tt:Height>
+                </tt:MaxResolution>
+                <tt:Encodings>H264 H265</tt:Encodings>
+                <tt:Reboot>false</tt:Reboot>
+              </tr2:VideoSourceModes>
+            </tr2:GetVideoSourceModesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_video_source_modes_parses_response() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(video_source_modes_xml()));
+
+    let modes = client
+        .get_video_source_modes_media2("http://192.168.1.1/onvif/media2", "VS_1")
+        .await
+        .unwrap();
+
+    assert_eq!(modes.len(), 1);
+    assert_eq!(modes[0].token, "Mode_1");
+    assert_eq!(modes[0].max_framerate, 30.0);
+    assert_eq!(modes[0].max_resolution_width, 1920);
+    assert_eq!(modes[0].max_resolution_height, 1080);
+    assert_eq!(modes[0].encodings, ["H264", "H265"]);
+    assert!(!modes[0].reboot);
+}
+
+#[tokio::test]
+async fn test_set_video_source_mode_sends_tokens() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tr2="http://www.onvif.org/ver20/media/wsdl">
+          <s:Body>
+            <tr2:SetVideoSourceModeResponse>
+              <tr2:Reboot>true</tr2:Reboot>
+            </tr2:SetVideoSourceModeResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let reboot = client
+        .set_video_source_mode_media2("http://192.168.1.1/onvif/media2", "VS_1", "Mode_1")
+        .await
+        .unwrap();
+
+    assert!(reboot);
+    let body = captured.lock().unwrap().body.clone();
+    assert!(body.contains("VS_1"));
+    assert!(body.contains("Mode_1"));
+}
