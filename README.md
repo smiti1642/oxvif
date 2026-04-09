@@ -10,7 +10,7 @@ UDP multicast ──► discovery::probe() ──► Vec<DiscoveredDevice>
                            │
 SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, hostname, NTP, reboot)
                            ──► Media1    (profiles, RTSP/snapshot URIs, video + audio configs)
-                           ──► Media2    (H.265 native, flat encoder config)
+                           ──► Media2    (H.265, metadata, audio, video source modes)
                            ──► PTZ       (move, stop, presets, home, status, configurations, nodes)
                            ──► Imaging   (brightness, contrast, exposure, IR cut, focus move/stop)
                            ──► OSD       (create, read, update, delete on-screen display elements)
@@ -22,10 +22,11 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 
 - Async-first (`tokio` + `reqwest`)
 - WS-Security `UsernameToken` with `PasswordDigest` (ONVIF Profile S §5.12)
+- HTTP Digest Authentication (RFC 7616, ONVIF Profile T §7.1)
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 334 unit tests + 17 doc tests
+- 352 unit tests + 17 doc tests
 
 ---
 
@@ -961,8 +962,9 @@ examples/
 | `GetNetworkInterfaces` / `SetNetworkInterfaces` | ✓ |
 | `GetNetworkProtocols` / `SetNetworkProtocols` | ✓ |
 | `GetDNS` / `SetDNS` | ✓ |
-| `GetNetworkDefaultGateway` | ✓ |
+| `GetNetworkDefaultGateway` / `SetNetworkDefaultGateway` | ✓ |
 | `GetDiscoveryMode` / `SetDiscoveryMode` | ✓ |
+| `SendAuxiliaryCommand` | ✓ |
 | `GetSystemLog` | ✓ |
 | `GetSystemUris` | ✓ |
 | `SetSystemFactoryDefault` | ✓ |
@@ -1005,6 +1007,15 @@ examples/
 | `SetVideoEncoderConfiguration` | ✓ |
 | `GetVideoEncoderConfigurationOptions` | ✓ |
 | `GetVideoEncoderInstances` | ✓ |
+| `AddConfiguration` / `RemoveConfiguration` | ✓ |
+| `GetMetadataConfigurations` / `SetMetadataConfiguration` | ✓ |
+| `GetMetadataConfigurationOptions` | ✓ |
+| `GetAudioSourceConfigurations` | ✓ |
+| `GetAudioEncoderConfigurations` / `SetAudioEncoderConfiguration` | ✓ |
+| `GetAudioEncoderConfigurationOptions` | ✓ |
+| `GetAudioOutputConfigurations` | ✓ |
+| `GetAudioDecoderConfigurations` | ✓ |
+| `GetVideoSourceModes` / `SetVideoSourceMode` | ✓ |
 
 ### PTZ Service
 
@@ -1017,7 +1028,8 @@ examples/
 | `GetStatus` | ✓ |
 | `GetConfigurations` / `GetConfiguration` | ✓ |
 | `SetConfiguration` / `GetConfigurationOptions` | ✓ |
-| `GetNodes` | ✓ |
+| `GetNodes` / `GetNode` | ✓ |
+| `GetCompatibleConfigurations` | ✓ |
 
 ### Imaging Service
 
@@ -1038,6 +1050,7 @@ examples/
 | `Unsubscribe` | ✓ |
 | `event_stream` (continuous poll stream) | ✓ |
 | WS-BaseNotification push (`subscribe` + `notification_listener`) | ✓ |
+| `SetSynchronizationPoint` | ✓ |
 
 ### Recording Service
 

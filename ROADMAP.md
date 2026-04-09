@@ -6,94 +6,40 @@ This document tracks planned work for the oxvif library. Items are grouped by th
 
 ## Short-term
 
-### Audio support (Media1 / Media2)
+### Analytics Service (Profile T §8.5/§8.6)
 
-The library currently covers all video-related operations but omits audio entirely.
+- [ ] `GetSupportedRules` — list supported rule types
+- [ ] `GetRules` — list configured rules (motion zones, line crossing, etc.)
+- [ ] `GetRuleOptions` — valid ranges for rule parameters
+- [ ] `CreateRules` / `DeleteRules` / `ModifyRules`
+- [ ] `GetSupportedAnalyticsModules`
+- [ ] `GetAnalyticsModules`
+- [ ] `CreateAnalyticsModules` / `DeleteAnalyticsModules`
 
-- [ ] `GetAudioSources` — list physical audio inputs
-- [ ] `GetAudioSourceConfigurations` / `GetAudioSourceConfiguration`
-- [ ] `SetAudioSourceConfiguration`
-- [ ] `GetAudioSourceConfigurationOptions`
-- [ ] `GetAudioEncoderConfigurations` / `GetAudioEncoderConfiguration`
-- [ ] `SetAudioEncoderConfiguration`
-- [ ] `GetAudioEncoderConfigurationOptions`
-- [ ] Media2 equivalents (`tr2:`)
+### DeviceIO Service (Profile T §8.15/§8.16)
 
-### PTZ advanced configuration
+- [ ] `GetVideoSources` (DeviceIO variant)
+- [ ] `GetAudioSources` / `GetAudioOutputs` (DeviceIO variant)
+- [ ] `GetDigitalInputs` / `SetDigitalInputConfigurations`
+- [ ] `GetRelayOutputs` / `SetRelayOutputState` (DeviceIO variant)
+- [ ] `GetRelayOutputOptions`
 
-Basic movement and presets are implemented. The configuration layer is missing.
+### Audio decoder configuration options
 
-- [ ] `GetConfigurations` — list all PTZ configs
-- [ ] `GetConfiguration` — single config by token
-- [ ] `SetConfiguration` — write back speed limits, zoom limits, etc.
-- [ ] `GetConfigurationOptions` — valid ranges for config fields
-- [ ] `GetNodes` — physical PTZ node description
-- [ ] `GetCompatibleConfigurations` — valid configs for a given profile
-
-### Imaging advanced controls
-
-- [ ] `Move` — focus and iris motorised control
-- [ ] `GetMoveOptions` — valid ranges for `Move`
-- [ ] `GetStatus` — current focus/iris position
-- [ ] `Stop` — halt ongoing focus/iris movement
+- [ ] `GetAudioDecoderConfigurationOptions` (Media2)
 
 ---
 
 ## Medium-term
 
-### WS-Discovery passive listening
+### Recording / Search advanced operations
 
-The current `probe()` function is an active sender only.
-
-- [ ] `Hello` listener — receive unsolicited announcements from cameras as they come online
-- [ ] `Bye` listener — detect camera going offline
-- [ ] Optional: maintain a live `DeviceRegistry` updated by Hello/Bye events
-
-### Analytics Service
-
-- [ ] `GetSupportedRules` — list supported rule types
-- [ ] `GetRules` — list configured rules (motion zones, line crossing, etc.)
-- [ ] `CreateRule` / `DeleteRule`
-- [ ] `GetSupportedAnalyticsModules`
-- [ ] `GetAnalyticsModules`
-- [ ] `CreateAnalyticsModule` / `DeleteAnalyticsModule`
-
-### Recording Service
-
-- [ ] `GetRecordings` — list recordings with start/stop timestamps
-- [ ] `GetRecordingInformation` — metadata for a single recording
-- [ ] `CreateRecording` / `DeleteRecording`
-- [ ] `CreateRecordingJob` / `DeleteRecordingJob`
-- [ ] `GetRecordingJobs` / `GetRecordingJobState`
-
-### Search Service
-
-- [ ] `FindRecordings` — query recordings by time range and profile
-- [ ] `GetRecordingSearchResults` — retrieve results from an ongoing search
-- [ ] `FindEvents` — search the event log
-- [ ] `GetEventSearchResults`
-
-### Replay Service
-
-- [ ] `GetReplayUri` — RTSP URI for playback of a stored recording
-- [ ] `GetReplayConfiguration` / `SetReplayConfiguration`
-
----
-
-## Long-term
-
-### WS-BaseNotification push subscriptions
-
-The Events service currently supports pull-point only. Some devices also support real-time push delivery.
-
-- [ ] `Subscribe` (WS-BaseNotification) — register a push callback endpoint
-- [ ] HTTP receiver for incoming `Notify` messages
-- [ ] Tokio `mpsc` channel or async iterator API for event streaming
-
-### DeviceIO Service
-
-- [ ] `GetRelayOutputs` / `SetRelayOutputState` — control alarm relays
-- [ ] `GetDigitalInputs` — read digital input states
+- [ ] `SetRecordingConfiguration` — modify existing recording
+- [ ] `SetTrackConfiguration` — modify track settings
+- [ ] `GetRecordingOptions` — recording capacity limits
+- [ ] `FindEvents` / `GetEventSearchResults` — event log search
+- [ ] `FindPTZPosition` / `GetPTZPositionSearchResults` — PTZ position search
+- [ ] Live-source job binding for recording jobs
 
 ### ONVIF Receiver Service
 
@@ -101,11 +47,20 @@ The Events service currently supports pull-point only. Some devices also support
 - [ ] `CreateReceiver` / `DeleteReceiver`
 - [ ] `SetReceiver`
 
+---
+
+## Long-term
+
 ### TLS / HTTPS hardening
 
 - [ ] Expose `reqwest::ClientBuilder` customisation (custom CA, client cert, `danger_accept_invalid_certs`)
 - [ ] Document HTTPS camera setup
-- [ ] CI smoke test against a self-signed camera
+
+### Access Control / Door Control (Profile C/D)
+
+- [ ] `GetAccessPointInfo` / `ExternalAuthorization`
+- [ ] `GetDoorInfo` / `LockDoor` / `UnlockDoor`
+- [ ] Credential / Schedule services
 
 ---
 
@@ -113,10 +68,8 @@ The Events service currently supports pull-point only. Some devices also support
 
 | Item | Notes |
 |------|-------|
-| Publish to crates.io | Choose final crate name, fill in metadata |
 | `serde` feature flag | Opt-in `Serialize` / `Deserialize` on all public types |
 | `tracing` integration | Instrument SOAP calls at `DEBUG` / `TRACE` level |
-| Streaming event iterator | `async fn event_stream(...) -> impl Stream<Item = NotificationMessage>` via `tokio_stream` |
 | Builder for `ImagingSettings` | Chainable setters to avoid cloning the full struct for one-field updates |
 | `OnvifClient::from_discovered(device)` | Convenience constructor from `DiscoveredDevice` |
 | Retry / timeout policy | Configurable per-request timeouts and automatic retry on transient errors |
@@ -126,19 +79,25 @@ The Events service currently supports pull-point only. Some devices also support
 
 ## Completed
 
-| Item | Commit |
-|------|--------|
-| Device: GetCapabilities, GetDeviceInformation, GetSystemDateAndTime, GetServices | `f0182f3` |
-| Media1: GetProfiles, GetStreamUri, GetSnapshotUri | `f0182f3` |
-| PTZ: AbsoluteMove, RelativeMove, ContinuousMove, Stop, GetPresets, GotoPreset | `4b8f23a` |
-| Media1 + Media2: full video source and encoder configuration | `4b8f23a` |
-| Media2: GetProfiles, GetStreamUri, GetSnapshotUri, GetVideoEncoderInstances, CreateProfile/DeleteProfile | `f0182f3` |
-| GetServices with Media2 URL discovery fallback | `f0182f3` |
-| Types split into `src/types/` module directory | `99d5407` |
-| Unit tests moved to `src/tests/` | `451a103` |
-| PTZ: SetPreset, RemovePreset, GetStatus | `a9f1456` |
-| Media1: CreateProfile, DeleteProfile, GetProfile, Add/RemoveVideoEncoderConfiguration, Add/RemoveVideoSourceConfiguration | `a9f1456` |
-| Device: GetHostname, SetHostname, GetNTP, SetNTP, SystemReboot | `a9f1456` |
-| Imaging: GetImagingSettings, SetImagingSettings, GetOptions | `a9f1456` |
-| WS-Discovery: UDP multicast Probe + DiscoveredDevice | `6da09a4` |
-| Events: GetEventProperties, CreatePullPointSubscription, PullMessages, Renew, Unsubscribe | `6da09a4` |
+| Item | Version |
+|------|---------|
+| Device: capabilities, device info, date/time, services, hostname, NTP, reboot, scopes, users, network, DNS, gateway, relay, storage, system log/URIs, factory default, discovery mode | v0.1–v0.8 |
+| Device: `SetNetworkDefaultGateway`, `SendAuxiliaryCommand` | develop |
+| Media1: profiles, stream/snapshot URI, video/audio source + encoder configs, OSD | v0.1–v0.8 |
+| Media2: profiles, stream/snapshot URI, video source/encoder configs + options + instances | v0.4–v0.8 |
+| Media2: `AddConfiguration` / `RemoveConfiguration` (unified config binding) | develop |
+| Media2: metadata configurations (Get/Set/Options) | develop |
+| Media2: audio source/encoder/output/decoder configurations | develop |
+| Media2: video source modes (Get/Set) | develop |
+| PTZ: absolute/relative/continuous move, stop, presets, home, status, configs, nodes | v0.2–v0.8 |
+| PTZ: `GetNode`, `GetCompatibleConfigurations` | develop |
+| Imaging: settings, options, focus move/stop/status | v0.3–v0.8 |
+| Events: pull-point subscription, poll, renew, unsubscribe, `event_stream` | v0.6–v0.8 |
+| Events: WS-BaseNotification push (`subscribe` + `notification_listener`) | v0.8.5 |
+| Events: `SetSynchronizationPoint` | develop |
+| Recording: list, create/delete recordings + tracks + jobs, job state/mode | v0.8 |
+| Search: find recordings, get results, end search, `search_recordings` | v0.8 |
+| Replay: `GetReplayUri` | v0.8 |
+| WS-Discovery: UDP multicast probe + passive Hello/Bye listening | v0.6–v0.8.5 |
+| HTTP Digest Authentication (RFC 7616, Profile T §7.1) | develop |
+| Published on crates.io | v0.1 |

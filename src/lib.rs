@@ -6,26 +6,31 @@
 //! interoperability between IP-based security cameras. This library provides
 //! a complete async client covering device management, media streaming,
 //! PTZ control, imaging, on-screen display, events, recording, search, and
-//! replay — all over SOAP/HTTP(S) with WS-Security authentication.
+//! replay — all over SOAP/HTTP(S) with WS-Security and HTTP Digest
+//! authentication.
 //!
 //! ## ONVIF Profile coverage
 //!
 //! | Profile | Description | Coverage | Notes |
 //! |---------|-------------|----------|-------|
-//! | **Profile S** | Video streaming | ~95% | All core operations implemented; PTZ move commands available but not shown in examples |
-//! | **Profile T** | Advanced streaming (H.265, focus, OSD, audio) | ~85% | Metadata RTP streaming excluded (not SOAP) |
+//! | **Profile S** | Video streaming | ~95% | All core operations implemented |
+//! | **Profile T** | Advanced streaming (H.265, focus, OSD, audio) | ~95% | HTTP Digest Auth, Media2 audio/metadata/analytics config, PTZ compat; Analytics rules and DeviceIO not yet implemented |
 //! | **Profile G** | Recording & playback | ~85% | Read/search/replay + full recording/job write management; live-source job binding not yet implemented |
 //!
 //! ## Supported services
 //!
 //! - **Device** — capabilities, scopes, device info, hostname, NTP, reboot,
 //!   user management, network interfaces/protocols/DNS/gateway, relay outputs,
-//!   storage configurations, system log/URIs, factory default, discovery mode
-//! - **Media1 / Media2** — profiles, RTSP/snapshot URIs, video + audio config, OSD
+//!   storage configurations, system log/URIs, factory default, discovery mode,
+//!   auxiliary commands (wiper/IR lamp)
+//! - **Media1 / Media2** — profiles, RTSP/snapshot URIs, video + audio config, OSD,
+//!   metadata config, audio decoder/output config, video source modes,
+//!   unified AddConfiguration/RemoveConfiguration
 //! - **PTZ** — absolute/relative/continuous move, presets, home position, status,
-//!   configurations, nodes
+//!   configurations, nodes, compatible configurations
 //! - **Imaging** — brightness/contrast/exposure settings, focus move/stop/status
-//! - **Events** — pull-point subscriptions, event polling, renew, unsubscribe, continuous `event_stream`
+//! - **Events** — pull-point subscriptions, event polling, renew, unsubscribe,
+//!   continuous `event_stream`, synchronization point
 //! - **Recording** — list stored recordings; create/delete recordings, tracks, and recording jobs
 //! - **Search** — find recordings by scope, collect results, end search
 //! - **Replay** — get RTSP playback URI for a stored recording
