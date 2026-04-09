@@ -26,6 +26,7 @@ async-stream = "0.3"
 futures-core = "0.3"
 if-addrs     = "0.10"
 socket2      = "0.5"
+diqwest      = "3.2"
 
 [dev-dependencies]
 mockito = "1"

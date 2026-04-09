@@ -13,6 +13,14 @@
 //! | 200    | `Ok(body)`  |
 //! | 500    | `Ok(body)`  — SOAP Fault; the SOAP layer parses the fault detail |
 //! | other  | `Err(TransportError::HttpStatus { status, body })` |
+//!
+//! ## HTTP Digest Authentication
+//!
+//! ONVIF Profile T §7.1 mandates HTTP Digest Authentication for clients.
+//! When credentials are supplied via [`HttpTransport::with_credentials`],
+//! the transport automatically handles the 401 challenge-response flow
+//! using [`diqwest`].  The digest session (nonce, realm) is cached so that
+//! subsequent requests avoid the extra round-trip.
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -60,8 +68,15 @@ pub trait Transport: Send + Sync {
 // ── HttpTransport ─────────────────────────────────────────────────────────────
 
 /// Production HTTP transport backed by [`reqwest`] with `rustls`.
+///
+/// Optionally performs HTTP Digest Authentication (RFC 7616) when credentials
+/// are provided.  This is required by ONVIF Profile T §7.1 and by some
+/// device vendors (Hikvision, Dahua, etc.) that protect SOAP endpoints at the
+/// HTTP layer in addition to WS-Security.
 pub struct HttpTransport {
     client: reqwest::Client,
+    /// Optional digest auth session that caches nonce/realm across requests.
+    digest_session: Option<diqwest::DigestAuthSession>,
 }
 
 impl HttpTransport {
@@ -72,7 +87,23 @@ impl HttpTransport {
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
                 .expect("failed to build reqwest client"),
+            digest_session: None,
         }
+    }
+
+    /// Enable HTTP Digest Authentication for all requests.
+    ///
+    /// When set, the transport automatically handles 401 challenges.
+    /// Typically the same `(username, password)` used for WS-Security.
+    /// The digest session caches the server nonce/realm so subsequent
+    /// requests use preemptive auth without an extra 401 round-trip.
+    pub fn with_credentials(
+        mut self,
+        username: impl Into<String>,
+        password: impl Into<String>,
+    ) -> Self {
+        self.digest_session = Some(diqwest::DigestAuthSession::new(username, password));
+        self
     }
 }
 
@@ -94,14 +125,33 @@ impl Transport for HttpTransport {
         // parameter rather than a separate header (SOAP 1.2 style).
         let content_type = format!("application/soap+xml; charset=utf-8; action=\"{action}\"");
 
-        let response = self
-            .client
-            .post(url)
-            .header("Content-Type", content_type)
-            .header("User-Agent", concat!("oxvif/", env!("CARGO_PKG_VERSION")))
-            .body(body)
-            .send()
-            .await?;
+        let response = if let Some(ref session) = self.digest_session {
+            use diqwest::WithDigestAuth as _;
+
+            self.client
+                .post(url)
+                .header("Content-Type", &content_type)
+                .header("User-Agent", concat!("oxvif/", env!("CARGO_PKG_VERSION")))
+                .body(body)
+                .send_digest_auth(session)
+                .await
+                .map_err(|e| match e {
+                    diqwest::error::Error::Reqwest(re) => TransportError::Http(re),
+                    other => TransportError::HttpStatus {
+                        status: 401,
+                        body: other.to_string(),
+                    },
+                })?
+        } else {
+            // No credentials — plain request (WS-Security only).
+            self.client
+                .post(url)
+                .header("Content-Type", &content_type)
+                .header("User-Agent", concat!("oxvif/", env!("CARGO_PKG_VERSION")))
+                .body(body)
+                .send()
+                .await?
+        };
 
         let status = response.status().as_u16();
         let text = response.text().await?;
@@ -188,8 +238,8 @@ mod tests {
         let mut server = mockito::Server::new_async().await;
         let mock = server
             .mock("POST", "/onvif/device_service")
-            .with_status(401)
-            .with_body("Unauthorized")
+            .with_status(403)
+            .with_body("Forbidden")
             .create_async()
             .await;
 
@@ -204,7 +254,7 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(TransportError::HttpStatus { status: 401, .. })
+            Err(TransportError::HttpStatus { status: 403, .. })
         ));
         mock.assert_async().await;
     }
@@ -254,6 +304,70 @@ mod tests {
             )
             .await;
 
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_digest_auth_handles_401_challenge() {
+        let mut server = mockito::Server::new_async().await;
+
+        // First request returns 401 with digest challenge.
+        let _challenge = server
+            .mock("POST", "/onvif/device_service")
+            .with_status(401)
+            .with_header(
+                "WWW-Authenticate",
+                r#"Digest realm="ONVIF", nonce="abc123", qop="auth""#,
+            )
+            .create_async()
+            .await;
+
+        // Second request (with Authorization header) returns 200.
+        let _success = server
+            .mock("POST", "/onvif/device_service")
+            .match_header("Authorization", mockito::Matcher::Regex("Digest ".into()))
+            .with_status(200)
+            .with_body(sample_response())
+            .create_async()
+            .await;
+
+        let t = HttpTransport::new().with_credentials("admin", "password");
+        let result = t
+            .soap_post(
+                &format!("{}/onvif/device_service", server.url()),
+                ACTION,
+                SOAP_BODY.to_string(),
+            )
+            .await;
+
+        assert!(result.is_ok(), "digest auth should succeed: {result:?}");
+        assert_eq!(result.unwrap(), sample_response());
+    }
+
+    #[tokio::test]
+    async fn test_no_digest_credentials_passes_through_401() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/onvif/device_service")
+            .with_status(401)
+            .with_body("Unauthorized")
+            .create_async()
+            .await;
+
+        // No credentials — 401 should be returned as error, not retried.
+        let t = HttpTransport::new();
+        let result = t
+            .soap_post(
+                &format!("{}/onvif/device_service", server.url()),
+                ACTION,
+                SOAP_BODY.to_string(),
+            )
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(TransportError::HttpStatus { status: 401, .. })
+        ));
         mock.assert_async().await;
     }
 }

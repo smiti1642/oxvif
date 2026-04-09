@@ -85,13 +85,24 @@ impl OnvifClient {
         }
     }
 
-    /// Set the credentials used for WS-Security `UsernameToken` authentication.
+    /// Set the credentials used for WS-Security `UsernameToken` authentication
+    /// and HTTP Digest Authentication.
+    ///
+    /// WS-Security credentials are embedded in the SOAP header of every
+    /// request.  HTTP Digest credentials are used at the transport layer to
+    /// handle 401 challenges from devices that require HTTP-level
+    /// authentication (ONVIF Profile T §7.1).
     pub fn with_credentials(
         mut self,
         username: impl Into<String>,
         password: impl Into<String>,
     ) -> Self {
-        self.credentials = Some((username.into(), password.into()));
+        let u = username.into();
+        let p = password.into();
+        // Also set HTTP Digest Auth on the default transport so that devices
+        // requiring HTTP-level authentication work out of the box.
+        self.transport = Arc::new(HttpTransport::new().with_credentials(&u, &p));
+        self.credentials = Some((u, p));
         self
     }
 
