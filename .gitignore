@@ -18,4 +18,5 @@ legacy/
 #.idea/
 .env
 .claude/
+.DS_Store
 Cargo.lock
