@@ -26,7 +26,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 352 unit tests + 17 doc tests
+- 352 unit tests + 17 doc tests + 16 mock server tests
 
 ---
 
@@ -799,9 +799,18 @@ match client.get_capabilities().await {
 
 ### Mock server
 
-`examples/mock_server.rs` is a stateless ONVIF server that responds to every
-operation exercised by `full-workflow`. Start it once and run any example
-against it — no camera required.
+`examples/mock_server/` is a **stateful** ONVIF mock server. Set operations
+(SetHostname, CreateUsers, SetDNS, etc.) persist in memory, so you can verify
+Get-after-Set roundtrips without a real camera.
+
+Features:
+- **Stateful device service** — hostname, users, scopes, DNS, NTP, timezone
+  all persist across requests (Set → Get returns updated values)
+- **Snapshot endpoint** — `GET /mock/snapshot.jpg` serves a dynamically
+  generated test-pattern BMP image that changes color every second
+- **All ONVIF services** — Device, Media1, Media2, PTZ, Imaging, Events,
+  Recording, Search, Replay (84 response handlers)
+- **16 unit tests** — stateful roundtrip verification + XML parser tests
 
 ```sh
 # Terminal 1 — start the mock server (default port 18080)
@@ -811,6 +820,27 @@ cargo run --example mock_server
 ONVIF_URL=http://127.0.0.1:18080/onvif/device \
 cargo run --example camera -- full-workflow
 ```
+
+#### Using with OxDM
+
+The mock server is designed to work with [OxDM](https://github.com/smiti1642/oxdm),
+the Dioxus-based ONVIF Device Manager:
+
+```sh
+# Terminal 1 — start mock server
+cd oxvif && cargo run --example mock_server
+
+# Terminal 2 — start OxDM
+cd oxdm && dx serve --platform desktop
+```
+
+In OxDM:
+1. Click the **Manual** tab in the device list
+2. Click **Add** and enter `127.0.0.1:18080` (auto-completes to full ONVIF URL)
+3. No credentials needed for the mock server — leave empty
+4. The device appears with snapshot thumbnails refreshing every 3 seconds
+5. Settings tabs (Identification, Network, Time, Users, Maintenance) show
+   live data from the mock server's stateful device service
 
 Or copy `.env.example` to `.env` and set `ONVIF_URL=http://127.0.0.1:18080/onvif/device`
 so examples pick it up automatically via `dotenvy`.
@@ -891,6 +921,9 @@ To run without a real camera, start the mock server first — see
 # Default port 18080; pass a port number to override
 cargo run --example mock_server
 cargo run --example mock_server -- 19090
+
+# Run mock server tests (16 tests: stateful roundtrips + XML parser)
+cargo test --example mock_server
 ```
 
 ---
@@ -938,7 +971,22 @@ src/
     └── types_tests.rs   XML parsing unit tests
 examples/
 ├── camera.rs            Live camera integration examples (all commands)
-├── mock_server.rs       Stateless ONVIF mock server for offline development
+├── mock_server/         Stateful ONVIF mock server for offline development
+│   ├── main.rs          Entry point, Axum router
+│   ├── dispatch.rs      SOAP action routing to service modules
+│   ├── helpers.rs       SOAP envelope builder, action extraction
+│   ├── snapshot.rs      Test-pattern BMP image generation
+│   ├── state.rs         Mutable device state + 11 stateful unit tests
+│   ├── xml_parse.rs     Request body XML tag extraction + 5 unit tests
+│   └── services/
+│       ├── device.rs    Device service (20 Get + 8 Set handlers, stateful)
+│       ├── media.rs     Media1 service (21 handlers)
+│       ├── media2.rs    Media2 service (17 handlers)
+│       ├── ptz.rs       PTZ service (8 handlers)
+│       ├── imaging.rs   Imaging service (4 handlers)
+│       ├── events.rs    Events service (5 handlers)
+│       └── recording.rs Recording/Search/Replay (9 handlers)
+├── odm_compat.rs        ODM compatibility integration test
 └── write_workflow.rs    Write-operation workflow with embedded mock server
 ```
 
