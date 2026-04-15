@@ -1,19 +1,16 @@
-//! ONVIF mock server — handles every operation exercised by `full-workflow`.
+//! ONVIF mock server — stateful, handles Get and Set operations.
 //!
 //! ```sh
-//! # Terminal 1 — start the mock server (default port 18080)
 //! cargo run --example mock_server
-//!
-//! # Terminal 2 — run the full workflow against it
-//! ONVIF_URL=http://127.0.0.1:18080/onvif/device \
-//! ONVIF_USERNAME=admin ONVIF_PASSWORD=password \
-//! cargo run --example camera -- full-workflow
+//! # Then point OxDM at http://127.0.0.1:18080/onvif/device
 //! ```
 
 mod dispatch;
 mod helpers;
 mod services;
 mod snapshot;
+mod state;
+pub mod xml_parse;
 
 use axum::{
     Router,
@@ -25,8 +22,11 @@ use axum::{
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 
+use state::{DeviceState, SharedState};
+
 pub struct MockState {
     pub base: String,
+    pub device: SharedState,
 }
 
 #[tokio::main]
@@ -38,7 +38,10 @@ async fn main() {
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let base = format!("http://{addr}");
-    let state = Arc::new(MockState { base: base.clone() });
+    let state = Arc::new(MockState {
+        base: base.clone(),
+        device: SharedState::new(DeviceState::default()),
+    });
 
     let app = Router::new()
         .route("/mock/snapshot.jpg", get(handle_snapshot))
@@ -48,6 +51,7 @@ async fn main() {
     let listener = TcpListener::bind(addr).await.expect("bind failed");
     println!("ONVIF mock server listening on {base}");
     println!("  ONVIF_URL={base}/onvif/device");
+    println!("  Stateful mode — Set operations persist in memory");
     println!();
 
     axum::serve(listener, app).await.expect("serve failed");
@@ -56,12 +60,13 @@ async fn main() {
 async fn handle_soap(
     State(state): State<Arc<MockState>>,
     headers: HeaderMap,
-    _body: axum::body::Bytes,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
     let action = helpers::extract_action(&headers).unwrap_or_default();
+    let body_str = String::from_utf8_lossy(&body);
     eprintln!("  → {action}");
 
-    let xml = dispatch::dispatch(&action, &state.base);
+    let xml = dispatch::dispatch(&action, &state.base, &state.device, &body_str);
 
     (
         StatusCode::OK,
