@@ -1,6 +1,12 @@
 //! oxvif — live IPCam integration tests / usage examples
 //!
-//! Copy `.env.example` to `.env`, fill in your camera details, then run:
+//! Quick start (no .env needed):
+//!
+//! ```sh
+//! cargo run --example camera -- healthcheck --ip 192.168.1.100 --auth admin/admin
+//! ```
+//!
+//! Or copy `.env.example` to `.env`, fill in your camera details, then run:
 //!
 //! ```sh
 //! cargo run --example camera -- full-workflow
@@ -52,14 +58,55 @@ struct Config {
 }
 
 impl Config {
-    fn from_env() -> Self {
+    /// Parse config from CLI flags, falling back to env vars / .env file.
+    ///
+    /// Supported flags (can appear anywhere in argv):
+    ///   --ip <addr>          Camera IP or ONVIF URL
+    ///   --auth <user/pass>   Credentials in "user/pass" format
+    fn from_args() -> Self {
         let _ = dotenvy::dotenv();
+        let args: Vec<String> = env::args().collect();
 
-        let camera_url = env::var("ONVIF_URL").expect(
-            "ONVIF_URL is not set. Copy .env.example to .env and fill in your camera details.",
-        );
-        let username = env::var("ONVIF_USERNAME").unwrap_or_else(|_| "admin".to_string());
-        let password = env::var("ONVIF_PASSWORD").unwrap_or_else(|_| String::new());
+        let mut ip: Option<String> = None;
+        let mut auth: Option<(String, String)> = None;
+
+        let mut i = 0;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--ip" => {
+                    i += 1;
+                    if let Some(v) = args.get(i) {
+                        ip = Some(v.clone());
+                    }
+                }
+                "--auth" => {
+                    i += 1;
+                    if let Some(v) = args.get(i) {
+                        if let Some((u, p)) = v.split_once('/') {
+                            auth = Some((u.to_string(), p.to_string()));
+                        } else {
+                            auth = Some((v.clone(), String::new()));
+                        }
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+
+        // Resolve camera URL: --ip flag > ONVIF_URL env
+        let camera_url = match ip {
+            Some(addr) if addr.starts_with("http://") || addr.starts_with("https://") => addr,
+            Some(addr) => format!("http://{addr}/onvif/device_service"),
+            None => env::var("ONVIF_URL")
+                .expect("Camera not specified. Use --ip <addr> or set ONVIF_URL in .env"),
+        };
+
+        let (username, password) = auth.unwrap_or_else(|| {
+            let u = env::var("ONVIF_USERNAME").unwrap_or_else(|_| "admin".to_string());
+            let p = env::var("ONVIF_PASSWORD").unwrap_or_else(|_| String::new());
+            (u, p)
+        });
 
         Self {
             camera_url,
@@ -73,9 +120,23 @@ impl Config {
 
 #[tokio::main]
 async fn main() {
-    let example = env::args().nth(1).unwrap_or_else(|| "help".to_string());
+    // Find the subcommand: first positional arg that isn't a flag or flag value.
+    let args: Vec<String> = env::args().skip(1).collect();
+    let mut example = "help".to_string();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--ip" || args[i] == "--auth" {
+            i += 2; // skip flag + value
+            continue;
+        }
+        if !args[i].starts_with('-') {
+            example = args[i].clone();
+            break;
+        }
+        i += 1;
+    }
 
-    let cfg = Config::from_env();
+    let cfg = Config::from_args();
 
     let result = match example.as_str() {
         "full-workflow" => full_workflow(&cfg).await,
@@ -125,7 +186,14 @@ fn print_help() {
     println!("oxvif IPCam integration examples");
     println!();
     println!("USAGE:");
-    println!("  cargo run -- <example>");
+    println!("  cargo run --example camera -- <command> [--ip <addr>] [--auth <user/pass>]");
+    println!();
+    println!("OPTIONS:");
+    println!("  --ip <addr>          Camera IP or full ONVIF URL (or set ONVIF_URL in .env)");
+    println!("  --auth <user/pass>   Credentials (default: admin with no password)");
+    println!();
+    println!("QUICK START:");
+    println!("  cargo run --example camera -- healthcheck --ip 192.168.1.100 --auth admin/admin");
     println!();
     println!("EXAMPLES:");
     println!("  full-workflow        All implemented operations end-to-end");
