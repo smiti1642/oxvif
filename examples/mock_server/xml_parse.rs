@@ -1,68 +1,32 @@
 //! Minimal XML tag extraction for parsing SOAP request bodies.
 //!
-//! Handles namespace prefixes: `<tt:Name>`, `<Name>`, `<tds:Name>` all match "Name".
+//! Handles namespace prefixes (`<tt:Name>`, `<wsse:Password>`) and
+//! tags with attributes (`<wsse:Password Type="...">value</wsse:Password>`).
 
 /// Extract the text content of the first tag with the given local name.
+///
+/// Matches `<ns:Name>`, `<Name>`, `<ns:Name attr="...">` — any tag whose
+/// local name (after the last `:`) equals `local_name`.
 pub fn extract_tag(xml: &str, local_name: &str) -> Option<String> {
-    // Find opening tag: anything ending with `LocalName>` or `LocalName ...>`
-    let search = format!("{local_name}>");
-    for (pos, _) in xml.match_indices(&search) {
-        // Walk back to find '<'
-        let before = &xml[..pos];
-        let lt = before.rfind('<')?;
-        let between = &xml[lt + 1..pos];
-        // Skip closing tags
-        if between.contains('/') {
-            continue;
-        }
-        // Found opening — extract content until closing tag
-        let content_start = pos + search.len();
-        let rest = &xml[content_start..];
-        // Find closing: </...LocalName>
-        let close = format!("{local_name}>");
-        for (cpos, _) in rest.match_indices(&close) {
-            let cbefore = &rest[..cpos];
-            if let Some(clt) = cbefore.rfind('<') {
-                let cbetween = &rest[clt + 1..cpos];
-                if cbetween.contains('/') {
-                    return Some(rest[..clt].trim().to_string());
-                }
-            }
-        }
-    }
-    None
+    let (_, content_start, _) = find_open_tag(xml, local_name, 0)?;
+    let rest = &xml[content_start..];
+    let close_pos = find_close_tag(rest, local_name)?;
+    Some(rest[..close_pos].trim().to_string())
 }
 
 /// Extract all values of a repeated tag.
-/// e.g., multiple `<tt:IPv4Address>` tags.
 pub fn extract_all_tags(xml: &str, local_name: &str) -> Vec<String> {
     let mut results = Vec::new();
     let mut search_from = 0;
-    let search = format!("{local_name}>");
 
     while search_from < xml.len() {
-        let rest = &xml[search_from..];
-        let Some(pos) = rest.find(&search) else { break };
-        let abs_pos = search_from + pos;
-
-        // Check it's an opening tag
-        let before = &xml[..abs_pos];
-        let Some(lt) = before.rfind('<') else {
-            search_from = abs_pos + search.len();
-            continue;
+        let Some((_, content_start, _)) = find_open_tag(xml, local_name, search_from) else {
+            break;
         };
-        let between = &xml[lt + 1..abs_pos];
-        if between.contains('/') {
-            search_from = abs_pos + search.len();
-            continue;
-        }
-
-        let content_start = abs_pos + search.len();
-        let after = &xml[content_start..];
-        // Find closing tag
-        if let Some(end) = find_close(after, local_name) {
-            results.push(after[..end].trim().to_string());
-            search_from = content_start + end;
+        let rest = &xml[content_start..];
+        if let Some(close_pos) = find_close_tag(rest, local_name) {
+            results.push(rest[..close_pos].trim().to_string());
+            search_from = content_start + close_pos;
         } else {
             search_from = content_start;
         }
@@ -71,18 +35,68 @@ pub fn extract_all_tags(xml: &str, local_name: &str) -> Vec<String> {
     results
 }
 
-fn find_close(xml: &str, local_name: &str) -> Option<usize> {
-    let pattern = format!("{local_name}>");
-    for (pos, _) in xml.match_indices(&pattern) {
-        if pos > 0 {
-            let before = &xml[..pos];
-            if let Some(lt) = before.rfind('<') {
-                let between = &xml[lt + 1..pos];
-                if between.contains('/') {
-                    return Some(lt);
-                }
-            }
+/// Find the opening tag for `local_name` starting from `from`.
+/// Returns `(tag_start, content_start, tag_name)` — content_start is right after `>`.
+fn find_open_tag(xml: &str, local_name: &str, from: usize) -> Option<(usize, usize, String)> {
+    let mut pos = from;
+    while pos < xml.len() {
+        let rest = &xml[pos..];
+        let lt = rest.find('<')?;
+        let abs_lt = pos + lt;
+        let after_lt = &xml[abs_lt + 1..];
+
+        // Skip closing tags, processing instructions, comments
+        if after_lt.starts_with('/')
+            || after_lt.starts_with('?')
+            || after_lt.starts_with('!')
+        {
+            pos = abs_lt + 2;
+            continue;
         }
+
+        // Find the end of this tag
+        let Some(gt) = after_lt.find('>') else {
+            break;
+        };
+        let tag_content = &after_lt[..gt]; // e.g. "wsse:Password Type=\"...\""
+
+        // Extract the tag name (before any space/attributes)
+        let tag_name = tag_content
+            .split(|c: char| c.is_whitespace() || c == '/')
+            .next()
+            .unwrap_or("");
+
+        // Get local part (after last ':')
+        let local = tag_name.rsplit(':').next().unwrap_or(tag_name);
+
+        if local == local_name {
+            let content_start = abs_lt + 1 + gt + 1; // position after '>'
+            return Some((abs_lt, content_start, tag_name.to_string()));
+        }
+
+        pos = abs_lt + 1;
+    }
+    None
+}
+
+/// Find the position of the closing tag `</...local_name>` relative to the input.
+fn find_close_tag(xml: &str, local_name: &str) -> Option<usize> {
+    let mut pos = 0;
+    while pos < xml.len() {
+        let rest = &xml[pos..];
+        let lt = rest.find("</")?;
+        let abs_lt = pos + lt;
+        let after = &xml[abs_lt + 2..];
+
+        let Some(gt) = after.find('>') else { break };
+        let tag_name = after[..gt].trim();
+        let local = tag_name.rsplit(':').next().unwrap_or(tag_name);
+
+        if local == local_name {
+            return Some(abs_lt);
+        }
+
+        pos = abs_lt + 2;
     }
     None
 }
@@ -110,6 +124,24 @@ mod tests {
     }
 
     #[test]
+    fn extract_tag_with_attributes() {
+        let xml = r#"<wsse:Password Type="http://example.com#PasswordDigest">abc123==</wsse:Password>"#;
+        assert_eq!(
+            extract_tag(xml, "Password"),
+            Some("abc123==".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_nonce_with_encoding_type() {
+        let xml = r#"<wsse:Nonce EncodingType="http://example.com#Base64Binary">bm9uY2U=</wsse:Nonce>"#;
+        assert_eq!(
+            extract_tag(xml, "Nonce"),
+            Some("bm9uY2U=".to_string())
+        );
+    }
+
+    #[test]
     fn extract_all() {
         let xml = r#"<a><tt:IPv4Address>8.8.8.8</tt:IPv4Address><tt:IPv4Address>1.1.1.1</tt:IPv4Address></a>"#;
         let v = extract_all_tags(xml, "IPv4Address");
@@ -119,5 +151,30 @@ mod tests {
     #[test]
     fn extract_missing() {
         assert_eq!(extract_tag("<a>b</a>", "Missing"), None);
+    }
+
+    #[test]
+    fn extract_from_full_soap_security_header() {
+        let xml = r#"<s:Envelope>
+          <s:Header>
+            <wsse:Security>
+              <wsse:UsernameToken>
+                <wsse:Username>admin</wsse:Username>
+                <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest">digest==</wsse:Password>
+                <wsse:Nonce EncodingType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary">bm9uY2U=</wsse:Nonce>
+                <wsu:Created>2026-04-15T00:00:00Z</wsu:Created>
+              </wsse:UsernameToken>
+            </wsse:Security>
+          </s:Header>
+          <s:Body><tds:GetHostname/></s:Body>
+        </s:Envelope>"#;
+
+        assert_eq!(extract_tag(xml, "Username"), Some("admin".to_string()));
+        assert_eq!(extract_tag(xml, "Password"), Some("digest==".to_string()));
+        assert_eq!(extract_tag(xml, "Nonce"), Some("bm9uY2U=".to_string()));
+        assert_eq!(
+            extract_tag(xml, "Created"),
+            Some("2026-04-15T00:00:00Z".to_string())
+        );
     }
 }
