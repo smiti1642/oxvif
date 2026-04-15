@@ -6,9 +6,35 @@ pub fn resp_profiles() -> String {
         r#"<trt:GetProfilesResponse>
           <trt:Profiles token="Profile_1" fixed="true">
             <tt:Name>mainStream</tt:Name>
+            <tt:VideoSourceConfiguration token="VSC_1">
+              <tt:Name>VSConfig1</tt:Name>
+              <tt:UseCount>2</tt:UseCount>
+              <tt:SourceToken>VS_1</tt:SourceToken>
+              <tt:Bounds x="0" y="0" width="1920" height="1080"/>
+            </tt:VideoSourceConfiguration>
+            <tt:VideoEncoderConfiguration token="VEC_1">
+              <tt:Name>H264</tt:Name>
+              <tt:UseCount>1</tt:UseCount>
+              <tt:Encoding>H264</tt:Encoding>
+              <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+              <tt:RateControl><tt:FrameRateLimit>30</tt:FrameRateLimit><tt:BitrateLimit>4096</tt:BitrateLimit></tt:RateControl>
+            </tt:VideoEncoderConfiguration>
           </trt:Profiles>
           <trt:Profiles token="Profile_2" fixed="false">
             <tt:Name>subStream</tt:Name>
+            <tt:VideoSourceConfiguration token="VSC_1">
+              <tt:Name>VSConfig1</tt:Name>
+              <tt:UseCount>2</tt:UseCount>
+              <tt:SourceToken>VS_1</tt:SourceToken>
+              <tt:Bounds x="0" y="0" width="1920" height="1080"/>
+            </tt:VideoSourceConfiguration>
+            <tt:VideoEncoderConfiguration token="VEC_2">
+              <tt:Name>H264_sub</tt:Name>
+              <tt:UseCount>1</tt:UseCount>
+              <tt:Encoding>H264</tt:Encoding>
+              <tt:Resolution><tt:Width>640</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
+              <tt:RateControl><tt:FrameRateLimit>15</tt:FrameRateLimit><tt:BitrateLimit>1024</tt:BitrateLimit></tt:RateControl>
+            </tt:VideoEncoderConfiguration>
           </trt:Profiles>
         </trt:GetProfilesResponse>"#,
     )
@@ -20,6 +46,12 @@ pub fn resp_profile() -> String {
         r#"<trt:GetProfileResponse>
           <trt:Profile token="Profile_1" fixed="true">
             <tt:Name>mainStream</tt:Name>
+            <tt:VideoSourceConfiguration token="VSC_1">
+              <tt:Name>VSConfig1</tt:Name>
+              <tt:UseCount>2</tt:UseCount>
+              <tt:SourceToken>VS_1</tt:SourceToken>
+              <tt:Bounds x="0" y="0" width="1920" height="1080"/>
+            </tt:VideoSourceConfiguration>
           </trt:Profile>
         </trt:GetProfileResponse>"#,
     )
