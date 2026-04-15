@@ -5,6 +5,46 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.0] - 2026-04-15
+
+### Added
+- **HTTP Digest Authentication** — transport layer now supports HTTP Digest
+  Auth (RFC 7616) as required by ONVIF Profile T §7.1
+- **Profile T operations** — Device, Events, and PTZ mandatory operations for
+  Profile T compliance
+- **Media2 audio/metadata** — `GetAudioSourceConfigurations`,
+  `GetAudioEncoderConfigurations`, `SetAudioEncoderConfiguration`,
+  `GetAudioEncoderConfigurationOptions`, `GetAudioOutputConfigurations`,
+  `GetAudioDecoderConfigurations`, `GetMetadataConfigurations`,
+  `SetMetadataConfiguration`, `GetMetadataConfigurationOptions`,
+  `AddConfiguration`, `RemoveConfiguration`
+- **Healthcheck example** — new `healthcheck` subcommand for the camera
+  example; `--ip` and `--auth` CLI flags for direct device targeting
+- **Mock server** — refactored to multi-module architecture with stateful
+  device service, file persistence, WS-Security auth, and snapshot endpoint
+
+### Fixed
+- **XML escape** — all user-supplied SOAP parameters are now XML-escaped
+  before interpolation, preventing XML injection
+- **MetadataConfiguration** — PTZFilter alignment corrected for Media2 service
+- **MediaProfile `video_source_token`** — now correctly parses `<SourceToken>`
+  child element instead of reading the wrong attribute
+- **Transport** — HTTP 400 responses are now treated as SOAP Faults with
+  structured error parsing instead of raw XML dump
+
+### Breaking
+- **`MediaProfile`** — added `video_source_config_token: Option<String>` field;
+  code that constructs `MediaProfile` with struct literal syntax will need to
+  include this new field
+
+### Dependencies
+- `if-addrs`: 0.10 -> 0.15 (major upgrade)
+- `rand`: 0.10.0 -> 0.10.1 (fixes RUSTSEC-2026-0097)
+- `rustls-webpki`: 0.103.10 -> 0.103.12 (fixes RUSTSEC-2026-0098)
+- `tokio`: 1.51.0 -> 1.52.0
+
+---
+
 ## [0.8.6] - 2026-04-08
 
 ### Fixed

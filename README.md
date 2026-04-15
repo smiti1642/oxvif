@@ -26,7 +26,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 352 unit tests + 17 doc tests + 16 mock server tests
+- 353 unit tests + 17 doc tests + 26 mock server tests
 
 ---
 
@@ -82,7 +82,7 @@ async fn main() -> Result<(), OnvifError> {
 
 ```toml
 [dependencies]
-oxvif = "0.8.6"
+oxvif = "0.9.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -810,7 +810,7 @@ Features:
   generated test-pattern BMP image that changes color every second
 - **All ONVIF services** — Device, Media1, Media2, PTZ, Imaging, Events,
   Recording, Search, Replay (84 response handlers)
-- **16 unit tests** — stateful roundtrip verification + XML parser tests
+- **26 unit tests** — stateful roundtrip verification, XML parser tests, WS-Security auth
 
 ```sh
 # Terminal 1 — start the mock server (default port 18080)
@@ -910,6 +910,17 @@ cargo run --example camera -- storage                # list storage configuratio
 cargo run --example camera -- discovery-mode         # show and toggle WS-Discovery mode
 cargo run --example camera -- discovery              # WS-Discovery UDP multicast probe
 cargo run --example camera -- error-handling         # typed error variant matching demo
+cargo run --example camera -- healthcheck            # quick reachability + auth check
+```
+
+#### Direct device targeting with `--ip` and `--auth`
+
+Instead of using a `.env` file, you can pass the device address and credentials
+directly on the command line:
+
+```sh
+cargo run --example camera -- --ip 192.168.1.100 --auth admin:password device-info
+cargo run --example camera -- --ip 192.168.1.100 healthcheck
 ```
 
 To run without a real camera, start the mock server first — see
@@ -922,7 +933,7 @@ To run without a real camera, start the mock server first — see
 cargo run --example mock_server
 cargo run --example mock_server -- 19090
 
-# Run mock server tests (16 tests: stateful roundtrips + XML parser)
+# Run mock server tests (26 tests: stateful roundtrips, XML parser, auth)
 cargo test --example mock_server
 ```
 
