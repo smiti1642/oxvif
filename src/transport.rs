@@ -156,9 +156,11 @@ impl Transport for HttpTransport {
         let status = response.status().as_u16();
         let text = response.text().await?;
 
-        // HTTP 500 carries a SOAP Fault body; return it as Ok so the SOAP
-        // layer can parse the fault code and reason.
-        if status == 200 || status == 500 {
+        // HTTP 200 is the normal success case.
+        // HTTP 400 and 500 carry SOAP Fault bodies; return them as Ok so
+        // the SOAP layer can parse the structured fault code and reason.
+        // (Some devices return SOAP Faults as 400 instead of 500.)
+        if status == 200 || status == 400 || status == 500 {
             Ok(text)
         } else {
             Err(TransportError::HttpStatus { status, body: text })
@@ -228,6 +230,35 @@ mod tests {
         assert!(
             result.is_ok(),
             "HTTP 500 should be Ok so SOAP layer can parse the Fault"
+        );
+        assert_eq!(result.unwrap(), fault_xml);
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_400_returns_ok_for_soap_fault() {
+        let fault_xml = r#"<s:Envelope><s:Body><s:Fault><s:Code><s:Value>s:Sender</s:Value></s:Code></s:Fault></s:Body></s:Envelope>"#;
+
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/onvif/device_service")
+            .with_status(400)
+            .with_body(fault_xml)
+            .create_async()
+            .await;
+
+        let t = HttpTransport::new();
+        let result = t
+            .soap_post(
+                &format!("{}/onvif/device_service", server.url()),
+                ACTION,
+                SOAP_BODY.to_string(),
+            )
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "HTTP 400 should be Ok so SOAP layer can parse the Fault"
         );
         assert_eq!(result.unwrap(), fault_xml);
         mock.assert_async().await;

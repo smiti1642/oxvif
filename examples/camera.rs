@@ -108,6 +108,7 @@ async fn main() {
         "relay-outputs" => relay_outputs_example(&cfg).await,
         "storage" => storage_example(&cfg).await,
         "discovery-mode" => discovery_mode_example(&cfg).await,
+        "healthcheck" => healthcheck(&cfg).await,
         _ => {
             print_help();
             return;
@@ -157,6 +158,7 @@ fn print_help() {
     println!("  relay-outputs        List relay outputs and trigger state change");
     println!("  storage              List storage configurations (SD/NAS)");
     println!("  discovery-mode       Show and toggle WS-Discovery mode");
+    println!("  healthcheck          Run all read-only APIs and report pass/fail");
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -3100,6 +3102,338 @@ async fn discovery_mode_example(cfg: &Config) -> Result<(), OnvifError> {
     section("GetDiscoveryMode");
     let mode = client.get_discovery_mode().await?;
     println!("  Current mode: {mode}");
+
+    Ok(())
+}
+
+// ── Healthcheck ──────────────────────────────────────────────────────────────
+
+/// Run all read-only ONVIF APIs against a real camera and report pass/fail.
+///
+/// No write operations are performed — safe to run against production cameras.
+async fn healthcheck(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== oxvif Healthcheck ===");
+    println!("Target: {}", cfg.camera_url);
+    println!();
+
+    let mut pass = 0u32;
+    let mut fail = 0u32;
+    let mut skip = 0u32;
+
+    fn record<T>(
+        label: &str,
+        result: Result<T, impl std::fmt::Display>,
+        pass: &mut u32,
+        fail: &mut u32,
+    ) -> Option<T> {
+        match result {
+            Ok(v) => {
+                println!("  PASS  {label}");
+                *pass += 1;
+                Some(v)
+            }
+            Err(e) => {
+                println!("  FAIL  {label}  — {e}");
+                *fail += 1;
+                None
+            }
+        }
+    }
+
+    // ── 1. Connect & capabilities ────────────────────────────────────────────
+
+    println!("── Device Service ──");
+    let base = OnvifClient::new(&cfg.camera_url);
+    let dt = record(
+        "GetSystemDateAndTime",
+        base.get_system_date_and_time().await,
+        &mut pass,
+        &mut fail,
+    );
+
+    let utc_offset = dt.map(|d| d.utc_offset_secs()).unwrap_or(0);
+    let client = OnvifClient::new(&cfg.camera_url)
+        .with_credentials(&cfg.username, &cfg.password)
+        .with_utc_offset(utc_offset);
+
+    let caps = record(
+        "GetCapabilities",
+        client.get_capabilities().await,
+        &mut pass,
+        &mut fail,
+    );
+    let Some(caps) = caps else {
+        println!("\nCannot continue without capabilities.");
+        return Ok(());
+    };
+
+    record(
+        "GetDeviceInformation",
+        client.get_device_info().await,
+        &mut pass,
+        &mut fail,
+    );
+    record("GetScopes", client.get_scopes().await, &mut pass, &mut fail);
+    record(
+        "GetHostname",
+        client.get_hostname().await,
+        &mut pass,
+        &mut fail,
+    );
+    record("GetDNS", client.get_dns().await, &mut pass, &mut fail);
+    record("GetNTP", client.get_ntp().await, &mut pass, &mut fail);
+    record(
+        "GetNetworkInterfaces",
+        client.get_network_interfaces().await,
+        &mut pass,
+        &mut fail,
+    );
+    record(
+        "GetNetworkDefaultGateway",
+        client.get_network_default_gateway().await,
+        &mut pass,
+        &mut fail,
+    );
+    record(
+        "GetNetworkProtocols",
+        client.get_network_protocols().await,
+        &mut pass,
+        &mut fail,
+    );
+    record("GetUsers", client.get_users().await, &mut pass, &mut fail);
+    record(
+        "GetDiscoveryMode",
+        client.get_discovery_mode().await,
+        &mut pass,
+        &mut fail,
+    );
+    record(
+        "GetServices",
+        client.get_services().await,
+        &mut pass,
+        &mut fail,
+    );
+    record(
+        "GetRelayOutputs",
+        client.get_relay_outputs().await,
+        &mut pass,
+        &mut fail,
+    );
+
+    // ── 2. Media Service ─────────────────────────────────────────────────────
+
+    println!("\n── Media Service ──");
+    let profiles: Vec<MediaProfile> = if let Some(url) = caps.media.url.as_deref() {
+        let p = record(
+            "GetProfiles",
+            client.get_profiles(url).await,
+            &mut pass,
+            &mut fail,
+        );
+        record(
+            "GetVideoSources",
+            client.get_video_sources(url).await,
+            &mut pass,
+            &mut fail,
+        );
+        record(
+            "GetAudioSources",
+            client.get_audio_sources(url).await,
+            &mut pass,
+            &mut fail,
+        );
+        record(
+            "GetVideoEncoderConfigurations",
+            client.get_video_encoder_configurations(url).await,
+            &mut pass,
+            &mut fail,
+        );
+        record(
+            "GetVideoSourceConfigurations",
+            client.get_video_source_configurations(url).await,
+            &mut pass,
+            &mut fail,
+        );
+        record(
+            "GetAudioEncoderConfigurations",
+            client.get_audio_encoder_configurations(url).await,
+            &mut pass,
+            &mut fail,
+        );
+        record(
+            "GetAudioSourceConfigurations",
+            client.get_audio_source_configurations(url).await,
+            &mut pass,
+            &mut fail,
+        );
+
+        let profiles = p.unwrap_or_default();
+        if let Some(first) = profiles.first() {
+            record(
+                "GetStreamUri (profile 1)",
+                client.get_stream_uri(url, &first.token).await,
+                &mut pass,
+                &mut fail,
+            );
+            record(
+                "GetSnapshotUri (profile 1)",
+                client.get_snapshot_uri(url, &first.token).await,
+                &mut pass,
+                &mut fail,
+            );
+        }
+        profiles
+    } else {
+        println!("  SKIP  (Media service not available)");
+        skip += 9;
+        Vec::new()
+    };
+
+    // ── 3. Media2 Service ────────────────────────────────────────────────────
+
+    println!("\n── Media2 Service ──");
+    if let Some(url) = caps.media2.url.as_deref() {
+        record(
+            "GetProfiles (Media2)",
+            client.get_profiles_media2(url).await,
+            &mut pass,
+            &mut fail,
+        );
+    } else {
+        println!("  SKIP  (Media2 service not available)");
+        skip += 1;
+    }
+
+    // ── 4. Imaging Service ───────────────────────────────────────────────────
+
+    println!("\n── Imaging Service ──");
+    let source_token = profiles
+        .first()
+        .and_then(|p| p.video_source_token.as_deref());
+    match (caps.imaging.url.as_deref(), source_token) {
+        (Some(url), Some(src)) => {
+            record(
+                "GetImagingSettings",
+                client.get_imaging_settings(url, src).await,
+                &mut pass,
+                &mut fail,
+            );
+            record(
+                "GetImagingOptions",
+                client.get_imaging_options(url, src).await,
+                &mut pass,
+                &mut fail,
+            );
+            record(
+                "GetImagingStatus",
+                client.imaging_get_status(url, src).await,
+                &mut pass,
+                &mut fail,
+            );
+            record(
+                "GetImagingMoveOptions",
+                client.imaging_get_move_options(url, src).await,
+                &mut pass,
+                &mut fail,
+            );
+        }
+        (None, _) => {
+            println!("  SKIP  (Imaging service not available)");
+            skip += 4;
+        }
+        (_, None) => {
+            println!("  SKIP  (No video source token in profiles)");
+            skip += 4;
+        }
+    }
+
+    // ── 5. PTZ Service ───────────────────────────────────────────────────────
+
+    println!("\n── PTZ Service ──");
+    if let Some(url) = caps.ptz.url.as_deref() {
+        record(
+            "GetNodes",
+            client.ptz_get_nodes(url).await,
+            &mut pass,
+            &mut fail,
+        );
+        record(
+            "GetConfigurations",
+            client.ptz_get_configurations(url).await,
+            &mut pass,
+            &mut fail,
+        );
+        if let Some(first) = profiles.first() {
+            record(
+                "GetPresets (profile 1)",
+                client.ptz_get_presets(url, &first.token).await,
+                &mut pass,
+                &mut fail,
+            );
+            record(
+                "GetStatus (profile 1)",
+                client.ptz_get_status(url, &first.token).await,
+                &mut pass,
+                &mut fail,
+            );
+        }
+    } else {
+        println!("  SKIP  (PTZ service not available)");
+        skip += 4;
+    }
+
+    // ── 6. Events Service ────────────────────────────────────────────────────
+
+    println!("\n── Events Service ──");
+    if let Some(url) = caps.events.url.as_deref() {
+        record(
+            "GetEventProperties",
+            client.get_event_properties(url).await,
+            &mut pass,
+            &mut fail,
+        );
+    } else {
+        println!("  SKIP  (Events service not available)");
+        skip += 1;
+    }
+
+    // ── 7. Recording Service ─────────────────────────────────────────────────
+
+    println!("\n── Recording Service ──");
+    if let Some(url) = caps.recording.url.as_deref() {
+        record(
+            "GetRecordings",
+            client.get_recordings(url).await,
+            &mut pass,
+            &mut fail,
+        );
+        record(
+            "GetRecordingJobs",
+            client.get_recording_jobs(url).await,
+            &mut pass,
+            &mut fail,
+        );
+    } else {
+        println!("  SKIP  (Recording service not available)");
+        skip += 2;
+    }
+
+    // ── Summary ──────────────────────────────────────────────────────────────
+
+    let total = pass + fail + skip;
+    println!();
+    println!("════════════════════════════════════");
+    println!("  PASS: {pass:3}");
+    println!("  FAIL: {fail:3}");
+    println!("  SKIP: {skip:3}");
+    println!("  TOTAL:{total:3}");
+    println!("════════════════════════════════════");
+
+    if fail > 0 {
+        println!("\nSome checks failed — review FAIL lines above.");
+    } else {
+        println!("\nAll checks passed!");
+    }
 
     Ok(())
 }
