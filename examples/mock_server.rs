@@ -25,9 +25,9 @@
 use axum::{
     Router,
     extract::State,
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
-    routing::post,
+    routing::{get, post},
 };
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
@@ -53,6 +53,8 @@ async fn main() {
     let state = Arc::new(MockState { base: base.clone() });
 
     let app = Router::new()
+        // Snapshot endpoint — serves a dynamically generated test JPEG.
+        .route("/mock/snapshot.jpg", get(handle_snapshot))
         // Single catch-all route — dispatch is done on the SOAPAction header.
         .route("/{*path}", post(handle_soap))
         .with_state(state);
@@ -86,6 +88,85 @@ async fn handle_soap(
         )],
         xml,
     )
+}
+
+/// Serve a dynamically generated test-pattern BMP snapshot.
+///
+/// The color changes based on the current time (every second),
+/// proving the auto-refresh mechanism works.
+async fn handle_snapshot() -> impl IntoResponse {
+    let bmp = generate_test_bmp();
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "image/bmp"),
+            (header::CACHE_CONTROL, "no-cache, no-store"),
+        ],
+        bmp,
+    )
+}
+
+/// Generate a 160×90 24-bit BMP with a time-varying color and a simple grid.
+fn generate_test_bmp() -> Vec<u8> {
+    let w: u32 = 160;
+    let h: u32 = 90;
+    let row_size = (w * 3 + 3) & !3; // rows padded to 4 bytes
+    let pixel_data_size = row_size * h;
+    let file_size = 54 + pixel_data_size;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let r = ((now * 37) % 180 + 40) as u8;
+    let g = ((now * 73) % 180 + 40) as u8;
+    let b = ((now * 113) % 180 + 40) as u8;
+
+    let mut data = Vec::with_capacity(file_size as usize);
+
+    // BMP file header (14 bytes)
+    data.extend_from_slice(b"BM");
+    data.extend_from_slice(&file_size.to_le_bytes());
+    data.extend_from_slice(&[0u8; 4]); // reserved
+    data.extend_from_slice(&54u32.to_le_bytes()); // pixel data offset
+
+    // DIB header (BITMAPINFOHEADER, 40 bytes)
+    data.extend_from_slice(&40u32.to_le_bytes()); // header size
+    data.extend_from_slice(&w.to_le_bytes());
+    data.extend_from_slice(&h.to_le_bytes());
+    data.extend_from_slice(&1u16.to_le_bytes()); // color planes
+    data.extend_from_slice(&24u16.to_le_bytes()); // bits per pixel
+    data.extend_from_slice(&0u32.to_le_bytes()); // no compression
+    data.extend_from_slice(&pixel_data_size.to_le_bytes());
+    data.extend_from_slice(&2835u32.to_le_bytes()); // h resolution (72 DPI)
+    data.extend_from_slice(&2835u32.to_le_bytes()); // v resolution
+    data.extend_from_slice(&0u32.to_le_bytes()); // colors in palette
+    data.extend_from_slice(&0u32.to_le_bytes()); // important colors
+
+    // Pixel data (bottom-up)
+    for y in 0..h {
+        for x in 0..w {
+            // Grid lines every 20px in a darker shade
+            let is_grid = x % 20 == 0 || y % 20 == 0;
+            if is_grid {
+                data.push(b / 3);
+                data.push(g / 3);
+                data.push(r / 3);
+            } else {
+                data.push(b);
+                data.push(g);
+                data.push(r);
+            }
+        }
+        // Row padding
+        let pad = row_size - w * 3;
+        for _ in 0..pad {
+            data.push(0);
+        }
+    }
+
+    data
 }
 
 /// Extract the SOAPAction from the `Content-Type` header.
@@ -177,7 +258,7 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver10/media/wsdl/GetProfiles" => resp_profiles(),
         "http://www.onvif.org/ver10/media/wsdl/GetProfile" => resp_profile(),
         "http://www.onvif.org/ver10/media/wsdl/GetStreamUri" => resp_stream_uri(),
-        "http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri" => resp_snapshot_uri(),
+        "http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri" => resp_snapshot_uri(base),
         "http://www.onvif.org/ver10/media/wsdl/CreateProfile" => resp_create_profile(),
         "http://www.onvif.org/ver10/media/wsdl/DeleteProfile" => {
             resp_empty("trt", "DeleteProfileResponse")
@@ -239,7 +320,7 @@ fn dispatch(action: &str, base: &str) -> String {
         // ── Media2 ────────────────────────────────────────────────────────────
         "http://www.onvif.org/ver20/media/wsdl/GetProfiles" => resp_profiles_media2(),
         "http://www.onvif.org/ver20/media/wsdl/GetStreamUri" => resp_stream_uri_media2(),
-        "http://www.onvif.org/ver20/media/wsdl/GetSnapshotUri" => resp_snapshot_uri_media2(),
+        "http://www.onvif.org/ver20/media/wsdl/GetSnapshotUri" => resp_snapshot_uri_media2(base),
         "http://www.onvif.org/ver20/media/wsdl/DeleteProfile" => {
             resp_empty("tr2", "DeleteProfileResponse")
         }
@@ -756,17 +837,19 @@ fn resp_stream_uri() -> String {
     )
 }
 
-fn resp_snapshot_uri() -> String {
+fn resp_snapshot_uri(base: &str) -> String {
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetSnapshotUriResponse>
+        &format!(
+            r#"<trt:GetSnapshotUriResponse>
           <trt:MediaUri>
-            <tt:Uri>http://127.0.0.1:18080/mock/snapshot.jpg</tt:Uri>
+            <tt:Uri>{base}/mock/snapshot.jpg</tt:Uri>
             <tt:InvalidAfterConnect>false</tt:InvalidAfterConnect>
             <tt:InvalidAfterReboot>false</tt:InvalidAfterReboot>
             <tt:Timeout>PT0S</tt:Timeout>
           </trt:MediaUri>
-        </trt:GetSnapshotUriResponse>"#,
+        </trt:GetSnapshotUriResponse>"#
+        ),
     )
 }
 
@@ -909,12 +992,14 @@ fn resp_stream_uri_media2() -> String {
     )
 }
 
-fn resp_snapshot_uri_media2() -> String {
+fn resp_snapshot_uri_media2(base: &str) -> String {
     soap(
         r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetSnapshotUriResponse>
-          <tr2:Uri>http://127.0.0.1:8080/mock/snapshot2.jpg</tr2:Uri>
-        </tr2:GetSnapshotUriResponse>"#,
+        &format!(
+            r#"<tr2:GetSnapshotUriResponse>
+          <tr2:Uri>{base}/mock/snapshot.jpg</tr2:Uri>
+        </tr2:GetSnapshotUriResponse>"#
+        ),
     )
 }
 
