@@ -863,14 +863,18 @@ mod media2 {
           <Profiles token="Profile_A" fixed="true">
             <Name>mainStream</Name>
             <Configurations>
-              <VideoSource token="VSC_1"/>
+              <VideoSource token="VSC_1">
+                <SourceToken>VS_1</SourceToken>
+              </VideoSource>
               <VideoEncoder token="VEC_1"/>
             </Configurations>
           </Profiles>
           <Profiles token="Profile_B" fixed="false">
             <Name>subStream</Name>
             <Configurations>
-              <VideoSource token="VSC_1"/>
+              <VideoSource token="VSC_1">
+                <SourceToken>VS_1</SourceToken>
+              </VideoSource>
             </Configurations>
           </Profiles>
         </GetProfilesResponse>"#;
@@ -882,12 +886,20 @@ mod media2 {
         assert_eq!(profiles[0].token, "Profile_A");
         assert_eq!(profiles[0].name, "mainStream");
         assert!(profiles[0].fixed);
-        assert_eq!(profiles[0].video_source_token.as_deref(), Some("VSC_1"));
+        assert_eq!(
+            profiles[0].video_source_config_token.as_deref(),
+            Some("VSC_1")
+        );
+        assert_eq!(profiles[0].video_source_token.as_deref(), Some("VS_1"));
         assert_eq!(profiles[0].video_encoder_token.as_deref(), Some("VEC_1"));
         assert_eq!(profiles[1].token, "Profile_B");
         assert_eq!(profiles[1].name, "subStream");
         assert!(!profiles[1].fixed);
-        assert_eq!(profiles[1].video_source_token.as_deref(), Some("VSC_1"));
+        assert_eq!(
+            profiles[1].video_source_config_token.as_deref(),
+            Some("VSC_1")
+        );
+        assert_eq!(profiles[1].video_source_token.as_deref(), Some("VS_1"));
         assert!(profiles[1].video_encoder_token.is_none());
     }
 

@@ -3716,7 +3716,9 @@ async fn test_get_profiles_parses_config_tokens() {
            <trt:GetProfilesResponse>
              <trt:Profiles token="Profile_1" fixed="false">
                <tt:Name>main</tt:Name>
-               <tt:VideoSourceConfiguration token="VideoSrc_1"/>
+               <tt:VideoSourceConfiguration token="VSC_1">
+                 <tt:SourceToken>VS_1</tt:SourceToken>
+               </tt:VideoSourceConfiguration>
                <tt:VideoEncoderConfiguration token="VideoEnc_1"/>
                <tt:AudioSourceConfiguration token="AudioSrc_1"/>
                <tt:AudioEncoderConfiguration token="AudioEnc_1"/>
@@ -3733,7 +3735,8 @@ async fn test_get_profiles_parses_config_tokens() {
         .unwrap();
     assert_eq!(profiles.len(), 1);
     let p = &profiles[0];
-    assert_eq!(p.video_source_token.as_deref(), Some("VideoSrc_1"));
+    assert_eq!(p.video_source_config_token.as_deref(), Some("VSC_1"));
+    assert_eq!(p.video_source_token.as_deref(), Some("VS_1"));
     assert_eq!(p.video_encoder_token.as_deref(), Some("VideoEnc_1"));
     assert_eq!(p.audio_source_token.as_deref(), Some("AudioSrc_1"));
     assert_eq!(p.audio_encoder_token.as_deref(), Some("AudioEnc_1"));
@@ -3759,6 +3762,7 @@ async fn test_get_profiles_missing_configs_are_none() {
         .await
         .unwrap();
     let p = &profiles[0];
+    assert!(p.video_source_config_token.is_none());
     assert!(p.video_source_token.is_none());
     assert!(p.video_encoder_token.is_none());
     assert!(p.audio_source_token.is_none());

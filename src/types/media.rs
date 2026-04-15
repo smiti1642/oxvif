@@ -17,6 +17,9 @@ pub struct MediaProfile {
     /// `true` if the profile is fixed and cannot be deleted.
     pub fixed: bool,
     /// Token of the bound `VideoSourceConfiguration`, if any.
+    pub video_source_config_token: Option<String>,
+    /// Token of the underlying `VideoSource` (the `<SourceToken>` inside
+    /// `VideoSourceConfiguration`). Pass this to the Imaging service.
     pub video_source_token: Option<String>,
     /// Token of the bound `VideoEncoderConfiguration`, if any.
     pub video_encoder_token: Option<String>,
@@ -37,14 +40,13 @@ impl MediaProfile {
             .filter(|t| !t.is_empty())
             .ok_or_else(|| SoapError::missing("Profile/@token"))?
             .to_string();
+        let vsc = p.child("VideoSourceConfiguration");
         Ok(Self {
             token,
             fixed: p.attr("fixed") == Some("true"),
             name: xml_str(p, "Name").unwrap_or_default(),
-            video_source_token: p
-                .child("VideoSourceConfiguration")
-                .and_then(|n| n.attr("token"))
-                .map(str::to_string),
+            video_source_config_token: vsc.and_then(|n| n.attr("token")).map(str::to_string),
+            video_source_token: vsc.and_then(|n| xml_str(n, "SourceToken")),
             video_encoder_token: p
                 .child("VideoEncoderConfiguration")
                 .and_then(|n| n.attr("token"))
@@ -161,6 +163,9 @@ pub struct MediaProfile2 {
     pub name: String,
     pub fixed: bool,
     /// Token of the bound `VideoSourceConfiguration`, if any.
+    pub video_source_config_token: Option<String>,
+    /// Token of the underlying `VideoSource` (the `<SourceToken>` inside
+    /// `VideoSourceConfiguration`). Pass this to the Imaging service.
     pub video_source_token: Option<String>,
     /// Token of the bound `VideoEncoderConfiguration2`, if any.
     pub video_encoder_token: Option<String>,
@@ -181,14 +186,15 @@ impl MediaProfile2 {
                     .filter(|t| !t.is_empty())
                     .ok_or_else(|| SoapError::missing("Profile/@token"))?
                     .to_string();
+                let vsc = p.path(&["Configurations", "VideoSource"]);
                 Ok(Self {
                     token,
                     name: xml_str(p, "Name").unwrap_or_default(),
                     fixed: p.attr("fixed") == Some("true"),
-                    video_source_token: p
-                        .path(&["Configurations", "VideoSource"])
+                    video_source_config_token: vsc
                         .and_then(|n| n.attr("token"))
                         .map(str::to_string),
+                    video_source_token: vsc.and_then(|n| xml_str(n, "SourceToken")),
                     video_encoder_token: p
                         .path(&["Configurations", "VideoEncoder"])
                         .and_then(|n| n.attr("token"))
