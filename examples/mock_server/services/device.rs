@@ -54,7 +54,11 @@ pub fn resp_device_info(state: &SharedState) -> String {
 
 pub fn resp_hostname(state: &SharedState) -> String {
     let s = state.read().unwrap();
-    let dhcp = if s.hostname_from_dhcp { "true" } else { "false" };
+    let dhcp = if s.hostname_from_dhcp {
+        "true"
+    } else {
+        "false"
+    };
     soap(
         NS,
         &format!(

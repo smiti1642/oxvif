@@ -14,9 +14,7 @@ const MOCK_USERNAME: &str = "admin";
 const MOCK_PASSWORD: &str = "admin";
 
 /// SOAP actions that do NOT require authentication.
-const AUTH_EXEMPT: &[&str] = &[
-    "http://www.onvif.org/ver10/device/wsdl/GetSystemDateAndTime",
-];
+const AUTH_EXEMPT: &[&str] = &["http://www.onvif.org/ver10/device/wsdl/GetSystemDateAndTime"];
 
 /// Check if the given action requires authentication.
 pub fn requires_auth(action: &str) -> bool {
@@ -27,14 +25,12 @@ pub fn requires_auth(action: &str) -> bool {
 ///
 /// Returns `Ok(())` if valid, `Err(reason)` if invalid.
 pub fn validate_ws_security(body: &str) -> Result<(), String> {
-    let username = extract_tag(body, "Username")
-        .ok_or_else(|| "Missing Username".to_string())?;
-    let digest_b64 = extract_tag(body, "Password")
-        .ok_or_else(|| "Missing Password digest".to_string())?;
-    let nonce_b64 = extract_tag(body, "Nonce")
-        .ok_or_else(|| "Missing Nonce".to_string())?;
-    let created = extract_tag(body, "Created")
-        .ok_or_else(|| "Missing Created timestamp".to_string())?;
+    let username = extract_tag(body, "Username").ok_or_else(|| "Missing Username".to_string())?;
+    let digest_b64 =
+        extract_tag(body, "Password").ok_or_else(|| "Missing Password digest".to_string())?;
+    let nonce_b64 = extract_tag(body, "Nonce").ok_or_else(|| "Missing Nonce".to_string())?;
+    let created =
+        extract_tag(body, "Created").ok_or_else(|| "Missing Created timestamp".to_string())?;
 
     if username != MOCK_USERNAME {
         return Err(format!("Unknown user: {username}"));

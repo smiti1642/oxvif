@@ -56,8 +56,14 @@ impl Default for DeviceState {
             hostname_from_dhcp: false,
 
             users: vec![
-                MockUser { username: "admin".to_string(), level: "Administrator".to_string() },
-                MockUser { username: "operator".to_string(), level: "Operator".to_string() },
+                MockUser {
+                    username: "admin".to_string(),
+                    level: "Administrator".to_string(),
+                },
+                MockUser {
+                    username: "operator".to_string(),
+                    level: "Operator".to_string(),
+                },
             ],
 
             scopes: vec![

@@ -8,9 +8,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         "http://www.onvif.org/ver10/device/wsdl/GetSystemDateAndTime" => {
             device::resp_system_date_and_time(state)
         }
-        "http://www.onvif.org/ver10/device/wsdl/GetCapabilities" => {
-            device::resp_capabilities(base)
-        }
+        "http://www.onvif.org/ver10/device/wsdl/GetCapabilities" => device::resp_capabilities(base),
         "http://www.onvif.org/ver10/device/wsdl/GetServices" => device::resp_services(base),
         "http://www.onvif.org/ver10/device/wsdl/GetDeviceInformation" => {
             device::resp_device_info(state)
@@ -20,9 +18,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             device::handle_set_hostname(state, body)
         }
         "http://www.onvif.org/ver10/device/wsdl/GetNTP" => device::resp_ntp(state),
-        "http://www.onvif.org/ver10/device/wsdl/SetNTP" => {
-            device::handle_set_ntp(state, body)
-        }
+        "http://www.onvif.org/ver10/device/wsdl/SetNTP" => device::handle_set_ntp(state, body),
         "http://www.onvif.org/ver10/device/wsdl/GetScopes" => device::resp_scopes(state),
         "http://www.onvif.org/ver10/device/wsdl/SetScopes" => {
             device::handle_set_scopes(state, body)
@@ -34,9 +30,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         "http://www.onvif.org/ver10/device/wsdl/DeleteUsers" => {
             device::handle_delete_users(state, body)
         }
-        "http://www.onvif.org/ver10/device/wsdl/SetUser" => {
-            device::handle_set_user(state, body)
-        }
+        "http://www.onvif.org/ver10/device/wsdl/SetUser" => device::handle_set_user(state, body),
         "http://www.onvif.org/ver10/device/wsdl/GetNetworkInterfaces" => {
             device::resp_network_interfaces()
         }
@@ -47,9 +41,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             device::resp_network_protocols()
         }
         "http://www.onvif.org/ver10/device/wsdl/GetDNS" => device::resp_dns(state),
-        "http://www.onvif.org/ver10/device/wsdl/SetDNS" => {
-            device::handle_set_dns(state, body)
-        }
+        "http://www.onvif.org/ver10/device/wsdl/SetDNS" => device::handle_set_dns(state, body),
         "http://www.onvif.org/ver10/device/wsdl/GetNetworkDefaultGateway" => {
             device::resp_network_default_gateway(state)
         }
@@ -60,9 +52,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             device::resp_send_auxiliary_command()
         }
         "http://www.onvif.org/ver10/device/wsdl/GetSystemLog" => device::resp_system_log(),
-        "http://www.onvif.org/ver10/device/wsdl/GetRelayOutputs" => {
-            device::resp_relay_outputs()
-        }
+        "http://www.onvif.org/ver10/device/wsdl/GetRelayOutputs" => device::resp_relay_outputs(),
         "http://www.onvif.org/ver10/device/wsdl/SetRelayOutputState" => {
             resp_empty("tds", "SetRelayOutputStateResponse")
         }
@@ -81,9 +71,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         "http://www.onvif.org/ver10/device/wsdl/SetStorageConfiguration" => {
             resp_empty("tds", "SetStorageConfigurationResponse")
         }
-        "http://www.onvif.org/ver10/device/wsdl/GetSystemUris" => {
-            device::resp_system_uris(base)
-        }
+        "http://www.onvif.org/ver10/device/wsdl/GetSystemUris" => device::resp_system_uris(base),
         "http://www.onvif.org/ver10/device/wsdl/GetDiscoveryMode" => {
             device::resp_discovery_mode(state)
         }
@@ -99,9 +87,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         "http://www.onvif.org/ver10/media/wsdl/GetProfiles" => media::resp_profiles(),
         "http://www.onvif.org/ver10/media/wsdl/GetProfile" => media::resp_profile(),
         "http://www.onvif.org/ver10/media/wsdl/GetStreamUri" => media::resp_stream_uri(),
-        "http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri" => {
-            media::resp_snapshot_uri(base)
-        }
+        "http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri" => media::resp_snapshot_uri(base),
         "http://www.onvif.org/ver10/media/wsdl/CreateProfile" => media::resp_create_profile(),
         "http://www.onvif.org/ver10/media/wsdl/DeleteProfile" => {
             resp_empty("trt", "DeleteProfileResponse")
@@ -143,13 +129,9 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             media::resp_video_encoder_configuration_options()
         }
         "http://www.onvif.org/ver10/media/wsdl/GetOSD" => media::resp_osd(),
-        "http://www.onvif.org/ver10/media/wsdl/SetOSD" => {
-            resp_empty("trt", "SetOSDResponse")
-        }
+        "http://www.onvif.org/ver10/media/wsdl/SetOSD" => resp_empty("trt", "SetOSDResponse"),
         "http://www.onvif.org/ver10/media/wsdl/CreateOSD" => media::resp_create_osd(),
-        "http://www.onvif.org/ver10/media/wsdl/DeleteOSD" => {
-            resp_empty("trt", "DeleteOSDResponse")
-        }
+        "http://www.onvif.org/ver10/media/wsdl/DeleteOSD" => resp_empty("trt", "DeleteOSDResponse"),
         "http://www.onvif.org/ver10/media/wsdl/GetOSDOptions" => media::resp_osd_options(),
         "http://www.onvif.org/ver10/media/wsdl/GetAudioSourceConfigurations" => {
             media::resp_audio_source_configurations()
@@ -166,9 +148,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
 
         // ── Media2 ────────────────────────────────────────────────────────────
         "http://www.onvif.org/ver20/media/wsdl/GetProfiles" => media2::resp_profiles_media2(),
-        "http://www.onvif.org/ver20/media/wsdl/GetStreamUri" => {
-            media2::resp_stream_uri_media2()
-        }
+        "http://www.onvif.org/ver20/media/wsdl/GetStreamUri" => media2::resp_stream_uri_media2(),
         "http://www.onvif.org/ver20/media/wsdl/GetSnapshotUri" => {
             media2::resp_snapshot_uri_media2(base)
         }
@@ -241,9 +221,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         "http://www.onvif.org/ver20/ptz/wsdl/GetPresets" => ptz::resp_ptz_presets(),
         "http://www.onvif.org/ver20/ptz/wsdl/GetNodes" => ptz::resp_ptz_nodes(),
         "http://www.onvif.org/ver20/ptz/wsdl/GetNode" => ptz::resp_ptz_node(),
-        "http://www.onvif.org/ver20/ptz/wsdl/GetConfigurations" => {
-            ptz::resp_ptz_configurations()
-        }
+        "http://www.onvif.org/ver20/ptz/wsdl/GetConfigurations" => ptz::resp_ptz_configurations(),
         "http://www.onvif.org/ver20/ptz/wsdl/GetCompatibleConfigurations" => {
             ptz::resp_ptz_configurations()
         }
@@ -254,13 +232,9 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         | "http://www.onvif.org/ver20/ptz/wsdl/GotoPreset"
         | "http://www.onvif.org/ver20/ptz/wsdl/GotoHomePosition"
         | "http://www.onvif.org/ver20/ptz/wsdl/SetHomePosition"
-        | "http://www.onvif.org/ver20/ptz/wsdl/RemovePreset" => {
-            resp_empty("tptz", "PTZResponse")
-        }
+        | "http://www.onvif.org/ver20/ptz/wsdl/RemovePreset" => resp_empty("tptz", "PTZResponse"),
         "http://www.onvif.org/ver20/ptz/wsdl/SetPreset" => ptz::resp_ptz_set_preset(),
-        "http://www.onvif.org/ver20/ptz/wsdl/GetConfiguration" => {
-            ptz::resp_ptz_configuration()
-        }
+        "http://www.onvif.org/ver20/ptz/wsdl/GetConfiguration" => ptz::resp_ptz_configuration(),
         "http://www.onvif.org/ver20/ptz/wsdl/SetConfiguration" => {
             resp_empty("tptz", "SetConfigurationResponse")
         }
@@ -272,12 +246,8 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         "http://www.onvif.org/ver20/imaging/wsdl/GetImagingSettings" => {
             imaging::resp_imaging_settings()
         }
-        "http://www.onvif.org/ver20/imaging/wsdl/GetOptions" => {
-            imaging::resp_imaging_options()
-        }
-        "http://www.onvif.org/ver20/imaging/wsdl/GetStatus" => {
-            imaging::resp_imaging_status()
-        }
+        "http://www.onvif.org/ver20/imaging/wsdl/GetOptions" => imaging::resp_imaging_options(),
+        "http://www.onvif.org/ver20/imaging/wsdl/GetStatus" => imaging::resp_imaging_status(),
         "http://www.onvif.org/ver20/imaging/wsdl/GetMoveOptions" => {
             imaging::resp_imaging_move_options()
         }
@@ -311,18 +281,14 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         }
 
         // ── Recording ─────────────────────────────────────────────────────────
-        "http://www.onvif.org/ver10/recording/wsdl/GetRecordings" => {
-            recording::resp_recordings()
-        }
+        "http://www.onvif.org/ver10/recording/wsdl/GetRecordings" => recording::resp_recordings(),
         "http://www.onvif.org/ver10/recording/wsdl/CreateRecording" => {
             recording::resp_create_recording()
         }
         "http://www.onvif.org/ver10/recording/wsdl/DeleteRecording" => {
             resp_empty("trc", "DeleteRecordingResponse")
         }
-        "http://www.onvif.org/ver10/recording/wsdl/CreateTrack" => {
-            recording::resp_create_track()
-        }
+        "http://www.onvif.org/ver10/recording/wsdl/CreateTrack" => recording::resp_create_track(),
         "http://www.onvif.org/ver10/recording/wsdl/DeleteTrack" => {
             resp_empty("trc", "DeleteTrackResponse")
         }

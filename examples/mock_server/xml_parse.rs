@@ -46,10 +46,7 @@ fn find_open_tag(xml: &str, local_name: &str, from: usize) -> Option<(usize, usi
         let after_lt = &xml[abs_lt + 1..];
 
         // Skip closing tags, processing instructions, comments
-        if after_lt.starts_with('/')
-            || after_lt.starts_with('?')
-            || after_lt.starts_with('!')
-        {
+        if after_lt.starts_with('/') || after_lt.starts_with('?') || after_lt.starts_with('!') {
             pos = abs_lt + 2;
             continue;
         }
@@ -125,20 +122,16 @@ mod tests {
 
     #[test]
     fn extract_tag_with_attributes() {
-        let xml = r#"<wsse:Password Type="http://example.com#PasswordDigest">abc123==</wsse:Password>"#;
-        assert_eq!(
-            extract_tag(xml, "Password"),
-            Some("abc123==".to_string())
-        );
+        let xml =
+            r#"<wsse:Password Type="http://example.com#PasswordDigest">abc123==</wsse:Password>"#;
+        assert_eq!(extract_tag(xml, "Password"), Some("abc123==".to_string()));
     }
 
     #[test]
     fn extract_nonce_with_encoding_type() {
-        let xml = r#"<wsse:Nonce EncodingType="http://example.com#Base64Binary">bm9uY2U=</wsse:Nonce>"#;
-        assert_eq!(
-            extract_tag(xml, "Nonce"),
-            Some("bm9uY2U=".to_string())
-        );
+        let xml =
+            r#"<wsse:Nonce EncodingType="http://example.com#Base64Binary">bm9uY2U=</wsse:Nonce>"#;
+        assert_eq!(extract_tag(xml, "Nonce"), Some("bm9uY2U=".to_string()));
     }
 
     #[test]
