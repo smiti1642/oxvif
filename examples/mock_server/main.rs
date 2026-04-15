@@ -1,10 +1,12 @@
-//! ONVIF mock server — stateful, handles Get and Set operations.
+//! ONVIF mock server — stateful, with WS-Security PasswordDigest auth.
 //!
 //! ```sh
 //! cargo run --example mock_server
-//! # Then point OxDM at http://127.0.0.1:18080/onvif/device
+//! # Credentials: admin / admin
+//! # OxDM: add 127.0.0.1:18080, set global credentials to admin/admin
 //! ```
 
+mod auth;
 mod dispatch;
 mod helpers;
 mod services;
@@ -51,6 +53,7 @@ async fn main() {
     let listener = TcpListener::bind(addr).await.expect("bind failed");
     println!("ONVIF mock server listening on {base}");
     println!("  ONVIF_URL={base}/onvif/device");
+    println!("  Credentials: admin / admin");
     println!("  Stateful mode — Set operations persist in memory");
     println!();
 
@@ -65,6 +68,18 @@ async fn handle_soap(
     let action = helpers::extract_action(&headers).unwrap_or_default();
     let body_str = String::from_utf8_lossy(&body);
     eprintln!("  → {action}");
+
+    // Check authentication (some actions are exempt, e.g. GetSystemDateAndTime)
+    if auth::requires_auth(&action) {
+        if let Err(reason) = auth::validate_ws_security(&body_str) {
+            eprintln!("    [AUTH FAIL] {reason}");
+            return (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/soap+xml; charset=utf-8")],
+                auth::auth_fault(&reason),
+            );
+        }
+    }
 
     let xml = dispatch::dispatch(&action, &state.base, &state.device, &body_str);
 
