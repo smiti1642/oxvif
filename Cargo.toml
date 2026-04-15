@@ -34,3 +34,7 @@ dotenvy = "0.15"
 tokio   = { version = "1", features = ["rt-multi-thread", "macros"] }
 axum    = "0.8"
 futures = "0.3"
+serde   = { version = "1", features = ["derive"] }
+toml    = "0.8"
+fs2     = "0.4"
+dirs    = "6"

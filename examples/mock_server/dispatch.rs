@@ -244,7 +244,10 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
 
         // ── Imaging ───────────────────────────────────────────────────────────
         "http://www.onvif.org/ver20/imaging/wsdl/GetImagingSettings" => {
-            imaging::resp_imaging_settings()
+            imaging::resp_imaging_settings(state)
+        }
+        "http://www.onvif.org/ver20/imaging/wsdl/SetImagingSettings" => {
+            imaging::handle_set_imaging_settings(state, body)
         }
         "http://www.onvif.org/ver20/imaging/wsdl/GetOptions" => imaging::resp_imaging_options(),
         "http://www.onvif.org/ver20/imaging/wsdl/GetStatus" => imaging::resp_imaging_status(),
@@ -252,10 +255,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             imaging::resp_imaging_move_options()
         }
         "http://www.onvif.org/ver20/imaging/wsdl/Move"
-        | "http://www.onvif.org/ver20/imaging/wsdl/Stop"
-        | "http://www.onvif.org/ver20/imaging/wsdl/SetImagingSettings" => {
-            resp_empty("timg", "ImagingResponse")
-        }
+        | "http://www.onvif.org/ver20/imaging/wsdl/Stop" => resp_empty("timg", "ImagingResponse"),
 
         // ── Events ───────────────────────────────────────────────────────────
         "http://www.onvif.org/ver10/events/wsdl/EventPortType/GetEventPropertiesRequest" => {

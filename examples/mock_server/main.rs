@@ -1,9 +1,13 @@
-//! ONVIF mock server — stateful, with WS-Security PasswordDigest auth.
+//! ONVIF mock server — stateful, with WS-Security auth and file persistence.
 //!
 //! ```sh
+//! # Default: state saved to ~/.oxvif/mock_device.toml
 //! cargo run --example mock_server
+//!
+//! # Custom port + config file
+//! cargo run --example mock_server -- 19090 --config /path/to/state.toml
+//!
 //! # Credentials: admin / admin
-//! # OxDM: add 127.0.0.1:18080, set global credentials to admin/admin
 //! ```
 
 mod auth;
@@ -24,11 +28,11 @@ use axum::{
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 
-use state::{DeviceState, SharedState};
+use state::PersistentState;
 
 pub struct MockState {
     pub base: String,
-    pub device: SharedState,
+    pub device: PersistentState,
 }
 
 #[tokio::main]
@@ -38,11 +42,13 @@ async fn main() {
         .and_then(|a| a.parse().ok())
         .unwrap_or(18080);
 
+    let state_path = state::resolve_state_path();
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let base = format!("http://{addr}");
+
     let state = Arc::new(MockState {
         base: base.clone(),
-        device: SharedState::new(DeviceState::default()),
+        device: PersistentState::load(state_path.clone()),
     });
 
     let app = Router::new()
@@ -54,7 +60,7 @@ async fn main() {
     println!("ONVIF mock server listening on {base}");
     println!("  ONVIF_URL={base}/onvif/device");
     println!("  Credentials: admin / admin");
-    println!("  Stateful mode — Set operations persist in memory");
+    println!("  State file: {}", state_path.display());
     println!();
 
     axum::serve(listener, app).await.expect("serve failed");
@@ -69,7 +75,6 @@ async fn handle_soap(
     let body_str = String::from_utf8_lossy(&body);
     eprintln!("  → {action}");
 
-    // Check authentication (some actions are exempt, e.g. GetSystemDateAndTime)
     if auth::requires_auth(&action) {
         if let Err(reason) = auth::validate_ws_security(&body_str) {
             eprintln!("    [AUTH FAIL] {reason}");

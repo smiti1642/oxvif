@@ -7,7 +7,7 @@ const NS: &str = r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#;
 // ── Stateful Get responses ──────────────────────────────────────────────────
 
 pub fn resp_system_date_and_time(state: &SharedState) -> String {
-    let s = state.read().unwrap();
+    let s = state.read();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -36,7 +36,7 @@ pub fn resp_system_date_and_time(state: &SharedState) -> String {
 }
 
 pub fn resp_device_info(state: &SharedState) -> String {
-    let s = state.read().unwrap();
+    let s = state.read();
     soap(
         NS,
         &format!(
@@ -47,13 +47,17 @@ pub fn resp_device_info(state: &SharedState) -> String {
           <tds:SerialNumber>{}</tds:SerialNumber>
           <tds:HardwareId>{}</tds:HardwareId>
         </tds:GetDeviceInformationResponse>"#,
-            s.manufacturer, s.model, s.firmware_version, s.serial_number, s.hardware_id,
+            s.info.manufacturer,
+            s.info.model,
+            s.info.firmware_version,
+            s.info.serial_number,
+            s.info.hardware_id,
         ),
     )
 }
 
 pub fn resp_hostname(state: &SharedState) -> String {
-    let s = state.read().unwrap();
+    let s = state.read();
     let dhcp = if s.hostname_from_dhcp {
         "true"
     } else {
@@ -74,10 +78,10 @@ pub fn resp_hostname(state: &SharedState) -> String {
 }
 
 pub fn resp_ntp(state: &SharedState) -> String {
-    let s = state.read().unwrap();
-    let dhcp = if s.ntp_from_dhcp { "true" } else { "false" };
+    let s = state.read();
+    let dhcp = if s.ntp.from_dhcp { "true" } else { "false" };
     let servers: String = s
-        .ntp_servers
+        .ntp.servers
         .iter()
         .map(|srv| {
             format!(
@@ -99,7 +103,7 @@ pub fn resp_ntp(state: &SharedState) -> String {
 }
 
 pub fn resp_scopes(state: &SharedState) -> String {
-    let s = state.read().unwrap();
+    let s = state.read();
     let items: String = s
         .scopes
         .iter()
@@ -116,7 +120,7 @@ pub fn resp_scopes(state: &SharedState) -> String {
 }
 
 pub fn resp_users(state: &SharedState) -> String {
-    let s = state.read().unwrap();
+    let s = state.read();
     let items: String = s
         .users
         .iter()
@@ -134,10 +138,10 @@ pub fn resp_users(state: &SharedState) -> String {
 }
 
 pub fn resp_dns(state: &SharedState) -> String {
-    let s = state.read().unwrap();
-    let dhcp = if s.dns_from_dhcp { "true" } else { "false" };
+    let s = state.read();
+    let dhcp = if s.dns.from_dhcp { "true" } else { "false" };
     let servers: String = s
-        .dns_servers
+        .dns.servers
         .iter()
         .map(|srv| {
             format!(
@@ -159,7 +163,7 @@ pub fn resp_dns(state: &SharedState) -> String {
 }
 
 pub fn resp_network_default_gateway(state: &SharedState) -> String {
-    let s = state.read().unwrap();
+    let s = state.read();
     let addrs: String = s
         .gateway_ipv4
         .iter()
@@ -176,7 +180,7 @@ pub fn resp_network_default_gateway(state: &SharedState) -> String {
 }
 
 pub fn resp_discovery_mode(state: &SharedState) -> String {
-    let s = state.read().unwrap();
+    let s = state.read();
     soap(
         NS,
         &format!(
@@ -192,8 +196,10 @@ pub fn resp_discovery_mode(state: &SharedState) -> String {
 
 pub fn handle_set_hostname(state: &SharedState, body: &str) -> String {
     if let Some(name) = extract_tag(body, "Name") {
-        state.write().unwrap().hostname = name;
-        eprintln!("    [STATE] hostname updated");
+        state.modify(|s| {
+            s.hostname = name;
+            eprintln!("    [STATE] hostname updated");
+        });
     }
     resp_empty("tds", "SetHostnameResponse")
 }
@@ -201,12 +207,14 @@ pub fn handle_set_hostname(state: &SharedState, body: &str) -> String {
 pub fn handle_set_ntp(state: &SharedState, body: &str) -> String {
     let servers = extract_all_tags(body, "DNSname");
     if !servers.is_empty() {
-        let mut s = state.write().unwrap();
-        s.ntp_servers = servers;
-        s.ntp_from_dhcp = extract_tag(body, "FromDHCP")
+        let from_dhcp = extract_tag(body, "FromDHCP")
             .map(|v| v == "true")
             .unwrap_or(false);
-        eprintln!("    [STATE] NTP updated: {:?}", s.ntp_servers);
+        state.modify(|s| {
+            s.ntp.servers = servers;
+            s.ntp.from_dhcp = from_dhcp;
+            eprintln!("    [STATE] NTP updated: {:?}", s.ntp.servers);
+        });
     }
     resp_empty("tds", "SetNTPResponse")
 }
@@ -214,12 +222,14 @@ pub fn handle_set_ntp(state: &SharedState, body: &str) -> String {
 pub fn handle_set_dns(state: &SharedState, body: &str) -> String {
     let servers = extract_all_tags(body, "IPv4Address");
     if !servers.is_empty() {
-        let mut s = state.write().unwrap();
-        s.dns_servers = servers;
-        s.dns_from_dhcp = extract_tag(body, "FromDHCP")
+        let from_dhcp = extract_tag(body, "FromDHCP")
             .map(|v| v == "true")
             .unwrap_or(false);
-        eprintln!("    [STATE] DNS updated: {:?}", s.dns_servers);
+        state.modify(|s| {
+            s.dns.servers = servers;
+            s.dns.from_dhcp = from_dhcp;
+            eprintln!("    [STATE] DNS updated: {:?}", s.dns.servers);
+        });
     }
     resp_empty("tds", "SetDNSResponse")
 }
@@ -227,19 +237,27 @@ pub fn handle_set_dns(state: &SharedState, body: &str) -> String {
 pub fn handle_set_scopes(state: &SharedState, body: &str) -> String {
     let scopes = extract_all_tags(body, "ScopeItem");
     if !scopes.is_empty() {
-        state.write().unwrap().scopes = scopes;
-        eprintln!("    [STATE] scopes updated");
+        state.modify(|s| {
+            s.scopes = scopes;
+            eprintln!("    [STATE] scopes updated");
+        });
     }
     resp_empty("tds", "SetScopesResponse")
 }
 
 pub fn handle_set_system_date_and_time(state: &SharedState, body: &str) -> String {
-    if let Some(tz) = extract_tag(body, "TZ") {
-        state.write().unwrap().timezone = tz;
-        eprintln!("    [STATE] timezone updated");
-    }
-    if let Some(dst) = extract_tag(body, "DaylightSavings") {
-        state.write().unwrap().daylight_savings = dst == "true";
+    let tz = extract_tag(body, "TZ");
+    let dst = extract_tag(body, "DaylightSavings");
+    if tz.is_some() || dst.is_some() {
+        state.modify(|s| {
+            if let Some(tz) = tz {
+                s.timezone = tz;
+                eprintln!("    [STATE] timezone updated");
+            }
+            if let Some(dst) = dst {
+                s.daylight_savings = dst == "true";
+            }
+        });
     }
     resp_empty("tds", "SetSystemDateAndTimeResponse")
 }
@@ -247,37 +265,41 @@ pub fn handle_set_system_date_and_time(state: &SharedState, body: &str) -> Strin
 pub fn handle_create_users(state: &SharedState, body: &str) -> String {
     let usernames = extract_all_tags(body, "Username");
     let levels = extract_all_tags(body, "UserLevel");
-    let mut s = state.write().unwrap();
-    for (u, l) in usernames.into_iter().zip(levels.into_iter()) {
-        eprintln!("    [STATE] user created: {u} ({l})");
-        s.users.push(crate::state::MockUser {
-            username: u,
-            level: l,
-        });
-    }
+    state.modify(|s| {
+        for (u, l) in usernames.into_iter().zip(levels.into_iter()) {
+            eprintln!("    [STATE] user created: {u} ({l})");
+            s.users.push(crate::state::MockUser {
+                username: u,
+                level: l,
+            });
+        }
+    });
     resp_empty("tds", "CreateUsersResponse")
 }
 
 pub fn handle_delete_users(state: &SharedState, body: &str) -> String {
     let usernames = extract_all_tags(body, "Username");
-    let mut s = state.write().unwrap();
-    for name in &usernames {
-        s.users.retain(|u| u.username != *name);
-        eprintln!("    [STATE] user deleted: {name}");
-    }
+    state.modify(|s| {
+        for name in &usernames {
+            s.users.retain(|u| u.username != *name);
+            eprintln!("    [STATE] user deleted: {name}");
+        }
+    });
     resp_empty("tds", "DeleteUsersResponse")
 }
 
 pub fn handle_set_user(state: &SharedState, body: &str) -> String {
-    if let Some(username) = extract_tag(body, "Username") {
-        let level = extract_tag(body, "UserLevel");
-        let mut s = state.write().unwrap();
-        if let Some(user) = s.users.iter_mut().find(|u| u.username == username) {
-            if let Some(l) = level {
-                user.level = l;
+    let username = extract_tag(body, "Username");
+    let level = extract_tag(body, "UserLevel");
+    if let Some(username) = username {
+        state.modify(|s| {
+            if let Some(user) = s.users.iter_mut().find(|u| u.username == username) {
+                if let Some(l) = &level {
+                    user.level = l.clone();
+                }
+                eprintln!("    [STATE] user updated: {username}");
             }
-            eprintln!("    [STATE] user updated: {username}");
-        }
+        });
     }
     resp_empty("tds", "SetUserResponse")
 }
