@@ -5,6 +5,61 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.2] - 2026-04-16
+
+### Added
+- `discovery::probe_unicast(ip, timeout)` — send a WS-Discovery `Probe`
+  directly to a single known IP via unicast. Useful for "is this device
+  still there" checks against a known address (e.g. user-added manual
+  entries) and for cross-subnet detection where multicast cannot reach.
+  Sends both `NetworkVideoTransmitter` and `Device` probes and
+  deduplicates the responses by endpoint UUID, matching the behaviour
+  of `probe` / `probe_rounds`.
+
+### Fixed
+- **WS-Addressing namespace regression — restored ~80 missing devices.**
+  `build_probe` now emits the legacy WS-Addressing 2004/08 namespace
+  with `s:mustUnderstand="1"` on the `Action` and `To` headers and an
+  explicit `<wsa:ReplyTo>` pointing at the WS-Addressing anonymous URI.
+  The 0.9.0/0.9.1 probe used the modern 2005/08 namespace, which older
+  Chinese OEM camera firmwares (Hikvision, Uniview, Dahua-family) silently
+  reject — they ship with strict ONVIF 2008-era SOAP parsers that only
+  recognise the 2004/08 wsa namespace. On a real heterogeneous LAN this
+  regression cost roughly 80 of 195 devices. The new payload matches
+  byte-for-byte what ODM (via WCF's `UdpDiscoveryEndpoint(WSDiscoveryApril2005)`)
+  sends. WS-Discovery 1.1 / 2009 support — which would use the 2005/08
+  wsa namespace — is deferred until both probes can be sent in parallel.
+- **Reordered `Bye` no longer flaps a live device offline.** `listen()`
+  now parses the `<wsd:AppSequence>` SOAP header (`InstanceId` /
+  `MessageNumber` / optional `SequenceId`) and silently drops a `Bye`
+  whose sequence is comparable to (same `InstanceId` and `SequenceId`
+  as) one we have already seen but with an equal-or-lower
+  `MessageNumber`. UDP multicast does not guarantee delivery order, so
+  on noisy LANs an old departure could arrive after a fresh presence
+  announcement and incorrectly remove a still-online device. Matches
+  ODM's `NvtDiscovery.fs::process_offline` behaviour. `Hello` is never
+  filtered — at worst a stale Hello resurfaces a live device, which is
+  harmless. The `DiscoveryEvent` enum is unchanged: sequence handling
+  is fully internal.
+- **`probe_rounds` cancellation.** Per-NIC listener tasks are now
+  spawned via `tokio::task::JoinSet` instead of `tokio::spawn`. When
+  the surrounding future is dropped (e.g. caller wraps the call in
+  `tokio::select!` and a timeout branch wins), every in-flight task is
+  aborted instead of leaking until its own timeout elapses. Public
+  API unchanged.
+
+### Changed
+- **Multicast TTL raised from 4 to 32** (`set_multicast_ttl_v4`). The
+  previous value was tuned for a single LAN segment and silently lost
+  devices on enterprise networks where the camera subnet is reached
+  through one or two IGMP-routed hops (PIM/IGMP on a core switch). 32
+  is a middle ground between the original 4 and ODM's "VPN workaround"
+  TTL of 64 — large enough for typical campus topologies, small enough
+  to respect the spec's intent that WS-Discovery stays close to the
+  link.
+
+---
+
 ## [0.9.1] - 2026-04-16
 
 ### Added

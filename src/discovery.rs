@@ -20,6 +20,7 @@
 //! ```
 
 use std::collections::HashSet;
+use std::net::IpAddr;
 use std::time::Duration;
 
 use tokio::net::UdpSocket;
@@ -167,6 +168,43 @@ pub async fn probe_rounds(
         .unwrap_or_default()
 }
 
+/// Send a WS-Discovery `Probe` to a single known IP via unicast.
+///
+/// Useful for "is this device still there" checks against a known address —
+/// avoids flooding the LAN with multicast and works across subnets where
+/// multicast WS-Discovery cannot reach. The target only needs to listen on
+/// UDP 3702 (every ONVIF device does).
+///
+/// Sends both `NetworkVideoTransmitter` and `Device` probes (the same dual
+/// probe used by [`probe`] / [`probe_rounds`]) and deduplicates the responses
+/// by endpoint UUID. Most devices reply with one `ProbeMatch`, but a few
+/// reply twice (once per probe type).
+///
+/// Returns an empty `Vec` on timeout or any I/O error — treat failures the
+/// same way as for the multicast variants.
+///
+/// # Example
+///
+/// ```no_run
+/// use std::net::IpAddr;
+/// use std::time::Duration;
+/// use oxvif::discovery;
+///
+/// # async fn run() {
+/// let ip: IpAddr = "192.168.1.100".parse().unwrap();
+/// let devices = discovery::probe_unicast(ip, Duration::from_secs(2)).await;
+/// if devices.is_empty() {
+///     println!("device unreachable");
+/// }
+/// # }
+/// ```
+pub async fn probe_unicast(ip: IpAddr, timeout_dur: Duration) -> Vec<DiscoveredDevice> {
+    let target = format!("{ip}:3702");
+    probe_unicast_inner(timeout_dur, &target)
+        .await
+        .unwrap_or_default()
+}
+
 /// Listen passively for WS-Discovery `Hello` and `Bye` multicast announcements.
 ///
 /// Binds to UDP port 3702 (the WS-Discovery multicast port), joins the ONVIF
@@ -210,30 +248,85 @@ async fn probe_inner(
         }
 
         let raw = probe_once(timeout_per_round, target).await?;
-        for data in raw {
-            let Ok(text) = std::str::from_utf8(&data) else {
-                continue;
-            };
-            // Fast path: strict DOM parse. Most compliant cameras land here.
-            //
-            // Slow path: if the datagram contains malformed XML (unescaped
-            // ampersands in scope URIs, unclosed tags, wrong-encoded CJK
-            // text, etc.) `XmlNode::parse` returns `Err` and we'd otherwise
-            // drop the whole ProbeMatch. Fall back to a tolerant string
-            // scanner — matches how the reference Java/C# WS-Discovery
-            // clients (and ODM) handle wire-level noise.
-            let matches = match XmlNode::parse(text) {
-                Ok(root) => collect_probe_matches(&root),
-                Err(_) => collect_probe_matches_lenient(text),
-            };
-            for d in matches {
-                if seen.insert(d.endpoint.clone()) {
-                    devices.push(d);
-                }
+        merge_probe_responses(raw, &mut devices, &mut seen);
+    }
+
+    Ok(devices)
+}
+
+/// Parse raw ProbeMatch datagrams and append unseen devices to `out`.
+///
+/// Fast path: strict DOM parse via [`XmlNode::parse`]. Most compliant cameras
+/// land here.
+///
+/// Slow path: if the datagram contains malformed XML (unescaped ampersands
+/// in scope URIs, unclosed tags, wrong-encoded CJK text, etc.) the strict
+/// parse fails and we fall back to a tolerant string scanner. Matches how
+/// the reference Java/C# WS-Discovery clients (and ODM) handle wire-level
+/// noise.
+fn merge_probe_responses(
+    raw: Vec<Vec<u8>>,
+    out: &mut Vec<DiscoveredDevice>,
+    seen: &mut HashSet<String>,
+) {
+    for data in raw {
+        let Ok(text) = std::str::from_utf8(&data) else {
+            continue;
+        };
+        let matches = match XmlNode::parse(text) {
+            Ok(root) => collect_probe_matches(&root),
+            Err(_) => collect_probe_matches_lenient(text),
+        };
+        for d in matches {
+            if seen.insert(d.endpoint.clone()) {
+                out.push(d);
             }
         }
     }
+}
 
+/// Send NVT + Device probes to a single unicast target and collect responses.
+///
+/// Unlike [`probe_once`] this does not enumerate NICs, set `IP_MULTICAST_IF`,
+/// or join a multicast group — it binds an ephemeral socket on the matching
+/// IP family and sends two datagrams to `target`. The same dedup-by-endpoint
+/// rule applies because cameras often respond once per probe type.
+async fn probe_unicast_inner(
+    timeout_dur: Duration,
+    target: &str,
+) -> std::io::Result<Vec<DiscoveredDevice>> {
+    // Resolve target up front so we can pick the matching bind family. If
+    // resolution fails we still try the OS default (`0.0.0.0:0`) — covers
+    // hostnames that resolve only at send time on some platforms.
+    let bind_addr: &str = match target.parse::<std::net::SocketAddr>() {
+        Ok(addr) if addr.is_ipv6() => "[::]:0",
+        _ => "0.0.0.0:0",
+    };
+
+    let sock = UdpSocket::bind(bind_addr).await?;
+    let nvt_probe = build_probe(&new_uuid(), ProbeTarget::NetworkVideoTransmitter);
+    let device_probe = build_probe(&new_uuid(), ProbeTarget::Device);
+    let _ = sock.send_to(nvt_probe.as_bytes(), target).await;
+    let _ = sock.send_to(device_probe.as_bytes(), target).await;
+
+    let mut raw: Vec<Vec<u8>> = Vec::new();
+    let mut buf = vec![0u8; UDP_MAX_SIZE];
+    let deadline = Instant::now() + timeout_dur;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match timeout(remaining, sock.recv_from(&mut buf)).await {
+            Ok(Ok((len, _))) => raw.push(buf[..len].to_vec()),
+            Ok(Err(_)) => continue, // transient — keep waiting
+            Err(_) => break,        // timeout elapsed
+        }
+    }
+
+    let mut devices: Vec<DiscoveredDevice> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    merge_probe_responses(raw, &mut devices, &mut seen);
     Ok(devices)
 }
 
@@ -267,7 +360,11 @@ async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<
 
     // Raw datagrams collected by per-interface listener tasks.
     let received: Arc<Mutex<Vec<Vec<u8>>>> = Arc::new(Mutex::new(Vec::new()));
-    let mut handles = Vec::new();
+
+    // JoinSet so that dropping the outer future (caller cancels mid-probe)
+    // aborts every per-NIC listener task. Plain `tokio::spawn` would orphan
+    // them and they'd keep holding sockets until their own timeout elapses.
+    let mut join_set: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
 
     for ip in bind_ips {
         // Use socket2 to set IP_MULTICAST_IF before converting to tokio.
@@ -283,7 +380,13 @@ async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<
         if raw.bind(&addr.into()).is_err() {
             continue;
         }
-        let _ = raw.set_multicast_ttl_v4(4);
+        // TTL = 32 covers the common enterprise case where the camera subnet
+        // is reached through one or two IGMP-routed hops (PIM/IGMP on a core
+        // switch). The original `4` was tuned for a single LAN segment and
+        // silently lost devices on routed networks. ODM uses `64` as a "VPN
+        // workaround" — 32 is a middle ground that still respects the spec's
+        // intent that WS-Discovery stays close to the link.
+        let _ = raw.set_multicast_ttl_v4(32);
         if ip != Ipv4Addr::UNSPECIFIED {
             let _ = raw.set_multicast_if_v4(&ip);
         }
@@ -295,7 +398,7 @@ async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<
         let _ = sock.send_to(device_probe.as_bytes(), target).await;
 
         let received = Arc::clone(&received);
-        let handle = tokio::task::spawn(async move {
+        join_set.spawn(async move {
             let mut buf = vec![0u8; UDP_MAX_SIZE];
             let deadline = Instant::now() + timeout_dur;
             loop {
@@ -317,12 +420,12 @@ async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<
                 }
             }
         });
-        handles.push(handle);
     }
 
-    for h in handles {
-        let _ = h.await;
-    }
+    // join_all awaits every spawned task to completion. If the surrounding
+    // future is dropped before this future yields Ready, JoinSet's Drop
+    // aborts all in-flight tasks for us — no leaked sockets.
+    join_set.join_all().await;
 
     let raw = Arc::try_unwrap(received)
         .unwrap_or_default()
@@ -350,6 +453,7 @@ fn local_ipv4_addrs() -> Vec<std::net::Ipv4Addr> {
 }
 
 async fn listen_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveryEvent>> {
+    use std::collections::HashMap;
     use std::net::Ipv4Addr;
 
     let socket = UdpSocket::bind("0.0.0.0:3702").await?;
@@ -357,6 +461,12 @@ async fn listen_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveryEve
 
     let mut buf = vec![0u8; UDP_MAX_SIZE];
     let mut events: Vec<DiscoveryEvent> = Vec::new();
+    // Per-endpoint AppSequence high-water mark. Used to drop reordered
+    // `Bye` datagrams: if the fresh Bye carries a sequence that is older
+    // than (or equal to) one we already saw, the network reordered an old
+    // departure on top of a more recent presence — silently dropping it
+    // avoids flapping a still-online device offline.
+    let mut last_seq: HashMap<String, AppSequence> = HashMap::new();
     let deadline = Instant::now() + timeout_dur;
 
     loop {
@@ -370,7 +480,12 @@ async fn listen_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveryEve
                     continue;
                 };
                 if let Ok(root) = XmlNode::parse(text) {
-                    events.extend(collect_discovery_events(&root));
+                    for (ev, seq) in collect_discovery_events(&root) {
+                        if !accept_event(&ev, seq.as_ref(), &mut last_seq) {
+                            continue;
+                        }
+                        events.push(ev);
+                    }
                 }
             }
             _ => break,
@@ -379,18 +494,105 @@ async fn listen_inner(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveryEve
     Ok(events)
 }
 
-fn collect_discovery_events(root: &XmlNode) -> Vec<DiscoveryEvent> {
+/// WS-Discovery `<wsd:AppSequence>` header — used to detect reordered
+/// announcements (a stale `Bye` arriving after a fresh `Hello`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AppSequence {
+    /// Increments on every device restart. Different `InstanceId` ⇒ the
+    /// sender restarted and prior sequence numbers are no longer comparable.
+    instance_id: u64,
+    /// Optional `SequenceId` (xs:anyURI) — partitions a sender's messages
+    /// into independent ordered streams. Different `SequenceId` (within
+    /// the same `InstanceId`) is also incomparable.
+    sequence_id: Option<String>,
+    /// Strictly increasing within (sender, instance, sequence).
+    message_number: u64,
+}
+
+impl AppSequence {
+    /// Two AppSequences are comparable iff they share the same
+    /// `(instance_id, sequence_id)` pair. Same endpoint UUID is enforced
+    /// implicitly by the caller (we key the high-water-mark map by endpoint).
+    fn comparable_to(&self, other: &Self) -> bool {
+        self.instance_id == other.instance_id && self.sequence_id == other.sequence_id
+    }
+
+    fn from_node(node: &XmlNode) -> Option<Self> {
+        let instance_id = node.attr("InstanceId")?.parse().ok()?;
+        let message_number = node.attr("MessageNumber")?.parse().ok()?;
+        let sequence_id = node.attr("SequenceId").map(str::to_string);
+        Some(Self {
+            instance_id,
+            message_number,
+            sequence_id,
+        })
+    }
+}
+
+/// Decide whether to surface an event, updating the per-endpoint
+/// high-water mark in the process.
+///
+/// Rules:
+/// * `Hello` always passes (a stale Hello at worst resurfaces a live
+///   device — never falsely removes one). Its sequence still updates the
+///   high-water mark so a subsequent stale `Bye` can be filtered.
+/// * `Bye` is dropped when it carries a sequence comparable to (same
+///   `InstanceId` and `SequenceId`) one we've already seen but with an
+///   equal-or-lower `MessageNumber` — i.e. the network reordered an old
+///   departure on top of newer presence. Incomparable Bye (different
+///   `InstanceId` ⇒ device restarted between) is accepted as the device
+///   genuinely left and came back.
+fn accept_event(
+    event: &DiscoveryEvent,
+    seq: Option<&AppSequence>,
+    last_seq: &mut std::collections::HashMap<String, AppSequence>,
+) -> bool {
+    let endpoint = match event {
+        DiscoveryEvent::Hello(d) => d.endpoint.clone(),
+        DiscoveryEvent::Bye { endpoint } => endpoint.clone(),
+    };
+
+    if matches!(event, DiscoveryEvent::Bye { .. })
+        && let Some(new) = seq
+        && let Some(prev) = last_seq.get(&endpoint)
+        && new.comparable_to(prev)
+        && new.message_number <= prev.message_number
+    {
+        return false;
+    }
+
+    if let Some(new) = seq {
+        match last_seq.get(&endpoint) {
+            Some(prev) if new.comparable_to(prev) && new.message_number < prev.message_number => {
+                // Older than what we have; don't lower the bar.
+            }
+            _ => {
+                last_seq.insert(endpoint, new.clone());
+            }
+        }
+    }
+    true
+}
+
+fn collect_discovery_events(root: &XmlNode) -> Vec<(DiscoveryEvent, Option<AppSequence>)> {
     // Determine message type from the WS-Addressing Action header.
     let action = root
         .path(&["Header", "Action"])
         .map(|n| n.text())
         .unwrap_or("");
 
+    let seq = root
+        .path(&["Header", "AppSequence"])
+        .and_then(AppSequence::from_node);
+
     let body = root.child("Body").unwrap_or(root);
 
     if action.ends_with("/Hello") {
         if let Some(hello) = body.child("Hello") {
-            return vec![DiscoveryEvent::Hello(DiscoveredDevice::from_xml(hello))];
+            return vec![(
+                DiscoveryEvent::Hello(DiscoveredDevice::from_xml(hello)),
+                seq,
+            )];
         }
     } else if action.ends_with("/Bye") {
         if let Some(bye) = body.child("Bye") {
@@ -398,7 +600,7 @@ fn collect_discovery_events(root: &XmlNode) -> Vec<DiscoveryEvent> {
                 .path(&["EndpointReference", "Address"])
                 .map(|n| n.text().to_string())
                 .unwrap_or_default();
-            return vec![DiscoveryEvent::Bye { endpoint }];
+            return vec![(DiscoveryEvent::Bye { endpoint }, seq)];
         }
     }
     vec![]
@@ -576,18 +778,27 @@ fn build_probe(message_id: &str, target: ProbeTarget) -> String {
             r#" xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
         ),
     };
+    // Legacy WS-Addressing format. Older Chinese OEM camera firmwares
+    // (Hikvision, Uniview, Dahua-family) silently drop probes that use
+    // the 2005/08 wsa namespace — they only recognise 2004/08, require
+    // `s:mustUnderstand="1"` on Action/To headers, and expect an explicit
+    // `<wsa:ReplyTo>`. This is also the exact wire format ODM sends, and
+    // the format the pre-oxvif oxdm used when it could discover ~195 of
+    // 195 cameras on a real heterogeneous LAN. Modernising to 2005/08
+    // (the WS-Discovery 1.1 wsa) cost ~80 of those devices.
     format!(
         concat!(
-            r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+            r#"<?xml version="1.0" encoding="utf-8"?>"#,
             r#"<s:Envelope"#,
             r#" xmlns:s="http://www.w3.org/2003/05/soap-envelope""#,
-            r#" xmlns:wsa="http://www.w3.org/2005/08/addressing""#,
+            r#" xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing""#,
             r#" xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery""#,
             r#"{}>"#,
             r#"<s:Header>"#,
-            r#"<wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</wsa:Action>"#,
+            r#"<wsa:Action s:mustUnderstand="1">http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</wsa:Action>"#,
             r#"<wsa:MessageID>uuid:{}</wsa:MessageID>"#,
-            r#"<wsa:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</wsa:To>"#,
+            r#"<wsa:ReplyTo><wsa:Address>http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous</wsa:Address></wsa:ReplyTo>"#,
+            r#"<wsa:To s:mustUnderstand="1">urn:schemas-xmlsoap-org:ws:2005:04:discovery</wsa:To>"#,
             r#"</s:Header>"#,
             r#"<s:Body>"#,
             r#"<wsd:Probe><wsd:Types>{}</wsd:Types></wsd:Probe>"#,
@@ -767,7 +978,7 @@ mod tests {
         let root = XmlNode::parse(&xml).unwrap();
         let events = collect_discovery_events(&root);
         assert_eq!(events.len(), 1);
-        match &events[0] {
+        match &events[0].0 {
             DiscoveryEvent::Hello(d) => {
                 assert_eq!(d.endpoint, "uuid:aaaa-0000-0000-0000-000000000001");
                 assert_eq!(d.xaddrs, ["http://192.168.1.200/onvif/device_service"]);
@@ -782,7 +993,7 @@ mod tests {
         let root = XmlNode::parse(&xml).unwrap();
         let events = collect_discovery_events(&root);
         assert_eq!(events.len(), 1);
-        match &events[0] {
+        match &events[0].0 {
             DiscoveryEvent::Bye { endpoint } => {
                 assert_eq!(endpoint, "uuid:bbbb-0000-0000-0000-000000000002");
             }
@@ -801,6 +1012,133 @@ mod tests {
              </s:Envelope>"#;
         let root = XmlNode::parse(xml).unwrap();
         assert!(collect_discovery_events(&root).is_empty());
+    }
+
+    // ── AppSequence reorder filter ───────────────────────────────────────────
+
+    fn hello_with_seq_xml(endpoint: &str, instance_id: u64, msg_num: u64) -> String {
+        format!(
+            r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                          xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery"
+                          xmlns:wsa="http://www.w3.org/2005/08/addressing">
+               <s:Header>
+                 <wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Hello</wsa:Action>
+                 <wsd:AppSequence InstanceId="{instance_id}" MessageNumber="{msg_num}"/>
+               </s:Header>
+               <s:Body>
+                 <wsd:Hello>
+                   <wsa:EndpointReference><wsa:Address>{endpoint}</wsa:Address></wsa:EndpointReference>
+                   <wsd:Types>dn:NetworkVideoTransmitter</wsd:Types>
+                   <wsd:XAddrs>http://192.168.1.50/onvif/device_service</wsd:XAddrs>
+                 </wsd:Hello>
+               </s:Body>
+             </s:Envelope>"#
+        )
+    }
+
+    fn bye_with_seq_xml(endpoint: &str, instance_id: u64, msg_num: u64) -> String {
+        format!(
+            r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                          xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery"
+                          xmlns:wsa="http://www.w3.org/2005/08/addressing">
+               <s:Header>
+                 <wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Bye</wsa:Action>
+                 <wsd:AppSequence InstanceId="{instance_id}" MessageNumber="{msg_num}"/>
+               </s:Header>
+               <s:Body>
+                 <wsd:Bye>
+                   <wsa:EndpointReference><wsa:Address>{endpoint}</wsa:Address></wsa:EndpointReference>
+                 </wsd:Bye>
+               </s:Body>
+             </s:Envelope>"#
+        )
+    }
+
+    /// Drives `accept_event` over a sequence of XML datagrams and returns
+    /// the events that survived the reorder filter — exactly the same
+    /// pipeline as `listen_inner`, just minus the socket I/O.
+    fn replay(xmls: &[String]) -> Vec<DiscoveryEvent> {
+        use std::collections::HashMap;
+        let mut last_seq: HashMap<String, AppSequence> = HashMap::new();
+        let mut out = Vec::new();
+        for xml in xmls {
+            let root = XmlNode::parse(xml).unwrap();
+            for (ev, seq) in collect_discovery_events(&root) {
+                if accept_event(&ev, seq.as_ref(), &mut last_seq) {
+                    out.push(ev);
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn test_reorder_filter_in_order_passes() {
+        let ep = "uuid:device-aa-0000-0000-000000000001";
+        let stream = vec![hello_with_seq_xml(ep, 100, 1), bye_with_seq_xml(ep, 100, 2)];
+        let events = replay(&stream);
+        assert_eq!(events.len(), 2, "in-order Hello/Bye should both pass");
+        assert!(matches!(events[0], DiscoveryEvent::Hello(_)));
+        assert!(matches!(events[1], DiscoveryEvent::Bye { .. }));
+    }
+
+    #[test]
+    fn test_reorder_filter_drops_stale_bye() {
+        // Hello @ msg 5 then a stale Bye @ msg 3 (same InstanceId, lower
+        // MessageNumber) — the Bye is reordered network noise, drop it.
+        let ep = "uuid:device-bb-0000-0000-000000000002";
+        let stream = vec![hello_with_seq_xml(ep, 100, 5), bye_with_seq_xml(ep, 100, 3)];
+        let events = replay(&stream);
+        assert_eq!(events.len(), 1, "stale Bye must be dropped");
+        assert!(matches!(events[0], DiscoveryEvent::Hello(_)));
+    }
+
+    #[test]
+    fn test_reorder_filter_drops_equal_message_number_bye() {
+        // Same MessageNumber as last seen Hello — also a duplicate, drop.
+        let ep = "uuid:device-cc-0000-0000-000000000003";
+        let stream = vec![hello_with_seq_xml(ep, 100, 7), bye_with_seq_xml(ep, 100, 7)];
+        let events = replay(&stream);
+        assert_eq!(events.len(), 1, "Bye with same msg# is a duplicate");
+        assert!(matches!(events[0], DiscoveryEvent::Hello(_)));
+    }
+
+    #[test]
+    fn test_reorder_filter_accepts_bye_after_restart() {
+        // Hello @ instance 100 then Bye @ instance 200 (device rebooted in
+        // between). Different InstanceId ⇒ incomparable ⇒ accept the Bye —
+        // it really did go away (and came back) so removing the old
+        // entry is correct.
+        let ep = "uuid:device-dd-0000-0000-000000000004";
+        let stream = vec![hello_with_seq_xml(ep, 100, 9), bye_with_seq_xml(ep, 200, 1)];
+        let events = replay(&stream);
+        assert_eq!(events.len(), 2, "Bye after device restart is real");
+        assert!(matches!(events[1], DiscoveryEvent::Bye { .. }));
+    }
+
+    #[test]
+    fn test_reorder_filter_per_endpoint_isolation() {
+        // Sequences are tracked per-endpoint — a low Bye for device B does
+        // not get filtered by a high Hello for device A.
+        let ep_a = "uuid:device-ee-0000-0000-00000000000a";
+        let ep_b = "uuid:device-ee-0000-0000-00000000000b";
+        let stream = vec![
+            hello_with_seq_xml(ep_a, 100, 50),
+            bye_with_seq_xml(ep_b, 100, 1),
+        ];
+        let events = replay(&stream);
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[1], DiscoveryEvent::Bye { ref endpoint } if endpoint == ep_b));
+    }
+
+    #[test]
+    fn test_reorder_filter_accepts_bye_when_no_appsequence() {
+        // A device that omits AppSequence entirely — we have no basis to
+        // filter, so events pass through (matches pre-filter behaviour).
+        let ep = "uuid:device-ff-0000-0000-000000000006";
+        let stream = vec![hello_xml(ep, "http://x"), bye_xml(ep)];
+        let events = replay(&stream);
+        assert_eq!(events.len(), 2);
     }
 
     // ── End-to-end UDP probe test ─────────────────────────────────────────────
@@ -1102,6 +1440,92 @@ mod tests {
         assert!(
             started.elapsed() < Duration::from_millis(200),
             "zero rounds must not block on the 30s timeout"
+        );
+    }
+
+    // ── Unicast probe ─────────────────────────────────────────────────────────
+
+    /// Unicast probe must reach a known IP, deduplicate dual-probe responses,
+    /// and return the parsed device.
+    #[tokio::test]
+    async fn test_probe_unicast_finds_device() {
+        use std::time::Duration;
+        use tokio::net::UdpSocket;
+
+        let mock = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let mock_addr = mock.local_addr().unwrap();
+
+        let canned = probe_match_xml(
+            "uuid:unicast-mock-0000-0000-000000000010",
+            "http://127.0.0.1/onvif/device_service",
+        );
+
+        // Reply to both NVT and Device probes (camera responds twice).
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; UDP_MAX_SIZE];
+            for _ in 0..2 {
+                if let Ok((_, src)) = mock.recv_from(&mut buf).await {
+                    let _ = mock.send_to(canned.as_bytes(), src).await;
+                }
+            }
+        });
+
+        let devices = probe_unicast_inner(Duration::from_millis(500), &mock_addr.to_string())
+            .await
+            .unwrap();
+
+        assert_eq!(devices.len(), 1, "duplicate responses should dedup");
+        assert_eq!(
+            devices[0].endpoint,
+            "uuid:unicast-mock-0000-0000-000000000010"
+        );
+    }
+
+    /// Dropping the `probe_inner` future via `tokio::select!` must return
+    /// control quickly — `JoinSet`'s drop aborts every per-NIC listener so
+    /// they don't keep listening for the full configured timeout.
+    #[tokio::test]
+    async fn test_probe_inner_drop_returns_promptly() {
+        use std::time::{Duration, Instant};
+
+        let started = Instant::now();
+        // 30s probe timeout, but we cancel after 50ms via select.
+        tokio::select! {
+            _ = probe_inner(1, Duration::from_secs(30), Duration::ZERO, "127.0.0.1:1") => {}
+            _ = tokio::time::sleep(Duration::from_millis(50)) => {}
+        }
+        // If we got here within a reasonable margin of 50ms, drop propagated.
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "select cancellation should release the probe future, took {:?}",
+            started.elapsed()
+        );
+    }
+
+    /// Unicast probe against a silent target returns empty after the timeout
+    /// (does not error).
+    #[tokio::test]
+    async fn test_probe_unicast_silent_target_returns_empty() {
+        use std::time::{Duration, Instant};
+
+        // Bind a socket to grab a port, then drop it — port is now free but
+        // the OS may briefly reject sends. Either way, no replies.
+        let probe_target = {
+            let s = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let addr = s.local_addr().unwrap();
+            drop(s);
+            addr.to_string()
+        };
+
+        let started = Instant::now();
+        let devices = probe_unicast_inner(Duration::from_millis(150), &probe_target)
+            .await
+            .unwrap();
+
+        assert!(devices.is_empty());
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "should return shortly after the configured timeout"
         );
     }
 }

@@ -144,7 +144,7 @@ pub mod transport;
 pub mod types;
 
 pub use client::{OnvifClient, notification_listener};
-pub use discovery::{DiscoveredDevice, DiscoveryEvent};
+pub use discovery::{DiscoveredDevice, DiscoveryEvent, probe_unicast};
 pub use error::OnvifError;
 pub use session::{OnvifSession, OnvifSessionBuilder};
 pub use types::{
