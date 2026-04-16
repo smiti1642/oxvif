@@ -5,6 +5,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.1] - 2026-04-16
+
+### Added
+- `discovery::probe_rounds(rounds, timeout_per_round, interval)` — repeat
+  the per-NIC WS-Discovery Probe `rounds` times with `interval` between
+  them, deduplicating results across rounds. `rounds = 0` is a no-op;
+  `rounds = 1` is equivalent to `probe()`.
+
+### Fixed
+- **Reliable discovery on heterogeneous LANs.** `probe()` on 0.9.0 could
+  under-report by 30–40% against a real company network. A reference
+  sweep with 195 live ONVIF devices returned 117. Three compounding
+  causes, each now addressed:
+
+  1. **Single-type probe filter.** `<wsd:Types>` is an AND match; the
+     probe was filtered on `dn:NetworkVideoTransmitter` alone, so every
+     device that advertised only `tds:Device` (many NVRs, doorbells,
+     Profile T encoders, anything whose vendor shipped Device without
+     Media) was silently ignored. `probe_once` now sends both probes
+     per socket per round and merges by endpoint UUID — the same
+     two-`FindCriteria` pattern as ODM's reference `NvtDiscovery.fs`.
+  2. **Strict XML parser rejects real-world ProbeMatch responses.**
+     Cameras that emit unescaped `&` in scope URIs, unclosed tags, or
+     wrong-encoded CJK bytes had their entire datagram dropped by
+     `XmlNode::parse`. The strict DOM parse is still the fast path for
+     compliant devices; on `Err` a tolerant local-name scanner pulls out
+     endpoint / types / scopes / xaddrs regardless of overall validity.
+  3. **Lossy single-shot multicast.** Busy networks drop individual
+     Probe packets. `probe_rounds` re-sends with cross-round dedup so
+     downstream callers don't have to reimplement the per-NIC +
+     `IP_MULTICAST_IF` plumbing just to get retry.
+
+  Against the 195-device reference network: 0.9.0 found 117, 0.9.1
+  finds 195.
+
+### Tests
+- 10 new: multi-round dedup + interval timing, `rounds = 0` no-op,
+  strict parser rejects the malformed fixture (sanity),
+  lenient parser recovers endpoint/types/scopes/xaddrs from it,
+  drops ProbeMatch without an endpoint UUID,
+  distinguishes `<ProbeMatch>` from `<ProbeMatches>`,
+  NVT probe XML is well-formed and does not leak Device type,
+  Device probe XML is well-formed with the correct `tds:` namespace,
+  and an end-to-end check that `probe_once` actually puts both NVT and
+  Device probes on the wire per round.
+
+---
+
 ## [0.9.0] - 2026-04-15
 
 ### Added

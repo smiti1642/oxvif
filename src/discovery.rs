@@ -103,15 +103,66 @@ pub enum DiscoveryEvent {
 
 /// Send a WS-Discovery `Probe` and collect all `ProbeMatch` responses.
 ///
-/// Binds to a random local UDP port, sends a single `Probe` to the ONVIF
-/// multicast group (`239.255.255.250:3702`), and returns every device that
-/// replies within `timeout_dur`. Duplicate responses (same endpoint UUID) are
+/// Binds to every non-loopback IPv4 interface (plus `0.0.0.0` as a
+/// catch-all), sends a `Probe` to the ONVIF multicast group
+/// (`239.255.255.250:3702`) on each, and returns every device that replies
+/// within `timeout_dur`. Duplicate responses (same endpoint UUID) are
 /// suppressed.
+///
+/// UDP multicast is lossy — a single probe can miss devices that are busy
+/// or that drop the first packet. Call [`probe_rounds`] instead when you
+/// need higher reliability.
 ///
 /// Returns an empty `Vec` on any I/O error — treat failures as "no devices
 /// found" rather than hard errors.
 pub async fn probe(timeout_dur: Duration) -> Vec<DiscoveredDevice> {
-    probe_inner(timeout_dur, WSD_MULTICAST)
+    probe_inner(1, timeout_dur, Duration::ZERO, WSD_MULTICAST)
+        .await
+        .unwrap_or_default()
+}
+
+/// Send multiple `Probe` rounds and collect deduplicated `ProbeMatch`
+/// responses.
+///
+/// Each round does what [`probe`] does — send a Probe on every non-loopback
+/// IPv4 interface and listen for `timeout_per_round`. Between rounds the
+/// task sleeps for `interval`. Devices found in earlier rounds are not
+/// re-reported.
+///
+/// Multiple rounds improve reliability on busy networks or against cameras
+/// that drop the first probe. A typical configuration is `3` rounds,
+/// `2s` per round, `800ms` interval (≈ 6.4s total).
+///
+/// - `rounds = 0` returns an empty `Vec` without any I/O.
+/// - `rounds = 1` is equivalent to [`probe`] (`interval` is ignored).
+///
+/// Returns an empty `Vec` on any I/O error — treat failures as "no devices
+/// found" rather than hard errors.
+///
+/// # Example
+///
+/// ```no_run
+/// use std::time::Duration;
+/// use oxvif::discovery;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let devices = discovery::probe_rounds(
+///         3,
+///         Duration::from_secs(2),
+///         Duration::from_millis(800),
+///     ).await;
+///     for d in &devices {
+///         println!("{}", d.xaddrs.first().map(String::as_str).unwrap_or("(no address)"));
+///     }
+/// }
+/// ```
+pub async fn probe_rounds(
+    rounds: usize,
+    timeout_per_round: Duration,
+    interval: Duration,
+) -> Vec<DiscoveredDevice> {
+    probe_inner(rounds, timeout_per_round, interval, WSD_MULTICAST)
         .await
         .unwrap_or_default()
 }
@@ -145,14 +196,67 @@ pub async fn listen(timeout_dur: Duration) -> Vec<DiscoveryEvent> {
 // ── Internal implementation ───────────────────────────────────────────────────
 
 async fn probe_inner(
-    timeout_dur: Duration,
+    rounds: usize,
+    timeout_per_round: Duration,
+    interval: Duration,
     target: &str,
 ) -> std::io::Result<Vec<DiscoveredDevice>> {
+    let mut devices: Vec<DiscoveredDevice> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    for round in 0..rounds {
+        if round > 0 && !interval.is_zero() {
+            tokio::time::sleep(interval).await;
+        }
+
+        let raw = probe_once(timeout_per_round, target).await?;
+        for data in raw {
+            let Ok(text) = std::str::from_utf8(&data) else {
+                continue;
+            };
+            // Fast path: strict DOM parse. Most compliant cameras land here.
+            //
+            // Slow path: if the datagram contains malformed XML (unescaped
+            // ampersands in scope URIs, unclosed tags, wrong-encoded CJK
+            // text, etc.) `XmlNode::parse` returns `Err` and we'd otherwise
+            // drop the whole ProbeMatch. Fall back to a tolerant string
+            // scanner — matches how the reference Java/C# WS-Discovery
+            // clients (and ODM) handle wire-level noise.
+            let matches = match XmlNode::parse(text) {
+                Ok(root) => collect_probe_matches(&root),
+                Err(_) => collect_probe_matches_lenient(text),
+            };
+            for d in matches {
+                if seen.insert(d.endpoint.clone()) {
+                    devices.push(d);
+                }
+            }
+        }
+    }
+
+    Ok(devices)
+}
+
+/// Send one round of Probes across every non-loopback IPv4 interface and
+/// collect the raw response datagrams until `timeout_dur` elapses.
+///
+/// Extracted so multi-round callers can loop this while keeping a single
+/// cross-round dedup set.
+async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<Vec<u8>>> {
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::{Arc, Mutex};
 
-    let message_id = new_uuid();
-    let xml = Arc::new(build_probe(&message_id));
+    // Two separate Probes per socket — one for NetworkVideoTransmitter,
+    // one for Device. WS-Discovery's <Types> is an AND match, so a single
+    // probe filtered on NetworkVideoTransmitter silently skips every
+    // device that advertises only Device (NVRs, doorbells, some Profile T
+    // encoders, etc.).  Matches ONVIF Device Manager's behaviour — without
+    // the second probe a mixed company LAN can under-report by 30–40%.
+    let nvt_probe = Arc::new(build_probe(
+        &new_uuid(),
+        ProbeTarget::NetworkVideoTransmitter,
+    ));
+    let device_probe = Arc::new(build_probe(&new_uuid(), ProbeTarget::Device));
 
     // Send a Probe from every non-loopback IPv4 interface so cameras on any
     // subnet receive it.  0.0.0.0 is always included first as a catch-all
@@ -187,7 +291,8 @@ async fn probe_inner(
         let Ok(sock) = UdpSocket::from_std(raw.into()) else {
             continue;
         };
-        let _ = sock.send_to(xml.as_bytes(), target).await;
+        let _ = sock.send_to(nvt_probe.as_bytes(), target).await;
+        let _ = sock.send_to(device_probe.as_bytes(), target).await;
 
         let received = Arc::clone(&received);
         let handle = tokio::task::spawn(async move {
@@ -224,22 +329,7 @@ async fn probe_inner(
         .into_inner()
         .unwrap_or_else(|e| e.into_inner());
 
-    let mut devices: Vec<DiscoveredDevice> = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
-    for data in raw {
-        let Ok(text) = std::str::from_utf8(&data) else {
-            continue;
-        };
-        if let Ok(root) = XmlNode::parse(text) {
-            for d in collect_probe_matches(&root) {
-                if seen.insert(d.endpoint.clone()) {
-                    devices.push(d);
-                }
-            }
-        }
-    }
-
-    Ok(devices)
+    Ok(raw)
 }
 
 /// Returns all non-loopback IPv4 addresses assigned to local interfaces.
@@ -323,7 +413,169 @@ fn collect_probe_matches(root: &XmlNode) -> Vec<DiscoveredDevice> {
         .collect()
 }
 
-fn build_probe(message_id: &str) -> String {
+// ── Lenient fallback parser ──────────────────────────────────────────────────
+//
+// Used only when `XmlNode::parse` rejects a datagram. Scans the raw text for
+// `<...ProbeMatch>` blocks and pulls out fields by local tag name, tolerating
+// the malformed XML that real-world cameras often emit:
+//
+// * unescaped `&` inside scope URIs (e.g. `name/A&B`)
+// * unclosed or mismatched namespace prefixes
+// * wrong-encoded CJK bytes in `<Scopes>`
+// * stray content outside `<Body>`
+//
+// The scanner is intentionally structural — it matches on local tag names and
+// ignores attributes, namespace prefixes, and overall validity. Same approach
+// used by the reference Java `wsdiscovery` and ONVIF Device Manager.
+
+fn collect_probe_matches_lenient(text: &str) -> Vec<DiscoveredDevice> {
+    let mut devices = Vec::new();
+    for block in extract_blocks(text, "ProbeMatch") {
+        let endpoint = extract_first_tag(&block, "Address").unwrap_or_default();
+        if endpoint.is_empty() {
+            // No endpoint UUID means we can't dedup across rounds or
+            // correlate with other responses — drop it.
+            continue;
+        }
+        let types = extract_first_tag(&block, "Types")
+            .map(|s| split_ws(&s))
+            .unwrap_or_default();
+        let scopes = extract_first_tag(&block, "Scopes")
+            .map(|s| split_ws(&s))
+            .unwrap_or_default();
+        let xaddrs = extract_first_tag(&block, "XAddrs")
+            .map(|s| split_ws(&s))
+            .unwrap_or_default();
+        devices.push(DiscoveredDevice {
+            endpoint,
+            types,
+            scopes,
+            xaddrs,
+        });
+    }
+    devices
+}
+
+fn split_ws(s: &str) -> Vec<String> {
+    s.split_whitespace()
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Extract the inner text of every tag with the given local name.
+///
+/// Handles namespace prefixes (`<d:ProbeMatch>`, `<wsdd:ProbeMatch>`,
+/// `<ProbeMatch>` are all matched). Distinguishes `ProbeMatch` from
+/// `ProbeMatches` by requiring exact local-name match.
+fn extract_blocks(xml: &str, local_name: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut search_from = 0;
+
+    while search_from < xml.len() {
+        let open = match find_open_tag(&xml[search_from..], local_name) {
+            Some((start, end)) => (search_from + start, search_from + end),
+            None => break,
+        };
+        let close = match find_close_tag(&xml[open.1..], local_name) {
+            Some(pos) => open.1 + pos,
+            None => break,
+        };
+        blocks.push(xml[open.1..close].to_string());
+        search_from = close;
+    }
+
+    blocks
+}
+
+/// Find `<Name>` or `<ns:Name>` (not `<NameSuffix>` or `</Name>`).
+/// Returns `(start_of_<, end_of_>)` — i.e. the slice *after* `end` is the tag's
+/// inner content start.
+fn find_open_tag(xml: &str, local_name: &str) -> Option<(usize, usize)> {
+    let mut pos = 0;
+    while pos < xml.len() {
+        let rest = &xml[pos..];
+        let lt = rest.find('<')?;
+        let abs_lt = pos + lt;
+        let after_lt = &xml[abs_lt + 1..];
+
+        // Skip closing tags, processing instructions, comments, DOCTYPE.
+        if after_lt.starts_with('/') || after_lt.starts_with('?') || after_lt.starts_with('!') {
+            pos = abs_lt + 1;
+            continue;
+        }
+
+        let gt = match after_lt.find('>') {
+            Some(p) => p,
+            None => break,
+        };
+        let tag_content = &after_lt[..gt]; // "d:ProbeMatch" or "ProbeMatch attr=..."
+        let tag_name = tag_content.split_whitespace().next().unwrap_or("");
+        let local = tag_name.rsplit(':').next().unwrap_or(tag_name);
+
+        // Strip trailing `/` so `<Foo/>` local name matches "Foo".
+        let local = local.trim_end_matches('/');
+
+        if local == local_name {
+            return Some((abs_lt, abs_lt + 1 + gt + 1));
+        }
+
+        pos = abs_lt + 1;
+    }
+    None
+}
+
+/// Find the `</Name>` closing tag position (start of `<`).
+fn find_close_tag(xml: &str, local_name: &str) -> Option<usize> {
+    let mut pos = 0;
+    while pos < xml.len() {
+        let rest = &xml[pos..];
+        let lt = rest.find("</")?;
+        let abs_lt = pos + lt;
+        let after_close = &xml[abs_lt + 2..];
+
+        let gt = after_close.find('>')?;
+        let tag_name = after_close[..gt].trim();
+        let local = tag_name.rsplit(':').next().unwrap_or(tag_name);
+
+        if local == local_name {
+            return Some(abs_lt);
+        }
+
+        pos = abs_lt + 2;
+    }
+    None
+}
+
+fn extract_first_tag(xml: &str, local_name: &str) -> Option<String> {
+    extract_blocks(xml, local_name)
+        .into_iter()
+        .next()
+        .map(|s| s.trim().to_string())
+}
+
+#[derive(Clone, Copy)]
+enum ProbeTarget {
+    /// `dn:NetworkVideoTransmitter` — covers most IP cameras.
+    NetworkVideoTransmitter,
+    /// `tds:Device` — covers NVRs, doorbells, and Profile T / S devices that
+    /// advertise the Device service but not a media transmitter. Some
+    /// firmware responds only to this type, so ODM and oxvif both send
+    /// both probes and merge by endpoint UUID.
+    Device,
+}
+
+fn build_probe(message_id: &str, target: ProbeTarget) -> String {
+    let (types, onvif_ns_decl) = match target {
+        ProbeTarget::NetworkVideoTransmitter => (
+            "dn:NetworkVideoTransmitter",
+            r#" xmlns:dn="http://www.onvif.org/ver10/network/wsdl""#,
+        ),
+        ProbeTarget::Device => (
+            "tds:Device",
+            r#" xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+        ),
+    };
     format!(
         concat!(
             r#"<?xml version="1.0" encoding="UTF-8"?>"#,
@@ -331,18 +583,18 @@ fn build_probe(message_id: &str) -> String {
             r#" xmlns:s="http://www.w3.org/2003/05/soap-envelope""#,
             r#" xmlns:wsa="http://www.w3.org/2005/08/addressing""#,
             r#" xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery""#,
-            r#" xmlns:dn="http://www.onvif.org/ver10/network/wsdl">"#,
+            r#"{}>"#,
             r#"<s:Header>"#,
             r#"<wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</wsa:Action>"#,
             r#"<wsa:MessageID>uuid:{}</wsa:MessageID>"#,
             r#"<wsa:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</wsa:To>"#,
             r#"</s:Header>"#,
             r#"<s:Body>"#,
-            r#"<wsd:Probe><wsd:Types>dn:NetworkVideoTransmitter</wsd:Types></wsd:Probe>"#,
+            r#"<wsd:Probe><wsd:Types>{}</wsd:Types></wsd:Probe>"#,
             r#"</s:Body>"#,
             r#"</s:Envelope>"#,
         ),
-        message_id
+        onvif_ns_decl, message_id, types
     )
 }
 
@@ -426,14 +678,35 @@ mod tests {
     }
 
     #[test]
-    fn test_build_probe_is_valid_xml() {
-        let xml = build_probe("test-uuid-1234");
+    fn test_build_nvt_probe_is_valid_xml() {
+        let xml = build_probe("test-uuid-1234", ProbeTarget::NetworkVideoTransmitter);
         assert!(
             XmlNode::parse(&xml).is_ok(),
-            "build_probe output should be valid XML"
+            "NVT probe output should be valid XML"
         );
         assert!(xml.contains("NetworkVideoTransmitter"));
+        assert!(xml.contains("onvif.org/ver10/network/wsdl"));
         assert!(xml.contains("test-uuid-1234"));
+        assert!(
+            !xml.contains("Device</"),
+            "NVT probe must not accidentally request Device type"
+        );
+    }
+
+    #[test]
+    fn test_build_device_probe_is_valid_xml() {
+        let xml = build_probe("test-uuid-5678", ProbeTarget::Device);
+        assert!(
+            XmlNode::parse(&xml).is_ok(),
+            "Device probe output should be valid XML"
+        );
+        assert!(xml.contains("tds:Device"));
+        assert!(xml.contains("onvif.org/ver10/device/wsdl"));
+        assert!(xml.contains("test-uuid-5678"));
+        assert!(
+            !xml.contains("NetworkVideoTransmitter"),
+            "Device probe must not accidentally request NVT type"
+        );
     }
 
     #[test]
@@ -557,7 +830,7 @@ mod tests {
             }
         });
 
-        let devices = probe_inner(Duration::from_millis(500), &target)
+        let devices = probe_inner(1, Duration::from_millis(500), Duration::ZERO, &target)
             .await
             .unwrap();
 
@@ -598,7 +871,7 @@ mod tests {
             }
         });
 
-        let devices = probe_inner(Duration::from_millis(500), &target)
+        let devices = probe_inner(1, Duration::from_millis(500), Duration::ZERO, &target)
             .await
             .unwrap();
 
@@ -622,13 +895,213 @@ mod tests {
             }
         });
 
-        let devices = probe_inner(Duration::from_millis(300), &target)
+        let devices = probe_inner(1, Duration::from_millis(300), Duration::ZERO, &target)
             .await
             .unwrap();
 
         assert!(
             devices.is_empty(),
             "garbage response should yield no devices"
+        );
+    }
+
+    /// Verifies that `probe_inner` with multiple rounds deduplicates across
+    /// rounds and pauses for `interval` between them.
+    #[tokio::test]
+    async fn test_probe_inner_multi_round_dedups_and_sleeps() {
+        use std::time::{Duration, Instant};
+        use tokio::net::UdpSocket;
+
+        let mock = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let mock_addr = mock.local_addr().unwrap();
+        let target = format!("127.0.0.1:{}", mock_addr.port());
+
+        let canned = probe_match_xml(
+            "uuid:mock-device-multi-0000-000000000003",
+            "http://192.168.1.202/onvif/device_service",
+        );
+
+        // Respond to every probe we receive (up to 3 rounds worth).
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; UDP_MAX_SIZE];
+            for _ in 0..3 {
+                if let Ok((_, src)) = mock.recv_from(&mut buf).await {
+                    let _ = mock.send_to(canned.as_bytes(), src).await;
+                }
+            }
+        });
+
+        let started = Instant::now();
+        let devices = probe_inner(
+            2,
+            Duration::from_millis(200),
+            Duration::from_millis(300),
+            &target,
+        )
+        .await
+        .unwrap();
+        let elapsed = started.elapsed();
+
+        assert_eq!(
+            devices.len(),
+            1,
+            "same endpoint across rounds should dedup to one"
+        );
+        // 2 rounds × 200ms listen + 1 interval × 300ms = 700ms minimum.
+        assert!(
+            elapsed >= Duration::from_millis(700),
+            "expected >= 700ms for 2 rounds + 1 interval, got {elapsed:?}"
+        );
+    }
+
+    // ── Lenient parser recovery ───────────────────────────────────────────────
+
+    /// WS-Discovery response with an unescaped `&` inside the scope URI.
+    /// `XmlNode::parse` rejects this as invalid XML entity; a tolerant
+    /// string scanner still extracts the fields.
+    const MALFORMED_PROBE_MATCH: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery"
+            xmlns:wsa="http://www.w3.org/2005/08/addressing">
+  <s:Body>
+    <wsd:ProbeMatches>
+      <wsd:ProbeMatch>
+        <wsa:EndpointReference>
+          <wsa:Address>uuid:malformed-scope-0000-0000-000000000099</wsa:Address>
+        </wsa:EndpointReference>
+        <wsd:Types>dn:NetworkVideoTransmitter</wsd:Types>
+        <wsd:Scopes>onvif://www.onvif.org/name/Alpha&Beta</wsd:Scopes>
+        <wsd:XAddrs>http://192.168.1.99/onvif/device_service</wsd:XAddrs>
+      </wsd:ProbeMatch>
+    </wsd:ProbeMatches>
+  </s:Body>
+</s:Envelope>"#;
+
+    #[test]
+    fn test_strict_parser_rejects_malformed_xml() {
+        // Sanity check for the premise: we want a fixture that actually
+        // breaks XmlNode, otherwise the fallback test proves nothing.
+        assert!(
+            XmlNode::parse(MALFORMED_PROBE_MATCH).is_err(),
+            "fixture should break XmlNode so the lenient fallback is exercised"
+        );
+    }
+
+    #[test]
+    fn test_lenient_parser_recovers_malformed_xml() {
+        let devices = collect_probe_matches_lenient(MALFORMED_PROBE_MATCH);
+        assert_eq!(
+            devices.len(),
+            1,
+            "lenient scanner should extract one device"
+        );
+        let d = &devices[0];
+        assert_eq!(d.endpoint, "uuid:malformed-scope-0000-0000-000000000099");
+        assert_eq!(d.xaddrs, ["http://192.168.1.99/onvif/device_service"]);
+        assert!(
+            d.types
+                .iter()
+                .any(|t| t.contains("NetworkVideoTransmitter")),
+            "types should include NetworkVideoTransmitter"
+        );
+    }
+
+    #[test]
+    fn test_lenient_parser_drops_missing_endpoint() {
+        // No <Address> → no way to dedup → drop.
+        let xml = r#"<wsd:ProbeMatch xmlns:wsd="...">
+            <wsd:Types>dn:NetworkVideoTransmitter</wsd:Types>
+            <wsd:XAddrs>http://10.0.0.1/onvif/device_service</wsd:XAddrs>
+        </wsd:ProbeMatch>"#;
+        let devices = collect_probe_matches_lenient(xml);
+        assert!(devices.is_empty());
+    }
+
+    #[test]
+    fn test_lenient_parser_distinguishes_probematch_from_probematches() {
+        // Don't accidentally match the outer <ProbeMatches> wrapper.
+        let xml = r#"<wsd:ProbeMatches xmlns:wsd="..."/>"#;
+        assert!(collect_probe_matches_lenient(xml).is_empty());
+    }
+
+    /// Verifies that each round sends TWO probes per socket — one for
+    /// NetworkVideoTransmitter and one for Device — by capturing the raw
+    /// probe XMLs that hit the mock and asserting both types are present.
+    ///
+    /// Before this behaviour was added, devices that advertise only the
+    /// Device type (NVRs, doorbells, Profile T encoders) were silently
+    /// ignored; see ODM's NvtDiscovery.fs for the reference implementation.
+    #[tokio::test]
+    async fn test_probe_once_sends_nvt_and_device_probes() {
+        use std::sync::{Arc, Mutex};
+        use std::time::Duration;
+        use tokio::net::UdpSocket;
+
+        let mock = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let mock_addr = mock.local_addr().unwrap();
+        let target = format!("127.0.0.1:{}", mock_addr.port());
+
+        // Capture every probe the mock receives. Per NIC we expect >= 2
+        // datagrams (NVT + Device); on a machine with N interfaces there
+        // will be roughly (N + 1) × 2 (the extra +1 is the 0.0.0.0
+        // catch-all socket).
+        let captured: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let captured_task = Arc::clone(&captured);
+
+        tokio::spawn(async move {
+            let mut buf = vec![0u8; UDP_MAX_SIZE];
+            // Drain aggressively for the test window.
+            for _ in 0..16 {
+                match tokio::time::timeout(Duration::from_millis(400), mock.recv_from(&mut buf))
+                    .await
+                {
+                    Ok(Ok((len, _))) => {
+                        if let Ok(text) = std::str::from_utf8(&buf[..len]) {
+                            captured_task.lock().unwrap().push(text.to_string());
+                        }
+                    }
+                    _ => break,
+                }
+            }
+        });
+
+        let _ = probe_inner(1, Duration::from_millis(300), Duration::ZERO, &target)
+            .await
+            .unwrap();
+
+        // Give the capture task a moment to drain the socket buffer.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let probes = captured.lock().unwrap().clone();
+        assert!(
+            probes.len() >= 2,
+            "expected at least one NVT + one Device probe, got {}",
+            probes.len()
+        );
+        assert!(
+            probes.iter().any(|p| p.contains("NetworkVideoTransmitter")),
+            "no probe asked for NetworkVideoTransmitter: {probes:?}"
+        );
+        assert!(
+            probes.iter().any(|p| p.contains("tds:Device")),
+            "no probe asked for tds:Device: {probes:?}"
+        );
+    }
+
+    /// `probe_rounds(0, _, _)` must return immediately with no devices and
+    /// no I/O — no NIC enumeration, no socket bind.
+    #[tokio::test]
+    async fn test_probe_inner_zero_rounds_is_noop() {
+        use std::time::{Duration, Instant};
+
+        let started = Instant::now();
+        let devices = probe_inner(0, Duration::from_secs(30), Duration::ZERO, "127.0.0.1:1")
+            .await
+            .unwrap();
+        assert!(devices.is_empty(), "zero rounds should yield no devices");
+        assert!(
+            started.elapsed() < Duration::from_millis(200),
+            "zero rounds must not block on the 30s timeout"
         );
     }
 }
