@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.3] - 2026-04-17
+
+### Changed
+- **Dependencies bumped to latest stable** — keeps the lib.rs / docs.rs
+  badges green. Zero source changes were required:
+  - `socket2` 0.5 → 0.6 — oxvif already used the `_v4`-suffixed multicast
+    methods that 0.6 makes mandatory, so the upgrade is API-compatible.
+  - `tokio` 1.52.0 → 1.52.1 — upstream patch reverting a regression
+    that caused `spawn_blocking` to hang under load.
+  - `toml` 0.8 → 1.1 (dev-dep only, used by the `mock_server` example
+    for state persistence). MSRV requirement (1.85) already met.
+
+  All 420 tests (375 lib + 19 doc + 26 mock server) continue to pass.
+
+---
+
 ## [0.9.2] - 2026-04-17
 
 ### Added

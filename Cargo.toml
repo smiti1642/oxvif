@@ -1,6 +1,6 @@
 [package]
 name = "oxvif"
-version = "0.9.2"
+version = "0.9.3"
 edition = "2024"
 rust-version = "1.85"
 description = "Async Rust client library for the ONVIF IP camera protocol"
@@ -25,7 +25,7 @@ async-trait  = "0.1"
 async-stream = "0.3"
 futures-core = "0.3"
 if-addrs     = "0.15"
-socket2      = "0.5"
+socket2      = "0.6"
 diqwest      = "3.2"
 tracing      = "0.1"
 
@@ -36,6 +36,6 @@ tokio   = { version = "1", features = ["rt-multi-thread", "macros"] }
 axum    = "0.8"
 futures = "0.3"
 serde   = { version = "1", features = ["derive"] }
-toml    = "0.8"
+toml    = "1"
 fs2     = "0.4"
 dirs    = "6"
