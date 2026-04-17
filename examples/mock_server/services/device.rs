@@ -266,7 +266,7 @@ pub fn handle_create_users(state: &SharedState, body: &str) -> String {
     let usernames = extract_all_tags(body, "Username");
     let levels = extract_all_tags(body, "UserLevel");
     state.modify(|s| {
-        for (u, l) in usernames.into_iter().zip(levels.into_iter()) {
+        for (u, l) in usernames.into_iter().zip(levels) {
             eprintln!("    [STATE] user created: {u} ({l})");
             s.users.push(crate::state::MockUser {
                 username: u,
