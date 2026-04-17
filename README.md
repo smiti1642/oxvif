@@ -26,7 +26,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 353 unit tests + 17 doc tests + 26 mock server tests
+- 375 unit tests + 19 doc tests + 26 mock server tests
 
 ---
 

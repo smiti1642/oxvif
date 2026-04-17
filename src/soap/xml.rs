@@ -85,7 +85,12 @@ impl XmlNode {
     /// arbitrarily deep documents.
     pub fn parse(xml: &str) -> Result<Self, SoapError> {
         let mut reader = Reader::from_str(xml);
-        reader.config_mut().trim_text(true);
+        // Don't trim per Text event: whitespace between entity references
+        // (which arrive as separate `GeneralRef` events) would be discarded
+        // and the surrounding text segments would re-collapse. Trim once at
+        // `Event::End` instead, so element-level leading/trailing whitespace
+        // is still removed.
+        reader.config_mut().trim_text(false);
 
         let mut stack: Vec<XmlNode> = Vec::new();
 
@@ -106,9 +111,20 @@ impl XmlNode {
                 }
 
                 Ok(Event::End(_)) => {
-                    let finished = stack
+                    let mut finished = stack
                         .pop()
                         .ok_or_else(|| SoapError::XmlParse("unmatched closing tag".into()))?;
+                    // Trim accumulated text now that the element is complete.
+                    // Text events are accumulated raw (without per-event trim) so
+                    // that runs split by entity references concatenate cleanly.
+                    if let Some(t) = finished.text.as_mut() {
+                        let trimmed = t.trim();
+                        if trimmed.is_empty() {
+                            finished.text = None;
+                        } else if trimmed.len() != t.len() {
+                            *t = trimmed.to_string();
+                        }
+                    }
                     if stack.is_empty() {
                         return Ok(finished);
                     }
@@ -119,10 +135,43 @@ impl XmlNode {
 
                 Ok(Event::Text(e)) => {
                     if let Some(node) = stack.last_mut() {
+                        // Accumulate raw text. quick-xml emits entity
+                        // references as separate `Event::GeneralRef`s, so a
+                        // single element's content can arrive as several Text
+                        // events interleaved with GeneralRefs.
                         let cow = e.xml_content().unwrap_or_default();
-                        let trimmed = cow.trim().to_string();
-                        if !trimmed.is_empty() {
-                            node.text = Some(trimmed);
+                        if !cow.is_empty() {
+                            append_text(node, &cow);
+                        }
+                    }
+                }
+
+                Ok(Event::GeneralRef(e)) => {
+                    // Entity reference inside element content. The five
+                    // predefined named entities are decoded inline; numeric
+                    // character references (`&#NN;` / `&#xHH;`) go through
+                    // resolve_char_ref. Anything else (DTD-defined entities)
+                    // is preserved verbatim as `&name;` so we don't silently
+                    // drop content.
+                    if let Some(node) = stack.last_mut() {
+                        if let Ok(Some(ch)) = e.resolve_char_ref() {
+                            let mut buf = [0u8; 4];
+                            append_text(node, ch.encode_utf8(&mut buf));
+                        } else if let Ok(name) = e.decode() {
+                            let decoded = match name.as_ref() {
+                                "amp" => "&",
+                                "lt" => "<",
+                                "gt" => ">",
+                                "quot" => "\"",
+                                "apos" => "'",
+                                other => {
+                                    // Unknown entity — preserve as `&name;`.
+                                    let preserved = format!("&{other};");
+                                    append_text(node, &preserved);
+                                    continue;
+                                }
+                            };
+                            append_text(node, decoded);
                         }
                     }
                 }
@@ -131,7 +180,7 @@ impl XmlNode {
                     if let Some(node) = stack.last_mut()
                         && let Ok(s) = std::str::from_utf8(e.as_ref())
                     {
-                        node.text = Some(s.to_string());
+                        append_text(node, s);
                     }
                 }
 
@@ -177,6 +226,17 @@ impl XmlNode {
             text: None,
             children: Vec::new(),
         }
+    }
+}
+
+/// Append text to a node, allocating the `text` field on first write.
+fn append_text(node: &mut XmlNode, s: &str) {
+    if s.is_empty() {
+        return;
+    }
+    match &mut node.text {
+        Some(existing) => existing.push_str(s),
+        None => node.text = Some(s.to_string()),
     }
 }
 
@@ -450,6 +510,70 @@ mod tests {
         assert_eq!(
             caps.path(&["Media", "XAddr"]).unwrap().text(),
             "http://192.168.1.100/onvif/media_service"
+        );
+    }
+
+    #[test]
+    fn test_text_unescapes_amp_entity() {
+        // Regression: GeoVision GetSnapshotUriResponse returns a URI containing
+        // `&amp;` between query parameters. Previously only the segment after
+        // the last `&amp;` survived, breaking snapshot fetches.
+        let xml = r#"<Uri>http://h/p.cgi?skey=1&amp;action=update&amp;name=foo</Uri>"#;
+        let n = XmlNode::parse(xml).unwrap();
+        assert_eq!(n.text(), "http://h/p.cgi?skey=1&action=update&name=foo");
+    }
+
+    #[test]
+    fn test_text_unescapes_all_predefined_entities() {
+        let xml = r#"<X>&lt;tag&gt; &quot;a&apos;b&quot; &amp; c</X>"#;
+        let n = XmlNode::parse(xml).unwrap();
+        assert_eq!(n.text(), r#"<tag> "a'b" & c"#);
+    }
+
+    #[test]
+    fn test_text_unescapes_numeric_char_refs() {
+        let xml = r#"<X>A&#65;&#x42;</X>"#;
+        let n = XmlNode::parse(xml).unwrap();
+        assert_eq!(n.text(), "AAB");
+    }
+
+    #[test]
+    fn test_text_accumulates_runs_split_by_entities() {
+        // Even if quick-xml emits separate Text events for runs around an
+        // entity, every run must end up in the final text.
+        let xml = r#"<X>foo&amp;bar&amp;baz</X>"#;
+        let n = XmlNode::parse(xml).unwrap();
+        assert_eq!(n.text(), "foo&bar&baz");
+    }
+
+    #[test]
+    fn test_geovision_style_snapshot_uri_response() {
+        // SOAP body fragment shaped like a GeoVision GetSnapshotUriResponse:
+        // the URI carries multiple `&amp;`-separated query params, and the
+        // session key is part of the URL (not HTTP auth). Previously the
+        // parser dropped everything before the last `&amp;`.
+        // IP is from RFC 5737 (TEST-NET-1) and the skey is synthetic.
+        let xml = r#"
+            <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                        xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                        xmlns:tt="http://www.onvif.org/ver10/schema">
+              <s:Body>
+                <trt:GetSnapshotUriResponse>
+                  <trt:MediaUri>
+                    <tt:Uri>http://192.0.2.1:80/geo-cgi/param.cgi?skey=0000000000&amp;action=update&amp;Snapshot=Video1.Stream1</tt:Uri>
+                    <tt:InvalidAfterConnect>false</tt:InvalidAfterConnect>
+                    <tt:InvalidAfterReboot>false</tt:InvalidAfterReboot>
+                    <tt:Timeout>PT00H00M06S</tt:Timeout>
+                  </trt:MediaUri>
+                </trt:GetSnapshotUriResponse>
+              </s:Body>
+            </s:Envelope>"#;
+        let body = parse_soap_body(xml).unwrap();
+        let resp = find_response(&body, "GetSnapshotUriResponse").unwrap();
+        let uri = resp.path(&["MediaUri", "Uri"]).unwrap().text();
+        assert_eq!(
+            uri,
+            "http://192.0.2.1:80/geo-cgi/param.cgi?skey=0000000000&action=update&Snapshot=Video1.Stream1"
         );
     }
 

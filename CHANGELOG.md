@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.9.2] - 2026-04-16
+## [0.9.2] - 2026-04-17
 
 ### Added
 - `discovery::probe_unicast(ip, timeout)` — send a WS-Discovery `Probe`
@@ -17,6 +17,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   of `probe` / `probe_rounds`.
 
 ### Fixed
+- **XML entity decoding in SOAP response text (GeoVision snapshot URIs).**
+  `XmlNode::parse` now handles `Event::GeneralRef` (quick-xml 0.39 emits
+  each `&amp;` / `&lt;` / `&#65;` as a separate event) and accumulates
+  text runs across events rather than overwriting on each `Event::Text`.
+  GeoVision cameras return a `GetSnapshotUriResponse` with URIs like
+  `http://host/cgi?skey=X&amp;action=update&amp;Snapshot=Video1.Stream1`
+  — valid, RFC-compliant XML escaping. The old parser dropped every
+  `Event::GeneralRef` and overwrote text on each `Event::Text`, so only
+  the fragment after the last `&amp;` survived; the URI came out as
+  `Snapshot=Video1.Stream1`, which the camera's web server rejected
+  with 500. Decodes the five predefined named entities (`amp`, `lt`,
+  `gt`, `quot`, `apos`) plus numeric character references
+  (`&#NN;` / `&#xHH;`). Unknown entities are preserved verbatim as
+  `&name;` so no content is silently lost. Affects every ONVIF response
+  carrying `&`-escaped text — `StreamUri`, `SnapshotUri`, `Scopes`,
+  `HostnameInformation`, custom metadata — not just GeoVision.
+
 - **WS-Addressing namespace regression — restored ~80 missing devices.**
   `build_probe` now emits the legacy WS-Addressing 2004/08 namespace
   with `s:mustUnderstand="1"` on the `Action` and `To` headers and an
