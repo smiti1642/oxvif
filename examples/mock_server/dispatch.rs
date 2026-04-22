@@ -32,13 +32,13 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         }
         "http://www.onvif.org/ver10/device/wsdl/SetUser" => device::handle_set_user(state, body),
         "http://www.onvif.org/ver10/device/wsdl/GetNetworkInterfaces" => {
-            device::resp_network_interfaces()
+            device::resp_network_interfaces(state)
         }
         "http://www.onvif.org/ver10/device/wsdl/SetNetworkInterfaces" => {
-            device::resp_set_network_interfaces()
+            device::handle_set_network_interfaces(state, body)
         }
         "http://www.onvif.org/ver10/device/wsdl/GetNetworkProtocols" => {
-            device::resp_network_protocols()
+            device::resp_network_protocols(state)
         }
         "http://www.onvif.org/ver10/device/wsdl/GetDNS" => device::resp_dns(state),
         "http://www.onvif.org/ver10/device/wsdl/SetDNS" => device::handle_set_dns(state, body),
@@ -46,7 +46,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             device::resp_network_default_gateway(state)
         }
         "http://www.onvif.org/ver10/device/wsdl/SetNetworkDefaultGateway" => {
-            resp_empty("tds", "SetNetworkDefaultGatewayResponse")
+            device::handle_set_network_default_gateway(state, body)
         }
         "http://www.onvif.org/ver10/device/wsdl/SendAuxiliaryCommand" => {
             device::resp_send_auxiliary_command()
@@ -60,7 +60,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             resp_empty("tds", "SetRelayOutputSettingsResponse")
         }
         "http://www.onvif.org/ver10/device/wsdl/SetNetworkProtocols" => {
-            resp_empty("tds", "SetNetworkProtocolsResponse")
+            device::handle_set_network_protocols(state, body)
         }
         "http://www.onvif.org/ver10/device/wsdl/SetSystemFactoryDefault" => {
             resp_empty("tds", "SetSystemFactoryDefaultResponse")

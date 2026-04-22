@@ -2,6 +2,7 @@
 
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
@@ -54,6 +55,29 @@ pub struct DeviceState {
     pub discovery_mode: String,
     #[serde(default = "default_imaging")]
     pub imaging: ImagingState,
+    #[serde(default = "default_interface")]
+    pub interface: NetworkInterfaceState,
+    #[serde(default = "default_protocols")]
+    pub protocols: Vec<NetworkProtocolState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkInterfaceState {
+    pub token: String,
+    pub name: String,
+    pub mac: String,
+    pub mtu: u32,
+    pub enabled: bool,
+    pub ipv4_from_dhcp: bool,
+    pub ipv4_address: String,
+    pub ipv4_prefix_length: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkProtocolState {
+    pub name: String,
+    pub enabled: bool,
+    pub ports: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,6 +173,37 @@ fn default_ntp() -> NtpState {
 fn default_gateway() -> Vec<String> {
     vec!["192.168.1.1".into()]
 }
+fn default_interface() -> NetworkInterfaceState {
+    NetworkInterfaceState {
+        token: "eth0".into(),
+        name: "eth0".into(),
+        mac: "00:11:22:33:44:55".into(),
+        mtu: 1500,
+        enabled: true,
+        ipv4_from_dhcp: false,
+        ipv4_address: "192.168.1.100".into(),
+        ipv4_prefix_length: 24,
+    }
+}
+fn default_protocols() -> Vec<NetworkProtocolState> {
+    vec![
+        NetworkProtocolState {
+            name: "HTTP".into(),
+            enabled: true,
+            ports: vec![80],
+        },
+        NetworkProtocolState {
+            name: "HTTPS".into(),
+            enabled: true,
+            ports: vec![443],
+        },
+        NetworkProtocolState {
+            name: "RTSP".into(),
+            enabled: true,
+            ports: vec![554],
+        },
+    ]
+}
 fn default_discovery_mode() -> String {
     "Discoverable".into()
 }
@@ -183,6 +238,8 @@ impl Default for DeviceState {
             gateway_ipv4: default_gateway(),
             discovery_mode: default_discovery_mode(),
             imaging: default_imaging(),
+            interface: default_interface(),
+            protocols: default_protocols(),
         }
     }
 }
@@ -245,7 +302,17 @@ impl PersistentState {
         self.state.read().unwrap()
     }
 
-    /// Flush current state to disk with file lock.
+    /// Flush current state to disk atomically.
+    ///
+    /// Writes to a sibling `.tmp` file under an exclusive lock, then
+    /// renames it over the real state file. A crash mid-flush leaves
+    /// either the old file intact or the new file in place — never a
+    /// half-written one.
+    ///
+    /// The lock is held on the tempfile (not the final path), so a
+    /// rival process holding a stale lock on the real file doesn't
+    /// block us, and on Windows we avoid the same-handle-twice trap
+    /// that `File::create + std::fs::write` used to fall into.
     fn flush(&self) {
         let state = self.state.read().unwrap();
         let content = match toml::to_string_pretty(&*state) {
@@ -257,24 +324,56 @@ impl PersistentState {
         };
         drop(state);
 
-        // Ensure parent directory exists
+        // Ensure parent directory exists.
         if let Some(parent) = self.path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
 
-        // Write with file lock
-        match std::fs::File::create(&self.path) {
-            Ok(file) => {
+        let tmp_path = {
+            // `.with_extension` replaces the extension; use an explicit
+            // suffix so paths without an extension still get a distinct
+            // tempfile name.
+            let mut p = self.path.clone();
+            let name = p
+                .file_name()
+                .map(|n| n.to_owned())
+                .unwrap_or_else(|| std::ffi::OsString::from("state"));
+            let mut new_name = name;
+            new_name.push(".tmp");
+            p.set_file_name(new_name);
+            p
+        };
+
+        match std::fs::File::create(&tmp_path) {
+            Ok(mut file) => {
                 if let Err(e) = file.lock_exclusive() {
                     eprintln!("  [WARN] File lock failed: {e}");
                 }
-                if let Err(e) = std::fs::write(&self.path, &content) {
-                    eprintln!("  [ERROR] Failed to write {}: {e}", self.path.display());
-                }
+                let write_ok =
+                    file.write_all(content.as_bytes()).is_ok() && file.sync_all().is_ok();
                 let _ = FileExt::unlock(&file);
+                drop(file);
+
+                if write_ok {
+                    if let Err(e) = std::fs::rename(&tmp_path, &self.path) {
+                        eprintln!(
+                            "  [ERROR] Failed to rename {} -> {}: {e}",
+                            tmp_path.display(),
+                            self.path.display()
+                        );
+                        // Best-effort cleanup of the orphan tempfile.
+                        let _ = std::fs::remove_file(&tmp_path);
+                    }
+                } else {
+                    eprintln!("  [ERROR] Write to tempfile {} failed", tmp_path.display());
+                    let _ = std::fs::remove_file(&tmp_path);
+                }
             }
             Err(e) => {
-                eprintln!("  [ERROR] Failed to create {}: {e}", self.path.display());
+                eprintln!(
+                    "  [ERROR] Failed to create tempfile {}: {e}",
+                    tmp_path.display()
+                );
             }
         }
     }
@@ -381,7 +480,11 @@ mod tests {
     #[test]
     fn set_scopes_then_get() {
         let s = new_state();
-        let body = r#"<tds:SetScopes><tt:ScopeItem>onvif://www.onvif.org/name/NewCam</tt:ScopeItem></tds:SetScopes>"#;
+        // ONVIF SetScopes: each URI is sent as a bare <Scopes>URI</Scopes>
+        // element — NOT wrapped in <ScopeItem>. The old test was matching
+        // a broken parser that looked for the wrong tag; fixed along with
+        // `handle_set_scopes` itself.
+        let body = r#"<tds:SetScopes><tds:Scopes>onvif://www.onvif.org/name/NewCam</tds:Scopes></tds:SetScopes>"#;
         device::handle_set_scopes(&s, body);
         let xml = device::resp_scopes(&s);
         assert!(xml.contains("NewCam"));
@@ -404,6 +507,92 @@ mod tests {
         let xml = device::resp_device_info(&s);
         assert!(xml.contains("oxvif-mock"));
         assert!(xml.contains("MockCam-1080p"));
+    }
+
+    #[test]
+    fn set_network_interfaces_updates_ip_and_dhcp() {
+        let s = new_state();
+        // SetNetworkInterfaces body shape per oxvif's `set_network_interfaces`.
+        let body = r#"<tds:SetNetworkInterfaces>
+            <tds:InterfaceToken>eth0</tds:InterfaceToken>
+            <tds:NetworkInterface>
+              <tt:Enabled>true</tt:Enabled>
+              <tt:IPv4>
+                <tt:Enabled>true</tt:Enabled>
+                <tt:DHCP>false</tt:DHCP>
+                <tt:Manual>
+                  <tt:Address>10.0.0.5</tt:Address>
+                  <tt:PrefixLength>16</tt:PrefixLength>
+                </tt:Manual>
+              </tt:IPv4>
+            </tds:NetworkInterface>
+          </tds:SetNetworkInterfaces>"#;
+        let resp = device::handle_set_network_interfaces(&s, body);
+        // Response wraps RebootNeeded — sanity check that the handler ran.
+        assert!(resp.contains("SetNetworkInterfacesResponse"));
+        assert!(resp.contains("RebootNeeded"));
+        let xml = device::resp_network_interfaces(&s);
+        assert!(xml.contains("10.0.0.5"));
+        assert!(xml.contains("<tt:PrefixLength>16</tt:PrefixLength>"));
+        assert!(!xml.contains("192.168.1.100"));
+    }
+
+    #[test]
+    fn set_network_protocols_updates_and_inserts() {
+        let s = new_state();
+        // Flip HTTP port, add a brand-new "FTP" entry the mock didn't have.
+        let body = r#"<tds:SetNetworkProtocols>
+            <tds:NetworkProtocols><tt:Name>HTTP</tt:Name><tt:Enabled>false</tt:Enabled><tt:Port>8080</tt:Port></tds:NetworkProtocols>
+            <tds:NetworkProtocols><tt:Name>FTP</tt:Name><tt:Enabled>true</tt:Enabled><tt:Port>21</tt:Port></tds:NetworkProtocols>
+          </tds:SetNetworkProtocols>"#;
+        device::handle_set_network_protocols(&s, body);
+        let xml = device::resp_network_protocols(&s);
+        // HTTP should still be there but disabled + new port.
+        assert!(xml.contains("<tt:Name>HTTP</tt:Name>"));
+        assert!(xml.contains("<tt:Port>8080</tt:Port>"));
+        // FTP newly inserted.
+        assert!(xml.contains("<tt:Name>FTP</tt:Name>"));
+        assert!(xml.contains("<tt:Port>21</tt:Port>"));
+    }
+
+    #[test]
+    fn set_network_default_gateway_replaces_list() {
+        let s = new_state();
+        let body = r#"<tds:SetNetworkDefaultGateway>
+            <tds:IPv4Address>10.0.0.1</tds:IPv4Address>
+            <tds:IPv4Address>10.0.0.254</tds:IPv4Address>
+          </tds:SetNetworkDefaultGateway>"#;
+        device::handle_set_network_default_gateway(&s, body);
+        let xml = device::resp_network_default_gateway(&s);
+        assert!(xml.contains("10.0.0.1"));
+        assert!(xml.contains("10.0.0.254"));
+        // Default was 192.168.1.1 — must be gone after replacement.
+        assert!(!xml.contains("192.168.1.1"));
+    }
+
+    #[test]
+    fn flush_creates_state_file_atomically() {
+        // Use a real tempfile path so the flush->rename pathway actually runs.
+        let tmp_dir = std::env::temp_dir().join("oxvif_mock_flush_test");
+        let _ = std::fs::create_dir_all(&tmp_dir);
+        let path = tmp_dir.join("state.toml");
+        let _ = std::fs::remove_file(&path);
+
+        let ps = PersistentState {
+            state: RwLock::new(DeviceState::default()),
+            path: path.clone(),
+        };
+        ps.flush();
+
+        assert!(path.exists(), "state file should exist after flush");
+        let contents = std::fs::read_to_string(&path).expect("readable");
+        assert!(contents.contains("hostname"));
+
+        // Tempfile should not linger.
+        let tmp_path = path.with_file_name("state.toml.tmp");
+        assert!(!tmp_path.exists(), "tempfile should be renamed away");
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

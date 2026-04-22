@@ -205,41 +205,50 @@ pub fn handle_set_hostname(state: &SharedState, body: &str) -> String {
 }
 
 pub fn handle_set_ntp(state: &SharedState, body: &str) -> String {
+    // Always honour the FromDHCP toggle, even when the servers list is
+    // empty (which it is when the client switches to DHCP mode).
     let servers = extract_all_tags(body, "DNSname");
-    if !servers.is_empty() {
-        let from_dhcp = extract_tag(body, "FromDHCP")
-            .map(|v| v == "true")
-            .unwrap_or(false);
-        state.modify(|s| {
-            s.ntp.servers = servers;
-            s.ntp.from_dhcp = from_dhcp;
-            eprintln!("    [STATE] NTP updated: {:?}", s.ntp.servers);
-        });
-    }
+    let from_dhcp = extract_tag(body, "FromDHCP")
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    state.modify(|s| {
+        s.ntp.servers = servers;
+        s.ntp.from_dhcp = from_dhcp;
+        eprintln!(
+            "    [STATE] NTP updated: dhcp={} servers={:?}",
+            s.ntp.from_dhcp, s.ntp.servers
+        );
+    });
     resp_empty("tds", "SetNTPResponse")
 }
 
 pub fn handle_set_dns(state: &SharedState, body: &str) -> String {
     let servers = extract_all_tags(body, "IPv4Address");
-    if !servers.is_empty() {
-        let from_dhcp = extract_tag(body, "FromDHCP")
-            .map(|v| v == "true")
-            .unwrap_or(false);
-        state.modify(|s| {
-            s.dns.servers = servers;
-            s.dns.from_dhcp = from_dhcp;
-            eprintln!("    [STATE] DNS updated: {:?}", s.dns.servers);
-        });
-    }
+    let from_dhcp = extract_tag(body, "FromDHCP")
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    state.modify(|s| {
+        s.dns.servers = servers;
+        s.dns.from_dhcp = from_dhcp;
+        eprintln!(
+            "    [STATE] DNS updated: dhcp={} servers={:?}",
+            s.dns.from_dhcp, s.dns.servers
+        );
+    });
     resp_empty("tds", "SetDNSResponse")
 }
 
 pub fn handle_set_scopes(state: &SharedState, body: &str) -> String {
-    let scopes = extract_all_tags(body, "ScopeItem");
+    // ONVIF SetScopes ships each URI directly as <tds:Scopes>URI</tds:Scopes>.
+    // The GetScopesResponse format is richer (<Scopes><ScopeDef/><ScopeItem/></Scopes>),
+    // but that doesn't apply to writes — we were looking at the wrong tag
+    // here before, which is why oxdm's name/location edits appeared to
+    // succeed but never reflected.
+    let scopes = extract_all_tags(body, "Scopes");
     if !scopes.is_empty() {
         state.modify(|s| {
             s.scopes = scopes;
-            eprintln!("    [STATE] scopes updated");
+            eprintln!("    [STATE] scopes updated: {:?}", s.scopes);
         });
     }
     resp_empty("tds", "SetScopesResponse")
@@ -357,33 +366,76 @@ pub fn resp_services(base: &str) -> String {
     )
 }
 
-pub fn resp_network_interfaces() -> String {
+pub fn resp_network_interfaces(state: &SharedState) -> String {
+    let s = state.read();
+    let i = &s.interface;
+    let enabled = if i.enabled { "true" } else { "false" };
+    let dhcp = if i.ipv4_from_dhcp { "true" } else { "false" };
     soap(
         NS,
-        r#"<tds:GetNetworkInterfacesResponse>
-          <tds:NetworkInterfaces token="eth0">
-            <tt:Enabled>true</tt:Enabled>
+        &format!(
+            r#"<tds:GetNetworkInterfacesResponse>
+          <tds:NetworkInterfaces token="{token}">
+            <tt:Enabled>{enabled}</tt:Enabled>
             <tt:Info>
-              <tt:Name>eth0</tt:Name>
-              <tt:HwAddress>00:11:22:33:44:55</tt:HwAddress>
-              <tt:MTU>1500</tt:MTU>
+              <tt:Name>{name}</tt:Name>
+              <tt:HwAddress>{mac}</tt:HwAddress>
+              <tt:MTU>{mtu}</tt:MTU>
             </tt:Info>
             <tt:IPv4>
               <tt:Enabled>true</tt:Enabled>
               <tt:Config>
-                <tt:FromDHCP>false</tt:FromDHCP>
+                <tt:FromDHCP>{dhcp}</tt:FromDHCP>
                 <tt:Manual>
-                  <tt:Address>192.168.1.100</tt:Address>
-                  <tt:PrefixLength>24</tt:PrefixLength>
+                  <tt:Address>{address}</tt:Address>
+                  <tt:PrefixLength>{prefix}</tt:PrefixLength>
                 </tt:Manual>
               </tt:Config>
             </tt:IPv4>
           </tds:NetworkInterfaces>
         </tds:GetNetworkInterfacesResponse>"#,
+            token = i.token,
+            name = i.name,
+            mac = i.mac,
+            mtu = i.mtu,
+            address = i.ipv4_address,
+            prefix = i.ipv4_prefix_length,
+        ),
     )
 }
 
-pub fn resp_set_network_interfaces() -> String {
+pub fn handle_set_network_interfaces(state: &SharedState, body: &str) -> String {
+    // Read the new values out of the SetNetworkInterfaces body.
+    let token = extract_tag(body, "InterfaceToken").unwrap_or_default();
+    let enabled = extract_tag(body, "Enabled").map(|v| v == "true");
+    let dhcp = extract_tag(body, "FromDHCP").map(|v| v == "true");
+    let address = extract_tag(body, "Address");
+    let prefix: Option<u32> = extract_tag(body, "PrefixLength").and_then(|p| p.parse().ok());
+
+    state.modify(|s| {
+        if !token.is_empty() && token != s.interface.token {
+            // Mock keeps a single interface; ignore writes to other tokens.
+            return;
+        }
+        if let Some(e) = enabled {
+            s.interface.enabled = e;
+        }
+        if let Some(d) = dhcp {
+            s.interface.ipv4_from_dhcp = d;
+        }
+        if let Some(a) = address {
+            s.interface.ipv4_address = a;
+        }
+        if let Some(p) = prefix {
+            s.interface.ipv4_prefix_length = p;
+        }
+        eprintln!(
+            "    [STATE] interface updated: dhcp={} addr={} /{}",
+            s.interface.ipv4_from_dhcp, s.interface.ipv4_address, s.interface.ipv4_prefix_length,
+        );
+    });
+
+    // Always report no-reboot-needed so the client UI flow stays deterministic.
     soap(
         NS,
         r#"<tds:SetNetworkInterfacesResponse>
@@ -392,15 +444,76 @@ pub fn resp_set_network_interfaces() -> String {
     )
 }
 
-pub fn resp_network_protocols() -> String {
+pub fn resp_network_protocols(state: &SharedState) -> String {
+    let s = state.read();
+    let items: String = s
+        .protocols
+        .iter()
+        .map(|p| {
+            let enabled = if p.enabled { "true" } else { "false" };
+            let ports: String = p
+                .ports
+                .iter()
+                .map(|n| format!("<tt:Port>{n}</tt:Port>"))
+                .collect();
+            format!(
+                r#"<tds:NetworkProtocols><tt:Name>{name}</tt:Name><tt:Enabled>{enabled}</tt:Enabled>{ports}</tds:NetworkProtocols>"#,
+                name = p.name,
+            )
+        })
+        .collect();
     soap(
         NS,
-        r#"<tds:GetNetworkProtocolsResponse>
-          <tds:NetworkProtocols><tt:Name>HTTP</tt:Name><tt:Enabled>true</tt:Enabled><tt:Port>80</tt:Port></tds:NetworkProtocols>
-          <tds:NetworkProtocols><tt:Name>HTTPS</tt:Name><tt:Enabled>true</tt:Enabled><tt:Port>443</tt:Port></tds:NetworkProtocols>
-          <tds:NetworkProtocols><tt:Name>RTSP</tt:Name><tt:Enabled>true</tt:Enabled><tt:Port>554</tt:Port></tds:NetworkProtocols>
-        </tds:GetNetworkProtocolsResponse>"#,
+        &format!("<tds:GetNetworkProtocolsResponse>{items}</tds:GetNetworkProtocolsResponse>"),
     )
+}
+
+pub fn handle_set_network_protocols(state: &SharedState, body: &str) -> String {
+    // SetNetworkProtocols sends one or more NetworkProtocols blocks; we
+    // pull Name/Enabled/Port out flat and zip them. Each block ships
+    // exactly one Port in normal ONVIF traffic, so 1:1 zipping is safe.
+    let names = extract_all_tags(body, "Name");
+    let enableds = extract_all_tags(body, "Enabled");
+    let ports = extract_all_tags(body, "Port");
+
+    if names.is_empty() {
+        return resp_empty("tds", "SetNetworkProtocolsResponse");
+    }
+
+    state.modify(|s| {
+        for (i, name) in names.iter().enumerate() {
+            let enabled = enableds.get(i).map(|v| v == "true").unwrap_or(true);
+            let port: Option<u32> = ports.get(i).and_then(|p| p.parse().ok());
+            // Update existing protocol or insert if camera doesn't have it.
+            if let Some(p) = s
+                .protocols
+                .iter_mut()
+                .find(|p| p.name.eq_ignore_ascii_case(name))
+            {
+                p.enabled = enabled;
+                if let Some(port) = port {
+                    p.ports = vec![port];
+                }
+            } else {
+                s.protocols.push(crate::state::NetworkProtocolState {
+                    name: name.clone(),
+                    enabled,
+                    ports: port.map(|p| vec![p]).unwrap_or_default(),
+                });
+            }
+            eprintln!("    [STATE] protocol {name}: enabled={enabled} port={port:?}");
+        }
+    });
+    resp_empty("tds", "SetNetworkProtocolsResponse")
+}
+
+pub fn handle_set_network_default_gateway(state: &SharedState, body: &str) -> String {
+    let addrs = extract_all_tags(body, "IPv4Address");
+    state.modify(|s| {
+        s.gateway_ipv4 = addrs;
+        eprintln!("    [STATE] gateway updated: {:?}", s.gateway_ipv4);
+    });
+    resp_empty("tds", "SetNetworkDefaultGatewayResponse")
 }
 
 pub fn resp_system_log() -> String {
