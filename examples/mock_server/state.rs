@@ -93,6 +93,11 @@ pub struct DeviceInfo {
 pub struct MockUser {
     pub username: String,
     pub level: String,
+    /// Plaintext password used to validate WS-Security digests.
+    /// `#[serde(default)]` keeps older state files (pre-per-user-auth)
+    /// loadable; those users get a blank password until re-set.
+    #[serde(default)]
+    pub password: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,10 +146,12 @@ fn default_users() -> Vec<MockUser> {
         MockUser {
             username: "admin".into(),
             level: "Administrator".into(),
+            password: "admin".into(),
         },
         MockUser {
             username: "operator".into(),
             level: "Operator".into(),
+            password: "operator".into(),
         },
     ]
 }
@@ -300,6 +307,17 @@ impl PersistentState {
     /// Read access (no file I/O).
     pub fn read(&self) -> std::sync::RwLockReadGuard<'_, DeviceState> {
         self.state.read().unwrap()
+    }
+
+    /// In-memory instance for tests — never touches the real filesystem
+    /// (flush writes to `/dev/null`, which is silently a no-op on both
+    /// POSIX and Windows).
+    #[cfg(test)]
+    pub fn for_tests() -> Self {
+        PersistentState {
+            state: RwLock::new(DeviceState::default()),
+            path: PathBuf::from("/dev/null"),
+        }
     }
 
     /// Flush current state to disk atomically.

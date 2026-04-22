@@ -76,7 +76,7 @@ async fn handle_soap(
     eprintln!("  → {action}");
 
     if auth::requires_auth(&action) {
-        if let Err(reason) = auth::validate_ws_security(&body_str) {
+        if let Err(reason) = auth::validate_ws_security(&body_str, &state.device) {
             eprintln!("    [AUTH FAIL] {reason}");
             return (
                 StatusCode::OK,

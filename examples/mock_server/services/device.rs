@@ -272,14 +272,22 @@ pub fn handle_set_system_date_and_time(state: &SharedState, body: &str) -> Strin
 }
 
 pub fn handle_create_users(state: &SharedState, body: &str) -> String {
-    let usernames = extract_all_tags(body, "Username");
-    let levels = extract_all_tags(body, "UserLevel");
+    // Scope extraction to the <tds:CreateUsers> block so we don't pick up
+    // the <wsse:Username>/<wsse:Password> tags from the WS-Security header
+    // sent alongside authenticated requests.
+    let inner = extract_tag(body, "CreateUsers").unwrap_or_default();
+    let usernames = extract_all_tags(&inner, "Username");
+    let passwords = extract_all_tags(&inner, "Password");
+    let levels = extract_all_tags(&inner, "UserLevel");
     state.modify(|s| {
-        for (u, l) in usernames.into_iter().zip(levels) {
-            eprintln!("    [STATE] user created: {u} ({l})");
+        for (i, username) in usernames.into_iter().enumerate() {
+            let level = levels.get(i).cloned().unwrap_or_else(|| "User".to_string());
+            let password = passwords.get(i).cloned().unwrap_or_default();
+            eprintln!("    [STATE] user created: {username} ({level})");
             s.users.push(crate::state::MockUser {
-                username: u,
-                level: l,
+                username,
+                level,
+                password,
             });
         }
     });
@@ -287,7 +295,8 @@ pub fn handle_create_users(state: &SharedState, body: &str) -> String {
 }
 
 pub fn handle_delete_users(state: &SharedState, body: &str) -> String {
-    let usernames = extract_all_tags(body, "Username");
+    let inner = extract_tag(body, "DeleteUsers").unwrap_or_default();
+    let usernames = extract_all_tags(&inner, "Username");
     state.modify(|s| {
         for name in &usernames {
             s.users.retain(|u| u.username != *name);
@@ -298,13 +307,18 @@ pub fn handle_delete_users(state: &SharedState, body: &str) -> String {
 }
 
 pub fn handle_set_user(state: &SharedState, body: &str) -> String {
-    let username = extract_tag(body, "Username");
-    let level = extract_tag(body, "UserLevel");
+    let inner = extract_tag(body, "SetUser").unwrap_or_default();
+    let username = extract_tag(&inner, "Username");
+    let level = extract_tag(&inner, "UserLevel");
+    let password = extract_tag(&inner, "Password");
     if let Some(username) = username {
         state.modify(|s| {
             if let Some(user) = s.users.iter_mut().find(|u| u.username == username) {
                 if let Some(l) = &level {
                     user.level = l.clone();
+                }
+                if let Some(p) = &password {
+                    user.password = p.clone();
                 }
                 eprintln!("    [STATE] user updated: {username}");
             }
