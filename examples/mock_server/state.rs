@@ -55,6 +55,8 @@ pub struct DeviceState {
     pub discovery_mode: String,
     #[serde(default = "default_imaging")]
     pub imaging: ImagingState,
+    #[serde(default = "default_ptz")]
+    pub ptz: PtzState,
     #[serde(default = "default_interface")]
     pub interface: NetworkInterfaceState,
     #[serde(default = "default_protocols")]
@@ -110,6 +112,26 @@ pub struct DnsState {
 pub struct NtpState {
     pub from_dhcp: bool,
     pub servers: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtzPreset {
+    pub token: String,
+    pub name: String,
+    pub pan: f32,
+    pub tilt: f32,
+    pub zoom: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtzState {
+    pub pan: f32,
+    pub tilt: f32,
+    pub zoom: f32,
+    pub home_pan: f32,
+    pub home_tilt: f32,
+    pub home_zoom: f32,
+    pub presets: Vec<PtzPreset>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -214,6 +236,32 @@ fn default_protocols() -> Vec<NetworkProtocolState> {
 fn default_discovery_mode() -> String {
     "Discoverable".into()
 }
+fn default_ptz() -> PtzState {
+    PtzState {
+        pan: 0.0,
+        tilt: 0.0,
+        zoom: 0.0,
+        home_pan: 0.0,
+        home_tilt: 0.0,
+        home_zoom: 0.0,
+        presets: vec![
+            PtzPreset {
+                token: "Preset_1".into(),
+                name: "Home".into(),
+                pan: 0.0,
+                tilt: 0.0,
+                zoom: 0.0,
+            },
+            PtzPreset {
+                token: "Preset_2".into(),
+                name: "Door".into(),
+                pan: 0.5,
+                tilt: 0.2,
+                zoom: 0.0,
+            },
+        ],
+    }
+}
 fn default_imaging() -> ImagingState {
     ImagingState {
         brightness: 60.0,
@@ -245,6 +293,7 @@ impl Default for DeviceState {
             gateway_ipv4: default_gateway(),
             discovery_mode: default_discovery_mode(),
             imaging: default_imaging(),
+            ptz: default_ptz(),
             interface: default_interface(),
             protocols: default_protocols(),
         }
@@ -405,6 +454,17 @@ impl PersistentState {
             f(&mut guard);
         }
         self.flush();
+    }
+
+    /// Same as `modify`, but the closure can return a value
+    /// (e.g. a freshly-generated token).
+    pub fn modify_returning<R>(&self, f: impl FnOnce(&mut DeviceState) -> R) -> R {
+        let result = {
+            let mut guard = self.state.write().unwrap();
+            f(&mut guard)
+        };
+        self.flush();
+        result
     }
 }
 
@@ -586,6 +646,94 @@ mod tests {
         assert!(xml.contains("10.0.0.254"));
         // Default was 192.168.1.1 — must be gone after replacement.
         assert!(!xml.contains("192.168.1.1"));
+    }
+
+    #[test]
+    fn ptz_absolute_move_updates_position() {
+        use crate::services::ptz;
+        let s = new_state();
+        let body = r#"<tptz:AbsoluteMove>
+            <tptz:Position>
+              <tt:PanTilt x="0.5" y="-0.3"/>
+              <tt:Zoom x="0.7"/>
+            </tt:Position>
+          </tptz:AbsoluteMove>"#;
+        ptz::handle_ptz_absolute_move(&s, body);
+        let xml = ptz::resp_ptz_status(&s);
+        assert!(xml.contains(r#"x="0.5""#));
+        assert!(xml.contains(r#"y="-0.3""#));
+        assert!(xml.contains(r#"x="0.7""#));
+    }
+
+    #[test]
+    fn ptz_set_preset_uses_current_position_and_returns_token() {
+        use crate::services::ptz;
+        let s = new_state();
+        // Move first so SetPreset captures a non-zero position.
+        let move_body = r#"<tptz:AbsoluteMove><tptz:Position>
+            <tt:PanTilt x="0.4" y="0.1"/><tt:Zoom x="0.2"/>
+          </tt:Position></tptz:AbsoluteMove>"#;
+        ptz::handle_ptz_absolute_move(&s, move_body);
+
+        let body = r#"<tptz:SetPreset>
+            <tptz:PresetName>Garden</tptz:PresetName>
+          </tptz:SetPreset>"#;
+        let resp = ptz::handle_ptz_set_preset(&s, body);
+        // Defaults already use Preset_1 and Preset_2, so new one is Preset_3.
+        assert!(resp.contains("Preset_3"));
+
+        let presets = ptz::resp_ptz_presets(&s);
+        assert!(presets.contains("Garden"));
+        assert!(presets.contains(r#"x="0.4""#));
+    }
+
+    #[test]
+    fn ptz_remove_preset_then_get() {
+        use crate::services::ptz;
+        let s = new_state();
+        let body = r#"<tptz:RemovePreset>
+            <tptz:PresetToken>Preset_2</tptz:PresetToken>
+          </tptz:RemovePreset>"#;
+        ptz::handle_ptz_remove_preset(&s, body);
+        let xml = ptz::resp_ptz_presets(&s);
+        assert!(xml.contains("Preset_1"));
+        assert!(!xml.contains(r#"token="Preset_2""#));
+    }
+
+    #[test]
+    fn ptz_goto_preset_jumps_position() {
+        use crate::services::ptz;
+        let s = new_state();
+        // Preset_2 default: pan=0.5 tilt=0.2 zoom=0.0
+        let body = r#"<tptz:GotoPreset>
+            <tptz:PresetToken>Preset_2</tptz:PresetToken>
+          </tptz:GotoPreset>"#;
+        ptz::handle_ptz_goto_preset(&s, body);
+        let xml = ptz::resp_ptz_status(&s);
+        assert!(xml.contains(r#"x="0.5""#));
+        assert!(xml.contains(r#"y="0.2""#));
+    }
+
+    #[test]
+    fn ptz_set_home_then_goto_home() {
+        use crate::services::ptz;
+        let s = new_state();
+        // Move, set home, move away, goto home → position should reset to setpoint.
+        let move1 = r#"<tptz:AbsoluteMove><tptz:Position>
+            <tt:PanTilt x="0.8" y="-0.4"/><tt:Zoom x="0.3"/>
+          </tt:Position></tptz:AbsoluteMove>"#;
+        ptz::handle_ptz_absolute_move(&s, move1);
+        ptz::handle_ptz_set_home_position(&s);
+
+        let move2 = r#"<tptz:AbsoluteMove><tptz:Position>
+            <tt:PanTilt x="-0.5" y="0.5"/><tt:Zoom x="0.0"/>
+          </tt:Position></tptz:AbsoluteMove>"#;
+        ptz::handle_ptz_absolute_move(&s, move2);
+
+        ptz::handle_ptz_goto_home_position(&s);
+        let xml = ptz::resp_ptz_status(&s);
+        assert!(xml.contains(r#"x="0.8""#));
+        assert!(xml.contains(r#"y="-0.4""#));
     }
 
     #[test]

@@ -17,7 +17,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             } else if tail.starts_with("ver10/media/wsdl/") {
                 dispatch_media(op, base)
             } else if tail.starts_with("ver20/ptz/wsdl/") {
-                dispatch_ptz(op)
+                dispatch_ptz(op, state, body)
             } else if tail.starts_with("ver20/imaging/wsdl/") {
                 dispatch_imaging(op, state, body)
             } else if tail.starts_with("ver10/recording/wsdl/")
@@ -152,21 +152,25 @@ fn dispatch_media2(op: &str, base: &str) -> Option<String> {
     })
 }
 
-fn dispatch_ptz(op: &str) -> Option<String> {
+fn dispatch_ptz(op: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
-        "GetStatus" => ptz::resp_ptz_status(),
-        "GetPresets" => ptz::resp_ptz_presets(),
-        "SetPreset" => ptz::resp_ptz_set_preset(),
+        "GetStatus" => ptz::resp_ptz_status(state),
+        "GetPresets" => ptz::resp_ptz_presets(state),
+        "SetPreset" => ptz::handle_ptz_set_preset(state, body),
+        "RemovePreset" => ptz::handle_ptz_remove_preset(state, body),
+        "GotoPreset" => ptz::handle_ptz_goto_preset(state, body),
+        "AbsoluteMove" => ptz::handle_ptz_absolute_move(state, body),
+        "RelativeMove" => ptz::handle_ptz_relative_move(state, body),
+        "ContinuousMove" => ptz::handle_ptz_continuous_move(state, body),
+        "Stop" => ptz::handle_ptz_stop(),
+        "GotoHomePosition" => ptz::handle_ptz_goto_home_position(state),
+        "SetHomePosition" => ptz::handle_ptz_set_home_position(state),
         "GetNodes" => ptz::resp_ptz_nodes(),
         "GetNode" => ptz::resp_ptz_node(),
         "GetConfigurations" | "GetCompatibleConfigurations" => ptz::resp_ptz_configurations(),
         "GetConfiguration" => ptz::resp_ptz_configuration(),
         "SetConfiguration" => resp_empty("tptz", "SetConfigurationResponse"),
         "GetConfigurationOptions" => ptz::resp_ptz_configuration_options(),
-        "AbsoluteMove" | "RelativeMove" | "ContinuousMove" | "Stop" | "GotoPreset"
-        | "GotoHomePosition" | "SetHomePosition" | "RemovePreset" => {
-            resp_empty("tptz", "PTZResponse")
-        }
         _ => return None,
     })
 }

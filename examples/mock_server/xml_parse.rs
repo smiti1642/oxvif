@@ -76,6 +76,47 @@ fn find_open_tag(xml: &str, local_name: &str, from: usize) -> Option<(usize, usi
     None
 }
 
+/// Extract an attribute value from the first occurrence of a tag.
+///
+/// e.g. for `<tt:PanTilt x="0.5" y="0.2"/>`, `extract_attr(xml, "PanTilt", "x")`
+/// returns `Some("0.5")`. Handles both single- and double-quoted values.
+pub fn extract_attr(xml: &str, tag_local: &str, attr: &str) -> Option<String> {
+    let mut pos = 0;
+    while pos < xml.len() {
+        let rest = &xml[pos..];
+        let lt = rest.find('<')?;
+        let abs_lt = pos + lt;
+        let after_lt = &xml[abs_lt + 1..];
+        if after_lt.starts_with('/') || after_lt.starts_with('?') || after_lt.starts_with('!') {
+            pos = abs_lt + 2;
+            continue;
+        }
+        let Some(gt) = after_lt.find('>') else {
+            break;
+        };
+        let header = &after_lt[..gt];
+        let tag_name = header
+            .split(|c: char| c.is_whitespace() || c == '/')
+            .next()
+            .unwrap_or("");
+        let local = tag_name.rsplit(':').next().unwrap_or(tag_name);
+        if local == tag_local {
+            for &quote in &['"', '\''] {
+                let needle = format!("{attr}={quote}");
+                if let Some(start) = header.find(&needle) {
+                    let val_start = start + needle.len();
+                    if let Some(end) = header[val_start..].find(quote) {
+                        return Some(header[val_start..val_start + end].to_string());
+                    }
+                }
+            }
+            return None;
+        }
+        pos = abs_lt + 1;
+    }
+    None
+}
+
 /// Find the position of the closing tag `</...local_name>` relative to the input.
 fn find_close_tag(xml: &str, local_name: &str) -> Option<usize> {
     let mut pos = 0;
