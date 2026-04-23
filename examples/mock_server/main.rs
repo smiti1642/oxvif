@@ -86,7 +86,7 @@ async fn handle_soap(
         }
     }
 
-    let xml = dispatch::dispatch(&action, &state.base, &state.device, &body_str);
+    let xml = dispatch::dispatch(&action, &state.base, &state.device, &body_str).await;
 
     (
         StatusCode::OK,

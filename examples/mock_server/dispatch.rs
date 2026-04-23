@@ -2,13 +2,13 @@ use crate::helpers::{resp_empty, resp_soap_fault};
 use crate::services::{device, events, imaging, media, media2, ptz, recording};
 use crate::state::SharedState;
 
-pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> String {
+pub async fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> String {
     let op = action.rsplit('/').next().unwrap_or("");
 
     // Events share one sub-dispatcher across the ONVIF and OASIS WSN namespaces.
     let response =
         if action.contains("/events/wsdl/") || action.contains("docs.oasis-open.org/wsn/") {
-            dispatch_events(op)
+            dispatch_events(op, base).await
         } else if let Some(tail) = action.strip_prefix("http://www.onvif.org/") {
             if tail.starts_with("ver10/device/wsdl/") {
                 dispatch_device(op, base, state, body)
@@ -187,12 +187,12 @@ fn dispatch_imaging(op: &str, state: &SharedState, body: &str) -> Option<String>
     })
 }
 
-fn dispatch_events(op: &str) -> Option<String> {
+async fn dispatch_events(op: &str, base: &str) -> Option<String> {
     Some(match op {
         "GetEventPropertiesRequest" => events::resp_event_properties(),
-        "CreatePullPointSubscriptionRequest" => events::resp_create_pull_point_subscription(),
-        "PullMessagesRequest" => events::resp_pull_messages(),
-        "SubscribeRequest" => events::resp_subscribe(),
+        "CreatePullPointSubscriptionRequest" => events::resp_create_pull_point_subscription(base),
+        "PullMessagesRequest" => events::resp_pull_messages().await,
+        "SubscribeRequest" => events::resp_subscribe(base),
         "RenewRequest" => events::resp_renew(),
         "UnsubscribeRequest" => resp_empty("wsnt", "UnsubscribeResponse"),
         "SetSynchronizationPointRequest" => resp_empty("tev", "SetSynchronizationPointResponse"),
