@@ -86,6 +86,9 @@ pub struct NotificationMessage {
     pub topic: String,
     /// UTC timestamp from the `Message/@UtcTime` attribute.
     pub utc_time: String,
+    /// `Message/@PropertyOperation` — typically `Initialized`, `Changed`,
+    /// or `Deleted`. Empty when the device omits the attribute.
+    pub property_operation: String,
     /// Source `SimpleItem` pairs (e.g. `VideoSourceToken = "VideoSource_1"`).
     pub source: HashMap<String, String>,
     /// Data `SimpleItem` pairs (e.g. `IsMotion = "true"`).
@@ -114,6 +117,10 @@ impl NotificationMessage {
             .and_then(|n| n.attr("UtcTime").map(str::to_string))
             .unwrap_or_default();
 
+        let property_operation = msg
+            .and_then(|n| n.attr("PropertyOperation").map(str::to_string))
+            .unwrap_or_default();
+
         let source = msg
             .and_then(|n| n.child("Source"))
             .map(parse_simple_items)
@@ -127,6 +134,7 @@ impl NotificationMessage {
         Self {
             topic,
             utc_time,
+            property_operation,
             source,
             data,
         }
