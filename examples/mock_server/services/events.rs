@@ -1,7 +1,8 @@
 use crate::helpers::soap;
+use crate::xml_parse::extract_tag;
+use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Per-process counter so each PullMessages returns a distinct event the
@@ -18,6 +19,18 @@ static EVENT_SEQ: AtomicU64 = AtomicU64::new(0);
 fn next_event_deadline() -> &'static Mutex<tokio::time::Instant> {
     static CELL: OnceLock<Mutex<tokio::time::Instant>> = OnceLock::new();
     CELL.get_or_init(|| Mutex::new(tokio::time::Instant::now()))
+}
+
+/// Accepted topics for the active subscription, parsed from the client's
+/// `<wsnt:TopicExpression>` on CreatePullPointSubscription. `None` means
+/// no filter = emit every generated event. A `Some(vec)` means only emit
+/// events whose topic exactly matches one of the entries.
+///
+/// Single-client assumption: we don't track per-subscription filters;
+/// whichever client most recently subscribed wins. Fine for oxdm dev.
+fn filter_topics() -> &'static Mutex<Option<Vec<String>>> {
+    static CELL: OnceLock<Mutex<Option<Vec<String>>>> = OnceLock::new();
+    CELL.get_or_init(|| Mutex::new(None))
 }
 
 /// Spacing between synthesized events. 3 s feels alive but not spammy.
@@ -84,7 +97,25 @@ fn epoch_to_civil(secs: u64) -> (i32, u32, u32, u32, u32, u32) {
     (y, m, d, hh, mm, ss)
 }
 
-pub fn resp_create_pull_point_subscription(base: &str) -> String {
+pub fn resp_create_pull_point_subscription(base: &str, body: &str) -> String {
+    // Parse the optional <wsnt:TopicExpression>topic1|topic2|...</...>
+    // and store it so subsequent PullMessages can filter. Empty or absent
+    // means "no filter" — clients subscribing without a filter expect
+    // every topic.
+    let new_filter = extract_tag(body, "TopicExpression").and_then(|expr| {
+        let entries: Vec<String> = expr
+            .split('|')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if entries.is_empty() {
+            None
+        } else {
+            Some(entries)
+        }
+    });
+    *filter_topics().lock().unwrap() = new_filter;
+
     let now = now_rfc3339();
     soap(
         r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsa="http://www.w3.org/2005/08/addressing""#,
@@ -155,6 +186,25 @@ pub async fn resp_pull_messages() -> String {
         )
     };
 
+    // Apply the subscription's topic filter, if any. When the candidate
+    // topic is filtered out, we still consumed the slot (simulating the
+    // underlying event firing on the camera) but return a zero-message
+    // response — which is exactly what a real camera does with a
+    // ConcreteSet filter that doesn't match.
+    if let Some(ref allowed) = *filter_topics().lock().unwrap() {
+        if !allowed.iter().any(|a| a == topic) {
+            return soap(
+                r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl""#,
+                &format!(
+                    r#"<tev:PullMessagesResponse>
+                  <tev:CurrentTime>{now}</tev:CurrentTime>
+                  <tev:TerminationTime>{now}</tev:TerminationTime>
+                </tev:PullMessagesResponse>"#
+                ),
+            );
+        }
+    }
+
     soap(
         r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2" xmlns:tns1="http://www.onvif.org/ver10/topics""#,
         &format!(
@@ -224,15 +274,28 @@ mod tests {
         assert_eq!(epoch_to_civil(1_709_210_096), (2024, 2, 29, 12, 34, 56));
     }
 
-    /// The deadline static persists across tests in the same binary.
-    /// Reset it to `now` so each test starts in a clean state.
-    fn reset_deadline() {
+    /// Serializes event tests — EVENT_SEQ / filter / deadline are all
+    /// module-level globals, so parallel tests stomp on each other.
+    fn test_lock() -> &'static Mutex<()> {
+        static CELL: OnceLock<Mutex<()>> = OnceLock::new();
+        CELL.get_or_init(|| Mutex::new(()))
+    }
+
+    /// Lock + clear the shared state. Caller MUST bind the returned
+    /// guard (`let _lock = reset_state();`) — dropping it early releases
+    /// the lock and lets another test clobber state mid-run.
+    #[must_use]
+    fn reset_state() -> std::sync::MutexGuard<'static, ()> {
+        let guard = test_lock().lock().unwrap_or_else(|e| e.into_inner());
         *next_event_deadline().lock().unwrap() = tokio::time::Instant::now();
+        *filter_topics().lock().unwrap() = None;
+        EVENT_SEQ.store(0, Ordering::Relaxed);
+        guard
     }
 
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn pull_messages_returns_distinct_events() {
-        reset_deadline();
+        let _lock = reset_state();
         // Paused tokio time + advance() lets the EVENT_INTERVAL sleep
         // complete instantly while still proving the deadline logic works.
         let a = resp_pull_messages().await;
@@ -249,7 +312,7 @@ mod tests {
         // least EVENT_INTERVAL because the second one blocks waiting
         // for its slot. Use a tighter assertion than the full interval
         // so timer slack on slow CI doesn't cause flakes.
-        reset_deadline();
+        let _lock = reset_state();
         let _ = resp_pull_messages().await;
         let start = tokio::time::Instant::now();
         let _ = resp_pull_messages().await;
@@ -257,6 +320,47 @@ mod tests {
         assert!(
             elapsed >= EVENT_INTERVAL - Duration::from_millis(200),
             "second pull returned in {elapsed:?}, expected ~{EVENT_INTERVAL:?}"
+        );
+    }
+
+    #[test]
+    fn create_pull_point_parses_filter() {
+        let _lock = reset_state();
+        let body = r#"<tev:CreatePullPointSubscription>
+            <tev:Filter>
+              <wsnt:TopicExpression Dialect="...ConcreteSet">
+                tns1:VideoSource/MotionAlarm|tns1:RuleEngine/FieldDetector/ObjectsInside
+              </wsnt:TopicExpression>
+            </tev:Filter>
+          </tev:CreatePullPointSubscription>"#;
+        let _ = resp_create_pull_point_subscription("http://mock", body);
+        let stored = filter_topics().lock().unwrap().clone();
+        assert_eq!(
+            stored,
+            Some(vec![
+                "tns1:VideoSource/MotionAlarm".to_string(),
+                "tns1:RuleEngine/FieldDetector/ObjectsInside".to_string(),
+            ])
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn pull_messages_respects_filter() {
+        let _lock = reset_state();
+        // Filter to motion only; rule-engine events (even seq) must come
+        // back as empty responses, motion events (odd seq) as full.
+        *filter_topics().lock().unwrap() = Some(vec!["tns1:VideoSource/MotionAlarm".to_string()]);
+        let seq1 = resp_pull_messages().await; // seq=1 → motion → pass
+        tokio::time::advance(EVENT_INTERVAL + Duration::from_millis(100)).await;
+        let seq2 = resp_pull_messages().await; // seq=2 → rule → filtered
+        assert!(seq1.contains("NotificationMessage"), "motion must pass");
+        assert!(
+            !seq2.contains("NotificationMessage"),
+            "rule-engine must be filtered"
+        );
+        assert!(
+            seq2.contains("PullMessagesResponse"),
+            "empty response still valid"
         );
     }
 }

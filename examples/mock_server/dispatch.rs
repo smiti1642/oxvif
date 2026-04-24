@@ -8,7 +8,7 @@ pub async fn dispatch(action: &str, base: &str, state: &SharedState, body: &str)
     // Events share one sub-dispatcher across the ONVIF and OASIS WSN namespaces.
     let response =
         if action.contains("/events/wsdl/") || action.contains("docs.oasis-open.org/wsn/") {
-            dispatch_events(op, base).await
+            dispatch_events(op, base, body).await
         } else if let Some(tail) = action.strip_prefix("http://www.onvif.org/") {
             if tail.starts_with("ver10/device/wsdl/") {
                 dispatch_device(op, base, state, body)
@@ -187,10 +187,12 @@ fn dispatch_imaging(op: &str, state: &SharedState, body: &str) -> Option<String>
     })
 }
 
-async fn dispatch_events(op: &str, base: &str) -> Option<String> {
+async fn dispatch_events(op: &str, base: &str, body: &str) -> Option<String> {
     Some(match op {
         "GetEventPropertiesRequest" => events::resp_event_properties(),
-        "CreatePullPointSubscriptionRequest" => events::resp_create_pull_point_subscription(base),
+        "CreatePullPointSubscriptionRequest" => {
+            events::resp_create_pull_point_subscription(base, body)
+        }
         "PullMessagesRequest" => events::resp_pull_messages().await,
         "SubscribeRequest" => events::resp_subscribe(base),
         "RenewRequest" => events::resp_renew(),
