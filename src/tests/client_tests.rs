@@ -2399,12 +2399,16 @@ async fn test_imaging_get_move_options_missing_returns_err() {
 // ── OSD ───────────────────────────────────────────────────────────────────────
 
 fn get_osds_xml() -> &'static str {
+    // Real cameras wrap each entry in `<trt:OSDs>` (the WSDL element
+    // name is "OSDs" with type tt:OSDConfiguration). Earlier fixture
+    // used `<trt:OSDConfiguration>` — that was wrong and masked a
+    // parser bug.
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                       xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
                       xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <trt:GetOSDsResponse>
-              <trt:OSDConfiguration token="osd_1">
+              <trt:OSDs token="osd_1">
                 <tt:VideoSourceConfigurationToken>vsc_1</tt:VideoSourceConfigurationToken>
                 <tt:Type>Text</tt:Type>
                 <tt:Position>
@@ -2414,7 +2418,7 @@ fn get_osds_xml() -> &'static str {
                   <tt:Type>DateAndTime</tt:Type>
                   <tt:DateFormat>MM/DD/YYYY</tt:DateFormat>
                 </tt:TextString>
-              </trt:OSDConfiguration>
+              </trt:OSDs>
             </trt:GetOSDsResponse>
           </s:Body>
         </s:Envelope>"#
@@ -2473,9 +2477,9 @@ async fn test_get_osds_missing_token_returns_err() {
                       xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
           <s:Body>
             <trt:GetOSDsResponse>
-              <trt:OSDConfiguration>
+              <trt:OSDs>
                 <tt:Type xmlns:tt="http://www.onvif.org/ver10/schema">Text</tt:Type>
-              </trt:OSDConfiguration>
+              </trt:OSDs>
             </trt:GetOSDsResponse>
           </s:Body>
         </s:Envelope>"#;
@@ -4236,7 +4240,7 @@ async fn test_get_osd_parses_colors_and_persistence() {
                      xmlns:tt="http://www.onvif.org/ver10/schema">
          <s:Body>
            <trt:GetOSDResponse>
-             <trt:OSDConfiguration token="OSD_1">
+             <trt:OSD token="OSD_1">
                <tt:VideoSourceConfigurationToken>VideoSrc_1</tt:VideoSourceConfigurationToken>
                <tt:Type>Text</tt:Type>
                <tt:Position><tt:Type>UpperLeft</tt:Type></tt:Position>
@@ -4252,7 +4256,7 @@ async fn test_get_osd_parses_colors_and_persistence() {
                  </tt:BackgroundColor>
                  <tt:IsPersistentText>true</tt:IsPersistentText>
                </tt:TextString>
-             </trt:OSDConfiguration>
+             </trt:OSD>
            </trt:GetOSDResponse>
          </s:Body>
        </s:Envelope>"#;

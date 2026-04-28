@@ -482,8 +482,11 @@ impl OnvifClient {
         let xml = self.call(media_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetOSDResponse")?;
-        resp.child("OSDConfiguration")
-            .ok_or_else(|| crate::soap::SoapError::missing("OSDConfiguration").into())
+        // Element name in the response is `<trt:OSD>` (per WSDL), not
+        // OSDConfiguration — that's the schema *type*, not the
+        // element name we read off the wire.
+        resp.child("OSD")
+            .ok_or_else(|| crate::soap::SoapError::missing("OSD").into())
             .and_then(OsdConfiguration::from_xml)
     }
 

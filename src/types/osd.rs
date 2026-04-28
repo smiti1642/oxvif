@@ -239,13 +239,18 @@ impl OsdConfiguration {
     }
 
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
-        resp.children_named("OSDConfiguration")
-            .map(Self::from_xml)
-            .collect()
+        // GetOSDsResponse wraps each entry in `<trt:OSDs>`, not
+        // `<trt:OSDConfiguration>` — the WSDL declares the element
+        // name as "OSDs" with type tt:OSDConfiguration.
+        resp.children_named("OSDs").map(Self::from_xml).collect()
     }
 
-    /// Serialise to a `<tt:OSDConfiguration>` XML fragment for
-    /// `SetOSD` / `CreateOSD`.
+    /// Serialise to a `<tt:OSD>` XML fragment for `SetOSD` /
+    /// `CreateOSD`. The schema names the wrapper element `OSD`
+    /// (not `OSDConfiguration` — that's the *type*); using
+    /// the wrong name triggers schema validation faults like
+    /// "occurrence constraint violation in element 'trt:CreateOSD'"
+    /// from the cameras that actually validate.
     pub(crate) fn to_xml_body(&self) -> String {
         let token_attr = if self.token.is_empty() {
             String::new()
@@ -268,12 +273,12 @@ impl OsdConfiguration {
             })
             .unwrap_or_default();
         format!(
-            "<tt:OSDConfiguration{token_attr}>\
+            "<tt:OSD{token_attr}>\
                <tt:VideoSourceConfigurationToken>{vsc}</tt:VideoSourceConfigurationToken>\
                <tt:Type>{type_}</tt:Type>\
                {pos}\
                {text_el}{img_el}\
-             </tt:OSDConfiguration>",
+             </tt:OSD>",
             vsc = xml_escape(&self.video_source_config_token),
             type_ = xml_escape(&self.type_),
             pos = self.position.to_xml_body(),
