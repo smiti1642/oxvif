@@ -5,7 +5,7 @@ use crate::soap::{SoapError, XmlNode};
 // ── OsdPosition ───────────────────────────────────────────────────────────────
 
 /// Screen position of an OSD element.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdPosition {
     /// Position type: `"UpperLeft"`, `"UpperRight"`, `"LowerLeft"`,
     /// `"LowerRight"`, or `"Custom"`.
@@ -50,7 +50,7 @@ impl OsdPosition {
 ///
 /// Channels (`x`, `y`, `z`) map to YCbCr or RGB depending on the device's
 /// colorspace URI. Most devices use YCbCr: X = luma, Y = Cb, Z = Cr.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdColor {
     pub x: f32,
     pub y: f32,
@@ -104,7 +104,7 @@ impl OsdColor {
 // ── OsdTextString ─────────────────────────────────────────────────────────────
 
 /// Text content settings for an OSD element of type `"Text"`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdTextString {
     /// Text type: `"Plain"`, `"Date"`, `"Time"`, or `"DateAndTime"`.
     pub type_: String,
@@ -199,7 +199,7 @@ impl OsdTextString {
 ///
 /// Pass a modified copy to `set_osd`, or a new instance (with an empty token)
 /// to `create_osd`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OsdConfiguration {
     /// Opaque token. Empty when creating a new OSD via `create_osd`.
     pub token: String,
@@ -284,7 +284,7 @@ impl OsdConfiguration {
 // ── OsdOptions ────────────────────────────────────────────────────────────────
 
 /// Valid OSD configuration options returned by `get_osd_options`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdOptions {
     /// Maximum number of OSDs supported by this video source configuration.
     pub max_osd: u32,
