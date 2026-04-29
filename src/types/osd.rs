@@ -245,12 +245,13 @@ impl OsdConfiguration {
         resp.children_named("OSDs").map(Self::from_xml).collect()
     }
 
-    /// Serialise to a `<tt:OSD>` XML fragment for `SetOSD` /
-    /// `CreateOSD`. The schema names the wrapper element `OSD`
-    /// (not `OSDConfiguration` — that's the *type*); using
-    /// the wrong name triggers schema validation faults like
-    /// "occurrence constraint violation in element 'trt:CreateOSD'"
-    /// from the cameras that actually validate.
+    /// Serialise to a `<trt:OSD>` XML fragment for `SetOSD` /
+    /// `CreateOSD`. The element name is `OSD` (the *type* is
+    /// OSDConfiguration), and it's defined in the trt (media)
+    /// schema's CreateOSD/SetOSD complex types — so the wire
+    /// prefix is `trt:`, not `tt:`. Strict cameras reject the
+    /// wrong namespace as a schema validation fault even when the
+    /// local name matches.
     pub(crate) fn to_xml_body(&self) -> String {
         let token_attr = if self.token.is_empty() {
             String::new()
@@ -273,12 +274,12 @@ impl OsdConfiguration {
             })
             .unwrap_or_default();
         format!(
-            "<tt:OSD{token_attr}>\
+            "<trt:OSD{token_attr}>\
                <tt:VideoSourceConfigurationToken>{vsc}</tt:VideoSourceConfigurationToken>\
                <tt:Type>{type_}</tt:Type>\
                {pos}\
                {text_el}{img_el}\
-             </tt:OSD>",
+             </trt:OSD>",
             vsc = xml_escape(&self.video_source_config_token),
             type_ = xml_escape(&self.type_),
             pos = self.position.to_xml_body(),
