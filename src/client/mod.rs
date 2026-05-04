@@ -137,16 +137,20 @@ impl OnvifClient {
     }
 
     /// Build a SOAP envelope, attach a WS-Security header if credentials are
-    /// set, serialise to XML, and POST to `url`.
+    /// set, serialise to XML, and POST to `url`. Logs the action + body
+    /// at trace level so `RUST_LOG=oxvif=trace` reveals the exact wire
+    /// shape — invaluable for chasing schema-validation faults from
+    /// strict cameras.
     async fn call(&self, url: &str, action: &str, body: &str) -> Result<String, OnvifError> {
         let mut envelope = SoapEnvelope::new(body.to_string()).with_wsa_to(url);
         if let Some(token) = self.security_token() {
             envelope = envelope.with_security(token);
         }
-        Ok(self
-            .transport
-            .soap_post(url, action, envelope.build())
-            .await?)
+        let xml = envelope.build();
+        tracing::trace!(action, url, body = %xml, "SOAP request");
+        let resp = self.transport.soap_post(url, action, xml).await?;
+        tracing::trace!(action, response = %resp, "SOAP response");
+        Ok(resp)
     }
 }
 
