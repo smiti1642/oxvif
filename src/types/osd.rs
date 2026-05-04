@@ -290,6 +290,15 @@ impl OsdConfiguration {
 // ── OsdOptions ────────────────────────────────────────────────────────────────
 
 /// Valid OSD configuration options returned by `get_osd_options`.
+///
+/// These tell the UI what values the *specific camera* will accept on
+/// CreateOSD / SetOSD. The ONVIF spec lets cameras vary widely here:
+/// some only support a fixed set of date format strings ("YYYY-MM-DD",
+/// "MM/DD/YYYY" etc.), others use category tokens ("24HourClock" on
+/// Hikvision), font-size ranges differ per model. Setting a value the
+/// camera doesn't whitelist comes back as a generic
+/// `ter:InvalidArgs / "Argument Value"` SOAP fault, so populating
+/// dropdowns from this is the only reliable way.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdOptions {
     /// Maximum number of OSDs supported by this video source configuration.
@@ -300,6 +309,13 @@ pub struct OsdOptions {
     pub position_types: Vec<String>,
     /// Supported text types (e.g. `["Plain", "Date", "DateAndTime"]`).
     pub text_types: Vec<String>,
+    /// Allowed date format strings; empty when the camera accepts any
+    /// (or doesn't advertise the list).
+    pub date_formats: Vec<String>,
+    /// Allowed time format strings; empty when the camera accepts any.
+    pub time_formats: Vec<String>,
+    /// Min/max allowed font size in points; `None` when unrestricted.
+    pub font_size_range: Option<(u32, u32)>,
 }
 
 impl OsdOptions {
@@ -307,6 +323,12 @@ impl OsdOptions {
         let opts = resp
             .child("OSDOptions")
             .ok_or_else(|| SoapError::missing("OSDOptions"))?;
+        let text_opt = opts.child("TextOption");
+        let font_size_range = text_opt.and_then(|t| t.child("FontSizeRange")).and_then(|r| {
+            let min = xml_u32(r, "Min")?;
+            let max = xml_u32(r, "Max")?;
+            Some((min, max))
+        });
         Ok(Self {
             max_osd: xml_u32(opts, "MaximumNumberOfOSDs").unwrap_or(0),
             types: opts
@@ -321,14 +343,28 @@ impl OsdOptions {
                         .collect()
                 })
                 .unwrap_or_default(),
-            text_types: opts
-                .child("TextOption")
+            text_types: text_opt
                 .map(|t| {
                     t.children_named("Type")
                         .map(|n| n.text().to_string())
                         .collect()
                 })
                 .unwrap_or_default(),
+            date_formats: text_opt
+                .map(|t| {
+                    t.children_named("DateFormat")
+                        .map(|n| n.text().to_string())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            time_formats: text_opt
+                .map(|t| {
+                    t.children_named("TimeFormat")
+                        .map(|n| n.text().to_string())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            font_size_range,
         })
     }
 }
