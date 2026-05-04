@@ -5,6 +5,46 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.4] - 2026-05-04
+
+### Fixed
+- **OSD module: wrong wrapper element on the wire.** `CreateOSD` and
+  `SetOSD` request bodies were emitting `<tt:OSDConfiguration>` as the
+  wrapper, but the WSDL declares the element as `<trt:OSD>` (with
+  *type* OSDConfiguration). Strict cameras (Hikvision, Dahua, Genetec,
+  Uniview) rejected this with schema-validation faults like
+  "occurrence constraint violation" or generic "Argument Value".
+  Matching response parsers also looked for the wrong element names —
+  `GetOSDsResponse` items are `<trt:OSDs>` (not `<OSDConfiguration>`),
+  `GetOSDResponse` is `<trt:OSD>` — so cameras that actually had OSDs
+  configured returned what looked like an empty list.
+
+### Added
+- **`OsdOptions` exposes `date_formats`, `time_formats`, and
+  `font_size_range`** parsed from `<TextOption>`. ONVIF lets each
+  camera define its own allowed date/time format strings (Hikvision
+  uses tokens like `"24HourClock"`, Dahua uses `"hh:mm:ss tt"`, etc.)
+  and font-size limits — sending values outside that set triggers
+  `ter:InvalidArgs` on Create/SetOSD. Clients can now populate
+  dropdowns from the camera's actual capabilities instead of guessing.
+- **`NotificationMessage.property_operation`** — exposes the
+  `Message/@PropertyOperation` attribute (`Initialized`, `Changed`,
+  `Deleted`). Subscribers need this to distinguish state-init events
+  fired at subscribe time from actual state changes.
+- **`PartialEq` derived on the OSD types** so they can flow through
+  framework prop-diffing layers (Dioxus, Yew) without a wrapper.
+- **SOAP request/response trace logging in `OnvifClient::call`** —
+  enable with `RUST_LOG=oxvif=trace` when chasing schema-validation
+  faults from cameras that return a generic SOAP fault with no detail.
+
+### Notes
+All 375 library tests + 19 doctests pass. Changes are additive
+except the OSD wire-format fix, which is a pure bug fix — code that
+was working against lenient cameras keeps working, code that was
+silently failing against strict ones starts working.
+
+---
+
 ## [0.9.3] - 2026-04-17
 
 ### Changed
