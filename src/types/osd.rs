@@ -324,11 +324,13 @@ impl OsdOptions {
             .child("OSDOptions")
             .ok_or_else(|| SoapError::missing("OSDOptions"))?;
         let text_opt = opts.child("TextOption");
-        let font_size_range = text_opt.and_then(|t| t.child("FontSizeRange")).and_then(|r| {
-            let min = xml_u32(r, "Min")?;
-            let max = xml_u32(r, "Max")?;
-            Some((min, max))
-        });
+        let font_size_range = text_opt
+            .and_then(|t| t.child("FontSizeRange"))
+            .and_then(|r| {
+                let min = xml_u32(r, "Min")?;
+                let max = xml_u32(r, "Max")?;
+                Some((min, max))
+            });
         Ok(Self {
             max_osd: xml_u32(opts, "MaximumNumberOfOSDs").unwrap_or(0),
             types: opts
