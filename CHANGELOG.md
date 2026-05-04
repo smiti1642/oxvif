@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.5] - 2026-05-04
+
+Vendor-tolerant OSD parsing, kept strictly out of `OnvifClient`. The
+guiding principle: `OnvifClient` is the spec-pristine "museum engine",
+`OnvifSession` is the road-going car that knows how to deal with
+real-world cameras that bend or break the spec.
+
+### Added
+- **`OsdOptions::max_per_text_type`.** New `HashMap<String, u32>`
+  exposing the per-text-type quotas (`Plain`, `Date`, `Time`,
+  `DateAndTime`) some cameras advertise via XML attributes on
+  `<MaximumNumberOfOSDs>` (Genetec, recent Hikvision). Lets clients
+  pre-validate `CreateOSD` calls against per-type limits instead of
+  parsing opaque `ter:InvalidArgs` fault strings after the fact.
+  **Populated only when fetched via `OnvifSession::get_osd_options`
+  — `OnvifClient::get_osd_options` leaves it empty (spec-strict).**
+- **`OnvifSession::get_osd_options` now layers vendor-extension
+  parsing** on top of the spec-strict `OnvifClient` result. Two
+  real-world shapes handled:
+  - `<MaximumNumberOfOSDs Total="8" Plain="7" DateAndTime="1" .../>`
+    — count from `Total` attribute when element body is empty, plus
+    per-type quotas from named attributes.
+  - `<PositionOption>UpperLeft</PositionOption>` flat siblings, when
+    the textbook nested-`<Type>` shape produces nothing.
+
+---
+
 ## [0.9.4] - 2026-05-04
 
 ### Fixed

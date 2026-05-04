@@ -301,8 +301,23 @@ impl OsdConfiguration {
 /// dropdowns from this is the only reliable way.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdOptions {
-    /// Maximum number of OSDs supported by this video source configuration.
+    /// Overall maximum number of OSDs across all types.
     pub max_osd: u32,
+    /// Per-text-type quotas keyed by text type (e.g. `"Plain"` →7,
+    /// `"DateAndTime"` →1).
+    ///
+    /// **Always empty when called via [`OnvifClient::get_osd_options`].**
+    /// The ONVIF spec doesn't define per-type quotas; some cameras
+    /// (Genetec, recent Hikvision) expose them as non-standard XML
+    /// attributes on `<MaximumNumberOfOSDs>`. Parsing those attributes
+    /// is a vendor extension, so it's done by
+    /// [`OnvifSession::get_osd_options`] (the "road car" layer that
+    /// handles real-world cameras), not by `OnvifClient` (the
+    /// spec-pristine "museum engine").
+    ///
+    /// [`OnvifClient::get_osd_options`]: crate::OnvifClient::get_osd_options
+    /// [`OnvifSession::get_osd_options`]: crate::OnvifSession::get_osd_options
+    pub max_per_text_type: std::collections::HashMap<String, u32>,
     /// Supported OSD types (e.g. `["Text", "Image"]`).
     pub types: Vec<String>,
     /// Supported position types (e.g. `["UpperLeft", "Custom"]`).
@@ -333,6 +348,7 @@ impl OsdOptions {
             });
         Ok(Self {
             max_osd: xml_u32(opts, "MaximumNumberOfOSDs").unwrap_or(0),
+            max_per_text_type: std::collections::HashMap::new(),
             types: opts
                 .children_named("Type")
                 .map(|n| n.text().to_string())
@@ -368,5 +384,56 @@ impl OsdOptions {
                 .unwrap_or_default(),
             font_size_range,
         })
+    }
+
+    /// Apply vendor-extension parsing on top of the spec-strict
+    /// [`from_xml`](Self::from_xml) result.
+    ///
+    /// Called only by `OnvifSession`. Handles two real-world XML
+    /// shapes that violate (or extend beyond) the ONVIF spec:
+    ///
+    /// 1. **`<MaximumNumberOfOSDs Total="8" Plain="7" DateAndTime="1" .../>`.**
+    ///    Genetec and recent Hikvision stuff the per-type quotas
+    ///    into XML attributes; the element body may also be empty
+    ///    with the count living in `Total`. Populates
+    ///    [`max_per_text_type`](Self::max_per_text_type) and, if
+    ///    [`max_osd`](Self::max_osd) is `0`, fills it from `Total`.
+    /// 2. **Flat `<PositionOption>UpperLeft</PositionOption>` siblings.**
+    ///    The spec shape is a single `<PositionOption>` wrapper
+    ///    holding nested `<Type>` children; Genetec (and some Dahua
+    ///    firmwares) instead emit each entry as a separate sibling.
+    ///    Repopulates [`position_types`](Self::position_types) when
+    ///    the strict parser found nothing.
+    ///
+    /// Idempotent — calling twice on the same XML produces the same
+    /// result.
+    pub(crate) fn apply_vendor_extensions(&mut self, resp: &XmlNode) {
+        let Some(opts) = resp.child("OSDOptions") else {
+            return;
+        };
+
+        if let Some(max_elem) = opts.child("MaximumNumberOfOSDs") {
+            if self.max_osd == 0 {
+                if let Some(total) = max_elem.attr("Total").and_then(|s| s.parse().ok()) {
+                    self.max_osd = total;
+                }
+            }
+            for name in ["Plain", "Date", "Time", "DateAndTime"] {
+                if let Some(v) = max_elem.attr(name).and_then(|s| s.parse::<u32>().ok()) {
+                    self.max_per_text_type.insert(name.to_string(), v);
+                }
+            }
+        }
+
+        if self.position_types.is_empty() {
+            let flat: Vec<String> = opts
+                .children_named("PositionOption")
+                .map(|n| n.text().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !flat.is_empty() {
+                self.position_types = flat;
+            }
+        }
     }
 }

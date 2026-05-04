@@ -472,3 +472,90 @@ async fn test_get_device_info_uses_device_url() {
     assert_eq!(info.manufacturer, "TestCorp");
     assert_eq!(info.model, "Cam-X");
 }
+
+// ── OSD options vendor-extension enrichment ──────────────────────────────
+//
+// OnvifSession::get_osd_options must (a) parse the spec-strict shape
+// and (b) layer in vendor extensions that OnvifClient deliberately
+// ignores. These tests pin both behaviours.
+
+#[tokio::test]
+async fn test_get_osd_options_enriches_per_type_quotas_from_attrs() {
+    // Genetec / late-Hikvision shape: count + per-type quotas live as
+    // attributes on <MaximumNumberOfOSDs>, element body empty.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                              xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                              xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetOSDOptionsResponse>
+              <trt:OSDOptions>
+                <tt:MaximumNumberOfOSDs Total="8" Plain="7" DateAndTime="1" Date="1" Time="1"/>
+                <tt:Type>Text</tt:Type>
+              </trt:OSDOptions>
+            </trt:GetOSDOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let session = session_with(&[xml]).await;
+    let opts = session.get_osd_options("vsc_1").await.unwrap();
+
+    assert_eq!(opts.max_osd, 8, "Total= attribute should fill max_osd");
+    assert_eq!(opts.max_per_text_type.get("Plain"), Some(&7));
+    assert_eq!(opts.max_per_text_type.get("DateAndTime"), Some(&1));
+    assert_eq!(opts.max_per_text_type.get("Date"), Some(&1));
+    assert_eq!(opts.max_per_text_type.get("Time"), Some(&1));
+}
+
+#[tokio::test]
+async fn test_get_osd_options_enriches_flat_position_options() {
+    // Genetec / some-Dahua shape: PositionOption entries are flat
+    // siblings with text bodies, not the textbook nested <Type> children.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                              xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                              xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetOSDOptionsResponse>
+              <trt:OSDOptions>
+                <tt:MaximumNumberOfOSDs>4</tt:MaximumNumberOfOSDs>
+                <tt:PositionOption>UpperLeft</tt:PositionOption>
+                <tt:PositionOption>UpperRight</tt:PositionOption>
+                <tt:PositionOption>LowerLeft</tt:PositionOption>
+                <tt:PositionOption>LowerRight</tt:PositionOption>
+              </trt:OSDOptions>
+            </trt:GetOSDOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let session = session_with(&[xml]).await;
+    let opts = session.get_osd_options("vsc_1").await.unwrap();
+
+    assert_eq!(
+        opts.position_types,
+        vec!["UpperLeft", "UpperRight", "LowerLeft", "LowerRight"]
+    );
+}
+
+#[tokio::test]
+async fn test_get_osd_options_strict_shape_still_parses() {
+    // Spec-strict shape — enrichment must be a no-op, not a regression.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                              xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                              xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetOSDOptionsResponse>
+              <trt:OSDOptions>
+                <tt:MaximumNumberOfOSDs>4</tt:MaximumNumberOfOSDs>
+                <tt:Type>Text</tt:Type>
+                <tt:PositionOption>
+                  <tt:Type>UpperLeft</tt:Type>
+                  <tt:Type>UpperRight</tt:Type>
+                </tt:PositionOption>
+              </trt:OSDOptions>
+            </trt:GetOSDOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let session = session_with(&[xml]).await;
+    let opts = session.get_osd_options("vsc_1").await.unwrap();
+
+    assert_eq!(opts.max_osd, 4);
+    assert_eq!(opts.position_types, vec!["UpperLeft", "UpperRight"]);
+    assert!(opts.max_per_text_type.is_empty());
+}

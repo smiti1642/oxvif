@@ -658,10 +658,36 @@ impl OnvifSession {
     }
 
     /// Retrieve valid OSD configuration options.
+    ///
+    /// Unlike [`OnvifClient::get_osd_options`], the returned
+    /// [`OsdOptions`] is enriched with vendor-extension data the
+    /// spec doesn't define — specifically the per-text-type quotas
+    /// some cameras stash in XML attributes on
+    /// `<MaximumNumberOfOSDs>`, and the flat `<PositionOption>`
+    /// shape Genetec / some Dahua firmwares emit. Doing this
+    /// enrichment here keeps `OnvifClient` strictly spec-compliant
+    /// while still letting application code (UIs, validators) see
+    /// the real-world quirks.
+    ///
+    /// [`OnvifClient::get_osd_options`]: crate::OnvifClient::get_osd_options
     pub async fn get_osd_options(&self, config_token: &str) -> Result<OsdOptions, OnvifError> {
-        self.client
-            .get_osd_options(self.media_url()?, config_token)
-            .await
+        use crate::soap::{find_response, parse_soap_body};
+        use crate::types::xml_escape;
+
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetOSDOptions";
+        let media_url = self.media_url()?;
+        let token = xml_escape(config_token);
+        let body = format!(
+            "<trt:GetOSDOptions>\
+               <trt:ConfigurationToken>{token}</trt:ConfigurationToken>\
+             </trt:GetOSDOptions>"
+        );
+        let xml = self.client.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetOSDOptionsResponse")?;
+        let mut opts = OsdOptions::from_xml(resp)?;
+        opts.apply_vendor_extensions(resp);
+        Ok(opts)
     }
 
     // ── Audio Service ─────────────────────────────────────────────────────────

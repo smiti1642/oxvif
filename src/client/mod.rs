@@ -141,7 +141,12 @@ impl OnvifClient {
     /// at trace level so `RUST_LOG=oxvif=trace` reveals the exact wire
     /// shape — invaluable for chasing schema-validation faults from
     /// strict cameras.
-    async fn call(&self, url: &str, action: &str, body: &str) -> Result<String, OnvifError> {
+    pub(crate) async fn call(
+        &self,
+        url: &str,
+        action: &str,
+        body: &str,
+    ) -> Result<String, OnvifError> {
         let mut envelope = SoapEnvelope::new(body.to_string()).with_wsa_to(url);
         if let Some(token) = self.security_token() {
             envelope = envelope.with_security(token);
