@@ -61,6 +61,8 @@ pub struct DeviceState {
     pub interface: NetworkInterfaceState,
     #[serde(default = "default_protocols")]
     pub protocols: Vec<NetworkProtocolState>,
+    #[serde(default = "default_osd")]
+    pub osd: OsdState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,6 +150,81 @@ pub struct ImagingState {
     pub ir_cut_filter: String,
     pub focus_mode: String,
 }
+
+// ── OSD state ───────────────────────────────────────────────────────────────
+//
+// OSDs are persisted by `(token, video_source_config_token)`. The mock
+// advertises per-type quotas in `GetOSDOptions` (Genetec/late-Hikvision
+// shape) and enforces them in `CreateOSD` — over-limit returns
+// `ter:InvalidArgs`. This lets clients exercise their quota-gate UI
+// against the mock instead of waiting for real-camera failures.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OsdState {
+    pub osds: Vec<OsdEntry>,
+    /// Counter for tokens. Persists across restarts so deleted tokens
+    /// don't get reused (matches what real cameras do).
+    #[serde(default)]
+    pub next_token_id: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OsdEntry {
+    pub token: String,
+    pub video_source_config_token: String,
+    /// `"Text"` or `"Image"`.
+    pub osd_type: String,
+    /// `"UpperLeft"`, `"UpperRight"`, `"LowerLeft"`, `"LowerRight"`,
+    /// or `"Custom"` (uses `position_x`/`position_y`).
+    pub position_type: String,
+    #[serde(default)]
+    pub position_x: Option<f32>,
+    #[serde(default)]
+    pub position_y: Option<f32>,
+    /// Text-OSD payload — `Some` when `osd_type == "Text"`.
+    #[serde(default)]
+    pub text: Option<OsdTextEntry>,
+    /// Image-OSD URL — `Some` when `osd_type == "Image"`.
+    #[serde(default)]
+    pub image_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OsdTextEntry {
+    /// `"Plain"`, `"Date"`, `"Time"`, or `"DateAndTime"`.
+    pub text_type: String,
+    #[serde(default)]
+    pub plain_text: Option<String>,
+    #[serde(default)]
+    pub date_format: Option<String>,
+    #[serde(default)]
+    pub time_format: Option<String>,
+    #[serde(default)]
+    pub font_size: Option<u32>,
+    #[serde(default)]
+    pub font_color: Option<OsdColorEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OsdColorEntry {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    #[serde(default)]
+    pub colorspace: Option<String>,
+    #[serde(default)]
+    pub transparent: Option<f32>,
+}
+
+/// Per-text-type OSD quotas. Matches what the mock advertises in
+/// `GetOSDOptionsResponse`. `CreateOSD` enforces these — over-limit
+/// returns a `ter:InvalidArgs` SOAP fault, mirroring Genetec's
+/// behaviour.
+pub const OSD_QUOTA_TOTAL: u32 = 8;
+pub const OSD_QUOTA_PLAIN: u32 = 7;
+pub const OSD_QUOTA_DATE: u32 = 1;
+pub const OSD_QUOTA_TIME: u32 = 1;
+pub const OSD_QUOTA_DATE_AND_TIME: u32 = 1;
 
 // ── Defaults ────────────────────────────────────────────────────────────────
 
@@ -262,6 +339,29 @@ fn default_ptz() -> PtzState {
         ],
     }
 }
+fn default_osd() -> OsdState {
+    OsdState {
+        osds: vec![OsdEntry {
+            token: "OSD_1".into(),
+            video_source_config_token: "VSC_1".into(),
+            osd_type: "Text".into(),
+            position_type: "UpperLeft".into(),
+            position_x: None,
+            position_y: None,
+            text: Some(OsdTextEntry {
+                text_type: "DateAndTime".into(),
+                plain_text: None,
+                date_format: Some("MM/dd/yyyy".into()),
+                time_format: Some("HH:mm:ss".into()),
+                font_size: Some(20),
+                font_color: None,
+            }),
+            image_path: None,
+        }],
+        next_token_id: 2,
+    }
+}
+
 fn default_imaging() -> ImagingState {
     ImagingState {
         brightness: 60.0,
@@ -296,6 +396,7 @@ impl Default for DeviceState {
             ptz: default_ptz(),
             interface: default_interface(),
             protocols: default_protocols(),
+            osd: default_osd(),
         }
     }
 }
@@ -769,5 +870,142 @@ mod tests {
         assert_eq!(parsed.hostname, state.hostname);
         assert_eq!(parsed.imaging.brightness, state.imaging.brightness);
         assert_eq!(parsed.users.len(), state.users.len());
+        assert_eq!(parsed.osd.osds.len(), state.osd.osds.len());
+    }
+
+    // ── OSD CRUD + quota ─────────────────────────────────────────────────
+
+    #[test]
+    fn osd_default_state_has_one_datetime_entry() {
+        let s = new_state();
+        let snap = s.read().osd.clone();
+        assert_eq!(snap.osds.len(), 1);
+        assert_eq!(snap.osds[0].token, "OSD_1");
+        assert_eq!(snap.osds[0].text.as_ref().unwrap().text_type, "DateAndTime");
+    }
+
+    #[test]
+    fn create_osd_then_appears_in_get() {
+        use crate::services::media;
+        let s = new_state();
+        // Create a Plain text OSD — DateAndTime is at quota (1/1) by default.
+        let body = r#"<trt:CreateOSD><trt:OSD>
+            <tt:VideoSourceConfigurationToken>VSC_1</tt:VideoSourceConfigurationToken>
+            <tt:Type>Text</tt:Type>
+            <tt:Position><tt:Type>UpperRight</tt:Type></tt:Position>
+            <tt:TextString>
+              <tt:Type>Plain</tt:Type>
+              <tt:PlainText>Hello camera</tt:PlainText>
+              <tt:FontSize>24</tt:FontSize>
+            </tt:TextString>
+          </trt:OSD></trt:CreateOSD>"#;
+        let resp = media::handle_create_osd(&s, body);
+        assert!(resp.contains("CreateOSDResponse"));
+        assert!(resp.contains("OSD_2"), "new token should be OSD_2");
+
+        let listed = media::resp_osds(&s, "<trt:GetOSDs/>");
+        assert!(listed.contains("OSD_1"));
+        assert!(listed.contains("OSD_2"));
+        assert!(listed.contains("Hello camera"));
+    }
+
+    #[test]
+    fn create_osd_rejects_when_per_type_quota_full() {
+        use crate::services::media;
+        let s = new_state();
+        // Default already has one DateAndTime — DateAndTime quota is 1.
+        // A second one must be rejected.
+        let body = r#"<trt:CreateOSD><trt:OSD>
+            <tt:VideoSourceConfigurationToken>VSC_1</tt:VideoSourceConfigurationToken>
+            <tt:Type>Text</tt:Type>
+            <tt:Position><tt:Type>LowerRight</tt:Type></tt:Position>
+            <tt:TextString><tt:Type>DateAndTime</tt:Type></tt:TextString>
+          </trt:OSD></trt:CreateOSD>"#;
+        let resp = media::handle_create_osd(&s, body);
+        assert!(resp.contains("Fault"), "should be SOAP fault");
+        assert!(resp.contains("InvalidArgs"));
+        assert!(resp.contains("DateAndTime"));
+        // State unchanged — still just the default one.
+        assert_eq!(s.read().osd.osds.len(), 1);
+    }
+
+    #[test]
+    fn set_osd_updates_existing() {
+        use crate::services::media;
+        let s = new_state();
+        let body = r#"<trt:SetOSD><trt:OSD token="OSD_1">
+            <tt:VideoSourceConfigurationToken>VSC_1</tt:VideoSourceConfigurationToken>
+            <tt:Type>Text</tt:Type>
+            <tt:Position><tt:Type>LowerLeft</tt:Type></tt:Position>
+            <tt:TextString>
+              <tt:Type>DateAndTime</tt:Type>
+              <tt:DateFormat>yyyy-MM-dd</tt:DateFormat>
+            </tt:TextString>
+          </trt:OSD></trt:SetOSD>"#;
+        let resp = media::handle_set_osd(&s, body);
+        assert!(resp.contains("SetOSDResponse"));
+        assert!(!resp.contains("Fault"));
+
+        let listed = media::resp_osds(&s, "<trt:GetOSDs/>");
+        assert!(listed.contains("LowerLeft"));
+        assert!(listed.contains("yyyy-MM-dd"));
+        // VSC token must be preserved across SetOSD.
+        assert!(listed.contains("VSC_1"));
+    }
+
+    #[test]
+    fn delete_osd_removes_entry() {
+        use crate::services::media;
+        let s = new_state();
+        let body = r#"<trt:DeleteOSD><trt:OSDToken>OSD_1</trt:OSDToken></trt:DeleteOSD>"#;
+        let resp = media::handle_delete_osd(&s, body);
+        assert!(resp.contains("DeleteOSDResponse"));
+        assert_eq!(s.read().osd.osds.len(), 0);
+    }
+
+    #[test]
+    fn delete_osd_unknown_token_returns_fault() {
+        use crate::services::media;
+        let s = new_state();
+        let body = r#"<trt:DeleteOSD><trt:OSDToken>OSD_99</trt:OSDToken></trt:DeleteOSD>"#;
+        let resp = media::handle_delete_osd(&s, body);
+        assert!(resp.contains("Fault"));
+        assert!(resp.contains("OSD_99"));
+        // State untouched.
+        assert_eq!(s.read().osd.osds.len(), 1);
+    }
+
+    #[test]
+    fn get_osds_filters_by_configuration_token() {
+        use crate::services::media;
+        let s = new_state();
+        // Create one OSD on a different VSC.
+        let create = r#"<trt:CreateOSD><trt:OSD>
+            <tt:VideoSourceConfigurationToken>VSC_OTHER</tt:VideoSourceConfigurationToken>
+            <tt:Type>Text</tt:Type>
+            <tt:Position><tt:Type>UpperLeft</tt:Type></tt:Position>
+            <tt:TextString><tt:Type>Plain</tt:Type><tt:PlainText>Other</tt:PlainText></tt:TextString>
+          </trt:OSD></trt:CreateOSD>"#;
+        media::handle_create_osd(&s, create);
+        assert_eq!(s.read().osd.osds.len(), 2);
+
+        // Filter by VSC_1 — should NOT include the VSC_OTHER one.
+        let only_vsc1 = media::resp_osds(
+            &s,
+            r#"<trt:GetOSDs><trt:ConfigurationToken>VSC_1</trt:ConfigurationToken></trt:GetOSDs>"#,
+        );
+        assert!(only_vsc1.contains("OSD_1"));
+        assert!(!only_vsc1.contains("Other"));
+    }
+
+    #[test]
+    fn osd_options_advertises_per_type_quotas_via_attributes() {
+        use crate::services::media;
+        let xml = media::resp_osd_options();
+        // Genetec/late-Hikvision shape — attributes on <MaximumNumberOfOSDs>,
+        // not element text. oxvif::OnvifSession parses these.
+        assert!(xml.contains(r#"Total="8""#));
+        assert!(xml.contains(r#"DateAndTime="1""#));
+        assert!(xml.contains(r#"Plain="7""#));
     }
 }

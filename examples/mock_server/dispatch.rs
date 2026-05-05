@@ -15,7 +15,7 @@ pub async fn dispatch(action: &str, base: &str, state: &SharedState, body: &str)
             } else if tail.starts_with("ver20/media/wsdl/") {
                 dispatch_media2(op, base)
             } else if tail.starts_with("ver10/media/wsdl/") {
-                dispatch_media(op, base)
+                dispatch_media(op, base, state, body)
             } else if tail.starts_with("ver20/ptz/wsdl/") {
                 dispatch_ptz(op, state, body)
             } else if tail.starts_with("ver20/imaging/wsdl/") {
@@ -79,7 +79,7 @@ fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
     })
 }
 
-fn dispatch_media(op: &str, base: &str) -> Option<String> {
+fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
         "GetProfiles" => media::resp_profiles(),
         "GetProfile" => media::resp_profile(),
@@ -106,11 +106,11 @@ fn dispatch_media(op: &str, base: &str) -> Option<String> {
         "GetAudioEncoderConfigurations" => media::resp_audio_encoder_configurations(),
         "SetAudioEncoderConfiguration" => resp_empty("trt", "SetAudioEncoderConfigurationResponse"),
         "GetAudioEncoderConfigurationOptions" => media::resp_audio_encoder_configuration_options(),
-        "GetOSD" => media::resp_osd(),
-        "GetOSDs" => media::resp_osds(),
-        "SetOSD" => resp_empty("trt", "SetOSDResponse"),
-        "CreateOSD" => media::resp_create_osd(),
-        "DeleteOSD" => resp_empty("trt", "DeleteOSDResponse"),
+        "GetOSD" => media::resp_osd(state, body),
+        "GetOSDs" => media::resp_osds(state, body),
+        "SetOSD" => media::handle_set_osd(state, body),
+        "CreateOSD" => media::handle_create_osd(state, body),
+        "DeleteOSD" => media::handle_delete_osd(state, body),
         "GetOSDOptions" => media::resp_osd_options(),
         _ => return None,
     })
