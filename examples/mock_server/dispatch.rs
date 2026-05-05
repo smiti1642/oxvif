@@ -81,10 +81,10 @@ fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
 
 fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
-        "GetProfiles" => media::resp_profiles(),
-        "GetProfile" => media::resp_profile(),
-        "CreateProfile" => media::resp_create_profile(),
-        "DeleteProfile" => resp_empty("trt", "DeleteProfileResponse"),
+        "GetProfiles" => media::resp_profiles(state),
+        "GetProfile" => media::resp_profile(state, body),
+        "CreateProfile" => media::handle_create_profile(state, body),
+        "DeleteProfile" => media::handle_delete_profile(state, body),
         "GetStreamUri" => media::resp_stream_uri(),
         "GetSnapshotUri" => media::resp_snapshot_uri(base),
         "GetVideoSources" => media::resp_video_sources(),

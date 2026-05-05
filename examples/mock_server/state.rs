@@ -63,6 +63,8 @@ pub struct DeviceState {
     pub protocols: Vec<NetworkProtocolState>,
     #[serde(default = "default_osd")]
     pub osd: OsdState,
+    #[serde(default = "default_profiles")]
+    pub profiles: ProfilesState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,6 +228,46 @@ pub const OSD_QUOTA_DATE: u32 = 1;
 pub const OSD_QUOTA_TIME: u32 = 1;
 pub const OSD_QUOTA_DATE_AND_TIME: u32 = 1;
 
+// ── Media profile state ─────────────────────────────────────────────────────
+//
+// Tracks the camera's media profile list. Real cameras seed two or
+// three "fixed" profiles (mainStream / subStream / sometimes thirdStream)
+// that can't be deleted, plus any user-created ones. The actual
+// configuration objects (VSC, VEC, etc.) referenced by the profile
+// stay hardcoded in `services/media.rs`'s render helpers — only the
+// attachment (which token is bound to which profile) is mutable.
+//
+// `CreateProfile` adds an entry with no configurations attached, matching
+// real-camera behaviour where the caller follows up with
+// `AddVideoSourceConfiguration` etc. to fill it in. `DeleteProfile`
+// refuses to remove `fixed=true` profiles (per ONVIF spec — returns
+// `ter:DeletionOfFixedProfile`).
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfilesState {
+    pub profiles: Vec<ProfileEntry>,
+    /// Counter for generated tokens. Persists so deleted profile
+    /// tokens don't get reused.
+    #[serde(default)]
+    pub next_token_id: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfileEntry {
+    pub token: String,
+    pub name: String,
+    /// `true` for factory-baked profiles that can't be deleted.
+    pub fixed: bool,
+    #[serde(default)]
+    pub video_source_config_token: Option<String>,
+    #[serde(default)]
+    pub video_encoder_config_token: Option<String>,
+    #[serde(default)]
+    pub audio_source_config_token: Option<String>,
+    #[serde(default)]
+    pub audio_encoder_config_token: Option<String>,
+}
+
 // ── Defaults ────────────────────────────────────────────────────────────────
 
 fn default_device_info() -> DeviceInfo {
@@ -362,6 +404,32 @@ fn default_osd() -> OsdState {
     }
 }
 
+fn default_profiles() -> ProfilesState {
+    ProfilesState {
+        profiles: vec![
+            ProfileEntry {
+                token: "Profile_1".into(),
+                name: "mainStream".into(),
+                fixed: true,
+                video_source_config_token: Some("VSC_1".into()),
+                video_encoder_config_token: Some("VEC_1".into()),
+                audio_source_config_token: None,
+                audio_encoder_config_token: None,
+            },
+            ProfileEntry {
+                token: "Profile_2".into(),
+                name: "subStream".into(),
+                fixed: false,
+                video_source_config_token: Some("VSC_1".into()),
+                video_encoder_config_token: Some("VEC_2".into()),
+                audio_source_config_token: None,
+                audio_encoder_config_token: None,
+            },
+        ],
+        next_token_id: 3,
+    }
+}
+
 fn default_imaging() -> ImagingState {
     ImagingState {
         brightness: 60.0,
@@ -397,6 +465,7 @@ impl Default for DeviceState {
             interface: default_interface(),
             protocols: default_protocols(),
             osd: default_osd(),
+            profiles: default_profiles(),
         }
     }
 }
@@ -1007,5 +1076,136 @@ mod tests {
         assert!(xml.contains(r#"Total="8""#));
         assert!(xml.contains(r#"DateAndTime="1""#));
         assert!(xml.contains(r#"Plain="7""#));
+    }
+
+    // ── Profile CRUD ─────────────────────────────────────────────────────
+
+    #[test]
+    fn profiles_default_state_has_two() {
+        use crate::services::media;
+        let s = new_state();
+        let xml = media::resp_profiles(&s);
+        assert!(xml.contains(r#"token="Profile_1" fixed="true""#));
+        assert!(xml.contains(r#"token="Profile_2" fixed="false""#));
+        assert!(xml.contains("mainStream"));
+        assert!(xml.contains("subStream"));
+        // Default profiles have video configs attached.
+        assert!(xml.contains("VSC_1"));
+        assert!(xml.contains("VEC_1"));
+        assert!(xml.contains("VEC_2"));
+    }
+
+    #[test]
+    fn create_profile_then_appears_in_get_profiles() {
+        use crate::services::media;
+        let s = new_state();
+        let body = r#"<trt:CreateProfile><trt:Name>customStream</trt:Name></trt:CreateProfile>"#;
+        let resp = media::handle_create_profile(&s, body);
+        assert!(resp.contains("CreateProfileResponse"));
+        // Default counter starts at 3, so first generated token is Profile_3.
+        assert!(resp.contains("Profile_3"));
+        assert!(resp.contains("customStream"));
+        assert!(resp.contains(r#"fixed="false""#));
+
+        let listed = media::resp_profiles(&s);
+        assert!(listed.contains("Profile_3"));
+        assert!(listed.contains("customStream"));
+        // New profiles have no configurations attached.
+        let new_p_block = listed
+            .find("Profile_3")
+            .and_then(|i| {
+                listed[i..]
+                    .find("</trt:Profiles>")
+                    .map(|j| &listed[i..i + j])
+            })
+            .unwrap_or("");
+        assert!(!new_p_block.contains("VideoSourceConfiguration"));
+        assert!(!new_p_block.contains("VideoEncoderConfiguration"));
+    }
+
+    #[test]
+    fn create_profile_with_explicit_token_honoured() {
+        use crate::services::media;
+        let s = new_state();
+        let body = r#"<trt:CreateProfile>
+            <trt:Name>specialName</trt:Name>
+            <trt:Token>MyProfile</trt:Token>
+          </trt:CreateProfile>"#;
+        let resp = media::handle_create_profile(&s, body);
+        assert!(resp.contains("MyProfile"));
+        // Counter should NOT have been bumped — explicit token, no generation.
+        assert_eq!(s.read().profiles.next_token_id, 3);
+    }
+
+    #[test]
+    fn create_profile_rejects_duplicate_token() {
+        use crate::services::media;
+        let s = new_state();
+        let body = r#"<trt:CreateProfile>
+            <trt:Name>dup</trt:Name>
+            <trt:Token>Profile_1</trt:Token>
+          </trt:CreateProfile>"#;
+        let resp = media::handle_create_profile(&s, body);
+        assert!(resp.contains("Fault"));
+        assert!(resp.contains("ProfileExists"));
+        // No new entry, no counter change.
+        assert_eq!(s.read().profiles.profiles.len(), 2);
+    }
+
+    #[test]
+    fn delete_profile_removes_non_fixed() {
+        use crate::services::media;
+        let s = new_state();
+        let body = r#"<trt:DeleteProfile><trt:ProfileToken>Profile_2</trt:ProfileToken></trt:DeleteProfile>"#;
+        let resp = media::handle_delete_profile(&s, body);
+        assert!(resp.contains("DeleteProfileResponse"));
+        assert_eq!(s.read().profiles.profiles.len(), 1);
+        assert_eq!(s.read().profiles.profiles[0].token, "Profile_1");
+    }
+
+    #[test]
+    fn delete_profile_refuses_fixed() {
+        use crate::services::media;
+        let s = new_state();
+        let body = r#"<trt:DeleteProfile><trt:ProfileToken>Profile_1</trt:ProfileToken></trt:DeleteProfile>"#;
+        let resp = media::handle_delete_profile(&s, body);
+        assert!(resp.contains("Fault"));
+        assert!(resp.contains("DeletionOfFixedProfile"));
+        // State untouched.
+        assert_eq!(s.read().profiles.profiles.len(), 2);
+    }
+
+    #[test]
+    fn delete_profile_unknown_token_returns_fault() {
+        use crate::services::media;
+        let s = new_state();
+        let body =
+            r#"<trt:DeleteProfile><trt:ProfileToken>NoSuch</trt:ProfileToken></trt:DeleteProfile>"#;
+        let resp = media::handle_delete_profile(&s, body);
+        assert!(resp.contains("Fault"));
+        assert!(resp.contains("NoProfile"));
+        assert_eq!(s.read().profiles.profiles.len(), 2);
+    }
+
+    #[test]
+    fn get_profile_by_token() {
+        use crate::services::media;
+        let s = new_state();
+        let body =
+            r#"<trt:GetProfile><trt:ProfileToken>Profile_2</trt:ProfileToken></trt:GetProfile>"#;
+        let resp = media::resp_profile(&s, body);
+        assert!(resp.contains("GetProfileResponse"));
+        assert!(resp.contains("subStream"));
+        assert!(!resp.contains("mainStream"));
+    }
+
+    #[test]
+    fn get_profile_unknown_token_returns_fault() {
+        use crate::services::media;
+        let s = new_state();
+        let body = r#"<trt:GetProfile><trt:ProfileToken>Bogus</trt:ProfileToken></trt:GetProfile>"#;
+        let resp = media::resp_profile(&s, body);
+        assert!(resp.contains("Fault"));
+        assert!(resp.contains("NoProfile"));
     }
 }

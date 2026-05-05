@@ -1,65 +1,36 @@
 use crate::helpers::{resp_soap_fault, soap};
 use crate::state::{
     OSD_QUOTA_DATE, OSD_QUOTA_DATE_AND_TIME, OSD_QUOTA_PLAIN, OSD_QUOTA_TIME, OSD_QUOTA_TOTAL,
-    OsdColorEntry, OsdEntry, OsdTextEntry, SharedState,
+    OsdColorEntry, OsdEntry, OsdTextEntry, ProfileEntry, SharedState,
 };
 use crate::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
-pub fn resp_profiles() -> String {
+pub fn resp_profiles(state: &SharedState) -> String {
+    let snapshot = state.read().profiles.profiles.clone();
+    let items: String = snapshot
+        .iter()
+        .map(|p| render_profile(p, "Profiles"))
+        .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetProfilesResponse>
-          <trt:Profiles token="Profile_1" fixed="true">
-            <tt:Name>mainStream</tt:Name>
-            <tt:VideoSourceConfiguration token="VSC_1">
-              <tt:Name>VSConfig1</tt:Name>
-              <tt:UseCount>2</tt:UseCount>
-              <tt:SourceToken>VS_1</tt:SourceToken>
-              <tt:Bounds x="0" y="0" width="1920" height="1080"/>
-            </tt:VideoSourceConfiguration>
-            <tt:VideoEncoderConfiguration token="VEC_1">
-              <tt:Name>H264</tt:Name>
-              <tt:UseCount>1</tt:UseCount>
-              <tt:Encoding>H264</tt:Encoding>
-              <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
-              <tt:RateControl><tt:FrameRateLimit>30</tt:FrameRateLimit><tt:BitrateLimit>4096</tt:BitrateLimit></tt:RateControl>
-            </tt:VideoEncoderConfiguration>
-          </trt:Profiles>
-          <trt:Profiles token="Profile_2" fixed="false">
-            <tt:Name>subStream</tt:Name>
-            <tt:VideoSourceConfiguration token="VSC_1">
-              <tt:Name>VSConfig1</tt:Name>
-              <tt:UseCount>2</tt:UseCount>
-              <tt:SourceToken>VS_1</tt:SourceToken>
-              <tt:Bounds x="0" y="0" width="1920" height="1080"/>
-            </tt:VideoSourceConfiguration>
-            <tt:VideoEncoderConfiguration token="VEC_2">
-              <tt:Name>H264_sub</tt:Name>
-              <tt:UseCount>1</tt:UseCount>
-              <tt:Encoding>H264</tt:Encoding>
-              <tt:Resolution><tt:Width>640</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
-              <tt:RateControl><tt:FrameRateLimit>15</tt:FrameRateLimit><tt:BitrateLimit>1024</tt:BitrateLimit></tt:RateControl>
-            </tt:VideoEncoderConfiguration>
-          </trt:Profiles>
-        </trt:GetProfilesResponse>"#,
+        &format!("<trt:GetProfilesResponse>{items}</trt:GetProfilesResponse>"),
     )
 }
 
-pub fn resp_profile() -> String {
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetProfileResponse>
-          <trt:Profile token="Profile_1" fixed="true">
-            <tt:Name>mainStream</tt:Name>
-            <tt:VideoSourceConfiguration token="VSC_1">
-              <tt:Name>VSConfig1</tt:Name>
-              <tt:UseCount>2</tt:UseCount>
-              <tt:SourceToken>VS_1</tt:SourceToken>
-              <tt:Bounds x="0" y="0" width="1920" height="1080"/>
-            </tt:VideoSourceConfiguration>
-          </trt:Profile>
-        </trt:GetProfileResponse>"#,
-    )
+pub fn resp_profile(state: &SharedState, body: &str) -> String {
+    let inner = extract_tag(body, "GetProfile").unwrap_or_default();
+    let want = extract_tag(&inner, "ProfileToken").unwrap_or_default();
+    let snapshot = state.read().profiles.profiles.clone();
+    match snapshot.iter().find(|p| p.token == want) {
+        Some(p) => soap(
+            r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+            &format!(
+                "<trt:GetProfileResponse>{}</trt:GetProfileResponse>",
+                render_profile(p, "Profile")
+            ),
+        ),
+        None => resp_soap_fault("ter:NoProfile", &format!("Profile not found: {want}")),
+    }
 }
 
 pub fn resp_stream_uri() -> String {
@@ -92,15 +63,193 @@ pub fn resp_snapshot_uri(base: &str) -> String {
     )
 }
 
-pub fn resp_create_profile() -> String {
+pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
+    let inner = extract_tag(body, "CreateProfile").unwrap_or_default();
+    let name = extract_tag(&inner, "Name").unwrap_or_else(|| "Profile".to_string());
+    // Caller may supply an explicit token (rare — most cameras assign).
+    // If supplied, honour it verbatim; otherwise generate one.
+    let supplied_token = extract_tag(&inner, "Token");
+
+    // Reject duplicate token if caller supplied one that already exists.
+    if let Some(t) = supplied_token.as_ref()
+        && state.read().profiles.profiles.iter().any(|p| &p.token == t)
+    {
+        return resp_soap_fault(
+            "ter:ProfileExists",
+            &format!("Profile token already in use: {t}"),
+        );
+    }
+
+    let entry = state.modify_returning(|s| {
+        let token = supplied_token.unwrap_or_else(|| {
+            let id = s.profiles.next_token_id;
+            s.profiles.next_token_id += 1;
+            format!("Profile_{id}")
+        });
+        let entry = ProfileEntry {
+            token: token.clone(),
+            name: name.clone(),
+            fixed: false,
+            video_source_config_token: None,
+            video_encoder_config_token: None,
+            audio_source_config_token: None,
+            audio_encoder_config_token: None,
+        };
+        eprintln!("    [STATE] profile created: {token} ({name})");
+        s.profiles.profiles.push(entry.clone());
+        entry
+    });
+
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:CreateProfileResponse>
-          <trt:Profile token="Profile_New" fixed="false">
-            <tt:Name>oxvif-test-profile</tt:Name>
-          </trt:Profile>
-        </trt:CreateProfileResponse>"#,
+        &format!(
+            "<trt:CreateProfileResponse>{}</trt:CreateProfileResponse>",
+            render_profile(&entry, "Profile")
+        ),
     )
+}
+
+pub fn handle_delete_profile(state: &SharedState, body: &str) -> String {
+    let inner = extract_tag(body, "DeleteProfile").unwrap_or_default();
+    let token = extract_tag(&inner, "ProfileToken").unwrap_or_default();
+    if token.is_empty() {
+        return resp_soap_fault("ter:InvalidArgs", "ProfileToken missing");
+    }
+
+    let outcome = state.modify_returning(|s| {
+        let Some(idx) = s.profiles.profiles.iter().position(|p| p.token == token) else {
+            return DeleteOutcome::NotFound;
+        };
+        if s.profiles.profiles[idx].fixed {
+            return DeleteOutcome::Fixed;
+        }
+        s.profiles.profiles.remove(idx);
+        eprintln!("    [STATE] profile deleted: {token}");
+        DeleteOutcome::Deleted
+    });
+
+    match outcome {
+        DeleteOutcome::Deleted => soap(
+            r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+            "<trt:DeleteProfileResponse/>",
+        ),
+        DeleteOutcome::NotFound => {
+            resp_soap_fault("ter:NoProfile", &format!("Profile not found: {token}"))
+        }
+        DeleteOutcome::Fixed => resp_soap_fault(
+            "ter:DeletionOfFixedProfile",
+            &format!("Cannot delete fixed profile: {token}"),
+        ),
+    }
+}
+
+enum DeleteOutcome {
+    Deleted,
+    NotFound,
+    /// Per ONVIF spec, fixed profiles can't be removed.
+    Fixed,
+}
+
+// ── Profile render helpers ──────────────────────────────────────────────────
+//
+// Profiles are rendered with full nested configuration objects (the
+// shape real cameras use). The configuration details for VSC_1, VEC_1,
+// VEC_2 are hardcoded here rather than stored in state — only the
+// *attachment* (which token a profile is bound to) is mutable, which
+// matches what `CreateProfile` / `AddVideoEncoderConfiguration` etc.
+// actually mutate on a real camera.
+
+fn render_profile(p: &ProfileEntry, tag: &str) -> String {
+    let vsc = p
+        .video_source_config_token
+        .as_deref()
+        .map(render_vsc_inline)
+        .unwrap_or_default();
+    let vec = p
+        .video_encoder_config_token
+        .as_deref()
+        .map(render_vec_inline)
+        .unwrap_or_default();
+    let asc = p
+        .audio_source_config_token
+        .as_deref()
+        .map(render_asc_inline)
+        .unwrap_or_default();
+    let aec = p
+        .audio_encoder_config_token
+        .as_deref()
+        .map(render_aec_inline)
+        .unwrap_or_default();
+    format!(
+        r#"<trt:{tag} token="{token}" fixed="{fixed}">
+          <tt:Name>{name}</tt:Name>
+          {vsc}{vec}{asc}{aec}
+        </trt:{tag}>"#,
+        token = p.token,
+        fixed = p.fixed,
+        name = p.name,
+    )
+}
+
+fn render_vsc_inline(token: &str) -> String {
+    match token {
+        "VSC_1" => r#"<tt:VideoSourceConfiguration token="VSC_1">
+          <tt:Name>VSConfig1</tt:Name>
+          <tt:UseCount>2</tt:UseCount>
+          <tt:SourceToken>VS_1</tt:SourceToken>
+          <tt:Bounds x="0" y="0" width="1920" height="1080"/>
+        </tt:VideoSourceConfiguration>"#
+            .to_string(),
+        _ => String::new(),
+    }
+}
+
+fn render_vec_inline(token: &str) -> String {
+    match token {
+        "VEC_1" => r#"<tt:VideoEncoderConfiguration token="VEC_1">
+          <tt:Name>H264</tt:Name>
+          <tt:UseCount>1</tt:UseCount>
+          <tt:Encoding>H264</tt:Encoding>
+          <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+          <tt:RateControl><tt:FrameRateLimit>30</tt:FrameRateLimit><tt:BitrateLimit>4096</tt:BitrateLimit></tt:RateControl>
+        </tt:VideoEncoderConfiguration>"#
+            .to_string(),
+        "VEC_2" => r#"<tt:VideoEncoderConfiguration token="VEC_2">
+          <tt:Name>H264_sub</tt:Name>
+          <tt:UseCount>1</tt:UseCount>
+          <tt:Encoding>H264</tt:Encoding>
+          <tt:Resolution><tt:Width>640</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
+          <tt:RateControl><tt:FrameRateLimit>15</tt:FrameRateLimit><tt:BitrateLimit>1024</tt:BitrateLimit></tt:RateControl>
+        </tt:VideoEncoderConfiguration>"#
+            .to_string(),
+        _ => String::new(),
+    }
+}
+
+fn render_asc_inline(token: &str) -> String {
+    match token {
+        "ASC_1" => r#"<tt:AudioSourceConfiguration token="ASC_1">
+          <tt:Name>AudioSourceConfig1</tt:Name>
+          <tt:UseCount>1</tt:UseCount>
+          <tt:SourceToken>AudioSource_1</tt:SourceToken>
+        </tt:AudioSourceConfiguration>"#
+            .to_string(),
+        _ => String::new(),
+    }
+}
+
+fn render_aec_inline(token: &str) -> String {
+    match token {
+        "AEC_1" => r#"<tt:AudioEncoderConfiguration token="AEC_1">
+          <tt:Name>AudioEncoder</tt:Name>
+          <tt:UseCount>1</tt:UseCount>
+          <tt:Encoding>G711</tt:Encoding>
+          <tt:Bitrate>64</tt:Bitrate>
+          <tt:SampleRate>8</tt:SampleRate>
+        </tt:AudioEncoderConfiguration>"#
+            .to_string(),
+        _ => String::new(),
+    }
 }
 
 pub fn resp_video_sources() -> String {
