@@ -12,6 +12,7 @@
 
 mod auth;
 mod dispatch;
+mod font;
 mod helpers;
 mod services;
 mod snapshot;
@@ -95,8 +96,8 @@ async fn handle_soap(
     )
 }
 
-async fn handle_snapshot() -> impl IntoResponse {
-    let bmp = snapshot::generate_test_bmp();
+async fn handle_snapshot(State(state): State<Arc<MockState>>) -> impl IntoResponse {
+    let bmp = snapshot::generate_test_bmp(&state.device);
     (
         StatusCode::OK,
         [
