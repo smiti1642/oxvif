@@ -26,7 +26,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 375 unit tests + 19 doc tests + 26 mock server tests
+- 380 unit tests + 19 doc tests + 74 mock server tests
 
 ---
 
@@ -662,31 +662,37 @@ from `get_services()` — namespace `http://www.onvif.org/ver10/recording/wsdl`.
 | `delete_recording(recording_url, recording_token)` | `()` | Delete a recording and all its tracks |
 | `create_track(recording_url, recording_token, track_type, description)` | `String` | Add a track to a recording, returns track token |
 | `delete_track(recording_url, recording_token, track_token)` | `()` | Remove a track from a recording |
-| `create_recording_job(recording_url, config)` | `RecordingJob` | Create a new recording job |
+| `create_recording_job(recording_url, config)` | `String` | Create a new recording job (`config: &RecordingJobConfiguration`), returns job token |
 | `set_recording_job_mode(recording_url, job_token, mode)` | `()` | Set job mode (`"Active"` or `"Idle"`) |
 | `delete_recording_job(recording_url, job_token)` | `()` | Delete a recording job |
 
 ```rust
 // Create a recording and start a job
-let rec_token = client.create_recording(
-    &recording_url, "src1", "Camera1", "Front door camera", "192.168.1.50"
-).await?;
+let config = RecordingConfiguration {
+    source_name: "Camera1".into(),
+    source_id: "src1".into(),
+    location: "Front door".into(),
+    description: "Front door camera".into(),
+    content: String::new(),
+    maximum_retention_time: "PT0S".into(),
+};
+let rec_token = client.create_recording(&recording_url, &config).await?;
 
 let track_token = client.create_track(
     &recording_url, &rec_token, "Video", "Main stream"
 ).await?;
 
-let config = RecordingJobConfiguration {
+let job_config = RecordingJobConfiguration {
     recording_token: rec_token.clone(),
     mode: "Active".into(),
     priority: 1,
     source_token: "VideoSourceToken_0".into(),
 };
-let job = client.create_recording_job(&recording_url, &config).await?;
-println!("Job token: {}", job.token);
+let job_token = client.create_recording_job(&recording_url, &job_config).await?;
+println!("Job token: {job_token}");
 
 // Check job state
-let state = client.get_recording_job_state(&recording_url, &job.token).await?;
+let state = client.get_recording_job_state(&recording_url, &job_token).await?;
 println!("Active state: {}", state.active_state);
 ```
 
@@ -810,7 +816,7 @@ Features:
   generated test-pattern BMP image that changes color every second
 - **All ONVIF services** — Device, Media1, Media2, PTZ, Imaging, Events,
   Recording, Search, Replay (84 response handlers)
-- **26 unit tests** — stateful roundtrip verification, XML parser tests, WS-Security auth
+- **74 unit tests** — stateful roundtrip verification, XML parser tests, WS-Security auth
 
 ```sh
 # Terminal 1 — start the mock server (default port 18080)
@@ -933,7 +939,7 @@ To run without a real camera, start the mock server first — see
 cargo run --example mock_server
 cargo run --example mock_server -- 19090
 
-# Run mock server tests (26 tests: stateful roundtrips, XML parser, auth)
+# Run mock server tests (74 tests: stateful roundtrips, XML parser, auth)
 cargo test --example mock_server
 ```
 
