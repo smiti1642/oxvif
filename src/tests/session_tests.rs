@@ -192,6 +192,22 @@ fn recordings_xml() -> &'static str {
     </s:Envelope>"#
 }
 
+fn subscribe_response_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                  xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2"
+                  xmlns:wsa="http://www.w3.org/2005/08/addressing">
+      <s:Body>
+        <wsnt:SubscribeResponse>
+          <wsnt:SubscriptionReference>
+            <wsa:Address>http://cam/onvif/events/push_sub_1</wsa:Address>
+          </wsnt:SubscriptionReference>
+          <wsnt:CurrentTime>2026-04-02T12:00:00Z</wsnt:CurrentTime>
+          <wsnt:TerminationTime>2026-04-02T12:01:00Z</wsnt:TerminationTime>
+        </wsnt:SubscribeResponse>
+      </s:Body>
+    </s:Envelope>"#
+}
+
 fn soap_fault_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
       <s:Body>
@@ -359,6 +375,19 @@ async fn test_missing_events_url_returns_error() {
 }
 
 #[tokio::test]
+async fn test_missing_events_url_subscribe_returns_error() {
+    let session = session_device_only().await;
+    let err = session
+        .subscribe("http://consumer/notify", None, Some("PT60S"))
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        OnvifError::Soap(crate::soap::SoapError::MissingField(_))
+    ));
+}
+
+#[tokio::test]
 async fn test_missing_recording_url_returns_error() {
     let session = session_device_only().await;
     let err = session.get_recordings().await.unwrap_err();
@@ -439,6 +468,19 @@ async fn test_get_recordings_delegates_and_returns_items() {
     assert_eq!(recs.len(), 1);
     assert_eq!(recs[0].token, "rec1");
     assert_eq!(recs[0].content, "Normal");
+}
+
+#[tokio::test]
+async fn test_subscribe_delegates_and_returns_reference() {
+    let session = session_with(&[subscribe_response_xml()]).await;
+    let sub = session
+        .subscribe("http://consumer/notify", None, Some("PT60S"))
+        .await
+        .unwrap();
+    assert_eq!(
+        sub.subscription_reference,
+        "http://cam/onvif/events/push_sub_1"
+    );
 }
 
 #[tokio::test]

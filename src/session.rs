@@ -50,11 +50,12 @@ use crate::types::{
     MetadataConfiguration, MetadataConfigurationOptions, NetworkGateway, NetworkInterface,
     NetworkProtocol, NotificationMessage, NtpInfo, OnvifService, OsdConfiguration, OsdOptions,
     PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus,
-    PullPointSubscription, RecordingItem, RecordingJob, RecordingJobConfiguration,
-    RecordingJobState, RelayOutput, SnapshotUri, StorageConfiguration, StreamUri, SystemDateTime,
-    SystemLog, SystemUris, User, VideoEncoderConfiguration, VideoEncoderConfiguration2,
-    VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,
-    VideoSource, VideoSourceConfiguration, VideoSourceConfigurationOptions, VideoSourceMode,
+    PullPointSubscription, PushSubscription, RecordingItem, RecordingJob,
+    RecordingJobConfiguration, RecordingJobState, RelayOutput, SnapshotUri, StorageConfiguration,
+    StreamUri, SystemDateTime, SystemLog, SystemUris, User, VideoEncoderConfiguration,
+    VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
+    VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
+    VideoSourceConfiguration, VideoSourceConfigurationOptions, VideoSourceMode,
 };
 
 // ── OnvifSessionBuilder ───────────────────────────────────────────────────────
@@ -1252,6 +1253,24 @@ impl OnvifSession {
     ) -> Result<PullPointSubscription, OnvifError> {
         self.client
             .create_pull_point_subscription(self.events_url()?, filter, initial_termination_time)
+            .await
+    }
+
+    /// Subscribe to device events via WS-BaseNotification push delivery.
+    ///
+    /// The device POSTs `Notify` messages to `consumer_url`; use
+    /// [`notification_listener`](crate::notification_listener) to receive them.
+    /// The returned [`PushSubscription::subscription_reference`] can be passed to
+    /// [`renew_subscription`](Self::renew_subscription) and
+    /// [`unsubscribe`](Self::unsubscribe).
+    pub async fn subscribe(
+        &self,
+        consumer_url: &str,
+        filter: Option<&str>,
+        termination_time: Option<&str>,
+    ) -> Result<PushSubscription, OnvifError> {
+        self.client
+            .subscribe(self.events_url()?, consumer_url, filter, termination_time)
             .await
     }
 
