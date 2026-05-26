@@ -861,6 +861,38 @@ async fn embedded_mock() {
 }
 ```
 
+Or keep the `MockTransport` as its own named handle instead of constructing it
+inline — then you can seed/inspect its state and arm faults directly on it. It's
+`Clone`, and every clone shares one device state, so hand a clone to the client:
+
+```rust
+use std::sync::Arc;
+use oxvif::OnvifClient;
+use oxvif::mock::MockTransport;
+
+#[tokio::test]
+async fn standalone_transport_handle() {
+    let mock = MockTransport::new();                 // an independent object
+
+    // Drive the mock directly — no client needed:
+    mock.device().modify(|s| s.hostname = "seeded-cam".into());      // seed state
+    mock.inject_fault("GetProfiles", "ter:NotAuthorized", "denied"); // arm one error
+
+    // Share it with a client (clone — both sides see the same state):
+    let client = OnvifClient::new("http://mock").with_transport(Arc::new(mock.clone()));
+
+    assert_eq!(
+        client.get_hostname().await.unwrap().name.as_deref(),
+        Some("seeded-cam"),
+    );
+    assert!(client.get_profiles("http://mock/media").await.is_err()); // consumes the fault
+
+    // Inspect, off the handle, what the client changed:
+    client.set_hostname("after").await.unwrap();
+    assert_eq!(mock.device().read().hostname, "after");
+}
+```
+
 **2. `MockServer` — a standalone server you connect to over real HTTP** (needs
 the `mock-server` feature). Start it on its own port and point an *ordinary*
 `OnvifClient` / `OnvifSession` at it — nothing is injected into the client, so
