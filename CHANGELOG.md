@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.9.5] - 2026-05-26
+## [0.9.6] - 2026-05-26
 
 Headline: a **built-in mock ONVIF device** so downstream crates can unit-test
 client code without a real camera — every vendor's ONVIF differs and depending

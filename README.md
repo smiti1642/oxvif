@@ -110,7 +110,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.9.5"
+oxvif = "0.9.6"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
