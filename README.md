@@ -831,25 +831,27 @@ match client.get_capabilities().await {
 
 ## Testing without a real camera
 
-### `oxvif::mock` — spin up a mock device in your own tests
+### `oxvif::mock` — test without a real camera
 
 Depending on a physical IP camera in unit tests is painful, and every vendor's
-ONVIF differs. Enable the **`mock`** feature and drive an `OnvifClient` against an
-in-process mock device — no network, no camera, deterministic. The mock is
-**stateful** (Set persists, Get reflects it) and covers every operation oxvif
-implements.
+ONVIF differs. Enable the **`mock`** feature for a built-in, **stateful** mock
+ONVIF device (Set persists, Get reflects it) covering every operation oxvif
+implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.9", features = ["mock"] }
+oxvif = { version = "0.9", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.9", features = ["mock-server"] }  # adds MockServer
 ```
+
+**1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):
 
 ```rust
 use std::sync::Arc;
 use oxvif::{OnvifClient, mock::MockTransport};
 
 #[tokio::test]
-async fn my_client_logic() {
+async fn embedded_mock() {
     let client = OnvifClient::new("http://mock")
         .with_transport(Arc::new(MockTransport::new()));
 
@@ -859,19 +861,69 @@ async fn my_client_logic() {
 }
 ```
 
-Need a real HTTP endpoint (cross-process, or a non-Rust client)? Enable the
-**`mock-server`** feature for a bound-port server:
+**2. `MockServer` — a standalone server you connect to over real HTTP** (needs
+the `mock-server` feature). Start it on its own port and point an *ordinary*
+`OnvifClient` / `OnvifSession` at it — nothing is injected into the client, so
+the real HTTP transport (and, optionally, WS-Security) is exercised end-to-end:
 
 ```rust
-let server = oxvif::mock::MockServer::start().await?;   // ephemeral 127.0.0.1 port
-let client = oxvif::OnvifClient::new(server.device_url());
-// server shuts down when dropped
+use oxvif::{OnvifSession, mock::MockServer};
+
+#[tokio::test]
+async fn standalone_server() -> Result<(), oxvif::OnvifError> {
+    let server = MockServer::start().await.unwrap();   // ephemeral 127.0.0.1 port
+
+    // A normal session talking to the mock over HTTP — no transport swap.
+    let session = OnvifSession::builder(server.device_url()).build().await?;
+    assert_eq!(session.get_device_info().await?.manufacturer, "oxvif-mock");
+
+    // Arm an error for the next GetProfiles to test your error handling.
+    server.inject_fault("GetProfiles", "ter:NotAuthorized", "denied");
+    assert!(session.get_profiles().await.is_err());
+    Ok(())
+}   // server shuts down when dropped
 ```
 
-Both default to **no authentication** (frictionless tests) — call `.with_auth()` /
-`.enforce_auth(true)` to exercise WS-Security. Arm error paths with
-`inject_fault(action_suffix, code, reason)`. State is in-memory; opt into
-persistence via `MockState::set_on_change`.
+Both default to **no authentication** (frictionless tests) — call `.with_auth()`
+(`MockTransport`) / `.enforce_auth(true)` (`MockServer::builder()`) to exercise
+WS-Security. State is in-memory; opt into persistence via `MockState::set_on_change`.
+
+### `oxvif::mock` API reference
+
+**`MockTransport`** (`mock` feature) — in-process `Transport`; `Clone` + `Default`;
+pass via `OnvifClient::with_transport(Arc::new(..))`:
+
+| Method | Description |
+|--------|-------------|
+| `MockTransport::new()` | Default device, auth off |
+| `MockTransport::with_state(MockState)` | Build from a seeded state |
+| `.with_auth()` | Enforce WS-Security (builder-style, consumes `self`) |
+| `.device() -> &MockState` | Seed / inspect device state |
+| `.inject_fault(suffix, code, reason)` | Arm a single-shot SOAP Fault for the next matching action |
+| `.clear_faults()` | Drop all queued faults |
+
+**`MockServer`** (`mock-server` feature) — bound-port HTTP server; shuts down on drop:
+
+| Method | Description |
+|--------|-------------|
+| `MockServer::start().await` | Start on an ephemeral port (auth off) → `io::Result<MockServer>` |
+| `MockServer::builder()` | `.port(u16)` · `.initial_state(DeviceState)` · `.on_change(hook)` · `.enforce_auth(bool)` · `.start().await` |
+| `.device_url()` / `.base_url()` / `.port()` | Connection info for `OnvifClient` / `OnvifSession` |
+| `.device()` / `.inject_fault(..)` / `.clear_faults()` | Same as `MockTransport` |
+
+HTTP extras: `GET /mock/snapshot.jpg`, `POST /admin/inject_fault?action=&code=&reason=`, `POST /admin/clear_faults`.
+
+**`MockState`** — shared device state (seed / assert / persist):
+
+| Method | Description |
+|--------|-------------|
+| `MockState::new()` / `::with_state(DeviceState)` | Create |
+| `.read()` | Read guard over `DeviceState`, for assertions |
+| `.modify(\|s\| ..)` / `.modify_returning(\|s\| ..)` | Mutate the state |
+| `.set_on_change(hook)` | Fire a callback after each mutation — the persistence seam |
+
+`DeviceState` is `serde`-serializable for snapshot/restore; the library itself
+never writes to disk.
 
 ### Standalone mock server (`cargo run`)
 
