@@ -1,4 +1,6 @@
-use crate::helpers::soap;
+use crate::helpers::{resp_empty, soap};
+use crate::state::{SharedState, VideoEncoderState};
+use crate::xml_parse::{extract_attr, extract_tag};
 
 pub fn resp_profiles_media2() -> String {
     soap(
@@ -97,6 +99,95 @@ pub fn resp_video_encoder_configuration_options_media2() -> String {
             <tt:ProfilesSupported>Main</tt:ProfilesSupported>
           </tr2:Options>
         </tr2:GetVideoEncoderConfigurationOptionsResponse>"#,
+    )
+}
+
+/// `GetVideoEncoderConfigurations` (Media2) — renders the encoder config from
+/// state. If the request carries a `ConfigurationToken`, only the matching
+/// config is returned (empty list otherwise), mirroring ONVIF token filtering.
+/// Pairs with [`handle_set_video_encoder_configuration`] for Set → Get roundtrips.
+pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> String {
+    let ve = state.read().video_encoder.clone();
+    let entry = match extract_tag(body, "ConfigurationToken") {
+        Some(tok) if tok != ve.token => String::new(),
+        _ => render_video_encoder(&ve),
+    };
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        &format!(
+            "<tr2:GetVideoEncoderConfigurationsResponse>{entry}</tr2:GetVideoEncoderConfigurationsResponse>"
+        ),
+    )
+}
+
+/// `SetVideoEncoderConfiguration` (Media2) — persists the posted fields into
+/// state so a following `GetVideoEncoderConfigurations` reflects them. Only the
+/// fields present in the request body are updated.
+pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+    state.modify(|s| {
+        let ve = &mut s.video_encoder;
+        if let Some(t) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) {
+            ve.token = t;
+        }
+        if let Some(v) = extract_tag(body, "Name") {
+            ve.name = v;
+        }
+        if let Some(v) = extract_tag(body, "Encoding") {
+            ve.encoding = v;
+        }
+        if let Some(v) = extract_tag(body, "Width").and_then(|x| x.parse().ok()) {
+            ve.width = v;
+        }
+        if let Some(v) = extract_tag(body, "Height").and_then(|x| x.parse().ok()) {
+            ve.height = v;
+        }
+        if let Some(v) = extract_tag(body, "Quality").and_then(|x| x.parse().ok()) {
+            ve.quality = v;
+        }
+        if let Some(v) = extract_tag(body, "FrameRateLimit").and_then(|x| x.parse().ok()) {
+            ve.frame_rate_limit = v;
+        }
+        if let Some(v) = extract_tag(body, "BitrateLimit").and_then(|x| x.parse().ok()) {
+            ve.bitrate_limit = v;
+        }
+        if let Some(v) = extract_tag(body, "GovLength").and_then(|x| x.parse().ok()) {
+            ve.gov_length = v;
+        }
+        if let Some(v) = extract_tag(body, "Profile") {
+            ve.profile = v;
+        }
+    });
+    resp_empty("tr2", "SetVideoEncoderConfigurationResponse")
+}
+
+/// Render one `<tr2:Configurations>` element from encoder state, in the flat
+/// Media2 shape `VideoEncoderConfiguration2::from_xml` expects.
+fn render_video_encoder(ve: &VideoEncoderState) -> String {
+    format!(
+        r#"<tr2:Configurations token="{token}">
+            <tt:Name>{name}</tt:Name>
+            <tt:UseCount>{use_count}</tt:UseCount>
+            <tt:Encoding>{encoding}</tt:Encoding>
+            <tt:Resolution><tt:Width>{width}</tt:Width><tt:Height>{height}</tt:Height></tt:Resolution>
+            <tt:RateControl>
+              <tt:FrameRateLimit>{fr}</tt:FrameRateLimit>
+              <tt:BitrateLimit>{br}</tt:BitrateLimit>
+            </tt:RateControl>
+            <tt:GovLength>{gov}</tt:GovLength>
+            <tt:Profile>{profile}</tt:Profile>
+            <tt:Quality>{quality}</tt:Quality>
+          </tr2:Configurations>"#,
+        token = ve.token,
+        name = ve.name,
+        use_count = ve.use_count,
+        encoding = ve.encoding,
+        width = ve.width,
+        height = ve.height,
+        fr = ve.frame_rate_limit,
+        br = ve.bitrate_limit,
+        gov = ve.gov_length,
+        profile = ve.profile,
+        quality = ve.quality,
     )
 }
 

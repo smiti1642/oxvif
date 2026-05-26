@@ -26,7 +26,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport — unit-test without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 380 unit tests + 19 doc tests + 74 mock server tests
+- 380 unit tests + 19 doc tests + 77 mock server tests
 
 ---
 
@@ -816,7 +816,7 @@ Features:
   generated test-pattern BMP image that changes color every second
 - **All ONVIF services** — Device, Media1, Media2, PTZ, Imaging, Events,
   Recording, Search, Replay (84 response handlers)
-- **74 unit tests** — stateful roundtrip verification, XML parser tests, WS-Security auth
+- **77 unit tests** — stateful roundtrip verification, XML parser tests, WS-Security auth
 
 ```sh
 # Terminal 1 — start the mock server (default port 18080)
@@ -939,7 +939,7 @@ To run without a real camera, start the mock server first — see
 cargo run --example mock_server
 cargo run --example mock_server -- 19090
 
-# Run mock server tests (74 tests: stateful roundtrips, XML parser, auth)
+# Run mock server tests (77 tests: stateful roundtrips, XML parser, auth)
 cargo test --example mock_server
 ```
 

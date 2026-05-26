@@ -65,6 +65,8 @@ pub struct DeviceState {
     pub osd: OsdState,
     #[serde(default = "default_profiles")]
     pub profiles: ProfilesState,
+    #[serde(default = "default_video_encoder")]
+    pub video_encoder: VideoEncoderState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -268,6 +270,29 @@ pub struct ProfileEntry {
     pub audio_encoder_config_token: Option<String>,
 }
 
+// ── Video encoder configuration state ─────────────────────────────────────────
+//
+// The Media2 video encoder config (token `VEC_1`, referenced by the default
+// profiles). `GetVideoEncoderConfigurations` renders from here and
+// `SetVideoEncoderConfiguration` persists into it, so a Set → Get roundtrip
+// reflects the change. Uses Media2's flat, H.265-capable shape.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoEncoderState {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    /// `"H264"`, `"H265"`, or `"JPEG"`.
+    pub encoding: String,
+    pub width: u32,
+    pub height: u32,
+    pub quality: f32,
+    pub frame_rate_limit: u32,
+    pub bitrate_limit: u32,
+    pub gov_length: u32,
+    pub profile: String,
+}
+
 // ── Defaults ────────────────────────────────────────────────────────────────
 
 fn default_device_info() -> DeviceInfo {
@@ -430,6 +455,22 @@ fn default_profiles() -> ProfilesState {
     }
 }
 
+fn default_video_encoder() -> VideoEncoderState {
+    VideoEncoderState {
+        token: "VEC_1".into(),
+        name: "VideoEncoderConfig".into(),
+        use_count: 1,
+        encoding: "H265".into(),
+        width: 1920,
+        height: 1080,
+        quality: 5.0,
+        frame_rate_limit: 30,
+        bitrate_limit: 4096,
+        gov_length: 50,
+        profile: "Main".into(),
+    }
+}
+
 fn default_imaging() -> ImagingState {
     ImagingState {
         brightness: 60.0,
@@ -466,6 +507,7 @@ impl Default for DeviceState {
             protocols: default_protocols(),
             osd: default_osd(),
             profiles: default_profiles(),
+            video_encoder: default_video_encoder(),
         }
     }
 }
@@ -1207,5 +1249,59 @@ mod tests {
         let resp = media::resp_profile(&s, body);
         assert!(resp.contains("Fault"));
         assert!(resp.contains("NoProfile"));
+    }
+
+    // ── Media2 video encoder config (stateful get/set) ───────────────────
+
+    #[test]
+    fn media2_get_video_encoder_configurations_returns_default() {
+        use crate::services::media2;
+        let s = new_state();
+        let xml =
+            media2::resp_video_encoder_configurations(&s, "<tr2:GetVideoEncoderConfigurations/>");
+        assert!(xml.contains("GetVideoEncoderConfigurationsResponse"));
+        assert!(xml.contains(r#"token="VEC_1""#));
+        assert!(xml.contains("<tt:Encoding>H265</tt:Encoding>"));
+        assert!(xml.contains("<tt:Width>1920</tt:Width>"));
+    }
+
+    #[test]
+    fn media2_set_video_encoder_then_get() {
+        use crate::services::media2;
+        let s = new_state();
+        let body = r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_1">
+            <tt:Name>VideoEncoderConfig</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:Encoding>H264</tt:Encoding>
+            <tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>
+            <tt:RateControl><tt:FrameRateLimit>25</tt:FrameRateLimit><tt:BitrateLimit>2048</tt:BitrateLimit></tt:RateControl>
+            <tt:GovLength>60</tt:GovLength>
+            <tt:Profile>High</tt:Profile>
+            <tt:Quality>6</tt:Quality>
+          </tr2:Configuration></tr2:SetVideoEncoderConfiguration>"#;
+        let resp = media2::handle_set_video_encoder_configuration(&s, body);
+        assert!(resp.contains("SetVideoEncoderConfigurationResponse"));
+
+        let xml =
+            media2::resp_video_encoder_configurations(&s, "<tr2:GetVideoEncoderConfigurations/>");
+        assert!(xml.contains("<tt:Encoding>H264</tt:Encoding>"));
+        assert!(xml.contains("<tt:Width>1280</tt:Width>"));
+        assert!(xml.contains("<tt:BitrateLimit>2048</tt:BitrateLimit>"));
+        assert!(xml.contains("<tt:Profile>High</tt:Profile>"));
+        // Old default H265 must be gone after the Set.
+        assert!(!xml.contains("H265"));
+    }
+
+    #[test]
+    fn media2_get_video_encoder_configurations_filters_by_token() {
+        use crate::services::media2;
+        let s = new_state();
+        let xml = media2::resp_video_encoder_configurations(
+            &s,
+            r#"<tr2:GetVideoEncoderConfigurations><tr2:ConfigurationToken>OTHER</tr2:ConfigurationToken></tr2:GetVideoEncoderConfigurations>"#,
+        );
+        // Unknown token → response present but no configuration element.
+        assert!(xml.contains("GetVideoEncoderConfigurationsResponse"));
+        assert!(!xml.contains(r#"token="VEC_1""#));
     }
 }

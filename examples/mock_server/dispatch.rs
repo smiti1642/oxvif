@@ -13,7 +13,7 @@ pub async fn dispatch(action: &str, base: &str, state: &SharedState, body: &str)
             if tail.starts_with("ver10/device/wsdl/") {
                 dispatch_device(op, base, state, body)
             } else if tail.starts_with("ver20/media/wsdl/") {
-                dispatch_media2(op, base)
+                dispatch_media2(op, base, state, body)
             } else if tail.starts_with("ver10/media/wsdl/") {
                 dispatch_media(op, base, state, body)
             } else if tail.starts_with("ver20/ptz/wsdl/") {
@@ -116,7 +116,7 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
     })
 }
 
-fn dispatch_media2(op: &str, base: &str) -> Option<String> {
+fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
         "GetProfiles" => media2::resp_profiles_media2(),
         "CreateProfile" => media2::resp_create_profile_media2(),
@@ -130,7 +130,10 @@ fn dispatch_media2(op: &str, base: &str) -> Option<String> {
         "GetVideoSourceConfigurationOptions" => {
             media2::resp_video_source_configuration_options_media2()
         }
-        "SetVideoEncoderConfiguration" => resp_empty("tr2", "SetVideoEncoderConfigurationResponse"),
+        "GetVideoEncoderConfigurations" => media2::resp_video_encoder_configurations(state, body),
+        "SetVideoEncoderConfiguration" => {
+            media2::handle_set_video_encoder_configuration(state, body)
+        }
         "GetVideoEncoderConfigurationOptions" => {
             media2::resp_video_encoder_configuration_options_media2()
         }
