@@ -11,7 +11,14 @@ repository = "https://github.com/smiti1642/oxvif"
 homepage = "https://github.com/smiti1642/oxvif"
 documentation = "https://docs.rs/oxvif"
 readme = "README.md"
-exclude = [".env", ".env.example"]
+# `docs/` is a development-only ONVIF WSDL reference — not needed to build or
+# use the crate, so keep it out of the published package.
+exclude = [".env", ".env.example", "docs/"]
+
+# Build docs.rs with the mock features so `oxvif::mock` is documented there.
+# (This only affects docs.rs rendering — it does not enable features for users.)
+[package.metadata.docs.rs]
+features = ["mock-server"]
 
 [features]
 # In-process mock ONVIF device for unit-testing client code without a camera.
