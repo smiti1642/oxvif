@@ -5,38 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [0.9.5] - 2026-05-26
+
+Headline: a **built-in mock ONVIF device** so downstream crates can unit-test
+client code without a real camera — every vendor's ONVIF differs and depending
+on a physical IP camera in tests is painful. Also rolls in the session-level
+push `subscribe` and vendor-tolerant OSD parsing.
 
 ### Added
 - **Built-in mock ONVIF device — `oxvif::mock`** (opt-in, behind features).
-  Lets downstream crates unit-test client code without a real camera. The mock
-  is stateful (Set persists, Get reflects it) and covers every operation oxvif
+  Stateful (Set persists, Get reflects it) and covers every operation oxvif
   implements; state is in-memory (the library never writes to disk — opt into
   persistence via `MockState::set_on_change`).
-  - `mock` feature → `MockTransport`, an in-process
-    [`Transport`](crate::transport::Transport) (no sockets, no axum) for the
-    fast unit-test path:
+  - `mock` feature → `MockTransport`, an in-process `Transport` (no sockets, no
+    axum) — the fast unit-test path:
     `OnvifClient::new("http://mock").with_transport(Arc::new(MockTransport::new()))`.
   - `mock-server` feature → `MockServer`, a real axum HTTP server on an
     ephemeral port (`MockServer::start().await`), shutting down on drop — for
     cross-process / non-Rust clients.
   - Both default to no auth (call `.with_auth()` / `.enforce_auth(true)` to
     exercise WS-Security) and support `inject_fault(...)` for error-path tests.
+  - `axum` / `serde` are optional deps enabled only by these features — the
+    default build is unchanged and axum-free.
   - The `examples/mock_server` binary is now a thin wrapper over `MockServer`
-    that adds TOML file persistence (`--features mock-server`).
+    with TOML file persistence (`--features mock-server`); the mock engine moved
+    from `examples/` into `src/mock/`. New `tests/mock_workflow.rs` drives one
+    command from every service against a real `MockServer`.
 - **`OnvifSession::subscribe`** — delegates the WS-BaseNotification push
   subscription that was previously only on `OnvifClient`.
-
----
-
-## [0.9.5] - 2026-05-04
-
-Vendor-tolerant OSD parsing, kept strictly out of `OnvifClient`. The
-guiding principle: `OnvifClient` is the spec-pristine "museum engine",
-`OnvifSession` is the road-going car that knows how to deal with
-real-world cameras that bend or break the spec.
-
-### Added
 - **`OsdOptions::max_per_text_type`.** New `HashMap<String, u32>`
   exposing the per-text-type quotas (`Plain`, `Date`, `Time`,
   `DateAndTime`) some cameras advertise via XML attributes on

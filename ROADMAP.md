@@ -100,5 +100,5 @@ This document tracks planned work for the oxvif library. Items are grouped by th
 | Replay: `GetReplayUri` | v0.8 |
 | WS-Discovery: UDP multicast probe + passive Hello/Bye listening | v0.6–v0.8.5 |
 | HTTP Digest Authentication (RFC 7616, Profile T §7.1) | develop |
-| Testing: `oxvif::mock` — in-process `MockTransport` (`mock`) + bound-port `MockServer` (`mock-server`) | develop |
+| Testing: `oxvif::mock` — in-process `MockTransport` (`mock`) + bound-port `MockServer` (`mock-server`) | v0.9.5 |
 | Published on crates.io | v0.1 |
