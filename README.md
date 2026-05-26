@@ -24,9 +24,9 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Security `UsernameToken` with `PasswordDigest` (ONVIF Profile S §5.12)
 - HTTP Digest Authentication (RFC 7616, ONVIF Profile T §7.1)
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
-- Mockable transport — unit-test without a real camera
+- Mockable transport, plus a built-in mock ONVIF device (`mock` / `mock-server` features) — unit-test client code without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 380 unit tests + 19 doc tests + 77 mock server tests
+- 380 unit tests + 19 doc tests (462 with `--features mock-server`, incl. the in-process mock device)
 
 ---
 
@@ -803,29 +803,65 @@ match client.get_capabilities().await {
 
 ## Testing without a real camera
 
-### Mock server
+### `oxvif::mock` — spin up a mock device in your own tests
 
-`examples/mock_server/` is a **stateful** ONVIF mock server. Set operations
-(SetHostname, CreateUsers, SetDNS, etc.) persist in memory, so you can verify
-Get-after-Set roundtrips without a real camera.
+Depending on a physical IP camera in unit tests is painful, and every vendor's
+ONVIF differs. Enable the **`mock`** feature and drive an `OnvifClient` against an
+in-process mock device — no network, no camera, deterministic. The mock is
+**stateful** (Set persists, Get reflects it) and covers every operation oxvif
+implements.
 
-Features:
-- **Stateful device service** — hostname, users, scopes, DNS, NTP, timezone
-  all persist across requests (Set → Get returns updated values)
-- **Snapshot endpoint** — `GET /mock/snapshot.jpg` serves a dynamically
-  generated test-pattern BMP image that changes color every second
-- **All ONVIF services** — Device, Media1, Media2, PTZ, Imaging, Events,
-  Recording, Search, Replay (84 response handlers)
-- **77 unit tests** — stateful roundtrip verification, XML parser tests, WS-Security auth
+```toml
+[dev-dependencies]
+oxvif = { version = "0.9", features = ["mock"] }
+```
+
+```rust
+use std::sync::Arc;
+use oxvif::{OnvifClient, mock::MockTransport};
+
+#[tokio::test]
+async fn my_client_logic() {
+    let client = OnvifClient::new("http://mock")
+        .with_transport(Arc::new(MockTransport::new()));
+
+    client.set_hostname("lab-cam").await.unwrap();
+    let h = client.get_hostname().await.unwrap();   // Set → Get round-trips
+    assert_eq!(h.name.as_deref(), Some("lab-cam"));
+}
+```
+
+Need a real HTTP endpoint (cross-process, or a non-Rust client)? Enable the
+**`mock-server`** feature for a bound-port server:
+
+```rust
+let server = oxvif::mock::MockServer::start().await?;   // ephemeral 127.0.0.1 port
+let client = oxvif::OnvifClient::new(server.device_url());
+// server shuts down when dropped
+```
+
+Both default to **no authentication** (frictionless tests) — call `.with_auth()` /
+`.enforce_auth(true)` to exercise WS-Security. Arm error paths with
+`inject_fault(action_suffix, code, reason)`. State is in-memory; opt into
+persistence via `MockState::set_on_change`.
+
+### Standalone mock server (`cargo run`)
+
+The `examples/mock_server` binary wraps `oxvif::mock::MockServer` with TOML file
+persistence (state survives restarts) — handy for manual testing and OxDM:
 
 ```sh
-# Terminal 1 — start the mock server (default port 18080)
-cargo run --example mock_server
+# Terminal 1 — start the mock server (default port 18080); needs the feature
+cargo run --example mock_server --features mock-server
 
-# Terminal 2 — run any example against it
+# Terminal 2 — run any example against it (no credentials required)
 ONVIF_URL=http://127.0.0.1:18080/onvif/device \
 cargo run --example camera -- full-workflow
 ```
+
+It serves `GET /mock/snapshot.jpg` (a test-pattern image) and persists Set
+operations to `~/.oxvif/mock_device.toml`. The mock engine's unit tests run with
+`cargo test --features mock-server`.
 
 #### Using with OxDM
 
@@ -834,7 +870,7 @@ the Dioxus-based ONVIF Device Manager:
 
 ```sh
 # Terminal 1 — start mock server
-cd oxvif && cargo run --example mock_server
+cd oxvif && cargo run --example mock_server --features mock-server
 
 # Terminal 2 — start OxDM
 cd oxdm && dx serve --platform desktop
@@ -935,12 +971,12 @@ To run without a real camera, start the mock server first — see
 ### Mock server
 
 ```sh
-# Default port 18080; pass a port number to override
-cargo run --example mock_server
-cargo run --example mock_server -- 19090
+# Default port 18080; pass a port number to override (needs the feature)
+cargo run --example mock_server --features mock-server
+cargo run --example mock_server --features mock-server -- 19090
 
-# Run mock server tests (77 tests: stateful roundtrips, XML parser, auth)
-cargo test --example mock_server
+# Run the mock engine's unit tests
+cargo test --features mock-server
 ```
 
 ---

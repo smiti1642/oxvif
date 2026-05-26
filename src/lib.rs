@@ -109,17 +109,33 @@
 //!
 //! ## Testing without a real camera
 //!
-//! Implement [`transport::Transport`] to inject any XML fixture:
+//! Enable the **`mock`** feature for a built-in, stateful mock ONVIF device and
+//! drive an [`OnvifClient`] against it — no network, no real camera. The
+//! **`mock-server`** feature additionally provides a bound-port `mock::MockServer`
+//! for cross-process / non-Rust clients. See the `mock` module for details.
+//!
+//! ```ignore
+//! // Cargo.toml:  oxvif = { version = "0.9", features = ["mock"] }
+//! use std::sync::Arc;
+//! use oxvif::{OnvifClient, mock::MockTransport};
+//!
+//! let client = OnvifClient::new("http://mock")
+//!     .with_transport(Arc::new(MockTransport::new()));
+//! // exercise client commands — Set persists, Get reflects it.
+//! ```
+//!
+//! For full control you can instead implement [`transport::Transport`] yourself
+//! to inject any fixture:
 //!
 //! ```no_run
 //! use oxvif::transport::{Transport, TransportError};
 //! use async_trait::async_trait;
 //! use std::sync::Arc;
 //!
-//! struct MockTransport { xml: String }
+//! struct FixtureTransport { xml: String }
 //!
 //! #[async_trait]
-//! impl Transport for MockTransport {
+//! impl Transport for FixtureTransport {
 //!     async fn soap_post(&self, _url: &str, _action: &str, _body: String)
 //!         -> Result<String, TransportError>
 //!     {
@@ -129,7 +145,7 @@
 //!
 //! # async fn example() {
 //! let client = oxvif::OnvifClient::new("http://ignored")
-//!     .with_transport(Arc::new(MockTransport { xml: "<s:Envelope/>".into() }));
+//!     .with_transport(Arc::new(FixtureTransport { xml: "<s:Envelope/>".into() }));
 //! # }
 //! ```
 //!
@@ -138,6 +154,8 @@
 pub mod client;
 pub mod discovery;
 pub mod error;
+#[cfg(feature = "mock")]
+pub mod mock;
 pub mod session;
 pub mod soap;
 pub mod transport;

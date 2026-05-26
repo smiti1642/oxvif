@@ -13,6 +13,13 @@ documentation = "https://docs.rs/oxvif"
 readme = "README.md"
 exclude = [".env", ".env.example"]
 
+[features]
+# In-process mock ONVIF device for unit-testing client code without a camera.
+# `mock` gives the zero-network `MockTransport`; `mock-server` adds a real
+# bound-port `MockServer` (pulls axum).
+mock = ["dep:serde"]
+mock-server = ["mock", "dep:axum", "tokio/rt-multi-thread"]
+
 [dependencies]
 quick-xml    = "0.39"
 sha1         = "0.11"
@@ -28,6 +35,9 @@ if-addrs     = "0.15"
 socket2      = "0.6"
 diqwest      = "3.2"
 tracing      = "0.1"
+# Optional — enabled by the `mock` / `mock-server` features only.
+serde        = { version = "1", features = ["derive"], optional = true }
+axum         = { version = "0.8", optional = true }
 
 [dev-dependencies]
 mockito = "1"
@@ -39,3 +49,8 @@ serde   = { version = "1", features = ["derive"] }
 toml    = "1"
 fs2     = "0.4"
 dirs    = "6"
+
+# The mock_server example is now a thin wrapper over `oxvif::mock::MockServer`.
+[[example]]
+name = "mock_server"
+required-features = ["mock-server"]

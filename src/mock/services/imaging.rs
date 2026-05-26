@@ -1,6 +1,6 @@
-use crate::helpers::{resp_empty, soap};
-use crate::state::SharedState;
-use crate::xml_parse::extract_tag;
+use crate::mock::helpers::{resp_empty, soap};
+use crate::mock::state::SharedState;
+use crate::mock::xml_parse::extract_tag;
 
 const NS: &str = r#"xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl""#;
 

@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Built-in mock ONVIF device — `oxvif::mock`** (opt-in, behind features).
+  Lets downstream crates unit-test client code without a real camera. The mock
+  is stateful (Set persists, Get reflects it) and covers every operation oxvif
+  implements; state is in-memory (the library never writes to disk — opt into
+  persistence via `MockState::set_on_change`).
+  - `mock` feature → `MockTransport`, an in-process
+    [`Transport`](crate::transport::Transport) (no sockets, no axum) for the
+    fast unit-test path:
+    `OnvifClient::new("http://mock").with_transport(Arc::new(MockTransport::new()))`.
+  - `mock-server` feature → `MockServer`, a real axum HTTP server on an
+    ephemeral port (`MockServer::start().await`), shutting down on drop — for
+    cross-process / non-Rust clients.
+  - Both default to no auth (call `.with_auth()` / `.enforce_auth(true)` to
+    exercise WS-Security) and support `inject_fault(...)` for error-path tests.
+  - The `examples/mock_server` binary is now a thin wrapper over `MockServer`
+    that adds TOML file persistence (`--features mock-server`).
+- **`OnvifSession::subscribe`** — delegates the WS-BaseNotification push
+  subscription that was previously only on `OnvifClient`.
+
+---
+
 ## [0.9.5] - 2026-05-04
 
 Vendor-tolerant OSD parsing, kept strictly out of `OnvifClient`. The

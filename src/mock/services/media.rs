@@ -1,9 +1,9 @@
-use crate::helpers::{resp_soap_fault, soap};
-use crate::state::{
+use crate::mock::helpers::{resp_soap_fault, soap};
+use crate::mock::state::{
     OSD_QUOTA_DATE, OSD_QUOTA_DATE_AND_TIME, OSD_QUOTA_PLAIN, OSD_QUOTA_TIME, OSD_QUOTA_TOTAL,
     OsdColorEntry, OsdEntry, OsdTextEntry, ProfileEntry, SharedState,
 };
-use crate::xml_parse::{extract_all_tags, extract_attr, extract_tag};
+use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 pub fn resp_profiles(state: &SharedState) -> String {
     let snapshot = state.read().profiles.profiles.clone();

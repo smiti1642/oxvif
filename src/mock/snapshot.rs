@@ -16,8 +16,8 @@
 //! safe fallback for anything else. Unknown format strings render as
 //! literal text so the OSD still appears — just not formatted.
 
-use crate::font::{CHAR_H, CHAR_W, glyph};
-use crate::state::{OsdEntry, OsdTextEntry, SharedState};
+use crate::mock::font::{CHAR_H, CHAR_W, glyph};
+use crate::mock::state::{OsdEntry, OsdTextEntry, SharedState};
 
 const W: u32 = 640;
 const H: u32 = 360;
@@ -283,10 +283,10 @@ fn civil_from_days(days: i64) -> (i32, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{OsdState, OsdTextEntry, PersistentState};
+    use crate::mock::state::{MockState, OsdState, OsdTextEntry};
 
-    fn fresh_state() -> PersistentState {
-        PersistentState::for_tests()
+    fn fresh_state() -> MockState {
+        MockState::for_tests()
     }
 
     #[test]

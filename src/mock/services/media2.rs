@@ -1,6 +1,6 @@
-use crate::helpers::{resp_empty, soap};
-use crate::state::{SharedState, VideoEncoderState};
-use crate::xml_parse::{extract_attr, extract_tag};
+use crate::mock::helpers::{resp_empty, soap};
+use crate::mock::state::{SharedState, VideoEncoderState};
+use crate::mock::xml_parse::{extract_attr, extract_tag};
 
 pub fn resp_profiles_media2() -> String {
     soap(

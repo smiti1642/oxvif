@@ -1,6 +1,6 @@
-use crate::helpers::{resp_empty, soap};
-use crate::state::{PtzPreset, SharedState};
-use crate::xml_parse::{extract_attr, extract_tag};
+use crate::mock::helpers::{resp_empty, soap};
+use crate::mock::state::{PtzPreset, SharedState};
+use crate::mock::xml_parse::{extract_attr, extract_tag};
 
 const NS: &str = r#"xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl""#;
 const POS_SPACE: &str = "http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace";

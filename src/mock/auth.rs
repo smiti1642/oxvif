@@ -7,8 +7,8 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha1::{Digest, Sha1};
 
-use crate::state::SharedState;
-use crate::xml_parse::extract_tag;
+use crate::mock::state::SharedState;
+use crate::mock::xml_parse::extract_tag;
 
 /// SOAP actions that do NOT require authentication.
 const AUTH_EXEMPT: &[&str] = &["http://www.onvif.org/ver10/device/wsdl/GetSystemDateAndTime"];
@@ -60,7 +60,7 @@ pub fn validate_ws_security(body: &str, state: &SharedState) -> Result<(), Strin
 
 /// Generate a SOAP Fault for authentication failure.
 pub fn auth_fault(reason: &str) -> String {
-    crate::helpers::soap(
+    crate::mock::helpers::soap(
         "",
         &format!(
             r#"<s:Fault>
@@ -76,10 +76,10 @@ pub fn auth_fault(reason: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::PersistentState;
+    use crate::mock::state::MockState;
 
-    fn new_state() -> PersistentState {
-        PersistentState::for_tests()
+    fn new_state() -> MockState {
+        MockState::for_tests()
     }
 
     fn build_digest_body(
@@ -197,7 +197,7 @@ mod tests {
             <tt:Password>viewerpw</tt:Password>
             <tt:UserLevel>User</tt:UserLevel>
           </tds:User></tds:CreateUsers>"#;
-        crate::services::device::handle_create_users(&s, create_body);
+        crate::mock::services::device::handle_create_users(&s, create_body);
 
         let body = build_digest_body(
             "viewer",

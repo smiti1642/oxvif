@@ -1,6 +1,6 @@
-use crate::helpers::{resp_empty, soap};
-use crate::state::SharedState;
-use crate::xml_parse::{extract_all_tags, extract_tag};
+use crate::mock::helpers::{resp_empty, soap};
+use crate::mock::state::SharedState;
+use crate::mock::xml_parse::{extract_all_tags, extract_tag};
 
 const NS: &str = r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#;
 
@@ -284,7 +284,7 @@ pub fn handle_create_users(state: &SharedState, body: &str) -> String {
             let level = levels.get(i).cloned().unwrap_or_else(|| "User".to_string());
             let password = passwords.get(i).cloned().unwrap_or_default();
             eprintln!("    [STATE] user created: {username} ({level})");
-            s.users.push(crate::state::MockUser {
+            s.users.push(crate::mock::state::MockUser {
                 username,
                 level,
                 password,
@@ -509,7 +509,7 @@ pub fn handle_set_network_protocols(state: &SharedState, body: &str) -> String {
                     p.ports = vec![port];
                 }
             } else {
-                s.protocols.push(crate::state::NetworkProtocolState {
+                s.protocols.push(crate::mock::state::NetworkProtocolState {
                     name: name.clone(),
                     enabled,
                     ports: port.map(|p| vec![p]).unwrap_or_default(),

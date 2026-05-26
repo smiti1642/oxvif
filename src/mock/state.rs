@@ -1,31 +1,7 @@
-//! Mutable device state — persisted to TOML file with file locking.
+//! In-memory mock device state.
 
-use fs2::FileExt;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
-use std::path::PathBuf;
 use std::sync::RwLock;
-
-/// Default state file path.
-fn default_state_path() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".oxvif")
-        .join("mock_device.toml")
-}
-
-/// Parse CLI args for optional `--config <path>`, otherwise use default.
-pub fn resolve_state_path() -> PathBuf {
-    let args: Vec<String> = std::env::args().collect();
-    for i in 0..args.len() {
-        if args[i] == "--config" {
-            if let Some(p) = args.get(i + 1) {
-                return PathBuf::from(p);
-            }
-        }
-    }
-    default_state_path()
-}
 
 // ── Device State ────────────────────────────────────────────────────────────
 
@@ -67,6 +43,14 @@ pub struct DeviceState {
     pub profiles: ProfilesState,
     #[serde(default = "default_video_encoder")]
     pub video_encoder: VideoEncoderState,
+    /// Monotonic event counter for the pull-point stream (per-instance,
+    /// not persisted). Replaces the former process-global `EVENT_SEQ`.
+    #[serde(skip)]
+    pub event_seq: u64,
+    /// Active pull-point topic filter, set by CreatePullPointSubscription
+    /// (per-instance, not persisted). `None` = emit every topic.
+    #[serde(skip)]
+    pub event_filter: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -508,175 +492,97 @@ impl Default for DeviceState {
             osd: default_osd(),
             profiles: default_profiles(),
             video_encoder: default_video_encoder(),
+            event_seq: 0,
+            event_filter: None,
         }
     }
 }
 
-// ── Persistent shared state ─────────────────────────────────────────────────
+// ── In-memory shared state ──────────────────────────────────────────────────
+//
+// The mock holds its `DeviceState` purely in memory and never touches the
+// filesystem. Persistence is opt-in and owned by the caller: register an
+// `on_change` hook (the bundled example writes TOML) and it fires after every
+// mutation with a snapshot of the new state.
 
-pub struct PersistentState {
+/// Callback fired after each state mutation — the seam for caller-owned
+/// persistence without the library doing any file I/O.
+pub type ChangeHook = std::sync::Arc<dyn Fn(&DeviceState) + Send + Sync>;
+
+/// Thread-safe in-memory device state shared by `MockTransport` / `MockServer`.
+pub struct MockState {
     state: RwLock<DeviceState>,
-    path: PathBuf,
+    on_change: Option<ChangeHook>,
 }
 
-/// Thread-safe wrapper — replaces the old `type SharedState = RwLock<DeviceState>`.
-pub type SharedState = PersistentState;
+/// Internal alias so service handlers keep reading `&SharedState` unchanged.
+pub type SharedState = MockState;
 
-impl PersistentState {
-    /// Load from file or create with defaults.
-    pub fn load(path: PathBuf) -> Self {
-        let state = if path.exists() {
-            match std::fs::read_to_string(&path) {
-                Ok(content) => match toml::from_str::<DeviceState>(&content) {
-                    Ok(s) => {
-                        eprintln!("  Loaded state from {}", path.display());
-                        s
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "  [WARN] Failed to parse {}: {e}, using defaults",
-                            path.display()
-                        );
-                        DeviceState::default()
-                    }
-                },
-                Err(e) => {
-                    eprintln!(
-                        "  [WARN] Failed to read {}: {e}, using defaults",
-                        path.display()
-                    );
-                    DeviceState::default()
-                }
-            }
-        } else {
-            eprintln!("  No state file found, creating {}", path.display());
-            let s = DeviceState::default();
-            let ps = PersistentState {
-                state: RwLock::new(s.clone()),
-                path: path.clone(),
-            };
-            ps.flush();
-            return ps;
-        };
-
-        PersistentState {
-            state: RwLock::new(state),
-            path,
+impl MockState {
+    /// Fresh state seeded with factory defaults and no persistence hook.
+    pub fn new() -> Self {
+        Self {
+            state: RwLock::new(DeviceState::default()),
+            on_change: None,
         }
     }
 
-    /// Read access (no file I/O).
+    /// Seed with a caller-supplied state (e.g. loaded from disk by the caller).
+    pub fn with_state(state: DeviceState) -> Self {
+        Self {
+            state: RwLock::new(state),
+            on_change: None,
+        }
+    }
+
+    /// Register a hook invoked after every mutation with a snapshot of the new
+    /// state. This is how opt-in persistence is wired — the library performs no
+    /// file I/O itself.
+    pub fn set_on_change(&mut self, hook: ChangeHook) {
+        self.on_change = Some(hook);
+    }
+
+    /// Read access.
     pub fn read(&self) -> std::sync::RwLockReadGuard<'_, DeviceState> {
         self.state.read().unwrap()
     }
 
-    /// In-memory instance for tests — never touches the real filesystem
-    /// (flush writes to `/dev/null`, which is silently a no-op on both
-    /// POSIX and Windows).
-    #[cfg(test)]
-    pub fn for_tests() -> Self {
-        PersistentState {
-            state: RwLock::new(DeviceState::default()),
-            path: PathBuf::from("/dev/null"),
-        }
-    }
-
-    /// Flush current state to disk atomically.
-    ///
-    /// Writes to a sibling `.tmp` file under an exclusive lock, then
-    /// renames it over the real state file. A crash mid-flush leaves
-    /// either the old file intact or the new file in place — never a
-    /// half-written one.
-    ///
-    /// The lock is held on the tempfile (not the final path), so a
-    /// rival process holding a stale lock on the real file doesn't
-    /// block us, and on Windows we avoid the same-handle-twice trap
-    /// that `File::create + std::fs::write` used to fall into.
-    fn flush(&self) {
-        let state = self.state.read().unwrap();
-        let content = match toml::to_string_pretty(&*state) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("  [ERROR] Failed to serialize state: {e}");
-                return;
-            }
-        };
-        drop(state);
-
-        // Ensure parent directory exists.
-        if let Some(parent) = self.path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-
-        let tmp_path = {
-            // `.with_extension` replaces the extension; use an explicit
-            // suffix so paths without an extension still get a distinct
-            // tempfile name.
-            let mut p = self.path.clone();
-            let name = p
-                .file_name()
-                .map(|n| n.to_owned())
-                .unwrap_or_else(|| std::ffi::OsString::from("state"));
-            let mut new_name = name;
-            new_name.push(".tmp");
-            p.set_file_name(new_name);
-            p
-        };
-
-        match std::fs::File::create(&tmp_path) {
-            Ok(mut file) => {
-                if let Err(e) = file.lock_exclusive() {
-                    eprintln!("  [WARN] File lock failed: {e}");
-                }
-                let write_ok =
-                    file.write_all(content.as_bytes()).is_ok() && file.sync_all().is_ok();
-                let _ = FileExt::unlock(&file);
-                drop(file);
-
-                if write_ok {
-                    if let Err(e) = std::fs::rename(&tmp_path, &self.path) {
-                        eprintln!(
-                            "  [ERROR] Failed to rename {} -> {}: {e}",
-                            tmp_path.display(),
-                            self.path.display()
-                        );
-                        // Best-effort cleanup of the orphan tempfile.
-                        let _ = std::fs::remove_file(&tmp_path);
-                    }
-                } else {
-                    eprintln!("  [ERROR] Write to tempfile {} failed", tmp_path.display());
-                    let _ = std::fs::remove_file(&tmp_path);
-                }
-            }
-            Err(e) => {
-                eprintln!(
-                    "  [ERROR] Failed to create tempfile {}: {e}",
-                    tmp_path.display()
-                );
-            }
-        }
-    }
-}
-
-impl PersistentState {
-    /// Get a mutable reference, modify it, then call flush.
+    /// Mutate the state, then fire the change hook (if any).
     pub fn modify(&self, f: impl FnOnce(&mut DeviceState)) {
         {
             let mut guard = self.state.write().unwrap();
             f(&mut guard);
         }
-        self.flush();
+        self.notify();
     }
 
-    /// Same as `modify`, but the closure can return a value
+    /// Like [`modify`](Self::modify) but the closure returns a value
     /// (e.g. a freshly-generated token).
     pub fn modify_returning<R>(&self, f: impl FnOnce(&mut DeviceState) -> R) -> R {
         let result = {
             let mut guard = self.state.write().unwrap();
             f(&mut guard)
         };
-        self.flush();
+        self.notify();
         result
+    }
+
+    fn notify(&self) {
+        if let Some(hook) = &self.on_change {
+            hook(&self.state.read().unwrap());
+        }
+    }
+
+    /// In-memory instance for tests.
+    #[cfg(test)]
+    pub fn for_tests() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for MockState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -685,13 +591,10 @@ impl PersistentState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::device;
+    use crate::mock::services::device;
 
-    fn new_state() -> PersistentState {
-        PersistentState {
-            state: RwLock::new(DeviceState::default()),
-            path: PathBuf::from("/dev/null"), // don't actually write in tests
-        }
+    fn new_state() -> MockState {
+        MockState::new()
     }
 
     #[test]
@@ -862,7 +765,7 @@ mod tests {
 
     #[test]
     fn ptz_absolute_move_updates_position() {
-        use crate::services::ptz;
+        use crate::mock::services::ptz;
         let s = new_state();
         let body = r#"<tptz:AbsoluteMove>
             <tptz:Position>
@@ -879,7 +782,7 @@ mod tests {
 
     #[test]
     fn ptz_set_preset_uses_current_position_and_returns_token() {
-        use crate::services::ptz;
+        use crate::mock::services::ptz;
         let s = new_state();
         // Move first so SetPreset captures a non-zero position.
         let move_body = r#"<tptz:AbsoluteMove><tptz:Position>
@@ -901,7 +804,7 @@ mod tests {
 
     #[test]
     fn ptz_remove_preset_then_get() {
-        use crate::services::ptz;
+        use crate::mock::services::ptz;
         let s = new_state();
         let body = r#"<tptz:RemovePreset>
             <tptz:PresetToken>Preset_2</tptz:PresetToken>
@@ -914,7 +817,7 @@ mod tests {
 
     #[test]
     fn ptz_goto_preset_jumps_position() {
-        use crate::services::ptz;
+        use crate::mock::services::ptz;
         let s = new_state();
         // Preset_2 default: pan=0.5 tilt=0.2 zoom=0.0
         let body = r#"<tptz:GotoPreset>
@@ -928,7 +831,7 @@ mod tests {
 
     #[test]
     fn ptz_set_home_then_goto_home() {
-        use crate::services::ptz;
+        use crate::mock::services::ptz;
         let s = new_state();
         // Move, set home, move away, goto home → position should reset to setpoint.
         let move1 = r#"<tptz:AbsoluteMove><tptz:Position>
@@ -948,42 +851,6 @@ mod tests {
         assert!(xml.contains(r#"y="-0.4""#));
     }
 
-    #[test]
-    fn flush_creates_state_file_atomically() {
-        // Use a real tempfile path so the flush->rename pathway actually runs.
-        let tmp_dir = std::env::temp_dir().join("oxvif_mock_flush_test");
-        let _ = std::fs::create_dir_all(&tmp_dir);
-        let path = tmp_dir.join("state.toml");
-        let _ = std::fs::remove_file(&path);
-
-        let ps = PersistentState {
-            state: RwLock::new(DeviceState::default()),
-            path: path.clone(),
-        };
-        ps.flush();
-
-        assert!(path.exists(), "state file should exist after flush");
-        let contents = std::fs::read_to_string(&path).expect("readable");
-        assert!(contents.contains("hostname"));
-
-        // Tempfile should not linger.
-        let tmp_path = path.with_file_name("state.toml.tmp");
-        assert!(!tmp_path.exists(), "tempfile should be renamed away");
-
-        let _ = std::fs::remove_file(&path);
-    }
-
-    #[test]
-    fn serialization_roundtrip() {
-        let state = DeviceState::default();
-        let toml_str = toml::to_string_pretty(&state).unwrap();
-        let parsed: DeviceState = toml::from_str(&toml_str).unwrap();
-        assert_eq!(parsed.hostname, state.hostname);
-        assert_eq!(parsed.imaging.brightness, state.imaging.brightness);
-        assert_eq!(parsed.users.len(), state.users.len());
-        assert_eq!(parsed.osd.osds.len(), state.osd.osds.len());
-    }
-
     // ── OSD CRUD + quota ─────────────────────────────────────────────────
 
     #[test]
@@ -997,7 +864,7 @@ mod tests {
 
     #[test]
     fn create_osd_then_appears_in_get() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         // Create a Plain text OSD — DateAndTime is at quota (1/1) by default.
         let body = r#"<trt:CreateOSD><trt:OSD>
@@ -1022,7 +889,7 @@ mod tests {
 
     #[test]
     fn create_osd_rejects_when_per_type_quota_full() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         // Default already has one DateAndTime — DateAndTime quota is 1.
         // A second one must be rejected.
@@ -1042,7 +909,7 @@ mod tests {
 
     #[test]
     fn set_osd_updates_existing() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:SetOSD><trt:OSD token="OSD_1">
             <tt:VideoSourceConfigurationToken>VSC_1</tt:VideoSourceConfigurationToken>
@@ -1066,7 +933,7 @@ mod tests {
 
     #[test]
     fn delete_osd_removes_entry() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteOSD><trt:OSDToken>OSD_1</trt:OSDToken></trt:DeleteOSD>"#;
         let resp = media::handle_delete_osd(&s, body);
@@ -1076,7 +943,7 @@ mod tests {
 
     #[test]
     fn delete_osd_unknown_token_returns_fault() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteOSD><trt:OSDToken>OSD_99</trt:OSDToken></trt:DeleteOSD>"#;
         let resp = media::handle_delete_osd(&s, body);
@@ -1088,7 +955,7 @@ mod tests {
 
     #[test]
     fn get_osds_filters_by_configuration_token() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         // Create one OSD on a different VSC.
         let create = r#"<trt:CreateOSD><trt:OSD>
@@ -1111,7 +978,7 @@ mod tests {
 
     #[test]
     fn osd_options_advertises_per_type_quotas_via_attributes() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let xml = media::resp_osd_options();
         // Genetec/late-Hikvision shape — attributes on <MaximumNumberOfOSDs>,
         // not element text. oxvif::OnvifSession parses these.
@@ -1124,7 +991,7 @@ mod tests {
 
     #[test]
     fn profiles_default_state_has_two() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let xml = media::resp_profiles(&s);
         assert!(xml.contains(r#"token="Profile_1" fixed="true""#));
@@ -1139,7 +1006,7 @@ mod tests {
 
     #[test]
     fn create_profile_then_appears_in_get_profiles() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:CreateProfile><trt:Name>customStream</trt:Name></trt:CreateProfile>"#;
         let resp = media::handle_create_profile(&s, body);
@@ -1167,7 +1034,7 @@ mod tests {
 
     #[test]
     fn create_profile_with_explicit_token_honoured() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:CreateProfile>
             <trt:Name>specialName</trt:Name>
@@ -1181,7 +1048,7 @@ mod tests {
 
     #[test]
     fn create_profile_rejects_duplicate_token() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:CreateProfile>
             <trt:Name>dup</trt:Name>
@@ -1196,7 +1063,7 @@ mod tests {
 
     #[test]
     fn delete_profile_removes_non_fixed() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteProfile><trt:ProfileToken>Profile_2</trt:ProfileToken></trt:DeleteProfile>"#;
         let resp = media::handle_delete_profile(&s, body);
@@ -1207,7 +1074,7 @@ mod tests {
 
     #[test]
     fn delete_profile_refuses_fixed() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteProfile><trt:ProfileToken>Profile_1</trt:ProfileToken></trt:DeleteProfile>"#;
         let resp = media::handle_delete_profile(&s, body);
@@ -1219,7 +1086,7 @@ mod tests {
 
     #[test]
     fn delete_profile_unknown_token_returns_fault() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body =
             r#"<trt:DeleteProfile><trt:ProfileToken>NoSuch</trt:ProfileToken></trt:DeleteProfile>"#;
@@ -1231,7 +1098,7 @@ mod tests {
 
     #[test]
     fn get_profile_by_token() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body =
             r#"<trt:GetProfile><trt:ProfileToken>Profile_2</trt:ProfileToken></trt:GetProfile>"#;
@@ -1243,7 +1110,7 @@ mod tests {
 
     #[test]
     fn get_profile_unknown_token_returns_fault() {
-        use crate::services::media;
+        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:GetProfile><trt:ProfileToken>Bogus</trt:ProfileToken></trt:GetProfile>"#;
         let resp = media::resp_profile(&s, body);
@@ -1255,7 +1122,7 @@ mod tests {
 
     #[test]
     fn media2_get_video_encoder_configurations_returns_default() {
-        use crate::services::media2;
+        use crate::mock::services::media2;
         let s = new_state();
         let xml =
             media2::resp_video_encoder_configurations(&s, "<tr2:GetVideoEncoderConfigurations/>");
@@ -1267,7 +1134,7 @@ mod tests {
 
     #[test]
     fn media2_set_video_encoder_then_get() {
-        use crate::services::media2;
+        use crate::mock::services::media2;
         let s = new_state();
         let body = r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_1">
             <tt:Name>VideoEncoderConfig</tt:Name>
@@ -1294,7 +1161,7 @@ mod tests {
 
     #[test]
     fn media2_get_video_encoder_configurations_filters_by_token() {
-        use crate::services::media2;
+        use crate::mock::services::media2;
         let s = new_state();
         let xml = media2::resp_video_encoder_configurations(
             &s,

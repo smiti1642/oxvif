@@ -1,43 +1,25 @@
-//! ONVIF mock server — stateful, with WS-Security auth and file persistence.
+//! ONVIF mock server — a thin wrapper over [`oxvif::mock::MockServer`] that adds
+//! TOML file persistence (state survives restarts, for the OxDM dev workflow).
+//!
+//! The mock engine itself now lives in the library (`oxvif::mock`); this binary
+//! just wires it to a port and a state file. Requires the `mock-server` feature.
 //!
 //! ```sh
-//! # Default: state saved to ~/.oxvif/mock_device.toml
-//! cargo run --example mock_server
+//! # Default: state saved to ~/.oxvif/mock_device.toml, port 18080
+//! cargo run --example mock_server --features mock-server
 //!
 //! # Custom port + config file
-//! cargo run --example mock_server -- 19090 --config /path/to/state.toml
+//! cargo run --example mock_server --features mock-server -- 19090 --config /path/to/state.toml
 //!
 //! # Credentials: admin / admin
 //! ```
 
-mod auth;
-mod dispatch;
-mod fault_injection;
-mod font;
-mod helpers;
-mod services;
-mod snapshot;
-mod state;
-pub mod xml_parse;
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use axum::{
-    Router,
-    extract::{Query, State},
-    http::{HeaderMap, StatusCode, header},
-    response::IntoResponse,
-    routing::{get, post},
-};
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
-use tokio::net::TcpListener;
-
-use fault_injection::{FaultInjector, PendingFault};
-use state::PersistentState;
-
-pub struct MockState {
-    pub base: String,
-    pub device: PersistentState,
-    pub fault_injector: FaultInjector,
-}
+use fs2::FileExt;
+use oxvif::mock::{DeviceState, MockServer};
 
 #[tokio::main]
 async fn main() {
@@ -45,125 +27,107 @@ async fn main() {
         .nth(1)
         .and_then(|a| a.parse().ok())
         .unwrap_or(18080);
+    let path = resolve_state_path();
+    let initial = load_state(&path).unwrap_or_default();
 
-    let state_path = state::resolve_state_path();
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let base = format!("http://{addr}");
+    let flush_path = path.clone();
+    let server = MockServer::builder()
+        .port(port)
+        // Auth not enforced — connect credential-free (OxDM workflow). Default
+        // users admin/admin & operator/operator still exist if a client sends
+        // WS-Security; they're just not required.
+        .initial_state(initial)
+        .on_change(Arc::new(move |s: &DeviceState| flush_state(&flush_path, s)))
+        .start()
+        .await
+        .expect("bind failed");
 
-    let state = Arc::new(MockState {
-        base: base.clone(),
-        device: PersistentState::load(state_path.clone()),
-        fault_injector: FaultInjector::new(),
-    });
+    // Write the file once at startup so it exists even before the first Set.
+    flush_state(&path, &server.device().read());
 
-    let app = Router::new()
-        .route("/mock/snapshot.jpg", get(handle_snapshot))
-        .route("/admin/inject_fault", post(handle_inject_fault))
-        .route("/admin/clear_faults", post(handle_clear_faults))
-        .route("/{*path}", post(handle_soap))
-        .with_state(state);
-
-    let listener = TcpListener::bind(addr).await.expect("bind failed");
-    println!("ONVIF mock server listening on {base}");
-    println!("  ONVIF_URL={base}/onvif/device");
-    println!("  Credentials: admin / admin");
-    println!("  State file: {}", state_path.display());
+    println!("ONVIF mock server listening on {}", server.base_url());
+    println!("  ONVIF_URL={}", server.device_url());
+    println!("  Auth: not enforced (credentials optional)");
+    println!("  State file: {}", path.display());
     println!();
+    println!("Press Ctrl-C to stop.");
 
-    axum::serve(listener, app).await.expect("serve failed");
+    // Keep the process (and the background server task) alive until killed.
+    std::future::pending::<()>().await;
 }
 
-async fn handle_soap(
-    State(state): State<Arc<MockState>>,
-    headers: HeaderMap,
-    body: axum::body::Bytes,
-) -> impl IntoResponse {
-    let action = helpers::extract_action(&headers).unwrap_or_default();
-    let body_str = String::from_utf8_lossy(&body);
-    eprintln!("  → {action}");
-
-    // Test-only fault injection. Checked BEFORE auth so tests can short-
-    // circuit a specific action regardless of WS-Security state. Normal
-    // requests (no fault armed) fall through to the auth check below and
-    // see the full production-like validation.
-    if let Some(f) = state.fault_injector.take_for_action(&action) {
-        eprintln!("    [INJECTED FAULT] {} -> {}", action, f.code);
-        return (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "application/soap+xml; charset=utf-8")],
-            helpers::resp_soap_fault(&f.code, &f.reason),
-        );
-    }
-
-    if auth::requires_auth(&action) {
-        if let Err(reason) = auth::validate_ws_security(&body_str, &state.device) {
-            eprintln!("    [AUTH FAIL] {reason}");
-            return (
-                StatusCode::OK,
-                [(header::CONTENT_TYPE, "application/soap+xml; charset=utf-8")],
-                auth::auth_fault(&reason),
-            );
+/// Parse `--config <path>` from the CLI, else default to `~/.oxvif/mock_device.toml`.
+fn resolve_state_path() -> PathBuf {
+    let args: Vec<String> = std::env::args().collect();
+    for i in 0..args.len() {
+        if args[i] == "--config" {
+            if let Some(p) = args.get(i + 1) {
+                return PathBuf::from(p);
+            }
         }
     }
-
-    let xml = dispatch::dispatch(&action, &state.base, &state.device, &body_str).await;
-
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/soap+xml; charset=utf-8")],
-        xml,
-    )
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".oxvif")
+        .join("mock_device.toml")
 }
 
-async fn handle_snapshot(State(state): State<Arc<MockState>>) -> impl IntoResponse {
-    let bmp = snapshot::generate_test_bmp(&state.device);
-    (
-        StatusCode::OK,
-        [
-            (header::CONTENT_TYPE, "image/bmp"),
-            (header::CACHE_CONTROL, "no-cache, no-store"),
-        ],
-        bmp,
-    )
-}
-
-/// `POST /admin/inject_fault?action=<suffix>&code=<faultcode>&reason=<text>`
-///
-/// Arm a single-shot SOAP Fault for the next request whose action URI
-/// ends with `action`. Test-only helper — there is no auth on the
-/// admin endpoints since the mock server binds to 127.0.0.1.
-async fn handle_inject_fault(
-    State(state): State<Arc<MockState>>,
-    Query(params): Query<HashMap<String, String>>,
-) -> impl IntoResponse {
-    let action_suffix = params.get("action").cloned().unwrap_or_default();
-    if action_suffix.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            "missing required 'action' query parameter\n".to_string(),
-        );
+/// Load device state from a TOML file, or `None` if absent/unparseable.
+fn load_state(path: &Path) -> Option<DeviceState> {
+    let content = std::fs::read_to_string(path).ok()?;
+    match toml::from_str::<DeviceState>(&content) {
+        Ok(s) => {
+            eprintln!("  Loaded state from {}", path.display());
+            Some(s)
+        }
+        Err(e) => {
+            eprintln!(
+                "  [WARN] Failed to parse {}: {e}, using defaults",
+                path.display()
+            );
+            None
+        }
     }
-    let code = params
-        .get("code")
-        .cloned()
-        .unwrap_or_else(|| "s:Receiver".to_string());
-    let reason = params
-        .get("reason")
-        .cloned()
-        .unwrap_or_else(|| "Injected fault".to_string());
-
-    eprintln!("  [ADMIN] inject fault: action_suffix='{action_suffix}' code='{code}'");
-    state.fault_injector.inject(PendingFault {
-        action_suffix,
-        code,
-        reason,
-    });
-    (StatusCode::OK, "fault injected\n".to_string())
 }
 
-/// `POST /admin/clear_faults` — drop every queued fault.
-async fn handle_clear_faults(State(state): State<Arc<MockState>>) -> impl IntoResponse {
-    eprintln!("  [ADMIN] clear all faults");
-    state.fault_injector.clear_all();
-    (StatusCode::OK, "faults cleared\n".to_string())
+/// Atomically persist device state to TOML: write a sibling `.tmp` under an
+/// exclusive lock, then rename it over the target — a crash never leaves a
+/// half-written file.
+fn flush_state(path: &Path, state: &DeviceState) {
+    let content = match toml::to_string_pretty(state) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("  [ERROR] serialize state: {e}");
+            return;
+        }
+    };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let tmp_path = {
+        let mut name = path
+            .file_name()
+            .map(|n| n.to_owned())
+            .unwrap_or_else(|| std::ffi::OsString::from("state"));
+        name.push(".tmp");
+        path.with_file_name(name)
+    };
+
+    match std::fs::File::create(&tmp_path) {
+        Ok(mut file) => {
+            let _ = file.lock_exclusive();
+            let write_ok = file.write_all(content.as_bytes()).is_ok() && file.sync_all().is_ok();
+            let _ = FileExt::unlock(&file);
+            drop(file);
+            if write_ok {
+                if std::fs::rename(&tmp_path, path).is_err() {
+                    let _ = std::fs::remove_file(&tmp_path);
+                }
+            } else {
+                let _ = std::fs::remove_file(&tmp_path);
+            }
+        }
+        Err(e) => eprintln!("  [ERROR] create tempfile {}: {e}", tmp_path.display()),
+    }
 }
