@@ -76,6 +76,34 @@ async fn main() -> Result<(), OnvifError> {
 
 `OnvifSession` calls `GetCapabilities` once on `build()` and caches all service URLs — no URL arguments needed for individual methods. `OnvifClient` is stateless; you forward the URL yourself for full routing control.
 
+### Testing — drive a mock device, no camera needed
+
+Enable the `mock` feature and point a client at a built-in, stateful mock ONVIF
+device — no network, no hardware. Ideal for unit tests.
+
+```toml
+[dev-dependencies]
+oxvif = { version = "0.9", features = ["mock"] }
+```
+
+```rust
+use std::sync::Arc;
+use oxvif::{OnvifClient, mock::MockTransport};
+
+#[tokio::test]
+async fn talks_to_a_mock_camera() {
+    let client = OnvifClient::new("http://mock")
+        .with_transport(Arc::new(MockTransport::new()));
+
+    client.set_hostname("lab-cam").await.unwrap();
+    let h = client.get_hostname().await.unwrap();   // Set → Get round-trips
+    assert_eq!(h.name.as_deref(), Some("lab-cam"));
+}
+```
+
+Need a real bound port instead? The `mock-server` feature adds `MockServer::start()`.
+See [Testing without a real camera](#testing-without-a-real-camera) for details.
+
 ---
 
 ## Installation
