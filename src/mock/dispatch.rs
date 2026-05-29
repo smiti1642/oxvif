@@ -72,6 +72,8 @@ fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
         "GetStorageConfigurations" => device::resp_storage_configurations(),
         "SetStorageConfiguration" => resp_empty("tds", "SetStorageConfigurationResponse"),
         "GetSystemUris" => device::resp_system_uris(base),
+        "StartFirmwareUpgrade" => device::resp_start_firmware_upgrade(base),
+        "StartSystemRestore" => device::resp_start_system_restore(base),
         "GetDiscoveryMode" => device::resp_discovery_mode(state),
         "SetDiscoveryMode" => resp_empty("tds", "SetDiscoveryModeResponse"),
         "SystemReboot" => device::resp_system_reboot(),

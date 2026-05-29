@@ -585,7 +585,33 @@ pub fn resp_system_uris(base: &str) -> String {
             <tt:SystemLogUri><tt:Uri>{base}/syslog</tt:Uri><tt:LogType>System</tt:LogType></tt:SystemLogUri>
           </tds:SystemLogUris>
           <tds:SupportInfoUri>{base}/support</tds:SupportInfoUri>
+          <tds:SystemBackupUri>{base}/backup</tds:SystemBackupUri>
         </tds:GetSystemUrisResponse>"#
+        ),
+    )
+}
+
+pub fn resp_start_firmware_upgrade(base: &str) -> String {
+    soap(
+        NS,
+        &format!(
+            r#"<tds:StartFirmwareUpgradeResponse>
+          <tds:UploadUri>{base}/upload/firmware</tds:UploadUri>
+          <tds:UploadDelay>PT0S</tds:UploadDelay>
+          <tds:ExpectedDownTime>PT30S</tds:ExpectedDownTime>
+        </tds:StartFirmwareUpgradeResponse>"#
+        ),
+    )
+}
+
+pub fn resp_start_system_restore(base: &str) -> String {
+    soap(
+        NS,
+        &format!(
+            r#"<tds:StartSystemRestoreResponse>
+          <tds:UploadUri>{base}/upload/restore</tds:UploadUri>
+          <tds:ExpectedDownTime>PT30S</tds:ExpectedDownTime>
+        </tds:StartSystemRestoreResponse>"#
         ),
     )
 }

@@ -4,9 +4,10 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
-    Capabilities, DeviceInfo, DnsInformation, Hostname, NetworkGateway, NetworkInterface,
-    NetworkProtocol, NtpInfo, OnvifService, RelayOutput, SetDateTimeRequest, StorageConfiguration,
-    SystemDateTime, SystemLog, SystemUris, User, xml_escape,
+    Capabilities, DeviceInfo, DnsInformation, FirmwareUpgradeStart, Hostname, NetworkGateway,
+    NetworkInterface, NetworkProtocol, NtpInfo, OnvifService, RelayOutput, SetDateTimeRequest,
+    StorageConfiguration, SystemDateTime, SystemLog, SystemRestoreStart, SystemUris, User,
+    xml_escape,
 };
 
 impl OnvifClient {
@@ -730,6 +731,34 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetSystemUrisResponse")?;
         SystemUris::from_xml(resp)
+    }
+
+    /// Begin a firmware upgrade via the upload-URI mechanism.
+    ///
+    /// Returns the [`FirmwareUpgradeStart`] handle; the caller then HTTP
+    /// POSTs the firmware image to its `upload_uri` (after `upload_delay`).
+    /// The binary upload is left to the application layer — oxvif's
+    /// SOAP-only transport deliberately doesn't carry firmware payloads.
+    pub async fn start_firmware_upgrade(&self) -> Result<FirmwareUpgradeStart, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/StartFirmwareUpgrade";
+        const BODY: &str = "<tds:StartFirmwareUpgrade/>";
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "StartFirmwareUpgradeResponse")?;
+        FirmwareUpgradeStart::from_xml(resp)
+    }
+
+    /// Begin a system restore via the upload-URI mechanism.
+    ///
+    /// Returns the [`SystemRestoreStart`] handle; the caller then HTTP
+    /// POSTs a previously downloaded backup to its `upload_uri`.
+    pub async fn start_system_restore(&self) -> Result<SystemRestoreStart, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/StartSystemRestore";
+        const BODY: &str = "<tds:StartSystemRestore/>";
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "StartSystemRestoreResponse")?;
+        SystemRestoreStart::from_xml(resp)
     }
 
     /// Retrieve the current WS-Discovery mode.

@@ -294,4 +294,29 @@ mod tests {
         // Server-side state reflects it too.
         assert_eq!(server.device().read().hostname, "bound-cam");
     }
+
+    #[tokio::test]
+    async fn bound_server_start_firmware_upgrade_returns_upload_uri() {
+        let server = MockServer::start().await.unwrap();
+        let client = OnvifClient::new(server.device_url());
+        let start = client.start_firmware_upgrade().await.unwrap();
+        assert!(start.upload_uri.ends_with("/upload/firmware"));
+        assert_eq!(start.expected_down_time, "PT30S");
+    }
+
+    #[tokio::test]
+    async fn bound_server_start_system_restore_returns_upload_uri() {
+        let server = MockServer::start().await.unwrap();
+        let client = OnvifClient::new(server.device_url());
+        let start = client.start_system_restore().await.unwrap();
+        assert!(start.upload_uri.ends_with("/upload/restore"));
+    }
+
+    #[tokio::test]
+    async fn bound_server_system_uris_includes_backup() {
+        let server = MockServer::start().await.unwrap();
+        let client = OnvifClient::new(server.device_url());
+        let uris = client.get_system_uris().await.unwrap();
+        assert!(uris.system_backup_uri.is_some());
+    }
 }

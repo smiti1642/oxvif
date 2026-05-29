@@ -45,15 +45,15 @@ use crate::transport::Transport;
 use crate::types::{
     AudioDecoderConfiguration, AudioEncoderConfiguration, AudioEncoderConfigurationOptions,
     AudioOutputConfiguration, AudioSource, AudioSourceConfiguration, Capabilities, DeviceInfo,
-    DnsInformation, EventProperties, FindRecordingResults, FocusMove, Hostname, ImagingMoveOptions,
-    ImagingOptions, ImagingSettings, ImagingStatus, MediaProfile, MediaProfile2,
-    MetadataConfiguration, MetadataConfigurationOptions, NetworkGateway, NetworkInterface,
-    NetworkProtocol, NotificationMessage, NtpInfo, OnvifService, OsdConfiguration, OsdOptions,
-    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus,
-    PullPointSubscription, PushSubscription, RecordingItem, RecordingJob,
+    DnsInformation, EventProperties, FindRecordingResults, FirmwareUpgradeStart, FocusMove,
+    Hostname, ImagingMoveOptions, ImagingOptions, ImagingSettings, ImagingStatus, MediaProfile,
+    MediaProfile2, MetadataConfiguration, MetadataConfigurationOptions, NetworkGateway,
+    NetworkInterface, NetworkProtocol, NotificationMessage, NtpInfo, OnvifService,
+    OsdConfiguration, OsdOptions, PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset,
+    PtzStatus, PullPointSubscription, PushSubscription, RecordingItem, RecordingJob,
     RecordingJobConfiguration, RecordingJobState, RelayOutput, SnapshotUri, StorageConfiguration,
-    StreamUri, SystemDateTime, SystemLog, SystemUris, User, VideoEncoderConfiguration,
-    VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
+    StreamUri, SystemDateTime, SystemLog, SystemRestoreStart, SystemUris, User,
+    VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
     VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
     VideoSourceConfiguration, VideoSourceConfigurationOptions, VideoSourceMode,
 };
@@ -445,6 +445,18 @@ impl OnvifSession {
     /// Retrieve HTTP URIs for firmware upgrade, system log, and support-info download.
     pub async fn get_system_uris(&self) -> Result<SystemUris, OnvifError> {
         self.client.get_system_uris().await
+    }
+
+    /// Begin a firmware upgrade (upload-URI mechanism). HTTP POST the
+    /// firmware image to the returned `upload_uri`.
+    pub async fn start_firmware_upgrade(&self) -> Result<FirmwareUpgradeStart, OnvifError> {
+        self.client.start_firmware_upgrade().await
+    }
+
+    /// Begin a system restore (upload-URI mechanism). HTTP POST a backup
+    /// to the returned `upload_uri`.
+    pub async fn start_system_restore(&self) -> Result<SystemRestoreStart, OnvifError> {
+        self.client.start_system_restore().await
     }
 
     /// Retrieve the current WS-Discovery mode.

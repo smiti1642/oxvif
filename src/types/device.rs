@@ -647,3 +647,55 @@ impl SystemUris {
         })
     }
 }
+
+// ── Firmware upgrade / system restore (upload-URI handshakes) ──────────────────
+
+/// Upload handle returned by `StartFirmwareUpgrade`.
+///
+/// The client waits `upload_delay`, HTTP POSTs the firmware image to
+/// `upload_uri`, then the device upgrades and reboots (offline for roughly
+/// `expected_down_time`). This upload-URI flow avoids the deprecated
+/// attachment-based `UpgradeSystemFirmware` (MTOM), which oxvif's
+/// SOAP-only transport can't produce. Durations are raw ISO 8601 strings
+/// (e.g. `"PT30S"`), matching the rest of oxvif's duration handling.
+#[derive(Debug, Clone)]
+pub struct FirmwareUpgradeStart {
+    /// HTTP endpoint to POST the firmware image to.
+    pub upload_uri: String,
+    /// How long to wait before starting the upload (ISO 8601 duration).
+    pub upload_delay: String,
+    /// Expected time the device is offline during the upgrade (ISO 8601).
+    pub expected_down_time: String,
+}
+
+impl FirmwareUpgradeStart {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        Ok(Self {
+            upload_uri: xml_str(resp, "UploadUri").unwrap_or_default(),
+            upload_delay: xml_str(resp, "UploadDelay").unwrap_or_default(),
+            expected_down_time: xml_str(resp, "ExpectedDownTime").unwrap_or_default(),
+        })
+    }
+}
+
+/// Upload handle returned by `StartSystemRestore`.
+///
+/// The client HTTP POSTs a previously downloaded backup to `upload_uri`;
+/// the device then restores and reboots (offline for roughly
+/// `expected_down_time`). Avoids the attachment-based `RestoreSystem`.
+#[derive(Debug, Clone)]
+pub struct SystemRestoreStart {
+    /// HTTP endpoint to POST the backup file to.
+    pub upload_uri: String,
+    /// Expected time the device is offline during the restore (ISO 8601).
+    pub expected_down_time: String,
+}
+
+impl SystemRestoreStart {
+    pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        Ok(Self {
+            upload_uri: xml_str(resp, "UploadUri").unwrap_or_default(),
+            expected_down_time: xml_str(resp, "ExpectedDownTime").unwrap_or_default(),
+        })
+    }
+}
