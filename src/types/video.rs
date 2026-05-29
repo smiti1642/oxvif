@@ -18,14 +18,14 @@ impl std::fmt::Display for Resolution {
 }
 
 /// Integer min/max range (inclusive).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct IntRange {
     pub min: i32,
     pub max: i32,
 }
 
 /// Floating-point min/max range (inclusive).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct FloatRange {
     pub min: f32,
     pub max: f32,
@@ -285,7 +285,7 @@ impl std::fmt::Display for VideoEncoding {
 // ── VideoEncoderConfiguration ─────────────────────────────────────────────────
 
 /// Multicast streaming configuration embedded in a video encoder configuration.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MulticastConfiguration {
     /// Multicast IPv4 (or IPv6) group address.
     pub address: String,
@@ -301,7 +301,7 @@ pub struct MulticastConfiguration {
 ///
 /// Pass a modified copy to `SetVideoEncoderConfiguration` to change resolution,
 /// frame rate, bitrate, or codec profile.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VideoEncoderConfiguration {
     /// Opaque token for this configuration.
     pub token: String,
@@ -324,7 +324,7 @@ pub struct VideoEncoderConfiguration {
 }
 
 /// Frame rate, encoding interval, and bitrate limits.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VideoRateControl {
     /// Maximum frames per second the encoder produces.
     pub frame_rate_limit: u32,
@@ -335,7 +335,7 @@ pub struct VideoRateControl {
 }
 
 /// H.264-specific codec settings.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct H264Configuration {
     /// Group-of-pictures length (keyframe interval in frames).
     pub gov_length: u32,
@@ -344,7 +344,7 @@ pub struct H264Configuration {
 }
 
 /// H.265-specific codec settings.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct H265Configuration {
     /// Group-of-pictures length (keyframe interval in frames).
     pub gov_length: u32,
@@ -492,7 +492,7 @@ impl VideoEncoderConfiguration {
 // ── VideoEncoderConfigurationOptions ─────────────────────────────────────────
 
 /// Valid parameter ranges for `SetVideoEncoderConfiguration`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct VideoEncoderConfigurationOptions {
     pub quality_range: Option<FloatRange>,
     pub jpeg: Option<JpegOptions>,
@@ -501,7 +501,7 @@ pub struct VideoEncoderConfigurationOptions {
 }
 
 /// Valid options for JPEG encoding.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct JpegOptions {
     pub resolutions: Vec<Resolution>,
     pub frame_rate_range: Option<IntRange>,
@@ -509,7 +509,7 @@ pub struct JpegOptions {
 }
 
 /// Valid options for H.264 encoding.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct H264Options {
     pub resolutions: Vec<Resolution>,
     pub gov_length_range: Option<IntRange>,
@@ -521,7 +521,7 @@ pub struct H264Options {
 }
 
 /// Valid options for H.265 encoding.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct H265Options {
     pub resolutions: Vec<Resolution>,
     pub gov_length_range: Option<IntRange>,
