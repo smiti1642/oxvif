@@ -26,6 +26,9 @@ features = ["mock-server"]
 # bound-port `MockServer` (pulls axum).
 mock = ["dep:serde"]
 mock-server = ["mock", "dep:axum", "tokio/rt-multi-thread"]
+# Fast ONVIF health / conformance check (HealthCheck) for a target device.
+# Pure library code over OnvifSession — no extra dependencies.
+health = []
 
 [dependencies]
 quick-xml    = "0.39"
@@ -61,3 +64,7 @@ dirs    = "6"
 [[example]]
 name = "mock_server"
 required-features = ["mock-server"]
+
+[[example]]
+name = "healthcheck"
+required-features = ["health"]
