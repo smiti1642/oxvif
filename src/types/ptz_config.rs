@@ -142,7 +142,7 @@ impl PtzConfiguration {
     pub(crate) fn to_xml_body(&self) -> String {
         let opt_str = |v: &Option<String>, tag: &str| -> String {
             v.as_deref()
-                .map(|s| format!("<tt:{tag}>{}<tt:/{tag}>", xml_escape(s)))
+                .map(|s| format!("<tt:{tag}>{}</tt:{tag}>", xml_escape(s)))
                 .unwrap_or_default()
         };
         let timeout_el = opt_str(&self.default_ptz_timeout, "DefaultPTZTimeout");

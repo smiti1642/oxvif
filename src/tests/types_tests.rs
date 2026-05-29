@@ -789,7 +789,8 @@ mod video {
             }),
             h265: None,
             multicast: None,
-            guaranteed_frame_rate: None,
+            session_timeout: Some("PT60S".into()),
+            guaranteed_frame_rate: Some(true),
         };
         let xml = cfg.to_xml_body();
         assert!(xml.contains("token=\"enc1\""));
@@ -798,6 +799,40 @@ mod video {
         assert!(xml.contains("<tt:FrameRateLimit>30</tt:FrameRateLimit>"));
         assert!(xml.contains("<tt:GovLength>25</tt:GovLength>"));
         assert!(xml.contains("<tt:H264Profile>Baseline</tt:H264Profile>"));
+        // SessionTimeout is required by the schema and must be emitted.
+        assert!(xml.contains("<tt:SessionTimeout>PT60S</tt:SessionTimeout>"));
+        // GuaranteedFrameRate is an attribute, not a child element.
+        assert!(xml.contains("GuaranteedFrameRate=\"true\""));
+        assert!(!xml.contains("<tt:GuaranteedFrameRate>"));
+        // Quality must precede RateControl per the XSD sequence.
+        let q = xml.find("<tt:Quality>").unwrap();
+        let rc = xml.find("<tt:RateControl>").unwrap();
+        assert!(q < rc, "Quality must come before RateControl");
+    }
+
+    #[test]
+    fn test_ptz_configuration_to_xml_body_closes_optional_tags() {
+        let cfg = crate::types::PtzConfiguration {
+            token: "PTZCfg_1".into(),
+            name: "ptz".into(),
+            use_count: 1,
+            node_token: "Node_1".into(),
+            default_ptz_timeout: Some("PT5S".into()),
+            default_abs_pan_tilt_space: None,
+            default_abs_zoom_space: None,
+            default_rel_pan_tilt_space: None,
+            default_rel_zoom_space: None,
+            default_cont_pan_tilt_space: None,
+            default_cont_zoom_space: None,
+            default_ptz_speed: None,
+            pan_tilt_limits: None,
+            zoom_limits: None,
+        };
+        let xml = cfg.to_xml_body();
+        // Optional string fields must close as </tt:Tag>, never the
+        // malformed <tt:/Tag> the opt_str helper used to emit.
+        assert!(xml.contains("<tt:DefaultPTZTimeout>PT5S</tt:DefaultPTZTimeout>"));
+        assert!(!xml.contains("<tt:/"));
     }
 
     // ── VideoEncoderConfigurationOptions ──────────────────────────────────

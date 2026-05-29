@@ -319,7 +319,12 @@ pub struct VideoEncoderConfiguration {
     pub h265: Option<H265Configuration>,
     /// Multicast streaming settings, if configured.
     pub multicast: Option<MulticastConfiguration>,
+    /// RTSP session keep-alive timeout (ISO 8601 duration, e.g. `"PT60S"`).
+    /// Required by the ONVIF schema on `SetVideoEncoderConfiguration`; preserved
+    /// across a read-modify-write so strict devices don't reject the update.
+    pub session_timeout: Option<String>,
     /// When `true`, the device guarantees the configured frame rate even under load.
+    /// This is an XSD attribute on the configuration element, not a child.
     pub guaranteed_frame_rate: Option<bool>,
 }
 
@@ -402,9 +407,17 @@ impl VideoEncoderConfiguration {
                     .child("AutoStart")
                     .is_some_and(|n| n.text() == "true" || n.text() == "1"),
             }),
+            session_timeout: xml_str(node, "SessionTimeout"),
+            // GuaranteedFrameRate is an XSD attribute; tolerate the
+            // child-element form some devices emit as a fallback.
             guaranteed_frame_rate: node
-                .child("GuaranteedFrameRate")
-                .map(|n| n.text() == "true" || n.text() == "1"),
+                .attr("GuaranteedFrameRate")
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    node.child("GuaranteedFrameRate")
+                        .map(|n| n.text().to_string())
+                })
+                .map(|v| v == "true" || v == "1"),
         })
     }
 
@@ -468,17 +481,27 @@ impl VideoEncoderConfiguration {
             ),
             None => String::new(),
         };
-        let gfr = match self.guaranteed_frame_rate {
-            Some(v) => format!("<tt:GuaranteedFrameRate>{v}</tt:GuaranteedFrameRate>"),
+        let session_timeout = match &self.session_timeout {
+            Some(v) => format!("<tt:SessionTimeout>{}</tt:SessionTimeout>", xml_escape(v)),
             None => String::new(),
         };
+        // GuaranteedFrameRate is an XSD attribute on Configuration, not a child.
+        let gfr_attr = match self.guaranteed_frame_rate {
+            Some(v) => format!(" GuaranteedFrameRate=\"{v}\""),
+            None => String::new(),
+        };
+        // Element order follows the onvif.xsd VideoEncoderConfiguration sequence
+        // (Encoding, Resolution, Quality, RateControl, H264, Multicast,
+        // SessionTimeout); strict devices reject out-of-order children. Quality
+        // in particular must precede RateControl.
         format!(
-            "<trt:Configuration token=\"{token}\">\
+            "<trt:Configuration token=\"{token}\"{gfr_attr}>\
                <tt:Name>{name}</tt:Name>\
                <tt:UseCount>{use_count}</tt:UseCount>\
                <tt:Encoding>{encoding}</tt:Encoding>\
-               {res}{rate}{h264}{h265}{multicast}{gfr}\
+               {res}\
                <tt:Quality>{quality}</tt:Quality>\
+               {rate}{h264}{h265}{multicast}{session_timeout}\
              </trt:Configuration>",
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),
