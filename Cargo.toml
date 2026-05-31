@@ -1,6 +1,6 @@
 [package]
 name = "oxvif"
-version = "0.9.6"
+version = "0.9.7"
 edition = "2024"
 rust-version = "1.85"
 description = "Async Rust client library for the ONVIF IP camera protocol"
@@ -15,10 +15,11 @@ readme = "README.md"
 # use the crate, so keep it out of the published package.
 exclude = [".env", ".env.example", "docs/"]
 
-# Build docs.rs with the mock features so `oxvif::mock` is documented there.
+# Build docs.rs with the mock + health features so `oxvif::mock` and
+# `oxvif::health` are documented there.
 # (This only affects docs.rs rendering — it does not enable features for users.)
 [package.metadata.docs.rs]
-features = ["mock-server"]
+features = ["mock-server", "health"]
 
 [features]
 # In-process mock ONVIF device for unit-testing client code without a camera.

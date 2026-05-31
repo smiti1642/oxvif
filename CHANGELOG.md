@@ -5,6 +5,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.7] - 2026-05-31
+
+Headline: a fast, scriptable **device health check** (`oxvif::health`) — point
+it at a camera and get a Pass/Warn/Fail/Skip conformance report with a Profile
+S/T/G assessment, a readable alternative to the official ONVIF Device Test Tool.
+Also adds the firmware-upgrade / system-restore upload-URI flow and corrects
+two write-path XML bugs.
+
+### Added
+- **Health check — `oxvif::health`** (opt-in, behind the `health` feature; pure
+  library code over `OnvifSession`, no extra dependencies).
+  - `HealthCheck::new(url).with_credentials(..).run().await` returns a
+    `HealthReport` of per-check `CheckResult`s (status + category + timing) plus
+    a `ProfileAssessment` (S/T/G verdict). `Display` renders a readable summary.
+  - Checks run concurrently and are read-only by default; opt into write/clock
+    probes via the builder.
+  - New `examples/healthcheck.rs` (`--features health`).
+- **Device firmware / restore (upload-URI flow)** — `start_firmware_upgrade()`
+  → `FirmwareUpgradeStart` and `start_system_restore()` → `SystemRestoreStart`.
+  Each returns the upload URI + timing; the caller HTTP-POSTs the image/backup
+  (the SOAP transport deliberately doesn't carry the binary payload).
+- `PartialEq` derived on the video-encoder configuration types
+  (`VideoEncoderConfiguration`, `VideoEncoderConfigurationOptions`, and related)
+  so downstream code can diff configs without hand-written comparisons.
+
+### Fixed
+- `SetVideoEncoderConfiguration` and PTZ `SetConfiguration` produced malformed
+  request XML that some cameras rejected — corrected the element nesting/order.
+
+### Docs
+- Recorded a read-path audit under `docs/audit-2026-05.md`.
+
 ## [0.9.6] - 2026-05-26
 
 Headline: a **built-in mock ONVIF device** so downstream crates can unit-test

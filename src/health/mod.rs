@@ -6,7 +6,7 @@
 //! Profile S/T/G assessment.
 //!
 //! This module is **additive and feature-gated** (`health`): it builds on
-//! [`OnvifSession`](crate::OnvifSession) internally but adds no methods to it.
+//! [`OnvifSession`] internally but adds no methods to it.
 //!
 //! ```no_run
 //! # async fn run() {

@@ -31,9 +31,9 @@ service URL. oxvif covers the Profile-S/T/G core; the long tail (certificates, I
 | GetSystemSupportInformation | support-info blob | — | — |
 | GetSystemBackup | download config backup | — | — |
 | RestoreSystem | restore config backup | — | — |
-| StartSystemRestore | restore via upload URI | — | — |
+| StartSystemRestore | restore via upload URI | ✓ | `start_system_restore` |
 | UpgradeSystemFirmware | firmware upgrade (deprecated) | — | — |
-| StartFirmwareUpgrade | firmware upgrade via upload URI | — | — |
+| StartFirmwareUpgrade | firmware upgrade via upload URI | ✓ | `start_firmware_upgrade` |
 | UpgradeFirmware | firmware upgrade by version | — | — |
 | SetHashingAlgorithm | password hashing algorithm | — | — |
 | GetEndpointReference | device GUID / endpoint ref | — | — |
@@ -195,10 +195,6 @@ All unimplemented. Catalog only — field detail via the WSDL `<wsdl:types>` whe
 
 #### DeleteStorageConfiguration
 - **Req:** `Token` `tt:ReferenceToken` [1] · **Resp:** _(empty)_
-
-#### StartFirmwareUpgrade
-- **Req:** _(empty)_ · **Resp:** `UploadUri` `xs:anyURI` [1]; `UploadDelay` `xs:duration` [1];
-  `ExpectedDownTime` `xs:duration` [1]
 
 #### UpgradeFirmware
 - **Req:** `Version` `xs:string` [1] · **Resp:** `ExpectedDownTime` `xs:duration` [1]

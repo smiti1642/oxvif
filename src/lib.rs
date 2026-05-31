@@ -22,6 +22,7 @@
 //! - **Device** — capabilities, scopes, device info, hostname, NTP, reboot,
 //!   user management, network interfaces/protocols/DNS/gateway, relay outputs,
 //!   storage configurations, system log/URIs, factory default, discovery mode,
+//!   firmware upgrade / system restore (upload-URI flow),
 //!   auxiliary commands (wiper/IR lamp)
 //! - **Media1 / Media2** — profiles, RTSP/snapshot URIs, video + audio config, OSD,
 //!   metadata config, audio decoder/output config, video source modes,
@@ -35,6 +36,14 @@
 //! - **Search** — find recordings by scope, collect results, end search
 //! - **Replay** — get RTSP playback URI for a stored recording
 //! - **WS-Discovery** — UDP multicast probe to find cameras on the local network
+//!
+//! ## Optional features
+//!
+//! - **`health`** — `health::HealthCheck`, a fast read-only conformance check
+//!   that returns a `health::HealthReport` (per-check Pass/Warn/Fail/Skip plus
+//!   a Profile S/T/G assessment). Pure library code over [`OnvifSession`].
+//! - **`mock`** / **`mock-server`** — a built-in mock ONVIF device for
+//!   unit-testing client code without a camera (see the `mock` module).
 //!
 //! ## Architecture
 //!

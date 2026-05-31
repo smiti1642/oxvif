@@ -26,7 +26,8 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport, plus a built-in mock ONVIF device (`mock` / `mock-server` features) — unit-test client code without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- 380 unit tests + 19 doc tests (462 with `--features mock-server`, incl. the in-process mock device)
+- Optional, scriptable device health check (`health` feature)
+- 381 unit tests + 19 doc tests (499 with `--all-features`, incl. the in-process mock device and the health checks)
 
 ---
 
@@ -345,6 +346,8 @@ for s in &scopes {
 | `get_system_log(log_type)` | Retrieve device log (`"System"` or `"Access"`) → `SystemLog` |
 | `get_system_uris()` | Syslog / support-info / system-backup download URIs → `SystemUris` |
 | `set_system_factory_default(default_type)` | Factory reset — `"Hard"` (full) or `"Soft"` (keep network) |
+| `start_firmware_upgrade()` | Begin firmware upgrade (upload-URI flow) → `FirmwareUpgradeStart` (upload URI + timing) |
+| `start_system_restore()` | Begin system restore (upload-URI flow) → `SystemRestoreStart` |
 | `get_relay_outputs()` | List relay output ports → `Vec<RelayOutput>` |
 | `set_relay_output_state(token, state)` | Set relay electrical state (`"active"` / `"inactive"`) |
 | `set_relay_output_settings(token, mode, delay, idle)` | Configure relay mode/delay/idle-state |
@@ -796,6 +799,36 @@ println!("Playback: {uri}");
 
 ---
 
+## Health check (`health` feature)
+
+A fast, scriptable conformance check — point it at a camera and get a
+Pass/Warn/Fail/Skip report with a Profile S/T/G assessment. A readable
+alternative to the official ONVIF Device Test Tool. Opt in with the `health`
+feature; it is pure library code over `OnvifSession` (no extra dependencies).
+
+```toml
+oxvif = { version = "0.9", features = ["health"] }
+```
+
+```rust
+use oxvif::health::HealthCheck;
+
+let report = HealthCheck::new("http://192.168.1.100/onvif/device_service")
+    .with_credentials("admin", "password")
+    .run()
+    .await;
+
+println!("{report}"); // readable summary: per-check status + timings + profile verdict
+```
+
+Checks run concurrently and are read-only by default. `HealthReport` exposes the
+individual `CheckResult`s (`status`, `category`, timing) and a
+`ProfileAssessment` if you want to inspect results programmatically rather than
+printing. See `examples/healthcheck.rs` (`cargo run --example healthcheck
+--features health`).
+
+---
+
 ## Error handling
 
 All API methods return `Result<T, OnvifError>`:
@@ -1181,6 +1214,8 @@ examples/
 | `GetSystemLog` | ✓ |
 | `GetSystemUris` | ✓ |
 | `SetSystemFactoryDefault` | ✓ |
+| `StartFirmwareUpgrade` | ✓ |
+| `StartSystemRestore` | ✓ |
 | `GetRelayOutputs` / `SetRelayOutputState` / `SetRelayOutputSettings` | ✓ |
 | `GetStorageConfigurations` / `SetStorageConfiguration` | ✓ |
 
