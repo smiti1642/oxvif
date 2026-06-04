@@ -25,14 +25,35 @@ pub struct ImagingSettings {
     pub ir_cut_filter: Option<String>,
     /// White balance mode: `"AUTO"` or `"MANUAL"`.
     pub white_balance_mode: Option<String>,
+    /// Manual white-balance red-channel gain (device-native range).
+    /// Only meaningful when `white_balance_mode == "MANUAL"`.
+    pub wb_cr_gain: Option<f32>,
+    /// Manual white-balance blue-channel gain (device-native range).
+    /// Only meaningful when `white_balance_mode == "MANUAL"`.
+    pub wb_cb_gain: Option<f32>,
     /// Exposure mode: `"AUTO"` or `"MANUAL"`.
     pub exposure_mode: Option<String>,
+    /// Auto-exposure priority: `"FrameRate"` or `"LowNoise"`.
+    pub exposure_priority: Option<String>,
+    /// Manual exposure time in seconds. Only meaningful when
+    /// `exposure_mode == "MANUAL"`.
+    pub exposure_time: Option<f32>,
+    /// Manual sensor gain in dB. Only meaningful when
+    /// `exposure_mode == "MANUAL"`.
+    pub exposure_gain: Option<f32>,
+    /// Manual iris value (F-number). Only meaningful when
+    /// `exposure_mode == "MANUAL"`.
+    pub exposure_iris: Option<f32>,
     /// Backlight compensation mode: `"OFF"` or `"ON"`.
     pub backlight_compensation: Option<String>,
     /// Autofocus mode: `"AUTO"`, `"MANUAL"`, or `"OnePush"`.
     pub focus_mode: Option<String>,
     /// Default focus speed for autofocus operations (device-native range).
     pub focus_default_speed: Option<f32>,
+    /// Near-end focus limit (device-native units). Constrains autofocus search.
+    pub focus_near_limit: Option<f32>,
+    /// Far-end focus limit (device-native units). Constrains autofocus search.
+    pub focus_far_limit: Option<f32>,
     /// Wide dynamic range mode: `"OFF"` or `"ON"`.
     pub wide_dynamic_range_mode: Option<String>,
     /// Wide dynamic range intensity level (device-native range, typically 0–100).
@@ -52,46 +73,37 @@ impl ImagingSettings {
 
         let parse_f32 = |child: &str| s.child(child).and_then(|n| n.text().parse::<f32>().ok());
 
+        let parse_nested_f32 =
+            |path: &[&str]| s.path(path).and_then(|n| n.text().parse::<f32>().ok());
+        let parse_nested_str = |path: &[&str]| {
+            s.path(path)
+                .map(|n| n.text().to_string())
+                .filter(|v| !v.is_empty())
+        };
+
         Ok(Self {
             brightness: parse_f32("Brightness"),
             color_saturation: parse_f32("ColorSaturation"),
             contrast: parse_f32("Contrast"),
             sharpness: parse_f32("Sharpness"),
             ir_cut_filter: xml_str(s, "IrCutFilter").filter(|v| !v.is_empty()),
-            white_balance_mode: s
-                .path(&["WhiteBalance", "Mode"])
-                .map(|n| n.text().to_string())
-                .filter(|v| !v.is_empty()),
-            exposure_mode: s
-                .path(&["Exposure", "Mode"])
-                .map(|n| n.text().to_string())
-                .filter(|v| !v.is_empty()),
-            backlight_compensation: s
-                .path(&["BacklightCompensation", "Mode"])
-                .map(|n| n.text().to_string())
-                .filter(|v| !v.is_empty()),
-            focus_mode: s
-                .path(&["Focus", "AutoFocusMode"])
-                .map(|n| n.text().to_string())
-                .filter(|v| !v.is_empty()),
-            focus_default_speed: s
-                .path(&["Focus", "DefaultSpeed"])
-                .and_then(|n| n.text().parse().ok()),
-            wide_dynamic_range_mode: s
-                .path(&["WideDynamicRange", "Mode"])
-                .map(|n| n.text().to_string())
-                .filter(|v| !v.is_empty()),
-            wide_dynamic_range_level: s
-                .path(&["WideDynamicRange", "Level"])
-                .and_then(|n| n.text().parse().ok()),
-            image_stabilization_mode: s
-                .path(&["ImageStabilization", "Mode"])
-                .map(|n| n.text().to_string())
-                .filter(|v| !v.is_empty()),
-            tone_compensation_mode: s
-                .path(&["ToneCompensation", "Mode"])
-                .map(|n| n.text().to_string())
-                .filter(|v| !v.is_empty()),
+            white_balance_mode: parse_nested_str(&["WhiteBalance", "Mode"]),
+            wb_cr_gain: parse_nested_f32(&["WhiteBalance", "CrGain"]),
+            wb_cb_gain: parse_nested_f32(&["WhiteBalance", "CbGain"]),
+            exposure_mode: parse_nested_str(&["Exposure", "Mode"]),
+            exposure_priority: parse_nested_str(&["Exposure", "Priority"]),
+            exposure_time: parse_nested_f32(&["Exposure", "ExposureTime"]),
+            exposure_gain: parse_nested_f32(&["Exposure", "Gain"]),
+            exposure_iris: parse_nested_f32(&["Exposure", "Iris"]),
+            backlight_compensation: parse_nested_str(&["BacklightCompensation", "Mode"]),
+            focus_mode: parse_nested_str(&["Focus", "AutoFocusMode"]),
+            focus_default_speed: parse_nested_f32(&["Focus", "DefaultSpeed"]),
+            focus_near_limit: parse_nested_f32(&["Focus", "NearLimit"]),
+            focus_far_limit: parse_nested_f32(&["Focus", "FarLimit"]),
+            wide_dynamic_range_mode: parse_nested_str(&["WideDynamicRange", "Mode"]),
+            wide_dynamic_range_level: parse_nested_f32(&["WideDynamicRange", "Level"]),
+            image_stabilization_mode: parse_nested_str(&["ImageStabilization", "Mode"]),
+            tone_compensation_mode: parse_nested_str(&["ToneCompensation", "Mode"]),
         })
     }
 
@@ -117,17 +129,49 @@ impl ImagingSettings {
                 xml_escape(v)
             ));
         }
-        if let Some(ref m) = self.white_balance_mode {
-            out.push_str(&format!(
-                "<tt:WhiteBalance><tt:Mode>{}</tt:Mode></tt:WhiteBalance>",
-                xml_escape(m)
-            ));
+        // WhiteBalance20 sequence: Mode, CrGain, CbGain
+        if self.white_balance_mode.is_some()
+            || self.wb_cr_gain.is_some()
+            || self.wb_cb_gain.is_some()
+        {
+            out.push_str("<tt:WhiteBalance>");
+            if let Some(ref m) = self.white_balance_mode {
+                out.push_str(&format!("<tt:Mode>{}</tt:Mode>", xml_escape(m)));
+            }
+            if let Some(v) = self.wb_cr_gain {
+                out.push_str(&format!("<tt:CrGain>{v}</tt:CrGain>"));
+            }
+            if let Some(v) = self.wb_cb_gain {
+                out.push_str(&format!("<tt:CbGain>{v}</tt:CbGain>"));
+            }
+            out.push_str("</tt:WhiteBalance>");
         }
-        if let Some(ref m) = self.exposure_mode {
-            out.push_str(&format!(
-                "<tt:Exposure><tt:Mode>{}</tt:Mode></tt:Exposure>",
-                xml_escape(m)
-            ));
+        // Exposure20 sequence: Mode, Priority, Window, Min/MaxExposureTime,
+        // Min/MaxGain, Min/MaxIris, ExposureTime, Gain, Iris. We model only
+        // the fields a caller can set: Mode, Priority, ExposureTime, Gain, Iris.
+        if self.exposure_mode.is_some()
+            || self.exposure_priority.is_some()
+            || self.exposure_time.is_some()
+            || self.exposure_gain.is_some()
+            || self.exposure_iris.is_some()
+        {
+            out.push_str("<tt:Exposure>");
+            if let Some(ref m) = self.exposure_mode {
+                out.push_str(&format!("<tt:Mode>{}</tt:Mode>", xml_escape(m)));
+            }
+            if let Some(ref p) = self.exposure_priority {
+                out.push_str(&format!("<tt:Priority>{}</tt:Priority>", xml_escape(p)));
+            }
+            if let Some(v) = self.exposure_time {
+                out.push_str(&format!("<tt:ExposureTime>{v}</tt:ExposureTime>"));
+            }
+            if let Some(v) = self.exposure_gain {
+                out.push_str(&format!("<tt:Gain>{v}</tt:Gain>"));
+            }
+            if let Some(v) = self.exposure_iris {
+                out.push_str(&format!("<tt:Iris>{v}</tt:Iris>"));
+            }
+            out.push_str("</tt:Exposure>");
         }
         if let Some(ref m) = self.backlight_compensation {
             out.push_str(&format!(
@@ -135,7 +179,12 @@ impl ImagingSettings {
                 xml_escape(m)
             ));
         }
-        if self.focus_mode.is_some() || self.focus_default_speed.is_some() {
+        // FocusConfiguration20 sequence: AutoFocusMode, DefaultSpeed, NearLimit, FarLimit
+        if self.focus_mode.is_some()
+            || self.focus_default_speed.is_some()
+            || self.focus_near_limit.is_some()
+            || self.focus_far_limit.is_some()
+        {
             out.push_str("<tt:Focus>");
             if let Some(ref m) = self.focus_mode {
                 out.push_str(&format!(
@@ -145,6 +194,12 @@ impl ImagingSettings {
             }
             if let Some(v) = self.focus_default_speed {
                 out.push_str(&format!("<tt:DefaultSpeed>{v}</tt:DefaultSpeed>"));
+            }
+            if let Some(v) = self.focus_near_limit {
+                out.push_str(&format!("<tt:NearLimit>{v}</tt:NearLimit>"));
+            }
+            if let Some(v) = self.focus_far_limit {
+                out.push_str(&format!("<tt:FarLimit>{v}</tt:FarLimit>"));
             }
             out.push_str("</tt:Focus>");
         }

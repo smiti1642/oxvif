@@ -1091,6 +1091,158 @@ mod media2 {
     }
 }
 
+// ── ImagingSettings ───────────────────────────────────────────────────────
+
+mod imaging {
+    use super::*;
+    use crate::types::ImagingSettings;
+
+    const FULL_XML: &str = r#"<GetImagingSettingsResponse>
+        <ImagingSettings>
+          <Brightness>50.0</Brightness>
+          <ColorSaturation>60.0</ColorSaturation>
+          <Contrast>40.0</Contrast>
+          <Sharpness>30.0</Sharpness>
+          <IrCutFilter>AUTO</IrCutFilter>
+          <WhiteBalance>
+            <Mode>MANUAL</Mode>
+            <CrGain>1.25</CrGain>
+            <CbGain>0.75</CbGain>
+          </WhiteBalance>
+          <Exposure>
+            <Mode>MANUAL</Mode>
+            <Priority>FrameRate</Priority>
+            <ExposureTime>0.04</ExposureTime>
+            <Gain>6.0</Gain>
+            <Iris>2.8</Iris>
+          </Exposure>
+          <BacklightCompensation><Mode>OFF</Mode></BacklightCompensation>
+          <Focus>
+            <AutoFocusMode>MANUAL</AutoFocusMode>
+            <DefaultSpeed>1.0</DefaultSpeed>
+            <NearLimit>0.5</NearLimit>
+            <FarLimit>3000.0</FarLimit>
+          </Focus>
+          <WideDynamicRange><Mode>ON</Mode><Level>80.0</Level></WideDynamicRange>
+        </ImagingSettings>
+      </GetImagingSettingsResponse>"#;
+
+    #[test]
+    fn parses_manual_exposure_white_balance_focus_depth() {
+        let s = ImagingSettings::from_xml(&parse(FULL_XML)).unwrap();
+        // White balance manual gains
+        assert_eq!(s.white_balance_mode.as_deref(), Some("MANUAL"));
+        assert_eq!(s.wb_cr_gain, Some(1.25));
+        assert_eq!(s.wb_cb_gain, Some(0.75));
+        // Exposure manual fields
+        assert_eq!(s.exposure_mode.as_deref(), Some("MANUAL"));
+        assert_eq!(s.exposure_priority.as_deref(), Some("FrameRate"));
+        assert_eq!(s.exposure_time, Some(0.04));
+        assert_eq!(s.exposure_gain, Some(6.0));
+        assert_eq!(s.exposure_iris, Some(2.8));
+        // Focus limits
+        assert_eq!(s.focus_mode.as_deref(), Some("MANUAL"));
+        assert_eq!(s.focus_default_speed, Some(1.0));
+        assert_eq!(s.focus_near_limit, Some(0.5));
+        assert_eq!(s.focus_far_limit, Some(3000.0));
+    }
+
+    #[test]
+    fn to_xml_body_emits_new_fields_in_xsd_order() {
+        let s = ImagingSettings {
+            brightness: Some(50.0),
+            white_balance_mode: Some("MANUAL".into()),
+            wb_cr_gain: Some(1.25),
+            wb_cb_gain: Some(0.75),
+            exposure_mode: Some("MANUAL".into()),
+            exposure_priority: Some("FrameRate".into()),
+            exposure_time: Some(0.04),
+            exposure_gain: Some(6.0),
+            exposure_iris: Some(2.8),
+            focus_mode: Some("MANUAL".into()),
+            focus_default_speed: Some(1.0),
+            focus_near_limit: Some(0.5),
+            focus_far_limit: Some(3000.0),
+            ..Default::default()
+        };
+        let xml = s.to_xml_body();
+
+        // Each new field is emitted.
+        assert!(xml.contains("<tt:CrGain>1.25</tt:CrGain>"));
+        assert!(xml.contains("<tt:CbGain>0.75</tt:CbGain>"));
+        assert!(xml.contains("<tt:Priority>FrameRate</tt:Priority>"));
+        assert!(xml.contains("<tt:ExposureTime>0.04</tt:ExposureTime>"));
+        assert!(xml.contains("<tt:Gain>6</tt:Gain>"));
+        assert!(xml.contains("<tt:Iris>2.8</tt:Iris>"));
+        assert!(xml.contains("<tt:NearLimit>0.5</tt:NearLimit>"));
+        assert!(xml.contains("<tt:FarLimit>3000</tt:FarLimit>"));
+
+        // XSD sequence inside Exposure: Mode, Priority, ExposureTime, Gain, Iris.
+        let exp_start = xml.find("<tt:Exposure>").expect("exposure block");
+        let exp_end = xml[exp_start..].find("</tt:Exposure>").unwrap() + exp_start;
+        let exp = &xml[exp_start..exp_end];
+        let order = [
+            "<tt:Mode>",
+            "<tt:Priority>",
+            "<tt:ExposureTime>",
+            "<tt:Gain>",
+            "<tt:Iris>",
+        ];
+        let mut last = 0;
+        for tag in order {
+            let pos = exp.find(tag).unwrap_or_else(|| panic!("missing {tag}"));
+            assert!(pos >= last, "{tag} out of XSD order in {exp}");
+            last = pos;
+        }
+
+        // XSD sequence inside WhiteBalance: Mode, CrGain, CbGain.
+        let wb_start = xml.find("<tt:WhiteBalance>").expect("wb block");
+        let wb_end = xml[wb_start..].find("</tt:WhiteBalance>").unwrap() + wb_start;
+        let wb = &xml[wb_start..wb_end];
+        assert!(wb.find("<tt:Mode>").unwrap() < wb.find("<tt:CrGain>").unwrap());
+        assert!(wb.find("<tt:CrGain>").unwrap() < wb.find("<tt:CbGain>").unwrap());
+
+        // XSD sequence inside Focus: AutoFocusMode, DefaultSpeed, NearLimit, FarLimit.
+        let focus_start = xml.find("<tt:Focus>").expect("focus block");
+        let focus_end = xml[focus_start..].find("</tt:Focus>").unwrap() + focus_start;
+        let focus = &xml[focus_start..focus_end];
+        let f_order = [
+            "<tt:AutoFocusMode>",
+            "<tt:DefaultSpeed>",
+            "<tt:NearLimit>",
+            "<tt:FarLimit>",
+        ];
+        let mut last = 0;
+        for tag in f_order {
+            let pos = focus
+                .find(tag)
+                .unwrap_or_else(|| panic!("missing {tag} in focus"));
+            assert!(pos >= last, "{tag} out of XSD order in {focus}");
+            last = pos;
+        }
+    }
+
+    #[test]
+    fn read_write_round_trip_preserves_new_fields() {
+        let parsed = ImagingSettings::from_xml(&parse(FULL_XML)).unwrap();
+        let emitted = parsed.to_xml_body();
+        // Round-trip the emitted body back into the response shape and re-parse.
+        let wrapped = format!(
+            "<GetImagingSettingsResponse><ImagingSettings>{}</ImagingSettings></GetImagingSettingsResponse>",
+            // strip the timg-prefixed outer element so we can re-wrap with bare names
+            emitted
+                .trim_start_matches("<timg:ImagingSettings>")
+                .trim_end_matches("</timg:ImagingSettings>"),
+        );
+        let re_parsed = ImagingSettings::from_xml(&parse(&wrapped)).unwrap();
+        assert_eq!(re_parsed.wb_cr_gain, Some(1.25));
+        assert_eq!(re_parsed.exposure_priority.as_deref(), Some("FrameRate"));
+        assert_eq!(re_parsed.exposure_time, Some(0.04));
+        assert_eq!(re_parsed.focus_near_limit, Some(0.5));
+        assert_eq!(re_parsed.focus_far_limit, Some(3000.0));
+    }
+}
+
 // ── xml_escape ────────────────────────────────────────────────────────────
 
 mod xml_escape_tests {
