@@ -163,6 +163,8 @@
 pub mod client;
 pub mod discovery;
 pub mod error;
+#[cfg(feature = "mock")]
+pub mod fixtures;
 #[cfg(feature = "health")]
 pub mod health;
 #[cfg(feature = "mock")]
@@ -175,6 +177,8 @@ pub mod types;
 pub use client::{OnvifClient, notification_listener};
 pub use discovery::{DiscoveredDevice, DiscoveryEvent, probe_unicast};
 pub use error::OnvifError;
+#[cfg(feature = "mock")]
+pub use fixtures::{CapturingTransport, FixtureTransport};
 #[cfg(feature = "health")]
 pub use health::{HealthCheck, HealthReport};
 pub use session::{OnvifSession, OnvifSessionBuilder};
