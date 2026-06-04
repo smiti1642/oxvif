@@ -4,11 +4,65 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
-    Capabilities, DeviceInfo, DnsInformation, FirmwareUpgradeStart, Hostname, NetworkGateway,
-    NetworkInterface, NetworkProtocol, NtpInfo, OnvifService, RelayOutput, SetDateTimeRequest,
-    StorageConfiguration, SystemDateTime, SystemLog, SystemRestoreStart, SystemUris, User,
-    xml_escape,
+    Capabilities, DeviceInfo, DnsInformation, FirmwareUpgradeStart, Hostname, IpStackConfig,
+    NetworkGateway, NetworkInterface, NetworkInterfaceConfig, NetworkProtocol, NtpInfo,
+    OnvifService, RelayOutput, SetDateTimeRequest, StorageConfiguration, SystemDateTime, SystemLog,
+    SystemRestoreStart, SystemUris, User, xml_escape,
 };
+
+fn ipv4_block(s: &IpStackConfig) -> String {
+    let enabled = if s.enabled { "true" } else { "false" };
+    let dhcp = if s.from_dhcp { "true" } else { "false" };
+    let manual: String = s
+        .manual
+        .iter()
+        .map(|a| {
+            format!(
+                "<tt:Manual>\
+                   <tt:Address>{}</tt:Address>\
+                   <tt:PrefixLength>{}</tt:PrefixLength>\
+                 </tt:Manual>",
+                xml_escape(&a.address),
+                a.prefix_length,
+            )
+        })
+        .collect();
+    format!(
+        "<tt:IPv4>\
+           <tt:Enabled>{enabled}</tt:Enabled>\
+           <tt:DHCP>{dhcp}</tt:DHCP>\
+           {manual}\
+         </tt:IPv4>",
+    )
+}
+
+fn ipv6_block(s: &IpStackConfig) -> String {
+    let enabled = if s.enabled { "true" } else { "false" };
+    // IPv6 DHCP is an enum (Auto/Stateful/Stateless/Off). Map the bool to
+    // the two common cases; finer control lives outside this builder.
+    let dhcp = if s.from_dhcp { "Stateful" } else { "Off" };
+    let manual: String = s
+        .manual
+        .iter()
+        .map(|a| {
+            format!(
+                "<tt:Manual>\
+                   <tt:Address>{}</tt:Address>\
+                   <tt:PrefixLength>{}</tt:PrefixLength>\
+                 </tt:Manual>",
+                xml_escape(&a.address),
+                a.prefix_length,
+            )
+        })
+        .collect();
+    format!(
+        "<tt:IPv6>\
+           <tt:Enabled>{enabled}</tt:Enabled>\
+           <tt:DHCP>{dhcp}</tt:DHCP>\
+           {manual}\
+         </tt:IPv6>",
+    )
+}
 
 impl OnvifClient {
     /// Retrieve service endpoint URLs from the device.
@@ -379,37 +433,43 @@ impl OnvifClient {
         NetworkInterface::vec_from_xml(resp)
     }
 
-    /// Update the IPv4 configuration of a network interface.
+    /// Update the configuration of a network interface (IPv4 and/or IPv6).
     ///
     /// Returns `true` if the device requires a reboot to apply the change.
+    ///
+    /// The XSD element order inside `<tt:NetworkInterface>` is enforced:
+    /// `Enabled` → `MTU?` → `IPv4?` → `IPv6?`. Each stack block emits
+    /// `Enabled`, `DHCP`, then zero-or-more `Manual` entries.
     pub async fn set_network_interfaces(
         &self,
         token: &str,
-        enabled: bool,
-        ipv4_address: &str,
-        prefix_length: u32,
-        from_dhcp: bool,
+        cfg: &NetworkInterfaceConfig,
     ) -> Result<bool, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/SetNetworkInterfaces";
-        let enabled_str = if enabled { "true" } else { "false" };
-        let from_dhcp_str = if from_dhcp { "true" } else { "false" };
+
+        let enabled = if cfg.enabled { "true" } else { "false" };
+        let mtu = match cfg.mtu {
+            Some(v) => format!("<tt:MTU>{v}</tt:MTU>"),
+            None => String::new(),
+        };
+        let ipv4 = match &cfg.ipv4 {
+            Some(s) => ipv4_block(s),
+            None => String::new(),
+        };
+        let ipv6 = match &cfg.ipv6 {
+            Some(s) => ipv6_block(s),
+            None => String::new(),
+        };
+
         let body = format!(
             "<tds:SetNetworkInterfaces>\
                <tds:InterfaceToken>{}</tds:InterfaceToken>\
                <tds:NetworkInterface>\
-                 <tt:Enabled>{enabled_str}</tt:Enabled>\
-                 <tt:IPv4>\
-                   <tt:Enabled>true</tt:Enabled>\
-                   <tt:DHCP>{from_dhcp_str}</tt:DHCP>\
-                   <tt:Manual>\
-                     <tt:Address>{}</tt:Address>\
-                     <tt:PrefixLength>{prefix_length}</tt:PrefixLength>\
-                   </tt:Manual>\
-                 </tt:IPv4>\
+                 <tt:Enabled>{enabled}</tt:Enabled>\
+                 {mtu}{ipv4}{ipv6}\
                </tds:NetworkInterface>\
              </tds:SetNetworkInterfaces>",
             xml_escape(token),
-            xml_escape(ipv4_address)
         );
         let xml = self.call(&self.device_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;

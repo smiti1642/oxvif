@@ -392,6 +392,49 @@ impl NetworkInterface {
     }
 }
 
+// ── NetworkInterfaceConfig (write side) ───────────────────────────────────────
+
+/// New configuration for a single interface, passed to
+/// [`set_network_interfaces`](crate::OnvifClient::set_network_interfaces).
+///
+/// Fields left as `None` are omitted from the request — the device keeps its
+/// existing value for that property.
+#[derive(Debug, Clone, Default)]
+pub struct NetworkInterfaceConfig {
+    /// Enable or disable the interface as a whole.
+    pub enabled: bool,
+    /// Maximum transmission unit in bytes. `None` leaves the current MTU.
+    pub mtu: Option<u32>,
+    /// IPv4 stack configuration. `None` leaves IPv4 untouched.
+    pub ipv4: Option<IpStackConfig>,
+    /// IPv6 stack configuration. `None` leaves IPv6 untouched.
+    ///
+    /// For IPv6, `from_dhcp = true` is sent as `<tt:DHCP>Stateful</tt:DHCP>`
+    /// and `false` as `<tt:DHCP>Off</tt:DHCP>` (the two common cases).
+    /// Stateless / Auto DHCPv6 modes are not exposed; callers that need them
+    /// can build the request manually until a richer enum is added.
+    pub ipv6: Option<IpStackConfig>,
+}
+
+/// One IP stack's configuration. Used for both IPv4 and IPv6 in
+/// [`NetworkInterfaceConfig`].
+#[derive(Debug, Clone, Default)]
+pub struct IpStackConfig {
+    /// Enable or disable this stack on the interface.
+    pub enabled: bool,
+    /// Acquire an address via DHCP (or DHCPv6 / SLAAC for IPv6).
+    pub from_dhcp: bool,
+    /// Static (manual) addresses to assign. May be empty.
+    pub manual: Vec<ManualAddress>,
+}
+
+/// One static address with prefix length.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ManualAddress {
+    pub address: String,
+    pub prefix_length: u32,
+}
+
 // ── NetworkProtocol ───────────────────────────────────────────────────────────
 
 /// A network protocol entry returned by `GetNetworkProtocols`.

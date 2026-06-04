@@ -3183,15 +3183,26 @@ fn set_network_interfaces_response_xml() -> &'static str {
 }
 
 #[tokio::test]
-async fn test_set_network_interfaces_sends_correct_body() {
+async fn test_set_network_interfaces_sends_ipv4_body() {
+    use crate::types::{IpStackConfig, ManualAddress, NetworkInterfaceConfig};
     let (transport, captured) = RecordingTransport::new(set_network_interfaces_response_xml());
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
 
-    let reboot = client
-        .set_network_interfaces("eth0", true, "192.168.1.200", 24, false)
-        .await
-        .unwrap();
+    let cfg = NetworkInterfaceConfig {
+        enabled: true,
+        mtu: None,
+        ipv4: Some(IpStackConfig {
+            enabled: true,
+            from_dhcp: false,
+            manual: vec![ManualAddress {
+                address: "192.168.1.200".into(),
+                prefix_length: 24,
+            }],
+        }),
+        ipv6: None,
+    };
+    let reboot = client.set_network_interfaces("eth0", &cfg).await.unwrap();
 
     assert!(!reboot);
     let c = captured.lock().unwrap();
@@ -3203,11 +3214,17 @@ async fn test_set_network_interfaces_sends_correct_body() {
         c.body
             .contains("<tds:InterfaceToken>eth0</tds:InterfaceToken>")
     );
-    assert!(c.body.contains("192.168.1.200"));
+    assert!(c.body.contains("<tt:IPv4>"));
+    assert!(c.body.contains("<tt:Address>192.168.1.200</tt:Address>"));
+    assert!(c.body.contains("<tt:PrefixLength>24</tt:PrefixLength>"));
+    assert!(c.body.contains("<tt:DHCP>false</tt:DHCP>"));
+    // No IPv6 block when ipv6 is None.
+    assert!(!c.body.contains("<tt:IPv6>"));
 }
 
 #[tokio::test]
 async fn test_set_network_interfaces_reboot_needed() {
+    use crate::types::{IpStackConfig, ManualAddress, NetworkInterfaceConfig};
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                      xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
          <s:Body>
@@ -3218,11 +3235,66 @@ async fn test_set_network_interfaces_reboot_needed() {
        </s:Envelope>"#;
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    let reboot = client
-        .set_network_interfaces("eth0", true, "10.0.0.1", 8, false)
-        .await
-        .unwrap();
+    let cfg = NetworkInterfaceConfig {
+        enabled: true,
+        mtu: None,
+        ipv4: Some(IpStackConfig {
+            enabled: true,
+            from_dhcp: false,
+            manual: vec![ManualAddress {
+                address: "10.0.0.1".into(),
+                prefix_length: 8,
+            }],
+        }),
+        ipv6: None,
+    };
+    let reboot = client.set_network_interfaces("eth0", &cfg).await.unwrap();
     assert!(reboot);
+}
+
+#[tokio::test]
+async fn test_set_network_interfaces_sends_ipv6_body_and_mtu() {
+    use crate::types::{IpStackConfig, ManualAddress, NetworkInterfaceConfig};
+    let (transport, captured) = RecordingTransport::new(set_network_interfaces_response_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let cfg = NetworkInterfaceConfig {
+        enabled: true,
+        mtu: Some(1500),
+        ipv4: None,
+        ipv6: Some(IpStackConfig {
+            enabled: true,
+            from_dhcp: false,
+            manual: vec![
+                ManualAddress {
+                    address: "2001:db8::1".into(),
+                    prefix_length: 64,
+                },
+                ManualAddress {
+                    address: "2001:db8::2".into(),
+                    prefix_length: 64,
+                },
+            ],
+        }),
+    };
+    client.set_network_interfaces("eth0", &cfg).await.unwrap();
+    let c = captured.lock().unwrap();
+    assert!(c.body.contains("<tt:MTU>1500</tt:MTU>"));
+    assert!(c.body.contains("<tt:IPv6>"));
+    // Two Manual entries
+    let manual_count = c.body.matches("<tt:Manual>").count();
+    assert_eq!(
+        manual_count, 2,
+        "expected 2 Manual entries, body={}",
+        c.body
+    );
+    assert!(c.body.contains("<tt:Address>2001:db8::1</tt:Address>"));
+    assert!(c.body.contains("<tt:Address>2001:db8::2</tt:Address>"));
+    // IPv6 DHCP bool maps to Stateful/Off enum
+    assert!(c.body.contains("<tt:DHCP>Off</tt:DHCP>"));
+    // No IPv4 block when ipv4 is None.
+    assert!(!c.body.contains("<tt:IPv4>"));
 }
 
 // ── get_network_protocols ─────────────────────────────────────────────────────

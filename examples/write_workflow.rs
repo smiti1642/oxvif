@@ -493,10 +493,22 @@ async fn main() {
     );
 
     // set_network_interfaces returns RebootNeeded bool
+    let net_cfg = oxvif::NetworkInterfaceConfig {
+        enabled: true,
+        mtu: None,
+        ipv4: Some(oxvif::IpStackConfig {
+            enabled: true,
+            from_dhcp: false,
+            manual: vec![oxvif::ManualAddress {
+                address: "192.168.1.100".into(),
+                prefix_length: 24,
+            }],
+        }),
+        ipv6: None,
+    };
     show(
         "set_network_interfaces(eth0, 192.168.1.100/24, static)",
-        c.set_network_interfaces("eth0", true, "192.168.1.100", 24, false)
-            .await,
+        c.set_network_interfaces("eth0", &net_cfg).await,
     );
 
     check(

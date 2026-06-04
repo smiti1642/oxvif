@@ -48,9 +48,9 @@ use crate::types::{
     DnsInformation, EventProperties, FindRecordingResults, FirmwareUpgradeStart, FocusMove,
     Hostname, ImagingMoveOptions, ImagingOptions, ImagingSettings, ImagingStatus, MediaProfile,
     MediaProfile2, MetadataConfiguration, MetadataConfigurationOptions, NetworkGateway,
-    NetworkInterface, NetworkProtocol, NotificationMessage, NtpInfo, OnvifService,
-    OsdConfiguration, OsdOptions, PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset,
-    PtzStatus, PullPointSubscription, PushSubscription, RecordingItem, RecordingJob,
+    NetworkInterface, NetworkInterfaceConfig, NetworkProtocol, NotificationMessage, NtpInfo,
+    OnvifService, OsdConfiguration, OsdOptions, PtzConfiguration, PtzConfigurationOptions, PtzNode,
+    PtzPreset, PtzStatus, PullPointSubscription, PushSubscription, RecordingItem, RecordingJob,
     RecordingJobConfiguration, RecordingJobState, RelayOutput, SnapshotUri, StorageConfiguration,
     StreamUri, SystemDateTime, SystemLog, SystemRestoreStart, SystemUris, User,
     VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
@@ -324,18 +324,13 @@ impl OnvifSession {
         self.client.get_network_interfaces().await
     }
 
-    /// Update the IPv4 configuration of a network interface.
+    /// Update the configuration of a network interface (IPv4 and/or IPv6).
     pub async fn set_network_interfaces(
         &self,
         token: &str,
-        enabled: bool,
-        ipv4_address: &str,
-        prefix_length: u32,
-        from_dhcp: bool,
+        cfg: &NetworkInterfaceConfig,
     ) -> Result<bool, OnvifError> {
-        self.client
-            .set_network_interfaces(token, enabled, ipv4_address, prefix_length, from_dhcp)
-            .await
+        self.client.set_network_interfaces(token, cfg).await
     }
 
     /// Retrieve the enabled network protocols.
