@@ -140,7 +140,7 @@ impl HealthCheck {
         }
 
         // 3. Stable ordering for the report.
-        checks.sort_by(|a, b| a.category.cmp(&b.category).then_with(|| a.id.cmp(b.id)));
+        checks.sort_by(|a, b| a.category.cmp(&b.category).then_with(|| a.id.cmp(&b.id)));
 
         let profiles = assess(&checks);
         HealthReport {
@@ -161,11 +161,12 @@ fn check_passed(checks: &[CheckResult], id: &str) -> bool {
 fn verdict(
     checks: &[CheckResult],
     required: &[&'static str],
-) -> (ProfileVerdict, Vec<&'static str>) {
-    let missing: Vec<&'static str> = required
+) -> (ProfileVerdict, Vec<String>) {
+    let missing: Vec<String> = required
         .iter()
         .copied()
         .filter(|id| !check_passed(checks, id))
+        .map(String::from)
         .collect();
     let v = if missing.is_empty() {
         ProfileVerdict::Conformant

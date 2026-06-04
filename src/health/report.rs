@@ -3,10 +3,10 @@
 use std::fmt;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Which area of the device a check exercises. Also drives report grouping order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Category {
     Connectivity,
     Time,
@@ -39,7 +39,7 @@ impl Category {
 }
 
 /// Outcome of a single check.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "reason")]
 pub enum CheckStatus {
     /// The check succeeded.
@@ -65,10 +65,10 @@ impl CheckStatus {
 }
 
 /// Result of one named check.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckResult {
     /// Stable identifier (e.g. `"get_profiles"`).
-    pub id: &'static str,
+    pub id: String,
     /// Grouping category.
     pub category: Category,
     /// Pass / Warn / Fail / Skip.
@@ -76,18 +76,32 @@ pub struct CheckResult {
     /// Extra context (parsed values on success, error text otherwise).
     pub detail: String,
     /// Wall-clock time this check took.
-    #[serde(serialize_with = "ser_duration_ms", rename = "elapsed_ms")]
+    #[serde(with = "duration_ms", rename = "elapsed_ms")]
     pub elapsed: Duration,
 }
 
-fn ser_duration_ms<S: serde::Serializer>(d: &Duration, s: S) -> Result<S::Ok, S::Error> {
-    s.serialize_u128(d.as_millis())
+mod duration_ms {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S: Serializer>(d: &Duration, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_u128(d.as_millis())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Duration, D::Error> {
+        let ms = u64::deserialize(d)?;
+        Ok(Duration::from_millis(ms))
+    }
 }
 
 impl CheckResult {
-    pub(crate) fn pass(id: &'static str, category: Category, detail: impl Into<String>) -> Self {
+    pub(crate) fn pass(
+        id: impl Into<String>,
+        category: Category,
+        detail: impl Into<String>,
+    ) -> Self {
         Self {
-            id,
+            id: id.into(),
             category,
             status: CheckStatus::Pass,
             detail: detail.into(),
@@ -96,13 +110,13 @@ impl CheckResult {
     }
 
     pub(crate) fn warn(
-        id: &'static str,
+        id: impl Into<String>,
         category: Category,
         reason: impl Into<String>,
         detail: impl Into<String>,
     ) -> Self {
         Self {
-            id,
+            id: id.into(),
             category,
             status: CheckStatus::Warn(reason.into()),
             detail: detail.into(),
@@ -110,9 +124,13 @@ impl CheckResult {
         }
     }
 
-    pub(crate) fn fail(id: &'static str, category: Category, reason: impl Into<String>) -> Self {
+    pub(crate) fn fail(
+        id: impl Into<String>,
+        category: Category,
+        reason: impl Into<String>,
+    ) -> Self {
         Self {
-            id,
+            id: id.into(),
             category,
             status: CheckStatus::Fail(reason.into()),
             detail: String::new(),
@@ -120,9 +138,13 @@ impl CheckResult {
         }
     }
 
-    pub(crate) fn skip(id: &'static str, category: Category, reason: impl Into<String>) -> Self {
+    pub(crate) fn skip(
+        id: impl Into<String>,
+        category: Category,
+        reason: impl Into<String>,
+    ) -> Self {
         Self {
-            id,
+            id: id.into(),
             category,
             status: CheckStatus::Skip(reason.into()),
             detail: String::new(),
@@ -137,7 +159,7 @@ impl CheckResult {
 }
 
 /// Per-profile conformance verdict derived from the check results.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProfileVerdict {
     /// All required checks passed.
     Conformant,
@@ -158,23 +180,23 @@ impl ProfileVerdict {
 }
 
 /// Conformance assessment for the ONVIF profiles, derived from check results.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileAssessment {
     /// Profile S (video streaming): verdict + non-passing required check ids.
-    pub profile_s: (ProfileVerdict, Vec<&'static str>),
+    pub profile_s: (ProfileVerdict, Vec<String>),
     /// Profile T (advanced streaming / imaging / events).
-    pub profile_t: (ProfileVerdict, Vec<&'static str>),
+    pub profile_t: (ProfileVerdict, Vec<String>),
     /// Profile G (recording / search / replay) — not exercised; informational.
-    pub profile_g: (ProfileVerdict, Vec<&'static str>),
+    pub profile_g: (ProfileVerdict, Vec<String>),
 }
 
 /// The full result of a [`HealthCheck`](super::HealthCheck) run.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthReport {
     /// Device URL the check ran against.
     pub target: String,
     /// Total wall-clock time for the whole run.
-    #[serde(serialize_with = "ser_duration_ms", rename = "total_elapsed_ms")]
+    #[serde(with = "duration_ms", rename = "total_elapsed_ms")]
     pub total_elapsed: Duration,
     /// Individual check results, ordered by category.
     pub checks: Vec<CheckResult>,
@@ -206,6 +228,145 @@ impl HealthReport {
     /// Serialise the report as pretty-printed JSON (indented, line-separated).
     pub fn to_json_pretty(&self) -> String {
         serde_json::to_string_pretty(self).expect("HealthReport is fully serializable")
+    }
+
+    /// Compare this report against an earlier baseline and report the
+    /// differences relevant for regression tracking (e.g. between firmware
+    /// versions).
+    pub fn diff(&self, prev: &HealthReport) -> ReportDiff {
+        ReportDiff::compute(prev, self)
+    }
+}
+
+// ── ReportDiff ────────────────────────────────────────────────────────────────
+
+/// Differences between two [`HealthReport`]s, surfacing the things that
+/// matter for regression tracking.
+///
+/// Computed via [`HealthReport::diff`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReportDiff {
+    /// Checks that were not failing in `prev` but are failing now.
+    pub flipped_to_fail: Vec<String>,
+    /// Checks that were failing in `prev` but are not failing now.
+    pub flipped_to_pass: Vec<String>,
+    /// Check ids present in the new report but not in the baseline.
+    pub new_checks: Vec<String>,
+    /// Check ids present in the baseline but missing from the new report.
+    pub removed_checks: Vec<String>,
+    /// Checks whose runtime grew significantly: now > 2 × prev AND
+    /// the delta exceeds 100 ms (filters millisecond-scale noise).
+    /// Tuples are `(id, prev_ms, now_ms)`.
+    pub slowed: Vec<SlowedCheck>,
+}
+
+/// One entry in [`ReportDiff::slowed`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlowedCheck {
+    pub id: String,
+    pub prev_ms: u128,
+    pub now_ms: u128,
+}
+
+impl ReportDiff {
+    /// `true` if nothing flipped, nothing changed set, and nothing slowed.
+    pub fn is_empty(&self) -> bool {
+        self.flipped_to_fail.is_empty()
+            && self.flipped_to_pass.is_empty()
+            && self.new_checks.is_empty()
+            && self.removed_checks.is_empty()
+            && self.slowed.is_empty()
+    }
+
+    fn compute(prev: &HealthReport, now: &HealthReport) -> Self {
+        use std::collections::HashMap;
+        let prev_by_id: HashMap<&str, &CheckResult> =
+            prev.checks.iter().map(|c| (c.id.as_str(), c)).collect();
+        let now_by_id: HashMap<&str, &CheckResult> =
+            now.checks.iter().map(|c| (c.id.as_str(), c)).collect();
+
+        let mut flipped_to_fail = Vec::new();
+        let mut flipped_to_pass = Vec::new();
+        let mut new_checks = Vec::new();
+        let mut slowed = Vec::new();
+
+        for c in &now.checks {
+            match prev_by_id.get(c.id.as_str()) {
+                None => new_checks.push(c.id.clone()),
+                Some(p) => {
+                    let was_fail = matches!(p.status, CheckStatus::Fail(_));
+                    let is_fail = matches!(c.status, CheckStatus::Fail(_));
+                    match (was_fail, is_fail) {
+                        (false, true) => flipped_to_fail.push(c.id.clone()),
+                        (true, false) => flipped_to_pass.push(c.id.clone()),
+                        _ => {}
+                    }
+                    let prev_ms = p.elapsed.as_millis();
+                    let now_ms = c.elapsed.as_millis();
+                    if now_ms > prev_ms.saturating_mul(2)
+                        && now_ms.saturating_sub(prev_ms) > 100
+                    {
+                        slowed.push(SlowedCheck {
+                            id: c.id.clone(),
+                            prev_ms,
+                            now_ms,
+                        });
+                    }
+                }
+            }
+        }
+
+        let removed_checks: Vec<String> = prev
+            .checks
+            .iter()
+            .filter(|c| !now_by_id.contains_key(c.id.as_str()))
+            .map(|c| c.id.clone())
+            .collect();
+
+        Self {
+            flipped_to_fail,
+            flipped_to_pass,
+            new_checks,
+            removed_checks,
+            slowed,
+        }
+    }
+}
+
+impl fmt::Display for ReportDiff {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Diff vs baseline:")?;
+        if self.is_empty() {
+            writeln!(f, "  no changes")?;
+            return Ok(());
+        }
+        if !self.flipped_to_fail.is_empty() {
+            writeln!(f, "  flipped → FAIL: {}", self.flipped_to_fail.join(", "))?;
+        }
+        if !self.flipped_to_pass.is_empty() {
+            writeln!(
+                f,
+                "  recovered    : {}",
+                self.flipped_to_pass.join(", ")
+            )?;
+        }
+        if !self.new_checks.is_empty() {
+            writeln!(f, "  new checks   : {}", self.new_checks.join(", "))?;
+        }
+        if !self.removed_checks.is_empty() {
+            writeln!(f, "  removed      : {}", self.removed_checks.join(", "))?;
+        }
+        if !self.slowed.is_empty() {
+            writeln!(f, "  slowed:")?;
+            for s in &self.slowed {
+                writeln!(
+                    f,
+                    "    {:<28} {:>5}ms → {:>5}ms",
+                    s.id, s.prev_ms, s.now_ms
+                )?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -254,5 +415,123 @@ impl fmt::Display for HealthReport {
             writeln!(f, "    Profile {name}: {}{miss}", verdict.label())?;
         }
         Ok(())
+    }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check(id: &str, status: CheckStatus, elapsed_ms: u64) -> CheckResult {
+        let mut c = CheckResult::pass(id, Category::Media, "");
+        c.status = status;
+        c.elapsed = Duration::from_millis(elapsed_ms);
+        c
+    }
+
+    fn assess() -> ProfileAssessment {
+        ProfileAssessment {
+            profile_s: (ProfileVerdict::Conformant, vec![]),
+            profile_t: (ProfileVerdict::Conformant, vec![]),
+            profile_g: (ProfileVerdict::Unsupported, vec!["recording".into()]),
+        }
+    }
+
+    fn report(checks: Vec<CheckResult>) -> HealthReport {
+        HealthReport {
+            target: "http://test/onvif/device_service".into(),
+            total_elapsed: Duration::from_millis(123),
+            checks,
+            profiles: assess(),
+        }
+    }
+
+    #[test]
+    fn diff_flags_pass_to_fail() {
+        let prev = report(vec![check("a", CheckStatus::Pass, 10)]);
+        let now = report(vec![check("a", CheckStatus::Fail("boom".into()), 10)]);
+        let d = now.diff(&prev);
+        assert_eq!(d.flipped_to_fail, vec!["a".to_string()]);
+        assert!(d.flipped_to_pass.is_empty());
+    }
+
+    #[test]
+    fn diff_flags_fail_to_pass() {
+        let prev = report(vec![check("a", CheckStatus::Fail("x".into()), 10)]);
+        let now = report(vec![check("a", CheckStatus::Pass, 10)]);
+        let d = now.diff(&prev);
+        assert_eq!(d.flipped_to_pass, vec!["a".to_string()]);
+        assert!(d.flipped_to_fail.is_empty());
+    }
+
+    #[test]
+    fn diff_flags_warn_is_not_flipped() {
+        // Warn is not a fail, so warn → pass and pass → warn don't flip.
+        let prev = report(vec![check("a", CheckStatus::Warn("slow".into()), 10)]);
+        let now = report(vec![check("a", CheckStatus::Pass, 10)]);
+        let d = now.diff(&prev);
+        assert!(d.flipped_to_pass.is_empty());
+        assert!(d.flipped_to_fail.is_empty());
+    }
+
+    #[test]
+    fn diff_lists_added_and_removed_checks() {
+        let prev = report(vec![
+            check("a", CheckStatus::Pass, 1),
+            check("b", CheckStatus::Pass, 1),
+        ]);
+        let now = report(vec![
+            check("a", CheckStatus::Pass, 1),
+            check("c", CheckStatus::Pass, 1),
+        ]);
+        let d = now.diff(&prev);
+        assert_eq!(d.new_checks, vec!["c".to_string()]);
+        assert_eq!(d.removed_checks, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn diff_slowed_requires_doubled_and_delta_over_100ms() {
+        // 10 → 30 ms (delta < 100 ms) → not slowed.
+        let prev = report(vec![check("a", CheckStatus::Pass, 10)]);
+        let now = report(vec![check("a", CheckStatus::Pass, 30)]);
+        assert!(now.diff(&prev).slowed.is_empty());
+
+        // 200 → 350 ms (less than 2×) → not slowed.
+        let prev = report(vec![check("b", CheckStatus::Pass, 200)]);
+        let now = report(vec![check("b", CheckStatus::Pass, 350)]);
+        assert!(now.diff(&prev).slowed.is_empty());
+
+        // 100 → 250 ms (2.5× AND delta 150 > 100) → slowed.
+        let prev = report(vec![check("c", CheckStatus::Pass, 100)]);
+        let now = report(vec![check("c", CheckStatus::Pass, 250)]);
+        let d = now.diff(&prev);
+        assert_eq!(d.slowed.len(), 1);
+        assert_eq!(d.slowed[0].id, "c");
+        assert_eq!(d.slowed[0].prev_ms, 100);
+        assert_eq!(d.slowed[0].now_ms, 250);
+    }
+
+    #[test]
+    fn diff_is_empty_when_nothing_changed() {
+        let r = report(vec![check("a", CheckStatus::Pass, 5)]);
+        assert!(r.diff(&r).is_empty());
+    }
+
+    #[test]
+    fn report_round_trips_through_json() {
+        let r = report(vec![
+            check("a", CheckStatus::Pass, 12),
+            check("b", CheckStatus::Fail("nope".into()), 7),
+        ]);
+        let json = r.to_json();
+        let re: HealthReport = serde_json::from_str(&json).expect("json deserialises");
+        assert_eq!(re.target, r.target);
+        assert_eq!(re.checks.len(), r.checks.len());
+        assert_eq!(re.checks[1].id, "b");
+        assert!(matches!(re.checks[1].status, CheckStatus::Fail(_)));
+        assert_eq!(re.checks[0].elapsed, Duration::from_millis(12));
+        assert_eq!(re.total_elapsed, Duration::from_millis(123));
     }
 }
