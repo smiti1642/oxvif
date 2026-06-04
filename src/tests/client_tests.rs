@@ -543,6 +543,59 @@ async fn test_get_video_encoder_configuration_options_parses_h264() {
     assert_eq!(br.max, 16384);
 }
 
+// ── set_video_encoder_configuration H265 gate ─────────────────────────────
+
+#[tokio::test]
+async fn test_set_video_encoder_configuration_rejects_h265_via_media1() {
+    use crate::types::{
+        H265Configuration, Resolution, VideoEncoderConfiguration, VideoEncoding,
+    };
+
+    // Transport explodes if reached — proves the gate fires before any send.
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(Arc::new(ErrorTransport { status: 999 }));
+
+    let cfg = VideoEncoderConfiguration {
+        token: "VEC_1".into(),
+        name: "Main".into(),
+        use_count: 1,
+        encoding: VideoEncoding::H265,
+        resolution: Resolution {
+            width: 1920,
+            height: 1080,
+        },
+        quality: 4.0,
+        rate_control: None,
+        h264: None,
+        h265: Some(H265Configuration {
+            gov_length: 25,
+            profile: "Main".into(),
+        }),
+        multicast: None,
+        session_timeout: Some("PT60S".into()),
+        guaranteed_frame_rate: None,
+    };
+
+    let err = client
+        .set_video_encoder_configuration("http://192.168.1.1/onvif/media_service", &cfg)
+        .await
+        .unwrap_err();
+
+    match err {
+        OnvifError::InvalidArgument(msg) => {
+            assert!(
+                msg.contains("H265"),
+                "expected H265 mention in error: {msg}"
+            );
+            assert!(
+                msg.contains("Media2") || msg.contains("media2"),
+                "expected Media2 hint in error: {msg}"
+            );
+        }
+        other => panic!("expected InvalidArgument, got {other:?}"),
+    }
+}
+
 // ── Media2 fixtures ───────────────────────────────────────────────────────
 
 fn profiles_media2_xml() -> &'static str {

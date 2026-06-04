@@ -23,6 +23,11 @@ use crate::transport::TransportError;
 /// * [`Soap`](OnvifError::Soap) — a response was received but could not be
 ///   parsed, a required field was missing, or the device returned a
 ///   `<s:Fault>` element.
+///
+/// * [`InvalidArgument`](OnvifError::InvalidArgument) — the caller asked the
+///   client to do something the ONVIF schema does not allow (e.g. setting an
+///   H265 video encoder via the Media1 client, which is JPEG/MPEG4/H264 only).
+///   No request is sent.
 #[derive(Debug, Error)]
 pub enum OnvifError {
     #[error(transparent)]
@@ -30,6 +35,9 @@ pub enum OnvifError {
 
     #[error(transparent)]
     Soap(#[from] SoapError),
+
+    #[error("invalid argument: {0}")]
+    InvalidArgument(String),
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

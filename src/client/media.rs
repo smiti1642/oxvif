@@ -393,11 +393,26 @@ impl OnvifClient {
     /// Apply a modified video encoder configuration to the device.
     ///
     /// `media_url` is obtained from [`get_capabilities`](Self::get_capabilities).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OnvifError::InvalidArgument`] without sending a request when
+    /// `config.encoding == VideoEncoding::H265`. The Media1 ONVIF schema is
+    /// JPEG / MPEG4 / H264 only; H265 belongs to Media2. Use
+    /// [`set_video_encoder_configuration_media2`](Self::set_video_encoder_configuration_media2)
+    /// instead.
     pub async fn set_video_encoder_configuration(
         &self,
         media_url: &str,
         config: &VideoEncoderConfiguration,
     ) -> Result<(), OnvifError> {
+        if config.encoding == crate::types::VideoEncoding::H265 {
+            return Err(OnvifError::InvalidArgument(
+                "Media1 schema does not include H265; use \
+                 set_video_encoder_configuration_media2 (Media2) instead"
+                    .into(),
+            ));
+        }
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/SetVideoEncoderConfiguration";
         let body = format!(
             "<trt:SetVideoEncoderConfiguration>\

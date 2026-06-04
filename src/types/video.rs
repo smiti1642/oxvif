@@ -301,6 +301,15 @@ pub struct MulticastConfiguration {
 ///
 /// Pass a modified copy to `SetVideoEncoderConfiguration` to change resolution,
 /// frame rate, bitrate, or codec profile.
+///
+/// # H265
+///
+/// The Media1 schema covers JPEG / MPEG4 / H264 only. To set an H265 encoder,
+/// use the Media2 path: [`VideoEncoderConfiguration2`](crate::types::VideoEncoderConfiguration2)
+/// with [`set_video_encoder_configuration_media2`](crate::OnvifClient::set_video_encoder_configuration_media2).
+///
+/// The Media1 [`set_video_encoder_configuration`](crate::OnvifClient::set_video_encoder_configuration)
+/// rejects H265 with [`OnvifError::InvalidArgument`](crate::OnvifError::InvalidArgument).
 #[derive(Debug, Clone, PartialEq)]
 pub struct VideoEncoderConfiguration {
     /// Opaque token for this configuration.
