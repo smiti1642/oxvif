@@ -28,8 +28,10 @@ features = ["mock-server", "health"]
 mock = ["dep:serde"]
 mock-server = ["mock", "dep:axum", "tokio/rt-multi-thread"]
 # Fast ONVIF health / conformance check (HealthCheck) for a target device.
-# Pure library code over OnvifSession — no extra dependencies.
-health = []
+# Pure library code over OnvifSession. Pulls serde + serde_json for the
+# `HealthReport::to_json` / `to_json_pretty` outputs that drive `--json` and
+# the `--baseline` diff flow.
+health = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
 quick-xml    = "0.39"
@@ -46,8 +48,9 @@ if-addrs     = "0.15"
 socket2      = "0.6"
 diqwest      = "3.2"
 tracing      = "0.1"
-# Optional — enabled by the `mock` / `mock-server` features only.
+# Optional — enabled by the `mock` / `mock-server` / `health` features only.
 serde        = { version = "1", features = ["derive"], optional = true }
+serde_json   = { version = "1", optional = true }
 axum         = { version = "0.8", optional = true }
 
 [dev-dependencies]

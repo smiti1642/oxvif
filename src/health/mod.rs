@@ -236,4 +236,36 @@ mod tests {
             "write round-trip should pass against the mock:\n{report}"
         );
     }
+
+    #[tokio::test]
+    async fn healthcheck_report_to_json_is_valid_and_round_trips() {
+        let server = MockServer::start().await.unwrap();
+        let report = HealthCheck::new(server.device_url()).run().await;
+
+        // Compact and pretty are both valid JSON and equivalent values.
+        let compact: serde_json::Value =
+            serde_json::from_str(&report.to_json()).expect("compact JSON parses");
+        let pretty: serde_json::Value =
+            serde_json::from_str(&report.to_json_pretty()).expect("pretty JSON parses");
+        assert_eq!(compact, pretty);
+
+        // Core fields are present and durations are integer-millisecond.
+        assert!(compact.get("target").and_then(|v| v.as_str()).is_some());
+        assert!(
+            compact
+                .get("total_elapsed_ms")
+                .and_then(|v| v.as_u64())
+                .is_some()
+        );
+        let checks = compact
+            .get("checks")
+            .and_then(|v| v.as_array())
+            .expect("checks array");
+        let first = &checks[0];
+        assert!(first.get("id").and_then(|v| v.as_str()).is_some());
+        assert!(first.get("elapsed_ms").and_then(|v| v.as_u64()).is_some());
+        // CheckStatus is tagged: { "kind": "Pass" } or { "kind": "Fail", "reason": "..." }
+        let status = first.get("status").expect("status field");
+        assert!(status.get("kind").and_then(|v| v.as_str()).is_some());
+    }
 }

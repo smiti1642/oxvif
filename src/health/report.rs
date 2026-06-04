@@ -3,8 +3,10 @@
 use std::fmt;
 use std::time::Duration;
 
+use serde::Serialize;
+
 /// Which area of the device a check exercises. Also drives report grouping order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub enum Category {
     Connectivity,
     Time,
@@ -37,7 +39,8 @@ impl Category {
 }
 
 /// Outcome of a single check.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", content = "reason")]
 pub enum CheckStatus {
     /// The check succeeded.
     Pass,
@@ -62,7 +65,7 @@ impl CheckStatus {
 }
 
 /// Result of one named check.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CheckResult {
     /// Stable identifier (e.g. `"get_profiles"`).
     pub id: &'static str,
@@ -73,7 +76,12 @@ pub struct CheckResult {
     /// Extra context (parsed values on success, error text otherwise).
     pub detail: String,
     /// Wall-clock time this check took.
+    #[serde(serialize_with = "ser_duration_ms", rename = "elapsed_ms")]
     pub elapsed: Duration,
+}
+
+fn ser_duration_ms<S: serde::Serializer>(d: &Duration, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_u128(d.as_millis())
 }
 
 impl CheckResult {
@@ -129,7 +137,7 @@ impl CheckResult {
 }
 
 /// Per-profile conformance verdict derived from the check results.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ProfileVerdict {
     /// All required checks passed.
     Conformant,
@@ -150,7 +158,7 @@ impl ProfileVerdict {
 }
 
 /// Conformance assessment for the ONVIF profiles, derived from check results.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ProfileAssessment {
     /// Profile S (video streaming): verdict + non-passing required check ids.
     pub profile_s: (ProfileVerdict, Vec<&'static str>),
@@ -161,11 +169,12 @@ pub struct ProfileAssessment {
 }
 
 /// The full result of a [`HealthCheck`](super::HealthCheck) run.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct HealthReport {
     /// Device URL the check ran against.
     pub target: String,
     /// Total wall-clock time for the whole run.
+    #[serde(serialize_with = "ser_duration_ms", rename = "total_elapsed_ms")]
     pub total_elapsed: Duration,
     /// Individual check results, ordered by category.
     pub checks: Vec<CheckResult>,
@@ -185,6 +194,18 @@ impl HealthReport {
             .checks
             .iter()
             .any(|c| matches!(c.status, CheckStatus::Fail(_)))
+    }
+
+    /// Serialise the report as a compact single-line JSON string. Durations
+    /// are emitted as integer milliseconds (fields suffixed `_ms`).
+    pub fn to_json(&self) -> String {
+        // serde_json on the fully-serializable HealthReport — infallible.
+        serde_json::to_string(self).expect("HealthReport is fully serializable")
+    }
+
+    /// Serialise the report as pretty-printed JSON (indented, line-separated).
+    pub fn to_json_pretty(&self) -> String {
+        serde_json::to_string_pretty(self).expect("HealthReport is fully serializable")
     }
 }
 
