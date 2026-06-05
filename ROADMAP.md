@@ -83,8 +83,13 @@ This document tracks planned work for the oxvif library. Items are grouped by th
 |------|---------|
 | Device: capabilities, device info, date/time, services, hostname, NTP, reboot, scopes, users, network, DNS, gateway, relay, storage, system log/URIs, factory default, discovery mode | v0.1–v0.8 |
 | Device: `SetNetworkDefaultGateway`, `SendAuxiliaryCommand` | develop |
+| Device: `SetNetworkInterfaces` struct-shaped API with IPv6 + MTU (`NetworkInterfaceConfig`, breaking) | v0.9.8 |
+| Media1: `SetVideoEncoderConfiguration` rejects H.265 (use Media2 instead) | v0.9.8 |
 | Device: `StartFirmwareUpgrade`, `StartSystemRestore` (upload-URI flow) | v0.9.7 |
 | Health check: `oxvif::health` (read-only conformance report, `health` feature) | v0.9.7 |
+| Health check: JSON report + `--baseline` diff (`HealthReport::to_json` / `diff`, `ReportDiff` / `SlowedCheck`) | v0.9.8 |
+| Test fixtures: `oxvif::fixtures` — `CapturingTransport` / `FixtureTransport` for record-and-replay SOAP exchanges | v0.9.8 |
+| Imaging: write-side manual exposure / WB Cr/Cb gains / focus near-far limits (`ImagingSettings` optional fields) | v0.9.8 |
 | Media1: profiles, stream/snapshot URI, video/audio source + encoder configs, OSD | v0.1–v0.8 |
 | Media2: profiles, stream/snapshot URI, video source/encoder configs + options + instances | v0.4–v0.8 |
 | Media2: `AddConfiguration` / `RemoveConfiguration` (unified config binding) | develop |

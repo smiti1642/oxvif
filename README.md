@@ -27,7 +27,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - Mockable transport, plus a built-in mock ONVIF device (`mock` / `mock-server` features) — unit-test client code without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
 - Optional, scriptable device health check (`health` feature)
-- 381 unit tests + 19 doc tests (499 with `--all-features`, incl. the in-process mock device and the health checks)
+- 386 unit tests + 23 doc tests (515 with `--all-features`, incl. the in-process mock device and the health checks)
 
 ---
 
@@ -84,7 +84,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.9", features = ["mock"] }
+oxvif = { version = "0.9.8", features = ["mock"] }
 ```
 
 ```rust
@@ -111,7 +111,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.9.6"
+oxvif = "0.9.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -807,7 +807,7 @@ alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 ```toml
-oxvif = { version = "0.9", features = ["health"] }
+oxvif = { version = "0.9.8", features = ["health"] }
 ```
 
 ```rust
@@ -873,8 +873,8 @@ implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.9", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.9", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.9.8", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.9.8", features = ["mock-server"] }  # adds MockServer
 ```
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):
@@ -1144,6 +1144,7 @@ src/
 ├── discovery.rs         WS-Discovery UDP multicast probe
 ├── error.rs             OnvifError unified error type
 ├── transport.rs         Transport trait + HttpTransport (reqwest + rustls)
+├── fixtures.rs          CapturingTransport / FixtureTransport — record-and-replay test seam
 ├── soap/
 │   ├── mod.rs
 │   ├── envelope.rs      SOAP 1.2 envelope builder
@@ -1154,7 +1155,7 @@ src/
 │   ├── mod.rs           XML helper functions (xml_escape, xml_str, …)
 │   ├── audio.rs         AudioSource, AudioEncoderConfiguration, AudioEncoding
 │   ├── capabilities.rs  Capabilities, service sub-structs
-│   ├── device.rs        DeviceInfo, SystemDateTime, Hostname, NtpInfo, StorageConfiguration
+│   ├── device.rs        DeviceInfo, NetworkInterfaceConfig, SystemDateTime, Hostname, NtpInfo, StorageConfiguration
 │   ├── events.rs        PullPointSubscription, NotificationMessage, EventProperties
 │   ├── imaging.rs       ImagingSettings, ImagingOptions, ImagingStatus
 │   ├── media.rs         MediaProfile, MediaProfile2, StreamUri, SnapshotUri
@@ -1163,27 +1164,34 @@ src/
 │   ├── ptz_config.rs    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzSpeed
 │   ├── recording.rs     RecordingItem, RecordingJob, RecordingJobConfiguration, RecordingJobState
 │   └── video.rs         VideoSource, VideoEncoder configs and options
+├── mock/                In-process mock ONVIF device (mock / mock-server features)
+│   ├── mod.rs           Public surface — MockTransport, MockServer, MockState, DeviceState
+│   ├── transport.rs     MockTransport — Transport impl, zero-network
+│   ├── server.rs        MockServer — axum bound-port server (mock-server only)
+│   ├── state.rs         Stateful DeviceState — Set persists, Get reflects
+│   ├── dispatch.rs      SOAP action routing to per-service handlers
+│   ├── services/        device / media / media2 / ptz / imaging / events / recording handlers
+│   ├── auth.rs          Optional WS-Security enforcement
+│   ├── fault_injection.rs  Single-shot SOAP Fault queue per action
+│   ├── helpers.rs       SOAP envelope helpers
+│   ├── snapshot.rs      Test-pattern JPEG generator (GET /mock/snapshot.jpg)
+│   ├── font.rs          5×7 bitmap font used by the snapshot generator
+│   └── xml_parse.rs     Request body tag extraction
+├── health/              Read-only ONVIF health / conformance check (health feature)
+│   ├── mod.rs           HealthCheck builder + HealthReport public surface
+│   ├── checks.rs        Individual check implementations (connectivity, services, …)
+│   └── report.rs        HealthReport / CheckResult / ReportDiff types (Serde + diff)
 └── tests/
     ├── client_tests.rs  unit tests covering all client methods
     ├── session_tests.rs unit tests for OnvifSession builder and delegates
     └── types_tests.rs   XML parsing unit tests
 examples/
 ├── camera.rs            Live camera integration examples (all commands)
-├── mock_server/         Stateful ONVIF mock server for offline development
-│   ├── main.rs          Entry point, Axum router
-│   ├── dispatch.rs      SOAP action routing to service modules
-│   ├── helpers.rs       SOAP envelope builder, action extraction
-│   ├── snapshot.rs      Test-pattern BMP image generation
-│   ├── state.rs         Mutable device state + 11 stateful unit tests
-│   ├── xml_parse.rs     Request body XML tag extraction + 5 unit tests
-│   └── services/
-│       ├── device.rs    Device service (20 Get + 8 Set handlers, stateful)
-│       ├── media.rs     Media1 service (21 handlers)
-│       ├── media2.rs    Media2 service (17 handlers)
-│       ├── ptz.rs       PTZ service (8 handlers)
-│       ├── imaging.rs   Imaging service (4 handlers)
-│       ├── events.rs    Events service (5 handlers)
-│       └── recording.rs Recording/Search/Replay (9 handlers)
+├── mock_server/         Thin wrapper over oxvif::mock::MockServer with TOML persistence
+│   └── main.rs          Entry point (--features mock-server)
+├── healthcheck.rs       Scriptable health/conformance check + --json + --baseline (--features health)
+├── record_fixtures.rs   Capture every SOAP exchange against a live device for replay (--features mock,health)
+├── probe_unicast.rs     One-shot unicast WS-Discovery probe to a specific host
 ├── odm_compat.rs        ODM compatibility integration test
 └── write_workflow.rs    Write-operation workflow with embedded mock server
 ```

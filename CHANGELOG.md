@@ -5,6 +5,96 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.8] - 2026-06-10
+
+Headline: the **health check grows a memory** — JSON output plus a
+`--baseline` diff mode that surfaces conformance regressions between
+runs. Three audit items also land in this release: H265 is now rejected
+at the Media1 boundary (it never belonged there), `SetNetworkInterfaces`
+finally accepts IPv6 + MTU via a struct-shaped API, and `ImagingSettings`
+gains write-side coverage for manual exposure / WB gains / focus limits.
+Plus a record-and-replay `Transport` pair (`CapturingTransport` /
+`FixtureTransport`) so the test suite can grow without a camera farm.
+
+### Added
+- **`HealthReport` JSON + baseline diff (`health` feature).**
+  - `HealthReport::to_json()` / `to_json_pretty()` serialise the full
+    report — every `CheckResult`, `ProfileAssessment`, timing, and
+    status payload — to a stable JSON shape that round-trips back to
+    `HealthReport` via `serde_json::from_str`.
+  - `HealthReport::diff(&previous) -> ReportDiff` compares two runs and
+    returns `{ flipped_to_fail, flipped_to_pass, new_checks,
+    removed_checks, slowed }`. `slowed` carries `SlowedCheck { id,
+    prev_ms, now_ms }` for any check that took ≥ 2× longer than the
+    baseline (with a 5 ms noise floor).
+  - The `healthcheck` example grows `--json` / `--json-pretty`
+    (emit report to stdout as JSON for `> baseline.json`) and
+    `--baseline <path>` (read a saved JSON report and print the diff)
+    so it can be used as a scriptable regression gate in CI — exits
+    non-zero if anything flipped to FAIL.
+  - All report types now derive `Serialize`, `Deserialize`, `PartialEq`,
+    `Eq` so consumers can embed them as struct fields, hash-keys, or
+    UI-framework props without newtype wrappers. `verdict()` returns
+    `Vec<String>` (was `Vec<&'static str>`) so it survives JSON
+    round-trips.
+- **`oxvif::fixtures` (`mock` + `health` features).** Two `Transport`
+  implementations for offline testing:
+  - `CapturingTransport<T>` wraps any inner `Transport` and writes every
+    `(action, request_body, response_body)` triple under a directory as
+    plain files — point it at a real camera once, get a reusable fixture
+    set.
+  - `FixtureTransport` is the replay side: it reads the same directory
+    layout and serves responses keyed by action without touching the
+    network. The two together let new B-track services (Analytics /
+    DeviceIO / Receiver, etc.) get integration tests against real
+    camera responses without requiring those cameras in CI.
+  - New `examples/record_fixtures.rs` (`--features mock,health`) shows
+    the typical capture flow against a live device.
+- **`ImagingSettings` — manual exposure / WB / focus limits (writable).**
+  Eight new optional fields, all serialised by `set_imaging_settings`
+  when populated: `exposure_time`, `exposure_gain`, `exposure_iris`,
+  `exposure_priority`, `wb_cr_gain`, `wb_cb_gain`, `focus_near_limit`,
+  `focus_far_limit`. Existing callers see no behaviour change — these
+  are pure additions on top of the auto-mode fields that already
+  worked.
+
+### Changed (breaking)
+- **`OnvifClient::set_network_interfaces` / `OnvifSession::set_network_interfaces`
+  now take a `&NetworkInterfaceConfig` struct** instead of the old
+  positional `(token, enabled, dhcp, address, prefix_length, mtu)`
+  signature. The new struct carries both an `IpStackConfig::v4` *and*
+  `IpStackConfig::v6` (each with `enabled` / `from_dhcp` / `Option<ManualAddress>`)
+  plus an `Option<u32>` MTU, so write-side IPv6 finally lines up with
+  the read-side `NetworkInterface` parser shipped in 0.9.6. Migration
+  for an IPv4-only caller is mechanical:
+  ```rust
+  // Before
+  client.set_network_interfaces(&token, true, false, "192.0.2.10", 24, None).await?;
+  // After
+  client.set_network_interfaces(&NetworkInterfaceConfig {
+      token: token.clone(),
+      enabled: true,
+      v4: IpStackConfig { enabled: true, from_dhcp: false,
+          manual: Some(ManualAddress { address: "192.0.2.10".into(), prefix_length: 24 }) },
+      v6: IpStackConfig::default(),
+      mtu: None,
+  }).await?;
+  ```
+
+### Fixed
+- **`set_video_encoder_configuration` (Media1) now rejects H.265 up
+  front** with `OnvifError::InvalidArgument(..)`. The Media1 schema
+  pre-dates H.265 and has no field for `H265Configuration`; passing
+  `VideoEncoding::H265` here silently produced an invalid request that
+  some cameras coerced into H.264 and others rejected with vague
+  faults. Use `set_video_encoder_configuration_media2` for H.265
+  profiles.
+
+### Docs
+- `docs/audit-2026-05.md` updated — C1 (H265 Media1 reject), C2
+  (network struct + IPv6), C3 (imaging manual write) are now marked
+  fixed in 0.9.8.
+
 ## [0.9.7] - 2026-05-31
 
 Headline: a fast, scriptable **device health check** (`oxvif::health`) — point

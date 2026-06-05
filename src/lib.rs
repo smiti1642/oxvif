@@ -42,8 +42,16 @@
 //! - **`health`** — `health::HealthCheck`, a fast read-only conformance check
 //!   that returns a `health::HealthReport` (per-check Pass/Warn/Fail/Skip plus
 //!   a Profile S/T/G assessment). Pure library code over [`OnvifSession`].
+//!   Reports serialise to JSON (`to_json` / `to_json_pretty`) and a
+//!   later report can diff against an earlier one via
+//!   [`HealthReport::diff`](health::HealthReport::diff) — see
+//!   `examples/healthcheck.rs --baseline <file.json>`.
 //! - **`mock`** / **`mock-server`** — a built-in mock ONVIF device for
 //!   unit-testing client code without a camera (see the `mock` module).
+//!   The `mock` feature also exposes `fixtures::CapturingTransport` /
+//!   `fixtures::FixtureTransport` for recording real-camera exchanges
+//!   into `tests/fixtures/<vendor>-<model>/` and replaying them in tests
+//!   without the device (see `examples/record_fixtures.rs`).
 //!
 //! ## Architecture
 //!
@@ -193,17 +201,17 @@ pub use types::{
     IpStackConfig, JpegOptions, ManualAddress, Media2Capabilities, MediaCapabilities, MediaProfile,
     MediaProfile2, MetadataConfiguration, MetadataConfigurationOptions, MulticastConfiguration,
     NetworkCapabilities, NetworkGateway, NetworkInterface, NetworkInterfaceConfig, NetworkProtocol,
-    NotificationMessage,
-    NtpInfo, OnvifService, OsdColor, OsdConfiguration, OsdOptions, OsdPosition, OsdTextString,
-    PtzCapabilities, PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzSpaceRange,
-    PtzSpeed, PtzStatus, PullPointSubscription, PushSubscription, RecordingCapabilities,
-    RecordingConfiguration, RecordingInformation, RecordingItem, RecordingJob,
-    RecordingJobConfiguration, RecordingJobState, RecordingSourceInformation, RecordingTrack,
-    RelayOutput, ReplayCapabilities, Resolution, SearchCapabilities, SecurityCapabilities,
-    SetDateTimeRequest, SnapshotUri, SourceBounds, StorageConfiguration, StreamUri,
-    StreamingCapabilities, SystemCapabilities, SystemDateTime, SystemLog, SystemRestoreStart,
-    SystemUris, User, UtcDateTime, VideoEncoderConfiguration, VideoEncoderConfiguration2,
-    VideoEncoderConfigurationOptions, VideoEncoderConfigurationOptions2, VideoEncoderInstances,
-    VideoEncoderOptions2, VideoEncoding, VideoRateControl, VideoRateControl2, VideoSource,
-    VideoSourceConfiguration, VideoSourceConfigurationOptions, VideoSourceMode,
+    NotificationMessage, NtpInfo, OnvifService, OsdColor, OsdConfiguration, OsdOptions,
+    OsdPosition, OsdTextString, PtzCapabilities, PtzConfiguration, PtzConfigurationOptions,
+    PtzNode, PtzPreset, PtzSpaceRange, PtzSpeed, PtzStatus, PullPointSubscription,
+    PushSubscription, RecordingCapabilities, RecordingConfiguration, RecordingInformation,
+    RecordingItem, RecordingJob, RecordingJobConfiguration, RecordingJobState,
+    RecordingSourceInformation, RecordingTrack, RelayOutput, ReplayCapabilities, Resolution,
+    SearchCapabilities, SecurityCapabilities, SetDateTimeRequest, SnapshotUri, SourceBounds,
+    StorageConfiguration, StreamUri, StreamingCapabilities, SystemCapabilities, SystemDateTime,
+    SystemLog, SystemRestoreStart, SystemUris, User, UtcDateTime, VideoEncoderConfiguration,
+    VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
+    VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoEncoderOptions2, VideoEncoding,
+    VideoRateControl, VideoRateControl2, VideoSource, VideoSourceConfiguration,
+    VideoSourceConfigurationOptions, VideoSourceMode,
 };

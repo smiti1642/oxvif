@@ -547,9 +547,7 @@ async fn test_get_video_encoder_configuration_options_parses_h264() {
 
 #[tokio::test]
 async fn test_set_video_encoder_configuration_rejects_h265_via_media1() {
-    use crate::types::{
-        H265Configuration, Resolution, VideoEncoderConfiguration, VideoEncoding,
-    };
+    use crate::types::{H265Configuration, Resolution, VideoEncoderConfiguration, VideoEncoding};
 
     // Transport explodes if reached — proves the gate fires before any send.
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")

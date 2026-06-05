@@ -118,12 +118,19 @@ resp.children_named("Foo").map(|n| {
 
 ### Mock server coverage
 
-5a. Add a handler for every new ONVIF action in `examples/mock_server.rs` —
-    including write/Set methods. This makes `mock_server` a full integration
-    harness that runs without a real device.
-    - Add the action URI to the `dispatch()` match block.
-    - Add a `resp_<operation>()` function returning a plausible canned response.
-    - Write methods that return `void` may share `resp_empty(prefix, tag)`.
+5a. Add a handler for every new ONVIF action under `src/mock/` (the mock
+    engine moved into the library in 0.9.6; `examples/mock_server/` is now
+    a thin wrapper over `oxvif::mock::MockServer`). Including write/Set
+    methods. This keeps both `MockTransport` and `MockServer` as full
+    integration harnesses that run without a real device.
+    - Add the action URI to the match block in `src/mock/dispatch.rs`.
+    - Add a `resp_<operation>()` function in the right
+      `src/mock/services/<service>.rs` returning a plausible response
+      (or mutating `DeviceState` for write methods).
+    - Write methods that return `void` may share the empty-body helper
+      from `src/mock/helpers.rs`.
+    - The behind-the-scenes example binary needs no change — it auto-picks
+      up new handlers because they live in the library now.
 
 ### Quality gate (run before every commit)
 

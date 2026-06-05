@@ -65,7 +65,7 @@ impl CheckStatus {
 }
 
 /// Result of one named check.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckResult {
     /// Stable identifier (e.g. `"get_profiles"`).
     pub id: String,
@@ -180,7 +180,7 @@ impl ProfileVerdict {
 }
 
 /// Conformance assessment for the ONVIF profiles, derived from check results.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProfileAssessment {
     /// Profile S (video streaming): verdict + non-passing required check ids.
     pub profile_s: (ProfileVerdict, Vec<String>),
@@ -191,7 +191,7 @@ pub struct ProfileAssessment {
 }
 
 /// The full result of a [`HealthCheck`](super::HealthCheck) run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HealthReport {
     /// Device URL the check ran against.
     pub target: String,
@@ -244,7 +244,7 @@ impl HealthReport {
 /// matter for regression tracking.
 ///
 /// Computed via [`HealthReport::diff`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportDiff {
     /// Checks that were not failing in `prev` but are failing now.
     pub flipped_to_fail: Vec<String>,
@@ -261,7 +261,7 @@ pub struct ReportDiff {
 }
 
 /// One entry in [`ReportDiff::slowed`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlowedCheck {
     pub id: String,
     pub prev_ms: u128,
@@ -303,9 +303,7 @@ impl ReportDiff {
                     }
                     let prev_ms = p.elapsed.as_millis();
                     let now_ms = c.elapsed.as_millis();
-                    if now_ms > prev_ms.saturating_mul(2)
-                        && now_ms.saturating_sub(prev_ms) > 100
-                    {
+                    if now_ms > prev_ms.saturating_mul(2) && now_ms.saturating_sub(prev_ms) > 100 {
                         slowed.push(SlowedCheck {
                             id: c.id.clone(),
                             prev_ms,
@@ -344,11 +342,7 @@ impl fmt::Display for ReportDiff {
             writeln!(f, "  flipped → FAIL: {}", self.flipped_to_fail.join(", "))?;
         }
         if !self.flipped_to_pass.is_empty() {
-            writeln!(
-                f,
-                "  recovered    : {}",
-                self.flipped_to_pass.join(", ")
-            )?;
+            writeln!(f, "  recovered    : {}", self.flipped_to_pass.join(", "))?;
         }
         if !self.new_checks.is_empty() {
             writeln!(f, "  new checks   : {}", self.new_checks.join(", "))?;
@@ -359,11 +353,7 @@ impl fmt::Display for ReportDiff {
         if !self.slowed.is_empty() {
             writeln!(f, "  slowed:")?;
             for s in &self.slowed {
-                writeln!(
-                    f,
-                    "    {:<28} {:>5}ms → {:>5}ms",
-                    s.id, s.prev_ms, s.now_ms
-                )?;
+                writeln!(f, "    {:<28} {:>5}ms → {:>5}ms", s.id, s.prev_ms, s.now_ms)?;
             }
         }
         Ok(())

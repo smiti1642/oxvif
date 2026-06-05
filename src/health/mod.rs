@@ -24,6 +24,7 @@ mod report;
 
 pub use report::{
     Category, CheckResult, CheckStatus, HealthReport, ProfileAssessment, ProfileVerdict,
+    ReportDiff, SlowedCheck,
 };
 
 use std::time::Instant;
@@ -158,10 +159,7 @@ fn check_passed(checks: &[CheckResult], id: &str) -> bool {
         .any(|c| c.id == id && matches!(c.status, CheckStatus::Pass | CheckStatus::Warn(_)))
 }
 
-fn verdict(
-    checks: &[CheckResult],
-    required: &[&'static str],
-) -> (ProfileVerdict, Vec<String>) {
+fn verdict(checks: &[CheckResult], required: &[&'static str]) -> (ProfileVerdict, Vec<String>) {
     let missing: Vec<String> = required
         .iter()
         .copied()
