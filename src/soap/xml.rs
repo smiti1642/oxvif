@@ -92,17 +92,25 @@ impl XmlNode {
         // is still removed.
         reader.config_mut().trim_text(false);
 
+        // The input is always a `&str`, so the reader decodes as UTF-8. Capture
+        // the decoder once and hand it to `from_bytes_start`: quick-xml 0.39
+        // cfg-gates `Attribute::unescape_value` away whenever the `encoding`
+        // feature is active anywhere in the build graph (feature unification),
+        // so we must go through `decode_and_unescape_value(decoder)` to compile
+        // regardless of that feature.
+        let decoder = reader.decoder();
+
         let mut stack: Vec<XmlNode> = Vec::new();
 
         loop {
             match reader.read_event() {
                 Ok(Event::Start(ref e)) => {
-                    stack.push(Self::from_bytes_start(e));
+                    stack.push(Self::from_bytes_start(e, decoder));
                 }
 
                 Ok(Event::Empty(ref e)) => {
                     // Self-closing tag: <Foo/>
-                    let node = Self::from_bytes_start(e);
+                    let node = Self::from_bytes_start(e, decoder);
                     if let Some(parent) = stack.last_mut() {
                         parent.children.push(node);
                     } else {
@@ -198,7 +206,10 @@ impl XmlNode {
         }
     }
 
-    fn from_bytes_start(e: &quick_xml::events::BytesStart<'_>) -> Self {
+    fn from_bytes_start(
+        e: &quick_xml::events::BytesStart<'_>,
+        decoder: quick_xml::Decoder,
+    ) -> Self {
         let local_name = String::from_utf8_lossy(e.local_name().as_ref()).into_owned();
 
         let mut attrs = HashMap::new();
@@ -214,7 +225,7 @@ impl XmlNode {
 
             let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).into_owned();
             let value = attr
-                .unescape_value()
+                .decode_and_unescape_value(decoder)
                 .map(|v| v.into_owned())
                 .unwrap_or_default();
             attrs.insert(key, value);

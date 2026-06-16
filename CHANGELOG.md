@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.9] - Unreleased
+
+### Fixed
+- **Compile failure when `quick-xml/encoding` is enabled anywhere in the
+  build graph.** quick-xml 0.39 cfg-gates `Attribute::unescape_value` away
+  whenever its `encoding` feature is active; Cargo feature unification turns
+  that feature on for the whole graph as soon as *any* sibling crate (e.g.
+  `calamine`) requests it, so `oxvif` failed to build with
+  `E0599: no method named unescape_value`. The XML attribute parser now goes
+  through `Attribute::decode_and_unescape_value(reader.decoder())`, which is
+  always available and decodes identically (the input is always a UTF-8
+  `&str`). oxvif now builds with the `encoding` feature on or off.
+
+---
+
 ## [0.9.8] - 2026-06-10
 
 Headline: the **health check grows a memory** — JSON output plus a
