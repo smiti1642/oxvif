@@ -54,6 +54,12 @@ serde_json   = { version = "1", optional = true }
 axum         = { version = "0.8", optional = true }
 
 [dev-dependencies]
+# Regression guard: force `quick-xml/encoding` on for the test build via
+# feature unification, so `cargo test` compiles the library exactly as a
+# downstream crate that enables `encoding` (e.g. via calamine) would. Any
+# future call into an `encoding`-gated quick-xml API fails the build here
+# instead of only in a user's workspace. See CHANGELOG 0.9.9.
+quick-xml = { version = "0.39", features = ["encoding"] }
 mockito = "1"
 dotenvy = "0.15"
 tokio   = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }
