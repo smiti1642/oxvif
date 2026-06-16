@@ -333,6 +333,16 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_attribute_unescapes_entities() {
+        // Exercises the `decode_and_unescape_value(reader.decoder())` path:
+        // attribute values must still be XML-unescaped, identically to the
+        // old `unescape_value()` call, with the `encoding` feature on or off.
+        let xml = r#"<Node token="a&amp;b&lt;c&gt;d&quot;e&apos;f"/>"#;
+        let node = XmlNode::parse(xml).unwrap();
+        assert_eq!(node.attr("token"), Some(r#"a&b<c>d"e'f"#));
+    }
+
+    #[test]
     fn test_strips_namespace_prefix_from_elements() {
         let xml = r#"
             <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
