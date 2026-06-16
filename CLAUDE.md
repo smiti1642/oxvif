@@ -24,6 +24,11 @@ cargo audit               # zero vulnerabilities required
 cargo outdated --depth 1  # review; upgrade direct deps if significantly behind
 ```
 
+After `cargo outdated`, if any direct dependency was updated, re-check for
+feature-unification footguns (a public API a sibling crate can flip off via
+`#[cfg(not(feature = …))]`). See [docs/dependency-pitfalls.md](docs/dependency-pitfalls.md)
+for the audit steps and the `quick-xml/encoding` case that motivated this.
+
 ## Coding rules
 
 ### Required fields must return `Result`
@@ -166,6 +171,8 @@ All three must pass cleanly.
 12. Consider running `cargo outdated --depth 1` — if direct dependencies are
     significantly behind, upgrade before publishing so the crate ships with a
     green dependency health indicator on lib.rs / crates.io.
+    If any direct dep was updated, re-audit for feature-unification footguns
+    (see [docs/dependency-pitfalls.md](docs/dependency-pitfalls.md)).
 13. Commit, merge to `master`.
 14. Tag the release commit: `git tag v<version>` (e.g. `git tag v0.4.1`).
     Tags appear in GitHub Desktop next to commits — useful for version-based debugging.
@@ -196,6 +203,7 @@ All three must pass cleanly.
 - [ ] `cargo publish --dry-run` — no errors
 - [ ] `cargo audit` — zero vulnerabilities
 - [ ] `cargo outdated --depth 1` — review; upgrade direct deps if significantly behind
+- [ ] If a direct dep was updated: re-audit for feature-unification footguns ([docs/dependency-pitfalls.md](docs/dependency-pitfalls.md))
 - [ ] `CHANGELOG.md` updated with new version entry
 - [ ] `Cargo.toml` version bumped
 - [ ] `README.md` installation version updated + content updated
