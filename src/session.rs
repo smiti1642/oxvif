@@ -45,15 +45,15 @@ use crate::transport::Transport;
 use crate::types::{
     AudioDecoderConfiguration, AudioEncoderConfiguration, AudioEncoderConfigurationOptions,
     AudioOutputConfiguration, AudioSource, AudioSourceConfiguration, Capabilities, DeviceInfo,
-    DnsInformation, EventProperties, FindRecordingResults, FirmwareUpgradeStart, FocusMove,
-    Hostname, ImagingMoveOptions, ImagingOptions, ImagingSettings, ImagingStatus, MediaProfile,
-    MediaProfile2, MetadataConfiguration, MetadataConfigurationOptions, NetworkGateway,
-    NetworkInterface, NetworkInterfaceConfig, NetworkProtocol, NotificationMessage, NtpInfo,
-    OnvifService, OsdConfiguration, OsdOptions, PtzConfiguration, PtzConfigurationOptions, PtzNode,
-    PtzPreset, PtzStatus, PullPointSubscription, PushSubscription, RecordingItem, RecordingJob,
-    RecordingJobConfiguration, RecordingJobState, RelayOutput, SnapshotUri, StorageConfiguration,
-    StreamUri, SystemDateTime, SystemLog, SystemRestoreStart, SystemUris, User,
-    VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
+    DigitalInput, DnsInformation, EventProperties, FindRecordingResults, FirmwareUpgradeStart,
+    FocusMove, Hostname, ImagingMoveOptions, ImagingOptions, ImagingSettings, ImagingStatus,
+    MediaProfile, MediaProfile2, MetadataConfiguration, MetadataConfigurationOptions,
+    NetworkGateway, NetworkInterface, NetworkInterfaceConfig, NetworkProtocol, NotificationMessage,
+    NtpInfo, OnvifService, OsdConfiguration, OsdOptions, PtzConfiguration, PtzConfigurationOptions,
+    PtzNode, PtzPreset, PtzStatus, PullPointSubscription, PushSubscription, RecordingItem,
+    RecordingJob, RecordingJobConfiguration, RecordingJobState, RelayOutput, SnapshotUri,
+    StorageConfiguration, StreamUri, SystemDateTime, SystemLog, SystemRestoreStart, SystemUris,
+    User, VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
     VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
     VideoSourceConfiguration, VideoSourceConfigurationOptions, VideoSourceMode,
 };
@@ -401,6 +401,11 @@ impl OnvifSession {
         self.client
             .set_relay_output_settings(relay_token, mode, delay_time, idle_state)
             .await
+    }
+
+    /// Retrieve all digital input port configurations.
+    pub async fn get_digital_inputs(&self) -> Result<Vec<DigitalInput>, OnvifError> {
+        self.client.get_digital_inputs().await
     }
 
     /// Enable or disable network protocols (HTTP, HTTPS, RTSP, etc.).

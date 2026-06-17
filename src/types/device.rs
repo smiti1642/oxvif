@@ -560,7 +560,7 @@ impl SystemLog {
 // ── RelayOutput ───────────────────────────────────────────────────────────────
 
 /// A relay output port returned by `GetRelayOutputs`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelayOutput {
     pub token: String,
     /// `"Bistable"` (latching) or `"Monostable"` (timed).
@@ -599,6 +599,39 @@ impl RelayOutput {
                     delay_time,
                     idle_state,
                 })
+            })
+            .collect()
+    }
+}
+
+// ── DigitalInput ──────────────────────────────────────────────────────────────
+
+/// A digital input port returned by `GetDigitalInputs`.
+///
+/// The Device Service exposes only the port's configured idle state — the
+/// live (active/inactive) reading is not polled here. Subscribe to the
+/// `tns1:Device/Trigger/DigitalInput` PullPoint topic to observe transitions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DigitalInput {
+    pub token: String,
+    /// Idle electrical state: `"closed"` or `"open"`. Empty when the
+    /// device omits the attribute (some firmwares do — treat as unknown).
+    pub idle_state: String,
+}
+
+impl DigitalInput {
+    pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
+        resp.children_named("DigitalInputs")
+            .map(|n| {
+                let token = n
+                    .attr("token")
+                    .filter(|t| !t.is_empty())
+                    .ok_or_else(|| SoapError::missing("DigitalInputs/@token"))?
+                    .to_string();
+                // ONVIF spec puts IdleState as an attribute on the
+                // DigitalInputs element. Empty / absent → unknown.
+                let idle_state = n.attr("IdleState").unwrap_or_default().to_string();
+                Ok(Self { token, idle_state })
             })
             .collect()
     }

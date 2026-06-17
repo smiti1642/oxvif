@@ -5,6 +5,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.9.9] - 2026-06-11
+
+Headline: **digital input read API** — `GetDigitalInputs` returns each
+port's token + idle electrical state, completing the read side of the
+Device-service IO surface that previously only exposed relay outputs.
+Live input transitions still arrive via PullPoint subscription on the
+`tns1:Device/Trigger/DigitalInput` topic (unchanged from 0.9.8).
+
+### Added
+- **`OnvifSession::get_digital_inputs()` / `OnvifClient::get_digital_inputs()`.**
+  Returns `Vec<DigitalInput>` where each entry carries `token` and
+  `idle_state` (`"closed"` / `"open"`, or empty string when the
+  firmware omits the attribute). Mirrors the existing `get_relay_outputs`
+  shape; no Set-side method is exposed because the Device service spec
+  doesn't define one (per-input configuration is a real-camera vendor
+  extension when it exists at all).
+- New `DigitalInput` type re-exported from the crate root.
+
+### Mock server
+- **Stateful Relay/Input.** `MockState` now carries `relay_outputs`
+  (two defaults: Bistable + Monostable) and `digital_inputs` (two
+  defaults). `GetRelayOutputs` and `GetDigitalInputs` render from
+  state instead of hardcoded XML; `SetRelayOutputState` and
+  `SetRelayOutputSettings` mutate state and emit a SOAP Fault on
+  unknown tokens.
+- **PullPoint IO event topics.** `GetEventProperties` now advertises
+  `tns1:Device/Trigger/DigitalInput` and `tns1:Device/Trigger/Relay`.
+  `SetRelayOutputState` queues a `RelayOutput` event automatically;
+  the queue is drained by the next `PullMessages` before the synthetic
+  motion / rule cycle resumes.
+- **`/mock/digital-input/:token/pulse` and `/set?state=...` REST hooks
+  (`mock-server` feature).** Test-only endpoints that simulate physical
+  input signals without an ONVIF SOAP wrapper (real cameras drive
+  inputs through hardware, so there's no spec-level Set for them).
+  Pulse queues an active→inactive pair; set queues one event in either
+  direction. 404 on unknown token, 400 on missing `state` query.
+
+---
+
 ## [0.9.8] - 2026-06-10
 
 Headline: the **health check grows a memory** — JSON output plus a

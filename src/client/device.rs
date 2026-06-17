@@ -4,10 +4,10 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
-    Capabilities, DeviceInfo, DnsInformation, FirmwareUpgradeStart, Hostname, IpStackConfig,
-    NetworkGateway, NetworkInterface, NetworkInterfaceConfig, NetworkProtocol, NtpInfo,
-    OnvifService, RelayOutput, SetDateTimeRequest, StorageConfiguration, SystemDateTime, SystemLog,
-    SystemRestoreStart, SystemUris, User, xml_escape,
+    Capabilities, DeviceInfo, DigitalInput, DnsInformation, FirmwareUpgradeStart, Hostname,
+    IpStackConfig, NetworkGateway, NetworkInterface, NetworkInterfaceConfig, NetworkProtocol,
+    NtpInfo, OnvifService, RelayOutput, SetDateTimeRequest, StorageConfiguration, SystemDateTime,
+    SystemLog, SystemRestoreStart, SystemUris, User, xml_escape,
 };
 
 fn ipv4_block(s: &IpStackConfig) -> String {
@@ -665,6 +665,20 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         find_response(&body_node, "SetRelayOutputStateResponse")?;
         Ok(())
+    }
+
+    /// Retrieve all digital input port configurations.
+    ///
+    /// The response carries each input's idle state (open/closed). Live
+    /// transitions arrive through PullPoint subscriptions on the
+    /// `tns1:Device/Trigger/DigitalInput` topic, not here.
+    pub async fn get_digital_inputs(&self) -> Result<Vec<DigitalInput>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetDigitalInputs";
+        const BODY: &str = "<tds:GetDigitalInputs/>";
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetDigitalInputsResponse")?;
+        DigitalInput::vec_from_xml(resp)
     }
 
     /// Enable or disable network protocols (HTTP, HTTPS, RTSP, etc.).

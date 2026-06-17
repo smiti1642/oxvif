@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use axum::{
     Router,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
     routing::{get, post},
@@ -93,6 +93,14 @@ impl MockServerBuilder {
 
         let app = Router::new()
             .route("/mock/snapshot.jpg", get(handle_snapshot))
+            .route(
+                "/mock/digital-input/{token}/pulse",
+                post(handle_digital_input_pulse),
+            )
+            .route(
+                "/mock/digital-input/{token}/set",
+                post(handle_digital_input_set),
+            )
             .route("/admin/inject_fault", post(handle_inject_fault))
             .route("/admin/clear_faults", post(handle_clear_faults))
             .route("/{*path}", post(handle_soap))
@@ -269,6 +277,93 @@ async fn handle_inject_fault(
 async fn handle_clear_faults(State(ctx): State<Arc<Ctx>>) -> impl IntoResponse {
     ctx.faults.clear_all();
     (StatusCode::OK, "faults cleared\n".to_string())
+}
+
+/// `POST /mock/digital-input/:token/pulse` — flip the input to `active`
+/// (queueing a Trigger/DigitalInput event), then immediately flip it back
+/// to `inactive` (queueing the trailing event). The two events surface
+/// on the next two `PullMessages` calls. 404 on unknown token.
+///
+/// Synchronous (no sleep) so tests can poll deterministically.
+async fn handle_digital_input_pulse(
+    State(ctx): State<Arc<Ctx>>,
+    Path(token): Path<String>,
+) -> impl IntoResponse {
+    let exists = ctx
+        .state
+        .read()
+        .digital_inputs
+        .iter()
+        .any(|d| d.token == token);
+    if !exists {
+        return (
+            StatusCode::NOT_FOUND,
+            format!("unknown digital input: {token}\n"),
+        );
+    }
+    ctx.state.modify(|s| {
+        if let Some(d) = s.digital_inputs.iter_mut().find(|d| d.token == token) {
+            d.logical_state = "active".into();
+        }
+        s.pending_io_events
+            .push(crate::mock::state::PendingIoEvent {
+                kind: "DigitalInput",
+                token: token.clone(),
+                logical_state: "active".into(),
+            });
+        if let Some(d) = s.digital_inputs.iter_mut().find(|d| d.token == token) {
+            d.logical_state = "inactive".into();
+        }
+        s.pending_io_events
+            .push(crate::mock::state::PendingIoEvent {
+                kind: "DigitalInput",
+                token: token.clone(),
+                logical_state: "inactive".into(),
+            });
+    });
+    (StatusCode::OK, "pulsed\n".to_string())
+}
+
+/// `POST /mock/digital-input/:token/set?state=active|inactive` — set
+/// the logical state explicitly (no auto-revert) and queue a single
+/// Trigger/DigitalInput event. 400 on missing/invalid state, 404 on
+/// unknown token.
+async fn handle_digital_input_set(
+    State(ctx): State<Arc<Ctx>>,
+    Path(token): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let state_param = params.get("state").cloned().unwrap_or_default();
+    if state_param != "active" && state_param != "inactive" {
+        return (
+            StatusCode::BAD_REQUEST,
+            "expected ?state=active or ?state=inactive\n".to_string(),
+        );
+    }
+    let exists = ctx
+        .state
+        .read()
+        .digital_inputs
+        .iter()
+        .any(|d| d.token == token);
+    if !exists {
+        return (
+            StatusCode::NOT_FOUND,
+            format!("unknown digital input: {token}\n"),
+        );
+    }
+    ctx.state.modify(|s| {
+        if let Some(d) = s.digital_inputs.iter_mut().find(|d| d.token == token) {
+            d.logical_state = state_param.clone();
+        }
+        s.pending_io_events
+            .push(crate::mock::state::PendingIoEvent {
+                kind: "DigitalInput",
+                token: token.clone(),
+                logical_state: state_param.clone(),
+            });
+    });
+    (StatusCode::OK, format!("set {state_param}\n"))
 }
 
 #[cfg(test)]

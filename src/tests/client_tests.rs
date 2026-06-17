@@ -3603,6 +3603,68 @@ async fn test_set_relay_output_settings_sends_correct_body() {
     assert!(c.body.contains("<tt:IdleState>open</tt:IdleState>"));
 }
 
+// ── get_digital_inputs ────────────────────────────────────────────────────────
+
+fn get_digital_inputs_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body>
+           <tds:GetDigitalInputsResponse>
+             <tds:DigitalInputs token="DigitalInput_1" IdleState="closed"/>
+             <tds:DigitalInputs token="DigitalInput_2" IdleState="open"/>
+           </tds:GetDigitalInputsResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_digital_inputs_returns_fields() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(get_digital_inputs_xml()));
+
+    let inputs = client.get_digital_inputs().await.unwrap();
+    assert_eq!(inputs.len(), 2);
+    assert_eq!(inputs[0].token, "DigitalInput_1");
+    assert_eq!(inputs[0].idle_state, "closed");
+    assert_eq!(inputs[1].token, "DigitalInput_2");
+    assert_eq!(inputs[1].idle_state, "open");
+}
+
+#[tokio::test]
+async fn test_get_digital_inputs_missing_token_returns_err() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body>
+           <tds:GetDigitalInputsResponse>
+             <tds:DigitalInputs IdleState="closed"/>
+           </tds:GetDigitalInputsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let err = client.get_digital_inputs().await.unwrap_err();
+    assert!(matches!(err, OnvifError::Soap(_)));
+}
+
+#[tokio::test]
+async fn test_get_digital_inputs_missing_idle_state_ok() {
+    // Some firmwares omit IdleState entirely. Treat as unknown rather than err.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body>
+           <tds:GetDigitalInputsResponse>
+             <tds:DigitalInputs token="DI_A"/>
+           </tds:GetDigitalInputsResponse>
+         </s:Body>
+       </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    let inputs = client.get_digital_inputs().await.unwrap();
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(inputs[0].token, "DI_A");
+    assert_eq!(inputs[0].idle_state, "");
+}
+
 // ── set_network_protocols ─────────────────────────────────────────────────────
 
 fn set_network_protocols_response_xml() -> &'static str {

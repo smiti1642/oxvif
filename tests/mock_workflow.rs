@@ -155,6 +155,89 @@ async fn recording_search_replay() {
 }
 
 #[tokio::test]
+async fn io_relay_and_digital_input_flow() {
+    let (srv, s) = setup().await;
+
+    // Defaults: two relays, two inputs.
+    let relays = s.get_relay_outputs().await.unwrap();
+    assert_eq!(relays.len(), 2);
+    assert!(relays.iter().any(|r| r.token == "RelayOutput_1"));
+
+    let inputs = s.get_digital_inputs().await.unwrap();
+    assert_eq!(inputs.len(), 2);
+    assert!(inputs.iter().any(|d| d.token == "DigitalInput_1"));
+
+    // Flip the bistable relay's logical state. Spec says it doesn't
+    // appear in GetRelayOutputs, but the mock holds it for tests.
+    s.set_relay_output_state("RelayOutput_1", "active")
+        .await
+        .unwrap();
+    // Drop the guard inside a block so clippy doesn't flag a stale
+    // lock held across the next `.await`.
+    let r1_logical = {
+        let snap = srv.device().read();
+        snap.relay_outputs
+            .iter()
+            .find(|r| r.token == "RelayOutput_1")
+            .unwrap()
+            .logical_state
+            .clone()
+    };
+    assert_eq!(r1_logical, "active");
+
+    // Configure properties (Bistable → Monostable + delay).
+    s.set_relay_output_settings("RelayOutput_1", "Monostable", "PT2S", "open")
+        .await
+        .unwrap();
+    let after = s.get_relay_outputs().await.unwrap();
+    let r1_after = after.iter().find(|r| r.token == "RelayOutput_1").unwrap();
+    assert_eq!(r1_after.mode, "Monostable");
+    assert_eq!(r1_after.delay_time, "PT2S");
+    assert_eq!(r1_after.idle_state, "open");
+
+    // Trigger an input pulse through the REST hook, then PullMessages
+    // should drain the pending queue in FIFO order:
+    //   1. RelayOutput  (queued by SetRelayOutputState above)
+    //   2. DigitalInput active  (pulse first half)
+    //   3. DigitalInput inactive  (pulse second half)
+    let pulse_url = format!("{}/mock/digital-input/DigitalInput_1/pulse", srv.base_url());
+    let resp = reqwest::Client::new()
+        .post(&pulse_url)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+
+    let sub = s
+        .create_pull_point_subscription(None, Some("PT60S"))
+        .await
+        .unwrap();
+    let m1 = s
+        .pull_messages(&sub.reference_url, "PT1S", 1)
+        .await
+        .unwrap();
+    let m2 = s
+        .pull_messages(&sub.reference_url, "PT1S", 1)
+        .await
+        .unwrap();
+    let m3 = s
+        .pull_messages(&sub.reference_url, "PT1S", 1)
+        .await
+        .unwrap();
+    assert!(m1[0].topic.contains("RelayOutput"), "got {:?}", m1[0].topic);
+    assert!(
+        m2[0].topic.contains("DigitalInput"),
+        "got {:?}",
+        m2[0].topic
+    );
+    assert!(
+        m3[0].topic.contains("DigitalInput"),
+        "got {:?}",
+        m3[0].topic
+    );
+}
+
+#[tokio::test]
 async fn injected_fault_propagates() {
     use oxvif::OnvifError;
     use oxvif::soap::SoapError;

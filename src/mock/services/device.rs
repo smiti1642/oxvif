@@ -541,18 +541,91 @@ pub fn resp_system_log() -> String {
     )
 }
 
-pub fn resp_relay_outputs() -> String {
+pub fn resp_relay_outputs(state: &SharedState) -> String {
+    let s = state.read();
+    let entries: String = s
+        .relay_outputs
+        .iter()
+        .map(|r| {
+            format!(
+                r#"<tds:RelayOutputs token="{}"><tt:Properties><tt:Mode>{}</tt:Mode><tt:DelayTime>{}</tt:DelayTime><tt:IdleState>{}</tt:IdleState></tt:Properties></tds:RelayOutputs>"#,
+                r.token, r.mode, r.delay_time, r.idle_state
+            )
+        })
+        .collect();
     soap(
         NS,
-        r#"<tds:GetRelayOutputsResponse>
-          <tds:RelayOutputs token="RelayOutput_1">
-            <tt:Properties>
-              <tt:Mode>Bistable</tt:Mode>
-              <tt:DelayTime>PT0S</tt:DelayTime>
-              <tt:IdleState>open</tt:IdleState>
-            </tt:Properties>
-          </tds:RelayOutputs>
-        </tds:GetRelayOutputsResponse>"#,
+        &format!("<tds:GetRelayOutputsResponse>{entries}</tds:GetRelayOutputsResponse>"),
+    )
+}
+
+pub fn handle_set_relay_output_state(state: &SharedState, body: &str) -> String {
+    let token = extract_tag(body, "RelayOutputToken").unwrap_or_default();
+    let logical_state = extract_tag(body, "LogicalState").unwrap_or_default();
+    let exists = state.read().relay_outputs.iter().any(|r| r.token == token);
+    if !exists {
+        return crate::mock::helpers::resp_soap_fault(
+            "s:Sender",
+            &format!("Unknown RelayOutput token: {token}"),
+        );
+    }
+    state.modify(|s| {
+        if let Some(r) = s.relay_outputs.iter_mut().find(|r| r.token == token) {
+            r.logical_state = logical_state.clone();
+        }
+        s.pending_io_events
+            .push(crate::mock::state::PendingIoEvent {
+                kind: "RelayOutput",
+                token: token.clone(),
+                logical_state: logical_state.clone(),
+            });
+    });
+    resp_empty("tds", "SetRelayOutputStateResponse")
+}
+
+pub fn handle_set_relay_output_settings(state: &SharedState, body: &str) -> String {
+    let token = extract_tag(body, "RelayOutputToken").unwrap_or_default();
+    let mode = extract_tag(body, "Mode").unwrap_or_default();
+    let delay_time = extract_tag(body, "DelayTime").unwrap_or_default();
+    let idle_state = extract_tag(body, "IdleState").unwrap_or_default();
+    let exists = state.read().relay_outputs.iter().any(|r| r.token == token);
+    if !exists {
+        return crate::mock::helpers::resp_soap_fault(
+            "s:Sender",
+            &format!("Unknown RelayOutput token: {token}"),
+        );
+    }
+    state.modify(|s| {
+        if let Some(r) = s.relay_outputs.iter_mut().find(|r| r.token == token) {
+            if !mode.is_empty() {
+                r.mode = mode.clone();
+            }
+            if !delay_time.is_empty() {
+                r.delay_time = delay_time.clone();
+            }
+            if !idle_state.is_empty() {
+                r.idle_state = idle_state.clone();
+            }
+        }
+    });
+    resp_empty("tds", "SetRelayOutputSettingsResponse")
+}
+
+pub fn resp_digital_inputs(state: &SharedState) -> String {
+    let s = state.read();
+    let entries: String = s
+        .digital_inputs
+        .iter()
+        .map(|d| {
+            format!(
+                r#"<tds:DigitalInputs token="{}" IdleState="{}"/>"#,
+                d.token, d.idle_state
+            )
+        })
+        .collect();
+    soap(
+        NS,
+        &format!("<tds:GetDigitalInputsResponse>{entries}</tds:GetDigitalInputsResponse>"),
     )
 }
 

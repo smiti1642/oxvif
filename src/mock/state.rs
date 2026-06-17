@@ -43,6 +43,10 @@ pub struct DeviceState {
     pub profiles: ProfilesState,
     #[serde(default = "default_video_encoder")]
     pub video_encoder: VideoEncoderState,
+    #[serde(default = "default_relay_outputs")]
+    pub relay_outputs: Vec<RelayOutputState>,
+    #[serde(default = "default_digital_inputs")]
+    pub digital_inputs: Vec<DigitalInputState>,
     /// Monotonic event counter for the pull-point stream (per-instance,
     /// not persisted). Replaces the former process-global `EVENT_SEQ`.
     #[serde(skip)]
@@ -51,6 +55,64 @@ pub struct DeviceState {
     /// (per-instance, not persisted). `None` = emit every topic.
     #[serde(skip)]
     pub event_filter: Option<Vec<String>>,
+    /// Pending events emitted out-of-band (e.g. by the
+    /// `/mock/digital-input/...` simulator endpoint) and surfaced on the
+    /// next `PullMessages` call. Per-instance, not persisted.
+    #[serde(skip)]
+    pub pending_io_events: Vec<PendingIoEvent>,
+}
+
+// ── Relay output / Digital input ──────────────────────────────────────────────
+//
+// Real cameras expose 0–2 of each on the Device service. The mock seeds two
+// of each so callers exercise both single-port and multi-port flows. The
+// `logical_state` field on `RelayOutputState` is what `SetRelayOutputState`
+// writes (active/inactive); `GetRelayOutputs` by spec doesn't return it,
+// but the mock keeps it for event emission and for tests that want to
+// assert the latched state after a Set call.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelayOutputState {
+    pub token: String,
+    /// `"Bistable"` (latching) or `"Monostable"` (timed pulse).
+    pub mode: String,
+    /// ISO 8601 duration for monostable mode, e.g. `"PT1S"`.
+    pub delay_time: String,
+    /// Idle electrical state: `"closed"` or `"open"`.
+    pub idle_state: String,
+    /// Current logical state — `"active"` or `"inactive"`. Updated by
+    /// `SetRelayOutputState`. The mock's monostable handler does NOT
+    /// auto-revert (a real device would, but that needs a timer the
+    /// mock doesn't run); callers wanting that flow should use the
+    /// `/mock/relay-output/.../pulse` REST hook.
+    #[serde(default = "default_logical_inactive")]
+    pub logical_state: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DigitalInputState {
+    pub token: String,
+    /// Idle electrical state: `"closed"` or `"open"`. Empty when the
+    /// firmware omits the attribute.
+    pub idle_state: String,
+    /// Current logical state — `"active"` or `"inactive"`. Flipped by
+    /// the `/mock/digital-input/.../pulse|set` REST endpoint to simulate
+    /// sensor signals. Drives PullPoint event emission.
+    #[serde(default = "default_logical_inactive")]
+    pub logical_state: String,
+}
+
+/// One-shot event emitted by the IO simulator endpoint and consumed by
+/// the next `PullMessages` call. Distinct from the regular periodic
+/// event stream (`event_seq`) — these are demand-driven.
+#[derive(Debug, Clone)]
+pub struct PendingIoEvent {
+    /// `"DigitalInput"` or `"RelayOutput"`. Maps to the
+    /// `tns1:Device/Trigger/{this}` PullPoint topic.
+    pub kind: &'static str,
+    pub token: String,
+    /// `"active"` or `"inactive"`.
+    pub logical_state: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -455,6 +517,44 @@ fn default_video_encoder() -> VideoEncoderState {
     }
 }
 
+fn default_logical_inactive() -> String {
+    "inactive".into()
+}
+
+fn default_relay_outputs() -> Vec<RelayOutputState> {
+    vec![
+        RelayOutputState {
+            token: "RelayOutput_1".into(),
+            mode: "Bistable".into(),
+            delay_time: "PT0S".into(),
+            idle_state: "closed".into(),
+            logical_state: "inactive".into(),
+        },
+        RelayOutputState {
+            token: "RelayOutput_2".into(),
+            mode: "Monostable".into(),
+            delay_time: "PT1S".into(),
+            idle_state: "open".into(),
+            logical_state: "inactive".into(),
+        },
+    ]
+}
+
+fn default_digital_inputs() -> Vec<DigitalInputState> {
+    vec![
+        DigitalInputState {
+            token: "DigitalInput_1".into(),
+            idle_state: "closed".into(),
+            logical_state: "inactive".into(),
+        },
+        DigitalInputState {
+            token: "DigitalInput_2".into(),
+            idle_state: "open".into(),
+            logical_state: "inactive".into(),
+        },
+    ]
+}
+
 fn default_imaging() -> ImagingState {
     ImagingState {
         brightness: 60.0,
@@ -492,8 +592,11 @@ impl Default for DeviceState {
             osd: default_osd(),
             profiles: default_profiles(),
             video_encoder: default_video_encoder(),
+            relay_outputs: default_relay_outputs(),
+            digital_inputs: default_digital_inputs(),
             event_seq: 0,
             event_filter: None,
+            pending_io_events: Vec::new(),
         }
     }
 }
@@ -1170,5 +1273,127 @@ mod tests {
         // Unknown token → response present but no configuration element.
         assert!(xml.contains("GetVideoEncoderConfigurationsResponse"));
         assert!(!xml.contains(r#"token="VEC_1""#));
+    }
+
+    // ── Relay output / Digital input (stateful) ───────────────────────────
+
+    #[test]
+    fn get_relay_outputs_returns_two_defaults() {
+        let s = new_state();
+        let xml = device::resp_relay_outputs(&s);
+        assert!(xml.contains(r#"token="RelayOutput_1""#));
+        assert!(xml.contains(r#"token="RelayOutput_2""#));
+        assert!(xml.contains("<tt:Mode>Bistable</tt:Mode>"));
+        assert!(xml.contains("<tt:Mode>Monostable</tt:Mode>"));
+    }
+
+    #[test]
+    fn set_relay_output_state_updates_logical_and_queues_event() {
+        let s = new_state();
+        let body = r#"<tds:SetRelayOutputState>
+            <tds:RelayOutputToken>RelayOutput_1</tds:RelayOutputToken>
+            <tds:LogicalState>active</tds:LogicalState>
+          </tds:SetRelayOutputState>"#;
+        let resp = device::handle_set_relay_output_state(&s, body);
+        assert!(resp.contains("SetRelayOutputStateResponse"));
+        assert!(!resp.contains("Fault"));
+
+        let snap = s.read();
+        let r1 = snap
+            .relay_outputs
+            .iter()
+            .find(|r| r.token == "RelayOutput_1");
+        assert_eq!(r1.unwrap().logical_state, "active");
+        assert_eq!(snap.pending_io_events.len(), 1);
+        assert_eq!(snap.pending_io_events[0].kind, "RelayOutput");
+        assert_eq!(snap.pending_io_events[0].logical_state, "active");
+    }
+
+    #[test]
+    fn set_relay_output_state_unknown_token_returns_fault() {
+        let s = new_state();
+        let body = r#"<tds:SetRelayOutputState>
+            <tds:RelayOutputToken>NoSuch</tds:RelayOutputToken>
+            <tds:LogicalState>active</tds:LogicalState>
+          </tds:SetRelayOutputState>"#;
+        let resp = device::handle_set_relay_output_state(&s, body);
+        assert!(resp.contains("Fault"));
+        assert!(resp.contains("NoSuch"));
+        // State untouched.
+        assert_eq!(s.read().pending_io_events.len(), 0);
+    }
+
+    #[test]
+    fn set_relay_output_settings_updates_mode_and_delay() {
+        let s = new_state();
+        let body = r#"<tds:SetRelayOutputSettings>
+            <tds:RelayOutputToken>RelayOutput_1</tds:RelayOutputToken>
+            <tds:Properties>
+              <tt:Mode>Monostable</tt:Mode>
+              <tt:DelayTime>PT5S</tt:DelayTime>
+              <tt:IdleState>open</tt:IdleState>
+            </tds:Properties>
+          </tds:SetRelayOutputSettings>"#;
+        let resp = device::handle_set_relay_output_settings(&s, body);
+        assert!(resp.contains("SetRelayOutputSettingsResponse"));
+
+        let snap = s.read();
+        let r1 = snap
+            .relay_outputs
+            .iter()
+            .find(|r| r.token == "RelayOutput_1");
+        let r1 = r1.unwrap();
+        assert_eq!(r1.mode, "Monostable");
+        assert_eq!(r1.delay_time, "PT5S");
+        assert_eq!(r1.idle_state, "open");
+    }
+
+    #[test]
+    fn get_digital_inputs_returns_two_defaults() {
+        let s = new_state();
+        let xml = device::resp_digital_inputs(&s);
+        assert!(xml.contains(r#"token="DigitalInput_1""#));
+        assert!(xml.contains(r#"token="DigitalInput_2""#));
+        assert!(xml.contains(r#"IdleState="closed""#));
+        assert!(xml.contains(r#"IdleState="open""#));
+    }
+
+    #[test]
+    fn pull_messages_drains_pending_io_event_first() {
+        use crate::mock::services::events;
+        let s = new_state();
+        // Seed an IO event as if the pulse endpoint fired.
+        s.modify(|st| {
+            st.pending_io_events.push(PendingIoEvent {
+                kind: "DigitalInput",
+                token: "DigitalInput_1".into(),
+                logical_state: "active".into(),
+            });
+        });
+        let xml = events::resp_pull_messages(&s);
+        assert!(xml.contains("tns1:Device/Trigger/DigitalInput"));
+        assert!(xml.contains(r#"Name="InputToken" Value="DigitalInput_1""#));
+        assert!(xml.contains(r#"Name="LogicalState" Value="true""#));
+        // Queue drained; next call falls through to the synthetic stream.
+        assert_eq!(s.read().pending_io_events.len(), 0);
+        let xml2 = events::resp_pull_messages(&s);
+        assert!(xml2.contains("MotionAlarm") || xml2.contains("RuleEngine"));
+    }
+
+    #[test]
+    fn pull_messages_io_event_relay_uses_relay_token_source() {
+        use crate::mock::services::events;
+        let s = new_state();
+        s.modify(|st| {
+            st.pending_io_events.push(PendingIoEvent {
+                kind: "RelayOutput",
+                token: "RelayOutput_1".into(),
+                logical_state: "inactive".into(),
+            });
+        });
+        let xml = events::resp_pull_messages(&s);
+        assert!(xml.contains("tns1:Device/Trigger/RelayOutput"));
+        assert!(xml.contains(r#"Name="RelayToken" Value="RelayOutput_1""#));
+        assert!(xml.contains(r#"Name="LogicalState" Value="false""#));
     }
 }

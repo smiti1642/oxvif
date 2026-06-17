@@ -26,6 +26,12 @@ pub fn resp_event_properties() -> String {
                 <tns1:ObjectsInside wstop:topic="true"/>
               </tns1:FieldDetector>
             </tns1:RuleEngine>
+            <tns1:Device wstop:topic="false" xmlns:tns1="http://www.onvif.org/ver10/topics">
+              <tns1:Trigger wstop:topic="false">
+                <tns1:DigitalInput wstop:topic="true"/>
+                <tns1:Relay wstop:topic="true"/>
+              </tns1:Trigger>
+            </tns1:Device>
           </wstop:TopicSet>
           <tev:TopicExpressionDialect>http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet</tev:TopicExpressionDialect>
         </tev:GetEventPropertiesResponse>"#,
@@ -100,7 +106,25 @@ pub fn resp_create_pull_point_subscription(base: &str, state: &SharedState, body
 /// Synthesize the next event. Deterministic and immediate: each call bumps the
 /// per-instance counter and emits one event (subject to the active topic
 /// filter), so a client polling in a loop sees a steadily growing log.
+///
+/// Out-of-band IO events queued by the `/mock/digital-input/...` simulator
+/// endpoints win first — they drain the queue before the synthetic motion /
+/// rule cycle resumes. This lets a test drive the input flip, poll once,
+/// and assert the exact event content without racing against the
+/// synthetic stream.
 pub fn resp_pull_messages(state: &SharedState) -> String {
+    // Drain a pending IO event if any are queued.
+    let pending = state.modify_returning(|s| {
+        if s.pending_io_events.is_empty() {
+            None
+        } else {
+            Some(s.pending_io_events.remove(0))
+        }
+    });
+    if let Some(ev) = pending {
+        return io_event_response(&ev);
+    }
+
     let seq = state.modify_returning(|s| {
         s.event_seq += 1;
         s.event_seq
@@ -173,6 +197,46 @@ pub fn resp_pull_messages(state: &SharedState) -> String {
             </wsnt:Message>
           </wsnt:NotificationMessage>
         </tev:PullMessagesResponse>"#
+        ),
+    )
+}
+
+/// Build a `PullMessagesResponse` carrying one IO-trigger notification.
+/// LogicalState is reported as the boolean ONVIF expects (`true`=active).
+fn io_event_response(ev: &crate::mock::state::PendingIoEvent) -> String {
+    let now = now_rfc3339();
+    let topic = format!("tns1:Device/Trigger/{}", ev.kind);
+    let source_name = match ev.kind {
+        "DigitalInput" => "InputToken",
+        "RelayOutput" => "RelayToken",
+        _ => "Token",
+    };
+    let logical_bool = if ev.logical_state == "active" {
+        "true"
+    } else {
+        "false"
+    };
+    soap(
+        r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2" xmlns:tns1="http://www.onvif.org/ver10/topics""#,
+        &format!(
+            r#"<tev:PullMessagesResponse>
+          <tev:CurrentTime>{now}</tev:CurrentTime>
+          <tev:TerminationTime>{now}</tev:TerminationTime>
+          <wsnt:NotificationMessage>
+            <wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">{topic}</wsnt:Topic>
+            <wsnt:Message>
+              <tt:Message UtcTime="{now}" PropertyOperation="Changed">
+                <tt:Source>
+                  <tt:SimpleItem Name="{source_name}" Value="{token}"/>
+                </tt:Source>
+                <tt:Data>
+                  <tt:SimpleItem Name="LogicalState" Value="{logical_bool}"/>
+                </tt:Data>
+              </tt:Message>
+            </wsnt:Message>
+          </wsnt:NotificationMessage>
+        </tev:PullMessagesResponse>"#,
+            token = ev.token,
         ),
     )
 }
