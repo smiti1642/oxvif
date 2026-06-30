@@ -2764,9 +2764,9 @@ fn get_recordings_xml() -> &'static str {
                       xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <trc:GetRecordingsResponse>
-              <trc:RecordingItems>
-                <trc:RecordingToken>rec_001</trc:RecordingToken>
-                <trc:Configuration>
+              <trc:RecordingItem>
+                <tt:RecordingToken>rec_001</tt:RecordingToken>
+                <tt:Configuration>
                   <tt:Source>
                     <tt:SourceId>urn:uuid:source-1</tt:SourceId>
                     <tt:Name>Channel 1</tt:Name>
@@ -2775,8 +2775,17 @@ fn get_recordings_xml() -> &'static str {
                   </tt:Source>
                   <tt:Content>Motion event</tt:Content>
                   <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
-                </trc:Configuration>
-              </trc:RecordingItems>
+                </tt:Configuration>
+                <tt:Tracks>
+                  <tt:Track>
+                    <tt:TrackToken>VIDEO001</tt:TrackToken>
+                    <tt:Configuration>
+                      <tt:TrackType>Video</tt:TrackType>
+                      <tt:Description>videoTrack</tt:Description>
+                    </tt:Configuration>
+                  </tt:Track>
+                </tt:Tracks>
+              </trc:RecordingItem>
             </trc:GetRecordingsResponse>
           </s:Body>
         </s:Envelope>"#
@@ -2796,6 +2805,9 @@ async fn test_get_recordings_parses_item() {
     assert_eq!(recs[0].token, "rec_001");
     assert_eq!(recs[0].source.name, "Channel 1");
     assert_eq!(recs[0].content, "Motion event");
+    assert_eq!(recs[0].tracks.len(), 1);
+    assert_eq!(recs[0].tracks[0].token, "VIDEO001");
+    assert_eq!(recs[0].tracks[0].track_type, "Video");
 }
 
 #[tokio::test]
@@ -2804,9 +2816,9 @@ async fn test_get_recordings_missing_token_returns_err() {
                       xmlns:trc="http://www.onvif.org/ver10/recording/wsdl">
           <s:Body>
             <trc:GetRecordingsResponse>
-              <trc:RecordingItems>
+              <trc:RecordingItem>
                 <!-- no RecordingToken — should trigger missing-field error -->
-              </trc:RecordingItems>
+              </trc:RecordingItem>
             </trc:GetRecordingsResponse>
           </s:Body>
         </s:Envelope>"#;
@@ -2819,6 +2831,96 @@ async fn test_get_recordings_missing_token_returns_err() {
         .unwrap_err();
 
     assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+}
+
+// ── Real-camera regression (GeoVision GV-GBLF4813, ONVIF v25.6) ───────────────
+//
+// Captured raw from the device. These shapes — singular `RecordingItem` with
+// `tt:`-namespaced fields, `Tracks/Track/TrackToken/Configuration`, and a
+// `ResultList`-wrapped search response — are the official ONVIF schema and
+// previously parsed to empty under oxvif's mock-matching (but spec-wrong)
+// parsers. Keep them verbatim so the parsers can never silently regress.
+
+fn get_recordings_geovision_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trc="http://www.onvif.org/ver10/recording/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trc:GetRecordingsResponse>
+              <trc:RecordingItem>
+                <tt:RecordingToken>tokenRecording1</tt:RecordingToken>
+                <tt:Configuration>
+                  <tt:Source>
+                    <tt:SourceId>SourceId_1</tt:SourceId>
+                    <tt:Name>IpCamera_1</tt:Name>
+                    <tt:Location>Location</tt:Location>
+                    <tt:Description>videoSource</tt:Description>
+                    <tt:Address>http://www.onvif.org/ver10/schema/Profile</tt:Address>
+                  </tt:Source>
+                  <tt:Content>recordingContent</tt:Content>
+                  <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
+                </tt:Configuration>
+                <tt:Tracks>
+                  <tt:Track><tt:TrackToken>VIDEO001</tt:TrackToken><tt:Configuration><tt:TrackType>Video</tt:TrackType><tt:Description>videoTrack</tt:Description></tt:Configuration></tt:Track>
+                  <tt:Track><tt:TrackToken>AUDIO001</tt:TrackToken><tt:Configuration><tt:TrackType>Audio</tt:TrackType><tt:Description>audioTrack</tt:Description></tt:Configuration></tt:Track>
+                  <tt:Track><tt:TrackToken>META001</tt:TrackToken><tt:Configuration><tt:TrackType>Metadata</tt:TrackType><tt:Description>metaTrack</tt:Description></tt:Configuration></tt:Track>
+                </tt:Tracks>
+              </trc:RecordingItem>
+            </trc:GetRecordingsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_recordings_geovision_real() {
+    let client = OnvifClient::new("http://192.0.2.10/onvif/device_service")
+        .with_transport(mock(get_recordings_geovision_xml()));
+
+    let recs = client
+        .get_recordings("http://192.0.2.10/onvif/Recording")
+        .await
+        .unwrap();
+
+    assert_eq!(recs.len(), 1);
+    assert_eq!(recs[0].token, "tokenRecording1");
+    assert_eq!(recs[0].source.name, "IpCamera_1");
+    assert_eq!(recs[0].tracks.len(), 3);
+    assert_eq!(recs[0].tracks[0].token, "VIDEO001");
+    assert_eq!(recs[0].tracks[0].track_type, "Video");
+    assert_eq!(recs[0].tracks[1].token, "AUDIO001");
+    assert_eq!(recs[0].tracks[2].track_type, "Metadata");
+}
+
+#[tokio::test]
+async fn test_search_results_geovision_resultlist_queued() {
+    // The camera nests SearchState inside <tse:ResultList>; oxvif previously
+    // read it as a direct child and fell back to "Unknown", which made the
+    // poll loop never complete.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tse="http://www.onvif.org/ver10/search/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tse:GetRecordingSearchResultsResponse>
+              <tse:ResultList>
+                <tt:SearchState>Queued</tt:SearchState>
+              </tse:ResultList>
+            </tse:GetRecordingSearchResultsResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.0.2.10/onvif/device_service").with_transport(mock(xml));
+
+    let results = client
+        .get_recording_search_results(
+            "http://192.0.2.10/onvif/SearchRecording",
+            "t",
+            50,
+            "PT5S",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(results.search_state, "Queued");
 }
 
 // ── find_recordings / get_recording_search_results / end_search ───────────────
@@ -2840,17 +2942,19 @@ fn recording_search_results_xml() -> &'static str {
                       xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <tse:GetRecordingSearchResultsResponse>
-              <tse:SearchState>Completed</tse:SearchState>
-              <tse:RecordingInformation>
-                <tt:RecordingToken>rec_001</tt:RecordingToken>
-                <tt:Source>
-                  <tt:Name>Channel 1</tt:Name>
-                </tt:Source>
-                <tt:EarliestRecording>2026-01-01T00:00:00Z</tt:EarliestRecording>
-                <tt:LatestRecording>2026-01-02T00:00:00Z</tt:LatestRecording>
-                <tt:Content>Motion event</tt:Content>
-                <tt:RecordingStatus>Stopped</tt:RecordingStatus>
-              </tse:RecordingInformation>
+              <tse:ResultList>
+                <tt:SearchState>Completed</tt:SearchState>
+                <tt:RecordingInformation>
+                  <tt:RecordingToken>rec_001</tt:RecordingToken>
+                  <tt:Source>
+                    <tt:Name>Channel 1</tt:Name>
+                  </tt:Source>
+                  <tt:EarliestRecording>2026-01-01T00:00:00Z</tt:EarliestRecording>
+                  <tt:LatestRecording>2026-01-02T00:00:00Z</tt:LatestRecording>
+                  <tt:Content>Motion event</tt:Content>
+                  <tt:RecordingStatus>Stopped</tt:RecordingStatus>
+                </tt:RecordingInformation>
+              </tse:ResultList>
             </tse:GetRecordingSearchResultsResponse>
           </s:Body>
         </s:Envelope>"#
@@ -4378,9 +4482,9 @@ async fn test_get_recordings_parses_track_times_and_address() {
                      xmlns:tt="http://www.onvif.org/ver10/schema">
          <s:Body>
            <trc:GetRecordingsResponse>
-             <trc:RecordingItems>
-               <trc:RecordingToken>Rec_001</trc:RecordingToken>
-               <trc:Configuration>
+             <trc:RecordingItem>
+               <tt:RecordingToken>Rec_001</tt:RecordingToken>
+               <tt:Configuration>
                  <tt:Source>
                    <tt:SourceId>urn:uuid:camera-001</tt:SourceId>
                    <tt:Name>Camera 1</tt:Name>
@@ -4390,16 +4494,19 @@ async fn test_get_recordings_parses_track_times_and_address() {
                  </tt:Source>
                  <tt:Content>Normal</tt:Content>
                  <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
-               </trc:Configuration>
-               <trc:Tracks>
-                 <trc:Track token="Track_V1">
-                   <tt:TrackType>Video</tt:TrackType>
-                   <tt:Description>Main video</tt:Description>
+               </tt:Configuration>
+               <tt:Tracks>
+                 <tt:Track>
+                   <tt:TrackToken>Track_V1</tt:TrackToken>
+                   <tt:Configuration>
+                     <tt:TrackType>Video</tt:TrackType>
+                     <tt:Description>Main video</tt:Description>
+                   </tt:Configuration>
                    <tt:DataFrom>2024-01-01T00:00:00Z</tt:DataFrom>
                    <tt:DataTo>2024-01-02T00:00:00Z</tt:DataTo>
-                 </trc:Track>
-               </trc:Tracks>
-             </trc:RecordingItems>
+                 </tt:Track>
+               </tt:Tracks>
+             </trc:RecordingItem>
            </trc:GetRecordingsResponse>
          </s:Body>
        </s:Envelope>"#;

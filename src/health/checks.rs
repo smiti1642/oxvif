@@ -68,6 +68,30 @@ pub(super) async fn services(s: &OnvifSession) -> Vec<CheckResult> {
     ]
 }
 
+/// Profile G presence: report each recording/search/replay service as Pass
+/// when advertised (via GetCapabilities or the GetServices fallback resolved
+/// during session build) or Skip when absent. Informational — the services
+/// are not exercised here. Feeds the Profile G verdict in `mod.rs::assess`,
+/// which keys off the `recording` / `search` / `replay` check ids.
+pub(super) async fn recording_services(s: &OnvifSession) -> Vec<CheckResult> {
+    let caps = s.capabilities();
+    [
+        ("recording", caps.recording.url.as_deref()),
+        ("search", caps.search.url.as_deref()),
+        ("replay", caps.replay.url.as_deref()),
+    ]
+    .into_iter()
+    .map(|(id, url)| match url {
+        Some(u) => CheckResult::pass(
+            id,
+            Category::Services,
+            format!("advertised: {u}  (not exercised)"),
+        ),
+        None => CheckResult::skip(id, Category::Services, "not advertised"),
+    })
+    .collect()
+}
+
 pub(super) async fn media(s: &OnvifSession) -> Vec<CheckResult> {
     let mut out = Vec::new();
 

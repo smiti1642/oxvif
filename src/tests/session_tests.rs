@@ -179,14 +179,14 @@ fn recordings_xml() -> &'static str {
                   xmlns:tt="http://www.onvif.org/ver10/schema">
       <s:Body>
         <trc:GetRecordingsResponse>
-          <trc:RecordingItems>
-            <trc:RecordingToken>rec1</trc:RecordingToken>
-            <trc:Configuration>
+          <trc:RecordingItem>
+            <tt:RecordingToken>rec1</tt:RecordingToken>
+            <tt:Configuration>
               <tt:Source><tt:Name>Camera 1</tt:Name></tt:Source>
               <tt:Content>Normal</tt:Content>
               <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
-            </trc:Configuration>
-          </trc:RecordingItems>
+            </tt:Configuration>
+          </trc:RecordingItem>
         </trc:GetRecordingsResponse>
       </s:Body>
     </s:Envelope>"#
@@ -418,6 +418,68 @@ async fn test_missing_replay_url_returns_error() {
         err,
         OnvifError::Soap(crate::soap::SoapError::MissingField(_))
     ));
+}
+
+fn svc(ns: &str, url: &str) -> crate::types::OnvifService {
+    crate::types::OnvifService {
+        namespace: ns.to_string(),
+        url: url.to_string(),
+        version_major: 2,
+        version_minor: 0,
+    }
+}
+
+#[test]
+fn fill_profile_g_urls_fills_missing_from_get_services() {
+    let services = vec![
+        svc(
+            "http://www.onvif.org/ver10/device/wsdl",
+            "http://cam/onvif/device",
+        ),
+        svc(
+            "http://www.onvif.org/ver10/recording/wsdl",
+            "http://cam/onvif/Recording",
+        ),
+        svc(
+            "http://www.onvif.org/ver10/search/wsdl",
+            "http://cam/onvif/SearchRecording",
+        ),
+        svc(
+            "http://www.onvif.org/ver10/replay/wsdl",
+            "http://cam/onvif/Replay",
+        ),
+    ];
+
+    let mut caps = Capabilities::default();
+    fill_profile_g_urls(&mut caps, &services);
+
+    assert_eq!(
+        caps.recording.url.as_deref(),
+        Some("http://cam/onvif/Recording")
+    );
+    assert_eq!(
+        caps.search.url.as_deref(),
+        Some("http://cam/onvif/SearchRecording")
+    );
+    assert_eq!(caps.replay.url.as_deref(), Some("http://cam/onvif/Replay"));
+}
+
+#[test]
+fn fill_profile_g_urls_does_not_override_existing() {
+    let services = vec![svc(
+        "http://www.onvif.org/ver10/recording/wsdl",
+        "http://cam/onvif/FromServices",
+    )];
+
+    let mut caps = Capabilities::default();
+    caps.recording.url = Some("http://cam/onvif/FromCapabilities".to_string());
+    fill_profile_g_urls(&mut caps, &services);
+
+    // The GetCapabilities URL wins; GetServices must not clobber it.
+    assert_eq!(
+        caps.recording.url.as_deref(),
+        Some("http://cam/onvif/FromCapabilities")
+    );
 }
 
 #[tokio::test]

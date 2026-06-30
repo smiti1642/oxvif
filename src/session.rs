@@ -130,9 +130,37 @@ impl OnvifSessionBuilder {
             client = client.with_utc_offset(dt.utc_offset_secs());
         }
 
-        let caps = client.get_capabilities().await?;
+        let mut caps = client.get_capabilities().await?;
+
+        // Some devices (GeoVision, ONVIF v25.x) advertise the Profile G
+        // services only via GetServices, not the legacy GetCapabilities
+        // Extension. Fall back to GetServices to fill any missing
+        // recording/search/replay URL so Profile G works on those cameras.
+        if caps.recording.url.is_none() || caps.search.url.is_none() || caps.replay.url.is_none() {
+            if let Ok(services) = client.get_services().await {
+                fill_profile_g_urls(&mut caps, &services);
+            }
+        }
 
         Ok(OnvifSession { client, caps })
+    }
+}
+
+/// Fill any missing Profile G service URL (recording / search / replay) in
+/// `caps` from a GetServices listing. Only fills `None` fields — never
+/// overrides a URL already discovered via GetCapabilities.
+fn fill_profile_g_urls(caps: &mut Capabilities, services: &[OnvifService]) {
+    for svc in services {
+        let ns = svc.namespace.as_str();
+        if caps.recording.url.is_none() && ns.contains("/recording/wsdl") {
+            caps.recording.url = Some(svc.url.clone());
+        }
+        if caps.search.url.is_none() && ns.contains("/search/wsdl") {
+            caps.search.url = Some(svc.url.clone());
+        }
+        if caps.replay.url.is_none() && ns.contains("/replay/wsdl") {
+            caps.replay.url = Some(svc.url.clone());
+        }
     }
 }
 
