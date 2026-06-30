@@ -20,6 +20,7 @@
 //! ```
 
 mod checks;
+mod coverage;
 mod report;
 
 pub use report::{
@@ -82,7 +83,15 @@ impl HealthCheck {
 
         // 1. Connectivity — build the session (one GetCapabilities round-trip).
         let conn_start = Instant::now();
-        let mut builder = OnvifSession::builder(&self.device_url);
+        // Wrap the HTTP transport in a coverage tap so the parse-coverage check
+        // can compare parsed item counts against the raw responses. Credentials
+        // go on the transport (HTTP Digest) AND the builder (WS-Security).
+        let mut http = crate::transport::HttpTransport::new();
+        if let Some((u, p)) = &self.credentials {
+            http = http.with_credentials(u.clone(), p.clone());
+        }
+        let tap = std::sync::Arc::new(coverage::CoverageTransport::new(std::sync::Arc::new(http)));
+        let mut builder = OnvifSession::builder(&self.device_url).with_transport(tap.clone());
         if let Some((u, p)) = &self.credentials {
             builder = builder.with_credentials(u.clone(), p.clone());
         }
@@ -128,6 +137,13 @@ impl HealthCheck {
         spawn_check!(checks::users);
         if self.write_checks {
             spawn_check!(checks::write_roundtrip);
+        }
+        // Parse-coverage runs over the same tap (re-calls list ops; each
+        // comparison uses its own call's raw, so it is race-free).
+        {
+            let s = session.clone();
+            let tap = tap.clone();
+            set.spawn(async move { coverage::coverage(&s, &tap).await });
         }
 
         while let Some(joined) = set.join_next().await {
@@ -223,6 +239,13 @@ mod tests {
         // The mock advertises Media/Imaging/PTZ/Events, so Profile S/T should
         // not come back Unsupported.
         assert_ne!(report.profiles.profile_s.0, ProfileVerdict::Unsupported);
+        // Parse-coverage must not false-positive on the compliant mock: the
+        // parser's item counts match the raw response item counts.
+        assert!(
+            !report.checks.iter().any(|c| c.category == Category::Coverage
+                && matches!(c.status, CheckStatus::Warn(_))),
+            "unexpected parse-coverage warning on the mock:\n{report}"
+        );
     }
 
     #[tokio::test]
