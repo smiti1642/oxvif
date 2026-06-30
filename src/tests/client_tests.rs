@@ -4699,6 +4699,76 @@ async fn test_get_imaging_options_missing_optional_ranges_are_none() {
     assert!(opts.backlight_compensation_modes.is_empty());
 }
 
+// ── Real-camera regression: Exposure20 Min*/Max* options form ─────────────────
+//
+// Scrubbed captures (bodies are PII-free; the device IP lived only in the
+// header, dropped here). Spec-compliant cameras report exposure bounds as
+// `Min{X}`/`Max{X}` pairs, NOT a single legacy `{X}` — oxvif previously read the
+// legacy name and returned `None` on these. Envelope = [Min{X}.Min, Max{X}.Max].
+
+#[tokio::test]
+async fn test_imaging_options_geovision_minmax_envelope() {
+    // GeoVision GV-GBLF4813 (ONVIF v25.6).
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <timg:GetOptionsResponse><timg:ImagingOptions>
+             <tt:Exposure>
+               <tt:Mode>AUTO</tt:Mode>
+               <tt:MinExposureTime><tt:Min>10</tt:Min><tt:Max>1000000</tt:Max></tt:MinExposureTime>
+               <tt:MaxExposureTime><tt:Min>10</tt:Min><tt:Max>1000000</tt:Max></tt:MaxExposureTime>
+               <tt:MinGain><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:MinGain>
+               <tt:MaxGain><tt:Min>0</tt:Min><tt:Max>100</tt:Max></tt:MaxGain>
+               <tt:MinIris><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:MinIris>
+               <tt:MaxIris><tt:Min>13</tt:Min><tt:Max>13</tt:Max></tt:MaxIris>
+             </tt:Exposure>
+           </timg:ImagingOptions></timg:GetOptionsResponse>
+         </s:Body></s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.0.2.10/onvif/device_service").with_transport(mock(xml));
+    let opts = client
+        .get_imaging_options("http://192.0.2.10/onvif/imaging_service", "VS_1")
+        .await
+        .unwrap();
+    let et = opts.exposure_time_range.expect("exposure_time_range");
+    assert_eq!((et.min, et.max), (10.0, 1_000_000.0));
+    let gain = opts.gain_range.expect("gain_range");
+    assert_eq!((gain.min, gain.max), (0.0, 100.0));
+    let iris = opts.iris_range.expect("iris_range");
+    assert_eq!((iris.min, iris.max), (0.0, 13.0));
+}
+
+#[tokio::test]
+async fn test_imaging_options_hikvision_no_iris() {
+    // Hikvision iDS-2CD7A26G0-IZHS: Min*/Max* exposure + gain, NO iris.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <timg:GetOptionsResponse><timg:ImagingOptions>
+             <tt:Exposure>
+               <tt:Mode>AUTO</tt:Mode>
+               <tt:MinExposureTime><tt:Min>10</tt:Min><tt:Max>10</tt:Max></tt:MinExposureTime>
+               <tt:MaxExposureTime><tt:Min>10</tt:Min><tt:Max>1000000</tt:Max></tt:MaxExposureTime>
+               <tt:MinGain><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:MinGain>
+               <tt:MaxGain><tt:Min>0</tt:Min><tt:Max>100</tt:Max></tt:MaxGain>
+             </tt:Exposure>
+           </timg:ImagingOptions></timg:GetOptionsResponse>
+         </s:Body></s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.0.2.11/onvif/device_service").with_transport(mock(xml));
+    let opts = client
+        .get_imaging_options("http://192.0.2.11/onvif/imaging_service", "VS_1")
+        .await
+        .unwrap();
+    let et = opts.exposure_time_range.expect("exposure_time_range");
+    assert_eq!((et.min, et.max), (10.0, 1_000_000.0));
+    assert_eq!(opts.gain_range.expect("gain_range").max, 100.0);
+    // No iris ranges at all (no Min*/Max* and no legacy) → None, correctly.
+    assert!(opts.iris_range.is_none());
+}
+
 // ── Direction-1: Profile G recording write operations ─────────────────────────
 
 #[tokio::test]

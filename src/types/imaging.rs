@@ -300,6 +300,35 @@ impl ImagingOptions {
             })
         };
 
+        // Exposure20 options report two FloatRange bounds per parameter:
+        // `Min{X}` (allowed range for the configured *minimum*) and `Max{X}`
+        // (for the *maximum*), each itself a `{Min,Max}` range. Collapse to a
+        // single envelope `[Min{X}.Min, Max{X}.Max]`. Some GeoVisions ALSO emit
+        // a legacy combined `{X}` element; the spec form wins, legacy is the
+        // fallback only. (Looking up the legacy `{X}` alone is wrong on
+        // spec-compliant cameras — they return the bounds under `Min{X}`/`Max{X}`
+        // and the field would silently be `None`.)
+        let parse_envelope_range = |parent: Option<&XmlNode>, base: &str| -> Option<FloatRange> {
+            let p = parent?;
+            let bound = |el: Option<&XmlNode>, tag: &str| {
+                el.and_then(|x| x.child(tag))
+                    .and_then(|m| m.text().parse::<f32>().ok())
+            };
+            let min_el = p.child(&format!("Min{base}"));
+            let max_el = p.child(&format!("Max{base}"));
+            if min_el.is_some() || max_el.is_some() {
+                return Some(FloatRange {
+                    min: bound(min_el, "Min").unwrap_or(0.0),
+                    max: bound(max_el, "Max").unwrap_or(0.0),
+                });
+            }
+            // Legacy combined `{X}` element fallback.
+            p.child(base).map(|n| FloatRange {
+                min: bound(Some(n), "Min").unwrap_or(0.0),
+                max: bound(Some(n), "Max").unwrap_or(0.0),
+            })
+        };
+
         let exposure = opts.child("Exposure");
         let focus = opts.child("Focus");
         let wdr = opts.child("WideDynamicRange");
@@ -329,9 +358,9 @@ impl ImagingOptions {
                         .collect()
                 })
                 .unwrap_or_default(),
-            exposure_time_range: parse_nested_range(exposure, "ExposureTime"),
-            gain_range: parse_nested_range(exposure, "Gain"),
-            iris_range: parse_nested_range(exposure, "Iris"),
+            exposure_time_range: parse_envelope_range(exposure, "ExposureTime"),
+            gain_range: parse_envelope_range(exposure, "Gain"),
+            iris_range: parse_envelope_range(exposure, "Iris"),
             focus_af_modes: focus
                 .map(|f| {
                     f.children_named("AutoFocusModes")
