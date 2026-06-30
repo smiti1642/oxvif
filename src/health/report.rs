@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Which area of the device a check exercises. Also drives report grouping order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum Category {
     Connectivity,
     Time,

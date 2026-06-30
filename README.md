@@ -84,7 +84,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.9.8", features = ["mock"] }
+oxvif = { version = "0.10", features = ["mock"] }
 ```
 
 ```rust
@@ -813,7 +813,7 @@ alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 ```toml
-oxvif = { version = "0.9.8", features = ["health"] }
+oxvif = { version = "0.10", features = ["health"] }
 ```
 
 ```rust
@@ -894,8 +894,8 @@ implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.9.8", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.9.8", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.10", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.10", features = ["mock-server"] }  # adds MockServer
 ```
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):

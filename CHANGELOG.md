@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [0.10.0] - 2026-06-30
 
 Headline: **real-camera correctness for Profile G and imaging.** Parsers and
 service discovery had only ever been validated against hand-written mocks;
@@ -67,8 +67,11 @@ regression tests, plus a new parse-coverage health dimension and a
   shapes can't silently regress.
 
 ### Compatibility
-- `health::Category` gained a `Coverage` variant; downstream code that matches
-  it exhaustively will need a new arm.
+- **Breaking:** `health::Category` gained a `Coverage` variant and is now
+  `#[non_exhaustive]` — external code matching it must add a `_` arm. (The
+  `#[non_exhaustive]` marker means future `Category` additions will be
+  backwards-compatible.) `CheckStatus` and `ProfileVerdict` are unchanged and
+  remain exhaustively matchable.
 
 ---
 
