@@ -242,8 +242,11 @@ mod tests {
         // Parse-coverage must not false-positive on the compliant mock: the
         // parser's item counts match the raw response item counts.
         assert!(
-            !report.checks.iter().any(|c| c.category == Category::Coverage
-                && matches!(c.status, CheckStatus::Warn(_))),
+            !report
+                .checks
+                .iter()
+                .any(|c| c.category == Category::Coverage
+                    && matches!(c.status, CheckStatus::Warn(_))),
             "unexpected parse-coverage warning on the mock:\n{report}"
         );
     }

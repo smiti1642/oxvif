@@ -2911,12 +2911,7 @@ async fn test_search_results_geovision_resultlist_queued() {
         OnvifClient::new("http://192.0.2.10/onvif/device_service").with_transport(mock(xml));
 
     let results = client
-        .get_recording_search_results(
-            "http://192.0.2.10/onvif/SearchRecording",
-            "t",
-            50,
-            "PT5S",
-        )
+        .get_recording_search_results("http://192.0.2.10/onvif/SearchRecording", "t", 50, "PT5S")
         .await
         .unwrap();
 
