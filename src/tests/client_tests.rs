@@ -2873,11 +2873,11 @@ fn get_recordings_geovision_xml() -> &'static str {
 
 #[tokio::test]
 async fn test_get_recordings_geovision_real() {
-    let client = OnvifClient::new("http://192.168.4.231/onvif/device_service")
+    let client = OnvifClient::new("http://192.0.2.10/onvif/device_service")
         .with_transport(mock(get_recordings_geovision_xml()));
 
     let recs = client
-        .get_recordings("http://192.168.4.231/onvif/Recording")
+        .get_recordings("http://192.0.2.10/onvif/Recording")
         .await
         .unwrap();
 
@@ -2908,11 +2908,11 @@ async fn test_search_results_geovision_resultlist_queued() {
           </s:Body>
         </s:Envelope>"#;
     let client =
-        OnvifClient::new("http://192.168.4.231/onvif/device_service").with_transport(mock(xml));
+        OnvifClient::new("http://192.0.2.10/onvif/device_service").with_transport(mock(xml));
 
     let results = client
         .get_recording_search_results(
-            "http://192.168.4.231/onvif/SearchRecording",
+            "http://192.0.2.10/onvif/SearchRecording",
             "t",
             50,
             "PT5S",
