@@ -20,3 +20,12 @@ legacy/
 .claude/
 .DS_Store
 Cargo.lock
+
+# Local conformance/robustness testing — credentials + captures, never commit.
+# (examples/conformance.rs IS committed; the device list and raw dumps are not.)
+.cameras
+conformance_out/
+robustness_out/
+examples/robustness.rs
+examples/discover_probe.rs
+examples/dump_profileg.rs
