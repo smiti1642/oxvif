@@ -119,6 +119,7 @@ impl HealthCheck {
         spawn_check!(checks::device_info);
         spawn_check!(checks::time);
         spawn_check!(checks::services);
+        spawn_check!(checks::recording_services);
         spawn_check!(checks::media);
         spawn_check!(checks::imaging);
         spawn_check!(checks::ptz);
@@ -199,7 +200,8 @@ fn assess(checks: &[CheckResult]) -> ProfileAssessment {
                 "get_event_properties",
             ],
         ),
-        // Profile G (recording/search/replay) is not exercised by these checks.
+        // Profile G presence (recording/search/replay) — advertised, not
+        // exercised; see `checks::recording_services`.
         profile_g: verdict(checks, &["recording", "search", "replay"]),
     }
 }
