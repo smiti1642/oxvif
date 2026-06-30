@@ -5,6 +5,73 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+Headline: **real-camera correctness for Profile G and imaging.** Parsers and
+service discovery had only ever been validated against hand-written mocks;
+testing oxvif against a fleet of real cameras (3 vendors, incl. Hikvision and
+Hanwha) surfaced several silent-parse bugs where a compliant device's data was
+dropped with no error. All are fixed, with the real captures committed as
+regression tests, plus a new parse-coverage health dimension and a
+`conformance` example to keep the bug class from recurring.
+
+### Fixed
+- **Profile G `GetRecordings` parsed real cameras as empty.** The parser looked
+  for a plural `RecordingItems` container, read the track token from a `@token`
+  attribute, and read `TrackType`/`Description` as direct children of the track
+  — but the ONVIF schema (and real GeoVision / Hanwha cameras) use a singular
+  `RecordingItem`, a `TrackToken` child element, and `TrackType`/`Description`
+  under the track's `Configuration`. `get_recordings` now returns the recordings
+  and their video/audio/metadata tracks.
+- **Profile G `GetRecordingSearchResults` never completed.** `SearchState` and
+  `RecordingInformation` were read as direct children of the response, but the
+  schema wraps them in `ResultList`; the state parsed as `"Unknown"`, so the
+  search-poll loop spun out and returned nothing. Now read from `ResultList`,
+  with a fallback for devices that omit the wrapper.
+- **Imaging `GetOptions` exposure/gain/iris ranges parsed to `None`** on
+  spec-compliant cameras. The Exposure20 *options* form reports
+  `MinExposureTime`/`MaxExposureTime`, `MinGain`/`MaxGain`, `MinIris`/`MaxIris`
+  (each a `{Min,Max}` range); the parser only looked for the legacy single
+  `ExposureTime`/`Gain`/`Iris` element. `ImagingOptions.{exposure_time, gain,
+  iris}_range` now collapse to the spec envelope `[Min{X}.Min, Max{X}.Max]`,
+  keeping the legacy element as a fallback (confirmed across 8 cameras /
+  2 vendors incl. Hikvision).
+
+### Changed
+- **Profile G service discovery falls back to `GetServices`.** Some cameras
+  (GeoVision, ONVIF v25.x) advertise the recording / search / replay services
+  only via `GetServices`, not the legacy `GetCapabilities` extension.
+  `OnvifSession::build` now fills any missing recording / search / replay URL
+  from `GetServices`, so `get_recordings` / `search_recordings` /
+  `get_replay_uri` work on those devices (they previously failed with a
+  `MissingField` error). The health check's Profile G verdict reflects this too.
+
+### Added
+- **Parse-coverage health dimension (`health` feature).** `HealthCheck` now
+  compares the parsed item count against the number of item elements actually
+  present in the raw response for a curated set of list operations (profiles,
+  video encoders, users, network interfaces, PTZ nodes), emitting a warning
+  under the new `Category::Coverage` when the parser silently dropped items.
+  This catches the *list-emptying* bug class; it does **not** catch scalar
+  *field-defaulting* (an optional value parsed to `None`) — committed fixtures
+  and the `conformance` example guard that.
+- **`recording_services` health check.** Reports recording / search / replay as
+  advertised (Pass) or absent (Skip), so the Profile G verdict reflects real
+  service availability instead of always reading `Unsupported`.
+- **`conformance` example (`--features mock`).** The mirror of `mock_server`
+  (which *simulates* a device): `conformance` points oxvif at a list of real
+  devices, dumps each raw SOAP response, and prints a parsed summary so
+  silent-parse mismatches stand out for review.
+- **Real-camera regression tests.** Scrubbed captures (GeoVision GV-GBLF4813,
+  Hikvision iDS-2CD7A26) added to the recording and imaging tests so the fixed
+  shapes can't silently regress.
+
+### Compatibility
+- `health::Category` gained a `Coverage` variant; downstream code that matches
+  it exhaustively will need a new arm.
+
+---
+
 ## [0.9.9] - 2026-06-11
 
 Headline: **digital input read API** — `GetDigitalInputs` returns each

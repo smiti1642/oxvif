@@ -11,6 +11,12 @@ oxvif covers the recording-search session (find → poll → end). Unimplemented
 attributes and the **event / PTZ-position / metadata** search sessions (ROADMAP medium-term:
 `FindEvents` + `GetEventSearchResults`, `FindPTZPosition` + `GetPTZPositionSearchResults`).
 
+> **Real-camera shape (verified GeoVision).** `GetRecordingSearchResultsResponse`
+> wraps `SearchState` and the `RecordingInformation` entries in a **`ResultList`**
+> element — they are not direct children of the response. A parser that reads
+> them directly sees `SearchState = "Unknown"` and never terminates the poll
+> loop. oxvif reads from `ResultList` (with a fallback for devices that omit it).
+
 ---
 
 ## Operations

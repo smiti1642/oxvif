@@ -12,6 +12,14 @@ Unimplemented: the **configuration getters/setters** (recording/track/job), **op
 **export** family (ROADMAP medium-term: `SetRecordingConfiguration`, `SetTrackConfiguration`,
 `GetRecordingOptions`).
 
+> **Real-camera shape (verified GeoVision / Hanwha).** `GetRecordingsResponse`
+> contains repeated **`RecordingItem`** (singular — not `RecordingItems`); each
+> track carries a `TrackToken` **child element** (not a `@token` attribute) and
+> its `TrackType`/`Description` live under the track's `Configuration`. The
+> recording / search / replay service URLs are advertised by some cameras only
+> via `GetServices`, not the `GetCapabilities` extension; `OnvifSession` falls
+> back to `GetServices` so these work regardless.
+
 ---
 
 ## Operations

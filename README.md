@@ -26,8 +26,8 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport, plus a built-in mock ONVIF device (`mock` / `mock-server` features) — unit-test client code without a real camera
 - No unsafe code; pure Rust XML parsing via `quick-xml`
-- Optional, scriptable device health check (`health` feature)
-- 386 unit tests + 23 doc tests (515 with `--all-features`, incl. the in-process mock device and the health checks)
+- Optional, scriptable device health check with parse-coverage detection (`health` feature), plus a `conformance` example that validates the parsers against real cameras
+- Hundreds of unit + doc tests, including the in-process mock device, the health checks, and scrubbed real-camera regression captures
 
 ---
 
@@ -268,6 +268,12 @@ let media2_url = caps.media2_url.clone().or_else(|| {
         .map(|s| s.url)
 });
 ```
+
+> **`OnvifSession` does this for you for Profile G.** Some cameras advertise the
+> recording / search / replay services only via `GetServices`, not the
+> `GetCapabilities` extension. `OnvifSession::build` fills any missing one from
+> `GetServices` automatically, so `get_recordings` / `search_recordings` /
+> `get_replay_uri` work on those devices without a manual fallback.
 
 ### `get_system_date_and_time() -> Result<SystemDateTime, OnvifError>`
 
@@ -827,6 +833,21 @@ individual `CheckResult`s (`status`, `category`, timing) and a
 printing. See `examples/healthcheck.rs` (`cargo run --example healthcheck
 --features health`).
 
+**Parse coverage.** The report also includes a `Category::Coverage` dimension:
+for a curated set of list operations it compares how many items the parser
+returned against how many item elements the device actually sent, and warns when
+the parser silently dropped data (the bug class where a wrong element name yields
+an empty result with no error). It catches *list-emptying*; it does not catch
+scalar *field-defaulting* — for that, validate against real hardware with the
+**`conformance`** example (the mirror of `mock_server`):
+
+```sh
+cargo run --example conformance --features mock -- devices.txt
+```
+
+It points oxvif at a list of real cameras, dumps each raw SOAP response, and
+prints a parsed summary so silent-parse mismatches stand out for review.
+
 ---
 
 ## Error handling
@@ -1124,6 +1145,15 @@ cargo run --example mock_server --features mock-server -- 19090
 cargo test --features mock-server
 ```
 
+### Conformance check (real devices)
+
+```sh
+# Validate the parsers against a list of real cameras; flags silent-parse gaps.
+# The device-list file (pipe-delimited: name | url | user | pass) holds
+# credentials — keep it out of version control.
+cargo run --example conformance --features mock -- devices.txt
+```
+
 ---
 
 ## Project structure
@@ -1191,6 +1221,7 @@ examples/
 │   └── main.rs          Entry point (--features mock-server)
 ├── healthcheck.rs       Scriptable health/conformance check + --json + --baseline (--features health)
 ├── record_fixtures.rs   Capture every SOAP exchange against a live device for replay (--features mock,health)
+├── conformance.rs       Validate the parsers against a fleet of real cameras; flags silent-parse gaps (--features mock)
 ├── probe_unicast.rs     One-shot unicast WS-Discovery probe to a specific host
 ├── odm_compat.rs        ODM compatibility integration test
 └── write_workflow.rs    Write-operation workflow with embedded mock server

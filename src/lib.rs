@@ -166,6 +166,16 @@
 //! # }
 //! ```
 //!
+//! ## Health & conformance checks
+//!
+//! Enable the **`health`** feature for [`health::HealthCheck`] — a fast,
+//! read-only conformance check that reports Pass/Warn/Fail/Skip per ONVIF
+//! service plus a Profile S/T/G verdict. It includes a **parse-coverage**
+//! dimension that flags when a parser silently drops list data (a wrong element
+//! name returning an empty result with no error). To validate the parsers
+//! against real hardware, the `conformance` example dumps each device's raw
+//! responses next to the parsed summary so silent-parse gaps stand out.
+//!
 //! [ONVIF]: https://www.onvif.org
 
 pub mod client;
