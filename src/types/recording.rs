@@ -70,14 +70,16 @@ pub struct RecordingItem {
 
 impl RecordingItem {
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
-        resp.children_named("RecordingItems")
+        // Per spec (recording.wsdl): GetRecordingsResponse contains repeated
+        // `RecordingItem` (singular) of type GetRecordingsResponseItem.
+        resp.children_named("RecordingItem")
             .map(|item| {
-                // Per spec: RecordingToken is a child element, not an attribute.
+                // RecordingToken is a child element, not an attribute.
                 let token = item
                     .child("RecordingToken")
                     .map(|n| n.text().to_string())
                     .filter(|t| !t.is_empty())
-                    .ok_or_else(|| SoapError::missing("RecordingItems/RecordingToken"))?;
+                    .ok_or_else(|| SoapError::missing("RecordingItem/RecordingToken"))?;
 
                 let source = item
                     .path(&["Configuration", "Source"])
@@ -89,6 +91,9 @@ impl RecordingItem {
                     .map(|n| n.text().to_string())
                     .unwrap_or_default();
 
+                // Tracks/Track*; per GetTracksResponseItem the token is a
+                // `TrackToken` child element and TrackType/Description live
+                // inside the track's `Configuration`.
                 let tracks: Vec<RecordingTrack> = item
                     .child("Tracks")
                     .map(|tracks_node| -> Result<Vec<RecordingTrack>, OnvifError> {
@@ -96,14 +101,20 @@ impl RecordingItem {
                             .children_named("Track")
                             .map(|t| {
                                 let token = t
-                                    .attr("token")
+                                    .child("TrackToken")
+                                    .map(|n| n.text().to_string())
                                     .filter(|s| !s.is_empty())
-                                    .ok_or_else(|| SoapError::missing("Track/@token"))?
-                                    .to_string();
+                                    .ok_or_else(|| SoapError::missing("Track/TrackToken"))?;
                                 Ok(RecordingTrack {
                                     token,
-                                    track_type: xml_str(t, "TrackType").unwrap_or_default(),
-                                    description: xml_str(t, "Description").unwrap_or_default(),
+                                    track_type: t
+                                        .path(&["Configuration", "TrackType"])
+                                        .map(|n| n.text().to_string())
+                                        .unwrap_or_default(),
+                                    description: t
+                                        .path(&["Configuration", "Description"])
+                                        .map(|n| n.text().to_string())
+                                        .unwrap_or_default(),
                                     data_from: t.child("DataFrom").map(|n| n.text().to_string()),
                                     data_to: t.child("DataTo").map(|n| n.text().to_string()),
                                 })
@@ -177,12 +188,16 @@ pub struct FindRecordingResults {
 
 impl FindRecordingResults {
     pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
+        // Per spec (search.wsdl): GetRecordingSearchResultsResponse wraps the
+        // state and results in a `ResultList` (tt:FindRecordingResultList).
+        // Fall back to the response node for devices that omit the wrapper.
+        let list = resp.child("ResultList").unwrap_or(resp);
         Ok(Self {
-            search_state: resp
+            search_state: list
                 .child("SearchState")
                 .map(|n| n.text().to_string())
                 .unwrap_or_else(|| "Unknown".to_string()),
-            recording_information: resp
+            recording_information: list
                 .children_named("RecordingInformation")
                 .map(RecordingInformation::from_xml)
                 .collect(),

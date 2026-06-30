@@ -6,9 +6,9 @@ pub fn resp_recordings() -> String {
     soap(
         r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
         r#"<trc:GetRecordingsResponse>
-          <trc:RecordingItems>
-            <trc:RecordingToken>Rec_001</trc:RecordingToken>
-            <trc:Configuration>
+          <trc:RecordingItem>
+            <tt:RecordingToken>Rec_001</tt:RecordingToken>
+            <tt:Configuration>
               <tt:Source>
                 <tt:SourceId>rtsp://mock/live</tt:SourceId>
                 <tt:Name>MockCamera</tt:Name>
@@ -17,18 +17,27 @@ pub fn resp_recordings() -> String {
               </tt:Source>
               <tt:Content>Normal</tt:Content>
               <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
-            </trc:Configuration>
-          </trc:RecordingItems>
-          <trc:RecordingItems>
-            <trc:RecordingToken>Rec_002</trc:RecordingToken>
-            <trc:Configuration>
+            </tt:Configuration>
+            <tt:Tracks>
+              <tt:Track>
+                <tt:TrackToken>VIDEO001</tt:TrackToken>
+                <tt:Configuration>
+                  <tt:TrackType>Video</tt:TrackType>
+                  <tt:Description>videoTrack</tt:Description>
+                </tt:Configuration>
+              </tt:Track>
+            </tt:Tracks>
+          </trc:RecordingItem>
+          <trc:RecordingItem>
+            <tt:RecordingToken>Rec_002</tt:RecordingToken>
+            <tt:Configuration>
               <tt:Source>
                 <tt:Name>MockCamera</tt:Name>
               </tt:Source>
               <tt:Content></tt:Content>
               <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
-            </trc:Configuration>
-          </trc:RecordingItems>
+            </tt:Configuration>
+          </trc:RecordingItem>
         </trc:GetRecordingsResponse>"#,
     )
 }
@@ -108,17 +117,19 @@ pub fn resp_recording_search_results() -> String {
     soap(
         r#"xmlns:tse="http://www.onvif.org/ver10/search/wsdl""#,
         r#"<tse:GetRecordingSearchResultsResponse>
-          <tse:SearchState>Completed</tse:SearchState>
-          <tse:RecordingInformation>
-            <tt:RecordingToken>Rec_001</tt:RecordingToken>
-            <tt:Source>
-              <tt:Name>MockCamera</tt:Name>
-            </tt:Source>
-            <tt:EarliestRecording>2026-01-01T00:00:00Z</tt:EarliestRecording>
-            <tt:LatestRecording>2026-04-01T00:00:00Z</tt:LatestRecording>
-            <tt:Content>Motion event</tt:Content>
-            <tt:RecordingStatus>Stopped</tt:RecordingStatus>
-          </tse:RecordingInformation>
+          <tse:ResultList>
+            <tt:SearchState>Completed</tt:SearchState>
+            <tt:RecordingInformation>
+              <tt:RecordingToken>Rec_001</tt:RecordingToken>
+              <tt:Source>
+                <tt:Name>MockCamera</tt:Name>
+              </tt:Source>
+              <tt:EarliestRecording>2026-01-01T00:00:00Z</tt:EarliestRecording>
+              <tt:LatestRecording>2026-04-01T00:00:00Z</tt:LatestRecording>
+              <tt:Content>Motion event</tt:Content>
+              <tt:RecordingStatus>Stopped</tt:RecordingStatus>
+            </tt:RecordingInformation>
+          </tse:ResultList>
         </tse:GetRecordingSearchResultsResponse>"#,
     )
 }

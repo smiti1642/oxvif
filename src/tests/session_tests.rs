@@ -179,14 +179,14 @@ fn recordings_xml() -> &'static str {
                   xmlns:tt="http://www.onvif.org/ver10/schema">
       <s:Body>
         <trc:GetRecordingsResponse>
-          <trc:RecordingItems>
-            <trc:RecordingToken>rec1</trc:RecordingToken>
-            <trc:Configuration>
+          <trc:RecordingItem>
+            <tt:RecordingToken>rec1</tt:RecordingToken>
+            <tt:Configuration>
               <tt:Source><tt:Name>Camera 1</tt:Name></tt:Source>
               <tt:Content>Normal</tt:Content>
               <tt:MaximumRetentionTime>PT0S</tt:MaximumRetentionTime>
-            </trc:Configuration>
-          </trc:RecordingItems>
+            </tt:Configuration>
+          </trc:RecordingItem>
         </trc:GetRecordingsResponse>
       </s:Body>
     </s:Envelope>"#
