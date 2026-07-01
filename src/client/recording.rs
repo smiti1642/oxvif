@@ -259,8 +259,14 @@ impl OnvifClient {
             .map(|m| format!("<tse:MaxMatches>{m}</tse:MaxMatches>"))
             .unwrap_or_default();
         let keep_alive_timeout = xml_escape(keep_alive_timeout);
+        // `Scope` (type tt:SearchScope) is a *required* first child per the
+        // search WSDL sequence (Scope → MaxMatches? → KeepAliveTime). An empty
+        // element means "all sources/recordings" — SearchScope's own children
+        // are all optional. Strict devices (e.g. Hanwha) reject the body with an
+        // "occurrence constraint violation" fault if Scope is omitted.
         let body = format!(
             "<tse:FindRecordings>\
+               <tse:Scope></tse:Scope>\
                {max_el}\
                <tse:KeepAliveTime>{keep_alive_timeout}</tse:KeepAliveTime>\
              </tse:FindRecordings>"
