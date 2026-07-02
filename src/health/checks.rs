@@ -18,8 +18,20 @@ where
     let elapsed = start.elapsed();
     match r {
         Ok(detail) => CheckResult::pass(id, category, detail).with_elapsed(elapsed),
-        Err(e) => CheckResult::fail(id, category, e.to_string()).with_elapsed(elapsed),
+        Err(e) => CheckResult::fail_from(id, category, &e).with_elapsed(elapsed),
     }
+}
+
+/// Parse the numeric skew back out of a `system_date_time` check's `detail`
+/// (`"skew -20s"`). Colocated with the formatter in [`time`] so the two move
+/// together; returns `None` if the check failed (empty detail) or the format
+/// ever changes.
+pub(super) fn parse_skew(detail: &str) -> Option<i64> {
+    detail
+        .strip_prefix("skew ")?
+        .strip_suffix('s')?
+        .parse()
+        .ok()
 }
 
 pub(super) async fn device_info(s: &OnvifSession) -> Vec<CheckResult> {
@@ -53,7 +65,7 @@ pub(super) async fn time(s: &OnvifSession) -> Vec<CheckResult> {
                 CheckResult::pass("system_date_time", Category::Time, format!("skew {skew}s"))
             }
         }
-        Err(e) => CheckResult::fail("system_date_time", Category::Time, e.to_string()),
+        Err(e) => CheckResult::fail_from("system_date_time", Category::Time, &e),
     };
     vec![res.with_elapsed(elapsed)]
 }
@@ -124,8 +136,7 @@ pub(super) async fn media(s: &OnvifSession) -> Vec<CheckResult> {
         }
         Err(e) => {
             out.push(
-                CheckResult::fail("get_profiles", Category::Media, e.to_string())
-                    .with_elapsed(elapsed),
+                CheckResult::fail_from("get_profiles", Category::Media, e).with_elapsed(elapsed),
             );
             None
         }
@@ -144,7 +155,7 @@ pub(super) async fn media(s: &OnvifSession) -> Vec<CheckResult> {
                     .with_elapsed(start.elapsed()),
             ),
             Err(e) => out.push(
-                CheckResult::fail("get_stream_uri", Category::Media, e.to_string())
+                CheckResult::fail_from("get_stream_uri", Category::Media, &e)
                     .with_elapsed(start.elapsed()),
             ),
         }
@@ -165,7 +176,7 @@ pub(super) async fn media(s: &OnvifSession) -> Vec<CheckResult> {
                 .with_elapsed(start.elapsed()),
             ),
             Err(e) => out.push(
-                CheckResult::fail("get_snapshot_uri", Category::Media, e.to_string())
+                CheckResult::fail_from("get_snapshot_uri", Category::Media, &e)
                     .with_elapsed(start.elapsed()),
             ),
         }
@@ -205,7 +216,7 @@ pub(super) async fn imaging(s: &OnvifSession) -> Vec<CheckResult> {
         }
         Err(e) => {
             return vec![
-                CheckResult::fail("get_video_sources", Category::Imaging, e.to_string())
+                CheckResult::fail_from("get_video_sources", Category::Imaging, &e)
                     .with_elapsed(start.elapsed()),
             ];
         }
@@ -268,7 +279,7 @@ pub(super) async fn events(s: &OnvifSession) -> Vec<CheckResult> {
             );
         }
         Err(e) => out.push(
-            CheckResult::fail("pull_point_subscription", Category::Events, e.to_string())
+            CheckResult::fail_from("pull_point_subscription", Category::Events, &e)
                 .with_elapsed(start.elapsed()),
         ),
     }
@@ -330,6 +341,7 @@ pub(super) async fn write_roundtrip(s: &OnvifSession) -> Vec<CheckResult> {
                     Category::Write,
                     format!("read failed: {e}"),
                 )
+                .with_error(&e)
                 .with_elapsed(start.elapsed()),
             ];
         }
@@ -340,11 +352,7 @@ pub(super) async fn write_roundtrip(s: &OnvifSession) -> Vec<CheckResult> {
             Category::Write,
             "Set accepted (unchanged values)",
         ),
-        Err(e) => CheckResult::fail(
-            "set_video_encoder_roundtrip",
-            Category::Write,
-            e.to_string(),
-        ),
+        Err(e) => CheckResult::fail_from("set_video_encoder_roundtrip", Category::Write, &e),
     };
     vec![res.with_elapsed(start.elapsed())]
 }

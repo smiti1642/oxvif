@@ -27,8 +27,18 @@ pub enum SoapError {
     UnexpectedResponse(String),
 
     /// The device returned a `<s:Fault>` with a structured code and reason.
+    ///
+    /// `subcode` is the ONVIF-specific `Code/Subcode/Value` (e.g.
+    /// `ter:NotAuthorized`) when the device includes it — the stable key for
+    /// grouping the same fault across brands whose `reason` text differs.
+    /// `detail` is the verbatim `<Detail>` text when present.
     #[error("SOAP fault [{code}]: {reason}")]
-    Fault { code: String, reason: String },
+    Fault {
+        code: String,
+        reason: String,
+        subcode: Option<String>,
+        detail: Option<String>,
+    },
 
     /// A field was present but its value could not be interpreted.
     #[error("Invalid value '{value}' for field '{field}'")]

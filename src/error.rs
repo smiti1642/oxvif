@@ -69,6 +69,8 @@ mod tests {
         let err: OnvifError = SoapError::Fault {
             code: "s:Sender".into(),
             reason: "Not Authorized".into(),
+            subcode: None,
+            detail: None,
         }
         .into();
         let msg = err.to_string();

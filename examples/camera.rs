@@ -2283,7 +2283,7 @@ async fn error_handling_example(cfg: &Config) -> Result<(), OnvifError> {
                 eprintln!("Body: {body}");
             }
         }
-        Err(Err_::Soap(SoapError::Fault { code, reason })) => {
+        Err(Err_::Soap(SoapError::Fault { code, reason, .. })) => {
             eprintln!("SOAP Fault [{code}]: {reason}");
             eprintln!("Tip: verify username / password.");
         }

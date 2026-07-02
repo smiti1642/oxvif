@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.11.0] - 2026-07-02
+
+Headline: **structured error facts on the health report**, so a cross-brand
+conformance corpus can group the same fault across vendors (by ONVIF subcode)
+instead of re-parsing free-text reasons — and separate genuine device faults
+from client-side preconditions.
+
+### Added
+- `health::CheckError` + `health::ErrorClass` — structured facts attached to a
+  failing `CheckResult` via a new `error` field: `class`
+  (`soap_fault` / `precondition` / `parse` / `http` / `invalid_argument`),
+  `fault_code`, ONVIF `subcode` (e.g. `ter:NotAuthorized`), `reason`, and
+  verbatim `detail`.
+- `HealthReport::clock_skew_s` — the numeric device-vs-local clock skew
+  (previously only formatted into the `system_date_time` check string).
+- `HealthReport::declared_profiles` — the ONVIF profiles the device
+  self-declares via its scopes (canonical letters, e.g. `["S", "T", "G"]`),
+  read best-effort from `GetScopes`. Independent of the *assessed* `profiles`
+  verdicts, so consumers can flag "declares Profile G but replay/search fail".
+- SOAP fault parsing now extracts `Code/Subcode/Value` and `Detail`, which were
+  previously discarded.
+
+### Changed
+- **Breaking (source):** `SoapError::Fault` gained `subcode: Option<String>`
+  and `detail: Option<String>` fields. Its `Display` string is unchanged;
+  exhaustive matches on the variant must add `..`.
+
 ## [0.10.0] - 2026-06-30
 
 Headline: **real-camera correctness for Profile G and imaging.** Parsers and
