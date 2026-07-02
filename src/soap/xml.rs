@@ -288,11 +288,38 @@ pub fn find_response<'a>(body: &'a XmlNode, expected_tag: &str) -> Result<&'a Xm
             .map(|n| n.text().to_string())
             .unwrap_or_default();
 
-        return Err(SoapError::Fault { code, reason });
+        // SOAP 1.2 `Code/Subcode/Value` (ONVIF's `ter:*` code) — the stable
+        // cross-brand key. Absent in SOAP 1.1 faults.
+        let subcode = fault
+            .path(&["Code", "Subcode", "Value"])
+            .map(|n| n.text().to_string())
+            .filter(|s| !s.is_empty());
+
+        let detail = fault.child("Detail").and_then(detail_text);
+
+        return Err(SoapError::Fault {
+            code,
+            reason,
+            subcode,
+            detail,
+        });
     }
 
     body.child(expected_tag)
         .ok_or_else(|| SoapError::UnexpectedResponse(expected_tag.to_string()))
+}
+
+/// Extract human-readable text from a SOAP `<Detail>` node: its own text, else
+/// a nested `<Text>` child, else the first child's text. `None` if all empty.
+fn detail_text(d: &XmlNode) -> Option<String> {
+    let own = d.text();
+    if !own.is_empty() {
+        return Some(own.to_string());
+    }
+    d.child("Text")
+        .or_else(|| d.children.first())
+        .map(|n| n.text().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -459,9 +486,46 @@ mod tests {
         let err = find_response(&body, "GetCapabilitiesResponse").unwrap_err();
         assert!(matches!(
             err,
-            SoapError::Fault { ref code, ref reason }
+            SoapError::Fault { ref code, ref reason, .. }
             if code == "s:Sender" && reason == "Sender not Authorized"
         ));
+    }
+
+    #[test]
+    fn test_find_response_fault_subcode_and_detail() {
+        let xml = r#"
+            <s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+              <s:Body>
+                <s:Fault>
+                  <s:Code>
+                    <s:Value>s:Sender</s:Value>
+                    <s:Subcode><s:Value>ter:NotAuthorized</s:Value></s:Subcode>
+                  </s:Code>
+                  <s:Reason><s:Text xml:lang="en">Sender not Authorized</s:Text></s:Reason>
+                  <s:Detail><ter:Text>The action requires authentication</ter:Text></s:Detail>
+                </s:Fault>
+              </s:Body>
+            </s:Envelope>"#;
+
+        let body = parse_soap_body(xml).unwrap();
+        let err = find_response(&body, "AnyResponse").unwrap_err();
+        match err {
+            SoapError::Fault {
+                code,
+                reason,
+                subcode,
+                detail,
+            } => {
+                assert_eq!(code, "s:Sender");
+                assert_eq!(reason, "Sender not Authorized");
+                assert_eq!(subcode.as_deref(), Some("ter:NotAuthorized"));
+                assert_eq!(
+                    detail.as_deref(),
+                    Some("The action requires authentication")
+                );
+            }
+            other => panic!("expected Fault, got {other:?}"),
+        }
     }
 
     #[test]
@@ -480,7 +544,7 @@ mod tests {
         let err = find_response(&body, "SomeResponse").unwrap_err();
         assert!(matches!(
             err,
-            SoapError::Fault { ref code, ref reason }
+            SoapError::Fault { ref code, ref reason, .. }
             if code == "s:Client" && reason == "Access Denied"
         ));
     }

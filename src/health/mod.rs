@@ -24,8 +24,8 @@ mod coverage;
 mod report;
 
 pub use report::{
-    Category, CheckResult, CheckStatus, HealthReport, ProfileAssessment, ProfileVerdict,
-    ReportDiff, SlowedCheck,
+    Category, CheckError, CheckResult, CheckStatus, ErrorClass, HealthReport, ProfileAssessment,
+    ProfileVerdict, ReportDiff, SlowedCheck,
 };
 
 use std::time::Instant;
@@ -109,6 +109,7 @@ impl HealthCheck {
                     total_elapsed: started.elapsed(),
                     profiles: assess(std::slice::from_ref(&conn)),
                     checks: vec![conn],
+                    clock_skew_s: None,
                 };
             }
         };
@@ -161,11 +162,16 @@ impl HealthCheck {
         checks.sort_by(|a, b| a.category.cmp(&b.category).then_with(|| a.id.cmp(&b.id)));
 
         let profiles = assess(&checks);
+        let clock_skew_s = checks
+            .iter()
+            .find(|c| c.id == "system_date_time")
+            .and_then(|c| checks::parse_skew(&c.detail));
         HealthReport {
             target: self.device_url,
             total_elapsed: started.elapsed(),
             checks,
             profiles,
+            clock_skew_s,
         }
     }
 }

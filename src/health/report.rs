@@ -5,6 +5,9 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::OnvifError;
+use crate::soap::SoapError;
+
 /// Which area of the device a check exercises. Also drives report grouping order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -67,6 +70,100 @@ impl CheckStatus {
     }
 }
 
+/// Machine-readable classification of a failing check's underlying error.
+/// Lets consumers group faults across brands (by `subcode`) and separate genuine
+/// device faults from client-side preconditions or transport problems.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorClass {
+    /// Device returned a `<s:Fault>`.
+    SoapFault,
+    /// Client-side precondition unmet (e.g. a required service URL wasn't
+    /// advertised, so the call was never sent).
+    Precondition,
+    /// Response received but could not be parsed / didn't match the schema.
+    Parse,
+    /// Network / TLS / non-200 HTTP failure before a SOAP response.
+    Http,
+    /// The caller asked for something the ONVIF schema disallows; no request sent.
+    InvalidArgument,
+}
+
+/// Structured facts about a failing check's error, extracted at the source so
+/// the flat `CheckStatus::Fail(reason)` string doesn't have to be re-parsed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckError {
+    pub class: ErrorClass,
+    /// SOAP fault `Code/Value` (e.g. `SOAP-ENV:Sender`), when a fault.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub fault_code: Option<String>,
+    /// SOAP fault `Code/Subcode/Value` (e.g. `ter:NotAuthorized`) — the stable
+    /// cross-brand grouping key, when the device supplies it.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub subcode: Option<String>,
+    /// Human-readable reason (fault `Reason/Text`, or the error's Display).
+    pub reason: String,
+    /// Verbatim `<Detail>` text, when present.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub detail: Option<String>,
+}
+
+impl From<&OnvifError> for CheckError {
+    fn from(e: &OnvifError) -> Self {
+        match e {
+            OnvifError::Soap(SoapError::Fault {
+                code,
+                reason,
+                subcode,
+                detail,
+            }) => CheckError {
+                class: ErrorClass::SoapFault,
+                fault_code: (!code.is_empty()).then(|| code.clone()),
+                subcode: subcode.clone(),
+                reason: if reason.is_empty() {
+                    e.to_string()
+                } else {
+                    reason.clone()
+                },
+                detail: detail.clone(),
+            },
+            OnvifError::Soap(SoapError::MissingField(_)) => CheckError {
+                class: ErrorClass::Precondition,
+                fault_code: None,
+                subcode: None,
+                reason: e.to_string(),
+                detail: None,
+            },
+            OnvifError::Soap(
+                SoapError::XmlParse(_)
+                | SoapError::MissingBody
+                | SoapError::UnexpectedResponse(_)
+                | SoapError::InvalidValue { .. },
+            ) => CheckError {
+                class: ErrorClass::Parse,
+                fault_code: None,
+                subcode: None,
+                reason: e.to_string(),
+                detail: None,
+            },
+            OnvifError::Transport(_) => CheckError {
+                class: ErrorClass::Http,
+                fault_code: None,
+                subcode: None,
+                reason: e.to_string(),
+                detail: None,
+            },
+            OnvifError::InvalidArgument(_) => CheckError {
+                class: ErrorClass::InvalidArgument,
+                fault_code: None,
+                subcode: None,
+                reason: e.to_string(),
+                detail: None,
+            },
+        }
+    }
+}
+
 /// Result of one named check.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckResult {
@@ -78,6 +175,9 @@ pub struct CheckResult {
     pub status: CheckStatus,
     /// Extra context (parsed values on success, error text otherwise).
     pub detail: String,
+    /// Structured error facts when this check failed (absent on pass/warn/skip).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub error: Option<CheckError>,
     /// Wall-clock time this check took.
     #[serde(with = "duration_ms", rename = "elapsed_ms")]
     pub elapsed: Duration,
@@ -108,6 +208,7 @@ impl CheckResult {
             category,
             status: CheckStatus::Pass,
             detail: detail.into(),
+            error: None,
             elapsed: Duration::ZERO,
         }
     }
@@ -123,6 +224,7 @@ impl CheckResult {
             category,
             status: CheckStatus::Warn(reason.into()),
             detail: detail.into(),
+            error: None,
             elapsed: Duration::ZERO,
         }
     }
@@ -137,6 +239,7 @@ impl CheckResult {
             category,
             status: CheckStatus::Fail(reason.into()),
             detail: String::new(),
+            error: None,
             elapsed: Duration::ZERO,
         }
     }
@@ -151,8 +254,28 @@ impl CheckResult {
             category,
             status: CheckStatus::Skip(reason.into()),
             detail: String::new(),
+            error: None,
             elapsed: Duration::ZERO,
         }
+    }
+
+    /// Fail carrying both the human reason (the error's Display) and structured
+    /// error facts extracted from the same `OnvifError`.
+    pub(crate) fn fail_from(id: impl Into<String>, category: Category, err: &OnvifError) -> Self {
+        Self {
+            id: id.into(),
+            category,
+            status: CheckStatus::Fail(err.to_string()),
+            detail: String::new(),
+            error: Some(CheckError::from(err)),
+            elapsed: Duration::ZERO,
+        }
+    }
+
+    /// Attach structured error facts to a check built with a custom reason string.
+    pub(crate) fn with_error(mut self, err: &OnvifError) -> Self {
+        self.error = Some(CheckError::from(err));
+        self
     }
 
     pub(crate) fn with_elapsed(mut self, elapsed: Duration) -> Self {
@@ -205,6 +328,11 @@ pub struct HealthReport {
     pub checks: Vec<CheckResult>,
     /// Per-profile conformance verdicts.
     pub profiles: ProfileAssessment,
+    /// Device clock skew vs local in seconds (`device_utc - local_utc`), when the
+    /// `system_date_time` check obtained it. Large values are the usual cause of
+    /// spurious WS-Security auth failures.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub clock_skew_s: Option<i64>,
 }
 
 impl HealthReport {
@@ -424,6 +552,26 @@ mod tests {
         c
     }
 
+    #[test]
+    fn check_error_classifies_variants() {
+        // SOAP fault → SoapFault with the subcode preserved as the grouping key.
+        let e = OnvifError::Soap(SoapError::Fault {
+            code: "SOAP-ENV:Sender".into(),
+            reason: "Sender not Authorized".into(),
+            subcode: Some("ter:NotAuthorized".into()),
+            detail: None,
+        });
+        let ce = CheckError::from(&e);
+        assert_eq!(ce.class, ErrorClass::SoapFault);
+        assert_eq!(ce.fault_code.as_deref(), Some("SOAP-ENV:Sender"));
+        assert_eq!(ce.subcode.as_deref(), Some("ter:NotAuthorized"));
+        assert_eq!(ce.reason, "Sender not Authorized");
+
+        // Client-side precondition (unadvertised service) → Precondition, not a fault.
+        let e = OnvifError::Soap(SoapError::missing("Search service URL"));
+        assert_eq!(CheckError::from(&e).class, ErrorClass::Precondition);
+    }
+
     fn assess() -> ProfileAssessment {
         ProfileAssessment {
             profile_s: (ProfileVerdict::Conformant, vec![]),
@@ -438,6 +586,7 @@ mod tests {
             total_elapsed: Duration::from_millis(123),
             checks,
             profiles: assess(),
+            clock_skew_s: None,
         }
     }
 
