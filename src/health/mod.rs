@@ -110,6 +110,7 @@ impl HealthCheck {
                     profiles: assess(std::slice::from_ref(&conn)),
                     checks: vec![conn],
                     clock_skew_s: None,
+                    declared_profiles: vec![],
                 };
             }
         };
@@ -166,14 +167,59 @@ impl HealthCheck {
             .iter()
             .find(|c| c.id == "system_date_time")
             .and_then(|c| checks::parse_skew(&c.detail));
+        // Vendor-declared profiles from scopes (best-effort; the health check is
+        // infallible, so a scopes failure just leaves this empty).
+        let declared_profiles = session
+            .get_scopes()
+            .await
+            .ok()
+            .map(|sc| declared_profiles_from_scopes(&sc))
+            .unwrap_or_default();
         HealthReport {
             target: self.device_url,
             total_elapsed: started.elapsed(),
             checks,
             profiles,
             clock_skew_s,
+            declared_profiles,
         }
     }
+}
+
+/// Extract the ONVIF profiles a device self-declares from its scope URIs.
+///
+/// Scope form: `onvif://www.onvif.org/Profile/<X>`, where `<X>` is `Streaming`
+/// (Profile S) or a single letter (`G`, `T`, `M`, `A`, `C`, `D`, `K`). Returns
+/// canonical letters, deduped and ordered `[S, T, G, M, A, C, D, K]`; unknown
+/// tokens are dropped.
+fn declared_profiles_from_scopes(scopes: &[String]) -> Vec<String> {
+    const ORDER: [&str; 8] = ["S", "T", "G", "M", "A", "C", "D", "K"];
+    let mut found = std::collections::HashSet::new();
+    for scope in scopes {
+        let Some((_, rest)) = scope.split_once("/Profile/") else {
+            continue;
+        };
+        let tok = rest.split('/').next().unwrap_or("");
+        let letter: Option<&'static str> = match tok.to_ascii_uppercase().as_str() {
+            "STREAMING" | "S" => Some("S"),
+            "T" => Some("T"),
+            "G" => Some("G"),
+            "M" => Some("M"),
+            "A" => Some("A"),
+            "C" => Some("C"),
+            "D" => Some("D"),
+            "K" => Some("K"),
+            _ => None,
+        };
+        if let Some(l) = letter {
+            found.insert(l);
+        }
+    }
+    ORDER
+        .iter()
+        .filter(|l| found.contains(*l))
+        .map(|l| l.to_string())
+        .collect()
 }
 
 fn check_passed(checks: &[CheckResult], id: &str) -> bool {
@@ -225,6 +271,32 @@ fn assess(checks: &[CheckResult]) -> ProfileAssessment {
         // Profile G presence (recording/search/replay) — advertised, not
         // exercised; see `checks::recording_services`.
         profile_g: verdict(checks, &["recording", "search", "replay"]),
+    }
+}
+
+#[cfg(test)]
+mod declared_tests {
+    use super::declared_profiles_from_scopes;
+
+    #[test]
+    fn parses_and_canonicalizes_profile_scopes() {
+        let scopes = vec![
+            "onvif://www.onvif.org/name/Camera1".to_string(),
+            "onvif://www.onvif.org/Profile/G".to_string(),
+            "onvif://www.onvif.org/Profile/Streaming".to_string(), // Profile S
+            "onvif://www.onvif.org/Profile/M".to_string(),
+            "onvif://www.onvif.org/Profile/G".to_string(), // dupe
+            "onvif://www.onvif.org/Profile/Zzz".to_string(), // unknown → dropped
+        ];
+        // Canonical order [S, T, G, M, A, C, D, K]; deduped; unknown dropped.
+        assert_eq!(declared_profiles_from_scopes(&scopes), ["S", "G", "M"]);
+    }
+
+    #[test]
+    fn empty_when_no_profile_scopes() {
+        let scopes = vec!["onvif://www.onvif.org/location/Lobby".to_string()];
+        assert!(declared_profiles_from_scopes(&scopes).is_empty());
+        assert!(declared_profiles_from_scopes(&[]).is_empty());
     }
 }
 

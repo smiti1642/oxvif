@@ -20,6 +20,10 @@ from client-side preconditions.
   verbatim `detail`.
 - `HealthReport::clock_skew_s` — the numeric device-vs-local clock skew
   (previously only formatted into the `system_date_time` check string).
+- `HealthReport::declared_profiles` — the ONVIF profiles the device
+  self-declares via its scopes (canonical letters, e.g. `["S", "T", "G"]`),
+  read best-effort from `GetScopes`. Independent of the *assessed* `profiles`
+  verdicts, so consumers can flag "declares Profile G but replay/search fail".
 - SOAP fault parsing now extracts `Code/Subcode/Value` and `Detail`, which were
   previously discarded.
 

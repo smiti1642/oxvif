@@ -333,6 +333,13 @@ pub struct HealthReport {
     /// spurious WS-Security auth failures.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub clock_skew_s: Option<i64>,
+    /// ONVIF profiles the device *self-declares* via its scopes (canonical
+    /// letters, e.g. `["S", "T", "G"]`). This is the vendor's claim, independent
+    /// of [`profiles`](Self::profiles) — which is what oxvif actually *assessed*.
+    /// Comparing the two surfaces "declares Profile G but replay/search fail".
+    /// Empty when scopes were unavailable.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub declared_profiles: Vec<String>,
 }
 
 impl HealthReport {
@@ -587,6 +594,7 @@ mod tests {
             checks,
             profiles: assess(),
             clock_skew_s: None,
+            declared_profiles: vec![],
         }
     }
 
