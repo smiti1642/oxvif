@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.11.0] - 2026-07-02
+## [0.11.0] - 2026-07-03
 
 Headline: **structured error facts on the health report**, so a cross-brand
 conformance corpus can group the same fault across vendors (by ONVIF subcode)
