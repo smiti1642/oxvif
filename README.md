@@ -84,7 +84,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.11", features = ["mock"] }
+oxvif = { version = "0.12", features = ["mock"] }
 ```
 
 ```rust
@@ -111,7 +111,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.11"
+oxvif = "0.12"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -813,7 +813,7 @@ alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 ```toml
-oxvif = { version = "0.11", features = ["health"] }
+oxvif = { version = "0.12", features = ["health"] }
 ```
 
 ```rust
@@ -848,6 +848,16 @@ report carries machine-readable facts alongside the human-readable strings:
   via its scopes (e.g. `["S", "T", "G"]`), read from `GetScopes`. Compare
   against the *assessed* `profiles` verdicts to flag "declares Profile G but
   replay/search fail".
+- `ProfileAssessment::profile_{s,t,g}` — each a `ProfileState { verdict, missing,
+  unverified }`. `verdict` is `conformant` / `partial` / `unsupported` /
+  **`inconclusive`**; the last means required checks couldn't be tested (auth
+  blocked / skipped) with nothing verified to fail — kept distinct from `partial`
+  so "couldn't verify" is never read as "non-conformant". `missing` lists the
+  ids that genuinely failed, `unverified` the ones that couldn't be tested.
+
+> **Note:** the `health` report shape changed in a **breaking** way in 0.12.0
+> (profiles became an object, verdicts/`status.kind` lowercase, `elapsed_ms`
+> nullable). 0.11 output was provisional. See the CHANGELOG.
 
 **Parse coverage.** The report also includes a `Category::Coverage` dimension:
 for a curated set of list operations it compares how many items the parser
@@ -910,8 +920,8 @@ implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.11", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.11", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.12", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.12", features = ["mock-server"] }  # adds MockServer
 ```
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):

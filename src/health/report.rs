@@ -46,7 +46,7 @@ impl Category {
 
 /// Outcome of a single check.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "reason")]
+#[serde(tag = "kind", content = "reason", rename_all = "snake_case")]
 pub enum CheckStatus {
     /// The check succeeded.
     Pass,
@@ -106,6 +106,30 @@ pub struct CheckError {
     /// Verbatim `<Detail>` text, when present.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub detail: Option<String>,
+}
+
+impl CheckError {
+    /// `true` when this error is an authentication / authorization failure
+    /// (credentials rejected, or a WS-Security token the device wouldn't accept)
+    /// rather than a genuine device fault. Used to tell "we couldn't verify this"
+    /// apart from "the device is genuinely non-conformant" — the same predicate
+    /// the assessment logic and downstream consumers must agree on, so it lives
+    /// here once.
+    pub fn is_auth(&self) -> bool {
+        let hay = format!("{} {}", self.subcode.as_deref().unwrap_or(""), self.reason)
+            .to_ascii_lowercase();
+        match self.class {
+            ErrorClass::Http => hay.contains("401") || hay.contains("unauthorized"),
+            ErrorClass::SoapFault => {
+                hay.contains("notauthorized")
+                    || hay.contains("not authorized")
+                    || hay.contains("unauthorized")
+                    || hay.contains("security token")
+                    || hay.contains("authenticat")
+            }
+            _ => false,
+        }
+    }
 }
 
 impl From<&OnvifError> for CheckError {
@@ -178,9 +202,11 @@ pub struct CheckResult {
     /// Structured error facts when this check failed (absent on pass/warn/skip).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub error: Option<CheckError>,
-    /// Wall-clock time this check took.
-    #[serde(with = "duration_ms", rename = "elapsed_ms")]
-    pub elapsed: Duration,
+    /// Wall-clock time this check took, or `None` when the check did not run
+    /// (e.g. `Skip`) and so was never timed — serialised as `null`, distinct
+    /// from a genuine `0` ms.
+    #[serde(with = "opt_duration_ms", rename = "elapsed_ms")]
+    pub elapsed: Option<Duration>,
 }
 
 mod duration_ms {
@@ -197,6 +223,25 @@ mod duration_ms {
     }
 }
 
+/// Like [`duration_ms`] but for an optional duration: `None` serialises as JSON
+/// `null` (a check that did not run / was not timed), `Some(d)` as integer ms.
+mod opt_duration_ms {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S: Serializer>(d: &Option<Duration>, s: S) -> Result<S::Ok, S::Error> {
+        match d {
+            Some(d) => s.serialize_some(&(d.as_millis() as u64)),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Duration>, D::Error> {
+        let ms: Option<u64> = Option::deserialize(d)?;
+        Ok(ms.map(Duration::from_millis))
+    }
+}
+
 impl CheckResult {
     pub(crate) fn pass(
         id: impl Into<String>,
@@ -209,7 +254,7 @@ impl CheckResult {
             status: CheckStatus::Pass,
             detail: detail.into(),
             error: None,
-            elapsed: Duration::ZERO,
+            elapsed: None,
         }
     }
 
@@ -225,7 +270,7 @@ impl CheckResult {
             status: CheckStatus::Warn(reason.into()),
             detail: detail.into(),
             error: None,
-            elapsed: Duration::ZERO,
+            elapsed: None,
         }
     }
 
@@ -240,7 +285,7 @@ impl CheckResult {
             status: CheckStatus::Fail(reason.into()),
             detail: String::new(),
             error: None,
-            elapsed: Duration::ZERO,
+            elapsed: None,
         }
     }
 
@@ -255,7 +300,7 @@ impl CheckResult {
             status: CheckStatus::Skip(reason.into()),
             detail: String::new(),
             error: None,
-            elapsed: Duration::ZERO,
+            elapsed: None,
         }
     }
 
@@ -268,7 +313,7 @@ impl CheckResult {
             status: CheckStatus::Fail(err.to_string()),
             detail: String::new(),
             error: Some(CheckError::from(err)),
-            elapsed: Duration::ZERO,
+            elapsed: None,
         }
     }
 
@@ -279,20 +324,26 @@ impl CheckResult {
     }
 
     pub(crate) fn with_elapsed(mut self, elapsed: Duration) -> Self {
-        self.elapsed = elapsed;
+        self.elapsed = Some(elapsed);
         self
     }
 }
 
 /// Per-profile conformance verdict derived from the check results.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ProfileVerdict {
     /// All required checks passed.
     Conformant,
-    /// Some required checks passed, others failed or were skipped.
+    /// Some required checks passed, others were verified to genuinely fail.
     Partial,
     /// No required checks passed (profile likely unsupported).
     Unsupported,
+    /// Nothing was verified to fail, but some required checks could not be
+    /// tested (auth blocked / skipped) — conformance is *unknown*, not failed.
+    /// Kept distinct from `Partial` so a reader never mistakes "couldn't test"
+    /// for "tested and non-conformant".
+    Inconclusive,
 }
 
 impl ProfileVerdict {
@@ -301,19 +352,35 @@ impl ProfileVerdict {
             ProfileVerdict::Conformant => "conformant",
             ProfileVerdict::Partial => "partial",
             ProfileVerdict::Unsupported => "unsupported",
+            ProfileVerdict::Inconclusive => "inconclusive",
         }
     }
+}
+
+/// One profile's assessment: the verdict plus the required check ids behind it,
+/// split by *why* they didn't pass.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileState {
+    pub verdict: ProfileVerdict,
+    /// Required checks that were verified to genuinely fail (device fault).
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub missing: Vec<String>,
+    /// Required checks that could not be verified (auth-blocked or skipped) —
+    /// separated from `missing` so an auth failure is never read as a
+    /// conformance failure.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub unverified: Vec<String>,
 }
 
 /// Conformance assessment for the ONVIF profiles, derived from check results.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProfileAssessment {
-    /// Profile S (video streaming): verdict + non-passing required check ids.
-    pub profile_s: (ProfileVerdict, Vec<String>),
+    /// Profile S (video streaming).
+    pub profile_s: ProfileState,
     /// Profile T (advanced streaming / imaging / events).
-    pub profile_t: (ProfileVerdict, Vec<String>),
+    pub profile_t: ProfileState,
     /// Profile G (recording / search / replay) — not exercised; informational.
-    pub profile_g: (ProfileVerdict, Vec<String>),
+    pub profile_g: ProfileState,
 }
 
 /// The full result of a [`HealthCheck`](super::HealthCheck) run.
@@ -439,8 +506,8 @@ impl ReportDiff {
                         (true, false) => flipped_to_pass.push(c.id.clone()),
                         _ => {}
                     }
-                    let prev_ms = p.elapsed.as_millis();
-                    let now_ms = c.elapsed.as_millis();
+                    let prev_ms = p.elapsed.map(|d| d.as_millis()).unwrap_or(0);
+                    let now_ms = c.elapsed.map(|d| d.as_millis()).unwrap_or(0);
                     if now_ms > prev_ms.saturating_mul(2) && now_ms.saturating_sub(prev_ms) > 100 {
                         slowed.push(SlowedCheck {
                             id: c.id.clone(),
@@ -525,22 +592,24 @@ impl fmt::Display for HealthReport {
                 "    {:<4} {:<28} {:>5}ms  {}",
                 c.status.tag(),
                 c.id,
-                c.elapsed.as_millis(),
+                c.elapsed.map(|d| d.as_millis()).unwrap_or(0),
                 note,
             )?;
         }
         writeln!(f, "\n  Profiles:")?;
-        for (name, (verdict, missing)) in [
+        for (name, st) in [
             ("S", &self.profiles.profile_s),
             ("T", &self.profiles.profile_t),
             ("G", &self.profiles.profile_g),
         ] {
-            let miss = if missing.is_empty() {
-                String::new()
-            } else {
-                format!("  (missing: {})", missing.join(", "))
-            };
-            writeln!(f, "    Profile {name}: {}{miss}", verdict.label())?;
+            let mut extra = String::new();
+            if !st.missing.is_empty() {
+                extra.push_str(&format!("  (missing: {})", st.missing.join(", ")));
+            }
+            if !st.unverified.is_empty() {
+                extra.push_str(&format!("  (untested: {})", st.unverified.join(", ")));
+            }
+            writeln!(f, "    Profile {name}: {}{extra}", st.verdict.label())?;
         }
         Ok(())
     }
@@ -555,7 +624,7 @@ mod tests {
     fn check(id: &str, status: CheckStatus, elapsed_ms: u64) -> CheckResult {
         let mut c = CheckResult::pass(id, Category::Media, "");
         c.status = status;
-        c.elapsed = Duration::from_millis(elapsed_ms);
+        c.elapsed = Some(Duration::from_millis(elapsed_ms));
         c
     }
 
@@ -580,10 +649,15 @@ mod tests {
     }
 
     fn assess() -> ProfileAssessment {
+        let state = |verdict, missing: &[&str]| ProfileState {
+            verdict,
+            missing: missing.iter().map(|s| s.to_string()).collect(),
+            unverified: vec![],
+        };
         ProfileAssessment {
-            profile_s: (ProfileVerdict::Conformant, vec![]),
-            profile_t: (ProfileVerdict::Conformant, vec![]),
-            profile_g: (ProfileVerdict::Unsupported, vec!["recording".into()]),
+            profile_s: state(ProfileVerdict::Conformant, &[]),
+            profile_t: state(ProfileVerdict::Conformant, &[]),
+            profile_g: state(ProfileVerdict::Unsupported, &["recording"]),
         }
     }
 
@@ -681,7 +755,55 @@ mod tests {
         assert_eq!(re.checks.len(), r.checks.len());
         assert_eq!(re.checks[1].id, "b");
         assert!(matches!(re.checks[1].status, CheckStatus::Fail(_)));
-        assert_eq!(re.checks[0].elapsed, Duration::from_millis(12));
+        assert_eq!(re.checks[0].elapsed, Some(Duration::from_millis(12)));
         assert_eq!(re.total_elapsed, Duration::from_millis(123));
+    }
+
+    #[test]
+    fn check_status_kind_is_lowercase() {
+        let json = serde_json::to_string(&CheckStatus::Fail("x".into())).unwrap();
+        assert_eq!(json, r#"{"kind":"fail","reason":"x"}"#);
+        let json = serde_json::to_string(&CheckStatus::Pass).unwrap();
+        assert_eq!(json, r#"{"kind":"pass"}"#);
+    }
+
+    #[test]
+    fn elapsed_ms_is_null_for_unrun_check() {
+        // Skip-constructed check → no elapsed → serialises as null.
+        let skipped = CheckResult::skip("s", Category::Media, "not advertised");
+        assert!(skipped.elapsed.is_none());
+        let json = serde_json::to_string(&skipped).unwrap();
+        assert!(json.contains(r#""elapsed_ms":null"#), "{json}");
+        // A timed check serialises an integer, and both round-trip.
+        let timed = check("t", CheckStatus::Pass, 5);
+        let re: CheckResult =
+            serde_json::from_str(&serde_json::to_string(&timed).unwrap()).unwrap();
+        assert_eq!(re.elapsed, Some(Duration::from_millis(5)));
+        let re: CheckResult = serde_json::from_str(&json).unwrap();
+        assert!(re.elapsed.is_none());
+    }
+
+    #[test]
+    fn profile_state_serialises_as_lowercase_object() {
+        // Object shape (not a tuple/array), lowercase verdict, empty lists omitted.
+        let st = ProfileState {
+            verdict: ProfileVerdict::Conformant,
+            missing: vec![],
+            unverified: vec![],
+        };
+        assert_eq!(
+            serde_json::to_string(&st).unwrap(),
+            r#"{"verdict":"conformant"}"#
+        );
+        // Inconclusive keeps its unverified list.
+        let st = ProfileState {
+            verdict: ProfileVerdict::Inconclusive,
+            missing: vec![],
+            unverified: vec!["get_stream_uri".into()],
+        };
+        assert_eq!(
+            serde_json::to_string(&st).unwrap(),
+            r#"{"verdict":"inconclusive","unverified":["get_stream_uri"]}"#
+        );
     }
 }

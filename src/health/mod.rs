@@ -25,7 +25,7 @@ mod report;
 
 pub use report::{
     Category, CheckError, CheckResult, CheckStatus, ErrorClass, HealthReport, ProfileAssessment,
-    ProfileVerdict, ReportDiff, SlowedCheck,
+    ProfileState, ProfileVerdict, ReportDiff, SlowedCheck,
 };
 
 use std::time::Instant;
@@ -222,27 +222,67 @@ fn declared_profiles_from_scopes(scopes: &[String]) -> Vec<String> {
         .collect()
 }
 
+#[cfg(all(test, feature = "mock-server"))]
 fn check_passed(checks: &[CheckResult], id: &str) -> bool {
     checks
         .iter()
         .any(|c| c.id == id && matches!(c.status, CheckStatus::Pass | CheckStatus::Warn(_)))
 }
 
-fn verdict(checks: &[CheckResult], required: &[&'static str]) -> (ProfileVerdict, Vec<String>) {
-    let missing: Vec<String> = required
-        .iter()
-        .copied()
-        .filter(|id| !check_passed(checks, id))
-        .map(String::from)
-        .collect();
-    let v = if missing.is_empty() {
+/// Why a required check did not contribute a pass to a profile.
+enum ReqOutcome {
+    Passed,
+    /// Verified to genuinely fail (a real device fault).
+    FailedVerified,
+    /// Could not be tested — skipped, or failed only because auth was blocked.
+    Unverifiable,
+}
+
+fn classify_required(checks: &[CheckResult], id: &str) -> ReqOutcome {
+    match checks.iter().find(|c| c.id == id) {
+        Some(c) => match &c.status {
+            CheckStatus::Pass | CheckStatus::Warn(_) => ReqOutcome::Passed,
+            CheckStatus::Skip(_) => ReqOutcome::Unverifiable,
+            CheckStatus::Fail(_) => {
+                if c.error.as_ref().is_some_and(CheckError::is_auth) {
+                    ReqOutcome::Unverifiable
+                } else {
+                    ReqOutcome::FailedVerified
+                }
+            }
+        },
+        // Expected but absent from the report → treat as a genuine gap.
+        None => ReqOutcome::FailedVerified,
+    }
+}
+
+fn verdict(checks: &[CheckResult], required: &[&'static str]) -> ProfileState {
+    let mut missing = Vec::new();
+    let mut unverified = Vec::new();
+    let mut passed = 0usize;
+    for id in required {
+        match classify_required(checks, id) {
+            ReqOutcome::Passed => passed += 1,
+            ReqOutcome::FailedVerified => missing.push((*id).to_string()),
+            ReqOutcome::Unverifiable => unverified.push((*id).to_string()),
+        }
+    }
+    let verdict = if missing.is_empty() && unverified.is_empty() {
         ProfileVerdict::Conformant
-    } else if missing.len() < required.len() {
+    } else if !missing.is_empty() && passed > 0 {
         ProfileVerdict::Partial
+    } else if missing.is_empty() {
+        // Nothing genuinely failed, but some required checks couldn't be tested.
+        ProfileVerdict::Inconclusive
     } else {
+        // Genuine failures and nothing passed.
         ProfileVerdict::Unsupported
     };
-    (v, missing)
+    ProfileState {
+        verdict,
+        missing,
+        unverified,
+    }
 }
 
 fn assess(checks: &[CheckResult]) -> ProfileAssessment {
@@ -300,6 +340,80 @@ mod declared_tests {
     }
 }
 
+#[cfg(test)]
+mod verdict_tests {
+    use super::*;
+
+    fn chk(id: &str, status: CheckStatus, error: Option<CheckError>) -> CheckResult {
+        CheckResult {
+            id: id.into(),
+            category: Category::Media,
+            status,
+            detail: String::new(),
+            error,
+            elapsed: None,
+        }
+    }
+    fn soap(class: ErrorClass, subcode: &str, reason: &str) -> CheckError {
+        CheckError {
+            class,
+            fault_code: None,
+            subcode: (!subcode.is_empty()).then(|| subcode.to_string()),
+            reason: reason.into(),
+            detail: None,
+        }
+    }
+
+    #[test]
+    fn verdict_splits_auth_from_genuine_failure() {
+        use ProfileVerdict::*;
+        let auth = || {
+            Some(soap(
+                ErrorClass::SoapFault,
+                "ter:NotAuthorized",
+                "sender not authorized",
+            ))
+        };
+        let parse = || Some(soap(ErrorClass::Parse, "", "bad xml"));
+
+        // Something passed, the rest was auth-blocked → Inconclusive (unknown),
+        // NOT Partial; the blocked id lands in `unverified`, not `missing`.
+        let st = verdict(
+            &[
+                chk("a", CheckStatus::Pass, None),
+                chk("b", CheckStatus::Fail("x".into()), auth()),
+            ],
+            &["a", "b"],
+        );
+        assert_eq!(st.verdict, Inconclusive);
+        assert_eq!(st.unverified, ["b"]);
+        assert!(st.missing.is_empty());
+
+        // A genuine (non-auth) failure alongside a pass → Partial, id in `missing`.
+        let st = verdict(
+            &[
+                chk("a", CheckStatus::Pass, None),
+                chk("b", CheckStatus::Fail("x".into()), parse()),
+            ],
+            &["a", "b"],
+        );
+        assert_eq!(st.verdict, Partial);
+        assert_eq!(st.missing, ["b"]);
+        assert!(st.unverified.is_empty());
+
+        // All required pass → Conformant.
+        assert_eq!(
+            verdict(&[chk("a", CheckStatus::Pass, None)], &["a"]).verdict,
+            Conformant
+        );
+        // Genuine failures, nothing passed → Unsupported.
+        assert_eq!(
+            verdict(&[chk("a", CheckStatus::Fail("x".into()), parse())], &["a"]).verdict,
+            Unsupported
+        );
+    }
+}
+
 #[cfg(all(test, feature = "mock-server"))]
 mod tests {
     use super::*;
@@ -316,7 +430,10 @@ mod tests {
         assert!(check_passed(&report.checks, "get_users"));
         // The mock advertises Media/Imaging/PTZ/Events, so Profile S/T should
         // not come back Unsupported.
-        assert_ne!(report.profiles.profile_s.0, ProfileVerdict::Unsupported);
+        assert_ne!(
+            report.profiles.profile_s.verdict,
+            ProfileVerdict::Unsupported
+        );
         // Parse-coverage must not false-positive on the compliant mock: the
         // parser's item counts match the raw response item counts.
         assert!(

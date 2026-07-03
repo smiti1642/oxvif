@@ -5,6 +5,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.12.0] - 2026-07-03
+
+Headline: **BREAKING — the HealthCheck report is reshaped so "couldn't verify"
+is never mistaken for "non-conformant".** In 0.x a minor bump is the SemVer
+signal for a breaking change; only the `health` feature's `HealthReport` JSON
+shape changes here — the rest of the crate (the ONVIF client) is untouched.
+0.11's health output was explicitly provisional (see that release's note).
+
+### Changed (breaking — `health` feature)
+- **Profile assessment is an object, not a tuple.** `ProfileAssessment::profile_{s,t,g}`
+  changed from `(ProfileVerdict, Vec<String>)` to `ProfileState { verdict, missing,
+  unverified }`. JSON goes from `["Conformant", []]` to `{ "verdict": "conformant" }`.
+- **`ProfileVerdict` gained `Inconclusive`** and now serialises lowercase
+  (`conformant` / `partial` / `unsupported` / `inconclusive`). A profile whose
+  required checks couldn't be tested (auth blocked / skipped), with nothing
+  verified to fail, is now `Inconclusive` — not `Partial`. The ids behind a
+  verdict are split into `missing` (verified fail) vs `unverified` (couldn't test),
+  so an auth failure is never counted as a conformance failure.
+- **`CheckStatus` `kind` serialises lowercase** (`pass` / `warn` / `fail` / `skip`).
+- **`CheckResult::elapsed` is now `Option<Duration>`**; `elapsed_ms` serialises as
+  `null` for a check that never ran (e.g. `Skip`) instead of an ambiguous `0`.
+
+### Added
+- `health::ProfileState` — the per-profile `{ verdict, missing, unverified }`.
+- `CheckError::is_auth()` — the single source of truth for "is this failure an
+  authentication/authorization problem?", used by the assessment to route a
+  check to `unverified` vs `missing` (so callers can't drift from oxvif's rule).
+
+### Migration
+- `HealthReport` JSON written by ≤0.11 (e.g. saved baselines) will not
+  deserialize into the 0.12 shape — regenerate it by re-running the check.
+
 ## [0.11.0] - 2026-07-03
 
 Headline: **structured error facts on the health report**, so a cross-brand
