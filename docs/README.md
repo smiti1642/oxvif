@@ -58,3 +58,18 @@ request/response field structure so a new method can be written against the real
 > Profiles: **S** video streaming · **T** advanced streaming (H.265, analytics, OSD) ·
 > **G** recording & playback · **M** metadata/analytics · **A** access-rules/schedule ·
 > **C** physical access control / door control · **D** access-control configuration.
+
+---
+
+## Attribution & licensing
+
+These catalogues are **derived from the publicly published ONVIF® WSDL/XSD
+schemas** (each file cites its source URL) purely as an implementation reference
+for interoperability. They transcribe *interface facts* — operation names, field
+names, types, and cardinality — and paraphrase each operation's purpose; they do
+**not** reproduce the ONVIF specification prose, and no raw `.wsdl`/`.xsd` files
+are redistributed here. This directory is excluded from the published crate
+(`exclude = ["docs/"]` in `Cargo.toml`).
+
+ONVIF® is a trademark of ONVIF, Inc. oxvif is an independent project and is
+**not affiliated with, endorsed by, or certified by ONVIF**.

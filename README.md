@@ -1397,4 +1397,15 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## License
 
-MIT
+MIT — covers oxvif's own source code.
+
+## Trademark & ONVIF
+
+ONVIF® is a trademark of ONVIF, Inc. oxvif is an independent, community project
+and is **not affiliated with, endorsed by, or certified by ONVIF**. The name
+"ONVIF" is used here only descriptively, to identify the protocol oxvif speaks.
+oxvif has not been through the ONVIF conformance program and makes no ONVIF
+Profile conformance claim; the `health` / `conformance` features are unofficial
+self-diagnostics, not the official ONVIF Device Test Tool. Interface references
+under [`docs/`](docs/) are derived from the publicly published ONVIF WSDL/XSD
+schemas for interoperability — see [`docs/README.md`](docs/README.md).
