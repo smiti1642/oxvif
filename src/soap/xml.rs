@@ -15,6 +15,7 @@
 use std::collections::HashMap;
 
 use quick_xml::Reader;
+use quick_xml::XmlVersion;
 use quick_xml::events::Event;
 
 use crate::soap::error::SoapError;
@@ -93,11 +94,12 @@ impl XmlNode {
         reader.config_mut().trim_text(false);
 
         // The input is always a `&str`, so the reader decodes as UTF-8. Capture
-        // the decoder once and hand it to `from_bytes_start`: quick-xml 0.39
-        // cfg-gates `Attribute::unescape_value` away whenever the `encoding`
-        // feature is active anywhere in the build graph (feature unification),
-        // so we must go through `decode_and_unescape_value(decoder)` to compile
-        // regardless of that feature.
+        // the decoder once and hand it to `from_bytes_start`: we go through
+        // `Attribute::decoded_and_normalized_value(version, decoder)` — quick-xml's
+        // recommended path for untrusted input — rather than the decoder-less
+        // `normalized_value`, so attribute decoding is driven by the reader's
+        // decoder and stays correct regardless of whether a sibling crate flips
+        // on `quick-xml/encoding` (feature unification).
         let decoder = reader.decoder();
 
         let mut stack: Vec<XmlNode> = Vec::new();
@@ -147,7 +149,7 @@ impl XmlNode {
                         // references as separate `Event::GeneralRef`s, so a
                         // single element's content can arrive as several Text
                         // events interleaved with GeneralRefs.
-                        let cow = e.xml_content().unwrap_or_default();
+                        let cow = e.xml10_content().unwrap_or_default();
                         if !cow.is_empty() {
                             append_text(node, &cow);
                         }
@@ -225,7 +227,7 @@ impl XmlNode {
 
             let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).into_owned();
             let value = attr
-                .decode_and_unescape_value(decoder)
+                .decoded_and_normalized_value(XmlVersion::Implicit1_0, decoder)
                 .map(|v| v.into_owned())
                 .unwrap_or_default();
             attrs.insert(key, value);

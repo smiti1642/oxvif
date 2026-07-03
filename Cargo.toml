@@ -34,7 +34,7 @@ mock-server = ["mock", "dep:axum", "tokio/rt-multi-thread"]
 health = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
-quick-xml    = "0.39"
+quick-xml    = "0.41"
 sha1         = "0.11"
 base64       = "0.22"
 rand         = "0.10.1"
@@ -59,7 +59,7 @@ axum         = { version = "0.8", optional = true }
 # downstream crate that enables `encoding` (e.g. via calamine) would. Any
 # future call into an `encoding`-gated quick-xml API fails the build here
 # instead of only in a user's workspace. See CHANGELOG 0.9.9.
-quick-xml = { version = "0.39", features = ["encoding"] }
+quick-xml = { version = "0.41", features = ["encoding"] }
 mockito = "1"
 dotenvy = "0.15"
 tokio   = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }

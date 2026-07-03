@@ -32,6 +32,18 @@ from client-side preconditions.
   and `detail: Option<String>` fields. Its `Display` string is unchanged;
   exhaustive matches on the variant must add `..`.
 
+### Security
+- Upgraded `quick-xml` `0.39` → `0.41`, clearing RUSTSEC-2026-0194 (quadratic
+  run time when checking a start tag for duplicate attribute names) and
+  RUSTSEC-2026-0195 (unbounded namespace-declaration allocation in `NsReader`,
+  a memory-exhaustion DoS). Migrated the two changed APIs used in
+  `soap::xml`: `BytesText::xml_content()` → `xml10_content()` and the
+  deprecated `Attribute::decode_and_unescape_value` →
+  `decoded_and_normalized_value(XmlVersion::Implicit1_0, decoder)`.
+- Refreshed the dependency tree (`cargo update`), pulling `quinn-proto`
+  `0.11.15` (RUSTSEC-2026-0185, remote memory exhaustion) and `rand` `0.8.6`
+  (RUSTSEC-2026-0097 unsoundness). `cargo audit` is now clean.
+
 ## [0.10.0] - 2026-06-30
 
 Headline: **real-camera correctness for Profile G and imaging.** Parsers and
