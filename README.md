@@ -84,7 +84,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.10", features = ["mock"] }
+oxvif = { version = "0.11", features = ["mock"] }
 ```
 
 ```rust
@@ -111,7 +111,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.9.8"
+oxvif = "0.11"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -813,7 +813,7 @@ alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 ```toml
-oxvif = { version = "0.10", features = ["health"] }
+oxvif = { version = "0.11", features = ["health"] }
 ```
 
 ```rust
@@ -832,6 +832,22 @@ individual `CheckResult`s (`status`, `category`, timing) and a
 `ProfileAssessment` if you want to inspect results programmatically rather than
 printing. See `examples/healthcheck.rs` (`cargo run --example healthcheck
 --features health`).
+
+**Structured facts (0.11+).** For building a cross-brand conformance corpus, the
+report carries machine-readable facts alongside the human-readable strings:
+
+- `CheckResult::error` — an optional `CheckError` on a failing check with a
+  `class` (`ErrorClass::SoapFault` / `Precondition` / `Parse` / `Http` /
+  `InvalidArgument`), the ONVIF `subcode` (e.g. `ter:NotAuthorized`),
+  `fault_code`, `reason`, and verbatim `detail`. This lets you group the *same*
+  fault across vendors by subcode instead of re-parsing free-text reasons, and
+  separate genuine device faults from client-side preconditions.
+- `HealthReport::clock_skew_s` — the numeric device-vs-local clock skew, the
+  usual cause of spurious WS-Security auth failures.
+- `HealthReport::declared_profiles` — the profiles the device *self-declares*
+  via its scopes (e.g. `["S", "T", "G"]`), read from `GetScopes`. Compare
+  against the *assessed* `profiles` verdicts to flag "declares Profile G but
+  replay/search fail".
 
 **Parse coverage.** The report also includes a `Category::Coverage` dimension:
 for a curated set of list operations it compares how many items the parser
@@ -894,8 +910,8 @@ implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.10", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.10", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.11", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.11", features = ["mock-server"] }  # adds MockServer
 ```
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):
