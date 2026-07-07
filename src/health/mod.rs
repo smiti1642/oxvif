@@ -39,6 +39,7 @@ pub struct HealthCheck {
     device_url: String,
     credentials: Option<(String, String)>,
     write_checks: bool,
+    liveness_probes: bool,
     clock_sync: bool,
 }
 
@@ -49,6 +50,7 @@ impl HealthCheck {
             device_url: device_url.into(),
             credentials: None,
             write_checks: false,
+            liveness_probes: false,
             clock_sync: false,
         }
     }
@@ -67,6 +69,18 @@ impl HealthCheck {
     /// unchanged video encoder configuration to exercise the `Set` path).
     pub fn with_write_checks(mut self, enabled: bool) -> Self {
         self.write_checks = enabled;
+        self
+    }
+
+    /// Enable opt-in active liveness probes that go beyond the SOAP responses:
+    /// an RTSP `OPTIONS` reachability probe on the stream URI, a snapshot byte
+    /// fetch (validated as a real image, not a 0-byte body or an HTML error
+    /// page), and a real Profile G exercise (recording search + replay URI)
+    /// instead of advertised-only presence. Off by default because these open
+    /// extra network connections (RTSP/TCP and HTTP GET) the read-only SOAP
+    /// checks never touch.
+    pub fn with_liveness_probes(mut self, enabled: bool) -> Self {
+        self.liveness_probes = enabled;
         self
     }
 
@@ -130,13 +144,24 @@ impl HealthCheck {
         spawn_check!(checks::device_info);
         spawn_check!(checks::time);
         spawn_check!(checks::services);
-        spawn_check!(checks::recording_services);
-        spawn_check!(checks::media);
         spawn_check!(checks::imaging);
         spawn_check!(checks::ptz);
         spawn_check!(checks::events);
         spawn_check!(checks::network);
         spawn_check!(checks::users);
+        // Media (stream/snapshot) and Profile G take the liveness flag; media
+        // also needs the credentials for an authenticated snapshot GET.
+        {
+            let s = session.clone();
+            let liveness = self.liveness_probes;
+            let creds = self.credentials.clone();
+            set.spawn(async move { checks::media(&s, liveness, creds.as_ref()).await });
+        }
+        {
+            let s = session.clone();
+            let liveness = self.liveness_probes;
+            set.spawn(async move { checks::recording_services(&s, liveness).await });
+        }
         if self.write_checks {
             spawn_check!(checks::write_roundtrip);
         }
@@ -308,8 +333,9 @@ fn assess(checks: &[CheckResult]) -> ProfileAssessment {
                 "get_event_properties",
             ],
         ),
-        // Profile G presence (recording/search/replay) — advertised, not
-        // exercised; see `checks::recording_services`.
+        // Profile G (recording/search/replay) — advertised-only by default, or
+        // genuinely exercised when liveness probing is on; see
+        // `checks::recording_services`.
         profile_g: verdict(checks, &["recording", "search", "replay"]),
     }
 }
@@ -443,6 +469,55 @@ mod tests {
                 .any(|c| c.category == Category::Coverage
                     && matches!(c.status, CheckStatus::Warn(_))),
             "unexpected parse-coverage warning on the mock:\n{report}"
+        );
+    }
+
+    #[tokio::test]
+    async fn liveness_probes_exercise_profile_g_and_fetch_snapshot() {
+        let server = MockServer::start().await.unwrap();
+        let report = HealthCheck::new(server.device_url())
+            .with_liveness_probes(true)
+            .run()
+            .await;
+
+        let detail = |id: &str| {
+            report
+                .checks
+                .iter()
+                .find(|c| c.id == id)
+                .map(|c| c.detail.clone())
+                .unwrap_or_default()
+        };
+
+        // Snapshot was actually fetched and validated as a real image (the mock
+        // serves a test-pattern JPEG at /mock/snapshot.jpg).
+        assert!(
+            check_passed(&report.checks, "get_snapshot_uri"),
+            "snapshot check should pass:\n{report}"
+        );
+        assert!(
+            detail("get_snapshot_uri").contains("image"),
+            "snapshot detail should note a validated image, got: {:?}",
+            detail("get_snapshot_uri")
+        );
+
+        // Profile G is now genuinely exercised, not advertised-only: the mock
+        // answers FindRecordings / GetReplayUri / GetRecordings, so all three
+        // pass and the detail no longer carries the "(not exercised)" marker.
+        for id in ["recording", "search", "replay"] {
+            assert!(
+                check_passed(&report.checks, id),
+                "{id} should pass when exercised:\n{report}"
+            );
+            assert!(
+                !detail(id).contains("not exercised"),
+                "{id} should be exercised, not presence-only"
+            );
+        }
+        assert_eq!(
+            report.profiles.profile_g.verdict,
+            ProfileVerdict::Conformant,
+            "exercised Profile G should be Conformant against the mock:\n{report}"
         );
     }
 

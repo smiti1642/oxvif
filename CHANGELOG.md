@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.13.0] - 2026-07-07
+
+Headline: **opt-in active liveness probing for the HealthCheck** — the check can
+now verify that a stream/snapshot/Profile-G actually *works*, not just that the
+device answered the SOAP call. Additive and off by default; existing behaviour
+and report shape are unchanged.
+
+### Added (`health` feature)
+- **`HealthCheck::with_liveness_probes(bool)`** (default `false`). When enabled:
+  - `get_stream_uri` follows the resolved RTSP URI with a non-destructive RTSP
+    `OPTIONS` reachability probe (a resolved URI is no guarantee the server
+    answers). `200`/`401` count as reachable; otherwise the check downgrades to
+    `Warn` with the reason.
+  - `get_snapshot_uri` fetches the snapshot bytes and validates them as a real
+    image (JPEG/PNG/BMP magic) — a 0-byte body or an HTML error page returned
+    with a `200` is flagged, not counted as a pass. Uses HTTP Digest (with a
+    Basic-auth fallback) when credentials are supplied.
+  - the `recording` / `search` / `replay` checks genuinely exercise Profile G
+    (recording list + recording search + replay-URI resolution) instead of
+    reporting advertised-only presence, so the Profile G verdict reflects real
+    behaviour.
+
+### Notes
+- With liveness off, every check keeps its exact prior behaviour (URI-scheme
+  check / advertised-only Profile G); no report-shape change.
+
 ## [0.12.0] - 2026-07-03
 
 Headline: **BREAKING — the HealthCheck report is reshaped so "couldn't verify"

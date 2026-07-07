@@ -89,7 +89,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.12", features = ["mock"] }
+oxvif = { version = "0.13", features = ["mock"] }
 ```
 
 ```rust
@@ -116,7 +116,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.12"
+oxvif = "0.13"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -818,7 +818,7 @@ alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 ```toml
-oxvif = { version = "0.12", features = ["health"] }
+oxvif = { version = "0.13", features = ["health"] }
 ```
 
 ```rust
@@ -837,6 +837,26 @@ individual `CheckResult`s (`status`, `category`, timing) and a
 `ProfileAssessment` if you want to inspect results programmatically rather than
 printing. See `examples/healthcheck.rs` (`cargo run --example healthcheck
 --features health`).
+
+**Active liveness probing (opt-in).** By default the check only confirms the
+device *answered* each SOAP call. Enable `with_liveness_probes(true)` to also
+verify the results actually work:
+
+```rust
+let report = HealthCheck::new(url)
+    .with_credentials("admin", "password")
+    .with_liveness_probes(true)   // RTSP OPTIONS + snapshot bytes + real Profile G
+    .run()
+    .await;
+```
+
+With it on, `get_stream_uri` follows the RTSP URI with a non-destructive
+`OPTIONS` reachability probe, `get_snapshot_uri` fetches the bytes and validates
+them as a real image (rejecting a 0-byte body or an HTML error page returned with
+a `200`), and the `recording` / `search` / `replay` checks genuinely exercise
+Profile G (recording search + replay-URI resolution) instead of reporting
+advertised-only presence. Off by default because these open extra RTSP/HTTP
+connections the read-only SOAP checks never touch.
 
 **Structured facts (0.11+).** For building a cross-brand conformance corpus, the
 report carries machine-readable facts alongside the human-readable strings:
@@ -925,8 +945,8 @@ implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.12", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.12", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.13", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.13", features = ["mock-server"] }  # adds MockServer
 ```
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):

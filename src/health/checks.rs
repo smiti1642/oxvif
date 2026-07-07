@@ -1,9 +1,15 @@
 //! Reusable, capability-gated check units. Each returns one or more
-//! [`CheckResult`]s. All checks are read-only except [`write_roundtrip`],
-//! which re-applies an unchanged configuration.
+//! [`CheckResult`]s.
+//!
+//! Most checks are read-only, but a few actively touch the device:
+//! [`events`]'s pull-point round-trip subscribes / pulls / unsubscribes
+//! (self-cleaning); the opt-in [`write_roundtrip`] re-applies an unchanged
+//! configuration; and when liveness probing is enabled, [`media`] opens an
+//! RTSP `OPTIONS` connection + fetches a snapshot, and [`recording_services`]
+//! exercises the real recording-search / replay operations.
 
 use std::future::Future;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::report::{Category, CheckResult};
 use crate::{OnvifError, OnvifSession};
@@ -32,6 +38,111 @@ pub(super) fn parse_skew(detail: &str) -> Option<i64> {
         .strip_suffix('s')?
         .parse()
         .ok()
+}
+
+/// Non-destructive RTSP reachability probe: open a TCP connection to the stream
+/// endpoint and send an `OPTIONS` request. A resolved stream URI is no guarantee
+/// the RTSP server actually answers; `200` is ideal and `401` still proves the
+/// server is alive (it just wants auth), so both count as reachable. Read-only —
+/// never issues `DESCRIBE` / `SETUP` / `PLAY`. IPv4/hostname authorities only.
+async fn rtsp_options_probe(rtsp_url: &str) -> Result<(), String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+    use tokio::time::timeout;
+
+    let authority = rtsp_url
+        .strip_prefix("rtsp://")
+        .ok_or("not an rtsp:// url")?
+        .split('/')
+        .next()
+        .unwrap_or("");
+    // Drop any userinfo, then split host:port (default 554).
+    let hostport = authority.rsplit('@').next().unwrap_or(authority);
+    let (host, port) = match hostport.rsplit_once(':') {
+        Some((h, p)) => (h, p.parse::<u16>().unwrap_or(554)),
+        None => (hostport, 554u16),
+    };
+    if host.is_empty() {
+        return Err("empty host".to_string());
+    }
+
+    let mut stream = timeout(Duration::from_secs(5), TcpStream::connect((host, port)))
+        .await
+        .map_err(|_| "connect timed out".to_string())?
+        .map_err(|e| format!("connect failed: {e}"))?;
+
+    let req = format!(
+        "OPTIONS {rtsp_url} RTSP/1.0\r\nCSeq: 1\r\nUser-Agent: oxvif\r\nAccept: */*\r\n\r\n"
+    );
+    stream
+        .write_all(req.as_bytes())
+        .await
+        .map_err(|e| format!("write failed: {e}"))?;
+
+    let mut buf = [0u8; 256];
+    let n = timeout(Duration::from_secs(5), stream.read(&mut buf))
+        .await
+        .map_err(|_| "read timed out".to_string())?
+        .map_err(|e| format!("read failed: {e}"))?;
+
+    let head = String::from_utf8_lossy(&buf[..n]);
+    let status = head.lines().next().unwrap_or("").trim();
+    if status.contains(" 200") || status.contains(" 401") {
+        Ok(())
+    } else {
+        Err(format!("OPTIONS refused: {status}"))
+    }
+}
+
+/// Fetch the snapshot URI and confirm the body is a real image. Returns the byte
+/// count on success. Tries HTTP Digest (via `diqwest`, the same path the SOAP
+/// transport uses) then falls back to Basic auth when credentials are supplied.
+/// A `200` carrying an HTML error page or a 0-byte body — a common firmware quirk
+/// — is rejected here rather than counted as a passing snapshot.
+async fn fetch_snapshot(uri: &str, creds: Option<&(String, String)>) -> Result<usize, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("client build failed: {e}"))?;
+
+    let resp = match creds {
+        Some((u, p)) => {
+            use diqwest::WithDigestAuth as _;
+            let session = diqwest::DigestAuthSession::new(u.clone(), p.clone());
+            match client.get(uri).send_digest_auth(&session).await {
+                Ok(r) if r.status().is_success() => r,
+                // Digest failed / server wants Basic — retry with Basic auth.
+                _ => client
+                    .get(uri)
+                    .basic_auth(u, Some(p))
+                    .send()
+                    .await
+                    .map_err(|e| format!("GET failed: {e}"))?,
+            }
+        }
+        None => client
+            .get(uri)
+            .send()
+            .await
+            .map_err(|e| format!("GET failed: {e}"))?,
+    };
+
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status().as_u16()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| format!("read body: {e}"))?;
+    if looks_like_image(&bytes) {
+        Ok(bytes.len())
+    } else {
+        Err(format!("not an image ({} bytes)", bytes.len()))
+    }
+}
+
+/// True when `bytes` starts with a JPEG (`FF D8`), PNG (`89 50 4E 47`) or BMP
+/// (`42 4D`) magic signature — enough to reject a 0-byte body or an HTML error
+/// page that some firmware returns with a `200` instead of a real snapshot.
+fn looks_like_image(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0xFF, 0xD8]) || bytes.starts_with(b"\x89PNG") || bytes.starts_with(b"BM")
 }
 
 pub(super) async fn device_info(s: &OnvifSession) -> Vec<CheckResult> {
@@ -80,31 +191,125 @@ pub(super) async fn services(s: &OnvifSession) -> Vec<CheckResult> {
     ]
 }
 
-/// Profile G presence: report each recording/search/replay service as Pass
-/// when advertised (via GetCapabilities or the GetServices fallback resolved
-/// during session build) or Skip when absent. Informational — the services
-/// are not exercised here. Feeds the Profile G verdict in `mod.rs::assess`,
-/// which keys off the `recording` / `search` / `replay` check ids.
-pub(super) async fn recording_services(s: &OnvifSession) -> Vec<CheckResult> {
+/// Profile G assessment for the `recording` / `search` / `replay` check ids
+/// (fed to `mod.rs::assess`).
+///
+/// Without liveness probing this is presence-only: Pass when the service is
+/// advertised (via GetCapabilities or the GetServices fallback resolved during
+/// session build), Skip when absent — the services are not exercised.
+///
+/// With liveness probing on, each advertised service is actually exercised:
+/// `search` runs a real recording search (find → poll → end), `replay`
+/// resolves a replay URI for the first recording found, and `recording`
+/// lists recordings. A SOAP fault here is a genuine Profile G failure, no
+/// longer hidden behind "advertised".
+pub(super) async fn recording_services(s: &OnvifSession, liveness: bool) -> Vec<CheckResult> {
     let caps = s.capabilities();
-    [
-        ("recording", caps.recording.url.as_deref()),
-        ("search", caps.search.url.as_deref()),
-        ("replay", caps.replay.url.as_deref()),
-    ]
-    .into_iter()
-    .map(|(id, url)| match url {
-        Some(u) => CheckResult::pass(
-            id,
+    let recording_url = caps.recording.url.clone();
+    let search_url = caps.search.url.clone();
+    let replay_url = caps.replay.url.clone();
+
+    if !liveness {
+        return [
+            ("recording", recording_url.as_deref()),
+            ("search", search_url.as_deref()),
+            ("replay", replay_url.as_deref()),
+        ]
+        .into_iter()
+        .map(|(id, url)| match url {
+            Some(u) => CheckResult::pass(
+                id,
+                Category::Services,
+                format!("advertised: {u}  (not exercised)"),
+            ),
+            None => CheckResult::skip(id, Category::Services, "not advertised"),
+        })
+        .collect();
+    }
+
+    let mut out = Vec::new();
+
+    // recording — list stored recordings.
+    if recording_url.is_some() {
+        out.push(
+            one("recording", Category::Services, async {
+                let recs = s.get_recordings().await?;
+                Ok(format!("{} recording(s)", recs.len()))
+            })
+            .await,
+        );
+    } else {
+        out.push(CheckResult::skip(
+            "recording",
             Category::Services,
-            format!("advertised: {u}  (not exercised)"),
-        ),
-        None => CheckResult::skip(id, Category::Services, "not advertised"),
-    })
-    .collect()
+            "not advertised",
+        ));
+    }
+
+    // search — real find → poll → end; keep the first recording token for replay.
+    let mut first_recording: Option<String> = None;
+    if search_url.is_some() {
+        let start = Instant::now();
+        match s.search_recordings(None).await {
+            Ok(recs) => {
+                first_recording = recs.first().map(|r| r.recording_token.clone());
+                out.push(
+                    CheckResult::pass(
+                        "search",
+                        Category::Services,
+                        format!("{} recording(s) found", recs.len()),
+                    )
+                    .with_elapsed(start.elapsed()),
+                );
+            }
+            Err(e) => out.push(
+                CheckResult::fail_from("search", Category::Services, &e)
+                    .with_elapsed(start.elapsed()),
+            ),
+        }
+    } else {
+        out.push(CheckResult::skip(
+            "search",
+            Category::Services,
+            "not advertised",
+        ));
+    }
+
+    // replay — resolve a replay URI for the first recording found.
+    match (replay_url.is_some(), first_recording) {
+        (false, _) => out.push(CheckResult::skip(
+            "replay",
+            Category::Services,
+            "not advertised",
+        )),
+        (true, None) => out.push(CheckResult::skip(
+            "replay",
+            Category::Services,
+            "no recordings to replay",
+        )),
+        (true, Some(token)) => {
+            let start = Instant::now();
+            match s.get_replay_uri(&token, "RTP-Unicast", "RTSP").await {
+                Ok(uri) => out.push(
+                    CheckResult::pass("replay", Category::Services, uri)
+                        .with_elapsed(start.elapsed()),
+                ),
+                Err(e) => out.push(
+                    CheckResult::fail_from("replay", Category::Services, &e)
+                        .with_elapsed(start.elapsed()),
+                ),
+            }
+        }
+    }
+
+    out
 }
 
-pub(super) async fn media(s: &OnvifSession) -> Vec<CheckResult> {
+pub(super) async fn media(
+    s: &OnvifSession,
+    liveness: bool,
+    creds: Option<&(String, String)>,
+) -> Vec<CheckResult> {
     let mut out = Vec::new();
 
     let start = Instant::now();
@@ -143,13 +348,31 @@ pub(super) async fn media(s: &OnvifSession) -> Vec<CheckResult> {
     };
 
     if let Some(token) = first_token {
-        // Stream URI — expect rtsp://
+        // Stream URI — expect rtsp://. With liveness on, also probe the RTSP
+        // server (a resolved URI is no guarantee the server actually answers).
         let start = Instant::now();
         match s.get_stream_uri(&token).await {
-            Ok(u) if u.uri.starts_with("rtsp://") => out.push(
-                CheckResult::pass("get_stream_uri", Category::Media, u.uri)
-                    .with_elapsed(start.elapsed()),
-            ),
+            Ok(u) if u.uri.starts_with("rtsp://") => {
+                let elapsed = start.elapsed();
+                let res = if liveness {
+                    match rtsp_options_probe(&u.uri).await {
+                        Ok(()) => CheckResult::pass(
+                            "get_stream_uri",
+                            Category::Media,
+                            format!("{} (RTSP OPTIONS ok)", u.uri),
+                        ),
+                        Err(why) => CheckResult::warn(
+                            "get_stream_uri",
+                            Category::Media,
+                            format!("RTSP not reachable: {why}"),
+                            u.uri,
+                        ),
+                    }
+                } else {
+                    CheckResult::pass("get_stream_uri", Category::Media, u.uri)
+                };
+                out.push(res.with_elapsed(elapsed));
+            }
             Ok(u) => out.push(
                 CheckResult::warn("get_stream_uri", Category::Media, "non-rtsp scheme", u.uri)
                     .with_elapsed(start.elapsed()),
@@ -159,13 +382,32 @@ pub(super) async fn media(s: &OnvifSession) -> Vec<CheckResult> {
                     .with_elapsed(start.elapsed()),
             ),
         }
-        // Snapshot URI — expect http(s)://
+        // Snapshot URI — expect http(s)://. With liveness on, also fetch the
+        // bytes and confirm they are a real image (not a 0-byte body or an
+        // HTML error page some firmware returns with a 200).
         let start = Instant::now();
         match s.get_snapshot_uri(&token).await {
-            Ok(u) if u.uri.starts_with("http") => out.push(
-                CheckResult::pass("get_snapshot_uri", Category::Media, u.uri)
-                    .with_elapsed(start.elapsed()),
-            ),
+            Ok(u) if u.uri.starts_with("http") => {
+                let elapsed = start.elapsed();
+                let res = if liveness {
+                    match fetch_snapshot(&u.uri, creds).await {
+                        Ok(bytes) => CheckResult::pass(
+                            "get_snapshot_uri",
+                            Category::Media,
+                            format!("{} ({} KB image)", u.uri, bytes / 1024),
+                        ),
+                        Err(why) => CheckResult::warn(
+                            "get_snapshot_uri",
+                            Category::Media,
+                            format!("snapshot fetch: {why}"),
+                            u.uri,
+                        ),
+                    }
+                } else {
+                    CheckResult::pass("get_snapshot_uri", Category::Media, u.uri)
+                };
+                out.push(res.with_elapsed(elapsed));
+            }
             Ok(u) => out.push(
                 CheckResult::warn(
                     "get_snapshot_uri",
@@ -355,4 +597,26 @@ pub(super) async fn write_roundtrip(s: &OnvifSession) -> Vec<CheckResult> {
         Err(e) => CheckResult::fail_from("set_video_encoder_roundtrip", Category::Write, &e),
     };
     vec![res.with_elapsed(start.elapsed())]
+}
+
+#[cfg(test)]
+mod probe_tests {
+    use super::*;
+
+    #[test]
+    fn image_magic_accepts_jpeg_png_rejects_html_and_empty() {
+        assert!(looks_like_image(&[0xFF, 0xD8, 0xFF, 0xE0])); // JPEG
+        assert!(looks_like_image(b"\x89PNG\r\n\x1a\n")); // PNG
+        assert!(looks_like_image(b"BM\x00\x00")); // BMP
+        assert!(!looks_like_image(b"<html><body>401</body></html>")); // error page
+        assert!(!looks_like_image(b"")); // 0-byte body
+    }
+
+    #[tokio::test]
+    async fn rtsp_probe_rejects_non_rtsp_url() {
+        let err = rtsp_options_probe("http://192.168.1.10/stream")
+            .await
+            .unwrap_err();
+        assert!(err.contains("not an rtsp"), "unexpected error: {err}");
+    }
 }
