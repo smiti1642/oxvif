@@ -1,6 +1,11 @@
 # oxvif
 
-Async Rust client library for the [ONVIF](https://www.onvif.org/) IP camera protocol.
+[![crates.io](https://img.shields.io/crates/v/oxvif.svg)](https://crates.io/crates/oxvif)
+[![docs.rs](https://img.shields.io/docsrs/oxvif)](https://docs.rs/oxvif)
+[![downloads](https://img.shields.io/crates/d/oxvif.svg)](https://crates.io/crates/oxvif)
+[![license](https://img.shields.io/crates/l/oxvif.svg)](https://github.com/smiti1642/oxvif/blob/master/LICENSE)
+
+Async [ONVIF](https://www.onvif.org/) client for IP cameras (Profile S/T/G) in Rust — discovery, PTZ, media, imaging & events.
 
 ```
 UDP multicast ──► discovery::probe() ──► Vec<DiscoveredDevice>
