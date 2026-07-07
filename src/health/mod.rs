@@ -162,6 +162,13 @@ impl HealthCheck {
             let liveness = self.liveness_probes;
             set.spawn(async move { checks::recording_services(&s, liveness).await });
         }
+        // Negative auth-enforcement probe — opens its own credential-free
+        // session, so it takes the device URL rather than the authed session.
+        {
+            let url = self.device_url.clone();
+            let had_creds = self.credentials.is_some();
+            set.spawn(async move { checks::auth_enforcement(&url, had_creds).await });
+        }
         if self.write_checks {
             spawn_check!(checks::write_roundtrip);
         }
@@ -329,8 +336,10 @@ fn assess(checks: &[CheckResult]) -> ProfileAssessment {
                 "connect",
                 "get_profiles",
                 "get_stream_uri",
+                "media2",
                 "get_imaging_settings",
                 "get_event_properties",
+                "event_motion_topic",
             ],
         ),
         // Profile G (recording/search/replay) — advertised-only by default, or
@@ -518,6 +527,75 @@ mod tests {
             report.profiles.profile_g.verdict,
             ProfileVerdict::Conformant,
             "exercised Profile G should be Conformant against the mock:\n{report}"
+        );
+    }
+
+    #[tokio::test]
+    async fn profile_t_gates_on_media2_and_motion_topic() {
+        let server = MockServer::start().await.unwrap();
+        let report = HealthCheck::new(server.device_url()).run().await;
+
+        // The mock advertises Media2 and a motion-alarm topic, so both
+        // Profile-T-defining checks pass and Profile T is Conformant.
+        assert!(
+            check_passed(&report.checks, "media2"),
+            "mock advertises Media2:\n{report}"
+        );
+        assert!(
+            check_passed(&report.checks, "event_motion_topic"),
+            "mock exposes a motion-alarm topic:\n{report}"
+        );
+        assert_eq!(
+            report.profiles.profile_t.verdict,
+            ProfileVerdict::Conformant,
+            "exercised Profile T should be Conformant against the mock:\n{report}"
+        );
+    }
+
+    #[tokio::test]
+    async fn negative_auth_probe_flags_and_confirms_enforcement() {
+        let status_of = |report: &HealthReport| {
+            report
+                .checks
+                .iter()
+                .find(|c| c.id == "auth_enforcement")
+                .expect("auth_enforcement check present")
+                .status
+                .clone()
+        };
+
+        // Auth OFF + credentials supplied → the device serves GetDeviceInformation
+        // anonymously → a security Warn.
+        let open = MockServer::start().await.unwrap();
+        let report = HealthCheck::new(open.device_url())
+            .with_credentials("admin", "admin")
+            .run()
+            .await;
+        assert!(
+            matches!(status_of(&report), CheckStatus::Warn(_)),
+            "auth-off device should warn:\n{report}"
+        );
+
+        // No credentials → nothing to compare against → Skip.
+        let report = HealthCheck::new(open.device_url()).run().await;
+        assert!(
+            matches!(status_of(&report), CheckStatus::Skip(_)),
+            "no credentials → skip:\n{report}"
+        );
+
+        // Auth ENFORCED + valid credentials → the anonymous read is rejected → Pass.
+        let locked = MockServer::builder()
+            .enforce_auth(true)
+            .start()
+            .await
+            .unwrap();
+        let report = HealthCheck::new(locked.device_url())
+            .with_credentials("admin", "admin")
+            .run()
+            .await;
+        assert!(
+            matches!(status_of(&report), CheckStatus::Pass),
+            "auth-enforced device should pass:\n{report}"
         );
     }
 

@@ -21,6 +21,7 @@ pub enum Category {
     Events,
     Network,
     Users,
+    Security,
     Coverage,
     Write,
 }
@@ -38,6 +39,7 @@ impl Category {
             Category::Events => "Events",
             Category::Network => "Network",
             Category::Users => "Users",
+            Category::Security => "Security",
             Category::Coverage => "Parse coverage",
             Category::Write => "Write round-trip",
         }

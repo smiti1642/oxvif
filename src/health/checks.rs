@@ -11,7 +11,7 @@
 use std::future::Future;
 use std::time::{Duration, Instant};
 
-use super::report::{Category, CheckResult};
+use super::report::{Category, CheckError, CheckResult};
 use crate::{OnvifError, OnvifSession};
 
 /// Time a `Result<String, OnvifError>` future into a Pass/Fail check.
@@ -182,12 +182,19 @@ pub(super) async fn time(s: &OnvifSession) -> Vec<CheckResult> {
 }
 
 pub(super) async fn services(s: &OnvifSession) -> Vec<CheckResult> {
+    // Media2 (`ver20/media`) presence — a Profile T requirement. Advertised via
+    // GetCapabilities or the GetServices fallback resolved during session build.
+    let media2 = match s.capabilities().media2.url.as_deref() {
+        Some(u) => CheckResult::pass("media2", Category::Services, format!("advertised: {u}")),
+        None => CheckResult::skip("media2", Category::Services, "Media2 not advertised"),
+    };
     vec![
         one("get_services", Category::Services, async {
             let svcs = s.get_services().await?;
             Ok(format!("{} service(s)", svcs.len()))
         })
         .await,
+        media2,
     ]
 }
 
@@ -498,13 +505,42 @@ pub(super) async fn events(s: &OnvifSession) -> Vec<CheckResult> {
             "Events service not advertised",
         )];
     }
-    let mut out = vec![
-        one("get_event_properties", Category::Events, async {
-            s.get_event_properties().await?;
-            Ok("ok".to_string())
-        })
-        .await,
-    ];
+    let mut out = Vec::new();
+
+    // GetEventProperties — and, from the same response, whether the device
+    // exposes a motion-alarm topic (a Profile T requirement). A device that
+    // answers GetEventProperties but advertises no motion topic is likely
+    // Profile S, not T; keep it a Skip so it flags "couldn't confirm T"
+    // (Inconclusive) rather than painting a false failure on an S-only device.
+    let start = Instant::now();
+    match s.get_event_properties().await {
+        Ok(props) => {
+            out.push(
+                CheckResult::pass(
+                    "get_event_properties",
+                    Category::Events,
+                    format!("{} topic(s)", props.topics.len()),
+                )
+                .with_elapsed(start.elapsed()),
+            );
+            let motion = props
+                .topics
+                .iter()
+                .find(|t| t.to_ascii_lowercase().contains("motion"));
+            out.push(match motion {
+                Some(t) => CheckResult::pass("event_motion_topic", Category::Events, t.clone()),
+                None => CheckResult::skip(
+                    "event_motion_topic",
+                    Category::Events,
+                    "no motion-alarm topic advertised",
+                ),
+            });
+        }
+        Err(e) => out.push(
+            CheckResult::fail_from("get_event_properties", Category::Events, &e)
+                .with_elapsed(start.elapsed()),
+        ),
+    }
     // PullPoint round-trip — subscribe, pull briefly, unsubscribe (self-cleaning).
     let start = Instant::now();
     match s.create_pull_point_subscription(None, Some("PT1M")).await {
@@ -526,6 +562,48 @@ pub(super) async fn events(s: &OnvifSession) -> Vec<CheckResult> {
         ),
     }
     out
+}
+
+/// Negative security probe: confirm the device actually *enforces*
+/// authentication. Calls `GetDeviceInformation` on a credential-free client —
+/// an operation the ONVIF access policy requires authentication for (unlike the
+/// pre-auth `GetSystemDateAndTime` / `GetCapabilities`). If it returns data
+/// without credentials, the device is leaking device info to anonymous clients
+/// (a security finding, `Warn`), not a conformance pass. An auth rejection is
+/// the healthy outcome (`Pass`); any other error leaves it undetermined
+/// (`Skip`). Only runs when credentials were supplied — otherwise every call is
+/// already anonymous and there is nothing to compare against.
+pub(super) async fn auth_enforcement(device_url: &str, had_creds: bool) -> Vec<CheckResult> {
+    if !had_creds {
+        return vec![CheckResult::skip(
+            "auth_enforcement",
+            Category::Security,
+            "no credentials supplied to test enforcement",
+        )];
+    }
+    let start = Instant::now();
+    // A credential-free client aimed straight at the device service — no
+    // GetCapabilities round-trip, so it works even where that is auth-gated.
+    let client = crate::OnvifClient::new(device_url);
+    let res = match client.get_device_info().await {
+        Ok(_) => CheckResult::warn(
+            "auth_enforcement",
+            Category::Security,
+            "device returned GetDeviceInformation without authentication",
+            "unauthenticated read allowed",
+        ),
+        Err(e) if CheckError::from(&e).is_auth() => CheckResult::pass(
+            "auth_enforcement",
+            Category::Security,
+            "GetDeviceInformation rejected without credentials",
+        ),
+        Err(e) => CheckResult::skip(
+            "auth_enforcement",
+            Category::Security,
+            format!("undetermined: {e}"),
+        ),
+    };
+    vec![res.with_elapsed(start.elapsed())]
 }
 
 pub(super) async fn network(s: &OnvifSession) -> Vec<CheckResult> {

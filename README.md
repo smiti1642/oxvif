@@ -879,6 +879,13 @@ report carries machine-readable facts alongside the human-readable strings:
   blocked / skipped) with nothing verified to fail — kept distinct from `partial`
   so "couldn't verify" is never read as "non-conformant". `missing` lists the
   ids that genuinely failed, `unverified` the ones that couldn't be tested.
+  Profile T additionally requires `media2` (Media2 advertised) and
+  `event_motion_topic` (a motion-alarm topic), so a Profile-S-only device is not
+  read as near-T.
+- **`Category::Security` / `auth_enforcement`** — when credentials are supplied, a
+  credential-free `GetDeviceInformation` probe checks the device actually enforces
+  authentication. Serving device info anonymously is a security `Warn`; a rejection
+  is a `Pass`.
 
 > **Note:** the `health` report shape changed in a **breaking** way in 0.12.0
 > (profiles became an object, verdicts/`status.kind` lowercase, `elapsed_ms`

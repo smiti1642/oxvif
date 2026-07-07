@@ -26,6 +26,17 @@ and report shape are unchanged.
     (recording list + recording search + replay-URI resolution) instead of
     reporting advertised-only presence, so the Profile G verdict reflects real
     behaviour.
+- **Stronger Profile T assessment.** Two new checks gate the Profile T verdict so
+  a Profile-S-only device is no longer read as near-T:
+  - `media2` — whether the device advertises the Media2 (`ver20/media`) service.
+  - `event_motion_topic` — whether `GetEventProperties` exposes a motion-alarm
+    topic. Absent → the check `Skip`s (Profile T becomes `Inconclusive`, not a
+    false failure).
+- **Negative security probe (`auth_enforcement`, new `Category::Security`).**
+  When credentials are supplied, a credential-free `GetDeviceInformation` call
+  confirms the device actually enforces authentication. Serving device info
+  anonymously is flagged as a security `Warn`; an auth rejection is the healthy
+  `Pass`; anything else is `Skip` (undetermined).
 
 ### Notes
 - With liveness off, every check keeps its exact prior behaviour (URI-scheme
