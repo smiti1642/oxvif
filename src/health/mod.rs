@@ -264,9 +264,12 @@ fn check_passed(checks: &[CheckResult], id: &str) -> bool {
 /// Why a required check did not contribute a pass to a profile.
 enum ReqOutcome {
     Passed,
-    /// Verified to genuinely fail (a real device fault).
+    /// Verified to genuinely fail (a real device fault) or a capability the
+    /// device definitively does not advertise — either way, a real gap.
     FailedVerified,
-    /// Could not be tested — skipped, or failed only because auth was blocked.
+    /// Could not be tested — auth was blocked, or the check was skipped for a
+    /// reason that isn't a definitive capability gap (e.g. no recordings to
+    /// exercise replay against).
     Unverifiable,
 }
 
@@ -274,6 +277,13 @@ fn classify_required(checks: &[CheckResult], id: &str) -> ReqOutcome {
     match checks.iter().find(|c| c.id == id) {
         Some(c) => match &c.status {
             CheckStatus::Pass | CheckStatus::Warn(_) => ReqOutcome::Passed,
+            // A capability the device does not advertise is a definitive gap
+            // ("not supported"), distinct from a check we merely couldn't
+            // exercise ("couldn't verify"). Every capability-absent skip oxvif
+            // emits says "…advertised"; other skips (no test data) don't.
+            CheckStatus::Skip(reason) if reason.contains("advertised") => {
+                ReqOutcome::FailedVerified
+            }
             CheckStatus::Skip(_) => ReqOutcome::Unverifiable,
             CheckStatus::Fail(_) => {
                 if c.error.as_ref().is_some_and(CheckError::is_auth) {
@@ -446,6 +456,41 @@ mod verdict_tests {
             verdict(&[chk("a", CheckStatus::Fail("x".into()), parse())], &["a"]).verdict,
             Unsupported
         );
+    }
+
+    #[test]
+    fn unadvertised_capability_is_a_gap_not_inconclusive() {
+        use ProfileVerdict::*;
+        // A required capability the device doesn't advertise (a "…advertised"
+        // skip) is a definitive gap → `missing`, so a device with none of the
+        // capability is Unsupported, not Inconclusive.
+        let st = verdict(
+            &[
+                chk("a", CheckStatus::Skip("not advertised".into()), None),
+                chk("b", CheckStatus::Skip("Media2 not advertised".into()), None),
+            ],
+            &["a", "b"],
+        );
+        assert_eq!(st.verdict, Unsupported);
+        assert_eq!(st.missing, ["a", "b"]);
+        assert!(st.unverified.is_empty());
+
+        // A skip that isn't a capability gap (no data to exercise it) stays
+        // `unverified` → Inconclusive, not a failure.
+        let st = verdict(
+            &[
+                chk("a", CheckStatus::Pass, None),
+                chk(
+                    "b",
+                    CheckStatus::Skip("no recordings to replay".into()),
+                    None,
+                ),
+            ],
+            &["a", "b"],
+        );
+        assert_eq!(st.verdict, Inconclusive);
+        assert_eq!(st.unverified, ["b"]);
+        assert!(st.missing.is_empty());
     }
 }
 
