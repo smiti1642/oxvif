@@ -40,6 +40,7 @@ pub struct HealthCheck {
     credentials: Option<(String, String)>,
     write_checks: bool,
     liveness_probes: bool,
+    force_unsupported: bool,
     clock_sync: bool,
 }
 
@@ -51,6 +52,7 @@ impl HealthCheck {
             credentials: None,
             write_checks: false,
             liveness_probes: false,
+            force_unsupported: false,
             clock_sync: false,
         }
     }
@@ -81,6 +83,21 @@ impl HealthCheck {
     /// checks never touch.
     pub fn with_liveness_probes(mut self, enabled: bool) -> Self {
         self.liveness_probes = enabled;
+        self
+    }
+
+    /// Enable opt-in force-verification of services the device does **not**
+    /// advertise. For each unadvertised service that gates a profile (Media2,
+    /// recording / search / replay), try a few conventional service URLs
+    /// (derived from the device endpoint, plus the device endpoint itself for
+    /// single-endpoint devices) and actually call the operation. A service that
+    /// responds despite not being advertised is flagged as under-declared —
+    /// catching the mirror of "declares a profile but it's broken". Best-effort:
+    /// vendors use non-standard paths (`/onvif/media2`, `/Media2`,
+    /// `/media2_service`), so a miss is not proof of absence. Off by default
+    /// because it opens extra requests to guessed endpoints.
+    pub fn with_force_unsupported(mut self, enabled: bool) -> Self {
+        self.force_unsupported = enabled;
         self
     }
 
@@ -143,12 +160,19 @@ impl HealthCheck {
         }
         spawn_check!(checks::device_info);
         spawn_check!(checks::time);
-        spawn_check!(checks::services);
         spawn_check!(checks::imaging);
         spawn_check!(checks::ptz);
         spawn_check!(checks::events);
         spawn_check!(checks::network);
         spawn_check!(checks::users);
+        // Services (incl. Media2 presence) can force-verify an unadvertised
+        // Media2 against guessed URLs, so it takes the flag + device URL.
+        {
+            let s = session.clone();
+            let force = self.force_unsupported;
+            let url = self.device_url.clone();
+            set.spawn(async move { checks::services(&s, force, &url).await });
+        }
         // Media (stream/snapshot) and Profile G take the liveness flag; media
         // also needs the credentials for an authenticated snapshot GET.
         {
@@ -160,7 +184,9 @@ impl HealthCheck {
         {
             let s = session.clone();
             let liveness = self.liveness_probes;
-            set.spawn(async move { checks::recording_services(&s, liveness).await });
+            let force = self.force_unsupported;
+            let url = self.device_url.clone();
+            set.spawn(async move { checks::recording_services(&s, liveness, force, &url).await });
         }
         // Negative auth-enforcement probe — opens its own credential-free
         // session, so it takes the device URL rather than the authed session.

@@ -145,6 +145,51 @@ fn looks_like_image(bytes: &[u8]) -> bool {
     bytes.starts_with(&[0xFF, 0xD8]) || bytes.starts_with(b"\x89PNG") || bytes.starts_with(b"BM")
 }
 
+/// `scheme://host[:port]` of a URL — the base for guessing sibling service URLs.
+fn origin_of(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    let host = rest.split('/').next().unwrap_or(rest);
+    (!host.is_empty()).then(|| format!("{scheme}://{host}"))
+}
+
+/// Best-effort conventional service URLs for a device that does not advertise a
+/// service (used by [`HealthCheck::with_force_unsupported`](super::HealthCheck::with_force_unsupported)).
+/// Vendors use several path conventions (`/onvif/media2`, `/Media2`,
+/// `/media2_service`); the device endpoint itself is included last for
+/// single-endpoint devices that route by SOAP action rather than URL path.
+fn service_url_candidates(device_url: &str, name: &str) -> Vec<String> {
+    let mut v = Vec::new();
+    if let Some(origin) = origin_of(device_url) {
+        let cap = {
+            let mut c = name.chars();
+            c.next()
+                .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+                .unwrap_or_default()
+        };
+        v.push(format!("{origin}/onvif/{name}"));
+        v.push(format!("{origin}/onvif/{cap}"));
+        v.push(format!("{origin}/onvif/{name}_service"));
+    }
+    v.push(device_url.to_string());
+    v.dedup();
+    v
+}
+
+/// Try each candidate URL with a single-call `probe`; return the first URL whose
+/// call succeeds (i.e. the service actually responds there).
+async fn first_responding<F, Fut, T>(candidates: &[String], mut probe: F) -> Option<String>
+where
+    F: FnMut(String) -> Fut,
+    Fut: Future<Output = Result<T, OnvifError>>,
+{
+    for c in candidates {
+        if probe(c.clone()).await.is_ok() {
+            return Some(c.clone());
+        }
+    }
+    None
+}
+
 pub(super) async fn device_info(s: &OnvifSession) -> Vec<CheckResult> {
     vec![
         one("get_device_info", Category::Connectivity, async {
@@ -181,7 +226,7 @@ pub(super) async fn time(s: &OnvifSession) -> Vec<CheckResult> {
     vec![res.with_elapsed(elapsed)]
 }
 
-pub(super) async fn services(s: &OnvifSession) -> Vec<CheckResult> {
+pub(super) async fn services(s: &OnvifSession, force: bool, device_url: &str) -> Vec<CheckResult> {
     let start = Instant::now();
     let svcs = s.get_services().await;
     let elapsed = start.elapsed();
@@ -196,6 +241,25 @@ pub(super) async fn services(s: &OnvifSession) -> Vec<CheckResult> {
             .unwrap_or(false);
     let media2 = if has_media2 {
         CheckResult::pass("media2", Category::Services, "advertised")
+    } else if force {
+        // Not advertised anywhere — force-verify against guessed Media2 URLs.
+        let start = Instant::now();
+        let candidates = service_url_candidates(device_url, "media2");
+        let found = first_responding(&candidates, |url| async move {
+            s.client().get_profiles_media2(&url).await
+        })
+        .await;
+        match found {
+            Some(url) => CheckResult::warn(
+                "media2",
+                Category::Services,
+                "not advertised, but responds when forced (under-declared)",
+                url,
+            )
+            .with_elapsed(start.elapsed()),
+            None => CheckResult::skip("media2", Category::Services, "Media2 not advertised")
+                .with_elapsed(start.elapsed()),
+        }
     } else {
         CheckResult::skip("media2", Category::Services, "Media2 not advertised")
     };
@@ -227,13 +291,19 @@ pub(super) async fn services(s: &OnvifSession) -> Vec<CheckResult> {
 /// resolves a replay URI for the first recording found, and `recording`
 /// lists recordings. A SOAP fault here is a genuine Profile G failure, no
 /// longer hidden behind "advertised".
-pub(super) async fn recording_services(s: &OnvifSession, liveness: bool) -> Vec<CheckResult> {
+pub(super) async fn recording_services(
+    s: &OnvifSession,
+    liveness: bool,
+    force: bool,
+    device_url: &str,
+) -> Vec<CheckResult> {
     let caps = s.capabilities();
     let recording_url = caps.recording.url.clone();
     let search_url = caps.search.url.clone();
     let replay_url = caps.replay.url.clone();
 
-    if !liveness {
+    // Presence-only fast path: not exercising (liveness) and not forcing.
+    if !liveness && !force {
         return [
             ("recording", recording_url.as_deref()),
             ("search", search_url.as_deref()),
@@ -251,80 +321,134 @@ pub(super) async fn recording_services(s: &OnvifSession, liveness: bool) -> Vec<
         .collect();
     }
 
+    const UNDER_DECLARED: &str = "not advertised, but responds when forced (under-declared)";
+    let client = s.client();
     let mut out = Vec::new();
 
     // recording — list stored recordings.
-    if recording_url.is_some() {
-        out.push(
-            one("recording", Category::Services, async {
-                let recs = s.get_recordings().await?;
-                Ok(format!("{} recording(s)", recs.len()))
-            })
-            .await,
-        );
+    let start = Instant::now();
+    let rec = if recording_url.is_some() {
+        if liveness {
+            match s.get_recordings().await {
+                Ok(recs) => CheckResult::pass(
+                    "recording",
+                    Category::Services,
+                    format!("{} recording(s)", recs.len()),
+                ),
+                Err(e) => CheckResult::fail_from("recording", Category::Services, &e),
+            }
+        } else {
+            CheckResult::pass(
+                "recording",
+                Category::Services,
+                "advertised (not exercised)",
+            )
+        }
+    } else if force {
+        let candidates = service_url_candidates(device_url, "recording");
+        match first_responding(&candidates, |url| async move {
+            client.get_recordings(&url).await
+        })
+        .await
+        {
+            Some(url) => CheckResult::warn("recording", Category::Services, UNDER_DECLARED, url),
+            None => CheckResult::skip("recording", Category::Services, "not advertised"),
+        }
     } else {
-        out.push(CheckResult::skip(
-            "recording",
-            Category::Services,
-            "not advertised",
-        ));
-    }
+        CheckResult::skip("recording", Category::Services, "not advertised")
+    };
+    out.push(rec.with_elapsed(start.elapsed()));
 
-    // search — real find → poll → end; keep the first recording token for replay.
+    // search — find → poll → end; keep the first recording token for replay.
+    let start = Instant::now();
     let mut first_recording: Option<String> = None;
-    if search_url.is_some() {
-        let start = Instant::now();
-        match s.search_recordings(None).await {
-            Ok(recs) => {
-                first_recording = recs.first().map(|r| r.recording_token.clone());
-                out.push(
+    let search = if search_url.is_some() {
+        if liveness {
+            match s.search_recordings(None).await {
+                Ok(recs) => {
+                    first_recording = recs.first().map(|r| r.recording_token.clone());
                     CheckResult::pass(
                         "search",
                         Category::Services,
                         format!("{} recording(s) found", recs.len()),
                     )
-                    .with_elapsed(start.elapsed()),
-                );
+                }
+                Err(e) => CheckResult::fail_from("search", Category::Services, &e),
             }
-            Err(e) => out.push(
-                CheckResult::fail_from("search", Category::Services, &e)
-                    .with_elapsed(start.elapsed()),
-            ),
+        } else {
+            CheckResult::pass("search", Category::Services, "advertised (not exercised)")
+        }
+    } else if force {
+        let candidates = service_url_candidates(device_url, "search");
+        let mut found = None;
+        for cand in &candidates {
+            if let Ok(token) = client.find_recordings(cand, None, "PT10S").await {
+                let results = client
+                    .get_recording_search_results(cand, &token, 10, "PT5S")
+                    .await;
+                let _ = client.end_search(cand, &token).await;
+                let recs = results.map(|r| r.recording_information).unwrap_or_default();
+                found = Some((cand.clone(), recs));
+                break;
+            }
+        }
+        match found {
+            Some((url, recs)) => {
+                first_recording = recs.first().map(|r| r.recording_token.clone());
+                CheckResult::warn(
+                    "search",
+                    Category::Services,
+                    UNDER_DECLARED,
+                    format!("{url}  ({} found)", recs.len()),
+                )
+            }
+            None => CheckResult::skip("search", Category::Services, "not advertised"),
         }
     } else {
-        out.push(CheckResult::skip(
-            "search",
-            Category::Services,
-            "not advertised",
-        ));
-    }
+        CheckResult::skip("search", Category::Services, "not advertised")
+    };
+    out.push(search.with_elapsed(start.elapsed()));
 
     // replay — resolve a replay URI for the first recording found.
-    match (replay_url.is_some(), first_recording) {
-        (false, _) => out.push(CheckResult::skip(
-            "replay",
-            Category::Services,
-            "not advertised",
-        )),
-        (true, None) => out.push(CheckResult::skip(
-            "replay",
-            Category::Services,
-            "no recordings to replay",
-        )),
-        (true, Some(token)) => {
-            let start = Instant::now();
-            match s.get_replay_uri(&token, "RTP-Unicast", "RTSP").await {
-                Ok(uri) => out.push(
-                    CheckResult::pass("replay", Category::Services, uri)
-                        .with_elapsed(start.elapsed()),
-                ),
-                Err(e) => out.push(
-                    CheckResult::fail_from("replay", Category::Services, &e)
-                        .with_elapsed(start.elapsed()),
-                ),
+    let start = Instant::now();
+    let replay = if replay_url.is_some() {
+        if !liveness {
+            CheckResult::pass("replay", Category::Services, "advertised (not exercised)")
+        } else if let Some(token) = &first_recording {
+            match s.get_replay_uri(token, "RTP-Unicast", "RTSP").await {
+                Ok(uri) => CheckResult::pass("replay", Category::Services, uri),
+                Err(e) => CheckResult::fail_from("replay", Category::Services, &e),
             }
+        } else {
+            CheckResult::skip("replay", Category::Services, "no recordings to replay")
         }
-    }
+    } else if force {
+        match &first_recording {
+            Some(token) => {
+                let candidates = service_url_candidates(device_url, "replay");
+                let mut found = None;
+                for cand in &candidates {
+                    if let Ok(uri) = client
+                        .get_replay_uri(cand, token, "RTP-Unicast", "RTSP")
+                        .await
+                    {
+                        found = Some(uri);
+                        break;
+                    }
+                }
+                match found {
+                    Some(uri) => {
+                        CheckResult::warn("replay", Category::Services, UNDER_DECLARED, uri)
+                    }
+                    None => CheckResult::skip("replay", Category::Services, "not advertised"),
+                }
+            }
+            None => CheckResult::skip("replay", Category::Services, "no recordings to replay"),
+        }
+    } else {
+        CheckResult::skip("replay", Category::Services, "not advertised")
+    };
+    out.push(replay.with_elapsed(start.elapsed()));
 
     out
 }
@@ -713,5 +837,39 @@ mod probe_tests {
             .await
             .unwrap_err();
         assert!(err.contains("not an rtsp"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn origin_of_extracts_scheme_host_port() {
+        assert_eq!(
+            origin_of("http://192.168.1.50:8080/onvif/device"),
+            Some("http://192.168.1.50:8080".into())
+        );
+        assert_eq!(
+            origin_of("https://cam.local/onvif/device_service"),
+            Some("https://cam.local".into())
+        );
+        assert_eq!(origin_of("not-a-url"), None);
+    }
+
+    #[test]
+    fn service_url_candidates_cover_common_conventions() {
+        let c = service_url_candidates("http://192.168.1.50/onvif/device_service", "media2");
+        // The three path conventions seen across vendors.
+        for want in [
+            "http://192.168.1.50/onvif/media2",
+            "http://192.168.1.50/onvif/Media2",
+            "http://192.168.1.50/onvif/media2_service",
+            // …plus the device endpoint itself (single-endpoint devices).
+            "http://192.168.1.50/onvif/device_service",
+        ] {
+            assert!(
+                c.contains(&want.to_string()),
+                "missing candidate {want}: {c:?}"
+            );
+        }
+        // Port is preserved on every candidate.
+        let c = service_url_candidates("http://192.168.1.50:8080/onvif/device", "recording");
+        assert!(c.iter().all(|u| u.starts_with("http://192.168.1.50:8080")));
     }
 }

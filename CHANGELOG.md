@@ -64,6 +64,14 @@ that release's note).
   (`missing` → `Unsupported`/`Partial`), while `Inconclusive` is reserved for
   genuinely untestable checks (auth-blocked, or no data to exercise — e.g. a
   recording device with zero recordings to replay).
+- **`HealthCheck::with_force_unsupported(bool)`** (default `false`) — force-verify
+  services the device does *not* advertise. For each unadvertised profile-gating
+  service (Media2, recording / search / replay) it tries a few conventional
+  service URLs (derived from the device endpoint, plus the endpoint itself for
+  single-endpoint devices) and actually calls the operation; one that responds is
+  flagged `Warn` as **under-declared** — the mirror of "declares a profile but
+  it's broken". Best-effort: vendors use non-standard paths, so a miss is not
+  proof of absence.
 - **Negative security probe (`auth_enforcement`, new `Category::Security`).**
   When credentials are supplied, a credential-free `GetDeviceInformation` call
   confirms the device actually enforces authentication. Serving device info

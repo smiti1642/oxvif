@@ -858,6 +858,14 @@ Profile G (recording search + replay-URI resolution) instead of reporting
 advertised-only presence. Off by default because these open extra RTSP/HTTP
 connections the read-only SOAP checks never touch.
 
+**Force-verifying undeclared services (opt-in).** `with_force_unsupported(true)`
+goes after the *opposite* problem — a device that under-declares. For each
+profile-gating service the device doesn't advertise (Media2, recording / search /
+replay), it tries a few conventional service URLs (and the device endpoint
+itself) and calls the operation; one that answers is flagged as **under-declared**
+rather than counted as unsupported. Best-effort — vendors use non-standard paths,
+so a miss isn't proof of absence.
+
 **Structured facts (0.11+).** For building a cross-brand conformance corpus, the
 report carries machine-readable facts alongside the human-readable strings:
 
