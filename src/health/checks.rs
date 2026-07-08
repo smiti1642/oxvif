@@ -182,20 +182,37 @@ pub(super) async fn time(s: &OnvifSession) -> Vec<CheckResult> {
 }
 
 pub(super) async fn services(s: &OnvifSession) -> Vec<CheckResult> {
-    // Media2 (`ver20/media`) presence — a Profile T requirement. Advertised via
-    // GetCapabilities or the GetServices fallback resolved during session build.
-    let media2 = match s.capabilities().media2.url.as_deref() {
-        Some(u) => CheckResult::pass("media2", Category::Services, format!("advertised: {u}")),
-        None => CheckResult::skip("media2", Category::Services, "Media2 not advertised"),
+    let start = Instant::now();
+    let svcs = s.get_services().await;
+    let elapsed = start.elapsed();
+
+    // Media2 (`ver20/media`) presence — a Profile T requirement. Many devices
+    // omit Media2 from the GetCapabilities extension and only list it in
+    // GetServices, so check both; GetServices is the reliable source.
+    let has_media2 = s.capabilities().media2.url.is_some()
+        || svcs
+            .as_ref()
+            .map(|list| list.iter().any(|x| x.is_media2()))
+            .unwrap_or(false);
+    let media2 = if has_media2 {
+        CheckResult::pass("media2", Category::Services, "advertised")
+    } else {
+        CheckResult::skip("media2", Category::Services, "Media2 not advertised")
     };
-    vec![
-        one("get_services", Category::Services, async {
-            let svcs = s.get_services().await?;
-            Ok(format!("{} service(s)", svcs.len()))
-        })
-        .await,
-        media2,
-    ]
+
+    let get_services = match &svcs {
+        Ok(list) => CheckResult::pass(
+            "get_services",
+            Category::Services,
+            format!("{} service(s)", list.len()),
+        )
+        .with_elapsed(elapsed),
+        Err(e) => {
+            CheckResult::fail_from("get_services", Category::Services, e).with_elapsed(elapsed)
+        }
+    };
+
+    vec![get_services, media2]
 }
 
 /// Profile G assessment for the `recording` / `search` / `replay` check ids
