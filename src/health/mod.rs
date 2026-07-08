@@ -293,10 +293,13 @@ enum ReqOutcome {
     /// Verified to genuinely fail (a real device fault) or a capability the
     /// device definitively does not advertise — either way, a real gap.
     FailedVerified,
-    /// Could not be tested — auth was blocked, or the check was skipped for a
-    /// reason that isn't a definitive capability gap (e.g. no recordings to
-    /// exercise replay against).
+    /// Could not be tested — auth was blocked (a "couldn't verify" unknown).
     Unverifiable,
+    /// The service is present but there was nothing to exercise it with (e.g. a
+    /// recording device with zero recordings to replay). Not a gap and not an
+    /// unknown — excluded from the verdict entirely so it neither fails nor
+    /// clouds a device whose other checks all pass.
+    NotApplicable,
 }
 
 fn classify_required(checks: &[CheckResult], id: &str) -> ReqOutcome {
@@ -304,11 +307,15 @@ fn classify_required(checks: &[CheckResult], id: &str) -> ReqOutcome {
         Some(c) => match &c.status {
             CheckStatus::Pass | CheckStatus::Warn(_) => ReqOutcome::Passed,
             // A capability the device does not advertise is a definitive gap
-            // ("not supported"), distinct from a check we merely couldn't
-            // exercise ("couldn't verify"). Every capability-absent skip oxvif
-            // emits says "…advertised"; other skips (no test data) don't.
+            // ("not supported"); every capability-absent skip oxvif emits says
+            // "…advertised".
             CheckStatus::Skip(reason) if reason.contains("advertised") => {
                 ReqOutcome::FailedVerified
+            }
+            // The service is present but had no data to exercise ("no
+            // recordings to replay") — excluded, don't penalise the verdict.
+            CheckStatus::Skip(reason) if reason.contains("no recordings") => {
+                ReqOutcome::NotApplicable
             }
             CheckStatus::Skip(_) => ReqOutcome::Unverifiable,
             CheckStatus::Fail(_) => {
@@ -333,6 +340,8 @@ fn verdict(checks: &[CheckResult], required: &[&'static str]) -> ProfileState {
             ReqOutcome::Passed => passed += 1,
             ReqOutcome::FailedVerified => missing.push((*id).to_string()),
             ReqOutcome::Unverifiable => unverified.push((*id).to_string()),
+            // Excluded from the verdict — see [`ReqOutcome::NotApplicable`].
+            ReqOutcome::NotApplicable => {}
         }
     }
     let verdict = if missing.is_empty() && unverified.is_empty() {
@@ -501,8 +510,9 @@ mod verdict_tests {
         assert_eq!(st.missing, ["a", "b"]);
         assert!(st.unverified.is_empty());
 
-        // A skip that isn't a capability gap (no data to exercise it) stays
-        // `unverified` → Inconclusive, not a failure.
+        // A "no data to exercise it" skip (service present, nothing to test) is
+        // excluded from the verdict — it neither fails nor clouds a device whose
+        // other required checks all pass.
         let st = verdict(
             &[
                 chk("a", CheckStatus::Pass, None),
@@ -514,8 +524,8 @@ mod verdict_tests {
             ],
             &["a", "b"],
         );
-        assert_eq!(st.verdict, Inconclusive);
-        assert_eq!(st.unverified, ["b"]);
+        assert_eq!(st.verdict, Conformant);
+        assert!(st.unverified.is_empty());
         assert!(st.missing.is_empty());
     }
 }

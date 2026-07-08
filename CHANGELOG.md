@@ -59,11 +59,13 @@ that release's note).
     devices only list Media2 in the former).
   - `event_motion_topic` — whether `GetEventProperties` exposes a motion-alarm
     topic.
-- **Verdicts distinguish "not supported" from "couldn't verify".** A required
-  capability the device doesn't advertise now counts as a definitive gap
-  (`missing` → `Unsupported`/`Partial`), while `Inconclusive` is reserved for
-  genuinely untestable checks (auth-blocked, or no data to exercise — e.g. a
-  recording device with zero recordings to replay).
+- **Verdicts distinguish "not supported", "couldn't verify" and "not
+  applicable".** A required capability the device doesn't advertise is a
+  definitive gap (`missing` → `Unsupported`/`Partial`); `Inconclusive` is
+  reserved for genuinely untestable checks (auth-blocked); and a service that is
+  present but had no data to exercise (a recording device with zero recordings
+  to replay) is **excluded** from the verdict, so it neither fails nor clouds a
+  device whose other checks all pass.
 - **`HealthCheck::with_force_unsupported(bool)`** (default `false`) — force-verify
   services the device does *not* advertise. For each unadvertised profile-gating
   service (Media2, recording / search / replay) it tries a few conventional
