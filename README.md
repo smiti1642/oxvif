@@ -89,7 +89,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.13", features = ["mock"] }
+oxvif = { version = "0.12", features = ["mock"] }
 ```
 
 ```rust
@@ -116,7 +116,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.13"
+oxvif = "0.12"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -818,7 +818,7 @@ alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 ```toml
-oxvif = { version = "0.13", features = ["health"] }
+oxvif = { version = "0.12", features = ["health"] }
 ```
 
 ```rust
@@ -952,8 +952,8 @@ implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.13", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.13", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.12", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.12", features = ["mock-server"] }  # adds MockServer
 ```
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):

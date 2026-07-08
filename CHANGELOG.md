@@ -5,50 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.13.0] - 2026-07-07
-
-Headline: **opt-in active liveness probing for the HealthCheck** — the check can
-now verify that a stream/snapshot/Profile-G actually *works*, not just that the
-device answered the SOAP call. Additive and off by default; existing behaviour
-and report shape are unchanged.
-
-### Added (`health` feature)
-- **`HealthCheck::with_liveness_probes(bool)`** (default `false`). When enabled:
-  - `get_stream_uri` follows the resolved RTSP URI with a non-destructive RTSP
-    `OPTIONS` reachability probe (a resolved URI is no guarantee the server
-    answers). `200`/`401` count as reachable; otherwise the check downgrades to
-    `Warn` with the reason.
-  - `get_snapshot_uri` fetches the snapshot bytes and validates them as a real
-    image (JPEG/PNG/BMP magic) — a 0-byte body or an HTML error page returned
-    with a `200` is flagged, not counted as a pass. Uses HTTP Digest (with a
-    Basic-auth fallback) when credentials are supplied.
-  - the `recording` / `search` / `replay` checks genuinely exercise Profile G
-    (recording list + recording search + replay-URI resolution) instead of
-    reporting advertised-only presence, so the Profile G verdict reflects real
-    behaviour.
-- **Stronger Profile T assessment.** Two new checks gate the Profile T verdict so
-  a Profile-S-only device is no longer read as near-T:
-  - `media2` — whether the device advertises the Media2 (`ver20/media`) service.
-  - `event_motion_topic` — whether `GetEventProperties` exposes a motion-alarm
-    topic. Absent → the check `Skip`s (Profile T becomes `Inconclusive`, not a
-    false failure).
-- **Negative security probe (`auth_enforcement`, new `Category::Security`).**
-  When credentials are supplied, a credential-free `GetDeviceInformation` call
-  confirms the device actually enforces authentication. Serving device info
-  anonymously is flagged as a security `Warn`; an auth rejection is the healthy
-  `Pass`; anything else is `Skip` (undetermined).
-
-### Notes
-- With liveness off, every check keeps its exact prior behaviour (URI-scheme
-  check / advertised-only Profile G); no report-shape change.
-
-## [0.12.0] - 2026-07-03
+## [0.12.0] - 2026-07-08
 
 Headline: **BREAKING — the HealthCheck report is reshaped so "couldn't verify"
-is never mistaken for "non-conformant".** In 0.x a minor bump is the SemVer
-signal for a breaking change; only the `health` feature's `HealthReport` JSON
-shape changes here — the rest of the crate (the ONVIF client) is untouched.
-0.11's health output was explicitly provisional (see that release's note).
+is never mistaken for "non-conformant"**, plus opt-in active liveness probing, a
+stronger Profile T assessment, and a negative auth-enforcement probe. In 0.x a
+minor bump is the SemVer signal for a breaking change; only the `health`
+feature's `HealthReport` JSON shape changes here — the rest of the crate (the
+ONVIF client) is untouched. 0.11's health output was explicitly provisional (see
+that release's note).
 
 ### Changed (breaking — `health` feature)
 - **Profile assessment is an object, not a tuple.** `ProfileAssessment::profile_{s,t,g}`
@@ -64,11 +29,40 @@ shape changes here — the rest of the crate (the ONVIF client) is untouched.
 - **`CheckResult::elapsed` is now `Option<Duration>`**; `elapsed_ms` serialises as
   `null` for a check that never ran (e.g. `Skip`) instead of an ambiguous `0`.
 
-### Added
+### Added (`health` feature)
 - `health::ProfileState` — the per-profile `{ verdict, missing, unverified }`.
 - `CheckError::is_auth()` — the single source of truth for "is this failure an
   authentication/authorization problem?", used by the assessment to route a
   check to `unverified` vs `missing` (so callers can't drift from oxvif's rule).
+- **`HealthCheck::with_liveness_probes(bool)`** (default `false`) — opt-in active
+  probing that verifies results actually *work*, not just that the device
+  answered the SOAP call. When enabled:
+  - `get_stream_uri` follows the resolved RTSP URI with a non-destructive RTSP
+    `OPTIONS` reachability probe (a resolved URI is no guarantee the server
+    answers). `200`/`401` count as reachable; otherwise the check downgrades to
+    `Warn` with the reason.
+  - `get_snapshot_uri` fetches the snapshot bytes and validates them as a real
+    image (JPEG/PNG/BMP magic) — a 0-byte body or an HTML error page returned
+    with a `200` is flagged, not counted as a pass. Uses HTTP Digest (with a
+    Basic-auth fallback) when credentials are supplied.
+  - the `recording` / `search` / `replay` checks genuinely exercise Profile G
+    (recording list + recording search + replay-URI resolution) instead of
+    reporting advertised-only presence, so the Profile G verdict reflects real
+    behaviour.
+
+  With liveness off, every check keeps its exact prior behaviour (URI-scheme
+  check / advertised-only Profile G); no report-shape change.
+- **Stronger Profile T assessment.** Two new checks gate the Profile T verdict so
+  a Profile-S-only device is no longer read as near-T:
+  - `media2` — whether the device advertises the Media2 (`ver20/media`) service.
+  - `event_motion_topic` — whether `GetEventProperties` exposes a motion-alarm
+    topic. Absent → the check `Skip`s (Profile T becomes `Inconclusive`, not a
+    false failure).
+- **Negative security probe (`auth_enforcement`, new `Category::Security`).**
+  When credentials are supplied, a credential-free `GetDeviceInformation` call
+  confirms the device actually enforces authentication. Serving device info
+  anonymously is flagged as a security `Warn`; an auth rejection is the healthy
+  `Pass`; anything else is `Skip` (undetermined).
 
 ### Migration
 - `HealthReport` JSON written by ≤0.11 (e.g. saved baselines) will not
