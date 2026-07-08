@@ -54,10 +54,16 @@ that release's note).
   check / advertised-only Profile G); no report-shape change.
 - **Stronger Profile T assessment.** Two new checks gate the Profile T verdict so
   a Profile-S-only device is no longer read as near-T:
-  - `media2` — whether the device advertises the Media2 (`ver20/media`) service.
+  - `media2` — whether the device advertises the Media2 (`ver20/media`) service,
+    checked via **GetServices** as well as the GetCapabilities extension (many
+    devices only list Media2 in the former).
   - `event_motion_topic` — whether `GetEventProperties` exposes a motion-alarm
-    topic. Absent → the check `Skip`s (Profile T becomes `Inconclusive`, not a
-    false failure).
+    topic.
+- **Verdicts distinguish "not supported" from "couldn't verify".** A required
+  capability the device doesn't advertise now counts as a definitive gap
+  (`missing` → `Unsupported`/`Partial`), while `Inconclusive` is reserved for
+  genuinely untestable checks (auth-blocked, or no data to exercise — e.g. a
+  recording device with zero recordings to replay).
 - **Negative security probe (`auth_enforcement`, new `Category::Security`).**
   When credentials are supplied, a credential-free `GetDeviceInformation` call
   confirms the device actually enforces authentication. Serving device info
