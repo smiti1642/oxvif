@@ -8,6 +8,17 @@ use serde::{Deserialize, Serialize};
 use crate::OnvifError;
 use crate::soap::SoapError;
 
+/// Escape a string for XML: drop characters that are illegal in XML 1.0 (control
+/// chars other than tab/newline/CR, which a device fault string could contain),
+/// then entity-escape `& < > " '`. Safe for both attribute values and text.
+fn x(s: &str) -> String {
+    let cleaned: String = s
+        .chars()
+        .filter(|&c| c == '\t' || c == '\n' || c == '\r' || c >= ' ')
+        .collect();
+    crate::types::xml_escape(&cleaned).into_owned()
+}
+
 /// Which area of the device a check exercises. Also drives report grouping order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -437,6 +448,128 @@ impl HealthReport {
         serde_json::to_string_pretty(self).expect("HealthReport is fully serializable")
     }
 
+    /// Render this report as a JUnit `<testsuite>` element (no `<?xml?>`
+    /// declaration or `<testsuites>` wrapper), so it can be composed into a
+    /// multi-device document. `name` names the suite (e.g. the device address).
+    ///
+    /// Each check becomes a `<testcase>`: `Fail` → `<failure>` (carrying the
+    /// ONVIF subcode as `type` and any `<Detail>` as the body), `Skip` →
+    /// `<skipped>`, `Warn` → a passing case with a `<system-out>` note (JUnit
+    /// has no "warn", and a warning should not fail a CI gate). Each profile
+    /// verdict is a testcase too: `Conformant` passes, `Partial`/`Unsupported`
+    /// fail, `Inconclusive` is skipped.
+    pub fn to_junit_testsuite(&self, name: &str) -> String {
+        use std::fmt::Write as _;
+
+        let mut cases = String::new();
+        let mut tests = 0usize;
+        let mut failures = 0usize;
+        let mut skipped = 0usize;
+
+        for c in &self.checks {
+            tests += 1;
+            let time = c.elapsed.map(|d| d.as_secs_f64()).unwrap_or(0.0);
+            let _ = write!(
+                cases,
+                "    <testcase name=\"{}\" classname=\"{}\" time=\"{:.3}\"",
+                x(&c.id),
+                x(c.category.label()),
+                time,
+            );
+            match &c.status {
+                CheckStatus::Pass => cases.push_str("/>\n"),
+                CheckStatus::Warn(reason) => {
+                    let _ = write!(
+                        cases,
+                        ">\n      <system-out>WARN: {}</system-out>\n    </testcase>\n",
+                        x(reason),
+                    );
+                }
+                CheckStatus::Fail(reason) => {
+                    failures += 1;
+                    let typ = c
+                        .error
+                        .as_ref()
+                        .map(|e| {
+                            e.subcode
+                                .clone()
+                                .or_else(|| e.fault_code.clone())
+                                .unwrap_or_else(|| format!("{:?}", e.class))
+                        })
+                        .unwrap_or_else(|| "fail".into());
+                    let detail = c.error.as_ref().and_then(|e| e.detail.as_deref());
+                    let _ = write!(
+                        cases,
+                        ">\n      <failure message=\"{}\" type=\"{}\">{}</failure>\n    </testcase>\n",
+                        x(reason),
+                        x(&typ),
+                        x(detail.unwrap_or("")),
+                    );
+                }
+                CheckStatus::Skip(reason) => {
+                    skipped += 1;
+                    let _ = write!(
+                        cases,
+                        ">\n      <skipped message=\"{}\"/>\n    </testcase>\n",
+                        x(reason),
+                    );
+                }
+            }
+        }
+
+        for (letter, st) in [
+            ("S", &self.profiles.profile_s),
+            ("T", &self.profiles.profile_t),
+            ("G", &self.profiles.profile_g),
+        ] {
+            tests += 1;
+            let _ = write!(
+                cases,
+                "    <testcase name=\"Profile {letter}\" classname=\"Profiles\"",
+            );
+            match st.verdict {
+                ProfileVerdict::Conformant => cases.push_str("/>\n"),
+                ProfileVerdict::Inconclusive => {
+                    skipped += 1;
+                    let _ = write!(
+                        cases,
+                        ">\n      <skipped message=\"inconclusive (unverified: {})\"/>\n    </testcase>\n",
+                        x(&st.unverified.join(", ")),
+                    );
+                }
+                ProfileVerdict::Partial | ProfileVerdict::Unsupported => {
+                    failures += 1;
+                    let _ = write!(
+                        cases,
+                        ">\n      <failure message=\"{} (missing: {})\" type=\"profile\"/>\n    </testcase>\n",
+                        st.verdict.label(),
+                        x(&st.missing.join(", ")),
+                    );
+                }
+            }
+        }
+
+        format!(
+            "  <testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" skipped=\"{}\" time=\"{:.3}\">\n{}  </testsuite>\n",
+            x(name),
+            tests,
+            failures,
+            skipped,
+            self.total_elapsed.as_secs_f64(),
+            cases,
+        )
+    }
+
+    /// Render this report as a standalone JUnit XML document (`<?xml?>` +
+    /// `<testsuites>` wrapping a single `<testsuite>`) — consumable by any CI or
+    /// test-report viewer that ingests JUnit XML.
+    pub fn to_junit_xml(&self) -> String {
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites>\n{}</testsuites>\n",
+            self.to_junit_testsuite(&self.target),
+        )
+    }
+
     /// Compare this report against an earlier baseline and report the
     /// differences relevant for regression tracking (e.g. between firmware
     /// versions).
@@ -672,6 +805,50 @@ mod tests {
             clock_skew_s: None,
             declared_profiles: vec![],
         }
+    }
+
+    #[test]
+    fn junit_xml_maps_statuses_and_escapes() {
+        let mut fail = check(
+            "get_stream_uri",
+            CheckStatus::Fail("boom & <bad>".into()),
+            12,
+        );
+        fail.error = Some(CheckError {
+            class: ErrorClass::SoapFault,
+            fault_code: Some("SOAP-ENV:Sender".into()),
+            subcode: Some("ter:NotAuthorized".into()),
+            reason: "boom & <bad>".into(),
+            detail: Some("detail\u{0007}text".into()), // includes an illegal XML control char
+        });
+        let checks = vec![
+            check("connect", CheckStatus::Pass, 5),
+            fail,
+            check("recording", CheckStatus::Skip("not advertised".into()), 0),
+            check(
+                "get_snapshot_uri",
+                CheckStatus::Warn("snapshot fetch: x".into()),
+                8,
+            ),
+        ];
+        let xml = report(checks).to_junit_xml();
+
+        // Well-formed skeleton + suite named for the device.
+        assert!(xml.starts_with("<?xml"));
+        assert!(xml.contains("<testsuites>") && xml.contains("</testsuites>"));
+        assert!(xml.contains("name=\"http://test/onvif/device_service\""));
+        // 4 checks + 3 profiles = 7; check fail + Profile G unsupported = 2 failures; 1 skip.
+        assert!(xml.contains("tests=\"7\""), "{xml}");
+        assert!(xml.contains("failures=\"2\""), "{xml}");
+        assert!(xml.contains("skipped=\"1\""), "{xml}");
+        // Fail carries the ONVIF subcode as `type`; entities escaped; control char dropped.
+        assert!(xml.contains("type=\"ter:NotAuthorized\""));
+        assert!(xml.contains("boom &amp; &lt;bad&gt;"));
+        assert!(!xml.contains('\u{0007}'));
+        // Warn is a note, not a failure; skip and profile failure present.
+        assert!(xml.contains("<system-out>WARN: snapshot fetch: x</system-out>"));
+        assert!(xml.contains("<skipped message=\"not advertised\"/>"));
+        assert!(xml.contains("unsupported (missing: recording)"));
     }
 
     #[test]

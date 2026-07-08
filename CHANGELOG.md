@@ -80,6 +80,14 @@ that release's note).
   anonymously is flagged as a security `Warn`; an auth rejection is the healthy
   `Pass`; anything else is `Skip` (undetermined).
 
+- **`HealthReport::to_junit_xml()` / `to_junit_testsuite(name)`** — render a run as
+  JUnit XML, the de-facto test-result format every CI and dashboard ingests. Each
+  check is a `<testcase>` (`Fail` → `<failure>` carrying the ONVIF subcode as
+  `type`, `Skip` → `<skipped>`, `Warn` → a passing case with a `<system-out>`
+  note) and each profile verdict is a testcase too (`Partial`/`Unsupported` →
+  failure, `Inconclusive` → skipped). `to_junit_testsuite` emits a bare
+  `<testsuite>` for composing multi-device documents.
+
 ### Migration
 - `HealthReport` JSON written by ≤0.11 (e.g. saved baselines) will not
   deserialize into the 0.12 shape — regenerate it by re-running the check.
