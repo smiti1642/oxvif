@@ -95,10 +95,13 @@ async fn rtsp_options_probe(rtsp_url: &str) -> Result<(), String> {
 }
 
 /// Fetch the snapshot URI and confirm the body is a real image. Returns the byte
-/// count on success. Tries HTTP Digest (via `diqwest`, the same path the SOAP
-/// transport uses) then falls back to Basic auth when credentials are supplied.
-/// A `200` carrying an HTML error page or a 0-byte body — a common firmware quirk
-/// — is rejected here rather than counted as a passing snapshot.
+/// count on success. Performs a manual HTTP Digest handshake (challenge → answer)
+/// so the `qop="auth"` value can be quoted — some Hikvision/Uniview firmware
+/// reject the unquoted `qop=auth` that `diqwest`/`digest_auth` emit by default and
+/// answer with a non-image `200` body. Falls back to Basic auth when the device
+/// does not offer Digest. A `200` carrying an HTML error page or a 0-byte body —
+/// a common firmware quirk — is rejected here rather than counted as a passing
+/// snapshot.
 async fn fetch_snapshot(uri: &str, creds: Option<&(String, String)>) -> Result<usize, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -107,17 +110,56 @@ async fn fetch_snapshot(uri: &str, creds: Option<&(String, String)>) -> Result<u
 
     let resp = match creds {
         Some((u, p)) => {
-            use diqwest::WithDigestAuth as _;
-            let session = diqwest::DigestAuthSession::new(u.clone(), p.clone());
-            match client.get(uri).send_digest_auth(&session).await {
-                Ok(r) if r.status().is_success() => r,
-                // Digest failed / server wants Basic — retry with Basic auth.
-                _ => client
-                    .get(uri)
-                    .basic_auth(u, Some(p))
-                    .send()
-                    .await
-                    .map_err(|e| format!("GET failed: {e}"))?,
+            // Unauthenticated GET first — yields the Digest challenge (and some
+            // cameras serve the snapshot anonymously, answering 200 straight away).
+            let first = client
+                .get(uri)
+                .send()
+                .await
+                .map_err(|e| format!("GET failed: {e}"))?;
+            if first.status().is_success() {
+                first
+            } else if first.status().as_u16() == 401 {
+                let www = first
+                    .headers()
+                    .get(reqwest::header::WWW_AUTHENTICATE)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+                let digest = if www.to_lowercase().contains("digest") {
+                    digest_header(&www, uri, u, p)
+                } else {
+                    None
+                };
+                let had_digest = digest.is_some();
+                let authed = match digest {
+                    Some(header) => client
+                        .get(uri)
+                        .header(reqwest::header::AUTHORIZATION, header)
+                        .send()
+                        .await
+                        .map_err(|e| format!("GET failed: {e}"))?,
+                    None => client
+                        .get(uri)
+                        .basic_auth(u, Some(p))
+                        .send()
+                        .await
+                        .map_err(|e| format!("GET failed: {e}"))?,
+                };
+                // Digest offered but rejected (stale nonce, unusual realm) —
+                // give Basic a chance before giving up.
+                if !authed.status().is_success() && had_digest {
+                    client
+                        .get(uri)
+                        .basic_auth(u, Some(p))
+                        .send()
+                        .await
+                        .map_err(|e| format!("GET failed: {e}"))?
+                } else {
+                    authed
+                }
+            } else {
+                first
             }
         }
         None => client
@@ -136,6 +178,28 @@ async fn fetch_snapshot(uri: &str, creds: Option<&(String, String)>) -> Result<u
     } else {
         Err(format!("not an image ({} bytes)", bytes.len()))
     }
+}
+
+/// Build a `Digest` `Authorization` header for `GET uri` from a server
+/// `WWW-Authenticate` challenge, quoting the `qop` value (`qop=auth` →
+/// `qop="auth"`). `digest_auth` emits `qop` unquoted, which some Hikvision and
+/// Uniview firmware reject — answering with a non-image `200` body — so we
+/// re-quote it here, mirroring the fix the oxdm snapshot path applies. Returns
+/// `None` if the challenge is unparseable.
+fn digest_header(www_authenticate: &str, uri: &str, user: &str, pass: &str) -> Option<String> {
+    let url = reqwest::Url::parse(uri).ok()?;
+    let request_uri = match url.query() {
+        Some(q) => format!("{}?{}", url.path(), q),
+        None => url.path().to_string(),
+    };
+    let mut prompt = digest_auth::parse(www_authenticate).ok()?;
+    let ctx = digest_auth::AuthContext::new(user, pass, &request_uri);
+    let answer = prompt.respond(&ctx).ok()?;
+    Some(
+        answer
+            .to_header_string()
+            .replace("qop=auth", r#"qop="auth""#),
+    )
 }
 
 /// True when `bytes` starts with a JPEG (`FF D8`), PNG (`89 50 4E 47`) or BMP
@@ -829,6 +893,28 @@ mod probe_tests {
         assert!(looks_like_image(b"BM\x00\x00")); // BMP
         assert!(!looks_like_image(b"<html><body>401</body></html>")); // error page
         assert!(!looks_like_image(b"")); // 0-byte body
+    }
+
+    #[test]
+    fn digest_header_quotes_qop_for_hikvision_uniview() {
+        // A typical camera challenge advertising qop="auth".
+        let challenge = r#"Digest realm="IP Camera", nonce="abc123", qop="auth""#;
+        let header = digest_header(
+            challenge,
+            "http://192.168.1.10/onvif/snapshot",
+            "admin",
+            "pw",
+        )
+        .expect("challenge should parse");
+        assert!(header.starts_with("Digest "));
+        // The fix: qop must be quoted, never emitted as bare `qop=auth`.
+        assert!(header.contains(r#"qop="auth""#), "qop not quoted: {header}");
+        assert!(!header.contains("qop=auth,"), "bare qop leaked: {header}");
+    }
+
+    #[test]
+    fn digest_header_returns_none_on_garbage_challenge() {
+        assert!(digest_header("Basic realm=x", "http://h/p", "u", "p").is_none());
     }
 
     #[tokio::test]

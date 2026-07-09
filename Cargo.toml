@@ -31,7 +31,7 @@ mock-server = ["mock", "dep:axum", "tokio/rt-multi-thread"]
 # Pure library code over OnvifSession. Pulls serde + serde_json for the
 # `HealthReport::to_json` / `to_json_pretty` outputs that drive `--json` and
 # the `--baseline` diff flow.
-health = ["dep:serde", "dep:serde_json"]
+health = ["dep:serde", "dep:serde_json", "dep:digest_auth"]
 
 [dependencies]
 quick-xml    = "0.41"
@@ -52,6 +52,10 @@ tracing      = "0.1"
 serde        = { version = "1", features = ["derive"], optional = true }
 serde_json   = { version = "1", optional = true }
 axum         = { version = "0.8", optional = true }
+# Manual HTTP Digest for the health snapshot probe (the only HTTP-digest use
+# outside the WS-Security SOAP path). Lets us quote `qop="auth"`, which some
+# Hikvision/Uniview firmware require and diqwest emits unquoted.
+digest_auth  = { version = "0.3", optional = true }
 
 [dev-dependencies]
 # Regression guard: force `quick-xml/encoding` on for the test build via

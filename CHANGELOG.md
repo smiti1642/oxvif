@@ -43,8 +43,10 @@ that release's note).
     `Warn` with the reason.
   - `get_snapshot_uri` fetches the snapshot bytes and validates them as a real
     image (JPEG/PNG/BMP magic) — a 0-byte body or an HTML error page returned
-    with a `200` is flagged, not counted as a pass. Uses HTTP Digest (with a
-    Basic-auth fallback) when credentials are supplied.
+    with a `200` is flagged, not counted as a pass. Authenticates with a manual
+    HTTP Digest handshake that quotes `qop="auth"` (some Hikvision/Uniview
+    firmware reject the unquoted `qop=auth` and answer with a non-image `200`),
+    falling back to Basic auth when the device does not offer Digest.
   - the `recording` / `search` / `replay` checks genuinely exercise Profile G
     (recording list + recording search + replay-URI resolution) instead of
     reporting advertised-only presence, so the Profile G verdict reflects real
