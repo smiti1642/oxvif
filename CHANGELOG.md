@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.12.0] - 2026-07-08
+## [0.12.0] - 2026-07-09
 
 Headline: **BREAKING — the HealthCheck report is reshaped so "couldn't verify"
 is never mistaken for "non-conformant"**, plus opt-in active liveness probing, a
