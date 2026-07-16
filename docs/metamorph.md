@@ -8,7 +8,8 @@
 This file is the authoritative spec a coding agent builds against. It is dev-only
 (the `docs/` directory is excluded from the published crate).
 
-Status: **spec locked** for M0. The pre-work decisions in
+Status: **M0–M2 shipped** (the clone-a-camera-and-replay increment, per D7); M3+
+not yet started. The pre-work decisions in
 [§1](#1-locked-decisions) are settled; the milestone-scoped open questions in
 [§9](#9-still-open-decide-at-the-milestone-not-now) are deliberately deferred to
 their milestone and must NOT be pre-empted.
@@ -289,8 +290,16 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   tests (timestamp/nonce jitter collapses; MessageID doesn't fragment the key;
   distinct tokens → distinct keys but equal values; prefix/attr-order/whitespace
   agnostic).
-- **M2 — Persona B record/replay ([§4-B](#persona-b--replay--clone-m2))**. CLI `record`, `ReplayResponder`,
-  coarse COW, param-aware key. *End of the shippable increment (per D7).*
+- **M2 — Persona B record/replay ([§4-B](#persona-b--replay--clone-m2))** ✅ *(commit `0c7dd1b`)*. New
+  `metamorph` feature + `src/metamorph/`: `FixtureStore` (one `fixtures.json`
+  per device, param-aware canonical key, in-memory hash, credential-redacted
+  requests), `ReplayResponder` (spliced via the new `Chain::mock_with_extra`;
+  reads from fixtures, writes pass to synthetic + invalidate the op family =
+  coarse COW), `MetamorphTransport` (in-process replay device),
+  `RecordingTransport` + `examples/metamorph_record.rs` (the recorder). Masker
+  gained `wsa:To`. Integration test records a mock "camera" → replays →
+  `Set → Get` round-trips. **End of the shippable increment (per D7)** — the
+  version bump + CHANGELOG for M0–M2 rides the next oxvif release.
 - **M3 — WS-Discovery responder ([§5.2](#52-ws-discovery-responder))**. Clone is multicast-discoverable; scopes
   match the current persona.
 - **M4 — Control plane + Persona A ([§4-A](#persona-a--synthetic--control-plane-m4))**. Grow `/admin/*`; oxdm Dioxus UI drives it.
