@@ -33,11 +33,11 @@
 //! via [`MockState::set_on_change`].
 
 mod auth;
-mod canon;
+pub(crate) mod canon;
 mod dispatch;
-mod fault_injection;
+pub(crate) mod fault_injection;
 mod helpers;
-mod responder;
+pub(crate) mod responder;
 mod services;
 mod transport;
 mod xml_parse;

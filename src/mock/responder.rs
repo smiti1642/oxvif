@@ -65,11 +65,24 @@ impl Chain {
     /// The default mock pipeline: armed fault → auth gate → synthetic dispatch.
     /// Reproduces the pre-chain inline flow exactly.
     pub(crate) fn default_mock(faults: Arc<FaultInjector>, enforce_auth: bool) -> Self {
-        Self::new(vec![
-            Box::new(FaultResponder { faults }),
-            Box::new(AuthResponder { enforce_auth }),
-            Box::new(SyntheticResponder),
-        ])
+        Self::mock_with_extra(faults, enforce_auth, Vec::new())
+    }
+
+    /// The default mock pipeline with `extra` responders spliced in immediately
+    /// before the terminal [`SyntheticResponder`] — the insertion point for
+    /// metamorph personas (replay, adapter). Fault + auth heads and the
+    /// synthetic terminal are kept intact, so writes still land in `DeviceState`.
+    pub(crate) fn mock_with_extra(
+        faults: Arc<FaultInjector>,
+        enforce_auth: bool,
+        extra: Vec<Box<dyn Responder>>,
+    ) -> Self {
+        let mut responders: Vec<Box<dyn Responder>> = Vec::with_capacity(extra.len() + 3);
+        responders.push(Box::new(FaultResponder { faults }));
+        responders.push(Box::new(AuthResponder { enforce_auth }));
+        responders.extend(extra);
+        responders.push(Box::new(SyntheticResponder));
+        Self::new(responders)
     }
 
     /// Offer the request to each responder in turn; return the first answer.

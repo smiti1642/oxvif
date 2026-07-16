@@ -21,10 +21,11 @@
 //! resolved to namespace URIs, so two *different* namespaces that reuse a local
 //! name are treated as one — a non-issue for ONVIF SOAP.
 
-// Staged for M2: the ReplayResponder is the first non-test caller of
-// `canonicalize` / `Masking`. Until it lands the crate has no production caller,
-// so allow dead_code module-wide (dropped when M2 wires it up).
-#![allow(dead_code)]
+// The `metamorph` feature's ReplayResponder is the production caller of
+// `canonicalize` / `Masking`. With only `mock` enabled the module has no
+// non-test caller, so silence dead_code just there; under `metamorph` (and the
+// `--all-features` gate) real dead-code detection stays on.
+#![cfg_attr(not(feature = "metamorph"), allow(dead_code))]
 
 use crate::soap::XmlNode;
 
@@ -53,6 +54,7 @@ const EPHEMERAL_TEXT: &[&str] = &[
     "TerminationTime",
     "CurrentTime",
     "Address", // subscription-reference / endpoint URLs
+    "To",      // WS-Addressing destination endpoint (varies by device URL)
 ];
 
 /// Attribute local-names that are transport ephemera (class a).
@@ -178,6 +180,15 @@ mod tests {
     fn prefix_attr_order_and_whitespace_agnostic() {
         let a = r#"<s:Envelope xmlns:s="urn:x"><s:Body>  <trt:GetProfiles a="1" b="2"/></s:Body></s:Envelope>"#;
         let b = "<t:Envelope xmlns:t=\"urn:x\">\n  <t:Body><q:GetProfiles b=\"2\" a=\"1\"/></t:Body>\n</t:Envelope>";
+        assert_eq!(key(a), key(b));
+    }
+
+    #[test]
+    fn key_ignores_wsaddressing_to_endpoint() {
+        // The device endpoint (wsa:To) varies between record time and replay
+        // time, so it must not fragment the key.
+        let a = "<E><Header><To>http://cam-a/onvif</To></Header><GetHostname/></E>";
+        let b = "<E><Header><To>http://replay/onvif</To></Header><GetHostname/></E>";
         assert_eq!(key(a), key(b));
     }
 

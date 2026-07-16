@@ -185,6 +185,8 @@ pub mod error;
 pub mod fixtures;
 #[cfg(feature = "health")]
 pub mod health;
+#[cfg(feature = "metamorph")]
+pub mod metamorph;
 #[cfg(feature = "mock")]
 pub mod mock;
 pub mod session;
@@ -199,6 +201,10 @@ pub use error::OnvifError;
 pub use fixtures::{CapturingTransport, FixtureTransport};
 #[cfg(feature = "health")]
 pub use health::{CapturedExchange, HealthCheck, HealthReport};
+#[cfg(feature = "metamorph")]
+pub use metamorph::{
+    Fixture, FixtureStore, MetamorphTransport, RecordingTransport, ReplayResponder,
+};
 pub use session::{OnvifSession, OnvifSessionBuilder};
 pub use types::{
     AnalyticsCapabilities, AudioDecoderConfiguration, AudioEncoderConfiguration,

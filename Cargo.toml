@@ -32,6 +32,11 @@ mock-server = ["mock", "dep:axum", "tokio/rt-multi-thread"]
 # `HealthReport::to_json` / `to_json_pretty` outputs that drive `--json` and
 # the `--baseline` diff flow.
 health = ["dep:serde", "dep:serde_json", "dep:digest_auth"]
+# Persona B (record / replay) of the metamorph shape-shifting device: clone a
+# real camera into a param-aware fixture set and replay it in-process without
+# hardware. A superset of `mock` — builds on its responder chain, `DeviceState`,
+# and canonicaliser. See `docs/metamorph.md`.
+metamorph = ["mock", "dep:serde_json"]
 
 [dependencies]
 quick-xml    = "0.41"
@@ -89,3 +94,9 @@ required-features = ["health"]
 [[example]]
 name = "record_fixtures"
 required-features = ["mock", "health"]
+
+# Metamorph Persona B recorder: clone a real camera into a param-aware
+# `fixtures.json` for in-process replay via `MetamorphTransport`.
+[[example]]
+name = "metamorph_record"
+required-features = ["metamorph"]
