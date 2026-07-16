@@ -18,13 +18,21 @@ their milestone and must NOT be pre-empted.
 ## 0. Naming & placement
 
 - **Spelling**: `metamorph` (correct — "a thing that changes shape").
-- **Home**: stays **inside the `oxvif` crate** as a `metamorph` feature; code under
-  `src/metamorph/`. It is a **superset** of `mock` / `mock-server` and reuses
-  `dispatch` / `DeviceState` / `MockTransport` / `MockServer` directly — no
-  cross-crate dependency friction. The server binary/target uses a
-  `metamorph-server` feature (reuses the existing axum dependency).
-- The `mock` module is **left untouched**; it becomes metamorph's synthetic
-  "terminal responder" (see [§3](#3-keystone--the-responder-chain-m0)).
+- **Home**: stays **inside the `oxvif` crate**. It splits across two layers:
+  - The **responder chain** (the M0 keystone) lives in **`src/mock/responder.rs`,
+    under the existing `mock` feature** — because `MockTransport` (which is
+    `mock`-gated) routes its own requests through it, so the chain must compile
+    wherever `mock` does. `Responder` / `RequestCtx` / `Chain` are re-exported as
+    `oxvif::mock::{Responder, RequestCtx, Chain}`.
+  - The **`metamorph` feature** (module `src/metamorph/`, added at M2) carries the
+    persona-specific responders — replay, adapter, control plane — built *on* the
+    mock-layer chain. The server binary/target uses a `metamorph-server` feature
+    (reuses the existing axum dependency).
+  - This is a **superset** of `mock` / `mock-server`, reusing `dispatch` /
+    `DeviceState` / `MockTransport` / `MockServer` directly — no cross-crate
+    dependency friction.
+- The `mock` module's `dispatch` is **left untouched**; it is wrapped as
+  metamorph's synthetic "terminal responder" (see [§3](#3-keystone--the-responder-chain-m0)).
 - **Hard constraint — backward compatibility**: `oxvif` is published on crates.io.
   The public API of `mock` / `mock-server` **must not break**. Every new
   capability is feature-gated (`metamorph` / `metamorph-server`).
@@ -37,8 +45,8 @@ Settled in design review; these are the M0 spec. Do not relitigate mid-build.
 
 | # | Decision | Resolution | Why |
 |---|----------|------------|-----|
-| **D1** | Crate form | Stay in `oxvif` as a `metamorph` feature | M0 is a refactor of oxvif internals; a separate crate would force the keystone across a crate boundary. |
-| **D2** | Extraction seam | Make `Responder` + `RequestCtx` **public and stable early** | The public trait is the fission line: as long as `ReplayResponder`/`AdapterResponder` depend only on the public `Chain`/`Responder`/`SharedState` API and never on `mock` private internals, lifting them into a sibling `oxvif-metamorph` later is near-painless. |
+| **D1** | Crate form | Stay in `oxvif`; **chain seam in the `mock` layer** (`src/mock/responder.rs`), personas in a later `metamorph` feature (`src/metamorph/`) | M0 is a refactor of oxvif internals; a separate crate would force the keystone across a crate boundary. The chain lands in `mock` because `MockTransport` consumes it — the `metamorph` feature/module is introduced at M2 for the first persona (replay). |
+| **D2** | Extraction seam | Make `Responder` + `RequestCtx` (+ `Chain`) **public and stable early** — exposed now as `oxvif::mock::{Responder, RequestCtx, Chain}` | The public trait is the fission line: as long as `ReplayResponder`/`AdapterResponder` depend only on the public `Chain`/`Responder`/`MockState` API and never on `mock` private internals, lifting them into a sibling `oxvif-metamorph` later is near-painless. |
 | **D3** | Chain shape | **async** — `#[async_trait] Responder::respond` | The chain is *already* invoked from async (`Transport::send` is `#[async_trait]`, the `MockServer` handler is axum-async), so `async fn` costs nothing at the call site. The one responder that does I/O — `AdapterResponder` (`snapshot`/`ptz_move` hit a real device) — needs it; a sync trait would force `block_on` inside a tokio worker thread (panics / starves the executor) precisely there, and M5 would have to convert every responder anyway. `async-trait` is already a dependency; the per-call future box is irrelevant for a mock server. |
 | **D4** | Masking classes | **Two classes** (see [§5.1](#51-normaliser--volatile-field-masker-keystone)) | Transport ephemera (MessageID/UUID, UtcTime, nonce, created, subscription refs) are masked in both the fixture *key* and value comparison; semantic identifiers (profile/media token) are **preserved in the key** and masked only in value comparison. Masking tokens into the key would collapse `GetProfile(token=A)` and `(token=B)` — the exact collision the param-aware key must avoid. Resolves the old open-Q4. |
 | **D5** | Replay copy-on-write | **Coarse first** | A `Set*` invalidates the whole replay for that operation family; subsequent reads fall to synthetic `DeviceState`. Get `SetHostname → GetHostname` round-tripping before attempting field-level overlay (the highest-risk part of the plan). |
@@ -115,22 +123,33 @@ impl Chain {
                 return resp;
             }
         }
-        // Terminal fallback: synthetic dispatch always answers.
-        crate::mock::dispatch::dispatch(ctx.action, ctx.base, ctx.state, ctx.body)
+        // Unreachable while a terminal responder is present; defensive fallback.
+        helpers::resp_soap_fault("s:Receiver", "no responder handled the request")
     }
 }
 ```
 
-Refactor:
-- Wrap existing `dispatch` as **`SyntheticResponder`** (terminal, always `Some`).
+`Chain` stays generic — it knows nothing about `dispatch`. The synthetic
+dispatch is just the terminal responder in the list, not a hardcoded fallback;
+this keeps the extraction seam (D2) free of `mock` internals.
+
+Refactor (implemented in M0, commit `92e60a6`):
+- Wrap existing `dispatch` as **`SyntheticResponder`** (terminal, always `Some`) —
+  the last entry in the chain.
 - Wrap existing `fault_injection` as **`FaultResponder`** (chain head): hit → override, else pass.
-- Default chain: `[FaultResponder, (ReplayResponder?), (AdapterResponder?), SyntheticResponder]`.
+- Wrap the WS-Security check as **`AuthResponder`** (between fault and synthetic) —
+  the honest mapping of the existing `enforce_auth` gate, which sat *between* fault
+  and dispatch.
+- Default chain (`Chain::default_mock`): `[FaultResponder, AuthResponder, SyntheticResponder]`;
+  later personas splice `(ReplayResponder?)` / `(AdapterResponder?)` in ahead of
+  `SyntheticResponder`.
 - **Write semantics (`Set*`) always land in `SyntheticResponder`'s `DeviceState`** — so
-  even when reads come from replay/adapter, state changes still work (COW basis, [§4-B](#persona-b--replay--clone-4-b)).
+  even when reads come from replay/adapter, state changes still work (COW basis, [§4-B](#persona-b--replay--clone-m2)).
 
 **M0 acceptance — the only success condition**: every existing mock test stays
-green. Swap `dispatch` for a `Chain` of `[FaultResponder, SyntheticResponder]`;
-behaviour is byte-for-byte unchanged. No new behaviour in M0.
+green. `MockTransport` / `MockServer` route through the default `Chain`;
+behaviour is byte-for-byte unchanged. No new behaviour in M0. *(Done: 530 tests
+pass, all pre-existing ones untouched, +3 chain-contract tests.)*
 
 ---
 
@@ -254,8 +273,9 @@ unicast probe path in integration tests.
 
 Each ends with: existing tests green + new tests added + CHANGELOG/feature docs updated.
 
-- **M0 — Responder chain refactor ([§3](#3-keystone--the-responder-chain-m0))**. Synthetic dispatch + fault queue move
-  behind the async `Chain`, behaviour unchanged. *Keystone — do first.*
+- **M0 — Responder chain refactor ([§3](#3-keystone--the-responder-chain-m0))** ✅ *(commit `92e60a6`)*. Synthetic
+  dispatch + fault queue + auth gate moved behind the async `Chain`, behaviour
+  unchanged (530 tests green). *Keystone — done.*
 - **M1 — Normaliser + masker ([§5.1](#51-normaliser--volatile-field-masker-keystone))**. Standalone module + unit tests (same
   response with different tokens/timestamps → equal after masking; two profile
   tokens → distinct keys).
