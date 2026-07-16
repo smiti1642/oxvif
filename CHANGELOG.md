@@ -37,6 +37,12 @@ unchanged.
   default). The trait is the stable seam personas extend; behaviour of the
   default pipeline is byte-for-byte unchanged.
 
+### Added (`mock-server` feature)
+- **WS-Discovery responder** — `MockServer::builder().discoverable(scopes)`
+  makes a bound server answer WS-Discovery `Probe`s (best-effort :3702 +
+  multicast), so a client (oxdm, ONVIF Device Manager, Frigate) finds it on the
+  LAN. `mock::DiscoveryResponder` is also usable standalone.
+
 ---
 
 ## [0.13.0] - 2026-07-14
