@@ -242,6 +242,14 @@ One module, three payoffs (replay fidelity, fixture auto-scrub, stable regressio
 - **Pragmatic**: do NOT chase W3C XML C14N.
 - Output a comparable intermediate form for replay matching and (later) diff.
 
+**As built (`src/mock/canon.rs`, M1)**: `canonicalize(xml, Masking)` parses with the
+existing prefix-stripping `XmlNode` (so prefixes → local names and `xmlns` decls
+drop for free), sorts attributes, collapses whitespace, and re-serialises to a
+stable non-XML string. `Masking::Key` masks class (a) only; `Masking::Value` masks
+(a) + (b). Field lists live as `const` slices in the module — extend them there.
+The prefix-strip (vs full namespace-URI resolution) is the pragmatic cut: two
+different namespaces reusing a local name collapse together, a non-issue for ONVIF.
+
 ### 5.2 WS-Discovery responder
 
 Add a multicast Probe **responder** (`discovery.rs` today is client-probe only), so
@@ -276,9 +284,11 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
 - **M0 — Responder chain refactor ([§3](#3-keystone--the-responder-chain-m0))** ✅ *(commit `92e60a6`)*. Synthetic
   dispatch + fault queue + auth gate moved behind the async `Chain`, behaviour
   unchanged (530 tests green). *Keystone — done.*
-- **M1 — Normaliser + masker ([§5.1](#51-normaliser--volatile-field-masker-keystone))**. Standalone module + unit tests (same
-  response with different tokens/timestamps → equal after masking; two profile
-  tokens → distinct keys).
+- **M1 — Normaliser + masker ([§5.1](#51-normaliser--volatile-field-masker-keystone))** ✅ *(commit `efca697`)*. `src/mock/canon.rs`:
+  `canonicalize(xml, Masking)` over the `XmlNode` tree, two-class masking, 6 unit
+  tests (timestamp/nonce jitter collapses; MessageID doesn't fragment the key;
+  distinct tokens → distinct keys but equal values; prefix/attr-order/whitespace
+  agnostic).
 - **M2 — Persona B record/replay ([§4-B](#persona-b--replay--clone-m2))**. CLI `record`, `ReplayResponder`,
   coarse COW, param-aware key. *End of the shippable increment (per D7).*
 - **M3 — WS-Discovery responder ([§5.2](#52-ws-discovery-responder))**. Clone is multicast-discoverable; scopes
