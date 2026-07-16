@@ -198,7 +198,7 @@ pub use error::OnvifError;
 #[cfg(feature = "mock")]
 pub use fixtures::{CapturingTransport, FixtureTransport};
 #[cfg(feature = "health")]
-pub use health::{HealthCheck, HealthReport};
+pub use health::{CapturedExchange, HealthCheck, HealthReport};
 pub use session::{OnvifSession, OnvifSessionBuilder};
 pub use types::{
     AnalyticsCapabilities, AudioDecoderConfiguration, AudioEncoderConfiguration,

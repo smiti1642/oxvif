@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.13.0] - 2026-07-14
+
+Headline: **opt-in raw-SOAP capture for failing health checks** — the raw
+request/response evidence a maintainer needs to see *why* a specific brand
+rejected a call, without leaking credentials.
+
+### Added (`health` feature)
+- **`HealthCheck::with_capture(true)`** records the raw request/response of every
+  SOAP call that **fails** (a transport error or a SOAP Fault) into the new
+  `HealthReport::captured` field (`Vec<CapturedExchange>`). Off by default.
+  Successful — and therefore credential-bearing — requests are not stored, and
+  the requests that are stored have their WS-Security `Password`/`Nonce` blanked,
+  so a capture never carries credential-derivation material. Each entry keys on
+  the SOAP action (`GetStreamUri`, …), keeping the latest failure per action.
+- **`CapturedExchange`** exported from the crate root and `health`.
+
+### Changed
+- `HealthReport` gained a `captured: Vec<CapturedExchange>` field (additive;
+  serialises only when non-empty, deserialises to empty when absent). Code that
+  constructs `HealthReport` with a struct literal must add the field — in 0.x a
+  minor bump is the SemVer signal for this.
+
+---
+
 ## [0.12.0] - 2026-07-09
 
 Headline: **BREAKING — the HealthCheck report is reshaped so "couldn't verify"
