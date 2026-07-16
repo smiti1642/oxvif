@@ -5,6 +5,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+Headline: **metamorph Persona B — clone a real camera and replay it verbatim,
+in-process, without hardware.** The first shippable slice (M0–M2) of the
+shape-shifting mock device (see `docs/metamorph.md`). Everything here is
+additive and feature-gated; the existing `mock` / `mock-server` public API is
+unchanged.
+
+### Added (`metamorph` feature)
+- **`metamorph` feature** (a superset of `mock`) and the `oxvif::metamorph`
+  module — Persona B record/replay:
+  - **`FixtureStore`** — a device's recorded SOAP exchanges as one
+    `fixtures.json`, keyed by the **canonical, ephemera-masked request**, so
+    `GetProfile(token=A)` and `(token=B)` never collide while MessageID / nonce
+    / timestamps and the `wsa:To` endpoint don't fragment the key. Loads whole
+    into memory; recorded requests have WS-Security `Password`/`Nonce` blanked.
+  - **`ReplayResponder`** — answers reads from fixtures; writes pass through to
+    the synthetic device state and invalidate that operation family's replay
+    (coarse copy-on-write), so `Set → Get` round-trips.
+  - **`MetamorphTransport`** — an in-process replay device (`Transport`), the
+    client-drivable counterpart of `MockTransport`.
+  - **`RecordingTransport`** — taps a live transport into a `FixtureStore`;
+    `examples/metamorph_record.rs` is the recorder CLI.
+  - `Fixture`, `FixtureStore`, `MetamorphTransport`, `ReplayResponder`,
+    `RecordingTransport` are re-exported from the crate root.
+
+### Added (`mock` feature)
+- **`mock::{Chain, Responder, RequestCtx}`** — the mock device now answers each
+  request through an ordered chain of responders (fault → auth → synthetic by
+  default). The trait is the stable seam personas extend; behaviour of the
+  default pipeline is byte-for-byte unchanged.
+
+---
+
 ## [0.13.0] - 2026-07-14
 
 Headline: **opt-in raw-SOAP capture for failing health checks** — the raw
