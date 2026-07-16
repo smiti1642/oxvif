@@ -19,6 +19,8 @@ use axum::{
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
+use crate::discovery::{DiscoveredDevice, new_uuid};
+use crate::mock::discovery_responder::DiscoveryResponder;
 use crate::mock::fault_injection::{FaultInjector, PendingFault};
 use crate::mock::responder::{Chain, RequestCtx};
 use crate::mock::state::{ChangeHook, DeviceState, MockState};
@@ -41,6 +43,7 @@ pub struct MockServerBuilder {
     initial_state: Option<DeviceState>,
     on_change: Option<ChangeHook>,
     enforce_auth: bool,
+    discoverable: Option<Vec<String>>,
 }
 
 impl MockServerBuilder {
@@ -67,6 +70,19 @@ impl MockServerBuilder {
     /// credential-less client works out of the box.
     pub fn enforce_auth(mut self, yes: bool) -> Self {
         self.enforce_auth = yes;
+        self
+    }
+
+    /// Make the server answer WS-Discovery `Probe`s so a client (oxdm, ODM,
+    /// Frigate) finds it on the LAN, advertising the given ONVIF `scopes`
+    /// (e.g. `onvif://www.onvif.org/name/MockCam`). Off by default.
+    ///
+    /// Best-effort: this binds the shared UDP port `3702` and joins the ONVIF
+    /// multicast group — if the bind fails (port already in use, sandboxed CI)
+    /// the HTTP server still starts, just undiscoverable. At most one
+    /// discoverable server can run per host.
+    pub fn discoverable(mut self, scopes: Vec<String>) -> Self {
+        self.discoverable = Some(scopes);
         self
     }
 
@@ -115,12 +131,39 @@ impl MockServerBuilder {
                 .await;
         });
 
+        let device_url = format!("{base}/onvif/device");
+
+        // Opt-in WS-Discovery. Best-effort: a failed :3702 bind must not sink
+        // the HTTP server, so log and carry on undiscoverable.
+        let discovery = match self.discoverable {
+            Some(scopes) => {
+                let dev = DiscoveredDevice {
+                    endpoint: format!("urn:uuid:{}", new_uuid()),
+                    types: vec![
+                        "dn:NetworkVideoTransmitter".to_string(),
+                        "tds:Device".to_string(),
+                    ],
+                    scopes,
+                    xaddrs: vec![device_url.clone()],
+                };
+                match DiscoveryResponder::spawn("0.0.0.0:3702", true, dev).await {
+                    Ok(r) => Some(r),
+                    Err(e) => {
+                        tracing::warn!("mock discovery responder failed to bind :3702: {e}");
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+
         Ok(MockServer {
-            device_url: format!("{base}/onvif/device"),
+            device_url,
             base,
             port: local.port(),
             ctx,
             shutdown: Some(tx),
+            _discovery: discovery,
         })
     }
 }
@@ -141,6 +184,9 @@ pub struct MockServer {
     port: u16,
     ctx: Arc<Ctx>,
     shutdown: Option<oneshot::Sender<()>>,
+    /// Kept alive so the WS-Discovery responder (if any) shuts down with the
+    /// server. `None` unless [`MockServerBuilder::discoverable`] was set.
+    _discovery: Option<DiscoveryResponder>,
 }
 
 impl MockServer {

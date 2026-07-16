@@ -45,6 +45,8 @@ mod xml_parse;
 pub mod state;
 
 #[cfg(feature = "mock-server")]
+mod discovery_responder;
+#[cfg(feature = "mock-server")]
 mod font;
 #[cfg(feature = "mock-server")]
 mod server;
@@ -55,5 +57,7 @@ pub use responder::{Chain, RequestCtx, Responder};
 pub use state::{DeviceState, MockState};
 pub use transport::MockTransport;
 
+#[cfg(feature = "mock-server")]
+pub use discovery_responder::DiscoveryResponder;
 #[cfg(feature = "mock-server")]
 pub use server::MockServer;
