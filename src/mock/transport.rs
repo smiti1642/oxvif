@@ -8,10 +8,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::mock::dispatch::dispatch;
 use crate::mock::fault_injection::{FaultInjector, PendingFault};
+use crate::mock::responder::{Chain, RequestCtx};
 use crate::mock::state::MockState;
-use crate::mock::{auth, helpers};
 use crate::transport::{Transport, TransportError};
 
 /// Base URL the mock uses when it has to emit absolute URLs (snapshot /
@@ -116,16 +115,15 @@ impl Transport for MockTransport {
         action: &str,
         body: String,
     ) -> Result<String, TransportError> {
-        // Armed fault wins first (matches the bound server's ordering).
-        if let Some(f) = self.faults.take_for_action(action) {
-            return Ok(helpers::resp_soap_fault(&f.code, &f.reason));
-        }
-        if self.enforce_auth && auth::requires_auth(action) {
-            if let Err(reason) = auth::validate_ws_security(&body, &self.state) {
-                return Ok(auth::auth_fault(&reason));
-            }
-        }
-        Ok(dispatch(action, MOCK_BASE, &self.state, &body))
+        // Default pipeline: armed fault → auth gate → synthetic dispatch.
+        let chain = Chain::default_mock(self.faults.clone(), self.enforce_auth);
+        let ctx = RequestCtx {
+            action,
+            base: MOCK_BASE,
+            body: &body,
+            state: &self.state,
+        };
+        Ok(chain.respond(&ctx).await)
     }
 }
 

@@ -36,6 +36,7 @@ mod auth;
 mod dispatch;
 mod fault_injection;
 mod helpers;
+mod responder;
 mod services;
 mod transport;
 mod xml_parse;
@@ -49,6 +50,7 @@ mod server;
 #[cfg(feature = "mock-server")]
 mod snapshot;
 
+pub use responder::{Chain, RequestCtx, Responder};
 pub use state::{DeviceState, MockState};
 pub use transport::MockTransport;
 

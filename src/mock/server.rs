@@ -19,10 +19,10 @@ use axum::{
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-use crate::mock::dispatch::dispatch;
 use crate::mock::fault_injection::{FaultInjector, PendingFault};
+use crate::mock::responder::{Chain, RequestCtx};
 use crate::mock::state::{ChangeHook, DeviceState, MockState};
-use crate::mock::{auth, helpers, snapshot};
+use crate::mock::{helpers, snapshot};
 
 const SOAP_CT: &str = "application/soap+xml; charset=utf-8";
 
@@ -30,7 +30,7 @@ const SOAP_CT: &str = "application/soap+xml; charset=utf-8";
 struct Ctx {
     base: String,
     state: MockState,
-    faults: FaultInjector,
+    faults: Arc<FaultInjector>,
     enforce_auth: bool,
 }
 
@@ -87,7 +87,7 @@ impl MockServerBuilder {
         let ctx = Arc::new(Ctx {
             base: base.clone(),
             state,
-            faults: FaultInjector::new(),
+            faults: Arc::new(FaultInjector::new()),
             enforce_auth: self.enforce_auth,
         });
 
@@ -210,24 +210,15 @@ async fn handle_soap(
     let action = helpers::extract_action(&headers).unwrap_or_default();
     let body_str = String::from_utf8_lossy(&body);
 
-    // Armed fault wins first (same ordering as MockTransport).
-    if let Some(f) = ctx.faults.take_for_action(&action) {
-        return (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, SOAP_CT)],
-            helpers::resp_soap_fault(&f.code, &f.reason),
-        );
-    }
-    if ctx.enforce_auth && auth::requires_auth(&action) {
-        if let Err(reason) = auth::validate_ws_security(&body_str, &ctx.state) {
-            return (
-                StatusCode::OK,
-                [(header::CONTENT_TYPE, SOAP_CT)],
-                auth::auth_fault(&reason),
-            );
-        }
-    }
-    let xml = dispatch(&action, &ctx.base, &ctx.state, &body_str);
+    // Default pipeline: armed fault → auth gate → synthetic dispatch.
+    let chain = Chain::default_mock(ctx.faults.clone(), ctx.enforce_auth);
+    let rctx = RequestCtx {
+        action: &action,
+        base: &ctx.base,
+        body: &body_str,
+        state: &ctx.state,
+    };
+    let xml = chain.respond(&rctx).await;
     (StatusCode::OK, [(header::CONTENT_TYPE, SOAP_CT)], xml)
 }
 
