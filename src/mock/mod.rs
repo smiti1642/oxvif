@@ -33,6 +33,7 @@
 //! via [`MockState::set_on_change`].
 
 mod auth;
+mod canon;
 mod dispatch;
 mod fault_injection;
 mod helpers;
