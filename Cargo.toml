@@ -100,3 +100,8 @@ required-features = ["mock", "health"]
 [[example]]
 name = "metamorph_record"
 required-features = ["metamorph"]
+
+# Metamorph Persona C template: skin one fixed RTSP stream as an ONVIF device.
+[[example]]
+name = "metamorph_adapter"
+required-features = ["metamorph"]

@@ -203,7 +203,8 @@ pub use fixtures::{CapturingTransport, FixtureTransport};
 pub use health::{CapturedExchange, HealthCheck, HealthReport};
 #[cfg(feature = "metamorph")]
 pub use metamorph::{
-    Fixture, FixtureStore, MetamorphTransport, RecordingTransport, ReplayResponder,
+    AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, Fixture,
+    FixtureStore, MetamorphTransport, PtzVector, RecordingTransport, ReplayResponder,
 };
 pub use session::{OnvifSession, OnvifSessionBuilder};
 pub use types::{

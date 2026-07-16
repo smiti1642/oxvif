@@ -36,7 +36,7 @@ mod auth;
 pub(crate) mod canon;
 mod dispatch;
 pub(crate) mod fault_injection;
-mod helpers;
+pub(crate) mod helpers;
 pub(crate) mod responder;
 mod services;
 mod transport;
