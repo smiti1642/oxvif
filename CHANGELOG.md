@@ -30,6 +30,14 @@ unchanged.
     `examples/metamorph_record.rs` is the recorder CLI.
   - `Fixture`, `FixtureStore`, `MetamorphTransport`, `ReplayResponder`,
     `RecordingTransport` are re-exported from the crate root.
+  - **Persona C — adapter / skin**: implement the **`DeviceAdapter`** trait
+    (`identity` + `stream_uri` required; `continuous_move` / `snapshot`
+    optional) to put an ONVIF skin on a non-ONVIF (e.g. RTSP-only) device.
+    **`AdapterResponder`** answers GetDeviceInformation / GetStreamUri /
+    ContinuousMove from the adapter and falls through to the synthetic mock for
+    everything else; **`AdapterTransport`** drives it in-process. See
+    `examples/metamorph_adapter.rs`. `DeviceIdentity`, `PtzVector`,
+    `AdapterResult` are re-exported too.
 
 ### Added (`mock` feature)
 - **`mock::{Chain, Responder, RequestCtx}`** — the mock device now answers each

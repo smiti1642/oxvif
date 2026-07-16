@@ -8,9 +8,10 @@
 This file is the authoritative spec a coding agent builds against. It is dev-only
 (the `docs/` directory is excluded from the published crate).
 
-Status: **M0–M3 done** — the clone-a-camera-and-replay increment (M0–M2, per D7)
-plus WS-Discovery so a clone is findable on the LAN (M3); M4+ not yet started.
-The pre-work decisions in
+Status: **M0–M3 + M5 done** — the clone-a-camera-and-replay increment (M0–M2,
+per D7), WS-Discovery so a clone is findable on the LAN (M3), and the Persona C
+adapter/skin template (M5, pulled ahead of M4). **M4** (control plane + Persona A)
+and **M6/M7** not yet started. The pre-work decisions in
 [§1](#1-locked-decisions) are settled; the milestone-scoped open questions in
 [§9](#9-still-open-decide-at-the-milestone-not-now) are deliberately deferred to
 their milestone and must NOT be pre-empted.
@@ -310,8 +311,13 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   type. Tested via the pure path + a loopback **unicast** round-trip (multicast
   is left to real use, per the CI caveat). `<Scopes>` filter deferred.
 - **M4 — Control plane + Persona A ([§4-A](#persona-a--synthetic--control-plane-m4))**. Grow `/admin/*`; oxdm Dioxus UI drives it.
-- **M5 — Persona C skin template ([§4-C](#persona-c--adapter--skin-template-m5))**. `DeviceAdapter` + `AdapterResponder` + one
-  RTSP example adapter.
+- **M5 — Persona C skin template ([§4-C](#persona-c--adapter--skin-template-m5))** ✅ *(commit `879c8be`)*.
+  `src/metamorph/adapter.rs`: `DeviceAdapter` trait (required `identity` +
+  `stream_uri`, optional `continuous_move` / reserved `snapshot`),
+  `AdapterResponder` (GetDeviceInformation / GetStreamUri / ContinuousMove →
+  adapter, else fall through to synthetic), `AdapterTransport` (in-process
+  device), and `examples/metamorph_adapter.rs` (fixed-RTSP-URL template).
+  Delivered ahead of M4 at the maintainer's request.
 - **M6 — Multi-device fleet ([§5.3](#53-multi-device--fleet))**. Multi-port first; path routing if time allows.
 - **M7 (stretch) — quirk diff**. Masker-driven structural diff (baseline vs clone),
   surfaced in oxdm; semantic diff waits on [§5.5](#55-serde-on-public-types).
