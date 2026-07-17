@@ -84,6 +84,11 @@ dirs    = "6"
 name = "mock_server"
 required-features = ["mock-server"]
 
+# Fleet: start several mock cameras at once (one port each) and batch-scan them.
+[[example]]
+name = "mock_fleet"
+required-features = ["mock-server"]
+
 [[example]]
 name = "healthcheck"
 required-features = ["health"]

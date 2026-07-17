@@ -47,6 +47,8 @@ pub mod state;
 #[cfg(feature = "mock-server")]
 mod discovery_responder;
 #[cfg(feature = "mock-server")]
+mod fleet;
+#[cfg(feature = "mock-server")]
 mod font;
 #[cfg(feature = "mock-server")]
 mod server;
@@ -59,5 +61,7 @@ pub use transport::MockTransport;
 
 #[cfg(feature = "mock-server")]
 pub use discovery_responder::DiscoveryResponder;
+#[cfg(feature = "mock-server")]
+pub use fleet::{Fleet, FleetBuilder};
 #[cfg(feature = "mock-server")]
 pub use server::MockServer;

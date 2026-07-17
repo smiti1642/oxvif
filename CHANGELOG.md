@@ -50,6 +50,12 @@ unchanged.
   makes a bound server answer WS-Discovery `Probe`s (best-effort :3702 +
   multicast), so a client (oxdm, ONVIF Device Manager, Frigate) finds it on the
   LAN. `mock::DiscoveryResponder` is also usable standalone.
+- **Multi-device fleet** — `mock::Fleet` runs several independent `MockServer`s
+  at once, each on its own ephemeral port with a distinct identity (hostname /
+  model / serial). `Fleet::start(n)` for `n` default cameras or
+  `Fleet::builder()` to mix in caller-seeded `DeviceState`s; `device_urls()`
+  feeds a batch scanner directly. Dropping the fleet shuts every device down.
+  See `examples/mock_fleet.rs` (metamorph M6).
 
 ---
 
