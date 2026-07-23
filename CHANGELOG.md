@@ -9,7 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Headline: **metamorph Persona B — clone a real camera and replay it verbatim,
 in-process, without hardware.** The first shippable slice (M0–M2) of the
-shape-shifting mock device (see `docs/metamorph.md`). Everything here is
+shape-shifting mock device (see `docs/active/metamorph.md`). Everything here is
 additive and feature-gated; the existing `mock` / `mock-server` public API is
 unchanged.
 

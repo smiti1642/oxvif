@@ -6,7 +6,7 @@
 //! and volatile fields masked. The output is *not* valid XML; it is a stable
 //! comparable form (hash it for a fixture key, diff two of them for drift).
 //!
-//! Masking has two classes (`docs/metamorph.md` D4):
+//! Masking has two classes (`docs/active/metamorph.md` D4):
 //!
 //! - **(a) transport ephemera** — `MessageID`, WS-Security nonce/password,
 //!   timestamps, subscription-reference endpoints. They vary every exchange and

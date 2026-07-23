@@ -26,7 +26,7 @@ const METAMORPH_BASE: &str = "http://metamorph";
 ///   invalidated by a prior write, in which case it passes to synthetic.
 /// - A **write** (anything not `Get*`) always passes, so `SyntheticResponder`
 ///   applies it to `DeviceState`, and invalidates that family's replay — the
-///   coarse copy-on-write of `docs/metamorph.md` D5, so `Set → Get` reflects the
+///   coarse copy-on-write of `docs/active/metamorph.md` D5, so `Set → Get` reflects the
 ///   new value.
 pub struct ReplayResponder {
     store: Arc<FixtureStore>,

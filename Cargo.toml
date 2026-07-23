@@ -41,7 +41,7 @@ health = ["dep:serde", "dep:serde_json", "dep:digest_auth"]
 # Persona B (record / replay) of the metamorph shape-shifting device: clone a
 # real camera into a param-aware fixture set and replay it in-process without
 # hardware. A superset of `mock` — builds on its responder chain, `DeviceState`,
-# and canonicaliser. See `docs/metamorph.md`.
+# and canonicaliser. See `docs/active/metamorph.md`.
 metamorph = ["mock", "dep:serde_json"]
 
 [dependencies]

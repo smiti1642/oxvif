@@ -10,7 +10,7 @@
 //! responders in ahead of the terminal [`SyntheticResponder`] without touching
 //! the callers.
 //!
-//! The trait is deliberately `async` (see `docs/metamorph.md` D3): the chain is
+//! The trait is deliberately `async` (see `docs/active/metamorph.md` D3): the chain is
 //! always invoked from an async context, and a future adapter responder needs to
 //! `.await` real-device I/O — a sync trait would force a `block_on` inside a
 //! tokio worker thread.
@@ -41,7 +41,7 @@ pub struct RequestCtx<'a> {
 ///
 /// Implement this to teach a metamorph device a new way to answer — a fixture
 /// replay, an adapter over a non-ONVIF device, a fault gate. This trait is the
-/// stable extension seam (`docs/metamorph.md` D2); it is `async` so responders
+/// stable extension seam (`docs/active/metamorph.md` D2); it is `async` so responders
 /// that do real I/O can `.await` directly.
 #[async_trait]
 pub trait Responder: Send + Sync {
