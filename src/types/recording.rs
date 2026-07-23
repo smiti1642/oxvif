@@ -5,6 +5,7 @@ use crate::soap::{SoapError, XmlNode};
 // ── RecordingSourceInformation ────────────────────────────────────────────────
 
 /// Identifies the physical source of a recording.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct RecordingSourceInformation {
     /// Unique source identifier URI.
@@ -34,6 +35,7 @@ impl RecordingSourceInformation {
 // ── RecordingTrack ────────────────────────────────────────────────────────────
 
 /// A single track (video, audio, or metadata) within a recording.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct RecordingTrack {
     /// Opaque track token.
@@ -56,6 +58,7 @@ pub struct RecordingTrack {
 /// fields are not included in `GetRecordings` — use `search_recordings` /
 /// `get_recording_search_results` (which return [`RecordingInformation`]) to
 /// obtain `earliest_recording`, `latest_recording`, and `recording_status`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct RecordingItem {
     /// Opaque recording token; pass to `get_replay_uri`.
@@ -138,6 +141,7 @@ impl RecordingItem {
 // ── RecordingInformation ──────────────────────────────────────────────────────
 
 /// Summary of a recording returned by `get_recording_search_results`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct RecordingInformation {
     /// Opaque recording token; pass to `get_replay_uri`.
@@ -178,6 +182,7 @@ impl RecordingInformation {
 // ── FindRecordingResults ──────────────────────────────────────────────────────
 
 /// Results returned by `get_recording_search_results`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct FindRecordingResults {
     /// Search state: `"Queued"`, `"Searching"`, `"Completed"`, or `"Unknown"`.
@@ -210,6 +215,7 @@ impl FindRecordingResults {
 /// Parameters for creating a new recording entry on the device.
 ///
 /// Pass to `OnvifClient::create_recording` or `OnvifSession::create_recording`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct RecordingConfiguration {
     /// Human-readable name for the recording source (e.g. `"Front Door Camera"`).
@@ -230,6 +236,7 @@ pub struct RecordingConfiguration {
 /// Configuration for creating a recording job via `create_recording_job`.
 ///
 /// A recording job continuously writes media from a profile into a recording.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct RecordingJobConfiguration {
     /// Token of the recording this job writes to.
@@ -279,6 +286,7 @@ impl RecordingJobConfiguration {
 // ── RecordingJob ──────────────────────────────────────────────────────────────
 
 /// A recording job entry returned by `get_recording_jobs`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct RecordingJob {
     /// Opaque job token; pass to `set_recording_job_mode`, `delete_recording_job`, etc.
@@ -326,6 +334,7 @@ impl RecordingJob {
 // ── RecordingJobState ─────────────────────────────────────────────────────────
 
 /// Current operational state of a recording job returned by `get_recording_job_state`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct RecordingJobState {
     /// Token of the recording being written by this job.

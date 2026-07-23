@@ -5,6 +5,7 @@ use crate::soap::{SoapError, XmlNode};
 // ── AudioSource ───────────────────────────────────────────────────────────────
 
 /// A physical audio input returned by `GetAudioSources`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AudioSource {
     /// Opaque token; pass to `AudioSourceConfiguration.source_token`.
@@ -34,6 +35,7 @@ impl AudioSource {
 // ── AudioSourceConfiguration ──────────────────────────────────────────────────
 
 /// Audio source configuration returned by `GetAudioSourceConfigurations`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AudioSourceConfiguration {
     /// Opaque token for this configuration.
@@ -68,6 +70,7 @@ impl AudioSourceConfiguration {
 // ── AudioEncoding ─────────────────────────────────────────────────────────────
 
 /// Audio compression format.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum AudioEncoding {
     #[default]
@@ -109,6 +112,7 @@ impl std::fmt::Display for AudioEncoding {
 /// Audio codec settings returned by `GetAudioEncoderConfiguration(s)`.
 ///
 /// Pass a modified copy to `set_audio_encoder_configuration`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AudioEncoderConfiguration {
     /// Opaque token for this configuration.
@@ -177,6 +181,7 @@ impl AudioEncoderConfiguration {
 // ── AudioEncoderConfigurationOptions ─────────────────────────────────────────
 
 /// Valid options for one audio encoding type.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct AudioEncoderOptions {
     pub encoding: AudioEncoding,
@@ -189,6 +194,7 @@ pub struct AudioEncoderOptions {
 /// Valid parameter ranges for `SetAudioEncoderConfiguration`.
 ///
 /// Contains one [`AudioEncoderOptions`] entry per encoding the device supports.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct AudioEncoderConfigurationOptions {
     pub options: Vec<AudioEncoderOptions>,

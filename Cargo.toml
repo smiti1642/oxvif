@@ -22,6 +22,12 @@ exclude = [".env", ".env.example", "docs/"]
 features = ["mock-server", "health"]
 
 [features]
+# Derive `serde::Serialize` + `Deserialize` on every public response type in
+# `oxvif::types`, so they can be exposed directly over a REST API / persisted
+# as JSON without hand-cloning parallel structs. Off by default — pulls no new
+# dependency and costs nothing unless enabled. Field names are the Rust-native
+# snake_case identifiers (no `rename_all`).
+serde = ["dep:serde"]
 # In-process mock ONVIF device for unit-testing client code without a camera.
 # `mock` gives the zero-network `MockTransport`; `mock-server` adds a real
 # bound-port `MockServer` (pulls axum).
@@ -71,6 +77,8 @@ digest_auth  = { version = "0.3", optional = true }
 quick-xml = { version = "0.41", features = ["encoding"] }
 mockito = "1"
 dotenvy = "0.15"
+# Exercises the `serde` feature's derives with a real JSON roundtrip in tests.
+serde_json = "1"
 tokio   = { version = "1", features = ["rt-multi-thread", "macros", "test-util"] }
 axum    = "0.8"
 futures = "0.3"

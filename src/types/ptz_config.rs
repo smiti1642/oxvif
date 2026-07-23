@@ -5,6 +5,7 @@ use crate::soap::{SoapError, XmlNode};
 // ── PtzSpaceRange ─────────────────────────────────────────────────────────────
 
 /// A single PTZ space definition with a URI and coordinate ranges.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct PtzSpaceRange {
     /// ONVIF space URI (e.g.
@@ -53,6 +54,7 @@ fn parse_space_range(node: &XmlNode) -> PtzSpaceRange {
 // ── PtzSpeed ──────────────────────────────────────────────────────────────────
 
 /// Default PTZ movement speed stored in a `PtzConfiguration`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct PtzSpeed {
     /// Default pan (x) and tilt (y) speed, normalised range `[0, 1]`.
@@ -66,6 +68,7 @@ pub struct PtzSpeed {
 /// PTZ configuration returned by `GetConfigurations` / `GetConfiguration`.
 ///
 /// Pass a modified copy to `ptz_set_configuration`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct PtzConfiguration {
     /// Opaque token for this configuration.
@@ -203,6 +206,7 @@ impl PtzConfiguration {
 // ── PtzConfigurationOptions ───────────────────────────────────────────────────
 
 /// Valid parameter ranges for `SetConfiguration`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct PtzConfigurationOptions {
     /// Minimum PTZ operation timeout as ISO 8601 duration.
@@ -233,6 +237,7 @@ impl PtzConfigurationOptions {
 ///
 /// Describes the physical PTZ capabilities of the device (supported spaces,
 /// preset count, home position support, etc.).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct PtzNode {
     /// Opaque token; referenced by `PtzConfiguration.node_token`.

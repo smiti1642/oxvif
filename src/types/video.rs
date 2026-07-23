@@ -5,6 +5,7 @@ use crate::soap::{SoapError, XmlNode};
 // ── Shared primitives ─────────────────────────────────────────────────────────
 
 /// Width × height in pixels.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Resolution {
     pub width: u32,
@@ -18,6 +19,7 @@ impl std::fmt::Display for Resolution {
 }
 
 /// Integer min/max range (inclusive).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct IntRange {
     pub min: i32,
@@ -25,6 +27,7 @@ pub struct IntRange {
 }
 
 /// Floating-point min/max range (inclusive).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct FloatRange {
     pub min: f32,
@@ -54,6 +57,7 @@ pub(super) fn parse_int_range_node(node: &XmlNode) -> IntRange {
 // ── VideoSource ───────────────────────────────────────────────────────────────
 
 /// A physical video input channel returned by `GetVideoSources`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoSource {
     /// Opaque token identifying this physical input.
@@ -95,6 +99,7 @@ impl VideoSource {
 ///
 /// Returned by `GetVideoSourceConfiguration(s)`.
 /// Pass a modified copy to `SetVideoSourceConfiguration`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoSourceConfiguration {
     /// Opaque token for this configuration.
@@ -109,6 +114,7 @@ pub struct VideoSourceConfiguration {
 }
 
 /// Rectangular region within a video source, in pixels.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SourceBounds {
     pub x: i32,
@@ -191,6 +197,7 @@ impl VideoSourceConfiguration {
 // ── VideoSourceConfigurationOptions ──────────────────────────────────────────
 
 /// Valid parameter ranges for `SetVideoSourceConfiguration`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct VideoSourceConfigurationOptions {
     /// Available video source tokens that can be referenced.
@@ -202,6 +209,7 @@ pub struct VideoSourceConfigurationOptions {
 }
 
 /// Valid coordinate ranges for `SourceBounds`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct BoundsRange {
     pub x_range: IntRange,
@@ -246,6 +254,7 @@ impl VideoSourceConfigurationOptions {
 // ── VideoEncoding ─────────────────────────────────────────────────────────────
 
 /// Video compression format.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum VideoEncoding {
     Jpeg,
@@ -285,6 +294,7 @@ impl std::fmt::Display for VideoEncoding {
 // ── VideoEncoderConfiguration ─────────────────────────────────────────────────
 
 /// Multicast streaming configuration embedded in a video encoder configuration.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct MulticastConfiguration {
     /// Multicast IPv4 (or IPv6) group address.
@@ -310,6 +320,7 @@ pub struct MulticastConfiguration {
 ///
 /// The Media1 [`set_video_encoder_configuration`](crate::OnvifClient::set_video_encoder_configuration)
 /// rejects H265 with [`OnvifError::InvalidArgument`](crate::OnvifError::InvalidArgument).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct VideoEncoderConfiguration {
     /// Opaque token for this configuration.
@@ -338,6 +349,7 @@ pub struct VideoEncoderConfiguration {
 }
 
 /// Frame rate, encoding interval, and bitrate limits.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct VideoRateControl {
     /// Maximum frames per second the encoder produces.
@@ -349,6 +361,7 @@ pub struct VideoRateControl {
 }
 
 /// H.264-specific codec settings.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct H264Configuration {
     /// Group-of-pictures length (keyframe interval in frames).
@@ -358,6 +371,7 @@ pub struct H264Configuration {
 }
 
 /// H.265-specific codec settings.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct H265Configuration {
     /// Group-of-pictures length (keyframe interval in frames).
@@ -524,6 +538,7 @@ impl VideoEncoderConfiguration {
 // ── VideoEncoderConfigurationOptions ─────────────────────────────────────────
 
 /// Valid parameter ranges for `SetVideoEncoderConfiguration`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VideoEncoderConfigurationOptions {
     pub quality_range: Option<FloatRange>,
@@ -533,6 +548,7 @@ pub struct VideoEncoderConfigurationOptions {
 }
 
 /// Valid options for JPEG encoding.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JpegOptions {
     pub resolutions: Vec<Resolution>,
@@ -541,6 +557,7 @@ pub struct JpegOptions {
 }
 
 /// Valid options for H.264 encoding.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct H264Options {
     pub resolutions: Vec<Resolution>,
@@ -553,6 +570,7 @@ pub struct H264Options {
 }
 
 /// Valid options for H.265 encoding.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct H265Options {
     pub resolutions: Vec<Resolution>,
@@ -630,6 +648,7 @@ impl VideoEncoderConfigurationOptions {
 /// `gov_length` and `profile` are top-level fields, not nested under a codec
 /// sub-struct. Use with `get_video_encoder_configurations_media2` and
 /// `set_video_encoder_configuration_media2`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoEncoderConfiguration2 {
     pub token: String,
@@ -647,6 +666,7 @@ pub struct VideoEncoderConfiguration2 {
 }
 
 /// Simplified rate control for Media2 (no `EncodingInterval`).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoRateControl2 {
     pub frame_rate_limit: u32,
@@ -738,6 +758,7 @@ impl VideoEncoderConfiguration2 {
 ///
 /// Media2 returns one [`VideoEncoderOptions2`] entry per supported encoding.
 /// Match on `opts.options[i].encoding` to find the set relevant to you.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct VideoEncoderConfigurationOptions2 {
     /// One entry per encoding type the device supports (H264, H265, JPEG, …).
@@ -745,6 +766,7 @@ pub struct VideoEncoderConfigurationOptions2 {
 }
 
 /// Per-encoding options entry within [`VideoEncoderConfigurationOptions2`].
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct VideoEncoderOptions2 {
     pub encoding: VideoEncoding,
@@ -802,6 +824,7 @@ impl VideoEncoderConfigurationOptions2 {
 // ── VideoEncoderInstances ─────────────────────────────────────────────────────
 
 /// Encoder capacity info returned by `GetVideoEncoderInstances` (Media2).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct VideoEncoderInstances {
     /// Total number of encoder instances available on the source.
@@ -811,6 +834,7 @@ pub struct VideoEncoderInstances {
 }
 
 /// Available instance count for one encoding type.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct EncoderInstanceInfo {
     pub encoding: VideoEncoding,

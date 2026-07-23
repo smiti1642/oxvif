@@ -5,6 +5,7 @@ use crate::soap::{SoapError, XmlNode};
 // ── OsdPosition ───────────────────────────────────────────────────────────────
 
 /// Screen position of an OSD element.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdPosition {
     /// Position type: `"UpperLeft"`, `"UpperRight"`, `"LowerLeft"`,
@@ -50,6 +51,7 @@ impl OsdPosition {
 ///
 /// Channels (`x`, `y`, `z`) map to YCbCr or RGB depending on the device's
 /// colorspace URI. Most devices use YCbCr: X = luma, Y = Cb, Z = Cr.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdColor {
     pub x: f32,
@@ -104,6 +106,7 @@ impl OsdColor {
 // ── OsdTextString ─────────────────────────────────────────────────────────────
 
 /// Text content settings for an OSD element of type `"Text"`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdTextString {
     /// Text type: `"Plain"`, `"Date"`, `"Time"`, or `"DateAndTime"`.
@@ -199,6 +202,7 @@ impl OsdTextString {
 ///
 /// Pass a modified copy to `set_osd`, or a new instance (with an empty token)
 /// to `create_osd`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct OsdConfiguration {
     /// Opaque token. Empty when creating a new OSD via `create_osd`.
@@ -299,6 +303,7 @@ impl OsdConfiguration {
 /// camera doesn't whitelist comes back as a generic
 /// `ter:InvalidArgs / "Argument Value"` SOAP fault, so populating
 /// dropdowns from this is the only reliable way.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdOptions {
     /// Overall maximum number of OSDs across all types.
