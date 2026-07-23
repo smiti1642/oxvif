@@ -11,6 +11,7 @@ use crate::soap::{SoapError, XmlNode};
 ///
 /// Pass a modified copy to
 /// [`set_imaging_settings`](crate::client::OnvifClient::set_imaging_settings).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct ImagingSettings {
     /// Image brightness level.
@@ -233,6 +234,7 @@ impl ImagingSettings {
 // ── ImagingOptions ────────────────────────────────────────────────────────────
 
 /// Valid parameter ranges for `SetImagingSettings`, returned by `GetOptions`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct ImagingOptions {
     /// Valid brightness range.
@@ -391,6 +393,7 @@ impl ImagingOptions {
 // ── ImagingStatus ─────────────────────────────────────────────────────────────
 
 /// Current imaging / focus status returned by `imaging_get_status`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct ImagingStatus {
     /// Current focus position in the device's native range.
@@ -419,6 +422,7 @@ impl ImagingStatus {
 // ── ImagingMoveOptions ────────────────────────────────────────────────────────
 
 /// Valid focus movement ranges returned by `imaging_get_move_options`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct ImagingMoveOptions {
     /// Valid absolute focus position range.
@@ -467,6 +471,7 @@ impl ImagingMoveOptions {
 // ── FocusMove ─────────────────────────────────────────────────────────────────
 
 /// Focus movement command passed to `imaging_move`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub enum FocusMove {
     /// Move focus to an absolute position.

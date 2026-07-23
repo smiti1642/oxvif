@@ -33,9 +33,11 @@
 //! via [`MockState::set_on_change`].
 
 mod auth;
+pub(crate) mod canon;
 mod dispatch;
-mod fault_injection;
-mod helpers;
+pub(crate) mod fault_injection;
+pub(crate) mod helpers;
+pub(crate) mod responder;
 mod services;
 mod transport;
 mod xml_parse;
@@ -43,14 +45,23 @@ mod xml_parse;
 pub mod state;
 
 #[cfg(feature = "mock-server")]
+mod discovery_responder;
+#[cfg(feature = "mock-server")]
+mod fleet;
+#[cfg(feature = "mock-server")]
 mod font;
 #[cfg(feature = "mock-server")]
 mod server;
 #[cfg(feature = "mock-server")]
 mod snapshot;
 
+pub use responder::{Chain, RequestCtx, Responder};
 pub use state::{DeviceState, MockState};
 pub use transport::MockTransport;
 
+#[cfg(feature = "mock-server")]
+pub use discovery_responder::DiscoveryResponder;
+#[cfg(feature = "mock-server")]
+pub use fleet::{Fleet, FleetBuilder};
 #[cfg(feature = "mock-server")]
 pub use server::MockServer;

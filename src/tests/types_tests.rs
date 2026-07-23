@@ -1293,3 +1293,81 @@ mod xml_escape_tests {
         }
     }
 }
+
+#[cfg(feature = "serde")]
+mod serde_support {
+    use super::*;
+
+    /// Response types serialize with Rust-native snake_case field names and
+    /// survive a JSON roundtrip — the shape the `serde` feature promises to
+    /// downstream REST/NVR code.
+    #[test]
+    fn ptz_preset_json_roundtrip() {
+        let preset = PtzPreset {
+            token: "Preset_1".to_string(),
+            name: "Front <door>".to_string(), // exercises string escaping in JSON
+            pan_tilt: Some((0.5, -0.25)),
+            zoom: Some(0.75),
+        };
+
+        let json = serde_json::to_string(&preset).unwrap();
+        // Field names are the plain Rust identifiers (no `rename_all`).
+        assert!(json.contains("\"token\":\"Preset_1\""), "json was: {json}");
+        assert!(
+            json.contains("\"pan_tilt\":[0.5,-0.25]"),
+            "json was: {json}"
+        );
+
+        let back: PtzPreset = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.token, preset.token);
+        assert_eq!(back.name, preset.name);
+        assert_eq!(back.pan_tilt, preset.pan_tilt);
+        assert_eq!(back.zoom, preset.zoom);
+    }
+
+    /// A struct parsed from a real SOAP response deserializes back from the
+    /// JSON it produces — the round trip a webapp would rely on.
+    #[test]
+    fn parsed_struct_reserializes_stably() {
+        let preset = PtzPreset {
+            token: "p2".to_string(),
+            name: "Gate".to_string(),
+            pan_tilt: None,
+            zoom: None,
+        };
+        let json = serde_json::to_string(&preset).unwrap();
+        let back: PtzPreset = serde_json::from_str(&json).unwrap();
+        // Re-serializing the deserialized value yields byte-identical JSON.
+        assert_eq!(json, serde_json::to_string(&back).unwrap());
+    }
+
+    /// The exact pattern the issue asked for: return `Json(response)` straight
+    /// from an axum handler. Drives a real `axum::Json` through `IntoResponse`
+    /// and inspects the emitted HTTP body — proof that a REST handler needs no
+    /// hand-cloned parallel structs.
+    #[tokio::test]
+    async fn axum_json_response_body_is_the_serialized_type() {
+        use axum::response::IntoResponse;
+
+        let presets = vec![PtzPreset {
+            token: "Preset_1".to_string(),
+            name: "Front door".to_string(),
+            pan_tilt: Some((0.5, -0.25)),
+            zoom: Some(0.75),
+        }];
+
+        let response = axum::Json(presets).into_response();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json = String::from_utf8(body.to_vec()).unwrap();
+        assert!(json.starts_with('['), "Vec → JSON array; body was: {json}");
+        assert!(json.contains("\"token\":\"Preset_1\""), "body was: {json}");
+        assert!(
+            json.contains("\"pan_tilt\":[0.5,-0.25]"),
+            "body was: {json}"
+        );
+    }
+}

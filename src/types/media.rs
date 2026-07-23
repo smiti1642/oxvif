@@ -8,6 +8,7 @@ use crate::soap::{SoapError, XmlNode};
 ///
 /// Pass `token` to [`get_stream_uri`](crate::client::OnvifClient::get_stream_uri)
 /// to retrieve the RTSP URI for this profile.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct MediaProfile {
     /// Opaque identifier used in subsequent media service calls.
@@ -78,6 +79,7 @@ impl MediaProfile {
 // ── StreamUri ─────────────────────────────────────────────────────────────────
 
 /// RTSP stream URI returned by `GetStreamUri`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct StreamUri {
     /// The RTSP URI to open with a media player (e.g. `rtsp://…/stream`).
@@ -117,6 +119,7 @@ impl StreamUri {
 /// HTTP snapshot URI returned by `GetSnapshotUri`.
 ///
 /// Fetch the URI with any HTTP client to retrieve a JPEG image.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct SnapshotUri {
     /// HTTP URL of the JPEG snapshot endpoint.
@@ -157,6 +160,7 @@ impl SnapshotUri {
 ///
 /// Compared with [`MediaProfile`], this carries optional references to the
 /// configurations currently bound to the profile.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct MediaProfile2 {
     pub token: String,
@@ -222,6 +226,7 @@ impl MediaProfile2 {
 /// Metadata stream configuration returned by `GetMetadataConfigurations` (Media2).
 ///
 /// ONVIF Media2 WSDL — Profile T §7.14/§7.15 (conditional).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct MetadataConfiguration {
     pub token: String,
@@ -298,6 +303,7 @@ impl MetadataConfiguration {
 
 /// Valid ranges for metadata configuration returned by
 /// `GetMetadataConfigurationOptions` (Media2).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct MetadataConfigurationOptions {
     pub ptz_status_filter_supported: bool,
@@ -322,6 +328,7 @@ impl MetadataConfigurationOptions {
 /// `GetAudioDecoderConfigurations` (Media2).
 ///
 /// ONVIF Media2 WSDL — Profile T §8.13 (conditional).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AudioDecoderConfiguration {
     pub token: String,
@@ -358,6 +365,7 @@ impl AudioDecoderConfiguration {
 /// Audio output configuration returned by `GetAudioOutputConfigurations` (Media2).
 ///
 /// ONVIF Media2 WSDL — Profile T §8.13 (conditional).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AudioOutputConfiguration {
     pub token: String,
@@ -398,6 +406,7 @@ impl AudioOutputConfiguration {
 /// A video source mode returned by `GetVideoSourceModes` (Media2).
 ///
 /// ONVIF Media2 WSDL — Profile T §8.7 (conditional).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoSourceMode {
     pub token: String,

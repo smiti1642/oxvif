@@ -7,6 +7,7 @@ use crate::soap::{SoapError, XmlNode};
 /// Hardware and firmware information returned by `GetDeviceInformation`.
 ///
 /// Absent fields in the device response are represented as empty strings.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct DeviceInfo {
     pub manufacturer: String,
@@ -43,6 +44,7 @@ impl DeviceInfo {
 /// let client = client.with_utc_offset(dt.utc_offset_secs());
 /// # Ok(()) }
 /// ```
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct SystemDateTime {
     /// Device UTC clock as a Unix timestamp (seconds since 1970-01-01T00:00:00Z).
@@ -133,6 +135,7 @@ pub(crate) fn civil_to_unix(year: i32, month: i32, day: i32, hour: i32, min: i32
 // ── SetDateTimeRequest ────────────────────────────────────────────────────────
 
 /// UTC date and time components for [`SetDateTimeRequest`].
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct UtcDateTime {
     pub year: u16,
@@ -144,6 +147,7 @@ pub struct UtcDateTime {
 }
 
 /// Parameters for `OnvifClient::set_system_date_and_time`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct SetDateTimeRequest {
     /// `"Manual"` (use `utc_datetime`) or `"NTP"` (device syncs automatically).
@@ -159,6 +163,7 @@ pub struct SetDateTimeRequest {
 // ── Hostname ──────────────────────────────────────────────────────────────────
 
 /// Hostname configuration returned by `GetHostname`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct Hostname {
     /// `true` if the hostname is assigned by DHCP rather than set manually.
@@ -183,6 +188,7 @@ impl Hostname {
 // ── NtpInfo ───────────────────────────────────────────────────────────────────
 
 /// NTP configuration returned by `GetNTP`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct NtpInfo {
     /// `true` if NTP servers are obtained from DHCP rather than set manually.
@@ -222,6 +228,7 @@ impl NtpInfo {
 /// `GetServices` is the proper ONVIF mechanism for discovering all service
 /// endpoints, including Media2. Use [`OnvifService::is_media2`] to identify
 /// the Media2 entry.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct OnvifService {
     /// Service namespace URI, e.g. `"http://www.onvif.org/ver20/media/wsdl"`.
@@ -260,6 +267,7 @@ impl OnvifService {
 // ── User ──────────────────────────────────────────────────────────────────────
 
 /// A device user account returned by `GetUsers`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct User {
     pub username: String,
@@ -285,6 +293,7 @@ impl User {
 // ── NetworkInterface ──────────────────────────────────────────────────────────
 
 /// Network interface configuration returned by `GetNetworkInterfaces`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct NetworkInterface {
     pub token: String,
@@ -399,6 +408,7 @@ impl NetworkInterface {
 ///
 /// Fields left as `None` are omitted from the request — the device keeps its
 /// existing value for that property.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct NetworkInterfaceConfig {
     /// Enable or disable the interface as a whole.
@@ -418,6 +428,7 @@ pub struct NetworkInterfaceConfig {
 
 /// One IP stack's configuration. Used for both IPv4 and IPv6 in
 /// [`NetworkInterfaceConfig`].
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct IpStackConfig {
     /// Enable or disable this stack on the interface.
@@ -429,6 +440,7 @@ pub struct IpStackConfig {
 }
 
 /// One static address with prefix length.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ManualAddress {
     pub address: String,
@@ -438,6 +450,7 @@ pub struct ManualAddress {
 // ── NetworkProtocol ───────────────────────────────────────────────────────────
 
 /// A network protocol entry returned by `GetNetworkProtocols`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct NetworkProtocol {
     /// Protocol name, e.g. `"HTTP"`, `"HTTPS"`, `"RTSP"`.
@@ -466,6 +479,7 @@ impl NetworkProtocol {
 // ── DnsInformation ────────────────────────────────────────────────────────────
 
 /// DNS configuration returned by `GetDNS`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct DnsInformation {
     pub from_dhcp: bool,
@@ -504,6 +518,7 @@ impl DnsInformation {
 // ── NetworkGateway ────────────────────────────────────────────────────────────
 
 /// Default gateway configuration returned by `GetNetworkDefaultGateway`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct NetworkGateway {
     pub ipv4_addresses: Vec<String>,
@@ -537,6 +552,7 @@ impl NetworkGateway {
 // ── SystemLog ─────────────────────────────────────────────────────────────────
 
 /// System log content returned by `GetSystemLog`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct SystemLog {
     /// Plain-text log content. `None` if the device returned binary data only.
@@ -560,6 +576,7 @@ impl SystemLog {
 // ── RelayOutput ───────────────────────────────────────────────────────────────
 
 /// A relay output port returned by `GetRelayOutputs`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelayOutput {
     pub token: String,
@@ -611,6 +628,7 @@ impl RelayOutput {
 /// The Device Service exposes only the port's configured idle state — the
 /// live (active/inactive) reading is not polled here. Subscribe to the
 /// `tns1:Device/Trigger/DigitalInput` PullPoint topic to observe transitions.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigitalInput {
     pub token: String,
@@ -643,6 +661,7 @@ impl DigitalInput {
 ///
 /// Per the ONVIF spec, all fields live inside the `<Data>` child element and
 /// `storage_type` is the `type` attribute of that element.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct StorageConfiguration {
     pub token: String,
@@ -701,6 +720,7 @@ impl StorageConfiguration {
 ///
 /// Per the ONVIF spec the response contains `SystemLogUris`, `SupportInfoUri`,
 /// and `SystemBackupUri`.  There is no firmware-upgrade URI in this response.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct SystemUris {
     /// URI of the first system-log entry reported by the device.
@@ -734,6 +754,7 @@ impl SystemUris {
 /// attachment-based `UpgradeSystemFirmware` (MTOM), which oxvif's
 /// SOAP-only transport can't produce. Durations are raw ISO 8601 strings
 /// (e.g. `"PT30S"`), matching the rest of oxvif's duration handling.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct FirmwareUpgradeStart {
     /// HTTP endpoint to POST the firmware image to.
@@ -759,6 +780,7 @@ impl FirmwareUpgradeStart {
 /// The client HTTP POSTs a previously downloaded backup to `upload_uri`;
 /// the device then restores and reboots (offline for roughly
 /// `expected_down_time`). Avoids the attachment-based `RestoreSystem`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct SystemRestoreStart {
     /// HTTP endpoint to POST the backup file to.

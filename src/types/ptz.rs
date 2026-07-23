@@ -5,6 +5,7 @@ use crate::soap::{SoapError, XmlNode};
 // ── PtzPreset ─────────────────────────────────────────────────────────────────
 
 /// A named PTZ preset position returned by `GetPresets`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct PtzPreset {
     /// Opaque preset identifier; pass to `ptz_goto_preset`.
@@ -49,6 +50,7 @@ impl PtzPreset {
 // ── PtzStatus ─────────────────────────────────────────────────────────────────
 
 /// Current PTZ position and movement state returned by `GetStatus`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct PtzStatus {
     /// Current pan position in the normalised range `[-1.0, 1.0]`.

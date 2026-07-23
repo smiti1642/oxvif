@@ -396,6 +396,30 @@ pub struct ProfileAssessment {
     pub profile_g: ProfileState,
 }
 
+/// One captured request/response for a check that failed — the raw evidence a
+/// maintainer needs to see *why* a brand rejected a call. Populated only when
+/// capture was enabled via [`HealthCheck::with_capture`](super::HealthCheck::with_capture).
+///
+/// The request has its WS-Security `Password` and `Nonce` blanked, so it never
+/// carries credential-derivation material. IP addresses / serials in either
+/// field are *not* scrubbed here — apply transport-agnostic redaction downstream
+/// if the capture will be shared.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CapturedExchange {
+    /// SOAP action (last URL segment, e.g. `GetStreamUri`).
+    pub action: String,
+    /// The request SOAP envelope, with WS-Security `Password`/`Nonce` redacted.
+    pub request: String,
+    /// The response body — a SOAP Fault envelope, or the transport error text.
+    pub response: String,
+    /// HTTP status when the failure was a non-SOAP transport error (e.g. `401`).
+    /// `None` for a SOAP Fault (the device returned 400/500 with a fault body,
+    /// which the transport collapses to a normal response) — read the fault code
+    /// from `response` in that case.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub http_status: Option<u16>,
+}
+
 /// The full result of a [`HealthCheck`](super::HealthCheck) run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HealthReport {
@@ -420,6 +444,11 @@ pub struct HealthReport {
     /// Empty when scopes were unavailable.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub declared_profiles: Vec<String>,
+    /// Raw request/response for the checks that failed — populated only when
+    /// capture was enabled via [`HealthCheck::with_capture`](super::HealthCheck::with_capture).
+    /// Empty otherwise. See [`CapturedExchange`].
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub captured: Vec<CapturedExchange>,
 }
 
 impl HealthReport {
@@ -804,6 +833,7 @@ mod tests {
             profiles: assess(),
             clock_skew_s: None,
             declared_profiles: vec![],
+            captured: vec![],
         }
     }
 

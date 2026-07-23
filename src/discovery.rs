@@ -809,7 +809,7 @@ fn build_probe(message_id: &str, target: ProbeTarget) -> String {
     )
 }
 
-fn new_uuid() -> String {
+pub(crate) fn new_uuid() -> String {
     format!(
         "{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}",
         rand::random::<u32>(),

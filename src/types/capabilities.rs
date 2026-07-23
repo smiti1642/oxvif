@@ -5,6 +5,7 @@ use crate::soap::{SoapError, XmlNode};
 // ── Capabilities sub-structs ──────────────────────────────────────────────────
 
 /// Network capabilities from `Device/Network`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct NetworkCapabilities {
     pub ip_filter: bool,
@@ -14,6 +15,7 @@ pub struct NetworkCapabilities {
 }
 
 /// System capabilities from `Device/System`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SystemCapabilities {
     pub discovery_resolve: bool,
@@ -25,6 +27,7 @@ pub struct SystemCapabilities {
 }
 
 /// I/O capabilities from `Device/IO`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct IoCapabilities {
     /// Number of digital inputs on the device.
@@ -34,6 +37,7 @@ pub struct IoCapabilities {
 }
 
 /// Security capabilities from `Device/Security`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SecurityCapabilities {
     pub tls_1_2: bool,
@@ -45,6 +49,7 @@ pub struct SecurityCapabilities {
 }
 
 /// Device management service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct DeviceCapabilities {
     /// Device management service endpoint URL.
@@ -56,6 +61,7 @@ pub struct DeviceCapabilities {
 }
 
 /// RTP streaming capabilities from `Media/StreamingCapabilities`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct StreamingCapabilities {
     pub rtp_multicast: bool,
@@ -64,6 +70,7 @@ pub struct StreamingCapabilities {
 }
 
 /// Media service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct MediaCapabilities {
     /// Media service endpoint URL.
@@ -74,6 +81,7 @@ pub struct MediaCapabilities {
 }
 
 /// Events service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct EventsCapabilities {
     /// Events service endpoint URL.
@@ -85,6 +93,7 @@ pub struct EventsCapabilities {
 }
 
 /// Analytics service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct AnalyticsCapabilities {
     /// Analytics service endpoint URL.
@@ -94,6 +103,7 @@ pub struct AnalyticsCapabilities {
 }
 
 /// PTZ service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct PtzCapabilities {
     /// PTZ service endpoint URL (`None` if not supported).
@@ -101,6 +111,7 @@ pub struct PtzCapabilities {
 }
 
 /// Imaging service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct ImagingCapabilities {
     /// Imaging service endpoint URL (`None` if not supported).
@@ -108,6 +119,7 @@ pub struct ImagingCapabilities {
 }
 
 /// Recording service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct RecordingCapabilities {
     /// Recording service endpoint URL (`None` if not supported).
@@ -115,6 +127,7 @@ pub struct RecordingCapabilities {
 }
 
 /// Search service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SearchCapabilities {
     /// Search service endpoint URL (`None` if not supported).
@@ -122,6 +135,7 @@ pub struct SearchCapabilities {
 }
 
 /// Replay service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct ReplayCapabilities {
     /// Replay service endpoint URL (`None` if not supported).
@@ -129,6 +143,7 @@ pub struct ReplayCapabilities {
 }
 
 /// Media2 service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct Media2Capabilities {
     /// Media2 service endpoint URL (`None` if device does not support Media2).
@@ -136,6 +151,7 @@ pub struct Media2Capabilities {
 }
 
 /// DeviceIO service capabilities.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct DeviceIoCapabilities {
     /// DeviceIO service endpoint URL (`None` if not supported).
@@ -172,6 +188,7 @@ pub struct DeviceIoCapabilities {
 /// }
 /// # Ok(()) }
 /// ```
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct Capabilities {
     pub device: DeviceCapabilities,

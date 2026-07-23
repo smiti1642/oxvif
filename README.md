@@ -89,7 +89,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.12", features = ["mock"] }
+oxvif = { version = "0.13", features = ["mock"] }
 ```
 
 ```rust
@@ -116,7 +116,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.12"
+oxvif = "0.13"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -818,7 +818,7 @@ alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 ```toml
-oxvif = { version = "0.12", features = ["health"] }
+oxvif = { version = "0.13", features = ["health"] }
 ```
 
 ```rust
@@ -865,6 +865,14 @@ replay), it tries a few conventional service URLs (and the device endpoint
 itself) and calls the operation; one that answers is flagged as **under-declared**
 rather than counted as unsupported. Best-effort — vendors use non-standard paths,
 so a miss isn't proof of absence.
+
+**Raw-SOAP capture (opt-in, 0.13+).** `with_capture(true)` records the raw
+request/response of every SOAP call that **fails** (a transport error or a SOAP
+Fault) into `HealthReport::captured` — the raw evidence for *why* a brand
+rejected a call, to pair with the structured `CheckError`. Off by default;
+successful (credential-bearing) requests are never stored, and stored requests
+have their WS-Security `Password`/`Nonce` blanked, so a capture carries no
+credential-derivation material. Each `CapturedExchange` keys on the SOAP action.
 
 **Structured facts (0.11+).** For building a cross-brand conformance corpus, the
 report carries machine-readable facts alongside the human-readable strings:
@@ -960,8 +968,8 @@ implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.12", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.12", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.13", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.13", features = ["mock-server"] }  # adds MockServer
 ```
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):

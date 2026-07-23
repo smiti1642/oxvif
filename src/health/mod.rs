@@ -19,13 +19,14 @@
 //! # }
 //! ```
 
+mod capture;
 mod checks;
 mod coverage;
 mod report;
 
 pub use report::{
-    Category, CheckError, CheckResult, CheckStatus, ErrorClass, HealthReport, ProfileAssessment,
-    ProfileState, ProfileVerdict, ReportDiff, SlowedCheck,
+    CapturedExchange, Category, CheckError, CheckResult, CheckStatus, ErrorClass, HealthReport,
+    ProfileAssessment, ProfileState, ProfileVerdict, ReportDiff, SlowedCheck,
 };
 
 use std::time::Instant;
@@ -42,6 +43,7 @@ pub struct HealthCheck {
     liveness_probes: bool,
     force_unsupported: bool,
     clock_sync: bool,
+    capture: bool,
 }
 
 impl HealthCheck {
@@ -54,6 +56,7 @@ impl HealthCheck {
             liveness_probes: false,
             force_unsupported: false,
             clock_sync: false,
+            capture: false,
         }
     }
 
@@ -108,6 +111,20 @@ impl HealthCheck {
         self
     }
 
+    /// Capture the raw request/response of every SOAP call that **fails** (a
+    /// transport error or a SOAP Fault) into
+    /// [`HealthReport::captured`](crate::health::HealthReport). Off by default.
+    ///
+    /// The stored request has its WS-Security `Password`/`Nonce` blanked, so it
+    /// never carries credential-derivation material; successful (and therefore
+    /// credential-bearing) requests are not stored at all. This is the raw
+    /// evidence a maintainer needs to see *why* a specific brand rejected a
+    /// call — pair it with the structured [`CheckError`] on the failing check.
+    pub fn with_capture(mut self, enabled: bool) -> Self {
+        self.capture = enabled;
+        self
+    }
+
     /// Run the checks and produce a [`HealthReport`].
     pub async fn run(self) -> HealthReport {
         let started = Instant::now();
@@ -122,7 +139,17 @@ impl HealthCheck {
             http = http.with_credentials(u.clone(), p.clone());
         }
         let tap = std::sync::Arc::new(coverage::CoverageTransport::new(std::sync::Arc::new(http)));
-        let mut builder = OnvifSession::builder(&self.device_url).with_transport(tap.clone());
+        // When capture is on, insert a tap that records the failing exchanges.
+        // It wraps the coverage tap, so both observe the same requests/responses
+        // and `coverage()` still reads its own map. `None` when off — zero cost.
+        let capture: Option<std::sync::Arc<capture::CaptureTransport>> = self
+            .capture
+            .then(|| std::sync::Arc::new(capture::CaptureTransport::new(tap.clone())));
+        let transport: std::sync::Arc<dyn crate::transport::Transport> = match &capture {
+            Some(c) => c.clone(),
+            None => tap.clone(),
+        };
+        let mut builder = OnvifSession::builder(&self.device_url).with_transport(transport);
         if let Some((u, p)) = &self.credentials {
             builder = builder.with_credentials(u.clone(), p.clone());
         }
@@ -142,6 +169,8 @@ impl HealthCheck {
                     checks: vec![conn],
                     clock_skew_s: None,
                     declared_profiles: vec![],
+                    // The connect failure went through the tap — capture it too.
+                    captured: capture.map(|c| c.take()).unwrap_or_default(),
                 };
             }
         };
@@ -240,6 +269,7 @@ impl HealthCheck {
             profiles,
             clock_skew_s,
             declared_profiles,
+            captured: capture.map(|c| c.take()).unwrap_or_default(),
         }
     }
 }
@@ -691,6 +721,38 @@ mod tests {
             check_passed(&report.checks, "set_video_encoder_roundtrip"),
             "write round-trip should pass against the mock:\n{report}"
         );
+    }
+
+    #[tokio::test]
+    async fn capture_is_opt_in_and_records_failing_exchanges() {
+        // An auth-enforced device probed without credentials: the anonymous
+        // calls fault, so capture should collect their raw exchanges.
+        let locked = MockServer::builder()
+            .enforce_auth(true)
+            .start()
+            .await
+            .unwrap();
+
+        // Off by default → nothing captured, even though checks fail.
+        let report = HealthCheck::new(locked.device_url()).run().await;
+        assert!(report.captured.is_empty(), "capture must be opt-in");
+
+        // On → the failing exchanges are recorded, keyed by action.
+        let report = HealthCheck::new(locked.device_url())
+            .with_capture(true)
+            .run()
+            .await;
+        assert!(
+            !report.captured.is_empty(),
+            "expected captured faults from an auth-enforced device"
+        );
+        for ex in &report.captured {
+            assert!(!ex.action.is_empty(), "captured exchange needs an action");
+            assert!(
+                !ex.response.is_empty(),
+                "captured exchange needs a response"
+            );
+        }
     }
 
     #[tokio::test]

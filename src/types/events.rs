@@ -11,6 +11,7 @@ use crate::soap::{SoapError, XmlNode};
 ///
 /// Use `reference_url` as the endpoint for `pull_messages`,
 /// `renew_subscription`, and `unsubscribe`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct PullPointSubscription {
     /// Subscription manager endpoint URL.
@@ -47,6 +48,7 @@ impl PullPointSubscription {
 /// The device will POST `Notify` messages to the `consumer_url` you supplied
 /// to [`subscribe`](crate::OnvifClient::subscribe). Use
 /// [`notification_listener`](crate::notification_listener) to receive them.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct PushSubscription {
     /// Subscription manager endpoint URL — the device's subscription reference.
@@ -80,6 +82,7 @@ impl PushSubscription {
 // ── NotificationMessage ───────────────────────────────────────────────────────
 
 /// A single ONVIF event notification received via `PullMessages`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct NotificationMessage {
     /// Topic path (e.g. `tns1:VideoSource/MotionAlarm`).
@@ -154,6 +157,7 @@ fn parse_simple_items(node: &XmlNode) -> HashMap<String, String> {
 // ── EventProperties ───────────────────────────────────────────────────────────
 
 /// Available event topics advertised by the device.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct EventProperties {
     /// Flattened list of all topic paths (e.g. `VideoSource/MotionAlarm`).

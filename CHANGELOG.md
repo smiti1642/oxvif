@@ -5,6 +5,84 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+Headline: **metamorph Persona B — clone a real camera and replay it verbatim,
+in-process, without hardware.** The first shippable slice (M0–M2) of the
+shape-shifting mock device (see `docs/active/metamorph.md`). Everything here is
+additive and feature-gated; the existing `mock` / `mock-server` public API is
+unchanged.
+
+### Added (`metamorph` feature)
+- **`metamorph` feature** (a superset of `mock`) and the `oxvif::metamorph`
+  module — Persona B record/replay:
+  - **`FixtureStore`** — a device's recorded SOAP exchanges as one
+    `fixtures.json`, keyed by the **canonical, ephemera-masked request**, so
+    `GetProfile(token=A)` and `(token=B)` never collide while MessageID / nonce
+    / timestamps and the `wsa:To` endpoint don't fragment the key. Loads whole
+    into memory; recorded requests have WS-Security `Password`/`Nonce` blanked.
+  - **`ReplayResponder`** — answers reads from fixtures; writes pass through to
+    the synthetic device state and invalidate that operation family's replay
+    (coarse copy-on-write), so `Set → Get` round-trips.
+  - **`MetamorphTransport`** — an in-process replay device (`Transport`), the
+    client-drivable counterpart of `MockTransport`.
+  - **`RecordingTransport`** — taps a live transport into a `FixtureStore`;
+    `examples/metamorph_record.rs` is the recorder CLI.
+  - `Fixture`, `FixtureStore`, `MetamorphTransport`, `ReplayResponder`,
+    `RecordingTransport` are re-exported from the crate root.
+  - **Persona C — adapter / skin**: implement the **`DeviceAdapter`** trait
+    (`identity` + `stream_uri` required; `continuous_move` / `snapshot`
+    optional) to put an ONVIF skin on a non-ONVIF (e.g. RTSP-only) device.
+    **`AdapterResponder`** answers GetDeviceInformation / GetStreamUri /
+    ContinuousMove from the adapter and falls through to the synthetic mock for
+    everything else; **`AdapterTransport`** drives it in-process. See
+    `examples/metamorph_adapter.rs`. `DeviceIdentity`, `PtzVector`,
+    `AdapterResult` are re-exported too.
+
+### Added (`mock` feature)
+- **`mock::{Chain, Responder, RequestCtx}`** — the mock device now answers each
+  request through an ordered chain of responders (fault → auth → synthetic by
+  default). The trait is the stable seam personas extend; behaviour of the
+  default pipeline is byte-for-byte unchanged.
+
+### Added (`mock-server` feature)
+- **WS-Discovery responder** — `MockServer::builder().discoverable(scopes)`
+  makes a bound server answer WS-Discovery `Probe`s (best-effort :3702 +
+  multicast), so a client (oxdm, ONVIF Device Manager, Frigate) finds it on the
+  LAN. `mock::DiscoveryResponder` is also usable standalone.
+- **Multi-device fleet** — `mock::Fleet` runs several independent `MockServer`s
+  at once, each on its own ephemeral port with a distinct identity (hostname /
+  model / serial). `Fleet::start(n)` for `n` default cameras or
+  `Fleet::builder()` to mix in caller-seeded `DeviceState`s; `device_urls()`
+  feeds a batch scanner directly. Dropping the fleet shuts every device down.
+  See `examples/mock_fleet.rs` (metamorph M6).
+
+---
+
+## [0.13.0] - 2026-07-14
+
+Headline: **opt-in raw-SOAP capture for failing health checks** — the raw
+request/response evidence a maintainer needs to see *why* a specific brand
+rejected a call, without leaking credentials.
+
+### Added (`health` feature)
+- **`HealthCheck::with_capture(true)`** records the raw request/response of every
+  SOAP call that **fails** (a transport error or a SOAP Fault) into the new
+  `HealthReport::captured` field (`Vec<CapturedExchange>`). Off by default.
+  Successful — and therefore credential-bearing — requests are not stored, and
+  the requests that are stored have their WS-Security `Password`/`Nonce` blanked,
+  so a capture never carries credential-derivation material. Each entry keys on
+  the SOAP action (`GetStreamUri`, …), keeping the latest failure per action.
+- **`CapturedExchange`** exported from the crate root and `health`.
+
+### Changed
+- `HealthReport` gained a `captured: Vec<CapturedExchange>` field (additive;
+  serialises only when non-empty, deserialises to empty when absent). Code that
+  constructs `HealthReport` with a struct literal must add the field — in 0.x a
+  minor bump is the SemVer signal for this.
+
+---
+
 ## [0.12.0] - 2026-07-09
 
 Headline: **BREAKING — the HealthCheck report is reshaped so "couldn't verify"
