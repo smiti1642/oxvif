@@ -430,7 +430,7 @@ fn svc(ns: &str, url: &str) -> crate::types::OnvifService {
 }
 
 #[test]
-fn fill_profile_g_urls_fills_missing_from_get_services() {
+fn fill_missing_service_urls_fills_missing_from_get_services() {
     let services = vec![
         svc(
             "http://www.onvif.org/ver10/device/wsdl",
@@ -451,7 +451,7 @@ fn fill_profile_g_urls_fills_missing_from_get_services() {
     ];
 
     let mut caps = Capabilities::default();
-    fill_profile_g_urls(&mut caps, &services);
+    fill_missing_service_urls(&mut caps, &services);
 
     assert_eq!(
         caps.recording.url.as_deref(),
@@ -465,7 +465,7 @@ fn fill_profile_g_urls_fills_missing_from_get_services() {
 }
 
 #[test]
-fn fill_profile_g_urls_does_not_override_existing() {
+fn fill_missing_service_urls_does_not_override_existing() {
     let services = vec![svc(
         "http://www.onvif.org/ver10/recording/wsdl",
         "http://cam/onvif/FromServices",
@@ -473,7 +473,7 @@ fn fill_profile_g_urls_does_not_override_existing() {
 
     let mut caps = Capabilities::default();
     caps.recording.url = Some("http://cam/onvif/FromCapabilities".to_string());
-    fill_profile_g_urls(&mut caps, &services);
+    fill_missing_service_urls(&mut caps, &services);
 
     // The GetCapabilities URL wins; GetServices must not clobber it.
     assert_eq!(

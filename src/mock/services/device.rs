@@ -350,14 +350,12 @@ pub fn resp_capabilities(base: &str) -> String {
               </tt:StreamingCapabilities>
             </tt:Media>
             <tt:PTZ><tt:XAddr>{base}/onvif/ptz</tt:XAddr></tt:PTZ>
-            <!-- NOTE: Media2 in CapabilitiesExtension is non-standard (Media2 is
-                 officially discovered via GetServices), but oxvif's own session
-                 reads it here; kept until Media2 discovery moves to GetServices. -->
             <tt:Extension>
               <tt:Recording><tt:XAddr>{base}/onvif/recording</tt:XAddr></tt:Recording>
               <tt:Search><tt:XAddr>{base}/onvif/search</tt:XAddr></tt:Search>
               <tt:Replay><tt:XAddr>{base}/onvif/replay</tt:XAddr></tt:Replay>
-              <tt:Media2><tt:XAddr>{base}/onvif/media2</tt:XAddr></tt:Media2>
+              <!-- Media2 is advertised via GetServices (ver20/media/wsdl), not
+                   here — the Capabilities Media2 extension is non-standard. -->
             </tt:Extension>
           </tds:Capabilities>
         </tds:GetCapabilitiesResponse>"#
