@@ -34,6 +34,19 @@ struct Ctx {
     state: MockState,
     faults: Arc<FaultInjector>,
     enforce_auth: bool,
+    /// A loaded camera clone to replay reads from (feature `metamorph`); `None`
+    /// for a plain synthetic mock.
+    #[cfg(feature = "metamorph")]
+    replay: Option<ReplayHandle>,
+}
+
+/// Replay state for a cloned camera served over the bound port: the recorded
+/// fixtures plus the shared copy-on-write invalidation set, so a `Set` still
+/// retires that operation family's fixtures and `Set → Get` round-trips.
+#[cfg(feature = "metamorph")]
+struct ReplayHandle {
+    store: Arc<crate::metamorph::FixtureStore>,
+    invalidated: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
 }
 
 /// Builder for [`MockServer`].
@@ -44,6 +57,8 @@ pub struct MockServerBuilder {
     on_change: Option<ChangeHook>,
     enforce_auth: bool,
     discoverable: Option<Vec<String>>,
+    #[cfg(feature = "metamorph")]
+    replay: Option<crate::metamorph::FixtureStore>,
 }
 
 impl MockServerBuilder {
@@ -86,6 +101,22 @@ impl MockServerBuilder {
         self
     }
 
+    /// Serve a recorded camera clone (the "container"): reads replay the
+    /// recorded responses — quirks and all — from `store`, while writes and
+    /// unrecorded operations fall to synthetic `DeviceState` with coarse
+    /// copy-on-write, so `Set → Get` still round-trips. Any HTTP ONVIF client
+    /// (oxdm, Frigate, ODM) can then drive the clone at [`device_url`].
+    ///
+    /// Requires the `metamorph` feature (this method exists under
+    /// `metamorph-server` = `metamorph` + `mock-server`).
+    ///
+    /// [`device_url`]: MockServer::device_url
+    #[cfg(feature = "metamorph")]
+    pub fn replay(mut self, store: crate::metamorph::FixtureStore) -> Self {
+        self.replay = Some(store);
+        self
+    }
+
     /// Bind the socket and spawn the server on a background task.
     pub async fn start(self) -> std::io::Result<MockServer> {
         let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], self.port))).await?;
@@ -105,6 +136,11 @@ impl MockServerBuilder {
             state,
             faults: Arc::new(FaultInjector::new()),
             enforce_auth: self.enforce_auth,
+            #[cfg(feature = "metamorph")]
+            replay: self.replay.map(|store| ReplayHandle {
+                store: Arc::new(store),
+                invalidated: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+            }),
         });
 
         let app = Router::new()
@@ -256,7 +292,19 @@ async fn handle_soap(
     let action = helpers::extract_action(&headers).unwrap_or_default();
     let body_str = String::from_utf8_lossy(&body);
 
-    // Default pipeline: armed fault → auth gate → synthetic dispatch.
+    // Default pipeline: armed fault → auth gate → synthetic dispatch. With a
+    // replay clone loaded, the replay responder is spliced in just ahead of the
+    // synthetic terminal, so recorded reads win and writes still land in state.
+    #[cfg(feature = "metamorph")]
+    let chain = match &ctx.replay {
+        Some(rp) => {
+            let replay =
+                crate::metamorph::ReplayResponder::new(rp.store.clone(), rp.invalidated.clone());
+            Chain::mock_with_extra(ctx.faults.clone(), ctx.enforce_auth, vec![Box::new(replay)])
+        }
+        None => Chain::default_mock(ctx.faults.clone(), ctx.enforce_auth),
+    };
+    #[cfg(not(feature = "metamorph"))]
     let chain = Chain::default_mock(ctx.faults.clone(), ctx.enforce_auth);
     let rctx = RequestCtx {
         action: &action,
@@ -450,5 +498,54 @@ mod tests {
         let client = OnvifClient::new(server.device_url());
         let uris = client.get_system_uris().await.unwrap();
         assert!(uris.system_backup_uri.is_some());
+    }
+
+    /// The bound-port replay "container": record a camera, serve the clone from
+    /// a real HTTP `MockServer`, and drive it with a client over the network —
+    /// reads replay the recorded device and `Set → Get` still round-trips via
+    /// synthetic copy-on-write.
+    #[cfg(feature = "metamorph")]
+    #[tokio::test]
+    async fn bound_replay_server_serves_clone_and_cow_roundtrips() {
+        use crate::metamorph::{FixtureStore, RecordingTransport};
+        use std::sync::{Arc, Mutex};
+
+        // 1. "Real camera": a synthetic mock with a distinctive hostname.
+        let real = crate::mock::MockTransport::new();
+        real.device()
+            .modify(|s| s.hostname = "real-camera-host".to_string());
+
+        // 2. Record its standard reads into a FixtureStore.
+        let store = Arc::new(Mutex::new(FixtureStore::new("mock-real")));
+        let rec = RecordingTransport::new(Arc::new(real), store.clone());
+        let rc = OnvifClient::new("http://real").with_transport(Arc::new(rec));
+        rc.get_device_info().await.unwrap();
+        rc.get_hostname().await.unwrap();
+        let recorded = store.lock().unwrap().clone();
+
+        // 3. Serve the clone from a bound MockServer, drive it over real HTTP.
+        let server = MockServer::builder()
+            .replay(recorded)
+            .start()
+            .await
+            .unwrap();
+        let client = OnvifClient::new(server.device_url());
+
+        // Reads replay the recorded camera verbatim.
+        let host = client.get_hostname().await.unwrap();
+        assert_eq!(
+            host.name.as_deref(),
+            Some("real-camera-host"),
+            "bound replay must serve the recorded hostname, not the synthetic default"
+        );
+
+        // Copy-on-write: after a Set, the family falls to live synthetic state.
+        client.set_hostname("changed-host").await.unwrap();
+        let host2 = client.get_hostname().await.unwrap();
+        assert_eq!(
+            host2.name.as_deref(),
+            Some("changed-host"),
+            "Set then Get must reflect the new value via synthetic COW"
+        );
     }
 }

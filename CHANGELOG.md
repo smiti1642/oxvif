@@ -38,6 +38,25 @@ unchanged.
     everything else; **`AdapterTransport`** drives it in-process. See
     `examples/metamorph_adapter.rs`. `DeviceIdentity`, `PtzVector`,
     `AdapterResult` are re-exported too.
+  - **Structural quirk diff** — **`FixtureStore::diff_against_synthetic`**
+    replays each recorded request through the synthetic mock and diffs the two
+    responses' element-path sets, returning a serde-serialisable **`QuirkReport`**
+    (`OperationQuirk` per drifting op: `only_in_clone` / `only_in_synthetic`
+    paths). Surfaces where the real camera's response *shape* deviates from the
+    spec-ideal baseline — extra vendor elements, omitted blocks. Structure only
+    (not values); the semantic half stays M7. `FixtureStore::fixtures()` exposes
+    the recorded set for rendering. `QuirkReport` / `OperationQuirk` re-exported.
+
+### Added (`metamorph-server` feature)
+- **Serve a clone from a bound port — the "container".**
+  `MockServer::builder().replay(FixtureStore).start()` turns the HTTP mock
+  server into the recorded camera: reads replay the clone's real responses
+  (quirks and all) via the replay responder spliced into the server's chain,
+  while writes and unrecorded operations fall to synthetic `DeviceState` with the
+  same coarse copy-on-write (`Set → Get` still round-trips). Any HTTP ONVIF
+  client — oxdm, ONVIF Device Manager, Frigate — or oxvif's own `HealthCheck`
+  can drive the clone at `device_url()`. The feature is just
+  `metamorph` + `mock-server`. See `examples/metamorph_serve.rs`.
 
 ### Added (`mock` feature)
 - **`mock::{Chain, Responder, RequestCtx}`** — the mock device now answers each

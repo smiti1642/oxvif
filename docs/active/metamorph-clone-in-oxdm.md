@@ -1,9 +1,19 @@
 # metamorph clone-in-oxdm — design note
 
-> **Status: draft for review.** Wires Persona B (clone / replay) into oxdm so a
-> user can clone their own IP camera's behaviour and hunt its quirks — without
-> hardware after the first capture. Companion to [`metamorph.md`](metamorph.md);
-> this is the "M-clone" pre-work note.
+> **Status: superseded by the container path.** The in-process approach below
+> (and its gap **G2**) is no longer the plan. Serving the clone from a bound-port
+> `MockServer` — see [`metamorph-container-and-quirk-diff.md`](metamorph-container-and-quirk-diff.md),
+> now implemented — makes G2 unnecessary: oxdm runs the existing
+> `HealthCheck::new(clone_url)` against the container, and "compare" reuses the
+> existing `health::ReportDiff` (synthetic server vs clone server) or the new
+> `FixtureStore::diff_against_synthetic`. **G1** (library-ify the recorder) and
+> **G3** (`FixtureStore::summary`) are still open and independent of the pivot;
+> this note is kept for that context and the credential-scrubbing risks in §7.
+
+> **Original status: draft for review.** Wires Persona B (clone / replay) into
+> oxdm so a user can clone their own IP camera's behaviour and hunt its quirks —
+> without hardware after the first capture. Companion to
+> [`metamorph.md`](metamorph.md); this is the "M-clone" pre-work note.
 
 ---
 

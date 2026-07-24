@@ -23,10 +23,24 @@
 //! `(token=B)` never collide while volatile fields (MessageID, nonce,
 //! timestamps) don't fragment the key.
 //!
+//! ## Serving the clone + finding quirks
+//!
+//! - **Container**: with the `metamorph-server` feature, serve a clone from a
+//!   real bound port via
+//!   [`MockServerBuilder::replay`](crate::mock::MockServer::builder) — any HTTP
+//!   ONVIF client (oxdm, Frigate, ODM) can then drive the cloned camera.
+//! - **Quirk diff**: [`FixtureStore::diff_against_synthetic`] compares the clone
+//!   against oxvif's synthetic (spec-ideal) mock, per operation, reporting where
+//!   the response *shape* deviates ([`QuirkReport`]). The diff is **structural
+//!   only** — which element paths exist, not their values; a different
+//!   `Manufacturer` string is expected, not a quirk. Value / type-level drift is
+//!   the deeper, still-unbuilt half of M7.
+//!
 //! Gated on the `metamorph` feature (a superset of `mock`).
 
 mod adapter;
 mod fixture;
+mod quirk;
 mod record;
 mod replay;
 
@@ -34,5 +48,6 @@ pub use adapter::{
     AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, PtzVector,
 };
 pub use fixture::{Fixture, FixtureStore};
+pub use quirk::{OperationQuirk, QuirkReport};
 pub use record::RecordingTransport;
 pub use replay::{MetamorphTransport, ReplayResponder};

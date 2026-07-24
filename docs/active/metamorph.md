@@ -11,7 +11,12 @@ This file is the authoritative spec a coding agent builds against. It is dev-onl
 Status: **M0–M3 + M5–M6 done** — the clone-a-camera-and-replay increment (M0–M2,
 per D7), WS-Discovery so a clone is findable on the LAN (M3), the Persona C
 adapter/skin template (M5, pulled ahead of M4), and the multi-device fleet (M6).
-**M4** (control plane + Persona A) and **M7** not yet started. The pre-work decisions in
+**M4** (full control plane + Persona A) and **M7** (semantic diff) not yet
+complete, but two targeted slices have since landed (see
+[`metamorph-container-and-quirk-diff.md`](metamorph-container-and-quirk-diff.md)):
+the **bound-port replay "container"** (`MockServerBuilder::replay`, an M4 subset
+without the control plane) and the **structural quirk diff**
+(`FixtureStore::diff_against_synthetic`, the first half of M7). The pre-work decisions in
 [§1](#1-locked-decisions) are settled; the milestone-scoped open questions in
 [§9](#9-still-open-decide-at-the-milestone-not-now) are deliberately deferred to
 their milestone and must NOT be pre-empted.
@@ -311,6 +316,10 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   type. Tested via the pure path + a loopback **unicast** round-trip (multicast
   is left to real use, per the CI caveat). `<Scopes>` filter deferred.
 - **M4 — Control plane + Persona A ([§4-A](#persona-a--synthetic--control-plane-m4))**. Grow `/admin/*`; oxdm Dioxus UI drives it.
+  *Partial:* the replay slice — serving a clone over the bound port
+  (`metamorph-server` feature, `MockServerBuilder::replay(FixtureStore)`) — is
+  done; reads replay the clone, writes fall to synthetic `DeviceState` with the
+  existing coarse COW. The `/admin/*` control plane and persona-switching remain.
 - **M5 — Persona C skin template ([§4-C](#persona-c--adapter--skin-template-m5))** ✅ *(commit `879c8be`)*.
   `src/metamorph/adapter.rs`: `DeviceAdapter` trait (required `identity` +
   `stream_uri`, optional `continuous_move` / reserved `snapshot`),
@@ -328,6 +337,11 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   `examples/mock_fleet.rs`.
 - **M7 (stretch) — quirk diff**. Masker-driven structural diff (baseline vs clone),
   surfaced in oxdm; semantic diff waits on [§5.5](#55-serde-on-public-types).
+  *Partial:* the **structural** half is done —
+  `FixtureStore::diff_against_synthetic` diffs each clone response's element-path
+  set against the synthetic baseline and returns a serde-serialisable
+  `QuirkReport`. Value / type-level (semantic) diff over the now-serde-derived
+  types remains.
 
 M0–M2 is a complete, independently deliverable "metamorph that clones a real
 camera" — do not wait for the rest.

@@ -112,6 +112,14 @@ impl FixtureStore {
         &self.device
     }
 
+    /// The recorded exchanges, in insertion order — for rendering the clone's
+    /// contents or driving analysis such as [`diff_against_synthetic`].
+    ///
+    /// [`diff_against_synthetic`]: FixtureStore::diff_against_synthetic
+    pub fn fixtures(&self) -> &[Fixture] {
+        &self.fixtures
+    }
+
     /// Number of stored exchanges.
     pub fn len(&self) -> usize {
         self.fixtures.len()

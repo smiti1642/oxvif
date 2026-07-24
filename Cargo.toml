@@ -43,6 +43,12 @@ health = ["dep:serde", "dep:serde_json", "dep:digest_auth"]
 # hardware. A superset of `mock` — builds on its responder chain, `DeviceState`,
 # and canonicaliser. See `docs/active/metamorph.md`.
 metamorph = ["mock", "dep:serde_json"]
+# Serve a recorded clone from a real bound-port `MockServer` (the "container"):
+# `MockServerBuilder::replay(FixtureStore)` splices the replay responder into the
+# HTTP server so oxdm / Frigate / ODM can drive the cloned camera over the
+# network. Just `metamorph` + `mock-server`.
+# See `docs/active/metamorph-container-and-quirk-diff.md`.
+metamorph-server = ["metamorph", "mock-server"]
 
 [dependencies]
 quick-xml    = "0.41"
@@ -118,3 +124,9 @@ required-features = ["metamorph"]
 [[example]]
 name = "metamorph_adapter"
 required-features = ["metamorph"]
+
+# Serve a recorded clone from a bound-port MockServer (the "container") and print
+# a structural quirk diff of the clone vs the synthetic (spec-ideal) mock.
+[[example]]
+name = "metamorph_serve"
+required-features = ["metamorph-server"]
