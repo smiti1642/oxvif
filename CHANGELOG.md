@@ -44,6 +44,14 @@ feature-gated (`metamorph`); no public API removed.
   `(action, key_canon)` key so a UI can join verdict + side-by-side SOAP diff.
   The `metamorph` feature now enables `serde` (was implicit via `mock`) so
   response types serialize to JSON.
+- **Adapter raw escape hatch (Persona C)** — `DeviceAdapter::respond_raw(op,
+  body)` lets an adapter answer any ONVIF operation the typed hooks
+  (`identity` / `stream_uri` / `continuous_move`) don't cover, returning a full
+  SOAP envelope or `None` to fall through to synthetic. Consulted only after the
+  typed hooks decline. Public **`soap_body(xmlns, inner)`** builds the response
+  envelope so implementers don't reach into internal mock helpers. Opens
+  Persona C to arbitrary per-device operations without waiting on typed hooks
+  landing upstream.
 
 ### Changed
 - `drive_standard_surface` now sweeps the full non-destructive `Get*` surface

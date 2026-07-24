@@ -56,6 +56,7 @@ mod surface;
 
 pub use adapter::{
     AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, PtzVector,
+    soap_body,
 };
 pub use fixture::{Fixture, FixtureStore};
 pub use parse::{ParseReport, ParseStatus, ParseVerdict};

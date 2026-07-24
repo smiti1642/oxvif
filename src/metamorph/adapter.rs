@@ -11,6 +11,19 @@
 //! is enough for a standard NVR / Frigate to ingest the device as an ONVIF
 //! camera. [`DeviceAdapter::continuous_move`] is an optional hook (default:
 //! unsupported → falls through). See `examples/metamorph_adapter.rs`.
+//!
+//! ## Answering operations the typed hooks don't cover
+//!
+//! The typed hooks ([`identity`](DeviceAdapter::identity),
+//! [`stream_uri`](DeviceAdapter::stream_uri),
+//! [`continuous_move`](DeviceAdapter::continuous_move)) are the ergonomic path
+//! for the common operations. For anything else — a vendor-specific `GetOSDs`,
+//! an imaging read your device answers from its own config — override
+//! [`DeviceAdapter::respond_raw`]: a raw escape hatch handed the operation's
+//! local name and the SOAP request body, returning a full response envelope
+//! (build it with [`soap_body`]) or `None` to fall through. It is consulted
+//! only after every typed hook declines, so it never has to re-handle
+//! `GetDeviceInformation` or `GetStreamUri`.
 
 use std::sync::Arc;
 
@@ -77,6 +90,29 @@ pub trait DeviceAdapter: Send + Sync {
     async fn snapshot(&self) -> Option<Vec<u8>> {
         None
     }
+
+    /// Raw escape hatch: answer an arbitrary ONVIF operation the typed hooks
+    /// don't cover.
+    ///
+    /// `op` is the action's local name (e.g. `"GetOSDs"`), `body` is the raw
+    /// SOAP request envelope. Return the full SOAP response envelope — build it
+    /// with [`soap_body`] — or `None` to fall through to the synthetic mock.
+    ///
+    /// Consulted only after every typed hook declines, so it never has to
+    /// re-handle `GetDeviceInformation`, `GetStreamUri`, or `ContinuousMove`.
+    /// Default: `None` (everything falls through).
+    async fn respond_raw(&self, _op: &str, _body: &str) -> Option<String> {
+        None
+    }
+}
+
+/// Build a SOAP 1.2 response envelope wrapping `inner`, declaring the extra
+/// namespaces in `xmlns` (e.g. `r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#`).
+///
+/// The `tt` (ONVIF schema) namespace is always in scope. Intended for building
+/// responses inside [`DeviceAdapter::respond_raw`].
+pub fn soap_body(xmlns: &str, inner: &str) -> String {
+    soap(xmlns, inner)
 }
 
 /// Chain responder that answers ONVIF operations from a [`DeviceAdapter`],
@@ -98,6 +134,19 @@ impl AdapterResponder {
 impl Responder for AdapterResponder {
     async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
         let op = ctx.action.rsplit('/').next().unwrap_or(ctx.action);
+        if let Some(resp) = self.typed(op, ctx).await {
+            return Some(resp);
+        }
+        // Every typed hook declined — offer the operation to the raw escape
+        // hatch before falling through to synthetic.
+        self.adapter.respond_raw(op, ctx.body).await
+    }
+}
+
+impl AdapterResponder {
+    /// The ergonomic typed hooks. `None` means "not one of these" *or* the
+    /// matching hook declined — either way the caller then tries `respond_raw`.
+    async fn typed(&self, op: &str, ctx: &RequestCtx<'_>) -> Option<String> {
         match op {
             "GetDeviceInformation" => Some(device_information(&self.adapter.identity())),
             "GetStreamUri" => {
@@ -330,6 +379,40 @@ mod tests {
         // GetHostname isn't overridden → synthetic answers it (no error).
         let h = client().get_hostname().await.unwrap();
         assert!(h.name.is_some());
+    }
+
+    /// A skin that answers an operation the typed hooks don't cover, via the
+    /// raw escape hatch.
+    struct HatchCam;
+
+    #[async_trait]
+    impl DeviceAdapter for HatchCam {
+        fn identity(&self) -> DeviceIdentity {
+            DeviceIdentity::default()
+        }
+        fn stream_uri(&self, _profile: &str) -> Option<String> {
+            None
+        }
+        async fn respond_raw(&self, op: &str, _body: &str) -> Option<String> {
+            (op == "GetHostname").then(|| {
+                soap_body(
+                    r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#,
+                    r#"<tds:GetHostnameResponse><tds:HostnameInformation>
+                      <tt:FromDHCP>false</tt:FromDHCP>
+                      <tt:Name>escape-hatch-host</tt:Name>
+                    </tds:HostnameInformation></tds:GetHostnameResponse>"#,
+                )
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn respond_raw_answers_ops_the_typed_hooks_miss() {
+        let c = OnvifClient::new("http://adapter")
+            .with_transport(Arc::new(AdapterTransport::new(Arc::new(HatchCam))));
+        let h = c.get_hostname().await.unwrap();
+        // The escape hatch's value wins over the synthetic default.
+        assert_eq!(h.name.as_deref(), Some("escape-hatch-host"));
     }
 
     #[test]
