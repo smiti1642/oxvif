@@ -19,7 +19,7 @@
 //!   point an `OnvifClient` at it — no camera required.
 //!
 //! The fixture key is the canonical, ephemera-masked request
-//! ([`Masking::Key`](crate::mock::canon::Masking)), so `GetProfile(token=A)` and
+//! (`Masking::Key`), so `GetProfile(token=A)` and
 //! `(token=B)` never collide while volatile fields (MessageID, nonce,
 //! timestamps) don't fragment the key.
 //!

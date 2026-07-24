@@ -5,13 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [0.13.0] - 2026-07-24
 
-Headline: **metamorph Persona B — clone a real camera and replay it verbatim,
-in-process, without hardware.** The first shippable slice (M0–M2) of the
-shape-shifting mock device (see `docs/active/metamorph.md`). Everything here is
-additive and feature-gated; the existing `mock` / `mock-server` public API is
-unchanged.
+Headline: **metamorph — clone a real camera, replay it (in-process or over a
+bound port), and diff its quirks** — plus opt-in `serde` on every response type,
+ONVIF-schema fixes to the mock, correct Media2 discovery, and raw-SOAP capture
+for failing health checks. Everything is additive and feature-gated; the ONVIF
+client's public API is unchanged.
 
 ### Added (`metamorph` feature)
 - **`metamorph` feature** (a superset of `mock`) and the `oxvif::metamorph`
@@ -48,13 +48,20 @@ unchanged.
     `examples/metamorph_adapter.rs`. `DeviceIdentity`, `PtzVector`,
     `AdapterResult` are re-exported too.
   - **Structural quirk diff** — **`FixtureStore::diff_against_synthetic`**
-    replays each recorded request through the synthetic mock and diffs the two
-    responses' element-path sets, returning a serde-serialisable **`QuirkReport`**
-    (`OperationQuirk` per drifting op: `only_in_clone` / `only_in_synthetic`
-    paths). Surfaces where the real camera's response *shape* deviates from the
-    spec-ideal baseline — extra vendor elements, omitted blocks. Structure only
-    (not values); the semantic half stays M7. `FixtureStore::fixtures()` exposes
-    the recorded set for rendering. `QuirkReport` / `OperationQuirk` re-exported.
+    replays each recorded request through the synthetic **reference** mock and
+    diffs the two responses' element-path sets (the SOAP `Header` is excluded, so
+    it reflects response *Body* shape), returning a serde-serialisable
+    **`QuirkReport`** (`OperationQuirk` per drifting op: `only_in_clone` /
+    `only_in_synthetic` paths). Surfaces where the real camera's response *shape*
+    differs from what oxvif emits/expects — a proxy for "will oxvif parse this
+    device", **not** an ONVIF-schema-conformance verdict. Structure only (not
+    values). **`FixtureStore::diff_details` → `Vec<OperationDiff>`** additionally
+    renders each operation's baseline and clone responses as aligned,
+    pretty-printed XML for a git-style side-by-side diff, with transport
+    ephemera, tokens, and IPv4/IPv6/MAC literals (incl. IPs inside URLs)
+    normalised so instance-specific values don't show as differences.
+    `FixtureStore::fixtures()` exposes the recorded set. `QuirkReport`,
+    `OperationQuirk`, `OperationDiff` re-exported.
 
 ### Added (`metamorph-server` feature)
 - **Serve a clone from a bound port — the "container".**
@@ -95,14 +102,6 @@ unchanged.
   Rust-native snake_case identifiers (no `rename_all`). Resolves a
   user-reported gap.
 
----
-
-## [0.13.0] - 2026-07-14
-
-Headline: **opt-in raw-SOAP capture for failing health checks** — the raw
-request/response evidence a maintainer needs to see *why* a specific brand
-rejected a call, without leaking credentials.
-
 ### Added (`health` feature)
 - **`HealthCheck::with_capture(true)`** records the raw request/response of every
   SOAP call that **fails** (a transport error or a SOAP Fault) into the new
@@ -118,6 +117,25 @@ rejected a call, without leaking credentials.
   serialises only when non-empty, deserialises to empty when absent). Code that
   constructs `HealthReport` with a struct literal must add the field — in 0.x a
   minor bump is the SemVer signal for this.
+
+### Fixed
+- **Media2 is now discovered via `GetServices`** — Media2 is a GetServices-only
+  service in the ONVIF spec, but the session build only read the *non-standard*
+  Capabilities `Media2` extension, so standards-compliant cameras (which
+  advertise Media2 only in `GetServices`) were mis-detected as having no Media2.
+  The session build now fills `media2.url` from `GetServices` when
+  `GetCapabilities` didn't provide it (dual-source, non-breaking — a device that
+  does advertise it in Capabilities still works, that URL wins). `mock-server`'s
+  non-standard `<tt:Media2>` in `GetCapabilities` was removed (it's advertised
+  via the mock's `GetServices`, `ver20/media/wsdl`).
+- **Mock read-surface responses are now ONVIF-schema conformant** (`mock`) — an
+  audit against `onvif.xsd` fixed real violations that also skewed the clone
+  quirk baseline: `GetNetworkInterfaces` emitted a boolean `<FromDHCP>` and
+  omitted the required `<DHCP>` boolean (now `<Manual>` + `<DHCP>`, matching
+  oxvif's own parser); video-encoder configs (`GetVideoEncoderConfigurations`
+  and the `GetProfiles`-nested ones) omitted the required `Multicast` +
+  `SessionTimeout` (added, in XSD order); `GetCapabilities` and
+  `GetImagingSettings` children were out of `xs:sequence` order (reordered).
 
 ---
 

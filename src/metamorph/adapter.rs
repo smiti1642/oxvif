@@ -82,7 +82,7 @@ pub trait DeviceAdapter: Send + Sync {
 /// Chain responder that answers ONVIF operations from a [`DeviceAdapter`],
 /// deferring everything it doesn't handle to the next responder (synthetic).
 ///
-/// Spliced ahead of the synthetic terminal via [`Chain::mock_with_extra`].
+/// Spliced ahead of the synthetic terminal via `Chain::mock_with_extra`.
 pub struct AdapterResponder {
     adapter: Arc<dyn DeviceAdapter>,
 }

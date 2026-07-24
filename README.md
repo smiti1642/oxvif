@@ -30,6 +30,7 @@ SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, 
 - HTTP Digest Authentication (RFC 7616, ONVIF Profile T §7.1)
 - WS-Discovery via UDP multicast (`239.255.255.250:3702`)
 - Mockable transport, plus a built-in mock ONVIF device (`mock` / `mock-server` features) — unit-test client code without a real camera
+- Metamorph (`metamorph` / `metamorph-server` features) — clone a real camera and replay it verbatim offline, serve the clone from a bound port, diff its response shapes, or skin a non-ONVIF device as ONVIF
 - No unsafe code; pure Rust XML parsing via `quick-xml`
 - Optional, scriptable device health check with parse-coverage detection (`health` feature), plus a `conformance` example that validates the parsers against real cameras
 - Hundreds of unit + doc tests, including the in-process mock device, the health checks, and scrubbed real-camera regression captures
@@ -1185,6 +1186,156 @@ cargo test
 
 ---
 
+## Metamorph (`metamorph` / `metamorph-server` features)
+
+*Metamorph* turns oxvif's mock device into a **shape-shifter**: clone a real
+camera and replay it verbatim, put an ONVIF skin on a non-ONVIF device, or diff a
+clone's response shapes against oxvif's own reference mock — all offline, no
+hardware. `metamorph` is a superset of `mock` (it builds on the same responder
+chain and `DeviceState`); everything here is opt-in and feature-gated, and
+`metamorph-server` just adds `mock-server` on top to serve a clone over HTTP.
+
+```toml
+[dev-dependencies]
+oxvif = { version = "0.13", features = ["metamorph"] }         # record / replay in-process
+# oxvif = { version = "0.13", features = ["metamorph-server"] } # + serve the clone over real HTTP
+```
+
+### Clone & replay (Persona B)
+
+`record_standard_surface` drives a camera's standard read surface once and
+returns a `FixtureStore` — the recorded SOAP exchanges keyed by the *canonical,
+ephemera-masked request*, so `GetProfile(token=A)` and `(token=B)` stay distinct
+while per-request nonce / MessageID / timestamps never fragment the key. Recorded
+envelopes have their WS-Security `Password`/`Nonce` and any `user:pass@` URL
+credential (e.g. an RTSP stream URI) scrubbed, so a saved `fixtures.json` carries
+no secret.
+
+```rust
+use oxvif::metamorph::record_standard_surface;
+
+// Clone the camera once — the device is needed only here.
+let clone = record_standard_surface(
+    "http://192.168.1.100/onvif/device_service",
+    Some(("admin", "password")),   // None for an open device
+    "hikvision-ds2cd",             // label for the store
+).await?;
+clone.save("clones/hikvision-ds2cd")?;   // → clones/hikvision-ds2cd/fixtures.json
+```
+
+Replay it **in-process** by pointing an ordinary `OnvifClient` at a
+`MetamorphTransport` — the client-drivable counterpart of `MockTransport`. Reads
+reproduce the recorded device verbatim; writes fall through to synthetic
+`DeviceState` and invalidate that operation family (coarse copy-on-write), so
+`Set → Get` still round-trips:
+
+```rust
+use std::sync::Arc;
+use oxvif::OnvifClient;
+use oxvif::metamorph::{FixtureStore, MetamorphTransport};
+
+let store  = FixtureStore::load("clones/hikvision-ds2cd")?;
+let client = OnvifClient::new("http://replay")
+    .with_transport(Arc::new(MetamorphTransport::new(store)));
+
+let info = client.get_device_info().await?;   // the real camera's recorded response
+```
+
+Or serve the clone from a **real bound port — the "container"** (needs the
+`metamorph-server` feature). `MockServer::builder().replay(store)` splices the
+replay responder into the HTTP mock server, so *any* ONVIF client — oxdm, ONVIF
+Device Manager, Frigate — or oxvif's own `HealthCheck` can drive the cloned
+camera over the network:
+
+```rust
+use oxvif::metamorph::FixtureStore;
+use oxvif::mock::MockServer;
+
+let store  = FixtureStore::load("clones/hikvision-ds2cd")?;
+let server = MockServer::builder().replay(store).start().await?;
+println!("cloned camera at {}", server.device_url());
+// point any HTTP ONVIF client here; the server shuts down when dropped.
+```
+
+To record with a session you already own instead of the one-shot helper, tap a
+live transport with `RecordingTransport` and call `drive_standard_surface(&session)`,
+which exposes just the standard read-surface op list.
+
+### Quirk diff — how a clone deviates from the reference mock
+
+`FixtureStore::diff_against_synthetic()` replays each recorded request through
+oxvif's synthetic mock and diffs the two responses' **element-path sets**,
+returning a serde-serialisable `QuirkReport`. Per drifting operation, an
+`OperationQuirk` lists the element paths `only_in_clone` (an extra vendor element
+oxvif's mock doesn't emit) and `only_in_synthetic` (a block the clone omits).
+
+```rust
+let store  = FixtureStore::load("clones/hikvision-ds2cd")?;
+let report = store.diff_against_synthetic();
+if report.is_empty() {
+    println!("no structural drift vs the reference mock");
+}
+for q in &report.quirks {
+    println!("{}: +{:?} -{:?}", q.action, q.only_in_clone, q.only_in_synthetic);
+}
+```
+
+> **Scope.** This is a **structural** diff — *which element paths exist*, not
+> their values (a different `Manufacturer` string is expected, not a quirk) — and
+> the baseline is **oxvif's own reference mock, not the ONVIF WSDL/XSD schema.** A
+> deviation means "the clone's shape differs from what oxvif emits/expects" (a
+> useful proxy for whether oxvif will parse the device correctly), **not** a
+> schema-conformance verdict. For a side-by-side view,
+> `diff_details() -> Vec<OperationDiff>` renders each operation's baseline and
+> clone responses as aligned, pretty-printed XML (instance values like IPs and
+> tokens normalised) ready for a git-style line diff.
+
+### Adapter / skin (Persona C)
+
+Implement the `DeviceAdapter` trait to put an ONVIF skin on a **non-ONVIF**
+device (e.g. an RTSP-only camera). Only `identity` and `stream_uri` are required
+— enough for a standard NVR / Frigate to ingest it as an ONVIF camera; everything
+else (profiles, capabilities, services) falls through to the synthetic mock.
+`continuous_move` and `snapshot` are optional hooks that default to unsupported.
+
+```rust
+use std::sync::Arc;
+use oxvif::OnvifClient;
+use oxvif::metamorph::{AdapterTransport, DeviceAdapter, DeviceIdentity};
+
+struct RtspCam { rtsp: String }
+
+#[async_trait::async_trait]
+impl DeviceAdapter for RtspCam {
+    fn identity(&self) -> DeviceIdentity {
+        DeviceIdentity {
+            manufacturer: "Acme".into(),
+            model: "RTSP-Skin".into(),
+            firmware_version: "1.0".into(),
+            serial_number: "SN-0001".into(),
+            hardware_id: "HW-0001".into(),
+        }
+    }
+    fn stream_uri(&self, _profile: &str) -> Option<String> {
+        Some(self.rtsp.clone())
+    }
+}
+
+let adapter = Arc::new(RtspCam {
+    rtsp: "rtsp://192.168.1.77:554/Streaming/Channels/101".into(),
+});
+let client = OnvifClient::new("http://adapter")
+    .with_transport(Arc::new(AdapterTransport::new(adapter)));
+
+let info = client.get_device_info().await?;   // identity from the adapter
+// GetStreamUri returns the real RTSP URL; profiles come from the synthetic scaffolding.
+```
+
+See `examples/metamorph_record.rs`, `metamorph_serve.rs`, and
+`metamorph_adapter.rs` for runnable versions of each.
+
+---
+
 ## Running the built-in examples
 
 ```sh
@@ -1256,6 +1407,20 @@ cargo test --features mock-server
 cargo run --example conformance --features mock -- devices.txt
 ```
 
+### Metamorph (clone / serve / skin)
+
+```sh
+# Clone a real camera's read surface into clones/<vendor-model>/fixtures.json
+cargo run --example metamorph_record --features metamorph -- \
+    http://192.168.1.100/onvif/device_service admin password clones/hikvision-ds2cd
+
+# Serve the recorded clone from a bound port + print a structural quirk diff
+cargo run --example metamorph_serve --features metamorph-server -- clones/hikvision-ds2cd
+
+# Skin one fixed RTSP stream as an ONVIF device (Persona C template)
+cargo run --example metamorph_adapter --features metamorph
+```
+
 ---
 
 ## Project structure
@@ -1313,6 +1478,13 @@ src/
 │   ├── mod.rs           HealthCheck builder + HealthReport public surface
 │   ├── checks.rs        Individual check implementations (connectivity, services, …)
 │   └── report.rs        HealthReport / CheckResult / ReportDiff types (Serde + diff)
+├── metamorph/           Metamorph personas (metamorph / metamorph-server features)
+│   ├── mod.rs           Public surface — FixtureStore, MetamorphTransport, DeviceAdapter, QuirkReport
+│   ├── fixture.rs       FixtureStore — param-aware recorded SOAP exchanges (fixtures.json)
+│   ├── record.rs        RecordingTransport + record_standard_surface / drive_standard_surface
+│   ├── replay.rs        MetamorphTransport / ReplayResponder — Persona B replay (copy-on-write)
+│   ├── adapter.rs       DeviceAdapter / AdapterTransport — Persona C ONVIF skin
+│   └── quirk.rs         diff_against_synthetic / diff_details — structural quirk diff
 └── tests/
     ├── client_tests.rs  unit tests covering all client methods
     ├── session_tests.rs unit tests for OnvifSession builder and delegates
@@ -1324,6 +1496,9 @@ examples/
 ├── healthcheck.rs       Scriptable health/conformance check + --json + --baseline (--features health)
 ├── record_fixtures.rs   Capture every SOAP exchange against a live device for replay (--features mock,health)
 ├── conformance.rs       Validate the parsers against a fleet of real cameras; flags silent-parse gaps (--features mock)
+├── metamorph_record.rs  Clone a real camera into a param-aware fixtures.json (--features metamorph)
+├── metamorph_serve.rs   Serve a recorded clone from a bound port + quirk diff (--features metamorph-server)
+├── metamorph_adapter.rs Skin one fixed RTSP stream as an ONVIF device (--features metamorph)
 ├── probe_unicast.rs     One-shot unicast WS-Discovery probe to a specific host
 ├── odm_compat.rs        ODM compatibility integration test
 └── write_workflow.rs    Write-operation workflow with embedded mock server

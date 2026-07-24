@@ -19,10 +19,10 @@ const METAMORPH_BASE: &str = "http://metamorph";
 
 /// Chain responder that answers reads from recorded fixtures.
 ///
-/// Spliced just before the synthetic terminal (via [`Chain::mock_with_extra`]):
+/// Spliced just before the synthetic terminal (via `Chain::mock_with_extra`):
 ///
 /// - A **read** (`Get*`) is answered from the fixture matching the canonical
-///   ([`Masking::Key`]) request — unless its operation *family* has been
+///   (`Masking::Key`) request — unless its operation *family* has been
 ///   invalidated by a prior write, in which case it passes to synthetic.
 /// - A **write** (anything not `Get*`) always passes, so `SyntheticResponder`
 ///   applies it to `DeviceState`, and invalidates that family's replay — the

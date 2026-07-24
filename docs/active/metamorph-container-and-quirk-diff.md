@@ -1,6 +1,10 @@
 # metamorph — clone-into-a-container + quirk diff (plan)
 
-> **Status: in progress.** Serve a recorded camera clone from a bound-port
+> **Status: shipped in oxvif 0.13** (`metamorph-server` container +
+> `diff_against_synthetic` / `diff_details`), and consumed by oxdm's clone
+> feature. Kept as the design record; the honest-limits section still holds.
+
+> Serve a recorded camera clone from a bound-port
 > `MockServer` (the "container") so oxdm / Frigate / ODM can point at it, and add
 > a structural **quirk diff** that shows where the clone's responses deviate from
 > oxvif's synthetic (spec-ideal) mock. Supersedes the in-process approach in

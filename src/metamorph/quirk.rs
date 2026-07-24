@@ -153,7 +153,7 @@ impl FixtureStore {
     /// diff. Instance-specific values (transport ephemera, tokens, and
     /// IPv4/IPv6/MAC literals, including IPs inside URLs) are normalised to a
     /// placeholder, so a line that differs only in such a value doesn't show as
-    /// a change. `differs` mirrors [`diff_against_synthetic`].
+    /// a change. `differs` mirrors [`Self::diff_against_synthetic`].
     pub fn diff_details(&self) -> Vec<OperationDiff> {
         self.fixtures()
             .iter()
