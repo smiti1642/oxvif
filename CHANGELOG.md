@@ -57,6 +57,16 @@ unchanged.
   feeds a batch scanner directly. Dropping the fleet shuts every device down.
   See `examples/mock_fleet.rs` (metamorph M6).
 
+### Added (`serde` feature)
+- **`serde` feature** — derives `serde::Serialize` + `Deserialize` on every
+  public response type in `oxvif::types`, so they can be returned directly from
+  a REST handler (`axum::Json(session.ptz_get_presets(..).await?)`) or persisted
+  as JSON, instead of hand-cloning parallel structs just to attach serde.
+  Implemented with `#[cfg_attr(feature = "serde", derive(..))]`: **opt-in, with
+  no new dependency and zero cost unless enabled.** Field names are the
+  Rust-native snake_case identifiers (no `rename_all`). Resolves a
+  user-reported gap.
+
 ---
 
 ## [0.13.0] - 2026-07-14

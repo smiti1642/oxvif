@@ -122,6 +122,34 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 ---
 
+## Serde support (`serde` feature)
+
+Enable the `serde` feature to derive `Serialize` + `Deserialize` on every
+response type in `oxvif::types`. This lets you expose them directly over a REST
+API (or persist them as JSON) without hand-cloning parallel structs.
+
+```toml
+[dependencies]
+oxvif = { version = "0.13", features = ["serde"] }
+```
+
+```rust
+use axum::{Json, http::StatusCode};
+
+// The response types serialize straight to JSON — no shadow structs.
+async fn presets() -> Result<Json<Vec<oxvif::PtzPreset>>, StatusCode> {
+    session.ptz_get_presets("Profile_1").await
+        .map(Json)
+        .map_err(|_| StatusCode::BAD_GATEWAY)
+}
+```
+
+Field names are the Rust-native `snake_case` identifiers (no `rename_all`), and
+`Deserialize` is derived too, so the types also work as request bodies. The
+feature is opt-in: it pulls no new dependency and costs nothing when disabled.
+
+---
+
 ## `OnvifSession`
 
 `OnvifSession` calls `GetCapabilities` once at construction, caches all service
