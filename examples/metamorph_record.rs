@@ -1,10 +1,11 @@
 //! Clone a real camera into a param-aware metamorph fixture set.
 //!
 //! Drives the standard read surface against a live device through
-//! [`RecordingTransport`], then writes a single `fixtures.json` keyed by the
+//! [`record_standard_surface`], then writes a single `fixtures.json` keyed by the
 //! canonical (ephemera-masked) request — so it survives per-request nonce /
 //! timestamp jitter and keeps distinct `token=` params apart. Replay the result
-//! in-process with [`MetamorphTransport`] (no camera needed).
+//! in-process with `MetamorphTransport`, or serve it from a bound-port
+//! `MockServer` (see `metamorph_serve`).
 //!
 //! ```text
 //! cargo run --example metamorph_record --features metamorph -- \
@@ -12,11 +13,7 @@
 //!     tests/fixtures/hikvision-ds-2cd2085
 //! ```
 
-use std::sync::{Arc, Mutex};
-
-use oxvif::OnvifSession;
-use oxvif::metamorph::{FixtureStore, RecordingTransport};
-use oxvif::transport::{HttpTransport, Transport};
+use oxvif::metamorph::record_standard_surface;
 
 #[tokio::main]
 async fn main() {
@@ -38,6 +35,10 @@ async fn main() {
     // Positional args between `device_url` and the trailing `out_dir` are the
     // optional `[user] [pass]`.
     let creds: Vec<&String> = rest[..rest.len().saturating_sub(1)].iter().collect();
+    let cred_pair = match (creds.first(), creds.get(1)) {
+        (Some(u), Some(p)) => Some((u.as_str(), p.as_str())),
+        _ => None,
+    };
 
     // Label the store by the output directory's final segment (`<vendor>-<model>`).
     let device_label = std::path::Path::new(&out_dir)
@@ -46,49 +47,14 @@ async fn main() {
         .unwrap_or("device")
         .to_string();
 
-    let mut http = HttpTransport::new();
-    if let (Some(u), Some(p)) = (creds.first(), creds.get(1)) {
-        http = http.with_credentials((*u).clone(), (*p).clone());
-    }
-    let inner: Arc<dyn Transport> = Arc::new(http);
-    let store = Arc::new(Mutex::new(FixtureStore::new(device_label)));
-    let tap: Arc<dyn Transport> = Arc::new(RecordingTransport::new(inner, store.clone()));
-
-    let mut builder = OnvifSession::builder(&device_url).with_transport(tap);
-    if let (Some(u), Some(p)) = (creds.first(), creds.get(1)) {
-        builder = builder.with_credentials((*u).clone(), (*p).clone());
-    }
-    let session = match builder.build().await {
+    let store = match record_standard_surface(&device_url, cred_pair, device_label).await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("session build failed: {e}");
+            eprintln!("recording failed: {e}");
             std::process::exit(1);
         }
     };
 
-    // Exercise the standard read surface; each call is recorded.
-    let _ = session.get_device_info().await;
-    let _ = session.get_system_date_and_time().await;
-    let _ = session.get_services().await;
-    let _ = session.get_hostname().await;
-    let profiles = session.get_profiles().await;
-    if let Ok(ps) = &profiles {
-        // Per-profile reads exercise the param-aware key (token=A vs token=B).
-        for p in ps {
-            let _ = session.get_stream_uri(&p.token).await;
-            let _ = session.get_snapshot_uri(&p.token).await;
-        }
-    }
-    let _ = session.get_video_encoder_configurations().await;
-    if let Ok(sources) = session.get_video_sources().await
-        && let Some(s) = sources.first()
-    {
-        let _ = session.get_imaging_settings(&s.token).await;
-    }
-    let _ = session.ptz_get_nodes().await;
-    let _ = session.get_network_interfaces().await;
-
-    let store = store.lock().unwrap();
     if let Err(e) = store.save(&out_dir) {
         eprintln!("failed to write fixtures to {out_dir}: {e}");
         std::process::exit(1);

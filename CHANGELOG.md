@@ -28,6 +28,15 @@ unchanged.
     client-drivable counterpart of `MockTransport`.
   - **`RecordingTransport`** — taps a live transport into a `FixtureStore`;
     `examples/metamorph_record.rs` is the recorder CLI.
+  - **`record_standard_surface(url, credentials, label)`** — one call clones a
+    camera's standard read surface into a `FixtureStore` (builds the session +
+    recording tap internally), so a caller like oxdm needs no copy of the op
+    list; `drive_standard_surface(&session)` exposes just the op list for callers
+    that own the session. The example is now a thin wrapper over it.
+  - Recorded fixtures now also strip `user:pass@` **URL credentials** (e.g. an
+    `rtsp://` stream URI from `GetStreamUri`) from both request and response, so
+    a saved `fixtures.json` carries no stream/snapshot password — not just the
+    WS-Security ones.
   - `Fixture`, `FixtureStore`, `MetamorphTransport`, `ReplayResponder`,
     `RecordingTransport` are re-exported from the crate root.
   - **Persona C — adapter / skin**: implement the **`DeviceAdapter`** trait

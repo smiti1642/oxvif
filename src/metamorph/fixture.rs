@@ -30,9 +30,12 @@ pub struct Fixture {
     /// The SOAP action URI this exchange answered.
     pub action: String,
     /// The request envelope as recorded, with WS-Security `Password`/`Nonce`
-    /// blanked so no credential lands on disk.
+    /// blanked and any `user:pass@` URL credential stripped, so nothing secret
+    /// lands on disk.
     pub request_raw: String,
-    /// The device's response envelope, stored verbatim for faithful replay.
+    /// The device's response envelope, stored for faithful replay — with any
+    /// `user:pass@` URL credential (e.g. an `rtsp://` stream URI) stripped so no
+    /// credential lands on disk.
     pub response_raw: String,
 }
 
@@ -90,15 +93,17 @@ impl FixtureStore {
         std::fs::write(dir.join(FIXTURES_FILE), text)
     }
 
-    /// Record one exchange: derive the canonical key from `request_raw`, blank
-    /// the request's credentials, and upsert (last write wins per key).
+    /// Record one exchange: derive the canonical key from `request_raw`, scrub
+    /// every credential (WS-Security `Password`/`Nonce` in the request, plus any
+    /// `user:pass@` URL credential in either envelope), and upsert (last write
+    /// wins per key).
     pub fn record(&mut self, action: &str, request_raw: &str, response_raw: &str) {
         let key_canon = canonicalize(request_raw, Masking::Key);
         self.insert(Fixture {
             key_canon,
             action: action.to_string(),
-            request_raw: redact_credentials(request_raw),
-            response_raw: response_raw.to_string(),
+            request_raw: scrub_url_userinfo(&redact_credentials(request_raw)),
+            response_raw: scrub_url_userinfo(response_raw),
         });
     }
 
@@ -183,6 +188,61 @@ fn blank_between(xml: &str, open: &str, close: &str) -> String {
     out
 }
 
+/// Strip `user:pass@` credential userinfo from every URL in `xml` (e.g. a
+/// `GetStreamUri` response's `rtsp://user:pass@host/…` → `rtsp://host/…`), so no
+/// stream / snapshot credential lands on disk. Targets the `scheme://userinfo@`
+/// form where the userinfo contains a `:` — a user/password pair; a bare
+/// `user@host` (no password) is left alone. The replayed URI then carries no
+/// credential, which is the correct shape (RTSP auth is negotiated separately).
+fn scrub_url_userinfo(xml: &str) -> String {
+    let mut out = String::with_capacity(xml.len());
+    let bytes = xml.as_bytes();
+    let mut i = 0;
+    while i < xml.len() {
+        if xml[i..].starts_with("://") {
+            out.push_str("://");
+            i += 3;
+            // Scan a userinfo candidate up to '@' or a URL delimiter.
+            let start = i;
+            let mut j = i;
+            let mut saw_colon = false;
+            let mut at = None;
+            while j < xml.len() {
+                match bytes[j] {
+                    b'@' => {
+                        at = Some(j);
+                        break;
+                    }
+                    b'/' | b'?' | b'#' | b'<' | b'>' | b'"' | b'\'' | b' ' | b'\t' | b'\r'
+                    | b'\n' => break,
+                    b':' => {
+                        saw_colon = true;
+                        j += 1;
+                    }
+                    b if b.is_ascii() => j += 1,
+                    // Non-ASCII byte: not URL userinfo — stop (keeps `j` on a
+                    // char boundary, since every prior byte was ASCII).
+                    _ => break,
+                }
+            }
+            match (at, saw_colon) {
+                // `scheme://user:pass@…` → drop the userinfo and the '@'.
+                (Some(at_pos), true) => i = at_pos + 1,
+                // No credential pair — keep the scanned segment verbatim.
+                _ => {
+                    out.push_str(&xml[start..j]);
+                    i = j;
+                }
+            }
+        } else {
+            let ch = xml[i..].chars().next().unwrap();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,6 +297,42 @@ mod tests {
         assert!(!stored.contains("SECRET=="), "password leaked: {stored}");
         assert!(!stored.contains("NONCE=="), "nonce leaked: {stored}");
         assert!(stored.contains(">[redacted]</wsse:Password>"));
+    }
+
+    #[test]
+    fn record_scrubs_url_credentials_in_stream_uri() {
+        let mut store = FixtureStore::new("dev");
+        let req = "<Envelope><Body><GetStreamUri/></Body></Envelope>";
+        let resp = "<Envelope><Body><GetStreamUriResponse><Uri>\
+                    rtsp://admin:s3cr3t@10.0.0.5:554/Streaming/Channels/101\
+                    </Uri></GetStreamUriResponse></Body></Envelope>";
+        store.record("act/GetStreamUri", req, resp);
+        let key = canonicalize(req, Masking::Key);
+        let stored = &store.lookup(&key).unwrap().response_raw;
+        assert!(!stored.contains("s3cr3t"), "password leaked: {stored}");
+        assert!(!stored.contains("admin:"), "userinfo leaked: {stored}");
+        assert!(
+            stored.contains("rtsp://10.0.0.5:554/Streaming/Channels/101"),
+            "host/path must survive: {stored}"
+        );
+    }
+
+    #[test]
+    fn scrub_url_userinfo_targets_only_credential_pairs() {
+        // A user:password pair is stripped, host/path kept.
+        assert_eq!(scrub_url_userinfo("rtsp://u:p@h/x"), "rtsp://h/x");
+        // A bare userinfo (no password) is left alone.
+        assert_eq!(
+            scrub_url_userinfo("http://user@host/x"),
+            "http://user@host/x"
+        );
+        // A host:port colon is not mistaken for userinfo.
+        assert_eq!(scrub_url_userinfo("http://host:554/x"), "http://host:554/x");
+        // Surrounding markup is preserved; only the pair is removed.
+        assert_eq!(
+            scrub_url_userinfo("<Uri>rtsp://a:b@h:554/s</Uri>"),
+            "<Uri>rtsp://h:554/s</Uri>"
+        );
     }
 
     static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);

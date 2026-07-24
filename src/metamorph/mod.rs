@@ -49,5 +49,5 @@ pub use adapter::{
 };
 pub use fixture::{Fixture, FixtureStore};
 pub use quirk::{OperationQuirk, QuirkReport};
-pub use record::RecordingTransport;
+pub use record::{RecordingTransport, drive_standard_surface, record_standard_surface};
 pub use replay::{MetamorphTransport, ReplayResponder};
