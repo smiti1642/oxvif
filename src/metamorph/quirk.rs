@@ -13,8 +13,11 @@
 //!
 //! This compares *which element paths exist*, not their text. A different
 //! `Manufacturer` value (`"Hikvision"` vs `"oxvif-mock"`) is expected and is
-//! **not** reported — only shape drift is. Value / type-level quirks are the
-//! deeper, still-unbuilt half of M7 (see `docs/active/metamorph.md`).
+//! **not** reported — only shape drift is. The SOAP `Header` subtree
+//! (WS-Addressing plumbing a real device echoes but the baseline omits) is
+//! excluded, so the diff reflects response *Body* shape. Value / type-level
+//! quirks are the deeper, still-unbuilt half of M7 (see
+//! `docs/active/metamorph.md`).
 //!
 //! The synthetic mock stands in for "the spec ideal"; it is oxvif's own
 //! well-formed response, so a deviation means "the clone's shape differs from
@@ -135,6 +138,15 @@ fn walk(node: &XmlNode, prefix: &str, set: &mut BTreeSet<String>) {
         format!("{prefix}/{}", node.local_name)
     };
     for child in &node.children {
+        // Skip the SOAP `Header` subtree (WS-Addressing plumbing — MessageID,
+        // To, RelatesTo …). A real device echoes it; the synthetic baseline
+        // emits none, so keeping it would flag *every* operation and bury the
+        // real Body-shape differences. `prefix.is_empty()` ⇒ `node` is the root
+        // envelope, so this only drops the top-level Header, not a same-named
+        // element deeper in the body.
+        if prefix.is_empty() && child.local_name == "Header" {
+            continue;
+        }
         walk(child, &path, set);
     }
     set.insert(path);
@@ -144,6 +156,32 @@ fn walk(node: &XmlNode, prefix: &str, set: &mut BTreeSet<String>) {
 mod tests {
     use super::*;
     use crate::metamorph::FixtureStore;
+
+    #[test]
+    fn soap_header_subtree_is_ignored() {
+        // A real device echoes a WS-Addressing SOAP Header the synthetic mock
+        // never emits; it must not register as a quirk on every operation.
+        let action = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+        let req = "<Envelope><Body><GetHostname/></Body></Envelope>";
+        let state = MockState::new();
+        let synthetic = dispatch(action, BASELINE_BASE, &state, req);
+
+        // Clone = the synthetic Body, but wrapped with an extra SOAP Header.
+        let env = synthetic.find("Envelope").expect("SOAP Envelope root");
+        let gt = env + synthetic[env..].find('>').expect("open tag closes");
+        let with_header = format!(
+            "{}<Header><To>http://cam/onvif</To><MessageID>uuid:x</MessageID></Header>{}",
+            &synthetic[..=gt],
+            &synthetic[gt + 1..]
+        );
+        let mut store = FixtureStore::new("clone");
+        store.record(action, req, &with_header);
+        let report = store.diff_against_synthetic();
+        assert!(
+            report.is_empty(),
+            "a SOAP Header must not count as a structural quirk: {report:?}"
+        );
+    }
 
     #[test]
     fn element_paths_are_prefix_agnostic_and_nested() {
