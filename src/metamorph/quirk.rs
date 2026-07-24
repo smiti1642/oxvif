@@ -1,6 +1,7 @@
 //! Structural quirk diff: compare a recorded clone against oxvif's synthetic
-//! (spec-ideal) mock, per operation, and report where the response *shape*
-//! deviates.
+//! **reference** mock, per operation, and report where the response *shape*
+//! deviates. The baseline is oxvif's own well-formed response, **not** the ONVIF
+//! WSDL/XSD schema — see the caveat at the end.
 //!
 //! For each recorded [`Fixture`](super::fixture::Fixture), the fixture's own
 //! request is replayed through the synthetic [`dispatch`] to produce the
@@ -19,9 +20,17 @@
 //! quirks are the deeper, still-unbuilt half of M7 (see
 //! `docs/active/metamorph.md`).
 //!
-//! The synthetic mock stands in for "the spec ideal"; it is oxvif's own
-//! well-formed response, so a deviation means "the clone's shape differs from
-//! what oxvif expects", which is an approximation, not a conformance verdict.
+//! ## Caveat — the baseline is oxvif's mock, not the ONVIF schema
+//!
+//! The baseline is oxvif's synthetic response, **not** the ONVIF WSDL/XSD. So a
+//! deviation means "the clone's shape differs from what oxvif emits/expects",
+//! which is a useful proxy (it tracks whether oxvif will parse the device
+//! correctly) but **not** a schema-conformance verdict. In particular the mock
+//! is *minimal*: it omits many spec-*optional* elements, so a camera that
+//! includes an optional element shows it as `only_in_clone` and one that omits
+//! one oxvif happens to emit shows it as `only_in_synthetic` — neither is
+//! necessarily a spec violation. A true spec baseline would require validating
+//! against the XSD (element presence + cardinality), which oxvif does not do.
 
 use std::collections::BTreeSet;
 
@@ -93,9 +102,10 @@ pub struct OperationDiff {
 }
 
 impl FixtureStore {
-    /// Diff every recorded exchange against the synthetic (spec-ideal) mock and
+    /// Diff every recorded exchange against the synthetic reference mock and
     /// report the structural deviations. See the [module docs](crate::metamorph)
-    /// for the structure-only scope.
+    /// for the structure-only scope and the baseline caveat (it is oxvif's mock,
+    /// not the ONVIF schema).
     ///
     /// ```no_run
     /// # fn run() -> std::io::Result<()> {

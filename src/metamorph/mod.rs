@@ -30,7 +30,8 @@
 //!   [`MockServerBuilder::replay`](crate::mock::MockServer::builder) — any HTTP
 //!   ONVIF client (oxdm, Frigate, ODM) can then drive the cloned camera.
 //! - **Quirk diff**: [`FixtureStore::diff_against_synthetic`] compares the clone
-//!   against oxvif's synthetic (spec-ideal) mock, per operation, reporting where
+//!   against oxvif's synthetic reference mock (its own well-formed response, not
+//!   the ONVIF WSDL/XSD), per operation, reporting where
 //!   the response *shape* deviates ([`QuirkReport`]). The diff is **structural
 //!   only** — which element paths exist, not their values; a different
 //!   `Manufacturer` string is expected, not a quirk. Value / type-level drift is
