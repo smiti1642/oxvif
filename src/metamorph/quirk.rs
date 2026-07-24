@@ -27,6 +27,7 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::mock::canon::{MASK, Masking, mask_attr, mask_text};
 use crate::mock::dispatch::dispatch;
 use crate::mock::state::MockState;
 use crate::soap::XmlNode;
@@ -74,6 +75,23 @@ impl QuirkReport {
     }
 }
 
+/// Side-by-side diff material for one operation: the baseline and clone responses
+/// rendered as aligned, pretty-printed XML, ready for a line-level (git-style)
+/// diff. Produced by [`FixtureStore::diff_details`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperationDiff {
+    /// The SOAP action URI this exchange answered.
+    pub action: String,
+    /// The canonical, ephemera-masked request (the fixture key).
+    pub key_canon: String,
+    /// oxvif's synthetic baseline response — the **left** side of the diff.
+    pub baseline_xml: String,
+    /// The real camera's recorded response — the **right** side of the diff.
+    pub clone_xml: String,
+    /// Whether the two differ structurally (same test as the quirk report).
+    pub differs: bool,
+}
+
 impl FixtureStore {
     /// Diff every recorded exchange against the synthetic (spec-ideal) mock and
     /// report the structural deviations. See the [module docs](crate::metamorph)
@@ -118,6 +136,92 @@ impl FixtureStore {
             quirks,
         }
     }
+
+    /// Per-operation side-by-side material: for every recorded exchange, the
+    /// synthetic baseline and the clone response rendered as aligned,
+    /// pretty-printed, ephemera-masked, Header-stripped XML — the raw input for
+    /// a git-style line diff. `differs` mirrors [`diff_against_synthetic`].
+    pub fn diff_details(&self) -> Vec<OperationDiff> {
+        self.fixtures()
+            .iter()
+            .map(|f| {
+                let state = MockState::new();
+                let synthetic = dispatch(&f.action, BASELINE_BASE, &state, &f.request_raw);
+                OperationDiff {
+                    action: f.action.clone(),
+                    key_canon: f.key_canon.clone(),
+                    baseline_xml: pretty_xml(&synthetic, Masking::Key),
+                    clone_xml: pretty_xml(&f.response_raw, Masking::Key),
+                    differs: element_paths(&f.response_raw) != element_paths(&synthetic),
+                }
+            })
+            .collect()
+    }
+}
+
+/// Render `xml` as indented, one-element-per-line XML — volatile fields masked
+/// per `masking`, the top-level SOAP `Header` dropped — an aligned form for a
+/// line diff. Unparseable input is returned unchanged.
+fn pretty_xml(xml: &str, masking: Masking) -> String {
+    match XmlNode::parse(xml) {
+        Ok(root) => {
+            let mut out = String::new();
+            pretty_node(&mut out, &root, 0, masking, true);
+            out
+        }
+        Err(_) => xml.to_string(),
+    }
+}
+
+fn pretty_node(out: &mut String, node: &XmlNode, depth: usize, masking: Masking, is_root: bool) {
+    let indent = "  ".repeat(depth);
+    let mut open = format!("{indent}<{}", node.local_name);
+    let mut attrs: Vec<(&String, &String)> = node.attrs.iter().collect();
+    attrs.sort_by(|a, b| a.0.cmp(b.0));
+    for (k, v) in attrs {
+        let val = if mask_attr(k, masking) {
+            MASK
+        } else {
+            v.as_str()
+        };
+        open.push_str(&format!(" {k}=\"{val}\""));
+    }
+
+    // Drop the top-level SOAP Header subtree, matching the structural diff.
+    let children: Vec<&XmlNode> = node
+        .children
+        .iter()
+        .filter(|c| !(is_root && c.local_name == "Header"))
+        .collect();
+
+    let text = node
+        .text
+        .as_deref()
+        .map(|t| t.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|t| !t.is_empty());
+
+    if children.is_empty() && text.is_none() {
+        out.push_str(&open);
+        out.push_str("/>\n");
+    } else if children.is_empty() {
+        let t = text.unwrap();
+        let shown = if mask_text(&node.local_name, masking) {
+            MASK
+        } else {
+            &t
+        };
+        out.push_str(&open);
+        out.push('>');
+        out.push_str(shown);
+        out.push_str(&format!("</{}>\n", node.local_name));
+    } else {
+        out.push_str(&open);
+        out.push_str(">\n");
+        for c in children {
+            pretty_node(out, c, depth + 1, masking, false);
+        }
+        out.push_str(&format!("{indent}</{}>\n", node.local_name));
+    }
 }
 
 /// The set of element paths in `xml` — prefix-agnostic, slash-joined local names
@@ -156,6 +260,46 @@ fn walk(node: &XmlNode, prefix: &str, set: &mut BTreeSet<String>) {
 mod tests {
     use super::*;
     use crate::metamorph::FixtureStore;
+
+    #[test]
+    fn diff_details_render_aligned_masked_header_stripped_bodies() {
+        let action = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+        let req = "<Envelope><Body><GetHostname/></Body></Envelope>";
+        let state = MockState::new();
+        let synthetic = dispatch(action, BASELINE_BASE, &state, req);
+
+        // Clone = the synthetic body, but wrapped with a SOAP Header the
+        // baseline lacks — after Header-stripping the two renders must match.
+        let env = synthetic.find("Envelope").expect("SOAP Envelope root");
+        let gt = env + synthetic[env..].find('>').expect("open tag closes");
+        let clone = format!(
+            "{}<Header><To>http://cam/onvif</To></Header>{}",
+            &synthetic[..=gt],
+            &synthetic[gt + 1..]
+        );
+        let mut store = FixtureStore::new("clone");
+        store.record(action, req, &clone);
+
+        let details = store.diff_details();
+        assert_eq!(details.len(), 1);
+        let d = &details[0];
+        assert!(!d.differs, "clone == synthetic body → no drift: {d:?}");
+        assert_eq!(
+            d.baseline_xml, d.clone_xml,
+            "identical bodies must render identically"
+        );
+        assert!(
+            d.clone_xml.contains("<GetHostnameResponse"),
+            "pretty body present: {}",
+            d.clone_xml
+        );
+        assert!(
+            !d.clone_xml.contains("Header") && !d.clone_xml.contains("<To>"),
+            "SOAP Header subtree must be dropped: {}",
+            d.clone_xml
+        );
+        assert!(d.clone_xml.contains('\n'), "multi-line pretty output");
+    }
 
     #[test]
     fn soap_header_subtree_is_ignored() {

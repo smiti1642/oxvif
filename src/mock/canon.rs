@@ -30,7 +30,7 @@
 use crate::soap::XmlNode;
 
 /// Placeholder substituted for every masked value.
-const MASK: &str = "__MASKED__";
+pub(crate) const MASK: &str = "__MASKED__";
 
 /// Which fields to mask when canonicalising. See the module docs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,12 +85,12 @@ pub(crate) fn canonicalize(xml: &str, masking: Masking) -> String {
     }
 }
 
-fn mask_text(local: &str, masking: Masking) -> bool {
+pub(crate) fn mask_text(local: &str, masking: Masking) -> bool {
     EPHEMERAL_TEXT.contains(&local)
         || (masking == Masking::Value && IDENTIFIER_TEXT.contains(&local))
 }
 
-fn mask_attr(local: &str, masking: Masking) -> bool {
+pub(crate) fn mask_attr(local: &str, masking: Masking) -> bool {
     EPHEMERAL_ATTR.contains(&local)
         || (masking == Masking::Value && IDENTIFIER_ATTR.contains(&local))
 }

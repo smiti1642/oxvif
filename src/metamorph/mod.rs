@@ -48,6 +48,6 @@ pub use adapter::{
     AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, PtzVector,
 };
 pub use fixture::{Fixture, FixtureStore};
-pub use quirk::{OperationQuirk, QuirkReport};
+pub use quirk::{OperationDiff, OperationQuirk, QuirkReport};
 pub use record::{RecordingTransport, drive_standard_surface, record_standard_surface};
 pub use replay::{MetamorphTransport, ReplayResponder};
