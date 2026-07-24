@@ -59,6 +59,20 @@ feature-gated (`metamorph`); no public API removed.
   when advertised) instead of ~12 reads, and returns a `SweepReport`.
   `record_standard_surface` is unchanged (still returns `FixtureStore`).
 
+### Fixed (mock self-consistency — surfaced by parse verification)
+- **`GetOSD`**: the mock wrapped the entry in `<trt:OSDConfiguration>` (the
+  schema *type*), but the WSDL element name — and what the client parser reads —
+  is `<trt:OSD>`. The mock now emits `<trt:OSD>`, so a clone of the mock's own
+  `GetOSD` parses.
+- **`GetCompatibleConfigurations`**: the mock reused the `GetConfigurations`
+  handler, answering with `<GetConfigurationsResponse>`; the client parser
+  matches `<GetCompatibleConfigurationsResponse>`. Added a dedicated mock
+  response with the correct wrapper element.
+- Both mismatches were between the mock's own output and oxvif's own parser
+  (the hand-written client-test fixtures never re-parsed the mock's bytes);
+  real ONVIF devices return the schema-correct shapes and always parsed. Added
+  mock→client round-trip regression tests for both.
+
 ## [0.13.0] - 2026-07-24
 
 Headline: **metamorph — clone a real camera, replay it (in-process or over a

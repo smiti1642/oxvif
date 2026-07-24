@@ -5757,6 +5757,42 @@ async fn test_ptz_get_compatible_configurations_sends_profile_token() {
     assert!(body.contains("Profile_1"));
 }
 
+// ── Mock self-consistency: the mock's own responses parse via the client ──
+// These round-trip through the real dispatching mock (crate::mock::MockTransport)
+// and re-parse with the client, guarding against mock/parser drift that the
+// hand-written fixtures above cannot catch (they test the parser against
+// known-good XML, never the mock's actual output).
+
+#[cfg(feature = "mock")]
+#[tokio::test]
+async fn mock_get_osd_response_parses_via_client() {
+    let client = OnvifClient::new("http://mock/onvif/device")
+        .with_transport(Arc::new(crate::mock::MockTransport::new()));
+    // The mock's GetOSDResponse must wrap the entry as <trt:OSD> (WSDL element
+    // name), not <trt:OSDConfiguration> (the schema type) — else get_osd's
+    // `resp.child("OSD")` misses and the parse fails.
+    let osd = client
+        .get_osd("http://mock/onvif/media", "OSD_1")
+        .await
+        .unwrap();
+    assert_eq!(osd.token, "OSD_1");
+}
+
+#[cfg(feature = "mock")]
+#[tokio::test]
+async fn mock_get_compatible_configurations_response_parses_via_client() {
+    let client = OnvifClient::new("http://mock/onvif/device")
+        .with_transport(Arc::new(crate::mock::MockTransport::new()));
+    // The mock must answer with <GetCompatibleConfigurationsResponse>, not reuse
+    // <GetConfigurationsResponse> — the client parser matches the former.
+    let configs = client
+        .ptz_get_compatible_configurations("http://mock/onvif/ptz", "Profile_1")
+        .await
+        .unwrap();
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs[0].token, "PTZConfig_1");
+}
+
 // ── Media2 AddConfiguration / RemoveConfiguration ─────────────────────────
 
 #[tokio::test]

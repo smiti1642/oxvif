@@ -290,6 +290,24 @@ pub fn resp_ptz_configurations() -> String {
     )
 }
 
+/// `GetCompatibleConfigurations` — same PTZConfiguration content as
+/// `GetConfigurations`, but wrapped in its own response element (the client
+/// parser matches on `GetCompatibleConfigurationsResponse`, so it cannot share
+/// `resp_ptz_configurations`'s `GetConfigurationsResponse`).
+pub fn resp_ptz_compatible_configurations() -> String {
+    soap(
+        NS,
+        r#"<tptz:GetCompatibleConfigurationsResponse>
+          <tptz:PTZConfiguration token="PTZConfig_1">
+            <tt:Name>PTZConfig</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
+            <tt:NodeToken>PTZNode_1</tt:NodeToken>
+            <tt:DefaultPTZTimeout>PT10S</tt:DefaultPTZTimeout>
+          </tptz:PTZConfiguration>
+        </tptz:GetCompatibleConfigurationsResponse>"#,
+    )
+}
+
 pub fn resp_ptz_configuration() -> String {
     soap(
         NS,

@@ -463,12 +463,15 @@ pub fn resp_osd(state: &SharedState, body: &str) -> String {
     let snapshot = state.read().osd.osds.clone();
     match snapshot.iter().find(|o| o.token == want) {
         Some(entry) => {
+            // Singular GetOSDResponse wraps the entry as `<trt:OSD>` (the WSDL
+            // element name; OSDConfiguration is the schema *type*). The shared
+            // renderer emits the plural `<trt:OSDs>`, so rename it here.
             let body = format!(
                 "<trt:GetOSDResponse>{}</trt:GetOSDResponse>",
                 render_osd_entry(entry)
             )
-            .replace("<trt:OSDs ", "<trt:OSDConfiguration ")
-            .replace("</trt:OSDs>", "</trt:OSDConfiguration>");
+            .replace("<trt:OSDs ", "<trt:OSD ")
+            .replace("</trt:OSDs>", "</trt:OSD>");
             soap(
                 r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
                 &body,
