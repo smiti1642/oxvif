@@ -336,6 +336,11 @@ pub fn resp_capabilities(base: &str) -> String {
             r#"<tds:GetCapabilitiesResponse>
           <tds:Capabilities>
             <tt:Device><tt:XAddr>{base}/onvif/device</tt:XAddr></tt:Device>
+            <tt:Events>
+              <tt:XAddr>{base}/onvif/events</tt:XAddr>
+              <tt:WSPullPointSupport>true</tt:WSPullPointSupport>
+            </tt:Events>
+            <tt:Imaging><tt:XAddr>{base}/onvif/imaging</tt:XAddr></tt:Imaging>
             <tt:Media>
               <tt:XAddr>{base}/onvif/media</tt:XAddr>
               <tt:StreamingCapabilities>
@@ -345,11 +350,9 @@ pub fn resp_capabilities(base: &str) -> String {
               </tt:StreamingCapabilities>
             </tt:Media>
             <tt:PTZ><tt:XAddr>{base}/onvif/ptz</tt:XAddr></tt:PTZ>
-            <tt:Imaging><tt:XAddr>{base}/onvif/imaging</tt:XAddr></tt:Imaging>
-            <tt:Events>
-              <tt:XAddr>{base}/onvif/events</tt:XAddr>
-              <tt:WSPullPointSupport>true</tt:WSPullPointSupport>
-            </tt:Events>
+            <!-- NOTE: Media2 in CapabilitiesExtension is non-standard (Media2 is
+                 officially discovered via GetServices), but oxvif's own session
+                 reads it here; kept until Media2 discovery moves to GetServices. -->
             <tt:Extension>
               <tt:Recording><tt:XAddr>{base}/onvif/recording</tt:XAddr></tt:Recording>
               <tt:Search><tt:XAddr>{base}/onvif/search</tt:XAddr></tt:Search>
@@ -399,11 +402,11 @@ pub fn resp_network_interfaces(state: &SharedState) -> String {
             <tt:IPv4>
               <tt:Enabled>true</tt:Enabled>
               <tt:Config>
-                <tt:FromDHCP>{dhcp}</tt:FromDHCP>
                 <tt:Manual>
                   <tt:Address>{address}</tt:Address>
                   <tt:PrefixLength>{prefix}</tt:PrefixLength>
                 </tt:Manual>
+                <tt:DHCP>{dhcp}</tt:DHCP>
               </tt:Config>
             </tt:IPv4>
           </tds:NetworkInterfaces>

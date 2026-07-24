@@ -204,24 +204,39 @@ fn render_vsc_inline(token: &str) -> String {
     }
 }
 
+/// The `Multicast` + `SessionTimeout` tail required to close a schema-valid
+/// `tt:VideoEncoderConfiguration` (both are `[1]` in the XSD sequence).
+const VEC_TAIL: &str = concat!(
+    "<tt:Multicast><tt:Address><tt:Type>IPv4</tt:Type>",
+    "<tt:IPv4Address>0.0.0.0</tt:IPv4Address></tt:Address>",
+    "<tt:Port>0</tt:Port><tt:TTL>1</tt:TTL><tt:AutoStart>false</tt:AutoStart></tt:Multicast>",
+    "<tt:SessionTimeout>PT0S</tt:SessionTimeout>",
+);
+
 fn render_vec_inline(token: &str) -> String {
     match token {
-        "VEC_1" => r#"<tt:VideoEncoderConfiguration token="VEC_1">
+        "VEC_1" => format!(
+            r#"<tt:VideoEncoderConfiguration token="VEC_1">
           <tt:Name>H264</tt:Name>
           <tt:UseCount>1</tt:UseCount>
           <tt:Encoding>H264</tt:Encoding>
           <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
-          <tt:RateControl><tt:FrameRateLimit>30</tt:FrameRateLimit><tt:BitrateLimit>4096</tt:BitrateLimit></tt:RateControl>
+          <tt:Quality>5</tt:Quality>
+          <tt:RateControl><tt:FrameRateLimit>30</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>4096</tt:BitrateLimit></tt:RateControl>
+          {VEC_TAIL}
         </tt:VideoEncoderConfiguration>"#
-            .to_string(),
-        "VEC_2" => r#"<tt:VideoEncoderConfiguration token="VEC_2">
+        ),
+        "VEC_2" => format!(
+            r#"<tt:VideoEncoderConfiguration token="VEC_2">
           <tt:Name>H264_sub</tt:Name>
           <tt:UseCount>1</tt:UseCount>
           <tt:Encoding>H264</tt:Encoding>
           <tt:Resolution><tt:Width>640</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
-          <tt:RateControl><tt:FrameRateLimit>15</tt:FrameRateLimit><tt:BitrateLimit>1024</tt:BitrateLimit></tt:RateControl>
+          <tt:Quality>4</tt:Quality>
+          <tt:RateControl><tt:FrameRateLimit>15</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>1024</tt:BitrateLimit></tt:RateControl>
+          {VEC_TAIL}
         </tt:VideoEncoderConfiguration>"#
-            .to_string(),
+        ),
         _ => String::new(),
     }
 }
@@ -281,7 +296,8 @@ pub fn resp_video_source_configurations() -> String {
 pub fn resp_video_encoder_configurations() -> String {
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetVideoEncoderConfigurationsResponse>
+        &format!(
+            r#"<trt:GetVideoEncoderConfigurationsResponse>
           <trt:Configurations token="VEC_1">
             <tt:Name>MainStream</tt:Name>
             <tt:UseCount>1</tt:UseCount>
@@ -297,6 +313,7 @@ pub fn resp_video_encoder_configurations() -> String {
               <tt:GovLength>25</tt:GovLength>
               <tt:H264Profile>Main</tt:H264Profile>
             </tt:H264>
+            {VEC_TAIL}
           </trt:Configurations>
           <trt:Configurations token="VEC_2">
             <tt:Name>SubStream</tt:Name>
@@ -304,8 +321,10 @@ pub fn resp_video_encoder_configurations() -> String {
             <tt:Encoding>JPEG</tt:Encoding>
             <tt:Resolution><tt:Width>640</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
             <tt:Quality>3</tt:Quality>
+            {VEC_TAIL}
           </trt:Configurations>
-        </trt:GetVideoEncoderConfigurationsResponse>"#,
+        </trt:GetVideoEncoderConfigurationsResponse>"#
+        ),
     )
 }
 

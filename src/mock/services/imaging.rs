@@ -10,31 +10,35 @@ pub fn resp_imaging_settings(state: &SharedState) -> String {
     soap(
         NS,
         &format!(
+            // `tt:ImagingSettings20` is an xs:sequence — children in schema order:
+            // BacklightCompensation, Brightness, ColorSaturation, Contrast,
+            // Exposure, Focus, IrCutFilter, Sharpness, WideDynamicRange,
+            // WhiteBalance, Extension.
             r#"<timg:GetImagingSettingsResponse>
           <timg:ImagingSettings>
-            <tt:Brightness>{}</tt:Brightness>
-            <tt:ColorSaturation>{}</tt:ColorSaturation>
-            <tt:Contrast>{}</tt:Contrast>
-            <tt:Sharpness>{}</tt:Sharpness>
-            <tt:IrCutFilter>{}</tt:IrCutFilter>
-            <tt:WhiteBalance><tt:Mode>{}</tt:Mode></tt:WhiteBalance>
-            <tt:Exposure><tt:Mode>{}</tt:Mode></tt:Exposure>
-            <tt:BacklightCompensation><tt:Mode>{}</tt:Mode></tt:BacklightCompensation>
-            <tt:WideDynamicRange><tt:Mode>{}</tt:Mode><tt:Level>{}</tt:Level></tt:WideDynamicRange>
-            <tt:Focus><tt:AutoFocusMode>{}</tt:AutoFocusMode></tt:Focus>
+            <tt:BacklightCompensation><tt:Mode>{backlight}</tt:Mode></tt:BacklightCompensation>
+            <tt:Brightness>{brightness}</tt:Brightness>
+            <tt:ColorSaturation>{saturation}</tt:ColorSaturation>
+            <tt:Contrast>{contrast}</tt:Contrast>
+            <tt:Exposure><tt:Mode>{exposure}</tt:Mode></tt:Exposure>
+            <tt:Focus><tt:AutoFocusMode>{focus}</tt:AutoFocusMode></tt:Focus>
+            <tt:IrCutFilter>{ir}</tt:IrCutFilter>
+            <tt:Sharpness>{sharpness}</tt:Sharpness>
+            <tt:WideDynamicRange><tt:Mode>{wdr_mode}</tt:Mode><tt:Level>{wdr_level}</tt:Level></tt:WideDynamicRange>
+            <tt:WhiteBalance><tt:Mode>{wb}</tt:Mode></tt:WhiteBalance>
           </timg:ImagingSettings>
         </timg:GetImagingSettingsResponse>"#,
-            img.brightness,
-            img.color_saturation,
-            img.contrast,
-            img.sharpness,
-            img.ir_cut_filter,
-            img.white_balance_mode,
-            img.exposure_mode,
-            img.backlight_compensation,
-            img.wide_dynamic_range_mode,
-            img.wide_dynamic_range_level,
-            img.focus_mode,
+            backlight = img.backlight_compensation,
+            brightness = img.brightness,
+            saturation = img.color_saturation,
+            contrast = img.contrast,
+            exposure = img.exposure_mode,
+            focus = img.focus_mode,
+            ir = img.ir_cut_filter,
+            sharpness = img.sharpness,
+            wdr_mode = img.wide_dynamic_range_mode,
+            wdr_level = img.wide_dynamic_range_level,
+            wb = img.white_balance_mode,
         ),
     )
 }
