@@ -14,15 +14,15 @@ UDP multicast ──► discovery::probe() ──► Vec<DiscoveredDevice>
                       OnvifSession ─── caches service URLs, delegates every call
                            │
 SOAP/HTTP ──────►  OnvifClient ──► Device    (capabilities, hostname, NTP, reboot)
-                           ──► Media1    (profiles, RTSP/snapshot URIs, video + audio configs)
-                           ──► Media2    (H.265, metadata, audio, video source modes)
-                           ──► PTZ       (move, stop, presets, home, status, configurations, nodes)
-                           ──► Imaging   (brightness, contrast, exposure, IR cut, focus move/stop)
-                           ──► OSD       (create, read, update, delete on-screen display elements)
-                           ──► Events    (subscribe, pull, renew, unsubscribe, continuous stream)
-                           ──► Recording (list, create/delete recordings and recording jobs)
-                           ──► Search    (find recordings by time/scope)
-                           ──► Replay    (RTSP URI for playback)
+                               ──► Media1    (profiles, RTSP/snapshot URIs, video + audio configs)
+                               ──► Media2    (H.265, metadata, audio, video source modes)
+                               ──► PTZ       (move, stop, presets, home, status, configurations, nodes)
+                               ──► Imaging   (brightness, contrast, exposure, IR cut, focus move/stop)
+                               ──► OSD       (create, read, update, delete on-screen display elements)
+                               ──► Events    (subscribe, pull, renew, unsubscribe, continuous stream)
+                               ──► Recording (list, create/delete recordings and recording jobs)
+                               ──► Search    (find recordings by time/scope)
+                               ──► Replay    (RTSP URI for playback)
 ```
 
 - Async-first (`tokio` + `reqwest`)
