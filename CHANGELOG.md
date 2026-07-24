@@ -5,6 +5,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.13.1] - 2026-07-24
+
+Headline: **the metamorph clone sweep is now a selectable, two-level read
+surface** — pick whole service zones or individual `Get*` operations, with
+prerequisite tracking and a per-operation outcome report. Widens the default
+clone from ~12 reads to the full non-destructive `Get*` surface. Additive and
+feature-gated (`metamorph`); no public API removed.
+
+### Added (`metamorph` feature)
+- **`SurfaceGroup`** — the seven coarse service zones (identity, network, media,
+  PTZ, imaging, events, media2). `ALL` / `label()` / `ops()` let a UI render the
+  top level of a "pick what to clone" tree.
+- **`SurfaceOp`** — the ~50 individual read operations, the fine-grained level a
+  tester needs to reproduce a model-specific quirk on one command. `ALL` /
+  `group()` / `action_name()`, plus **`requires()`** — the token-source
+  prerequisite (e.g. `GetStreamUri` → `GetProfiles`), so the surface renders as a
+  dependency tree and a child lights up its parent when ticked.
+- **`SurfaceSelection`** — the user's literal picks (`none` / `all` /
+  `recommended` / `from_groups` / `with` / `with_group`); the driver expands
+  prerequisites internally, so selecting just `GetStreamUri` still yields a
+  replayable clone.
+- **`SweepReport`** / **`OpOutcome`** — a per-operation result:
+  `Recorded` / `Failed` / `SkippedNoData` / `SkippedPrerequisite`. The "hard
+  prerequisite" feedback distinguishes *this device has no such path* from *the
+  command itself broke*. Query via `outcome()` / `recorded()` / `skipped()` /
+  `is_complete()`.
+- **`drive_surface(session, &selection)`** and **`record_surface(url, creds,
+  label, &selection)`** — drive / record a chosen subset; both return a
+  `SweepReport`. `record_surface` returns `(FixtureStore, SweepReport)`.
+- **Parse verification (M7 value/type half)** — `FixtureStore::verify_parsing()`
+  runs oxvif's own typed parser over each recorded response and returns a
+  `ParseReport` of `ParseVerdict`s (`ParseStatus::Parsed` + extracted value as
+  JSON / `Failed` + parser error / `Unverified`). Answers "will oxvif choke on
+  this device", catching value/type quirks the structural diff is blind to (a
+  non-integer where an int is expected). Complements — does not replace — the
+  structural `diff_against_synthetic` / `diff_details`; both share the
+  `(action, key_canon)` key so a UI can join verdict + side-by-side SOAP diff.
+  The `metamorph` feature now enables `serde` (was implicit via `mock`) so
+  response types serialize to JSON.
+
+### Changed
+- `drive_standard_surface` now sweeps the full non-destructive `Get*` surface
+  (per-profile / per-token reads, OSD, audio, PTZ, imaging, events, and Media2
+  when advertised) instead of ~12 reads, and returns a `SweepReport`.
+  `record_standard_surface` is unchanged (still returns `FixtureStore`).
+
 ## [0.13.0] - 2026-07-24
 
 Headline: **metamorph — clone a real camera, replay it (in-process or over a

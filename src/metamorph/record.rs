@@ -8,6 +8,7 @@ use crate::transport::{HttpTransport, Transport, TransportError};
 use crate::{OnvifError, OnvifSession};
 
 use super::fixture::FixtureStore;
+use super::surface::{SurfaceSelection, drive_standard_surface, drive_surface};
 
 /// Wraps a real [`Transport`] and records each **successful** SOAP exchange
 /// into a shared [`FixtureStore`]. Drive a normal `OnvifSession` through it
@@ -86,6 +87,52 @@ pub async fn record_standard_surface(
     credentials: Option<(&str, &str)>,
     label: impl Into<String>,
 ) -> Result<FixtureStore, OnvifError> {
+    let (store, _report) = record_into(device_url, credentials, label, None).await?;
+    Ok(store)
+}
+
+/// Clone a **chosen subset** of a real camera's read surface into a
+/// [`FixtureStore`], returning it alongside a [`SweepReport`](super::SweepReport)
+/// of what each selected operation did (recorded / failed / skipped). Same as
+/// [`record_standard_surface`] but drives only the operations in `selection`
+/// (prerequisites auto-included) — the entry point for a "pick which commands to
+/// capture" UI or a targeted quirk-reproduction run.
+///
+/// ```no_run
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// use oxvif::metamorph::{SurfaceGroup, SurfaceSelection, record_surface};
+/// // Just the media zone, plus the single GetStreamUri command.
+/// let selection = SurfaceSelection::from_groups(&[SurfaceGroup::Media]);
+/// let (clone, report) = record_surface(
+///     "http://192.168.1.100/onvif/device_service",
+///     Some(("admin", "password")),
+///     "hikvision-ds2cd",
+///     &selection,
+/// )
+/// .await?;
+/// clone.save("clones/hikvision-ds2cd")?;
+/// for op in report.skipped() {
+///     eprintln!("skipped {}: {:?}", op.action_name(), report.outcome(op));
+/// }
+/// # Ok(()) }
+/// ```
+pub async fn record_surface(
+    device_url: &str,
+    credentials: Option<(&str, &str)>,
+    label: impl Into<String>,
+    selection: &SurfaceSelection,
+) -> Result<(FixtureStore, super::SweepReport), OnvifError> {
+    record_into(device_url, credentials, label, Some(selection)).await
+}
+
+/// Shared body of [`record_standard_surface`] / [`record_surface`]: build a
+/// tapped session, drive the surface, return the recorded store + sweep report.
+async fn record_into(
+    device_url: &str,
+    credentials: Option<(&str, &str)>,
+    label: impl Into<String>,
+    selection: Option<&SurfaceSelection>,
+) -> Result<(FixtureStore, super::SweepReport), OnvifError> {
     let mut http = HttpTransport::new();
     if let Some((u, p)) = credentials {
         http = http.with_credentials(u.to_string(), p.to_string());
@@ -99,38 +146,11 @@ pub async fn record_standard_surface(
     }
     let session = builder.build().await?;
 
-    drive_standard_surface(&session).await;
+    let report = match selection {
+        Some(sel) => drive_surface(&session, sel).await,
+        None => drive_standard_surface(&session).await,
+    };
 
     let recorded = store.lock().unwrap().clone();
-    Ok(recorded)
-}
-
-/// Drive the standard ONVIF read surface against `session`: device info, time,
-/// services, hostname, per-profile stream / snapshot URIs, encoder configs,
-/// imaging, PTZ nodes, and network interfaces. Per-profile reads exercise the
-/// param-aware fixture key (`token=A` vs `token=B`).
-///
-/// Every call is best-effort — a device that lacks a service is simply skipped.
-/// When `session`'s transport is a [`RecordingTransport`], each successful
-/// exchange lands in its store; this is the op list [`record_standard_surface`]
-/// records, exposed on its own for callers that manage the session themselves.
-pub async fn drive_standard_surface(session: &OnvifSession) {
-    let _ = session.get_device_info().await;
-    let _ = session.get_system_date_and_time().await;
-    let _ = session.get_services().await;
-    let _ = session.get_hostname().await;
-    if let Ok(profiles) = session.get_profiles().await {
-        for p in &profiles {
-            let _ = session.get_stream_uri(&p.token).await;
-            let _ = session.get_snapshot_uri(&p.token).await;
-        }
-    }
-    let _ = session.get_video_encoder_configurations().await;
-    if let Ok(sources) = session.get_video_sources().await
-        && let Some(s) = sources.first()
-    {
-        let _ = session.get_imaging_settings(&s.token).await;
-    }
-    let _ = session.ptz_get_nodes().await;
-    let _ = session.get_network_interfaces().await;
+    Ok((recorded, report))
 }

@@ -1,6 +1,6 @@
 [package]
 name = "oxvif"
-version = "0.13.0"
+version = "0.13.1"
 edition = "2024"
 rust-version = "1.85"
 description = "Async Rust client library for the ONVIF IP camera protocol"
@@ -42,7 +42,7 @@ health = ["dep:serde", "dep:serde_json", "dep:digest_auth"]
 # real camera into a param-aware fixture set and replay it in-process without
 # hardware. A superset of `mock` — builds on its responder chain, `DeviceState`,
 # and canonicaliser. See `docs/active/metamorph.md`.
-metamorph = ["mock", "dep:serde_json"]
+metamorph = ["mock", "serde", "dep:serde_json"]
 # Serve a recorded clone from a real bound-port `MockServer` (the "container"):
 # `MockServerBuilder::replay(FixtureStore)` splices the replay responder into the
 # HTTP server so oxdm / Frigate / ODM can drive the cloned camera over the

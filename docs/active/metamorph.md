@@ -307,6 +307,18 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   gained `wsa:To`. Integration test records a mock "camera" → replays →
   `Set → Get` round-trips. **End of the shippable increment (per D7)** — the
   version bump + CHANGELOG for M0–M2 rides the next oxvif release.
+  - *0.13.1 — selectable read surface (`src/metamorph/surface.rs`).* The record
+    half is now a **two-level selectable surface**: `SurfaceGroup` (seven service
+    zones) and `SurfaceOp` (~50 individual `Get*` reads), with
+    `SurfaceOp::requires()` exposing the token-source prerequisite as a depth-1
+    dependency tree (for an oxdm right-click "pick what to clone" tree, per D6 —
+    the library gives the relations, the UI draws them). `SurfaceSelection` holds
+    the literal picks; `drive_surface` / `record_surface` drive a chosen subset
+    and return a `SweepReport` (`Recorded` / `Failed` / `SkippedNoData` /
+    `SkippedPrerequisite`) — the "hard prerequisite" feedback that tells a tester
+    *no such path on this device* from *this command broke*.
+    `drive_standard_surface` now sweeps the full non-destructive `Get*` surface
+    (was ~12 reads).
 - **M3 — WS-Discovery responder ([§5.2](#52-ws-discovery-responder))** ✅ *(commit `e448321`)*.
   `src/mock/discovery_responder.rs` (`mock-server`): pure `build_probe_match` +
   `probe_response` (Probe → ProbeMatch, `<Types>` AND-filter by local name,
@@ -340,8 +352,19 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   *Partial:* the **structural** half is done —
   `FixtureStore::diff_against_synthetic` diffs each clone response's element-path
   set against the synthetic baseline and returns a serde-serialisable
-  `QuirkReport`. Value / type-level (semantic) diff over the now-serde-derived
-  types remains.
+  `QuirkReport` (`diff_details` renders the git-style side-by-side).
+  - *0.13.1 — parse verification (value/type half).*
+    `FixtureStore::verify_parsing` runs oxvif's **own typed parser** over each
+    recorded response → `ParseReport` (`Parsed` + extracted JSON / `Failed` +
+    error / `Unverified`). Baseline-free and oxvif-opinionated: it answers "will
+    oxvif choke on this device", catching value/type quirks structure can't see
+    (a non-integer where an int is expected). It **complements**, not replaces,
+    the structural diff — the SOAP side-by-side is retained as the oxvif-independent
+    evidence layer. Both share the `(action, key_canon)` key for a UI to join
+    (verdict badge + SOAP diff drill-down). Implemented via a single-response
+    transport driving the client read methods, so no parser logic is duplicated;
+    the `metamorph` feature now enables `serde` for the JSON. Deeper value diff
+    *between* clone and a real reference (not just parse/no-parse) is still open.
 
 M0–M2 is a complete, independently deliverable "metamorph that clones a real
 camera" — do not wait for the rest.

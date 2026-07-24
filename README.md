@@ -1223,6 +1223,32 @@ let clone = record_standard_surface(
 clone.save("clones/hikvision-ds2cd")?;   // → clones/hikvision-ds2cd/fixtures.json
 ```
 
+`record_standard_surface` sweeps the **full non-destructive `Get*` surface**
+(per-profile stream/snapshot URIs, encoder/source configs, OSD, audio, PTZ,
+imaging, events, and Media2 when advertised). To capture only part of it — a
+whole zone, or a single command to reproduce a model-specific quirk — use
+`record_surface` with a `SurfaceSelection`; it returns a `SweepReport` telling
+you which operations were recorded, which the device errored on, and which were
+skipped for a missing prerequisite. Per-token operations declare their token
+source via `SurfaceOp::requires()`, so a UI can render the surface as a
+dependency tree and the driver auto-includes prerequisites:
+
+```rust
+use oxvif::metamorph::{SurfaceGroup, SurfaceSelection, record_surface};
+
+// Just the media zone plus the single GetStreamUri command.
+let selection = SurfaceSelection::from_groups(&[SurfaceGroup::Media]);
+let (clone, report) = record_surface(
+    "http://192.168.1.100/onvif/device_service",
+    Some(("admin", "password")),
+    "hikvision-ds2cd",
+    &selection,
+).await?;
+for op in report.skipped() {
+    eprintln!("skipped {}: {:?}", op.action_name(), report.outcome(op));
+}
+```
+
 Replay it **in-process** by pointing an ordinary `OnvifClient` at a
 `MetamorphTransport` — the client-drivable counterpart of `MockTransport`. Reads
 reproduce the recorded device verbatim; writes fall through to synthetic
@@ -1289,6 +1315,30 @@ for q in &report.quirks {
 > `diff_details() -> Vec<OperationDiff>` renders each operation's baseline and
 > clone responses as aligned, pretty-printed XML (instance values like IPs and
 > tokens normalised) ready for a git-style line diff.
+
+### Parse verification — will oxvif choke on this device
+
+`FixtureStore::verify_parsing().await` runs oxvif's **own typed parser** over each
+recorded response and returns a `ParseReport` of `ParseVerdict`s: `Parsed` (with
+the extracted value as JSON), `Failed` (with the parser error), or `Unverified`
+(no parser wired — a write/event op the sweep never records). This is the
+value / type-level check — it catches quirks the structural diff is blind to,
+e.g. a device returning `<Width>1080p</Width>` where oxvif expects an integer:
+same element path (no structural drift), but the parser rejects it.
+
+```rust
+let store  = FixtureStore::load("clones/hikvision-ds2cd")?;
+let report = store.verify_parsing().await;
+for v in report.failures() {
+    println!("oxvif cannot parse {}: {}", v.action, v.error.as_deref().unwrap_or(""));
+}
+```
+
+The two diffs are **complementary, not either/or**. Parse verification is
+oxvif-opinionated (the verdict: does it work?); the structural SOAP diff is
+oxvif-independent wire truth (the evidence: what does the device actually send?).
+Both are keyed by `(action, key_canon)`, so a UI can join them per operation — the
+parse verdict as the status badge, the side-by-side SOAP diff as the drill-down.
 
 ### Adapter / skin (Persona C)
 
