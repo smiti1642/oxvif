@@ -139,8 +139,11 @@ impl FixtureStore {
 
     /// Per-operation side-by-side material: for every recorded exchange, the
     /// synthetic baseline and the clone response rendered as aligned,
-    /// pretty-printed, ephemera-masked, Header-stripped XML — the raw input for
-    /// a git-style line diff. `differs` mirrors [`diff_against_synthetic`].
+    /// pretty-printed, Header-stripped XML — the raw input for a git-style line
+    /// diff. Instance-specific values (transport ephemera, tokens, and
+    /// IPv4/IPv6/MAC literals, including IPs inside URLs) are normalised to a
+    /// placeholder, so a line that differs only in such a value doesn't show as
+    /// a change. `differs` mirrors [`diff_against_synthetic`].
     pub fn diff_details(&self) -> Vec<OperationDiff> {
         self.fixtures()
             .iter()
@@ -150,8 +153,8 @@ impl FixtureStore {
                 OperationDiff {
                     action: f.action.clone(),
                     key_canon: f.key_canon.clone(),
-                    baseline_xml: pretty_xml(&synthetic, Masking::Key),
-                    clone_xml: pretty_xml(&f.response_raw, Masking::Key),
+                    baseline_xml: pretty_xml(&synthetic, Masking::Value),
+                    clone_xml: pretty_xml(&f.response_raw, Masking::Value),
                     differs: element_paths(&f.response_raw) != element_paths(&synthetic),
                 }
             })
@@ -180,9 +183,9 @@ fn pretty_node(out: &mut String, node: &XmlNode, depth: usize, masking: Masking,
     attrs.sort_by(|a, b| a.0.cmp(b.0));
     for (k, v) in attrs {
         let val = if mask_attr(k, masking) {
-            MASK
+            MASK.to_string()
         } else {
-            v.as_str()
+            normalize_instance_values(v)
         };
         open.push_str(&format!(" {k}=\"{val}\""));
     }
@@ -206,13 +209,13 @@ fn pretty_node(out: &mut String, node: &XmlNode, depth: usize, masking: Masking,
     } else if children.is_empty() {
         let t = text.unwrap();
         let shown = if mask_text(&node.local_name, masking) {
-            MASK
+            MASK.to_string()
         } else {
-            &t
+            normalize_instance_values(&t)
         };
         out.push_str(&open);
         out.push('>');
-        out.push_str(shown);
+        out.push_str(&shown);
         out.push_str(&format!("</{}>\n", node.local_name));
     } else {
         out.push_str(&open);
@@ -222,6 +225,89 @@ fn pretty_node(out: &mut String, node: &XmlNode, depth: usize, masking: Masking,
         }
         out.push_str(&format!("{indent}</{}>\n", node.local_name));
     }
+}
+
+/// Normalise instance-specific values that differ per device but aren't a
+/// structural quirk — IPv4/IPv6/MAC literals (in bare values *and* inside URLs
+/// like `XAddr`) — to a stable placeholder, so a line that differs only in such
+/// a value collapses to an equal (un-highlighted) row in the side-by-side diff.
+/// Token identifiers are handled separately by [`Masking::Value`].
+fn normalize_instance_values(s: &str) -> String {
+    normalize_ipv6(&normalize_ipv4(s))
+}
+
+/// Replace every dotted-quad IPv4 literal (each octet 0–255) with `x.x.x.x`.
+fn normalize_ipv4(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        if bytes[i].is_ascii_digit() {
+            let start = i;
+            while i < s.len() && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
+                i += 1;
+            }
+            let run = &s[start..i];
+            out.push_str(if is_ipv4(run) { "x.x.x.x" } else { run });
+        } else {
+            let ch = s[i..].chars().next().unwrap();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    out
+}
+
+fn is_ipv4(run: &str) -> bool {
+    let parts: Vec<&str> = run.split('.').collect();
+    parts.len() == 4
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.len() <= 3 && p.parse::<u16>().is_ok_and(|n| n <= 255))
+}
+
+/// Replace IPv6 / MAC-style literals (hex groups joined by `:`) with `x:x`.
+/// Guarded so plain times like `12:34:56` (no hex letter, no `::`) are left
+/// alone. Runs after [`normalize_ipv4`], whose `x.x.x.x` output has no colons.
+fn normalize_ipv6(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        if is_hexish(bytes[i]) {
+            let start = i;
+            while i < s.len() && is_hexish(bytes[i]) {
+                i += 1;
+            }
+            let run = &s[start..i];
+            out.push_str(if looks_like_ipv6_or_mac(run) {
+                "x:x"
+            } else {
+                run
+            });
+        } else {
+            let ch = s[i..].chars().next().unwrap();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    out
+}
+
+fn is_hexish(c: u8) -> bool {
+    c.is_ascii_hexdigit() || c == b':'
+}
+
+fn looks_like_ipv6_or_mac(run: &str) -> bool {
+    if !run.contains(':') {
+        return false;
+    }
+    // A hex *letter* (a–f) or a `::` distinguishes an address/MAC from a plain
+    // numeric time like `12:34:56`.
+    run.contains("::")
+        || run
+            .bytes()
+            .any(|b| b.is_ascii_hexdigit() && !b.is_ascii_digit())
 }
 
 /// The set of element paths in `xml` — prefix-agnostic, slash-joined local names
@@ -260,6 +346,22 @@ fn walk(node: &XmlNode, prefix: &str, set: &mut BTreeSet<String>) {
 mod tests {
     use super::*;
     use crate::metamorph::FixtureStore;
+
+    #[test]
+    fn normalize_masks_addresses_but_not_times_or_versions() {
+        // IPv4 in a bare value and inside a URL.
+        assert_eq!(normalize_instance_values("192.168.1.5"), "x.x.x.x");
+        assert_eq!(
+            normalize_instance_values("rtsp://10.0.0.9:554/live"),
+            "rtsp://x.x.x.x:554/live"
+        );
+        // IPv6 and MAC.
+        assert_eq!(normalize_instance_values("fe80::1"), "x:x");
+        assert_eq!(normalize_instance_values("00:1A:2B:3C:4D:5E"), "x:x");
+        // A plain numeric time and a 3-part version are left alone.
+        assert_eq!(normalize_instance_values("12:34:56"), "12:34:56");
+        assert_eq!(normalize_instance_values("5.1.2"), "5.1.2");
+    }
 
     #[test]
     fn diff_details_render_aligned_masked_header_stripped_bodies() {
