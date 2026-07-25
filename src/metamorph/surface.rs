@@ -26,10 +26,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+use serde::{Deserialize, Serialize};
+
 use crate::OnvifSession;
 
 /// A coarse service zone — the top level of the selectable read surface.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum SurfaceGroup {
     /// Device identity & service discovery.
@@ -93,7 +95,9 @@ macro_rules! surface_ops {
         /// once per discovered token; the token source is given by
         /// [`SurfaceOp::requires`]. The derived ordering follows declaration
         /// order in [`SurfaceOp::ALL`], giving reports a stable sort.
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(
+            Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+        )]
         #[non_exhaustive]
         pub enum SurfaceOp { $( $variant ),+ }
 
@@ -227,7 +231,7 @@ impl SurfaceOp {
 /// Store the user's literal picks here; the driver expands prerequisites
 /// ([`SurfaceOp::requires`]) internally, so a selection of just
 /// [`SurfaceOp::GetStreamUri`] still yields a replayable clone.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SurfaceSelection(HashSet<SurfaceOp>);
 
 impl SurfaceSelection {
@@ -316,7 +320,7 @@ impl SurfaceSelection {
 }
 
 /// What happened to a selected [`SurfaceOp`] during a sweep.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum OpOutcome {
     /// The operation ran and at least one response was captured.
@@ -350,7 +354,7 @@ impl OpOutcome {
 /// [`OpOutcome::Recorded`] when its token source actually produced data, so a
 /// tester can tell "this device has no such path" ([`OpOutcome::SkippedNoData`])
 /// apart from "the command itself broke" ([`OpOutcome::Failed`]).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SweepReport {
     outcomes: HashMap<SurfaceOp, OpOutcome>,
 }
@@ -962,5 +966,45 @@ mod tests {
             "a child whose token source failed is SkippedPrerequisite, not Failed"
         );
         assert!(!report.is_complete());
+    }
+
+    /// A saved selection reloads as the same set — the "remember what the user
+    /// ticked" round trip a UI relies on.
+    #[test]
+    fn surface_selection_json_roundtrip() {
+        let sel = SurfaceSelection::none()
+            .with(SurfaceOp::GetStreamUri)
+            .with(SurfaceOp::GetProfiles);
+        let json = serde_json::to_string(&sel).unwrap();
+        let back: SurfaceSelection = serde_json::from_str(&json).unwrap();
+
+        let mut before: Vec<_> = sel.iter().collect();
+        let mut after: Vec<_> = back.iter().collect();
+        before.sort();
+        after.sort();
+        assert_eq!(before, after);
+    }
+
+    /// `SweepReport` keys its map by `SurfaceOp`, so serialising it depends on
+    /// the enum rendering as a JSON *object key* (a string) rather than a
+    /// struct. Guards that specifically — it is the one shape that would fail
+    /// at runtime while still compiling.
+    #[test]
+    fn sweep_report_json_roundtrip_uses_string_keys() {
+        let mut report = SweepReport::default();
+        report.observe(SurfaceOp::GetProfiles, true);
+        report.observe(SurfaceOp::GetStreamUri, false);
+        report
+            .outcomes
+            .insert(SurfaceOp::GetPtzPresets, OpOutcome::SkippedNoData);
+
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(
+            json.contains("\"GetProfiles\":\"Recorded\""),
+            "op should be a string key, json was: {json}"
+        );
+
+        let back: SweepReport = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.entries(), report.entries());
     }
 }

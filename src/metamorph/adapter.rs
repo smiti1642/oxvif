@@ -28,6 +28,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 use crate::mock::fault_injection::FaultInjector;
 use crate::mock::helpers::{resp_empty, soap};
@@ -38,7 +39,7 @@ use crate::transport::{Transport, TransportError};
 use crate::types::xml_escape;
 
 /// Advertised device identity — the `GetDeviceInformation` fields.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DeviceIdentity {
     pub manufacturer: String,
     pub model: String,
@@ -48,7 +49,7 @@ pub struct DeviceIdentity {
 }
 
 /// A PTZ continuous-move velocity (each component nominally in `-1.0..=1.0`).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct PtzVector {
     pub pan: f32,
     pub tilt: f32,
@@ -56,7 +57,7 @@ pub struct PtzVector {
 }
 
 /// Outcome of an optional adapter hook.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AdapterResult {
     /// The adapter handled the operation.
     Handled,
@@ -425,5 +426,43 @@ mod tests {
         assert_eq!(v.pan, 0.5);
         assert_eq!(v.tilt, -0.25);
         assert_eq!(v.zoom, 0.1);
+    }
+
+    /// The adapter's own data types serialise, so a Persona C device profile
+    /// can be stored as config rather than hard-coded in Rust.
+    #[test]
+    fn adapter_data_types_json_roundtrip() {
+        let identity = DeviceIdentity {
+            manufacturer: "Acme".to_string(),
+            model: "RTSP-Skin".to_string(),
+            firmware_version: "1.0".to_string(),
+            serial_number: "SN-1".to_string(),
+            hardware_id: "HW-1".to_string(),
+        };
+        let json = serde_json::to_string(&identity).unwrap();
+        assert!(
+            json.contains("\"firmware_version\":\"1.0\""),
+            "json was: {json}"
+        );
+        let back: DeviceIdentity = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.model, identity.model);
+        assert_eq!(back.serial_number, identity.serial_number);
+
+        let v = PtzVector {
+            pan: 0.5,
+            tilt: -0.25,
+            zoom: 0.1,
+        };
+        let back: PtzVector = serde_json::from_str(&serde_json::to_string(&v).unwrap()).unwrap();
+        assert_eq!(back.pan, v.pan);
+        assert_eq!(back.tilt, v.tilt);
+        assert_eq!(back.zoom, v.zoom);
+
+        let json = serde_json::to_string(&AdapterResult::Unsupported).unwrap();
+        assert_eq!(json, "\"Unsupported\"");
+        assert_eq!(
+            serde_json::from_str::<AdapterResult>(&json).unwrap(),
+            AdapterResult::Unsupported
+        );
     }
 }

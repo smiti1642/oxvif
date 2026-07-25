@@ -23,10 +23,11 @@ features = ["mock-server", "health"]
 
 [features]
 # Derive `serde::Serialize` + `Deserialize` on every public response type in
-# `oxvif::types`, so they can be exposed directly over a REST API / persisted
-# as JSON without hand-cloning parallel structs. Off by default — pulls no new
-# dependency and costs nothing unless enabled. Field names are the Rust-native
-# snake_case identifiers (no `rename_all`).
+# `oxvif::types` plus the WS-Discovery result types (`DiscoveredDevice`,
+# `DiscoveryEvent`), so they can be exposed directly over a REST API /
+# persisted as JSON without hand-cloning parallel structs. Off by default —
+# pulls no new dependency and costs nothing unless enabled. Field names are the
+# Rust-native snake_case identifiers (no `rename_all`).
 serde = ["dep:serde"]
 # In-process mock ONVIF device for unit-testing client code without a camera.
 # `mock` gives the zero-network `MockTransport`; `mock-server` adds a real

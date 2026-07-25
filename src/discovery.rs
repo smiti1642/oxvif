@@ -38,6 +38,7 @@ const UDP_MAX_SIZE: usize = 65_535;
 // ── DiscoveredDevice ──────────────────────────────────────────────────────────
 
 /// A device found via WS-Discovery.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct DiscoveredDevice {
     /// Unique endpoint address (typically a `uuid:…` URN).
@@ -89,6 +90,7 @@ impl DiscoveredDevice {
 /// multicast port.
 ///
 /// Devices broadcast `Hello` on arrival and `Bye` on departure.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub enum DiscoveryEvent {
     /// A device has announced itself on the network.
@@ -866,6 +868,65 @@ mod tests {
                 .iter()
                 .any(|t| t.contains("NetworkVideoTransmitter"))
         );
+    }
+
+    /// The `serde` feature covers the discovery types too, not just
+    /// `oxvif::types` — `probe` results are the first thing a REST layer wants
+    /// to hand out as JSON.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_discovered_device_json_roundtrip() {
+        let xml = probe_match_xml(
+            "uuid:serde-0000-0000-0000-000000000042",
+            "http://192.168.1.42/onvif/device_service",
+        );
+        let root = XmlNode::parse(&xml).unwrap();
+        let device = collect_probe_matches(&root).remove(0);
+
+        let json = serde_json::to_string(&device).unwrap();
+        // Field names are the plain Rust identifiers (no `rename_all`).
+        assert!(
+            json.contains("\"endpoint\":\"uuid:serde-0000-0000-0000-000000000042\""),
+            "json was: {json}"
+        );
+
+        let back: DiscoveredDevice = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.endpoint, device.endpoint);
+        assert_eq!(back.xaddrs, device.xaddrs);
+        assert_eq!(back.scopes, device.scopes);
+        assert_eq!(back.types, device.types);
+    }
+
+    /// `DiscoveryEvent` wraps `DiscoveredDevice`, so it only serialises if the
+    /// inner type does — both variants are checked.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_discovery_event_json_roundtrip() {
+        let bye = DiscoveryEvent::Bye {
+            endpoint: "uuid:gone-0000-0000-0000-000000000007".to_string(),
+        };
+        let json = serde_json::to_string(&bye).unwrap();
+        match serde_json::from_str::<DiscoveryEvent>(&json).unwrap() {
+            DiscoveryEvent::Bye { endpoint } => {
+                assert_eq!(endpoint, "uuid:gone-0000-0000-0000-000000000007");
+            }
+            DiscoveryEvent::Hello(_) => panic!("expected Bye"),
+        }
+
+        let hello_src = hello_xml(
+            "uuid:hi-0000-0000-0000-000000000008",
+            "http://192.168.1.8/onvif/device_service",
+        );
+        let root = XmlNode::parse(&hello_src).unwrap();
+        let (event, _) = collect_discovery_events(&root).remove(0);
+        let json = serde_json::to_string(&event).unwrap();
+        match serde_json::from_str::<DiscoveryEvent>(&json).unwrap() {
+            DiscoveryEvent::Hello(d) => {
+                assert_eq!(d.endpoint, "uuid:hi-0000-0000-0000-000000000008");
+                assert_eq!(d.xaddrs, ["http://192.168.1.8/onvif/device_service"]);
+            }
+            DiscoveryEvent::Bye { .. } => panic!("expected Hello"),
+        }
     }
 
     #[test]

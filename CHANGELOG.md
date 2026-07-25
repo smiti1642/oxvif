@@ -53,6 +53,22 @@ feature-gated (`metamorph`); no public API removed.
   Persona C to arbitrary per-device operations without waiting on typed hooks
   landing upstream.
 
+### Added (`serde` feature)
+- **`DiscoveredDevice`** and **`DiscoveryEvent`** now derive
+  `Serialize` / `Deserialize` under the `serde` feature. They were the only
+  always-public data types the feature missed, so `discovery::probe` results
+  could not be handed to a REST layer or persisted without a hand-cloned
+  parallel struct. Reported by a downstream user.
+
+### Added (`metamorph` feature — serialization)
+- The metamorph **surface** and **adapter** data types now derive
+  `Serialize` / `Deserialize`, matching `ParseReport` / `QuirkReport` which
+  already did: `SurfaceOp`, `SurfaceGroup`, `SurfaceSelection`, `OpOutcome`,
+  `SweepReport`, `DeviceIdentity`, `PtzVector`, `AdapterResult`. A UI can now
+  persist which operations the user ticked and store a sweep result alongside
+  the parse and quirk reports. Unconditional (the `metamorph` feature already
+  requires `serde`).
+
 ### Changed
 - `drive_standard_surface` now sweeps the full non-destructive `Get*` surface
   (per-profile / per-token reads, OSD, audio, PTZ, imaging, events, and Media2
