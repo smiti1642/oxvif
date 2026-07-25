@@ -30,9 +30,14 @@ two multi-service fixture helpers live in `src/tests/common.rs`, declared once f
 **Migration notes for the 0.14.0 release notes** (accumulating; the release SOP
 writes `CHANGELOG.md`, the stages deliberately do not):
 
-- *Stage 3.* Invalidates every already-recorded metamorph clone. The lost Media1
-  fixtures were never written to disk, so no upgrade path can recover them —
-  users must re-record.
+- *Stage 3.* **The on-disk format does not change** — `Fixture` already carries
+  `action`, and `load()` rebuilds the index by re-`insert()`ing each entry
+  (`src/metamorph/fixture.rs:98-100`), so old `fixtures.json` files keep loading.
+  What an old clone cannot recover is the exchanges that were never written:
+  **4 of the 64 exchanges in a recommended sweep** (measured, see D1). Those four
+  replay as an honest miss after the fix instead of silently returning the other
+  service's envelope, so an un-re-recorded clone gets *less* wrong, not more.
+  Re-recording is still the recommendation, and it is the only way to fill the gap.
 - *Stage 2.* `OnvifClient::get_discovery_mode` / `OnvifSession::get_discovery_mode`
   now return `Err(SoapError::MissingField("GetDiscoveryModeResponse/DiscoveryMode"))`
   where a device that omitted the element previously produced `Ok("")`. Signature
@@ -51,7 +56,7 @@ writes `CHANGELOG.md`, the stages deliberately do not):
 | 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | **done** — `894b865` |
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
-| 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | not started |
+| 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | step 1 in progress |
 | 4 | Positive+negative pairs for the 26 zero-coverage + 21 hollow-negative methods | additive | not started |
 
 Verdicts for the four finished stages are in [§9](#9-stage-verdicts) — what each one
@@ -163,6 +168,16 @@ The full ledger was measured while Stage 1a was in flight (see C11b) and must be
 - Stage 3 step 1 adds the new `lookup` signature with the old kept as a
   deprecated shim; step 2 removes the shim. Test-first is impossible in one step
   because the target test cannot compile against a signature that does not exist.
+  **The shim cannot be correct** — the old signature has no `action` to
+  disambiguate with, so it can only keep today's ambiguous "first match by key"
+  behaviour. Its `#[deprecated]` note must say that outright, not just "use the
+  new API": a caller who reads it as an equivalent rename keeps the bug.
+  Three facts that shrink this stage, all verified 2026-07-26:
+  `ReplayResponder::respond` already holds `ctx.action` (it calls
+  `operation(ctx.action)` at `src/metamorph/replay.rs:47`), so no plumbing is
+  needed; `record()` already takes `action` and merely fails to key on it; and the
+  *reporting* layer already treats the pair as the identity
+  (`src/metamorph/fixture.rs:47`). The break is confined to one public function.
 
 ---
 
@@ -187,9 +202,35 @@ key alone and `find_response` is prefix-agnostic, so a Media1 read replays the
 Media2 envelope, **parses successfully, and returns wrong data** while
 `SweepReport` still reports `Recorded`.
 
+*Measured 2026-07-26* (sandbox, scratch tap over a `MockServer` sweep, reverted
+after): a `SurfaceSelection::recommended()` sweep issues **64 exchanges** that
+collapse to **59 keys**. Four of those five collapses are cross-action — real
+loss — and they are exactly the Media1/Media2 pairs whose canonical bodies match:
+
+| colliding key | actions |
+|---|---|
+| `<GetProfiles/>` | `ver10/media/wsdl/GetProfiles`, `ver20/media/wsdl/GetProfiles` |
+| `<GetVideoSourceConfigurations/>` | ver10, ver20 |
+| `<GetVideoEncoderConfigurations/>` | ver10, ver20 |
+| `<GetVideoEncoderConfigurationOptions/>` | ver10, ver20 |
+
+`GetStreamUri` and `GetSnapshotUri` do **not** collide despite sharing a local
+name — Media1 sends `StreamSetup/Stream/Transport`, Media2 sends `Protocol`, so
+the bodies differ. The fifth collapse is same-action and is the legitimate
+ephemera de-dup. Note what the key looks like:
+`<Envelope><Header><To>__MASKED__</To></Header><Body><GetProfiles/></Body></Envelope>`
+— the endpoint URL, the one field that *would* have separated the two services,
+is masked as transport ephemera. That is why the action has to enter the key
+rather than the masking being loosened.
+
+Since the key derives from the request the *client* builds, this measurement is
+device-independent; a real device only changes how many operations get swept.
+
 Must preserve: ephemera de-duplication (`src/metamorph/fixture.rs`,
 `ephemera_jitter_does_not_fragment_the_key`) — two records differing only in
-`MessageID` must still collapse to one.
+`MessageID` must still collapse to one. The measurement above already contains
+one such legitimate collapse, so a fix that keys on the raw request would take
+the count from 59 to 60 and *look* like it lost nothing while breaking dedup.
 
 **D2 · Six mock operations return response elements that exist in no ONVIF WSDL.**
 `src/mock/dispatch.rs:102-105` collapses four ops onto `"ConfigurationResponse"`;
