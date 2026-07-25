@@ -168,10 +168,27 @@ Run **all** of this per stage. Record pass/fail in the stage's review, not from 
    that is not actually negative.
 
 **C. Mutation kill (the main instrument)**
+
+> **Mutate only in the sandbox worktree — never in the main checkout.**
+> `C:/Users/Null/Documents/GitHub/oxvif-mut` is a detached-HEAD worktree of this
+> repo carrying a `pre-commit` hook (scoped to it via `git config --worktree
+> core.hooksPath`) that refuses every commit. Reason: a mutation left in the main
+> tree can be swept into someone else's commit — that already happened once, when
+> a `git add` picked up a concurrent agent's staged `git rm`. Isolation also lets
+> a mutation run while agents work in the main tree.
+>
+> ```sh
+> cd C:/Users/Null/Documents/GitHub/oxvif-mut
+> git fetch . refactor/2026-07 && git checkout --detach FETCH_HEAD   # sync to the commit under review
+> # …mutate, test, then:
+> git checkout -- . && git status --short                            # must be clean
+> ```
+
 6. Pick a mutation point **the agent did not use** — an agent that verifies its
    own net tends to pick the one case it had in mind.
-7. Break production code, run the specific test, confirm red, then
-   `git checkout -- <file>` and confirm `git status` clean.
+7. Break production code, run the test suite **unfiltered** (see C10 — a filtered
+   `cargo test` silently drops the integration crates), confirm red, then
+   `git checkout -- .` and confirm `git status` clean.
 8. At least one mutation per net/fix. Prefer breaking something that currently
    *works* over flipping something already known broken.
 
@@ -212,6 +229,13 @@ Mistakes actually made in this programme. Re-read before each stage.
 ---
 
 ## 7. Environment facts that bite
+
+- **Branch layout.** This programme lives on **`refactor/2026-07`**, branched from
+  `f94a747` (= `origin/develop`). `develop` was rewound to exactly its remote so
+  the staged work cannot leak into it; nothing here has been pushed. Merge back to
+  `develop` only when the whole programme is green, then follow the release SOP.
+- **Mutation sandbox:** `C:/Users/Null/Documents/GitHub/oxvif-mut`, a detached-HEAD
+  worktree with a commit-refusing hook. See §5 C. Keep it out of the main tree.
 
 - **rtk silently corrupts two things. Both produce plausible wrong answers, not errors.**
   1. *Regex mangling.* `grep -n '#\[cfg(test)\]'`, `grep 'x>{y}</x'` and
