@@ -39,11 +39,42 @@ disk, so no upgrade path can recover them — users must re-record.
 |---|---|---|---|
 | 0 | Regression safety net (tests only) | additive | **done** — `1e8d634` |
 | 0.5 | Split client tests by service; move mock snapshot to `tests/` | pure move | **done** — `e21ed7f` |
-| 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | not started |
+| 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | **done** — `894b865` |
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 3 encoding sites | non-breaking | not started |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | not started |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | not started |
-| 4 | Positive+negative pairs for every uncovered client method | additive | not started |
+| 4 | Positive+negative pairs for every uncovered client method | additive | not started — **scope open, see below** |
+
+**Stage 4 scope is larger than §1 assumed.** A survey of all **148** public
+`OnvifClient` methods (149 `pub fn` in `src/client/` minus the free function
+`notification_listener`; enumeration cross-checked against the 8 `impl OnvifClient`
+blocks and against `--list`) scores them against the CLAUDE.md positive+negative
+rule as:
+
+| verdict | count | meaning |
+|---|---|---|
+| covered | 32 | real positive **and** discriminating negative |
+| partial | 90 | real positive, negative **missing or weak** (`assert!(res.is_err())` only) |
+| zero | 26 | neither |
+
+So closing only the 26 zero-coverage methods leaves **90 methods still violating
+the rule**. §1's locked decision ("all zero-coverage client methods") therefore
+does *not* make the tree CLAUDE.md-compliant; that would be 116 methods. This
+needs an explicit decision before Stage 4 starts — recorded here so it cannot be
+silently resolved by whoever happens to run the stage.
+
+Two findings that sharpen it:
+- **PTZ has zero `covered` methods out of 18.** Six are zero-coverage
+  (`ptz_absolute_move`, `ptz_relative_move`, `ptz_continuous_move`, `ptz_stop`,
+  `ptz_get_presets`, `ptz_goto_preset`); the other twelve all lack a real negative.
+- **The 12 recording negatives are the most dangerous cluster.** Nine feed a real
+  `make_soap_fault_xml` response and then assert only `is_err()`. Turning a Fault
+  into an `UnexpectedResponse` or `MissingField` would leave all of them green.
+- `with_utc_offset` and `device_url` have **no call site in any test at all** — not
+  even in the snapshot net.
+
+The full ledger was measured while Stage 1a was in flight (see C11b) and must be
+**regenerated against a committed ref** before Stage 4 begins.
 
 **Ordering constraints (not preferences):**
 - Stage 0 had to complete alone — it photographs current behaviour, so a
@@ -230,8 +261,10 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C8 | The counts written into this doc were measured | Three were not, and all three came from shell `grep`, which §7.1 shows returns 0 on parenthesised patterns: "99 uses of `pub(crate)`" (real: 73), "16 lock poison sites" (real: 25), `src/lib.rs:200` (real: `:204-205`). **A tool that fails by returning `0`/nothing cannot be distinguished from a true negative.** Re-measure every number in this doc with the Grep tool before citing it. | reviewer |
 | C9 | rtk only mangles *search patterns* | It also **truncates command output** and appends a fake cargo-style summary (§7.2). Detected only because a 676-test baseline came back as 373. Any evidence gathered through rtk that "looks a bit short" is short. | reviewer |
 | C10 | `cargo test <filter>` is enough to prove a mutation was caught | It silently **excludes the integration crates** ("2 filtered out"). Mutation D (`GetPresetsResponse` typo) read as *not caught* under `cargo test --all-features client::ptz`, and as caught only under the unfiltered run. Always run the mutation check unfiltered, or the net looks weaker than it is. | reviewer |
-| C11 | Disjoint file scope means two stages can run concurrently | Not in one working tree. Both agents run `cargo test`, so each sees the other's half-finished edits and red-before-green becomes unprovable. Serialise, or give each agent its own worktree. Read-only work may run alongside. | reviewer |
+| C11 | Disjoint file scope means two stages can run concurrently | Not in one working tree. Both agents run `cargo test`, so each sees the other's half-finished edits and red-before-green becomes unprovable. Serialise, or give each agent its own worktree. | reviewer |
+| C11b | *(amending C11)* Read-only work may safely run alongside a writing stage | **No.** A read-only *analysis* of a tree being written produces a ledger of a state that never existed. The Stage 4 survey watched `imaging_tests.rs` grow 495 → 588 lines between two of its own tool calls, and only caught it by cross-checking `--list` against the file it had just read. Read-only work must run against a **committed** ref, not the live tree. | reviewer |
 | C12 | Counting Rust items with a line pattern is fine | `grep -c '^    ("'` gave **137** `EXPECTED` rows; the real count is **141**. The six missing rows are rustfmt-wrapped across lines *because their values are long* — i.e. the exact six broken entries the count existed to track. Count with a brace-matching parser, and prefer asserting a post-condition ("all 141 rows are `ok`") over a delta ("6 rows changed"). | reviewer |
+| C13 | `git checkout -- .` undoes a mutation | Not if the mutation was applied with `git checkout <commit> -- <path>`, which **stages** it. `checkout -- .` then restores the worktree *from the poisoned index*, and `git diff` reads clean while `git status` shows `M ` (staged). Undo with `git checkout HEAD -- <path>` and verify with `git diff HEAD --stat`, not `git diff`. | reviewer |
 
 ---
 
@@ -268,11 +301,19 @@ Mistakes actually made in this programme. Re-read before each stage.
   cargo test --all-features
   cargo test --all-features --doc
   ```
-- Test totals: **652** before Stage 0 → **674** after (629 lib / 9 integration / 36 doc),
-  verified by running the suite at `7daa4ac`. Note `-- --list` reports **676**
-  names, because 2 doc tests are `ignored` and so are listed but never run.
-  **Check #4 compares the 676-name set, not the 674 pass count.** Baseline name set
-  captured at `<scratchpad>/baseline-tests.txt`.
+- **Test totals move every stage — re-baseline before each review, from a *clean*
+  tree.** `-- --list` counts 2 `ignored` doc tests that the pass count omits, so
+  the listed number is always 2 above the passing number. Check #4 compares the
+  *listed name set*.
+
+  | at | listed | passing | split (lib / integration / doc) |
+  |---|---|---|---|
+  | `7daa4ac` (pre-0.5) | 676 | 674 | 629 / 9 / 36 |
+  | `e21ed7f` (post-0.5) | 676 | 674 | 627 / 2 + 9 / 36 |
+  | `894b865` (post-1a) | 688 | 686 | 640 / 1 + 9 / 36 |
+
+  The 0.5 → 1a delta is −1 (`known_broken_mock_actions_are_pinned`, deleted by
+  design) +13. Baseline sets live at `<scratchpad>/{baseline,after,1a}-tests.txt`.
 
 ---
 
