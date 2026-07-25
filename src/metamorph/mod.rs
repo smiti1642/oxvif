@@ -40,9 +40,21 @@
 //!   typed parser over each recorded response and reports whether it parses plus
 //!   the value extracted ([`ParseReport`]) — the value / type-level half. It
 //!   answers "will oxvif choke on this device", catching quirks the structural
-//!   diff is blind to (e.g. a non-integer where an int is expected). The two are
-//!   complementary and share the `(action, key_canon)` key so a UI can join them:
-//!   the parse verdict as the badge, the SOAP diff as the drill-down evidence.
+//!   diff is blind to (e.g. a non-integer where an int is expected). A response
+//!   the device *declined* with a SOAP Fault is classified
+//!   [`ParseStatus::Faulted`], kept out of [`ParseReport::failures`] — a
+//!   restricted account gets "the device said no", not "oxvif cannot parse this".
+//!   The two reports are complementary and share the `(action, key_canon)` key so
+//!   a UI can join them: the parse verdict as the badge, the SOAP diff as the
+//!   drill-down evidence.
+//! - **Progress**: each long pass has a `*_with_progress` twin taking an
+//!   `Fn(..) + Send + Sync` callback — [`drive_surface_with_progress`],
+//!   [`record_surface_with_progress`], [`FixtureStore::verify_parsing_with_progress`]
+//!   and [`FixtureStore::diff_against_synthetic_with_progress`] — so a UI can
+//!   drive a determinate progress bar instead of one opaque await. The sweep's
+//!   unit is a [`SurfaceOp`] ([`SweepProgress`]); the two fixture passes count
+//!   recorded exchanges ([`FixtureProgress`]). The plain forms delegate to these
+//!   with a no-op callback.
 //!
 //! Gated on the `metamorph` feature (a superset of `mock`).
 
@@ -58,12 +70,14 @@ pub use adapter::{
     AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, PtzVector,
     soap_body,
 };
-pub use fixture::{Fixture, FixtureStore};
+pub use fixture::{Fixture, FixtureProgress, FixtureStore};
 pub use parse::{ParseReport, ParseStatus, ParseVerdict};
 pub use quirk::{ChangedQuirk, OperationDiff, OperationQuirk, QuirkDiff, QuirkReport};
-pub use record::{RecordingTransport, record_standard_surface, record_surface};
+pub use record::{
+    RecordingTransport, record_standard_surface, record_surface, record_surface_with_progress,
+};
 pub use replay::{MetamorphTransport, ReplayResponder};
 pub use surface::{
-    OpOutcome, SurfaceGroup, SurfaceOp, SurfaceSelection, SweepReport, drive_standard_surface,
-    drive_surface,
+    OpOutcome, SurfaceGroup, SurfaceOp, SurfaceSelection, SweepProgress, SweepReport,
+    drive_standard_surface, drive_surface, drive_surface_with_progress,
 };

@@ -39,6 +39,28 @@ pub struct Fixture {
     pub response_raw: String,
 }
 
+/// Progress of a per-fixture pass over a [`FixtureStore`] — one event per
+/// recorded exchange examined.
+///
+/// Emitted by [`FixtureStore::verify_parsing_with_progress`] and
+/// [`FixtureStore::diff_against_synthetic_with_progress`]. The unit of work is
+/// one recorded [`Fixture`], identified by the same `(action, key_canon)` pair
+/// the reports are keyed on, so a UI can highlight the row it is working on.
+///
+/// [`FixtureStore::verify_parsing_with_progress`]: FixtureStore::verify_parsing_with_progress
+/// [`FixtureStore::diff_against_synthetic_with_progress`]: FixtureStore::diff_against_synthetic_with_progress
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FixtureProgress {
+    /// The SOAP action URI of the fixture just examined.
+    pub action: String,
+    /// The canonical, ephemera-masked request of the fixture just examined.
+    pub key_canon: String,
+    /// Fixtures completed so far, counting this one — `1..=total`.
+    pub done: usize,
+    /// Total fixtures in the store, known before the pass starts.
+    pub total: usize,
+}
+
 /// On-disk shape of a device's fixture set.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct OnDisk {

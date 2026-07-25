@@ -416,6 +416,28 @@ impl SweepReport {
     }
 }
 
+/// Progress of a surface sweep — one event per selected operation.
+///
+/// Emitted by [`drive_surface_with_progress`] and
+/// [`record_surface_with_progress`](super::record_surface_with_progress).
+///
+/// **The unit is a [`SurfaceOp`], not an HTTP request.** A per-token operation
+/// such as [`SurfaceOp::GetStreamUri`] contributes exactly *one* event no matter
+/// how many profile tokens the device turns out to have — the request count is
+/// unknowable before `GetProfiles` answers, whereas the operation count is known
+/// up front, which is what a determinate progress bar needs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SweepProgress {
+    /// The operation this event is for.
+    pub op: SurfaceOp,
+    /// Operations resolved so far, counting this one — `1..=total`.
+    pub done: usize,
+    /// The number of **selected operations after prerequisite expansion**
+    /// ([`SurfaceOp::requires`]) — i.e. everything the driver will resolve.
+    /// Known before the sweep starts. Not a request count.
+    pub total: usize,
+}
+
 /// Drive the recommended default read surface (every zone) against `session`.
 ///
 /// Equivalent to [`drive_surface`] with [`SurfaceSelection::recommended`].
@@ -433,10 +455,87 @@ pub async fn drive_standard_surface(session: &OnvifSession) -> SweepReport {
 /// [`RecordingTransport`](super::RecordingTransport), each successful exchange —
 /// prerequisites included — lands in its store.
 pub async fn drive_surface(session: &OnvifSession, selection: &SurfaceSelection) -> SweepReport {
+    drive_surface_with_progress(session, selection, |_| {}).await
+}
+
+/// Accumulates a [`SweepReport`] while emitting one [`SweepProgress`] per
+/// selected operation. Deliberately named so that `rep.observe(..)` in the
+/// driver body reads and behaves exactly as it did before progress existed.
+struct SweepRun<'a> {
+    rep: SweepReport,
+    done: usize,
+    total: usize,
+    progress: &'a (dyn Fn(SweepProgress) + Send + Sync),
+}
+
+impl SweepRun<'_> {
+    /// Record an attempt, ticking progress the **first** time this operation is
+    /// touched. A per-token operation is observed once per token but reported
+    /// once; the payload carries no outcome because at first touch the outcome
+    /// is still provisional (a later token can upgrade it to `Recorded`).
+    fn observe(&mut self, op: SurfaceOp, ok: bool) {
+        let first = !self.rep.outcomes.contains_key(&op);
+        self.rep.observe(op, ok);
+        if first {
+            self.tick(op);
+        }
+    }
+
+    fn tick(&mut self, op: SurfaceOp) {
+        self.done += 1;
+        (self.progress)(SweepProgress {
+            op,
+            done: self.done,
+            total: self.total,
+        });
+    }
+}
+
+/// [`drive_surface`], reporting progress as it goes.
+///
+/// `progress` is invoked **once per selected operation** (after prerequisite
+/// expansion): when the operation is first attempted, or — for one gated out by
+/// a prerequisite that failed or yielded no tokens — when it is resolved as
+/// skipped at the end. [`done`](SweepProgress::done) counts operations resolved,
+/// so the first call carries `done == 1` and the last `done == total`.
+///
+/// Attempted operations are reported in the driver's fixed order; the trailing
+/// skip-resolution batch is unordered (it walks the expanded selection's set),
+/// so a UI should treat the op as a label, not as a position.
+///
+/// [`total`](SweepProgress::total) is the size of the prerequisite-expanded
+/// selection, known before the first request goes out. It is **not** a request
+/// count: per-token operations issue one request per token and that count only
+/// becomes known once the device answers the list read. See [`SweepProgress`].
+///
+/// The callback is `Fn + Send + Sync` so it can be a closure that pushes into a
+/// channel shared with a UI thread, and so the returned future stays `Send`.
+///
+/// ```no_run
+/// # async fn run(session: &oxvif::OnvifSession) {
+/// use oxvif::metamorph::{SurfaceSelection, drive_surface_with_progress};
+/// let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+/// let report = drive_surface_with_progress(session, &SurfaceSelection::all(), move |p| {
+///     let _ = tx.send(p);
+/// })
+/// .await;
+/// # let _ = report;
+/// # }
+/// ```
+pub async fn drive_surface_with_progress(
+    session: &OnvifSession,
+    selection: &SurfaceSelection,
+    progress: impl Fn(SweepProgress) + Send + Sync,
+) -> SweepReport {
     use SurfaceOp::*;
     let eff = selection.effective();
     let want = |op: SurfaceOp| eff.contains(&op);
-    let mut rep = SweepReport::default();
+    let mut rep = SweepRun {
+        rep: SweepReport::default(),
+        done: 0,
+        total: eff.len(),
+        progress: &progress,
+    };
 
     // Identity & discovery.
     if want(GetDeviceInformation) {
@@ -821,17 +920,18 @@ pub async fn drive_surface(session: &OnvifSession, selection: &SurfaceSelection)
     // `requires()` targets are top-level list reads (depth-1 tree), so a single
     // pass suffices.
     for op in eff.iter().copied() {
-        if rep.outcomes.contains_key(&op) {
+        if rep.rep.outcomes.contains_key(&op) {
             continue;
         }
-        let outcome = match op.requires().and_then(|parent| rep.outcome(parent)) {
+        let outcome = match op.requires().and_then(|parent| rep.rep.outcome(parent)) {
             Some(OpOutcome::Recorded) => OpOutcome::SkippedNoData,
             _ => OpOutcome::SkippedPrerequisite,
         };
-        rep.outcomes.insert(op, outcome);
+        rep.rep.outcomes.insert(op, outcome);
+        rep.tick(op);
     }
 
-    rep
+    rep.rep
 }
 
 #[cfg(test)]
@@ -1006,5 +1106,135 @@ mod tests {
 
         let back: SweepReport = serde_json::from_str(&json).unwrap();
         assert_eq!(back.entries(), report.entries());
+    }
+
+    // ── progress ──────────────────────────────────────────────────────────────
+
+    /// Drain a sweep's progress events, sorted the way a caller sees them.
+    fn sweep_events(report_events: Vec<SweepProgress>) -> (Vec<usize>, Vec<SurfaceOp>) {
+        let dones = report_events.iter().map(|p| p.done).collect();
+        let mut ops: Vec<SurfaceOp> = report_events.iter().map(|p| p.op).collect();
+        ops.sort();
+        (dones, ops)
+    }
+
+    /// `total` is the **selected operations after prerequisite expansion**, and a
+    /// per-token operation ticks once however many tokens the device returns —
+    /// the mock serves two profiles, so `GetStreamUri` is driven twice but
+    /// reported once.
+    #[tokio::test]
+    async fn progress_totals_the_expanded_selection_and_ticks_once_per_op() {
+        let session = mock_session(Arc::new(MockTransport::new())).await;
+        let sel = SurfaceSelection::none().with(SurfaceOp::GetStreamUri);
+        assert_eq!(sel.len(), 1, "the user ticked one op");
+        assert_eq!(sel.effective().len(), 2, "expansion adds GetProfiles");
+
+        let seen = std::sync::Mutex::new(Vec::new());
+        let report =
+            drive_surface_with_progress(&session, &sel, |p| seen.lock().unwrap().push(p)).await;
+        let seen = seen.into_inner().unwrap();
+
+        assert!(
+            seen.iter().all(|p| p.total == 2),
+            "total is the expanded selection size, not a request count: {seen:?}"
+        );
+        let (dones, ops) = sweep_events(seen);
+        assert_eq!(dones, vec![1, 2], "one tick per op, ending at total");
+        assert_eq!(ops, vec![SurfaceOp::GetProfiles, SurfaceOp::GetStreamUri]);
+
+        // Both really were driven, and GetStreamUri ran per profile token — the
+        // event count deliberately does not follow the request count.
+        assert_eq!(
+            report.outcome(SurfaceOp::GetStreamUri),
+            Some(OpOutcome::Recorded)
+        );
+        assert!(
+            session.get_profiles().await.expect("mock profiles").len() > 1,
+            "the mock must serve several profiles for this test to mean anything"
+        );
+    }
+
+    /// An operation gated out by a failed prerequisite is never attempted, so it
+    /// ticks in the final skip-resolution pass instead — `done` still reaches
+    /// `total`.
+    #[tokio::test]
+    async fn progress_ticks_operations_resolved_as_skipped() {
+        let transport = Arc::new(FailAction {
+            inner: MockTransport::new(),
+            fail_suffix: "/GetProfiles",
+        });
+        let session = mock_session(transport).await;
+        let sel = SurfaceSelection::none().with(SurfaceOp::GetStreamUri);
+
+        let seen = std::sync::Mutex::new(Vec::new());
+        let report =
+            drive_surface_with_progress(&session, &sel, |p| seen.lock().unwrap().push(p)).await;
+        let seen = seen.into_inner().unwrap();
+
+        assert_eq!(
+            report.outcome(SurfaceOp::GetStreamUri),
+            Some(OpOutcome::SkippedPrerequisite)
+        );
+        let (dones, ops) = sweep_events(seen);
+        assert_eq!(dones, vec![1, 2], "a skipped op still ticks exactly once");
+        assert_eq!(ops, vec![SurfaceOp::GetProfiles, SurfaceOp::GetStreamUri]);
+    }
+
+    /// Every op of a full sweep ticks exactly once, and `drive_surface` — which
+    /// delegates with a no-op callback — produces the identical report.
+    #[tokio::test]
+    async fn full_sweep_ticks_every_selected_op_exactly_once() {
+        let session = mock_session(Arc::new(MockTransport::new())).await;
+        let sel = SurfaceSelection::recommended();
+        let total = sel.effective().len();
+
+        let seen = std::sync::Mutex::new(Vec::new());
+        let with = drive_surface_with_progress(&session, &sel, |p| seen.lock().unwrap().push(p))
+            .await
+            .entries();
+        let seen = seen.into_inner().unwrap();
+
+        let (dones, mut ops) = sweep_events(seen);
+        assert_eq!(dones, (1..=total).collect::<Vec<_>>());
+        ops.dedup();
+        assert_eq!(ops.len(), total, "no operation ticks twice");
+        assert_eq!(
+            total,
+            SurfaceOp::ALL.len(),
+            "the recommended selection is everything"
+        );
+
+        let without = drive_surface(&session, &sel).await.entries();
+        assert_eq!(with, without, "the no-progress form is unchanged");
+    }
+
+    /// The Dioxus-desktop shape: the callback is a closure that sends into a
+    /// `tokio::sync::mpsc::UnboundedSender`, and the future stays `Send` so it
+    /// can be spawned. Compile-checked, not assumed.
+    #[tokio::test]
+    async fn progress_callback_accepts_an_mpsc_sender() {
+        fn assert_send<T: Send>(t: T) -> T {
+            t
+        }
+
+        let session = mock_session(Arc::new(MockTransport::new())).await;
+        let sel = SurfaceSelection::none().with(SurfaceOp::GetHostname);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<SweepProgress>();
+
+        let report = assert_send(drive_surface_with_progress(&session, &sel, move |p| {
+            let _ = tx.send(p);
+        }))
+        .await;
+        assert_eq!(
+            report.outcome(SurfaceOp::GetHostname),
+            Some(OpOutcome::Recorded)
+        );
+
+        let got = rx.recv().await.expect("one progress event");
+        assert_eq!(
+            (got.op, got.done, got.total),
+            (SurfaceOp::GetHostname, 1, 1)
+        );
+        assert!(rx.recv().await.is_none(), "sender dropped with the future");
     }
 }

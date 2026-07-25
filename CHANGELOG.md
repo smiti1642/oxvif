@@ -60,6 +60,32 @@ feature-gated (`metamorph`); no public API removed.
   could not be handed to a REST layer or persisted without a hand-cloned
   parallel struct. Reported by a downstream user.
 
+### Added (`metamorph` feature — progress reporting)
+- **`drive_surface_with_progress`**, **`record_surface_with_progress`**,
+  **`FixtureStore::verify_parsing_with_progress`** and
+  **`…::diff_against_synthetic_with_progress`** — determinate progress for the
+  four long operations, so a UI can show a real bar instead of freezing for the
+  length of a 52-operation sweep. The existing four functions are unchanged and
+  delegate with a no-op callback.
+- **`SweepProgress`** (`op` / `done` / `total`) and **`FixtureProgress`**
+  (`action` / `key_canon` / `done` / `total`) carry the events. The callback is
+  `Fn(..) + Send + Sync` so it can feed a channel from an async UI.
+- For the sweep, `total` counts **selected operations after prerequisite
+  expansion** — not HTTP requests, which are unknowable in advance because a
+  per-token operation runs once per token the device returns. Each operation
+  ticks exactly once, whether it was attempted or resolved as skipped.
+
+### Changed (`metamorph` feature — fault classification)
+- **`ParseStatus::Faulted`** — a recorded response carrying a well-formed SOAP
+  `Fault` is now classified `Faulted` rather than `Failed`. A device answering
+  `NotAuthorized` is behaving correctly; reporting it as "oxvif cannot parse
+  this" was wrong and, when sweeping with a restricted account, buried the real
+  interop failures under non-problems. `failures()` and `all_parsed()` keep
+  their meaning ("oxvif choked") and exclude `Faulted`; the new **`faulted()`**
+  iterator surfaces declined operations separately. `ParseStatus` is
+  `#[non_exhaustive]`, so the new variant is source-compatible — but any caller
+  counting `Failed` verdicts will see faults move out of that bucket.
+
 ### Added (`metamorph` feature — report ergonomics)
 - **`QuirkReport::to_json` / `to_json_pretty`** and **`ParseReport::to_json` /
   `to_json_pretty`** — matching `HealthReport`, so a caller no longer has to pull

@@ -41,7 +41,7 @@ use crate::mock::dispatch::dispatch;
 use crate::mock::state::MockState;
 use crate::soap::XmlNode;
 
-use super::fixture::FixtureStore;
+use super::fixture::{FixtureProgress, FixtureStore};
 
 /// Base URL handed to the synthetic dispatcher when producing the baseline. Only
 /// affects absolute URLs in the response *text*, which the structural diff
@@ -133,9 +133,9 @@ impl QuirkReport {
 /// Entries are ordered by that pair and every path list is sorted, so two runs
 /// over identical input serialise byte-identically.
 ///
-/// [`ParseVerdict`]: super::ParseVerdict
-///
 /// Computed via [`QuirkReport::diff`].
+///
+/// [`ParseVerdict`]: super::ParseVerdict
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuirkDiff {
     /// Operations that drift now but did not in the baseline — a newly quirky
@@ -277,8 +277,39 @@ impl FixtureStore {
     /// # Ok(()) }
     /// ```
     pub fn diff_against_synthetic(&self) -> QuirkReport {
+        self.diff_against_synthetic_with_progress(|_| {})
+    }
+
+    /// [`Self::diff_against_synthetic`], reporting progress as it goes.
+    ///
+    /// `progress` is invoked **once per recorded fixture**, immediately after
+    /// that fixture has been compared, with [`done`](FixtureProgress::done)
+    /// counting fixtures *completed* — the first call carries `done == 1` and
+    /// the last `done == total`. `total` is [`FixtureStore::len`], known before
+    /// any work starts, so a determinate progress bar is possible.
+    ///
+    /// The callback is `Fn + Send + Sync`, matching the other metamorph progress
+    /// entry points, so one closure (e.g. pushing into a channel shared with a
+    /// UI thread) can drive all of them.
+    ///
+    /// ```no_run
+    /// # fn run() -> std::io::Result<()> {
+    /// use oxvif::metamorph::FixtureStore;
+    /// let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    /// let store = FixtureStore::load("clones/hikvision-ds2cd")?;
+    /// let report = store.diff_against_synthetic_with_progress(move |p| {
+    ///     let _ = tx.send(p);
+    /// });
+    /// # let _ = report;
+    /// # Ok(()) }
+    /// ```
+    pub fn diff_against_synthetic_with_progress(
+        &self,
+        progress: impl Fn(FixtureProgress) + Send + Sync,
+    ) -> QuirkReport {
+        let total = self.fixtures().len();
         let mut quirks = Vec::new();
-        for f in self.fixtures() {
+        for (i, f) in self.fixtures().iter().enumerate() {
             // A fresh synthetic device answers the fixture's own request.
             let state = MockState::new();
             let synthetic = dispatch(&f.action, BASELINE_BASE, &state, &f.request_raw);
@@ -298,6 +329,12 @@ impl FixtureStore {
                     only_in_synthetic,
                 });
             }
+            progress(FixtureProgress {
+                action: f.action.clone(),
+                key_canon: f.key_canon.clone(),
+                done: i + 1,
+                total,
+            });
         }
         QuirkReport {
             device: self.device().to_string(),
@@ -826,5 +863,72 @@ mod tests {
         let base = report(vec![quirk(GET_PROFILES, "k1", &[], &[])]);
         let now = report(vec![quirk(GET_PROFILES, "k1", &["E/b", "E/a"], &[])]);
         assert_eq!(now.diff(&base).changed[0].clone_only_added, ["E/a", "E/b"]);
+    }
+
+    // ── progress ──────────────────────────────────────────────────────────────
+
+    /// Two fixtures, one drifting and one not — progress must fire for both, not
+    /// only for the ones that end up in the report.
+    fn two_fixture_store() -> FixtureStore {
+        let action = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+        let req = "<Envelope><Body><GetHostname/></Body></Envelope>";
+        let state = MockState::new();
+        let synthetic = dispatch(action, BASELINE_BASE, &state, req);
+
+        let mut store = FixtureStore::new("clone");
+        store.record(action, req, &synthetic);
+        store.record(
+            "http://www.onvif.org/ver10/device/wsdl/GetScopes",
+            "<Envelope><Body><GetScopes/></Body></Envelope>",
+            "<Envelope><Body><Whatever/></Body></Envelope>",
+        );
+        assert_eq!(store.len(), 2);
+        store
+    }
+
+    #[test]
+    fn progress_fires_once_per_fixture_and_ends_at_total() {
+        let store = two_fixture_store();
+        let seen = std::sync::Mutex::new(Vec::new());
+        let report = store.diff_against_synthetic_with_progress(|p| seen.lock().unwrap().push(p));
+        let seen = seen.into_inner().unwrap();
+
+        assert_eq!(seen.len(), store.len(), "one event per recorded fixture");
+        assert!(
+            seen.iter().all(|p| p.total == store.len()),
+            "total is the store size for every event: {seen:?}"
+        );
+        assert_eq!(
+            seen.iter().map(|p| p.done).collect::<Vec<_>>(),
+            vec![1, 2],
+            "done counts completed fixtures and ends at total"
+        );
+        // Fired for the clean fixture too, though only one op drifts.
+        assert_eq!(report.compared, 2);
+        assert_eq!(report.quirks.len(), 1, "{report:?}");
+
+        // The no-progress form is unchanged.
+        let plain = store.diff_against_synthetic();
+        assert_eq!(plain.quirks, report.quirks);
+        assert_eq!(plain.compared, report.compared);
+    }
+
+    /// The Dioxus-desktop shape: a closure sending into a
+    /// `tokio::sync::mpsc::UnboundedSender`. Compile-checked, not assumed.
+    #[test]
+    fn progress_callback_accepts_an_mpsc_sender() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let store = two_fixture_store();
+        let report = store.diff_against_synthetic_with_progress(move |p| {
+            let _ = tx.send(p);
+        });
+        assert_eq!(report.compared, 2);
+
+        let mut got = Vec::new();
+        while let Ok(p) = rx.try_recv() {
+            got.push(p);
+        }
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[1].done, got[1].total);
     }
 }
