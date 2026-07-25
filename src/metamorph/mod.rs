@@ -18,10 +18,13 @@
 //! - **Replay**: [`FixtureStore::load`] a set into a [`MetamorphTransport`] and
 //!   point an `OnvifClient` at it — no camera required.
 //!
-//! The fixture key is the canonical, ephemera-masked request
-//! (`Masking::Key`), so `GetProfile(token=A)` and
+//! The fixture key is the SOAP action paired with the canonical,
+//! ephemera-masked request (`Masking::Key`), so `GetProfile(token=A)` and
 //! `(token=B)` never collide while volatile fields (MessageID, nonce,
-//! timestamps) don't fragment the key.
+//! timestamps) don't fragment the key. The action is part of the key because
+//! the canonical request alone does not separate services: Media1's
+//! `<trt:GetProfiles/>` and Media2's `<tr2:GetProfiles/>` canonicalise to the
+//! same string once prefixes and the endpoint URL are removed.
 //!
 //! ## Serving the clone + finding quirks
 //!

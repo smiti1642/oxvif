@@ -57,7 +57,9 @@ impl Responder for ReplayResponder {
             return None;
         }
         let key = canonicalize(ctx.body, Masking::Key);
-        self.store.lookup(&key).map(|f| f.response_raw.clone())
+        self.store
+            .lookup(ctx.action, &key)
+            .map(|f| f.response_raw.clone())
     }
 }
 
@@ -344,6 +346,75 @@ mod tests {
         assert_eq!(
             responder.respond(&dns).await.as_deref(),
             Some(GET_DNS_RESPONSE)
+        );
+    }
+
+    // ── D1: replay must not cross two services onto one canonical key ─────────
+
+    const MEDIA1_GET_PROFILES: &str = "http://www.onvif.org/ver10/media/wsdl/GetProfiles";
+    const MEDIA2_GET_PROFILES: &str = "http://www.onvif.org/ver20/media/wsdl/GetProfiles";
+
+    const MEDIA1_PROFILES_REQ: &str = "<Envelope><Header><To>http://cam/onvif/Media</To></Header>\
+                                       <Body><trt:GetProfiles/></Body></Envelope>";
+    const MEDIA2_PROFILES_REQ: &str = "<Envelope><Header><To>http://cam/onvif/Media2</To></Header>\
+                                       <Body><tr2:GetProfiles/></Body></Envelope>";
+
+    const MEDIA1_PROFILES_RESP: &str = "<Envelope><Body><trt:GetProfilesResponse>\
+                                        <Profiles token=\"media1-profile\"/>\
+                                        </trt:GetProfilesResponse></Body></Envelope>";
+    const MEDIA2_PROFILES_RESP: &str = "<Envelope><Body><tr2:GetProfilesResponse>\
+                                        <Profiles token=\"media2-profile\"/>\
+                                        </tr2:GetProfilesResponse></Body></Envelope>";
+
+    /// The defect that matters most: a Media1 read whose canonical body is
+    /// identical to Media2's must replay the *Media1* envelope. Answering with
+    /// Media2's parses successfully and returns wrong data, with the sweep still
+    /// reporting `Recorded`.
+    #[tokio::test]
+    async fn replay_answers_each_service_with_its_own_recorded_envelope() {
+        // Premise: these two requests really do share one canonical key.
+        assert_eq!(
+            canonicalize(MEDIA1_PROFILES_REQ, Masking::Key),
+            canonicalize(MEDIA2_PROFILES_REQ, Masking::Key),
+        );
+
+        let mut store = FixtureStore::new("dev");
+        store.record(
+            MEDIA1_GET_PROFILES,
+            MEDIA1_PROFILES_REQ,
+            MEDIA1_PROFILES_RESP,
+        );
+        store.record(
+            MEDIA2_GET_PROFILES,
+            MEDIA2_PROFILES_REQ,
+            MEDIA2_PROFILES_RESP,
+        );
+
+        let responder = ReplayResponder::new(Arc::new(store), Arc::new(Mutex::new(HashSet::new())));
+        let state = MockState::new();
+
+        let media1 = RequestCtx {
+            action: MEDIA1_GET_PROFILES,
+            base: METAMORPH_BASE,
+            body: MEDIA1_PROFILES_REQ,
+            state: &state,
+        };
+        assert_eq!(
+            responder.respond(&media1).await.as_deref(),
+            Some(MEDIA1_PROFILES_RESP),
+            "a Media1 read must not be answered from the Media2 exchange"
+        );
+
+        let media2 = RequestCtx {
+            action: MEDIA2_GET_PROFILES,
+            base: METAMORPH_BASE,
+            body: MEDIA2_PROFILES_REQ,
+            state: &state,
+        };
+        assert_eq!(
+            responder.respond(&media2).await.as_deref(),
+            Some(MEDIA2_PROFILES_RESP),
+            "a Media2 read must not be answered from the Media1 exchange"
         );
     }
 }

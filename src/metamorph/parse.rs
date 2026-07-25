@@ -516,11 +516,12 @@ mod tests {
 
     /// A report covering all three verdict kinds, built through the public API.
     ///
-    /// Each fixture needs its own `request_raw`: [`FixtureStore::record`] derives
-    /// the key from the request body alone (the action is not an input) and
-    /// upserts, so sharing one placeholder body would collapse all three into a
-    /// single entry. Real recordings carry the operation element, which is what
-    /// keeps them distinct here too.
+    /// Each fixture needs its own `request_raw`: [`FixtureStore::record`] keys
+    /// on `(action, key_canon)` and upserts, so while the distinct actions here
+    /// would already keep these apart, sharing one placeholder body would make
+    /// the fixtures indistinguishable to a reader and to any per-key assertion.
+    /// Note the converse is *not* true — a distinct request body does not imply
+    /// a distinct key, since two services' canonical bodies can be identical.
     async fn mixed_report() -> ParseReport {
         let mut store = FixtureStore::new("clone");
         store.record(

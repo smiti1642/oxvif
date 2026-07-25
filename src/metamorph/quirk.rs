@@ -125,10 +125,10 @@ impl QuirkReport {
 /// A quirk's identity is the `(action, key_canon)` pair — the join key the
 /// [module docs](crate::metamorph) share with [`ParseVerdict`] and
 /// [`OperationDiff`]. `action` alone will not do: one action can have many
-/// fixtures distinguished only by their `token=` params. `key_canon` alone is in
-/// fact unique *within* one store (it is [`FixtureStore`]'s index key), but the
-/// pair keeps the identity aligned with the other reports and stays correct when
-/// the two reports being compared come from different stores.
+/// fixtures distinguished only by their `token=` params. `key_canon` alone will
+/// not do either: two services can share one canonical request (Media1's
+/// `<trt:GetProfiles/>` and Media2's `<tr2:GetProfiles/>` canonicalise
+/// identically). The pair is exactly [`FixtureStore`]'s own index key.
 ///
 /// Entries are ordered by that pair and every path list is sorted, so two runs
 /// over identical input serialise byte-identically.
