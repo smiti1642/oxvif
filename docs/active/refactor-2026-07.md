@@ -20,6 +20,13 @@ This doc is the **working contract** for the fixes that came out of it.
 | Test-coverage scope | **all zero-coverage client methods**, not just `get_services` | See Stage 4. |
 | Test layout | split by service; keep in `src/tests/` | `src/tests/client_tests.rs` uses zero `pub(crate)` internals so it *could* move to `tests/`, but that needs a several-hundred-site `crate::` → `oxvif::` rewrite, producing a diff too large to review for silently weakened assertions. Only the black-box mock snapshot moved to `tests/`. `src/tests/types_tests.rs` **cannot** move — 73 call sites of `pub(crate)` fns (46 `from_xml`, 15 `vec_from_xml`, 12 `to_xml_body`; all 84 definitions in `src/types/` are `pub(crate)`). |
 
+**Layout as shipped in `e21ed7f`:** each `src/tests/client/<svc>_tests.rs` is attached
+from the foot of the matching `src/client/<svc>.rs` via `#[cfg(test)] #[path]`, so tests
+sit in the module they exercise (`client::device::tests::…`). Shared transports and the
+two multi-service fixture helpers live in `src/tests/common.rs`, declared once from
+`src/lib.rs` through `src/tests/mod.rs`. The black-box snapshot is
+`tests/mock_action_snapshot.rs`, gated `#![cfg(feature = "mock")]`.
+
 **Migration note for the 0.14.0 release notes:** Stage 3 invalidates every
 already-recorded metamorph clone. The lost Media1 fixtures were never written to
 disk, so no upgrade path can recover them — users must re-record.
@@ -31,7 +38,7 @@ disk, so no upgrade path can recover them — users must re-record.
 | # | Content | Nature | Status |
 |---|---|---|---|
 | 0 | Regression safety net (tests only) | additive | **done** — `1e8d634` |
-| 0.5 | Split client tests by service; move mock snapshot to `tests/` | pure move | in progress |
+| 0.5 | Split client tests by service; move mock snapshot to `tests/` | pure move | **done** — `e21ed7f` |
 | 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | not started |
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 3 encoding sites | non-breaking | not started |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | not started |
@@ -49,6 +56,10 @@ disk, so no upgrade path can recover them — users must re-record.
 - Stage 4 must run last. Earlier stages change what the correct assertion *is*
   (e.g. after 1b, `set_audio_encoder_configuration_media2`'s positive test asserts
   `tr2:`, not `trt:`), so writing those tests earlier wastes them.
+  *Datum for Stage 4, found while mutation-testing 0.5:* `ptz_get_presets` has **no
+  unit-level test at all** — breaking its response tag left all 23 `client::ptz`
+  tests green, and only `tests/mock_action_snapshot.rs` caught it. Concrete
+  confirmation of C6: the snapshot creates a call site, not a positive/negative pair.
 - Stage 3 step 1 adds the new `lookup` signature with the old kept as a
   deprecated shim; step 2 removes the shim. Test-first is impossible in one step
   because the target test cannot compile against a signature that does not exist.
@@ -196,6 +207,7 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C7 | A test helper claiming to build N cases actually builds N | One built 3 fixtures that collided to 1 under D1's keying, so two thirds of the test body never ran. Whenever a test asserts a count, verify the count is *constructed*, not assumed. | agent |
 | C8 | The counts written into this doc were measured | Three were not, and all three came from shell `grep`, which §7.1 shows returns 0 on parenthesised patterns: "99 uses of `pub(crate)`" (real: 73), "16 lock poison sites" (real: 25), `src/lib.rs:200` (real: `:204-205`). **A tool that fails by returning `0`/nothing cannot be distinguished from a true negative.** Re-measure every number in this doc with the Grep tool before citing it. | reviewer |
 | C9 | rtk only mangles *search patterns* | It also **truncates command output** and appends a fake cargo-style summary (§7.2). Detected only because a 676-test baseline came back as 373. Any evidence gathered through rtk that "looks a bit short" is short. | reviewer |
+| C10 | `cargo test <filter>` is enough to prove a mutation was caught | It silently **excludes the integration crates** ("2 filtered out"). Mutation D (`GetPresetsResponse` typo) read as *not caught* under `cargo test --all-features client::ptz`, and as caught only under the unfiltered run. Always run the mutation check unfiltered, or the net looks weaker than it is. | reviewer |
 
 ---
 
