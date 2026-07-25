@@ -40,10 +40,38 @@ disk, so no upgrade path can recover them — users must re-record.
 | 0 | Regression safety net (tests only) | additive | **done** — `1e8d634` |
 | 0.5 | Split client tests by service; move mock snapshot to `tests/` | pure move | **done** — `e21ed7f` |
 | 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | **done** — `894b865` |
-| 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 3 encoding sites | non-breaking | **done** — `573168a` |
-| 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | not started |
+| 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
+| 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **next — blocked on an API decision, see §2.1** |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | not started |
 | 4 | Positive+negative pairs for the 26 zero-coverage + 21 hollow-negative methods | additive | not started |
+
+Verdicts for the four finished stages are in [§9](#9-stage-verdicts) — what each one
+actually rested on, not just that it passed.
+
+### 2.1 Stage 2 — the open API decision (blocking)
+
+Stage 2 cannot start until this is answered, because it decides what the target
+test asserts.
+
+`get_discovery_mode` (`src/client/device.rs:838-851`) documents its return as
+`"Discoverable"` or `"NonDiscoverable"` and then does
+`.map(|n| n.text().to_string()).unwrap_or_default()` — a device that omits
+`<tds:DiscoveryMode>` yields `Ok("")`, a third value the doc denies exists.
+
+| option | signature | cost |
+|---|---|---|
+| **A — `Err` on missing** (reviewer's recommendation) | unchanged `Result<String, OnvifError>` | smallest diff; matches the CLAUDE.md rule "required fields must return `Result`, never silently default to an empty string"; `src/types/` has no precedent for opening an enum over a single device field |
+| B — introduce `DiscoveryMode` enum | `Result<DiscoveryMode, OnvifError>` | rules the third value out at the type level, but expands the public API and must then decide what an unknown-but-present string does (`Other(String)`? `Err`?) — which reintroduces A's question one layer down |
+
+Either way `SweepReport::is_complete()` (`src/metamorph/surface.rs:414`) is
+vacuously `true` on an empty `outcomes` map (D11); that half has no API question
+attached and no dependency on this one.
+
+Note that Stage 2 is the only stage whose commit could be cut as a standalone
+0.13.1 if Stage 3 stalls — see §1. That does not change the decision, but it does
+mean the answer lands in released docs.
+
+### 2.2 Stage 4 scope
 
 **Stage 4 scope is larger than §1 assumed.** A survey of all **148** public
 `OnvifClient` methods (149 `pub fn` in `src/client/` minus the free function
@@ -240,6 +268,10 @@ Run **all** of this per stage. Record pass/fail in the stage's review, not from 
    `git checkout -- .` and confirm `git status` clean.
 8. At least one mutation per net/fix. Prefer breaking something that currently
    *works* over flipping something already known broken.
+8b. **The mutation must compile**, or it measures the compiler and not the tests
+   (C14). Inside a `format!` block prefer substitution — retag `<tt:Channels>` to
+   `<tt:Channel>` — over deletion, which orphans the named argument and is
+   rejected by rustc before a single test runs.
 
 **D. Red-before-green (Stages 1–4)**
 9. Require the agent to paste the actual pre-fix failure output, not a claim that
@@ -278,6 +310,7 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C11b | *(amending C11)* Read-only work may safely run alongside a writing stage | **No.** A read-only *analysis* of a tree being written produces a ledger of a state that never existed. The Stage 4 survey watched `imaging_tests.rs` grow 495 → 588 lines between two of its own tool calls, and only caught it by cross-checking `--list` against the file it had just read. Read-only work must run against a **committed** ref, not the live tree. | reviewer |
 | C12 | Counting Rust items with a line pattern is fine | `grep -c '^    ("'` gave **137** `EXPECTED` rows; the real count is **141**. The six missing rows are rustfmt-wrapped across lines *because their values are long* — i.e. the exact six broken entries the count existed to track. Count with a brace-matching parser, and prefer asserting a post-condition ("all 141 rows are `ok`") over a delta ("6 rows changed"). | reviewer |
 | C13 | `git checkout -- .` undoes a mutation | Not if the mutation was applied with `git checkout <commit> -- <path>`, which **stages** it. `checkout -- .` then restores the worktree *from the poisoned index*, and `git diff` reads clean while `git status` shows `M ` (staged). Undo with `git checkout HEAD -- <path>` and verify with `git diff HEAD --stat`, not `git diff`. | reviewer |
+| C14 | Any mutation of the fixed code proves the net | Only if it **compiles**. Deleting `<tt:Channels>{channels}</tt:Channels>` from the new Media2 serialiser left `channels = self.channels` as an unused named `format!` argument and rustc rejected the build — zero tests ran, so the mutation said nothing about the suite. That the compiler happened to be a stronger net *there* does not transfer to the next site. Retagging `Channels` → `Channel` compiles, and went red in 4 tests. | reviewer |
 
 ---
 
@@ -355,3 +388,55 @@ them silently become in-scope; open a separate plan.
   fields; Media1/Media2 profile and encoder state are disjoint.
 - `examples/write_workflow.rs` reimplements the library's mock server (~400 lines)
   and its harness prints failures instead of failing, exiting 0 regardless.
+
+---
+
+## 9. Stage verdicts
+
+What each verdict actually rested on. "Done" in §2 means *this*, not an agent's
+self-report. Mutations listed are the reviewer's own, chosen per check #6 to be
+points the agent did **not** use.
+
+**Stage 0 · `1e8d634` — baseline, no separate Critic pass.**
+It *is* the photograph the later stages are checked against, so it has nothing
+prior to be checked against. Its integrity is established indirectly: 0.5 proved
+the net survives a file move byte-for-byte, and 1a proved the six pinned rows were
+pinned for the right reason.
+
+**Stage 0.5 · `e21ed7f` — PASS.**
+Listed test names 676 → 676, leaf-name multiset identical. An independent extractor
+(`<scratchpad>/equiv.py`, a lexer-lite that handles `r#"…"#` — v1 gave 8 false
+positives without it) found 324 → 324 fns, 0 missing, 0 gained, 2 bodies changed —
+both `crate::` → `oxvif::` in the file that moved to `tests/`, byte lengths
+unchanged because both spellings are 5 characters. `const EXPECTED` identical.
+2 mutations caught.
+
+**Stage 1a · `894b865` — PASS.**
+`EXPECTED` 141 → 141 rows, exactly 6 changed and all 6 now `"ok"`, the other 135
+byte-identical, order preserved — diffed against a copy frozen from `git HEAD`
+*before* the agent started (C11b). Names 676 → 688 with one deliberate deletion
+(`known_broken_mock_actions_are_pinned`). Production diff is six `dispatch.rs`
+arms and nothing else. Sandbox mutation — revert `src/mock/dispatch.rs` alone —
+turned exactly the six new round-trip tests red (634 passed, 6 failed), run
+unfiltered per C10.
+
+**Stage 1b · `573168a` — PASS.**
+Agent pasted real red, not a claim: `E0599: no method named to_xml_body_media2`,
+plus a behaviour failure printing the actual wire body
+`<tr2:SetAudioEncoderConfiguration><trt:Configuration …>`. `fmt`/`clippy` re-run
+by the reviewer, clean. Names 688 → 698; the one vanished name is the rename this
+stage existed to perform. Two mutations, neither at the agent's suggested point:
+reverting the `src/client/media2.rs` call site → D3 target test red; retagging
+`<tt:Channels>` → `<tt:Channel>` in the Media2 serialiser only → 4 tests red,
+including the drift invariant
+`audio_media1_and_media2_differ_only_in_the_wrapper_prefix`. A third attempt was
+discarded for not compiling (C14).
+
+Two test-design points worth carrying forward from 1b:
+- `hostile_encoding_reaches_display_unescaped` is a **premise guard** — it asserts
+  the hostile string still carries XML metacharacters when read back through
+  `as_str`/`Display`. Without it, anyone who later makes `as_str` escape would turn
+  all four site tests vacuous and nothing would go red. This is C6 applied correctly.
+- `audio_media1_and_media2_differ_only_in_the_wrapper_prefix` compares the two
+  serialisers' whole output after normalising the wrapper element name, so any
+  future drift between them fails rather than silently diverging.
