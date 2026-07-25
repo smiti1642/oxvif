@@ -17,7 +17,7 @@ This doc is the **working contract** for the fixes that came out of it.
 | Decision | Value | Rationale |
 |---|---|---|
 | Release | **single 0.14.0** | Stage 3 is breaking; a second release would mean running the 17-step SOP twice and moving oxdm's pin twice for a few days' head start. Stages are separate commits, so cutting a 0.13.1 from the Stage-2 commit stays possible if Stage 3 stalls. |
-| Test-coverage scope | **all zero-coverage client methods**, not just `get_services` | See Stage 4. |
+| Test-coverage scope | **the 26 zero-coverage methods + the 21 hollow negatives = 47** | Decided 2026-07-26, replacing the earlier "all zero-coverage" wording once the survey showed that covered only 26 of 148. Both classes selected *mislead a reader*: the 26 have no test at all, and the 21 feed a real SOAP Fault then assert only `is_err()`, so they read as green. The remaining 69 `partial` methods simply have no negative — an absence that is visible in the ledger — and are deferred. See Stage 4. |
 | Test layout | split by service; keep in `src/tests/` | `src/tests/client_tests.rs` uses zero `pub(crate)` internals so it *could* move to `tests/`, but that needs a several-hundred-site `crate::` → `oxvif::` rewrite, producing a diff too large to review for silently weakened assertions. Only the black-box mock snapshot moved to `tests/`. `src/tests/types_tests.rs` **cannot** move — 73 call sites of `pub(crate)` fns (46 `from_xml`, 15 `vec_from_xml`, 12 `to_xml_body`; all 84 definitions in `src/types/` are `pub(crate)`). |
 
 **Layout as shipped in `e21ed7f`:** each `src/tests/client/<svc>_tests.rs` is attached
@@ -43,7 +43,7 @@ disk, so no upgrade path can recover them — users must re-record.
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 3 encoding sites | non-breaking | not started |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | not started |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | not started |
-| 4 | Positive+negative pairs for every uncovered client method | additive | not started — **scope open, see below** |
+| 4 | Positive+negative pairs for the 26 zero-coverage + 21 hollow-negative methods | additive | not started |
 
 **Stage 4 scope is larger than §1 assumed.** A survey of all **148** public
 `OnvifClient` methods (149 `pub fn` in `src/client/` minus the free function
@@ -57,11 +57,24 @@ rule as:
 | partial | 90 | real positive, negative **missing or weak** (`assert!(res.is_err())` only) |
 | zero | 26 | neither |
 
-So closing only the 26 zero-coverage methods leaves **90 methods still violating
-the rule**. §1's locked decision ("all zero-coverage client methods") therefore
-does *not* make the tree CLAUDE.md-compliant; that would be 116 methods. This
-needs an explicit decision before Stage 4 starts — recorded here so it cannot be
-silently resolved by whoever happens to run the stage.
+Closing only the 26 zero-coverage methods would leave **90 methods still violating
+the rule**; full CLAUDE.md compliance would be 116 methods.
+
+**Decided 2026-07-26: Stage 4 covers 47 — the 26 `zero` plus the 21 whose negative
+is hollow** (`assert!(res.is_err())` against a real SOAP Fault). The selection
+criterion is *misleadingness*, not count: those 21 look green while discriminating
+nothing, which is strictly worse than a visible gap. The other 69 `partial` methods
+are deferred with their absence recorded in the ledger, **not** silently closed —
+§8 is where deferred work goes, and Stage 4 must not be described afterwards as
+having made the crate rule-compliant. Stage 4 ships inside 0.14.0 as §1 locked.
+
+The 21 hollow negatives: `ptz_get_configurations`, `ptz_get_nodes`, `get_profiles`
+(×2 sites), `get_profile`, `get_stream_uri`, `set_scopes`,
+`set_system_date_and_time`, `event_stream`, and all twelve recording ones
+(`create_recording`, `delete_recording`, `create_track`, `delete_track`,
+`get_recording_jobs`, `create_recording_job`, `set_recording_job_mode`,
+`delete_recording_job`, `get_recording_job_state`, `get_recording_search_results`,
+`end_search`, `search_recordings`).
 
 Two findings that sharpen it:
 - **PTZ has zero `covered` methods out of 18.** Six are zero-coverage
