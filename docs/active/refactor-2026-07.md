@@ -18,7 +18,7 @@ This doc is the **working contract** for the fixes that came out of it.
 |---|---|---|
 | Release | **single 0.14.0** | Stage 3 is breaking; a second release would mean running the 17-step SOP twice and moving oxdm's pin twice for a few days' head start. Stages are separate commits, so cutting a 0.13.1 from the Stage-2 commit stays possible if Stage 3 stalls. |
 | Test-coverage scope | **all zero-coverage client methods**, not just `get_services` | See Stage 4. |
-| Test layout | split by service; keep in `src/tests/` | `src/tests/client_tests.rs` uses zero `pub(crate)` internals so it *could* move to `tests/`, but that needs a several-hundred-site `crate::` → `oxvif::` rewrite, producing a diff too large to review for silently weakened assertions. Only the black-box mock snapshot moved to `tests/`. `src/tests/types_tests.rs` **cannot** move — 99 uses of `pub(crate)` (`to_xml_body` / `from_xml`). |
+| Test layout | split by service; keep in `src/tests/` | `src/tests/client_tests.rs` uses zero `pub(crate)` internals so it *could* move to `tests/`, but that needs a several-hundred-site `crate::` → `oxvif::` rewrite, producing a diff too large to review for silently weakened assertions. Only the black-box mock snapshot moved to `tests/`. `src/tests/types_tests.rs` **cannot** move — 73 call sites of `pub(crate)` fns (46 `from_xml`, 15 `vec_from_xml`, 12 `to_xml_body`; all 84 definitions in `src/types/` are `pub(crate)`). |
 
 **Migration note for the 0.14.0 release notes:** Stage 3 invalidates every
 already-recorded metamorph clone. The lost Media1 fixtures were never written to
@@ -63,8 +63,9 @@ reproduced by running code, not by reading it.
 ### Tier 1 — reproduced by running code
 
 **D1 · Fixture key omits the SOAP action → silent data loss and wrong replay answers.**
-`src/metamorph/fixture.rs:122` keys on `canonicalize(request_raw, Masking::Key)`
-alone and `insert()` upserts. `src/soap/xml.rs:215` keeps only `local_name`;
+`src/metamorph/fixture.rs:123` keys on `canonicalize(request_raw, Masking::Key)`
+alone (`record()` at `:122` takes `action` but never feeds it into the key) and
+`insert()` upserts — the doc comment at `:118-121` says "last write wins" outright. `src/soap/xml.rs:215` keeps only `local_name`;
 `:221-226` drops `xmlns` declarations; `src/mock/canon.rs:100` writes the bare
 local name. So `<trt:GetProfiles/>` (`src/client/media.rs:21`) and
 `<tr2:GetProfiles/>` (`src/client/media2.rs:24`) collapse to one key.
@@ -186,21 +187,31 @@ Mistakes actually made in this programme. Re-read before each stage.
 
 | # | Wrong belief | Truth | Who |
 |---|---|---|---|
-| C1 | `examples/conformance.rs` needs `required-features = ["health"]` | It needs **`["mock"]`** — `CapturingTransport` is gated on `mock` (`src/lib.rs:200`), and the file's own doc at `examples/conformance.rs:10` already says so. No `[[example]]` stanza exists for it. | reviewer |
+| C1 | `examples/conformance.rs` needs `required-features = ["health"]` | It needs **`["mock"]`** — `CapturingTransport` is gated on `mock` (`src/lib.rs:204-205`), and the file's own doc at `examples/conformance.rs:10` already says so. No `[[example]]` stanza exists for it. | reviewer |
 | C2 | Adding a mock operation is shotgun surgery across many files | It is 2 files, sometimes 1. | reviewer |
 | C3 | Stage 1a would clear ~6 methods from the zero-coverage list, leaving 18 | Only `imaging_stop` overlapped. The other five broken ops already had `RecordingTransport` body tests — which is precisely why the mock breakage went unnoticed. | reviewer |
 | C4 | `key_canon` alone is not unique across actions | It *is* the store's index key — but only because collisions destroy one side (D1). Both halves of the earlier statement were misleading. | reviewer |
 | C5 | "grep for unescaped `{var}` in XML" finds escaping holes | `xml_escape` is applied three different ways — shadowing `let` (63 sites), named `format!` arg (15), inline. A naive grep produces false positives *and* misses `Display`-laundered values (D4). | reviewer |
 | C6 | "has a call site in the test suite" == "has test coverage" | The CLAUDE.md rule requires a **positive and a negative** test per method. Snapshot nets create call sites without creating pairs; counting by grep overstates coverage. | reviewer |
 | C7 | A test helper claiming to build N cases actually builds N | One built 3 fixtures that collided to 1 under D1's keying, so two thirds of the test body never ran. Whenever a test asserts a count, verify the count is *constructed*, not assumed. | agent |
+| C8 | The counts written into this doc were measured | Three were not, and all three came from shell `grep`, which §7.1 shows returns 0 on parenthesised patterns: "99 uses of `pub(crate)`" (real: 73), "16 lock poison sites" (real: 25), `src/lib.rs:200` (real: `:204-205`). **A tool that fails by returning `0`/nothing cannot be distinguished from a true negative.** Re-measure every number in this doc with the Grep tool before citing it. | reviewer |
+| C9 | rtk only mangles *search patterns* | It also **truncates command output** and appends a fake cargo-style summary (§7.2). Detected only because a 676-test baseline came back as 373. Any evidence gathered through rtk that "looks a bit short" is short. | reviewer |
 
 ---
 
 ## 7. Environment facts that bite
 
-- **rtk mangles bracket/brace regex patterns.** `grep -n '#\[cfg(test)\]'` and
-  `grep 'x>{y}</x'` silently return 0 matches through the rtk proxy. Use the
-  **Grep tool**, not shell `grep`, for any pattern containing `[ ] { }`.
+- **rtk silently corrupts two things. Both produce plausible wrong answers, not errors.**
+  1. *Regex mangling.* `grep -n '#\[cfg(test)\]'`, `grep 'x>{y}</x'` and
+     `grep -rE '\.lock\(\)\.unwrap\(\)'` all return **0 matches** through the rtk
+     proxy while the real count is non-zero (the last one: real answer 105). The
+     trigger is any pattern containing `[ ] { } ( )`. Use the **Grep tool**, never
+     shell `grep`, for these.
+  2. *Output truncation.* `cargo test --all-features -- --list` through rtk emitted
+     **373** of 676 lines and capped it with its own summary line
+     `cargo test: 5 errors, 0 warnings (0 crates)` — which reads like cargo output
+     but is not. This would have silently corrupted Critic check #4. For any command
+     whose **full** output is the evidence, run it as `rtk proxy <cmd>`.
 - **Windows console mangles UTF-8 commit messages.** Use
   `git -c i18n.commitEncoding=UTF-8 commit -F -` with an **ASCII-only** body.
 - **Known-red baseline:** a feature-free `cargo test` fails on
@@ -214,7 +225,11 @@ Mistakes actually made in this programme. Re-read before each stage.
   cargo test --all-features
   cargo test --all-features --doc
   ```
-- Test totals: **652** before Stage 0 → **674** after (629 lib / 9 integration / 36 doc).
+- Test totals: **652** before Stage 0 → **674** after (629 lib / 9 integration / 36 doc),
+  verified by running the suite at `7daa4ac`. Note `-- --list` reports **676**
+  names, because 2 doc tests are `ignored` and so are listed but never run.
+  **Check #4 compares the 676-name set, not the 674 pass count.** Baseline name set
+  captured at `<scratchpad>/baseline-tests.txt`.
 
 ---
 
@@ -228,10 +243,11 @@ them silently become in-scope; open a separate plan.
   `src/soap/xml.rs`. D8 and D9 are both consequences of that split brain.
 - `pub mod soap::{xml,security,…}` makes `compute_digest` and
   `unix_secs_to_iso8601` permanent public API on a published crate.
-- 16 `.lock().unwrap()` / `.read().unwrap()` poison-panic sites across
-  `src/health/`, `src/metamorph/`, `src/mock/`. `src/discovery.rs:417` shows the
-  correct `unwrap_or_else(|e| e.into_inner())` form, so the inconsistency is
-  internal.
+- **25** `.lock()/.read()/.write().unwrap()` poison-panic sites in production code
+  across `src/metamorph/` (12), `src/mock/` (9), `src/health/` (4), plus 2 in
+  `src/discovery.rs`. `src/discovery.rs:417` shows the correct
+  `unwrap_or_else(|e| e.into_inner())` form, so the inconsistency is internal.
+  (Counted with the Grep tool — shell `grep` reports 0 here, see §7.)
 - Mock-side correctness: undeclared namespace prefixes on every void response;
   SOAP faults put the ONVIF code in `Code/Value` instead of `Code/Subcode/Value`,
   so `subcode` is always `None`; `SetImagingSettings` silently drops 5 of 11
