@@ -522,8 +522,7 @@ mod request_body_shapes {
         }
     }
 
-    /// The single serialised audio-encoder fragment both Media1 and Media2 emit
-    /// today — note the `trt:` prefix, which is correct for Media1 only.
+    /// The serialised audio-encoder fragment Media1 emits — `trt:`-prefixed.
     const AUDIO_CFG_FRAGMENT: &str = concat!(
         r#"<trt:Configuration token="AEC_1">"#,
         "<tt:Name>AudioEncoder</tt:Name>",
@@ -533,6 +532,19 @@ mod request_body_shapes {
         "<tt:SampleRate>8</tt:SampleRate>",
         "<tt:Channels>1</tt:Channels>",
         "</trt:Configuration>",
+    );
+
+    /// The same fragment as Media2 must emit it — identical apart from the
+    /// wrapper prefix.
+    const AUDIO_CFG_FRAGMENT_MEDIA2: &str = concat!(
+        r#"<tr2:Configuration token="AEC_1">"#,
+        "<tt:Name>AudioEncoder</tt:Name>",
+        "<tt:UseCount>1</tt:UseCount>",
+        "<tt:Encoding>G711</tt:Encoding>",
+        "<tt:Bitrate>64</tt:Bitrate>",
+        "<tt:SampleRate>8</tt:SampleRate>",
+        "<tt:Channels>1</tt:Channels>",
+        "</tr2:Configuration>",
     );
 
     fn video_enc_cfg() -> VideoEncoderConfiguration {
@@ -635,15 +647,13 @@ mod request_body_shapes {
         );
     }
 
-    /// KNOWN BUG pinned deliberately (Stage 1b flips this).
+    /// D3 target: Media2 `SetAudioEncoderConfiguration` must wrap a
+    /// `tr2:`-prefixed `<Configuration>`, not the Media1 `trt:` one.
     ///
-    /// Media2 `SetAudioEncoderConfiguration` reuses
-    /// `AudioEncoderConfiguration::to_xml_body()`, which hard-codes the Media1
-    /// `trt:` prefix — so today the `tr2:` operation element contains a
-    /// `<trt:Configuration>` child. Stage 1b gives Media2 its own serialiser;
-    /// when it lands, this test must be updated to expect `<tr2:Configuration`.
+    /// (This test previously pinned the bug and expected `trt:`; Stage 1b flips
+    /// it, which is why it is listed as the stage's red-before-green target.)
     #[tokio::test]
-    async fn set_audio_encoder_configuration_media2_emits_trt_configuration_known_bug() {
+    async fn set_audio_encoder_configuration_media2_emits_tr2_configuration() {
         let (transport, captured) =
             RecordingTransport::new(&envelope("<tr2:SetAudioEncoderConfigurationResponse/>"));
         let client =
@@ -660,7 +670,7 @@ mod request_body_shapes {
             "http://www.onvif.org/ver20/media/wsdl/SetAudioEncoderConfiguration"
         );
         let expected = format!(
-            "<tr2:SetAudioEncoderConfiguration>{AUDIO_CFG_FRAGMENT}\
+            "<tr2:SetAudioEncoderConfiguration>{AUDIO_CFG_FRAGMENT_MEDIA2}\
              </tr2:SetAudioEncoderConfiguration>"
         );
         assert!(
@@ -669,8 +679,8 @@ mod request_body_shapes {
             c.body
         );
         assert!(
-            !c.body.contains("<tr2:Configuration"),
-            "pinned bug: Media2 does NOT yet emit a tr2:-prefixed Configuration: {}",
+            !c.body.contains("trt:"),
+            "Media2 must not carry any Media1 trt: prefix: {}",
             c.body
         );
         assert!(
@@ -678,6 +688,52 @@ mod request_body_shapes {
             "Media2 must not send ForcePersistence: {}",
             c.body
         );
+    }
+
+    /// Negative for `set_audio_encoder_configuration_media2`: a device Fault
+    /// must surface as `SoapError::Fault` carrying the device's code and
+    /// reason — not as `UnexpectedResponse` or `MissingField`.
+    #[tokio::test]
+    async fn set_audio_encoder_configuration_media2_soap_fault_returns_fault() {
+        let client =
+            OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
+                &make_soap_fault_xml("s:Sender", "Media2 audio encoder rejected"),
+            ));
+
+        let err = client
+            .set_audio_encoder_configuration_media2(MEDIA2, &audio_cfg())
+            .await
+            .unwrap_err();
+
+        match err {
+            OnvifError::Soap(crate::soap::SoapError::Fault { code, reason, .. }) => {
+                assert_eq!(code, "s:Sender");
+                assert_eq!(reason, "Media2 audio encoder rejected");
+            }
+            other => panic!("expected SoapError::Fault, got {other:?}"),
+        }
+    }
+
+    /// Negative for the Media1 `set_audio_encoder_configuration` twin.
+    #[tokio::test]
+    async fn set_audio_encoder_configuration_media1_soap_fault_returns_fault() {
+        let client =
+            OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
+                &make_soap_fault_xml("s:Receiver", "Media1 audio encoder rejected"),
+            ));
+
+        let err = client
+            .set_audio_encoder_configuration(MEDIA, &audio_cfg())
+            .await
+            .unwrap_err();
+
+        match err {
+            OnvifError::Soap(crate::soap::SoapError::Fault { code, reason, .. }) => {
+                assert_eq!(code, "s:Receiver");
+                assert_eq!(reason, "Media1 audio encoder rejected");
+            }
+            other => panic!("expected SoapError::Fault, got {other:?}"),
+        }
     }
 
     /// Media1 `SetVideoEncoderConfiguration`: full element sequence, including

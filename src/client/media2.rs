@@ -511,7 +511,7 @@ impl OnvifClient {
             "<tr2:SetAudioEncoderConfiguration>\
                {}\
              </tr2:SetAudioEncoderConfiguration>",
-            config.to_xml_body()
+            config.to_xml_body_media2()
         );
         let xml = self.call(media2_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;

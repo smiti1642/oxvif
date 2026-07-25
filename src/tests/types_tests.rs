@@ -1494,6 +1494,170 @@ mod encoding_serialisation {
         );
     }
 
+    /// FREEZE (Media1): the audio serialiser reached by
+    /// `set_audio_encoder_configuration` must keep emitting `trt:`.
+    /// Stage 1b adds a separate Media2 serialiser and must not disturb this one.
+    #[test]
+    fn audio_media1_serialiser_still_emits_trt_configuration() {
+        let body = audio_cfg(AudioEncoding::G711).to_xml_body();
+        assert!(
+            body.starts_with(r#"<trt:Configuration token="AEC_1">"#),
+            "Media1 audio serialiser must open with trt:Configuration; body was: {body}"
+        );
+        assert!(
+            body.ends_with("</trt:Configuration>"),
+            "Media1 audio serialiser must close with trt:Configuration; body was: {body}"
+        );
+        assert!(
+            !body.contains("tr2:"),
+            "Media1 audio serialiser must never emit a tr2: prefix; body was: {body}"
+        );
+    }
+
+    /// D3: Media2 needs its own serialiser emitting `<tr2:Configuration>`,
+    /// byte-identical to the Media1 form apart from the wrapper prefix.
+    #[test]
+    fn audio_media2_serialiser_emits_tr2_configuration() {
+        let body = audio_cfg(AudioEncoding::G711).to_xml_body_media2();
+        assert_eq!(
+            body,
+            concat!(
+                r#"<tr2:Configuration token="AEC_1">"#,
+                "<tt:Name>Audio</tt:Name>",
+                "<tt:UseCount>1</tt:UseCount>",
+                "<tt:Encoding>G711</tt:Encoding>",
+                "<tt:Bitrate>64</tt:Bitrate>",
+                "<tt:SampleRate>8</tt:SampleRate>",
+                "<tt:Channels>1</tt:Channels>",
+                "</tr2:Configuration>",
+            )
+        );
+        assert!(
+            !body.contains("trt:"),
+            "Media2 audio serialiser must never emit a trt: prefix; body was: {body}"
+        );
+    }
+
+    /// The two audio serialisers must differ *only* in the wrapper prefix.
+    #[test]
+    fn audio_media1_and_media2_differ_only_in_the_wrapper_prefix() {
+        let cfg = audio_cfg(AudioEncoding::G726);
+        assert_eq!(
+            cfg.to_xml_body().replace("trt:Configuration", "NS"),
+            cfg.to_xml_body_media2().replace("tr2:Configuration", "NS"),
+        );
+    }
+
+    // ── D4: `xml_escape` must not be bypassed via `Display` ───────────────
+    //
+    // `VideoEncoding::Other(String)` / `AudioEncoding::Other(String)` carry the
+    // device's raw string. `to_xml_body()` interpolates the enum through
+    // `Display`, so the value reaches the wire unescaped unless the serialiser
+    // escapes `as_str()` explicitly. A `grep xml_escape` audit cannot see this.
+
+    /// The raw device-echoed encoding, and what it must look like on the wire.
+    const HOSTILE_ENCODING: &str = "a&b<c\"d";
+    const HOSTILE_ENCODING_ESCAPED: &str = "a&amp;b&lt;c&quot;d";
+
+    #[test]
+    fn hostile_encoding_reaches_display_unescaped() {
+        // Guards the premise of the four site tests below: the value really does
+        // contain XML metacharacters when read back through `as_str`/`Display`.
+        let enc = VideoEncoding::Other(HOSTILE_ENCODING.into());
+        assert_eq!(enc.as_str(), HOSTILE_ENCODING);
+        assert_eq!(enc.to_string(), HOSTILE_ENCODING);
+        let enc = AudioEncoding::Other(HOSTILE_ENCODING.into());
+        assert_eq!(enc.as_str(), HOSTILE_ENCODING);
+        assert_eq!(enc.to_string(), HOSTILE_ENCODING);
+    }
+
+    /// Site 1 — `VideoEncoderConfiguration::to_xml_body()` (`src/types/video.rs`).
+    #[test]
+    fn video_encoding_other_is_escaped_in_media1_body() {
+        let body = video_cfg(VideoEncoding::Other(HOSTILE_ENCODING.into())).to_xml_body();
+        assert_eq!(
+            body,
+            format!(
+                concat!(
+                    r#"<trt:Configuration token="VEC_1">"#,
+                    "<tt:Name>Main</tt:Name>",
+                    "<tt:UseCount>1</tt:UseCount>",
+                    "<tt:Encoding>{}</tt:Encoding>",
+                    "<tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>",
+                    "<tt:Quality>4</tt:Quality>",
+                    "</trt:Configuration>",
+                ),
+                HOSTILE_ENCODING_ESCAPED
+            )
+        );
+    }
+
+    /// Site 2 — `VideoEncoderConfiguration2::to_xml_body()` (`src/types/video.rs`).
+    #[test]
+    fn video_encoding_other_is_escaped_in_media2_body() {
+        let body = video_cfg2(VideoEncoding::Other(HOSTILE_ENCODING.into())).to_xml_body();
+        assert_eq!(
+            body,
+            format!(
+                concat!(
+                    r#"<tr2:Configuration token="VEC_1">"#,
+                    "<tt:Name>Main</tt:Name>",
+                    "<tt:UseCount>1</tt:UseCount>",
+                    "<tt:Encoding>{}</tt:Encoding>",
+                    "<tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>",
+                    "<tt:Quality>4</tt:Quality>",
+                    "</tr2:Configuration>",
+                ),
+                HOSTILE_ENCODING_ESCAPED
+            )
+        );
+    }
+
+    /// Site 3 — `AudioEncoderConfiguration::to_xml_body()` (`src/types/audio.rs`).
+    #[test]
+    fn audio_encoding_other_is_escaped_in_media1_body() {
+        let body = audio_cfg(AudioEncoding::Other(HOSTILE_ENCODING.into())).to_xml_body();
+        assert_eq!(
+            body,
+            format!(
+                concat!(
+                    r#"<trt:Configuration token="AEC_1">"#,
+                    "<tt:Name>Audio</tt:Name>",
+                    "<tt:UseCount>1</tt:UseCount>",
+                    "<tt:Encoding>{}</tt:Encoding>",
+                    "<tt:Bitrate>64</tt:Bitrate>",
+                    "<tt:SampleRate>8</tt:SampleRate>",
+                    "<tt:Channels>1</tt:Channels>",
+                    "</trt:Configuration>",
+                ),
+                HOSTILE_ENCODING_ESCAPED
+            )
+        );
+    }
+
+    /// Site 4 — the Media2 audio serialiser D3 adds: it must be escaped from
+    /// the day it is written, not inherit the hole.
+    #[test]
+    fn audio_encoding_other_is_escaped_in_media2_body() {
+        let body = audio_cfg(AudioEncoding::Other(HOSTILE_ENCODING.into())).to_xml_body_media2();
+        assert_eq!(
+            body,
+            format!(
+                concat!(
+                    r#"<tr2:Configuration token="AEC_1">"#,
+                    "<tt:Name>Audio</tt:Name>",
+                    "<tt:UseCount>1</tt:UseCount>",
+                    "<tt:Encoding>{}</tt:Encoding>",
+                    "<tt:Bitrate>64</tt:Bitrate>",
+                    "<tt:SampleRate>8</tt:SampleRate>",
+                    "<tt:Channels>1</tt:Channels>",
+                    "</tr2:Configuration>",
+                ),
+                HOSTILE_ENCODING_ESCAPED
+            )
+        );
+    }
+
     /// The wire strings the `Encoding` element is built from. `Display` is what
     /// `to_xml_body()` actually interpolates, so both must stay in step.
     #[test]

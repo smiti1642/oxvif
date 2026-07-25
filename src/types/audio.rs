@@ -170,7 +170,36 @@ impl AudioEncoderConfiguration {
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),
             use_count = self.use_count,
-            encoding = self.encoding,
+            // `AudioEncoding::Other` carries the device's raw string; going
+            // through `Display` would put it on the wire unescaped.
+            encoding = xml_escape(self.encoding.as_str()),
+            bitrate = self.bitrate,
+            sample_rate = self.sample_rate,
+            channels = self.channels,
+        )
+    }
+
+    /// Serialise to a `<tr2:Configuration>` XML fragment for
+    /// `SetAudioEncoderConfiguration` (Media2).
+    ///
+    /// Identical to [`to_xml_body`](Self::to_xml_body) apart from the wrapper
+    /// prefix: Media2 operations live in the `tr2:` namespace, so reusing the
+    /// Media1 serialiser would put a `trt:`-prefixed child inside a `tr2:`
+    /// request.
+    pub(crate) fn to_xml_body_media2(&self) -> String {
+        format!(
+            "<tr2:Configuration token=\"{token}\">\
+               <tt:Name>{name}</tt:Name>\
+               <tt:UseCount>{use_count}</tt:UseCount>\
+               <tt:Encoding>{encoding}</tt:Encoding>\
+               <tt:Bitrate>{bitrate}</tt:Bitrate>\
+               <tt:SampleRate>{sample_rate}</tt:SampleRate>\
+               <tt:Channels>{channels}</tt:Channels>\
+             </tr2:Configuration>",
+            token = xml_escape(&self.token),
+            name = xml_escape(&self.name),
+            use_count = self.use_count,
+            encoding = xml_escape(self.encoding.as_str()),
             bitrate = self.bitrate,
             sample_rate = self.sample_rate,
             channels = self.channels,

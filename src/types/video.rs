@@ -529,7 +529,9 @@ impl VideoEncoderConfiguration {
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),
             use_count = self.use_count,
-            encoding = self.encoding,
+            // `VideoEncoding::Other` carries the device's raw string; going
+            // through `Display` would put it on the wire unescaped.
+            encoding = xml_escape(self.encoding.as_str()),
             quality = self.quality,
         )
     }
@@ -746,7 +748,9 @@ impl VideoEncoderConfiguration2 {
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),
             use_count = self.use_count,
-            encoding = self.encoding,
+            // `VideoEncoding::Other` carries the device's raw string; going
+            // through `Display` would put it on the wire unescaped.
+            encoding = xml_escape(self.encoding.as_str()),
             quality = self.quality,
         )
     }
