@@ -126,8 +126,10 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ## Serde support (`serde` feature)
 
 Enable the `serde` feature to derive `Serialize` + `Deserialize` on every
-response type in `oxvif::types`. This lets you expose them directly over a REST
-API (or persist them as JSON) without hand-cloning parallel structs.
+response type in `oxvif::types`, plus the WS-Discovery result types
+(`DiscoveredDevice`, `DiscoveryEvent`) returned by `discovery::probe` and friends.
+This lets you expose them directly over a REST API (or persist them as JSON)
+without hand-cloning parallel structs.
 
 ```toml
 [dependencies]
@@ -1320,11 +1322,18 @@ for q in &report.quirks {
 
 `FixtureStore::verify_parsing().await` runs oxvif's **own typed parser** over each
 recorded response and returns a `ParseReport` of `ParseVerdict`s: `Parsed` (with
-the extracted value as JSON), `Failed` (with the parser error), or `Unverified`
-(no parser wired — a write/event op the sweep never records). This is the
-value / type-level check — it catches quirks the structural diff is blind to,
-e.g. a device returning `<Width>1080p</Width>` where oxvif expects an integer:
-same element path (no structural drift), but the parser rejects it.
+the extracted value as JSON), `Failed` (with the parser error), `Faulted` (the
+device returned a SOAP Fault — it declined, which is correct behaviour, not an
+oxvif problem), or `Unverified` (no parser wired — a write/event op the sweep
+never records). This is the value / type-level check — it catches quirks the
+structural diff is blind to, e.g. a device returning `<Width>1080p</Width>` where
+oxvif expects an integer: same element path (no structural drift), but the parser
+rejects it.
+
+`failures()` means "oxvif choked" and deliberately **excludes** `Faulted`, as does
+`all_parsed()`; use `faulted()` to list the operations the device declined. This
+matters when sweeping with a restricted account, where otherwise every denied
+operation would masquerade as an interop bug.
 
 ```rust
 let store  = FixtureStore::load("clones/hikvision-ds2cd")?;
@@ -1339,6 +1348,42 @@ oxvif-opinionated (the verdict: does it work?); the structural SOAP diff is
 oxvif-independent wire truth (the evidence: what does the device actually send?).
 Both are keyed by `(action, key_canon)`, so a UI can join them per operation — the
 parse verdict as the status badge, the side-by-side SOAP diff as the drill-down.
+
+Both reports serialise: `to_json()` / `to_json_pretty()` on either one. Save a
+`QuirkReport` as a baseline and `report.diff(&baseline)` returns a `QuirkDiff` of
+just what moved — `appeared`, `resolved`, and `changed` (still quirky, but the
+deviating paths shifted). With a full sweep covering 52 operations, comparing two
+reports by hand is not viable; "three things changed since the firmware update"
+is. Output is order-deterministic, so a saved JSON baseline also diffs cleanly
+with ordinary text tools.
+
+### Progress — driving a real camera takes a while
+
+A full sweep is 52 operations and more HTTP requests than that (per-token reads
+run once per token), so a UI that just awaits it appears frozen. Each long call
+has a `_with_progress` variant taking an `Fn(..) + Send + Sync` callback — usable
+from an async UI by feeding a channel. The plain versions are unchanged.
+
+```rust
+use oxvif::metamorph::{SurfaceSelection, record_surface_with_progress};
+
+let (clone, sweep) = record_surface_with_progress(
+    "http://192.168.1.100/onvif/device_service",
+    Some(("admin", "password")),
+    "hikvision-ds2cd",
+    &SurfaceSelection::all(),
+    |p| println!("{}/{}  {}", p.done, p.total, p.op.action_name()),
+)
+.await?;
+```
+
+`SweepProgress::total` counts the **selected operations after prerequisite
+expansion**, not HTTP requests — a per-token operation ticks once no matter how
+many tokens the camera returns, and the request count cannot be known until the
+list read answers. Every selected operation ticks exactly once, whether it ran or
+was resolved as skipped. `verify_parsing_with_progress` and
+`diff_against_synthetic_with_progress` report `FixtureProgress` over the recorded
+fixtures the same way.
 
 ### Adapter / skin (Persona C)
 
