@@ -41,17 +41,24 @@ disk, so no upgrade path can recover them — users must re-record.
 | 0.5 | Split client tests by service; move mock snapshot to `tests/` | pure move | **done** — `e21ed7f` |
 | 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | **done** — `894b865` |
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
-| 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **next — blocked on an API decision, see §2.1** |
+| 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **in progress** — API shape decided, see §2.1 |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | not started |
 | 4 | Positive+negative pairs for the 26 zero-coverage + 21 hollow-negative methods | additive | not started |
 
 Verdicts for the four finished stages are in [§9](#9-stage-verdicts) — what each one
 actually rested on, not just that it passed.
 
-### 2.1 Stage 2 — the open API decision (blocking)
+### 2.1 Stage 2 — the API decision
 
-Stage 2 cannot start until this is answered, because it decides what the target
-test asserts.
+**Decided 2026-07-26: option A — `Err` on a missing or empty `DiscoveryMode`,
+signature unchanged.** Concretely
+`SoapError::missing("GetDiscoveryModeResponse/DiscoveryMode")`, with an empty
+text node treated as missing per the CLAUDE.md `.filter(|t| !t.is_empty())` idiom,
+so `Ok("")` becomes unreachable rather than merely undocumented. The pin
+`get_discovery_mode_without_the_element_yields_an_empty_string`
+(`src/tests/client/device_tests.rs:1765`) exists to be flipped by this stage;
+`get_discovery_mode_pins_action_body_and_parsed_value` next to it must survive
+untouched. Rationale below.
 
 `get_discovery_mode` (`src/client/device.rs:838-851`) documents its return as
 `"Discoverable"` or `"NonDiscoverable"` and then does
