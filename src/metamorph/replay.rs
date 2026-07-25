@@ -231,4 +231,119 @@ mod tests {
             "Set then Get must reflect the new value via synthetic COW"
         );
     }
+
+    // ── NET 4: replay round-trip, at the responder level ──────────────────────
+
+    const GET_HOSTNAME_ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+    const GET_HOSTNAME_RESPONSE: &str = "<Envelope><Body><GetHostnameResponse>\
+                                         <Name>recorded-host</Name>\
+                                         </GetHostnameResponse></Body></Envelope>";
+
+    fn hostname_request(message_id: &str) -> String {
+        format!(
+            "<Envelope><Header><MessageID>uuid:{message_id}</MessageID></Header>\
+             <Body><GetHostname/></Body></Envelope>"
+        )
+    }
+
+    /// A recorded response is replayed verbatim for a matching request, even
+    /// when the live request carries a different `MessageID`; an unrecorded
+    /// read passes through (so the synthetic terminal answers it).
+    #[tokio::test]
+    async fn replay_responder_returns_the_recorded_response_for_a_matching_request() {
+        let mut store = FixtureStore::new("dev");
+        store.record(
+            GET_HOSTNAME_ACTION,
+            &hostname_request("aaa"),
+            GET_HOSTNAME_RESPONSE,
+        );
+
+        let responder = ReplayResponder::new(Arc::new(store), Arc::new(Mutex::new(HashSet::new())));
+        let state = MockState::new();
+
+        let live = hostname_request("bbb");
+        let hit = RequestCtx {
+            action: GET_HOSTNAME_ACTION,
+            base: METAMORPH_BASE,
+            body: &live,
+            state: &state,
+        };
+        assert_eq!(
+            responder.respond(&hit).await.as_deref(),
+            Some(GET_HOSTNAME_RESPONSE)
+        );
+
+        let miss_body = "<Envelope><Body><GetDNS/></Body></Envelope>";
+        let miss = RequestCtx {
+            action: "http://www.onvif.org/ver10/device/wsdl/GetDNS",
+            base: METAMORPH_BASE,
+            body: miss_body,
+            state: &state,
+        };
+        assert_eq!(
+            responder.respond(&miss).await,
+            None,
+            "an unrecorded read must fall through to synthetic"
+        );
+    }
+
+    /// Copy-on-write, at the responder level: a write in a family retires that
+    /// family's fixtures, so the recorded read stops being replayed. Reads in
+    /// other families keep replaying.
+    #[tokio::test]
+    async fn a_write_retires_only_its_own_family_from_replay() {
+        const GET_DNS_ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetDNS";
+        const GET_DNS_REQUEST: &str = "<Envelope><Body><GetDNS/></Body></Envelope>";
+        const GET_DNS_RESPONSE: &str = "<Envelope><Body><GetDNSResponse/></Body></Envelope>";
+
+        let mut store = FixtureStore::new("dev");
+        store.record(
+            GET_HOSTNAME_ACTION,
+            &hostname_request("aaa"),
+            GET_HOSTNAME_RESPONSE,
+        );
+        store.record(GET_DNS_ACTION, GET_DNS_REQUEST, GET_DNS_RESPONSE);
+
+        let responder = ReplayResponder::new(Arc::new(store), Arc::new(Mutex::new(HashSet::new())));
+        let state = MockState::new();
+
+        let read = hostname_request("aaa");
+        let ctx = RequestCtx {
+            action: GET_HOSTNAME_ACTION,
+            base: METAMORPH_BASE,
+            body: &read,
+            state: &state,
+        };
+        assert_eq!(
+            responder.respond(&ctx).await.as_deref(),
+            Some(GET_HOSTNAME_RESPONSE)
+        );
+
+        // A SetHostname passes through (returns None) and invalidates Hostname.
+        let write = RequestCtx {
+            action: "http://www.onvif.org/ver10/device/wsdl/SetHostname",
+            base: METAMORPH_BASE,
+            body: "<Envelope><Body><SetHostname><Name>x</Name></SetHostname></Body></Envelope>",
+            state: &state,
+        };
+        assert_eq!(responder.respond(&write).await, None);
+
+        assert_eq!(
+            responder.respond(&ctx).await,
+            None,
+            "after a write the Hostname family must come from live state"
+        );
+
+        // A different family is untouched.
+        let dns = RequestCtx {
+            action: GET_DNS_ACTION,
+            base: METAMORPH_BASE,
+            body: GET_DNS_REQUEST,
+            state: &state,
+        };
+        assert_eq!(
+            responder.respond(&dns).await.as_deref(),
+            Some(GET_DNS_RESPONSE)
+        );
+    }
 }

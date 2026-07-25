@@ -1371,3 +1371,140 @@ mod serde_support {
         );
     }
 }
+
+// ── NET 2 (types layer): encoding serialisation ───────────────────────────────
+//
+// Stage 1b will wrap the `Encoding` element's value in `xml_escape()`. For a
+// well-known variant (`H264`, `G711`) that must be a no-op, so these tests pin
+// the whole `to_xml_body()` output byte-for-byte: after the change every string
+// below must still compare equal.
+mod encoding_serialisation {
+    use super::*;
+
+    fn video_cfg(encoding: VideoEncoding) -> VideoEncoderConfiguration {
+        VideoEncoderConfiguration {
+            token: "VEC_1".into(),
+            name: "Main".into(),
+            use_count: 1,
+            encoding,
+            resolution: Resolution {
+                width: 1280,
+                height: 720,
+            },
+            quality: 4.0,
+            rate_control: None,
+            h264: None,
+            h265: None,
+            multicast: None,
+            session_timeout: None,
+            guaranteed_frame_rate: None,
+        }
+    }
+
+    fn video_cfg2(encoding: VideoEncoding) -> VideoEncoderConfiguration2 {
+        VideoEncoderConfiguration2 {
+            token: "VEC_1".into(),
+            name: "Main".into(),
+            use_count: 1,
+            encoding,
+            resolution: Resolution {
+                width: 1280,
+                height: 720,
+            },
+            quality: 4.0,
+            rate_control: None,
+            gov_length: None,
+            profile: None,
+        }
+    }
+
+    fn audio_cfg(encoding: AudioEncoding) -> AudioEncoderConfiguration {
+        AudioEncoderConfiguration {
+            token: "AEC_1".into(),
+            name: "Audio".into(),
+            use_count: 1,
+            encoding,
+            bitrate: 64,
+            sample_rate: 8,
+            channels: 1,
+        }
+    }
+
+    #[test]
+    fn video_encoding_h264_serialises_to_plain_h264_element() {
+        let body = video_cfg(VideoEncoding::H264).to_xml_body();
+        assert!(
+            body.contains("<tt:Encoding>H264</tt:Encoding>"),
+            "body was: {body}"
+        );
+        assert_eq!(
+            body,
+            concat!(
+                r#"<trt:Configuration token="VEC_1">"#,
+                "<tt:Name>Main</tt:Name>",
+                "<tt:UseCount>1</tt:UseCount>",
+                "<tt:Encoding>H264</tt:Encoding>",
+                "<tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>",
+                "<tt:Quality>4</tt:Quality>",
+                "</trt:Configuration>",
+            )
+        );
+    }
+
+    #[test]
+    fn video_encoding_h264_serialises_identically_in_media2() {
+        let body = video_cfg2(VideoEncoding::H264).to_xml_body();
+        assert!(
+            body.contains("<tt:Encoding>H264</tt:Encoding>"),
+            "body was: {body}"
+        );
+        assert_eq!(
+            body,
+            concat!(
+                r#"<tr2:Configuration token="VEC_1">"#,
+                "<tt:Name>Main</tt:Name>",
+                "<tt:UseCount>1</tt:UseCount>",
+                "<tt:Encoding>H264</tt:Encoding>",
+                "<tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>",
+                "<tt:Quality>4</tt:Quality>",
+                "</tr2:Configuration>",
+            )
+        );
+    }
+
+    #[test]
+    fn audio_encoding_g711_serialises_to_plain_g711_element() {
+        let body = audio_cfg(AudioEncoding::G711).to_xml_body();
+        assert!(
+            body.contains("<tt:Encoding>G711</tt:Encoding>"),
+            "body was: {body}"
+        );
+        assert_eq!(
+            body,
+            concat!(
+                r#"<trt:Configuration token="AEC_1">"#,
+                "<tt:Name>Audio</tt:Name>",
+                "<tt:UseCount>1</tt:UseCount>",
+                "<tt:Encoding>G711</tt:Encoding>",
+                "<tt:Bitrate>64</tt:Bitrate>",
+                "<tt:SampleRate>8</tt:SampleRate>",
+                "<tt:Channels>1</tt:Channels>",
+                "</trt:Configuration>",
+            )
+        );
+    }
+
+    /// The wire strings the `Encoding` element is built from. `Display` is what
+    /// `to_xml_body()` actually interpolates, so both must stay in step.
+    #[test]
+    fn well_known_encodings_have_stable_wire_strings() {
+        assert_eq!(VideoEncoding::H264.as_str(), "H264");
+        assert_eq!(VideoEncoding::H264.to_string(), "H264");
+        assert_eq!(VideoEncoding::H265.as_str(), "H265");
+        assert_eq!(VideoEncoding::Jpeg.as_str(), "JPEG");
+        assert_eq!(AudioEncoding::G711.as_str(), "G711");
+        assert_eq!(AudioEncoding::G711.to_string(), "G711");
+        assert_eq!(AudioEncoding::G726.as_str(), "G726");
+        assert_eq!(AudioEncoding::Aac.as_str(), "AAC");
+    }
+}

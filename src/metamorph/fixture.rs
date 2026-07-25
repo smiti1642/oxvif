@@ -392,4 +392,109 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    // ── NET 4: invariants Stage 3 must preserve ───────────────────────────────
+
+    /// Ephemera de-duplication, checked on the whole `Fixture` rather than just
+    /// the store length: two recordings of the same operation that differ only
+    /// in `MessageID` must collapse onto one entry whose `action` and
+    /// `key_canon` survive, with the later response winning.
+    ///
+    /// Complements `ephemera_jitter_does_not_fragment_the_key` above, which
+    /// pins the length and last-write-wins but not the retained metadata.
+    #[test]
+    fn ephemera_dedup_keeps_one_fixture_with_its_action_and_key() {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+        let req1 = "<Envelope><Header><MessageID>uuid:aaa</MessageID></Header>\
+                    <Body><GetHostname/></Body></Envelope>";
+        let req2 = "<Envelope><Header><MessageID>uuid:bbb</MessageID></Header>\
+                    <Body><GetHostname/></Body></Envelope>";
+
+        // Both requests canonicalise to the same key — that is *why* they merge.
+        let key = canonicalize(req1, Masking::Key);
+        assert_eq!(key, canonicalize(req2, Masking::Key));
+        assert!(
+            !key.contains("uuid:aaa") && !key.contains("uuid:bbb"),
+            "the MessageID must be masked out of the key: {key}"
+        );
+
+        let mut store = FixtureStore::new("dev");
+        store.record(ACTION, req1, "<r1/>");
+        store.record(ACTION, req2, "<r2/>");
+
+        assert_eq!(store.len(), 1);
+        assert_eq!(store.fixtures().len(), 1);
+        let f = &store.fixtures()[0];
+        assert_eq!(f.action, ACTION);
+        assert_eq!(f.key_canon, key);
+        assert_eq!(f.response_raw, "<r2/>", "last write wins");
+        assert!(
+            f.request_raw.contains("uuid:bbb"),
+            "the retained request is the later one: {}",
+            f.request_raw
+        );
+        assert_eq!(store.lookup(&key).unwrap().response_raw, "<r2/>");
+    }
+
+    /// `save` → `load` round-trip over several fixtures: device label, count,
+    /// insertion order, and every fixture's `action` / `key_canon` /
+    /// `request_raw` / `response_raw` come back byte-identical.
+    #[test]
+    fn save_then_load_preserves_every_fixture_and_its_action() {
+        const GET_HOSTNAME: &str = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+        const GET_PROFILE: &str = "http://www.onvif.org/ver10/media/wsdl/GetProfile";
+
+        let dir = tmp_dir("actions");
+        let mut store = FixtureStore::new("acme-cam");
+        store.record(
+            GET_HOSTNAME,
+            "<Envelope><Body><GetHostname/></Body></Envelope>",
+            "<HostnameResponse/>",
+        );
+        store.record(GET_PROFILE, GET_PROFILE_A, "<respA/>");
+        store.record(GET_PROFILE, GET_PROFILE_B, "<respB/>");
+        store.save(&dir).unwrap();
+
+        let loaded = FixtureStore::load(&dir).unwrap();
+        assert_eq!(loaded.device(), "acme-cam");
+        assert_eq!(loaded.len(), 3);
+        assert_eq!(
+            loaded
+                .fixtures()
+                .iter()
+                .map(|f| f.action.as_str())
+                .collect::<Vec<_>>(),
+            vec![GET_HOSTNAME, GET_PROFILE, GET_PROFILE],
+            "actions survive the round-trip, in insertion order"
+        );
+        assert_eq!(
+            loaded.fixtures().len(),
+            store.fixtures().len(),
+            "no fixture is dropped"
+        );
+        for (before, after) in store.fixtures().iter().zip(loaded.fixtures()) {
+            assert_eq!(before.key_canon, after.key_canon);
+            assert_eq!(before.action, after.action);
+            assert_eq!(before.request_raw, after.request_raw);
+            assert_eq!(before.response_raw, after.response_raw);
+        }
+
+        // The reloaded index still resolves each distinct request separately.
+        assert_eq!(
+            loaded
+                .lookup(&canonicalize(GET_PROFILE_A, Masking::Key))
+                .unwrap()
+                .response_raw,
+            "<respA/>"
+        );
+        assert_eq!(
+            loaded
+                .lookup(&canonicalize(GET_PROFILE_B, Masking::Key))
+                .unwrap()
+                .response_raw,
+            "<respB/>"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -1237,4 +1237,70 @@ mod tests {
         );
         assert!(rx.recv().await.is_none(), "sender dropped with the future");
     }
+
+    // ── NET 3: `is_complete()` on a non-empty report ──────────────────────────
+    //
+    // Stage 2 changes what `is_complete()` returns for an *empty* report, so
+    // that case is deliberately left unpinned here. The non-empty semantics
+    // below must survive the change untouched.
+
+    /// A report in which every swept operation was `Recorded` is complete.
+    #[test]
+    fn is_complete_is_true_when_every_non_empty_outcome_is_recorded() {
+        let mut report = SweepReport::default();
+        report.observe(SurfaceOp::GetProfiles, true);
+        report.observe(SurfaceOp::GetStreamUri, true);
+        report.observe(SurfaceOp::GetHostname, true);
+
+        assert_eq!(report.entries().len(), 3, "the report must be non-empty");
+        assert!(report.is_complete());
+        let recorded = report.recorded();
+        assert_eq!(recorded.len(), 3);
+        for op in [
+            SurfaceOp::GetProfiles,
+            SurfaceOp::GetStreamUri,
+            SurfaceOp::GetHostname,
+        ] {
+            assert!(recorded.contains(&op), "{op:?} missing from {recorded:?}");
+            assert_eq!(report.outcome(op), Some(OpOutcome::Recorded));
+        }
+        assert!(report.skipped().is_empty());
+    }
+
+    /// A single `Failed` outcome makes the whole report incomplete.
+    #[test]
+    fn is_complete_is_false_when_any_outcome_failed() {
+        let mut report = SweepReport::default();
+        report.observe(SurfaceOp::GetProfiles, true);
+        report.observe(SurfaceOp::GetStreamUri, false);
+
+        assert_eq!(
+            report.outcome(SurfaceOp::GetStreamUri),
+            Some(OpOutcome::Failed)
+        );
+        assert!(!report.is_complete());
+        assert_eq!(
+            report.skipped(),
+            Vec::<SurfaceOp>::new(),
+            "Failed is not a skip"
+        );
+    }
+
+    /// Either skip reason also makes the report incomplete.
+    #[test]
+    fn is_complete_is_false_when_any_outcome_is_skipped() {
+        for skipped in [OpOutcome::SkippedNoData, OpOutcome::SkippedPrerequisite] {
+            let mut report = SweepReport::default();
+            report.observe(SurfaceOp::GetProfiles, true);
+            report.outcomes.insert(SurfaceOp::GetPtzPresets, skipped);
+
+            assert_eq!(report.outcome(SurfaceOp::GetPtzPresets), Some(skipped));
+            assert!(skipped.is_skipped());
+            assert!(
+                !report.is_complete(),
+                "{skipped:?} must not count as a completed sweep"
+            );
+            assert_eq!(report.skipped(), vec![SurfaceOp::GetPtzPresets]);
+        }
+    }
 }
