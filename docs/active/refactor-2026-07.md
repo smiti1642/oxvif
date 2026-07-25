@@ -44,6 +44,14 @@ writes `CHANGELOG.md`, the stages deliberately do not):
   unchanged; callers that read `""` as "unknown mode" now see an error.
 - *Stage 2.* `SweepReport::is_complete()` returns `false` for an empty report
   instead of `true`. A caller gating on it with an empty selection flips.
+- *Stage 3 step 1.* `FixtureStore::lookup` takes the SOAP action as its first
+  argument — a compile break, deliberately, so the change cannot pass silently.
+  `lookup_by_key` ships **already deprecated** and is removed in step 2, so there
+  is no release in which adopting it is supported: it exists to make the break
+  diagnosable, not to be used. Say that in the notes, and do not describe it as
+  bug-compatible with the old `lookup` (see §9). Also check at release time that
+  its `#[deprecated(since = "0.14.0")]` matches the version actually shipped —
+  it was written against a `Cargo.toml` still reading `0.13.1`.
 
 ---
 
@@ -56,7 +64,7 @@ writes `CHANGELOG.md`, the stages deliberately do not):
 | 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | **done** — `894b865` |
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
-| 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | step 1 in progress |
+| 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | step 1 **done** — `5d3fbc7`; step 2 not started |
 | 4 | Positive+negative pairs for the 26 zero-coverage + 21 hollow-negative methods | additive | not started |
 
 Verdicts for the four finished stages are in [§9](#9-stage-verdicts) — what each one
@@ -376,6 +384,7 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C13 | `git checkout -- .` undoes a mutation | Not if the mutation was applied with `git checkout <commit> -- <path>`, which **stages** it. `checkout -- .` then restores the worktree *from the poisoned index*, and `git diff` reads clean while `git status` shows `M ` (staged). Undo with `git checkout HEAD -- <path>` and verify with `git diff HEAD --stat`, not `git diff`. | reviewer |
 | C14 | Any mutation of the fixed code proves the net | Only if it **compiles**. Deleting `<tt:Channels>{channels}</tt:Channels>` from the new Media2 serialiser left `channels = self.channels` as an unused named `format!` argument and rustc rejected the build — zero tests ran, so the mutation said nothing about the suite. That the compiler happened to be a stronger net *there* does not transfer to the next site. Retagging `Channels` → `Channel` compiles, and went red in 4 tests. | reviewer |
 | C15 | A name vanishing from `-- --list` means a test was deleted | **Doc-test names embed a line number** (`src/metamorph/surface.rs - metamorph::surface::drive_surface_with_progress (line 514)`). Any doc-comment edit above a doc test makes its name vanish and a near-identical one appear — indistinguishable from a deletion unless you match on name-minus-line. Stage 2's 4 added doc lines moved that test 514 → 518. Stages 3 and 4 edit many doc comments, so expect this. | agent |
+| C17 | A test marked "do not edit" should come out of the stage byte-identical | Not when the stage changes a **public signature** — that mechanically rewrites every call site, including in tests whose subject is unrelated (Stage 3 step 1 had to touch both ephemera de-dup tests for exactly this reason). Read the instruction as "do not weaken its assertions" and review by diffing the **assertion set**, not the byte count. The check that matters: does the test still fail for the reason it was written? | agent |
 | C16 | Every new test must be shown red before the fix | Not one whose subject is "property X still holds". A cross-module premise guard is **green the moment it is written**, because the premise already holds — red-before-green proves nothing and accepting it green is indistinguishable from accepting a vacuous test. Validate it by **mutating the module that owns the property** and naming the expected victims. Stage 2's two whitespace pins were the only 2 of 654 lib tests that caught a mutation of the `Event::End` trim; 1b's `hostile_encoding_reaches_display_unescaped` is the same shape, with the method left implicit. | agent |
 
 ---
@@ -388,6 +397,12 @@ Mistakes actually made in this programme. Re-read before each stage.
   `develop` only when the whole programme is green, then follow the release SOP.
 - **Mutation sandbox:** `C:/Users/Null/Documents/GitHub/oxvif-mut`, a detached-HEAD
   worktree with a commit-refusing hook. See §5 C. Keep it out of the main tree.
+- **`oxdm` builds against this branch, not against a release.** `oxdm/Cargo.toml`
+  overrides `oxvif` with `path = "../oxvif"` — the *main worktree* — at both `:31`
+  and `:70` (dev-deps). Two consequences: any oxdm build during this programme
+  compiles mid-programme code, and, usefully, `cargo check --all-features` in
+  `oxdm` is a free downstream check for a breaking stage. Run it before declaring
+  a breaking stage done; it took 23 s at Stage 3 step 1.
 
 - **rtk silently corrupts two things. Both produce plausible wrong answers, not errors.**
   1. *Regex mangling.* `grep -n '#\[cfg(test)\]'`, `grep 'x>{y}</x'` and
@@ -425,6 +440,7 @@ Mistakes actually made in this programme. Re-read before each stage.
   | `894b865` (post-1a) | 688 | 686 | 640 / 1 + 9 / 36 |
   | `573168a` (post-1b) | 698 | 696 | 650 / 1 + 9 / 36 |
   | `ddfde44` (post-2) | 702 | 700 | 654 / 1 + 9 / 36 |
+  | `5d3fbc7` (post-3 step 1) | 707 | 705 | 659 / 1 + 9 / 36 |
 
   The 0.5 → 1a delta is −1 (`known_broken_mock_actions_are_pinned`, deleted by
   design) +13. The 1a → 1b delta is −1 +11, where the −1 is a *rename*:
@@ -525,6 +541,47 @@ amend pins it at both altitudes. Verified with a *narrower* mutation than the
 agent's — keep the trim for non-empty text, drop only the collapse-to-`None`
 branch — which turned exactly those two tests red out of 654. That is the whole
 defence: nothing else in the crate notices.
+
+**Stage 3 step 1 · `5d3fbc7` — PASS.**
+Two reds pasted, in the right order: the compile error against the old arity
+(6 errors, nothing ran), then — after applying the *signature only*, leaving the
+key-only index in place — the behavioural red, which prints the defect verbatim:
+a Media1 request answered with `<tr2:GetProfilesResponse><Profiles token="media2-profile"/>`.
+Names 702 → 707, +5 real, the single vanished name a C15 line shift
+(`MetamorphTransport` 91 → 93, the `respond` call site rustfmt-wrapped to three
+lines). Three reviewer mutations, none at the agent's point (it had used
+`canon.rs`):
+
+| mutation | red |
+|---|---|
+| neutralise the action half in `insert` *and* `lookup` — the pre-fix bug, still compiling | the 3 collision/round-trip/replay tests + the shim test |
+| **key on the raw request instead of the canonical one** — the trap named in §3 | 13 tests, including **both** ephemera de-dup invariants |
+| shim returns the last key match instead of the first | the shim test alone |
+
+The middle one is the point of the exercise: a "fix" that keys on the raw request
+would show 60 fixtures where 59 stood and *look* like it lost nothing, while
+silently destroying de-dup. The net catches it.
+
+**Downstream verified, not assumed:** `oxdm` (the only known consumer) uses
+`FixtureStore::{save, load, device}` and `serve(store)` and **never calls
+`lookup`**. `cargo check --all-features` in `oxdm` against this commit finishes
+clean — no errors, and no deprecation warnings either, since it does not touch the
+shim. The break costs the desktop app nothing. See §7 for the pin that made this
+checkable at all.
+
+**Deviation accepted:** the two protected de-dup tests could not stay
+byte-identical — each ends on a `store.lookup(&key)` line, and a public signature
+change mechanically rewrites every call site. The reviewer diffed both: only the
+call line moved, every `len()`, last-write-wins and field assertion is unchanged,
+and the tests are marginally *stronger* since the entry must now resolve under its
+recorded action. Recorded as C17.
+
+**Not bug-compatible, by design:** the shim returns the *first* fixture matching
+the key, while the old `lookup` returned the *surviving* one (the last write, which
+had overwritten the other service). For a store that now holds both, "the old
+behaviour" is not well defined — so the shim is documented as first-match rather
+than pretending to be a drop-in. The 0.14.0 notes must not describe it as
+compatible.
 
 ### Test-design patterns these stages produced
 
