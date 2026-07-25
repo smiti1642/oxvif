@@ -27,9 +27,18 @@ two multi-service fixture helpers live in `src/tests/common.rs`, declared once f
 `src/lib.rs` through `src/tests/mod.rs`. The black-box snapshot is
 `tests/mock_action_snapshot.rs`, gated `#![cfg(feature = "mock")]`.
 
-**Migration note for the 0.14.0 release notes:** Stage 3 invalidates every
-already-recorded metamorph clone. The lost Media1 fixtures were never written to
-disk, so no upgrade path can recover them — users must re-record.
+**Migration notes for the 0.14.0 release notes** (accumulating; the release SOP
+writes `CHANGELOG.md`, the stages deliberately do not):
+
+- *Stage 3.* Invalidates every already-recorded metamorph clone. The lost Media1
+  fixtures were never written to disk, so no upgrade path can recover them —
+  users must re-record.
+- *Stage 2.* `OnvifClient::get_discovery_mode` / `OnvifSession::get_discovery_mode`
+  now return `Err(SoapError::MissingField("GetDiscoveryModeResponse/DiscoveryMode"))`
+  where a device that omitted the element previously produced `Ok("")`. Signature
+  unchanged; callers that read `""` as "unknown mode" now see an error.
+- *Stage 2.* `SweepReport::is_complete()` returns `false` for an empty report
+  instead of `true`. A caller gating on it with an empty selection flips.
 
 ---
 
@@ -41,7 +50,7 @@ disk, so no upgrade path can recover them — users must re-record.
 | 0.5 | Split client tests by service; move mock snapshot to `tests/` | pure move | **done** — `e21ed7f` |
 | 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | **done** — `894b865` |
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
-| 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **in progress** — API shape decided, see §2.1 |
+| 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | not started |
 | 4 | Positive+negative pairs for the 26 zero-coverage + 21 hollow-negative methods | additive | not started |
 
@@ -59,6 +68,13 @@ so `Ok("")` becomes unreachable rather than merely undocumented. The pin
 (`src/tests/client/device_tests.rs:1765`) exists to be flipped by this stage;
 `get_discovery_mode_pins_action_body_and_parsed_value` next to it must survive
 untouched. Rationale below.
+
+*Shipped in `ddfde44`.* The whitespace-only half of the decision holds only
+because `XmlNode::parse` collapses blank text to `None` when it trims at
+`Event::End` (`src/soap/xml.rs:130-137`) — a property of another module that **no
+test defended**. It is now pinned at both altitudes, which is why the stage
+touches a fourth file (`src/soap/xml.rs`, tests only, hunk after its `#[cfg(test)]`
+at `:329`). See §9 and C16.
 
 `get_discovery_mode` (`src/client/device.rs:838-851`) documents its return as
 `"Discoverable"` or `"NonDiscoverable"` and then does
@@ -190,13 +206,13 @@ Expected tags: `src/client/media.rs:175,195,220,239`,
 |---|---|---|
 | D3 | `AudioEncoderConfiguration::to_xml_body()` emits `trt:` into a `tr2:` Media2 request. The fix pattern already exists in-tree: `VideoSourceConfiguration` carries two serialisers for exactly this reason. | `src/types/audio.rs:160` × `src/client/media2.rs:514`; precedent `src/types/video.rs:157` / `:177` |
 | D4 | `xml_escape` bypassed via `Display` — `Other(String)` returns the device's raw string. Invisible to a `grep xml_escape` audit. **Fixed in `573168a` at four sites, not three** — D3's new `to_xml_body_media2()` creates a fourth interpolation. All four now escape `self.encoding.as_str()`; `Display` itself is deliberately left unescaped and pinned by `hostile_encoding_reaches_display_unescaped`. | `src/types/audio.rs:99`,`:175`,`:202`; `src/types/video.rs:534`,`:753` |
-| D5 | `get_discovery_mode` doc promises one of two strings; code can return `""`. | `src/client/device.rs:840` vs `:847-850` |
+| D5 | `get_discovery_mode` doc promises one of two strings; code can return `""`. **Fixed in `ddfde44`** — missing, empty and whitespace-only all become `SoapError::missing("GetDiscoveryModeResponse/DiscoveryMode")`; signature unchanged. | `src/client/device.rs:840` vs `:847-850` |
 | D6 | `Transport` 400-handling contract undocumented at the trait, and contradicted by three doc sites that say 200/500 only. | `src/transport.rs:11-15`, `:40-41`, `src/error.rs:19-21` vs code at `src/transport.rs:163` |
 | D7 | Non-reqwest `diqwest` errors reported as a fabricated HTTP 401. | `src/transport.rs:138-144` |
 | D8 | Devices with an empty endpoint overwrite each other; only the first survives. Strict path only — the lenient path already rejects them. | `src/discovery.rs:61` + `:283` vs `:638-643` |
 | D9 | `listen()` aborts the whole window on one transient recv error; `probe_once` explicitly does not. | `src/discovery.rs:493` vs `:420` |
 | D10 | `CapturingTransport` writes WS-Security digests and RTSP credentials verbatim, and the module doc tells the user to commit them. The successor module spent ~100 lines solving this. | `src/fixtures.rs:73`,`:78` vs `:15`; cf. `src/metamorph/fixture.rs:178-266` |
-| D11 | `SweepReport::is_complete()` is vacuously `true` on an empty sweep. | `src/metamorph/surface.rs:414` |
+| D11 | `SweepReport::is_complete()` is vacuously `true` on an empty sweep. **Fixed in `ddfde44`** — it now requires a non-empty report; no production caller existed either way. | `src/metamorph/surface.rs:414` |
 | D12 | `SoapError::InvalidValue` is never constructed; `src/health/report.rs:178` has an unreachable match arm for it. | `src/soap/error.rs:45`,`:55` |
 
 ### Rejected / downgraded
@@ -318,6 +334,8 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C12 | Counting Rust items with a line pattern is fine | `grep -c '^    ("'` gave **137** `EXPECTED` rows; the real count is **141**. The six missing rows are rustfmt-wrapped across lines *because their values are long* — i.e. the exact six broken entries the count existed to track. Count with a brace-matching parser, and prefer asserting a post-condition ("all 141 rows are `ok`") over a delta ("6 rows changed"). | reviewer |
 | C13 | `git checkout -- .` undoes a mutation | Not if the mutation was applied with `git checkout <commit> -- <path>`, which **stages** it. `checkout -- .` then restores the worktree *from the poisoned index*, and `git diff` reads clean while `git status` shows `M ` (staged). Undo with `git checkout HEAD -- <path>` and verify with `git diff HEAD --stat`, not `git diff`. | reviewer |
 | C14 | Any mutation of the fixed code proves the net | Only if it **compiles**. Deleting `<tt:Channels>{channels}</tt:Channels>` from the new Media2 serialiser left `channels = self.channels` as an unused named `format!` argument and rustc rejected the build — zero tests ran, so the mutation said nothing about the suite. That the compiler happened to be a stronger net *there* does not transfer to the next site. Retagging `Channels` → `Channel` compiles, and went red in 4 tests. | reviewer |
+| C15 | A name vanishing from `-- --list` means a test was deleted | **Doc-test names embed a line number** (`src/metamorph/surface.rs - metamorph::surface::drive_surface_with_progress (line 514)`). Any doc-comment edit above a doc test makes its name vanish and a near-identical one appear — indistinguishable from a deletion unless you match on name-minus-line. Stage 2's 4 added doc lines moved that test 514 → 518. Stages 3 and 4 edit many doc comments, so expect this. | agent |
+| C16 | Every new test must be shown red before the fix | Not one whose subject is "property X still holds". A cross-module premise guard is **green the moment it is written**, because the premise already holds — red-before-green proves nothing and accepting it green is indistinguishable from accepting a vacuous test. Validate it by **mutating the module that owns the property** and naming the expected victims. Stage 2's two whitespace pins were the only 2 of 654 lib tests that caught a mutation of the `Event::End` trim; 1b's `hostile_encoding_reaches_display_unescaped` is the same shape, with the method left implicit. | agent |
 
 ---
 
@@ -365,12 +383,16 @@ Mistakes actually made in this programme. Re-read before each stage.
   | `e21ed7f` (post-0.5) | 676 | 674 | 627 / 2 + 9 / 36 |
   | `894b865` (post-1a) | 688 | 686 | 640 / 1 + 9 / 36 |
   | `573168a` (post-1b) | 698 | 696 | 650 / 1 + 9 / 36 |
+  | `ddfde44` (post-2) | 702 | 700 | 654 / 1 + 9 / 36 |
 
   The 0.5 → 1a delta is −1 (`known_broken_mock_actions_are_pinned`, deleted by
   design) +13. The 1a → 1b delta is −1 +11, where the −1 is a *rename*:
   `…_emits_trt_configuration_known_bug` → `…_emits_tr2_configuration`, the pin
-  this stage existed to flip. Baseline sets live at
-  `<scratchpad>/{baseline,after,1a,1b}-tests.txt`.
+  this stage existed to flip. The 1b → 2 delta is −2 +6, where one −1 is again a
+  rename (`…_yields_an_empty_string` → `…_is_a_missing_field_error`, Stage 0's
+  pin) and the other is **not a deletion at all** but a doc-test line-number shift
+  (C15). Baseline sets live at `<scratchpad>/{baseline,after,1a,1b}-tests.txt` and
+  `<scratchpad>/names-{1a,1b,2}.txt`.
 
 ---
 
@@ -439,11 +461,47 @@ including the drift invariant
 `audio_media1_and_media2_differ_only_in_the_wrapper_prefix`. A third attempt was
 discarded for not compiling (C14).
 
-Two test-design points worth carrying forward from 1b:
-- `hostile_encoding_reaches_display_unescaped` is a **premise guard** — it asserts
-  the hostile string still carries XML metacharacters when read back through
-  `as_str`/`Display`. Without it, anyone who later makes `as_str` escape would turn
-  all four site tests vacuous and nothing would go red. This is C6 applied correctly.
-- `audio_media1_and_media2_differ_only_in_the_wrapper_prefix` compares the two
-  serialisers' whole output after normalising the wrapper element name, so any
-  future drift between them fails rather than silently diverging.
+**Stage 2 · `ddfde44` — PASS** (amended once, see below).
+Red pasted verbatim for all three behaviour tests, unfiltered: both
+`get_discovery_mode` negatives failed with `Ok("")` — confirming the
+present-but-empty element is a genuinely separate code path from the absent one
+(`child()` finds the node, `text()` returns `""`), not a duplicate case. Names
+698 → 702; the two vanished are the renamed Stage 0 pin and a C15 line-number
+shift, verified as +4 doc lines against a 514 → 518 move. Four reviewer
+mutations, all caught unfiltered:
+
+| mutation | red |
+|---|---|
+| revert the D5 production half alone | the 2 new negatives |
+| revert the D11 production half alone | `is_complete_is_false_when_the_report_is_empty` |
+| shorten the field path to `"DiscoveryMode"` | the 2 new negatives — so they discriminate on the path, not on `is_err()` |
+| `all()` → `any()` in `is_complete` | the 2 Stage 0 non-empty tests — the pre-existing net still bites after the change |
+
+**The one thing sent back:** the whitespace-only half of the decision was
+unguarded. It works only because `XmlNode::parse` collapses blank text to `None`,
+and neither the new tests nor any of `soap::xml`'s own 23 tests asserted that. The
+amend pins it at both altitudes. Verified with a *narrower* mutation than the
+agent's — keep the trim for non-empty text, drop only the collapse-to-`None`
+branch — which turned exactly those two tests red out of 654. That is the whole
+defence: nothing else in the crate notices.
+
+### Test-design patterns these stages produced
+
+Worth reusing in Stages 3 and 4 rather than rediscovering.
+
+- **Premise guard** (1b `hostile_encoding_reaches_display_unescaped`, 2
+  `test_whitespace_only_element_text_is_empty`). Asserts the *precondition* a
+  group of tests silently relies on. Without the 1b one, anyone who later makes
+  `as_str` escape turns all four site tests vacuous with nothing going red.
+  Validate by mutating the module that owns the premise — see C16.
+- **Two-altitude pinning** (2). When a method's contract depends on another
+  module's behaviour, pin it in both places: the call site so the contract fails
+  loudly, and the source so the failure points at the module that actually
+  changed. Costs a few lines; stops a `soap::xml` regression from being reported
+  as a device-client bug.
+- **Drift invariant** (1b `audio_media1_and_media2_differ_only_in_the_wrapper_prefix`).
+  Compares two implementations' whole output after normalising the one difference
+  that is legitimate, so any future divergence fails instead of silently spreading.
+- **Assert the payload, not the variant** (2). Both new negatives assert the
+  `MissingField` *path string*, which is what made the shortened-path mutation
+  fail. This is the concrete template for un-hollowing the 21 negatives in Stage 4.
