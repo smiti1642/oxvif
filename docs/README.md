@@ -29,6 +29,7 @@ conventions, and attribution/licensing.
 |-----|-------|
 | [`metamorph.md`](active/metamorph.md) | The shape-shifting mock device (three personas). M0–M3, M5, M6 shipped; **M4** (control plane + Persona A) and **M7** (quirk diff) not yet started. |
 | [`metamorph-clone-in-oxdm.md`](active/metamorph-clone-in-oxdm.md) | Draft design for wiring Persona B (clone/replay) into oxdm so a user can clone their own IP camera and hunt its quirks. |
+| [`refactor-2026-07.md`](active/refactor-2026-07.md) | Staged bug-fix programme from the 2026-07 audit. Carries the locked release decision, the confirmed-defect list with citations, the per-stage **Critic protocol**, and a correction log of wrong beliefs held during the work. Read §5 and §6 before reviewing any stage. |
 
 ## `done/` — completed plans
 
