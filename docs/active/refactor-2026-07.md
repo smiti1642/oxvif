@@ -50,9 +50,14 @@ disk, so no upgrade path can recover them — users must re-record.
   concurrent behaviour change would corrupt the baseline.
 - Stage 0.5 must land before Stage 1 — a large mechanical file move conflicts
   with concurrent test edits.
-- Stages 1a and 1b may run in parallel: 1a touches only `src/mock/`, 1b touches
-  `src/types/{audio,video}.rs` + `src/client/media2.rs`. **1b must be one unit** —
-  splitting it would put two agents in `src/types/audio.rs` at once.
+- Stages 1a and 1b are disjoint in file scope — 1a touches only `src/mock/`, 1b
+  touches `src/types/{audio,video}.rs` + `src/client/media2.rs` — but they must
+  still be **serialised**, because they share one working tree: two agents each
+  running `cargo test` see each other's edits, which destroys red-before-green
+  verification, and they block on the same cargo target lock. Run them in sequence,
+  or give each its own worktree. Only genuinely read-only work may run alongside a
+  writing stage. **1b must be one unit** — splitting it would put two agents in
+  `src/types/audio.rs` at once.
 - Stage 4 must run last. Earlier stages change what the correct assertion *is*
   (e.g. after 1b, `set_audio_encoder_configuration_media2`'s positive test asserts
   `tr2:`, not `trt:`), so writing those tests earlier wastes them.
@@ -225,6 +230,8 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C8 | The counts written into this doc were measured | Three were not, and all three came from shell `grep`, which §7.1 shows returns 0 on parenthesised patterns: "99 uses of `pub(crate)`" (real: 73), "16 lock poison sites" (real: 25), `src/lib.rs:200` (real: `:204-205`). **A tool that fails by returning `0`/nothing cannot be distinguished from a true negative.** Re-measure every number in this doc with the Grep tool before citing it. | reviewer |
 | C9 | rtk only mangles *search patterns* | It also **truncates command output** and appends a fake cargo-style summary (§7.2). Detected only because a 676-test baseline came back as 373. Any evidence gathered through rtk that "looks a bit short" is short. | reviewer |
 | C10 | `cargo test <filter>` is enough to prove a mutation was caught | It silently **excludes the integration crates** ("2 filtered out"). Mutation D (`GetPresetsResponse` typo) read as *not caught* under `cargo test --all-features client::ptz`, and as caught only under the unfiltered run. Always run the mutation check unfiltered, or the net looks weaker than it is. | reviewer |
+| C11 | Disjoint file scope means two stages can run concurrently | Not in one working tree. Both agents run `cargo test`, so each sees the other's half-finished edits and red-before-green becomes unprovable. Serialise, or give each agent its own worktree. Read-only work may run alongside. | reviewer |
+| C12 | Counting Rust items with a line pattern is fine | `grep -c '^    ("'` gave **137** `EXPECTED` rows; the real count is **141**. The six missing rows are rustfmt-wrapped across lines *because their values are long* — i.e. the exact six broken entries the count existed to track. Count with a brace-matching parser, and prefer asserting a post-condition ("all 141 rows are `ok`") over a delta ("6 rows changed"). | reviewer |
 
 ---
 
