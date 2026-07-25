@@ -32,7 +32,7 @@
 //! necessarily a spec violation. A true spec baseline would require validating
 //! against the XSD (element presence + cardinality), which oxvif does not do.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -51,7 +51,7 @@ const BASELINE_BASE: &str = "http://baseline";
 /// One operation whose clone response deviates structurally from the synthetic
 /// baseline. Empty `only_in_*` vectors never appear here — a fixture with no
 /// drift is omitted from the [`QuirkReport`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationQuirk {
     /// The SOAP action URI this exchange answered.
     pub action: String,
@@ -82,6 +82,165 @@ impl QuirkReport {
     pub fn is_empty(&self) -> bool {
         self.quirks.is_empty()
     }
+
+    /// Serialise the report as a compact single-line JSON string — the on-disk
+    /// form for a saved quirk baseline.
+    pub fn to_json(&self) -> String {
+        // serde_json on the fully-serializable QuirkReport — infallible.
+        serde_json::to_string(self).expect("QuirkReport is fully serializable")
+    }
+
+    /// Serialise the report as pretty-printed JSON (indented, line-separated).
+    pub fn to_json_pretty(&self) -> String {
+        serde_json::to_string_pretty(self).expect("QuirkReport is fully serializable")
+    }
+
+    /// Compare this report against an earlier baseline and report only what
+    /// changed — the regression-tracking view. Answers "did this firmware update
+    /// change the device's quirks?" and "are these two same-model cameras
+    /// quirk-identical?".
+    ///
+    /// ```no_run
+    /// # fn run() -> std::io::Result<()> {
+    /// use oxvif::metamorph::{FixtureStore, QuirkReport};
+    /// let baseline: QuirkReport =
+    ///     serde_json::from_str(&std::fs::read_to_string("quirks-baseline.json")?).unwrap();
+    /// let now = FixtureStore::load("tests/fixtures/hikvision-ds2cd")?.diff_against_synthetic();
+    /// let d = now.diff(&baseline);
+    /// if !d.is_empty() {
+    ///     println!("{}", serde_json::to_string_pretty(&d).unwrap());
+    /// }
+    /// # Ok(()) }
+    /// ```
+    pub fn diff(&self, prev: &QuirkReport) -> QuirkDiff {
+        QuirkDiff::compute(prev, self)
+    }
+}
+
+// ── QuirkDiff ─────────────────────────────────────────────────────────────────
+
+/// Differences between two [`QuirkReport`]s — what a device's structural quirks
+/// gained, lost, or shifted between two runs.
+///
+/// A quirk's identity is the `(action, key_canon)` pair — the join key the
+/// [module docs](crate::metamorph) share with [`ParseVerdict`] and
+/// [`OperationDiff`]. `action` alone will not do: one action can have many
+/// fixtures distinguished only by their `token=` params. `key_canon` alone is in
+/// fact unique *within* one store (it is [`FixtureStore`]'s index key), but the
+/// pair keeps the identity aligned with the other reports and stays correct when
+/// the two reports being compared come from different stores.
+///
+/// Entries are ordered by that pair and every path list is sorted, so two runs
+/// over identical input serialise byte-identically.
+///
+/// [`ParseVerdict`]: super::ParseVerdict
+///
+/// Computed via [`QuirkReport::diff`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QuirkDiff {
+    /// Operations that drift now but did not in the baseline — a newly quirky
+    /// operation, carried whole so the paths are readable without a join.
+    pub appeared: Vec<OperationQuirk>,
+    /// Operations that drifted in the baseline but match the synthetic mock now
+    /// — carried as they appeared in the baseline.
+    pub resolved: Vec<OperationQuirk>,
+    /// Operations that drift in *both* reports but whose deviating path sets
+    /// moved. See [`ChangedQuirk`].
+    pub changed: Vec<ChangedQuirk>,
+}
+
+/// One entry in [`QuirkDiff::changed`]: an operation quirky in both reports,
+/// with the paths that entered or left each side of its deviation.
+///
+/// The four vectors are set differences against the baseline's corresponding
+/// vector, so a path that moved from `only_in_synthetic` to `only_in_clone`
+/// shows up in both `clone_only_added` and `synthetic_only_removed`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangedQuirk {
+    /// The SOAP action URI this exchange answered.
+    pub action: String,
+    /// The canonical, ephemera-masked request (the fixture key).
+    pub key_canon: String,
+    /// Paths in [`OperationQuirk::only_in_clone`] now but not in the baseline's.
+    pub clone_only_added: Vec<String>,
+    /// Paths in the baseline's [`OperationQuirk::only_in_clone`] but not now.
+    pub clone_only_removed: Vec<String>,
+    /// Paths in [`OperationQuirk::only_in_synthetic`] now but not in the baseline's.
+    pub synthetic_only_added: Vec<String>,
+    /// Paths in the baseline's [`OperationQuirk::only_in_synthetic`] but not now.
+    pub synthetic_only_removed: Vec<String>,
+}
+
+impl QuirkDiff {
+    /// `true` when the two reports describe the same quirks — nothing appeared,
+    /// nothing resolved, and no deviation changed shape.
+    pub fn is_empty(&self) -> bool {
+        self.appeared.is_empty() && self.resolved.is_empty() && self.changed.is_empty()
+    }
+
+    fn compute(prev: &QuirkReport, now: &QuirkReport) -> Self {
+        let prev_by_key = index_by_key(prev);
+        let now_by_key = index_by_key(now);
+
+        let mut appeared = Vec::new();
+        let mut changed = Vec::new();
+
+        for (key, q) in &now_by_key {
+            match prev_by_key.get(key) {
+                None => appeared.push((*q).clone()),
+                Some(p) => {
+                    let entry = ChangedQuirk {
+                        action: q.action.clone(),
+                        key_canon: q.key_canon.clone(),
+                        clone_only_added: path_diff(&q.only_in_clone, &p.only_in_clone),
+                        clone_only_removed: path_diff(&p.only_in_clone, &q.only_in_clone),
+                        synthetic_only_added: path_diff(&q.only_in_synthetic, &p.only_in_synthetic),
+                        synthetic_only_removed: path_diff(
+                            &p.only_in_synthetic,
+                            &q.only_in_synthetic,
+                        ),
+                    };
+                    if !(entry.clone_only_added.is_empty()
+                        && entry.clone_only_removed.is_empty()
+                        && entry.synthetic_only_added.is_empty()
+                        && entry.synthetic_only_removed.is_empty())
+                    {
+                        changed.push(entry);
+                    }
+                }
+            }
+        }
+
+        let resolved = prev_by_key
+            .iter()
+            .filter(|(key, _)| !now_by_key.contains_key(*key))
+            .map(|(_, q)| (*q).clone())
+            .collect();
+
+        Self {
+            appeared,
+            resolved,
+            changed,
+        }
+    }
+}
+
+/// Index a report's quirks on their identity — the `(action, key_canon)` *pair*,
+/// since `key_canon` alone collides across actions. The `BTreeMap` also fixes the
+/// diff's output order deterministically.
+fn index_by_key(r: &QuirkReport) -> BTreeMap<(&str, &str), &OperationQuirk> {
+    r.quirks
+        .iter()
+        .map(|q| ((q.action.as_str(), q.key_canon.as_str()), q))
+        .collect()
+}
+
+/// The paths in `a` absent from `b`, sorted and deduplicated — so the result is
+/// independent of the order the two reports happened to store their paths in.
+fn path_diff(a: &[String], b: &[String]) -> Vec<String> {
+    let a: BTreeSet<&str> = a.iter().map(String::as_str).collect();
+    let b: BTreeSet<&str> = b.iter().map(String::as_str).collect();
+    a.difference(&b).map(|p| (*p).to_string()).collect()
 }
 
 /// Side-by-side diff material for one operation: the baseline and clone responses
@@ -489,5 +648,183 @@ mod tests {
             q.only_in_synthetic.is_empty(),
             "baseline lacks nothing the clone has here: {q:?}"
         );
+    }
+
+    // ── to_json / diff ────────────────────────────────────────────────────────
+
+    /// A quirk with the given identity and deviating path sets.
+    fn quirk(action: &str, key: &str, clone: &[&str], synth: &[&str]) -> OperationQuirk {
+        OperationQuirk {
+            action: action.to_string(),
+            key_canon: key.to_string(),
+            only_in_clone: clone.iter().map(|s| s.to_string()).collect(),
+            only_in_synthetic: synth.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    fn report(quirks: Vec<OperationQuirk>) -> QuirkReport {
+        QuirkReport {
+            device: "cam".to_string(),
+            compared: 4,
+            quirks,
+        }
+    }
+
+    const GET_PROFILES: &str = "http://www.onvif.org/ver10/media/wsdl/GetProfiles";
+    const GET_HOSTNAME: &str = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+
+    #[test]
+    fn to_json_round_trips() {
+        let r = report(vec![
+            quirk(GET_PROFILES, "k1", &["E/Body/P/Vendor"], &[]),
+            quirk(GET_HOSTNAME, "k2", &[], &["E/Body/H/Name"]),
+        ]);
+        let json = r.to_json();
+
+        let back: QuirkReport = serde_json::from_str(&json).expect("to_json emits valid JSON");
+        assert_eq!(back.device, r.device);
+        assert_eq!(back.compared, r.compared);
+        assert_eq!(back.quirks, r.quirks);
+        // Re-serialising the round-tripped report reproduces the same bytes.
+        assert_eq!(back.to_json(), json);
+    }
+
+    #[test]
+    fn to_json_pretty_is_indented() {
+        let r = report(vec![quirk(GET_PROFILES, "k1", &["E/Body/P/Vendor"], &[])]);
+        let compact = r.to_json();
+        let pretty = r.to_json_pretty();
+
+        assert_ne!(pretty, compact);
+        assert!(pretty.contains('\n'), "pretty JSON is line-separated");
+        assert!(pretty.contains("\n  \""), "pretty JSON is indented");
+        assert!(!compact.contains('\n'), "compact JSON is single-line");
+        // Both encode the same document.
+        let a: serde_json::Value = serde_json::from_str(&compact).unwrap();
+        let b: serde_json::Value = serde_json::from_str(&pretty).unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn diff_is_empty_for_identical_reports() {
+        let r = report(vec![
+            quirk(GET_PROFILES, "k1", &["E/Body/P/Vendor"], &["E/Body/P/Gone"]),
+            quirk(GET_HOSTNAME, "k2", &[], &["E/Body/H/Name"]),
+        ]);
+        let d = r.diff(&r.clone());
+        assert!(d.is_empty(), "same quirks → no diff: {d:?}");
+        assert_eq!(d, QuirkDiff::compute(&r, &r));
+    }
+
+    #[test]
+    fn diff_flags_appeared_quirk() {
+        let prev = report(vec![]);
+        let now = report(vec![quirk(GET_PROFILES, "k1", &["E/Body/P/Vendor"], &[])]);
+
+        let d = now.diff(&prev);
+        assert!(!d.is_empty());
+        assert_eq!(d.appeared.len(), 1, "{d:?}");
+        assert_eq!(d.appeared[0].action, GET_PROFILES);
+        assert_eq!(d.appeared[0].only_in_clone, ["E/Body/P/Vendor"]);
+        assert!(d.resolved.is_empty() && d.changed.is_empty(), "{d:?}");
+    }
+
+    #[test]
+    fn diff_flags_resolved_quirk() {
+        let prev = report(vec![quirk(GET_PROFILES, "k1", &["E/Body/P/Vendor"], &[])]);
+        let now = report(vec![]);
+
+        let d = now.diff(&prev);
+        assert!(!d.is_empty());
+        assert_eq!(d.resolved.len(), 1, "{d:?}");
+        assert_eq!(d.resolved[0].key_canon, "k1");
+        assert_eq!(
+            d.resolved[0].only_in_clone,
+            ["E/Body/P/Vendor"],
+            "resolved carries the baseline's paths: {d:?}"
+        );
+        assert!(d.appeared.is_empty() && d.changed.is_empty(), "{d:?}");
+    }
+
+    #[test]
+    fn diff_flags_changed_path_sets() {
+        // Same operation, quirky in both — but one path moved from the
+        // synthetic-only side to the clone-only side, and another was dropped.
+        let prev = report(vec![quirk(
+            GET_PROFILES,
+            "k1",
+            &["E/Body/P/Old"],
+            &["E/Body/P/Moved"],
+        )]);
+        let now = report(vec![quirk(
+            GET_PROFILES,
+            "k1",
+            &["E/Body/P/Moved"],
+            &["E/Body/P/Fresh"],
+        )]);
+
+        let d = now.diff(&prev);
+        assert!(d.appeared.is_empty() && d.resolved.is_empty(), "{d:?}");
+        assert_eq!(d.changed.len(), 1, "{d:?}");
+        let c = &d.changed[0];
+        assert_eq!(c.action, GET_PROFILES);
+        assert_eq!(c.key_canon, "k1");
+        assert_eq!(c.clone_only_added, ["E/Body/P/Moved"]);
+        assert_eq!(c.clone_only_removed, ["E/Body/P/Old"]);
+        assert_eq!(c.synthetic_only_added, ["E/Body/P/Fresh"]);
+        assert_eq!(c.synthetic_only_removed, ["E/Body/P/Moved"]);
+    }
+
+    #[test]
+    fn diff_keys_on_action_and_key_canon_pair() {
+        // Two fixtures of the *same* action distinguished only by their
+        // `token=` params: they are distinct quirks, never merged.
+        let prev = report(vec![quirk(
+            GET_PROFILES,
+            "GetProfile token=A",
+            &["E/Body/P/A"],
+            &[],
+        )]);
+        let now = report(vec![quirk(
+            GET_PROFILES,
+            "GetProfile token=B",
+            &["E/Body/P/B"],
+            &[],
+        )]);
+
+        let d = now.diff(&prev);
+        assert_eq!(d.appeared.len(), 1, "token=B is new: {d:?}");
+        assert_eq!(d.appeared[0].key_canon, "GetProfile token=B");
+        assert_eq!(d.resolved.len(), 1, "token=A is gone: {d:?}");
+        assert_eq!(d.resolved[0].key_canon, "GetProfile token=A");
+        assert!(
+            d.changed.is_empty(),
+            "different key_canon ⇒ never a path change: {d:?}"
+        );
+
+        // And the mirror trap: the same key_canon under a *different* action is
+        // likewise distinct, not a changed path set.
+        let prev2 = report(vec![quirk(GET_PROFILES, "k1", &["E/Body/X"], &[])]);
+        let now2 = report(vec![quirk(GET_HOSTNAME, "k1", &["E/Body/Y"], &[])]);
+        let d2 = now2.diff(&prev2);
+        assert_eq!(d2.appeared.len(), 1, "{d2:?}");
+        assert_eq!(d2.resolved.len(), 1, "{d2:?}");
+        assert!(d2.changed.is_empty(), "{d2:?}");
+    }
+
+    #[test]
+    fn diff_output_order_is_deterministic() {
+        let a = quirk(GET_PROFILES, "k2", &["E/Body/b", "E/Body/a"], &[]);
+        let b = quirk(GET_HOSTNAME, "k1", &["E/Body/z"], &[]);
+        let prev = report(vec![]);
+
+        let d1 = report(vec![a.clone(), b.clone()]).diff(&prev);
+        let d2 = report(vec![b, a]).diff(&prev);
+        assert_eq!(d1, d2, "insertion order must not leak into the diff");
+
+        // Path lists inside a changed entry are sorted, not source-ordered.
+        let base = report(vec![quirk(GET_PROFILES, "k1", &[], &[])]);
+        let now = report(vec![quirk(GET_PROFILES, "k1", &["E/b", "E/a"], &[])]);
+        assert_eq!(now.diff(&base).changed[0].clone_only_added, ["E/a", "E/b"]);
     }
 }

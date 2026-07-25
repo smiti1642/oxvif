@@ -60,6 +60,25 @@ feature-gated (`metamorph`); no public API removed.
   could not be handed to a REST layer or persisted without a hand-cloned
   parallel struct. Reported by a downstream user.
 
+### Added (`metamorph` feature — report ergonomics)
+- **`QuirkReport::to_json` / `to_json_pretty`** and **`ParseReport::to_json` /
+  `to_json_pretty`** — matching `HealthReport`, so a caller no longer has to pull
+  in `serde_json` to persist a report. No new dependency (`metamorph` already
+  requires it).
+- **`QuirkReport::diff(&prev) -> QuirkDiff`** — compare a run against a saved
+  baseline and see only what moved: `appeared` (newly quirky operations),
+  `resolved` (no longer deviating), and `changed` (still quirky, but the
+  deviating path sets shifted — detailed per side by `ChangedQuirk`). Mirrors
+  `HealthReport::diff` / `ReportDiff`. Answers "did this firmware update change
+  the device's quirks?" and "are these two same-model cameras quirk-identical?" —
+  the practical question now that a full sweep covers 52 operations and
+  hand-comparing two reports is not viable. Output is order-deterministic
+  (entries keyed and sorted by `(action, key_canon)`, path lists set-sorted), so
+  two runs over identical input serialise byte-identically and a JSON baseline
+  can be diffed with ordinary text tools.
+- `OperationQuirk` now also derives `PartialEq` / `Eq` (additive) so reports and
+  diffs compare structurally.
+
 ### Added (`metamorph` feature — serialization)
 - The metamorph **surface** and **adapter** data types now derive
   `Serialize` / `Deserialize`, matching `ParseReport` / `QuirkReport` which

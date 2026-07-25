@@ -60,7 +60,7 @@ pub use adapter::{
 };
 pub use fixture::{Fixture, FixtureStore};
 pub use parse::{ParseReport, ParseStatus, ParseVerdict};
-pub use quirk::{OperationDiff, OperationQuirk, QuirkReport};
+pub use quirk::{ChangedQuirk, OperationDiff, OperationQuirk, QuirkDiff, QuirkReport};
 pub use record::{RecordingTransport, record_standard_surface, record_surface};
 pub use replay::{MetamorphTransport, ReplayResponder};
 pub use surface::{

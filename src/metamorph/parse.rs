@@ -96,6 +96,18 @@ impl ParseReport {
             .iter()
             .all(|v| v.status != ParseStatus::Failed)
     }
+
+    /// Serialise the report as a compact single-line JSON string. Extracted
+    /// values are embedded as-is (they are already `serde_json::Value`).
+    pub fn to_json(&self) -> String {
+        // serde_json on the fully-serializable ParseReport — infallible.
+        serde_json::to_string(self).expect("ParseReport is fully serializable")
+    }
+
+    /// Serialise the report as pretty-printed JSON (indented, line-separated).
+    pub fn to_json_pretty(&self) -> String {
+        serde_json::to_string_pretty(self).expect("ParseReport is fully serializable")
+    }
 }
 
 impl FixtureStore {
@@ -323,5 +335,87 @@ mod tests {
         let report = store.verify_parsing().await;
         assert_eq!(report.verdicts[0].status, ParseStatus::Unverified);
         assert!(report.all_parsed(), "unverified is not a failure");
+    }
+
+    /// A report covering all three verdict kinds, built through the public API.
+    ///
+    /// Each fixture needs its own `request_raw`: [`FixtureStore::record`] derives
+    /// the key from the request body alone (the action is not an input) and
+    /// upserts, so sharing one placeholder body would collapse all three into a
+    /// single entry. Real recordings carry the operation element, which is what
+    /// keeps them distinct here too.
+    async fn mixed_report() -> ParseReport {
+        let mut store = FixtureStore::new("clone");
+        store.record(
+            HOSTNAME,
+            "<Envelope><Body><GetHostname/></Body></Envelope>",
+            &valid_hostname_response(),
+        );
+        store.record(
+            "http://www.onvif.org/ver10/device/wsdl/GetScopes",
+            "<Envelope><Body><GetScopes/></Body></Envelope>",
+            "<Envelope><Body><SomethingElse/></Body></Envelope>",
+        );
+        store.record(
+            "http://www.onvif.org/ver10/device/wsdl/SetHostname",
+            "<Envelope><Body><SetHostname><Name>cam</Name></SetHostname></Body></Envelope>",
+            "<Envelope><Body><SetHostnameResponse/></Body></Envelope>",
+        );
+        assert_eq!(store.len(), 3, "each fixture must survive the key upsert");
+
+        let report = store.verify_parsing().await;
+        assert_eq!(report.verdicts.len(), 3, "one verdict per stored fixture");
+
+        // Enforce the claim above. Without this, a change to the parse match
+        // arms could quietly collapse every verdict to `Unverified` and the
+        // round-trip tests would still pass — no longer covering `Some`/`None`
+        // for either `error` or `value`.
+        for want in [
+            ParseStatus::Parsed,
+            ParseStatus::Failed,
+            ParseStatus::Unverified,
+        ] {
+            assert!(
+                report.verdicts.iter().any(|v| v.status == want),
+                "fixture no longer produces a {want:?} verdict: {:?}",
+                report.verdicts
+            );
+        }
+        report
+    }
+
+    #[tokio::test]
+    async fn to_json_round_trips() {
+        let report = mixed_report().await;
+        let json = report.to_json();
+
+        let back: ParseReport = serde_json::from_str(&json).expect("to_json emits valid JSON");
+        assert_eq!(back.device, report.device);
+        assert_eq!(back.verdicts.len(), report.verdicts.len());
+        for (a, b) in back.verdicts.iter().zip(&report.verdicts) {
+            assert_eq!(a.action, b.action);
+            assert_eq!(a.key_canon, b.key_canon);
+            assert_eq!(a.status, b.status);
+            assert_eq!(a.error, b.error);
+            assert_eq!(a.value, b.value);
+        }
+        // Re-serialising the round-tripped report reproduces the same bytes.
+        assert_eq!(back.to_json(), json);
+    }
+
+    #[tokio::test]
+    async fn to_json_pretty_is_indented() {
+        let report = mixed_report().await;
+        let compact = report.to_json();
+        let pretty = report.to_json_pretty();
+
+        assert_ne!(pretty, compact);
+        assert!(pretty.contains('\n'), "pretty JSON is line-separated");
+        assert!(pretty.contains("\n  \""), "pretty JSON is indented");
+        assert!(!compact.contains('\n'), "compact JSON is single-line");
+        // Both encode the same document.
+        let a: serde_json::Value = serde_json::from_str(&compact).unwrap();
+        let b: serde_json::Value = serde_json::from_str(&pretty).unwrap();
+        assert_eq!(a, b);
     }
 }
