@@ -239,6 +239,100 @@ async fn test_imaging_move_sends_absolute_body() {
 }
 
 #[tokio::test]
+async fn test_imaging_move_soap_fault_returns_err() {
+    let xml = make_soap_fault_xml("s:Sender", "ter:NoFocus");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let result = client
+        .imaging_move(
+            "http://192.168.1.1/onvif/imaging",
+            "video_source",
+            &crate::FocusMove::Continuous { speed: 0.5 },
+        )
+        .await;
+
+    assert!(
+        matches!(
+            result,
+            Err(OnvifError::Soap(crate::soap::SoapError::Fault { ref code, ref reason, .. }))
+            if code == "s:Sender" && reason == "ter:NoFocus"
+        ),
+        "expected SOAP Fault error, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_imaging_stop_sends_source_token_and_action() {
+    let xml = empty_response_xml("StopResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .imaging_stop("http://192.168.1.1/onvif/imaging", "video_source")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert!(
+        c.body
+            .contains("<timg:VideoSourceToken>video_source</timg:VideoSourceToken>")
+    );
+    assert_eq!(c.action, "http://www.onvif.org/ver20/imaging/wsdl/Stop");
+}
+
+#[tokio::test]
+async fn test_imaging_stop_soap_fault_returns_err() {
+    let xml = make_soap_fault_xml("s:Sender", "ter:NoSource");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let result = client
+        .imaging_stop("http://192.168.1.1/onvif/imaging", "video_source")
+        .await;
+
+    assert!(
+        matches!(
+            result,
+            Err(OnvifError::Soap(crate::soap::SoapError::Fault { ref code, ref reason, .. }))
+            if code == "s:Sender" && reason == "ter:NoSource"
+        ),
+        "expected SOAP Fault error, got: {result:?}"
+    );
+}
+
+// Move and Stop used to share one made-up response tag, `<timg:ImagingResponse/>`,
+// which exists in no ONVIF WSDL — so both failed with UnexpectedResponse. Each
+// must now get its own per-operation response element.
+
+#[cfg(feature = "mock")]
+#[tokio::test]
+async fn mock_imaging_move_response_parses_via_client() {
+    let client = OnvifClient::new("http://mock/onvif/device")
+        .with_transport(std::sync::Arc::new(crate::mock::MockTransport::new()));
+    client
+        .imaging_move(
+            "http://mock/onvif/imaging",
+            "VideoSource_1",
+            &crate::FocusMove::Continuous { speed: 0.5 },
+        )
+        .await
+        .expect("mock must answer <timg:MoveResponse/>");
+}
+
+#[cfg(feature = "mock")]
+#[tokio::test]
+async fn mock_imaging_stop_response_parses_via_client() {
+    let client = OnvifClient::new("http://mock/onvif/device")
+        .with_transport(std::sync::Arc::new(crate::mock::MockTransport::new()));
+    client
+        .imaging_stop("http://mock/onvif/imaging", "VideoSource_1")
+        .await
+        .expect("mock must answer <timg:StopResponse/>");
+}
+
+#[tokio::test]
 async fn test_imaging_get_move_options_parses_ranges() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(mock(imaging_move_options_xml()));

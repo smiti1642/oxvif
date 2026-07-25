@@ -95,10 +95,6 @@ macro_rules! probe {
 /// run, so when a stage fixes (or breaks) an operation this test fails and
 /// forces a deliberate one-line edit here. Do not "make it pass" by
 /// regenerating it.
-///
-/// Entries marked `KNOWN BUG` are pinned as broken deliberately: the mock
-/// dispatcher answers them with a response tag the client does not accept.
-/// Stage 1a fixes `src/mock/dispatch.rs` and must flip these six to `"ok"`.
 const EXPECTED: &[(&str, &str)] = &[
     // ── Device ────────────────────────────────────────────────────────────
     ("get_capabilities", "ok"),
@@ -151,10 +147,8 @@ const EXPECTED: &[(&str, &str)] = &[
     ("get_imaging_settings", "ok"),
     ("set_imaging_settings", "ok"),
     ("get_imaging_options", "ok"),
-    // KNOWN BUG (Stage 1a): dispatch answers Move/Stop with the shared tag
-    // `<timg:ImagingResponse/>` instead of MoveResponse / StopResponse.
-    ("imaging_move", "unexpected-response:MoveResponse"),
-    ("imaging_stop", "unexpected-response:StopResponse"),
+    ("imaging_move", "ok"),
+    ("imaging_stop", "ok"),
     ("imaging_get_move_options", "ok"),
     ("imaging_get_status", "ok"),
     // ── Media1 ────────────────────────────────────────────────────────────
@@ -164,25 +158,10 @@ const EXPECTED: &[(&str, &str)] = &[
     ("create_profile", "ok"),
     ("delete_profile", "ok"),
     ("get_profile", "ok"),
-    // KNOWN BUG (Stage 1a): dispatch collapses all four Add/Remove
-    // Video{Encoder,Source}Configuration ops onto the single made-up tag
-    // `<trt:ConfigurationResponse/>`.
-    (
-        "add_video_encoder_configuration",
-        "unexpected-response:AddVideoEncoderConfigurationResponse",
-    ),
-    (
-        "remove_video_encoder_configuration",
-        "unexpected-response:RemoveVideoEncoderConfigurationResponse",
-    ),
-    (
-        "add_video_source_configuration",
-        "unexpected-response:AddVideoSourceConfigurationResponse",
-    ),
-    (
-        "remove_video_source_configuration",
-        "unexpected-response:RemoveVideoSourceConfigurationResponse",
-    ),
+    ("add_video_encoder_configuration", "ok"),
+    ("remove_video_encoder_configuration", "ok"),
+    ("add_video_source_configuration", "ok"),
+    ("remove_video_source_configuration", "ok"),
     ("get_video_sources", "ok"),
     ("get_video_source_configurations", "ok"),
     ("get_video_source_configuration", "ok"),
@@ -961,76 +940,5 @@ async fn mock_action_snapshot_matches_expected_list() {
         "mock action snapshot drifted from EXPECTED — update the listed \
          lines deliberately, one per operation:\n{}",
         drift.join("\n")
-    );
-}
-
-/// The six operations Stage 1a is going to fix, called out on their own so
-/// the fix cannot be mistaken for incidental drift in the big list above.
-///
-/// Every assertion here is a *known bug pinned deliberately*. When Stage 1a
-/// gives `src/mock/dispatch.rs` a correctly-named response per operation,
-/// this test must be inverted to assert success.
-#[tokio::test]
-async fn known_broken_mock_actions_are_pinned() {
-    fn tag(e: OnvifError) -> String {
-        match e {
-            OnvifError::Soap(SoapError::UnexpectedResponse(t)) => t,
-            other => panic!("expected UnexpectedResponse, got {other:?}"),
-        }
-    }
-
-    let c = fresh();
-    assert_eq!(
-        tag(c
-            .add_video_encoder_configuration(MEDIA, PROFILE, VEC)
-            .await
-            .unwrap_err()),
-        "AddVideoEncoderConfigurationResponse"
-    );
-
-    let c = fresh();
-    assert_eq!(
-        tag(c
-            .remove_video_encoder_configuration(MEDIA, PROFILE)
-            .await
-            .unwrap_err()),
-        "RemoveVideoEncoderConfigurationResponse"
-    );
-
-    let c = fresh();
-    assert_eq!(
-        tag(c
-            .add_video_source_configuration(MEDIA, PROFILE, VSC)
-            .await
-            .unwrap_err()),
-        "AddVideoSourceConfigurationResponse"
-    );
-
-    let c = fresh();
-    assert_eq!(
-        tag(c
-            .remove_video_source_configuration(MEDIA, PROFILE)
-            .await
-            .unwrap_err()),
-        "RemoveVideoSourceConfigurationResponse"
-    );
-
-    let c = fresh();
-    assert_eq!(
-        tag(c
-            .imaging_move(
-                IMAGING,
-                VIDEO_SOURCE,
-                &oxvif::types::FocusMove::Continuous { speed: 0.5 },
-            )
-            .await
-            .unwrap_err()),
-        "MoveResponse"
-    );
-
-    let c = fresh();
-    assert_eq!(
-        tag(c.imaging_stop(IMAGING, VIDEO_SOURCE).await.unwrap_err()),
-        "StopResponse"
     );
 }

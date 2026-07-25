@@ -565,6 +565,94 @@ async fn test_remove_video_source_configuration_ok() {
 }
 
 #[tokio::test]
+async fn test_add_video_encoder_configuration_soap_fault_returns_err() {
+    let xml = make_soap_fault_xml("s:Sender", "ter:NoConfig");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let result = client
+        .add_video_encoder_configuration(
+            "http://192.168.1.1/onvif/media_service",
+            "Profile_1",
+            "VEC_1",
+        )
+        .await;
+
+    assert!(
+        matches!(
+            result,
+            Err(OnvifError::Soap(crate::soap::SoapError::Fault { ref code, ref reason, .. }))
+            if code == "s:Sender" && reason == "ter:NoConfig"
+        ),
+        "expected SOAP Fault error, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_remove_video_encoder_configuration_soap_fault_returns_err() {
+    let xml = make_soap_fault_xml("s:Sender", "ter:NoProfile");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let result = client
+        .remove_video_encoder_configuration("http://192.168.1.1/onvif/media_service", "Profile_1")
+        .await;
+
+    assert!(
+        matches!(
+            result,
+            Err(OnvifError::Soap(crate::soap::SoapError::Fault { ref code, ref reason, .. }))
+            if code == "s:Sender" && reason == "ter:NoProfile"
+        ),
+        "expected SOAP Fault error, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_add_video_source_configuration_soap_fault_returns_err() {
+    let xml = make_soap_fault_xml("s:Sender", "ter:NoConfig");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let result = client
+        .add_video_source_configuration(
+            "http://192.168.1.1/onvif/media_service",
+            "Profile_1",
+            "VSC_1",
+        )
+        .await;
+
+    assert!(
+        matches!(
+            result,
+            Err(OnvifError::Soap(crate::soap::SoapError::Fault { ref code, ref reason, .. }))
+            if code == "s:Sender" && reason == "ter:NoConfig"
+        ),
+        "expected SOAP Fault error, got: {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_remove_video_source_configuration_soap_fault_returns_err() {
+    let xml = make_soap_fault_xml("s:Sender", "ter:NoProfile");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let result = client
+        .remove_video_source_configuration("http://192.168.1.1/onvif/media_service", "Profile_1")
+        .await;
+
+    assert!(
+        matches!(
+            result,
+            Err(OnvifError::Soap(crate::soap::SoapError::Fault { ref code, ref reason, .. }))
+            if code == "s:Sender" && reason == "ter:NoProfile"
+        ),
+        "expected SOAP Fault error, got: {result:?}"
+    );
+}
+
+#[tokio::test]
 async fn test_get_profiles_malformed_xml_returns_err() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(mock("<unclosed"));
@@ -1253,4 +1341,53 @@ async fn mock_get_osd_response_parses_via_client() {
         .await
         .unwrap();
     assert_eq!(osd.token, "OSD_1");
+}
+
+// The four Add/Remove Video{Encoder,Source}Configuration operations used to
+// share one made-up response tag, `<trt:ConfigurationResponse/>`, which exists
+// in no ONVIF WSDL — so every one of them failed with UnexpectedResponse. Each
+// must now get its own per-operation response element.
+
+#[cfg(feature = "mock")]
+#[tokio::test]
+async fn mock_add_video_encoder_configuration_response_parses_via_client() {
+    let client = OnvifClient::new("http://mock/onvif/device")
+        .with_transport(Arc::new(crate::mock::MockTransport::new()));
+    client
+        .add_video_encoder_configuration("http://mock/onvif/media", "Profile_1", "VEC_1")
+        .await
+        .expect("mock must answer <trt:AddVideoEncoderConfigurationResponse/>");
+}
+
+#[cfg(feature = "mock")]
+#[tokio::test]
+async fn mock_remove_video_encoder_configuration_response_parses_via_client() {
+    let client = OnvifClient::new("http://mock/onvif/device")
+        .with_transport(Arc::new(crate::mock::MockTransport::new()));
+    client
+        .remove_video_encoder_configuration("http://mock/onvif/media", "Profile_1")
+        .await
+        .expect("mock must answer <trt:RemoveVideoEncoderConfigurationResponse/>");
+}
+
+#[cfg(feature = "mock")]
+#[tokio::test]
+async fn mock_add_video_source_configuration_response_parses_via_client() {
+    let client = OnvifClient::new("http://mock/onvif/device")
+        .with_transport(Arc::new(crate::mock::MockTransport::new()));
+    client
+        .add_video_source_configuration("http://mock/onvif/media", "Profile_1", "VSC_1")
+        .await
+        .expect("mock must answer <trt:AddVideoSourceConfigurationResponse/>");
+}
+
+#[cfg(feature = "mock")]
+#[tokio::test]
+async fn mock_remove_video_source_configuration_response_parses_via_client() {
+    let client = OnvifClient::new("http://mock/onvif/device")
+        .with_transport(Arc::new(crate::mock::MockTransport::new()));
+    client
+        .remove_video_source_configuration("http://mock/onvif/media", "Profile_1")
+        .await
+        .expect("mock must answer <trt:RemoveVideoSourceConfigurationResponse/>");
 }

@@ -99,10 +99,14 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
         "GetVideoEncoderConfiguration" => media::resp_video_encoder_configuration(),
         "SetVideoEncoderConfiguration" => resp_empty("trt", "SetVideoEncoderConfigurationResponse"),
         "GetVideoEncoderConfigurationOptions" => media::resp_video_encoder_configuration_options(),
-        "AddVideoEncoderConfiguration"
-        | "RemoveVideoEncoderConfiguration"
-        | "AddVideoSourceConfiguration"
-        | "RemoveVideoSourceConfiguration" => resp_empty("trt", "ConfigurationResponse"),
+        "AddVideoEncoderConfiguration" => resp_empty("trt", "AddVideoEncoderConfigurationResponse"),
+        "RemoveVideoEncoderConfiguration" => {
+            resp_empty("trt", "RemoveVideoEncoderConfigurationResponse")
+        }
+        "AddVideoSourceConfiguration" => resp_empty("trt", "AddVideoSourceConfigurationResponse"),
+        "RemoveVideoSourceConfiguration" => {
+            resp_empty("trt", "RemoveVideoSourceConfigurationResponse")
+        }
         "GetAudioSources" => media::resp_audio_sources(),
         "GetAudioSourceConfigurations" => media::resp_audio_source_configurations(),
         "GetAudioEncoderConfiguration" => media::resp_audio_encoder_configuration(),
@@ -189,7 +193,8 @@ fn dispatch_imaging(op: &str, state: &SharedState, body: &str) -> Option<String>
         "GetOptions" => imaging::resp_imaging_options(),
         "GetStatus" => imaging::resp_imaging_status(),
         "GetMoveOptions" => imaging::resp_imaging_move_options(),
-        "Move" | "Stop" => resp_empty("timg", "ImagingResponse"),
+        "Move" => resp_empty("timg", "MoveResponse"),
+        "Stop" => resp_empty("timg", "StopResponse"),
         _ => return None,
     })
 }
