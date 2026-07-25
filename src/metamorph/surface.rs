@@ -411,8 +411,12 @@ impl SweepReport {
     }
 
     /// Whether every swept operation was captured (nothing failed or skipped).
+    ///
+    /// An **empty** report is not complete: a sweep that resolved no operation
+    /// at all captured nothing, so it must not read as a successful sweep the
+    /// way a vacuous `all()` over an empty map otherwise would.
     pub fn is_complete(&self) -> bool {
-        self.outcomes.values().all(|o| *o == OpOutcome::Recorded)
+        !self.outcomes.is_empty() && self.outcomes.values().all(|o| *o == OpOutcome::Recorded)
     }
 }
 
@@ -1302,5 +1306,21 @@ mod tests {
             );
             assert_eq!(report.skipped(), vec![SurfaceOp::GetPtzPresets]);
         }
+    }
+
+    /// A sweep that captured nothing is not a complete sweep. `all()` over an
+    /// empty map is vacuously true, so this case has to be ruled out
+    /// explicitly or "nothing was swept" reads as "everything succeeded".
+    #[test]
+    fn is_complete_is_false_when_the_report_is_empty() {
+        let report = SweepReport::default();
+
+        assert!(report.entries().is_empty(), "the report must be empty");
+        assert!(report.recorded().is_empty());
+        assert!(report.skipped().is_empty());
+        assert!(
+            !report.is_complete(),
+            "an empty sweep captured nothing and must not read as complete"
+        );
     }
 }

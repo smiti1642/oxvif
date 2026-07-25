@@ -1759,17 +1759,77 @@ mod discovery_mode_happy_path {
         }
     }
 
-    /// A `GetDiscoveryModeResponse` that omits `DiscoveryMode` currently yields
-    /// `Ok("")`, not an error. Pinned so Stage 2 cannot change it by accident.
+    /// A `GetDiscoveryModeResponse` that omits `DiscoveryMode` is an error, not
+    /// a third legal return value: the doc promises one of two strings, so the
+    /// absent element must surface as `MissingField` naming the exact path.
     #[tokio::test]
-    async fn get_discovery_mode_without_the_element_yields_an_empty_string() {
+    async fn get_discovery_mode_without_the_element_is_a_missing_field_error() {
         let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                                   xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
                        <s:Body><tds:GetDiscoveryModeResponse/></s:Body>
                      </s:Envelope>"#;
         let client =
             OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-        assert_eq!(client.get_discovery_mode().await.unwrap(), "");
+
+        match client.get_discovery_mode().await.unwrap_err() {
+            OnvifError::Soap(crate::soap::SoapError::MissingField(field)) => {
+                assert_eq!(field, "GetDiscoveryModeResponse/DiscoveryMode");
+            }
+            other => panic!("expected SoapError::MissingField, got {other:?}"),
+        }
+    }
+
+    /// A *present but empty* `<tds:DiscoveryMode></tds:DiscoveryMode>` is a
+    /// distinct code path from the missing element — `child()` finds the node
+    /// and `text()` returns `""` — and must reach the same error.
+    #[tokio::test]
+    async fn get_discovery_mode_with_an_empty_element_is_a_missing_field_error() {
+        let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                                  xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+                       <s:Body>
+                         <tds:GetDiscoveryModeResponse>
+                           <tds:DiscoveryMode></tds:DiscoveryMode>
+                         </tds:GetDiscoveryModeResponse>
+                       </s:Body>
+                     </s:Envelope>"#;
+        let client =
+            OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+        match client.get_discovery_mode().await.unwrap_err() {
+            OnvifError::Soap(crate::soap::SoapError::MissingField(field)) => {
+                assert_eq!(field, "GetDiscoveryModeResponse/DiscoveryMode");
+            }
+            other => panic!("expected SoapError::MissingField, got {other:?}"),
+        }
+    }
+
+    /// A `DiscoveryMode` holding only whitespace must reach the same error.
+    ///
+    /// `get_discovery_mode` filters on `is_empty()`, not `trim().is_empty()`, so
+    /// this case only works because `XmlNode::parse` collapses whitespace-only
+    /// element text to `None` — a property of a *different* module. Pinned here
+    /// so that if that trimming ever moves or is dropped, this method's contract
+    /// fails loudly instead of silently regaining `Ok("   ")`.
+    /// See also `soap::xml::tests::test_whitespace_only_element_text_is_empty`.
+    #[tokio::test]
+    async fn get_discovery_mode_with_a_whitespace_only_element_is_a_missing_field_error() {
+        let xml = "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\"\
+                                xmlns:tds=\"http://www.onvif.org/ver10/device/wsdl\">\
+                     <s:Body>\
+                       <tds:GetDiscoveryModeResponse>\
+                         <tds:DiscoveryMode>  \t\n  </tds:DiscoveryMode>\
+                       </tds:GetDiscoveryModeResponse>\
+                     </s:Body>\
+                   </s:Envelope>";
+        let client =
+            OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+        match client.get_discovery_mode().await.unwrap_err() {
+            OnvifError::Soap(crate::soap::SoapError::MissingField(field)) => {
+                assert_eq!(field, "GetDiscoveryModeResponse/DiscoveryMode");
+            }
+            other => panic!("expected SoapError::MissingField, got {other:?}"),
+        }
     }
 
     /// A SOAP Fault on `GetDiscoveryMode` surfaces as `SoapError::Fault` with

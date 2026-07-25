@@ -838,16 +838,25 @@ impl OnvifClient {
     /// Retrieve the current WS-Discovery mode.
     ///
     /// Returns `"Discoverable"` or `"NonDiscoverable"`.
+    ///
+    /// # Errors
+    ///
+    /// `DiscoveryMode` is required by the WSDL, so a response that omits the
+    /// element — or carries it empty — is a
+    /// [`SoapError::MissingField`](crate::soap::SoapError::MissingField) for
+    /// `GetDiscoveryModeResponse/DiscoveryMode` rather than an empty `Ok`.
     pub async fn get_discovery_mode(&self) -> Result<String, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetDiscoveryMode";
         const BODY: &str = "<tds:GetDiscoveryMode/>";
         let xml = self.call(&self.device_url, ACTION, BODY).await?;
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetDiscoveryModeResponse")?;
-        Ok(resp
-            .child("DiscoveryMode")
+        resp.child("DiscoveryMode")
             .map(|n| n.text().to_string())
-            .unwrap_or_default())
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| {
+                crate::soap::SoapError::missing("GetDiscoveryModeResponse/DiscoveryMode").into()
+            })
     }
 
     /// Set the WS-Discovery mode.

@@ -634,6 +634,23 @@ mod tests {
     }
 
     #[test]
+    fn test_whitespace_only_element_text_is_empty() {
+        // Callers treat "absent" and "present but blank" alike by filtering on
+        // `is_empty()` rather than `trim().is_empty()` (e.g.
+        // `OnvifClient::get_discovery_mode`). That is only correct because the
+        // trim at `Event::End` collapses a whitespace-only element to `None`.
+        // The element must still exist — otherwise this would pass vacuously.
+        let root = XmlNode::parse("<Root><Blank>  \t\r\n  </Blank></Root>").unwrap();
+        let blank = root.child("Blank").expect("the element itself is present");
+        assert_eq!(
+            blank.text(),
+            "",
+            "whitespace-only text must collapse to \"\""
+        );
+        assert_eq!(blank.text, None, "and be stored as absent, not as spaces");
+    }
+
+    #[test]
     fn test_geovision_style_snapshot_uri_response() {
         // SOAP body fragment shaped like a GeoVision GetSnapshotUriResponse:
         // the URI carries multiple `&amp;`-separated query params, and the
