@@ -40,7 +40,7 @@ disk, so no upgrade path can recover them — users must re-record.
 | 0 | Regression safety net (tests only) | additive | **done** — `1e8d634` |
 | 0.5 | Split client tests by service; move mock snapshot to `tests/` | pure move | **done** — `e21ed7f` |
 | 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | **done** — `894b865` |
-| 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 3 encoding sites | non-breaking | not started |
+| 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 3 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | not started |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | not started |
 | 4 | Positive+negative pairs for the 26 zero-coverage + 21 hollow-negative methods | additive | not started |
@@ -154,7 +154,7 @@ Expected tags: `src/client/media.rs:175,195,220,239`,
 | ID | Defect | Citation |
 |---|---|---|
 | D3 | `AudioEncoderConfiguration::to_xml_body()` emits `trt:` into a `tr2:` Media2 request. The fix pattern already exists in-tree: `VideoSourceConfiguration` carries two serialisers for exactly this reason. | `src/types/audio.rs:160` × `src/client/media2.rs:514`; precedent `src/types/video.rs:157` / `:177` |
-| D4 | `xml_escape` bypassed via `Display` — `Other(String)` returns the device's raw string. Invisible to a `grep xml_escape` audit. | `src/types/audio.rs:99`,`:173`; `src/types/video.rs:532`,`:749` |
+| D4 | `xml_escape` bypassed via `Display` — `Other(String)` returns the device's raw string. Invisible to a `grep xml_escape` audit. **Fixed in `573168a` at four sites, not three** — D3's new `to_xml_body_media2()` creates a fourth interpolation. All four now escape `self.encoding.as_str()`; `Display` itself is deliberately left unescaped and pinned by `hostile_encoding_reaches_display_unescaped`. | `src/types/audio.rs:99`,`:175`,`:202`; `src/types/video.rs:534`,`:753` |
 | D5 | `get_discovery_mode` doc promises one of two strings; code can return `""`. | `src/client/device.rs:840` vs `:847-850` |
 | D6 | `Transport` 400-handling contract undocumented at the trait, and contradicted by three doc sites that say 200/500 only. | `src/transport.rs:11-15`, `:40-41`, `src/error.rs:19-21` vs code at `src/transport.rs:163` |
 | D7 | Non-reqwest `diqwest` errors reported as a fabricated HTTP 401. | `src/transport.rs:138-144` |
@@ -324,9 +324,13 @@ Mistakes actually made in this programme. Re-read before each stage.
   | `7daa4ac` (pre-0.5) | 676 | 674 | 629 / 9 / 36 |
   | `e21ed7f` (post-0.5) | 676 | 674 | 627 / 2 + 9 / 36 |
   | `894b865` (post-1a) | 688 | 686 | 640 / 1 + 9 / 36 |
+  | `573168a` (post-1b) | 698 | 696 | 650 / 1 + 9 / 36 |
 
   The 0.5 → 1a delta is −1 (`known_broken_mock_actions_are_pinned`, deleted by
-  design) +13. Baseline sets live at `<scratchpad>/{baseline,after,1a}-tests.txt`.
+  design) +13. The 1a → 1b delta is −1 +11, where the −1 is a *rename*:
+  `…_emits_trt_configuration_known_bug` → `…_emits_tr2_configuration`, the pin
+  this stage existed to flip. Baseline sets live at
+  `<scratchpad>/{baseline,after,1a,1b}-tests.txt`.
 
 ---
 
