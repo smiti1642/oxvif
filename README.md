@@ -1581,7 +1581,10 @@ src/
 │   ├── adapter.rs       DeviceAdapter / AdapterTransport — Persona C ONVIF skin
 │   └── quirk.rs         diff_against_synthetic / diff_details — structural quirk diff
 └── tests/
-    ├── client_tests.rs  unit tests covering all client methods
+    ├── common.rs        shared test transports + SOAP fault / empty-body fixtures
+    ├── client/          unit tests, one file per client service module
+    │   ├── device_tests.rs, media_tests.rs, media2_tests.rs, ptz_tests.rs
+    │   └── imaging_tests.rs, events_tests.rs, recording_tests.rs
     ├── session_tests.rs unit tests for OnvifSession builder and delegates
     └── types_tests.rs   XML parsing unit tests
 examples/

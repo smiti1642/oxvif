@@ -401,3 +401,7 @@ impl OnvifClient {
             .ok_or_else(|| crate::soap::SoapError::missing("Uri").into())
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/client/recording_tests.rs"]
+mod tests;

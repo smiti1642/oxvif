@@ -164,3 +164,7 @@ impl OnvifClient {
         ImagingStatus::from_xml(resp)
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/client/imaging_tests.rs"]
+mod tests;

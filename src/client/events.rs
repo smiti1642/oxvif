@@ -432,3 +432,7 @@ async fn read_http_body(conn: &mut tokio::net::TcpStream) -> std::io::Result<Str
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
+
+#[cfg(test)]
+#[path = "../tests/client/events_tests.rs"]
+mod tests;

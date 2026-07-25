@@ -2,6 +2,7 @@ use super::*;
 use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
 
+use crate::tests::common::ErrorTransport;
 use crate::transport::TransportError;
 
 // ── SequenceTransport: returns responses in order ─────────────────────────
@@ -37,25 +38,8 @@ impl Transport for SequenceTransport {
 }
 
 // ── ErrorTransport: always fails ─────────────────────────────────────────
-
-struct ErrorTransport {
-    status: u16,
-}
-
-#[async_trait]
-impl Transport for ErrorTransport {
-    async fn soap_post(
-        &self,
-        _url: &str,
-        _action: &str,
-        _body: String,
-    ) -> Result<String, TransportError> {
-        Err(TransportError::HttpStatus {
-            status: self.status,
-            body: format!("HTTP {}", self.status),
-        })
-    }
-}
+//
+// Shared with the client tests — see `src/tests/common.rs`.
 
 // ── XML fixtures ──────────────────────────────────────────────────────────
 

@@ -430,3 +430,7 @@ impl OnvifClient {
         PtzConfiguration::vec_from_xml(resp)
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/client/ptz_tests.rs"]
+mod tests;

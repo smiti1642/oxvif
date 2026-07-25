@@ -867,3 +867,7 @@ impl OnvifClient {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/client/device_tests.rs"]
+mod tests;

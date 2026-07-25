@@ -95,10 +95,24 @@ resp.children_named("Foo").map(|n| {
 
 - Every new client method needs at least one **positive test** (happy path)
   and one **negative test** (missing required field or SOAP Fault).
-- Fixtures go in `src/tests/client_tests.rs`.
+- Client tests are split by service, mirroring `src/client/`:
+  `src/tests/client/<service>_tests.rs` (`device`, `media`, `media2`, `ptz`,
+  `imaging`, `events`, `recording`). Each file is attached to the module it
+  exercises by a `#[cfg(test)] #[path = "../tests/client/<service>_tests.rs"]
+  mod tests;` declaration at the foot of `src/client/<service>.rs`.
+- Put a fixture next to the tests that use it. Only promote it to
+  `src/tests/common.rs` when more than one service needs it.
+- `src/tests/common.rs` holds the shared transports (`MockTransport` + the
+  `mock()` builder, `RecordingTransport` + `Captured`, `ErrorTransport`) and the
+  cross-service fixtures `empty_response_xml` / `make_soap_fault_xml`. It is
+  declared once from `src/lib.rs` as `#[cfg(test)] mod tests;` (via
+  `src/tests/mod.rs`) and pulled in with `use crate::tests::common::*;`.
 - Use `MockTransport` for happy-path tests and `ErrorTransport` for HTTP
   error tests.
 - Negative SOAP Fault tests: use `make_soap_fault_xml(code, reason)`.
+- Black-box tests that only touch the public API (plus `oxvif::mock`) belong in
+  the integration directory `tests/`, not inside the library crate — see
+  `tests/mock_action_snapshot.rs` and `tests/mock_workflow.rs`.
 
 ## Adding a new ONVIF service — step-by-step SOP
 
@@ -116,7 +130,15 @@ resp.children_named("Foo").map(|n| {
 
 ### Testing
 
-5. Append tests to `src/tests/client_tests.rs`:
+5. Append tests to `src/tests/client/<service>_tests.rs` — the file that
+   mirrors the `src/client/<service>.rs` you added the methods to. For a
+   brand-new service, create the test file and attach it from the bottom of
+   `src/client/<service>.rs`:
+   ```rust
+   #[cfg(test)]
+   #[path = "../tests/client/<service>_tests.rs"]
+   mod tests;
+   ```
    - At least one positive test per method (fixture XML + assert fields)
    - At least one negative test per method (missing token or SOAP Fault)
    - For write methods: use `RecordingTransport` and assert `c.action` + `c.body`

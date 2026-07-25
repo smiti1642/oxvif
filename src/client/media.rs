@@ -678,3 +678,7 @@ impl OnvifClient {
         AudioEncoderConfigurationOptions::from_xml(resp)
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/client/media_tests.rs"]
+mod tests;

@@ -194,6 +194,10 @@ pub mod soap;
 pub mod transport;
 pub mod types;
 
+/// Helpers shared by the `#[path]`-attached unit-test modules.
+#[cfg(test)]
+mod tests;
+
 pub use client::{OnvifClient, notification_listener};
 pub use discovery::{DiscoveredDevice, DiscoveryEvent, probe_unicast};
 pub use error::OnvifError;

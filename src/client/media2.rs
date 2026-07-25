@@ -601,3 +601,7 @@ impl OnvifClient {
             .is_some_and(|n| n.text() == "true" || n.text() == "1"))
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/client/media2_tests.rs"]
+mod tests;
