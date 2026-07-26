@@ -322,8 +322,15 @@ Expected tags: `src/client/media.rs:175,195,220,239`,
 
 ## 4. Docs that are wrong and must be fixed with Stage 3
 
-Both were written by the reviewer in a previous session and both are load-bearing
-for D1:
+**All four are fixed — verified by reading them at `89ace34` during the
+pre-publish check, not by trusting a stage report.** Each now states the key as
+`(action, key_canon)` and says outright that the canonical request alone does not
+separate services; `parse.rs` even carries the converse ("a distinct request body
+does not imply a distinct key"). No stage verdict had recorded this, so it read as
+outstanding right up to the release gate.
+
+The original findings, kept for the record. Both were written by the reviewer in a
+previous session and both are load-bearing for D1:
 
 - `src/metamorph/parse.rs:522-523` — "Real recordings carry the operation
   element, which is what keeps them distinct here too." **False.** Media1 and
