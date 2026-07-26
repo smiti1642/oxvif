@@ -67,7 +67,7 @@ writes `CHANGELOG.md`, the stages deliberately do not):
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | **done** — `5d3fbc7` (step 1) + `0c156b2` (step 2) |
-| 4 | Positive+negative pairs for **64** methods (28 no-positive + 20 `is_err`-hollow + 16 variant-only) | additive | ledger done — `c903816`; batches not started |
+| 4 | Positive+negative pairs for **64** methods (28 no-positive + 20 `is_err`-hollow + 16 variant-only) | additive | ledger done — `c903816`; batch 1 (recording, 15) **done** — `1c01977`; 49 left |
 
 Verdicts for every finished stage are in [§9](#9-stage-verdicts) — what each one
 actually rested on, not just that it passed. (Stage 4 is now the only one left,
@@ -419,6 +419,7 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C17 | A test marked "do not edit" should come out of the stage byte-identical | Not when the stage changes a **public signature** — that mechanically rewrites every call site, including in tests whose subject is unrelated (Stage 3 step 1 had to touch both ephemera de-dup tests for exactly this reason). Read the instruction as "do not weaken its assertions" and review by diffing the **assertion set**, not the byte count. The check that matters: does the test still fail for the reason it was written? | agent |
 | C19 | Giving an agent an isolated worktree guarantees it analyses the right tree | It guarantees only that the tree **stops moving**. The Stage 4 ledger agent was handed a worktree created from `5789f41` — a stale `develop` commit predating the whole programme, with no `src/tests/client/`, no `tests/`, and no copy of this document. Frozen, and frozen at a tree Stage 4 will never touch: C11b's failure mode inverted. The agent caught it and re-detached to the programme tip. **Isolation addresses drift, not provenance** — require the agent to report the SHA it measured, and check that SHA against the ref you meant. | reviewer |
 | C18 | A mutation's red **count** from an earlier stage is a reusable expectation | It is not — it is a measurement of one tree. Replaying Stage 3 step 1's mutations after step 2, the reviewer's first draft asserted "expect 13 again"; the deleted shim test had itself been red under both mutations, so the true answer was 12 and the hard-coded expectation would have flagged a clean commit as a weakened net. Re-measure the baseline on the old ref and diff the red **name sets** — the invariant worth asserting is *which* tests defend a fix, not how many. | reviewer |
+| C20 | `get_capabilities` is a hollow negative — it asserts only `Fault { .. }` | The ledger's `yes / yes` is right and the reviewer's citation was wrong. `device_tests.rs` holds **two** fault tests for it: `..._returns_error` at `:75`, which asserts the bare variant, and `..._returns_err` at `:361`, which asserts `code == "s:Sender"` — and a third pins `HttpStatus { status: 401 }`. A method's class is its **strongest** test; quoting one assertion without sweeping its siblings misreads it, and the names differ by one letter. Batch 1's fault mutation settles this objectively: `:361` is red at the baseline, so `get_capabilities` was never in scope. (The weaker `:75` is pre-existing dead weight; not this programme's to remove.) | reviewer |
 | C16 | Every new test must be shown red before the fix | Not one whose subject is "property X still holds". A cross-module premise guard is **green the moment it is written**, because the premise already holds — red-before-green proves nothing and accepting it green is indistinguishable from accepting a vacuous test. Validate it by **mutating the module that owns the property** and naming the expected victims. Stage 2's two whitespace pins were the only 2 of 654 lib tests that caught a mutation of the `Event::End` trim; 1b's `hostile_encoding_reaches_display_unescaped` is the same shape, with the method left implicit. | agent |
 
 ---
@@ -520,6 +521,13 @@ them silently become in-scope; open a separate plan.
   fields; Media1/Media2 profile and encoder state are disjoint.
 - `examples/write_workflow.rs` reimplements the library's mock server (~400 lines)
   and its harness prints failures instead of failing, exiting 0 regardless.
+- **`MissingField` path strings are inconsistent and half of them are unqualified.**
+  Recording alone emits `"Uri"`, `"JobToken"`, `"SearchToken"`, `"RecordingToken"`,
+  `"TrackToken"` with no operation or element context, and `"RecordingJob/JobToken"`
+  names a Rust type where the XML element is `JobItem`. `Missing required field: Uri`
+  is not a diagnosable message. Normalising them is a library change; Stage 4
+  batch 1 has **pinned** the current strings in 7 tests, so the normalisation will
+  fail loudly and its blast radius is already measured. Found by the batch-1 agent.
 
 ---
 
@@ -668,6 +676,60 @@ a false alarm against a perfectly good commit. Recorded as C18.
 **Feature-free `--all-targets` has two failure sources, not one** — found by the
 agent, confirmed by the reviewer, and pre-existing by construction since this diff
 touches only `fixture.rs`. §7's known-red note has been corrected.
+
+### Stage 4 batch 1 — `1c01977` — PASS
+
+All 15 recording methods, one file (`src/tests/client/recording_tests.rs`), 92
+insertions / 46 deletions. No test added, none removed, none renamed — the name
+set is byte-identical at 706, so the whole diff is assertion strength. Two
+`#[track_caller]` helpers (`assert_fault`, `assert_missing_field`) plus 15
+call-site rewrites and 7 fixtures given distinctive payload strings.
+
+**The independent proof is a library mutation, not the agent's own perturbations.**
+The agent proved each assertion fixture-sensitive by perturbing its own fixture
+(22 perturbations, 22 red, 22 reverted green). That is necessary but self-scored,
+so the reviewer ran two mutations of the *library* across both refs, unfiltered,
+and diffed red name sets:
+
+| mutation | at `2d39f63` | at `1c01977` | set difference |
+|---|---|---|---|
+| `SoapError::missing()` ignores its argument, returns `"MUTANT_PATH"` | 11 red | 19 red | exactly the **8** recording missing-field negatives |
+| the fault parser returns constant `code`/`reason` | 16 red | 23 red | exactly the **7** recording fault negatives |
+
+8 + 7 = 15, nothing else moved in either direction, both compiled (not a C14 false
+red). **Before the batch not one of the 15 was red under either mutation** — the
+hollowness §2.2 asserted is now measured, not argued. Drivers at
+`<scratchpad>/mut5.py`, captures at `<scratchpad>/red-b1-{before,after}.json`.
+
+**These two mutations are the standing instrument for the remaining batches.** They
+are service-independent: any negative that asserts a `MissingField` path goes red
+under the first, any that asserts a fault `code`/`reason` under the second. Run
+them before and after each batch and require the difference to equal that batch's
+method list. They also give a cheap lower-bound audit of the ledger — a method
+already red at the baseline has a real negative regardless of what a grep says.
+
+**The two hollow flavours were never distinguishable in power, only in
+appearance.** Seven of the agent's perturbations turn a `Fault` into
+`UnexpectedResponse`; both `assert!(res.is_err())` and
+`matches!(err, OnvifError::Soap(_))` pass either way. The ledger's split between
+`[is_err-only]` and `[outer-variant-only]` predicts cost, not risk — which is the
+reasoning §2.2 already used to fold the 16 variant-only rows into the 64.
+
+**Deliberate coupling, recorded so nobody unpicks it by accident.** The batch pins
+seven `MissingField` path strings exactly as the library emits them, and they are
+not consistent: `get_recording_jobs` reports `"RecordingJob/JobToken"` although the
+XML element is `JobItem`, while its sibling reports the element-named
+`"RecordingItem/RecordingToken"`, and five more are bare (`"Uri"`, `"JobToken"`,
+`"SearchToken"`, `"RecordingToken"`, `"TrackToken"` — a user sees
+`Missing required field: Uri` with no operation named). Normalising them is a
+library change and out of scope here; the point of pinning is that such a change
+now fails loudly instead of silently. Logged in [§8](#8-known-gaps-deliberately-not-addressed-here).
+
+**Minor, accepted:** four fixtures now send `env:Receiver` for what ONVIF would
+call a sender-side fault. The strings exist to make `code` and `reason`
+independently discriminating, and no library behaviour depends on the value —
+but they are not device-plausible, and a future real-camera fixture should not
+copy them.
 
 ### Test-design patterns these stages produced
 
