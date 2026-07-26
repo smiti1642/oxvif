@@ -340,7 +340,7 @@ async fn test_get_metadata_configurations_missing_token_returns_err() {
         .get_metadata_configurations_media2("http://192.168.1.1/onvif/media2", None, None)
         .await
         .unwrap_err();
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+    assert_missing_field(err, "MetadataConfiguration/@token");
 }
 
 // ── Media2 Audio decoder / output configurations ──────────────────────────

@@ -656,10 +656,19 @@ async fn test_remove_video_source_configuration_soap_fault_returns_err() {
 async fn test_get_profiles_malformed_xml_returns_err() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(mock("<unclosed"));
-    let result = client
+    let err = client
         .get_profiles("http://192.168.1.1/onvif/media_service")
-        .await;
-    assert!(result.is_err(), "expected Err on malformed XML");
+        .await
+        .unwrap_err();
+    match err {
+        OnvifError::Soap(crate::soap::SoapError::XmlParse(msg)) => {
+            assert_eq!(
+                msg, "syntax error: tag not closed: `>` not found before end of input",
+                "XML parse message"
+            );
+        }
+        other => panic!("expected SoapError::XmlParse, got {other:?}"),
+    }
 }
 
 // ── Missing required fields ───────────────────────────────────────────────
@@ -682,13 +691,11 @@ fn get_profiles_response_missing_token() -> &'static str {
 async fn test_get_profiles_missing_token_returns_err() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(mock(get_profiles_response_missing_token()));
-    let result = client
+    let err = client
         .get_profiles("http://192.168.1.1/onvif/media_service")
-        .await;
-    assert!(
-        result.is_err(),
-        "expected Err when profile token is missing"
-    );
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "Profile/@token");
 }
 
 fn get_profile_response_missing_token() -> &'static str {
@@ -709,13 +716,11 @@ fn get_profile_response_missing_token() -> &'static str {
 async fn test_get_profile_missing_token_returns_err() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(mock(get_profile_response_missing_token()));
-    let result = client
+    let err = client
         .get_profile("http://192.168.1.1/onvif/media_service", "Profile_1")
-        .await;
-    assert!(
-        result.is_err(),
-        "expected Err when profile token attribute is absent"
-    );
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "Profile/@token");
 }
 
 fn get_stream_uri_missing_uri() -> &'static str {
@@ -733,10 +738,11 @@ fn get_stream_uri_missing_uri() -> &'static str {
 async fn test_get_stream_uri_missing_uri_returns_err() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(mock(get_stream_uri_missing_uri()));
-    let result = client
+    let err = client
         .get_stream_uri("http://192.168.1.1/onvif/media_service", "Profile_1")
-        .await;
-    assert!(result.is_err(), "expected Err when Uri element is missing");
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "Uri");
 }
 
 // ── Audio Service tests ───────────────────────────────────────────────────────
@@ -964,7 +970,7 @@ async fn test_get_osds_missing_token_returns_err() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+    assert_missing_field(err, "OSDConfiguration/@token");
 }
 
 #[tokio::test]
@@ -1020,7 +1026,7 @@ async fn test_get_osd_options_missing_returns_err() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+    assert_missing_field(err, "OSDOptions");
 }
 
 // ── New-field coverage tests ──────────────────────────────────────────────────
