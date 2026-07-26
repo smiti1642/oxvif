@@ -5,6 +5,93 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.14.0] - 2026-07-26
+
+Headline: **a correctness release** — six mock operations that never worked, a
+Media2 request that carried a Media1 prefix, an XML-escaping hole reachable from
+device-supplied data, and a fixture key that silently discarded one of any two
+services sharing a canonical request. Found by a read-only audit, fixed in staged
+commits, each one proved by a library mutation that had to redden the new test
+before it was accepted.
+
+### Breaking
+
+- **`FixtureStore::lookup` now takes the SOAP action as its first argument**
+  (`lookup(action, key_canon)`). Callers get `E0061` — deliberately, so the change
+  cannot pass silently. There is **no compatibility shim and no deprecation
+  cycle**: the pair `(action, key_canon)` is the store's real identity, and a
+  key-only lookup cannot disambiguate two services that canonicalise identically.
+- **`get_discovery_mode` returns `Err` where it used to return `Ok("")`.** A device
+  that omits `<tds:DiscoveryMode>` now yields
+  `SoapError::MissingField("GetDiscoveryModeResponse/DiscoveryMode")`. The
+  signature is unchanged; callers that read `""` as "unknown mode" now see an
+  error. The doc comment always claimed two possible values — `""` was a third the
+  documentation denied.
+- **`SweepReport::is_complete()` returns `false` for an empty report**, not `true`.
+  A sweep that resolved no operation at all no longer reads as a successful sweep.
+  A caller gating on it with an empty selection flips.
+
+### Fixed
+
+- **Six mock operations answered with element names that exist in no ONVIF WSDL.**
+  `Add`/`RemoveVideoEncoderConfiguration`, `Add`/`RemoveVideoSourceConfiguration`
+  shared a made-up `<trt:ConfigurationResponse/>`, and both imaging focus
+  operations shared `<timg:ImagingResponse/>`, so all six failed against
+  `MockTransport` with `UnexpectedResponse`. Each now has its own dispatch arm and
+  its own real response element.
+- **`set_audio_encoder_configuration_media2` sent a Media1 prefix.**
+  `AudioEncoderConfiguration::to_xml_body()` hard-codes `trt:`, so a `tr2:`
+  request carried a `<trt:Configuration>` child. Adds `to_xml_body_media2()`;
+  Media1 output is unchanged and frozen by tests.
+- **`xml_escape` was bypassed through `Display`.** `VideoEncoding::Other(String)`
+  and `AudioEncoding::Other(String)` return the device's raw string, so four
+  serialisers put an unescaped device-echoed encoding on the wire — a device
+  reporting an encoding containing `&`, `<` or `"` produced malformed XML. All
+  four sites now escape. Invisible to a `grep xml_escape` audit, which is why it
+  survived.
+- **Fixtures are keyed on `(action, key_canon)`, not the canonical request alone.**
+  Media1's `<trt:GetProfiles/>` and Media2's `<tr2:GetProfiles/>` canonicalise
+  identically, so one silently overwrote the other. **The on-disk format does not
+  change** and old `fixtures.json` files keep loading; what an old clone cannot
+  recover is the exchanges that were never written — 4 of the 64 in a recommended
+  sweep. Those four now replay as an honest miss instead of returning the other
+  service's envelope, so an un-re-recorded clone gets *less* wrong, not more.
+  Re-recording is still recommended and is the only way to fill the gap.
+
+### Security (advisory note — no change to this crate)
+
+Four advisories were open against transitive dependencies at release time, all
+reached through `reqwest`:
+
+- `quinn-proto` < 0.11.15 — RUSTSEC-2026-0185, 7.5 high: remote memory exhaustion
+  via unbounded out-of-order stream reassembly.
+- `rustls-webpki` < 0.103.13 — RUSTSEC-2026-0098 and -0099, name constraints
+  incorrectly accepted for URI names and for wildcard certificates;
+  RUSTSEC-2026-0104, reachable panic in CRL parsing.
+
+**Nothing in this crate changed and nothing needed to.** `oxvif` never named those
+crates; its `reqwest` requirement is a caret range that already permits the fixed
+versions, so a fresh resolve picks them up. `Cargo.lock` is not tracked here — a
+library does not ship one — so this release cannot pin them for you. **If your
+lockfile predates 2026-07-26, run `cargo update -p quinn-proto -p rustls-webpki`;
+upgrading `oxvif` alone will not do it.**
+
+### Testing
+
+No public API change, but the suite is materially different: 64 client methods
+that reported as covered were not. 28 had no test asserting anything about their
+outcome, and 36 had a negative test that could not fail for the reason it was
+written — `assert!(res.is_err())` stays green when a `Fault` becomes an
+`UnexpectedResponse`. All 64 now assert the payload: the fault's `code` and
+`reason`, or the exact `MissingField` path. 706 → 734 tests, none removed or
+renamed. Each batch was measured before and after with the same two library
+mutations, so the improvement is a diffed set of failing test names, not a count.
+
+`CLAUDE.md` now bans hollow tests outright and states how to prove a new
+assertion is load-bearing.
+
+---
+
 ## [0.13.1] - 2026-07-24
 
 Headline: **the metamorph clone sweep is now a selectable, two-level read

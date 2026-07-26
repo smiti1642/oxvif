@@ -90,7 +90,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.13", features = ["mock"] }
+oxvif = { version = "0.14", features = ["mock"] }
 ```
 
 ```rust
@@ -117,7 +117,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.13"
+oxvif = "0.14"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -133,7 +133,7 @@ without hand-cloning parallel structs.
 
 ```toml
 [dependencies]
-oxvif = { version = "0.13", features = ["serde"] }
+oxvif = { version = "0.14", features = ["serde"] }
 ```
 
 ```rust
@@ -849,7 +849,7 @@ alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 ```toml
-oxvif = { version = "0.13", features = ["health"] }
+oxvif = { version = "0.14", features = ["health"] }
 ```
 
 ```rust
@@ -999,8 +999,8 @@ implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.13", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.13", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.14", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.14", features = ["mock-server"] }  # adds MockServer
 ```
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):
@@ -1199,8 +1199,8 @@ chain and `DeviceState`); everything here is opt-in and feature-gated, and
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.13", features = ["metamorph"] }         # record / replay in-process
-# oxvif = { version = "0.13", features = ["metamorph-server"] } # + serve the clone over real HTTP
+oxvif = { version = "0.14", features = ["metamorph"] }         # record / replay in-process
+# oxvif = { version = "0.14", features = ["metamorph-server"] } # + serve the clone over real HTTP
 ```
 
 ### Clone & replay (Persona B)
