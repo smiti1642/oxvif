@@ -94,7 +94,9 @@ resp.children_named("Foo").map(|n| {
 ## Testing rules
 
 - Every new client method needs at least one **positive test** (happy path)
-  and one **negative test** (missing required field or SOAP Fault).
+  and one **negative test** (missing required field or SOAP Fault). Both must
+  assert the payload — see [No hollow tests](#no-hollow-tests); a test that
+  only asserts "an error happened" does not satisfy this rule.
 - Client tests are split by service, mirroring `src/client/`:
   `src/tests/client/<service>_tests.rs` (`device`, `media`, `media2`, `ptz`,
   `imaging`, `events`, `recording`). Each file is attached to the module it
@@ -113,6 +115,70 @@ resp.children_named("Foo").map(|n| {
 - Black-box tests that only touch the public API (plus `oxvif::mock`) belong in
   the integration directory `tests/`, not inside the library crate — see
   `tests/mock_action_snapshot.rs` and `tests/mock_workflow.rs`.
+
+### No hollow tests
+
+A test that cannot fail for the reason it was written is not coverage. It is
+worse than no test, because it reports the method as covered.
+
+**Banned in a negative test** — every one of these passes when the device
+returns a *completely different* error:
+
+```rust
+// WRONG — all four are hollow
+assert!(res.is_err());
+assert!(matches!(res, Err(_)));
+assert!(matches!(err, OnvifError::Soap(_)));
+assert!(matches!(err, OnvifError::Soap(SoapError::Fault { .. })));
+```
+
+This is measured, not theoretical: change one letter in the response tag so a
+`Fault` becomes `UnexpectedResponse`, and all four stay green.
+
+**Required instead — assert the payload:**
+
+```rust
+// CORRECT — fault: the exact code and reason the fixture sent
+let err = client.delete_recording(url, "bad").await.unwrap_err();
+assert_fault(err, "env:Receiver", "NoSuchRecording-delete-8821");
+
+// CORRECT — missing field: the exact path string the parser emits
+let err = client.get_replay_uri(url, "r").await.unwrap_err();
+assert_missing_field(err, "Uri");
+```
+
+Use the `#[track_caller]` helpers at the top of
+`src/tests/client/recording_tests.rs`; copy them into a second service's file
+only until a third needs them, then promote to `src/tests/common.rs`.
+
+Rules that make the assertion load-bearing:
+
+- **Assert what the fixture chose, not what the enum is.** `code`, `reason`,
+  the field-path string, the message text. If the assertion would still hold
+  after you edit the fixture, it is asserting nothing.
+- **Give each fixture a distinctive payload.** `make_soap_fault_xml("env:Sender",
+  "InvalidToken")` repeated across ten tests means no test can tell which
+  operation faulted. Use `"InvalidJobMode-3160"`-style strings.
+- **`code` and `reason` must vary independently** across a file, or asserting
+  both proves no more than asserting one.
+- **Positives are subject to the same rule.** `res.unwrap();` or
+  `assert!(res.is_ok());` with no field assertion is a hollow positive. Assert
+  returned fields, or for write methods assert `c.action` **and** `c.body` from
+  `RecordingTransport`.
+
+**Prove it before you commit.** A new assertion that passes on the first run has
+proved nothing yet:
+
+1. Perturb *that test's* fixture — change the fault code, the reason, or omit a
+   different element so a different path is reported.
+2. Run that one test. It must fail on the **assertion**, not on a compile error.
+3. Revert exactly, confirm green.
+
+For a whole batch, mutate the library instead and diff the failing test **names**
+before and after: make `SoapError::missing()` ignore its argument, or make the
+fault parser in `src/soap/xml.rs` return a constant `code`/`reason`. Every real
+negative goes red; every hollow one stays green. Run it unfiltered — a
+`cargo test <filter>` run silently excludes the integration crates.
 
 ## Adding a new ONVIF service — step-by-step SOP
 
