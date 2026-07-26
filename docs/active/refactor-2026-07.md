@@ -67,7 +67,7 @@ writes `CHANGELOG.md`, the stages deliberately do not):
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | **done** — `5d3fbc7` (step 1) + `0c156b2` (step 2) |
-| 4 | Positive+negative pairs for the 26 zero-coverage + 21 hollow-negative methods | additive | not started |
+| 4 | Positive+negative pairs for **64** methods (28 no-positive + 20 `is_err`-hollow + 16 variant-only) | additive | ledger done — `c903816`; batches not started |
 
 Verdicts for every finished stage are in [§9](#9-stage-verdicts) — what each one
 actually rested on, not just that it passed. (Stage 4 is now the only one left,
@@ -113,49 +113,74 @@ mean the answer lands in released docs.
 
 ### 2.2 Stage 4 scope
 
-**Stage 4 scope is larger than §1 assumed.** A survey of all **148** public
-`OnvifClient` methods (149 `pub fn` in `src/client/` minus the free function
-`notification_listener`; enumeration cross-checked against the 8 `impl OnvifClient`
-blocks and against `--list`) scores them against the CLAUDE.md positive+negative
-rule as:
+**Universe: 148 methods.** 149 `pub fn` in `src/client/` minus the free function
+`notification_listener` (`src/client/events.rs:321`, outside every `impl` block).
+Reconciled four ways: reviewer's Grep 149, agent's line-anchored Grep 149, a token
+parser 150 (the extra is `pub(crate) async fn call`, `mod.rs:144`, not public), and
+142 `pub async fn` + 6 non-async methods. `src/session.rs` mirrors all 142 async
+ones 1:1. **`148` is the count to cite; `142` counts only the async half.**
 
-| verdict | count | meaning |
-|---|---|---|
-| covered | 32 | real positive **and** discriminating negative |
-| partial | 90 | real positive, negative **missing or weak** (`assert!(res.is_err())` only) |
-| zero | 26 | neither |
+**The ledger was regenerated at `c903816` (C11b satisfied) and is committed at
+[`docs/active/stage4-ledger.md`](stage4-ledger.md)** — 148 rows with per-method
+evidence, quoting the assertion for every row scored `hollow`, `weak` or `unsure`.
+It is in the repo rather than a scratchpad on purpose: Stage 4 runs in batches,
+possibly across sessions, and a work list that evaporates is a work list that gets
+re-derived wrongly. Re-measure it against the then-current ref before each batch;
+do not work from the summary below alone.
 
-Closing only the 26 zero-coverage methods would leave **90 methods still violating
-the rule**; full CLAUDE.md compliance would be 116 methods.
+| class | count |
+|---|---|
+| fully compliant (real positive **and** real negative) | **13** |
+| no real positive (27 zero + 1 weak) | 28 |
+| negative is `assert!(res.is_err())` only | 20 methods / **21 sites** |
+| negative asserts the variant but no payload (`Fault { .. }`, `MissingField(_)`) | 16 |
+| no negative test at all | 94 |
+| infallible, exempt | 3 (`new`, `with_credentials`, `with_transport`) |
 
-**Decided 2026-07-26: Stage 4 covers 47 — the 26 `zero` plus the 21 whose negative
-is hollow** (`assert!(res.is_err())` against a real SOAP Fault). The selection
-criterion is *misleadingness*, not count: those 21 look green while discriminating
-nothing, which is strictly worse than a visible gap. The other 69 `partial` methods
-are deferred with their absence recorded in the ledger, **not** silently closed —
-§8 is where deferred work goes, and Stage 4 must not be described afterwards as
-having made the crate rule-compliant. Stage 4 ships inside 0.14.0 as §1 locked.
+**Decided 2026-07-26: Stage 4 covers 64 = 28 + 20 + 16.** The two hollow classes are
+one defect wearing two costumes — *a negative test that does not assert what went
+wrong* — and the earlier "21" undercounted only because it was gathered by grepping
+`is_err()`. Excluding the 16 would let the stage claim it cleared the hollow class
+while leaving 16 known-hollow tests in place. They are also the cheapest rows in the
+ledger: `get_storage_configurations` is one `assert_eq!` on the field path.
+Template: **assert the payload, not the variant** (§9).
 
-The 21 hollow negatives: `ptz_get_configurations`, `ptz_get_nodes`, `get_profiles`
-(×2 sites), `get_profile`, `get_stream_uri`, `set_scopes`,
-`set_system_date_and_time`, `event_stream`, and all twelve recording ones
-(`create_recording`, `delete_recording`, `create_track`, `delete_track`,
-`get_recording_jobs`, `create_recording_job`, `set_recording_job_mode`,
-`delete_recording_job`, `get_recording_job_state`, `get_recording_search_results`,
-`end_search`, `search_recordings`).
+Full CLAUDE.md compliance is **132** methods, not the 116 previously stated
+(`148 − 13 compliant − 3 exempt`). The 68 beyond this stage's 64 — almost all
+"never had a negative at all" — stay deferred in §8. **Stage 4 must not be described
+afterwards as having made the crate rule-compliant.** Stage 4 ships inside 0.14.0.
 
-Two findings that sharpen it:
-- **PTZ has zero `covered` methods out of 18.** Six are zero-coverage
-  (`ptz_absolute_move`, `ptz_relative_move`, `ptz_continuous_move`, `ptz_stop`,
-  `ptz_get_presets`, `ptz_goto_preset`); the other twelve all lack a real negative.
-- **The 12 recording negatives are the most dangerous cluster.** Nine feed a real
-  `make_soap_fault_xml` response and then assert only `is_err()`. Turning a Fault
-  into an `UnexpectedResponse` or `MissingField` would leave all of them green.
-- `with_utc_offset` and `device_url` have **no call site in any test at all** — not
-  even in the snapshot net.
+Superseded numbers, kept so the drift is visible: the first survey scored
+`covered 32 / partial 90 / zero 26` and set the scope at 47. Regenerated, `covered`
+is 13 strict (29 if variant-only counts), and the scope is 64. The `32` is the one
+figure that could not be reconciled at all — see the ledger's §"unreconcilable".
+Stages 1a–3 cleared exactly **two** rows: `imaging_stop` (1a) and
+`get_discovery_mode` (2). Every one of the 21 hollow sites is still hollow.
 
-The full ledger was measured while Stage 1a was in flight (see C11b) and must be
-**regenerated against a committed ref** before Stage 4 begins.
+Findings that shape the batching:
+- **PTZ has zero compliant methods out of 18** — five zero-positive, one weak
+  (`ptz_stop`: called at `session_tests.rs:498` and `.unwrap()`ed with no assertion,
+  so it is `weak`, not `zero` as first recorded), the rest lacking a real negative.
+- **Recording is the most dangerous cluster: 15 hollow, not 12.** The regenerated
+  ledger found three the first survey missed (`get_recordings`, `find_recordings`,
+  `get_replay_uri`). Most feed a real `make_soap_fault_xml` and assert only
+  `is_err()`, so turning a Fault into `UnexpectedResponse` leaves them all green.
+- **`media` and `media2` must go to the same agent** — three Media1 setters have
+  their tests in `media2_tests.rs`.
+- `with_utc_offset` and `device_url` have **no call site in any test at all**, not
+  even in the snapshot net. Both are infallible, so they need a positive only.
+- `get_capabilities` has **six** tests and is still not compliant: its negative
+  asserts `SoapError::Fault { .. }` with neither code nor reason. A high test count
+  is not coverage.
+- `set_video_encoder_configuration`'s only negative is a client-side
+  `InvalidArgument` gate that never reaches the transport — it counts, but the
+  method has no SOAP-Fault negative.
+- Outside the universe by definition, but untested all the same: the free function
+  `notification_listener` has no unit test, only a snapshot call site.
+
+Per-service locked scope (28 + 20 + 16 = 64): recording 15, media2 12, device 14,
+media 10, ptz 8, mod 2, events 1, imaging 2. Batch recording first — one file,
+mechanically uniform, largest single win.
 
 **Ordering constraints (not preferences):**
 - Stage 0 had to complete alone — it photographs current behaviour, so a
@@ -392,6 +417,7 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C14 | Any mutation of the fixed code proves the net | Only if it **compiles**. Deleting `<tt:Channels>{channels}</tt:Channels>` from the new Media2 serialiser left `channels = self.channels` as an unused named `format!` argument and rustc rejected the build — zero tests ran, so the mutation said nothing about the suite. That the compiler happened to be a stronger net *there* does not transfer to the next site. Retagging `Channels` → `Channel` compiles, and went red in 4 tests. | reviewer |
 | C15 | A name vanishing from `-- --list` means a test was deleted | **Doc-test names embed a line number** (`src/metamorph/surface.rs - metamorph::surface::drive_surface_with_progress (line 514)`). Any doc-comment edit above a doc test makes its name vanish and a near-identical one appear — indistinguishable from a deletion unless you match on name-minus-line. Stage 2's 4 added doc lines moved that test 514 → 518. Stages 3 and 4 edit many doc comments, so expect this. | agent |
 | C17 | A test marked "do not edit" should come out of the stage byte-identical | Not when the stage changes a **public signature** — that mechanically rewrites every call site, including in tests whose subject is unrelated (Stage 3 step 1 had to touch both ephemera de-dup tests for exactly this reason). Read the instruction as "do not weaken its assertions" and review by diffing the **assertion set**, not the byte count. The check that matters: does the test still fail for the reason it was written? | agent |
+| C19 | Giving an agent an isolated worktree guarantees it analyses the right tree | It guarantees only that the tree **stops moving**. The Stage 4 ledger agent was handed a worktree created from `5789f41` — a stale `develop` commit predating the whole programme, with no `src/tests/client/`, no `tests/`, and no copy of this document. Frozen, and frozen at a tree Stage 4 will never touch: C11b's failure mode inverted. The agent caught it and re-detached to the programme tip. **Isolation addresses drift, not provenance** — require the agent to report the SHA it measured, and check that SHA against the ref you meant. | reviewer |
 | C18 | A mutation's red **count** from an earlier stage is a reusable expectation | It is not — it is a measurement of one tree. Replaying Stage 3 step 1's mutations after step 2, the reviewer's first draft asserted "expect 13 again"; the deleted shim test had itself been red under both mutations, so the true answer was 12 and the hard-coded expectation would have flagged a clean commit as a weakened net. Re-measure the baseline on the old ref and diff the red **name sets** — the invariant worth asserting is *which* tests defend a fix, not how many. | reviewer |
 | C16 | Every new test must be shown red before the fix | Not one whose subject is "property X still holds". A cross-module premise guard is **green the moment it is written**, because the premise already holds — red-before-green proves nothing and accepting it green is indistinguishable from accepting a vacuous test. Validate it by **mutating the module that owns the property** and naming the expected victims. Stage 2's two whitespace pins were the only 2 of 654 lib tests that caught a mutation of the `Event::End` trim; 1b's `hostile_encoding_reaches_display_unescaped` is the same shape, with the method left implicit. | agent |
 
@@ -425,6 +451,11 @@ Mistakes actually made in this programme. Re-read before each stage.
      whose **full** output is the evidence, run it as `rtk proxy <cmd>`.
 - **Windows console mangles UTF-8 commit messages.** Use
   `git -c i18n.commitEncoding=UTF-8 commit -F -` with an **ASCII-only** body.
+- **Agent worktrees are not created from your `HEAD`.** The Stage 4 ledger agent's
+  isolated worktree came from `5789f41` (stale `develop`), not the branch tip. Any
+  agent given `isolation: worktree` must be told to `git checkout --detach` the
+  intended ref and to **report the SHA it actually measured** (C19). Verify it:
+  `git worktree list` names every worktree and its commit.
 - **Known-red baseline: feature-free `--all-targets` has _two_ failure sources.**
   `error[E0432]: unresolved import oxvif::CapturingTransport` in
   `examples/conformance.rs` (C1), **and** `error: unused import: std::sync::Arc`
