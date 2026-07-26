@@ -68,7 +68,7 @@ writes `CHANGELOG.md`, the stages deliberately do not):
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | **done** — `5d3fbc7` (step 1) + `0c156b2` (step 2) |
-| 4 | Fix the **defect that put each of 64 methods in scope** — 28 get a real positive, 20 + 16 get a real negative. *Not* full CLAUDE.md pairs: a method scoped for a missing positive keeps its missing negative, which is why full compliance is 132 and the other 68 are deferred to §8 | additive | ledger `c903816`; batch 1 recording 15 — `1c01977`; batch 2 media+media2 22 — `71e349d` + `3c8b420`; **27 left** (device 14 + mod 2, ptz 8, events 1 + imaging 2) |
+| 4 | Fix the **defect that put each of 64 methods in scope** — 28 get a real positive, 20 + 16 get a real negative. *Not* full CLAUDE.md pairs: a method scoped for a missing positive keeps its missing negative, which is why full compliance is 132 and the other 68 are deferred to §8 | additive | ledger `c903816`; batch 1 recording 15 — `1c01977`; batch 2 media+media2 22 — `71e349d` + `3c8b420`; batch 3 ptz 8 — `ca94afe` + `e9f0911`; **19 left** (device 14 + mod 2, events 1 + imaging 2) |
 
 Verdicts for every finished stage are in [§9](#9-stage-verdicts) — what each one
 actually rested on, not just that it passed. (Stage 4 is now the only one left,
@@ -201,8 +201,15 @@ mechanically uniform, largest single win.
   `tr2:`, not `trt:`), so writing those tests earlier wastes them.
   *Datum for Stage 4, found while mutation-testing 0.5:* `ptz_get_presets` has **no
   unit-level test at all** — breaking its response tag left all 23 `client::ptz`
-  tests green, and only `tests/mock_action_snapshot.rs` caught it. Concrete
-  confirmation of C6: the snapshot creates a call site, not a positive/negative pair.
+  tests green. Concrete confirmation of C6: the snapshot creates a call site, not
+  a positive/negative pair.
+  *Corrected in batch 3:* "and only `tests/mock_action_snapshot.rs` caught it" was
+  wrong — re-run unfiltered with `--no-fail-fast` at `dd69150`, that mutation
+  reddens **two** integration tests, `mock_action_snapshot_matches_expected_list`
+  **and** `mock_workflow::ptz_commands`. Almost certainly C10 again: the original
+  observation was made under a `client::ptz` filter, which drops both crates, and
+  only one was found when it was re-run. **Retired at `ca94afe`** — the mutation
+  now also reddens `client::ptz::tests::test_ptz_get_presets_parses_tokens_names_and_positions`.
 - Stage 3 step 1 adds the new `lookup` signature with the old kept as a
   deprecated shim; step 2 removes the shim. Test-first is impossible in one step
   because the target test cannot compile against a signature that does not exist.
@@ -420,6 +427,7 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C17 | A test marked "do not edit" should come out of the stage byte-identical | Not when the stage changes a **public signature** — that mechanically rewrites every call site, including in tests whose subject is unrelated (Stage 3 step 1 had to touch both ephemera de-dup tests for exactly this reason). Read the instruction as "do not weaken its assertions" and review by diffing the **assertion set**, not the byte count. The check that matters: does the test still fail for the reason it was written? | agent |
 | C19 | Giving an agent an isolated worktree guarantees it analyses the right tree | It guarantees only that the tree **stops moving**. The Stage 4 ledger agent was handed a worktree created from `5789f41` — a stale `develop` commit predating the whole programme, with no `src/tests/client/`, no `tests/`, and no copy of this document. Frozen, and frozen at a tree Stage 4 will never touch: C11b's failure mode inverted. The agent caught it and re-detached to the programme tip. **Isolation addresses drift, not provenance** — require the agent to report the SHA it measured, and check that SHA against the ref you meant. | reviewer |
 | C18 | A mutation's red **count** from an earlier stage is a reusable expectation | It is not — it is a measurement of one tree. Replaying Stage 3 step 1's mutations after step 2, the reviewer's first draft asserted "expect 13 again"; the deleted shim test had itself been red under both mutations, so the true answer was 12 and the hard-coded expectation would have flagged a clean commit as a weakened net. Re-measure the baseline on the old ref and diff the red **name sets** — the invariant worth asserting is *which* tests defend a fix, not how many. | reviewer |
+| C22 | A mutation driver that reads cargo's output is reading cargo's output | Only if it decodes it. The reviewer's Python driver used `subprocess.run(text=True)`, which on this machine decodes with the **ANSI code page cp950** and raised `UnicodeDecodeError` on the first non-ASCII byte cargo emitted — mid-run, leaving the sandbox dirty so the next run refused to start. It surfaced only because the crash was unhandled: wrapped in the `try/except` a tidier script would have had, it would have returned an empty red set and read as **"the mutation killed nothing"**, which is the same shape as C8 (a tool that fails by returning nothing is indistinguishable from a true negative). Pass `encoding="utf-8", errors="replace"` explicitly. Two earlier mutations in the same run decoded fine because their failure output happened to be pure ASCII — so this fails *intermittently*, by content. | reviewer |
 | C21 | Dropping the filter is enough to make a mutation check see the whole suite | It is not. `cargo test --all-features` **aborts after the first failing target**, so the moment the lib tests go red the integration crates are never built or run — a mutation killed only by `tests/mock_action_snapshot.rs` reads as killed by nothing. Distinct from C10, which is about a *filter* dropping those crates; this one drops them because the mutation worked. Batch 2's agent hit it on its first round and switched to `--no-fail-fast`; the reviewer's own batch-1 driver had the same hole and was re-run. **Mutation checks must be `--all-features --no-fail-fast`, and the run must report how many targets reported a result** (4 here) — a red count alone cannot distinguish "nothing else caught it" from "nothing else ran". | agent |
 | C20 | `get_capabilities` is a hollow negative — it asserts only `Fault { .. }` | The ledger's `yes / yes` is right and the reviewer's citation was wrong. `device_tests.rs` holds **two** fault tests for it: `..._returns_error` at `:75`, which asserts the bare variant, and `..._returns_err` at `:361`, which asserts `code == "s:Sender"` — and a third pins `HttpStatus { status: 401 }`. A method's class is its **strongest** test; quoting one assertion without sweeping its siblings misreads it, and the names differ by one letter. Batch 1's fault mutation settles this objectively: `:361` is red at the baseline, so `get_capabilities` was never in scope. (The weaker `:75` is pre-existing dead weight; not this programme's to remove.) | reviewer |
 | C16 | Every new test must be shown red before the fix | Not one whose subject is "property X still holds". A cross-module premise guard is **green the moment it is written**, because the premise already holds — red-before-green proves nothing and accepting it green is indistinguishable from accepting a vacuous test. Validate it by **mutating the module that owns the property** and naming the expected victims. Stage 2's two whitespace pins were the only 2 of 654 lib tests that caught a mutation of the `Event::End` trim; 1b's `hostile_encoding_reaches_display_unescaped` is the same shape, with the method left implicit. | agent |
@@ -446,7 +454,12 @@ Mistakes actually made in this programme. Re-read before each stage.
      `grep -rE '\.lock\(\)\.unwrap\(\)'` all return **0 matches** through the rtk
      proxy while the real count is non-zero (the last one: real answer 105). The
      trigger is any pattern containing `[ ] { } ( )`. Use the **Grep tool**, never
-     shell `grep`, for these.
+     shell `grep`, for these. Batch 3 extends this: `sed -i 's/y=/z=/'` came back
+     `unknown option to 's'`, and `grep ": test$" f | sort` was replaced by rtk's
+     own file listing. So it mangles *edit* expressions and *pipelines* too — use
+     the Edit tool to apply mutations, and compute name-set diffs in Python.
+     **Any name-set diff in this document that was computed through an rtk'd
+     `grep | sort | comm` pipeline should be re-checked.**
   2. *Output truncation.* `cargo test --all-features -- --list` through rtk emitted
      **373** of 676 lines and capped it with its own summary line
      `cargo test: 5 errors, 0 warnings (0 crates)` — which reads like cargo output
@@ -523,8 +536,12 @@ them silently become in-scope; open a separate plan.
   fields; Media1/Media2 profile and encoder state are disjoint. **The mock's OSD
   payload parser tolerates a renamed `<tt:Type>` and defaults it** — measured in
   batch 2, where retagging that element left `tests/mock_action_snapshot.rs`
-  entirely green with all four targets running. The snapshot net does not
-  discriminate that field, so it must not be cited as coverage for it.
+  entirely green with all four targets running. Batch 3 found the same for PTZ:
+  retagging `<tptz:Translation>`, `<tptz:Velocity>` or `GotoPreset`'s
+  `<tptz:PresetToken>` leaves the snapshot green, because the PTZ handlers fall
+  back to `0.0` on an unparseable body and still emit the right response element.
+  **The mock's detection surface is the action and the response tag, not the
+  request body** — it must not be cited as coverage for request-body content.
 - `examples/write_workflow.rs` reimplements the library's mock server (~400 lines)
   and its harness prints failures instead of failing, exiting 0 regardless.
 - **`MissingField` path strings are inconsistent and half of them are unqualified.**
@@ -800,6 +817,47 @@ by two media methods, because the library genuinely emits the same bare string f
 different operations. The agent did not change the library to make its assertions
 prettier. This widens the §8 coupling: normalising those paths now fails across
 two services.
+
+### Stage 4 batch 3 — `ca94afe` + `e9f0911` — PASS
+
+8 ptz methods, one file, two commits. 722 → 728 names, 6 added, **none removed**;
+commit A has **0 deletions**. 720 → 726 passing.
+
+**The C6 datum is retired, and its citation was wrong.** Replaying the original
+mutation (`find_response(…, "GetPresetsResponse")` → `"GetPresetsRespons"`)
+unfiltered with `--no-fail-fast`, 4 targets reporting:
+
+| ref | red |
+|---|---|
+| `dd69150` (pre-batch) | `mock_action_snapshot_matches_expected_list`, `mock_workflow::ptz_commands` — **zero `client::ptz`** |
+| `e9f0911` (post-batch) | those two **plus** `client::ptz::tests::test_ptz_get_presets_parses_tokens_names_and_positions` |
+
+So the datum reproduced exactly a stage later, and the new positive closes it. The
+plan's claim that *only* the snapshot caught it was wrong by one crate — corrected
+in §2.2, and the likely cause is C10 all over again.
+
+**The 2 hollow negatives, on the standing instrument:** MF 25 → **27**, delta
+exactly `ptz_get_configurations` and `ptz_get_nodes`; FA 23 → 23, correct — neither
+has a fault negative. Path strings (`PTZConfiguration/@token`, `PTZNode/@token`)
+were read out of `src/types/ptz_config.rs`, not guessed.
+
+**The mock's detection surface is action and response tag, not request body.**
+Three of commit A's mutations — retagging `<tptz:Translation>`, `<tptz:Velocity>`
+and `GotoPreset`'s `<tptz:PresetToken>` — killed **only** the new unit test, because
+the mock's PTZ handlers fall back to `0.0` on an unparseable body and still return
+the right response element. The two that *do* flip the snapshot are an ACTION
+change (`ptz_stop`) and a response-tag change (`ptz_get_presets`). Same shape as
+batch 2's OSD `<tt:Type>` finding; both are now against the §8 mock bullet.
+
+**A delegation test is not coverage of what it delegates to.**
+`session_tests::test_ptz_stop_delegates_ok` stayed green under an ACTION mutation
+that sent `…/StopAll` instead of `…/Stop`. It cannot tell whether the client sends
+the right SOAPAction — it survives any request the transport will answer. The
+ledger's `weak` for `ptz_stop` was, if anything, generous.
+
+**Scope discipline held.** All 18 ptz methods still have negative `no` or `hollow`;
+the 6 that got a positive here keep their missing negative, per the stage-4
+definition. The agent flagged the asymmetry and did not act on it, which is right.
 
 ### Test-design patterns these stages produced
 
