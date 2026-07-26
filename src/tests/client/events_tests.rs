@@ -321,7 +321,7 @@ async fn test_event_stream_error_on_bad_response() {
          <s:Body>
            <s:Fault>
              <s:Code><s:Value>s:Receiver</s:Value></s:Code>
-             <s:Reason><s:Text>Subscription expired</s:Text></s:Reason>
+             <s:Reason><s:Text>SubscriptionExpired-7712</s:Text></s:Reason>
            </s:Fault>
          </s:Body>
        </s:Envelope>"#;
@@ -329,7 +329,14 @@ async fn test_event_stream_error_on_bad_response() {
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let mut stream = client.event_stream("http://192.168.1.1/onvif/subscription_1", "PT5S", 10);
     let result = stream.next().await.expect("stream should yield an error");
-    assert!(result.is_err());
+    // The stream must surface the device's fault verbatim, not merely stop:
+    // a caller distinguishes "subscription gone, resubscribe" from any other
+    // failure by the code and reason.
+    assert_fault(
+        result.unwrap_err(),
+        "s:Receiver",
+        "SubscriptionExpired-7712",
+    );
 }
 
 // ── Subscribe (WS-BaseNotification push) ─────────────────────────────────────

@@ -213,7 +213,7 @@ async fn test_imaging_get_status_missing_status_returns_err() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+    assert_missing_field(err, "Status");
 }
 
 #[tokio::test]
@@ -362,7 +362,7 @@ async fn test_imaging_get_move_options_missing_returns_err() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+    assert_missing_field(err, "MoveOptions");
 }
 
 // ImagingSettings backlight_compensation

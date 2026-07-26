@@ -465,11 +465,14 @@ async fn test_set_scopes_xml_escapes_value() {
 
 #[tokio::test]
 async fn test_set_scopes_soap_fault_returns_err() {
-    let xml = make_soap_fault_xml("env:Sender", "InvalidScope");
+    let xml = make_soap_fault_xml("ter:InvalidArgVal", "InvalidScopeUri-4419");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client.set_scopes(&["onvif://www.onvif.org/name/Bad"]).await;
-    assert!(res.is_err());
+    let err = client
+        .set_scopes(&["onvif://www.onvif.org/name/Bad"])
+        .await
+        .unwrap_err();
+    assert_fault(err, "ter:InvalidArgVal", "InvalidScopeUri-4419");
 }
 
 // ── set_system_date_and_time ──────────────────────────────────────────────────
@@ -532,18 +535,19 @@ async fn test_set_system_date_and_time_ntp_omits_utc_element() {
 
 #[tokio::test]
 async fn test_set_system_date_and_time_soap_fault_returns_err() {
-    let xml = make_soap_fault_xml("env:Sender", "InvalidDateTimeType");
+    let xml = make_soap_fault_xml("env:Sender", "InvalidDateTimeType-8802");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client
+    let err = client
         .set_system_date_and_time(&crate::types::SetDateTimeRequest {
             datetime_type: "Manual".into(),
             daylight_savings: false,
             timezone: "UTC".into(),
             utc_datetime: None,
         })
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Sender", "InvalidDateTimeType-8802");
 }
 
 // ── get_users ─────────────────────────────────────────────────────────────────
@@ -638,7 +642,13 @@ async fn test_delete_users_transport_error() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(Arc::new(ErrorTransport { status: 500 }));
     let err = client.delete_users(&["operator"]).await.unwrap_err();
-    assert!(matches!(err, OnvifError::Transport(_)));
+    match err {
+        OnvifError::Transport(crate::transport::TransportError::HttpStatus { status, body }) => {
+            assert_eq!(status, 500, "status the transport reported");
+            assert_eq!(body, "HTTP 500", "body the transport reported");
+        }
+        other => panic!("expected TransportError::HttpStatus, got {other:?}"),
+    }
 }
 
 // ── set_user ─────────────────────────────────────────────────────────────────
@@ -736,7 +746,7 @@ async fn test_get_network_interfaces_missing_token_returns_err() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let err = client.get_network_interfaces().await.unwrap_err();
-    assert!(matches!(err, OnvifError::Soap(_)));
+    assert_missing_field(err, "NetworkInterfaces/@token");
 }
 
 // ── set_network_interfaces ────────────────────────────────────────────────────
@@ -948,7 +958,7 @@ async fn test_get_dns_missing_dns_information_returns_err() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let err = client.get_dns().await.unwrap_err();
-    assert!(matches!(err, OnvifError::Soap(_)));
+    assert_missing_field(err, "DNSInformation");
 }
 
 // ── set_dns ───────────────────────────────────────────────────────────────────
@@ -1013,7 +1023,7 @@ async fn test_get_network_default_gateway_missing_node_returns_err() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let err = client.get_network_default_gateway().await.unwrap_err();
-    assert!(matches!(err, OnvifError::Soap(_)));
+    assert_missing_field(err, "NetworkGateway");
 }
 
 // ── get_system_log ────────────────────────────────────────────────────────────
@@ -1053,7 +1063,7 @@ async fn test_get_system_log_missing_system_log_returns_err() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let err = client.get_system_log("System").await.unwrap_err();
-    assert!(matches!(err, OnvifError::Soap(_)));
+    assert_missing_field(err, "SystemLog");
 }
 
 // ── get_relay_outputs ─────────────────────────────────────────────────────────
@@ -1104,7 +1114,7 @@ async fn test_get_relay_outputs_missing_token_returns_err() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let err = client.get_relay_outputs().await.unwrap_err();
-    assert!(matches!(err, OnvifError::Soap(_)));
+    assert_missing_field(err, "RelayOutputs/@token");
 }
 
 // ── set_relay_output_state ────────────────────────────────────────────────────
@@ -1216,7 +1226,7 @@ async fn test_get_digital_inputs_missing_token_returns_err() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let err = client.get_digital_inputs().await.unwrap_err();
-    assert!(matches!(err, OnvifError::Soap(_)));
+    assert_missing_field(err, "DigitalInputs/@token");
 }
 
 #[tokio::test]
@@ -1341,10 +1351,7 @@ async fn test_get_storage_configurations_missing_token_returns_err() {
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
     let err = client.get_storage_configurations().await.unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::MissingField(_))
-    ));
+    assert_missing_field(err, "StorageConfigurations/@token");
 }
 
 // ── set_storage_configuration ─────────────────────────────────────────────────
