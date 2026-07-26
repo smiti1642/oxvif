@@ -2,7 +2,39 @@
 //! (`src/client/recording.rs`).
 
 use super::*;
+use crate::soap::SoapError;
 use crate::tests::common::*;
+
+// ── Negative-test assertion helpers ───────────────────────────────────────────
+//
+// Both compare the error payload against strings supplied by the call site, so
+// an assertion only holds for the exact payload its fixture produced: change
+// the fixture's fault code/reason or the element it omits and the test fails.
+
+#[track_caller]
+fn assert_fault(err: OnvifError, code: &str, reason: &str) {
+    match err {
+        OnvifError::Soap(SoapError::Fault {
+            code: got_code,
+            reason: got_reason,
+            ..
+        }) => {
+            assert_eq!(got_code, code, "fault code");
+            assert_eq!(got_reason, reason, "fault reason");
+        }
+        other => panic!("expected SoapError::Fault, got {other:?}"),
+    }
+}
+
+#[track_caller]
+fn assert_missing_field(err: OnvifError, path: &str) {
+    match err {
+        OnvifError::Soap(SoapError::MissingField(got)) => {
+            assert_eq!(got, path, "missing-field path")
+        }
+        other => panic!("expected SoapError::MissingField, got {other:?}"),
+    }
+}
 
 // ── get_recordings ────────────────────────────────────────────────────────────
 
@@ -78,7 +110,7 @@ async fn test_get_recordings_missing_token_returns_err() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+    assert_missing_field(err, "RecordingItem/RecordingToken");
 }
 
 // ── Real-camera regression (GeoVision GV-GBLF4813, ONVIF v25.6) ───────────────
@@ -229,7 +261,7 @@ async fn test_find_recordings_missing_token_returns_err() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+    assert_missing_field(err, "SearchToken");
 }
 
 #[tokio::test]
@@ -317,7 +349,7 @@ async fn test_get_replay_uri_missing_uri_returns_err() {
         .await
         .unwrap_err();
 
-    assert!(matches!(err, crate::error::OnvifError::Soap(_)));
+    assert_missing_field(err, "Uri");
 }
 
 #[tokio::test]
@@ -411,7 +443,7 @@ async fn test_create_recording_missing_token_returns_err() {
        </s:Envelope>"#;
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    let res = client
+    let err = client
         .create_recording(
             "http://192.168.1.1/onvif/recording_service",
             &crate::types::RecordingConfiguration {
@@ -420,8 +452,9 @@ async fn test_create_recording_missing_token_returns_err() {
                 ..Default::default()
             },
         )
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "RecordingToken");
 }
 
 #[tokio::test]
@@ -458,15 +491,16 @@ async fn test_create_track_missing_token_returns_err() {
        </s:Envelope>"#;
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    let res = client
+    let err = client
         .create_track(
             "http://192.168.1.1/onvif/recording_service",
             "Rec_001",
             "Video",
             "",
         )
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "TrackToken");
 }
 
 #[tokio::test]
@@ -518,10 +552,11 @@ async fn test_get_recording_jobs_missing_job_token_returns_err() {
        </s:Envelope>"#;
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    let res = client
+    let err = client
         .get_recording_jobs("http://192.168.1.1/onvif/recording_service")
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "RecordingJob/JobToken");
 }
 
 #[tokio::test]
@@ -613,10 +648,11 @@ async fn test_get_recording_job_state_missing_state_returns_err() {
        </s:Envelope>"#;
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    let res = client
+    let err = client
         .get_recording_job_state("http://192.168.1.1/onvif/recording_service", "Job_001")
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "GetRecordingJobStateResponse/State");
 }
 
 #[tokio::test]
@@ -666,13 +702,14 @@ async fn test_delete_recording_ok() {
 
 #[tokio::test]
 async fn test_delete_recording_soap_fault_returns_err() {
-    let xml = make_soap_fault_xml("env:Sender", "InvalidToken");
+    let xml = make_soap_fault_xml("env:Receiver", "NoSuchRecording-delete-8821");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client
+    let err = client
         .delete_recording("http://192.168.1.1/onvif/recording_service", "bad_token")
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Receiver", "NoSuchRecording-delete-8821");
 }
 
 #[tokio::test]
@@ -699,13 +736,14 @@ async fn test_delete_track_ok() {
 
 #[tokio::test]
 async fn test_delete_track_soap_fault_returns_err() {
-    let xml = make_soap_fault_xml("env:Sender", "InvalidToken");
+    let xml = make_soap_fault_xml("env:Sender", "NoSuchTrack-delete-4417");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client
+    let err = client
         .delete_track("http://192.168.1.1/onvif/recording_service", "bad", "bad")
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Sender", "NoSuchTrack-delete-4417");
 }
 
 #[tokio::test]
@@ -726,13 +764,14 @@ async fn test_delete_recording_job_ok() {
 
 #[tokio::test]
 async fn test_delete_recording_job_soap_fault_returns_err() {
-    let xml = make_soap_fault_xml("env:Sender", "InvalidToken");
+    let xml = make_soap_fault_xml("env:Receiver", "NoSuchJob-delete-9052");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client
+    let err = client
         .delete_recording_job("http://192.168.1.1/onvif/recording_service", "bad")
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Receiver", "NoSuchJob-delete-9052");
 }
 
 // ── Missing negative tests for existing methods ───────────────────────────────
@@ -751,60 +790,67 @@ async fn test_create_recording_job_missing_token_returns_err() {
         priority: 1,
         source_token: "Profile_1".into(),
     };
-    let res = client
+    let err = client
         .create_recording_job("http://192.168.1.1/onvif/recording_service", &config)
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "JobToken");
 }
 
 #[tokio::test]
 async fn test_set_recording_job_mode_soap_fault_returns_err() {
-    let xml = make_soap_fault_xml("env:Sender", "InvalidToken");
+    let xml = make_soap_fault_xml("env:Sender", "InvalidJobMode-3160");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client
+    let err = client
         .set_recording_job_mode(
             "http://192.168.1.1/onvif/recording_service",
             "bad_job",
             "Active",
         )
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Sender", "InvalidJobMode-3160");
 }
 
 #[tokio::test]
 async fn test_get_recording_search_results_soap_fault_returns_err() {
-    let xml = make_soap_fault_xml("env:Sender", "NoSuchSearchToken");
+    let xml = make_soap_fault_xml("env:Receiver", "NoSuchSearchToken-results-7735");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client
+    let err = client
         .get_recording_search_results("http://192.168.1.1/onvif/search", "bad_token", 10, "PT5S")
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Receiver", "NoSuchSearchToken-results-7735");
 }
 
 #[tokio::test]
 async fn test_end_search_soap_fault_returns_err() {
-    let xml = make_soap_fault_xml("env:Sender", "NoSuchSearchToken");
+    let xml = make_soap_fault_xml("env:Sender", "NoSuchSearchToken-end-2648");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client
+    let err = client
         .end_search("http://192.168.1.1/onvif/search", "bad_token")
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Sender", "NoSuchSearchToken-end-2648");
 }
 
 // ── search_recordings ─────────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn test_search_recordings_propagates_find_error() {
-    let xml = make_soap_fault_xml("env:Sender", "ActionNotSupported");
+    // The wrapper's first call is `find_recordings`, so the fault it surfaces
+    // must be that call's fault verbatim — not a repackaged one.
+    let xml = make_soap_fault_xml("env:Receiver", "ActionNotSupported-find-5093");
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
-    let res = client
+    let err = client
         .search_recordings("http://192.168.1.1/onvif/search", None)
-        .await;
-    assert!(res.is_err());
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Receiver", "ActionNotSupported-find-5093");
 }
 
 #[tokio::test]
