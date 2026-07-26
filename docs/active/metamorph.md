@@ -307,7 +307,7 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   gained `wsa:To`. Integration test records a mock "camera" → replays →
   `Set → Get` round-trips. **End of the shippable increment (per D7)** — the
   version bump + CHANGELOG for M0–M2 rides the next oxvif release.
-  - *0.13.1 — selectable read surface (`src/metamorph/surface.rs`).* The record
+  - *0.14.0 — selectable read surface (`src/metamorph/surface.rs`).* The record
     half is now a **two-level selectable surface**: `SurfaceGroup` (seven service
     zones) and `SurfaceOp` (~50 individual `Get*` reads), with
     `SurfaceOp::requires()` exposing the token-source prerequisite as a depth-1
@@ -353,7 +353,7 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   `FixtureStore::diff_against_synthetic` diffs each clone response's element-path
   set against the synthetic baseline and returns a serde-serialisable
   `QuirkReport` (`diff_details` renders the git-style side-by-side).
-  - *0.13.1 — parse verification (value/type half).*
+  - *0.14.0 — parse verification (value/type half).*
     `FixtureStore::verify_parsing` runs oxvif's **own typed parser** over each
     recorded response → `ParseReport` (`Parsed` + extracted JSON / `Failed` +
     error / `Unverified`). Baseline-free and oxvif-opinionated: it answers "will
