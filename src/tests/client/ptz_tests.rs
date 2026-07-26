@@ -670,6 +670,235 @@ async fn test_ptz_get_compatible_configurations_sends_profile_token() {
     assert!(body.contains("Profile_1"));
 }
 
+// ── PTZ movement commands (void writes: pin action + exact body) ──────────
+
+#[tokio::test]
+async fn test_ptz_absolute_move_pins_action_and_body() {
+    let xml = empty_response_xml("AbsoluteMoveResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_absolute_move(
+            "http://192.168.1.1/onvif/ptz_service",
+            "Profile_1",
+            0.5,
+            -0.25,
+            0.125,
+        )
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.action, "http://www.onvif.org/ver20/ptz/wsdl/AbsoluteMove");
+    assert!(
+        c.body.contains(
+            "<tptz:AbsoluteMove>\
+               <tptz:ProfileToken>Profile_1</tptz:ProfileToken>\
+               <tptz:Position>\
+                 <tt:PanTilt x=\"0.5\" y=\"-0.25\"/>\
+                 <tt:Zoom x=\"0.125\"/>\
+               </tptz:Position>\
+             </tptz:AbsoluteMove>"
+        ),
+        "AbsoluteMove body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn test_ptz_relative_move_pins_action_and_body() {
+    let xml = empty_response_xml("RelativeMoveResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_relative_move(
+            "http://192.168.1.1/onvif/ptz_service",
+            "Profile_2",
+            -0.75,
+            0.375,
+            -0.0625,
+        )
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.action, "http://www.onvif.org/ver20/ptz/wsdl/RelativeMove");
+    assert!(
+        c.body.contains(
+            "<tptz:RelativeMove>\
+               <tptz:ProfileToken>Profile_2</tptz:ProfileToken>\
+               <tptz:Translation>\
+                 <tt:PanTilt x=\"-0.75\" y=\"0.375\"/>\
+                 <tt:Zoom x=\"-0.0625\"/>\
+               </tptz:Translation>\
+             </tptz:RelativeMove>"
+        ),
+        "RelativeMove body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn test_ptz_continuous_move_pins_action_and_body() {
+    let xml = empty_response_xml("ContinuousMoveResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_continuous_move(
+            "http://192.168.1.1/onvif/ptz_service",
+            "Profile_3",
+            0.25,
+            -0.5,
+            0.75,
+        )
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver20/ptz/wsdl/ContinuousMove"
+    );
+    assert!(
+        c.body.contains(
+            "<tptz:ContinuousMove>\
+               <tptz:ProfileToken>Profile_3</tptz:ProfileToken>\
+               <tptz:Velocity>\
+                 <tt:PanTilt x=\"0.25\" y=\"-0.5\"/>\
+                 <tt:Zoom x=\"0.75\"/>\
+               </tptz:Velocity>\
+             </tptz:ContinuousMove>"
+        ),
+        "ContinuousMove body was: {}",
+        c.body
+    );
+}
+
+/// Client-level positive for `OnvifClient::ptz_stop`. The only pre-existing
+/// call site is `session_tests.rs`, whose subject is `OnvifSession`
+/// delegation and which asserts nothing about the wire request.
+#[tokio::test]
+async fn test_ptz_stop_pins_action_and_body() {
+    let xml = empty_response_xml("StopResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_stop("http://192.168.1.1/onvif/ptz_service", "Profile_4")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.action, "http://www.onvif.org/ver20/ptz/wsdl/Stop");
+    assert!(
+        c.body.contains(
+            "<tptz:Stop>\
+               <tptz:ProfileToken>Profile_4</tptz:ProfileToken>\
+               <tptz:PanTilt>true</tptz:PanTilt>\
+               <tptz:Zoom>true</tptz:Zoom>\
+             </tptz:Stop>"
+        ),
+        "Stop body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn test_ptz_goto_preset_pins_action_and_body() {
+    let xml = empty_response_xml("GotoPresetResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_goto_preset(
+            "http://192.168.1.1/onvif/ptz_service",
+            "Profile_5",
+            "Preset_11",
+        )
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.action, "http://www.onvif.org/ver20/ptz/wsdl/GotoPreset");
+    assert!(
+        c.body.contains(
+            "<tptz:GotoPreset>\
+               <tptz:ProfileToken>Profile_5</tptz:ProfileToken>\
+               <tptz:PresetToken>Preset_11</tptz:PresetToken>\
+             </tptz:GotoPreset>"
+        ),
+        "GotoPreset body was: {}",
+        c.body
+    );
+}
+
+// ── ptz_get_presets ───────────────────────────────────────────────────────
+
+fn ptz_get_presets_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                    xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tptz:GetPresetsResponse>
+              <tptz:Preset token="Preset_7">
+                <tt:Name>Gate-North-7</tt:Name>
+                <tt:PTZPosition>
+                  <tt:PanTilt x="0.25" y="-0.5"/>
+                  <tt:Zoom x="0.75"/>
+                </tt:PTZPosition>
+              </tptz:Preset>
+              <tptz:Preset token="Preset_9">
+                <tt:Name>Lobby-9</tt:Name>
+              </tptz:Preset>
+            </tptz:GetPresetsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_ptz_get_presets_parses_tokens_names_and_positions() {
+    let (transport, captured) = RecordingTransport::new(ptz_get_presets_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let presets = client
+        .ptz_get_presets("http://192.168.1.1/onvif/ptz_service", "Profile_6")
+        .await
+        .unwrap();
+
+    assert_eq!(presets.len(), 2);
+
+    assert_eq!(presets[0].token, "Preset_7");
+    assert_eq!(presets[0].name, "Gate-North-7");
+    assert_eq!(presets[0].pan_tilt, Some((0.25, -0.5)));
+    assert_eq!(presets[0].zoom, Some(0.75));
+
+    assert_eq!(presets[1].token, "Preset_9");
+    assert_eq!(presets[1].name, "Lobby-9");
+    assert!(presets[1].pan_tilt.is_none());
+    assert!(presets[1].zoom.is_none());
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.action, "http://www.onvif.org/ver20/ptz/wsdl/GetPresets");
+    assert!(
+        c.body.contains(
+            "<tptz:GetPresets>\
+               <tptz:ProfileToken>Profile_6</tptz:ProfileToken>\
+             </tptz:GetPresets>"
+        ),
+        "GetPresets body was: {}",
+        c.body
+    );
+}
+
 #[cfg(feature = "mock")]
 #[tokio::test]
 async fn mock_get_compatible_configurations_response_parses_via_client() {
