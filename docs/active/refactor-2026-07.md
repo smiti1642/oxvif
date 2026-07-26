@@ -68,7 +68,7 @@ writes `CHANGELOG.md`, the stages deliberately do not):
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | **done** — `5d3fbc7` (step 1) + `0c156b2` (step 2) |
-| 4 | Fix the **defect that put each of 64 methods in scope** — 28 get a real positive, 20 + 16 get a real negative. *Not* full CLAUDE.md pairs: a method scoped for a missing positive keeps its missing negative, which is why full compliance is 132 and the other 68 are deferred to §8 | additive | ledger `c903816`; batch 1 recording 15 — `1c01977`; batch 2 media+media2 22 — `71e349d` + `3c8b420`; batch 3 ptz 8 — `ca94afe` + `e9f0911`; **19 left** (device 14 + mod 2, events 1 + imaging 2) |
+| 4 | Fix the **defect that put each of 64 methods in scope** — 28 get a real positive, 20 + 16 get a real negative. *Not* full CLAUDE.md pairs: a method scoped for a missing positive keeps its missing negative, which is why full compliance is 132 and the other 68 are deferred to §8 | additive | ledger `c903816`; batch 1 recording 15 — `1c01977`; batch 2 media+media2 22 — `71e349d` + `3c8b420`; batch 3 ptz 8 — `ca94afe` + `e9f0911`; batch 4 device+mod+events+imaging 19 — `096cc65` + `64fdbca`; **done — 64/64** |
 
 Verdicts for every finished stage are in [§9](#9-stage-verdicts) — what each one
 actually rested on, not just that it passed. (Stage 4 is now the only one left,
@@ -427,6 +427,7 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C17 | A test marked "do not edit" should come out of the stage byte-identical | Not when the stage changes a **public signature** — that mechanically rewrites every call site, including in tests whose subject is unrelated (Stage 3 step 1 had to touch both ephemera de-dup tests for exactly this reason). Read the instruction as "do not weaken its assertions" and review by diffing the **assertion set**, not the byte count. The check that matters: does the test still fail for the reason it was written? | agent |
 | C19 | Giving an agent an isolated worktree guarantees it analyses the right tree | It guarantees only that the tree **stops moving**. The Stage 4 ledger agent was handed a worktree created from `5789f41` — a stale `develop` commit predating the whole programme, with no `src/tests/client/`, no `tests/`, and no copy of this document. Frozen, and frozen at a tree Stage 4 will never touch: C11b's failure mode inverted. The agent caught it and re-detached to the programme tip. **Isolation addresses drift, not provenance** — require the agent to report the SHA it measured, and check that SHA against the ref you meant. | reviewer |
 | C18 | A mutation's red **count** from an earlier stage is a reusable expectation | It is not — it is a measurement of one tree. Replaying Stage 3 step 1's mutations after step 2, the reviewer's first draft asserted "expect 13 again"; the deleted shim test had itself been red under both mutations, so the true answer was 12 and the hard-coded expectation would have flagged a clean commit as a weakened net. Re-measure the baseline on the old ref and diff the red **name sets** — the invariant worth asserting is *which* tests defend a fix, not how many. | reviewer |
+| C23 | The ledger's "Grep-verified: no call site in any unit test" rows are the reliable ones | They are the **least** reliable, and a batch agent trusts them most. The search covered `src/tests/`, which is not the crate: `start_firmware_upgrade` and `start_system_restore` are scored positive `no` but `src/mock/server.rs:479-493` holds two library unit tests that drive them over real HTTP and assert the outcome (`upload_uri`, `expected_down_time == "PT30S"`). They are `#[cfg(feature = "mock")]`, so a feature-free `cargo test` never compiles them — invisible to the survey, live under `--all-features`. Same for `get_services`, defended indirectly by `mock_workflow`, and `get_system_date_and_time`, defended at type level by `types_tests`. **A coverage claim is only as wide as the directories it searched; say which those were.** Found by the batch-4 agent, which then picked mutation targets the pre-existing tests do not assert, so its new tests still defend something nothing else did. | agent |
 | C22 | A mutation driver that reads cargo's output is reading cargo's output | Only if it decodes it. The reviewer's Python driver used `subprocess.run(text=True)`, which on this machine decodes with the **ANSI code page cp950** and raised `UnicodeDecodeError` on the first non-ASCII byte cargo emitted — mid-run, leaving the sandbox dirty so the next run refused to start. It surfaced only because the crash was unhandled: wrapped in the `try/except` a tidier script would have had, it would have returned an empty red set and read as **"the mutation killed nothing"**, which is the same shape as C8 (a tool that fails by returning nothing is indistinguishable from a true negative). Pass `encoding="utf-8", errors="replace"` explicitly. Two earlier mutations in the same run decoded fine because their failure output happened to be pure ASCII — so this fails *intermittently*, by content. | reviewer |
 | C21 | Dropping the filter is enough to make a mutation check see the whole suite | It is not. `cargo test --all-features` **aborts after the first failing target**, so the moment the lib tests go red the integration crates are never built or run — a mutation killed only by `tests/mock_action_snapshot.rs` reads as killed by nothing. Distinct from C10, which is about a *filter* dropping those crates; this one drops them because the mutation worked. Batch 2's agent hit it on its first round and switched to `--no-fail-fast`; the reviewer's own batch-1 driver had the same hole and was re-run. **Mutation checks must be `--all-features --no-fail-fast`, and the run must report how many targets reported a result** (4 here) — a red count alone cannot distinguish "nothing else caught it" from "nothing else ran". | agent |
 | C20 | `get_capabilities` is a hollow negative — it asserts only `Fault { .. }` | The ledger's `yes / yes` is right and the reviewer's citation was wrong. `device_tests.rs` holds **two** fault tests for it: `..._returns_error` at `:75`, which asserts the bare variant, and `..._returns_err` at `:361`, which asserts `code == "s:Sender"` — and a third pins `HttpStatus { status: 401 }`. A method's class is its **strongest** test; quoting one assertion without sweeping its siblings misreads it, and the names differ by one letter. Batch 1's fault mutation settles this objectively: `:361` is red at the baseline, so `get_capabilities` was never in scope. (The weaker `:75` is pre-existing dead weight; not this programme's to remove.) | reviewer |
@@ -544,6 +545,15 @@ them silently become in-scope; open a separate plan.
   request body** — it must not be cited as coverage for request-body content.
 - `examples/write_workflow.rs` reimplements the library's mock server (~400 lines)
   and its harness prints failures instead of failing, exiting 0 regardless.
+- **`with_credentials` silently replaces the transport.** `src/client/mod.rs:104`
+  assigns `self.transport = Arc::new(HttpTransport::new().with_credentials(…))`
+  unconditionally, so `.with_transport(t).with_credentials(u, p)` discards `t`
+  without a warning, a `#[must_use]`, or a doc note — the call order is load-bearing
+  and invisible. Found while writing batch 4's `with_utc_offset` test, where the
+  wrong order turns a WS-Security assertion into an `HttpTransport` call against a
+  dead address. Public API on a published crate; fixing it is a separate decision
+  (take `Option<Arc<dyn Transport>>`, or apply credentials to whatever transport is
+  installed at build time).
 - **`MissingField` path strings are inconsistent and half of them are unqualified.**
   Recording alone emits `"Uri"`, `"JobToken"`, `"SearchToken"`, `"RecordingToken"`,
   `"TrackToken"` with no operation or element context, and `"RecordingJob/JobToken"`
@@ -858,6 +868,65 @@ ledger's `weak` for `ptz_stop` was, if anything, generous.
 **Scope discipline held.** All 18 ptz methods still have negative `no` or `hollow`;
 the 6 that got a positive here keep their missing negative, per the stage-4
 definition. The agent flagged the asymmetry and did not act on it, which is right.
+
+### Stage 4 batch 4 — `096cc65` + `64fdbca` — PASS. Stage 4 is complete, 64/64.
+
+19 methods across four test files plus one authorised library edit. 728 → 734
+names, 6 added, **none removed or renamed**; 726 → 732 passing.
+
+**The authorised library edit is exactly what was authorised.** `src/client/mod.rs`
+gains the three-line `#[cfg(test)] #[path] mod tests;` attachment and a rewrite of
+the comment that used to claim there is no test module here. No function in that
+file changed — verified by reading the diff, which is 9 lines.
+
+**Standing instrument, unfiltered, 4 targets reporting:**
+
+| mutation | at `e9f0911` | at `64fdbca` | set difference |
+|---|---|---|---|
+| `SoapError::missing()` returns a constant path | 27 | **36** | exactly the 9 missing-field upgrades |
+| fault parser returns constant `code`/`reason` | 23 | **26** | exactly the 3 fault upgrades |
+
+Nothing removed in either. The 13th negative, `delete_users`, is invisible to both
+because its error never reaches the SOAP layer — it asserts `HttpStatus { status,
+body }` and rests on its own perturbation (`ErrorTransport` 500 → 503).
+27/23 reproduced the figures this document already recorded, so the batch-3
+baseline was confirmed rather than assumed.
+
+**`with_utc_offset` was the one that could not be faked, and was not.** It is an
+infallible builder over a private field whose only reader is `security_token()`.
+The test drives the real chain — `with_utc_offset` → `WsSecurityToken::generate` →
+`unix_now + offset` → `<wsu:Created>` — captures the body with
+`RecordingTransport`, and requires the stamp to equal
+`unix_secs_to_iso8601(t + OFFSET)` for **some** `t` in the window it measured
+around the call. That is an exact match against an enumerated set, not a
+tolerance, so a slow machine widens the set instead of going red or green by luck.
+`OFFSET_SECS = 608_461` is deliberately not round, so a unit slip cannot coincide.
+A zero-offset control is captured in the same window.
+
+**Prediction failures, both reported rather than smoothed:** retagging `XAddr`
+killed 2, not the predicted 1 — `mock_workflow::media2_encoder_set_then_get` goes
+red because `OnvifSession::build()` fills the Media2 URL from `GetServices`. And
+`get_system_date_and_time`'s parser already had a type-level defender,
+`types::tests::system_date_time::test_utc_unix_correct`.
+
+**Scope discipline held to the end.** The six positive-deficient methods keep their
+missing negatives; `delete_users` still has no protocol-level negative. The agent
+flagged both and acted on neither, which is right. **Stage 4 did not make the crate
+CLAUDE.md-compliant and must not be described as having done so** — 132 methods
+would; 64 were in scope; the other 68 are §8.
+
+### Stage 4 closing tally
+
+| batch | scope | commits | instrument delta |
+|---|---|---|---|
+| 1 | recording 15 | `1c01977` | MF 11→19, FA 16→23 |
+| 2 | media 10 + media2 12 | `71e349d`, `3c8b420` | MF 19→25, FA +0 (none had a fault negative) |
+| 3 | ptz 8 | `ca94afe`, `e9f0911` | MF 25→27, FA +0; the C6 datum retired |
+| 4 | device 14 + mod 2 + events 1 + imaging 2 | `096cc65`, `64fdbca` | MF 27→36, FA 23→26 |
+
+64 methods, 706 → 734 test names, **not one test removed or renamed across the
+whole stage**. Every batch was measured before and after with the same two
+library mutations, so "the net got stronger" is a diffed name set, never a count.
 
 ### Test-design patterns these stages produced
 

@@ -11,8 +11,8 @@
 >
 > Concretely, **the `locked-scope work` column of the per-service summary table
 > near the end of this file is stale in every row** — it excludes the
-> variant-only class. It reads media 8 / media2 11 / recording 12 where the true
-> figures are 10 / 12 / 15. Both batches done so far were under-scoped by exactly
+> variant-only class. It reads media 8 / media2 11 / recording 12 / **device 6**
+> where the true figures are 10 / 12 / 15 / **14**. Batches were under-scoped by exactly
 > that column. Per-service scope lives in §2.2 of the plan; add the
 > `hollow (variant-only)` column back if you must read it here.
 
