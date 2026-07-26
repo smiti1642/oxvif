@@ -153,26 +153,6 @@ impl FixtureStore {
             .map(|&i| &self.fixtures[i])
     }
 
-    /// Look up by canonical key alone, ignoring the action — the pre-0.14
-    /// behaviour, kept for one release.
-    ///
-    /// **This function cannot be made correct, so it is not a rename of
-    /// [`lookup`](Self::lookup).** Two different SOAP actions can share one
-    /// canonical request body: Media1's `<trt:GetProfiles/>` and Media2's
-    /// `<tr2:GetProfiles/>` canonicalise identically, because prefixes are
-    /// stripped to local names and the endpoint URL is masked as transport
-    /// ephemera. With no action to disambiguate with, this returns the *first*
-    /// fixture matching the key in insertion order — which for a store holding
-    /// both services may be the other service's exchange. That envelope parses
-    /// successfully and yields wrong data, silently. Pass the action instead.
-    #[deprecated(
-        since = "0.14.0",
-        note = "cannot disambiguate two actions that share one canonical request body (e.g. ver10 and ver20 GetProfiles), so it may silently return the wrong service's exchange; pass the action to `lookup(action, key_canon)`"
-    )]
-    pub fn lookup_by_key(&self, key_canon: &str) -> Option<&Fixture> {
-        self.fixtures.iter().find(|f| f.key_canon == key_canon)
-    }
-
     /// The device label this set was recorded for.
     pub fn device(&self) -> &str {
         &self.device
@@ -678,37 +658,5 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// Pins the documented ambiguity of the deprecated shim: it matches on the
-    /// key alone, so with both services recorded it hands a Media2 caller the
-    /// Media1 exchange. This is *why* the shim cannot be described as a rename.
-    #[test]
-    #[allow(deprecated)]
-    fn lookup_by_key_returns_the_first_match_and_so_can_be_the_wrong_action() {
-        let key = canonicalize(MEDIA1_PROFILES_REQ, Masking::Key);
-
-        let mut store = FixtureStore::new("dev");
-        store.record(
-            MEDIA1_GET_PROFILES,
-            MEDIA1_PROFILES_REQ,
-            MEDIA1_PROFILES_RESP,
-        );
-        store.record(
-            MEDIA2_GET_PROFILES,
-            MEDIA2_PROFILES_REQ,
-            MEDIA2_PROFILES_RESP,
-        );
-
-        let hit = store.lookup_by_key(&key).unwrap();
-        assert_eq!(
-            hit.action, MEDIA1_GET_PROFILES,
-            "the shim returns the first fixture matching the key"
-        );
-        assert_eq!(hit.response_raw, MEDIA1_PROFILES_RESP);
-        assert_ne!(
-            hit.response_raw, MEDIA2_PROFILES_RESP,
-            "a Media2 caller using the shim gets Media1's envelope - the bug it cannot fix"
-        );
     }
 }
