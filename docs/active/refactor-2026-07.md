@@ -44,14 +44,16 @@ writes `CHANGELOG.md`, the stages deliberately do not):
   unchanged; callers that read `""` as "unknown mode" now see an error.
 - *Stage 2.* `SweepReport::is_complete()` returns `false` for an empty report
   instead of `true`. A caller gating on it with an empty selection flips.
-- *Stage 3 step 1.* `FixtureStore::lookup` takes the SOAP action as its first
-  argument — a compile break, deliberately, so the change cannot pass silently.
-  `lookup_by_key` ships **already deprecated** and is removed in step 2, so there
-  is no release in which adopting it is supported: it exists to make the break
-  diagnosable, not to be used. Say that in the notes, and do not describe it as
-  bug-compatible with the old `lookup` (see §9). Also check at release time that
-  its `#[deprecated(since = "0.14.0")]` matches the version actually shipped —
-  it was written against a `Cargo.toml` still reading `0.13.1`.
+- *Stage 3.* `FixtureStore::lookup` takes the SOAP action as its first argument —
+  a compile break, deliberately, so the change cannot pass silently. **There is no
+  compatibility shim and no deprecation cycle.** `lookup_by_key` existed only
+  between `5d3fbc7` and `0c156b2`, both unreleased, so no published version ever
+  offered it and nothing is owed to callers of it; it must not appear in the notes
+  as an escape hatch. Decided 2026-07-26 on two grounds: a function marked
+  deprecated *and* removed in the same release supports no one, and the only known
+  consumer (`oxdm`) never called `lookup` at all. Callers get `E0061` and add the
+  action. This also retires the earlier release-time to-do about the shim's
+  `since = "0.14.0"` string — there is no such attribute left to check.
 
 ---
 
@@ -64,11 +66,13 @@ writes `CHANGELOG.md`, the stages deliberately do not):
 | 1a | Split the two collapsed `dispatch.rs` arms; six operations start working | non-breaking | **done** — `894b865` |
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
-| 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | step 1 **done** — `5d3fbc7`; step 2 not started |
+| 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | **done** — `5d3fbc7` (step 1) + `0c156b2` (step 2) |
 | 4 | Positive+negative pairs for the 26 zero-coverage + 21 hollow-negative methods | additive | not started |
 
-Verdicts for the four finished stages are in [§9](#9-stage-verdicts) — what each one
-actually rested on, not just that it passed.
+Verdicts for every finished stage are in [§9](#9-stage-verdicts) — what each one
+actually rested on, not just that it passed. (Stage 4 is now the only one left,
+and its prerequisite is C11b: regenerate the coverage ledger against a
+**committed** ref before the stage starts.)
 
 ### 2.1 Stage 2 — the API decision
 
@@ -186,6 +190,9 @@ The full ledger was measured while Stage 1a was in flight (see C11b) and must be
   needed; `record()` already takes `action` and merely fails to key on it; and the
   *reporting* layer already treats the pair as the identity
   (`src/metamorph/fixture.rs:47`). The break is confined to one public function.
+  *Outcome (`5d3fbc7` + `0c156b2`):* both steps shipped as planned, and the shim
+  is **gone** — see §1 for why it got no deprecation cycle. The paragraph above
+  describes how the break was staged, not a shim that still exists.
 
 ---
 
@@ -385,6 +392,7 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C14 | Any mutation of the fixed code proves the net | Only if it **compiles**. Deleting `<tt:Channels>{channels}</tt:Channels>` from the new Media2 serialiser left `channels = self.channels` as an unused named `format!` argument and rustc rejected the build — zero tests ran, so the mutation said nothing about the suite. That the compiler happened to be a stronger net *there* does not transfer to the next site. Retagging `Channels` → `Channel` compiles, and went red in 4 tests. | reviewer |
 | C15 | A name vanishing from `-- --list` means a test was deleted | **Doc-test names embed a line number** (`src/metamorph/surface.rs - metamorph::surface::drive_surface_with_progress (line 514)`). Any doc-comment edit above a doc test makes its name vanish and a near-identical one appear — indistinguishable from a deletion unless you match on name-minus-line. Stage 2's 4 added doc lines moved that test 514 → 518. Stages 3 and 4 edit many doc comments, so expect this. | agent |
 | C17 | A test marked "do not edit" should come out of the stage byte-identical | Not when the stage changes a **public signature** — that mechanically rewrites every call site, including in tests whose subject is unrelated (Stage 3 step 1 had to touch both ephemera de-dup tests for exactly this reason). Read the instruction as "do not weaken its assertions" and review by diffing the **assertion set**, not the byte count. The check that matters: does the test still fail for the reason it was written? | agent |
+| C18 | A mutation's red **count** from an earlier stage is a reusable expectation | It is not — it is a measurement of one tree. Replaying Stage 3 step 1's mutations after step 2, the reviewer's first draft asserted "expect 13 again"; the deleted shim test had itself been red under both mutations, so the true answer was 12 and the hard-coded expectation would have flagged a clean commit as a weakened net. Re-measure the baseline on the old ref and diff the red **name sets** — the invariant worth asserting is *which* tests defend a fix, not how many. | reviewer |
 | C16 | Every new test must be shown red before the fix | Not one whose subject is "property X still holds". A cross-module premise guard is **green the moment it is written**, because the premise already holds — red-before-green proves nothing and accepting it green is indistinguishable from accepting a vacuous test. Validate it by **mutating the module that owns the property** and naming the expected victims. Stage 2's two whitespace pins were the only 2 of 654 lib tests that caught a mutation of the `Event::End` trim; 1b's `hostile_encoding_reaches_display_unescaped` is the same shape, with the method left implicit. | agent |
 
 ---
@@ -417,10 +425,16 @@ Mistakes actually made in this programme. Re-read before each stage.
      whose **full** output is the evidence, run it as `rtk proxy <cmd>`.
 - **Windows console mangles UTF-8 commit messages.** Use
   `git -c i18n.commitEncoding=UTF-8 commit -F -` with an **ASCII-only** body.
-- **Known-red baseline:** a feature-free `cargo test` fails on
-  `examples/conformance.rs` (C1). Unrelated to this programme; do not fix it
-  inside a stage. CI only ever builds `--all-features`, so this class of breakage
-  is structurally invisible to CI.
+- **Known-red baseline: feature-free `--all-targets` has _two_ failure sources.**
+  `error[E0432]: unresolved import oxvif::CapturingTransport` in
+  `examples/conformance.rs` (C1), **and** `error: unused import: std::sync::Arc`
+  at `src/tests/client/ptz_tests.rs:5`, which only surfaces without features.
+  Both unrelated to this programme; do not fix either inside a stage. The second
+  was missing from this note until Stage 3 step 2 — so "feature-free clippy is red"
+  was not, on its own, evidence that a stage had introduced nothing: one new error
+  could have hidden in a baseline believed to hold exactly one. Compare the error
+  *list*, not the exit code. CI only ever builds `--all-features`, so this whole
+  class of breakage is structurally invisible to CI.
 - **Gate for every stage:**
   ```
   cargo fmt
@@ -441,6 +455,7 @@ Mistakes actually made in this programme. Re-read before each stage.
   | `573168a` (post-1b) | 698 | 696 | 650 / 1 + 9 / 36 |
   | `ddfde44` (post-2) | 702 | 700 | 654 / 1 + 9 / 36 |
   | `5d3fbc7` (post-3 step 1) | 707 | 705 | 659 / 1 + 9 / 36 |
+  | `0c156b2` (post-3 step 2) | 706 | 704 | 658 / 1 + 9 / 36 |
 
   The 0.5 → 1a delta is −1 (`known_broken_mock_actions_are_pinned`, deleted by
   design) +13. The 1a → 1b delta is −1 +11, where the −1 is a *rename*:
@@ -582,6 +597,46 @@ had overwritten the other service). For a store that now holds both, "the old
 behaviour" is not well defined — so the shim is documented as first-match rather
 than pretending to be a drop-in. The 0.14.0 notes must not describe it as
 compatible.
+
+### Stage 3 step 2 — `0c156b2` — PASS
+
+Removed `lookup_by_key` and the one test whose entire subject was it. Diff is 52
+deletions, 0 insertions, one file, exactly the two authorised blocks — verified by
+reading the diff, not the agent's description of it.
+
+**The red for a deletion is a compile error, not a failing assertion.** With the
+function gone and its test still present: one `E0599`, naming `lookup_by_key` at
+`fixture.rs:683` and nothing else. That single error *is* the proof that the
+reference surface was what §7's search said it was.
+
+Names 707 → 706, passing 705 → 704: exactly one vanished, none appeared, no C15
+line shift (`fixture.rs` contributes no doc tests — checked positively, the same
+list holds 12 doc-test lines from elsewhere in `metamorph`).
+
+**What actually needed proving.** A function with no callers is nearly
+unmutatable, so mutating the deletion is theatre. The real risk is collateral: that
+removing a test quietly took some of the net with it. So the reviewer replayed
+Stage 3 step 1's two load-bearing mutations against *both* commits and diffed the
+red **name sets**:
+
+| mutation | at `5d3fbc7` | at `0c156b2` | set difference |
+|---|---|---|---|
+| neutralise the action half in `insert` *and* `lookup` | 4 red | 3 red | exactly `{the shim test}` |
+| key on the raw request instead of the canonical one | 13 red | 12 red | exactly `{the shim test}` |
+
+Both compiled (not a C14 false red). Every test that defended D1 before still
+defends it. Drivers at `<scratchpad>/mut4.py`, captures at
+`<scratchpad>/red-step{1,2}.json`.
+
+**A count would have been the wrong instrument, and nearly was.** The reviewer's
+first draft of that check hard-coded "expect 13 again" from the step-1 verdict.
+Measuring the baseline instead showed the shim's own test was red under *both*
+mutations, so the correct expectation was 12 — the hard-coded 13 would have raised
+a false alarm against a perfectly good commit. Recorded as C18.
+
+**Feature-free `--all-targets` has two failure sources, not one** — found by the
+agent, confirmed by the reviewer, and pre-existing by construction since this diff
+touches only `fixture.rs`. §7's known-red note has been corrected.
 
 ### Test-design patterns these stages produced
 
