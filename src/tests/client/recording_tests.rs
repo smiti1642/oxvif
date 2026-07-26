@@ -2,39 +2,7 @@
 //! (`src/client/recording.rs`).
 
 use super::*;
-use crate::soap::SoapError;
 use crate::tests::common::*;
-
-// ── Negative-test assertion helpers ───────────────────────────────────────────
-//
-// Both compare the error payload against strings supplied by the call site, so
-// an assertion only holds for the exact payload its fixture produced: change
-// the fixture's fault code/reason or the element it omits and the test fails.
-
-#[track_caller]
-fn assert_fault(err: OnvifError, code: &str, reason: &str) {
-    match err {
-        OnvifError::Soap(SoapError::Fault {
-            code: got_code,
-            reason: got_reason,
-            ..
-        }) => {
-            assert_eq!(got_code, code, "fault code");
-            assert_eq!(got_reason, reason, "fault reason");
-        }
-        other => panic!("expected SoapError::Fault, got {other:?}"),
-    }
-}
-
-#[track_caller]
-fn assert_missing_field(err: OnvifError, path: &str) {
-    match err {
-        OnvifError::Soap(SoapError::MissingField(got)) => {
-            assert_eq!(got, path, "missing-field path")
-        }
-        other => panic!("expected SoapError::MissingField, got {other:?}"),
-    }
-}
 
 // ── get_recordings ────────────────────────────────────────────────────────────
 

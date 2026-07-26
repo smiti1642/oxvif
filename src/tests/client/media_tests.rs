@@ -1322,6 +1322,191 @@ async fn test_get_osds_without_filter_sends_no_token() {
     );
 }
 
+// ── Stage 4: positives for the Media1 methods that had none ───────────────
+//
+// Read methods assert the parsed field values the fixture chose; write methods
+// assert the SOAPAction URI *and* the exact operation fragment put on the wire.
+
+fn snapshot_uri_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetSnapshotUriResponse>
+              <trt:MediaUri>
+                <tt:Uri>http://192.168.1.1/onvif-http/snapshot?Profile_7</tt:Uri>
+                <tt:InvalidAfterConnect>true</tt:InvalidAfterConnect>
+                <tt:InvalidAfterReboot>false</tt:InvalidAfterReboot>
+                <tt:Timeout>PT30S</tt:Timeout>
+              </trt:MediaUri>
+            </trt:GetSnapshotUriResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_snapshot_uri_returns_http_url_and_flags() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(snapshot_uri_xml()));
+
+    let snap = client
+        .get_snapshot_uri("http://192.168.1.1/onvif/media_service", "Profile_7")
+        .await
+        .unwrap();
+
+    assert_eq!(snap.uri, "http://192.168.1.1/onvif-http/snapshot?Profile_7");
+    assert_eq!(snap.timeout, "PT30S");
+    assert!(snap.invalid_after_connect);
+    assert!(!snap.invalid_after_reboot);
+}
+
+fn video_source_configuration_single_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetVideoSourceConfigurationResponse>
+              <trt:Configuration token="VSC_7">
+                <tt:Name>CroppedSource</tt:Name>
+                <tt:UseCount>3</tt:UseCount>
+                <tt:SourceToken>VS_7</tt:SourceToken>
+                <tt:Bounds x="16" y="32" width="1280" height="720"/>
+              </trt:Configuration>
+            </trt:GetVideoSourceConfigurationResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_video_source_configuration_returns_fields() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(video_source_configuration_single_xml()));
+
+    let cfg = client
+        .get_video_source_configuration("http://192.168.1.1/onvif/media_service", "VSC_7")
+        .await
+        .unwrap();
+
+    assert_eq!(cfg.token, "VSC_7");
+    assert_eq!(cfg.name, "CroppedSource");
+    assert_eq!(cfg.use_count, 3);
+    assert_eq!(cfg.source_token, "VS_7");
+    assert_eq!(cfg.bounds.x, 16);
+    assert_eq!(cfg.bounds.y, 32);
+    assert_eq!(cfg.bounds.width, 1280);
+    assert_eq!(cfg.bounds.height, 720);
+}
+
+fn video_source_configuration_options_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <trt:GetVideoSourceConfigurationOptionsResponse>
+              <trt:Options>
+                <tt:MaximumNumberOfProfiles>6</tt:MaximumNumberOfProfiles>
+                <tt:BoundsRange>
+                  <tt:XRange><tt:Min>0</tt:Min><tt:Max>640</tt:Max></tt:XRange>
+                  <tt:YRange><tt:Min>0</tt:Min><tt:Max>360</tt:Max></tt:YRange>
+                  <tt:WidthRange><tt:Min>320</tt:Min><tt:Max>1920</tt:Max></tt:WidthRange>
+                  <tt:HeightRange><tt:Min>180</tt:Min><tt:Max>1080</tt:Max></tt:HeightRange>
+                </tt:BoundsRange>
+                <tt:VideoSourceTokensAvailable>VS_7</tt:VideoSourceTokensAvailable>
+                <tt:VideoSourceTokensAvailable>VS_8</tt:VideoSourceTokensAvailable>
+              </trt:Options>
+            </trt:GetVideoSourceConfigurationOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_video_source_configuration_options_returns_ranges() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(video_source_configuration_options_xml()));
+
+    let opts = client
+        .get_video_source_configuration_options("http://192.168.1.1/onvif/media_service", None)
+        .await
+        .unwrap();
+
+    assert_eq!(opts.max_limit, Some(6));
+    assert_eq!(opts.source_tokens, vec!["VS_7", "VS_8"]);
+    let br = opts.bounds_range.expect("BoundsRange must be parsed");
+    assert_eq!(br.x_range.max, 640);
+    assert_eq!(br.y_range.max, 360);
+    assert_eq!(br.width_range.min, 320);
+    assert_eq!(br.width_range.max, 1920);
+    assert_eq!(br.height_range.min, 180);
+    assert_eq!(br.height_range.max, 1080);
+}
+
+fn osd_for_write() -> crate::types::OsdConfiguration {
+    crate::types::OsdConfiguration {
+        token: "OSD_9".to_string(),
+        video_source_config_token: "VSC_9".to_string(),
+        type_: "Text".to_string(),
+        position: crate::types::OsdPosition {
+            type_: "LowerRight".to_string(),
+            x: None,
+            y: None,
+        },
+        text_string: None,
+        image_path: None,
+    }
+}
+
+#[tokio::test]
+async fn test_set_osd_sends_action_and_exact_osd_fragment() {
+    let xml = empty_response_xml("SetOSDResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_osd("http://192.168.1.1/onvif/media_service", &osd_for_write())
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.action, "http://www.onvif.org/ver10/media/wsdl/SetOSD");
+    let expected = concat!(
+        "<trt:SetOSD>",
+        r#"<trt:OSD token="OSD_9">"#,
+        "<tt:VideoSourceConfigurationToken>VSC_9</tt:VideoSourceConfigurationToken>",
+        "<tt:Type>Text</tt:Type>",
+        "<tt:Position><tt:Type>LowerRight</tt:Type></tt:Position>",
+        "</trt:OSD>",
+        "</trt:SetOSD>",
+    );
+    assert!(
+        c.body.contains(expected),
+        "SetOSD body drifted.\nexpected fragment:\n{expected}\nactual body:\n{}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn test_delete_osd_sends_action_and_osd_token_element() {
+    let xml = empty_response_xml("DeleteOSDResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .delete_osd("http://192.168.1.1/onvif/media_service", "OSD_9")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(c.action, "http://www.onvif.org/ver10/media/wsdl/DeleteOSD");
+    assert!(
+        c.body
+            .contains("<trt:DeleteOSD><trt:OSDToken>OSD_9</trt:OSDToken></trt:DeleteOSD>"),
+        "DeleteOSD body drifted: {}",
+        c.body
+    );
+}
+
 // ── Mock self-consistency: the mock's own responses parse via the client ──
 // These round-trip through the real dispatching mock (crate::mock::MockTransport)
 // and re-parse with the client, guarding against mock/parser drift that the
