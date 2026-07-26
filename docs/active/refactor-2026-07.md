@@ -68,7 +68,7 @@ writes `CHANGELOG.md`, the stages deliberately do not):
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | **done** — `5d3fbc7` (step 1) + `0c156b2` (step 2) |
-| 4 | Positive+negative pairs for **64** methods (28 no-positive + 20 `is_err`-hollow + 16 variant-only) | additive | ledger `c903816`; batch 1 recording 15 — `1c01977`; batch 2 media+media2 22 — `71e349d` + `3c8b420`; **27 left** (device 14 + mod 2, ptz 8, events 1 + imaging 2) |
+| 4 | Fix the **defect that put each of 64 methods in scope** — 28 get a real positive, 20 + 16 get a real negative. *Not* full CLAUDE.md pairs: a method scoped for a missing positive keeps its missing negative, which is why full compliance is 132 and the other 68 are deferred to §8 | additive | ledger `c903816`; batch 1 recording 15 — `1c01977`; batch 2 media+media2 22 — `71e349d` + `3c8b420`; **27 left** (device 14 + mod 2, ptz 8, events 1 + imaging 2) |
 
 Verdicts for every finished stage are in [§9](#9-stage-verdicts) — what each one
 actually rested on, not just that it passed. (Stage 4 is now the only one left,
