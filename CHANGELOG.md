@@ -7,20 +7,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.14.0] - 2026-07-26
 
-Headline: **two releases in one.** The metamorph clone sweep becomes a selectable,
-two-level read surface — pick whole service zones or individual `Get*` operations,
-with prerequisite tracking and a per-operation outcome report, widening the default
-clone from ~12 reads to the full non-destructive `Get*` surface. On top of that, a
-correctness pass: six mock operations that never worked, a Media2 request carrying a
-Media1 prefix, an XML-escaping hole reachable from device-supplied data, and a
-fixture key that silently discarded one of any two services sharing a canonical
-request — each fix proved by a library mutation that had to redden the new test
-before it was accepted.
-
-**0.13.1 is folded into this entry and was never released.** It was prepared and
-its changelog written, but no `v0.13.1` tag was cut and crates.io stops at 0.13.0,
-so there is no version anyone can be running that expects a separate 0.13.1
-section. Everything it described ships here.
+Headline: **the metamorph clone becomes something you steer, and the client gets a
+correctness pass.** Recording a device is now a two-level selectable read surface —
+pick whole service zones or individual `Get*` operations, with prerequisite
+tracking, determinate progress and a per-operation outcome report — widening the
+default clone from ~12 reads to the full non-destructive `Get*` surface. Alongside
+it: six mock operations that never worked, a Media2 request carrying a Media1
+prefix, an XML-escaping hole reachable from device-supplied data, and a fixture key
+that silently discarded one of any two services sharing a canonical request. Each
+fix was proved by a library mutation that had to redden the new test before it was
+accepted.
 
 ### Breaking
 
@@ -39,7 +35,7 @@ section. Everything it described ships here.
   A sweep that resolved no operation at all no longer reads as a successful sweep.
   A caller gating on it with an empty selection flips.
 
-### Added (`metamorph` feature)
+### Added — pick what to clone (`metamorph`)
 - **`SurfaceGroup`** — the seven coarse service zones (identity, network, media,
   PTZ, imaging, events, media2). `ALL` / `label()` / `ops()` let a UI render the
   top level of a "pick what to clone" tree.
@@ -60,7 +56,9 @@ section. Everything it described ships here.
 - **`drive_surface(session, &selection)`** and **`record_surface(url, creds,
   label, &selection)`** — drive / record a chosen subset; both return a
   `SweepReport`. `record_surface` returns `(FixtureStore, SweepReport)`.
-- **Parse verification (M7 value/type half)** — `FixtureStore::verify_parsing()`
+
+### Added — will oxvif parse this device (`metamorph`)
+- **Parse verification** — `FixtureStore::verify_parsing()`
   runs oxvif's own typed parser over each recorded response and returns a
   `ParseReport` of `ParseVerdict`s (`ParseStatus::Parsed` + extracted value as
   JSON / `Failed` + parser error / `Unverified`). Answers "will oxvif choke on
@@ -70,7 +68,9 @@ section. Everything it described ships here.
   `(action, key_canon)` key so a UI can join verdict + side-by-side SOAP diff.
   The `metamorph` feature now enables `serde` (was implicit via `mock`) so
   response types serialize to JSON.
-- **Adapter raw escape hatch (Persona C)** — `DeviceAdapter::respond_raw(op,
+
+### Added — device adapters (`metamorph`)
+- **Raw escape hatch** — `DeviceAdapter::respond_raw(op,
   body)` lets an adapter answer any ONVIF operation the typed hooks
   (`identity` / `stream_uri` / `continuous_move`) don't cover, returning a full
   SOAP envelope or `None` to fall through to synthetic. Consulted only after the
@@ -79,14 +79,21 @@ section. Everything it described ships here.
   Persona C to arbitrary per-device operations without waiting on typed hooks
   landing upstream.
 
-### Added (`serde` feature)
+### Added — serde coverage
 - **`DiscoveredDevice`** and **`DiscoveryEvent`** now derive
   `Serialize` / `Deserialize` under the `serde` feature. They were the only
   always-public data types the feature missed, so `discovery::probe` results
   could not be handed to a REST layer or persisted without a hand-cloned
   parallel struct. Reported by a downstream user.
+- The metamorph **surface** and **adapter** data types now derive
+  `Serialize` / `Deserialize`, matching `ParseReport` / `QuirkReport` which
+  already did: `SurfaceOp`, `SurfaceGroup`, `SurfaceSelection`, `OpOutcome`,
+  `SweepReport`, `DeviceIdentity`, `PtzVector`, `AdapterResult`. A UI can now
+  persist which operations the user ticked and store a sweep result alongside
+  the parse and quirk reports. Unconditional (the `metamorph` feature already
+  requires `serde`).
 
-### Added (`metamorph` feature — progress reporting)
+### Added — progress for the long operations (`metamorph`)
 - **`drive_surface_with_progress`**, **`record_surface_with_progress`**,
   **`FixtureStore::verify_parsing_with_progress`** and
   **`…::diff_against_synthetic_with_progress`** — determinate progress for the
@@ -101,18 +108,7 @@ section. Everything it described ships here.
   per-token operation runs once per token the device returns. Each operation
   ticks exactly once, whether it was attempted or resolved as skipped.
 
-### Changed (`metamorph` feature — fault classification)
-- **`ParseStatus::Faulted`** — a recorded response carrying a well-formed SOAP
-  `Fault` is now classified `Faulted` rather than `Failed`. A device answering
-  `NotAuthorized` is behaving correctly; reporting it as "oxvif cannot parse
-  this" was wrong and, when sweeping with a restricted account, buried the real
-  interop failures under non-problems. `failures()` and `all_parsed()` keep
-  their meaning ("oxvif choked") and exclude `Faulted`; the new **`faulted()`**
-  iterator surfaces declined operations separately. `ParseStatus` is
-  `#[non_exhaustive]`, so the new variant is source-compatible — but any caller
-  counting `Failed` verdicts will see faults move out of that bucket.
-
-### Added (`metamorph` feature — report ergonomics)
+### Added — reports as JSON, and baseline diffing (`metamorph`)
 - **`QuirkReport::to_json` / `to_json_pretty`** and **`ParseReport::to_json` /
   `to_json_pretty`** — matching `HealthReport`, so a caller no longer has to pull
   in `serde_json` to persist a report. No new dependency (`metamorph` already
@@ -131,22 +127,28 @@ section. Everything it described ships here.
 - `OperationQuirk` now also derives `PartialEq` / `Eq` (additive) so reports and
   diffs compare structurally.
 
-### Added (`metamorph` feature — serialization)
-- The metamorph **surface** and **adapter** data types now derive
-  `Serialize` / `Deserialize`, matching `ParseReport` / `QuirkReport` which
-  already did: `SurfaceOp`, `SurfaceGroup`, `SurfaceSelection`, `OpOutcome`,
-  `SweepReport`, `DeviceIdentity`, `PtzVector`, `AdapterResult`. A UI can now
-  persist which operations the user ticked and store a sweep result alongside
-  the parse and quirk reports. Unconditional (the `metamorph` feature already
-  requires `serde`).
-
 ### Changed
 - `drive_standard_surface` now sweeps the full non-destructive `Get*` surface
   (per-profile / per-token reads, OSD, audio, PTZ, imaging, events, and Media2
   when advertised) instead of ~12 reads, and returns a `SweepReport`.
   `record_standard_surface` is unchanged (still returns `FixtureStore`).
+- **`ParseStatus::Faulted`** — a recorded response carrying a well-formed SOAP
+  `Fault` is now classified `Faulted` rather than `Failed`. A device answering
+  `NotAuthorized` is behaving correctly; reporting it as "oxvif cannot parse
+  this" was wrong and, when sweeping with a restricted account, buried the real
+  interop failures under non-problems. `failures()` and `all_parsed()` keep
+  their meaning ("oxvif choked") and exclude `Faulted`; the new **`faulted()`**
+  iterator surfaces declined operations separately. `ParseStatus` is
+  `#[non_exhaustive]`, so the new variant is source-compatible — but any caller
+  counting `Failed` verdicts will see faults move out of that bucket.
 
-### Fixed (mock self-consistency — surfaced by parse verification)
+### Fixed — the mock disagreed with oxvif's own parser
+- **Six operations answered with element names that exist in no ONVIF WSDL.**
+  `Add`/`RemoveVideoEncoderConfiguration`, `Add`/`RemoveVideoSourceConfiguration`
+  shared a made-up `<trt:ConfigurationResponse/>`, and both imaging focus
+  operations shared `<timg:ImagingResponse/>`, so all six failed against
+  `MockTransport` with `UnexpectedResponse`. Each now has its own dispatch arm and
+  its own real response element.
 - **`GetOSD`**: the mock wrapped the entry in `<trt:OSDConfiguration>` (the
   schema *type*), but the WSDL element name — and what the client parser reads —
   is `<trt:OSD>`. The mock now emits `<trt:OSD>`, so a clone of the mock's own
@@ -155,19 +157,13 @@ section. Everything it described ships here.
   handler, answering with `<GetConfigurationsResponse>`; the client parser
   matches `<GetCompatibleConfigurationsResponse>`. Added a dedicated mock
   response with the correct wrapper element.
-- Both mismatches were between the mock's own output and oxvif's own parser
-  (the hand-written client-test fixtures never re-parsed the mock's bytes);
-  real ONVIF devices return the schema-correct shapes and always parsed. Added
-  mock→client round-trip regression tests for both.
+- Every one of these was a disagreement between the mock's own output and oxvif's
+  own parser — the hand-written client-test fixtures never re-parsed the mock's
+  bytes, so nothing was watching that seam. Real ONVIF devices return the
+  schema-correct shapes and always parsed. All now have mock→client round-trip
+  regression tests.
 
-### Fixed (client and mock correctness)
-
-- **Six mock operations answered with element names that exist in no ONVIF WSDL.**
-  `Add`/`RemoveVideoEncoderConfiguration`, `Add`/`RemoveVideoSourceConfiguration`
-  shared a made-up `<trt:ConfigurationResponse/>`, and both imaging focus
-  operations shared `<timg:ImagingResponse/>`, so all six failed against
-  `MockTransport` with `UnexpectedResponse`. Each now has its own dispatch arm and
-  its own real response element.
+### Fixed — what went on the wire, and what got stored
 - **`set_audio_encoder_configuration_media2` sent a Media1 prefix.**
   `AudioEncoderConfiguration::to_xml_body()` hard-codes `trt:`, so a `tr2:`
   request carried a `<trt:Configuration>` child. Adds `to_xml_body_media2()`;
