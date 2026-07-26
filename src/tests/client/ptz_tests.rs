@@ -240,7 +240,7 @@ async fn test_ptz_get_configurations_missing_token_returns_err() {
     let result = client
         .ptz_get_configurations("http://192.168.1.1/onvif/ptz_service")
         .await;
-    assert!(result.is_err());
+    assert_missing_field(result.unwrap_err(), "PTZConfiguration/@token");
 }
 
 fn set_ptz_configuration_xml() -> &'static str {
@@ -365,7 +365,7 @@ async fn test_ptz_get_nodes_missing_token_returns_err() {
     let result = client
         .ptz_get_nodes("http://192.168.1.1/onvif/ptz_service")
         .await;
-    assert!(result.is_err());
+    assert_missing_field(result.unwrap_err(), "PTZNode/@token");
 }
 
 // ── ptz_goto_home_position / ptz_set_home_position ────────────────────────────
