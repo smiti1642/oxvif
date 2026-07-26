@@ -161,6 +161,11 @@ impl OnvifClient {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 //
-// Per-service tests are attached to the service module they exercise; see the
-// `mod tests;` declaration at the foot of each of `device.rs`, `media.rs`,
+// The module below covers only the constructor/builder surface defined in this
+// file. Per-service tests are attached to the service module they exercise; see
+// the `mod tests;` declaration at the foot of each of `device.rs`, `media.rs`,
 // `media2.rs`, `ptz.rs`, `imaging.rs`, `events.rs` and `recording.rs`.
+
+#[cfg(test)]
+#[path = "../tests/client/mod_tests.rs"]
+mod tests;

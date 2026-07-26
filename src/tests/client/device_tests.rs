@@ -1848,3 +1848,202 @@ mod discovery_mode_happy_path {
         }
     }
 }
+
+// ── Stage 4 batch 4a: first real positives for four Device operations ─────────
+//
+// `get_services`, `get_system_date_and_time`, `start_firmware_upgrade` and
+// `start_system_restore` had no unit-test call site at all before this batch —
+// only a row in `tests/mock_action_snapshot.rs`, which pins "the call returned
+// Ok" and nothing about what was parsed out of the response. Each test below
+// therefore asserts the SOAP action *and* every field the fixture chose, so a
+// parser that reads the wrong element goes red here even though the snapshot
+// stays "ok".
+
+// ── get_services ─────────────────────────────────────────────────────────────
+
+fn get_services_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetServicesResponse>
+             <tds:Service>
+               <tds:Namespace>http://www.onvif.org/ver10/device/wsdl</tds:Namespace>
+               <tds:XAddr>http://192.168.1.1/onvif/device_service</tds:XAddr>
+               <tds:Version><tt:Major>2</tt:Major><tt:Minor>6</tt:Minor></tds:Version>
+             </tds:Service>
+             <tds:Service>
+               <tds:Namespace>http://www.onvif.org/ver20/media/wsdl</tds:Namespace>
+               <tds:XAddr>http://192.168.1.1/onvif/media2_service</tds:XAddr>
+               <tds:Version><tt:Major>2</tt:Major><tt:Minor>0</tt:Minor></tds:Version>
+             </tds:Service>
+           </tds:GetServicesResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_services_parses_namespace_xaddr_and_version() {
+    let (transport, captured) = RecordingTransport::new(get_services_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let services = client.get_services().await.unwrap();
+
+    assert_eq!(services.len(), 2);
+    assert_eq!(
+        services[0].namespace,
+        "http://www.onvif.org/ver10/device/wsdl"
+    );
+    assert_eq!(services[0].url, "http://192.168.1.1/onvif/device_service");
+    assert_eq!(services[0].version_major, 2);
+    assert_eq!(services[0].version_minor, 6);
+    assert!(!services[0].is_media2());
+
+    assert_eq!(
+        services[1].namespace,
+        "http://www.onvif.org/ver20/media/wsdl"
+    );
+    assert_eq!(services[1].url, "http://192.168.1.1/onvif/media2_service");
+    assert_eq!(services[1].version_minor, 0);
+    assert!(
+        services[1].is_media2(),
+        "the ver20/media/wsdl entry is the Media2 service"
+    );
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/GetServices"
+    );
+    assert!(
+        c.body
+            .contains("<tds:IncludeCapability>false</tds:IncludeCapability>"),
+        "body was: {}",
+        c.body
+    );
+}
+
+// ── get_system_date_and_time ─────────────────────────────────────────────────
+
+fn get_system_date_and_time_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
+                     xmlns:tt="http://www.onvif.org/ver10/schema">
+         <s:Body>
+           <tds:GetSystemDateAndTimeResponse>
+             <tds:SystemDateAndTime>
+               <tt:DateTimeType>NTP</tt:DateTimeType>
+               <tt:DaylightSavings>true</tt:DaylightSavings>
+               <tt:TimeZone><tt:TZ>CST-8</tt:TZ></tt:TimeZone>
+               <tt:UTCDateTime>
+                 <tt:Time><tt:Hour>10</tt:Hour><tt:Minute>30</tt:Minute><tt:Second>15</tt:Second></tt:Time>
+                 <tt:Date><tt:Year>2026</tt:Year><tt:Month>4</tt:Month><tt:Day>5</tt:Day></tt:Date>
+               </tt:UTCDateTime>
+             </tds:SystemDateAndTime>
+           </tds:GetSystemDateAndTimeResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_get_system_date_and_time_parses_clock_timezone_and_dst() {
+    let (transport, captured) = RecordingTransport::new(get_system_date_and_time_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let dt = client.get_system_date_and_time().await.unwrap();
+
+    // 2026-04-05T10:30:15Z, computed independently of `civil_to_unix`
+    // (Python: datetime(2026, 4, 5, 10, 30, 15, tzinfo=utc).timestamp()).
+    assert_eq!(dt.utc_unix, Some(1_775_385_015));
+    assert_eq!(dt.timezone, "CST-8");
+    assert!(dt.daylight_savings);
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/GetSystemDateAndTime"
+    );
+    assert!(
+        c.body.contains("<tds:GetSystemDateAndTime/>"),
+        "body was: {}",
+        c.body
+    );
+}
+
+// ── start_firmware_upgrade ───────────────────────────────────────────────────
+
+fn start_firmware_upgrade_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body>
+           <tds:StartFirmwareUpgradeResponse>
+             <tds:UploadUri>http://192.168.1.1/upload/firmware</tds:UploadUri>
+             <tds:UploadDelay>PT10S</tds:UploadDelay>
+             <tds:ExpectedDownTime>PT90S</tds:ExpectedDownTime>
+           </tds:StartFirmwareUpgradeResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_start_firmware_upgrade_returns_upload_handle() {
+    let (transport, captured) = RecordingTransport::new(start_firmware_upgrade_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let start = client.start_firmware_upgrade().await.unwrap();
+
+    assert_eq!(start.upload_uri, "http://192.168.1.1/upload/firmware");
+    assert_eq!(start.upload_delay, "PT10S");
+    assert_eq!(start.expected_down_time, "PT90S");
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/StartFirmwareUpgrade"
+    );
+    assert!(
+        c.body.contains("<tds:StartFirmwareUpgrade/>"),
+        "body was: {}",
+        c.body
+    );
+}
+
+// ── start_system_restore ─────────────────────────────────────────────────────
+
+fn start_system_restore_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+         <s:Body>
+           <tds:StartSystemRestoreResponse>
+             <tds:UploadUri>http://192.168.1.1/upload/restore</tds:UploadUri>
+             <tds:ExpectedDownTime>PT120S</tds:ExpectedDownTime>
+           </tds:StartSystemRestoreResponse>
+         </s:Body>
+       </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn test_start_system_restore_returns_upload_handle() {
+    let (transport, captured) = RecordingTransport::new(start_system_restore_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let start = client.start_system_restore().await.unwrap();
+
+    assert_eq!(start.upload_uri, "http://192.168.1.1/upload/restore");
+    assert_eq!(start.expected_down_time, "PT120S");
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/device/wsdl/StartSystemRestore"
+    );
+    assert!(
+        c.body.contains("<tds:StartSystemRestore/>"),
+        "body was: {}",
+        c.body
+    );
+}
