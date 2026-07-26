@@ -8,6 +8,13 @@
 > went wrong — and the cheapest rows here. The measurements in this file are
 > unaffected; only the line drawn through them moved. Authority is
 > [`refactor-2026-07.md`](refactor-2026-07.md) §2.2.
+>
+> Concretely, **the `locked-scope work` column of the per-service summary table
+> near the end of this file is stale in every row** — it excludes the
+> variant-only class. It reads media 8 / media2 11 / recording 12 where the true
+> figures are 10 / 12 / 15. Both batches done so far were under-scoped by exactly
+> that column. Per-service scope lives in §2.2 of the plan; add the
+> `hollow (variant-only)` column back if you must read it here.
 
 **Ref analysed:** `c903816360f3a420fe9dcdb871317dd789b17341`
 (`refactor/2026-07` tip, = "docs(active): stage 3 step 2 verdict; C18; no deprecation cycle for the shim").

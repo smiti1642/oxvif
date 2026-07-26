@@ -17,7 +17,8 @@ This doc is the **working contract** for the fixes that came out of it.
 | Decision | Value | Rationale |
 |---|---|---|
 | Release | **single 0.14.0** | Stage 3 is breaking; a second release would mean running the 17-step SOP twice and moving oxdm's pin twice for a few days' head start. Stages are separate commits, so cutting a 0.13.1 from the Stage-2 commit stays possible if Stage 3 stalls. |
-| Test-coverage scope | **the 26 zero-coverage methods + the 21 hollow negatives = 47** | Decided 2026-07-26, replacing the earlier "all zero-coverage" wording once the survey showed that covered only 26 of 148. Both classes selected *mislead a reader*: the 26 have no test at all, and the 21 feed a real SOAP Fault then assert only `is_err()`, so they read as green. The remaining 69 `partial` methods simply have no negative — an absence that is visible in the ledger — and are deferred. See Stage 4. |
+| Test-coverage scope | **64** — 28 with no real positive + 20 `is_err`-only + 16 variant-only hollow negatives | Decided 2026-07-26. Supersedes the earlier "26 + 21 = 47", whose halves were wrong in opposite directions (see §2.2 for the four-way reconciliation of the 148-method universe). All three classes *mislead a reader*: they read as green while asserting nothing that can fail. The remaining 68 methods have no negative at all — an absence visible in the ledger — and are deferred to §8. |
+| Release timing | **the whole programme goes green first**, then one 0.14.0 | Re-affirmed 2026-07-26, with the alternative explicitly on the table and declined: Stages 0–3 are verified and are the entire user-visible content of 0.14.0, and Stage 4 changes no shipped behaviour, so shipping early was possible. Declined because the contract exists precisely to stop Stage 4 becoming the permanent next thing. Merge `refactor/2026-07` → `develop` only when all 64 are done. |
 | Test layout | split by service; keep in `src/tests/` | `src/tests/client_tests.rs` uses zero `pub(crate)` internals so it *could* move to `tests/`, but that needs a several-hundred-site `crate::` → `oxvif::` rewrite, producing a diff too large to review for silently weakened assertions. Only the black-box mock snapshot moved to `tests/`. `src/tests/types_tests.rs` **cannot** move — 73 call sites of `pub(crate)` fns (46 `from_xml`, 15 `vec_from_xml`, 12 `to_xml_body`; all 84 definitions in `src/types/` are `pub(crate)`). |
 
 **Layout as shipped in `e21ed7f`:** each `src/tests/client/<svc>_tests.rs` is attached
@@ -67,7 +68,7 @@ writes `CHANGELOG.md`, the stages deliberately do not):
 | 1b | `AudioEncoderConfiguration::to_xml_body_media2()`; `xml_escape` on 4 encoding sites | non-breaking | **done** — `573168a` |
 | 2 | `get_discovery_mode` strictness; `is_complete()` empty-report case | behaviour change | **done** — `ddfde44` |
 | 3 | Fixture key → `(action, key_canon)`, in two steps | **breaking** | **done** — `5d3fbc7` (step 1) + `0c156b2` (step 2) |
-| 4 | Positive+negative pairs for **64** methods (28 no-positive + 20 `is_err`-hollow + 16 variant-only) | additive | ledger done — `c903816`; batch 1 (recording, 15) **done** — `1c01977`; 49 left |
+| 4 | Positive+negative pairs for **64** methods (28 no-positive + 20 `is_err`-hollow + 16 variant-only) | additive | ledger `c903816`; batch 1 recording 15 — `1c01977`; batch 2 media+media2 22 — `71e349d` + `3c8b420`; **27 left** (device 14 + mod 2, ptz 8, events 1 + imaging 2) |
 
 Verdicts for every finished stage are in [§9](#9-stage-verdicts) — what each one
 actually rested on, not just that it passed. (Stage 4 is now the only one left,
@@ -419,6 +420,7 @@ Mistakes actually made in this programme. Re-read before each stage.
 | C17 | A test marked "do not edit" should come out of the stage byte-identical | Not when the stage changes a **public signature** — that mechanically rewrites every call site, including in tests whose subject is unrelated (Stage 3 step 1 had to touch both ephemera de-dup tests for exactly this reason). Read the instruction as "do not weaken its assertions" and review by diffing the **assertion set**, not the byte count. The check that matters: does the test still fail for the reason it was written? | agent |
 | C19 | Giving an agent an isolated worktree guarantees it analyses the right tree | It guarantees only that the tree **stops moving**. The Stage 4 ledger agent was handed a worktree created from `5789f41` — a stale `develop` commit predating the whole programme, with no `src/tests/client/`, no `tests/`, and no copy of this document. Frozen, and frozen at a tree Stage 4 will never touch: C11b's failure mode inverted. The agent caught it and re-detached to the programme tip. **Isolation addresses drift, not provenance** — require the agent to report the SHA it measured, and check that SHA against the ref you meant. | reviewer |
 | C18 | A mutation's red **count** from an earlier stage is a reusable expectation | It is not — it is a measurement of one tree. Replaying Stage 3 step 1's mutations after step 2, the reviewer's first draft asserted "expect 13 again"; the deleted shim test had itself been red under both mutations, so the true answer was 12 and the hard-coded expectation would have flagged a clean commit as a weakened net. Re-measure the baseline on the old ref and diff the red **name sets** — the invariant worth asserting is *which* tests defend a fix, not how many. | reviewer |
+| C21 | Dropping the filter is enough to make a mutation check see the whole suite | It is not. `cargo test --all-features` **aborts after the first failing target**, so the moment the lib tests go red the integration crates are never built or run — a mutation killed only by `tests/mock_action_snapshot.rs` reads as killed by nothing. Distinct from C10, which is about a *filter* dropping those crates; this one drops them because the mutation worked. Batch 2's agent hit it on its first round and switched to `--no-fail-fast`; the reviewer's own batch-1 driver had the same hole and was re-run. **Mutation checks must be `--all-features --no-fail-fast`, and the run must report how many targets reported a result** (4 here) — a red count alone cannot distinguish "nothing else caught it" from "nothing else ran". | agent |
 | C20 | `get_capabilities` is a hollow negative — it asserts only `Fault { .. }` | The ledger's `yes / yes` is right and the reviewer's citation was wrong. `device_tests.rs` holds **two** fault tests for it: `..._returns_error` at `:75`, which asserts the bare variant, and `..._returns_err` at `:361`, which asserts `code == "s:Sender"` — and a third pins `HttpStatus { status: 401 }`. A method's class is its **strongest** test; quoting one assertion without sweeping its siblings misreads it, and the names differ by one letter. Batch 1's fault mutation settles this objectively: `:361` is red at the baseline, so `get_capabilities` was never in scope. (The weaker `:75` is pre-existing dead weight; not this programme's to remove.) | reviewer |
 | C16 | Every new test must be shown red before the fix | Not one whose subject is "property X still holds". A cross-module premise guard is **green the moment it is written**, because the premise already holds — red-before-green proves nothing and accepting it green is indistinguishable from accepting a vacuous test. Validate it by **mutating the module that owns the property** and naming the expected victims. Stage 2's two whitespace pins were the only 2 of 654 lib tests that caught a mutation of the `Event::End` trim; 1b's `hostile_encoding_reaches_display_unescaped` is the same shape, with the method left implicit. | agent |
 
@@ -518,7 +520,11 @@ them silently become in-scope; open a separate plan.
 - Mock-side correctness: undeclared namespace prefixes on every void response;
   SOAP faults put the ONVIF code in `Code/Value` instead of `Code/Subcode/Value`,
   so `subcode` is always `None`; `SetImagingSettings` silently drops 5 of 11
-  fields; Media1/Media2 profile and encoder state are disjoint.
+  fields; Media1/Media2 profile and encoder state are disjoint. **The mock's OSD
+  payload parser tolerates a renamed `<tt:Type>` and defaults it** — measured in
+  batch 2, where retagging that element left `tests/mock_action_snapshot.rs`
+  entirely green with all four targets running. The snapshot net does not
+  discriminate that field, so it must not be cited as coverage for it.
 - `examples/write_workflow.rs` reimplements the library's mock server (~400 lines)
   and its harness prints failures instead of failing, exiting 0 regardless.
 - **`MissingField` path strings are inconsistent and half of them are unqualified.**
@@ -701,6 +707,12 @@ red). **Before the batch not one of the 15 was red under either mutation** — t
 hollowness §2.2 asserted is now measured, not argued. Drivers at
 `<scratchpad>/mut5.py`, captures at `<scratchpad>/red-b1-{before,after}.json`.
 
+*Amended during batch 2:* those first runs lacked `--no-fail-fast`, so cargo
+aborted after the failing lib target and the three integration crates never ran
+(C21). Both refs were re-measured with it — 11/19 and 16/23 unchanged, because
+this batch touched no integration test — but the original runs proved less than
+the verdict claimed. Fresh captures: `<scratchpad>/red-nff-*.json`.
+
 **These two mutations are the standing instrument for the remaining batches.** They
 are service-independent: any negative that asserts a `MissingField` path goes red
 under the first, any that asserts a fault `code`/`reason` under the second. Run
@@ -730,6 +742,64 @@ call a sender-side fault. The strings exist to make `code` and `reason`
 independently discriminating, and no library behaviour depends on the value —
 but they are not device-plausible, and a future real-camera fixture should not
 copy them.
+
+### Stage 4 batch 2 — `71e349d` + `3c8b420` — PASS
+
+22 methods (media 10, media2 12), split into two commits because the two halves
+need different proofs. Scope was *derived by the agent from the ledger* against a
+stated rule and cross-checked against the six methods the reviewer already knew
+were red at the mutation baseline; it reconciled at 10 + 12 with none of the six
+present. 706 → 722 names, 16 added, **none removed**, 704 → 720 passing.
+
+**2b — the 6 hollow negatives.** Same instrument as batch 1, run at three refs:
+
+| mutation | pre-b1 `2d39f63` | post-b1 `1c01977` | post-b2 `3c8b420` |
+|---|---|---|---|
+| `SoapError::missing()` returns a constant path | 11 | 19 (+15's 8) | **25 (+6)** |
+| fault parser returns constant `code`/`reason` | 16 | 23 (+15's 7) | 23 (**+0**) |
+
+The +6 are exactly the six strengthened sites; nothing was removed. **FA moving by
+zero is the correct answer, not a miss** — none of the six in-scope methods has a
+SOAP-Fault negative to strengthen. The agent flagged that the brief's
+"distinctive fault payload" rule therefore did not apply here and declined to
+invent fault fixtures, which would have replaced the subject of tests it was told
+to strengthen in place. Correct call; giving these six fault negatives as well is
+new scope, not batch 2.
+
+**A seventh site is defended by a third instrument.** `get_profiles` has two
+negative sites and the second is a *parse-error* test; its payload is a quick-xml
+message string, so neither MF nor FA can see it. Do not expect it in a delta.
+
+**2a — the 16 new positives.** A brand-new positive is green the moment it is
+written (C16), so the proof is a compiling mutation of the library code each
+assertion depends on, with victims **named before the run**. Eight rounds, all
+reverted and verified with `git diff HEAD --stat` (C13). The reviewer replayed two
+independently at `3c8b420`, both reproducing exactly:
+
+- `VideoEncoderConfiguration2::from_xml` reading `GopLength` → 3 red, as predicted.
+- `OsdConfiguration::to_xml_body` retagging `<tt:Type>` → **1 red**, where the
+  agent had predicted 2. Its prediction was that the mock snapshot would flip too.
+  It does not: the mock's OSD payload parser tolerates the renamed element and
+  defaults it, so `tests/mock_action_snapshot.rs` does not discriminate the OSD
+  `Type` at all and the new unit test is the only thing defending it. **Fewer kills
+  than predicted is a finding, not noise** — logged against the mock bullet in §8.
+  The reverse also happened: retagging Media1 `DeleteOSD`'s `OSDToken` killed 4 not
+  3, because that mock handler parses the token out of the request *body*
+  (`src/mock/services/media.rs:589-590`) while the Media2 profile handlers are
+  static. The mock's dispatch is not uniformly action-only.
+
+**Accepted deviation.** `recording_tests.rs` was to come out byte-identical apart
+from the moved helper block; it lost one more line, `use crate::soap::SoapError`,
+which the move orphaned and `-D warnings` rejects. That is CLAUDE.md's "remove
+imports YOUR changes made unused", verified by reading the diff: −32 lines, the
+helper block plus that import, no assertion touched.
+
+**Pinning now spans services.** `"Uri"` is asserted verbatim by both
+`get_replay_uri` (recording) and `get_stream_uri` (media), and `"Profile/@token"`
+by two media methods, because the library genuinely emits the same bare string for
+different operations. The agent did not change the library to make its assertions
+prettier. This widens the §8 coupling: normalising those paths now fails across
+two services.
 
 ### Test-design patterns these stages produced
 
