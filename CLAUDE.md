@@ -41,11 +41,26 @@ All three must pass cleanly before committing.
 ## Before every publish (additional checks)
 
 ```
-cargo test --doc          # verify all doc examples compile and run
-cargo doc --no-deps       # verify HTML docs generate cleanly (mirrors docs.rs)
-cargo audit               # zero vulnerabilities required
-cargo outdated --depth 1  # review; upgrade direct deps if significantly behind
+cargo test --doc                      # verify all doc examples compile and run
+cargo doc --no-deps --all-features    # what docs.rs actually builds
+cargo doc --no-deps                   # the default-feature build; keep it warning-free too
+cargo audit                           # zero vulnerabilities required
+cargo outdated --depth 1              # review; upgrade direct deps if significantly behind
 ```
+
+**Both `cargo doc` forms, and both must be warning-free.** `[package.metadata.docs.rs]`
+sets `all-features = true`, so the plain `cargo doc --no-deps` is *not* what
+docs.rs renders — it is the no-feature build, and this crate has no default
+features, so it omits `mock`, `health` and `metamorph` entirely. An intra-doc
+link from the crate header to a feature-gated item resolves under
+`--all-features` and warns under the plain form; prefer a plain `` `code span` ``
+in the crate header for anything behind a feature.
+
+Also re-read the rendered front page after publishing. `all-features` was
+added in 0.14 precisely because an explicit feature list had silently omitted
+`metamorph` — docs.rs rendered ten modules instead of eleven for two releases
+and nobody noticed, because nothing in the local build fails when a module is
+merely absent.
 
 After `cargo outdated`, if any direct dependency was updated, re-check for
 feature-unification footguns (a public API a sibling crate can flip off via
@@ -266,6 +281,21 @@ All three must pass cleanly.
    - Update the `Implemented ONVIF operations` status table (— → ✓)
    - Update test count (`N unit tests`)
    - Update installation version number
+6a. **Update the crate-level docs in `src/lib.rs`** — the `//!` header. This is
+    what docs.rs renders as the crate's front page, and it is the first thing
+    most readers see; the README is the *second*. It does not follow the README
+    on its own and has silently fallen two releases behind before. Check every
+    one of these:
+    - `## Optional features` — one bullet per feature in `Cargo.toml`. A new
+      feature with no bullet here is invisible: it appears in the auto-generated
+      Modules list with no explanation of what to turn on or why. This is
+      exactly how `metamorph` shipped undocumented on the front page for two
+      releases while being the headline of both.
+    - A prose section for any feature big enough to need one (see `## Metamorph`).
+    - `## Supported services` and the Profile coverage table — percentages and
+      the "not yet implemented" notes both go stale.
+    - Version numbers in the example `Cargo.toml` snippets.
+    - Any behaviour statement about a type whose behaviour changed this release.
 7. Update `examples/camera.rs`:
    - Add new command to the doc comment at the top
    - Add new arm to the `match` in `main()`
@@ -310,7 +340,8 @@ All three must pass cleanly.
 - [ ] `cargo fmt && cargo clippy --all-targets -- -D warnings` clean
 - [ ] `cargo test` — all tests pass
 - [ ] `cargo test --doc` — all doc examples pass
-- [ ] `cargo doc --no-deps` — HTML docs generate without errors or broken links
+- [ ] `cargo doc --no-deps --all-features` — what docs.rs builds; no warnings
+- [ ] `cargo doc --no-deps` — the default-feature build; no warnings either
 - [ ] `cargo publish --dry-run` — no errors
 - [ ] `cargo audit` — zero vulnerabilities
 - [ ] `cargo outdated --depth 1` — review; upgrade direct deps if significantly behind
@@ -318,6 +349,10 @@ All three must pass cleanly.
 - [ ] `CHANGELOG.md` updated with new version entry
 - [ ] `Cargo.toml` version bumped
 - [ ] `README.md` installation version updated + content updated
+- [ ] **`src/lib.rs` crate-level `//!` docs updated** — the docs.rs front page.
+      Every feature in `Cargo.toml` has an `## Optional features` bullet; new
+      capabilities have a prose section; version numbers in the example
+      snippets are current
 - [ ] `examples/camera.rs` updated (new command + `full_workflow` sections)
 - [ ] Committed and on `master` branch
 - [ ] `git tag v<version>` — tag the release commit

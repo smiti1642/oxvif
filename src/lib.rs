@@ -44,14 +44,25 @@
 //!   a Profile S/T/G assessment). Pure library code over [`OnvifSession`].
 //!   Reports serialise to JSON (`to_json` / `to_json_pretty`) and a
 //!   later report can diff against an earlier one via
-//!   [`HealthReport::diff`](health::HealthReport::diff) — see
+//!   `HealthReport::diff` — see
 //!   `examples/healthcheck.rs --baseline <file.json>`.
 //! - **`mock`** / **`mock-server`** — a built-in mock ONVIF device for
 //!   unit-testing client code without a camera (see the `mock` module).
 //!   The `mock` feature also exposes `fixtures::CapturingTransport` /
 //!   `fixtures::FixtureTransport` for recording real-camera exchanges
 //!   into `tests/fixtures/<vendor>-<model>/` and replaying them in tests
-//!   without the device (see `examples/record_fixtures.rs`).
+//!   without the device (see `examples/record_fixtures.rs`). Captures are
+//!   redacted as they are written — the WS-Security `Password` / `Nonce` and
+//!   any `user:pass@` in a returned URL — so a fixture directory is safe to
+//!   commit.
+//! - **`metamorph`** / **`metamorph-server`** — clone a real camera into a
+//!   replayable fixture set, ask whether oxvif can parse a given device, and
+//!   diff a device's response shapes against oxvif's own reference mock. See
+//!   [Metamorph](#metamorph) below and the `metamorph` module.
+//! - **`serde`** — `Serialize` / `Deserialize` on every public response type in
+//!   [`types`], plus the WS-Discovery result types, so a result can go straight
+//!   to a REST layer or on disk without a hand-cloned parallel struct. Pulls no
+//!   new dependency and costs nothing unless enabled.
 //!
 //! ## Architecture
 //!
@@ -132,7 +143,7 @@
 //! for cross-process / non-Rust clients. See the `mock` module for details.
 //!
 //! ```ignore
-//! // Cargo.toml:  oxvif = { version = "0.9", features = ["mock"] }
+//! // Cargo.toml:  oxvif = { version = "0.14", features = ["mock"] }
 //! use std::sync::Arc;
 //! use oxvif::{OnvifClient, mock::MockTransport};
 //!
@@ -166,9 +177,47 @@
 //! # }
 //! ```
 //!
+//! ## Metamorph
+//!
+//! The **`metamorph`** feature turns that mock into a shape-shifter, for the
+//! work you cannot do against a synthetic device: answering *what does this
+//! particular camera actually send, and can oxvif read it?*
+//!
+//! - **Clone and replay** — `metamorph::record_surface` drives a chosen set of
+//!   read operations against a real camera once and returns a
+//!   `metamorph::FixtureStore`: the recorded exchanges, keyed by
+//!   `(SOAP action, canonical request)` so two services that canonicalise
+//!   identically stay distinct. Save it, replay it in-process, or serve it from
+//!   a real bound port with **`metamorph-server`** — the camera can then be
+//!   unplugged. Credentials are redacted as it records.
+//! - **Pick what to clone** — `metamorph::SurfaceSelection` selects whole
+//!   service zones (`SurfaceGroup`) or individual operations (`SurfaceOp`).
+//!   Prerequisites are expanded for you, so selecting `GetStreamUri` still
+//!   yields a replayable clone. Every sweep returns a `metamorph::SweepReport`
+//!   saying per operation whether it was recorded, failed, or skipped — and
+//!   *why* it was skipped, which separates "this device has no such path" from
+//!   "the command broke".
+//! - **Will oxvif parse this device?** — `FixtureStore::verify_parsing` runs
+//!   oxvif's own typed parser over each recorded response and returns a
+//!   `metamorph::ParseReport`. This catches value and type quirks that a
+//!   structural diff cannot see. A device that answers with a SOAP `Fault` is
+//!   reported as declined rather than unparseable — it is behaving correctly.
+//! - **What is unusual about it?** — `FixtureStore::diff_against_synthetic`
+//!   compares each recorded response against oxvif's reference mock and returns
+//!   a `metamorph::QuirkReport`. `QuirkReport::diff` compares that against an
+//!   earlier saved report, so you can answer "did this firmware update change
+//!   the device?" without reading two reports side by side.
+//! - **Put an ONVIF skin on something else** — implement
+//!   `metamorph::DeviceAdapter` to answer ONVIF operations from a non-ONVIF
+//!   source.
+//!
+//! The four long operations have `*_with_progress` twins that report
+//! determinate progress, so a UI can show a real bar rather than freezing for
+//! the length of a 52-operation sweep.
+//!
 //! ## Health & conformance checks
 //!
-//! Enable the **`health`** feature for [`health::HealthCheck`] — a fast,
+//! Enable the **`health`** feature for `health::HealthCheck` — a fast,
 //! read-only conformance check that reports Pass/Warn/Fail/Skip per ONVIF
 //! service plus a Profile S/T/G verdict. It includes a **parse-coverage**
 //! dimension that flags when a parser silently drops list data (a wrong element
