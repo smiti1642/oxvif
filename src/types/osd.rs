@@ -54,8 +54,11 @@ impl OsdPosition {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdColor {
+    /// First channel: luma (Y) under YCbCr, red under RGB.
     pub x: f32,
+    /// Second channel: Cb under YCbCr, green under RGB.
     pub y: f32,
+    /// Third channel: Cr under YCbCr, blue under RGB.
     pub z: f32,
     /// Colorspace URI (e.g. `"http://www.onvif.org/ver10/colorspace/YCbCr"`).
     pub colorspace: Option<String>,

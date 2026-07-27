@@ -300,9 +300,32 @@ Expected tags: `src/client/media.rs:175,195,220,239`,
 | D7 | Non-reqwest `diqwest` errors reported as a fabricated HTTP 401. | `src/transport.rs:138-144` |
 | D8 | Devices with an empty endpoint overwrite each other; only the first survives. Strict path only — the lenient path already rejects them. | `src/discovery.rs:61` + `:283` vs `:638-643` |
 | D9 | `listen()` aborts the whole window on one transient recv error; `probe_once` explicitly does not. | `src/discovery.rs:493` vs `:420` |
-| D10 | `CapturingTransport` writes WS-Security digests and RTSP credentials verbatim, and the module doc tells the user to commit them. The successor module spent ~100 lines solving this. | `src/fixtures.rs:73`,`:78` vs `:15`; cf. `src/metamorph/fixture.rs:178-266` |
+| D10 | `CapturingTransport` writes WS-Security digests and RTSP credentials verbatim, and the module doc tells the user to commit them. The successor module spent ~100 lines solving this. **Fixed before 0.14.0 shipped** — see the note below the table. | `src/fixtures.rs:73`,`:78` vs `:15`; cf. `src/metamorph/fixture.rs:178-266` |
 | D11 | `SweepReport::is_complete()` is vacuously `true` on an empty sweep. **Fixed in `ddfde44`** — it now requires a non-empty report; no production caller existed either way. | `src/metamorph/surface.rs:414` |
 | D12 | `SoapError::InvalidValue` is never constructed; `src/health/report.rs:178` has an unreachable match arm for it. | `src/soap/error.rs:45`,`:55` |
+
+**D10, as fixed.** Redaction is on by default in `CapturingTransport`:
+`<wsse:Password>` / `<wsse:Nonce>` blanked in requests, `user:pass@` stripped
+from URLs in responses. Two independent opt-outs (`with_raw_requests`,
+`with_raw_responses`) keep the one legitimate use — debugging WS-Security, where
+the digest is the evidence — without making the unsafe path the default. Only
+the bytes written change; the inner transport still receives the request
+unmodified.
+
+The three near-duplicate implementations collapsed into a crate-private
+`src/redact.rs` that `fixtures`, `health::capture` and `metamorph::fixture` all
+call. This does **not** reverse metamorph's documented reason for duplicating —
+that was "so `metamorph` does not pull in `health`" (`fixture.rs:195-197`), and a
+neutral module satisfies it. Gated `any(feature = "mock", feature = "health")`.
+
+Proof, unfiltered, 4 targets reporting: neutralising both functions in
+`redact.rs` reddens **9** tests — 1 in `health::capture`, 2 in
+`metamorph::fixture`, 3 in `fixtures`, 2 in `redact` itself — which is what
+demonstrates all three consumers really route through the shared module rather
+than a leftover copy. `redaction_does_not_alter_what_the_device_receives` stays
+green under that mutation by design (it asserts the *wire* body, which redaction
+must not touch); it was proved separately by sending the redacted body to the
+inner transport, which reddens it on its assertion.
 
 ### Rejected / downgraded
 
@@ -552,15 +575,35 @@ them silently become in-scope; open a separate plan.
   request body** — it must not be cited as coverage for request-body content.
 - `examples/write_workflow.rs` reimplements the library's mock server (~400 lines)
   and its harness prints failures instead of failing, exiting 0 regardless.
-- **`with_credentials` silently replaces the transport.** `src/client/mod.rs:104`
-  assigns `self.transport = Arc::new(HttpTransport::new().with_credentials(…))`
-  unconditionally, so `.with_transport(t).with_credentials(u, p)` discards `t`
-  without a warning, a `#[must_use]`, or a doc note — the call order is load-bearing
-  and invisible. Found while writing batch 4's `with_utc_offset` test, where the
-  wrong order turns a WS-Security assertion into an `HttpTransport` call against a
-  dead address. Public API on a published crate; fixing it is a separate decision
-  (take `Option<Arc<dyn Transport>>`, or apply credentials to whatever transport is
-  installed at build time).
+- ~~**`with_credentials` silently replaces the transport.**~~ **Fixed before
+  0.14.0 shipped.** `src/client/mod.rs:104` assigned
+  `self.transport = Arc::new(HttpTransport::new().with_credentials(…))`
+  unconditionally, so `.with_transport(t).with_credentials(u, p)` discarded `t`
+  without a warning, a `#[must_use]`, or a doc note — the call order was
+  load-bearing and invisible. Found while writing batch 4's `with_utc_offset`
+  test, where the wrong order turns a WS-Security assertion into an
+  `HttpTransport` call against a dead address.
+
+  Fixed by deferring transport *resolution* out of the builders: `transport`
+  became `Option<Arc<dyn Transport>>` (`None` = "use the default") and the
+  default `HttpTransport` is now built on first use in a private `transport()`
+  accessor, memoised in a `OnceLock` and discarded by `with_credentials`
+  (which feeds its Digest credentials). No builder can construct the default
+  before every input configuring it has arrived, so order stops mattering by
+  construction rather than by a documented rule. Source-compatible.
+
+  Two perturbations, run at the fixed tree, unfiltered, 4 targets reporting:
+  restoring the unconditional assignment reddens
+  `with_credentials_after_with_transport_keeps_the_installed_transport` on its
+  assertion (`left: ""` against the expected action, `mod_tests.rs:162`) and
+  nothing else; deleting the `OnceLock` reset reddens
+  `credentials_discard_a_default_transport_that_was_already_built` on its
+  assertion and nothing else. Both reverted green.
+
+  The memo reset is not hypothetical: `README.md:229-232` documents
+  `client.get_system_date_and_time().await?` *followed by*
+  `.with_credentials(…)` — a request that forces the default transport into
+  existence before the credentials arrive.
 - **`MissingField` path strings are inconsistent and half of them are unqualified.**
   Recording alone emits `"Uri"`, `"JobToken"`, `"SearchToken"`, `"RecordingToken"`,
   `"TrackToken"` with no operation or element context, and `"RecordingJob/JobToken"`

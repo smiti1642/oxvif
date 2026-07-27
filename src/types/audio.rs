@@ -40,6 +40,7 @@ impl AudioSource {
 pub struct AudioSourceConfiguration {
     /// Opaque token for this configuration.
     pub token: String,
+    /// Human-readable name. Many devices simply echo the token here.
     pub name: String,
     /// Number of profiles referencing this configuration.
     pub use_count: u32,
@@ -73,10 +74,16 @@ impl AudioSourceConfiguration {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum AudioEncoding {
+    /// ITU-T G.711 PCM (µ-law / A-law). The ONVIF baseline codec, and the
+    /// default here because every conformant device supports it.
     #[default]
     G711,
+    /// ITU-T G.726 ADPCM.
     G726,
+    /// MPEG-4 AAC.
     Aac,
+    /// An encoding string this crate does not model, kept verbatim as the
+    /// device reported it (Media2 devices may advertise `MP4A-LATM`, `PCMU`, …).
     Other(String),
 }
 
@@ -117,9 +124,11 @@ impl std::fmt::Display for AudioEncoding {
 pub struct AudioEncoderConfiguration {
     /// Opaque token for this configuration.
     pub token: String,
+    /// Human-readable name. Many devices simply echo the token here.
     pub name: String,
     /// Number of profiles referencing this configuration.
     pub use_count: u32,
+    /// Compression format the encoder produces.
     pub encoding: AudioEncoding,
     /// Bitrate in kbps (e.g. 64).
     pub bitrate: u32,
@@ -213,6 +222,7 @@ impl AudioEncoderConfiguration {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct AudioEncoderOptions {
+    /// The encoding these options apply to.
     pub encoding: AudioEncoding,
     /// Supported bitrates in kbps.
     pub bitrate_list: Vec<u32>,
@@ -226,6 +236,7 @@ pub struct AudioEncoderOptions {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct AudioEncoderConfigurationOptions {
+    /// One entry per encoding the device accepts; empty if it advertised none.
     pub options: Vec<AudioEncoderOptions>,
 }
 

@@ -1,10 +1,12 @@
 //! Unit tests for the `OnvifClient` constructor/builder surface
 //! (`src/client/mod.rs`).
 //!
-//! Only the two members that no other test file reaches are covered here:
-//! [`OnvifClient::device_url`] and [`OnvifClient::with_utc_offset`]. `new`,
-//! `with_credentials` and `with_transport` are exercised by essentially every
-//! service test (`with_credentials` specifically by
+//! Covered here: the members no other test file reaches —
+//! [`OnvifClient::device_url`] and [`OnvifClient::with_utc_offset`] — plus the
+//! *interaction* between [`OnvifClient::with_credentials`] and
+//! [`OnvifClient::with_transport`], which no single-method test can see. Each
+//! of those two in isolation is exercised by essentially every service test
+//! (`with_credentials` specifically by
 //! `client::device::tests::test_credentials_add_ws_security_header`).
 
 use super::*;
@@ -88,8 +90,6 @@ async fn with_utc_offset_shifts_the_ws_security_created_timestamp() {
 
     let before = unix_now();
 
-    // `with_credentials` installs its own HTTP transport, so `with_transport`
-    // has to come after it.
     OnvifClient::new(URL)
         .with_credentials("admin", "password")
         .with_utc_offset(OFFSET_SECS)
@@ -129,5 +129,97 @@ async fn with_utc_offset_shifts_the_ws_security_created_timestamp() {
     assert_ne!(
         shifted_created, plain_created,
         "the offset must change the emitted timestamp"
+    );
+}
+
+// ── with_transport × with_credentials: order independence ─────────────────────
+//
+// `with_credentials` used to assign a fresh `HttpTransport` over whatever
+// `transport` held, so `.with_transport(t).with_credentials(u, p)` silently
+// discarded `t` and went to the network. Both orders must now behave alike.
+
+const ORDER_URL: &str = "http://127.0.0.1:1/onvif/device_service";
+
+/// The action `get_device_info` sends, so the assertion names the operation
+/// that was actually routed rather than merely "something was routed".
+const GET_DEVICE_INFO: &str = "http://www.onvif.org/ver10/device/wsdl/GetDeviceInformation";
+
+/// `.with_transport(t).with_credentials(..)` — the order that used to lose `t`.
+///
+/// `ORDER_URL` points at a closed port, so if the installed transport were
+/// dropped the request would leave for the network and the recorder would stay
+/// empty. The capture is asserted before the result is unwrapped, so the
+/// regression surfaces as a failed assertion rather than a transport error.
+#[tokio::test]
+async fn with_credentials_after_with_transport_keeps_the_installed_transport() {
+    let (transport, captured) = RecordingTransport::new(device_info_response());
+
+    let res = OnvifClient::new(ORDER_URL)
+        .with_transport(transport)
+        .with_credentials("admin", "s3cret-after")
+        .get_device_info()
+        .await;
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action, GET_DEVICE_INFO,
+        "installed transport saw the call"
+    );
+    assert_eq!(c.url, ORDER_URL, "and was handed the device URL");
+    assert!(
+        c.body.contains("<wsse:Username>admin</wsse:Username>"),
+        "credentials still reach the SOAP header: {}",
+        c.body
+    );
+
+    assert_eq!(res.unwrap().manufacturer, "oxvif-test");
+}
+
+/// The mirror image — `.with_credentials(..).with_transport(t)` — which worked
+/// before the fix. Pinning it proves the fix did not simply move the hazard to
+/// the other order. Same fixture, a different password, so the two tests cannot
+/// pass on each other's captured body.
+#[tokio::test]
+async fn with_transport_after_with_credentials_keeps_the_installed_transport() {
+    let (transport, captured) = RecordingTransport::new(device_info_response());
+
+    let res = OnvifClient::new(ORDER_URL)
+        .with_credentials("operator", "s3cret-before")
+        .with_transport(transport)
+        .get_device_info()
+        .await;
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action, GET_DEVICE_INFO,
+        "installed transport saw the call"
+    );
+    assert!(
+        c.body.contains("<wsse:Username>operator</wsse:Username>"),
+        "credentials still reach the SOAP header: {}",
+        c.body
+    );
+
+    assert_eq!(res.unwrap().manufacturer, "oxvif-test");
+}
+
+/// With no transport installed the client falls back to a lazily built,
+/// memoised `HttpTransport` whose HTTP Digest credentials come from
+/// `self.credentials`. Setting credentials *after* something has already forced
+/// that transport into existence must therefore discard it — otherwise the
+/// memoised, credential-less one is kept and Digest never reaches the wire.
+///
+/// `first` is held across the `with_credentials` call so the old allocation
+/// cannot be freed and its address reused, which would make `ptr_eq` lie.
+#[test]
+fn credentials_discard_a_default_transport_that_was_already_built() {
+    let client = OnvifClient::new(ORDER_URL);
+    let first = client.transport().clone();
+
+    let client = client.with_credentials("admin", "s3cret-default");
+    assert!(
+        !std::sync::Arc::ptr_eq(&first, client.transport()),
+        "with_credentials must discard a default transport built before it, \
+         or the HTTP Digest credentials would never reach the wire"
     );
 }

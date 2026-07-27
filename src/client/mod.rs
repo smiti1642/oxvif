@@ -16,13 +16,15 @@
 //! ## Testing
 //!
 //! Inject a custom [`Transport`] via
-//! [`with_transport`] to unit-test without a real device.
+//! [`with_transport`] to unit-test without a real device. The builder methods
+//! are order-independent: an installed transport is used whether credentials
+//! were set before or after it.
 //!
 //! [`with_credentials`]: OnvifClient::with_credentials
 //! [`with_utc_offset`]: OnvifClient::with_utc_offset
 //! [`with_transport`]: OnvifClient::with_transport
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use crate::error::OnvifError;
 use crate::soap::{SoapEnvelope, WsSecurityToken};
@@ -68,7 +70,15 @@ pub struct OnvifClient {
     /// Set via [`with_utc_offset`](Self::with_utc_offset) after calling
     /// `GetSystemDateAndTime` if the device clock differs from local UTC.
     utc_offset: i64,
-    transport: Arc<dyn Transport>,
+    /// The transport installed by [`with_transport`](Self::with_transport), if
+    /// any. `None` means "use the default HTTP transport", which is built on
+    /// first use by [`transport`](Self::transport) — not at construction — so
+    /// that credentials set *after* this field are still picked up.
+    transport: Option<Arc<dyn Transport>>,
+    /// Memoised default transport, so a client does not build a fresh
+    /// `HttpTransport` (and thus a fresh connection pool) per request. Any
+    /// builder method that changes an input this is derived from must clear it.
+    default_transport: OnceLock<Arc<dyn Transport>>,
 }
 
 impl OnvifClient {
@@ -81,7 +91,8 @@ impl OnvifClient {
             device_url: device_url.into(),
             credentials: None,
             utc_offset: 0,
-            transport: Arc::new(HttpTransport::new()),
+            transport: None,
+            default_transport: OnceLock::new(),
         }
     }
 
@@ -92,17 +103,21 @@ impl OnvifClient {
     /// request.  HTTP Digest credentials are used at the transport layer to
     /// handle 401 challenges from devices that require HTTP-level
     /// authentication (ONVIF Profile T §7.1).
+    ///
+    /// The HTTP Digest half applies only to the **default** transport. A
+    /// transport installed with [`with_transport`](Self::with_transport) is
+    /// never replaced or reconfigured by this method — it owns its own
+    /// transport-level authentication. The WS-Security header is added either
+    /// way, so builder call order carries no meaning.
     pub fn with_credentials(
         mut self,
         username: impl Into<String>,
         password: impl Into<String>,
     ) -> Self {
-        let u = username.into();
-        let p = password.into();
-        // Also set HTTP Digest Auth on the default transport so that devices
-        // requiring HTTP-level authentication work out of the box.
-        self.transport = Arc::new(HttpTransport::new().with_credentials(&u, &p));
-        self.credentials = Some((u, p));
+        self.credentials = Some((username.into(), password.into()));
+        // The default transport derives its Digest credentials from this field,
+        // so a previously memoised one is now stale.
+        self.default_transport = OnceLock::new();
         self
     }
 
@@ -118,8 +133,12 @@ impl OnvifClient {
     /// Replace the default [`HttpTransport`] with a custom implementation.
     ///
     /// Primarily used in tests to inject a mock transport without a live device.
+    ///
+    /// The installed transport is used for every request regardless of where
+    /// this call sits in the builder chain;
+    /// [`with_credentials`](Self::with_credentials) will not replace it.
     pub fn with_transport(mut self, transport: Arc<dyn Transport>) -> Self {
-        self.transport = transport;
+        self.transport = Some(transport);
         self
     }
 
@@ -129,6 +148,27 @@ impl OnvifClient {
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /// The transport every request goes through: the one installed by
+    /// [`with_transport`](Self::with_transport) if there is one, otherwise a
+    /// default [`HttpTransport`] built on first use and memoised.
+    ///
+    /// Resolving here rather than in the builders is what makes the builder
+    /// methods order-independent — the default transport cannot be constructed
+    /// before every credential that configures it has been supplied.
+    fn transport(&self) -> &Arc<dyn Transport> {
+        match &self.transport {
+            Some(t) => t,
+            None => self.default_transport.get_or_init(|| {
+                let http = HttpTransport::new();
+                let http = match &self.credentials {
+                    Some((user, pass)) => http.with_credentials(user, pass),
+                    None => http,
+                };
+                Arc::new(http)
+            }),
+        }
+    }
 
     fn security_token(&self) -> Option<WsSecurityToken> {
         self.credentials
@@ -153,7 +193,7 @@ impl OnvifClient {
         }
         let xml = envelope.build();
         tracing::trace!(action, url, body = %xml, "SOAP request");
-        let resp = self.transport.soap_post(url, action, xml).await?;
+        let resp = self.transport().soap_post(url, action, xml).await?;
         tracing::trace!(action, response = %resp, "SOAP response");
         Ok(resp)
     }

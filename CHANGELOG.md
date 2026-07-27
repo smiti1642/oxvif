@@ -164,6 +164,21 @@ accepted.
   regression tests.
 
 ### Fixed — what went on the wire, and what got stored
+
+- **`OnvifClient::with_credentials` silently discarded a transport installed by
+  `with_transport`.** It assigned a fresh `HttpTransport` over the transport
+  field unconditionally, so builder call order was load-bearing and invisible:
+  `.with_credentials(u, p).with_transport(t)` kept `t`, while
+  `.with_transport(t).with_credentials(u, p)` threw `t` away and went to the
+  network — no warning, no `#[must_use]`, no compile error. A mock stopped
+  mocking; a `CapturingTransport` stopped capturing, leaving an empty output
+  directory and no error. The default transport is now resolved on first use
+  rather than in the builders, so **the two orders are equivalent** and an
+  installed transport is never replaced. HTTP Digest credentials still apply to
+  the default transport; a custom transport is left to its own transport-level
+  authentication, and the WS-Security header is added either way.
+  `OnvifSession::builder` was never affected — it normalises the order in
+  `build()` — so only direct `OnvifClient` users could hit this.
 - **`set_audio_encoder_configuration_media2` sent a Media1 prefix.**
   `AudioEncoderConfiguration::to_xml_body()` hard-codes `trt:`, so a `tr2:`
   request carried a `<trt:Configuration>` child. Adds `to_xml_body_media2()`;
@@ -183,7 +198,41 @@ accepted.
   service's envelope, so an un-re-recorded clone gets *less* wrong, not more.
   Re-recording is still recommended and is the only way to fill the gap.
 
-### Security (advisory note — no change to this crate)
+### Security
+
+- **`CapturingTransport` wrote credentials to disk, and the docs told you to
+  commit them.** It wrote each SOAP request verbatim, so an authenticated
+  capture put the WS-Security `UsernameToken` — username, nonce and password
+  digest — into `<action>.req.xml`, and a `GetStreamUri` response put
+  `rtsp://user:pass@host/…` into `<action>.resp.xml`. The module's stated
+  workflow was "commit those fixtures under `tests/fixtures/<vendor>-<model>/`".
+
+  It now redacts by default, using the same two transforms `HealthCheck`'s
+  capture and metamorph's `FixtureStore` already applied: `<wsse:Password>` and
+  `<wsse:Nonce>` are blanked to `[redacted]`, and `user:pass@` is stripped from
+  URLs in responses. `<wsse:Username>` and `<wsu:Created>` are kept — not secret,
+  and what makes a capture readable. **Only the bytes written to disk change;
+  the device still receives the request unmodified.**
+
+  Two opt-outs for the case that needs the untouched bytes — debugging
+  WS-Security itself, where the digest is the evidence:
+  `CapturingTransport::with_raw_requests()` and `with_raw_responses()`. They are
+  independent, and a directory recorded with either holds a live credential.
+
+  **If you committed captures recorded by an earlier version, treat those
+  `*.req.xml` as leaked credentials and rotate the device account.** Re-recording
+  with 0.14 produces redacted files; existing files are not rewritten. Note that
+  replayed `GetStreamUri` results now carry no userinfo — a test asserting the
+  full `rtsp://user:pass@…` form needs `with_raw_responses()`. Gated on the
+  `mock` feature, which is not on by default.
+
+- Internal: the redaction transforms had three near-identical copies (`health`,
+  `metamorph`, and none in `fixtures`). They now live once in a crate-private
+  `redact` module that all three use, so a fix reaches every recorder. Proved by
+  neutralising both functions there and confirming all nine redaction tests
+  across the three consumers turn red.
+
+#### Advisory note — no change to this crate
 
 Four advisories were open against transitive dependencies at release time, all
 reached through `reqwest`:
@@ -201,6 +250,23 @@ library does not ship one — so this release cannot pin them for you. **If your
 lockfile predates 2026-07-26, run `cargo update -p quinn-proto -p rustls-webpki`;
 upgrading `oxvif` alone will not do it.**
 
+### Documentation
+
+- **docs.rs was missing the entire `metamorph` module.** The crate has no
+  default features, and `[package.metadata.docs.rs]` listed only
+  `["mock-server", "health"]` — so every release since `metamorph` landed
+  rendered without it, and the record / replay / clone surface (`FixtureStore`,
+  `SurfaceOp`, `SurfaceSelection`, `DeviceAdapter`, parse verification, quirk
+  diff) simply did not appear in the published docs. Now `all-features = true`,
+  which cannot drift the same way when a future feature is added.
+- **Every public item in `oxvif::types` is documented.** 159 response-struct
+  fields, enum variants and constants had no doc comment — the types a caller
+  actually reads back from a device. `types` now carries `#[warn(missing_docs)]`
+  so the next undocumented field is visible at build time. The rest of the crate
+  is not yet clean (164 items remain, 123 of them in the test-only
+  `mock::state`); the lint is scoped rather than crate-wide to say so honestly
+  instead of silencing it.
+
 ### Testing
 
 No public API change, but the suite is materially different: 64 client methods
@@ -214,6 +280,13 @@ mutations, so the improvement is a diffed set of failing test names, not a count
 
 `CLAUDE.md` now bans hollow tests outright and states how to prove a new
 assertion is load-bearing.
+
+Three further tests came with the `with_credentials` / `with_transport` fix
+above, covering the interaction rather than either method alone: both builder
+orders route through the installed transport, and setting credentials discards
+a default transport that an earlier request had already built. Each was proved
+by restoring the specific defect it targets and watching that one test — and
+only that one — fail on its assertion.
 
 ---
 

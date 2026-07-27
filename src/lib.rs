@@ -189,9 +189,15 @@ pub mod health;
 pub mod metamorph;
 #[cfg(feature = "mock")]
 pub mod mock;
+#[cfg(any(feature = "mock", feature = "health"))]
+pub(crate) mod redact;
 pub mod session;
 pub mod soap;
 pub mod transport;
+// `types` is the module API users read most — every response struct they get
+// back lands here — so its public surface is held to full documentation. A
+// warning, not a deny: it should block a lazy field, not a build.
+#[warn(missing_docs)]
 pub mod types;
 
 /// Helpers shared by the `#[path]`-attached unit-test modules.

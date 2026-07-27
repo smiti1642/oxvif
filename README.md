@@ -1537,6 +1537,7 @@ src/
 ├── error.rs             OnvifError unified error type
 ├── transport.rs         Transport trait + HttpTransport (reqwest + rustls)
 ├── fixtures.rs          CapturingTransport / FixtureTransport — record-and-replay test seam
+├── redact.rs            Strip WS-Security digests and URL credentials before a recorder writes to disk
 ├── soap/
 │   ├── mod.rs
 │   ├── envelope.rs      SOAP 1.2 envelope builder

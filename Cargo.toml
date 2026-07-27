@@ -15,11 +15,14 @@ readme = "README.md"
 # use the crate, so keep it out of the published package.
 exclude = [".env", ".env.example", "docs/"]
 
-# Build docs.rs with the mock + health features so `oxvif::mock` and
-# `oxvif::health` are documented there.
+# Build docs.rs with every feature on, so no module is missing from the rendered
+# docs. An explicit feature list was used until 0.14 and silently omitted
+# `metamorph` — the whole record/replay/clone surface was absent from docs.rs
+# while being the headline of two releases. `all-features` cannot drift that way:
+# a feature added later is documented without anyone remembering to list it here.
 # (This only affects docs.rs rendering — it does not enable features for users.)
 [package.metadata.docs.rs]
-features = ["mock-server", "health"]
+all-features = true
 
 [features]
 # Derive `serde::Serialize` + `Deserialize` on every public response type in

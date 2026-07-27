@@ -10,10 +10,16 @@ use crate::soap::{SoapError, XmlNode};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct DeviceInfo {
+    /// Manufacturer name as the device reports it (e.g. `"Hikvision"`).
     pub manufacturer: String,
+    /// Model designation (e.g. `"DS-2CD2085FWD-I"`).
     pub model: String,
+    /// Firmware version string. Format is entirely vendor-defined — do not
+    /// attempt to order two of these.
     pub firmware_version: String,
+    /// Device serial number.
     pub serial_number: String,
+    /// Hardware revision identifier.
     pub hardware_id: String,
 }
 
@@ -138,11 +144,17 @@ pub(crate) fn civil_to_unix(year: i32, month: i32, day: i32, hour: i32, min: i32
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy)]
 pub struct UtcDateTime {
+    /// Full year, e.g. `2026`.
     pub year: u16,
+    /// Month, `1`–`12`.
     pub month: u8,
+    /// Day of month, `1`–`31`.
     pub day: u8,
+    /// Hour, `0`–`23`.
     pub hour: u8,
+    /// Minute, `0`–`59`.
     pub minute: u8,
+    /// Second, `0`–`59`.
     pub second: u8,
 }
 
@@ -235,7 +247,9 @@ pub struct OnvifService {
     pub namespace: String,
     /// Service endpoint URL.
     pub url: String,
+    /// Major part of the service version the device advertises.
     pub version_major: u32,
+    /// Minor part of the service version the device advertises.
     pub version_minor: u32,
 }
 
@@ -270,6 +284,7 @@ impl OnvifService {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct User {
+    /// Login name. Passwords are never returned by `GetUsers`.
     pub username: String,
     /// Access level: `"Administrator"`, `"Operator"`, `"User"`, `"Anonymous"`, or `"Extended"`.
     pub user_level: String,
@@ -296,15 +311,23 @@ impl User {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct NetworkInterface {
+    /// Opaque token identifying this interface in `SetNetworkInterfaces`.
     pub token: String,
+    /// `true` if the interface is administratively up.
     pub enabled: bool,
+    /// Interface name as the device reports it (e.g. `"eth0"`).
     pub name: String,
+    /// MAC address, in the device's own formatting.
     pub hw_address: String,
+    /// Maximum transmission unit in bytes.
     pub mtu: u32,
+    /// `true` if the IPv4 stack is enabled on this interface.
     pub ipv4_enabled: bool,
     /// Manual or DHCP-assigned IPv4 address. Empty when DHCP is active and no address is available.
     pub ipv4_address: String,
+    /// IPv4 subnet mask in CIDR form (`24` = `255.255.255.0`).
     pub ipv4_prefix_length: u32,
+    /// `true` if the IPv4 address came from DHCP rather than manual config.
     pub ipv4_from_dhcp: bool,
     /// `true` if the IPv6 stack is enabled on this interface.
     pub ipv6_enabled: bool,
@@ -443,7 +466,9 @@ pub struct IpStackConfig {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ManualAddress {
+    /// The address itself, IPv4 or IPv6 depending on the field that holds it.
     pub address: String,
+    /// Subnet mask in CIDR form (`24` = `255.255.255.0`; `64` is typical IPv6).
     pub prefix_length: u32,
 }
 
@@ -455,6 +480,7 @@ pub struct ManualAddress {
 pub struct NetworkProtocol {
     /// Protocol name, e.g. `"HTTP"`, `"HTTPS"`, `"RTSP"`.
     pub name: String,
+    /// `true` if the device is currently serving this protocol.
     pub enabled: bool,
     /// Configured port numbers (typically one element).
     pub ports: Vec<u32>,
@@ -482,6 +508,8 @@ impl NetworkProtocol {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct DnsInformation {
+    /// `true` if the DNS servers came from DHCP. When set, `servers` may still
+    /// list manual entries that the device is not currently using.
     pub from_dhcp: bool,
     /// Manually configured DNS server addresses (IPv4 or IPv6 strings).
     pub servers: Vec<String>,
@@ -521,7 +549,9 @@ impl DnsInformation {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct NetworkGateway {
+    /// IPv4 default gateways. Usually one entry; empty if none is configured.
     pub ipv4_addresses: Vec<String>,
+    /// IPv6 default gateways. Empty on devices without IPv6 routing.
     pub ipv6_addresses: Vec<String>,
 }
 
@@ -579,6 +609,7 @@ impl SystemLog {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelayOutput {
+    /// Opaque token; pass it to `set_relay_output_state` to switch this relay.
     pub token: String,
     /// `"Bistable"` (latching) or `"Monostable"` (timed).
     pub mode: String,
@@ -631,6 +662,7 @@ impl RelayOutput {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DigitalInput {
+    /// Opaque token identifying this input port.
     pub token: String,
     /// Idle electrical state: `"closed"` or `"open"`. Empty when the
     /// device omits the attribute (some firmwares do — treat as unknown).
@@ -664,6 +696,7 @@ impl DigitalInput {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct StorageConfiguration {
+    /// Opaque token identifying this storage location.
     pub token: String,
     /// `"LocalStorage"` or `"NFS"` — the `type` attribute of the `Data` element.
     pub storage_type: String,

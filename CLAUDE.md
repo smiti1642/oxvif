@@ -5,6 +5,29 @@
 `oxvif` is an async Rust client library for the ONVIF IP camera protocol.
 Library crate (no binary). Published on crates.io.
 
+## Commit discipline
+
+**Commit at the end of every completed piece of work — do not batch several
+unrelated pieces into one commit.** A piece is complete when the quality gate
+below passes and the change stands on its own; that is the moment to commit,
+not "once everything is done".
+
+Message format:
+
+- **Subject line names what the piece was**, in the existing
+  `type(scope): summary` form (`fix(client): …`, `test(ptz): …`, `docs: …`).
+  One line, imperative, no trailing period.
+- **Body is a bulleted list, and it must be detailed.** One bullet per
+  substantive change — file or symbol touched, what changed, and why. Do not
+  compress several changes into one bullet, and do not write a prose paragraph
+  where a list belongs. A reader must be able to reconstruct the change set from
+  the bullets alone, without opening the diff.
+- Include what was *verified*, not just what was written: which gate ran, what
+  the perturbation proved, what was deliberately left out.
+
+Confirm the git identity is `smiti1642 <smiti1642@gmail.com>` before running
+`git commit`.
+
 ## Before every commit
 
 ```

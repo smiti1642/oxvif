@@ -8,9 +8,13 @@ use crate::soap::{SoapError, XmlNode};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct NetworkCapabilities {
+    /// The device can allow or deny traffic by source address.
     pub ip_filter: bool,
+    /// Zero-configuration (link-local, 169.254.0.0/16) addressing is supported.
     pub zero_configuration: bool,
+    /// The device has an IPv6 stack.
     pub ip_version6: bool,
+    /// The device can register itself with a dynamic DNS provider.
     pub dyn_dns: bool,
 }
 
@@ -18,11 +22,18 @@ pub struct NetworkCapabilities {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SystemCapabilities {
+    /// The device answers WS-Discovery `Resolve` messages.
     pub discovery_resolve: bool,
+    /// The device sends a WS-Discovery `Bye` when going offline.
     pub discovery_bye: bool,
+    /// The device can be discovered beyond the local subnet, via a discovery
+    /// proxy rather than multicast.
     pub remote_discovery: bool,
+    /// `GetSystemBackup` / `RestoreSystem` are supported.
     pub system_backup: bool,
+    /// `GetSystemLog` is supported.
     pub system_logging: bool,
+    /// `StartFirmwareUpgrade` / `UpgradeSystemFirmware` are supported.
     pub firmware_upgrade: bool,
 }
 
@@ -40,9 +51,14 @@ pub struct IoCapabilities {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SecurityCapabilities {
+    /// TLS 1.2 is supported for HTTPS.
     pub tls_1_2: bool,
+    /// The device can generate a key pair itself, so a private key never has to
+    /// be uploaded to it.
     pub onboard_key_generation: bool,
+    /// Access policies can be read and written over ONVIF.
     pub access_policy_config: bool,
+    /// WS-Security X.509 certificate tokens are accepted for authentication.
     pub x509_token: bool,
     /// `true` if the device supports WS-Security `UsernameToken`.
     pub username_token: bool,
@@ -54,9 +70,13 @@ pub struct SecurityCapabilities {
 pub struct DeviceCapabilities {
     /// Device management service endpoint URL.
     pub url: Option<String>,
+    /// Addressing and network-service capabilities.
     pub network: NetworkCapabilities,
+    /// Discovery, backup, logging and firmware-upgrade capabilities.
     pub system: SystemCapabilities,
+    /// Digital input / relay output counts.
     pub io: IoCapabilities,
+    /// Authentication and TLS capabilities.
     pub security: SecurityCapabilities,
 }
 
@@ -64,8 +84,12 @@ pub struct DeviceCapabilities {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct StreamingCapabilities {
+    /// RTP over multicast UDP is offered.
     pub rtp_multicast: bool,
+    /// RTP delivered directly over TCP.
     pub rtp_tcp: bool,
+    /// RTP interleaved in the RTSP TCP connection — the transport that gets
+    /// through NAT and firewalls, and what most clients should ask for.
     pub rtp_rtsp_tcp: bool,
 }
 
@@ -75,6 +99,7 @@ pub struct StreamingCapabilities {
 pub struct MediaCapabilities {
     /// Media service endpoint URL.
     pub url: Option<String>,
+    /// Which RTP transports the device offers.
     pub streaming: StreamingCapabilities,
     /// Maximum number of media profiles the device supports.
     pub max_profiles: Option<u32>,
@@ -98,7 +123,9 @@ pub struct EventsCapabilities {
 pub struct AnalyticsCapabilities {
     /// Analytics service endpoint URL.
     pub url: Option<String>,
+    /// Analytics rules can be listed and configured.
     pub rule_support: bool,
+    /// Analytics modules can be listed and configured.
     pub analytics_module_support: bool,
 }
 
@@ -191,16 +218,29 @@ pub struct DeviceIoCapabilities {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct Capabilities {
+    /// Device management service — always present on a conformant device.
     pub device: DeviceCapabilities,
+    /// Media1 service: profiles, encoders, stream URIs.
     pub media: MediaCapabilities,
+    /// Events service: PullPoint and push subscriptions.
     pub events: EventsCapabilities,
+    /// Analytics service.
     pub analytics: AnalyticsCapabilities,
+    /// PTZ service. `ptz.url` is `None` on a fixed camera.
     pub ptz: PtzCapabilities,
+    /// Imaging service: brightness, focus, white balance.
     pub imaging: ImagingCapabilities,
+    /// Recording service: recordings and recording jobs on the device.
     pub recording: RecordingCapabilities,
+    /// Search service: querying what the device has recorded.
     pub search: SearchCapabilities,
+    /// Replay service: playback URIs for stored recordings.
     pub replay: ReplayCapabilities,
+    /// Media2 service. Most devices do **not** report this here — Media2 is
+    /// discoverable only via `GetServices`, which is why
+    /// [`OnvifSession`](crate::OnvifSession) calls that as a fallback.
     pub media2: Media2Capabilities,
+    /// DeviceIO service: relay outputs and digital inputs.
     pub device_io: DeviceIoCapabilities,
 }
 

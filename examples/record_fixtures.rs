@@ -10,6 +10,12 @@
 //! `<action>.req.xml` / `<action>.resp.xml`. The captured set covers the
 //! services HealthCheck exercises (Device, Media, Imaging, PTZ, Events,
 //! Network, Users) — enough to drive parser tests without the camera.
+//!
+//! Credentials do not reach the files: the WS-Security `<wsse:Password>` and
+//! `<wsse:Nonce>` are blanked in each request, and `user:pass@` is stripped
+//! from URLs in each response, so the output directory is safe to commit.
+//! `CapturingTransport::with_raw_requests` / `with_raw_responses` turn that off
+//! when the credential itself is what you are debugging.
 
 use std::sync::Arc;
 

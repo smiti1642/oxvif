@@ -73,6 +73,7 @@ pub struct PtzSpeed {
 pub struct PtzConfiguration {
     /// Opaque token for this configuration.
     pub token: String,
+    /// Human-readable name. Many devices simply echo the token here.
     pub name: String,
     /// Number of profiles referencing this configuration.
     pub use_count: u32,
@@ -242,6 +243,7 @@ impl PtzConfigurationOptions {
 pub struct PtzNode {
     /// Opaque token; referenced by `PtzConfiguration.node_token`.
     pub token: String,
+    /// Human-readable name of the physical PTZ unit.
     pub name: String,
     /// `true` if the home position is fixed and cannot be changed.
     pub fixed_home_position: bool,

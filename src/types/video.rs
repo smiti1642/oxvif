@@ -8,7 +8,9 @@ use crate::soap::{SoapError, XmlNode};
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Resolution {
+    /// Width in pixels.
     pub width: u32,
+    /// Height in pixels.
     pub height: u32,
 }
 
@@ -22,7 +24,9 @@ impl std::fmt::Display for Resolution {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct IntRange {
+    /// Lowest accepted value, inclusive.
     pub min: i32,
+    /// Highest accepted value, inclusive.
     pub max: i32,
 }
 
@@ -30,7 +34,9 @@ pub struct IntRange {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct FloatRange {
+    /// Lowest accepted value, inclusive.
     pub min: f32,
+    /// Highest accepted value, inclusive.
     pub max: f32,
 }
 
@@ -104,6 +110,7 @@ impl VideoSource {
 pub struct VideoSourceConfiguration {
     /// Opaque token for this configuration.
     pub token: String,
+    /// Human-readable name. Many devices simply echo the token here.
     pub name: String,
     /// Number of profiles currently referencing this configuration.
     pub use_count: u32,
@@ -117,9 +124,13 @@ pub struct VideoSourceConfiguration {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SourceBounds {
+    /// Left edge of the window, in pixels from the sensor's origin.
     pub x: i32,
+    /// Top edge of the window, in pixels from the sensor's origin.
     pub y: i32,
+    /// Window width in pixels.
     pub width: u32,
+    /// Window height in pixels.
     pub height: u32,
 }
 
@@ -212,9 +223,13 @@ pub struct VideoSourceConfigurationOptions {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct BoundsRange {
+    /// Accepted values for [`SourceBounds::x`].
     pub x_range: IntRange,
+    /// Accepted values for [`SourceBounds::y`].
     pub y_range: IntRange,
+    /// Accepted values for [`SourceBounds::width`].
     pub width_range: IntRange,
+    /// Accepted values for [`SourceBounds::height`].
     pub height_range: IntRange,
 }
 
@@ -257,10 +272,17 @@ impl VideoSourceConfigurationOptions {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum VideoEncoding {
+    /// Motion JPEG — every frame independently compressed.
     Jpeg,
+    /// H.264 / AVC. The default here because it is what almost every ONVIF
+    /// camera streams.
     #[default]
     H264,
+    /// H.265 / HEVC. Settable only through Media2 — see
+    /// [`VideoEncoderConfiguration`].
     H265,
+    /// An encoding string this crate does not model, kept verbatim as the
+    /// device reported it (`"MPEG4"`, `"JPEG2000"`, …).
     Other(String),
 }
 
@@ -325,13 +347,18 @@ pub struct MulticastConfiguration {
 pub struct VideoEncoderConfiguration {
     /// Opaque token for this configuration.
     pub token: String,
+    /// Human-readable name. Many devices simply echo the token here.
     pub name: String,
     /// Number of profiles currently referencing this configuration.
     pub use_count: u32,
+    /// Compression format the encoder produces.
     pub encoding: VideoEncoding,
+    /// Output frame size.
     pub resolution: Resolution,
     /// Encoder quality level. Valid range is device-specific; see `GetVideoEncoderConfigurationOptions`.
     pub quality: f32,
+    /// Frame rate and bitrate limits. `None` when the device left the element
+    /// out, which means it is not accepting rate control on this encoder.
     pub rate_control: Option<VideoRateControl>,
     /// H.264 specific settings; `None` when `encoding != H264`.
     pub h264: Option<H264Configuration>,
@@ -543,9 +570,13 @@ impl VideoEncoderConfiguration {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VideoEncoderConfigurationOptions {
+    /// Accepted values for `VideoEncoderConfiguration::quality`.
     pub quality_range: Option<FloatRange>,
+    /// JPEG options; `None` if the device does not offer JPEG.
     pub jpeg: Option<JpegOptions>,
+    /// H.264 options; `None` if the device does not offer H.264.
     pub h264: Option<H264Options>,
+    /// H.265 options; `None` if the device does not offer H.265.
     pub h265: Option<H265Options>,
 }
 
@@ -553,8 +584,12 @@ pub struct VideoEncoderConfigurationOptions {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct JpegOptions {
+    /// Frame sizes the device accepts for JPEG.
     pub resolutions: Vec<Resolution>,
+    /// Accepted frame rates, in frames per second.
     pub frame_rate_range: Option<IntRange>,
+    /// Accepted encoding intervals — encode every *n*-th frame. `1` encodes
+    /// every frame.
     pub encoding_interval_range: Option<IntRange>,
 }
 
@@ -562,10 +597,17 @@ pub struct JpegOptions {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct H264Options {
+    /// Frame sizes the device accepts for H.264.
     pub resolutions: Vec<Resolution>,
+    /// Accepted GOV lengths — frames between keyframes. Larger means smaller
+    /// bitrate but slower seek and recovery.
     pub gov_length_range: Option<IntRange>,
+    /// Accepted frame rates, in frames per second.
     pub frame_rate_range: Option<IntRange>,
+    /// Accepted encoding intervals — encode every *n*-th frame. `1` encodes
+    /// every frame.
     pub encoding_interval_range: Option<IntRange>,
+    /// Accepted bitrates, in kbps.
     pub bitrate_range: Option<IntRange>,
     /// Supported H.264 profiles (e.g. `"Baseline"`, `"Main"`, `"High"`).
     pub profiles: Vec<String>,
@@ -575,10 +617,16 @@ pub struct H264Options {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct H265Options {
+    /// Frame sizes the device accepts for H.265.
     pub resolutions: Vec<Resolution>,
+    /// Accepted GOV lengths — frames between keyframes.
     pub gov_length_range: Option<IntRange>,
+    /// Accepted frame rates, in frames per second.
     pub frame_rate_range: Option<IntRange>,
+    /// Accepted encoding intervals — encode every *n*-th frame. `1` encodes
+    /// every frame.
     pub encoding_interval_range: Option<IntRange>,
+    /// Accepted bitrates, in kbps.
     pub bitrate_range: Option<IntRange>,
     /// Supported H.265 profiles.
     pub profiles: Vec<String>,
@@ -653,11 +701,18 @@ impl VideoEncoderConfigurationOptions {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoEncoderConfiguration2 {
+    /// Opaque token for this configuration.
     pub token: String,
+    /// Human-readable name. Many devices simply echo the token here.
     pub name: String,
+    /// Number of profiles currently referencing this configuration.
     pub use_count: u32,
+    /// Compression format the encoder produces. Unlike Media1, H.265 is
+    /// settable here.
     pub encoding: VideoEncoding,
+    /// Output frame size.
     pub resolution: Resolution,
+    /// Encoder quality level. Valid range is device-specific.
     pub quality: f32,
     /// Codec-specific rate control. `None` if the device omits it.
     pub rate_control: Option<VideoRateControl2>,
@@ -671,7 +726,9 @@ pub struct VideoEncoderConfiguration2 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoRateControl2 {
+    /// Maximum output frame rate, in frames per second.
     pub frame_rate_limit: u32,
+    /// Maximum output bitrate, in kbps.
     pub bitrate_limit: u32,
 }
 
@@ -773,13 +830,20 @@ pub struct VideoEncoderConfigurationOptions2 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct VideoEncoderOptions2 {
+    /// The encoding these options apply to.
     pub encoding: VideoEncoding,
+    /// Accepted values for `VideoEncoderConfiguration2::quality`.
     pub quality_range: Option<FloatRange>,
+    /// Frame sizes the device accepts for this encoding.
     pub resolutions: Vec<Resolution>,
+    /// Accepted bitrates, in kbps.
     pub bitrate_range: Option<IntRange>,
     /// Discrete supported frame rates (may be empty if range is used instead).
     pub frame_rates: Vec<u32>,
+    /// Accepted frame rates as a range. Devices report either this or
+    /// `frame_rates`, rarely both.
     pub frame_rate_range: Option<IntRange>,
+    /// Accepted GOV lengths — frames between keyframes.
     pub gov_length_range: Option<IntRange>,
     /// Supported codec profiles (e.g. `"Main"`, `"High"`).
     pub profiles: Vec<String>,
@@ -841,7 +905,9 @@ pub struct VideoEncoderInstances {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct EncoderInstanceInfo {
+    /// The encoding this count applies to.
     pub encoding: VideoEncoding,
+    /// How many encoder instances of that encoding are still available.
     pub number: u32,
 }
 

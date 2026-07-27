@@ -163,8 +163,12 @@ impl SnapshotUri {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct MediaProfile2 {
+    /// Opaque profile token; the handle passed to every other Media2 call.
     pub token: String,
+    /// Human-readable profile name (e.g. `"MainStream"`).
     pub name: String,
+    /// `true` for a factory profile the device will not let you delete or
+    /// reconfigure.
     pub fixed: bool,
     /// Token of the bound `VideoSourceConfiguration`, if any.
     pub video_source_config_token: Option<String>,
@@ -229,8 +233,11 @@ impl MediaProfile2 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct MetadataConfiguration {
+    /// Opaque token for this configuration.
     pub token: String,
+    /// Human-readable name. Many devices simply echo the token here.
     pub name: String,
+    /// Number of profiles referencing this configuration.
     pub use_count: u32,
     /// Whether analytics events are embedded in the metadata stream.
     pub analytics: bool,
@@ -240,6 +247,7 @@ pub struct MetadataConfiguration {
     pub ptz_position: bool,
     /// Multicast settings, if any.
     pub multicast_address: Option<String>,
+    /// Multicast destination port, paired with `multicast_address`.
     pub multicast_port: Option<u32>,
 }
 
@@ -306,7 +314,10 @@ impl MetadataConfiguration {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct MetadataConfigurationOptions {
+    /// The device accepts a PTZ status filter — i.e. `ptz_status` /
+    /// `ptz_position` on [`MetadataConfiguration`] are settable.
     pub ptz_status_filter_supported: bool,
+    /// The device can embed analytics events in the metadata stream.
     pub analytics_supported: bool,
 }
 
@@ -331,8 +342,11 @@ impl MetadataConfigurationOptions {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AudioDecoderConfiguration {
+    /// Opaque token for this configuration.
     pub token: String,
+    /// Human-readable name. Many devices simply echo the token here.
     pub name: String,
+    /// Number of profiles referencing this configuration.
     pub use_count: u32,
 }
 
@@ -368,10 +382,15 @@ impl AudioDecoderConfiguration {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AudioOutputConfiguration {
+    /// Opaque token for this configuration.
     pub token: String,
+    /// Human-readable name. Many devices simply echo the token here.
     pub name: String,
+    /// Number of profiles referencing this configuration.
     pub use_count: u32,
+    /// Token of the physical `AudioOutput` (speaker) this config drives.
     pub output_token: String,
+    /// Output volume, `0`–`100`. `None` when the device does not report one.
     pub output_level: Option<u32>,
 }
 
@@ -409,11 +428,19 @@ impl AudioOutputConfiguration {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoSourceMode {
+    /// Opaque token identifying this mode; pass it to `SetVideoSourceMode`.
     pub token: String,
+    /// Highest frame rate, in frames per second, available in this mode.
     pub max_framerate: f32,
+    /// Width in pixels of the largest resolution this mode offers.
     pub max_resolution_width: u32,
+    /// Height in pixels of the largest resolution this mode offers.
     pub max_resolution_height: u32,
+    /// Video encodings usable in this mode, as the device spelled them
+    /// (`"H264"`, `"JPEG"`, …).
     pub encodings: Vec<String>,
+    /// `true` if switching to this mode reboots the device — the stream drops
+    /// and the device is unreachable until it comes back.
     pub reboot: bool,
 }
 
