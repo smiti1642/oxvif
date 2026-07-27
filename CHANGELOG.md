@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.14.0] - 2026-07-26
+## [0.14.0] - 2026-07-27
 
 Headline: **the metamorph clone becomes something you steer, and the client gets a
 correctness pass.** Recording a device is now a two-level selectable read surface —
