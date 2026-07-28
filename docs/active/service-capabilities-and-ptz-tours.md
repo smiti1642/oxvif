@@ -17,6 +17,14 @@ Because the mock landed first, the client work in Stage A now has a device to
 test against on day one, and §2's field lists are settled fact rather than
 something to verify mid-implementation.
 
+> **The *how* now lives in a companion document:
+> [tier1-implementation-map.md](tier1-implementation-map.md).** This file
+> decides what to build and why; that one carries the per-attribute
+> correspondence tables (schema name → Rust field → mock fixture value → the
+> test that pins it), the pre-allocated fault codes, and the perturbation
+> matrix. Read its §1 first — it corrects the quality gate for this work:
+> plain `cargo test` runs **none** of the mock tests added in `1d224f4`.
+
 The "Tier 1" slice of the ONVIF-depth push: finish the services oxvif already
 owns rather than open new ones. Everything here lands inside an existing
 `src/client/<service>.rs`; no new service module, no new dependency, no new
