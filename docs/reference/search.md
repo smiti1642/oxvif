@@ -44,6 +44,21 @@ attributes and the **event / PTZ-position / metadata** search sessions
 
 ## Request / response patterns (unimplemented)
 
+#### GetServiceCapabilities
+- **Req:** _(empty)_ · **Resp:** `Capabilities` `tse:Capabilities` [1]
+
+`tse:Capabilities` — all members are **attributes**, all `xs:boolean`, all
+optional. Complete set:
+
+| Attribute | Meaning |
+|-----------|---------|
+| `MetadataSearch` | `FindMetadata` / `GetMetadataSearchResults` supported |
+| `GeneralStartEvents` | search can start from a general event, not only a recording boundary |
+| `NLSearch` | natural-language search supported |
+| `ImageSearch` | image search supported |
+
+---
+
 All search sessions follow the same two-step shape (mirrors the implemented `FindRecordings` flow):
 
 - **`Find<X>`** — Req: `Scope` `tt:SearchScope` [1] (+ `<X>Filter` [0..1]); `MaxMatches` `xs:int` [0..1];

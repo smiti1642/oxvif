@@ -68,6 +68,45 @@ Also unimplemented: `SetEQPresetConfiguration`, `GetMulticastAudioDecoderConfigu
 #### GetServiceCapabilities
 - **Req:** _(empty)_ · **Resp:** `Capabilities` `tr2:Capabilities2` [1]
 
+> The type really is named **`Capabilities2`**, not `Capabilities` — verified
+> against ver20 media.wsdl, which defines no type named `Capabilities` at all.
+> The response *element* is still `GetServiceCapabilitiesResponse/Capabilities`;
+> only the type name carries the `2`.
+
+Attributes, all optional:
+
+| Attribute | Type | Meaning |
+|-----------|------|---------|
+| `SnapshotUri` | `xs:boolean` | `GetSnapshotUri` supported |
+| `Rotation` | `xs:boolean` | rotation configurable on a video source |
+| `VideoSourceMode` | `xs:boolean` | `GetVideoSourceModes` / `SetVideoSourceMode` supported |
+| `OSD` | `xs:boolean` | OSD configuration supported |
+| `TemporaryOSDText` | `xs:boolean` | temporary OSD text supported |
+| `Mask` | `xs:boolean` | privacy masks supported |
+| `SourceMask` | `xs:boolean` | masks defined on the video source (not the profile) |
+| `WebRTC` | **`xs:int`** | number of simultaneous WebRTC sessions supported |
+| `WebRTC_codecs` | `tt:StringList` | codecs offered over WebRTC |
+
+> `WebRTC` is an **`xs:int`**, not a boolean — it is a session count. Parsing it
+> as a bool loses the count and misreports `0` as "supported".
+
+Children:
+
+- **`ProfileCapabilities`** `tr2:ProfileCapabilities` [1] — attrs
+  `MaximumNumberOfProfiles` `xs:int` [0..1], `ConfigurationsSupported`
+  `tt:StringAttrList` [0..1].
+- **`StreamingCapabilities`** `tr2:StreamingCapabilities` [1] — attrs
+  `RTSPStreaming`, `RTPMulticast`, `RTP_RTSP_TCP`, `NonAggregateControl`,
+  `AutoStartMulticast`, `SecureRTSPStreaming` (all `xs:boolean` [0..1]) and
+  `RTSPWebSocketUri` `xs:anyURI` [0..1].
+- **`AudioClipCapabilities`** `tr2:AudioClipCapabilities` [0..1].
+- **`MulticastAudioDecoderCapabilities`** `tr2:MulticastAudioDecoderCapabilities` [0..1].
+
+Media2's `StreamingCapabilities` is **not** the same shape as Media1's: it drops
+`RTP_TCP` and `NoRTSPStreaming`, and adds `RTSPStreaming`, `AutoStartMulticast`,
+`SecureRTSPStreaming` and `RTSPWebSocketUri`. Three same-named types across the
+device / Media1 / Media2 levels — do not share one Rust struct between them.
+
 #### SetSynchronizationPoint / StartMulticastStreaming / StopMulticastStreaming
 - **Req:** `ProfileToken` `tt:ReferenceToken` [1] · **Resp:** _(empty)_
 

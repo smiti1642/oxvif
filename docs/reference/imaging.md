@@ -30,9 +30,20 @@
 ## Request / response detail (unimplemented only)
 
 #### GetServiceCapabilities
-- **Req:** _(empty)_
-- **Resp:** `Capabilities` `timg:Capabilities` [1] — attrs incl. `ImageStabilization`, `Presets`,
-  `AdaptablePreset` (bool, optional).
+- **Req:** _(empty)_ · **Resp:** `Capabilities` `timg:Capabilities` [1]
+
+`timg:Capabilities` — three attributes, all `xs:boolean`, all optional. This is
+the complete set:
+
+| Attribute | Meaning |
+|-----------|---------|
+| `ImageStabilization` | image-stabilisation configuration supported |
+| `Presets` | imaging presets supported (`GetPresets` / `SetCurrentPreset`) |
+| `AdaptablePreset` | the imaging preset can be adapted |
+
+> `AdaptablePreset` is singular and spelled *Adaptable*, not `AdaptivePresets`.
+> Verified against imaging.wsdl; the plausible-looking misspelling parses as
+> "attribute absent" and never fails a test.
 
 #### GetPresets
 - **Req:** `VideoSourceToken` `tt:ReferenceToken` [1]

@@ -24,7 +24,19 @@
 
 #### GetServiceCapabilities
 - **Req:** _(empty)_ · **Resp:** `Capabilities` `trp:Capabilities` [1]
-  (attr `ReversePlayback` `xs:boolean`, `SessionTimeoutRange`, …).
+
+`trp:Capabilities` — all members are **attributes**, all optional. Complete set:
+
+| Attribute | Type | Meaning |
+|-----------|------|---------|
+| `ReversePlayback` | `xs:boolean` | reverse playback supported |
+| `SessionTimeoutRange` | `tt:FloatList` | supported session-timeout range, as a whitespace-separated min/max pair |
+| `RTP_RTSP_TCP` | `xs:boolean` | RTP/RTSP/TCP delivery supported for replay |
+| `RTSPWebSocketUri` | `xs:anyURI` | endpoint for RTSP-over-WebSocket, if supported |
+
+Note `SessionTimeoutRange` is a `tt:FloatList` — a *list-typed attribute*, not a
+child element; parse by splitting on whitespace, not by reading a `Min`/`Max`
+sub-tree.
 
 #### GetReplayConfiguration
 - **Req:** _(empty)_ · **Resp:** `Configuration` `tt:ReplayConfiguration` [1]

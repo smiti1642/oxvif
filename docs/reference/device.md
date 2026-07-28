@@ -124,7 +124,52 @@ All unimplemented. Catalog only — field detail via the WSDL `<wsdl:types>` whe
 
 #### GetServiceCapabilities
 - **Req:** _(empty)_ · **Resp:** `Capabilities` `tds:DeviceServiceCapabilities` [1]
-  (Network / Security / System capability sub-trees).
+
+Four children — **`Network` [1], `Security` [1], `System` [1], `Misc` [0..1]**.
+Note the fourth: an earlier revision of this file listed only three.
+
+**`tds:NetworkCapabilities`** — attributes, all optional:
+`IPFilter`, `ZeroConfiguration`, `IPVersion6`, `DynDNS`, `Dot11Configuration`,
+`HostnameFromDHCP`, `DHCPv6` (`xs:boolean`); `Dot1XConfigurations`, `NTP`
+(`xs:int`).
+
+**`tds:SecurityCapabilities`** — attributes, all optional:
+`TLS1.0`, `TLS1.1`, `TLS1.2`, `OnboardKeyGeneration`, `AccessPolicyConfig`,
+`DefaultAccessPolicy`, `Dot1X`, `RemoteUserHandling`, `X.509Token`, `SAMLToken`,
+`KerberosToken`, `UsernameToken`, `HttpDigest`, `RELToken`, `JsonWebToken`
+(`xs:boolean`); `MaxUsers`, `MaxUserNameLength`, `MaxPasswordLength`,
+`MaxPasswordHistory`, `MaxUserRoles` (`xs:int`); `SupportedEAPMethods`
+(`tt:IntList`); `SecurityPolicies`, `HashingAlgorithms` (`tt:StringList`).
+
+> `TLS1.0`, `TLS1.1`, `TLS1.2` and `X.509Token` contain **dots** in the
+> attribute name. They are legal XML names but not legal Rust identifiers, so
+> the struct fields need renaming (`tls1_0`, `x509_token`) while the *parser*
+> must still match the dotted string exactly.
+
+**`tds:SystemCapabilities`** — attributes, all optional:
+`DiscoveryResolve`, `DiscoveryBye`, `RemoteDiscovery`, `SystemBackup`,
+`SystemLogging`, `CloudFirmwareUpgrade`, `HttpFirmwareUpgrade`,
+`HttpSystemBackup`, `HttpSystemLogging`, `HttpSupportInformation`,
+`StorageConfiguration`, `StorageConfigurationRenewal`, `DiscoveryNotSupported`,
+`NetworkConfigNotSupported`, `UserConfigNotSupported` (`xs:boolean`);
+`MaxStorageConfigurations`, `GeoLocationEntries` (`xs:int`); `AutoGeo`,
+`StorageTypesSupported`, `Addons` (`tt:StringAttrList`); `HardwareType`
+(`xs:string`).
+
+> Three of these are **negative** flags — `DiscoveryNotSupported`,
+> `NetworkConfigNotSupported`, `UserConfigNotSupported`. Absent means the
+> feature *is* supported. Do not normalise them to positive-sense fields
+> silently; either keep the schema name or invert with a doc comment saying so.
+
+**`tds:MiscCapabilities`** — one attribute: `AuxiliaryCommands`
+`tt:StringAttrList` [0..1] — the auxiliary commands the device accepts.
+
+> `AuxiliaryCommands` is the discoverable list behind both
+> `SendAuxiliaryCommand` operations (Device here, and the PTZ one in
+> [ptz.md](ptz.md)). It is the only place a client can learn which
+> `tt:Wiper|On`-style strings a given camera will accept, rather than guessing.
+
+_Source: devicemgmt.wsdl `<wsdl:types>` (fetched 2026-07-28)._
 
 #### AddScopes
 - **Req:** `ScopeItem` `xs:anyURI` [1..*] · **Resp:** _(empty)_

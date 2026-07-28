@@ -45,8 +45,29 @@ not used by ONVIF devices in practice — the ONVIF pull-point flow above is the
 
 #### GetServiceCapabilities
 - **Req:** _(empty)_ · **Resp:** `Capabilities` `tev:Capabilities` [1]
-  (attrs incl. `WSSubscriptionPolicySupport`, `WSPullPointSupport`, `MaxNotificationProducers`,
-  `MaxPullPoints`, `PersistentNotificationStorage`, `EventBrokerProtocols`).
+
+`tev:Capabilities` — all members are **attributes**, all optional:
+
+| Attribute | Type | Meaning |
+|-----------|------|---------|
+| `WSSubscriptionPolicySupport` | `xs:boolean` | WS-BaseNotification subscription policy supported |
+| `WSPausableSubscriptionManagerInterfaceSupport` | `xs:boolean` | `PauseSubscription` / `ResumeSubscription` supported |
+| `MaxNotificationProducers` | `xs:int` | max simultaneous notification producers |
+| `MaxPullPoints` | `xs:int` | max simultaneous pull points |
+| `PersistentNotificationStorage` | `xs:boolean` | notifications survive a reboot |
+| `EventBrokerProtocols` | `xs:string` | space-separated broker protocols (e.g. `mqtt mqtts`) |
+| `MaxEventBrokers` | `xs:int` | max configurable event brokers |
+| `MetadataOverMQTT` | `xs:boolean` | metadata can be published over MQTT |
+
+> **There is no `WSPullPointSupport` attribute here.** An earlier revision of this
+> file listed one; it does not exist in `tev:Capabilities`. `WSPullPointSupport`
+> is an **element** of `tt:EventCapabilities` — the *device-level*
+> `GetCapabilities` sub-tree, a different operation — alongside `XAddr`,
+> `WSSubscriptionPolicySupport` and
+> `WSPausableSubscriptionManagerInterfaceSupport`. That is the one oxvif already
+> parses into `EventsCapabilities::ws_pull_point`. Do not mirror that field name
+> into the service-capabilities struct: on this operation the nearest question
+> is answered by `MaxPullPoints`.
 
 #### Seek (Profile G event replay)
 - **Req:** `UtcTime` `xs:dateTime` [1]; `Reverse` `xs:boolean` [0..1] · **Resp:** _(empty)_

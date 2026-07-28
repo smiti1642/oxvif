@@ -57,7 +57,39 @@ Standard `trc`/`tt` shapes — verify config types against recording.wsdl when i
 
 #### GetServiceCapabilities
 - **Req:** _(empty)_ · **Resp:** `Capabilities` `trc:Capabilities` [1]
-  (attrs `DynamicRecordings`, `DynamicTracks`, `MaxRate`, `MaxTotalRate`, `MaxRecordings`, …).
+
+`trc:Capabilities` — all members are **attributes**, all optional. This is the
+complete set; it is much larger than the "…" in an earlier revision of this file
+suggested, and it is the widest of the nine service-capability types:
+
+| Attribute | Type | Meaning |
+|-----------|------|---------|
+| `DynamicRecordings` | `xs:boolean` | recordings can be created/deleted at runtime |
+| `DynamicTracks` | `xs:boolean` | tracks can be created/deleted at runtime |
+| `Encoding` | `tt:StringList` | supported encodings (from `tt:VideoEncoding`/`tt:AudioEncoding`) |
+| `MaxRate` | `xs:float` | max rate for a single recording, kbit/s |
+| `MaxTotalRate` | `xs:float` | max aggregate rate, kbit/s |
+| `MaxRecordings` | `xs:float` | max number of recordings |
+| `MaxRecordingJobs` | `xs:int` | max number of recording jobs |
+| `Options` | `xs:boolean` | `GetRecordingOptions` / `GetTrackOptions` supported |
+| `MetadataRecording` | `xs:boolean` | metadata tracks can be recorded |
+| `SupportedExportFileFormats` | `tt:StringAttrList` | export file formats |
+| `EventRecording` | `xs:boolean` | event-triggered recording supported |
+| `BeforeEventLimit` | `xs:duration` | max pre-event recording time |
+| `AfterEventLimit` | `xs:duration` | max post-event recording time |
+| `SupportedTargetFormats` | `tt:StringAttrList` | supported export target formats |
+| `EncryptionEntryLimit` | `xs:int` | max encryption entries per recording |
+| `SupportedEncryptionModes` | `tt:StringAttrList` | supported encryption modes |
+| `OverrideSegmentDuration` | `xs:boolean` | export segment duration can be overridden |
+| `AsymmetricEncryptionSupported` | `xs:boolean` | asymmetric encryption supported |
+| `ScheduledRecording` | `xs:boolean` | scheduled recording supported |
+| `OnboardStorage` | `xs:boolean` | onboard storage present — **schema default `true`** |
+| `SegmentExport` | `xs:boolean` | segment export supported |
+
+> `OnboardStorage` is the only attribute across all nine service-capability
+> types with a schema `default`, and it defaults to **`true`**. A parser that
+> maps "absent" to `None`/`false` disagrees with the schema here. Decide
+> deliberately which one oxvif reports and say so in the field's doc comment.
 
 #### GetRecordingConfiguration / SetRecordingConfiguration
 - **Get Req:** `RecordingToken` `tt:ReferenceToken` [1] · **Resp:** `RecordingConfiguration` `tt:RecordingConfiguration` [1]

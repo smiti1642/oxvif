@@ -86,6 +86,7 @@ re-reading the WSDL — verify the exact config type against onvif.xsd when impl
 Distinct streaming ops:
 
 - **GetServiceCapabilities** — Req: _(empty)_; Resp: `Capabilities` `trt:Capabilities` [1].
+  Full shape below.
 - **StartMulticastStreaming / StopMulticastStreaming** — Req: `ProfileToken` `tt:ReferenceToken` [1];
   Resp: _(empty)_.
 - **SetSynchronizationPoint** — Req: `ProfileToken` `tt:ReferenceToken` [1]; Resp: _(empty)_.
@@ -95,3 +96,39 @@ Distinct streaming ops:
 
 _Source: media.wsdl operation list (fetched 2026-05); family field shapes are stable ONVIF
 core (`trt`/`tt`) — verify exact config types against onvif.xsd when implementing._
+
+---
+
+## `trt:Capabilities` (GetServiceCapabilities)
+
+Unlike most service-capability types, Media1's has **two required child
+elements** as well as attributes.
+
+Attributes, all `xs:boolean`, all optional:
+
+| Attribute | Meaning |
+|-----------|---------|
+| `SnapshotUri` | `GetSnapshotUri` supported |
+| `Rotation` | rotation configurable on a video source |
+| `VideoSourceMode` | `GetVideoSourceModes` / `SetVideoSourceMode` supported |
+| `OSD` | OSD configuration supported |
+| `TemporaryOSDText` | temporary OSD text supported |
+| `EXICompression` | EXI-compressed SOAP supported |
+
+Children:
+
+- **`ProfileCapabilities`** `trt:ProfileCapabilities` [1] — attr
+  `MaximumNumberOfProfiles` `xs:int` [0..1].
+- **`StreamingCapabilities`** `trt:StreamingCapabilities` [1] — attrs, all
+  `xs:boolean` [0..1]: `RTPMulticast`, `RTP_TCP`, `RTP_RTSP_TCP`,
+  `NonAggregateControl`, `NoRTSPStreaming`.
+
+> Do not confuse `trt:StreamingCapabilities` with the identically named
+> `tt:StreamingCapabilities` that oxvif already parses into
+> `StreamingCapabilities` from the *device-level* `GetCapabilities`. The
+> device-level one has only `RTPMulticast` / `RTP_TCP` / `RTP_RTSP_TCP`; this
+> one adds `NonAggregateControl` and `NoRTSPStreaming`. Media2's version
+> (`tr2:StreamingCapabilities`) is different again — see
+> [media2.md](media2.md).
+
+_Source: media.wsdl `<wsdl:types>` (fetched 2026-07-28)._
