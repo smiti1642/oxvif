@@ -118,6 +118,14 @@ required-features = ["health"]
 name = "record_fixtures"
 required-features = ["mock", "health"]
 
+# Uses `CapturingTransport`, which is `#[cfg(feature = "mock")]`. Without this
+# entry the example is built by a bare `cargo test` / `cargo build --examples`
+# and fails to compile with E0432 — which is what broke the plain `cargo test`
+# in the CLAUDE.md quality gate.
+[[example]]
+name = "conformance"
+required-features = ["mock"]
+
 # Metamorph Persona B recorder: clone a real camera into a param-aware
 # `fixtures.json` for in-process replay via `MetamorphTransport`.
 [[example]]

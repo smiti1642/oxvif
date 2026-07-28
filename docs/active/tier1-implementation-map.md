@@ -60,6 +60,13 @@ Both `--all-features` additions matter. `clippy --all-targets` without
 Keep running the plain `cargo test` as well — a no-feature build breaking is
 its own bug — but it is no longer sufficient on its own.
 
+> **Update (2026-07-28, same day):** the plain `cargo test` did not merely skip
+> the mock tests, it **did not compile**. `examples/conformance.rs` uses
+> `oxvif::CapturingTransport`, which is `#[cfg(feature = "mock")]`, and had no
+> `required-features` entry in `Cargo.toml`, so a bare `cargo test` failed with
+> E0432 before running anything. Fixed by adding the entry; plain `cargo test`
+> now builds and reports 463 lib tests. Both halves of the gate run again.
+
 > Follow-up, out of scope here: CLAUDE.md's "Before every commit" block should
 > be amended. Do that as its own docs commit, not folded into a Stage commit.
 
