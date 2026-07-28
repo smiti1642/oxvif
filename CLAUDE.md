@@ -129,6 +129,60 @@ resp.children_named("Foo").map(|n| {
 }).collect()
 ```
 
+### Multi-sensor devices
+
+A dual/quad-lens camera is one ONVIF device with **several video sources**, and
+almost every per-channel answer depends on which one you asked about. Both
+failure modes below are silent: the call succeeds, the data is wrong, and no
+test fails.
+
+**Never omit the token on a per-channel query.** Every `Get…Options` /
+`Get…Configuration` that accepts a `ConfigurationToken` or `ProfileToken` must
+be given one. A device answering a token-less request is not obliged to say so
+— it answers for its *default* channel, and on a single-sensor camera the
+result is indistinguishable from correct.
+
+Measured on a real two-sensor device (2026-07-28): a token-less
+`GetVideoEncoderConfigurationOptions` returned lens 0's list
+(`2592x1944 … 1280x720`) — the same list every caller would then show for lens
+1, whose real maximum is `1280x720`. Passing `ConfigurationToken` alone was
+enough to get all four (lens, stream) lists right; the profile token was not
+required. So the rule is **send a token**, not "send the profile token".
+
+**A single-sensor fixture cannot cover a per-channel feature.** Any test for
+one of these calls needs at least two channels with *deliberately different*
+answers, or it passes just as well against a parser that ignores the token
+entirely. Prefer a fixture where the two channels disagree on a value the
+assertion reads.
+
+When touching one of these calls, list the affected operations and check each:
+Media1/Media2 `Get*ConfigurationOptions`, `GetProfiles` → per-profile config
+tokens, `GetVideoSources`, Imaging (every method is per-`VideoSourceToken`),
+and PTZ (per-profile).
+
+### Data nested in `Extension` levels
+
+ONVIF extends types by nesting a same-named element one level deeper rather
+than adding a field, so the deeper copy is a **superset** and the shallow copy
+is what an older device sends. `XmlNode::child` returns the *first direct*
+child, so a parser reading only the top level silently drops whatever the
+extension added.
+
+The case that motivated this rule — Media1 video encoder options:
+
+```text
+Options/JPEG, Options/H264                       no BitrateRange
+Options/Extension/JPEG, Options/Extension/H264   adds BitrateRange
+Options/Extension/Extension/H265                 the ONLY place H265 lives
+```
+
+Devices commonly send **both** copies. Prefer the deepest node and fall back
+outward. Before writing a parser for a type with an `Extension` member, check
+the schema for what the extension adds — and give the mock the nested shape, not
+the flat one. A mock that sends a shape no conformant device produces is how
+this defect survived: mock and unit fixture agreed with each other and with
+nothing else.
+
 ## Testing rules
 
 - Every new client method needs at least one **positive test** (happy path)
