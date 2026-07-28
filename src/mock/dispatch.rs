@@ -20,11 +20,12 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
                 dispatch_ptz(op, state, body)
             } else if tail.starts_with("ver20/imaging/wsdl/") {
                 dispatch_imaging(op, state, body)
-            } else if tail.starts_with("ver10/recording/wsdl/")
-                || tail.starts_with("ver10/search/wsdl/")
-                || tail.starts_with("ver10/replay/wsdl/")
-            {
+            } else if tail.starts_with("ver10/recording/wsdl/") {
                 dispatch_recording(op)
+            } else if tail.starts_with("ver10/search/wsdl/") {
+                dispatch_search(op)
+            } else if tail.starts_with("ver10/replay/wsdl/") {
+                dispatch_replay(op)
             } else {
                 None
             }
@@ -40,6 +41,7 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
 
 fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
+        "GetServiceCapabilities" => device::resp_service_capabilities(),
         "GetSystemDateAndTime" => device::resp_system_date_and_time(state),
         "SetSystemDateAndTime" => device::handle_set_system_date_and_time(state, body),
         "GetCapabilities" => device::resp_capabilities(base),
@@ -84,6 +86,7 @@ fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
 
 fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
+        "GetServiceCapabilities" => media::resp_service_capabilities(),
         "GetProfiles" => media::resp_profiles(state),
         "GetProfile" => media::resp_profile(state, body),
         "CreateProfile" => media::handle_create_profile(state, body),
@@ -125,6 +128,7 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
 
 fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
+        "GetServiceCapabilities" => media2::resp_service_capabilities_media2(),
         "GetProfiles" => media2::resp_profiles_media2(),
         "CreateProfile" => media2::resp_create_profile_media2(),
         "DeleteProfile" => resp_empty("tr2", "DeleteProfileResponse"),
@@ -164,6 +168,7 @@ fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
 
 fn dispatch_ptz(op: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
+        "GetServiceCapabilities" => ptz::resp_ptz_service_capabilities(),
         "GetStatus" => ptz::resp_ptz_status(state),
         "GetPresets" => ptz::resp_ptz_presets(state),
         "SetPreset" => ptz::handle_ptz_set_preset(state, body),
@@ -188,6 +193,7 @@ fn dispatch_ptz(op: &str, state: &SharedState, body: &str) -> Option<String> {
 
 fn dispatch_imaging(op: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
+        "GetServiceCapabilities" => imaging::resp_imaging_service_capabilities(),
         "GetImagingSettings" => imaging::resp_imaging_settings(state),
         "SetImagingSettings" => imaging::handle_set_imaging_settings(state, body),
         "GetOptions" => imaging::resp_imaging_options(),
@@ -201,6 +207,7 @@ fn dispatch_imaging(op: &str, state: &SharedState, body: &str) -> Option<String>
 
 fn dispatch_events(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
+        "GetServiceCapabilitiesRequest" => events::resp_event_service_capabilities(),
         "GetEventPropertiesRequest" => events::resp_event_properties(),
         "CreatePullPointSubscriptionRequest" => {
             events::resp_create_pull_point_subscription(base, state, body)
@@ -214,8 +221,15 @@ fn dispatch_events(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
     })
 }
 
+// Recording, Search and Replay are three separate ONVIF services that happen to
+// share `src/mock/services/recording.rs`. They must NOT share a dispatcher:
+// `op` is the last path segment of the action URI, so all three define a
+// distinct `GetServiceCapabilities` that arrives here as the same string. Until
+// 0.15 they were one match block, which is exactly why that operation could not
+// be added for any of them.
 fn dispatch_recording(op: &str) -> Option<String> {
     Some(match op {
+        "GetServiceCapabilities" => recording::resp_recording_service_capabilities(),
         "GetRecordings" => recording::resp_recordings(),
         "CreateRecording" => recording::resp_create_recording(),
         "DeleteRecording" => resp_empty("trc", "DeleteRecordingResponse"),
@@ -226,10 +240,212 @@ fn dispatch_recording(op: &str) -> Option<String> {
         "SetRecordingJobMode" => resp_empty("trc", "SetRecordingJobModeResponse"),
         "DeleteRecordingJob" => resp_empty("trc", "DeleteRecordingJobResponse"),
         "GetRecordingJobState" => recording::resp_recording_job_state(),
+        _ => return None,
+    })
+}
+
+fn dispatch_search(op: &str) -> Option<String> {
+    Some(match op {
+        "GetServiceCapabilities" => recording::resp_search_service_capabilities(),
         "FindRecordings" => recording::resp_find_recordings(),
         "GetRecordingSearchResults" => recording::resp_recording_search_results(),
         "EndSearch" => resp_empty("tse", "EndSearchResponse"),
+        _ => return None,
+    })
+}
+
+fn dispatch_replay(op: &str) -> Option<String> {
+    Some(match op {
+        "GetServiceCapabilities" => recording::resp_replay_service_capabilities(),
         "GetReplayUri" => recording::resp_replay_uri(),
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mock::state::MockState;
+
+    /// Every service's `GetServiceCapabilities` action URI. The `op` segment is
+    /// identical across all nine — that is the whole reason routing has to key
+    /// on the namespace prefix and not on `op`.
+    const CAPS: &[(&str, &str)] = &[
+        (
+            "device",
+            "http://www.onvif.org/ver10/device/wsdl/GetServiceCapabilities",
+        ),
+        (
+            "media",
+            "http://www.onvif.org/ver10/media/wsdl/GetServiceCapabilities",
+        ),
+        (
+            "media2",
+            "http://www.onvif.org/ver20/media/wsdl/GetServiceCapabilities",
+        ),
+        (
+            "ptz",
+            "http://www.onvif.org/ver20/ptz/wsdl/GetServiceCapabilities",
+        ),
+        (
+            "imaging",
+            "http://www.onvif.org/ver20/imaging/wsdl/GetServiceCapabilities",
+        ),
+        // Events is the odd one out twice over: its action URI carries a
+        // portType segment *and* a `Request` suffix, so `op` here is
+        // `GetServiceCapabilitiesRequest`, not `GetServiceCapabilities`.
+        (
+            "events",
+            "http://www.onvif.org/ver10/events/wsdl/EventPortType/GetServiceCapabilitiesRequest",
+        ),
+        (
+            "recording",
+            "http://www.onvif.org/ver10/recording/wsdl/GetServiceCapabilities",
+        ),
+        (
+            "search",
+            "http://www.onvif.org/ver10/search/wsdl/GetServiceCapabilities",
+        ),
+        (
+            "replay",
+            "http://www.onvif.org/ver10/replay/wsdl/GetServiceCapabilities",
+        ),
+    ];
+
+    fn call(action: &str) -> String {
+        let state = MockState::new();
+        dispatch(action, "http://mock", &state, "")
+    }
+
+    /// All nine answer, and none of them falls through to the
+    /// "Not implemented" fault. This is the test that would have failed before
+    /// recording/search/replay were split into three dispatchers.
+    #[test]
+    fn every_service_answers_get_service_capabilities() {
+        for (name, action) in CAPS {
+            let out = call(action);
+            assert!(
+                !out.contains("Not implemented"),
+                "{name}: unhandled action, got {out}"
+            );
+            assert!(
+                out.contains("GetServiceCapabilitiesResponse"),
+                "{name}: no response element, got {out}"
+            );
+        }
+    }
+
+    /// Recording, Search and Replay share `services/recording.rs` and used to
+    /// share a dispatcher. Assert each returns *its own* capability type, not
+    /// whichever one the shared match arm happened to list first.
+    #[test]
+    fn recording_search_replay_are_not_confused_with_each_other() {
+        let recording = call(CAPS[6].1);
+        let search = call(CAPS[7].1);
+        let replay = call(CAPS[8].1);
+
+        assert!(recording.contains("<trc:Capabilities"), "got {recording}");
+        assert!(search.contains("<tse:Capabilities"), "got {search}");
+        assert!(replay.contains("<trp:Capabilities"), "got {replay}");
+
+        // ...and specifically not each other's.
+        assert!(!recording.contains("tse:") && !recording.contains("trp:"));
+        assert!(!search.contains("trc:") && !search.contains("trp:"));
+        assert!(!replay.contains("trc:") && !replay.contains("tse:"));
+    }
+
+    /// Attribute names that are one plausible letter away from wrong. Each was
+    /// verified against the published schema during the 0.15 Stage 0 pass; a
+    /// typo here parses as "attribute absent" forever without failing anything
+    /// else, which is why it is asserted as a literal string.
+    #[test]
+    fn capability_attribute_spelling_matches_the_schema() {
+        let imaging = call(CAPS[4].1);
+        assert!(
+            imaging.contains("AdaptablePreset="),
+            "timg:Capabilities uses AdaptablePreset (singular, 'Adaptable'), got {imaging}"
+        );
+        assert!(
+            !imaging.contains("AdaptivePreset"),
+            "AdaptivePresets is the wrong spelling, got {imaging}"
+        );
+
+        let media2 = call(CAPS[2].1);
+        assert!(
+            media2.contains("<tr2:Capabilities "),
+            "the response element is Capabilities even though the type is Capabilities2, got {media2}"
+        );
+        assert!(
+            media2.contains(r#"WebRTC="0""#),
+            "tr2 WebRTC is an xs:int session count, not a bool, got {media2}"
+        );
+
+        let device = call(CAPS[0].1);
+        for dotted in ["TLS1.2=", "X.509Token="] {
+            assert!(
+                device.contains(dotted),
+                "tds:SecurityCapabilities attribute {dotted} carries a literal dot, got {device}"
+            );
+        }
+
+        let ptz = call(CAPS[3].1);
+        assert!(
+            ptz.contains(r#"MoveAndTrack="PresetToken PTZVector""#),
+            "tptz MoveAndTrack is a whitespace-separated tt:StringList, got {ptz}"
+        );
+    }
+
+    /// The mock deliberately omits some optional attributes rather than sending
+    /// them as `false`, so that a parser conflating "absent" with "said no" has
+    /// something to fail against. Pin the omissions, or a later well-meaning
+    /// edit fills them in and silently removes the only coverage of that path.
+    #[test]
+    fn optional_attributes_are_deliberately_omitted() {
+        let recording = call(CAPS[6].1);
+        assert!(
+            !recording.contains("OnboardStorage"),
+            "OnboardStorage must stay absent: it is the only capability attribute \
+             with a schema default, and that default is true. got {recording}"
+        );
+
+        let events = call(CAPS[5].1);
+        assert!(
+            !events.contains("EventBrokerProtocols"),
+            "a device with MaxEventBrokers=0 should not advertise a protocol list, got {events}"
+        );
+        assert!(
+            !events.contains("WSPullPointSupport"),
+            "WSPullPointSupport belongs to the device-level tt:EventCapabilities, \
+             not to tev:Capabilities. got {events}"
+        );
+
+        let ptz = call(CAPS[3].1);
+        assert!(
+            !ptz.contains("EFlip") && !ptz.contains("Reverse"),
+            "EFlip/Reverse are the omitted-attribute case for PTZ, got {ptz}"
+        );
+    }
+
+    /// The device-level `GetCapabilities` and the Device service's
+    /// `GetServiceCapabilities` are different operations returning different
+    /// shapes. Assert the mock did not start answering one with the other.
+    #[test]
+    fn device_service_capabilities_is_not_device_capabilities() {
+        let service = call(CAPS[0].1);
+        assert!(service.contains("<tds:Misc "), "got {service}");
+        assert!(
+            !service.contains("XAddr"),
+            "GetServiceCapabilities carries no service URLs; XAddr belongs to \
+             GetCapabilities. got {service}"
+        );
+
+        let device_caps = dispatch(
+            "http://www.onvif.org/ver10/device/wsdl/GetCapabilities",
+            "http://mock",
+            &MockState::new(),
+            "",
+        );
+        assert!(device_caps.contains("XAddr"), "got {device_caps}");
+        assert!(!device_caps.contains("<tds:Misc "), "got {device_caps}");
+    }
 }

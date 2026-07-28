@@ -335,3 +335,24 @@ pub fn resp_ptz_configuration_options() -> String {
         </tptz:GetConfigurationOptionsResponse>"#,
     )
 }
+
+// ── GetServiceCapabilities ───────────────────────────────────────────────────
+
+/// `tptz:Capabilities`.
+///
+/// The claims here are the ones this mock actually honours: `resp_ptz_status`
+/// emits both `MoveStatus` and `Position`, and `GetCompatibleConfigurations`
+/// is dispatched. `EFlip` and `Reverse` are deliberately **absent** rather
+/// than `false` — the mock is the only device a test can rely on to exercise
+/// the "attribute omitted" branch, which is distinct from "attribute said no".
+pub fn resp_ptz_service_capabilities() -> String {
+    soap(
+        NS,
+        r#"<tptz:GetServiceCapabilitiesResponse>
+          <tptz:Capabilities GetCompatibleConfigurations="true"
+                             MoveStatus="true"
+                             StatusPosition="true"
+                             MoveAndTrack="PresetToken PTZVector"/>
+        </tptz:GetServiceCapabilitiesResponse>"#,
+    )
+}

@@ -841,3 +841,37 @@ pub fn resp_audio_encoder_configuration_options() -> String {
         </trt:GetAudioEncoderConfigurationOptionsResponse>"#,
     )
 }
+
+// ── GetServiceCapabilities ───────────────────────────────────────────────────
+
+/// `trt:Capabilities`.
+///
+/// Media1's is one of only two service-capability types with required child
+/// elements (`ProfileCapabilities`, `StreamingCapabilities`) rather than
+/// attributes alone. `VideoSourceMode` is `false` here and `true` in Media2's
+/// — the mock dispatches `GetVideoSourceModes` on ver20 only, and the two
+/// answers should not agree just because the field name matches.
+///
+/// `trt:StreamingCapabilities` is **not** the device-level
+/// `tt:StreamingCapabilities`: it adds `NonAggregateControl` and
+/// `NoRTSPStreaming`.
+pub fn resp_service_capabilities() -> String {
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        r#"<trt:GetServiceCapabilitiesResponse>
+          <trt:Capabilities SnapshotUri="true"
+                            Rotation="false"
+                            VideoSourceMode="false"
+                            OSD="true"
+                            TemporaryOSDText="false"
+                            EXICompression="false">
+            <trt:ProfileCapabilities MaximumNumberOfProfiles="8"/>
+            <trt:StreamingCapabilities RTPMulticast="false"
+                                       RTP_TCP="true"
+                                       RTP_RTSP_TCP="true"
+                                       NonAggregateControl="false"
+                                       NoRTSPStreaming="false"/>
+          </trt:Capabilities>
+        </trt:GetServiceCapabilitiesResponse>"#,
+    )
+}

@@ -338,3 +338,36 @@ pub fn resp_set_video_source_mode() -> String {
         </tr2:SetVideoSourceModeResponse>"#,
     )
 }
+
+// ── GetServiceCapabilities ───────────────────────────────────────────────────
+
+/// `tr2:Capabilities2` — note the `2` in the type name; ver20 media.wsdl
+/// defines no type called `Capabilities`.
+///
+/// Claims track what this mock dispatches: `GetSnapshotUri`,
+/// `GetVideoSourceModes`/`SetVideoSourceMode`, and the `AddConfiguration`
+/// kinds. Privacy masks and WebRTC are not implemented, so `Mask` /
+/// `SourceMask` are `false` and `WebRTC` is `0` — an **`xs:int` session
+/// count**, not a boolean.
+pub fn resp_service_capabilities_media2() -> String {
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        r#"<tr2:GetServiceCapabilitiesResponse>
+          <tr2:Capabilities SnapshotUri="true"
+                            Rotation="false"
+                            VideoSourceMode="true"
+                            OSD="false"
+                            Mask="false"
+                            SourceMask="false"
+                            WebRTC="0">
+            <tr2:ProfileCapabilities MaximumNumberOfProfiles="8"
+                                     ConfigurationsSupported="VideoSource VideoEncoder AudioSource AudioEncoder Metadata"/>
+            <tr2:StreamingCapabilities RTSPStreaming="true"
+                                       RTPMulticast="false"
+                                       RTP_RTSP_TCP="true"
+                                       NonAggregateControl="false"
+                                       AutoStartMulticast="false"/>
+          </tr2:Capabilities>
+        </tr2:GetServiceCapabilitiesResponse>"#,
+    )
+}

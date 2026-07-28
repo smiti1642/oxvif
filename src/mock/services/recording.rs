@@ -144,3 +144,60 @@ pub fn resp_replay_uri() -> String {
         </trp:GetReplayUriResponse>"#,
     )
 }
+
+// ── GetServiceCapabilities (recording / search / replay) ─────────────────────
+
+/// `trc:Capabilities` — the widest of the nine, 21 attributes.
+///
+/// `OnboardStorage` is **deliberately omitted**. It is the only attribute
+/// across all nine service-capability types carrying a schema `default`, and
+/// that default is `true`, so a parser that maps absent to `false` disagrees
+/// with the schema. Leaving it out here is what makes that disagreement
+/// reachable from a test.
+pub fn resp_recording_service_capabilities() -> String {
+    soap(
+        r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
+        r#"<trc:GetServiceCapabilitiesResponse>
+          <trc:Capabilities DynamicRecordings="true"
+                            DynamicTracks="true"
+                            Encoding="H264 AAC"
+                            MaxRate="4096"
+                            MaxTotalRate="8192"
+                            MaxRecordings="2"
+                            MaxRecordingJobs="2"
+                            Options="false"
+                            MetadataRecording="false"
+                            EventRecording="false"
+                            ScheduledRecording="false"
+                            SegmentExport="false"/>
+        </trc:GetServiceCapabilitiesResponse>"#,
+    )
+}
+
+/// `tse:Capabilities`. Four booleans, no children.
+pub fn resp_search_service_capabilities() -> String {
+    soap(
+        r#"xmlns:tse="http://www.onvif.org/ver10/search/wsdl""#,
+        r#"<tse:GetServiceCapabilitiesResponse>
+          <tse:Capabilities MetadataSearch="false"
+                            GeneralStartEvents="false"
+                            NLSearch="false"
+                            ImageSearch="false"/>
+        </tse:GetServiceCapabilitiesResponse>"#,
+    )
+}
+
+/// `trp:Capabilities`.
+///
+/// `SessionTimeoutRange` is a `tt:FloatList` — a whitespace-separated
+/// min/max pair carried in the *attribute*, not a `Min`/`Max` child element.
+pub fn resp_replay_service_capabilities() -> String {
+    soap(
+        r#"xmlns:trp="http://www.onvif.org/ver10/replay/wsdl""#,
+        r#"<trp:GetServiceCapabilitiesResponse>
+          <trp:Capabilities ReversePlayback="false"
+                            SessionTimeoutRange="1.0 600.0"
+                            RTP_RTSP_TCP="true"/>
+        </trp:GetServiceCapabilitiesResponse>"#,
+    )
+}

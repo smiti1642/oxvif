@@ -270,6 +270,34 @@ pub fn resp_renew() -> String {
     )
 }
 
+// ── GetServiceCapabilities ───────────────────────────────────────────────────
+
+/// `tev:Capabilities`.
+///
+/// **There is no `WSPullPointSupport` attribute on this type.** That name
+/// belongs to `tt:EventCapabilities`, the device-level `GetCapabilities`
+/// sub-tree, and `resp_capabilities` in `device.rs` is where the mock emits
+/// it. The nearest thing here is `MaxPullPoints`.
+///
+/// The mock serves pull-point and `Subscribe` but has no pausable-subscription
+/// manager and no MQTT broker, so `EventBrokerProtocols` is **omitted** rather
+/// than sent empty — a device with no brokers does not advertise a protocol
+/// list.
+pub fn resp_event_service_capabilities() -> String {
+    soap(
+        r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl""#,
+        r#"<tev:GetServiceCapabilitiesResponse>
+          <tev:Capabilities WSSubscriptionPolicySupport="true"
+                            WSPausableSubscriptionManagerInterfaceSupport="false"
+                            MaxNotificationProducers="4"
+                            MaxPullPoints="4"
+                            PersistentNotificationStorage="false"
+                            MaxEventBrokers="0"
+                            MetadataOverMQTT="false"/>
+        </tev:GetServiceCapabilitiesResponse>"#,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

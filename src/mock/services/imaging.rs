@@ -152,3 +152,21 @@ pub fn resp_imaging_move_options() -> String {
         </timg:GetMoveOptionsResponse>"#,
     )
 }
+
+// ── GetServiceCapabilities ───────────────────────────────────────────────────
+
+/// `timg:Capabilities`.
+///
+/// `AdaptablePreset` is spelled exactly as the schema has it — singular,
+/// "Adaptable". The mock implements no imaging presets, so `Presets` is a
+/// real `false` here rather than an omission.
+pub fn resp_imaging_service_capabilities() -> String {
+    soap(
+        NS,
+        r#"<timg:GetServiceCapabilitiesResponse>
+          <timg:Capabilities ImageStabilization="false"
+                             Presets="false"
+                             AdaptablePreset="false"/>
+        </timg:GetServiceCapabilitiesResponse>"#,
+    )
+}

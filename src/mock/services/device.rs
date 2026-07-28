@@ -698,3 +698,68 @@ pub fn resp_system_reboot() -> String {
         </tds:SystemRebootResponse>"#,
     )
 }
+
+// ── GetServiceCapabilities ───────────────────────────────────────────────────
+
+/// `tds:DeviceServiceCapabilities` — four children: `Network`, `Security`,
+/// `System`, and the optional `Misc`.
+///
+/// Three things here exist to be parsed against, not just to look plausible:
+///
+/// - `TLS1.2` and `X.509Token` carry **dots** in the attribute name. They are
+///   legal XML names and illegal Rust identifiers, so a parser must match the
+///   dotted string even though its struct field cannot be spelled that way.
+/// - `DiscoveryNotSupported` / `NetworkConfigNotSupported` /
+///   `UserConfigNotSupported` are **negative-sense**: absent means the feature
+///   *is* supported. Two are omitted here and one is present-and-false, so a
+///   parser that inverts them wrongly cannot pass by accident.
+/// - `Misc/@AuxiliaryCommands` is the discoverable list behind
+///   `SendAuxiliaryCommand`; the values match what `resp_send_auxiliary_command`
+///   accepts.
+pub fn resp_service_capabilities() -> String {
+    soap(
+        NS,
+        r#"<tds:GetServiceCapabilitiesResponse>
+          <tds:Capabilities>
+            <tds:Network IPFilter="false"
+                         ZeroConfiguration="false"
+                         IPVersion6="true"
+                         DynDNS="false"
+                         Dot11Configuration="false"
+                         HostnameFromDHCP="false"
+                         NTP="1"
+                         DHCPv6="false"/>
+            <tds:Security TLS1.0="false"
+                          TLS1.1="false"
+                          TLS1.2="true"
+                          OnboardKeyGeneration="false"
+                          AccessPolicyConfig="false"
+                          DefaultAccessPolicy="false"
+                          Dot1X="false"
+                          RemoteUserHandling="false"
+                          X.509Token="false"
+                          SAMLToken="false"
+                          KerberosToken="false"
+                          UsernameToken="true"
+                          HttpDigest="true"
+                          RELToken="false"
+                          MaxUsers="8"
+                          MaxUserNameLength="32"
+                          MaxPasswordLength="64"/>
+            <tds:System DiscoveryResolve="false"
+                        DiscoveryBye="true"
+                        RemoteDiscovery="false"
+                        SystemBackup="false"
+                        SystemLogging="true"
+                        HttpFirmwareUpgrade="true"
+                        HttpSystemBackup="false"
+                        HttpSystemLogging="false"
+                        HttpSupportInformation="false"
+                        StorageConfiguration="true"
+                        MaxStorageConfigurations="2"
+                        UserConfigNotSupported="false"/>
+            <tds:Misc AuxiliaryCommands="tt:Wiper|On tt:Wiper|Off tt:IRLamp|On tt:IRLamp|Off tt:IRLamp|Auto"/>
+          </tds:Capabilities>
+        </tds:GetServiceCapabilitiesResponse>"#,
+    )
+}
