@@ -8,8 +8,8 @@
 - **oxvif status:** ◐ implemented in `src/client/recording.rs` (3 of 14 operations)
 
 oxvif covers the recording-search session (find → poll → end). Unimplemented: summary/info/media
-attributes and the **event / PTZ-position / metadata** search sessions (ROADMAP medium-term:
-`FindEvents` + `GetEventSearchResults`, `FindPTZPosition` + `GetPTZPositionSearchResults`).
+attributes and the **event / PTZ-position / metadata** search sessions
+(`FindEvents` + `GetEventSearchResults`, `FindPTZPosition` + `GetPTZPositionSearchResults`).
 
 > **Real-camera shape (verified GeoVision).** `GetRecordingSearchResultsResponse`
 > wraps `SearchState` and the `RecordingInformation` entries in a **`ResultList`**

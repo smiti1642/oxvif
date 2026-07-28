@@ -5,7 +5,7 @@
 - **WSDL:** https://www.onvif.org/ver10/receiver.wsdl
 - **Namespace:** `http://www.onvif.org/ver10/receiver/wsdl` (prefix `trv`)
 - **ONVIF Profile:** — (NVR-side; pairs with Recording)
-- **oxvif status:** ❌ not implemented (ROADMAP medium-term). No `src/client/receiver.rs`.
+- **oxvif status:** ❌ not implemented. No `src/client/receiver.rs`.
 
 A Receiver is an RTSP **input** sink on an NVR/device that pulls a stream from a remote source —
 the producer side of a recording job. Small, regular CRUD service.

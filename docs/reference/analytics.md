@@ -6,7 +6,7 @@
 - **Namespace:** `http://www.onvif.org/ver20/analytics/wsdl` (prefix `tan`)
 - **Shared schema:** `http://www.onvif.org/ver10/schema/onvif.xsd` (prefix `tt`)
 - **ONVIF Profile:** T (Profile M for metadata/analytics consumers)
-- **oxvif status:** ❌ not implemented (ROADMAP short-term). No `src/client/analytics.rs` yet.
+- **oxvif status:** ❌ not implemented. No `src/client/analytics.rs` yet.
 
 Two portTypes: **AnalyticsEngine** (module CRUD) and **RuleEngine** (rule CRUD).
 

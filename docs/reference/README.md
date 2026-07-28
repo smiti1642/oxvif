@@ -41,7 +41,7 @@ request/response field structure so a new method can be written against the real
 | Replay Control | [replay.md](replay.md) | `ver10/replay.wsdl` | `trp` | ✅ |
 | WS-Discovery | [discovery.md](discovery.md) | WS-Discovery 1.1 | `d`/`dn` | ◐ |
 
-### Not yet started (ROADMAP + Profiles A/C/D)
+### Not yet started (Profiles A/C/D)
 
 | Service | File | WSDL | ns prefix | Profile | oxvif |
 |---------|------|------|:---------:|:-------:|:-----:|

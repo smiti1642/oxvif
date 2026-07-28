@@ -9,7 +9,7 @@
 
 oxvif covers the create/delete lifecycle for recordings, tracks, and jobs, plus job mode/state.
 Unimplemented: the **configuration getters/setters** (recording/track/job), **options**, and the
-**export** family (ROADMAP medium-term: `SetRecordingConfiguration`, `SetTrackConfiguration`,
+**export** family (`SetRecordingConfiguration`, `SetTrackConfiguration`,
 `GetRecordingOptions`).
 
 > **Real-camera shape (verified GeoVision / Hanwha).** `GetRecordingsResponse`

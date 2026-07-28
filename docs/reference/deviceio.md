@@ -5,7 +5,7 @@
 - **WSDL:** https://www.onvif.org/ver10/deviceio.wsdl
 - **Namespace:** `http://www.onvif.org/ver10/deviceio/wsdl` (prefix `tmd`)
 - **ONVIF Profile:** T
-- **oxvif status:** ❌ not implemented (ROADMAP short-term). No `src/client/deviceio.rs`.
+- **oxvif status:** ❌ not implemented. No `src/client/deviceio.rs`.
 
 DeviceIO exposes the physical I/O of a device: video/audio sources & outputs, relay outputs,
 digital inputs, and serial ports. Several operations overlap the Device service (relay outputs)
