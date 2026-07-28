@@ -567,6 +567,24 @@ impl VideoEncoderConfiguration {
 // ── VideoEncoderConfigurationOptions ─────────────────────────────────────────
 
 /// Valid parameter ranges for `SetVideoEncoderConfiguration`.
+///
+/// # Where the codec blocks live
+///
+/// Media1 grew two extension levels, so the same codec can arrive at more than
+/// one depth and the deeper copy carries *more* data:
+///
+/// ```text
+/// Options/JPEG                      tt:JpegOptions    — no BitrateRange
+/// Options/H264                      tt:H264Options    — no BitrateRange
+/// Options/Extension/JPEG            tt:JpegOptions2   — adds BitrateRange
+/// Options/Extension/H264            tt:H264Options2   — adds BitrateRange
+/// Options/Extension/Extension/H265  tt:H265Options    — the ONLY place H265 exists
+/// ```
+///
+/// Devices commonly send **both** copies of JPEG/H264, with the bitrate range
+/// present only in the extension. The parser therefore prefers the deeper node
+/// and falls back to the shallower one, so `bitrate_range` is populated
+/// whichever form the device chose.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VideoEncoderConfigurationOptions {
@@ -637,6 +655,26 @@ impl VideoEncoderConfigurationOptions {
         let opts = resp
             .child("Options")
             .ok_or_else(|| SoapError::missing("Options"))?;
+
+        // Codec blocks may sit at the top level, one extension down, or (H265
+        // only) two down — see the type docs. Prefer the deepest form: it is
+        // the same type plus `BitrateRange`, so a device sending both copies
+        // carries the bitrate only in the extension, and reading just the
+        // top-level one silently drops it. The H265 fallback to a top-level
+        // node is not schema-legal but costs nothing and keeps any device
+        // relying on it working.
+        let ext = opts.child("Extension");
+        let ext2 = ext.and_then(|e| e.child("Extension"));
+        let jpeg_node = ext
+            .and_then(|e| e.child("JPEG"))
+            .or_else(|| opts.child("JPEG"));
+        let h264_node = ext
+            .and_then(|e| e.child("H264"))
+            .or_else(|| opts.child("H264"));
+        let h265_node = ext2
+            .and_then(|e| e.child("H265"))
+            .or_else(|| opts.child("H265"));
+
         Ok(Self {
             quality_range: opts.child("QualityRange").map(|qr| FloatRange {
                 min: qr
@@ -648,7 +686,7 @@ impl VideoEncoderConfigurationOptions {
                     .and_then(|n| n.text().parse().ok())
                     .unwrap_or(0.0),
             }),
-            jpeg: opts.child("JPEG").map(|jpeg| JpegOptions {
+            jpeg: jpeg_node.map(|jpeg| JpegOptions {
                 resolutions: jpeg
                     .children_named("ResolutionsAvailable")
                     .filter_map(parse_resolution)
@@ -658,7 +696,7 @@ impl VideoEncoderConfigurationOptions {
                     .child("EncodingIntervalRange")
                     .map(parse_int_range_node),
             }),
-            h264: opts.child("H264").map(|h| H264Options {
+            h264: h264_node.map(|h| H264Options {
                 resolutions: h
                     .children_named("ResolutionsAvailable")
                     .filter_map(parse_resolution)
@@ -672,7 +710,7 @@ impl VideoEncoderConfigurationOptions {
                     .map(|n| n.text().to_string())
                     .collect(),
             }),
-            h265: opts.child("H265").map(|h| H265Options {
+            h265: h265_node.map(|h| H265Options {
                 resolutions: h
                     .children_named("ResolutionsAvailable")
                     .filter_map(parse_resolution)

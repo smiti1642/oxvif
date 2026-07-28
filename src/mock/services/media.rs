@@ -434,6 +434,20 @@ pub fn resp_video_encoder_configuration() -> String {
     )
 }
 
+/// `trt:GetVideoEncoderConfigurationOptionsResponse`.
+///
+/// Shaped after a real device: the top-level `tt:H264` is `tt:H264Options`,
+/// which has **no** `BitrateRange` in the schema, and the whole block is
+/// repeated under `tt:Extension` as `tt:H264Options2`, which does. Until 0.15
+/// this responder put `BitrateRange` at the top level — not a legal
+/// `tt:H264Options` — and so taught the parser a shape no conformant device
+/// sends. That is why the parser's failure to descend into `Extension` went
+/// unnoticed against both the mock and a hand-written fixture.
+///
+/// Deliberately still no `H265`: it would live at
+/// `Options/Extension/Extension/H265`, and adding it changes what every caller
+/// of this responder sees. The parser's two-level descent is covered by unit
+/// fixtures in `src/tests/types_tests.rs`.
 pub fn resp_video_encoder_configuration_options() -> String {
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
@@ -446,11 +460,23 @@ pub fn resp_video_encoder_configuration_options() -> String {
               <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
               <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
               <tt:EncodingIntervalRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:EncodingIntervalRange>
-              <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
               <tt:H264ProfilesSupported>Baseline</tt:H264ProfilesSupported>
               <tt:H264ProfilesSupported>Main</tt:H264ProfilesSupported>
               <tt:H264ProfilesSupported>High</tt:H264ProfilesSupported>
             </tt:H264>
+            <tt:Extension>
+              <tt:H264>
+                <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
+                <tt:ResolutionsAvailable><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:ResolutionsAvailable>
+                <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
+                <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
+                <tt:EncodingIntervalRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:EncodingIntervalRange>
+                <tt:H264ProfilesSupported>Baseline</tt:H264ProfilesSupported>
+                <tt:H264ProfilesSupported>Main</tt:H264ProfilesSupported>
+                <tt:H264ProfilesSupported>High</tt:H264ProfilesSupported>
+                <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
+              </tt:H264>
+            </tt:Extension>
           </trt:Options>
         </trt:GetVideoEncoderConfigurationOptionsResponse>"#,
     )

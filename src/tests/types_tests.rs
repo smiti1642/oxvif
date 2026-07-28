@@ -887,6 +887,135 @@ mod video {
         assert_eq!(glr.max, 150);
         assert!(opts.h265.is_none());
     }
+
+    // ── Codec blocks nested in the Media1 extension levels ────────────────
+    //
+    // Captured verbatim from a real two-sensor device (2026-07-28): the
+    // top-level `H264` carries no `BitrateRange`, and the device puts the
+    // whole block again — bitrate included — under `Extension`. Reading only
+    // the top-level node loses the bitrate range with no error and no empty
+    // field to notice: `bitrate_range` is simply `None`, which is exactly what
+    // a device that never advertised one would produce.
+
+    const VECO_EXTENSION_XML: &str = r#"<GetVideoEncoderConfigurationOptionsResponse>
+          <Options>
+            <QualityRange><Min>1</Min><Max>5</Max></QualityRange>
+            <JPEG>
+              <ResolutionsAvailable><Width>704</Width><Height>480</Height></ResolutionsAvailable>
+              <FrameRateRange><Min>1</Min><Max>25</Max></FrameRateRange>
+              <EncodingIntervalRange><Min>1</Min><Max>1</Max></EncodingIntervalRange>
+            </JPEG>
+            <H264>
+              <ResolutionsAvailable><Width>704</Width><Height>480</Height></ResolutionsAvailable>
+              <ResolutionsAvailable><Width>352</Width><Height>240</Height></ResolutionsAvailable>
+              <GovLengthRange><Min>1</Min><Max>1500</Max></GovLengthRange>
+              <FrameRateRange><Min>1</Min><Max>25</Max></FrameRateRange>
+              <EncodingIntervalRange><Min>1</Min><Max>1</Max></EncodingIntervalRange>
+              <H264ProfilesSupported>Baseline</H264ProfilesSupported>
+            </H264>
+            <Extension>
+              <JPEG>
+                <ResolutionsAvailable><Width>704</Width><Height>480</Height></ResolutionsAvailable>
+                <FrameRateRange><Min>1</Min><Max>25</Max></FrameRateRange>
+                <EncodingIntervalRange><Min>1</Min><Max>1</Max></EncodingIntervalRange>
+                <BitrateRange><Min>64</Min><Max>2048</Max></BitrateRange>
+              </JPEG>
+              <H264>
+                <ResolutionsAvailable><Width>704</Width><Height>480</Height></ResolutionsAvailable>
+                <ResolutionsAvailable><Width>352</Width><Height>240</Height></ResolutionsAvailable>
+                <GovLengthRange><Min>1</Min><Max>1500</Max></GovLengthRange>
+                <FrameRateRange><Min>1</Min><Max>25</Max></FrameRateRange>
+                <EncodingIntervalRange><Min>1</Min><Max>1</Max></EncodingIntervalRange>
+                <H264ProfilesSupported>Baseline</H264ProfilesSupported>
+                <H264ProfilesSupported>Main</H264ProfilesSupported>
+                <H264ProfilesSupported>High</H264ProfilesSupported>
+                <BitrateRange><Min>64</Min><Max>2048</Max></BitrateRange>
+              </H264>
+            </Extension>
+          </Options>
+        </GetVideoEncoderConfigurationOptionsResponse>"#;
+
+    #[test]
+    fn video_encoder_options_read_bitrate_from_the_extension_level() {
+        let opts = VideoEncoderConfigurationOptions::from_xml(&parse(VECO_EXTENSION_XML)).unwrap();
+
+        // The whole point: the top-level H264 has no BitrateRange, so this is
+        // `None` unless the parser descends into `Extension`.
+        let h264 = opts.h264.expect("H264 options");
+        let br = h264
+            .bitrate_range
+            .expect("bitrate range lives in Extension");
+        assert_eq!(br.min, 64);
+        assert_eq!(br.max, 2048);
+
+        // The extension copy is a superset, not a replacement — taking it must
+        // not cost the fields the top-level node also had. Three profiles here
+        // versus one at the top level pins that the deeper node won.
+        assert_eq!(h264.profiles, ["Baseline", "Main", "High"]);
+        assert_eq!(h264.resolutions.len(), 2);
+        assert_eq!(
+            h264.resolutions[0],
+            Resolution {
+                width: 704,
+                height: 480
+            }
+        );
+        assert_eq!(h264.gov_length_range.unwrap().max, 1500);
+
+        // Same treatment for JPEG.
+        let jpeg = opts.jpeg.expect("JPEG options");
+        assert_eq!(jpeg.frame_rate_range.unwrap().max, 25);
+    }
+
+    // Second extension level. `tt:H265Options` exists *only* at
+    // `Options/Extension/Extension/H265` — there is no schema-legal top-level
+    // H265 in Media1 at all, so before this parser descended two levels oxvif
+    // could never report H265 from Media1 on any device. Shape transcribed
+    // from onvif.xsd; the device the fixture above came from offers no H265.
+    const VECO_H265_XML: &str = r#"<GetVideoEncoderConfigurationOptionsResponse>
+          <Options>
+            <QualityRange><Min>1</Min><Max>5</Max></QualityRange>
+            <Extension>
+              <H264>
+                <ResolutionsAvailable><Width>1280</Width><Height>720</Height></ResolutionsAvailable>
+                <BitrateRange><Min>64</Min><Max>4096</Max></BitrateRange>
+              </H264>
+              <Extension>
+                <H265>
+                  <ResolutionsAvailable><Width>2592</Width><Height>1944</Height></ResolutionsAvailable>
+                  <ResolutionsAvailable><Width>1920</Width><Height>1080</Height></ResolutionsAvailable>
+                  <GovLengthRange><Min>1</Min><Max>250</Max></GovLengthRange>
+                  <BitrateRange><Min>128</Min><Max>8192</Max></BitrateRange>
+                  <H265ProfilesSupported>Main</H265ProfilesSupported>
+                </H265>
+              </Extension>
+            </Extension>
+          </Options>
+        </GetVideoEncoderConfigurationOptionsResponse>"#;
+
+    #[test]
+    fn video_encoder_options_read_h265_from_the_second_extension_level() {
+        let opts = VideoEncoderConfigurationOptions::from_xml(&parse(VECO_H265_XML)).unwrap();
+
+        let h265 = opts.h265.expect("H265 lives two extension levels down");
+        assert_eq!(
+            h265.resolutions[0],
+            Resolution {
+                width: 2592,
+                height: 1944
+            }
+        );
+        assert_eq!(h265.resolutions.len(), 2);
+        assert_eq!(h265.bitrate_range.unwrap().max, 8192);
+        assert_eq!(h265.profiles, ["Main"]);
+
+        // H264 one level up must still be found in the same response.
+        assert_eq!(opts.h264.unwrap().bitrate_range.unwrap().max, 4096);
+
+        // Nothing at the top level, and JPEG genuinely absent — not a fallback
+        // that quietly picked up the H264 node.
+        assert!(opts.jpeg.is_none());
+    }
 }
 
 mod media2 {
