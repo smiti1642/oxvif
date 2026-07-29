@@ -1297,6 +1297,12 @@ For the same reason the mock **faults** on a per-channel `Get…Options` with no
 usually answer; this one refuses, because a token-less call is a client bug
 that a permissive device hides.
 
+The same applies to **Imaging**, where every operation is per-`VideoSourceToken`.
+`VS_1` is a motorised lens reporting levels on 0–100; `VS_2` is fixed-focus on
+0–255 and **faults** on `GetMoveOptions` / `Move` / `Stop`. So a client can be
+tested against "this *channel* has no focus" rather than only "this device has
+none".
+
 ### Standalone mock server (`cargo run`)
 
 The `examples/mock_server` binary wraps `oxvif::mock::MockServer` with TOML file

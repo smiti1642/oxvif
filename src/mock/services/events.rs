@@ -136,7 +136,7 @@ pub fn resp_pull_messages(state: &SharedState) -> String {
         (
             "tns1:VideoSource/MotionAlarm",
             "VideoSourceToken",
-            "VideoSource_1",
+            "VS_1",
             "IsMotion",
             if (seq / 2) % 2 == 0 { "true" } else { "false" },
         )

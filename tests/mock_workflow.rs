@@ -114,7 +114,9 @@ async fn ptz_commands() {
 #[tokio::test]
 async fn imaging_set_then_get() {
     let (_srv, s) = setup().await;
-    let vsc = "VideoSource_1";
+    // The motorised lens. `VS_2` is fixed-focus and answers differently —
+    // see tests/mock_multi_sensor.rs.
+    let vsc = "VS_1";
 
     let mut settings: ImagingSettings = s.get_imaging_settings(vsc).await.unwrap();
     settings.brightness = Some(33.0);

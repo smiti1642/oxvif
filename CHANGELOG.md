@@ -136,6 +136,38 @@ two-thirds of the test suite.
   where it returned 1, `get_profiles()` return **4** where it returned 2, and
   `get_video_encoder_configurations()` return **4** where it returned 2.
 
+- **The mock's Imaging service is now per-`VideoSourceToken`.** Every operation
+  in that service carries the token and the mock ignored all seven of them.
+  `MockState::imaging` became `imaging_sources: Vec<ImagingState>`, one entry
+  per sensor, and `ImagingState` gained `source_token`, `focus_supported` and
+  `level_max`.
+
+  The two lenses differ three independent ways: current values (brightness 60
+  vs 45, IR-cut `AUTO` vs `ON`), level scale (0–100 vs 0–255), and **focus
+  support**. `VS_2` is fixed-focus — it omits `tt:Focus` from
+  `GetImagingSettings` and `GetOptions`, returns an empty `Status`, and faults
+  on `GetMoveOptions` / `Move` / `Stop`. That last one is the only way to
+  express "*this channel* has no focus" as distinct from "this device has
+  none", and a single-sensor fixture cannot state it at all.
+
+  `Move` and `Stop` were unconditional empty responses; they now resolve the
+  token and refuse a lens with no focus motor.
+
+  No client change: `video_source_token` has always been a required `&str` on
+  all seven methods. The defect was entirely in the mock.
+
+- **Fixed: the mock spelled `tt:AFModes` where the schema has
+  `tt:AutoFocusModes`.** `tt:FocusOptions20` has no `AFModes` element, so
+  `ImagingOptions::focus_af_modes` came back **empty from the mock forever**
+  and nothing noticed — the hand-written unit fixture in `imaging_tests.rs`
+  spelled it correctly, and the two were never compared. Found by a new
+  end-to-end test, not by review.
+
+- **`VideoSource_1` is gone.** That token appeared in the mock's own imaging
+  tests, the action snapshot, `mock_workflow.rs` and the mock's event payloads,
+  and matched **no entry** in `video_sources`. It was harmless only because
+  Imaging ignored the token. All now use `VS_1`.
+
 - **One rendering path per configuration in the mock.** `VEC_2` used to be
   `H264_sub`/H264/640x480 when rendered inline in a profile and
   `SubStream`/JPEG/640x480 when rendered in the configuration list — three

@@ -29,8 +29,8 @@ pub struct DeviceState {
     pub gateway_ipv4: Vec<String>,
     #[serde(default = "default_discovery_mode")]
     pub discovery_mode: String,
-    #[serde(default = "default_imaging")]
-    pub imaging: ImagingState,
+    #[serde(default = "default_imaging_sources")]
+    pub imaging_sources: Vec<ImagingState>,
     #[serde(default = "default_ptz")]
     pub ptz: PtzState,
     #[serde(default = "default_interface")]
@@ -218,8 +218,18 @@ pub struct PtzState {
     pub tours: Vec<PtzTour>,
 }
 
+/// Imaging state for **one** video source.
+///
+/// Every operation in the Imaging service takes a `VideoSourceToken`, so on a
+/// multi-sensor device there is one of these per lens and none of them is the
+/// device's answer. The mock holds a `Vec` for exactly the reason the video
+/// encoder catalogue does: with a single entry, a responder that ignores the
+/// token is indistinguishable from one that reads it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImagingState {
+    /// Which sensor these settings belong to (`VS_1` / `VS_2`).
+    #[serde(default = "default_source_token")]
+    pub source_token: String,
     pub brightness: f32,
     pub color_saturation: f32,
     pub contrast: f32,
@@ -231,6 +241,24 @@ pub struct ImagingState {
     pub wide_dynamic_range_level: f32,
     pub ir_cut_filter: String,
     pub focus_mode: String,
+    /// Whether this lens has a motorised focus.
+    ///
+    /// A dual-sensor camera commonly pairs one motorised lens with one fixed
+    /// one, and the fixed one **faults** on `GetMoveOptions` / `Move` / `Stop`
+    /// rather than reporting a focus range it does not have. That asymmetry is
+    /// what lets a test tell "the device supports focus" apart from "*this
+    /// channel* supports focus" — a distinction a single-sensor fixture cannot
+    /// express at all.
+    #[serde(default = "default_true")]
+    pub focus_supported: bool,
+    /// Upper bound this sensor reports for brightness/saturation/contrast/
+    /// sharpness in `GetOptions`.
+    ///
+    /// Vendors genuinely differ per sensor here (0–100 on one, 0–255 on
+    /// another), and it gives the per-channel options test a single number to
+    /// assert rather than a structural difference.
+    #[serde(default = "default_level_max")]
+    pub level_max: f32,
 }
 
 // ── OSD state ───────────────────────────────────────────────────────────────
@@ -784,20 +812,57 @@ fn default_digital_inputs() -> Vec<DigitalInputState> {
     ]
 }
 
-fn default_imaging() -> ImagingState {
-    ImagingState {
-        brightness: 60.0,
-        color_saturation: 50.0,
-        contrast: 50.0,
-        sharpness: 50.0,
-        exposure_mode: "AUTO".into(),
-        white_balance_mode: "AUTO".into(),
-        backlight_compensation: "OFF".into(),
-        wide_dynamic_range_mode: "OFF".into(),
-        wide_dynamic_range_level: 50.0,
-        ir_cut_filter: "AUTO".into(),
-        focus_mode: "AUTO".into(),
-    }
+fn default_true() -> bool {
+    true
+}
+fn default_level_max() -> f32 {
+    100.0
+}
+
+/// One imaging entry per sensor, and they deliberately differ.
+///
+/// `VS_1` is the motorised 5MP lens; `VS_2` is a fixed-focus 720p lens that
+/// refuses the focus operations outright and reports levels on a 0–255 scale.
+/// Every value below that differs between the two is one a per-channel test can
+/// assert on; if they were equal, the tests would pass against a mock that
+/// threw the `VideoSourceToken` away.
+fn default_imaging_sources() -> Vec<ImagingState> {
+    vec![
+        ImagingState {
+            source_token: "VS_1".into(),
+            brightness: 60.0,
+            color_saturation: 50.0,
+            contrast: 50.0,
+            sharpness: 50.0,
+            exposure_mode: "AUTO".into(),
+            white_balance_mode: "AUTO".into(),
+            backlight_compensation: "OFF".into(),
+            wide_dynamic_range_mode: "OFF".into(),
+            wide_dynamic_range_level: 50.0,
+            ir_cut_filter: "AUTO".into(),
+            focus_mode: "AUTO".into(),
+            focus_supported: true,
+            level_max: 100.0,
+        },
+        ImagingState {
+            source_token: "VS_2".into(),
+            brightness: 45.0,
+            color_saturation: 128.0,
+            contrast: 130.0,
+            sharpness: 96.0,
+            exposure_mode: "MANUAL".into(),
+            white_balance_mode: "MANUAL".into(),
+            backlight_compensation: "ON".into(),
+            wide_dynamic_range_mode: "ON".into(),
+            wide_dynamic_range_level: 70.0,
+            ir_cut_filter: "ON".into(),
+            // No motorised focus, so the mode is the only one such a lens can
+            // report — and `GetMoveOptions` on it is a fault, not a range.
+            focus_mode: "MANUAL".into(),
+            focus_supported: false,
+            level_max: 255.0,
+        },
+    ]
 }
 
 impl Default for DeviceState {
@@ -814,7 +879,7 @@ impl Default for DeviceState {
             ntp: default_ntp(),
             gateway_ipv4: default_gateway(),
             discovery_mode: default_discovery_mode(),
-            imaging: default_imaging(),
+            imaging_sources: default_imaging_sources(),
             ptz: default_ptz(),
             interface: default_interface(),
             protocols: default_protocols(),
@@ -2080,5 +2145,235 @@ mod tests {
             "got: {resp}"
         );
         assert!(s.read().video_encoders.iter().all(|c| c.name != "Nope"));
+    }
+
+    // ── Imaging: every operation is per-VideoSourceToken ──────────────────
+    //
+    // Same rule as the video encoder options above, applied to the service
+    // where *every* method carries the token. The two lenses differ in three
+    // independent ways — level scale, focus support, and current values — so
+    // an assertion that survives a token being ignored has to be trying.
+
+    fn img_body(op: &str, token: &str) -> String {
+        format!("<timg:{op}><timg:VideoSourceToken>{token}</timg:VideoSourceToken></timg:{op}>")
+    }
+
+    #[test]
+    fn default_imaging_sources_cover_both_sensors_and_disagree() {
+        let s = new_state();
+        let snap = s.read();
+        let tokens: Vec<&str> = snap
+            .imaging_sources
+            .iter()
+            .map(|i| i.source_token.as_str())
+            .collect();
+        assert_eq!(tokens, ["VS_1", "VS_2"]);
+
+        // Each imaging entry must name a sensor that exists.
+        for i in &snap.imaging_sources {
+            assert!(
+                snap.video_sources.iter().any(|v| v.token == i.source_token),
+                "imaging entry for unknown sensor {}",
+                i.source_token
+            );
+        }
+        let vs1 = &snap.imaging_sources[0];
+        let vs2 = &snap.imaging_sources[1];
+        // The three properties the per-channel tests lean on. If any of these
+        // becomes an equality the corresponding test stops discriminating.
+        assert_ne!(vs1.brightness, vs2.brightness);
+        assert_ne!(vs1.level_max, vs2.level_max);
+        assert!(vs1.focus_supported && !vs2.focus_supported);
+    }
+
+    #[test]
+    fn imaging_settings_are_per_source() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let one = imaging::resp_imaging_settings(&s, &img_body("GetImagingSettings", "VS_1"));
+        let two = imaging::resp_imaging_settings(&s, &img_body("GetImagingSettings", "VS_2"));
+
+        assert!(one.contains("<tt:Brightness>60</tt:Brightness>"), "{one}");
+        assert!(two.contains("<tt:Brightness>45</tt:Brightness>"), "{two}");
+        assert!(one.contains("<tt:IrCutFilter>AUTO</tt:IrCutFilter>"));
+        assert!(two.contains("<tt:IrCutFilter>ON</tt:IrCutFilter>"));
+        // The fixed lens omits tt:Focus entirely — it is [0..1] in the schema
+        // and a lens with no motor has no auto-focus mode to report.
+        assert!(one.contains("<tt:AutoFocusMode>AUTO</tt:AutoFocusMode>"));
+        assert!(!two.contains("<tt:Focus>"));
+    }
+
+    #[test]
+    fn imaging_settings_without_token_faults() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let xml = imaging::resp_imaging_settings(&s, "<timg:GetImagingSettings/>");
+        assert!(xml.contains("NoVideoSourceToken-IMGSET-5601"), "got: {xml}");
+        assert!(!xml.contains("<tt:Brightness>"));
+    }
+
+    #[test]
+    fn imaging_settings_unknown_source_faults() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let xml =
+            imaging::resp_imaging_settings(&s, &img_body("GetImagingSettings", "VideoSource_1"));
+        assert!(
+            xml.contains("NoSuchVideoSource-IMGSET-5602: VideoSource_1"),
+            "got: {xml}"
+        );
+    }
+
+    #[test]
+    fn imaging_options_are_per_source() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let one = imaging::resp_imaging_options(&s, &img_body("GetOptions", "VS_1"));
+        let two = imaging::resp_imaging_options(&s, &img_body("GetOptions", "VS_2"));
+
+        // Different level scales — the single number that separates the two.
+        assert!(one.contains("<tt:Max>100</tt:Max>"), "{one}");
+        assert!(two.contains("<tt:Max>255</tt:Max>"), "{two}");
+        assert!(!two.contains("<tt:Max>100</tt:Max>"));
+        // And the fixed lens offers no auto-focus modes at all.
+        // Spelled as the schema has it — `tt:FocusOptions20/AutoFocusModes`.
+        assert!(one.contains("<tt:AutoFocusModes>AUTO</tt:AutoFocusModes>"));
+        assert!(!two.contains("<tt:AutoFocusModes>"));
+    }
+
+    #[test]
+    fn imaging_options_unknown_source_faults() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let xml = imaging::resp_imaging_options(&s, &img_body("GetOptions", "VS_7"));
+        assert!(
+            xml.contains("NoSuchVideoSource-IMGOPT-5606: VS_7"),
+            "got: {xml}"
+        );
+    }
+
+    #[test]
+    fn imaging_status_reports_focus_only_where_there_is_one() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let one = imaging::resp_imaging_status(&s, &img_body("GetStatus", "VS_1"));
+        let two = imaging::resp_imaging_status(&s, &img_body("GetStatus", "VS_2"));
+
+        assert!(one.contains("<tt:FocusStatus20>"));
+        assert!(one.contains("<tt:Position>0.5</tt:Position>"));
+        // Legal empty Status — FocusStatus20 is the type's only content and it
+        // is [0..1], so a caller has to survive its absence.
+        assert!(!two.contains("<tt:FocusStatus20>"));
+        assert!(two.contains("<timg:Status></timg:Status>"), "{two}");
+    }
+
+    #[test]
+    fn imaging_move_options_fault_on_a_fixed_lens() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let one = imaging::resp_imaging_move_options(&s, &img_body("GetMoveOptions", "VS_1"));
+        assert!(one.contains("<tt:PositionSpace>"), "{one}");
+
+        let two = imaging::resp_imaging_move_options(&s, &img_body("GetMoveOptions", "VS_2"));
+        assert!(
+            two.contains("NoFocusSupport-IMGMOVEOPT-5611: VS_2"),
+            "got: {two}"
+        );
+        assert!(!two.contains("<tt:PositionSpace>"));
+    }
+
+    #[test]
+    fn imaging_move_and_stop_fault_on_a_fixed_lens() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        assert!(
+            imaging::handle_imaging_move(&s, &img_body("Move", "VS_1")).contains("MoveResponse")
+        );
+        assert!(
+            imaging::handle_imaging_stop(&s, &img_body("Stop", "VS_1")).contains("StopResponse")
+        );
+
+        let m = imaging::handle_imaging_move(&s, &img_body("Move", "VS_2"));
+        assert!(m.contains("NoFocusSupport-IMGMOVE-5614: VS_2"), "got: {m}");
+        let st = imaging::handle_imaging_stop(&s, &img_body("Stop", "VS_2"));
+        assert!(
+            st.contains("NoFocusSupport-IMGSTOP-5617: VS_2"),
+            "got: {st}"
+        );
+    }
+
+    #[test]
+    fn imaging_move_without_token_faults() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let xml = imaging::handle_imaging_move(&s, "<timg:Move/>");
+        assert!(
+            xml.contains("NoVideoSourceToken-IMGMOVE-5612"),
+            "got: {xml}"
+        );
+    }
+
+    /// A Set writes the lens it names and leaves the other alone.
+    #[test]
+    fn set_imaging_settings_writes_only_the_named_source() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let body = r#"<timg:SetImagingSettings>
+            <timg:VideoSourceToken>VS_2</timg:VideoSourceToken>
+            <timg:ImagingSettings>
+              <tt:Brightness>7</tt:Brightness>
+              <tt:IrCutFilter>OFF</tt:IrCutFilter>
+            </timg:ImagingSettings>
+          </timg:SetImagingSettings>"#;
+        let resp = imaging::handle_set_imaging_settings(&s, body);
+        assert!(resp.contains("SetImagingSettingsResponse"));
+        assert!(!resp.contains("Fault"));
+
+        let snap = s.read();
+        let by = |t: &str| {
+            snap.imaging_sources
+                .iter()
+                .find(|i| i.source_token == t)
+                .unwrap()
+        };
+        assert_eq!(by("VS_2").brightness, 7.0);
+        assert_eq!(by("VS_2").ir_cut_filter, "OFF");
+        // VS_1 untouched — the value it would have picked up is distinctive.
+        assert_eq!(by("VS_1").brightness, 60.0);
+        assert_eq!(by("VS_1").ir_cut_filter, "AUTO");
+    }
+
+    #[test]
+    fn set_imaging_settings_unknown_source_writes_nothing() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let body = r#"<timg:SetImagingSettings>
+            <timg:VideoSourceToken>VS_9</timg:VideoSourceToken>
+            <timg:ImagingSettings><tt:Brightness>7</tt:Brightness></timg:ImagingSettings>
+          </timg:SetImagingSettings>"#;
+        let resp = imaging::handle_set_imaging_settings(&s, body);
+        assert!(
+            resp.contains("NoSuchVideoSource-IMGSETW-5604: VS_9"),
+            "got: {resp}"
+        );
+        // Neither lens moved.
+        assert!(s.read().imaging_sources.iter().all(|i| i.brightness != 7.0));
+    }
+
+    #[test]
+    fn set_imaging_settings_without_token_writes_nothing() {
+        use crate::mock::services::imaging;
+        let s = new_state();
+        let resp = imaging::handle_set_imaging_settings(
+            &s,
+            "<timg:SetImagingSettings><timg:ImagingSettings>\
+               <tt:Brightness>7</tt:Brightness>\
+             </timg:ImagingSettings></timg:SetImagingSettings>",
+        );
+        assert!(
+            resp.contains("NoVideoSourceToken-IMGSETW-5603"),
+            "got: {resp}"
+        );
+        assert!(s.read().imaging_sources.iter().all(|i| i.brightness != 7.0));
     }
 }

@@ -34,7 +34,9 @@ const PROFILE: &str = "Profile_1";
 const PROFILE2: &str = "Profile_2";
 const VSC: &str = "VSC_1";
 const VEC: &str = "VEC_1";
-const VIDEO_SOURCE: &str = "VideoSource_1";
+// A real sensor in the default state — Imaging is per-VideoSourceToken and
+// the mock now refuses a token it does not know.
+const VIDEO_SOURCE: &str = "VS_1";
 const AEC: &str = "AEC_1";
 const OSD: &str = "OSD_1";
 const PTZ_NODE: &str = "PTZNode_1";

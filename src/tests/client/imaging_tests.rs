@@ -314,7 +314,7 @@ async fn mock_imaging_move_response_parses_via_client() {
     client
         .imaging_move(
             "http://mock/onvif/imaging",
-            "VideoSource_1",
+            "VS_1",
             &crate::FocusMove::Continuous { speed: 0.5 },
         )
         .await
@@ -327,7 +327,7 @@ async fn mock_imaging_stop_response_parses_via_client() {
     let client = OnvifClient::new("http://mock/onvif/device")
         .with_transport(std::sync::Arc::new(crate::mock::MockTransport::new()));
     client
-        .imaging_stop("http://mock/onvif/imaging", "VideoSource_1")
+        .imaging_stop("http://mock/onvif/imaging", "VS_1")
         .await
         .expect("mock must answer <timg:StopResponse/>");
 }

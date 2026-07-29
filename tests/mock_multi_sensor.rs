@@ -262,3 +262,132 @@ async fn empty_channel_token_is_refused_as_missing() {
         .unwrap_err();
     assert_fault(err, "env:Sender", "NoConfigToken-VECOPT-5507");
 }
+
+// ── Imaging: every operation is per-VideoSourceToken ─────────────────────────
+//
+// The client has always sent `VideoSourceToken` on all seven imaging methods —
+// it is a required `&str`, not an `Option`. The mock was the half that ignored
+// it, so every imaging test in the tree passed against a device that answered
+// for one lens no matter which was asked about.
+//
+// The two lenses differ three ways: current values, level scale (0–100 vs
+// 0–255), and focus support. `VS_2` is fixed-focus, which is the common real
+// pairing and the only way to express "*this channel* has no focus" as opposed
+// to "this device has none".
+
+#[tokio::test]
+async fn imaging_settings_answer_for_the_lens_asked_about() {
+    let (_srv, s) = setup().await;
+
+    let one = s.get_imaging_settings("VS_1").await.unwrap();
+    let two = s.get_imaging_settings("VS_2").await.unwrap();
+
+    assert_eq!(one.brightness, Some(60.0));
+    assert_eq!(two.brightness, Some(45.0));
+    assert_eq!(one.ir_cut_filter.as_deref(), Some("AUTO"));
+    assert_eq!(two.ir_cut_filter.as_deref(), Some("ON"));
+    // The fixed lens reports no auto-focus mode at all — `None`, not a string
+    // the caller has to know to disbelieve.
+    assert_eq!(one.focus_mode.as_deref(), Some("AUTO"));
+    assert_eq!(two.focus_mode, None);
+}
+
+#[tokio::test]
+async fn imaging_options_answer_for_the_lens_asked_about() {
+    let (_srv, s) = setup().await;
+
+    let one = s.get_imaging_options("VS_1").await.unwrap();
+    let two = s.get_imaging_options("VS_2").await.unwrap();
+
+    assert_eq!(one.brightness.as_ref().map(|r| r.max), Some(100.0));
+    assert_eq!(two.brightness.as_ref().map(|r| r.max), Some(255.0));
+    // Auto-focus modes are a per-channel capability, not a device one.
+    assert_eq!(one.focus_af_modes, ["AUTO", "MANUAL"]);
+    assert!(two.focus_af_modes.is_empty());
+}
+
+#[tokio::test]
+async fn imaging_status_reports_focus_only_on_the_focusable_lens() {
+    let (_srv, s) = setup().await;
+
+    let one = s.imaging_get_status("VS_1").await.unwrap();
+    assert_eq!(one.focus_position, Some(0.5));
+
+    // An empty `Status` is a legal response — `FocusStatus20` is [0..1] and it
+    // is the type's only content. This must parse, not error.
+    let two = s.imaging_get_status("VS_2").await.unwrap();
+    assert_eq!(two.focus_position, None);
+}
+
+#[tokio::test]
+async fn setting_one_lens_does_not_move_the_other() {
+    let (_srv, s) = setup().await;
+
+    let mut settings = s.get_imaging_settings("VS_2").await.unwrap();
+    settings.brightness = Some(7.0);
+    s.set_imaging_settings("VS_2", &settings).await.unwrap();
+
+    assert_eq!(
+        s.get_imaging_settings("VS_2").await.unwrap().brightness,
+        Some(7.0)
+    );
+    assert_eq!(
+        s.get_imaging_settings("VS_1").await.unwrap().brightness,
+        Some(60.0),
+        "writing VS_2 must not disturb VS_1"
+    );
+}
+
+// ── Imaging negatives ────────────────────────────────────────────────────────
+
+/// A lens with no focus motor refuses the focus operations rather than
+/// reporting a range it cannot honour.
+#[tokio::test]
+async fn focus_operations_are_refused_on_the_fixed_lens() {
+    let (_srv, s) = setup().await;
+
+    // The focusable lens answers.
+    s.imaging_get_move_options("VS_1").await.unwrap();
+
+    let err = s.imaging_get_move_options("VS_2").await.unwrap_err();
+    assert_fault(err, "env:Sender", "NoFocusSupport-IMGMOVEOPT-5611: VS_2");
+
+    let err = s
+        .imaging_move("VS_2", &oxvif::FocusMove::Continuous { speed: 0.5 })
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Sender", "NoFocusSupport-IMGMOVE-5614: VS_2");
+
+    let err = s.imaging_stop("VS_2").await.unwrap_err();
+    assert_fault(err, "env:Sender", "NoFocusSupport-IMGSTOP-5617: VS_2");
+}
+
+#[tokio::test]
+async fn imaging_settings_unknown_lens_is_refused() {
+    let (_srv, s) = setup().await;
+
+    // `VideoSource_1` is the token the mock's own tests used to pass — it never
+    // matched anything, and a token-blind device answered anyway.
+    let err = s.get_imaging_settings("VideoSource_1").await.unwrap_err();
+    assert_fault(
+        err,
+        "env:Sender",
+        "NoSuchVideoSource-IMGSET-5602: VideoSource_1",
+    );
+}
+
+#[tokio::test]
+async fn imaging_options_unknown_lens_is_refused() {
+    let (_srv, s) = setup().await;
+
+    let err = s.get_imaging_options("VS_7").await.unwrap_err();
+    assert_fault(err, "env:Sender", "NoSuchVideoSource-IMGOPT-5606: VS_7");
+}
+
+#[tokio::test]
+async fn empty_lens_token_is_refused_as_missing() {
+    let (_srv, s) = setup().await;
+
+    let err = s.get_imaging_settings("").await.unwrap_err();
+    assert_fault(err, "env:Sender", "NoVideoSourceToken-IMGSET-5601");
+}

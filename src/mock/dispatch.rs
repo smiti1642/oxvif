@@ -206,13 +206,13 @@ fn dispatch_ptz(op: &str, state: &SharedState, body: &str) -> Option<String> {
 fn dispatch_imaging(op: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => imaging::resp_imaging_service_capabilities(),
-        "GetImagingSettings" => imaging::resp_imaging_settings(state),
+        "GetImagingSettings" => imaging::resp_imaging_settings(state, body),
         "SetImagingSettings" => imaging::handle_set_imaging_settings(state, body),
-        "GetOptions" => imaging::resp_imaging_options(),
-        "GetStatus" => imaging::resp_imaging_status(),
-        "GetMoveOptions" => imaging::resp_imaging_move_options(),
-        "Move" => resp_empty("timg", "MoveResponse"),
-        "Stop" => resp_empty("timg", "StopResponse"),
+        "GetOptions" => imaging::resp_imaging_options(state, body),
+        "GetStatus" => imaging::resp_imaging_status(state, body),
+        "GetMoveOptions" => imaging::resp_imaging_move_options(state, body),
+        "Move" => imaging::handle_imaging_move(state, body),
+        "Stop" => imaging::handle_imaging_stop(state, body),
         _ => return None,
     })
 }
