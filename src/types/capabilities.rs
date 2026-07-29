@@ -5,6 +5,10 @@ use crate::soap::{SoapError, XmlNode};
 // ── Capabilities sub-structs ──────────────────────────────────────────────────
 
 /// Network capabilities from `Device/Network`.
+///
+/// From the device-level `GetCapabilities`. The device service's own answer is
+/// [`DeviceNetworkCapabilities`](super::DeviceNetworkCapabilities), which is a
+/// wider set and distinguishes "said no" from "did not say".
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct NetworkCapabilities {
@@ -19,6 +23,9 @@ pub struct NetworkCapabilities {
 }
 
 /// System capabilities from `Device/System`.
+///
+/// From the device-level `GetCapabilities`. The device service's own answer is
+/// [`DeviceSystemCapabilities`](super::DeviceSystemCapabilities).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SystemCapabilities {
@@ -38,6 +45,9 @@ pub struct SystemCapabilities {
 }
 
 /// I/O capabilities from `Device/IO`.
+///
+/// From the device-level `GetCapabilities`. `tds:DeviceServiceCapabilities` has
+/// no I/O counterpart — the DeviceIO service answers that.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct IoCapabilities {
@@ -48,6 +58,10 @@ pub struct IoCapabilities {
 }
 
 /// Security capabilities from `Device/Security`.
+///
+/// From the device-level `GetCapabilities`. The device service's own answer is
+/// [`DeviceSecurityCapabilities`](super::DeviceSecurityCapabilities), which
+/// covers all three TLS versions and the user-account limits.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SecurityCapabilities {
@@ -65,6 +79,10 @@ pub struct SecurityCapabilities {
 }
 
 /// Device management service capabilities.
+///
+/// From the device-level `GetCapabilities` — *that the device service exists,
+/// and at what URL*. What it can **do** is
+/// [`DeviceServiceCapabilities`](super::DeviceServiceCapabilities).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct DeviceCapabilities {
@@ -81,6 +99,12 @@ pub struct DeviceCapabilities {
 }
 
 /// RTP streaming capabilities from `Media/StreamingCapabilities`.
+///
+/// From the device-level `GetCapabilities`. Media1's own answer is
+/// [`MediaStreamingCapabilities`](super::MediaStreamingCapabilities) and
+/// Media2's is
+/// [`Media2StreamingCapabilities`](super::Media2StreamingCapabilities); all
+/// three have different field sets and are deliberately separate types.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct StreamingCapabilities {
@@ -94,6 +118,9 @@ pub struct StreamingCapabilities {
 }
 
 /// Media service capabilities.
+///
+/// From the device-level `GetCapabilities`. Media1's own answer is
+/// [`MediaServiceCapabilities`](super::MediaServiceCapabilities).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct MediaCapabilities {
@@ -106,6 +133,10 @@ pub struct MediaCapabilities {
 }
 
 /// Events service capabilities.
+///
+/// From the device-level `GetCapabilities`. The events service's own answer is
+/// [`EventsServiceCapabilities`](super::EventsServiceCapabilities) — which has
+/// no `WSPullPointSupport`; that attribute is only here.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct EventsCapabilities {
@@ -130,6 +161,9 @@ pub struct AnalyticsCapabilities {
 }
 
 /// PTZ service capabilities.
+///
+/// From the device-level `GetCapabilities` — the URL only. What the PTZ service
+/// can do is [`PtzServiceCapabilities`](super::PtzServiceCapabilities).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct PtzCapabilities {
@@ -138,6 +172,9 @@ pub struct PtzCapabilities {
 }
 
 /// Imaging service capabilities.
+///
+/// From the device-level `GetCapabilities` — the URL only. See
+/// [`ImagingServiceCapabilities`](super::ImagingServiceCapabilities).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct ImagingCapabilities {
@@ -146,6 +183,9 @@ pub struct ImagingCapabilities {
 }
 
 /// Recording service capabilities.
+///
+/// From the device-level `GetCapabilities` — the URL only. See
+/// [`RecordingServiceCapabilities`](super::RecordingServiceCapabilities).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct RecordingCapabilities {
@@ -154,6 +194,9 @@ pub struct RecordingCapabilities {
 }
 
 /// Search service capabilities.
+///
+/// From the device-level `GetCapabilities` — the URL only. See
+/// [`SearchServiceCapabilities`](super::SearchServiceCapabilities).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SearchCapabilities {
@@ -162,6 +205,9 @@ pub struct SearchCapabilities {
 }
 
 /// Replay service capabilities.
+///
+/// From the device-level `GetCapabilities` — the URL only. See
+/// [`ReplayServiceCapabilities`](super::ReplayServiceCapabilities).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct ReplayCapabilities {
@@ -170,6 +216,10 @@ pub struct ReplayCapabilities {
 }
 
 /// Media2 service capabilities.
+///
+/// From the device-level `GetCapabilities` — the URL only. What the Media2
+/// service can do is
+/// [`Media2ServiceCapabilities`](super::Media2ServiceCapabilities).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct Media2Capabilities {
@@ -191,6 +241,12 @@ pub struct DeviceIoCapabilities {
 ///
 /// Top-level service structs have a `url` field for the service endpoint.
 /// Absent services have `url: None` and boolean fields default to `false`.
+///
+/// This answers **which services exist and where**. What each service can *do*
+/// is a separate call per service — see
+/// [`DeviceServiceCapabilities`](super::DeviceServiceCapabilities) and its
+/// eight siblings. A `false` here means "the device did not say yes", because
+/// this type cannot distinguish absent from denied; the per-service types can.
 ///
 /// # Usage
 ///

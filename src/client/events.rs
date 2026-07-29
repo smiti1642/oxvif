@@ -4,11 +4,37 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
-    EventProperties, NotificationMessage, PullPointSubscription, PushSubscription, xml_escape,
+    EventProperties, EventsServiceCapabilities, NotificationMessage, PullPointSubscription,
+    PushSubscription, xml_escape,
 };
 use futures_core::Stream;
 
 impl OnvifClient {
+    /// Ask the events service what it can do.
+    ///
+    /// `max_pull_points` is the number of concurrent
+    /// [`create_pull_point_subscription`](Self::create_pull_point_subscription)
+    /// endpoints the device will hold — the practical limit on how many
+    /// independent event consumers one camera can serve.
+    ///
+    /// This type has **no `WSPullPointSupport`**; that attribute belongs to the
+    /// device-level [`get_capabilities`](Self::get_capabilities) answer.
+    pub async fn events_get_service_capabilities(
+        &self,
+        events_url: &str,
+    ) -> Result<EventsServiceCapabilities, OnvifError> {
+        // The events action URI carries a portType segment *and* a `Request`
+        // suffix, unlike the other eight services.
+        const ACTION: &str =
+            "http://www.onvif.org/ver10/events/wsdl/EventPortType/GetServiceCapabilitiesRequest";
+        const BODY: &str = "<tev:GetServiceCapabilities/>";
+
+        let xml = self.call(events_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetServiceCapabilitiesResponse")?;
+        EventsServiceCapabilities::from_xml(resp)
+    }
+
     /// Retrieve all event topics advertised by the device.
     ///
     /// `events_url` is obtained from [`get_capabilities`](Self::get_capabilities)

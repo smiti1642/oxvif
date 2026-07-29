@@ -913,3 +913,61 @@ async fn mock_get_compatible_configurations_response_parses_via_client() {
     assert_eq!(configs.len(), 1);
     assert_eq!(configs[0].token, "PTZConfig_1");
 }
+
+// ── ptz_get_service_capabilities ──────────────────────────────────────────────
+//
+// `<tptz:Capabilities>` copied verbatim from
+// `crate::mock::services::ptz::resp_ptz_service_capabilities`
+// (src/mock/services/ptz.rs) — feature-gated there, so keep in step by hand.
+// `tests/mock_service_capabilities.rs` is what actually proves the two equal.
+
+fn ptz_service_capabilities_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl">
+          <s:Body>
+            <tptz:GetServiceCapabilitiesResponse>
+              <tptz:Capabilities GetCompatibleConfigurations="true"
+                                 MoveStatus="true"
+                                 StatusPosition="true"
+                                 MoveAndTrack="PresetToken PTZVector"/>
+            </tptz:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn ptz_service_capabilities_parses_move_and_track() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(ptz_service_capabilities_xml()));
+
+    let caps = client
+        .ptz_get_service_capabilities("http://192.168.1.1/onvif/ptz")
+        .await
+        .unwrap();
+
+    // `MoveAndTrack` is the spelling the schema uses. `MoveAndStartTracking`
+    // is an operation name, not an attribute, and would parse as an empty
+    // list here rather than failing.
+    assert_eq!(caps.move_and_track, ["PresetToken", "PTZVector"]);
+
+    // The richest omitted/denied pair in the stage: two `None`s next to three
+    // `Some(true)`s in one struct.
+    assert_eq!(caps.eflip, None);
+    assert_eq!(caps.reverse, None);
+    assert_eq!(caps.move_status, Some(true));
+    assert_eq!(caps.status_position, Some(true));
+    assert_eq!(caps.get_compatible_configurations, Some(true));
+}
+
+#[tokio::test]
+async fn ptz_service_capabilities_fault() {
+    let xml = make_soap_fault_xml("env:Receiver", "PtzCapsUnavailable-9318");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .ptz_get_service_capabilities("http://192.168.1.1/onvif/ptz")
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Receiver", "PtzCapsUnavailable-9318");
+}

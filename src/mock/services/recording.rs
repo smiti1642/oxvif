@@ -154,6 +154,11 @@ pub fn resp_replay_uri() -> String {
 /// that default is `true`, so a parser that maps absent to `false` disagrees
 /// with the schema. Leaving it out here is what makes that disagreement
 /// reachable from a test.
+///
+/// `MaxRecordings` is **`2.5`, not `2`** — deliberately fractional. It is
+/// `xs:float` in the schema despite reading like a count, and an integral
+/// fixture value passes just as well against a parser that typed it `u32`, so
+/// the fraction is the only thing pinning the type.
 pub fn resp_recording_service_capabilities() -> String {
     soap(
         r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#,
@@ -163,7 +168,7 @@ pub fn resp_recording_service_capabilities() -> String {
                             Encoding="H264 AAC"
                             MaxRate="4096"
                             MaxTotalRate="8192"
-                            MaxRecordings="2"
+                            MaxRecordings="2.5"
                             MaxRecordingJobs="2"
                             Options="false"
                             MetadataRecording="false"

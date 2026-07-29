@@ -45,13 +45,16 @@ use crate::transport::Transport;
 use crate::types::{
     AudioDecoderConfiguration, AudioEncoderConfiguration, AudioEncoderConfigurationOptions,
     AudioOutputConfiguration, AudioSource, AudioSourceConfiguration, Capabilities, DeviceInfo,
-    DigitalInput, DnsInformation, EventProperties, FindRecordingResults, FirmwareUpgradeStart,
-    FocusMove, Hostname, ImagingMoveOptions, ImagingOptions, ImagingSettings, ImagingStatus,
-    MediaProfile, MediaProfile2, MetadataConfiguration, MetadataConfigurationOptions,
-    NetworkGateway, NetworkInterface, NetworkInterfaceConfig, NetworkProtocol, NotificationMessage,
-    NtpInfo, OnvifService, OsdConfiguration, OsdOptions, PtzConfiguration, PtzConfigurationOptions,
-    PtzNode, PtzPreset, PtzStatus, PullPointSubscription, PushSubscription, RecordingItem,
-    RecordingJob, RecordingJobConfiguration, RecordingJobState, RelayOutput, SnapshotUri,
+    DeviceServiceCapabilities, DigitalInput, DnsInformation, EventProperties,
+    EventsServiceCapabilities, FindRecordingResults, FirmwareUpgradeStart, FocusMove, Hostname,
+    ImagingMoveOptions, ImagingOptions, ImagingServiceCapabilities, ImagingSettings, ImagingStatus,
+    Media2ServiceCapabilities, MediaProfile, MediaProfile2, MediaServiceCapabilities,
+    MetadataConfiguration, MetadataConfigurationOptions, NetworkGateway, NetworkInterface,
+    NetworkInterfaceConfig, NetworkProtocol, NotificationMessage, NtpInfo, OnvifService,
+    OsdConfiguration, OsdOptions, PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset,
+    PtzServiceCapabilities, PtzStatus, PullPointSubscription, PushSubscription, RecordingItem,
+    RecordingJob, RecordingJobConfiguration, RecordingJobState, RecordingServiceCapabilities,
+    RelayOutput, ReplayServiceCapabilities, SearchServiceCapabilities, SnapshotUri,
     StorageConfiguration, StreamUri, SystemDateTime, SystemLog, SystemRestoreStart, SystemUris,
     User, VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
     VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
@@ -275,6 +278,15 @@ impl OnvifSession {
     }
 
     // ── Device Service ────────────────────────────────────────────────────────
+
+    /// Ask the device management service what it can do.
+    ///
+    /// Distinct from `get_capabilities`, which lists which services exist.
+    pub async fn device_get_service_capabilities(
+        &self,
+    ) -> Result<DeviceServiceCapabilities, OnvifError> {
+        self.client.device_get_service_capabilities().await
+    }
 
     /// Retrieve all service endpoints advertised by the device.
     pub async fn get_services(&self) -> Result<Vec<OnvifService>, OnvifError> {
@@ -510,6 +522,15 @@ impl OnvifSession {
     }
 
     // ── Media1 Service ────────────────────────────────────────────────────────
+
+    /// Ask the Media1 service what it can do.
+    pub async fn media_get_service_capabilities(
+        &self,
+    ) -> Result<MediaServiceCapabilities, OnvifError> {
+        self.client
+            .media_get_service_capabilities(self.media_url()?)
+            .await
+    }
 
     /// List all media profiles.
     pub async fn get_profiles(&self) -> Result<Vec<MediaProfile>, OnvifError> {
@@ -800,6 +821,15 @@ impl OnvifSession {
 
     // ── Media2 Service ────────────────────────────────────────────────────────
 
+    /// Ask the Media2 service what it can do.
+    pub async fn media2_get_service_capabilities(
+        &self,
+    ) -> Result<Media2ServiceCapabilities, OnvifError> {
+        self.client
+            .media2_get_service_capabilities(self.media2_url()?)
+            .await
+    }
+
     /// List all media profiles via the Media2 service.
     pub async fn get_profiles_media2(&self) -> Result<Vec<MediaProfile2>, OnvifError> {
         self.client.get_profiles_media2(self.media2_url()?).await
@@ -1052,6 +1082,13 @@ impl OnvifSession {
 
     // ── PTZ Service ───────────────────────────────────────────────────────────
 
+    /// Ask the PTZ service what it can do.
+    pub async fn ptz_get_service_capabilities(&self) -> Result<PtzServiceCapabilities, OnvifError> {
+        self.client
+            .ptz_get_service_capabilities(self.ptz_url()?)
+            .await
+    }
+
     /// Move the camera to an absolute position.
     pub async fn ptz_absolute_move(
         &self,
@@ -1220,6 +1257,15 @@ impl OnvifSession {
 
     // ── Imaging Service ───────────────────────────────────────────────────────
 
+    /// Ask the imaging service what it can do.
+    pub async fn imaging_get_service_capabilities(
+        &self,
+    ) -> Result<ImagingServiceCapabilities, OnvifError> {
+        self.client
+            .imaging_get_service_capabilities(self.imaging_url()?)
+            .await
+    }
+
     /// Retrieve the current image quality settings for a video source.
     pub async fn get_imaging_settings(
         &self,
@@ -1291,6 +1337,15 @@ impl OnvifSession {
     }
 
     // ── Events Service ────────────────────────────────────────────────────────
+
+    /// Ask the events service what it can do.
+    pub async fn events_get_service_capabilities(
+        &self,
+    ) -> Result<EventsServiceCapabilities, OnvifError> {
+        self.client
+            .events_get_service_capabilities(self.events_url()?)
+            .await
+    }
 
     /// Retrieve all event topics advertised by the device.
     pub async fn get_event_properties(&self) -> Result<EventProperties, OnvifError> {
@@ -1401,12 +1456,30 @@ impl OnvifSession {
 
     // ── Recording Service ─────────────────────────────────────────────────────
 
+    /// Ask the recording service what it can do.
+    pub async fn recording_get_service_capabilities(
+        &self,
+    ) -> Result<RecordingServiceCapabilities, OnvifError> {
+        self.client
+            .recording_get_service_capabilities(self.recording_url()?)
+            .await
+    }
+
     /// List all recordings stored on the device.
     pub async fn get_recordings(&self) -> Result<Vec<RecordingItem>, OnvifError> {
         self.client.get_recordings(self.recording_url()?).await
     }
 
     // ── Search Service ────────────────────────────────────────────────────────
+
+    /// Ask the search service what it can do.
+    pub async fn search_get_service_capabilities(
+        &self,
+    ) -> Result<SearchServiceCapabilities, OnvifError> {
+        self.client
+            .search_get_service_capabilities(self.search_url()?)
+            .await
+    }
 
     /// Start an asynchronous search for recordings.
     pub async fn find_recordings(
@@ -1452,6 +1525,15 @@ impl OnvifSession {
     }
 
     // ── Replay Service ────────────────────────────────────────────────────────
+
+    /// Ask the replay service what it can do.
+    pub async fn replay_get_service_capabilities(
+        &self,
+    ) -> Result<ReplayServiceCapabilities, OnvifError> {
+        self.client
+            .replay_get_service_capabilities(self.replay_url()?)
+            .await
+    }
 
     /// Retrieve an RTSP URI for replaying a stored recording.
     pub async fn get_replay_uri(

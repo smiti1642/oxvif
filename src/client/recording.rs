@@ -5,10 +5,70 @@ use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
     FindRecordingResults, RecordingConfiguration, RecordingInformation, RecordingItem,
-    RecordingJob, RecordingJobConfiguration, RecordingJobState, xml_escape,
+    RecordingJob, RecordingJobConfiguration, RecordingJobState, RecordingServiceCapabilities,
+    ReplayServiceCapabilities, SearchServiceCapabilities, xml_escape,
 };
 
 impl OnvifClient {
+    /// Ask the recording service what it can do.
+    ///
+    /// The widest of the nine capability answers. `max_recordings` and
+    /// `max_recording_jobs` are the two that decide whether
+    /// [`create_recording`](Self::create_recording) will succeed.
+    ///
+    /// `onboard_storage` has a schema default of `true`, which this crate does
+    /// **not** apply — read it as `onboard_storage.unwrap_or(true)` if you want
+    /// the schema's behaviour rather than the device's silence.
+    pub async fn recording_get_service_capabilities(
+        &self,
+        recording_url: &str,
+    ) -> Result<RecordingServiceCapabilities, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/recording/wsdl/GetServiceCapabilities";
+        const BODY: &str = "<trc:GetServiceCapabilities/>";
+
+        let xml = self.call(recording_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetServiceCapabilitiesResponse")?;
+        RecordingServiceCapabilities::from_xml(resp)
+    }
+
+    /// Ask the search service what it can do.
+    ///
+    /// `search_url` is a **different endpoint** from `recording_url`, even
+    /// though both services are driven from this file — take it from
+    /// `GetServices` with namespace `http://www.onvif.org/ver10/search/wsdl`.
+    pub async fn search_get_service_capabilities(
+        &self,
+        search_url: &str,
+    ) -> Result<SearchServiceCapabilities, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/search/wsdl/GetServiceCapabilities";
+        const BODY: &str = "<tse:GetServiceCapabilities/>";
+
+        let xml = self.call(search_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetServiceCapabilitiesResponse")?;
+        SearchServiceCapabilities::from_xml(resp)
+    }
+
+    /// Ask the replay service what it can do.
+    ///
+    /// `session_timeout_range` is the `(min, max)` seconds the device will
+    /// accept for a replay session — worth reading before
+    /// [`get_replay_uri`](Self::get_replay_uri), because a value outside the
+    /// range comes back as a fault rather than being clamped.
+    pub async fn replay_get_service_capabilities(
+        &self,
+        replay_url: &str,
+    ) -> Result<ReplayServiceCapabilities, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/replay/wsdl/GetServiceCapabilities";
+        const BODY: &str = "<trp:GetServiceCapabilities/>";
+
+        let xml = self.call(replay_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetServiceCapabilitiesResponse")?;
+        ReplayServiceCapabilities::from_xml(resp)
+    }
+
     /// List all recordings stored on the device.
     ///
     /// `recording_url` is obtained from `GetServices` — look for the service

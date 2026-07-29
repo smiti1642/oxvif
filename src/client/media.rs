@@ -5,12 +5,36 @@ use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
     AudioEncoderConfiguration, AudioEncoderConfigurationOptions, AudioSource,
-    AudioSourceConfiguration, MediaProfile, OsdConfiguration, OsdOptions, SnapshotUri, StreamUri,
-    VideoEncoderConfiguration, VideoEncoderConfigurationOptions, VideoSource,
-    VideoSourceConfiguration, VideoSourceConfigurationOptions, xml_escape,
+    AudioSourceConfiguration, MediaProfile, MediaServiceCapabilities, OsdConfiguration, OsdOptions,
+    SnapshotUri, StreamUri, VideoEncoderConfiguration, VideoEncoderConfigurationOptions,
+    VideoSource, VideoSourceConfiguration, VideoSourceConfigurationOptions, xml_escape,
 };
 
 impl OnvifClient {
+    /// Ask the Media1 service what it can do.
+    ///
+    /// Answers whether snapshots, OSD and rotation are available and which RTP
+    /// transports the device offers, so a caller can pick a transport without
+    /// trying each one.
+    ///
+    /// The returned [`MediaServiceCapabilities`] is a different type from
+    /// [`Media2ServiceCapabilities`](crate::Media2ServiceCapabilities) even
+    /// where the attribute names coincide — Media2 dropped `RTP_TCP` and added
+    /// masks and WebRTC, and the two services may answer differently on the
+    /// same device.
+    pub async fn media_get_service_capabilities(
+        &self,
+        media_url: &str,
+    ) -> Result<MediaServiceCapabilities, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetServiceCapabilities";
+        const BODY: &str = "<trt:GetServiceCapabilities/>";
+
+        let xml = self.call(media_url, ACTION, BODY).await?;
+        let body = parse_soap_body(&xml)?;
+        let resp = find_response(&body, "GetServiceCapabilitiesResponse")?;
+        MediaServiceCapabilities::from_xml(resp)
+    }
+
     /// List all media profiles available on the device.
     ///
     /// `media_url` is obtained from [`get_capabilities`](Self::get_capabilities).

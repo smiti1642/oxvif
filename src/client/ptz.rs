@@ -4,10 +4,30 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
-    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzStatus, xml_escape,
+    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzServiceCapabilities,
+    PtzStatus, xml_escape,
 };
 
 impl OnvifClient {
+    /// Ask the PTZ service what it can do.
+    ///
+    /// Worth calling before [`ptz_get_status`](Self::ptz_get_status): a device
+    /// with `move_status` or `status_position` unset is not obliged to fill in
+    /// those parts of the status response, so an empty field there means
+    /// "never reported" rather than "not moving".
+    pub async fn ptz_get_service_capabilities(
+        &self,
+        ptz_url: &str,
+    ) -> Result<PtzServiceCapabilities, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetServiceCapabilities";
+        const BODY: &str = "<tptz:GetServiceCapabilities/>";
+
+        let xml = self.call(ptz_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetServiceCapabilitiesResponse")?;
+        PtzServiceCapabilities::from_xml(resp)
+    }
+
     /// Move the camera to an absolute position.
     ///
     /// Coordinates are in the normalised range `[-1.0, 1.0]` for pan/tilt

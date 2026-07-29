@@ -846,3 +846,175 @@ async fn test_search_recordings_returns_empty_on_completed_no_results() {
         .unwrap();
     assert!(results.is_empty());
 }
+
+// ── recording / search / replay GetServiceCapabilities ────────────────────────
+//
+// The three `<…:Capabilities>` blocks below are copied verbatim from
+// `resp_recording_service_capabilities`, `resp_search_service_capabilities` and
+// `resp_replay_service_capabilities` in `crate::mock::services::recording`
+// (src/mock/services/recording.rs) — feature-gated there, so keep in step by
+// hand.
+
+fn recording_service_capabilities_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trc="http://www.onvif.org/ver10/recording/wsdl">
+          <s:Body>
+            <trc:GetServiceCapabilitiesResponse>
+              <trc:Capabilities DynamicRecordings="true"
+                                DynamicTracks="true"
+                                Encoding="H264 AAC"
+                                MaxRate="4096"
+                                MaxTotalRate="8192"
+                                MaxRecordings="2.5"
+                                MaxRecordingJobs="2"
+                                Options="false"
+                                MetadataRecording="false"
+                                EventRecording="false"
+                                ScheduledRecording="false"
+                                SegmentExport="false"/>
+            </trc:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn recording_service_capabilities_parses_wide_attribute_set() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(recording_service_capabilities_xml()));
+
+    let caps = client
+        .recording_get_service_capabilities("http://192.168.1.1/onvif/recording")
+        .await
+        .unwrap();
+
+    // `MaxRecordings` is `xs:float`, not `xs:int`, despite reading like a
+    // count. The fixture value is fractional on purpose: an integral one
+    // parses identically against a `u32` field, so only `2.5` pins the type.
+    assert_eq!(caps.max_recordings, Some(2.5));
+    assert_eq!(caps.max_rate, Some(4096.0));
+    assert_eq!(caps.max_total_rate, Some(8192.0));
+    assert_eq!(caps.max_recording_jobs, Some(2));
+
+    assert_eq!(caps.encoding, ["H264", "AAC"]);
+    assert_eq!(caps.dynamic_recordings, Some(true));
+    assert_eq!(caps.dynamic_tracks, Some(true));
+    assert_eq!(caps.scheduled_recording, Some(false));
+    assert_eq!(caps.segment_export, Some(false));
+
+    // The schema gives `OnboardStorage` a `default="true"`, and this crate
+    // deliberately does not apply it — absent stays `None`, so a caller can
+    // still tell a silent device from one that answered.
+    assert_eq!(caps.onboard_storage, None);
+    assert_eq!(caps.before_event_limit, None);
+    assert_eq!(caps.asymmetric_encryption_supported, None);
+    assert!(caps.supported_export_file_formats.is_empty());
+}
+
+#[tokio::test]
+async fn recording_service_capabilities_fault() {
+    let xml = make_soap_fault_xml("ter:InvalidArgVal", "RecCapsBadRequest-3391");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .recording_get_service_capabilities("http://192.168.1.1/onvif/recording")
+        .await
+        .unwrap_err();
+    assert_fault(err, "ter:InvalidArgVal", "RecCapsBadRequest-3391");
+}
+
+fn search_service_capabilities_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tse="http://www.onvif.org/ver10/search/wsdl">
+          <s:Body>
+            <tse:GetServiceCapabilitiesResponse>
+              <tse:Capabilities MetadataSearch="false"
+                                GeneralStartEvents="false"
+                                NLSearch="false"
+                                ImageSearch="false"/>
+            </tse:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn search_service_capabilities_parses_four_flags() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(search_service_capabilities_xml()));
+
+    let caps = client
+        .search_get_service_capabilities("http://192.168.1.1/onvif/search")
+        .await
+        .unwrap();
+
+    // `NLSearch`, not `NlSearch` — the schema keeps the initialism upper-case.
+    assert_eq!(caps.nl_search, Some(false));
+    assert_eq!(caps.metadata_search, Some(false));
+    assert_eq!(caps.general_start_events, Some(false));
+    assert_eq!(caps.image_search, Some(false));
+}
+
+#[tokio::test]
+async fn search_service_capabilities_fault() {
+    let xml = make_soap_fault_xml("env:Sender", "SearchCapsUnsupported-7712");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .search_get_service_capabilities("http://192.168.1.1/onvif/search")
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Sender", "SearchCapsUnsupported-7712");
+}
+
+fn replay_service_capabilities_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trp="http://www.onvif.org/ver10/replay/wsdl">
+          <s:Body>
+            <trp:GetServiceCapabilitiesResponse>
+              <trp:Capabilities ReversePlayback="false"
+                                SessionTimeoutRange="1.0 600.0"
+                                RTP_RTSP_TCP="true"/>
+            </trp:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn replay_service_capabilities_parses_timeout_range() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(replay_service_capabilities_xml()));
+
+    let caps = client
+        .replay_get_service_capabilities("http://192.168.1.1/onvif/replay")
+        .await
+        .unwrap();
+
+    // The only `tt:FloatList` in the stage: a pair carried in the attribute,
+    // not a `Min`/`Max` sub-tree. A parser that reads the first float and stops
+    // yields `Some((1.0, …))` for nothing, so the max is the load-bearing half.
+    assert_eq!(caps.session_timeout_range, Some((1.0, 600.0)));
+    assert_eq!(caps.rtp_rtsp_tcp, Some(true));
+    assert_eq!(caps.reverse_playback, Some(false));
+    assert_eq!(caps.rtsp_web_socket_uri, None);
+}
+
+#[tokio::test]
+async fn replay_service_capabilities_missing_capabilities() {
+    // The response element is present but empty — the one path that makes the
+    // shared `Capabilities` lookup load-bearing across all nine services.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trp="http://www.onvif.org/ver10/replay/wsdl">
+          <s:Body>
+            <trp:GetServiceCapabilitiesResponse/>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .replay_get_service_capabilities("http://192.168.1.1/onvif/replay")
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "Capabilities");
+}

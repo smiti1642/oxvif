@@ -2054,3 +2054,138 @@ async fn test_start_system_restore_returns_upload_handle() {
         c.body
     );
 }
+
+// ── device_get_service_capabilities ───────────────────────────────────────────
+//
+// The `<tds:Capabilities>` block below is copied verbatim from
+// `crate::mock::services::device::resp_service_capabilities`
+// (src/mock/services/device.rs). That module is behind `#[cfg(feature =
+// "mock")]` and these tests compile without it, so the copy cannot be shared —
+// keep the two in step by hand. `tests/mock_service_capabilities.rs` proves the
+// client agrees with the live mock for one service.
+
+fn device_service_capabilities_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+          <s:Body>
+            <tds:GetServiceCapabilitiesResponse>
+              <tds:Capabilities>
+                <tds:Network IPFilter="false"
+                             ZeroConfiguration="false"
+                             IPVersion6="true"
+                             DynDNS="false"
+                             Dot11Configuration="false"
+                             HostnameFromDHCP="false"
+                             NTP="1"
+                             DHCPv6="false"/>
+                <tds:Security TLS1.0="false"
+                              TLS1.1="false"
+                              TLS1.2="true"
+                              OnboardKeyGeneration="false"
+                              AccessPolicyConfig="false"
+                              DefaultAccessPolicy="false"
+                              Dot1X="false"
+                              RemoteUserHandling="false"
+                              X.509Token="false"
+                              SAMLToken="false"
+                              KerberosToken="false"
+                              UsernameToken="true"
+                              HttpDigest="true"
+                              RELToken="false"
+                              MaxUsers="8"
+                              MaxUserNameLength="32"
+                              MaxPasswordLength="64"/>
+                <tds:System DiscoveryResolve="false"
+                            DiscoveryBye="true"
+                            RemoteDiscovery="false"
+                            SystemBackup="false"
+                            SystemLogging="true"
+                            HttpFirmwareUpgrade="true"
+                            HttpSystemBackup="false"
+                            HttpSystemLogging="false"
+                            HttpSupportInformation="false"
+                            StorageConfiguration="true"
+                            MaxStorageConfigurations="2"
+                            UserConfigNotSupported="false"/>
+                <tds:Misc AuxiliaryCommands="tt:Wiper|On tt:Wiper|Off tt:IRLamp|On tt:IRLamp|Off tt:IRLamp|Auto"/>
+              </tds:Capabilities>
+            </tds:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn device_service_capabilities_parses_all_four_children() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(device_service_capabilities_xml()));
+
+    let caps = client.device_get_service_capabilities().await.unwrap();
+
+    // Network — a bool and an int side by side, plus one omitted int.
+    assert_eq!(caps.network.ip_version6, Some(true));
+    assert_eq!(caps.network.ip_filter, Some(false));
+    assert_eq!(caps.network.ntp, Some(1));
+    assert_eq!(caps.network.dot1x_configurations, None);
+
+    // Security — the two dotted lookup strings. If either were renamed to
+    // match its Rust field the attribute would parse as absent, so these two
+    // lines are the whole test for §2.4.
+    assert_eq!(caps.security.tls1_2, Some(true));
+    assert_eq!(caps.security.tls1_0, Some(false));
+    assert_eq!(caps.security.x509_token, Some(false));
+    assert_eq!(caps.security.username_token, Some(true));
+    assert_eq!(caps.security.max_users, Some(8));
+    assert_eq!(caps.security.max_password_length, Some(64));
+    assert_eq!(caps.security.json_web_token, None);
+    assert!(caps.security.supported_eap_methods.is_empty());
+    assert!(caps.security.hashing_algorithms.is_empty());
+
+    // System — `Some(false)` and `None` in the same struct. A parser that
+    // defaults absent attributes to `false` passes every other assertion in
+    // this file and fails this pair.
+    assert_eq!(caps.system.user_config_not_supported, Some(false));
+    assert_eq!(caps.system.discovery_not_supported, None);
+    assert_eq!(caps.system.network_config_not_supported, None);
+    assert_eq!(caps.system.discovery_bye, Some(true));
+    assert_eq!(caps.system.max_storage_configurations, Some(2));
+    assert_eq!(caps.system.hardware_type, None);
+
+    // Misc — the discoverable auxiliary-command list. `|` is not an XML
+    // metacharacter, so the values survive the round trip unescaped.
+    let misc = caps.misc.expect("Misc element present");
+    assert_eq!(misc.auxiliary_commands.len(), 5);
+    assert_eq!(misc.auxiliary_commands[0], "tt:Wiper|On");
+    assert_eq!(misc.auxiliary_commands[4], "tt:IRLamp|Auto");
+}
+
+#[tokio::test]
+async fn device_service_capabilities_missing_security_is_an_error() {
+    // `Security` is `minOccurs="1"` in `tds:DeviceServiceCapabilities`, so its
+    // absence is a malformed response rather than "the device declined".
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+          <s:Body>
+            <tds:GetServiceCapabilitiesResponse>
+              <tds:Capabilities>
+                <tds:Network NTP="1"/>
+                <tds:System DiscoveryBye="true"/>
+              </tds:Capabilities>
+            </tds:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client.device_get_service_capabilities().await.unwrap_err();
+    assert_missing_field(err, "Capabilities/Security");
+}
+
+#[tokio::test]
+async fn device_service_capabilities_fault() {
+    let xml = make_soap_fault_xml("env:Sender", "ActionNotSupported-tds-caps-6104");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client.device_get_service_capabilities().await.unwrap_err();
+    assert_fault(err, "env:Sender", "ActionNotSupported-tds-caps-6104");
+}

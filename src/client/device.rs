@@ -4,10 +4,11 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
-    Capabilities, DeviceInfo, DigitalInput, DnsInformation, FirmwareUpgradeStart, Hostname,
-    IpStackConfig, NetworkGateway, NetworkInterface, NetworkInterfaceConfig, NetworkProtocol,
-    NtpInfo, OnvifService, RelayOutput, SetDateTimeRequest, StorageConfiguration, SystemDateTime,
-    SystemLog, SystemRestoreStart, SystemUris, User, xml_escape,
+    Capabilities, DeviceInfo, DeviceServiceCapabilities, DigitalInput, DnsInformation,
+    FirmwareUpgradeStart, Hostname, IpStackConfig, NetworkGateway, NetworkInterface,
+    NetworkInterfaceConfig, NetworkProtocol, NtpInfo, OnvifService, RelayOutput,
+    SetDateTimeRequest, StorageConfiguration, SystemDateTime, SystemLog, SystemRestoreStart,
+    SystemUris, User, xml_escape,
 };
 
 fn ipv4_block(s: &IpStackConfig) -> String {
@@ -65,6 +66,28 @@ fn ipv6_block(s: &IpStackConfig) -> String {
 }
 
 impl OnvifClient {
+    /// Ask the device management service what it can do.
+    ///
+    /// **Not the same call as [`get_capabilities`](Self::get_capabilities).**
+    /// That one lists *which services the device has and at what URL*; this one
+    /// describes what the device service itself supports — TLS versions, user
+    /// limits, discovery and firmware behaviour, and the auxiliary commands the
+    /// camera accepts.
+    ///
+    /// Every flag is [`Option<bool>`]: `None` means the device did not mention
+    /// the attribute at all, which is not the same answer as `Some(false)`.
+    pub async fn device_get_service_capabilities(
+        &self,
+    ) -> Result<DeviceServiceCapabilities, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetServiceCapabilities";
+        const BODY: &str = "<tds:GetServiceCapabilities/>";
+
+        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+        let body = parse_soap_body(&xml)?;
+        let resp = find_response(&body, "GetServiceCapabilitiesResponse")?;
+        DeviceServiceCapabilities::from_xml(resp)
+    }
+
     /// Retrieve service endpoint URLs from the device.
     ///
     /// This is typically the first call made after constructing a client. The

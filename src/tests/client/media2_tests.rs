@@ -1303,3 +1303,99 @@ mod request_body_shapes {
         );
     }
 }
+
+// ── media2_get_service_capabilities ───────────────────────────────────────────
+//
+// `<tr2:Capabilities>` copied verbatim from
+// `crate::mock::services::media2::resp_service_capabilities_media2`
+// (src/mock/services/media2.rs) — feature-gated there, so keep in step by hand.
+// The schema type is `tr2:Capabilities2`; the *element* is still
+// `Capabilities`, which is why the parser looks for the unsuffixed name.
+
+fn media2_service_capabilities_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tr2="http://www.onvif.org/ver20/media/wsdl">
+          <s:Body>
+            <tr2:GetServiceCapabilitiesResponse>
+              <tr2:Capabilities SnapshotUri="true"
+                                Rotation="false"
+                                VideoSourceMode="true"
+                                OSD="false"
+                                Mask="false"
+                                SourceMask="false"
+                                WebRTC="0">
+                <tr2:ProfileCapabilities MaximumNumberOfProfiles="8"
+                                         ConfigurationsSupported="VideoSource VideoEncoder AudioSource AudioEncoder Metadata"/>
+                <tr2:StreamingCapabilities RTSPStreaming="true"
+                                           RTPMulticast="false"
+                                           RTP_RTSP_TCP="true"
+                                           NonAggregateControl="false"
+                                           AutoStartMulticast="false"/>
+              </tr2:Capabilities>
+            </tr2:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn media2_service_capabilities_parses_webrtc_count() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(media2_service_capabilities_xml()));
+
+    let caps = client
+        .media2_get_service_capabilities("http://192.168.1.1/onvif/media2")
+        .await
+        .unwrap();
+
+    // `WebRTC` is an `xs:int` session count. A parser that reads it as a
+    // boolean turns `"0"` into `Some(false)` — supported, with the number
+    // gone.
+    assert_eq!(caps.webrtc, Some(0));
+    assert!(caps.webrtc_codecs.is_empty());
+
+    // The Media1/Media2 tripwire. Media1's fixture says `false` for
+    // `VideoSourceMode` and sends `TemporaryOSDText`; this one says `true` and
+    // omits it. Cross the two services' parsers or share one struct between
+    // them and exactly these two lines fail.
+    assert_eq!(caps.video_source_mode, Some(true));
+    assert_eq!(caps.temporary_osd_text, None);
+
+    assert_eq!(caps.snapshot_uri, Some(true));
+    assert_eq!(caps.osd, Some(false));
+    assert_eq!(caps.mask, Some(false));
+
+    assert_eq!(caps.profile.maximum_number_of_profiles, Some(8));
+    assert_eq!(
+        caps.profile.configurations_supported,
+        [
+            "VideoSource",
+            "VideoEncoder",
+            "AudioSource",
+            "AudioEncoder",
+            "Metadata"
+        ]
+    );
+
+    assert_eq!(caps.streaming.rtsp_streaming, Some(true));
+    assert_eq!(caps.streaming.rtp_rtsp_tcp, Some(true));
+    assert_eq!(caps.streaming.auto_start_multicast, Some(false));
+    assert_eq!(caps.streaming.secure_rtsp_streaming, None);
+    assert_eq!(caps.streaming.rtsp_web_socket_uri, None);
+}
+
+#[tokio::test]
+async fn media2_service_capabilities_fault() {
+    let xml = make_soap_fault_xml("ter:ActionNotSupported", "NoServiceCapabilities-tr2-2270");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .media2_get_service_capabilities("http://192.168.1.1/onvif/media2")
+        .await
+        .unwrap_err();
+    assert_fault(
+        err,
+        "ter:ActionNotSupported",
+        "NoServiceCapabilities-tr2-2270",
+    );
+}

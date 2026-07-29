@@ -10,6 +10,7 @@ mod osd;
 mod ptz;
 mod ptz_config;
 mod recording;
+mod service_capabilities;
 mod video;
 
 pub use audio::*;
@@ -22,6 +23,7 @@ pub use osd::*;
 pub use ptz::*;
 pub use ptz_config::*;
 pub use recording::*;
+pub use service_capabilities::*;
 pub use video::*;
 
 use std::borrow::Cow;

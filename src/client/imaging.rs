@@ -4,10 +4,30 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
-    FocusMove, ImagingMoveOptions, ImagingOptions, ImagingSettings, ImagingStatus, xml_escape,
+    FocusMove, ImagingMoveOptions, ImagingOptions, ImagingServiceCapabilities, ImagingSettings,
+    ImagingStatus, xml_escape,
 };
 
 impl OnvifClient {
+    /// Ask the imaging service what it can do.
+    ///
+    /// Three flags is the whole answer the schema allows. Note that this is a
+    /// **service-wide** query and takes no video source token, unlike every
+    /// other imaging method — the per-source ranges live in
+    /// [`get_imaging_options`](Self::get_imaging_options).
+    pub async fn imaging_get_service_capabilities(
+        &self,
+        imaging_url: &str,
+    ) -> Result<ImagingServiceCapabilities, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/imaging/wsdl/GetServiceCapabilities";
+        const BODY: &str = "<timg:GetServiceCapabilities/>";
+
+        let xml = self.call(imaging_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetServiceCapabilitiesResponse")?;
+        ImagingServiceCapabilities::from_xml(resp)
+    }
+
     /// Retrieve the current image quality settings for a video source.
     ///
     /// `imaging_url` is obtained from

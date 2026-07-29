@@ -5,13 +5,36 @@ use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
     AudioDecoderConfiguration, AudioEncoderConfiguration, AudioEncoderConfigurationOptions,
-    AudioOutputConfiguration, AudioSourceConfiguration, MediaProfile2, MetadataConfiguration,
-    MetadataConfigurationOptions, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions2,
-    VideoEncoderInstances, VideoSourceConfiguration, VideoSourceConfigurationOptions,
-    VideoSourceMode, xml_escape,
+    AudioOutputConfiguration, AudioSourceConfiguration, Media2ServiceCapabilities, MediaProfile2,
+    MetadataConfiguration, MetadataConfigurationOptions, VideoEncoderConfiguration2,
+    VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSourceConfiguration,
+    VideoSourceConfigurationOptions, VideoSourceMode, xml_escape,
 };
 
 impl OnvifClient {
+    /// Ask the Media2 service what it can do.
+    ///
+    /// The most useful answer here is
+    /// [`profile.configurations_supported`](crate::Media2ProfileCapabilities::configurations_supported)
+    /// — the exact set of configuration kinds
+    /// [`add_configuration_media2`](Self::add_configuration_media2) will accept
+    /// on this device.
+    ///
+    /// Note that `webrtc` is a **session count**, not a flag: `Some(0)` means
+    /// the device described WebRTC and offers no concurrent session.
+    pub async fn media2_get_service_capabilities(
+        &self,
+        media2_url: &str,
+    ) -> Result<Media2ServiceCapabilities, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetServiceCapabilities";
+        const BODY: &str = "<tr2:GetServiceCapabilities/>";
+
+        let xml = self.call(media2_url, ACTION, BODY).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetServiceCapabilitiesResponse")?;
+        Media2ServiceCapabilities::from_xml(resp)
+    }
+
     /// List all media profiles from the Media2 service.
     ///
     /// `media2_url` is obtained from `caps.media2.url` via

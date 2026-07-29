@@ -500,3 +500,80 @@ async fn test_set_synchronization_point_ok() {
     let action = captured.lock().unwrap().action.clone();
     assert!(action.contains("SetSynchronizationPoint"));
 }
+
+// ── events_get_service_capabilities ───────────────────────────────────────────
+//
+// `<tev:Capabilities>` copied verbatim from
+// `crate::mock::services::events::resp_event_service_capabilities`
+// (src/mock/services/events.rs) — feature-gated there, so keep in step by hand.
+
+fn events_service_capabilities_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tev="http://www.onvif.org/ver10/events/wsdl">
+          <s:Body>
+            <tev:GetServiceCapabilitiesResponse>
+              <tev:Capabilities WSSubscriptionPolicySupport="true"
+                                WSPausableSubscriptionManagerInterfaceSupport="false"
+                                MaxNotificationProducers="4"
+                                MaxPullPoints="4"
+                                PersistentNotificationStorage="false"
+                                MaxEventBrokers="0"
+                                MetadataOverMQTT="false"/>
+            </tev:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn events_service_capabilities_parses_counts() {
+    let (transport, captured) = RecordingTransport::new(events_service_capabilities_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let caps = client
+        .events_get_service_capabilities("http://192.168.1.1/onvif/events")
+        .await
+        .unwrap();
+
+    // `Some(0)`, not `None`. A parser that treats a falsy numeric attribute as
+    // absent reports "the device never mentioned brokers" for a device that
+    // explicitly said it has none.
+    assert_eq!(caps.max_event_brokers, Some(0));
+    assert_eq!(caps.max_pull_points, Some(4));
+    assert_eq!(caps.max_notification_producers, Some(4));
+    assert_eq!(caps.ws_subscription_policy_support, Some(true));
+    assert_eq!(
+        caps.ws_pausable_subscription_manager_interface_support,
+        Some(false)
+    );
+    assert_eq!(caps.metadata_over_mqtt, Some(false));
+    assert_eq!(caps.event_broker_protocols, None);
+
+    // Events is the only one of the nine whose action URI carries a portType
+    // segment and a `Request` suffix. Getting it wrong reaches a real device's
+    // fault handler, not a compiler.
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/events/wsdl/EventPortType/GetServiceCapabilitiesRequest"
+    );
+    assert!(
+        c.body
+            .contains("<s:Body><tev:GetServiceCapabilities/></s:Body>"),
+        "body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn events_service_capabilities_fault() {
+    let xml = make_soap_fault_xml("s:Receiver", "EventCapsInternal-8043");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .events_get_service_capabilities("http://192.168.1.1/onvif/events")
+        .await
+        .unwrap_err();
+    assert_fault(err, "s:Receiver", "EventCapsInternal-8043");
+}

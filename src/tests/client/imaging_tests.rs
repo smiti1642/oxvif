@@ -586,3 +586,54 @@ async fn test_imaging_options_hikvision_no_iris() {
     // No iris ranges at all (no Min*/Max* and no legacy) → None, correctly.
     assert!(opts.iris_range.is_none());
 }
+
+// ── imaging_get_service_capabilities ──────────────────────────────────────────
+//
+// `<timg:Capabilities>` copied verbatim from
+// `crate::mock::services::imaging::resp_imaging_service_capabilities`
+// (src/mock/services/imaging.rs) — feature-gated there, so keep in step by hand.
+
+fn imaging_service_capabilities_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl">
+          <s:Body>
+            <timg:GetServiceCapabilitiesResponse>
+              <timg:Capabilities ImageStabilization="false"
+                                 Presets="false"
+                                 AdaptablePreset="false"/>
+            </timg:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn imaging_service_capabilities_parses_three_flags() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(imaging_service_capabilities_xml()));
+
+    let caps = client
+        .imaging_get_service_capabilities("http://192.168.1.1/onvif/imaging")
+        .await
+        .unwrap();
+
+    // Three attributes is the complete schema, and all three are present, so
+    // this service has no `None` row of its own. `AdaptablePreset` is the
+    // verified spelling — singular, "Adaptable". The plausible-looking
+    // `AdaptivePresets` would make this `None` and only this assertion says so.
+    assert_eq!(caps.adaptable_preset, Some(false));
+    assert_eq!(caps.presets, Some(false));
+    assert_eq!(caps.image_stabilization, Some(false));
+}
+
+#[tokio::test]
+async fn imaging_service_capabilities_fault() {
+    let xml = make_soap_fault_xml("ter:NotAuthorized", "ImagingCapsDenied-5527");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .imaging_get_service_capabilities("http://192.168.1.1/onvif/imaging")
+        .await
+        .unwrap_err();
+    assert_fault(err, "ter:NotAuthorized", "ImagingCapsDenied-5527");
+}

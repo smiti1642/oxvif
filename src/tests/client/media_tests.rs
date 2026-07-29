@@ -1582,3 +1582,85 @@ async fn mock_remove_video_source_configuration_response_parses_via_client() {
         .await
         .expect("mock must answer <trt:RemoveVideoSourceConfigurationResponse/>");
 }
+
+// ── media_get_service_capabilities ────────────────────────────────────────────
+//
+// `<trt:Capabilities>` copied verbatim from
+// `crate::mock::services::media::resp_service_capabilities`
+// (src/mock/services/media.rs) — feature-gated there, so keep in step by hand.
+
+fn media_service_capabilities_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+          <s:Body>
+            <trt:GetServiceCapabilitiesResponse>
+              <trt:Capabilities SnapshotUri="true"
+                                Rotation="false"
+                                VideoSourceMode="false"
+                                OSD="true"
+                                TemporaryOSDText="false"
+                                EXICompression="false">
+                <trt:ProfileCapabilities MaximumNumberOfProfiles="8"/>
+                <trt:StreamingCapabilities RTPMulticast="false"
+                                           RTP_TCP="true"
+                                           RTP_RTSP_TCP="true"
+                                           NonAggregateControl="false"
+                                           NoRTSPStreaming="false"/>
+              </trt:Capabilities>
+            </trt:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn media_service_capabilities_parses_required_children() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(media_service_capabilities_xml()));
+
+    let caps = client
+        .media_get_service_capabilities("http://192.168.1.1/onvif/media")
+        .await
+        .unwrap();
+
+    assert_eq!(caps.snapshot_uri, Some(true));
+    assert_eq!(caps.osd, Some(true));
+    assert_eq!(caps.exi_compression, Some(false));
+
+    // `VideoSourceMode` is `false` here and `true` in the Media2 fixture, and
+    // `TemporaryOSDText` is present here and omitted there. Both disagreements
+    // are deliberate: they are what fails if the two services' parsers or
+    // structs are crossed.
+    assert_eq!(caps.video_source_mode, Some(false));
+    assert_eq!(caps.temporary_osd_text, Some(false));
+
+    assert_eq!(caps.profile.maximum_number_of_profiles, Some(8));
+
+    // `RTP_TCP` exists only on Media1 — Media2 dropped the transport.
+    assert_eq!(caps.streaming.rtp_tcp, Some(true));
+    assert_eq!(caps.streaming.rtp_rtsp_tcp, Some(true));
+    assert_eq!(caps.streaming.rtp_multicast, Some(false));
+    assert_eq!(caps.streaming.no_rtsp_streaming, Some(false));
+}
+
+#[tokio::test]
+async fn media_service_capabilities_missing_streaming() {
+    // Both children are `minOccurs="1"` on `trt:Capabilities`.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+          <s:Body>
+            <trt:GetServiceCapabilitiesResponse>
+              <trt:Capabilities SnapshotUri="true">
+                <trt:ProfileCapabilities MaximumNumberOfProfiles="8"/>
+              </trt:Capabilities>
+            </trt:GetServiceCapabilitiesResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .media_get_service_capabilities("http://192.168.1.1/onvif/media")
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "Capabilities/StreamingCapabilities");
+}
