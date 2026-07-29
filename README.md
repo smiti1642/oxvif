@@ -1001,6 +1001,17 @@ Pass/Warn/Fail/Skip report with a Profile S/T/G assessment. A readable
 alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
+> **Want this with a GUI?** [**OxDM**](https://github.com/smiti1642/oxdm) — the
+> ONVIF device manager built on this crate — drives the same `HealthCheck` from
+> a **Diagnostics** tab: per-service Pass/Warn/Fail/Skip, the Profile S/T/G
+> verdict, "save as baseline" plus an automatic diff on the next run, and batch
+> runs across a fleet exportable as JSON or JUnit XML for CI. Everything below
+> is the library underneath it, so the two report the same thing.
+
+[![A fleet health run in OxDM: one row per camera with pass/warn/fail/skip counts, Profile S/T/G badges, and live stream and recording probe results](https://raw.githubusercontent.com/smiti1642/oxdm/main/docs/health-check.png)](https://github.com/smiti1642/oxdm)
+
+<sub>A batch run over a fleet — demonstrated in **[OxDM](https://github.com/smiti1642/oxdm)**, which drives this crate's `HealthCheck`. The `snapshot 291 KB` / `RTSP OK` / `replay URI OK` badges are the liveness probes below: real bytes fetched, not an advertised URL echoed back.</sub>
+
 ```toml
 oxvif = { version = "0.15", features = ["health"] }
 ```
@@ -1470,6 +1481,12 @@ for q in &report.quirks {
 > `diff_details() -> Vec<OperationDiff>` renders each operation's baseline and
 > clone responses as aligned, pretty-printed XML (instance values like IPs and
 > tokens normalised) ready for a git-style line diff.
+
+[![A quirk report grouped by service area, each operation showing added and removed element counts, above a note that operations the device declined with a SOAP Fault are correct device behaviour rather than a client problem](https://raw.githubusercontent.com/smiti1642/oxdm/main/docs/quirks.png)](https://github.com/smiti1642/oxdm)
+
+[![A git-style side-by-side diff of one operation: oxvif's reference response on the left, the cloned camera's on the right, with word-level highlighting on the values that differ and extra vendor blocks the reference does not emit](https://raw.githubusercontent.com/smiti1642/oxdm/main/docs/quirks-diff.png)](https://github.com/smiti1642/oxdm)
+
+<sub>What a `QuirkReport` looks like rendered — demonstrated in **[OxDM](https://github.com/smiti1642/oxdm)**. Top: the report grouped by service area. Bottom: `diff_details()` as a git-style side-by-side, oxvif's reference on the left and the cloned camera on the right. Note the `__MASKED__` tokens — the canonicaliser normalises instance values so the diff shows *shape* drift, and a saved clone carries no credential.</sub>
 
 ### Parse verification — will oxvif choke on this device
 
