@@ -354,3 +354,40 @@ async fn ptz_preset_tour_round_trip() {
     assert_eq!(after.len(), 1);
     assert_eq!(after[0].token.as_deref(), Some("Tour_1"));
 }
+
+/// The two `SendAuxiliaryCommand` operations, driven over HTTP against the
+/// same mock device, proving they are distinct endpoints rather than one
+/// method with two names — and that what the Device service *advertises* in
+/// `Misc/@AuxiliaryCommands` is what the PTZ service actually *accepts*. That
+/// link is the only reason a caller can use the PTZ operation without
+/// guessing, so it is worth a test rather than only a doc comment.
+#[tokio::test]
+async fn auxiliary_commands_are_discoverable_and_accepted() {
+    let (_srv, s) = setup().await;
+    let profile = s.get_profiles().await.unwrap()[0].token.clone();
+
+    let advertised = s
+        .device_get_service_capabilities()
+        .await
+        .unwrap()
+        .misc
+        .expect("Misc")
+        .auxiliary_commands;
+    assert!(advertised.contains(&"tt:Wiper|On".to_string()));
+
+    // Every advertised command is accepted by the PTZ operation.
+    for cmd in &advertised {
+        let answer = s.ptz_send_auxiliary_command(&profile, cmd).await.unwrap();
+        assert!(answer.contains(cmd), "got {answer} for {cmd}");
+    }
+
+    // Something not on the list faults rather than silently succeeding.
+    assert!(
+        s.ptz_send_auxiliary_command(&profile, "tt:Sprinkler|On")
+            .await
+            .is_err()
+    );
+
+    // The Device operation is a different endpoint and still answers.
+    assert_eq!(s.send_auxiliary_command("tt:Wiper|On").await.unwrap(), "OK");
+}

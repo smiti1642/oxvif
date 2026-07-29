@@ -607,3 +607,36 @@ pub fn handle_ptz_remove_preset_tour(state: &SharedState, body: &str) -> String 
     }
     resp_empty("tptz", "RemovePresetTourResponse")
 }
+
+// ── SendAuxiliaryCommand ─────────────────────────────────────────────────────
+
+/// The **PTZ** `SendAuxiliaryCommand`, not the Device one in `device.rs`. Two
+/// different operations, two endpoints, and this one returns a payload where
+/// the Device one returns a bare acknowledgement.
+///
+/// The accepted values are exactly those advertised by
+/// `resp_service_capabilities` in `device.rs` as `Misc/@AuxiliaryCommands` —
+/// a mock that accepted anything would let a client ship code that only works
+/// against the mock.
+pub fn handle_ptz_send_auxiliary_command(body: &str) -> String {
+    const ACCEPTED: &[&str] = &[
+        "tt:Wiper|On",
+        "tt:Wiper|Off",
+        "tt:IRLamp|On",
+        "tt:IRLamp|Off",
+        "tt:IRLamp|Auto",
+    ];
+    let inner = extract_tag(body, "SendAuxiliaryCommand").unwrap_or_default();
+    let data = extract_tag(&inner, "AuxiliaryData").unwrap_or_default();
+    if !ACCEPTED.contains(&data.as_str()) {
+        return resp_soap_fault("ter:InvalidArgVal", &format!("NoAuxiliaryCommand: {data}"));
+    }
+    soap(
+        NS,
+        &format!(
+            r#"<tptz:SendAuxiliaryCommandResponse>
+              <tptz:AuxiliaryResponse>{data} accepted</tptz:AuxiliaryResponse>
+            </tptz:SendAuxiliaryCommandResponse>"#
+        ),
+    )
+}

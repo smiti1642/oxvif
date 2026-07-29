@@ -589,6 +589,14 @@ impl OnvifClient {
     /// ONVIF Device WSDL `SendAuxiliaryCommand` — Profile T §8.17.
     /// Common command values: `"tt:Wiper|On"`, `"tt:Wiper|Off"`,
     /// `"tt:Washer|On"`, `"tt:IRLamp|Auto"`.
+    ///
+    /// **There is a second, different operation of this name**: the PTZ
+    /// service's
+    /// [`ptz_send_auxiliary_command`](Self::ptz_send_auxiliary_command), which
+    /// is scoped to a media profile. Cameras that implement a wiper generally
+    /// implement the PTZ one; try that first and fall back to this. The values
+    /// either will accept are listed in
+    /// [`DeviceServiceCapabilities::misc`](crate::DeviceServiceCapabilities::misc).
     pub async fn send_auxiliary_command(
         &self,
         auxiliary_command: &str,

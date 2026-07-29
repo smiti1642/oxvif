@@ -643,6 +643,52 @@ impl OnvifClient {
         find_response(&body_node, "RemovePresetTourResponse")?;
         Ok(())
     }
+
+    // ── Auxiliary commands ────────────────────────────────────────────────────
+
+    /// Send an auxiliary command to a media profile — wiper, washer, IR lamp.
+    ///
+    /// **This is not [`send_auxiliary_command`](Self::send_auxiliary_command).**
+    /// That one is the *Device* service operation, takes no profile, and
+    /// returns nothing useful. This is the PTZ service operation, is scoped to
+    /// a profile, and **returns the device's answer**. Cameras that implement a
+    /// wiper generally implement it here — try this one first, and fall back to
+    /// the Device operation on firmware that faults.
+    ///
+    /// The values a given camera accepts are **discoverable**, not guessable:
+    /// they are vendor-namespaced, so the schema does not enumerate them and
+    /// this crate deliberately does not model them as an enum. Read
+    /// [`DeviceServiceCapabilities::misc`](crate::DeviceServiceCapabilities::misc)
+    /// → `auxiliary_commands` for the list this device advertises. Common
+    /// values are `"tt:Wiper|On"`, `"tt:Wiper|Off"`, `"tt:Washer|On"`,
+    /// `"tt:IRLamp|On"`, `"tt:IRLamp|Auto"`.
+    ///
+    /// `tt:AuxiliaryData` has a schema `maxLength` of 128. That is **not**
+    /// enforced here: the device rejects an over-long value with a fault, and a
+    /// client-side length check would be a second source of truth that drifts
+    /// from the firmware.
+    pub async fn ptz_send_auxiliary_command(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        auxiliary_data: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/SendAuxiliaryCommand";
+        let body = format!(
+            "<tptz:SendAuxiliaryCommand>\
+               <tptz:ProfileToken>{}</tptz:ProfileToken>\
+               <tptz:AuxiliaryData>{}</tptz:AuxiliaryData>\
+             </tptz:SendAuxiliaryCommand>",
+            xml_escape(profile_token),
+            xml_escape(auxiliary_data)
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "SendAuxiliaryCommandResponse")?;
+        resp.child("AuxiliaryResponse")
+            .map(|n| n.text().to_string())
+            .ok_or_else(|| crate::soap::SoapError::missing("AuxiliaryResponse").into())
+    }
 }
 
 #[cfg(test)]

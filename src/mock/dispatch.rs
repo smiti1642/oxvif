@@ -194,6 +194,7 @@ fn dispatch_ptz(op: &str, state: &SharedState, body: &str) -> Option<String> {
         "ModifyPresetTour" => ptz::handle_ptz_modify_preset_tour(state, body),
         "OperatePresetTour" => ptz::handle_ptz_operate_preset_tour(state, body),
         "RemovePresetTour" => ptz::handle_ptz_remove_preset_tour(state, body),
+        "SendAuxiliaryCommand" => ptz::handle_ptz_send_auxiliary_command(body),
         _ => return None,
     })
 }

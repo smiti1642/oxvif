@@ -1329,6 +1329,22 @@ impl OnvifSession {
             .await
     }
 
+    /// Send an auxiliary command to a media profile — wiper, washer, IR lamp.
+    ///
+    /// The PTZ operation, not the Device one behind
+    /// [`send_auxiliary_command`](Self::send_auxiliary_command). Cameras that
+    /// implement a wiper generally implement it here. The accepted values are
+    /// listed in `device_get_service_capabilities().misc.auxiliary_commands`.
+    pub async fn ptz_send_auxiliary_command(
+        &self,
+        profile_token: &str,
+        auxiliary_data: &str,
+    ) -> Result<String, OnvifError> {
+        self.client
+            .ptz_send_auxiliary_command(self.ptz_url()?, profile_token, auxiliary_data)
+            .await
+    }
+
     // ── Imaging Service ───────────────────────────────────────────────────────
 
     /// Ask the imaging service what it can do.

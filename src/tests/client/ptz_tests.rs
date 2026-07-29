@@ -1534,3 +1534,123 @@ async fn ptz_remove_preset_tour_fault() {
         .unwrap_err();
     assert_fault(err, "ter:NotAuthorized", "TourDeleteDenied-2884");
 }
+
+// ── ptz_send_auxiliary_command ────────────────────────────────────────────────
+//
+// The PTZ operation, not the Device one exercised in `device_tests.rs`. The two
+// share a name and nothing else: different endpoint, different request element
+// (`AuxiliaryData` vs `AuxiliaryCommand`), different response element
+// (`AuxiliaryResponse` vs `AuxiliaryCommandResponse`). Wiring either one to the
+// other's element names parses to an empty string rather than failing, so the
+// assertions below name the exact elements.
+
+#[tokio::test]
+async fn ptz_send_auxiliary_command_returns_the_device_answer() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl">
+          <s:Body>
+            <tptz:SendAuxiliaryCommandResponse>
+              <tptz:AuxiliaryResponse>tt:Wiper|On accepted</tptz:AuxiliaryResponse>
+            </tptz:SendAuxiliaryCommandResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let answer = client
+        .ptz_send_auxiliary_command("http://192.168.1.1/onvif/ptz", "Profile_1", "tt:Wiper|On")
+        .await
+        .unwrap();
+    assert_eq!(answer, "tt:Wiper|On accepted");
+
+    let c = captured.lock().unwrap();
+    // ver20/ptz, not ver10/device — the whole point of the second method.
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver20/ptz/wsdl/SendAuxiliaryCommand"
+    );
+    assert!(
+        c.body
+            .contains("<tptz:ProfileToken>Profile_1</tptz:ProfileToken>"),
+        "the PTZ operation is per-profile: {}",
+        c.body
+    );
+    assert!(
+        c.body
+            .contains("<tptz:AuxiliaryData>tt:Wiper|On</tptz:AuxiliaryData>"),
+        "element is AuxiliaryData, not AuxiliaryCommand: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn ptz_send_auxiliary_command_escapes_the_command() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl">
+          <s:Body>
+            <tptz:SendAuxiliaryCommandResponse>
+              <tptz:AuxiliaryResponse>OK</tptz:AuxiliaryResponse>
+            </tptz:SendAuxiliaryCommandResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_send_auxiliary_command(
+            "http://192.168.1.1/onvif/ptz",
+            "Profile&1",
+            "tt:Wiper|On&<Off>",
+        )
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert!(
+        c.body
+            .contains("<tptz:AuxiliaryData>tt:Wiper|On&amp;&lt;Off&gt;</tptz:AuxiliaryData>"),
+        "command must be escaped: {}",
+        c.body
+    );
+    assert!(
+        c.body
+            .contains("<tptz:ProfileToken>Profile&amp;1</tptz:ProfileToken>"),
+        "profile token must be escaped: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn ptz_send_auxiliary_command_missing_response_element() {
+    // `AuxiliaryResponse` is `minOccurs="1"`. Reporting it as missing beats
+    // handing back an empty string that reads as "the device said nothing".
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl">
+          <s:Body>
+            <tptz:SendAuxiliaryCommandResponse/>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .ptz_send_auxiliary_command("http://192.168.1.1/onvif/ptz", "Profile_1", "tt:Wiper|On")
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "AuxiliaryResponse");
+}
+
+#[tokio::test]
+async fn ptz_send_auxiliary_command_fault() {
+    let xml = make_soap_fault_xml("ter:InvalidArgVal", "NoAuxiliaryCommand-ptz-6620");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .ptz_send_auxiliary_command("http://192.168.1.1/onvif/ptz", "Profile_1", "tt:Nope|On")
+        .await
+        .unwrap_err();
+    assert_fault(err, "ter:InvalidArgVal", "NoAuxiliaryCommand-ptz-6620");
+}
