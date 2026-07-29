@@ -32,11 +32,25 @@ Confirm the git identity is `smiti1642 <smiti1642@gmail.com>` before running
 
 ```
 cargo fmt
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
 cargo test
 ```
 
-All three must pass cleanly before committing.
+All four must pass cleanly before committing.
+
+**`--all-features` is not optional on the first two.** This crate has **no
+default features**, and `src/mock/` is behind `#[cfg(feature = "mock")]`
+(`src/lib.rs`). Without the flag, `cargo test` collects only the non-mock
+subset — measured at `1d224f4`: 461 tests versus 698 — and `clippy
+--all-targets` lints only that same subset, so a warning inside `src/mock/`,
+`src/health/` or `src/metamorph/` fails nothing. Two commits' worth of mock
+tests had been invisible to this gate before it was measured.
+
+Keep the plain `cargo test` as well, as the last line: a no-feature build
+breaking is its own bug, and it has happened — a `[[example]]` missing its
+`required-features` entry made a bare `cargo test` fail to compile, so *no*
+test ran at all and the gate reported nothing wrong.
 
 ## Before every publish (additional checks)
 
@@ -269,8 +283,19 @@ proved nothing yet:
 For a whole batch, mutate the library instead and diff the failing test **names**
 before and after: make `SoapError::missing()` ignore its argument, or make the
 fault parser in `src/soap/xml.rs` return a constant `code`/`reason`. Every real
-negative goes red; every hollow one stays green. Run it unfiltered — a
-`cargo test <filter>` run silently excludes the integration crates.
+negative goes red; every hollow one stays green. Run it **unfiltered and with
+`--all-features`** — a `cargo test <filter>` run silently excludes the
+integration crates, and a no-feature run silently excludes every mock test.
+
+Two batch mutations worth keeping in the rotation beyond those two, because
+they catch a class the missing/fault pair cannot:
+
+- Make an `Option<bool>` parse helper return `Some(false)` where it returns
+  `None`. Every "the device did not say" assertion must go red. Nothing else
+  proves that distinction is observable in the tests rather than merely written
+  in the types.
+- Make a list-valued parse helper return empty unconditionally. Every
+  `Vec<String>` assertion must go red.
 
 ## Adding a new ONVIF service — step-by-step SOP
 
@@ -321,11 +346,14 @@ negative goes red; every hollow one stays green. Run it unfiltered — a
 
 ```
 cargo fmt
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
 cargo test
 ```
 
-All three must pass cleanly.
+All four must pass cleanly. See [Before every commit](#before-every-commit) for
+why `--all-features` is load-bearing — without it the mock tests you just added
+in step 5a are not collected.
 
 ### Documentation
 
@@ -391,8 +419,9 @@ All three must pass cleanly.
 
 ## Publishing checklist
 
-- [ ] `cargo fmt && cargo clippy --all-targets -- -D warnings` clean
-- [ ] `cargo test` — all tests pass
+- [ ] `cargo fmt && cargo clippy --all-targets --all-features -- -D warnings` clean
+- [ ] `cargo test --all-features` — all tests pass
+- [ ] `cargo test` — the no-feature build compiles and passes too
 - [ ] `cargo test --doc` — all doc examples pass
 - [ ] `cargo doc --no-deps --all-features` — what docs.rs builds; no warnings
 - [ ] `cargo doc --no-deps` — the default-feature build; no warnings either
