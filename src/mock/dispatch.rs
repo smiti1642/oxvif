@@ -187,6 +187,13 @@ fn dispatch_ptz(op: &str, state: &SharedState, body: &str) -> Option<String> {
         "GetConfiguration" => ptz::resp_ptz_configuration(),
         "SetConfiguration" => resp_empty("tptz", "SetConfigurationResponse"),
         "GetConfigurationOptions" => ptz::resp_ptz_configuration_options(),
+        "GetPresetTours" => ptz::resp_ptz_preset_tours(state),
+        "GetPresetTour" => ptz::resp_ptz_preset_tour(state, body),
+        "GetPresetTourOptions" => ptz::resp_ptz_preset_tour_options(state),
+        "CreatePresetTour" => ptz::handle_ptz_create_preset_tour(state),
+        "ModifyPresetTour" => ptz::handle_ptz_modify_preset_tour(state, body),
+        "OperatePresetTour" => ptz::handle_ptz_operate_preset_tour(state, body),
+        "RemovePresetTour" => ptz::handle_ptz_remove_preset_tour(state, body),
         _ => return None,
     })
 }

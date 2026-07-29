@@ -9,7 +9,11 @@
 #![cfg(feature = "mock-server")]
 
 use oxvif::mock::MockServer;
-use oxvif::{ImagingSettings, OnvifSession};
+use oxvif::{
+    ImagingSettings, OnvifSession, PtzPresetTour, PtzPresetTourDirection, PtzPresetTourOperation,
+    PtzPresetTourPresetDetail, PtzPresetTourSpot, PtzPresetTourStartingCondition,
+    PtzPresetTourState, PtzPresetTourStatus,
+};
 
 /// Start a mock server and a session wired to it. The returned `MockServer`
 /// must be kept alive for the session to keep working (it shuts down on drop).
@@ -258,4 +262,95 @@ async fn injected_fault_propagates() {
         s.get_device_info().await.unwrap().manufacturer,
         "oxvif-mock"
     );
+}
+
+/// Preset tours are the first PTZ feature with real state behind it, so the
+/// round trip is the test that matters: a tour created here must come back
+/// from a later `GetPresetTours`, or the mock is a fixture printer rather than
+/// an integration harness.
+#[tokio::test]
+async fn ptz_preset_tour_round_trip() {
+    let (_srv, s) = setup().await;
+    let profile = s.get_profiles().await.unwrap()[0].token.clone();
+
+    // The seeded tour has two stops — one is not enough to tell a parser that
+    // reads the whole list from one that returns the first.
+    let seeded = s.ptz_get_preset_tours(&profile).await.unwrap();
+    assert_eq!(seeded.len(), 1);
+    assert_eq!(seeded[0].token.as_deref(), Some("Tour_1"));
+    assert_eq!(seeded[0].tour_spots.len(), 2);
+
+    // What the device will accept, before building anything.
+    let opts = s.ptz_get_preset_tour_options(&profile, None).await.unwrap();
+    assert!(opts.auto_start);
+    assert_eq!(
+        opts.starting_condition.directions,
+        [
+            PtzPresetTourDirection::Forward,
+            PtzPresetTourDirection::Backward
+        ]
+    );
+    assert!(
+        opts.tour_spot
+            .preset_detail
+            .preset_tokens
+            .contains(&"Preset_1".to_string())
+    );
+
+    // Create → modify → read back.
+    let token = s.ptz_create_preset_tour(&profile).await.unwrap();
+    assert_ne!(token, "Tour_1");
+
+    let tour = PtzPresetTour {
+        token: Some(token.clone()),
+        name: Some("Night sweep".into()),
+        status: PtzPresetTourStatus {
+            state: PtzPresetTourState::Idle,
+            current_tour_spot: None,
+        },
+        auto_start: true,
+        starting_condition: PtzPresetTourStartingCondition {
+            random_preset_order: Some(true),
+            recurring_time: Some(2),
+            recurring_duration: None,
+            direction: Some(PtzPresetTourDirection::Backward),
+        },
+        tour_spots: vec![PtzPresetTourSpot {
+            preset_detail: PtzPresetTourPresetDetail::PresetToken("Preset_2".into()),
+            speed: None,
+            stay_time: Some("PT15S".into()),
+        }],
+    };
+    s.ptz_modify_preset_tour(&profile, &tour).await.unwrap();
+
+    let stored = s.ptz_get_preset_tour(&profile, &token).await.unwrap();
+    assert_eq!(stored.name.as_deref(), Some("Night sweep"));
+    assert!(stored.auto_start);
+    assert_eq!(stored.starting_condition.random_preset_order, Some(true));
+    assert_eq!(stored.starting_condition.recurring_time, Some(2));
+    assert_eq!(
+        stored.starting_condition.direction,
+        Some(PtzPresetTourDirection::Backward)
+    );
+    assert_eq!(stored.tour_spots.len(), 1);
+    assert_eq!(stored.tour_spots[0].stay_time.as_deref(), Some("PT15S"));
+
+    // Operate moves the state, and the state is observable.
+    s.ptz_operate_preset_tour(&profile, &token, PtzPresetTourOperation::Start)
+        .await
+        .unwrap();
+    let touring = s.ptz_get_preset_tour(&profile, &token).await.unwrap();
+    assert_eq!(touring.status.state, PtzPresetTourState::Touring);
+
+    s.ptz_operate_preset_tour(&profile, &token, PtzPresetTourOperation::Pause)
+        .await
+        .unwrap();
+    let paused = s.ptz_get_preset_tour(&profile, &token).await.unwrap();
+    assert_eq!(paused.status.state, PtzPresetTourState::Paused);
+
+    // Remove, and it is gone from the list.
+    s.ptz_remove_preset_tour(&profile, &token).await.unwrap();
+    let after = s.ptz_get_preset_tours(&profile).await.unwrap();
+    assert_eq!(after.len(), 1);
+    assert_eq!(after[0].token.as_deref(), Some("Tour_1"));
 }

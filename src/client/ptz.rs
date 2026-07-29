@@ -4,8 +4,8 @@ use super::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
-    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzServiceCapabilities,
-    PtzStatus, xml_escape,
+    PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset, PtzPresetTour,
+    PtzPresetTourOperation, PtzPresetTourOptions, PtzServiceCapabilities, PtzStatus, xml_escape,
 };
 
 impl OnvifClient {
@@ -448,6 +448,200 @@ impl OnvifClient {
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetCompatibleConfigurationsResponse")?;
         PtzConfiguration::vec_from_xml(resp)
+    }
+
+    // ── Preset tours ──────────────────────────────────────────────────────────
+    //
+    // A preset tour is a stored guard tour: a named sequence of stops the
+    // camera walks unattended. All seven operations are per-profile, so every
+    // one of them takes a `profile_token` — a device given no profile answers
+    // for whichever one it considers default, which on a multi-sensor camera is
+    // the wrong lens.
+
+    /// List every preset tour stored against a media profile.
+    ///
+    /// `ptz_url` comes from `caps.ptz.url` returned by
+    /// [`get_capabilities`](Self::get_capabilities).
+    pub async fn ptz_get_preset_tours(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+    ) -> Result<Vec<PtzPresetTour>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetPresetTours";
+        let body = format!(
+            "<tptz:GetPresetTours>\
+               <tptz:ProfileToken>{}</tptz:ProfileToken>\
+             </tptz:GetPresetTours>",
+            xml_escape(profile_token)
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetPresetToursResponse")?;
+        PtzPresetTour::vec_from_xml(resp)
+    }
+
+    /// Retrieve one preset tour by token.
+    pub async fn ptz_get_preset_tour(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        preset_tour_token: &str,
+    ) -> Result<PtzPresetTour, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetPresetTour";
+        let body = format!(
+            "<tptz:GetPresetTour>\
+               <tptz:ProfileToken>{}</tptz:ProfileToken>\
+               <tptz:PresetTourToken>{}</tptz:PresetTourToken>\
+             </tptz:GetPresetTour>",
+            xml_escape(profile_token),
+            xml_escape(preset_tour_token)
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetPresetTourResponse")?;
+        PtzPresetTour::from_xml(resp)
+    }
+
+    /// Retrieve what preset tours this device will accept.
+    ///
+    /// `preset_tour_token` is optional: pass `Some(token)` to ask what may be
+    /// changed about an existing tour, or `None` to ask what a new tour may
+    /// contain. Read this before building a tour for
+    /// [`ptz_modify_preset_tour`](Self::ptz_modify_preset_tour) — a stop
+    /// outside the returned bounds comes back as a fault rather than being
+    /// clamped.
+    pub async fn ptz_get_preset_tour_options(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        preset_tour_token: Option<&str>,
+    ) -> Result<PtzPresetTourOptions, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/GetPresetTourOptions";
+        let tour = preset_tour_token
+            .map(|t| {
+                format!(
+                    "<tptz:PresetTourToken>{}</tptz:PresetTourToken>",
+                    xml_escape(t)
+                )
+            })
+            .unwrap_or_default();
+        let body = format!(
+            "<tptz:GetPresetTourOptions>\
+               <tptz:ProfileToken>{}</tptz:ProfileToken>\
+               {tour}\
+             </tptz:GetPresetTourOptions>",
+            xml_escape(profile_token)
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "GetPresetTourOptionsResponse")?;
+        PtzPresetTourOptions::from_xml(resp)
+    }
+
+    /// Create an empty preset tour and return its new token.
+    ///
+    /// The tour has no stops yet. Fill it in with
+    /// [`ptz_modify_preset_tour`](Self::ptz_modify_preset_tour), then start it
+    /// with [`ptz_operate_preset_tour`](Self::ptz_operate_preset_tour).
+    pub async fn ptz_create_preset_tour(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+    ) -> Result<String, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/CreatePresetTour";
+        let body = format!(
+            "<tptz:CreatePresetTour>\
+               <tptz:ProfileToken>{}</tptz:ProfileToken>\
+             </tptz:CreatePresetTour>",
+            xml_escape(profile_token)
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        let resp = find_response(&body_node, "CreatePresetTourResponse")?;
+        resp.child("PresetTourToken")
+            .map(|n| n.text().to_string())
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| crate::soap::SoapError::missing("PresetTourToken").into())
+    }
+
+    /// Write a preset tour back to the device.
+    ///
+    /// This is the only Tier 1 operation that sends structured user data, so
+    /// it is the one where escaping matters: `tour.name` and every preset
+    /// token inside `tour.tour_spots` are user- or device-supplied and go
+    /// through `xml_escape` on the way out.
+    ///
+    /// Obtain the tour with
+    /// [`ptz_get_preset_tour`](Self::ptz_get_preset_tour), modify it, and pass
+    /// it here. `tour.token` must name an existing tour — the one from
+    /// [`ptz_create_preset_tour`](Self::ptz_create_preset_tour) if the tour is
+    /// new.
+    pub async fn ptz_modify_preset_tour(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        tour: &PtzPresetTour,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/ModifyPresetTour";
+        let body = format!(
+            "<tptz:ModifyPresetTour>\
+               <tptz:ProfileToken>{}</tptz:ProfileToken>\
+               {tour_xml}\
+             </tptz:ModifyPresetTour>",
+            xml_escape(profile_token),
+            tour_xml = tour.to_xml_body()
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "ModifyPresetTourResponse")?;
+        Ok(())
+    }
+
+    /// Start, stop or pause a preset tour.
+    pub async fn ptz_operate_preset_tour(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        preset_tour_token: &str,
+        operation: PtzPresetTourOperation,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/OperatePresetTour";
+        let body = format!(
+            "<tptz:OperatePresetTour>\
+               <tptz:ProfileToken>{}</tptz:ProfileToken>\
+               <tptz:PresetTourToken>{}</tptz:PresetTourToken>\
+               <tptz:Operation>{}</tptz:Operation>\
+             </tptz:OperatePresetTour>",
+            xml_escape(profile_token),
+            xml_escape(preset_tour_token),
+            operation.as_str()
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "OperatePresetTourResponse")?;
+        Ok(())
+    }
+
+    /// Delete a preset tour.
+    pub async fn ptz_remove_preset_tour(
+        &self,
+        ptz_url: &str,
+        profile_token: &str,
+        preset_tour_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/ptz/wsdl/RemovePresetTour";
+        let body = format!(
+            "<tptz:RemovePresetTour>\
+               <tptz:ProfileToken>{}</tptz:ProfileToken>\
+               <tptz:PresetTourToken>{}</tptz:PresetTourToken>\
+             </tptz:RemovePresetTour>",
+            xml_escape(profile_token),
+            xml_escape(preset_tour_token)
+        );
+        let xml = self.call(ptz_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "RemovePresetTourResponse")?;
+        Ok(())
     }
 }
 

@@ -17,7 +17,7 @@ pub struct PtzSpaceRange {
     pub y_range: Option<(f32, f32)>,
 }
 
-fn parse_space_range(node: &XmlNode) -> PtzSpaceRange {
+pub(crate) fn parse_space_range(node: &XmlNode) -> PtzSpaceRange {
     let uri = xml_str(node, "URI").unwrap_or_default();
     let x_range = node
         .child("XRange")

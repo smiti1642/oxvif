@@ -1,6 +1,6 @@
-use crate::mock::helpers::{resp_empty, soap};
-use crate::mock::state::{PtzPreset, SharedState};
-use crate::mock::xml_parse::{extract_attr, extract_tag};
+use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
+use crate::mock::state::{PtzPreset, PtzTour, PtzTourSpot, SharedState};
+use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 const NS: &str = r#"xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl""#;
 const POS_SPACE: &str = "http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace";
@@ -355,4 +355,255 @@ pub fn resp_ptz_service_capabilities() -> String {
                              MoveAndTrack="PresetToken PTZVector"/>
         </tptz:GetServiceCapabilitiesResponse>"#,
     )
+}
+
+// ── Preset tours ─────────────────────────────────────────────────────────────
+//
+// Unlike the capability responders, tours are **stateful**: a tour created by
+// `CreatePresetTour` must come back from a later `GetPresetTours` or the mock
+// is not an integration harness for the feature, only a fixture printer.
+//
+// The default fixture carries **two** tour spots on purpose. A one-spot tour
+// passes just as well against a parser that returns the first `TourSpot` and
+// drops the rest.
+
+fn tour_xml(t: &PtzTour) -> String {
+    let spots: String = t
+        .spots
+        .iter()
+        .map(|s| {
+            format!(
+                r#"<tt:TourSpot>
+              <tt:PresetDetail>
+                <tt:PresetToken>{preset}</tt:PresetToken>
+              </tt:PresetDetail>
+              <tt:StayTime>{stay}</tt:StayTime>
+            </tt:TourSpot>"#,
+                preset = s.preset_token,
+                stay = s.stay_time,
+            )
+        })
+        .collect();
+    let recurring = t
+        .recurring_time
+        .map(|n| format!("<tt:RecurringTime>{n}</tt:RecurringTime>"))
+        .unwrap_or_default();
+    format!(
+        r#"<tptz:PresetTour token="{token}">
+          <tt:Name>{name}</tt:Name>
+          <tt:Status>
+            <tt:State>{state}</tt:State>
+          </tt:Status>
+          <tt:AutoStart>{auto}</tt:AutoStart>
+          <tt:StartingCondition RandomPresetOrder="{random}">
+            {recurring}
+            <tt:Direction>{direction}</tt:Direction>
+          </tt:StartingCondition>
+          {spots}
+        </tptz:PresetTour>"#,
+        token = t.token,
+        name = t.name,
+        state = t.state,
+        auto = t.auto_start,
+        random = t.random_preset_order,
+        direction = t.direction,
+    )
+}
+
+pub fn resp_ptz_preset_tours(state: &SharedState) -> String {
+    let tours: String = state.read().ptz.tours.iter().map(tour_xml).collect();
+    soap(
+        NS,
+        &format!("<tptz:GetPresetToursResponse>{tours}</tptz:GetPresetToursResponse>"),
+    )
+}
+
+pub fn resp_ptz_preset_tour(state: &SharedState, body: &str) -> String {
+    let inner = extract_tag(body, "GetPresetTour").unwrap_or_default();
+    let token = extract_tag(&inner, "PresetTourToken").unwrap_or_default();
+    let found = state
+        .read()
+        .ptz
+        .tours
+        .iter()
+        .find(|t| t.token == token)
+        .map(tour_xml);
+    match found {
+        Some(xml) => soap(
+            NS,
+            &format!("<tptz:GetPresetTourResponse>{xml}</tptz:GetPresetTourResponse>"),
+        ),
+        None => resp_soap_fault("ter:InvalidArgVal", &format!("NoSuchPresetTour: {token}")),
+    }
+}
+
+/// `tt:PTZPresetTourOptions`. The three members are all `minOccurs="1"`.
+///
+/// `Direction` appears **twice** here, because in
+/// `PTZPresetTourStartingConditionOptions` it is `[0..*]` — a list of what the
+/// device supports — where the same element name inside a concrete
+/// `StartingCondition` is a single value. A one-element list here would let a
+/// parser that reads only the first child pass.
+pub fn resp_ptz_preset_tour_options(state: &SharedState) -> String {
+    let tokens: String = state
+        .read()
+        .ptz
+        .presets
+        .iter()
+        .map(|p| format!("<tt:PresetToken>{}</tt:PresetToken>", p.token))
+        .collect();
+    soap(
+        NS,
+        &format!(
+            r#"<tptz:GetPresetTourOptionsResponse>
+          <tptz:Options>
+            <tt:AutoStart>true</tt:AutoStart>
+            <tt:StartingCondition>
+              <tt:RecurringTime>
+                <tt:Min>1</tt:Min>
+                <tt:Max>10</tt:Max>
+              </tt:RecurringTime>
+              <tt:RecurringDuration>
+                <tt:Min>PT1M</tt:Min>
+                <tt:Max>PT8H</tt:Max>
+              </tt:RecurringDuration>
+              <tt:Direction>Forward</tt:Direction>
+              <tt:Direction>Backward</tt:Direction>
+            </tt:StartingCondition>
+            <tt:TourSpot>
+              <tt:PresetDetail>
+                {tokens}
+                <tt:Home>true</tt:Home>
+              </tt:PresetDetail>
+              <tt:StayTime>
+                <tt:Min>PT5S</tt:Min>
+                <tt:Max>PT10M</tt:Max>
+              </tt:StayTime>
+            </tt:TourSpot>
+          </tptz:Options>
+        </tptz:GetPresetTourOptionsResponse>"#
+        ),
+    )
+}
+
+/// Pick the next free `Tour_<n>` token, the same way presets are numbered.
+fn next_tour_token(tours: &[PtzTour]) -> String {
+    let used: std::collections::HashSet<u32> = tours
+        .iter()
+        .filter_map(|t| t.token.strip_prefix("Tour_").and_then(|n| n.parse().ok()))
+        .collect();
+    (1..)
+        .find(|n| !used.contains(n))
+        .map(|n| format!("Tour_{n}"))
+        .unwrap_or_else(|| "Tour_1".to_string())
+}
+
+pub fn handle_ptz_create_preset_tour(state: &SharedState) -> String {
+    let token = state.modify_returning(|s| {
+        let token = next_tour_token(&s.ptz.tours);
+        s.ptz.tours.push(PtzTour {
+            token: token.clone(),
+            name: String::new(),
+            state: "Idle".into(),
+            auto_start: false,
+            random_preset_order: false,
+            recurring_time: None,
+            direction: "Forward".into(),
+            spots: Vec::new(),
+        });
+        eprintln!("    [STATE] preset tour created: {token}");
+        token
+    });
+    soap(
+        NS,
+        &format!(
+            r#"<tptz:CreatePresetTourResponse>
+              <tptz:PresetTourToken>{token}</tptz:PresetTourToken>
+            </tptz:CreatePresetTourResponse>"#
+        ),
+    )
+}
+
+pub fn handle_ptz_modify_preset_tour(state: &SharedState, body: &str) -> String {
+    let inner = extract_tag(body, "ModifyPresetTour").unwrap_or_default();
+    let tour_xml = extract_tag(&inner, "PresetTour").unwrap_or_default();
+    let token = extract_attr(&inner, "PresetTour", "token").unwrap_or_default();
+
+    let name = extract_tag(&tour_xml, "Name").unwrap_or_default();
+    let auto_start = extract_tag(&tour_xml, "AutoStart").as_deref() == Some("true");
+    let random = extract_attr(&tour_xml, "StartingCondition", "RandomPresetOrder").as_deref()
+        == Some("true");
+    let recurring = extract_tag(&tour_xml, "RecurringTime").and_then(|v| v.parse().ok());
+    let direction = extract_tag(&tour_xml, "Direction").unwrap_or_else(|| "Forward".into());
+    let spots: Vec<PtzTourSpot> = extract_all_tags(&tour_xml, "TourSpot")
+        .iter()
+        .map(|s| PtzTourSpot {
+            preset_token: extract_tag(s, "PresetToken").unwrap_or_default(),
+            stay_time: extract_tag(s, "StayTime").unwrap_or_default(),
+        })
+        .collect();
+
+    let found = state.modify_returning(|s| {
+        if let Some(t) = s.ptz.tours.iter_mut().find(|t| t.token == token) {
+            t.name = name;
+            t.auto_start = auto_start;
+            t.random_preset_order = random;
+            t.recurring_time = recurring;
+            t.direction = direction;
+            t.spots = spots;
+            eprintln!("    [STATE] preset tour modified: {token}");
+            true
+        } else {
+            false
+        }
+    });
+
+    if found {
+        resp_empty("tptz", "ModifyPresetTourResponse")
+    } else {
+        resp_soap_fault("ter:InvalidArgVal", &format!("NoSuchPresetTour: {token}"))
+    }
+}
+
+/// `Start` / `Stop` / `Pause` move the stored `state` string, mirroring the
+/// existing `SetRecordingJobMode` handler. There is no clock here, so nothing
+/// actually tours — but a client can observe that its operation took effect.
+pub fn handle_ptz_operate_preset_tour(state: &SharedState, body: &str) -> String {
+    let inner = extract_tag(body, "OperatePresetTour").unwrap_or_default();
+    let token = extract_tag(&inner, "PresetTourToken").unwrap_or_default();
+    let op = extract_tag(&inner, "Operation").unwrap_or_default();
+
+    let new_state = match op.as_str() {
+        "Start" => "Touring",
+        "Stop" => "Idle",
+        "Pause" => "Paused",
+        _ => return resp_soap_fault("ter:InvalidArgVal", &format!("BadTourOperation: {op}")),
+    };
+
+    let found = state.modify_returning(|s| {
+        if let Some(t) = s.ptz.tours.iter_mut().find(|t| t.token == token) {
+            t.state = new_state.to_string();
+            eprintln!("    [STATE] preset tour {token} -> {new_state}");
+            true
+        } else {
+            false
+        }
+    });
+
+    if found {
+        resp_empty("tptz", "OperatePresetTourResponse")
+    } else {
+        resp_soap_fault("ter:InvalidArgVal", &format!("NoSuchPresetTour: {token}"))
+    }
+}
+
+pub fn handle_ptz_remove_preset_tour(state: &SharedState, body: &str) -> String {
+    let inner = extract_tag(body, "RemovePresetTour").unwrap_or_default();
+    if let Some(token) = extract_tag(&inner, "PresetTourToken") {
+        state.modify(|s| {
+            s.ptz.tours.retain(|t| t.token != token);
+            eprintln!("    [STATE] preset tour removed: {token}");
+        });
+    }
+    resp_empty("tptz", "RemovePresetTourResponse")
 }

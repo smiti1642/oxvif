@@ -175,6 +175,32 @@ pub struct PtzPreset {
     pub zoom: f32,
 }
 
+/// One stop on a mock preset tour. `preset_token` is the only stop kind the
+/// mock stores — `Home` and explicit positions parse fine on the client side
+/// but are not something this device offers, and inventing them here would
+/// make the mock claim a capability it does not honour.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtzTourSpot {
+    pub preset_token: String,
+    pub stay_time: String,
+}
+
+/// A stored preset tour. Created empty by `CreatePresetTour`, filled in by
+/// `ModifyPresetTour`, and walked by `OperatePresetTour` — which moves `state`
+/// only, since the mock has no clock to tour on.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtzTour {
+    pub token: String,
+    pub name: String,
+    /// `Idle`, `Touring` or `Paused`.
+    pub state: String,
+    pub auto_start: bool,
+    pub random_preset_order: bool,
+    pub recurring_time: Option<u32>,
+    pub direction: String,
+    pub spots: Vec<PtzTourSpot>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PtzState {
     pub pan: f32,
@@ -184,6 +210,8 @@ pub struct PtzState {
     pub home_tilt: f32,
     pub home_zoom: f32,
     pub presets: Vec<PtzPreset>,
+    #[serde(default = "default_tours")]
+    pub tours: Vec<PtzTour>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -450,7 +478,33 @@ fn default_ptz() -> PtzState {
                 zoom: 0.0,
             },
         ],
+        tours: default_tours(),
     }
+}
+
+/// One tour, with **two** stops. A single-stop fixture cannot tell a parser
+/// that returns the first spot and drops the rest from one that collects them
+/// all, which is the specific defect the `vec_from_xml` rule exists to catch.
+fn default_tours() -> Vec<PtzTour> {
+    vec![PtzTour {
+        token: "Tour_1".into(),
+        name: "Perimeter".into(),
+        state: "Idle".into(),
+        auto_start: false,
+        random_preset_order: false,
+        recurring_time: Some(3),
+        direction: "Forward".into(),
+        spots: vec![
+            PtzTourSpot {
+                preset_token: "Preset_1".into(),
+                stay_time: "PT10S".into(),
+            },
+            PtzTourSpot {
+                preset_token: "Preset_2".into(),
+                stay_time: "PT20S".into(),
+            },
+        ],
+    }]
 }
 fn default_osd() -> OsdState {
     OsdState {

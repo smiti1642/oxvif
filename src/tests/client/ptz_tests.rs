@@ -2,6 +2,13 @@
 
 use super::*;
 use crate::tests::common::*;
+// The preset-tour types the tour tests construct. `use super::*` only reaches
+// what `src/client/ptz.rs` itself imports, which is the response types and not
+// the members they are built from.
+use crate::types::{
+    PtzPresetTourDirection, PtzPresetTourPresetDetail, PtzPresetTourSpot,
+    PtzPresetTourStartingCondition, PtzPresetTourState, PtzPresetTourStatus,
+};
 use std::sync::Arc;
 
 // ── PTZ preset / status fixtures ──────────────────────────────────────────
@@ -970,4 +977,560 @@ async fn ptz_service_capabilities_fault() {
         .await
         .unwrap_err();
     assert_fault(err, "env:Receiver", "PtzCapsUnavailable-9318");
+}
+
+// ── Preset tours ──────────────────────────────────────────────────────────────
+//
+// The `<tptz:PresetTour>` shape below matches what
+// `crate::mock::services::ptz::tour_xml` emits (src/mock/services/ptz.rs) —
+// feature-gated there, so keep the two in step by hand.
+
+fn preset_tours_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tptz:GetPresetToursResponse>
+              <tptz:PresetTour token="Tour_1">
+                <tt:Name>Perimeter</tt:Name>
+                <tt:Status>
+                  <tt:State>Idle</tt:State>
+                </tt:Status>
+                <tt:AutoStart>false</tt:AutoStart>
+                <tt:StartingCondition RandomPresetOrder="false">
+                  <tt:RecurringTime>3</tt:RecurringTime>
+                  <tt:Direction>Forward</tt:Direction>
+                </tt:StartingCondition>
+                <tt:TourSpot>
+                  <tt:PresetDetail>
+                    <tt:PresetToken>Preset_1</tt:PresetToken>
+                  </tt:PresetDetail>
+                  <tt:StayTime>PT10S</tt:StayTime>
+                </tt:TourSpot>
+                <tt:TourSpot>
+                  <tt:PresetDetail>
+                    <tt:PresetToken>Preset_2</tt:PresetToken>
+                  </tt:PresetDetail>
+                  <tt:StayTime>PT20S</tt:StayTime>
+                </tt:TourSpot>
+              </tptz:PresetTour>
+              <tptz:PresetTour>
+                <tt:Status>
+                  <tt:State>Touring</tt:State>
+                  <tt:CurrentTourSpot>
+                    <tt:PresetDetail>
+                      <tt:Home>true</tt:Home>
+                    </tt:PresetDetail>
+                  </tt:CurrentTourSpot>
+                </tt:Status>
+                <tt:AutoStart>true</tt:AutoStart>
+                <tt:StartingCondition>
+                  <tt:Direction>Panoramic</tt:Direction>
+                </tt:StartingCondition>
+                <tt:TourSpot>
+                  <tt:PresetDetail>
+                    <tt:PTZPosition>
+                      <tt:PanTilt x="0.5" y="-0.25"/>
+                      <tt:Zoom x="0.75"/>
+                    </tt:PTZPosition>
+                  </tt:PresetDetail>
+                  <tt:Speed>
+                    <tt:PanTilt x="0.4" y="0.4"/>
+                  </tt:Speed>
+                </tt:TourSpot>
+              </tptz:PresetTour>
+            </tptz:GetPresetToursResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn ptz_get_preset_tours_parses_both_tours_and_all_spots() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(mock(preset_tours_xml()));
+
+    let tours = client
+        .ptz_get_preset_tours("http://192.168.1.1/onvif/ptz", "Profile_1")
+        .await
+        .unwrap();
+
+    assert_eq!(tours.len(), 2);
+
+    let t0 = &tours[0];
+    assert_eq!(t0.token.as_deref(), Some("Tour_1"));
+    assert_eq!(t0.name.as_deref(), Some("Perimeter"));
+    assert_eq!(t0.status.state, PtzPresetTourState::Idle);
+    assert!(t0.status.current_tour_spot.is_none());
+    assert!(!t0.auto_start);
+
+    // `RandomPresetOrder` is an attribute, not a child element. A parser
+    // reading it as a child sees `None` here and still passes every other
+    // line, so this is the assertion that pins it.
+    assert_eq!(t0.starting_condition.random_preset_order, Some(false));
+    assert_eq!(t0.starting_condition.recurring_time, Some(3));
+    assert_eq!(
+        t0.starting_condition.direction,
+        Some(PtzPresetTourDirection::Forward)
+    );
+
+    // Two spots, and the second one is what proves the whole list is read.
+    assert_eq!(t0.tour_spots.len(), 2);
+    match &t0.tour_spots[1].preset_detail {
+        PtzPresetTourPresetDetail::PresetToken(t) => assert_eq!(t, "Preset_2"),
+        other => panic!("expected PresetToken, got {other:?}"),
+    }
+    assert_eq!(t0.tour_spots[1].stay_time.as_deref(), Some("PT20S"));
+
+    let t1 = &tours[1];
+    // `@token` is `[0..1]` on `tt:PresetTour`, unlike `tt:PTZPreset/@token`.
+    // A tour with no token is schema-valid and must not be an error.
+    assert_eq!(t1.token, None);
+    assert_eq!(t1.name, None);
+    assert_eq!(t1.status.state, PtzPresetTourState::Touring);
+
+    // An unrecognised direction is carried, not rejected — a vendor string
+    // must not turn GetPresetTours into an Err.
+    assert_eq!(
+        t1.starting_condition.direction,
+        Some(PtzPresetTourDirection::Unknown("Panoramic".into()))
+    );
+
+    // The other two arms of the `xs:choice`.
+    let current = t1
+        .status
+        .current_tour_spot
+        .as_ref()
+        .expect("CurrentTourSpot");
+    assert!(matches!(
+        current.preset_detail,
+        PtzPresetTourPresetDetail::Home
+    ));
+    match &t1.tour_spots[0].preset_detail {
+        PtzPresetTourPresetDetail::Position { pan_tilt, zoom } => {
+            assert_eq!(*pan_tilt, Some((0.5, -0.25)));
+            assert_eq!(*zoom, Some(0.75));
+        }
+        other => panic!("expected Position, got {other:?}"),
+    }
+    let speed = t1.tour_spots[0].speed.as_ref().expect("Speed");
+    assert_eq!(speed.pan_tilt, Some((0.4, 0.4)));
+    assert_eq!(speed.zoom, None);
+}
+
+#[tokio::test]
+async fn ptz_get_preset_tours_propagates_a_bad_second_tour() {
+    // One valid tour and one missing `Status`. The whole call must fail — a
+    // `vec_from_xml` that returned the first tour and dropped the second would
+    // pass a one-element fixture and this is what catches it.
+    //
+    // `Status` rather than `@token` on purpose: `@token` is optional here, so
+    // omitting it is *valid* and would prove nothing.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tptz:GetPresetToursResponse>
+              <tptz:PresetTour token="Tour_1">
+                <tt:Status><tt:State>Idle</tt:State></tt:Status>
+                <tt:AutoStart>false</tt:AutoStart>
+                <tt:StartingCondition/>
+              </tptz:PresetTour>
+              <tptz:PresetTour token="Tour_2">
+                <tt:AutoStart>false</tt:AutoStart>
+                <tt:StartingCondition/>
+              </tptz:PresetTour>
+            </tptz:GetPresetToursResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .ptz_get_preset_tours("http://192.168.1.1/onvif/ptz", "Profile_1")
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "PresetTour/Status");
+}
+
+#[tokio::test]
+async fn ptz_get_preset_tour_fault() {
+    let xml = make_soap_fault_xml("ter:InvalidArgVal", "NoSuchPresetTour-tour-4471");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .ptz_get_preset_tour("http://192.168.1.1/onvif/ptz", "Profile_1", "Tour_9")
+        .await
+        .unwrap_err();
+    assert_fault(err, "ter:InvalidArgVal", "NoSuchPresetTour-tour-4471");
+}
+
+fn preset_tour_options_xml() -> &'static str {
+    r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tptz:GetPresetTourOptionsResponse>
+              <tptz:Options>
+                <tt:AutoStart>true</tt:AutoStart>
+                <tt:StartingCondition>
+                  <tt:RecurringTime>
+                    <tt:Min>1</tt:Min>
+                    <tt:Max>10</tt:Max>
+                  </tt:RecurringTime>
+                  <tt:RecurringDuration>
+                    <tt:Min>PT1M</tt:Min>
+                    <tt:Max>PT8H</tt:Max>
+                  </tt:RecurringDuration>
+                  <tt:Direction>Forward</tt:Direction>
+                  <tt:Direction>Backward</tt:Direction>
+                </tt:StartingCondition>
+                <tt:TourSpot>
+                  <tt:PresetDetail>
+                    <tt:PresetToken>Preset_1</tt:PresetToken>
+                    <tt:PresetToken>Preset_2</tt:PresetToken>
+                    <tt:Home>true</tt:Home>
+                  </tt:PresetDetail>
+                  <tt:StayTime>
+                    <tt:Min>PT5S</tt:Min>
+                    <tt:Max>PT10M</tt:Max>
+                  </tt:StayTime>
+                </tt:TourSpot>
+              </tptz:Options>
+            </tptz:GetPresetTourOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#
+}
+
+#[tokio::test]
+async fn ptz_get_preset_tour_options_reads_the_direction_list() {
+    let (transport, captured) = RecordingTransport::new(preset_tour_options_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let opts = client
+        .ptz_get_preset_tour_options("http://192.168.1.1/onvif/ptz", "Profile_1", None)
+        .await
+        .unwrap();
+
+    assert!(opts.auto_start);
+
+    // The cardinality asymmetry: `Direction` is `[0..*]` here and a single
+    // value inside a concrete `StartingCondition`. A parser using `child()`
+    // instead of `children_named()` returns one item and passes everything
+    // else.
+    assert_eq!(
+        opts.starting_condition.directions,
+        [
+            PtzPresetTourDirection::Forward,
+            PtzPresetTourDirection::Backward
+        ]
+    );
+    let rt = opts
+        .starting_condition
+        .recurring_time
+        .expect("RecurringTime");
+    assert_eq!((rt.min, rt.max), (1, 10));
+    assert_eq!(
+        opts.starting_condition.recurring_duration,
+        Some(("PT1M".to_string(), "PT8H".to_string()))
+    );
+
+    assert_eq!(
+        opts.tour_spot.preset_detail.preset_tokens,
+        ["Preset_1", "Preset_2"]
+    );
+    assert_eq!(opts.tour_spot.preset_detail.home, Some(true));
+    assert!(
+        opts.tour_spot
+            .preset_detail
+            .pan_tilt_position_space
+            .is_none()
+    );
+    assert_eq!(
+        opts.tour_spot.stay_time,
+        ("PT5S".to_string(), "PT10M".to_string())
+    );
+
+    // Passing `None` for the tour token must omit the element entirely, not
+    // send an empty one — a device reads an empty token as "this tour".
+    let c = captured.lock().unwrap();
+    assert!(!c.body.contains("PresetTourToken"), "body was: {}", c.body);
+}
+
+#[tokio::test]
+async fn ptz_get_preset_tour_options_missing_stay_time() {
+    // `StayTime` is `minOccurs="1"` on `tt:PTZPresetTourSpotOptions`.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
+          <s:Body>
+            <tptz:GetPresetTourOptionsResponse>
+              <tptz:Options>
+                <tt:AutoStart>true</tt:AutoStart>
+                <tt:StartingCondition/>
+                <tt:TourSpot>
+                  <tt:PresetDetail>
+                    <tt:PresetToken>Preset_1</tt:PresetToken>
+                  </tt:PresetDetail>
+                </tt:TourSpot>
+              </tptz:Options>
+            </tptz:GetPresetTourOptionsResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .ptz_get_preset_tour_options("http://192.168.1.1/onvif/ptz", "Profile_1", Some("Tour_1"))
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "Options/TourSpot/StayTime");
+}
+
+#[tokio::test]
+async fn ptz_create_preset_tour_returns_the_new_token() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl">
+          <s:Body>
+            <tptz:CreatePresetTourResponse>
+              <tptz:PresetTourToken>Tour_2</tptz:PresetTourToken>
+            </tptz:CreatePresetTourResponse>
+          </s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let token = client
+        .ptz_create_preset_tour("http://192.168.1.1/onvif/ptz", "Profile_1")
+        .await
+        .unwrap();
+    assert_eq!(token, "Tour_2");
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver20/ptz/wsdl/CreatePresetTour"
+    );
+    assert!(
+        c.body
+            .contains("<tptz:ProfileToken>Profile_1</tptz:ProfileToken>"),
+        "body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn ptz_create_preset_tour_missing_token() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl">
+          <s:Body>
+            <tptz:CreatePresetTourResponse/>
+          </s:Body>
+        </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .ptz_create_preset_tour("http://192.168.1.1/onvif/ptz", "Profile_1")
+        .await
+        .unwrap_err();
+    assert_missing_field(err, "PresetTourToken");
+}
+
+#[tokio::test]
+async fn ptz_modify_preset_tour_escapes_and_serialises_every_spot() {
+    let (transport, captured) = RecordingTransport::new(&empty_response_xml("dummy"));
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    let tour = PtzPresetTour {
+        token: Some("Tour_1".into()),
+        // `ModifyPresetTour` is the only Tier 1 operation that writes
+        // structured user data, so the name is where escaping has teeth.
+        name: Some("Lobby & <Gate>".into()),
+        status: PtzPresetTourStatus {
+            state: PtzPresetTourState::Idle,
+            current_tour_spot: None,
+        },
+        auto_start: true,
+        starting_condition: PtzPresetTourStartingCondition {
+            random_preset_order: Some(true),
+            recurring_time: Some(4),
+            recurring_duration: Some("PT30M".into()),
+            direction: Some(PtzPresetTourDirection::Backward),
+        },
+        tour_spots: vec![
+            PtzPresetTourSpot {
+                preset_detail: PtzPresetTourPresetDetail::PresetToken("A&B".into()),
+                speed: None,
+                stay_time: Some("PT10S".into()),
+            },
+            PtzPresetTourSpot {
+                preset_detail: PtzPresetTourPresetDetail::Home,
+                speed: None,
+                stay_time: None,
+            },
+        ],
+    };
+
+    let res = client
+        .ptz_modify_preset_tour("http://192.168.1.1/onvif/ptz", "Profile_1", &tour)
+        .await;
+    // The fixture is an unrelated response element, so the call must report
+    // that rather than silently succeeding.
+    assert!(
+        matches!(
+            res,
+            Err(crate::error::OnvifError::Soap(
+                crate::soap::SoapError::UnexpectedResponse(ref t)
+            )) if t == "ModifyPresetTourResponse"
+        ),
+        "got {res:?}"
+    );
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver20/ptz/wsdl/ModifyPresetTour"
+    );
+    assert!(
+        c.body
+            .contains("<tt:Name>Lobby &amp; &lt;Gate&gt;</tt:Name>"),
+        "name must be escaped: {}",
+        c.body
+    );
+    assert!(
+        c.body.contains("<tt:PresetToken>A&amp;B</tt:PresetToken>"),
+        "preset token must be escaped: {}",
+        c.body
+    );
+    assert!(
+        c.body.contains(r#"<tptz:PresetTour token="Tour_1">"#),
+        "body was: {}",
+        c.body
+    );
+    assert!(
+        c.body
+            .contains(r#"<tt:StartingCondition RandomPresetOrder="true">"#),
+        "RandomPresetOrder is an attribute: {}",
+        c.body
+    );
+    assert!(
+        c.body.contains("<tt:Direction>Backward</tt:Direction>"),
+        "body was: {}",
+        c.body
+    );
+    // Both spots, and the `Home` arm of the choice serialised on its own —
+    // a `PresetToken` alongside it would be schema-invalid.
+    assert_eq!(c.body.matches("<tt:TourSpot>").count(), 2);
+    assert!(
+        c.body.contains("<tt:Home>true</tt:Home>"),
+        "body: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn ptz_operate_preset_tour_sends_the_operation_verb() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl">
+          <s:Body><tptz:OperatePresetTourResponse/></s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_operate_preset_tour(
+            "http://192.168.1.1/onvif/ptz",
+            "Profile_1",
+            "Tour_1",
+            PtzPresetTourOperation::Pause,
+        )
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver20/ptz/wsdl/OperatePresetTour"
+    );
+    assert!(
+        c.body.contains("<tptz:Operation>Pause</tptz:Operation>"),
+        "body was: {}",
+        c.body
+    );
+    assert!(
+        c.body
+            .contains("<tptz:PresetTourToken>Tour_1</tptz:PresetTourToken>"),
+        "body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn ptz_operate_preset_tour_fault() {
+    let xml = make_soap_fault_xml("env:Sender", "TourNotRunning-5106");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .ptz_operate_preset_tour(
+            "http://192.168.1.1/onvif/ptz",
+            "Profile_1",
+            "Tour_1",
+            PtzPresetTourOperation::Start,
+        )
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Sender", "TourNotRunning-5106");
+}
+
+#[tokio::test]
+async fn ptz_remove_preset_tour_sends_both_tokens() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                      xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl">
+          <s:Body><tptz:RemovePresetTourResponse/></s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .ptz_remove_preset_tour("http://192.168.1.1/onvif/ptz", "Profile_1", "Tour_1")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver20/ptz/wsdl/RemovePresetTour"
+    );
+    assert!(
+        c.body
+            .contains("<tptz:ProfileToken>Profile_1</tptz:ProfileToken>"),
+        "body was: {}",
+        c.body
+    );
+    assert!(
+        c.body
+            .contains("<tptz:PresetTourToken>Tour_1</tptz:PresetTourToken>"),
+        "body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn ptz_remove_preset_tour_fault() {
+    let xml = make_soap_fault_xml("ter:NotAuthorized", "TourDeleteDenied-2884");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+
+    let err = client
+        .ptz_remove_preset_tour("http://192.168.1.1/onvif/ptz", "Profile_1", "Tour_1")
+        .await
+        .unwrap_err();
+    assert_fault(err, "ter:NotAuthorized", "TourDeleteDenied-2884");
 }

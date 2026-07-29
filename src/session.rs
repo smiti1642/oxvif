@@ -52,11 +52,12 @@ use crate::types::{
     MetadataConfiguration, MetadataConfigurationOptions, NetworkGateway, NetworkInterface,
     NetworkInterfaceConfig, NetworkProtocol, NotificationMessage, NtpInfo, OnvifService,
     OsdConfiguration, OsdOptions, PtzConfiguration, PtzConfigurationOptions, PtzNode, PtzPreset,
-    PtzServiceCapabilities, PtzStatus, PullPointSubscription, PushSubscription, RecordingItem,
-    RecordingJob, RecordingJobConfiguration, RecordingJobState, RecordingServiceCapabilities,
-    RelayOutput, ReplayServiceCapabilities, SearchServiceCapabilities, SnapshotUri,
-    StorageConfiguration, StreamUri, SystemDateTime, SystemLog, SystemRestoreStart, SystemUris,
-    User, VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
+    PtzPresetTour, PtzPresetTourOperation, PtzPresetTourOptions, PtzServiceCapabilities, PtzStatus,
+    PullPointSubscription, PushSubscription, RecordingItem, RecordingJob,
+    RecordingJobConfiguration, RecordingJobState, RecordingServiceCapabilities, RelayOutput,
+    ReplayServiceCapabilities, SearchServiceCapabilities, SnapshotUri, StorageConfiguration,
+    StreamUri, SystemDateTime, SystemLog, SystemRestoreStart, SystemUris, User,
+    VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoderConfigurationOptions,
     VideoEncoderConfigurationOptions2, VideoEncoderInstances, VideoSource,
     VideoSourceConfiguration, VideoSourceConfigurationOptions, VideoSourceMode,
 };
@@ -1252,6 +1253,79 @@ impl OnvifSession {
     ) -> Result<Vec<PtzConfiguration>, OnvifError> {
         self.client
             .ptz_get_compatible_configurations(self.ptz_url()?, profile_token)
+            .await
+    }
+
+    /// List every preset tour stored against a media profile.
+    pub async fn ptz_get_preset_tours(
+        &self,
+        profile_token: &str,
+    ) -> Result<Vec<PtzPresetTour>, OnvifError> {
+        self.client
+            .ptz_get_preset_tours(self.ptz_url()?, profile_token)
+            .await
+    }
+
+    /// Retrieve one preset tour by token.
+    pub async fn ptz_get_preset_tour(
+        &self,
+        profile_token: &str,
+        preset_tour_token: &str,
+    ) -> Result<PtzPresetTour, OnvifError> {
+        self.client
+            .ptz_get_preset_tour(self.ptz_url()?, profile_token, preset_tour_token)
+            .await
+    }
+
+    /// Retrieve what preset tours this device will accept.
+    pub async fn ptz_get_preset_tour_options(
+        &self,
+        profile_token: &str,
+        preset_tour_token: Option<&str>,
+    ) -> Result<PtzPresetTourOptions, OnvifError> {
+        self.client
+            .ptz_get_preset_tour_options(self.ptz_url()?, profile_token, preset_tour_token)
+            .await
+    }
+
+    /// Create an empty preset tour and return its new token.
+    pub async fn ptz_create_preset_tour(&self, profile_token: &str) -> Result<String, OnvifError> {
+        self.client
+            .ptz_create_preset_tour(self.ptz_url()?, profile_token)
+            .await
+    }
+
+    /// Write a preset tour back to the device.
+    pub async fn ptz_modify_preset_tour(
+        &self,
+        profile_token: &str,
+        tour: &PtzPresetTour,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .ptz_modify_preset_tour(self.ptz_url()?, profile_token, tour)
+            .await
+    }
+
+    /// Start, stop or pause a preset tour.
+    pub async fn ptz_operate_preset_tour(
+        &self,
+        profile_token: &str,
+        preset_tour_token: &str,
+        operation: PtzPresetTourOperation,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .ptz_operate_preset_tour(self.ptz_url()?, profile_token, preset_tour_token, operation)
+            .await
+    }
+
+    /// Delete a preset tour.
+    pub async fn ptz_remove_preset_tour(
+        &self,
+        profile_token: &str,
+        preset_tour_token: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .ptz_remove_preset_tour(self.ptz_url()?, profile_token, preset_tour_token)
             .await
     }
 
