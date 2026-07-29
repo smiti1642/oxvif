@@ -5,7 +5,7 @@
 - **WSDL:** https://www.onvif.org/ver10/replay.wsdl
 - **Namespace:** `http://www.onvif.org/ver10/replay/wsdl` (prefix `trp`)
 - **ONVIF Profile:** G
-- **oxvif status:** ◐ implemented in `src/client/recording.rs` (1 of 4 operations)
+- **oxvif status:** ◐ implemented in `src/client/recording.rs` (2 of 4 operations)
 
 ---
 
@@ -14,7 +14,7 @@
 | Operation | Purpose | oxvif | method |
 |-----------|---------|:----:|--------|
 | GetReplayUri | RTSP URI for stored recording playback | ✓ | `get_replay_uri` |
-| GetServiceCapabilities | replay service capabilities | — | — |
+| GetServiceCapabilities | replay service capabilities | ✓ | `replay_get_service_capabilities` |
 | GetReplayConfiguration | read replay config | — | — |
 | SetReplayConfiguration | modify replay config | — | — |
 

@@ -5,7 +5,7 @@
 - **WSDL:** https://www.onvif.org/ver20/media/wsdl/media.wsdl
 - **Namespace:** `http://www.onvif.org/ver20/media/wsdl` (prefix `tr2`)
 - **ONVIF Profile:** T
-- **oxvif status:** ◐ implemented in `src/client/media2.rs` (~26 of ~59 operations)
+- **oxvif status:** ◐ implemented in `src/client/media2.rs` (~27 of ~59 operations)
 
 Media2 replaces Media1's per-kind binding ops with a single generic `AddConfiguration` /
 `RemoveConfiguration` (a `Type` discriminator), flattens encoder configs, and drops
@@ -29,7 +29,7 @@ multicast/EQ/decoder audio, analytics config, and OSD-via-Media2 (oxvif does OSD
 | GetSnapshotUri | snapshot URI | ✓ | `get_snapshot_uri_media2` |
 | GetVideoEncoderInstances | encoder capacity | ✓ | `get_video_encoder_instances_media2` |
 | GetVideoSourceModes / SetVideoSourceMode | sensor modes | ✓ | `get_video_source_modes_media2` / `set_video_source_mode_media2` |
-| GetServiceCapabilities | media2 capabilities | — | — |
+| GetServiceCapabilities | media2 capabilities | ✓ | `media2_get_service_capabilities` |
 | SetSynchronizationPoint | force I-frame / refresh | — | — |
 | StartMulticastStreaming / StopMulticastStreaming | multicast control | — | — |
 

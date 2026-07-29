@@ -5,7 +5,7 @@
 - **WSDL:** https://www.onvif.org/ver20/imaging/wsdl/imaging.wsdl
 - **Namespace:** `http://www.onvif.org/ver20/imaging/wsdl` (prefix `timg`)
 - **ONVIF Profile:** T
-- **oxvif status:** ◐ implemented in `src/client/imaging.rs` (7 / 11 operations)
+- **oxvif status:** ◐ implemented in `src/client/imaging.rs` (8 / 11 operations)
 
 ---
 
@@ -20,7 +20,7 @@
 | Stop | stop focus move | `Stop` → `…Response` | ✓ | `imaging_stop` |
 | GetStatus | focus position + move state | `GetStatus` → `…Response` | ✓ | `imaging_get_status` |
 | GetMoveOptions | valid focus move ranges | `GetMoveOptions` → `…Response` | ✓ | `imaging_get_move_options` |
-| GetServiceCapabilities | imaging service capabilities | `GetServiceCapabilities` → `…Response` | — | — |
+| GetServiceCapabilities | imaging service capabilities | `GetServiceCapabilities` → `…Response` | ✓ | `imaging_get_service_capabilities` |
 | GetPresets | list manufacturer imaging presets | `GetPresets` → `…Response` | — | — |
 | GetCurrentPreset | currently-applied imaging preset | `GetCurrentPreset` → `…Response` | — | — |
 | SetCurrentPreset | apply an imaging preset | `SetCurrentPreset` → `…Response` | — | — |

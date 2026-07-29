@@ -1,7 +1,24 @@
 # Tier 1 implementation map (0.15.0)
 
-Status: **written 2026-07-28, not started.** Companion to
+Status: **shipped in 0.15.0** (2026-07-29). Written 2026-07-28. Companion to
 [service-capabilities-and-ptz-tours.md](service-capabilities-and-ptz-tours.md).
+
+All seventeen operations landed across `883e64f` (Stage A), `ac1f83e`
+(Stage B) and `a7b9f10` (Stage C). Two deviations from this plan, both recorded
+in the commits that made them:
+
+- **§8 commits 2 and 3 were merged.** A types-only commit cannot pass the gate:
+  every `from_xml` is `pub(crate)` with no caller until the client methods land,
+  so `clippy -D warnings` fails on `dead_code`. The split was for
+  reviewability; a red gate costs more than it buys.
+- **§3.3.2 called Media1 "the only service-capability type with required
+  children".** The device type has three (`Network`, `Security`, `System`), as
+  §3.3.1's own table says. Schema cardinality was followed.
+
+§1's gate correction is now folded into `CLAUDE.md`. §7's perturbation matrix
+was run in full plus two extras, and the per-stage results are in the three
+commit messages — that record, rather than this file, is the evidence of what
+was proved.
 
 That document decides *what* and *why*. This one is the **對照表** — the
 correspondence tables that make the writing mechanical: for every attribute in

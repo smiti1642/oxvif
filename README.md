@@ -90,7 +90,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.14", features = ["mock"] }
+oxvif = { version = "0.15", features = ["mock"] }
 ```
 
 ```rust
@@ -117,7 +117,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.14"
+oxvif = "0.15"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -133,7 +133,7 @@ without hand-cloning parallel structs.
 
 ```toml
 [dependencies]
-oxvif = { version = "0.14", features = ["serde"] }
+oxvif = { version = "0.15", features = ["serde"] }
 ```
 
 ```rust
@@ -290,6 +290,55 @@ caps.device.security.username_token
 caps.media.streaming.rtp_rtsp_tcp
 caps.events.ws_pull_point
 ```
+
+### Per-service capabilities — `*_get_service_capabilities()`
+
+`get_capabilities()` answers **which services exist and at what URL**. Each
+service has its own `GetServiceCapabilities` answering **what that service can
+do**, and all nine are implemented:
+
+| Method | Returns |
+|--------|---------|
+| `device_get_service_capabilities()` | `DeviceServiceCapabilities` |
+| `media_get_service_capabilities(media_url)` | `MediaServiceCapabilities` |
+| `media2_get_service_capabilities(media2_url)` | `Media2ServiceCapabilities` |
+| `ptz_get_service_capabilities(ptz_url)` | `PtzServiceCapabilities` |
+| `imaging_get_service_capabilities(imaging_url)` | `ImagingServiceCapabilities` |
+| `events_get_service_capabilities(events_url)` | `EventsServiceCapabilities` |
+| `recording_get_service_capabilities(recording_url)` | `RecordingServiceCapabilities` |
+| `search_get_service_capabilities(search_url)` | `SearchServiceCapabilities` |
+| `replay_get_service_capabilities(replay_url)` | `ReplayServiceCapabilities` |
+
+```rust
+let caps = client.device_get_service_capabilities().await?;
+
+caps.security.tls1_2                 // Option<bool>
+caps.security.max_users              // Option<u32>
+caps.system.user_config_not_supported
+caps.misc.map(|m| m.auxiliary_commands);  // what SendAuxiliaryCommand accepts
+```
+
+**Every flag is `Option<bool>`, not `bool`.** `None` means the device did not
+mention the attribute; `Some(false)` means it said no. The two are different
+answers, and collapsing them would defeat the reason for asking — a feature the
+firmware never described is not the same as one it declined. The device-level
+`Capabilities` from `get_capabilities()` uses bare `bool` and cannot make that
+distinction, which is why the two families are separate types.
+
+List-valued attributes are the deliberate exception: they are `Vec<_>`, empty
+when absent, because for a list "absent" and "present but empty" both mean *no
+items*.
+
+A few field types read wrong and are right:
+
+- `RecordingServiceCapabilities::max_recordings` is `f32` — `xs:float` in the
+  schema, despite reading like a count.
+- `Media2ServiceCapabilities::webrtc` is `Option<u32>`, a **session count**.
+  `Some(0)` means WebRTC was described and no concurrent session is offered.
+- `RecordingServiceCapabilities::onboard_storage` has a schema default of
+  `true` which oxvif does **not** apply. Read
+  `onboard_storage.unwrap_or(true)` if you want the schema's behaviour rather
+  than the device's silence.
 
 ### `get_services() -> Result<Vec<OnvifService>, OnvifError>`
 
@@ -506,6 +555,15 @@ All PTZ methods use `ptz_url` from `caps.ptz_url`. Coordinates use the ONVIF nor
 | `ptz_get_nodes(ptz_url)` | List PTZ nodes (capabilities, preset count, home support) |
 | `ptz_goto_home_position(ptz_url, profile_token, speed)` | Move to the configured home position |
 | `ptz_set_home_position(ptz_url, profile_token)` | Save current position as home |
+| `ptz_get_service_capabilities(ptz_url)` | What the PTZ service supports |
+| `ptz_get_preset_tours(ptz_url, profile_token)` | List stored guard tours |
+| `ptz_get_preset_tour(ptz_url, profile_token, tour_token)` | Single tour by token |
+| `ptz_get_preset_tour_options(ptz_url, profile_token, tour_token)` | What tours the device accepts |
+| `ptz_create_preset_tour(ptz_url, profile_token)` | Create an empty tour, returns its token |
+| `ptz_modify_preset_tour(ptz_url, profile_token, tour)` | Write a tour back to the device |
+| `ptz_operate_preset_tour(ptz_url, profile_token, tour_token, op)` | Start / stop / pause a tour |
+| `ptz_remove_preset_tour(ptz_url, profile_token, tour_token)` | Delete a tour |
+| `ptz_send_auxiliary_command(ptz_url, profile_token, data)` | Wiper / washer / IR lamp, per profile |
 
 ```rust
 // Save current position
@@ -518,6 +576,101 @@ println!("pan={:?} tilt={:?} zoom={:?} state={}",
 ```
 
 **`PtzStatus` fields:** `pan`, `tilt`, `zoom` (`Option<f32>`), `pan_tilt_status`, `zoom_status` (`String` — `"IDLE"` or `"MOVING"`), `utc_time` (`Option<String>`), `error` (`Option<String>` — device fault description if any).
+
+### Preset tours
+
+A preset tour is a stored guard tour: a named sequence of stops the camera
+walks unattended. Create an empty tour, fill it in, then start it.
+
+```rust
+use oxvif::{
+    PtzPresetTour, PtzPresetTourDirection, PtzPresetTourOperation,
+    PtzPresetTourPresetDetail, PtzPresetTourSpot, PtzPresetTourStartingCondition,
+    PtzPresetTourState, PtzPresetTourStatus,
+};
+
+// What this device will accept — a stop outside these bounds comes back as a
+// fault rather than being clamped.
+let opts = client.ptz_get_preset_tour_options(ptz_url, &profile, None).await?;
+println!("directions: {:?}", opts.starting_condition.directions);
+println!("stay time:  {:?}", opts.tour_spot.stay_time);
+
+let token = client.ptz_create_preset_tour(ptz_url, &profile).await?;
+
+let tour = PtzPresetTour {
+    token: Some(token.clone()),
+    name: Some("Night sweep".into()),
+    status: PtzPresetTourStatus {
+        state: PtzPresetTourState::Idle,
+        current_tour_spot: None,
+    },
+    auto_start: true,
+    starting_condition: PtzPresetTourStartingCondition {
+        random_preset_order: Some(false),
+        recurring_time: Some(2),
+        recurring_duration: None,
+        direction: Some(PtzPresetTourDirection::Forward),
+    },
+    tour_spots: vec![PtzPresetTourSpot {
+        preset_detail: PtzPresetTourPresetDetail::PresetToken("Preset_1".into()),
+        speed: None,
+        stay_time: Some("PT15S".into()),
+    }],
+};
+client.ptz_modify_preset_tour(ptz_url, &profile, &tour).await?;
+
+client
+    .ptz_operate_preset_tour(ptz_url, &profile, &token, PtzPresetTourOperation::Start)
+    .await?;
+```
+
+Two things about the types are worth knowing before you build one:
+
+- **`PtzPresetTour::token` is `Option<String>`.** `@token` is optional on
+  `tt:PresetTour` in the schema, unlike `tt:PTZPreset/@token`, so a device may
+  return a tour without one and oxvif does not treat that as an error. You
+  still need a token on the way *in* to every operation that names an existing
+  tour.
+- **`PtzPresetTourPresetDetail` is an enum, not a struct.** The schema member
+  is an `xs:choice` — `PresetToken`, `Home` or an explicit `Position`, exactly
+  one. Three `Option` fields would let you send two at once and get an
+  unhelpful fault back.
+
+`PtzPresetTourState` and `PtzPresetTourDirection` both carry an
+`Unknown(String)` variant. Both schema types end in `Extended`, so vendors do
+extend them, and an unrecognised value is carried rather than turning
+`ptz_get_preset_tours` into an `Err`.
+
+### Auxiliary commands — there are two of them
+
+`ptz_send_auxiliary_command(ptz_url, profile_token, data)` and
+`send_auxiliary_command(command)` are **different ONVIF operations** that
+happen to share a name. The first is the PTZ service's, is scoped to a media
+profile, and returns the device's answer; the second is the Device service's
+and is not. Cameras that implement a wiper generally implement the PTZ one, so
+try that first.
+
+The values a given camera accepts are vendor-namespaced, so oxvif does not
+model them as an enum — they are **discoverable** instead:
+
+```rust
+let advertised = client
+    .device_get_service_capabilities()
+    .await?
+    .misc
+    .map(|m| m.auxiliary_commands)
+    .unwrap_or_default();
+// e.g. ["tt:Wiper|On", "tt:Wiper|Off", "tt:IRLamp|On", "tt:IRLamp|Off", "tt:IRLamp|Auto"]
+
+let answer = client
+    .ptz_send_auxiliary_command(ptz_url, &profile, "tt:Wiper|On")
+    .await?;
+```
+
+`tt:AuxiliaryData` has a schema `maxLength` of 128, which oxvif does not
+enforce: the device rejects an over-long value with a fault, and a client-side
+check would be a second source of truth that drifts from the firmware.
+
 
 ---
 
@@ -849,7 +1002,7 @@ alternative to the official ONVIF Device Test Tool. Opt in with the `health`
 feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 ```toml
-oxvif = { version = "0.14", features = ["health"] }
+oxvif = { version = "0.15", features = ["health"] }
 ```
 
 ```rust
@@ -999,8 +1152,8 @@ implements. There are two ways to wire it up.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.14", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.14", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.15", features = ["mock"] }           # MockTransport
+# oxvif = { version = "0.15", features = ["mock-server"] }  # adds MockServer
 ```
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):
@@ -1199,8 +1352,8 @@ chain and `DeviceState`); everything here is opt-in and feature-gated, and
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.14", features = ["metamorph"] }         # record / replay in-process
-# oxvif = { version = "0.14", features = ["metamorph-server"] } # + serve the clone over real HTTP
+oxvif = { version = "0.15", features = ["metamorph"] }         # record / replay in-process
+# oxvif = { version = "0.15", features = ["metamorph-server"] } # + serve the clone over real HTTP
 ```
 
 ### Clone & replay (Persona B)
@@ -1613,6 +1766,7 @@ examples/
 |-----------|--------|
 | `GetCapabilities` | ✓ |
 | `GetServices` | ✓ |
+| `GetServiceCapabilities` | ✓ |
 | `GetDeviceInformation` | ✓ |
 | `GetSystemDateAndTime` | ✓ |
 | `GetHostname` / `SetHostname` | ✓ |
@@ -1638,6 +1792,7 @@ examples/
 
 | Operation | Status |
 |-----------|--------|
+| `GetServiceCapabilities` | ✓ |
 | `GetProfiles` / `GetProfile` | ✓ |
 | `CreateProfile` / `DeleteProfile` | ✓ |
 | `AddVideoEncoderConfiguration` / `RemoveVideoEncoderConfiguration` | ✓ |
@@ -1661,6 +1816,7 @@ examples/
 
 | Operation | Status |
 |-----------|--------|
+| `GetServiceCapabilities` | ✓ |
 | `GetProfiles` | ✓ |
 | `CreateProfile` / `DeleteProfile` | ✓ |
 | `GetStreamUri` / `GetSnapshotUri` | ✓ |
@@ -1684,6 +1840,7 @@ examples/
 
 | Operation | Status |
 |-----------|--------|
+| `GetServiceCapabilities` | ✓ |
 | `AbsoluteMove` / `RelativeMove` / `ContinuousMove` | ✓ |
 | `Stop` | ✓ |
 | `GetPresets` / `GotoPreset` | ✓ |
@@ -1693,11 +1850,17 @@ examples/
 | `SetConfiguration` / `GetConfigurationOptions` | ✓ |
 | `GetNodes` / `GetNode` | ✓ |
 | `GetCompatibleConfigurations` | ✓ |
+| `GetPresetTours` / `GetPresetTour` | ✓ |
+| `GetPresetTourOptions` | ✓ |
+| `CreatePresetTour` / `ModifyPresetTour` | ✓ |
+| `OperatePresetTour` / `RemovePresetTour` | ✓ |
+| `SendAuxiliaryCommand` | ✓ |
 
 ### Imaging Service
 
 | Operation | Status |
 |-----------|--------|
+| `GetServiceCapabilities` | ✓ |
 | `GetImagingSettings` / `SetImagingSettings` | ✓ |
 | `GetOptions` | ✓ |
 | `Move` / `Stop` / `GetMoveOptions` / `GetStatus` | ✓ |
@@ -1706,6 +1869,7 @@ examples/
 
 | Operation | Status |
 |-----------|--------|
+| `GetServiceCapabilities` | ✓ |
 | `GetEventProperties` | ✓ |
 | `CreatePullPointSubscription` | ✓ |
 | `PullMessages` | ✓ |
@@ -1719,6 +1883,7 @@ examples/
 
 | Operation | Status |
 |-----------|--------|
+| `GetServiceCapabilities` | ✓ |
 | `GetRecordings` | ✓ |
 | `CreateRecording` / `DeleteRecording` | ✓ |
 | `CreateTrack` / `DeleteTrack` | ✓ |
@@ -1730,6 +1895,7 @@ examples/
 
 | Operation | Status |
 |-----------|--------|
+| `GetServiceCapabilities` | ✓ |
 | `FindRecordings` | ✓ |
 | `GetRecordingSearchResults` | ✓ |
 | `EndSearch` | ✓ |
@@ -1738,6 +1904,7 @@ examples/
 
 | Operation | Status |
 |-----------|--------|
+| `GetServiceCapabilities` | ✓ |
 | `GetReplayUri` | ✓ |
 
 ### WS-Discovery

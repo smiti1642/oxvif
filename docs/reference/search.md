@@ -5,7 +5,7 @@
 - **WSDL:** https://www.onvif.org/ver10/search.wsdl
 - **Namespace:** `http://www.onvif.org/ver10/search/wsdl` (prefix `tse`)
 - **ONVIF Profile:** G
-- **oxvif status:** ◐ implemented in `src/client/recording.rs` (3 of 14 operations)
+- **oxvif status:** ◐ implemented in `src/client/recording.rs` (4 of 14 operations)
 
 oxvif covers the recording-search session (find → poll → end). Unimplemented: summary/info/media
 attributes and the **event / PTZ-position / metadata** search sessions
@@ -26,7 +26,7 @@ attributes and the **event / PTZ-position / metadata** search sessions
 | FindRecordings | start recording search | ✓ | `find_recordings` |
 | GetRecordingSearchResults | poll recording results | ✓ | `get_recording_search_results` |
 | EndSearch | end a search session | ✓ | `end_search` |
-| GetServiceCapabilities | search service capabilities | — | — |
+| GetServiceCapabilities | search service capabilities | ✓ | `search_get_service_capabilities` |
 | GetRecordingSummary | overview of all recorded data | — | — |
 | GetRecordingInformation | details of one recording | — | — |
 | GetMediaAttributes | track attributes at a time | — | — |

@@ -5,7 +5,7 @@
 - **WSDL:** https://www.onvif.org/ver20/ptz/wsdl/ptz.wsdl
 - **Namespace:** `http://www.onvif.org/ver20/ptz/wsdl` (prefix `tptz`)
 - **ONVIF Profile:** S (PTZ)
-- **oxvif status:** ◐ implemented in `src/client/ptz.rs` (18 / 29 operations)
+- **oxvif status:** ◐ implemented in `src/client/ptz.rs` (26 / 29 operations)
 
 Coordinates use the ONVIF normalised range: pan/tilt `[-1.0, 1.0]`, zoom `[0.0, 1.0]`.
 
@@ -33,20 +33,23 @@ Coordinates use the ONVIF normalised range: pan/tilt `[-1.0, 1.0]`, zoom `[0.0, 
 | GetNodes | list PTZ nodes | `GetNodes` → `…Response` | ✓ | `ptz_get_nodes` |
 | GetNode | single node | `GetNode` → `…Response` | ✓ | `ptz_get_node` |
 | GetCompatibleConfigurations | configs compatible w/ profile | `GetCompatibleConfigurations` → `…Response` | ✓ | `ptz_get_compatible_configurations` |
-| GetServiceCapabilities | PTZ service capabilities | `GetServiceCapabilities` → `…Response` | — | — |
-| SendAuxiliaryCommand | PTZ auxiliary command | `SendAuxiliaryCommand` → `…Response` | — | — |
+| GetServiceCapabilities | PTZ service capabilities | `GetServiceCapabilities` → `…Response` | ✓ | `ptz_get_service_capabilities` |
+| SendAuxiliaryCommand | PTZ auxiliary command | `SendAuxiliaryCommand` → `…Response` | ✓ | `ptz_send_auxiliary_command` |
 | GeoMove | move to a geolocation | `GeoMove` → `…Response` | — | — |
-| GetPresetTours | list preset tours | `GetPresetTours` → `…Response` | — | — |
-| GetPresetTour | single preset tour | `GetPresetTour` → `…Response` | — | — |
-| GetPresetTourOptions | preset-tour option ranges | `GetPresetTourOptions` → `…Response` | — | — |
-| CreatePresetTour | create preset tour | `CreatePresetTour` → `…Response` | — | — |
-| ModifyPresetTour | modify preset tour | `ModifyPresetTour` → `…Response` | — | — |
-| OperatePresetTour | start/stop/pause a tour | `OperatePresetTour` → `…Response` | — | — |
-| RemovePresetTour | delete preset tour | `RemovePresetTour` → `…Response` | — | — |
+| GetPresetTours | list preset tours | `GetPresetTours` → `…Response` | ✓ | `ptz_get_preset_tours` |
+| GetPresetTour | single preset tour | `GetPresetTour` → `…Response` | ✓ | `ptz_get_preset_tour` |
+| GetPresetTourOptions | preset-tour option ranges | `GetPresetTourOptions` → `…Response` | ✓ | `ptz_get_preset_tour_options` |
+| CreatePresetTour | create preset tour | `CreatePresetTour` → `…Response` | ✓ | `ptz_create_preset_tour` |
+| ModifyPresetTour | modify preset tour | `ModifyPresetTour` → `…Response` | ✓ | `ptz_modify_preset_tour` |
+| OperatePresetTour | start/stop/pause a tour | `OperatePresetTour` → `…Response` | ✓ | `ptz_operate_preset_tour` |
+| RemovePresetTour | delete preset tour | `RemovePresetTour` → `…Response` | ✓ | `ptz_remove_preset_tour` |
 | MoveAndStartTracking | move then auto-track | `MoveAndStartTracking` → `…Response` | — | — |
 
-> Note: oxvif's `send_auxiliary_command` is the **Device** service operation, not PTZ
-> `SendAuxiliaryCommand` (which carries `tt:AuxiliaryData` and returns a response payload).
+> Note: oxvif implements **both** auxiliary-command operations, and they are not
+> interchangeable. `send_auxiliary_command` is the **Device** service one;
+> `ptz_send_auxiliary_command` is this one, which is per-profile, carries
+> `tt:AuxiliaryData` rather than `tt:AuxiliaryCommand`, and returns a response
+> payload. Cameras that implement a wiper generally implement the PTZ one.
 
 ---
 

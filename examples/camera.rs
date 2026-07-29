@@ -19,6 +19,9 @@
 //! cargo run --example camera -- ptz-status
 //! cargo run --example camera -- ptz-config
 //! cargo run --example camera -- ptz-home
+//! cargo run --example camera -- ptz-tours
+//! cargo run --example camera -- ptz-aux
+//! cargo run --example camera -- service-capabilities
 //! cargo run --example camera -- audio
 //! cargo run --example camera -- imaging-focus
 //! cargo run --example camera -- osd
@@ -45,6 +48,8 @@ use futures::StreamExt as _;
 use oxvif::{
     Capabilities, DeviceInfo, DiscoveryEvent, FocusMove, ImagingSettings, MediaProfile,
     OnvifClient, OnvifError, OnvifSession, OsdConfiguration, OsdPosition, OsdTextString,
+    PtzPresetTour, PtzPresetTourOperation, PtzPresetTourPresetDetail, PtzPresetTourSpot,
+    PtzPresetTourStartingCondition, PtzPresetTourState, PtzPresetTourStatus,
     RecordingConfiguration, RecordingJobConfiguration, StorageConfiguration, SystemDateTime, User,
 };
 use std::env;
@@ -149,6 +154,9 @@ async fn main() {
         "ptz-status" => ptz_status(&cfg).await,
         "ptz-config" => ptz_config(&cfg).await,
         "ptz-home" => ptz_home_example(&cfg).await,
+        "ptz-tours" => ptz_tours_example(&cfg).await,
+        "ptz-aux" => ptz_aux_example(&cfg).await,
+        "service-capabilities" => service_capabilities_example(&cfg).await,
         "audio" => audio_example(&cfg).await,
         "imaging-focus" => imaging_focus(&cfg).await,
         "osd" => osd_example(&cfg).await,
@@ -206,6 +214,9 @@ fn print_help() {
     println!("  ptz-status           Current PTZ pan/tilt/zoom position");
     println!("  ptz-config           PTZ configurations and nodes");
     println!("  ptz-home             Go to / set the PTZ home position");
+    println!("  ptz-tours            Preset tours: list, options, create/modify/run/delete");
+    println!("  ptz-aux              PTZ vs Device SendAuxiliaryCommand, with discovery");
+    println!("  service-capabilities GetServiceCapabilities on all nine services");
     println!("  audio                Audio sources and encoder configurations");
     println!("  imaging-focus        Focus status, move options, move/stop");
     println!("  osd                  On-screen display elements (list, create, delete)");
@@ -1045,6 +1056,125 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
         }
     }
 
+    // ── 31. Per-service capabilities ──────────────────────────────────────────
+    section("GetServiceCapabilities (all nine services)");
+    match client.device_get_service_capabilities().await {
+        Ok(c) => {
+            println!(
+                "  device   : TLS1.2={:?} max_users={:?} aux={}",
+                c.security.tls1_2,
+                c.security.max_users,
+                c.misc
+                    .as_ref()
+                    .map(|m| m.auxiliary_commands.len())
+                    .unwrap_or(0)
+            );
+        }
+        Err(e) => println!("  device   : (skipped — {e})"),
+    }
+    if let Some(ref u) = caps.media.url {
+        match client.media_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "  media1   : snapshot={:?} osd={:?} rtp_tcp={:?}",
+                c.snapshot_uri, c.osd, c.streaming.rtp_tcp
+            ),
+            Err(e) => println!("  media1   : (skipped — {e})"),
+        }
+    }
+    if let Some(ref u) = caps.media2.url {
+        match client.media2_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "  media2   : webrtc={:?} mask={:?} configs={:?}",
+                c.webrtc, c.mask, c.profile.configurations_supported
+            ),
+            Err(e) => println!("  media2   : (skipped — {e})"),
+        }
+    }
+    if let Some(ref u) = caps.ptz.url {
+        match client.ptz_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "  ptz      : move_status={:?} eflip={:?} move_and_track={:?}",
+                c.move_status, c.eflip, c.move_and_track
+            ),
+            Err(e) => println!("  ptz      : (skipped — {e})"),
+        }
+    }
+    if let Some(ref u) = caps.imaging.url {
+        match client.imaging_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "  imaging  : presets={:?} adaptable={:?} stabilisation={:?}",
+                c.presets, c.adaptable_preset, c.image_stabilization
+            ),
+            Err(e) => println!("  imaging  : (skipped — {e})"),
+        }
+    }
+    if let Some(ref u) = caps.events.url {
+        match client.events_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "  events   : max_pull_points={:?} brokers={:?}",
+                c.max_pull_points, c.max_event_brokers
+            ),
+            Err(e) => println!("  events   : (skipped — {e})"),
+        }
+    }
+    if let Some(ref u) = recording_url {
+        match client.recording_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "  recording: max_recordings={:?} onboard_storage={:?} encodings={:?}",
+                c.max_recordings, c.onboard_storage, c.encoding
+            ),
+            Err(e) => println!("  recording: (skipped — {e})"),
+        }
+    }
+    if let Some(ref u) = caps.search.url {
+        match client.search_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "  search   : metadata={:?} nl_search={:?}",
+                c.metadata_search, c.nl_search
+            ),
+            Err(e) => println!("  search   : (skipped — {e})"),
+        }
+    }
+    if let Some(ref u) = caps.replay.url {
+        match client.replay_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "  replay   : reverse={:?} session_timeout={:?}",
+                c.reverse_playback, c.session_timeout_range
+            ),
+            Err(e) => println!("  replay   : (skipped — {e})"),
+        }
+    }
+
+    // ── 32. Preset tours (read-only) ──────────────────────────────────────────
+    if let (Some(ptz_url), Some(p)) = (&caps.ptz.url, profiles.first()) {
+        section("GetPresetTours");
+        match client.ptz_get_preset_tours(ptz_url, &p.token).await {
+            Ok(tours) => {
+                println!("  {} tour(s)", tours.len());
+                for t in tours.iter().take(3) {
+                    println!(
+                        "  [{}] {:?} state={:?} auto_start={} spots={}",
+                        t.token.as_deref().unwrap_or("(no token)"),
+                        t.name,
+                        t.status.state,
+                        t.auto_start,
+                        t.tour_spots.len()
+                    );
+                }
+            }
+            Err(e) => println!("  (skipped — {e})"),
+        }
+        match client
+            .ptz_get_preset_tour_options(ptz_url, &p.token, None)
+            .await
+        {
+            Ok(o) => println!(
+                "  options: auto_start={} directions={:?} stay_time={:?}",
+                o.auto_start, o.starting_condition.directions, o.tour_spot.stay_time
+            ),
+            Err(e) => println!("  options: (skipped — {e})"),
+        }
+    }
     println!("\n=== Full workflow complete ===");
     Ok(())
 }
@@ -3501,6 +3631,371 @@ async fn healthcheck(cfg: &Config) -> Result<(), OnvifError> {
         println!("\nSome checks failed — review FAIL lines above.");
     } else {
         println!("\nAll checks passed!");
+    }
+
+    Ok(())
+}
+
+// ── Example: per-service capabilities ─────────────────────────────────────────
+
+/// `GetServiceCapabilities` on every service the device advertises.
+///
+/// This is a different question from `GetCapabilities`, which only says *which*
+/// services exist. Note that every flag is `Option<bool>`: `None` printed here
+/// means the camera never mentioned the attribute, which is not the same as
+/// `Some(false)`.
+async fn service_capabilities_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== Per-service capabilities ===");
+    let (client, caps) = connect(cfg).await?;
+
+    let d = client.device_get_service_capabilities().await?;
+    println!("\nDevice");
+    println!(
+        "  TLS      : 1.0={:?} 1.1={:?} 1.2={:?}",
+        d.security.tls1_0, d.security.tls1_1, d.security.tls1_2
+    );
+    println!(
+        "  Users    : max={:?} name_len={:?} pw_len={:?}",
+        d.security.max_users, d.security.max_user_name_length, d.security.max_password_length
+    );
+    println!(
+        "  System   : backup={:?} logging={:?} storage_cfg={:?}",
+        d.system.system_backup, d.system.system_logging, d.system.storage_configuration
+    );
+    println!(
+        "  Not-supported flags (negative sense): discovery={:?} network={:?} user={:?}",
+        d.system.discovery_not_supported,
+        d.system.network_config_not_supported,
+        d.system.user_config_not_supported
+    );
+    match d.misc {
+        Some(m) if !m.auxiliary_commands.is_empty() => {
+            println!("  Aux cmds : {:?}", m.auxiliary_commands);
+            println!("             (pass any of these to ptz-aux)");
+        }
+        _ => println!("  Aux cmds : (none advertised)"),
+    }
+
+    if let Some(u) = &caps.media.url {
+        match client.media_get_service_capabilities(u).await {
+            Ok(c) => {
+                println!("\nMedia1");
+                println!(
+                    "  snapshot={:?} rotation={:?} osd={:?} exi={:?}",
+                    c.snapshot_uri, c.rotation, c.osd, c.exi_compression
+                );
+                println!(
+                    "  transports: multicast={:?} rtp_tcp={:?} rtp_rtsp_tcp={:?}",
+                    c.streaming.rtp_multicast, c.streaming.rtp_tcp, c.streaming.rtp_rtsp_tcp
+                );
+                println!("  max profiles: {:?}", c.profile.maximum_number_of_profiles);
+            }
+            Err(e) => println!("\nMedia1: (skipped — {e})"),
+        }
+    }
+
+    if let Some(u) = &caps.media2.url {
+        match client.media2_get_service_capabilities(u).await {
+            Ok(c) => {
+                println!("\nMedia2");
+                // A session count, not a flag: Some(0) means "described, none
+                // concurrent".
+                println!("  webrtc sessions: {:?}", c.webrtc);
+                println!("  mask={:?} source_mask={:?}", c.mask, c.source_mask);
+                println!("  configs: {:?}", c.profile.configurations_supported);
+            }
+            Err(e) => println!("\nMedia2: (skipped — {e})"),
+        }
+    }
+
+    if let Some(u) = &caps.ptz.url {
+        match client.ptz_get_service_capabilities(u).await {
+            Ok(c) => {
+                println!("\nPTZ");
+                println!(
+                    "  eflip={:?} reverse={:?} move_status={:?} status_position={:?}",
+                    c.eflip, c.reverse, c.move_status, c.status_position
+                );
+                println!("  move_and_track: {:?}", c.move_and_track);
+            }
+            Err(e) => println!("\nPTZ: (skipped — {e})"),
+        }
+    }
+
+    if let Some(u) = &caps.imaging.url {
+        match client.imaging_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "\nImaging\n  stabilisation={:?} presets={:?} adaptable_preset={:?}",
+                c.image_stabilization, c.presets, c.adaptable_preset
+            ),
+            Err(e) => println!("\nImaging: (skipped — {e})"),
+        }
+    }
+
+    if let Some(u) = &caps.events.url {
+        match client.events_get_service_capabilities(u).await {
+            Ok(c) => println!(
+                "\nEvents\n  max_pull_points={:?} producers={:?} brokers={:?} mqtt={:?}",
+                c.max_pull_points,
+                c.max_notification_producers,
+                c.max_event_brokers,
+                c.metadata_over_mqtt
+            ),
+            Err(e) => println!("\nEvents: (skipped — {e})"),
+        }
+    }
+
+    // Recording / search / replay are often advertised only via GetServices.
+    let services = client.get_services().await.unwrap_or_default();
+    let url_for = |ns: &str| -> Option<String> {
+        services
+            .iter()
+            .find(|s| s.namespace.contains(ns))
+            .map(|s| s.url.clone())
+    };
+
+    if let Some(u) = caps.recording.url.clone().or_else(|| url_for("recording")) {
+        match client.recording_get_service_capabilities(&u).await {
+            Ok(c) => {
+                println!("\nRecording");
+                // `max_recordings` is xs:float in the schema, not a count.
+                println!(
+                    "  max_recordings={:?} max_jobs={:?} max_rate={:?}",
+                    c.max_recordings, c.max_recording_jobs, c.max_rate
+                );
+                println!("  encodings: {:?}", c.encoding);
+                println!(
+                    "  onboard_storage={:?} (schema default is true when absent)",
+                    c.onboard_storage
+                );
+            }
+            Err(e) => println!("\nRecording: (skipped — {e})"),
+        }
+    }
+
+    if let Some(u) = caps.search.url.clone().or_else(|| url_for("search")) {
+        match client.search_get_service_capabilities(&u).await {
+            Ok(c) => println!(
+                "\nSearch\n  metadata={:?} start_events={:?} nl_search={:?} image={:?}",
+                c.metadata_search, c.general_start_events, c.nl_search, c.image_search
+            ),
+            Err(e) => println!("\nSearch: (skipped — {e})"),
+        }
+    }
+
+    if let Some(u) = caps.replay.url.clone().or_else(|| url_for("replay")) {
+        match client.replay_get_service_capabilities(&u).await {
+            Ok(c) => println!(
+                "\nReplay\n  reverse={:?} session_timeout_range={:?} rtp_rtsp_tcp={:?}",
+                c.reverse_playback, c.session_timeout_range, c.rtp_rtsp_tcp
+            ),
+            Err(e) => println!("\nReplay: (skipped — {e})"),
+        }
+    }
+
+    Ok(())
+}
+
+// ── Example: PTZ preset tours ─────────────────────────────────────────────────
+
+/// List preset tours, read the option ranges, then create → modify → start →
+/// stop → delete a throwaway tour.
+///
+/// The write half only runs if the camera already has at least one preset to
+/// point a stop at, and it removes what it created.
+async fn ptz_tours_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== PTZ preset tours ===");
+    let (client, caps) = connect(cfg).await?;
+
+    let Some(ptz_url) = caps.ptz.url.clone() else {
+        println!("(no PTZ service on this device)");
+        return Ok(());
+    };
+    let media_url = caps.media.url.clone().unwrap_or_default();
+    let profiles = client.get_profiles(&media_url).await?;
+    let Some(profile) = profiles.first() else {
+        println!("(no media profiles)");
+        return Ok(());
+    };
+    let profile_token = &profile.token;
+
+    println!("\n-- Existing tours --");
+    match client.ptz_get_preset_tours(&ptz_url, profile_token).await {
+        Ok(tours) if tours.is_empty() => println!("  (none)"),
+        Ok(tours) => {
+            for t in &tours {
+                println!(
+                    "  [{}] {:?} state={:?} auto_start={} direction={:?} spots={}",
+                    // `@token` is optional on tt:PresetTour, unlike a preset's.
+                    t.token.as_deref().unwrap_or("(no token)"),
+                    t.name,
+                    t.status.state,
+                    t.auto_start,
+                    t.starting_condition.direction,
+                    t.tour_spots.len()
+                );
+                for (i, s) in t.tour_spots.iter().enumerate() {
+                    println!("      {i}: {:?} stay={:?}", s.preset_detail, s.stay_time);
+                }
+            }
+        }
+        Err(e) => {
+            println!("  (unsupported — {e})");
+            return Ok(());
+        }
+    }
+
+    println!("\n-- What this device accepts --");
+    let opts = match client
+        .ptz_get_preset_tour_options(&ptz_url, profile_token, None)
+        .await
+    {
+        Ok(o) => {
+            println!("  auto_start   : {}", o.auto_start);
+            println!("  directions   : {:?}", o.starting_condition.directions);
+            println!("  recurring    : {:?}", o.starting_condition.recurring_time);
+            println!("  stay_time    : {:?}", o.tour_spot.stay_time);
+            println!(
+                "  preset stops : {:?} home={:?}",
+                o.tour_spot.preset_detail.preset_tokens, o.tour_spot.preset_detail.home
+            );
+            o
+        }
+        Err(e) => {
+            println!("  (unsupported — {e})");
+            return Ok(());
+        }
+    };
+
+    let presets = client.ptz_get_presets(&ptz_url, profile_token).await?;
+    let Some(target) = presets.first() else {
+        println!("\n(no presets to point a tour at — skipping the write half)");
+        return Ok(());
+    };
+
+    println!("\n-- Create → modify → start → stop → delete --");
+    let token = client
+        .ptz_create_preset_tour(&ptz_url, profile_token)
+        .await?;
+    println!("  created: {token}");
+
+    let tour = PtzPresetTour {
+        token: Some(token.clone()),
+        name: Some("oxvif demo tour".into()),
+        status: PtzPresetTourStatus {
+            state: PtzPresetTourState::Idle,
+            current_tour_spot: None,
+        },
+        auto_start: false,
+        starting_condition: PtzPresetTourStartingCondition {
+            random_preset_order: Some(false),
+            recurring_time: Some(1),
+            recurring_duration: None,
+            direction: opts.starting_condition.directions.first().cloned(),
+        },
+        tour_spots: vec![PtzPresetTourSpot {
+            // An xs:choice — exactly one of PresetToken / Home / Position.
+            preset_detail: PtzPresetTourPresetDetail::PresetToken(target.token.clone()),
+            speed: None,
+            stay_time: Some(opts.tour_spot.stay_time.0.clone()),
+        }],
+    };
+    client
+        .ptz_modify_preset_tour(&ptz_url, profile_token, &tour)
+        .await?;
+    println!("  modified: one stop at preset {}", target.token);
+
+    client
+        .ptz_operate_preset_tour(
+            &ptz_url,
+            profile_token,
+            &token,
+            PtzPresetTourOperation::Start,
+        )
+        .await?;
+    let running = client
+        .ptz_get_preset_tour(&ptz_url, profile_token, &token)
+        .await?;
+    println!("  started : state={:?}", running.status.state);
+
+    client
+        .ptz_operate_preset_tour(
+            &ptz_url,
+            profile_token,
+            &token,
+            PtzPresetTourOperation::Stop,
+        )
+        .await?;
+
+    client
+        .ptz_remove_preset_tour(&ptz_url, profile_token, &token)
+        .await?;
+    println!("  deleted : {token}");
+
+    Ok(())
+}
+
+// ── Example: PTZ auxiliary command ────────────────────────────────────────────
+
+/// The **PTZ** `SendAuxiliaryCommand`, which is a different operation from the
+/// Device one behind `send_auxiliary_command`. Cameras that implement a wiper
+/// generally implement this one.
+///
+/// The accepted values are vendor-namespaced, so they are discovered rather
+/// than guessed: `Misc/@AuxiliaryCommands` from the device's own service
+/// capabilities is the list.
+async fn ptz_aux_example(cfg: &Config) -> Result<(), OnvifError> {
+    println!("=== PTZ auxiliary commands ===");
+    let (client, caps) = connect(cfg).await?;
+
+    let advertised = client
+        .device_get_service_capabilities()
+        .await
+        .ok()
+        .and_then(|c| c.misc)
+        .map(|m| m.auxiliary_commands)
+        .unwrap_or_default();
+
+    if advertised.is_empty() {
+        println!("This device advertises no auxiliary commands.");
+        println!("(that is Misc/@AuxiliaryCommands on tds:GetServiceCapabilities)");
+        return Ok(());
+    }
+    println!("Advertised: {advertised:?}");
+
+    let Some(ptz_url) = caps.ptz.url.clone() else {
+        println!("(no PTZ service — falling back to the Device operation)");
+        for cmd in advertised.iter().take(1) {
+            match client.send_auxiliary_command(cmd).await {
+                Ok(r) => println!("  device {cmd} -> {r:?}"),
+                Err(e) => println!("  device {cmd} -> {e}"),
+            }
+        }
+        return Ok(());
+    };
+
+    let media_url = caps.media.url.clone().unwrap_or_default();
+    let profiles = client.get_profiles(&media_url).await?;
+    let Some(profile) = profiles.first() else {
+        println!("(no media profiles)");
+        return Ok(());
+    };
+
+    // Read-only demonstration: send the first advertised command, which on a
+    // typical camera is a wiper or IR-lamp toggle.
+    let cmd = &advertised[0];
+    println!("\nSending {cmd} via PTZ (per-profile) …");
+    match client
+        .ptz_send_auxiliary_command(&ptz_url, &profile.token, cmd)
+        .await
+    {
+        Ok(answer) => println!("  ptz    -> {answer:?}"),
+        Err(e) => println!("  ptz    -> {e}"),
+    }
+    println!("Sending {cmd} via Device (no profile) …");
+    match client.send_auxiliary_command(cmd).await {
+        Ok(answer) => println!("  device -> {answer:?}"),
+        Err(e) => println!("  device -> {e}"),
     }
 
     Ok(())

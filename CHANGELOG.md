@@ -5,6 +5,119 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.15.0] - 2026-07-29
+
+Headline: **every service can now be asked what it can do, and the PTZ surface
+gains guard tours.** Seventeen new operations — nine `GetServiceCapabilities`,
+seven preset-tour operations, and the PTZ `SendAuxiliaryCommand` that cameras
+actually implement. Alongside them, a fix for a silent parser defect found on a
+real two-sensor camera, and a quality gate that was running less than
+two-thirds of the test suite.
+
+### Added
+
+- **`GetServiceCapabilities` on all nine services.** New
+  `src/types/service_capabilities.rs` with nine top-level types and six nested
+  ones, plus nine client methods and nine `OnvifSession` wrappers:
+  `device_`, `media_`, `media2_`, `ptz_`, `imaging_`, `events_`, `recording_`,
+  `search_` and `replay_get_service_capabilities`.
+
+  This is a *different question* from `GetCapabilities`, which only says which
+  services exist and where. Every flag on the new types is **`Option<bool>`,
+  not `bool`**: `None` means the device did not mention the attribute,
+  `Some(false)` means it said no. Collapsing the two would defeat the reason
+  for asking, and the device-level `Capabilities` cannot make the distinction.
+  List-valued attributes are the deliberate exception — `Vec<_>`, empty when
+  absent, because for a list both cases mean *no items*.
+
+  Three field types match the schema rather than intuition and are documented
+  as such: `RecordingServiceCapabilities::max_recordings` is `f32` (`xs:float`,
+  despite reading like a count), `Media2ServiceCapabilities::webrtc` is a
+  session count (`Some(0)` = described, no concurrent session), and
+  `RecordingServiceCapabilities::onboard_storage` does **not** apply its schema
+  default of `true` — read `.unwrap_or(true)` if you want that.
+
+- **PTZ preset tours** — seven operations: `ptz_get_preset_tours`,
+  `ptz_get_preset_tour`, `ptz_get_preset_tour_options`,
+  `ptz_create_preset_tour`, `ptz_modify_preset_tour`,
+  `ptz_operate_preset_tour`, `ptz_remove_preset_tour`, each with a session
+  wrapper. Twelve new public types.
+
+  `PtzPresetTourPresetDetail` is a Rust **enum**, because the schema member is
+  an `xs:choice` — a struct with three `Option` fields would let you serialise
+  two arms at once and get an unhelpful fault back. `PtzPresetTour::token` is
+  `Option<String>`: `@token` is optional on `tt:PresetTour`, unlike
+  `tt:PTZPreset/@token`, so a device may legitimately return a tour without
+  one. `PtzPresetTourState` and `PtzPresetTourDirection` carry an
+  `Unknown(String)` variant — both schema types end in `Extended`, and a vendor
+  string must not turn `ptz_get_preset_tours` into an `Err`.
+
+- **`ptz_send_auxiliary_command`** — the **PTZ** service's
+  `SendAuxiliaryCommand`, which is not the Device operation of the same name
+  that oxvif already had. Different endpoint, different request and response
+  element names, scoped to a media profile, and it returns the device's answer.
+  Cameras that implement a wiper generally implement this one; try it first and
+  fall back to `send_auxiliary_command`. Both doc comments now name the other.
+
+  The accepted values are vendor-namespaced, so there is deliberately no enum:
+  read `device_get_service_capabilities().misc.auxiliary_commands` for what a
+  given camera advertises.
+
+- Mock coverage for all seventeen operations. Preset tours are **stateful** —
+  a tour created by `CreatePresetTour` comes back from a later
+  `GetPresetTours`, and `OperatePresetTour` moves an observable state — so the
+  mock is an integration harness for the feature rather than a fixture printer.
+  New integration tests `tests/mock_service_capabilities.rs` and two cases in
+  `tests/mock_workflow.rs`.
+
+### Fixed
+
+- **Media1 video encoder options nested inside `Extension` were silently
+  dropped.** ONVIF extends a type by nesting a same-named element one level
+  deeper, so the deeper copy is a superset; `XmlNode::child` returns the *first
+  direct* child, so the parser read only the shallow one. Consequences on a
+  real device: `BitrateRange` came back absent when the device had sent it, and
+  **H265 could never be reported from Media1 at all** — it exists only at
+  `Options/Extension/Extension/H265`, so no conformant device could have
+  produced it through the old parser.
+
+  `VideoEncoderConfigurationOptions::from_xml` now prefers the deepest node and
+  falls back outward. Found by cross-checking a bug report against a live
+  two-sensor camera; the fixture in the new test is captured verbatim from that
+  device.
+
+- The mock's `GetVideoEncoderConfigurationOptions` was emitting `BitrateRange`
+  at the top level, a position the schema does not allow. That is half the
+  reason the defect survived: the mock and the unit fixture agreed with each
+  other and with nothing else. The mock now sends the nested shape a real
+  device sends.
+
+- `examples/conformance.rs` uses `CapturingTransport`, which is behind the
+  `mock` feature, and had no `required-features` entry. A bare `cargo test`
+  therefore failed to **compile** — no test ran at all, and the quality gate
+  reported nothing wrong.
+
+### Changed
+
+- **The quality gate now uses `--all-features`.** This crate has no default
+  features and `src/mock/` is feature-gated, so the previous
+  `cargo clippy --all-targets` and `cargo test` collected only the non-mock
+  subset — measured at 461 of 698 lib tests — and a warning inside `src/mock/`,
+  `src/health/` or `src/metamorph/` failed nothing. The plain `cargo test` is
+  kept as an additional line, because a no-feature build breaking is its own
+  bug. Documented in `CLAUDE.md`.
+
+- New coding rules in `CLAUDE.md` for two classes of silent failure found this
+  release: **multi-sensor devices** (never omit the token on a per-channel
+  query; a single-sensor fixture cannot cover a per-channel feature) and
+  **data nested in `Extension` levels** (prefer the deepest node, and give the
+  mock the nested shape rather than the flat one).
+
+- `parse_space_range` in `src/types/ptz_config.rs` is now `pub(crate)`, reused
+  by the preset-tour option types rather than duplicated.
+
+---
+
 ## [0.14.0] - 2026-07-27
 
 Headline: **the metamorph clone becomes something you steer, and the client gets a

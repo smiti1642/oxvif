@@ -14,7 +14,7 @@
 //! | Profile | Description | Coverage | Notes |
 //! |---------|-------------|----------|-------|
 //! | **Profile S** | Video streaming | ~95% | All core operations implemented |
-//! | **Profile T** | Advanced streaming (H.265, focus, OSD, audio) | ~95% | HTTP Digest Auth, Media2 audio/metadata/analytics config, PTZ compat; Analytics rules and DeviceIO not yet implemented |
+//! | **Profile T** | Advanced streaming (H.265, focus, OSD, audio) | ~95% | HTTP Digest Auth, Media2 audio/metadata/analytics config, PTZ compat + preset tours, per-service capabilities; Analytics rules and DeviceIO not yet implemented |
 //! | **Profile G** | Recording & playback | ~85% | Read/search/replay + full recording/job write management; live-source job binding not yet implemented |
 //!
 //! ## Supported services
@@ -28,7 +28,8 @@
 //!   metadata config, audio decoder/output config, video source modes,
 //!   unified AddConfiguration/RemoveConfiguration
 //! - **PTZ** — absolute/relative/continuous move, presets, home position, status,
-//!   configurations, nodes, compatible configurations
+//!   configurations, nodes, compatible configurations, preset tours,
+//!   per-profile auxiliary commands
 //! - **Imaging** — brightness/contrast/exposure settings, focus move/stop/status
 //! - **Events** — pull-point subscriptions, event polling, renew, unsubscribe,
 //!   continuous `event_stream`, synchronization point
@@ -36,6 +37,42 @@
 //! - **Search** — find recordings by scope, collect results, end search
 //! - **Replay** — get RTSP playback URI for a stored recording
 //! - **WS-Discovery** — UDP multicast probe to find cameras on the local network
+//!
+//! Every one of the nine services above also answers its own
+//! `GetServiceCapabilities` — see [Per-service capabilities](#per-service-capabilities).
+//!
+//! ## Per-service capabilities
+//!
+//! [`OnvifClient::get_capabilities`] answers *which services exist and at what
+//! URL*. Each service separately answers *what it can do*, and all nine are
+//! implemented: [`DeviceServiceCapabilities`], [`MediaServiceCapabilities`],
+//! [`Media2ServiceCapabilities`], [`PtzServiceCapabilities`],
+//! [`ImagingServiceCapabilities`], [`EventsServiceCapabilities`],
+//! [`RecordingServiceCapabilities`], [`SearchServiceCapabilities`] and
+//! [`ReplayServiceCapabilities`].
+//!
+//! ```no_run
+//! # use oxvif::{OnvifClient, OnvifError};
+//! # async fn run() -> Result<(), OnvifError> {
+//! let client = OnvifClient::new("http://192.168.1.1/onvif/device_service");
+//! let caps = client.device_get_service_capabilities().await?;
+//!
+//! assert_eq!(caps.security.tls1_2, Some(true));
+//! // What `ptz_send_auxiliary_command` will accept on this camera:
+//! let commands = caps.misc.map(|m| m.auxiliary_commands).unwrap_or_default();
+//! # Ok(()) }
+//! ```
+//!
+//! **Every flag on these types is `Option<bool>`, not `bool`.** `None` means
+//! the device did not mention the attribute; `Some(false)` means it said no.
+//! Those are different answers, and collapsing them would defeat the reason for
+//! asking. [`Capabilities`], from the device-level `GetCapabilities`, uses bare
+//! `bool` and cannot make that distinction — which is why the two families are
+//! separate types rather than one shared set.
+//!
+//! List-valued attributes are the deliberate exception: `Vec<_>`, empty when
+//! absent, because for a list "absent" and "present but empty" both mean *no
+//! items*.
 //!
 //! ## Optional features
 //!
@@ -143,7 +180,7 @@
 //! for cross-process / non-Rust clients. See the `mock` module for details.
 //!
 //! ```ignore
-//! // Cargo.toml:  oxvif = { version = "0.14", features = ["mock"] }
+//! // Cargo.toml:  oxvif = { version = "0.15", features = ["mock"] }
 //! use std::sync::Arc;
 //! use oxvif::{OnvifClient, mock::MockTransport};
 //!

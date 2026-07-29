@@ -5,7 +5,7 @@
 - **WSDL:** https://www.onvif.org/ver10/device/wsdl/devicemgmt.wsdl
 - **Namespace:** `http://www.onvif.org/ver10/device/wsdl` (prefix `tds`)
 - **ONVIF Profile:** S / T / G (core device management)
-- **oxvif status:** ◐ implemented in `src/client/device.rs` (~35 of ~104 operations)
+- **oxvif status:** ◐ implemented in `src/client/device.rs` (~36 of ~104 operations)
 
 The device service is the entry point — `GetCapabilities` / `GetServices` resolve every other
 service URL. oxvif covers the Profile-S/T/G core; the long tail (certificates, IEEE 802.1X,
@@ -20,7 +20,7 @@ service URL. oxvif covers the Profile-S/T/G core; the long tail (certificates, I
 |-----------|---------|:----:|--------|
 | GetCapabilities | service URLs + feature flags | ✓ | `get_capabilities` |
 | GetServices | service URLs (incl. Media2) | ✓ | `get_services` |
-| GetServiceCapabilities | device service capabilities | — | — |
+| GetServiceCapabilities | device service capabilities | ✓ | `device_get_service_capabilities` |
 | GetDeviceInformation | manufacturer/model/firmware/serial | ✓ | `get_device_info` |
 | GetSystemDateAndTime | device clock | ✓ | `get_system_date_and_time` |
 | SetSystemDateAndTime | set device clock | ✓ | `set_system_date_and_time` |

@@ -5,7 +5,7 @@
 - **WSDL:** https://www.onvif.org/ver10/recording.wsdl
 - **Namespace:** `http://www.onvif.org/ver10/recording/wsdl` (prefix `trc`)
 - **ONVIF Profile:** G
-- **oxvif status:** ◐ implemented in `src/client/recording.rs` (10 of 22 operations)
+- **oxvif status:** ◐ implemented in `src/client/recording.rs` (11 of 22 operations)
 
 oxvif covers the create/delete lifecycle for recordings, tracks, and jobs, plus job mode/state.
 Unimplemented: the **configuration getters/setters** (recording/track/job), **options**, and the
@@ -36,7 +36,7 @@ Unimplemented: the **configuration getters/setters** (recording/track/job), **op
 | DeleteRecordingJob | delete job | ✓ | `delete_recording_job` |
 | SetRecordingJobMode | set job Active/Idle | ✓ | `set_recording_job_mode` |
 | GetRecordingJobState | job state | ✓ | `get_recording_job_state` |
-| GetServiceCapabilities | recording service capabilities | — | — |
+| GetServiceCapabilities | recording service capabilities | ✓ | `recording_get_service_capabilities` |
 | GetRecordingConfiguration | read recording config | — | — |
 | SetRecordingConfiguration | modify recording config | — | — |
 | GetRecordingOptions | recording capacity/options | — | — |

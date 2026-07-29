@@ -206,8 +206,10 @@ pub struct DeviceSecurityCapabilities {
 /// `tds:Capabilities/System`.
 ///
 /// The last three fields are **negative-sense** — `Some(true)` means the
-/// feature is *not* supported. They keep the schema's polarity deliberately;
-/// see the [module docs](self).
+/// feature is *not* supported. They keep the schema's polarity deliberately:
+/// inverting them would make `None` mean *supported* for those three and
+/// *unknown* for every other field in the same struct, and one stray `!` in a
+/// parser would silently swap the meaning of a health verdict.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct DeviceSystemCapabilities {
@@ -274,7 +276,9 @@ pub struct DeviceMiscCapabilities {
 /// `tds:GetServiceCapabilities` — what the device management service can do.
 ///
 /// Distinct from [`Capabilities`](super::Capabilities), which lists *which
-/// services exist*. See the [module docs](self).
+/// services exist and at what URL*. Every flag here is `Option<bool>`: `None`
+/// means the device did not mention the attribute, `Some(false)` means it said
+/// no.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct DeviceServiceCapabilities {

@@ -27,7 +27,7 @@ ONVIF events span several portTypes: the device `EventPortType`, the per-subscri
 | Subscribe | NotificationProducer | push (base-notification) subscribe | ✓ | `subscribe` |
 | Notify (consumer) | NotificationConsumer | receive pushed `Notify` | ✓ | `notification_listener` |
 | _(poll loop helper)_ | — | continuous stream | ✓ | `event_stream` |
-| GetServiceCapabilities | Event | event service capabilities | — | — |
+| GetServiceCapabilities | Event | event service capabilities | ✓ | `events_get_service_capabilities` |
 | Seek | PullPointSubscription | replay events from a timestamp | — | — |
 | GetCurrentMessage | NotificationProducer | latest message for a topic | — | — |
 | PauseSubscription | PausableSubscriptionManager | pause delivery | — | — |

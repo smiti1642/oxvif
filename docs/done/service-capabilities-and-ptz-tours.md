@@ -1,21 +1,20 @@
 # Plan: per-service capabilities + PTZ preset tours (target 0.15.0)
 
-Status: **Stage 0 done** (2026-07-28), plus the Stage A mock responders pulled
-forward. Client-side Stage A/B/C not started. Written 2026-07-28.
+Status: **shipped in 0.15.0** (2026-07-29). Written 2026-07-28.
 
 Progress against §7:
 
 | Step | State |
 |------|-------|
 | Stage 0 — WSDL transcription | **done** — all twelve types verified against the published schema; corrections listed in that commit |
-| Stage A — mock responders + dispatch split | **done early** — all nine services answer `GetServiceCapabilities`; `dispatch_recording` split into three |
-| Stage A — types / client / session | not started |
-| Stage B — preset tours | not started |
-| Stage C — PTZ `SendAuxiliaryCommand` | not started |
+| Stage A — mock responders + dispatch split | **done** (`1d224f4`) — all nine services answer `GetServiceCapabilities`; `dispatch_recording` split into three |
+| Stage A — types / client / session | **done** (`883e64f`) |
+| Stage B — preset tours | **done** (`ac1f83e`) |
+| Stage C — PTZ `SendAuxiliaryCommand` | **done** (`a7b9f10`) |
 
-Because the mock landed first, the client work in Stage A now has a device to
-test against on day one, and §2's field lists are settled fact rather than
-something to verify mid-implementation.
+Pulling the mock forward was the right call: the client work in Stage A had a
+device to test against on day one, and §2's field lists were settled fact rather
+than something to verify mid-implementation.
 
 > **The *how* now lives in a companion document:
 > [tier1-implementation-map.md](tier1-implementation-map.md).** This file
