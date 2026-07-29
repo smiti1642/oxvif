@@ -9,6 +9,9 @@ use crate::types::{
     PtzPresetTourDirection, PtzPresetTourPresetDetail, PtzPresetTourSpot,
     PtzPresetTourStartingCondition, PtzPresetTourState, PtzPresetTourStatus,
 };
+// Only the `mock` transport test below constructs an Arc; without the feature
+// this file has no other use for it.
+#[cfg(feature = "mock")]
 use std::sync::Arc;
 
 // ── PTZ preset / status fixtures ──────────────────────────────────────────
