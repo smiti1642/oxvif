@@ -313,11 +313,11 @@ async fn parse_check(
             "GetSnapshotUri" => chk!(c.get_snapshot_uri_media2(URL, TOK)),
             "GetVideoSourceConfigurations" => chk!(c.get_video_source_configurations_media2(URL)),
             "GetVideoSourceConfigurationOptions" => {
-                chk!(c.get_video_source_configuration_options_media2(URL, None))
+                chk!(c.get_video_source_configuration_options_media2(URL, TOK))
             }
             "GetVideoEncoderConfigurations" => chk!(c.get_video_encoder_configurations_media2(URL)),
             "GetVideoEncoderConfigurationOptions" => {
-                chk!(c.get_video_encoder_configuration_options_media2(URL, None))
+                chk!(c.get_video_encoder_configuration_options_media2(URL, TOK))
             }
             "GetVideoEncoderInstances" => chk!(c.get_video_encoder_instances_media2(URL, TOK)),
             _ => (ParseStatus::Unverified, None, None),
@@ -332,12 +332,12 @@ async fn parse_check(
             "GetVideoSourceConfigurations" => chk!(c.get_video_source_configurations(URL)),
             "GetVideoSourceConfiguration" => chk!(c.get_video_source_configuration(URL, TOK)),
             "GetVideoSourceConfigurationOptions" => {
-                chk!(c.get_video_source_configuration_options(URL, None))
+                chk!(c.get_video_source_configuration_options(URL, TOK))
             }
             "GetVideoEncoderConfigurations" => chk!(c.get_video_encoder_configurations(URL)),
             "GetVideoEncoderConfiguration" => chk!(c.get_video_encoder_configuration(URL, TOK)),
             "GetVideoEncoderConfigurationOptions" => {
-                chk!(c.get_video_encoder_configuration_options(URL, None))
+                chk!(c.get_video_encoder_configuration_options(URL, TOK))
             }
             "GetOSDs" => chk!(c.get_osds(URL, None)),
             "GetOSD" => chk!(c.get_osd(URL, TOK)),

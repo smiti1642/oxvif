@@ -586,7 +586,7 @@ async fn main() {
     }
 
     let opts = c
-        .get_video_source_configuration_options(&media_url, Some("VSC_1"))
+        .get_video_source_configuration_options(&media_url, "VSC_1")
         .await;
     match opts {
         Ok(o) => println!(
@@ -608,7 +608,7 @@ async fn main() {
     }
 
     let venc_opts = c
-        .get_video_encoder_configuration_options(&media_url, Some("VEC_1"))
+        .get_video_encoder_configuration_options(&media_url, "VEC_1")
         .await;
     match venc_opts {
         Ok(o) => println!(
@@ -768,7 +768,7 @@ async fn main() {
     }
 
     let vsc_opts_m2 = c
-        .get_video_source_configuration_options_media2(&media2_url, Some("VSC_1"))
+        .get_video_source_configuration_options_media2(&media2_url, "VSC_1")
         .await;
     match vsc_opts_m2 {
         Ok(o) => println!(
@@ -793,7 +793,7 @@ async fn main() {
     }
 
     let vec_opts_m2 = c
-        .get_video_encoder_configuration_options_media2(&media2_url, Some("VEC2_1"))
+        .get_video_encoder_configuration_options_media2(&media2_url, "VEC2_1")
         .await;
     match vec_opts_m2 {
         Ok(o) => {

@@ -1,6 +1,16 @@
-use crate::mock::helpers::{resp_empty, soap};
+use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
 use crate::mock::state::{SharedState, VideoEncoderState};
 use crate::mock::xml_parse::{extract_attr, extract_tag};
+
+const NS: &str = r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#;
+
+/// The `ConfigurationToken` of a per-channel Media2 request, or a SOAP Fault.
+/// Same reasoning as `media::require_config_token` — see that doc comment.
+fn require_config_token(body: &str, missing_reason: &str) -> Result<String, String> {
+    extract_tag(body, "ConfigurationToken")
+        .filter(|t| !t.is_empty())
+        .ok_or_else(|| resp_soap_fault("env:Sender", missing_reason))
+}
 
 pub fn resp_profiles_media2() -> String {
     soap(
@@ -15,6 +25,20 @@ pub fn resp_profiles_media2() -> String {
           </tr2:Profiles>
           <tr2:Profiles token="Profile_B" fixed="false">
             <tt:Name>subStream</tt:Name>
+          </tr2:Profiles>
+          <tr2:Profiles token="Profile_C" fixed="true">
+            <tt:Name>mainStream2</tt:Name>
+            <tr2:Configurations>
+              <tr2:VideoSource token="VSC_2"/>
+              <tr2:VideoEncoder token="VEC_3"/>
+            </tr2:Configurations>
+          </tr2:Profiles>
+          <tr2:Profiles token="Profile_D" fixed="false">
+            <tt:Name>subStream2</tt:Name>
+            <tr2:Configurations>
+              <tr2:VideoSource token="VSC_2"/>
+              <tr2:VideoEncoder token="VEC_4"/>
+            </tr2:Configurations>
           </tr2:Profiles>
         </tr2:GetProfilesResponse>"#,
     )
@@ -40,47 +64,117 @@ pub fn resp_snapshot_uri_media2(base: &str) -> String {
     )
 }
 
-pub fn resp_video_source_configurations_media2() -> String {
+pub fn resp_video_source_configurations_media2(state: &SharedState) -> String {
+    let vscs = state.read().video_source_configs.clone();
+    let items: String = vscs
+        .iter()
+        .map(|c| {
+            format!(
+                r#"<tr2:Configurations token="{token}">
+            <tt:Name>{name}</tt:Name>
+            <tt:UseCount>{use_count}</tt:UseCount>
+            <tt:SourceToken>{source}</tt:SourceToken>
+            <tt:Bounds x="0" y="0" width="{width}" height="{height}"/>
+          </tr2:Configurations>"#,
+                token = c.token,
+                name = c.name,
+                use_count = c.use_count,
+                source = c.source_token,
+                width = c.width,
+                height = c.height,
+            )
+        })
+        .collect();
     soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetVideoSourceConfigurationsResponse>
-          <tr2:Configurations token="VSC_1">
-            <tt:Name>VSConfig1</tt:Name>
-            <tt:UseCount>2</tt:UseCount>
-            <tt:SourceToken>VS_1</tt:SourceToken>
-            <tt:Bounds x="0" y="0" width="1920" height="1080"/>
-          </tr2:Configurations>
-        </tr2:GetVideoSourceConfigurationsResponse>"#,
+        NS,
+        &format!(
+            "<tr2:GetVideoSourceConfigurationsResponse>{items}</tr2:GetVideoSourceConfigurationsResponse>"
+        ),
     )
 }
 
-pub fn resp_video_source_configuration_options_media2() -> String {
+/// Per-channel — the bounds ceiling is the addressed sensor's own resolution.
+pub fn resp_video_source_configuration_options_media2(state: &SharedState, body: &str) -> String {
+    let want = match require_config_token(body, "NoConfigToken-VSCOPT2-5511") {
+        Ok(t) => t,
+        Err(fault) => return fault,
+    };
+    let vscs = state.read().video_source_configs.clone();
+    let Some(c) = vscs.iter().find(|c| c.token == want) else {
+        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-VSCOPT2-5512: {want}"));
+    };
     soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetVideoSourceConfigurationOptionsResponse>
+        NS,
+        &format!(
+            r#"<tr2:GetVideoSourceConfigurationOptionsResponse>
           <tr2:Options>
             <tt:MaximumNumberOfProfiles>5</tt:MaximumNumberOfProfiles>
             <tt:BoundsRange>
               <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
               <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
-              <tt:WidthRange><tt:Min>160</tt:Min><tt:Max>1920</tt:Max></tt:WidthRange>
-              <tt:HeightRange><tt:Min>90</tt:Min><tt:Max>1080</tt:Max></tt:HeightRange>
+              <tt:WidthRange><tt:Min>160</tt:Min><tt:Max>{width}</tt:Max></tt:WidthRange>
+              <tt:HeightRange><tt:Min>90</tt:Min><tt:Max>{height}</tt:Max></tt:HeightRange>
             </tt:BoundsRange>
-            <tt:VideoSourceTokensAvailable>VS_1</tt:VideoSourceTokensAvailable>
+            <tt:VideoSourceTokensAvailable>{source}</tt:VideoSourceTokensAvailable>
           </tr2:Options>
         </tr2:GetVideoSourceConfigurationOptionsResponse>"#,
+            width = c.width,
+            height = c.height,
+            source = c.source_token,
+        ),
     )
 }
 
-pub fn resp_video_encoder_configuration_options_media2() -> String {
+/// Per-channel. Media2 returns one `Options` block **per encoding**, so the
+/// H.265 block is offered only where the sensor can actually do it — sensor 1.
+/// Sensor 2 gets H.264 alone, at its own smaller resolution list.
+pub fn resp_video_encoder_configuration_options_media2(state: &SharedState, body: &str) -> String {
+    let want = match require_config_token(body, "NoConfigToken-VECOPT2-5513") {
+        Ok(t) => t,
+        Err(fault) => return fault,
+    };
+    let vecs = state.read().video_encoders.clone();
+    let Some(c) = vecs.iter().find(|c| c.token == want) else {
+        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-VECOPT2-5514: {want}"));
+    };
+
+    let resolutions: String = c
+        .resolutions
+        .iter()
+        .map(|(w, h)| {
+            format!(
+                "<tt:ResolutionsAvailable><tt:Width>{w}</tt:Width>\
+                 <tt:Height>{h}</tt:Height></tt:ResolutionsAvailable>"
+            )
+        })
+        .collect();
+
+    // Only the 5MP sensor advertises H.265. Nothing else in the mock lets a
+    // test tell "this device supports H265" from "this *channel* supports it".
+    let h265 = if c.source_token == "VS_1" {
+        format!(
+            r#"<tr2:Options>
+            <tt:Encoding>H265</tt:Encoding>
+            <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
+            {resolutions}
+            <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>32768</tt:Max></tt:BitrateRange>
+            <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>60</tt:Max></tt:FrameRateRange>
+            <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>600</tt:Max></tt:GovLengthRange>
+            <tt:ProfilesSupported>Main</tt:ProfilesSupported>
+          </tr2:Options>"#
+        )
+    } else {
+        String::new()
+    };
+
     soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetVideoEncoderConfigurationOptionsResponse>
+        NS,
+        &format!(
+            r#"<tr2:GetVideoEncoderConfigurationOptionsResponse>
           <tr2:Options>
             <tt:Encoding>H264</tt:Encoding>
             <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
-            <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
-            <tt:ResolutionsAvailable><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:ResolutionsAvailable>
+            {resolutions}
             <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
             <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
             <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
@@ -88,17 +182,9 @@ pub fn resp_video_encoder_configuration_options_media2() -> String {
             <tt:ProfilesSupported>Main</tt:ProfilesSupported>
             <tt:ProfilesSupported>High</tt:ProfilesSupported>
           </tr2:Options>
-          <tr2:Options>
-            <tt:Encoding>H265</tt:Encoding>
-            <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
-            <tt:ResolutionsAvailable><tt:Width>3840</tt:Width><tt:Height>2160</tt:Height></tt:ResolutionsAvailable>
-            <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
-            <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>32768</tt:Max></tt:BitrateRange>
-            <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>60</tt:Max></tt:FrameRateRange>
-            <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>600</tt:Max></tt:GovLengthRange>
-            <tt:ProfilesSupported>Main</tt:ProfilesSupported>
-          </tr2:Options>
-        </tr2:GetVideoEncoderConfigurationOptionsResponse>"#,
+          {h265}
+        </tr2:GetVideoEncoderConfigurationOptionsResponse>"#
+        ),
     )
 }
 
@@ -107,15 +193,17 @@ pub fn resp_video_encoder_configuration_options_media2() -> String {
 /// config is returned (empty list otherwise), mirroring ONVIF token filtering.
 /// Pairs with [`handle_set_video_encoder_configuration`] for Set → Get roundtrips.
 pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> String {
-    let ve = state.read().video_encoder.clone();
-    let entry = match extract_tag(body, "ConfigurationToken") {
-        Some(tok) if tok != ve.token => String::new(),
-        _ => render_video_encoder(&ve),
-    };
+    let vecs = state.read().video_encoders.clone();
+    let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
+    let items: String = vecs
+        .iter()
+        .filter(|c| want.as_deref().is_none_or(|t| t == c.token))
+        .map(render_video_encoder)
+        .collect();
     soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        NS,
         &format!(
-            "<tr2:GetVideoEncoderConfigurationsResponse>{entry}</tr2:GetVideoEncoderConfigurationsResponse>"
+            "<tr2:GetVideoEncoderConfigurationsResponse>{items}</tr2:GetVideoEncoderConfigurationsResponse>"
         ),
     )
 }
@@ -124,11 +212,20 @@ pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> Str
 /// state so a following `GetVideoEncoderConfigurations` reflects them. Only the
 /// fields present in the request body are updated.
 pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+    // The token now *selects* which of the four channels to write, rather than
+    // renaming the single global config it used to be. An absent or unknown
+    // token is a fault: with more than one encoder, writing to a guessed
+    // channel is the same silent-wrong-answer failure the getters avoid.
+    let Some(want) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) else {
+        return resp_soap_fault("env:Sender", "NoConfigToken-SETVEC2-5515");
+    };
+    if !state.read().video_encoders.iter().any(|c| c.token == want) {
+        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-SETVEC2-5516: {want}"));
+    }
     state.modify(|s| {
-        let ve = &mut s.video_encoder;
-        if let Some(t) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) {
-            ve.token = t;
-        }
+        let Some(ve) = s.video_encoders.iter_mut().find(|c| c.token == want) else {
+            return;
+        };
         if let Some(v) = extract_tag(body, "Name") {
             ve.name = v;
         }

@@ -654,7 +654,7 @@ pub async fn drive_surface_with_progress(
                         rep.observe(
                             GetVideoSourceConfigurationOptions,
                             session
-                                .get_video_source_configuration_options(Some(&c.token))
+                                .get_video_source_configuration_options(&c.token)
                                 .await
                                 .is_ok(),
                         );
@@ -682,7 +682,7 @@ pub async fn drive_surface_with_progress(
                         rep.observe(
                             GetVideoEncoderConfigurationOptions,
                             session
-                                .get_video_encoder_configuration_options(Some(&c.token))
+                                .get_video_encoder_configuration_options(&c.token)
                                 .await
                                 .is_ok(),
                         );
@@ -864,22 +864,26 @@ pub async fn drive_surface_with_progress(
         }
     }
     if want(GetVideoSourceConfigurationsMedia2) {
-        rep.observe(
-            GetVideoSourceConfigurationsMedia2,
-            session
-                .get_video_source_configurations_media2()
-                .await
-                .is_ok(),
-        );
-    }
-    if want(GetVideoSourceConfigurationOptionsMedia2) {
-        rep.observe(
-            GetVideoSourceConfigurationOptionsMedia2,
-            session
-                .get_video_source_configuration_options_media2(None)
-                .await
-                .is_ok(),
-        );
+        // The options probe is nested here rather than standing alone, because
+        // it needs a configuration token: it used to pass `None` and so probed
+        // whichever channel the device felt like answering for.
+        match session.get_video_source_configurations_media2().await {
+            Ok(cfgs) => {
+                rep.observe(GetVideoSourceConfigurationsMedia2, true);
+                for c in &cfgs {
+                    if want(GetVideoSourceConfigurationOptionsMedia2) {
+                        rep.observe(
+                            GetVideoSourceConfigurationOptionsMedia2,
+                            session
+                                .get_video_source_configuration_options_media2(&c.token)
+                                .await
+                                .is_ok(),
+                        );
+                    }
+                }
+            }
+            Err(_) => rep.observe(GetVideoSourceConfigurationsMedia2, false),
+        }
     }
     if want(GetVideoEncoderConfigurationsMedia2) {
         match session.get_video_encoder_configurations_media2().await {
@@ -899,7 +903,7 @@ pub async fn drive_surface_with_progress(
                         rep.observe(
                             GetVideoEncoderConfigurationOptionsMedia2,
                             session
-                                .get_video_encoder_configuration_options_media2(Some(&c.token))
+                                .get_video_encoder_configuration_options_media2(&c.token)
                                 .await
                                 .is_ok(),
                         );

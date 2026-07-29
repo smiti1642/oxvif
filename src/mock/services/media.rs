@@ -1,15 +1,17 @@
 use crate::mock::helpers::{resp_soap_fault, soap};
 use crate::mock::state::{
     OSD_QUOTA_DATE, OSD_QUOTA_DATE_AND_TIME, OSD_QUOTA_PLAIN, OSD_QUOTA_TIME, OSD_QUOTA_TOTAL,
-    OsdColorEntry, OsdEntry, OsdTextEntry, ProfileEntry, SharedState,
+    OsdColorEntry, OsdEntry, OsdTextEntry, ProfileEntry, SharedState, VideoEncoderState,
+    VideoSourceConfigEntry,
 };
 use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 pub fn resp_profiles(state: &SharedState) -> String {
     let snapshot = state.read().profiles.profiles.clone();
+    let (vscs, vecs) = catalogues(state);
     let items: String = snapshot
         .iter()
-        .map(|p| render_profile(p, "Profiles"))
+        .map(|p| render_profile(p, "Profiles", &vscs, &vecs))
         .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
@@ -21,12 +23,13 @@ pub fn resp_profile(state: &SharedState, body: &str) -> String {
     let inner = extract_tag(body, "GetProfile").unwrap_or_default();
     let want = extract_tag(&inner, "ProfileToken").unwrap_or_default();
     let snapshot = state.read().profiles.profiles.clone();
+    let (vscs, vecs) = catalogues(state);
     match snapshot.iter().find(|p| p.token == want) {
         Some(p) => soap(
             r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
             &format!(
                 "<trt:GetProfileResponse>{}</trt:GetProfileResponse>",
-                render_profile(p, "Profile")
+                render_profile(p, "Profile", &vscs, &vecs)
             ),
         ),
         None => resp_soap_fault("ter:NoProfile", &format!("Profile not found: {want}")),
@@ -104,7 +107,9 @@ pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
         &format!(
             "<trt:CreateProfileResponse>{}</trt:CreateProfileResponse>",
-            render_profile(&entry, "Profile")
+            // A freshly created profile carries no configurations yet, so the
+            // catalogues are never consulted.
+            render_profile(&entry, "Profile", &[], &[])
         ),
     )
 }
@@ -159,16 +164,21 @@ enum DeleteOutcome {
 // matches what `CreateProfile` / `AddVideoEncoderConfiguration` etc.
 // actually mutate on a real camera.
 
-fn render_profile(p: &ProfileEntry, tag: &str) -> String {
+fn render_profile(
+    p: &ProfileEntry,
+    tag: &str,
+    vscs: &[VideoSourceConfigEntry],
+    vecs: &[VideoEncoderState],
+) -> String {
     let vsc = p
         .video_source_config_token
         .as_deref()
-        .map(render_vsc_inline)
+        .map(|t| render_vsc_inline(vscs, t))
         .unwrap_or_default();
     let vec = p
         .video_encoder_config_token
         .as_deref()
-        .map(render_vec_inline)
+        .map(|t| render_vec_inline(vecs, t))
         .unwrap_or_default();
     let asc = p
         .audio_source_config_token
@@ -191,17 +201,41 @@ fn render_profile(p: &ProfileEntry, tag: &str) -> String {
     )
 }
 
-fn render_vsc_inline(token: &str) -> String {
-    match token {
-        "VSC_1" => r#"<tt:VideoSourceConfiguration token="VSC_1">
-          <tt:Name>VSConfig1</tt:Name>
-          <tt:UseCount>2</tt:UseCount>
-          <tt:SourceToken>VS_1</tt:SourceToken>
-          <tt:Bounds x="0" y="0" width="1920" height="1080"/>
-        </tt:VideoSourceConfiguration>"#
-            .to_string(),
-        _ => String::new(),
+/// Clone both per-channel catalogues out under a single read lock.
+///
+/// Every caller below needs the pair, and taking one lock rather than two
+/// keeps a responder from rendering a profile whose source config and encoder
+/// config came from different moments.
+fn catalogues(state: &SharedState) -> (Vec<VideoSourceConfigEntry>, Vec<VideoEncoderState>) {
+    let s = state.read();
+    (s.video_source_configs.clone(), s.video_encoders.clone())
+}
+
+fn render_vsc_inline(vscs: &[VideoSourceConfigEntry], token: &str) -> String {
+    match vscs.iter().find(|c| c.token == token) {
+        Some(c) => render_vsc_body(c, "tt:VideoSourceConfiguration"),
+        None => String::new(),
     }
+}
+
+/// The shared `VideoSourceConfiguration` payload. `tag` differs by context —
+/// `tt:VideoSourceConfiguration` inline in a profile, `trt:Configurations` in
+/// a list, `trt:Configuration` for the singular getter.
+fn render_vsc_body(c: &VideoSourceConfigEntry, tag: &str) -> String {
+    format!(
+        r#"<{tag} token="{token}">
+          <tt:Name>{name}</tt:Name>
+          <tt:UseCount>{use_count}</tt:UseCount>
+          <tt:SourceToken>{source}</tt:SourceToken>
+          <tt:Bounds x="0" y="0" width="{width}" height="{height}"/>
+        </{tag}>"#,
+        token = c.token,
+        name = c.name,
+        use_count = c.use_count,
+        source = c.source_token,
+        width = c.width,
+        height = c.height,
+    )
 }
 
 /// The `Multicast` + `SessionTimeout` tail required to close a schema-valid
@@ -213,32 +247,55 @@ const VEC_TAIL: &str = concat!(
     "<tt:SessionTimeout>PT0S</tt:SessionTimeout>",
 );
 
-fn render_vec_inline(token: &str) -> String {
-    match token {
-        "VEC_1" => format!(
-            r#"<tt:VideoEncoderConfiguration token="VEC_1">
-          <tt:Name>H264</tt:Name>
-          <tt:UseCount>1</tt:UseCount>
-          <tt:Encoding>H264</tt:Encoding>
-          <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
-          <tt:Quality>5</tt:Quality>
-          <tt:RateControl><tt:FrameRateLimit>30</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>4096</tt:BitrateLimit></tt:RateControl>
-          {VEC_TAIL}
-        </tt:VideoEncoderConfiguration>"#
-        ),
-        "VEC_2" => format!(
-            r#"<tt:VideoEncoderConfiguration token="VEC_2">
-          <tt:Name>H264_sub</tt:Name>
-          <tt:UseCount>1</tt:UseCount>
-          <tt:Encoding>H264</tt:Encoding>
-          <tt:Resolution><tt:Width>640</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
-          <tt:Quality>4</tt:Quality>
-          <tt:RateControl><tt:FrameRateLimit>15</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>1024</tt:BitrateLimit></tt:RateControl>
-          {VEC_TAIL}
-        </tt:VideoEncoderConfiguration>"#
-        ),
-        _ => String::new(),
+fn render_vec_inline(vecs: &[VideoEncoderState], token: &str) -> String {
+    match vecs.iter().find(|c| c.token == token) {
+        Some(c) => render_vec_body(c, "tt:VideoEncoderConfiguration"),
+        None => String::new(),
     }
+}
+
+/// The shared `VideoEncoderConfiguration` payload, rendered from state.
+///
+/// Before 0.15 there were three hardcoded copies of this element — inline in a
+/// profile, in the `GetVideoEncoderConfigurations` list, and in the singular
+/// getter — and they disagreed: `VEC_2` was `H264_sub`/H264/640x480 in one and
+/// `SubStream`/JPEG/640x480 in another. Rendering all three from one state
+/// entry makes that class of drift unrepresentable.
+///
+/// The `tt:H264` block is emitted only for H264, because the schema element is
+/// encoding-specific; a JPEG config carrying `tt:H264` is not something a
+/// conformant device sends.
+fn render_vec_body(c: &VideoEncoderState, tag: &str) -> String {
+    let codec = if c.encoding == "H264" {
+        format!(
+            "<tt:H264><tt:GovLength>{gov}</tt:GovLength>\
+             <tt:H264Profile>{profile}</tt:H264Profile></tt:H264>",
+            gov = c.gov_length,
+            profile = c.profile,
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        r#"<{tag} token="{token}">
+          <tt:Name>{name}</tt:Name>
+          <tt:UseCount>{use_count}</tt:UseCount>
+          <tt:Encoding>{encoding}</tt:Encoding>
+          <tt:Resolution><tt:Width>{width}</tt:Width><tt:Height>{height}</tt:Height></tt:Resolution>
+          <tt:Quality>{quality}</tt:Quality>
+          <tt:RateControl><tt:FrameRateLimit>{fps}</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>{bitrate}</tt:BitrateLimit></tt:RateControl>
+          {codec}{VEC_TAIL}
+        </{tag}>"#,
+        token = c.token,
+        name = c.name,
+        use_count = c.use_count,
+        encoding = c.encoding,
+        width = c.width,
+        height = c.height,
+        quality = c.quality,
+        fps = c.frame_rate_limit,
+        bitrate = c.bitrate_limit,
+    )
 }
 
 fn render_asc_inline(token: &str) -> String {
@@ -267,63 +324,61 @@ fn render_aec_inline(token: &str) -> String {
     }
 }
 
-pub fn resp_video_sources() -> String {
+pub fn resp_video_sources(state: &SharedState) -> String {
+    let sources = state.read().video_sources.clone();
+    let items: String = sources
+        .iter()
+        .map(|s| {
+            format!(
+                r#"<trt:VideoSources token="{token}">
+            <tt:Framerate>{fps}</tt:Framerate>
+            <tt:Resolution><tt:Width>{width}</tt:Width><tt:Height>{height}</tt:Height></tt:Resolution>
+          </trt:VideoSources>"#,
+                token = s.token,
+                fps = s.framerate,
+                width = s.width,
+                height = s.height,
+            )
+        })
+        .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetVideoSourcesResponse>
-          <trt:VideoSources token="VS_1">
-            <tt:Framerate>25</tt:Framerate>
-            <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
-          </trt:VideoSources>
-        </trt:GetVideoSourcesResponse>"#,
+        &format!("<trt:GetVideoSourcesResponse>{items}</trt:GetVideoSourcesResponse>"),
     )
 }
 
-pub fn resp_video_source_configurations() -> String {
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetVideoSourceConfigurationsResponse>
-          <trt:Configurations token="VSC_1">
-            <tt:Name>VSConfig1</tt:Name>
-            <tt:UseCount>2</tt:UseCount>
-            <tt:SourceToken>VS_1</tt:SourceToken>
-            <tt:Bounds x="0" y="0" width="1920" height="1080"/>
-          </trt:Configurations>
-        </trt:GetVideoSourceConfigurationsResponse>"#,
-    )
-}
-
-pub fn resp_video_encoder_configurations() -> String {
+pub fn resp_video_source_configurations(state: &SharedState) -> String {
+    let vscs = state.read().video_source_configs.clone();
+    let items: String = vscs
+        .iter()
+        .map(|c| render_vsc_body(c, "trt:Configurations"))
+        .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
         &format!(
-            r#"<trt:GetVideoEncoderConfigurationsResponse>
-          <trt:Configurations token="VEC_1">
-            <tt:Name>MainStream</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:Encoding>H264</tt:Encoding>
-            <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
-            <tt:Quality>5</tt:Quality>
-            <tt:RateControl>
-              <tt:FrameRateLimit>25</tt:FrameRateLimit>
-              <tt:EncodingInterval>1</tt:EncodingInterval>
-              <tt:BitrateLimit>4096</tt:BitrateLimit>
-            </tt:RateControl>
-            <tt:H264>
-              <tt:GovLength>25</tt:GovLength>
-              <tt:H264Profile>Main</tt:H264Profile>
-            </tt:H264>
-            {VEC_TAIL}
-          </trt:Configurations>
-          <trt:Configurations token="VEC_2">
-            <tt:Name>SubStream</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:Encoding>JPEG</tt:Encoding>
-            <tt:Resolution><tt:Width>640</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
-            <tt:Quality>3</tt:Quality>
-            {VEC_TAIL}
-          </trt:Configurations>
-        </trt:GetVideoEncoderConfigurationsResponse>"#
+            "<trt:GetVideoSourceConfigurationsResponse>{items}</trt:GetVideoSourceConfigurationsResponse>"
+        ),
+    )
+}
+
+/// `GetVideoEncoderConfigurations` — the whole catalogue, or one entry when the
+/// request carries a `ConfigurationToken`.
+///
+/// The token is genuinely optional here (the plural getter means "list them"),
+/// which is why an absent token returns everything rather than faulting. That
+/// is *not* true of the singular and Options getters below.
+pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> String {
+    let vecs = state.read().video_encoders.clone();
+    let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
+    let items: String = vecs
+        .iter()
+        .filter(|c| want.as_deref().is_none_or(|t| t == c.token))
+        .map(|c| render_vec_body(c, "trt:Configurations"))
+        .collect();
+    soap(
+        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        &format!(
+            "<trt:GetVideoEncoderConfigurationsResponse>{items}</trt:GetVideoEncoderConfigurationsResponse>"
         ),
     )
 }
@@ -378,63 +433,104 @@ pub fn resp_osds(state: &SharedState, body: &str) -> String {
     )
 }
 
-pub fn resp_video_source_configuration() -> String {
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetVideoSourceConfigurationResponse>
-          <trt:Configuration token="VSC_1">
-            <tt:Name>VSConfig1</tt:Name>
-            <tt:UseCount>2</tt:UseCount>
-            <tt:SourceToken>VS_1</tt:SourceToken>
-            <tt:Bounds x="0" y="0" width="1920" height="1080"/>
-          </trt:Configuration>
-        </trt:GetVideoSourceConfigurationResponse>"#,
-    )
+/// The `ConfigurationToken` of a **per-channel** request, or a SOAP Fault.
+///
+/// Absent is an error, not a default. On a multi-sensor device, answering a
+/// token-less per-channel query means picking a channel on the caller's behalf,
+/// and the pick is invisible — measured on a real two-sensor device
+/// (2026-07-28), a token-less `GetVideoEncoderConfigurationOptions` returned
+/// lens 0's resolution list, which the caller would then display for lens 1
+/// too. Nothing in the response says which lens answered.
+///
+/// The schema does mark the token optional, so this mock is stricter than the
+/// letter of the WSDL. That is the point: the omission is a client bug that a
+/// permissive device hides, and the mock exists to make our own bugs loud.
+fn require_config_token(body: &str, missing_reason: &str) -> Result<String, String> {
+    extract_tag(body, "ConfigurationToken")
+        .filter(|t| !t.is_empty())
+        .ok_or_else(|| resp_soap_fault("env:Sender", missing_reason))
 }
 
-pub fn resp_video_source_configuration_options() -> String {
+pub fn resp_video_source_configuration(state: &SharedState, body: &str) -> String {
+    let want = match require_config_token(body, "NoConfigToken-VSC-5501") {
+        Ok(t) => t,
+        Err(fault) => return fault,
+    };
+    let vscs = state.read().video_source_configs.clone();
+    match vscs.iter().find(|c| c.token == want) {
+        Some(c) => soap(
+            r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+            &format!(
+                "<trt:GetVideoSourceConfigurationResponse>{}</trt:GetVideoSourceConfigurationResponse>",
+                render_vsc_body(c, "trt:Configuration")
+            ),
+        ),
+        None => resp_soap_fault("env:Sender", &format!("NoSuchConfig-VSC-5502: {want}")),
+    }
+}
+
+/// `GetVideoSourceConfigurationOptions` — per-channel.
+///
+/// `BoundsRange` maxima are the addressed **sensor's** own resolution, so the
+/// two channels report different ceilings; `VideoSourceTokensAvailable` names
+/// only the sensor this configuration is attached to.
+pub fn resp_video_source_configuration_options(state: &SharedState, body: &str) -> String {
+    let want = match require_config_token(body, "NoConfigToken-VSCOPT-5503") {
+        Ok(t) => t,
+        Err(fault) => return fault,
+    };
+    let vscs = state.read().video_source_configs.clone();
+    let Some(c) = vscs.iter().find(|c| c.token == want) else {
+        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-VSCOPT-5504: {want}"));
+    };
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetVideoSourceConfigurationOptionsResponse>
+        &format!(
+            r#"<trt:GetVideoSourceConfigurationOptionsResponse>
           <trt:Options>
             <tt:MaximumNumberOfProfiles>5</tt:MaximumNumberOfProfiles>
             <tt:BoundsRange>
               <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
               <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
-              <tt:WidthRange><tt:Min>160</tt:Min><tt:Max>1920</tt:Max></tt:WidthRange>
-              <tt:HeightRange><tt:Min>90</tt:Min><tt:Max>1080</tt:Max></tt:HeightRange>
+              <tt:WidthRange><tt:Min>160</tt:Min><tt:Max>{width}</tt:Max></tt:WidthRange>
+              <tt:HeightRange><tt:Min>90</tt:Min><tt:Max>{height}</tt:Max></tt:HeightRange>
             </tt:BoundsRange>
-            <tt:VideoSourceTokensAvailable>VS_1</tt:VideoSourceTokensAvailable>
+            <tt:VideoSourceTokensAvailable>{source}</tt:VideoSourceTokensAvailable>
           </trt:Options>
         </trt:GetVideoSourceConfigurationOptionsResponse>"#,
+            width = c.width,
+            height = c.height,
+            source = c.source_token,
+        ),
     )
 }
 
-pub fn resp_video_encoder_configuration() -> String {
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetVideoEncoderConfigurationResponse>
-          <trt:Configuration token="VEC_1">
-            <tt:Name>MainStream</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:Encoding>H264</tt:Encoding>
-            <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
-            <tt:Quality>5</tt:Quality>
-            <tt:RateControl>
-              <tt:FrameRateLimit>25</tt:FrameRateLimit>
-              <tt:EncodingInterval>1</tt:EncodingInterval>
-              <tt:BitrateLimit>4096</tt:BitrateLimit>
-            </tt:RateControl>
-            <tt:H264>
-              <tt:GovLength>25</tt:GovLength>
-              <tt:H264Profile>Main</tt:H264Profile>
-            </tt:H264>
-          </trt:Configuration>
-        </trt:GetVideoEncoderConfigurationResponse>"#,
-    )
+pub fn resp_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+    let want = match require_config_token(body, "NoConfigToken-VEC-5505") {
+        Ok(t) => t,
+        Err(fault) => return fault,
+    };
+    let vecs = state.read().video_encoders.clone();
+    match vecs.iter().find(|c| c.token == want) {
+        Some(c) => soap(
+            r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+            &format!(
+                "<trt:GetVideoEncoderConfigurationResponse>{}</trt:GetVideoEncoderConfigurationResponse>",
+                render_vec_body(c, "trt:Configuration")
+            ),
+        ),
+        None => resp_soap_fault("env:Sender", &format!("NoSuchConfig-VEC-5506: {want}")),
+    }
 }
 
-/// `trt:GetVideoEncoderConfigurationOptionsResponse`.
+/// `trt:GetVideoEncoderConfigurationOptionsResponse` — **per-channel**.
+///
+/// This is the operation the multi-sensor rule in CLAUDE.md was written for.
+/// The resolution list comes from the addressed configuration's own
+/// `resolutions`, so `VEC_1` (sensor 1) reports up to 2592x1944 while `VEC_3`
+/// (sensor 2) tops out at 1280x720. Until 0.15 this responder took **no
+/// arguments at all**: every channel got sensor 1's list, so a parser that
+/// dropped the token on the floor passed every test in the tree.
 ///
 /// Shaped after a real device: the top-level `tt:H264` is `tt:H264Options`,
 /// which has **no** `BitrateRange` in the schema, and the whole block is
@@ -444,19 +540,48 @@ pub fn resp_video_encoder_configuration() -> String {
 /// sends. That is why the parser's failure to descend into `Extension` went
 /// unnoticed against both the mock and a hand-written fixture.
 ///
+/// The two copies deliberately carry **different** resolution lists: the
+/// `Extension` copy is the superset a newer device sends, so a parser that
+/// reads only the shallow copy loses the largest entry and an assertion
+/// catches it. Nothing else in the tree pins that direction.
+///
 /// Deliberately still no `H265`: it would live at
 /// `Options/Extension/Extension/H265`, and adding it changes what every caller
 /// of this responder sees. The parser's two-level descent is covered by unit
 /// fixtures in `src/tests/types_tests.rs`.
-pub fn resp_video_encoder_configuration_options() -> String {
+pub fn resp_video_encoder_configuration_options(state: &SharedState, body: &str) -> String {
+    let want = match require_config_token(body, "NoConfigToken-VECOPT-5507") {
+        Ok(t) => t,
+        Err(fault) => return fault,
+    };
+    let vecs = state.read().video_encoders.clone();
+    let Some(c) = vecs.iter().find(|c| c.token == want) else {
+        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-VECOPT-5508: {want}"));
+    };
+
+    let render = |list: &[(u32, u32)]| -> String {
+        list.iter()
+            .map(|(w, h)| {
+                format!(
+                    "<tt:ResolutionsAvailable><tt:Width>{w}</tt:Width>\
+                     <tt:Height>{h}</tt:Height></tt:ResolutionsAvailable>"
+                )
+            })
+            .collect()
+    };
+    // The shallow copy is what an older device sends: same channel, minus the
+    // widest mode the Extension added.
+    let shallow = render(c.resolutions.get(1..).unwrap_or_default());
+    let extended = render(&c.resolutions);
+
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetVideoEncoderConfigurationOptionsResponse>
+        &format!(
+            r#"<trt:GetVideoEncoderConfigurationOptionsResponse>
           <trt:Options>
             <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
             <tt:H264>
-              <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
-              <tt:ResolutionsAvailable><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:ResolutionsAvailable>
+              {shallow}
               <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
               <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
               <tt:EncodingIntervalRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:EncodingIntervalRange>
@@ -466,8 +591,7 @@ pub fn resp_video_encoder_configuration_options() -> String {
             </tt:H264>
             <tt:Extension>
               <tt:H264>
-                <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
-                <tt:ResolutionsAvailable><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:ResolutionsAvailable>
+                {extended}
                 <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
                 <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
                 <tt:EncodingIntervalRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:EncodingIntervalRange>
@@ -478,7 +602,8 @@ pub fn resp_video_encoder_configuration_options() -> String {
               </tt:H264>
             </tt:Extension>
           </trt:Options>
-        </trt:GetVideoEncoderConfigurationOptionsResponse>"#,
+        </trt:GetVideoEncoderConfigurationOptionsResponse>"#
+        ),
     )
 }
 

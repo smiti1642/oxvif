@@ -459,7 +459,7 @@ async fn main() {
         r.record(
             "GetVideoEncoderConfigurationOptions",
             session
-                .get_video_encoder_configuration_options(Some(tok.as_str()))
+                .get_video_encoder_configuration_options(tok.as_str())
                 .await,
             |_| "ok".into(),
         );
@@ -499,7 +499,7 @@ async fn main() {
         r.record(
             "GetVideoSourceConfigurationOptions",
             session
-                .get_video_source_configuration_options(Some(tok.as_str()))
+                .get_video_source_configuration_options(tok.as_str())
                 .await,
             |_| "ok".into(),
         );

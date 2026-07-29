@@ -343,26 +343,26 @@ impl OnvifClient {
         Ok(())
     }
 
-    /// Retrieve the valid parameter ranges for video source configuration.
+    /// Retrieve the valid parameter ranges for one video source configuration.
     ///
-    /// Pass `config_token` to narrow the options to a specific configuration,
-    /// or `None` to retrieve options valid for all configurations.
+    /// # Changed in 0.15
+    ///
+    /// `config_token` was `Option<&str>` and is now required — the bounds a
+    /// device reports are the addressed *sensor's*, so a token-less answer on a
+    /// multi-sensor camera describes some other lens. Same reasoning as
+    /// [`get_video_encoder_configuration_options`](Self::get_video_encoder_configuration_options).
     pub async fn get_video_source_configuration_options(
         &self,
         media_url: &str,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<VideoSourceConfigurationOptions, OnvifError> {
         const ACTION: &str =
             "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurationOptions";
-        let inner = match config_token {
-            Some(tok) => format!(
-                "<trt:ConfigurationToken>{}</trt:ConfigurationToken>",
-                xml_escape(tok)
-            ),
-            None => String::new(),
-        };
         let body = format!(
-            "<trt:GetVideoSourceConfigurationOptions>{inner}</trt:GetVideoSourceConfigurationOptions>"
+            "<trt:GetVideoSourceConfigurationOptions>\
+               <trt:ConfigurationToken>{}</trt:ConfigurationToken>\
+             </trt:GetVideoSourceConfigurationOptions>",
+            xml_escape(config_token)
         );
 
         let xml = self.call(media_url, ACTION, &body).await?;
@@ -452,26 +452,39 @@ impl OnvifClient {
         Ok(())
     }
 
-    /// Retrieve the valid parameter ranges for video encoder configuration.
+    /// Retrieve the valid parameter ranges for one video encoder configuration.
     ///
-    /// Pass `config_token` to narrow the options to a specific configuration,
-    /// or `None` to retrieve options valid for all configurations.
+    /// `config_token` is **required**, and deliberately so — the schema marks it
+    /// optional, but on a multi-sensor camera a token-less request is answered
+    /// for the device's *default* channel with nothing in the response to say
+    /// which one that was. Measured on a real two-sensor device (2026-07-28): a
+    /// token-less call returned lens 0's list (`2592x1944 … 1280x720`), the same
+    /// list a caller would then show for lens 1, whose real maximum is
+    /// `1280x720`. On a single-sensor camera the wrong answer is
+    /// indistinguishable from the right one, which is why this was a silent bug
+    /// for as long as it lasted.
+    ///
+    /// The configuration token alone was enough to get every channel right on
+    /// that device; the profile token was not required.
+    ///
+    /// # Changed in 0.15
+    ///
+    /// Was `config_token: Option<&str>`. Pass the token you were wrapping in
+    /// `Some(…)`; if you were passing `None`, pick a configuration from
+    /// [`get_video_encoder_configurations`](Self::get_video_encoder_configurations)
+    /// — there is no correct channel-less answer.
     pub async fn get_video_encoder_configuration_options(
         &self,
         media_url: &str,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<VideoEncoderConfigurationOptions, OnvifError> {
         const ACTION: &str =
             "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurationOptions";
-        let inner = match config_token {
-            Some(tok) => format!(
-                "<trt:ConfigurationToken>{}</trt:ConfigurationToken>",
-                xml_escape(tok)
-            ),
-            None => String::new(),
-        };
         let body = format!(
-            "<trt:GetVideoEncoderConfigurationOptions>{inner}</trt:GetVideoEncoderConfigurationOptions>"
+            "<trt:GetVideoEncoderConfigurationOptions>\
+               <trt:ConfigurationToken>{}</trt:ConfigurationToken>\
+             </trt:GetVideoEncoderConfigurationOptions>",
+            xml_escape(config_token)
         );
 
         let xml = self.call(media_url, ACTION, &body).await?;

@@ -1655,7 +1655,7 @@ async fn video_config(cfg: &Config) -> Result<(), OnvifError> {
             first.token
         ));
         match client
-            .get_video_source_configuration_options(&media_url, Some(&first.token))
+            .get_video_source_configuration_options(&media_url, &first.token)
             .await
         {
             Ok(opts) => {
@@ -1712,7 +1712,7 @@ async fn video_config(cfg: &Config) -> Result<(), OnvifError> {
             first.token
         ));
         match client
-            .get_video_encoder_configuration_options(&media_url, Some(&first.token))
+            .get_video_encoder_configuration_options(&media_url, &first.token)
             .await
         {
             Ok(opts) => {
@@ -1936,9 +1936,15 @@ async fn video_config_media2(cfg: &Config) -> Result<(), OnvifError> {
         }
     };
 
+    // Options are per-channel, so this needs a configuration token; take the
+    // first one the list above returned rather than letting the device pick.
+    let Some(first_cfg) = enc_cfgs2.first() else {
+        println!("  (no video encoder configurations — skipping options)");
+        return Ok(());
+    };
     section("GetVideoEncoderConfigurationOptions (Media2)");
     match client
-        .get_video_encoder_configuration_options_media2(&media2_url, None)
+        .get_video_encoder_configuration_options_media2(&media2_url, &first_cfg.token)
         .await
     {
         Ok(opts) => {

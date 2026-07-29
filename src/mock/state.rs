@@ -41,8 +41,12 @@ pub struct DeviceState {
     pub osd: OsdState,
     #[serde(default = "default_profiles")]
     pub profiles: ProfilesState,
-    #[serde(default = "default_video_encoder")]
-    pub video_encoder: VideoEncoderState,
+    #[serde(default = "default_video_sources")]
+    pub video_sources: Vec<VideoSourceEntry>,
+    #[serde(default = "default_video_source_configs")]
+    pub video_source_configs: Vec<VideoSourceConfigEntry>,
+    #[serde(default = "default_video_encoders")]
+    pub video_encoders: Vec<VideoEncoderState>,
     #[serde(default = "default_relay_outputs")]
     pub relay_outputs: Vec<RelayOutputState>,
     #[serde(default = "default_digital_inputs")]
@@ -344,13 +348,47 @@ pub struct ProfileEntry {
     pub audio_encoder_config_token: Option<String>,
 }
 
-// ── Video encoder configuration state ─────────────────────────────────────────
+// ── Video source / encoder state ──────────────────────────────────────────────
 //
-// The Media2 video encoder config (token `VEC_1`, referenced by the default
-// profiles). `GetVideoEncoderConfigurations` renders from here and
-// `SetVideoEncoderConfiguration` persists into it, so a Set → Get roundtrip
-// reflects the change. Uses Media2's flat, H.265-capable shape.
+// The mock is a **two-sensor** device: one ONVIF endpoint, two physical lenses,
+// two streams each. That is not decoration. Per the multi-sensor rule in
+// CLAUDE.md, every `Get…Options` / `Get…Configuration` answer depends on which
+// channel was asked about, and a single-sensor fixture cannot tell a parser
+// that reads the token from one that ignores it — both pass.
+//
+// The numbers below are transcribed from a real two-sensor device measured
+// 2026-07-28. The load-bearing property is that the sensors **disagree**:
+// VS_2 tops out at 1280x720, while VS_1 goes to 2592x1944. So VEC_1's current
+// 1920x1080 does not appear anywhere in VEC_3's option list, and a responder
+// that returns lens 0's list for a lens 1 query fails an assertion instead of
+// silently answering for the wrong channel.
 
+/// One physical sensor (`trt:GetVideoSources`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoSourceEntry {
+    pub token: String,
+    pub framerate: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// A video *source* configuration — the crop/bounds view onto one sensor.
+/// `source_token` is what ties it back to a [`VideoSourceEntry`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoSourceConfigEntry {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    pub source_token: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// One video encoder configuration — a (sensor, stream) pair.
+///
+/// `GetVideoEncoderConfigurations` renders from here and
+/// `SetVideoEncoderConfiguration` persists into it, so a Set → Get roundtrip
+/// reflects the change. Uses Media2's flat, H.265-capable shape.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoEncoderState {
     pub token: String,
@@ -365,6 +403,18 @@ pub struct VideoEncoderState {
     pub bitrate_limit: u32,
     pub gov_length: u32,
     pub profile: String,
+    /// Which sensor this encoder draws from (`VS_1` / `VS_2`).
+    #[serde(default = "default_source_token")]
+    pub source_token: String,
+    /// The resolutions `GetVideoEncoderConfigurationOptions` reports **for this
+    /// channel**. `(width, height)`, widest first.
+    ///
+    /// The invariant that makes this list worth having: `(width, height)` above
+    /// must appear in it. A device that offers a resolution it is not running,
+    /// or runs one it does not offer, is a bug the mock should not model by
+    /// accident — `default_video_encoders_are_self_consistent` asserts it.
+    #[serde(default)]
+    pub resolutions: Vec<(u32, u32)>,
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -550,25 +600,150 @@ fn default_profiles() -> ProfilesState {
                 audio_source_config_token: None,
                 audio_encoder_config_token: None,
             },
+            // Sensor 2. Present so the second lens is reachable the way a
+            // client actually reaches one — via a profile — and not only by
+            // guessing configuration tokens.
+            ProfileEntry {
+                token: "Profile_3".into(),
+                name: "mainStream2".into(),
+                fixed: true,
+                video_source_config_token: Some("VSC_2".into()),
+                video_encoder_config_token: Some("VEC_3".into()),
+                audio_source_config_token: None,
+                audio_encoder_config_token: None,
+            },
+            ProfileEntry {
+                token: "Profile_4".into(),
+                name: "subStream2".into(),
+                fixed: false,
+                video_source_config_token: Some("VSC_2".into()),
+                video_encoder_config_token: Some("VEC_4".into()),
+                audio_source_config_token: None,
+                audio_encoder_config_token: None,
+            },
         ],
-        next_token_id: 3,
+        next_token_id: 5,
     }
 }
 
-fn default_video_encoder() -> VideoEncoderState {
-    VideoEncoderState {
-        token: "VEC_1".into(),
-        name: "VideoEncoderConfig".into(),
-        use_count: 1,
-        encoding: "H265".into(),
-        width: 1920,
-        height: 1080,
-        quality: 5.0,
-        frame_rate_limit: 30,
-        bitrate_limit: 4096,
-        gov_length: 50,
-        profile: "Main".into(),
-    }
+fn default_source_token() -> String {
+    "VS_1".into()
+}
+
+fn default_video_sources() -> Vec<VideoSourceEntry> {
+    vec![
+        VideoSourceEntry {
+            token: "VS_1".into(),
+            framerate: 25,
+            width: 2592,
+            height: 1944,
+        },
+        VideoSourceEntry {
+            token: "VS_2".into(),
+            framerate: 25,
+            width: 1280,
+            height: 720,
+        },
+    ]
+}
+
+fn default_video_source_configs() -> Vec<VideoSourceConfigEntry> {
+    vec![
+        VideoSourceConfigEntry {
+            token: "VSC_1".into(),
+            name: "VSConfig1".into(),
+            use_count: 2,
+            source_token: "VS_1".into(),
+            width: 2592,
+            height: 1944,
+        },
+        VideoSourceConfigEntry {
+            token: "VSC_2".into(),
+            name: "VSConfig2".into(),
+            use_count: 2,
+            source_token: "VS_2".into(),
+            width: 1280,
+            height: 720,
+        },
+    ]
+}
+
+/// Four encoder configs: two sensors x (main, sub).
+///
+/// See the section comment above [`VideoEncoderState`] for why the two sensors
+/// deliberately disagree about what they can do.
+fn default_video_encoders() -> Vec<VideoEncoderState> {
+    vec![
+        // ── Sensor 1 (VS_1, 5MP) ────────────────────────────────────────────
+        VideoEncoderState {
+            token: "VEC_1".into(),
+            name: "MainStream".into(),
+            use_count: 1,
+            encoding: "H264".into(),
+            width: 1920,
+            height: 1080,
+            quality: 5.0,
+            frame_rate_limit: 25,
+            bitrate_limit: 4096,
+            gov_length: 25,
+            profile: "Main".into(),
+            source_token: "VS_1".into(),
+            resolutions: vec![
+                (2592, 1944),
+                (2592, 1520),
+                (2560, 1440),
+                (2304, 1296),
+                (1920, 1080),
+                (1280, 720),
+            ],
+        },
+        VideoEncoderState {
+            token: "VEC_2".into(),
+            name: "SubStream".into(),
+            use_count: 1,
+            encoding: "H264".into(),
+            width: 704,
+            height: 480,
+            quality: 4.0,
+            frame_rate_limit: 15,
+            bitrate_limit: 1024,
+            gov_length: 25,
+            profile: "Main".into(),
+            source_token: "VS_1".into(),
+            resolutions: vec![(1280, 720), (704, 480), (352, 240)],
+        },
+        // ── Sensor 2 (VS_2, 720p) ───────────────────────────────────────────
+        VideoEncoderState {
+            token: "VEC_3".into(),
+            name: "MainStream2".into(),
+            use_count: 1,
+            encoding: "H264".into(),
+            width: 1280,
+            height: 720,
+            quality: 5.0,
+            frame_rate_limit: 25,
+            bitrate_limit: 2048,
+            gov_length: 25,
+            profile: "High".into(),
+            source_token: "VS_2".into(),
+            resolutions: vec![(1280, 720), (704, 480), (480, 240), (352, 240)],
+        },
+        VideoEncoderState {
+            token: "VEC_4".into(),
+            name: "SubStream2".into(),
+            use_count: 1,
+            encoding: "JPEG".into(),
+            width: 704,
+            height: 480,
+            quality: 3.0,
+            frame_rate_limit: 10,
+            bitrate_limit: 512,
+            gov_length: 25,
+            profile: "Baseline".into(),
+            source_token: "VS_2".into(),
+            resolutions: vec![(704, 480), (480, 240), (352, 240)],
+        },
+    ]
 }
 
 fn default_logical_inactive() -> String {
@@ -645,7 +820,9 @@ impl Default for DeviceState {
             protocols: default_protocols(),
             osd: default_osd(),
             profiles: default_profiles(),
-            video_encoder: default_video_encoder(),
+            video_sources: default_video_sources(),
+            video_source_configs: default_video_source_configs(),
+            video_encoders: default_video_encoders(),
             relay_outputs: default_relay_outputs(),
             digital_inputs: default_digital_inputs(),
             event_seq: 0,
@@ -1159,6 +1336,15 @@ mod tests {
         assert!(xml.contains("VSC_1"));
         assert!(xml.contains("VEC_1"));
         assert!(xml.contains("VEC_2"));
+        // Sensor 2's pair, so a caller enumerating profiles reaches both lenses.
+        assert!(xml.contains(r#"token="Profile_3" fixed="true""#));
+        assert!(xml.contains(r#"token="Profile_4" fixed="false""#));
+        assert!(xml.contains("VSC_2"));
+        assert!(xml.contains("VEC_3"));
+        assert!(xml.contains("VEC_4"));
+        // Each profile carries its *own* source config, not a shared one: the
+        // sensor-2 profiles must not be rendered with VS_1's bounds.
+        assert!(xml.contains("<tt:SourceToken>VS_2</tt:SourceToken>"));
     }
 
     #[test]
@@ -1168,17 +1354,17 @@ mod tests {
         let body = r#"<trt:CreateProfile><trt:Name>customStream</trt:Name></trt:CreateProfile>"#;
         let resp = media::handle_create_profile(&s, body);
         assert!(resp.contains("CreateProfileResponse"));
-        // Default counter starts at 3, so first generated token is Profile_3.
-        assert!(resp.contains("Profile_3"));
+        // Four default profiles, so the counter starts at 5.
+        assert!(resp.contains("Profile_5"));
         assert!(resp.contains("customStream"));
         assert!(resp.contains(r#"fixed="false""#));
 
         let listed = media::resp_profiles(&s);
-        assert!(listed.contains("Profile_3"));
+        assert!(listed.contains("Profile_5"));
         assert!(listed.contains("customStream"));
         // New profiles have no configurations attached.
         let new_p_block = listed
-            .find("Profile_3")
+            .find("Profile_5")
             .and_then(|i| {
                 listed[i..]
                     .find("</trt:Profiles>")
@@ -1200,7 +1386,7 @@ mod tests {
         let resp = media::handle_create_profile(&s, body);
         assert!(resp.contains("MyProfile"));
         // Counter should NOT have been bumped — explicit token, no generation.
-        assert_eq!(s.read().profiles.next_token_id, 3);
+        assert_eq!(s.read().profiles.next_token_id, 5);
     }
 
     #[test]
@@ -1215,7 +1401,7 @@ mod tests {
         assert!(resp.contains("Fault"));
         assert!(resp.contains("ProfileExists"));
         // No new entry, no counter change.
-        assert_eq!(s.read().profiles.profiles.len(), 2);
+        assert_eq!(s.read().profiles.profiles.len(), 4);
     }
 
     #[test]
@@ -1225,8 +1411,16 @@ mod tests {
         let body = r#"<trt:DeleteProfile><trt:ProfileToken>Profile_2</trt:ProfileToken></trt:DeleteProfile>"#;
         let resp = media::handle_delete_profile(&s, body);
         assert!(resp.contains("DeleteProfileResponse"));
-        assert_eq!(s.read().profiles.profiles.len(), 1);
-        assert_eq!(s.read().profiles.profiles[0].token, "Profile_1");
+        assert_eq!(s.read().profiles.profiles.len(), 3);
+        // Only Profile_2 went; the other three are untouched and in order.
+        let tokens: Vec<String> = s
+            .read()
+            .profiles
+            .profiles
+            .iter()
+            .map(|p| p.token.clone())
+            .collect();
+        assert_eq!(tokens, ["Profile_1", "Profile_3", "Profile_4"]);
     }
 
     #[test]
@@ -1238,7 +1432,7 @@ mod tests {
         assert!(resp.contains("Fault"));
         assert!(resp.contains("DeletionOfFixedProfile"));
         // State untouched.
-        assert_eq!(s.read().profiles.profiles.len(), 2);
+        assert_eq!(s.read().profiles.profiles.len(), 4);
     }
 
     #[test]
@@ -1250,7 +1444,7 @@ mod tests {
         let resp = media::handle_delete_profile(&s, body);
         assert!(resp.contains("Fault"));
         assert!(resp.contains("NoProfile"));
-        assert_eq!(s.read().profiles.profiles.len(), 2);
+        assert_eq!(s.read().profiles.profiles.len(), 4);
     }
 
     #[test]
@@ -1284,36 +1478,16 @@ mod tests {
         let xml =
             media2::resp_video_encoder_configurations(&s, "<tr2:GetVideoEncoderConfigurations/>");
         assert!(xml.contains("GetVideoEncoderConfigurationsResponse"));
-        assert!(xml.contains(r#"token="VEC_1""#));
-        assert!(xml.contains("<tt:Encoding>H265</tt:Encoding>"));
+        // All four channels, not just one: the token-less plural getter lists
+        // everything, which is what makes the filtering test below meaningful.
+        for tok in ["VEC_1", "VEC_2", "VEC_3", "VEC_4"] {
+            assert!(xml.contains(&format!(r#"token="{tok}""#)), "missing {tok}");
+        }
         assert!(xml.contains("<tt:Width>1920</tt:Width>"));
-    }
-
-    #[test]
-    fn media2_set_video_encoder_then_get() {
-        use crate::mock::services::media2;
-        let s = new_state();
-        let body = r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_1">
-            <tt:Name>VideoEncoderConfig</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:Encoding>H264</tt:Encoding>
-            <tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>
-            <tt:RateControl><tt:FrameRateLimit>25</tt:FrameRateLimit><tt:BitrateLimit>2048</tt:BitrateLimit></tt:RateControl>
-            <tt:GovLength>60</tt:GovLength>
-            <tt:Profile>High</tt:Profile>
-            <tt:Quality>6</tt:Quality>
-          </tr2:Configuration></tr2:SetVideoEncoderConfiguration>"#;
-        let resp = media2::handle_set_video_encoder_configuration(&s, body);
-        assert!(resp.contains("SetVideoEncoderConfigurationResponse"));
-
-        let xml =
-            media2::resp_video_encoder_configurations(&s, "<tr2:GetVideoEncoderConfigurations/>");
-        assert!(xml.contains("<tt:Encoding>H264</tt:Encoding>"));
+        // Sensor 2's main stream is 720p — a value sensor 1 never reports, so
+        // this also pins that the list is not four copies of one channel.
         assert!(xml.contains("<tt:Width>1280</tt:Width>"));
-        assert!(xml.contains("<tt:BitrateLimit>2048</tt:BitrateLimit>"));
-        assert!(xml.contains("<tt:Profile>High</tt:Profile>"));
-        // Old default H265 must be gone after the Set.
-        assert!(!xml.contains("H265"));
+        assert!(xml.contains("<tt:Encoding>JPEG</tt:Encoding>"));
     }
 
     #[test]
@@ -1449,5 +1623,462 @@ mod tests {
         assert!(xml.contains("tns1:Device/Trigger/RelayOutput"));
         assert!(xml.contains(r#"Name="RelayToken" Value="RelayOutput_1""#));
         assert!(xml.contains(r#"Name="LogicalState" Value="false""#));
+    }
+
+    // ── Multi-sensor: per-channel answers ─────────────────────────────────
+    //
+    // The rule these cover (CLAUDE.md, "Multi-sensor devices"): a single-sensor
+    // fixture cannot cover a per-channel feature, because it passes just as well
+    // against a responder that ignores the token entirely. Every assertion below
+    // is written so that it fails if the token stops being read — most of them
+    // by naming a value that exists on *one* channel only.
+
+    /// Pull the `<tt:Width>` values out of a rendered response, in order.
+    fn widths(xml: &str) -> Vec<u32> {
+        xml.split("<tt:Width>")
+            .skip(1)
+            .filter_map(|s| s.split("</tt:Width>").next())
+            .filter_map(|s| s.trim().parse().ok())
+            .collect()
+    }
+
+    /// Every default encoder must run a resolution it also offers, draw from a
+    /// sensor that exists, and every source config must point at a real sensor.
+    ///
+    /// Without this, the fixture could drift into a shape no camera produces —
+    /// a channel advertising 720p while running 1080p — and the per-channel
+    /// tests below would still pass while asserting nonsense.
+    #[test]
+    fn default_video_catalogue_is_self_consistent() {
+        let s = new_state();
+        let snap = s.read();
+        let sensors: Vec<&str> = snap
+            .video_sources
+            .iter()
+            .map(|v| v.token.as_str())
+            .collect();
+        assert_eq!(sensors, ["VS_1", "VS_2"], "two sensors");
+
+        for c in &snap.video_encoders {
+            assert!(
+                c.resolutions.contains(&(c.width, c.height)),
+                "{} runs {}x{} but does not offer it: {:?}",
+                c.token,
+                c.width,
+                c.height,
+                c.resolutions
+            );
+            assert!(
+                sensors.contains(&c.source_token.as_str()),
+                "{} draws from unknown sensor {}",
+                c.token,
+                c.source_token
+            );
+        }
+        for c in &snap.video_source_configs {
+            assert!(
+                sensors.contains(&c.source_token.as_str()),
+                "{} points at unknown sensor {}",
+                c.token,
+                c.source_token
+            );
+        }
+        // The property every per-channel test leans on: the two sensors do not
+        // agree about their maximum. If this ever becomes false the tests below
+        // stop distinguishing a token-aware responder from a token-blind one.
+        let max_of = |tok: &str| -> u32 {
+            snap.video_encoders
+                .iter()
+                .filter(|c| c.source_token == tok)
+                .flat_map(|c| c.resolutions.iter().map(|(w, _)| *w))
+                .max()
+                .unwrap()
+        };
+        assert!(
+            max_of("VS_1") > max_of("VS_2"),
+            "the sensors must disagree: VS_1 max {} vs VS_2 max {}",
+            max_of("VS_1"),
+            max_of("VS_2")
+        );
+    }
+
+    #[test]
+    fn get_video_sources_lists_both_sensors() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let xml = media::resp_video_sources(&s);
+        assert!(xml.contains(r#"token="VS_1""#));
+        assert!(xml.contains(r#"token="VS_2""#));
+        // Their resolutions differ, so this is not one sensor listed twice.
+        assert_eq!(widths(&xml), vec![2592, 1280]);
+    }
+
+    // ── Media1 video encoder options ──────────────────────────────────────
+
+    fn vec_options_body(token: &str) -> String {
+        format!(
+            "<trt:GetVideoEncoderConfigurationOptions>\
+               <trt:ConfigurationToken>{token}</trt:ConfigurationToken>\
+             </trt:GetVideoEncoderConfigurationOptions>"
+        )
+    }
+
+    /// The regression this whole change exists for.
+    ///
+    /// Before 0.15 `resp_video_encoder_configuration_options` took no arguments,
+    /// so both halves of this test saw sensor 1's list and the assertion below
+    /// could not have failed.
+    #[test]
+    fn video_encoder_options_are_per_channel() {
+        use crate::mock::services::media;
+        let s = new_state();
+
+        let lens1 = media::resp_video_encoder_configuration_options(&s, &vec_options_body("VEC_1"));
+        let lens2 = media::resp_video_encoder_configuration_options(&s, &vec_options_body("VEC_3"));
+
+        // Sensor 1 offers 5MP; sensor 2 cannot and must not claim to.
+        assert!(lens1.contains("<tt:Width>2592</tt:Width>"), "VEC_1 max");
+        assert!(
+            !lens2.contains("<tt:Width>2592</tt:Width>"),
+            "VEC_3 must not report sensor 1's 2592-wide mode — token ignored?"
+        );
+        assert_eq!(
+            widths(&lens2).into_iter().max(),
+            Some(1280),
+            "VEC_3 tops out at 720p"
+        );
+        // And the two responses are genuinely different documents.
+        assert_ne!(lens1, lens2);
+    }
+
+    /// The `Extension` copy is the superset — a parser reading only the shallow
+    /// `Options/H264` loses the widest mode. Pinned here because the two copies
+    /// are generated from one list and could silently become identical.
+    #[test]
+    fn video_encoder_options_extension_copy_is_a_superset() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let xml = media::resp_video_encoder_configuration_options(&s, &vec_options_body("VEC_1"));
+
+        // Match the full pair, not the width alone — VEC_1 offers both
+        // 2592x1944 and 2592x1520, so a width-only check cannot tell the two
+        // copies apart. (It didn't: this assertion was written that way first
+        // and passed against a response where the widest mode *was* present.)
+        const WIDEST: &str = "<tt:Width>2592</tt:Width><tt:Height>1944</tt:Height>";
+        let (shallow, extension) = xml.split_once("<tt:Extension>").expect("Extension block");
+        assert!(
+            !shallow.contains(WIDEST),
+            "the shallow copy is the older device's smaller list"
+        );
+        assert!(
+            extension.contains(WIDEST),
+            "the Extension copy adds the widest mode"
+        );
+        // Same channel either way — the Extension is a superset, not a different
+        // lens's list.
+        assert!(shallow.contains("<tt:Width>1280</tt:Width>"));
+        assert!(extension.contains("<tt:Width>1280</tt:Width>"));
+    }
+
+    #[test]
+    fn video_encoder_options_without_token_faults() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let xml = media::resp_video_encoder_configuration_options(
+            &s,
+            "<trt:GetVideoEncoderConfigurationOptions/>",
+        );
+        assert!(xml.contains("NoConfigToken-VECOPT-5507"), "got: {xml}");
+        // Nothing resembling an answer came back with it.
+        assert!(!xml.contains("ResolutionsAvailable"));
+    }
+
+    #[test]
+    fn video_encoder_options_unknown_token_faults() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let xml = media::resp_video_encoder_configuration_options(&s, &vec_options_body("VEC_99"));
+        assert!(
+            xml.contains("NoSuchConfig-VECOPT-5508: VEC_99"),
+            "the fault must name the token that was rejected; got: {xml}"
+        );
+        assert!(!xml.contains("ResolutionsAvailable"));
+    }
+
+    // ── Media1 video source options ───────────────────────────────────────
+
+    fn vsc_options_body(token: &str) -> String {
+        format!(
+            "<trt:GetVideoSourceConfigurationOptions>\
+               <trt:ConfigurationToken>{token}</trt:ConfigurationToken>\
+             </trt:GetVideoSourceConfigurationOptions>"
+        )
+    }
+
+    #[test]
+    fn video_source_options_are_per_channel() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let lens1 = media::resp_video_source_configuration_options(&s, &vsc_options_body("VSC_1"));
+        let lens2 = media::resp_video_source_configuration_options(&s, &vsc_options_body("VSC_2"));
+
+        assert!(lens1.contains("<tt:Max>2592</tt:Max>"), "VSC_1 bounds");
+        assert!(lens2.contains("<tt:Max>1280</tt:Max>"), "VSC_2 bounds");
+        assert!(!lens2.contains("<tt:Max>2592</tt:Max>"));
+        // Each names only its own sensor.
+        assert!(lens1.contains("<tt:VideoSourceTokensAvailable>VS_1<"));
+        assert!(lens2.contains("<tt:VideoSourceTokensAvailable>VS_2<"));
+    }
+
+    #[test]
+    fn video_source_options_without_token_faults() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let xml = media::resp_video_source_configuration_options(
+            &s,
+            "<trt:GetVideoSourceConfigurationOptions/>",
+        );
+        assert!(xml.contains("NoConfigToken-VSCOPT-5503"), "got: {xml}");
+        assert!(!xml.contains("BoundsRange"));
+    }
+
+    #[test]
+    fn video_source_options_unknown_token_faults() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let xml = media::resp_video_source_configuration_options(&s, &vsc_options_body("VSC_9"));
+        assert!(
+            xml.contains("NoSuchConfig-VSCOPT-5504: VSC_9"),
+            "got: {xml}"
+        );
+        assert!(!xml.contains("BoundsRange"));
+    }
+
+    // ── Media1 singular getters ───────────────────────────────────────────
+
+    #[test]
+    fn get_video_encoder_configuration_is_per_channel() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let body = |t: &str| {
+            format!(
+                "<trt:GetVideoEncoderConfiguration>\
+                   <trt:ConfigurationToken>{t}</trt:ConfigurationToken>\
+                 </trt:GetVideoEncoderConfiguration>"
+            )
+        };
+        let one = media::resp_video_encoder_configuration(&s, &body("VEC_1"));
+        let three = media::resp_video_encoder_configuration(&s, &body("VEC_3"));
+        assert!(one.contains(r#"token="VEC_1""#) && one.contains("<tt:Width>1920</tt:Width>"));
+        assert!(three.contains(r#"token="VEC_3""#) && three.contains("<tt:Width>1280</tt:Width>"));
+        assert!(!three.contains(r#"token="VEC_1""#));
+
+        // JPEG channels carry no tt:H264 block — it is an encoding-specific
+        // element and a conformant device does not send it here.
+        let four = media::resp_video_encoder_configuration(&s, &body("VEC_4"));
+        assert!(four.contains("<tt:Encoding>JPEG</tt:Encoding>"));
+        assert!(!four.contains("<tt:H264>"));
+    }
+
+    #[test]
+    fn get_video_encoder_configuration_unknown_token_faults() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let xml = media::resp_video_encoder_configuration(
+            &s,
+            "<trt:GetVideoEncoderConfiguration>\
+               <trt:ConfigurationToken>VEC_77</trt:ConfigurationToken>\
+             </trt:GetVideoEncoderConfiguration>",
+        );
+        assert!(xml.contains("NoSuchConfig-VEC-5506: VEC_77"), "got: {xml}");
+    }
+
+    #[test]
+    fn get_video_source_configuration_is_per_channel() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let body = |t: &str| {
+            format!(
+                "<trt:GetVideoSourceConfiguration>\
+                   <trt:ConfigurationToken>{t}</trt:ConfigurationToken>\
+                 </trt:GetVideoSourceConfiguration>"
+            )
+        };
+        let one = media::resp_video_source_configuration(&s, &body("VSC_1"));
+        let two = media::resp_video_source_configuration(&s, &body("VSC_2"));
+        assert!(one.contains("<tt:SourceToken>VS_1</tt:SourceToken>"));
+        assert!(two.contains("<tt:SourceToken>VS_2</tt:SourceToken>"));
+        assert!(!two.contains("<tt:SourceToken>VS_1</tt:SourceToken>"));
+    }
+
+    #[test]
+    fn get_video_source_configuration_unknown_token_faults() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let xml = media::resp_video_source_configuration(
+            &s,
+            "<trt:GetVideoSourceConfiguration>\
+               <trt:ConfigurationToken>VSC_77</trt:ConfigurationToken>\
+             </trt:GetVideoSourceConfiguration>",
+        );
+        assert!(xml.contains("NoSuchConfig-VSC-5502: VSC_77"), "got: {xml}");
+    }
+
+    // ── Media2 ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn media2_video_encoder_options_are_per_channel() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let body = |t: &str| {
+            format!(
+                "<tr2:GetVideoEncoderConfigurationOptions>\
+                   <tr2:ConfigurationToken>{t}</tr2:ConfigurationToken>\
+                 </tr2:GetVideoEncoderConfigurationOptions>"
+            )
+        };
+        let lens1 = media2::resp_video_encoder_configuration_options_media2(&s, &body("VEC_1"));
+        let lens2 = media2::resp_video_encoder_configuration_options_media2(&s, &body("VEC_3"));
+
+        assert!(lens1.contains("<tt:Width>2592</tt:Width>"));
+        assert!(!lens2.contains("<tt:Width>2592</tt:Width>"));
+        // Only the 5MP sensor advertises H.265, so codec support is per-channel
+        // too, not a device-wide fact.
+        assert!(lens1.contains("<tt:Encoding>H265</tt:Encoding>"));
+        assert!(!lens2.contains("<tt:Encoding>H265</tt:Encoding>"));
+        assert!(lens2.contains("<tt:Encoding>H264</tt:Encoding>"));
+    }
+
+    #[test]
+    fn media2_video_encoder_options_without_token_faults() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let xml = media2::resp_video_encoder_configuration_options_media2(
+            &s,
+            "<tr2:GetVideoEncoderConfigurationOptions/>",
+        );
+        assert!(xml.contains("NoConfigToken-VECOPT2-5513"), "got: {xml}");
+        assert!(!xml.contains("ResolutionsAvailable"));
+    }
+
+    #[test]
+    fn media2_video_encoder_options_unknown_token_faults() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let xml = media2::resp_video_encoder_configuration_options_media2(
+            &s,
+            "<tr2:GetVideoEncoderConfigurationOptions>\
+               <tr2:ConfigurationToken>VEC_42</tr2:ConfigurationToken>\
+             </tr2:GetVideoEncoderConfigurationOptions>",
+        );
+        assert!(
+            xml.contains("NoSuchConfig-VECOPT2-5514: VEC_42"),
+            "got: {xml}"
+        );
+    }
+
+    #[test]
+    fn media2_video_source_options_are_per_channel() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let body = |t: &str| {
+            format!(
+                "<tr2:GetVideoSourceConfigurationOptions>\
+                   <tr2:ConfigurationToken>{t}</tr2:ConfigurationToken>\
+                 </tr2:GetVideoSourceConfigurationOptions>"
+            )
+        };
+        let one = media2::resp_video_source_configuration_options_media2(&s, &body("VSC_1"));
+        let two = media2::resp_video_source_configuration_options_media2(&s, &body("VSC_2"));
+        assert!(one.contains("<tt:VideoSourceTokensAvailable>VS_1<"));
+        assert!(two.contains("<tt:VideoSourceTokensAvailable>VS_2<"));
+        assert!(one.contains("<tt:Max>2592</tt:Max>"));
+        assert!(!two.contains("<tt:Max>2592</tt:Max>"));
+    }
+
+    #[test]
+    fn media2_video_source_options_unknown_token_faults() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let xml = media2::resp_video_source_configuration_options_media2(
+            &s,
+            "<tr2:GetVideoSourceConfigurationOptions>\
+               <tr2:ConfigurationToken>VSC_42</tr2:ConfigurationToken>\
+             </tr2:GetVideoSourceConfigurationOptions>",
+        );
+        assert!(
+            xml.contains("NoSuchConfig-VSCOPT2-5512: VSC_42"),
+            "got: {xml}"
+        );
+    }
+
+    /// A Set must write the channel it names and leave the other three alone.
+    ///
+    /// The old version of this test asserted `!xml.contains("H265")` after
+    /// setting the single global config to H264 — with four channels and no
+    /// H265 among them that assertion is true no matter what the handler does,
+    /// so it is replaced by one that reads the sibling channels.
+    #[test]
+    fn media2_set_video_encoder_writes_only_the_named_channel() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let body = r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_3">
+            <tt:Name>Retuned</tt:Name>
+            <tt:Encoding>H264</tt:Encoding>
+            <tt:Resolution><tt:Width>704</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
+            <tt:RateControl><tt:FrameRateLimit>12</tt:FrameRateLimit><tt:BitrateLimit>777</tt:BitrateLimit></tt:RateControl>
+            <tt:GovLength>60</tt:GovLength>
+            <tt:Profile>High</tt:Profile>
+            <tt:Quality>6</tt:Quality>
+          </tr2:Configuration></tr2:SetVideoEncoderConfiguration>"#;
+        let resp = media2::handle_set_video_encoder_configuration(&s, body);
+        assert!(resp.contains("SetVideoEncoderConfigurationResponse"));
+        assert!(!resp.contains("Fault"));
+
+        let snap = s.read();
+        let by = |t: &str| snap.video_encoders.iter().find(|c| c.token == t).unwrap();
+        let three = by("VEC_3");
+        assert_eq!(three.name, "Retuned");
+        assert_eq!((three.width, three.height), (704, 480));
+        assert_eq!(three.bitrate_limit, 777);
+        assert_eq!(three.gov_length, 60);
+        // The other three keep their factory values — in particular VEC_1 must
+        // not have picked up VEC_3's bitrate.
+        assert_eq!(by("VEC_1").bitrate_limit, 4096);
+        assert_eq!(by("VEC_1").name, "MainStream");
+        assert_eq!(by("VEC_2").bitrate_limit, 1024);
+        assert_eq!(by("VEC_4").bitrate_limit, 512);
+    }
+
+    #[test]
+    fn media2_set_video_encoder_without_token_faults() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let resp = media2::handle_set_video_encoder_configuration(
+            &s,
+            "<tr2:SetVideoEncoderConfiguration><tr2:Configuration>\
+               <tt:Name>Nope</tt:Name>\
+             </tr2:Configuration></tr2:SetVideoEncoderConfiguration>",
+        );
+        assert!(resp.contains("NoConfigToken-SETVEC2-5515"), "got: {resp}");
+        // And no channel was renamed on the way past.
+        assert!(s.read().video_encoders.iter().all(|c| c.name != "Nope"));
+    }
+
+    #[test]
+    fn media2_set_video_encoder_unknown_token_faults() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let resp = media2::handle_set_video_encoder_configuration(
+            &s,
+            r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_88">
+               <tt:Name>Nope</tt:Name>
+             </tr2:Configuration></tr2:SetVideoEncoderConfiguration>"#,
+        );
+        assert!(
+            resp.contains("NoSuchConfig-SETVEC2-5516: VEC_88"),
+            "got: {resp}"
+        );
+        assert!(s.read().video_encoders.iter().all(|c| c.name != "Nope"));
     }
 }

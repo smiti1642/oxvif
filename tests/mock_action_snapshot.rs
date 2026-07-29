@@ -498,7 +498,7 @@ async fn observed() -> Vec<(&'static str, String)> {
     probe!(
         out,
         "get_video_source_configuration_options",
-        get_video_source_configuration_options(MEDIA, Some(VSC))
+        get_video_source_configuration_options(MEDIA, VSC)
     );
     probe!(
         out,
@@ -524,7 +524,7 @@ async fn observed() -> Vec<(&'static str, String)> {
     probe!(
         out,
         "get_video_encoder_configuration_options",
-        get_video_encoder_configuration_options(MEDIA, Some(VEC))
+        get_video_encoder_configuration_options(MEDIA, VEC)
     );
     probe!(out, "get_osds", get_osds(MEDIA, Some(VSC)));
     probe!(out, "get_osd", get_osd(MEDIA, OSD));
@@ -623,7 +623,7 @@ async fn observed() -> Vec<(&'static str, String)> {
     probe!(
         out,
         "get_video_source_configuration_options_media2",
-        get_video_source_configuration_options_media2(MEDIA2, Some(VSC))
+        get_video_source_configuration_options_media2(MEDIA2, VSC)
     );
     probe!(
         out,
@@ -649,7 +649,7 @@ async fn observed() -> Vec<(&'static str, String)> {
     probe!(
         out,
         "get_video_encoder_configuration_options_media2",
-        get_video_encoder_configuration_options_media2(MEDIA2, Some(VEC))
+        get_video_encoder_configuration_options_media2(MEDIA2, VEC)
     );
     probe!(
         out,
@@ -711,7 +711,7 @@ async fn observed() -> Vec<(&'static str, String)> {
     probe!(
         out,
         "get_audio_encoder_configuration_options_media2",
-        get_audio_encoder_configuration_options_media2(MEDIA2, Some(AEC))
+        get_audio_encoder_configuration_options_media2(MEDIA2, AEC)
     );
     {
         let c = fresh();

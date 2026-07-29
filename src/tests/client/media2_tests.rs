@@ -171,7 +171,7 @@ async fn test_get_video_encoder_configuration_options_media2_parses_options() {
     let opts = client
         .get_video_encoder_configuration_options_media2(
             "http://192.168.1.1/onvif/media2_service",
-            None,
+            "VEC_1",
         )
         .await
         .unwrap();
@@ -621,7 +621,7 @@ async fn test_get_video_source_configuration_options_media2_returns_ranges() {
         .with_transport(mock(video_source_configuration_options_media2_xml()));
 
     let opts = client
-        .get_video_source_configuration_options_media2("http://192.168.1.1/onvif/media2", None)
+        .get_video_source_configuration_options_media2("http://192.168.1.1/onvif/media2", "VSC_1")
         .await
         .unwrap();
 
@@ -771,7 +771,7 @@ async fn test_get_audio_encoder_configuration_options_media2_returns_lists() {
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
 
     let opts = client
-        .get_audio_encoder_configuration_options_media2("http://192.168.1.1/onvif/media2", None)
+        .get_audio_encoder_configuration_options_media2("http://192.168.1.1/onvif/media2", "AEC_1")
         .await
         .unwrap();
 

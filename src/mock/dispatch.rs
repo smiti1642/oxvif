@@ -93,15 +93,19 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
         "DeleteProfile" => media::handle_delete_profile(state, body),
         "GetStreamUri" => media::resp_stream_uri(),
         "GetSnapshotUri" => media::resp_snapshot_uri(base),
-        "GetVideoSources" => media::resp_video_sources(),
-        "GetVideoSourceConfigurations" => media::resp_video_source_configurations(),
-        "GetVideoSourceConfiguration" => media::resp_video_source_configuration(),
+        "GetVideoSources" => media::resp_video_sources(state),
+        "GetVideoSourceConfigurations" => media::resp_video_source_configurations(state),
+        "GetVideoSourceConfiguration" => media::resp_video_source_configuration(state, body),
         "SetVideoSourceConfiguration" => resp_empty("trt", "SetVideoSourceConfigurationResponse"),
-        "GetVideoSourceConfigurationOptions" => media::resp_video_source_configuration_options(),
-        "GetVideoEncoderConfigurations" => media::resp_video_encoder_configurations(),
-        "GetVideoEncoderConfiguration" => media::resp_video_encoder_configuration(),
+        "GetVideoSourceConfigurationOptions" => {
+            media::resp_video_source_configuration_options(state, body)
+        }
+        "GetVideoEncoderConfigurations" => media::resp_video_encoder_configurations(state, body),
+        "GetVideoEncoderConfiguration" => media::resp_video_encoder_configuration(state, body),
         "SetVideoEncoderConfiguration" => resp_empty("trt", "SetVideoEncoderConfigurationResponse"),
-        "GetVideoEncoderConfigurationOptions" => media::resp_video_encoder_configuration_options(),
+        "GetVideoEncoderConfigurationOptions" => {
+            media::resp_video_encoder_configuration_options(state, body)
+        }
         "AddVideoEncoderConfiguration" => resp_empty("trt", "AddVideoEncoderConfigurationResponse"),
         "RemoveVideoEncoderConfiguration" => {
             resp_empty("trt", "RemoveVideoEncoderConfigurationResponse")
@@ -136,17 +140,17 @@ fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
         "RemoveConfiguration" => resp_empty("tr2", "RemoveConfigurationResponse"),
         "GetStreamUri" => media2::resp_stream_uri_media2(),
         "GetSnapshotUri" => media2::resp_snapshot_uri_media2(base),
-        "GetVideoSourceConfigurations" => media2::resp_video_source_configurations_media2(),
+        "GetVideoSourceConfigurations" => media2::resp_video_source_configurations_media2(state),
         "SetVideoSourceConfiguration" => resp_empty("tr2", "SetVideoSourceConfigurationResponse"),
         "GetVideoSourceConfigurationOptions" => {
-            media2::resp_video_source_configuration_options_media2()
+            media2::resp_video_source_configuration_options_media2(state, body)
         }
         "GetVideoEncoderConfigurations" => media2::resp_video_encoder_configurations(state, body),
         "SetVideoEncoderConfiguration" => {
             media2::handle_set_video_encoder_configuration(state, body)
         }
         "GetVideoEncoderConfigurationOptions" => {
-            media2::resp_video_encoder_configuration_options_media2()
+            media2::resp_video_encoder_configuration_options_media2(state, body)
         }
         "GetVideoEncoderInstances" => media2::resp_video_encoder_instances(),
         "GetMetadataConfigurations" => media2::resp_metadata_configurations(),

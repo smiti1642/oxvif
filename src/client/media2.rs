@@ -139,19 +139,15 @@ impl OnvifClient {
     pub async fn get_video_source_configuration_options_media2(
         &self,
         media2_url: &str,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<VideoSourceConfigurationOptions, OnvifError> {
         const ACTION: &str =
             "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions";
-        let inner = match config_token {
-            Some(tok) => format!(
-                "<tr2:ConfigurationToken>{}</tr2:ConfigurationToken>",
-                xml_escape(tok)
-            ),
-            None => String::new(),
-        };
         let body = format!(
-            "<tr2:GetVideoSourceConfigurationOptions>{inner}</tr2:GetVideoSourceConfigurationOptions>"
+            "<tr2:GetVideoSourceConfigurationOptions>\
+               <tr2:ConfigurationToken>{}</tr2:ConfigurationToken>\
+             </tr2:GetVideoSourceConfigurationOptions>",
+            xml_escape(config_token)
         );
 
         let xml = self.call(media2_url, ACTION, &body).await?;
@@ -221,25 +217,30 @@ impl OnvifClient {
         Ok(())
     }
 
-    /// Retrieve the valid parameter ranges for video encoder configuration via Media2.
+    /// Retrieve the valid parameter ranges for one video encoder configuration
+    /// via Media2.
     ///
-    /// Media2 returns one options entry per supported encoding type.
+    /// Media2 returns one options entry per supported encoding type — and which
+    /// encodings are on offer is itself per-channel, so the set you get back
+    /// depends on `config_token`.
+    ///
+    /// # Changed in 0.15
+    ///
+    /// `config_token` was `Option<&str>` and is now required, for the reason
+    /// spelled out on the Media1 counterpart
+    /// [`get_video_encoder_configuration_options`](Self::get_video_encoder_configuration_options).
     pub async fn get_video_encoder_configuration_options_media2(
         &self,
         media2_url: &str,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<VideoEncoderConfigurationOptions2, OnvifError> {
         const ACTION: &str =
             "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurationOptions";
-        let inner = match config_token {
-            Some(tok) => format!(
-                "<tr2:ConfigurationToken>{}</tr2:ConfigurationToken>",
-                xml_escape(tok)
-            ),
-            None => String::new(),
-        };
         let body = format!(
-            "<tr2:GetVideoEncoderConfigurationOptions>{inner}</tr2:GetVideoEncoderConfigurationOptions>"
+            "<tr2:GetVideoEncoderConfigurationOptions>\
+               <tr2:ConfigurationToken>{}</tr2:ConfigurationToken>\
+             </tr2:GetVideoEncoderConfigurationOptions>",
+            xml_escape(config_token)
         );
 
         let xml = self.call(media2_url, ACTION, &body).await?;
@@ -497,23 +498,24 @@ impl OnvifClient {
     /// Retrieve audio encoder configuration options via Media2.
     ///
     /// ONVIF Media2 WSDL `GetAudioEncoderConfigurationOptions` — Profile T §8.11.
+    ///
+    /// # Changed in 0.15
+    ///
+    /// `config_token` was `Option<&str>` and is now required. The Media1
+    /// counterpart `get_audio_encoder_configuration_options` has always
+    /// required it; the two sat in the same file disagreeing.
     pub async fn get_audio_encoder_configuration_options_media2(
         &self,
         media2_url: &str,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<AudioEncoderConfigurationOptions, OnvifError> {
         const ACTION: &str =
             "http://www.onvif.org/ver20/media/wsdl/GetAudioEncoderConfigurationOptions";
-        let inner = config_token
-            .map(|tok| {
-                format!(
-                    "<tr2:ConfigurationToken>{}</tr2:ConfigurationToken>",
-                    xml_escape(tok)
-                )
-            })
-            .unwrap_or_default();
         let body = format!(
-            "<tr2:GetAudioEncoderConfigurationOptions>{inner}</tr2:GetAudioEncoderConfigurationOptions>"
+            "<tr2:GetAudioEncoderConfigurationOptions>\
+               <tr2:ConfigurationToken>{}</tr2:ConfigurationToken>\
+             </tr2:GetAudioEncoderConfigurationOptions>",
+            xml_escape(config_token)
         );
         let xml = self.call(media2_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;

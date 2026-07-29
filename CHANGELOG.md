@@ -116,6 +116,76 @@ two-thirds of the test suite.
 - `parse_space_range` in `src/types/ptz_config.rs` is now `pub(crate)`, reused
   by the preset-tour option types rather than duplicated.
 
+- **The mock device is now a two-sensor camera.** `MockState` gained
+  `video_sources`, `video_source_configs` and `video_encoders` (a `Vec`, where
+  there used to be one `video_encoder`), holding two sensors, two source
+  configs and four encoder configs — `VS_1`/`VS_2`, `VSC_1`/`VSC_2`,
+  `VEC_1`…`VEC_4` — plus `Profile_3` and `Profile_4` so both lenses are
+  reachable through a profile. Transcribed from a real two-sensor device
+  measured 2026-07-28.
+
+  The sensors deliberately **disagree**: `VS_1` reaches 2592x1944, `VS_2` stops
+  at 1280x720, and only `VS_1` advertises H.265 in Media2. That is the whole
+  point — the previous single-sensor fixture could not distinguish a responder
+  that reads the configuration token from one that ignores it, so *every*
+  per-channel test in the tree passed against a token-blind device. Ten new
+  end-to-end tests in `tests/mock_multi_sensor.rs` drive the real client
+  against the real mock server and assert the two channels answer differently.
+
+  Users of `oxvif::mock` will see `get_video_sources()` return **2** entries
+  where it returned 1, `get_profiles()` return **4** where it returned 2, and
+  `get_video_encoder_configurations()` return **4** where it returned 2.
+
+- **One rendering path per configuration in the mock.** `VEC_2` used to be
+  `H264_sub`/H264/640x480 when rendered inline in a profile and
+  `SubStream`/JPEG/640x480 when rendered in the configuration list — three
+  hardcoded copies of the same object that disagreed. All now render from the
+  single state entry. Media1 and Media2 also no longer report different
+  encodings for the same token.
+
+### Breaking
+
+- **`config_token` is now required on four options getters.** The parameter
+  changed from `Option<&str>` to `&str` on:
+  `get_video_encoder_configuration_options`,
+  `get_video_source_configuration_options`,
+  `get_video_encoder_configuration_options_media2`,
+  `get_video_source_configuration_options_media2`, and
+  `get_audio_encoder_configuration_options_media2` — plus the matching
+  `OnvifSession` wrappers. Callers get `E0308`; wrap-free migration is to drop
+  the `Some(…)`.
+
+  The schema marks the token optional, so this is stricter than the WSDL, and
+  deliberately. On a multi-sensor camera a token-less request is answered for
+  the device's *default* channel with nothing in the response to say which one
+  that was. Measured 2026-07-28: a token-less
+  `GetVideoEncoderConfigurationOptions` returned lens 0's list
+  (`2592x1944 … 1280x720`) — the same list a caller would then show for lens 1,
+  whose real maximum is `1280x720`. On a single-sensor camera the wrong answer
+  is indistinguishable from the right one.
+
+  If you were passing `None`, there is no correct channel-less answer to
+  migrate to: pick a configuration from
+  `get_video_encoder_configurations` / `get_video_source_configurations`.
+  The configuration token alone was enough on the measured device; the profile
+  token was not required.
+
+  `get_audio_encoder_configuration_options` (Media1) has always required it —
+  the two sat in the same file disagreeing.
+
+- **The mock faults on a per-channel request with no token**, rather than
+  answering for a default channel: `env:Sender` /
+  `NoConfigToken-VECOPT-5507` and siblings. Unknown tokens fault too, and the
+  reason names the rejected token. Real devices vary here; the mock is strict
+  on purpose, because the omission is a client bug that a permissive device
+  hides.
+
+- **`MockState::video_encoder` is now `video_encoders: Vec<VideoEncoderState>`**,
+  and `VideoEncoderState` gained `source_token` and `resolutions`. Both new
+  fields are `#[serde(default)]`, so a persisted state file still loads.
+  Media2's `SetVideoEncoderConfiguration` now uses the posted token to *select*
+  which channel to write instead of renaming the single global config.
+
 ---
 
 ## [0.14.0] - 2026-07-27

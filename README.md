@@ -1280,6 +1280,23 @@ HTTP extras: `GET /mock/snapshot.jpg`, `POST /admin/inject_fault?action=&code=&r
 `DeviceState` is `serde`-serializable for snapshot/restore; the library itself
 never writes to disk.
 
+#### The mock is a two-sensor camera
+
+Since 0.15 the mock presents **two lenses**, not one — `VS_1` and `VS_2`, with
+source configs `VSC_1`/`VSC_2`, encoder configs `VEC_1`…`VEC_4` (main + sub per
+sensor), and four profiles. The numbers come from a real dual-sensor device.
+
+The two sensors deliberately **disagree**: `VS_1` reaches 2592x1944 and offers
+H.265 on Media2; `VS_2` stops at 1280x720 and offers H.264 only. That is what
+makes the fixture worth having — a single-sensor mock answers every channel
+identically, so it cannot tell a client that passes the configuration token
+from one that drops it. Both look correct.
+
+For the same reason the mock **faults** on a per-channel `Get…Options` with no
+`ConfigurationToken` rather than answering for a default channel. Real devices
+usually answer; this one refuses, because a token-less call is a client bug
+that a permissive device hides.
+
 ### Standalone mock server (`cargo run`)
 
 The `examples/mock_server` binary wraps `oxvif::mock::MockServer` with TOML file

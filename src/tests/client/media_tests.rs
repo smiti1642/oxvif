@@ -306,7 +306,7 @@ async fn test_get_video_encoder_configuration_options_parses_h264() {
         .with_transport(mock(video_encoder_configuration_options_xml()));
 
     let opts = client
-        .get_video_encoder_configuration_options("http://192.168.1.1/onvif/media_service", None)
+        .get_video_encoder_configuration_options("http://192.168.1.1/onvif/media_service", "VEC_1")
         .await
         .unwrap();
 
@@ -1431,7 +1431,7 @@ async fn test_get_video_source_configuration_options_returns_ranges() {
         .with_transport(mock(video_source_configuration_options_xml()));
 
     let opts = client
-        .get_video_source_configuration_options("http://192.168.1.1/onvif/media_service", None)
+        .get_video_source_configuration_options("http://192.168.1.1/onvif/media_service", "VSC_1")
         .await
         .unwrap();
 
@@ -1663,4 +1663,103 @@ async fn media_service_capabilities_missing_streaming() {
         .await
         .unwrap_err();
     assert_missing_field(err, "Capabilities/StreamingCapabilities");
+}
+
+// ── Per-channel options: the token must reach the wire ────────────────────────
+//
+// `config_token` became required in 0.15 (see the method docs). These pin the
+// half the mock cannot: that the *client* puts the token it was given into the
+// request, and reports the device's refusal faithfully when it is wrong.
+
+#[tokio::test]
+async fn get_video_encoder_configuration_options_sends_the_token() {
+    let (transport, captured) = RecordingTransport::new(video_encoder_configuration_options_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .get_video_encoder_configuration_options("http://192.168.1.1/onvif/media_service", "VEC_3")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurationOptions"
+    );
+    assert!(
+        c.body
+            .contains("<trt:ConfigurationToken>VEC_3</trt:ConfigurationToken>"),
+        "the channel must be named in the request; body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn get_video_encoder_configuration_options_escapes_the_token() {
+    let (transport, captured) = RecordingTransport::new(video_encoder_configuration_options_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .get_video_encoder_configuration_options(
+            "http://192.168.1.1/onvif/media_service",
+            "VEC<&>1",
+        )
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert!(
+        c.body
+            .contains("<trt:ConfigurationToken>VEC&lt;&amp;&gt;1</trt:ConfigurationToken>"),
+        "body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn get_video_encoder_configuration_options_rejected_token_reports_the_fault() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
+        &make_soap_fault_xml("env:Sender", "NoSuchConfig-VECOPT-5508: VEC_99"),
+    ));
+
+    let err = client
+        .get_video_encoder_configuration_options("http://192.168.1.1/onvif/media_service", "VEC_99")
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Sender", "NoSuchConfig-VECOPT-5508: VEC_99");
+}
+
+#[tokio::test]
+async fn get_video_source_configuration_options_sends_the_token() {
+    let (transport, captured) = RecordingTransport::new(video_source_configuration_options_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .get_video_source_configuration_options("http://192.168.1.1/onvif/media_service", "VSC_2")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert!(
+        c.body
+            .contains("<trt:ConfigurationToken>VSC_2</trt:ConfigurationToken>"),
+        "body was: {}",
+        c.body
+    );
+}
+
+#[tokio::test]
+async fn get_video_source_configuration_options_rejected_token_reports_the_fault() {
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
+        &make_soap_fault_xml("env:Sender", "NoSuchConfig-VSCOPT-5504: VSC_9"),
+    ));
+
+    let err = client
+        .get_video_source_configuration_options("http://192.168.1.1/onvif/media_service", "VSC_9")
+        .await
+        .unwrap_err();
+    assert_fault(err, "env:Sender", "NoSuchConfig-VSCOPT-5504: VSC_9");
 }

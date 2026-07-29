@@ -656,7 +656,7 @@ impl OnvifSession {
     /// Retrieve valid parameter ranges for video source configuration.
     pub async fn get_video_source_configuration_options(
         &self,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<VideoSourceConfigurationOptions, OnvifError> {
         self.client
             .get_video_source_configuration_options(self.media_url()?, config_token)
@@ -692,10 +692,13 @@ impl OnvifSession {
             .await
     }
 
-    /// Retrieve valid parameter ranges for video encoder configuration.
+    /// Retrieve valid parameter ranges for one video encoder configuration.
+    ///
+    /// `config_token` is required — see the client method for why a token-less
+    /// call is unsafe on a multi-sensor device.
     pub async fn get_video_encoder_configuration_options(
         &self,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<VideoEncoderConfigurationOptions, OnvifError> {
         self.client
             .get_video_encoder_configuration_options(self.media_url()?, config_token)
@@ -872,7 +875,7 @@ impl OnvifSession {
     /// Retrieve valid parameter ranges for video source configuration via Media2.
     pub async fn get_video_source_configuration_options_media2(
         &self,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<VideoSourceConfigurationOptions, OnvifError> {
         self.client
             .get_video_source_configuration_options_media2(self.media2_url()?, config_token)
@@ -908,10 +911,11 @@ impl OnvifSession {
             .await
     }
 
-    /// Retrieve valid parameter ranges for video encoder configuration via Media2.
+    /// Retrieve valid parameter ranges for one video encoder configuration via
+    /// Media2. `config_token` is required.
     pub async fn get_video_encoder_configuration_options_media2(
         &self,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<VideoEncoderConfigurationOptions2, OnvifError> {
         self.client
             .get_video_encoder_configuration_options_media2(self.media2_url()?, config_token)
@@ -1019,9 +1023,10 @@ impl OnvifSession {
     }
 
     /// Retrieve audio encoder configuration options via Media2.
+    /// `config_token` is required.
     pub async fn get_audio_encoder_configuration_options_media2(
         &self,
-        config_token: Option<&str>,
+        config_token: &str,
     ) -> Result<AudioEncoderConfigurationOptions, OnvifError> {
         self.client
             .get_audio_encoder_configuration_options_media2(self.media2_url()?, config_token)
