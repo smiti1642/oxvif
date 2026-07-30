@@ -78,7 +78,7 @@ fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
         "StartFirmwareUpgrade" => device::resp_start_firmware_upgrade(base),
         "StartSystemRestore" => device::resp_start_system_restore(base),
         "GetDiscoveryMode" => device::resp_discovery_mode(state),
-        "SetDiscoveryMode" => resp_empty("tds", "SetDiscoveryModeResponse"),
+        "SetDiscoveryMode" => device::handle_set_discovery_mode(state, body),
         "SystemReboot" => device::resp_system_reboot(),
         _ => return None,
     })
@@ -96,7 +96,7 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
         "GetVideoSources" => media::resp_video_sources(state),
         "GetVideoSourceConfigurations" => media::resp_video_source_configurations(state),
         "GetVideoSourceConfiguration" => media::resp_video_source_configuration(state, body),
-        "SetVideoSourceConfiguration" => resp_empty("trt", "SetVideoSourceConfigurationResponse"),
+        "SetVideoSourceConfiguration" => media::handle_set_video_source_configuration(state, body),
         "GetVideoSourceConfigurationOptions" => {
             media::resp_video_source_configuration_options(state, body)
         }
@@ -110,13 +110,18 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
         "GetVideoEncoderConfigurationOptions" => {
             media::resp_video_encoder_configuration_options(state, body)
         }
-        "AddVideoEncoderConfiguration" => resp_empty("trt", "AddVideoEncoderConfigurationResponse"),
-        "RemoveVideoEncoderConfiguration" => {
-            resp_empty("trt", "RemoveVideoEncoderConfigurationResponse")
+        // All four were `resp_empty`, which meant a profile could not be
+        // assembled on the mock at all — create one, add an encoder, read it
+        // back, still empty. Audit §3 items 1.4–1.6.
+        "AddVideoEncoderConfiguration" => {
+            media::handle_add_video_encoder_configuration(state, body)
         }
-        "AddVideoSourceConfiguration" => resp_empty("trt", "AddVideoSourceConfigurationResponse"),
+        "RemoveVideoEncoderConfiguration" => {
+            media::handle_remove_video_encoder_configuration(state, body)
+        }
+        "AddVideoSourceConfiguration" => media::handle_add_video_source_configuration(state, body),
         "RemoveVideoSourceConfiguration" => {
-            resp_empty("trt", "RemoveVideoSourceConfigurationResponse")
+            media::handle_remove_video_source_configuration(state, body)
         }
         "GetAudioSources" => media::resp_audio_sources(),
         "GetAudioSourceConfigurations" => media::resp_audio_source_configurations(),
@@ -144,12 +149,16 @@ fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
         "GetProfiles" => media2::resp_profiles_media2(state),
         "CreateProfile" => media2::handle_create_profile_media2(state, body),
         "DeleteProfile" => media2::handle_delete_profile_media2(state, body),
-        "AddConfiguration" => resp_empty("tr2", "AddConfigurationResponse"),
-        "RemoveConfiguration" => resp_empty("tr2", "RemoveConfigurationResponse"),
+        // Media2's single generic binding operation, over the same four
+        // `ProfileEntry` slots the four Media1 arms above write. Audit §3 item 1.7.
+        "AddConfiguration" => media2::handle_add_configuration_media2(state, body),
+        "RemoveConfiguration" => media2::handle_remove_configuration_media2(state, body),
         "GetStreamUri" => media2::resp_stream_uri_media2(),
         "GetSnapshotUri" => media2::resp_snapshot_uri_media2(base),
         "GetVideoSourceConfigurations" => media2::resp_video_source_configurations_media2(state),
-        "SetVideoSourceConfiguration" => resp_empty("tr2", "SetVideoSourceConfigurationResponse"),
+        "SetVideoSourceConfiguration" => {
+            media2::handle_set_video_source_configuration_media2(state, body)
+        }
         "GetVideoSourceConfigurationOptions" => {
             media2::resp_video_source_configuration_options_media2(state, body)
         }

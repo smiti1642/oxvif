@@ -242,6 +242,128 @@ async fn an_encoder_write_on_either_service_is_visible_to_the_other() {
     );
 }
 
+/// Media1's four named binding operations and Media2's one generic
+/// `AddConfiguration` write the same four `ProfileEntry` slots, so a binding
+/// made through one service must be visible through the other.
+///
+/// Until the Tier 1 wiring (audit §3 items 1.4–1.7) **all five were
+/// `resp_empty`** — every one reported success and bound nothing, so the two
+/// services agreed by both being wrong. That is why this test asserts the
+/// binding is *present* on both sides rather than merely equal on both sides.
+#[tokio::test]
+async fn a_media1_configuration_binding_is_visible_to_media2() {
+    let server = start(state_with_profiles(2)).await;
+    let client = OnvifClient::new(server.device_url());
+    let media_url = format!("{}/onvif/media", server.base_url());
+    let media2_url = format!("{}/onvif/media2", server.base_url());
+
+    let created = client
+        .create_profile(&media_url, "assembled-on-media1", Some("M1_BIND"))
+        .await
+        .expect("Media1 CreateProfile");
+    assert_eq!(
+        created.video_encoder_token, None,
+        "a fresh profile starts with nothing bound"
+    );
+
+    client
+        .add_video_encoder_configuration(&media_url, &created.token, "VEC_2")
+        .await
+        .expect("Media1 AddVideoEncoderConfiguration");
+
+    let via_media2 = client
+        .get_profiles_media2(&media2_url)
+        .await
+        .expect("Media2 GetProfiles")
+        .into_iter()
+        .find(|p| p.token == "M1_BIND")
+        .expect("the created profile is on Media2 too");
+    assert_eq!(
+        via_media2.video_encoder_token.as_deref(),
+        Some("VEC_2"),
+        "a Media1 binding must be visible to Media2 — one profile list, one set of slots",
+    );
+}
+
+/// …and the reverse, through Media2's generic `AddConfiguration`.
+#[tokio::test]
+async fn a_media2_configuration_binding_is_visible_to_media1() {
+    let server = start(state_with_profiles(2)).await;
+    let client = OnvifClient::new(server.device_url());
+    let media_url = format!("{}/onvif/media", server.base_url());
+    let media2_url = format!("{}/onvif/media2", server.base_url());
+
+    let token = client
+        .create_profile_media2(&media2_url, "assembled-on-media2")
+        .await
+        .expect("Media2 CreateProfile");
+    client
+        .add_configuration_media2(&media2_url, &token, "VideoSource", "VSC_2")
+        .await
+        .expect("Media2 AddConfiguration");
+
+    let via_media1 = client
+        .get_profile(&media_url, &token)
+        .await
+        .expect("Media1 GetProfile");
+    assert_eq!(
+        via_media1.video_source_config_token.as_deref(),
+        Some("VSC_2"),
+        "a Media2 binding must be visible to Media1",
+    );
+    // Media1 inlines the whole configuration, so it also resolves the *source*
+    // behind the config — the token reference Media2 sends does not.
+    assert_eq!(
+        via_media1.video_source_token.as_deref(),
+        Some("VS_2"),
+        "Media1 resolves the bound config to its physical source",
+    );
+}
+
+/// A `SetVideoSourceConfiguration` on either service edits the one catalogue.
+/// Both arms were `resp_empty` before the Tier 1 wiring — audit §3 items 1.1
+/// and 1.2, the same shape as the encoder divergence one commit earlier.
+#[tokio::test]
+async fn a_source_config_write_on_either_service_is_visible_to_the_other() {
+    let server = MockServer::start().await.unwrap();
+    let client = OnvifClient::new(server.device_url());
+    let media_url = format!("{}/onvif/media", server.base_url());
+    let media2_url = format!("{}/onvif/media2", server.base_url());
+
+    let mut cfg = client
+        .get_video_source_configuration(&media_url, "VSC_1")
+        .await
+        .expect("read VSC_1");
+    cfg.name = "renamed-via-media1".into();
+    client
+        .set_video_source_configuration(&media_url, &cfg)
+        .await
+        .expect("Media1 SetVideoSourceConfiguration");
+
+    let via_media2 = client
+        .get_video_source_configurations_media2(&media2_url)
+        .await
+        .expect("Media2 GetVideoSourceConfigurations")
+        .into_iter()
+        .find(|c| c.token == "VSC_1")
+        .expect("VSC_1 present on Media2");
+    assert_eq!(via_media2.name, "renamed-via-media1");
+
+    // …and back the other way, so neither direction can be the only one wired.
+    let mut cfg2 = via_media2;
+    cfg2.name = "renamed-via-media2".into();
+    client
+        .set_video_source_configuration_media2(&media2_url, &cfg2)
+        .await
+        .expect("Media2 SetVideoSourceConfiguration");
+
+    let via_media1 = client
+        .get_video_source_configuration(&media_url, "VSC_1")
+        .await
+        .expect("re-read VSC_1 on Media1");
+    assert_eq!(via_media1.name, "renamed-via-media2");
+}
+
 /// The other direction: a Media1 write must reach Media2. This is the half that
 /// a Media2-only fix would still leave broken.
 #[tokio::test]

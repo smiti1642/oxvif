@@ -204,6 +204,28 @@ pub fn resp_discovery_mode(state: &SharedState) -> String {
     )
 }
 
+/// Audit §3 item 1.3 — the getter above has always been state-driven while the
+/// dispatcher answered this with `resp_empty`. Exactly the shape of the reported
+/// Media2 profile bug: a live getter over a discarded write.
+///
+/// Only the two values `tt:DiscoveryMode` defines are accepted. A device that
+/// silently stored `"Maybe"` and echoed it back would round-trip while
+/// describing a state no real camera can be in.
+pub fn handle_set_discovery_mode(state: &SharedState, body: &str) -> String {
+    let mode = extract_tag(body, "DiscoveryMode").unwrap_or_default();
+    if mode != "Discoverable" && mode != "NonDiscoverable" {
+        return crate::mock::helpers::resp_soap_fault(
+            "env:Sender",
+            &format!("InvalidDiscoveryMode-5551: {mode} is not a tt:DiscoveryMode"),
+        );
+    }
+    state.modify(|s| {
+        s.discovery_mode = mode.clone();
+        eprintln!("    [STATE] discovery mode: {mode}");
+    });
+    resp_empty("tds", "SetDiscoveryModeResponse")
+}
+
 // ── Set handlers (mutate state) ─────────────────────────────────────────────
 
 pub fn handle_set_hostname(state: &SharedState, body: &str) -> String {
@@ -487,6 +509,12 @@ pub fn handle_set_network_interfaces(state: &SharedState, body: &str) -> String 
     let dhcp = extract_tag(body, "FromDHCP").map(|v| v == "true");
     let address = extract_tag(body, "Address");
     let prefix: Option<u32> = extract_tag(body, "PrefixLength").and_then(|p| p.parse().ok());
+    // Audit §3 item 1.8. The four reads above landed and this one did not, so
+    // the state log said "interface updated" and `GetNetworkInterfaces` reported
+    // the old MTU — a *partial* write, which reads as wired from every angle
+    // except writing a value and reading it back. Found by
+    // `tests/mock_roundtrip.rs` on its first run.
+    let mtu: Option<u32> = extract_tag(body, "MTU").and_then(|m| m.parse().ok());
 
     state.modify(|s| {
         if !token.is_empty() && token != s.interface.token {
@@ -505,9 +533,15 @@ pub fn handle_set_network_interfaces(state: &SharedState, body: &str) -> String 
         if let Some(p) = prefix {
             s.interface.ipv4_prefix_length = p;
         }
+        if let Some(m) = mtu {
+            s.interface.mtu = m;
+        }
         eprintln!(
-            "    [STATE] interface updated: dhcp={} addr={} /{}",
-            s.interface.ipv4_from_dhcp, s.interface.ipv4_address, s.interface.ipv4_prefix_length,
+            "    [STATE] interface updated: dhcp={} addr={} /{} mtu={}",
+            s.interface.ipv4_from_dhcp,
+            s.interface.ipv4_address,
+            s.interface.ipv4_prefix_length,
+            s.interface.mtu,
         );
     });
 

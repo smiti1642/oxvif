@@ -149,11 +149,48 @@ two-thirds of the test suite.
 
   Not reported — the report named an instance, and the audit found the class.
 
-  New `tests/mock_media1_media2_agree.rs` (7 tests, public API only, over real
+  New `tests/mock_media1_media2_agree.rs` (10 tests, public API only, over real
   HTTP) pins both directions: the two services must return the same profile token
-  set for a seeded *and* the default device, and a create/delete/encoder-write on
-  either must be visible to the other. Every one of the five perturbations —
-  restoring each old behaviour in turn — goes red.
+  set for a seeded *and* the default device, and a create/delete/encoder-write/
+  source-config-write/configuration-binding on either must be visible to the
+  other. Every one of the five perturbations — restoring each old behaviour in
+  turn — goes red.
+
+- **Nine more mock writes reported success and wrote nothing.** The two above
+  were reported; these came from sweeping the class. `SetDiscoveryMode`, both
+  services' `SetVideoSourceConfiguration`, Media1's
+  `Add`/`RemoveVideoEncoderConfiguration` and `Add`/`RemoveVideoSourceConfiguration`,
+  and Media2's `AddConfiguration`/`RemoveConfiguration` were all `resp_empty` in
+  the dispatcher, over getters that **are** state-driven. `resp_empty` arms in
+  `src/mock/dispatch.rs` went from 22 to 13.
+
+  The Add/Remove family is the one that mattered most: it meant **a profile
+  could not be assembled on the mock at all**. Create a profile, add an encoder,
+  read it back — still empty. Any test of profile-assembly logic passed without
+  exercising anything.
+
+  Media1's four named binding operations and Media2's one generic
+  `AddConfiguration` now share `bind_configuration` / `unbind_configuration`
+  over the same four `ProfileEntry` slots, and both services'
+  `SetVideoSourceConfiguration` share `apply_video_source_write` — the same
+  one-state-two-renderers shape as the profile and encoder families above.
+
+  A Media2 `AddConfiguration` naming a `Type` the mock does not model
+  (`Metadata`, `Analytics`, `PTZ`, `AudioOutput`, `AudioDecoder`) now **faults
+  naming the type** instead of reporting success. `ProfileEntry` has four slots
+  and `MediaProfile2` exposes exactly those four, so a success there could never
+  be observed by any caller.
+
+- **`SetNetworkInterfaces` silently dropped `MTU`.** It read `Enabled`,
+  `FromDHCP`, `Address` and `PrefixLength` from the request and wrote all four,
+  and ignored the fifth — which the client does send and `GetNetworkInterfaces`
+  does report. **A partial write is worse than no write**: the state log printed
+  `[STATE] interface updated`, the dispatch arm took `state`, and grepping for
+  `resp_empty` never named it.
+
+  Found by `tests/mock_roundtrip.rs` on its first run, after a hand audit with
+  three probe axes had missed it — only writing a value and reading it back
+  separates a whole write from a partial one.
 
 - **The mock's clock was half-frozen.** `GetSystemDateAndTime` computed the time
   of day from `SystemTime::now()` but hardcoded `<tt:Year>2026</tt:Year>
@@ -352,6 +389,22 @@ two-thirds of the test suite.
   hardcoded copies of the same object that disagreed. All now render from the
   single state entry. Media1 and Media2 also no longer report different
   encodings for the same token.
+
+- **Every mock `Set` now declares whether it round-trips.** New
+  `tests/mock_roundtrip.rs`: **47 `Set → Get` pairs** in one table, public API
+  only, over real HTTP, with a fresh `MockServer` per pair. Each row declares
+  `Expect::Works`, `Expect::Broken(audit §)` — a real defect — or
+  `Expect::Static(audit §)` — a deliberate stub. **All three arms are asserted**,
+  so wiring a `Broken` row up turns the test red telling you to move it, and the
+  list cannot rot into the permanent blind spot an xfail list usually becomes.
+
+  This exists because nothing else distinguished *deliberately static* from *not
+  wired up yet* — not the type system, not the dispatch table, not the tests.
+  `resp_profiles_media2()` (a bug) and `resp_audio_sources()` (a fine stub) had
+  the same signature in the same match block, which is why five instances of that
+  class were reported from **outside** the project. Now: **35 round-trip, 7 are
+  Tier 2 defects with a citation, 5 are declared stubs.** `CLAUDE.md` step 5c
+  makes a row mandatory for every new `Set`.
 
 - **The operation coverage tables moved out of `README.md`** into a new
   top-level **`OPERATIONS.md`**. Ten tables and 104 rows were roughly 8% of the

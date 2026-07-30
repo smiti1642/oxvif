@@ -1,7 +1,7 @@
 use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
 use crate::mock::services::media;
 use crate::mock::state::{ProfileEntry, SharedState, VideoEncoderState};
-use crate::mock::xml_parse::extract_tag;
+use crate::mock::xml_parse::{extract_all_tags, extract_tag};
 
 const NS: &str = r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#;
 
@@ -243,6 +243,90 @@ pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> Str
 /// `SetVideoEncoderConfiguration` (Media2) — persists the posted fields into
 /// state so a following `GetVideoEncoderConfigurations` reflects them. Only the
 /// fields present in the request body are updated.
+pub fn handle_set_video_source_configuration_media2(state: &SharedState, body: &str) -> String {
+    match media::apply_video_source_write(
+        state,
+        body,
+        "NoConfigToken-SETVSC2-5523",
+        "NoSuchConfig-SETVSC2-5524",
+    ) {
+        Ok(()) => resp_empty("tr2", "SetVideoSourceConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+/// `tr2:AddConfiguration` — one generic operation carrying `<tr2:Type>`, where
+/// Media1 has four named ones. It writes the *same* profile slots; only the way
+/// the caller names the slot differs.
+///
+/// A `Type` the mock does not model (`Metadata`, `Analytics`, `PTZ`,
+/// `AudioOutput`, `AudioDecoder`) **faults** rather than reporting success.
+/// `ProfileEntry` has four slots and `MediaProfile2` exposes exactly those four,
+/// so there is no state to write and no getter that could ever show the result —
+/// answering `AddConfigurationResponse` to it would be the audit's LIE cell
+/// (§1), reintroduced by the very commit that removes it. The fault names the
+/// type, so a caller learns *why* instead of being told nothing happened.
+pub fn handle_add_configuration_media2(state: &SharedState, body: &str) -> String {
+    match apply_media2_configuration(state, body, true) {
+        Ok(()) => resp_empty("tr2", "AddConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+pub fn handle_remove_configuration_media2(state: &SharedState, body: &str) -> String {
+    match apply_media2_configuration(state, body, false) {
+        Ok(()) => resp_empty("tr2", "RemoveConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+/// Both directions of the Media2 configuration binding.
+///
+/// The request may carry several `<tr2:Configuration>` children; every one is
+/// applied, and the first unmodelled `Type` aborts before anything is written so
+/// a partial application cannot be mistaken for a whole one.
+fn apply_media2_configuration(state: &SharedState, body: &str, add: bool) -> Result<(), String> {
+    let profile = extract_tag(body, "ProfileToken").unwrap_or_default();
+    let entries = extract_all_tags(body, "Configuration");
+    if entries.is_empty() {
+        return Err(resp_soap_fault(
+            "env:Sender",
+            "NoConfiguration-CFG2-5541: at least one tr2:Configuration is required",
+        ));
+    }
+
+    // Resolve every kind first — see the doc comment above.
+    let mut planned = Vec::new();
+    for entry in &entries {
+        let type_ = extract_tag(entry, "Type").unwrap_or_default();
+        let Some(kind) = media::ConfigKind::from_media2_type(&type_) else {
+            return Err(resp_soap_fault(
+                "ter:ConfigurationConflict",
+                &format!(
+                    "UnmodelledConfigType-CFG2-5542: the mock's ProfileEntry has no slot for \
+                     {type_}, and MediaProfile2 exposes none, so a success here could never be \
+                     observed"
+                ),
+            ));
+        };
+        planned.push((kind, extract_tag(entry, "Token").unwrap_or_default()));
+    }
+
+    for (kind, token) in planned {
+        // The state operations read `ProfileToken` out of the body themselves,
+        // so hand each one a minimal body naming this single binding.
+        let one = format!(
+            "<ProfileToken>{profile}</ProfileToken><ConfigurationToken>{token}</ConfigurationToken>"
+        );
+        if add {
+            media::bind_configuration(state, &one, kind, "ADDCFG2-5543")?;
+        } else {
+            media::unbind_configuration(state, &one, kind, "RMCFG2-5544")?;
+        }
+    }
+    Ok(())
+}
+
 pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
     match media::apply_video_encoder_write(
         state,

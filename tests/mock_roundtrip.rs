@@ -156,12 +156,12 @@ const PAIRS: &[Pair] = pairs![
     "device/users-create"              => Expect::Works, users_create;
     "device/users-delete"              => Expect::Works, users_delete;
     "device/user-level"                => Expect::Works, user_level;
-    "device/network-interfaces"        => Expect::Broken("audit §3 item 1.8"), network_interfaces;
+    "device/network-interfaces"        => Expect::Works                     , network_interfaces;
     "device/network-protocols"         => Expect::Works, network_protocols;
     "device/default-gateway"           => Expect::Works, default_gateway;
     "device/relay-output-settings"     => Expect::Works, relay_output_settings;
     "device/system-date-and-time"      => Expect::Works, system_date_and_time;
-    "device/discovery-mode"            => Expect::Broken("audit §3 item 1.3"), discovery_mode;
+    "device/discovery-mode"            => Expect::Works                     , discovery_mode;
     "device/storage-configuration"     => Expect::Static("audit §5"), storage_configuration;
 
     // ── Media1 ──────────────────────────────────────────────────────────────
@@ -171,20 +171,20 @@ const PAIRS: &[Pair] = pairs![
     "media1/osd-create"                => Expect::Works, m1_osd_create;
     "media1/osd-set"                   => Expect::Works, m1_osd_set;
     "media1/osd-delete"                => Expect::Works, m1_osd_delete;
-    "media1/video-source-config"       => Expect::Broken("audit §3 item 1.1"), m1_video_source_config;
-    "media1/add-video-encoder-config"  => Expect::Broken("audit §3 item 1.4"), m1_add_video_encoder;
-    "media1/remove-video-encoder-cfg"  => Expect::Broken("audit §3 item 1.5"), m1_remove_video_encoder;
-    "media1/add-video-source-config"   => Expect::Broken("audit §3 item 1.6"), m1_add_video_source;
-    "media1/remove-video-source-cfg"   => Expect::Broken("audit §3 item 1.6"), m1_remove_video_source;
+    "media1/video-source-config"       => Expect::Works                     , m1_video_source_config;
+    "media1/add-video-encoder-config"  => Expect::Works                     , m1_add_video_encoder;
+    "media1/remove-video-encoder-cfg"  => Expect::Works                     , m1_remove_video_encoder;
+    "media1/add-video-source-config"   => Expect::Works                     , m1_add_video_source;
+    "media1/remove-video-source-cfg"   => Expect::Works                     , m1_remove_video_source;
     "media1/audio-encoder-config"      => Expect::Static("audit §5"), m1_audio_encoder_config;
 
     // ── Media2 ──────────────────────────────────────────────────────────────
     "media2/profile-create"            => Expect::Works, m2_profile_create;
     "media2/profile-delete"            => Expect::Works, m2_profile_delete;
     "media2/video-encoder-config"      => Expect::Works, m2_video_encoder_config;
-    "media2/video-source-config"       => Expect::Broken("audit §3 item 1.2"), m2_video_source_config;
-    "media2/add-configuration"         => Expect::Broken("audit §3 item 1.7"), m2_add_configuration;
-    "media2/remove-configuration"      => Expect::Broken("audit §3 item 1.7"), m2_remove_configuration;
+    "media2/video-source-config"       => Expect::Works                     , m2_video_source_config;
+    "media2/add-configuration"         => Expect::Works                     , m2_add_configuration;
+    "media2/remove-configuration"      => Expect::Works                     , m2_remove_configuration;
     "media2/metadata-config"           => Expect::Static("audit §5"), m2_metadata_config;
     "media2/audio-encoder-config"      => Expect::Static("audit §5"), m2_audio_encoder_config;
 
@@ -1032,7 +1032,7 @@ async fn every_get_set_pair_matches_its_declared_expectation() {
 
     // And the positive side is not vacuous either: most of the table works.
     assert!(
-        round_tripped >= 25,
+        round_tripped >= 30,
         "only {round_tripped} pairs round-tripped — the mock is far more broken \
          than the table claims",
     );

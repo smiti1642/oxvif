@@ -423,6 +423,43 @@ they catch a class the missing/fault pair cannot:
     handler reads the wrong element. `tests/mock_media1_media2_agree.rs` is the
     standing guard.
 
+5c. **Every `Set` needs a row in `tests/mock_roundtrip.rs`.** The table pairs
+    each write with the getter that should show it, and each row declares
+    `Expect::Works`, `Expect::Broken(audit §)` or `Expect::Static(audit §)`.
+
+    This exists because **nothing else distinguishes "deliberately static" from
+    "not wired up yet"** — not the type system, not the dispatch table, not the
+    tests. `resp_profiles_media2()` (a bug) and `resp_audio_sources()` (a fine
+    stub) had the same signature and sat in the same match block; five instances
+    of that class were reported from *outside* the project before the table
+    existed. Declaring the intent is the whole point, so a row is not optional
+    and `Broken` is a legitimate answer — what is not legitimate is no row.
+
+    All three arms are asserted, not skipped: wire a `Broken` row up and the
+    test goes red telling you to move it. That is what stops the list rotting
+    into the permanent blind spot an xfail list usually becomes.
+
+    Two things the table taught that the SOP did not say before:
+
+    - **A partial write is worse than no write.** `SetNetworkInterfaces` wrote
+      `Enabled`, `FromDHCP`, `Address` and `PrefixLength` and silently dropped
+      `MTU`, which the client sends and the getter reports. The state log said
+      `[STATE] interface updated`, the dispatch arm took `state`, and `grep` for
+      `resp_empty` never named it. **Only writing a value and reading it back
+      finds this.** Found by this table on its first run, after a hand audit
+      with three probe axes had missed it.
+    - **A field you cannot store must be named in a comment.** `Bounds/@x` and
+      `@y` have no home in `VideoSourceConfigEntry`; saying so where the write
+      happens is what keeps a real gap from reading like the `MTU` bug. §6 of the
+      audit states the general rule: a documented omission is a design decision,
+      an undocumented one is a bug.
+
+    When a write has **no getter that could ever show it** — `SetVideoSourceMode`
+    (`VideoSourceMode` has no active-mode field), `SetRelayOutputState`
+    (`GetRelayOutputs` never returns the live state) — there is no pair to add.
+    Prefer faulting over reporting success on such an operation, so the caller
+    learns the mock does not model it instead of being told nothing happened.
+
 ### Quality gate (run before every commit)
 
 ```

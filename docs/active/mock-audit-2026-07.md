@@ -42,21 +42,34 @@ arm in `dispatch.rs`:
 
 ## 2. Headline numbers
 
+Measured before the Tier 1 wiring, and left as measured — the first four lines
+are the "before" picture the rest of this document reasons about.
+
 - **53** write operations in the dispatcher. **29 touch state, 24 do not.**
+  Tier 1 moved **9 dispatch arms** off the unconditional-success helper —
+  `resp_empty` arms in `dispatch.rs` went from **22 to 13**.
 - **19** getters confirmed state-driven by probe. **4 families have no
   `DeviceState` field at all.**
 - **26 of 27** PTZ handlers never receive the request body.
 - `grep -c recording src/mock/state.rs` → **0**.
 - **47** `Set → Get` pairs are now a standing test
-  (`tests/mock_roundtrip.rs`). **27 round-trip, 15 are defects, 5 are declared
-  stubs.**
+  (`tests/mock_roundtrip.rs`). 27 round-tripped, 15 were defects, 5 were
+  declared stubs. **After Tier 1: 35 round-trip, 7 defects (all Tier 2), 5
+  declared stubs.**
 
 ---
 
-## 3. Tier 1 — LIE: state exists, the write is discarded
+## 3. Tier 1 — LIE: state exists, the write is discarded — **fixed**
 
 The getter is state-driven (probe-confirmed), so a caller has every reason to
 believe the write landed. It did not. **This is the reported bug's class.**
+
+**All eight are wired as of the Tier 1 commit**, and every row is now
+`Expect::Works` in `tests/mock_roundtrip.rs`. The table below is kept as the
+record of what was wrong and how it was found; the test is what keeps it fixed.
+Perturbing each new writer back to a no-op reddens exactly the rows it fixed —
+and perturbing the *shared* source-config writer reddens **both** services,
+which is the property CLAUDE.md step 5b asks for.
 
 | # | Operation | Evidence | Fix |
 |---|---|---|---|
@@ -84,12 +97,31 @@ read state" (yes), the dispatch read asks "does the arm take `state`" (yes), and
 distinguishes a whole write from a partial one — which is the argument for the
 property test being step 1 rather than a nicety.
 
-**Size: small.** The state field exists in every case; this is wiring. 1.1–1.2
-and 1.4–1.8 are each ~10 lines plus a test.
+**Size: small.** The state field exists in every case; this was wiring. 1.1–1.2
+and 1.4–1.8 were each ~10 lines plus a test.
 
-**Why it matters beyond tidiness:** 1.4–1.7 mean **a profile cannot be built up
-on the mock**. Create a profile, add an encoder, read it back — still empty. Any
-test of profile-assembly logic passes without exercising anything.
+**Why it mattered beyond tidiness:** 1.4–1.7 meant **a profile could not be
+built up on the mock**. Create a profile, add an encoder, read it back — still
+empty. Any test of profile-assembly logic passed without exercising anything.
+
+### Three decisions taken while wiring it, recorded because they are omissions
+
+Per §6: a documented omission is a design decision, an undocumented one is a bug.
+
+- **`Bounds/@x` and `@y` are read off the wire and dropped.**
+  `VideoSourceConfigEntry` models a size, not an offset, and every renderer emits
+  `x="0" y="0"`. There is no field to write. Said out loud in
+  `apply_video_source_write`, precisely so it never reads like item 1.8.
+- **A Media2 `AddConfiguration` with an unmodelled `Type`** (`Metadata`,
+  `Analytics`, `PTZ`, `AudioOutput`, `AudioDecoder`) **faults** instead of
+  reporting success. `ProfileEntry` has four slots and `MediaProfile2` exposes
+  exactly those four, so a success there could never be observed — it would be
+  the LIE cell reintroduced by the commit that removes it. The fault names the
+  type.
+- **Binding to a *fixed* profile is still allowed.** Real devices refuse. All
+  four seeded mock profiles are fixed, so refusing would leave only freshly
+  created profiles reachable and would flip two `tests/mock_action_snapshot.rs`
+  rows from `ok` to `fault`. That belongs with the fidelity work in Tier 4.
 
 ---
 
@@ -266,7 +298,7 @@ schema-fidelity chase and stall everything else.
 | Step | Why first |
 |---|---|
 | ~~1. Property test **round-trip** (§8.1)~~ **done** — `tests/mock_roundtrip.rs` | It was both probe and guard. Produced the Tier 1 list mechanically, confirmed 46 of 47 hand classifications, and added item 1.8. |
-| 2. Tier 1 wiring (§3) | Small, the fields exist, and step 1's rows flip to `Works` as they land. |
+| ~~2. Tier 1 wiring (§3)~~ **done** — all 8 items | Eight rows moved from `Broken` to `Works`; **35 of 47 pairs now round-trip**. Three new cross-service tests in `tests/mock_media1_media2_agree.rs` cover the bindings and the shared source-config writer. |
 | 3. Tier 2.1 PTZ per-profile (§4.1) | Biggest source of green-when-wrong, and closes a rule we already wrote and left half-applied. |
 | 4. Property test **token discrimination** (§8.2) | Guards step 3 and the 0.15 media/imaging work. |
 | 5. Tier 2.2 recording state (§4.2) | Unblocks Profile G testing, including the health check's own liveness probe. |

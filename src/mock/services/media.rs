@@ -78,6 +78,46 @@ pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -
     }
 }
 
+pub fn handle_set_video_source_configuration(state: &SharedState, body: &str) -> String {
+    match apply_video_source_write(
+        state,
+        body,
+        "NoConfigToken-SETVSC-5521",
+        "NoSuchConfig-SETVSC-5522",
+    ) {
+        Ok(()) => resp_empty("trt", "SetVideoSourceConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+pub fn handle_add_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+    match bind_configuration(state, body, ConfigKind::VideoEncoder, "ADDVEC-5531") {
+        Ok(()) => resp_empty("trt", "AddVideoEncoderConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+pub fn handle_remove_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+    match unbind_configuration(state, body, ConfigKind::VideoEncoder, "RMVEC-5532") {
+        Ok(()) => resp_empty("trt", "RemoveVideoEncoderConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+pub fn handle_add_video_source_configuration(state: &SharedState, body: &str) -> String {
+    match bind_configuration(state, body, ConfigKind::VideoSource, "ADDVSC-5533") {
+        Ok(()) => resp_empty("trt", "AddVideoSourceConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+pub fn handle_remove_video_source_configuration(state: &SharedState, body: &str) -> String {
+    match unbind_configuration(state, body, ConfigKind::VideoSource, "RMVSC-5534") {
+        Ok(()) => resp_empty("trt", "RemoveVideoSourceConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
 pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
     let inner = extract_tag(body, "CreateProfile").unwrap_or_default();
     let name = extract_tag(&inner, "Name").unwrap_or_else(|| "Profile".to_string());
@@ -256,6 +296,204 @@ pub(crate) fn apply_video_encoder_write(
             .or_else(|| extract_tag(body, "H265Profile"))
         {
             ve.profile = v;
+        }
+    });
+    Ok(())
+}
+
+/// Apply a `SetVideoSourceConfiguration` body to the addressed channel.
+///
+/// Shared by Media1 and Media2 for the same reason as the encoder write above,
+/// and it is the same defect: both dispatchers answered this with `resp_empty`
+/// until 0.15 — a success that wrote nothing, over a getter that *is*
+/// state-driven. Audit §3 items 1.1 and 1.2.
+///
+/// The two request bodies are identical apart from the prefix
+/// (`<trt:Configuration>` vs `<tr2:Configuration>`), and `extract_attr` /
+/// `extract_tag` both match on the local name, so one reader serves both.
+///
+/// `Bounds/@x` and `@y` are read from the wire and dropped: `VideoSourceConfigEntry`
+/// models a size, not an offset, and every renderer emits `x="0" y="0"`. Writing
+/// them into a field that does not exist is not possible; **saying so here is
+/// what keeps it from looking like the `MTU` case in item 1.8.**
+pub(crate) fn apply_video_source_write(
+    state: &SharedState,
+    body: &str,
+    missing_reason: &str,
+    unknown_prefix: &str,
+) -> Result<(), String> {
+    let Some(want) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) else {
+        return Err(resp_soap_fault("env:Sender", missing_reason));
+    };
+    if !state
+        .read()
+        .video_source_configs
+        .iter()
+        .any(|c| c.token == want)
+    {
+        return Err(resp_soap_fault(
+            "env:Sender",
+            &format!("{unknown_prefix}: {want}"),
+        ));
+    }
+    state.modify(|s| {
+        let Some(vsc) = s.video_source_configs.iter_mut().find(|c| c.token == want) else {
+            return;
+        };
+        if let Some(v) = extract_tag(body, "Name") {
+            vsc.name = v;
+        }
+        if let Some(v) = extract_tag(body, "SourceToken") {
+            vsc.source_token = v;
+        }
+        if let Some(v) = extract_attr(body, "Bounds", "width").and_then(|x| x.parse().ok()) {
+            vsc.width = v;
+        }
+        if let Some(v) = extract_attr(body, "Bounds", "height").and_then(|x| x.parse().ok()) {
+            vsc.height = v;
+        }
+        eprintln!("    [STATE] video source config updated: {want}");
+    });
+    Ok(())
+}
+
+/// Which slot of a [`ProfileEntry`] a configuration binding writes to.
+///
+/// Media1 encodes the kind in the *operation name*
+/// (`AddVideoEncoderConfiguration`); Media2 encodes it in a `<tr2:Type>` element
+/// of one generic `AddConfiguration`. Same four slots either way, so the kind is
+/// resolved at the edge and the state operation below is shared.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConfigKind {
+    VideoSource,
+    VideoEncoder,
+    AudioSource,
+    AudioEncoder,
+}
+
+impl ConfigKind {
+    /// Media2's `<tr2:Type>` spelling. `None` for a type the mock does not model
+    /// — see `media2::handle_add_configuration_media2` for why that faults.
+    pub(crate) fn from_media2_type(t: &str) -> Option<Self> {
+        match t {
+            "VideoSource" => Some(Self::VideoSource),
+            "VideoEncoder" => Some(Self::VideoEncoder),
+            "AudioSource" => Some(Self::AudioSource),
+            "AudioEncoder" => Some(Self::AudioEncoder),
+            _ => None,
+        }
+    }
+
+    fn slot(self, p: &mut ProfileEntry) -> &mut Option<String> {
+        match self {
+            Self::VideoSource => &mut p.video_source_config_token,
+            Self::VideoEncoder => &mut p.video_encoder_config_token,
+            Self::AudioSource => &mut p.audio_source_config_token,
+            Self::AudioEncoder => &mut p.audio_encoder_config_token,
+        }
+    }
+
+    /// `true` if `DeviceState` carries a catalogue this token can be checked
+    /// against. The audio families are static fixtures (audit §5), so there is
+    /// nothing to validate a binding against and none is attempted.
+    fn known_token(self, state: &SharedState, token: &str) -> bool {
+        let s = state.read();
+        match self {
+            Self::VideoSource => s.video_source_configs.iter().any(|c| c.token == token),
+            Self::VideoEncoder => s.video_encoders.iter().any(|c| c.token == token),
+            Self::AudioSource | Self::AudioEncoder => true,
+        }
+    }
+}
+
+/// Bind a configuration to a profile in the shared list.
+///
+/// Audit §3 items 1.4, 1.6 and 1.7: the whole Add/Remove family was `resp_empty`
+/// in the dispatcher, which meant **a profile could not be assembled on the
+/// mock at all** — create one, add an encoder, read it back, still empty. Any
+/// test of profile-assembly logic passed without exercising anything.
+///
+/// A *fixed* profile is deliberately still bindable. Real devices refuse, but
+/// the mock's four seeded profiles are all fixed, so refusing would leave only
+/// freshly created profiles reachable and would flip
+/// `tests/mock_action_snapshot.rs` from `ok` to `fault` on two operations.
+/// Enforcing it belongs with the rest of the fidelity work, not here.
+pub(crate) fn bind_configuration(
+    state: &SharedState,
+    body: &str,
+    kind: ConfigKind,
+    tag: &str,
+) -> Result<(), String> {
+    let profile = extract_tag(body, "ProfileToken").unwrap_or_default();
+    let config = extract_tag(body, "ConfigurationToken")
+        .or_else(|| extract_tag(body, "Token"))
+        .unwrap_or_default();
+    if profile.is_empty() || config.is_empty() {
+        return Err(resp_soap_fault(
+            "env:Sender",
+            &format!("NoToken-{tag}: ProfileToken and ConfigurationToken are both required"),
+        ));
+    }
+    if !state
+        .read()
+        .profiles
+        .profiles
+        .iter()
+        .any(|p| p.token == profile)
+    {
+        return Err(resp_soap_fault(
+            "ter:NoProfile",
+            &format!("NoSuchProfile-{tag}: {profile}"),
+        ));
+    }
+    if !kind.known_token(state, &config) {
+        return Err(resp_soap_fault(
+            "ter:NoConfig",
+            &format!("NoSuchConfig-{tag}: {config}"),
+        ));
+    }
+    state.modify(|s| {
+        if let Some(p) = s.profiles.profiles.iter_mut().find(|p| p.token == profile) {
+            *kind.slot(p) = Some(config.clone());
+            eprintln!("    [STATE] profile {profile}: bound {config}");
+        }
+    });
+    Ok(())
+}
+
+/// Clear a configuration slot on a profile. Audit §3 items 1.5, 1.6 and 1.7.
+///
+/// Removing a slot that is already empty is **not** a fault — the operation is
+/// idempotent and ONVIF does not require a device to complain.
+pub(crate) fn unbind_configuration(
+    state: &SharedState,
+    body: &str,
+    kind: ConfigKind,
+    tag: &str,
+) -> Result<(), String> {
+    let profile = extract_tag(body, "ProfileToken").unwrap_or_default();
+    if profile.is_empty() {
+        return Err(resp_soap_fault(
+            "env:Sender",
+            &format!("NoToken-{tag}: ProfileToken is required"),
+        ));
+    }
+    if !state
+        .read()
+        .profiles
+        .profiles
+        .iter()
+        .any(|p| p.token == profile)
+    {
+        return Err(resp_soap_fault(
+            "ter:NoProfile",
+            &format!("NoSuchProfile-{tag}: {profile}"),
+        ));
+    }
+    state.modify(|s| {
+        if let Some(p) = s.profiles.profiles.iter_mut().find(|p| p.token == profile) {
+            *kind.slot(p) = None;
+            eprintln!("    [STATE] profile {profile}: unbound");
         }
     });
     Ok(())
