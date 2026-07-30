@@ -142,6 +142,28 @@ two-thirds of the test suite.
 
 ### Changed
 
+- **Dependencies brought current.** `base64` **0.22 → 0.23** (the only direct dep
+  behind by a major) plus semver-compatible moves for `async-trait` 0.1.91,
+  `futures-core` 0.3.33, `serde` 1.0.229, `serde_json` 1.0.151, `socket2` 0.6.5,
+  `thiserror` 2.0.19, `tokio` 1.53.1, and the dev-only `futures` / `toml`.
+  `cargo outdated --depth 1` is now empty; `cargo audit` reports zero
+  vulnerabilities across 245 crates.
+
+  base64 0.23 needed **no code change** — the `Engine` +
+  `general_purpose::STANDARD` API oxvif uses is unchanged — and has **zero**
+  public items gated on `not(feature = …)`, so it carries none of the
+  feature-unification footgun that motivated `docs/dependency-pitfalls.md`.
+
+  It does add a **default-on `simd-unsafe`** feature (runtime-dispatched
+  AVX2/NEON). oxvif base64s a 16-byte nonce and a 20-byte SHA-1 digest on the
+  WS-Security path, so SIMD buys nothing measurable and `Cargo.toml` takes base64
+  with `default-features = false, features = ["std"]`. **This is a default oxvif
+  chooses, not a guarantee it makes:** feature unification only ever adds, so a
+  downstream crate depending on base64 with default features re-enables it — 
+  reproduced with a scratch crate, and oxvif compiles and runs fine either way.
+  The full audit, including the `hyper-util`-still-on-0.22 note, is in
+  `docs/dependency-pitfalls.md`.
+
 - **The quality gate now uses `--all-features`.** This crate has no default
   features and `src/mock/` is feature-gated, so the previous
   `cargo clippy --all-targets` and `cargo test` collected only the non-mock

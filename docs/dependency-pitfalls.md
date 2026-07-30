@@ -91,3 +91,61 @@ API behind `not(feature = …)`.
 3. When in doubt, reproduce the way a downstream crate sees us: a scratch crate
    that depends on `oxvif` **and** force-enables the suspect feature
    (`dep = { features = ["…"] }`), then `cargo build`.
+
+---
+
+## Audit log
+
+Record the *outcome* here, not just that an audit happened — the next audit is
+much cheaper when it can start from "these were clear last time, and why".
+
+### 0.15.0 — `base64` 0.22 → 0.23
+
+The only direct dependency behind by a major; everything else moved within
+semver via `cargo update`.
+
+**No Case-1 footgun.** base64 0.23 has **zero** public items gated on
+`not(feature = …)` — the audit grep above returns nothing for it. The only hits
+across every crate `oxvif` calls into were `tracing`'s `__disabled_span`, which
+is the macro-internal plumbing this file already dismisses. **No code change was
+needed:** the `Engine` trait plus `engine::general_purpose::STANDARD` API that
+`src/soap/security.rs` and `src/mock/auth.rs` use is unchanged.
+
+**A different shape worth naming: a new default-on feature called
+`simd-unsafe`.** 0.23 added runtime-dispatched AVX2/NEON engines behind it, on by
+default. Not a footgun — it gates nothing away — but oxvif base64s a 16-byte
+nonce and a 20-byte SHA-1 digest on the WS-Security path, so SIMD buys nothing
+measurable. `Cargo.toml` therefore takes base64 as
+`{ default-features = false, features = ["std"] }`.
+
+Verified, because "we declined it" is a claim about the build graph:
+
+```sh
+cargo tree -e features -i base64@0.23.0 --all-features   # alloc + std only
+```
+
+**And verified that declining it is not load-bearing.** Feature unification only
+ever adds, so a downstream crate that takes base64 with default features turns
+`simd-unsafe` back on for us. Reproduced per step 3 — a scratch crate depending
+on `oxvif` plus `base64 = "0.23"`:
+
+```
+├── base64 feature "default"
+│   ├── base64 feature "simd-unsafe"     <-- re-enabled by the sibling
+```
+
+…and it compiles and runs fine. So this is a **default we choose, not a guarantee
+we make**, and the distinction is why declining it is safe rather than fragile.
+Do not write it up in the README as "no unsafe in the dependency tree".
+
+One thing to watch: `hyper-util` still pulls **base64 0.22** (via
+`axum` / `reqwest` / `mockito`), a separate major that does not unify with ours.
+When it moves to 0.23 the two collapse into one and that sibling's default
+features will apply — the reproduction above is what says that is a non-event.
+
+Also in 0.23, and checked: `DecodeError::InvalidLastSymbol` now carries the
+decoded value, so its `Display` text changed. `src/mock/auth.rs` only formats the
+error (`"Invalid nonce base64: {e}"`) and nothing matches on the variant or
+asserts the message, so nothing depends on it. MSRV moved to 1.71; ours is 1.85.
+
+`cargo audit`: zero vulnerabilities, 245 crate dependencies.
