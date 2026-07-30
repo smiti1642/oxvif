@@ -47,6 +47,9 @@ arm in `dispatch.rs`:
   `DeviceState` field at all.**
 - **26 of 27** PTZ handlers never receive the request body.
 - `grep -c recording src/mock/state.rs` → **0**.
+- **47** `Set → Get` pairs are now a standing test
+  (`tests/mock_roundtrip.rs`). **27 round-trip, 15 are defects, 5 are declared
+  stubs.**
 
 ---
 
@@ -64,9 +67,25 @@ believe the write landed. It did not. **This is the reported bug's class.**
 | 1.5 | `RemoveVideoEncoderConfiguration` | dispatch read: `resp_empty`; getter state-driven | clear the same field |
 | 1.6 | `AddVideoSourceConfiguration` / `RemoveVideoSourceConfiguration` | dispatch read: `resp_empty`; getter state-driven | as 1.4 / 1.5 |
 | 1.7 | `AddConfiguration` / `RemoveConfiguration` (Media2) | dispatch read: `resp_empty`; `GetProfiles` now state-driven | share 1.4–1.6 |
+| 1.8 | `SetNetworkInterfaces` — **drops `MTU`** | `tests/mock_roundtrip.rs`: `wrote Some(1420), read back Some(1500)` | one `if let` beside the four that are already there |
+
+**1.8 is a different shape from the rest, and was not in the first draft of this
+document.** `tests/mock_roundtrip.rs` found it on its own the first time it ran.
+The handler is not missing — it reads `Enabled`, `FromDHCP`, `Address` and
+`PrefixLength` out of the body and writes all four. It silently drops the fifth
+field, `MTU`, which the client *does* send (`src/client/device.rs:474`) and which
+`GetNetworkInterfaces` *does* report. **A partial write is worse than no write**:
+the state log prints `[STATE] interface updated`, four of five fields land, and
+every signal a reader has says the operation is wired.
+
+Nothing in the hand audit could have caught this. Axis A asks "does the getter
+read state" (yes), the dispatch read asks "does the arm take `state`" (yes), and
+`grep` for `resp_empty` never names it. Only writing a value and reading it back
+distinguishes a whole write from a partial one — which is the argument for the
+property test being step 1 rather than a nicety.
 
 **Size: small.** The state field exists in every case; this is wiring. 1.1–1.2
-and 1.4–1.7 are each ~10 lines plus a test.
+and 1.4–1.8 are each ~10 lines plus a test.
 
 **Why it matters beyond tidiness:** 1.4–1.7 mean **a profile cannot be built up
 on the mock**. Create a profile, add an encoder, read it back — still empty. Any
@@ -220,7 +239,13 @@ checkable from outside, which is where every one of these was found anyway. Thre
 table-driven property tests over the public API kill the class:
 
 1. **Round-trip** — every `(Get, Set)` pair: set a distinctive value, get it back.
-   *This axis found Tier 1 on its own; as a standing test it also guards it.*
+   **Landed as `tests/mock_roundtrip.rs`** (47 pairs). Each row declares
+   `Works` / `Broken(audit §)` / `Static(audit §)`, and **all three arms are
+   asserted** — wire a `Broken` row up and the test goes red telling you to move
+   it, so the list cannot rot into the permanent blind spot an xfail list usually
+   becomes. This is where "deliberately static" is finally written down. It
+   confirmed 46 of the 47 classifications in this document on its first run and
+   found the 47th (item 1.8).
 2. **Token discrimination** — every token-taking operation: two tokens the
    fixture disagrees on must produce different answers.
 3. **Cross-service agreement** — already landed as
@@ -240,8 +265,8 @@ schema-fidelity chase and stall everything else.
 
 | Step | Why first |
 |---|---|
-| 1. Property test **round-trip** (§8.1) | It is both probe and guard. Produces the authoritative Tier 1 list mechanically instead of by hand, and reddens today. |
-| 2. Tier 1 wiring (§3) | Small, the fields exist, and step 1 turns green as they land. |
+| ~~1. Property test **round-trip** (§8.1)~~ **done** — `tests/mock_roundtrip.rs` | It was both probe and guard. Produced the Tier 1 list mechanically, confirmed 46 of 47 hand classifications, and added item 1.8. |
+| 2. Tier 1 wiring (§3) | Small, the fields exist, and step 1's rows flip to `Works` as they land. |
 | 3. Tier 2.1 PTZ per-profile (§4.1) | Biggest source of green-when-wrong, and closes a rule we already wrote and left half-applied. |
 | 4. Property test **token discrimination** (§8.2) | Guards step 3 and the 0.15 media/imaging work. |
 | 5. Tier 2.2 recording state (§4.2) | Unblocks Profile G testing, including the health check's own liveness probe. |

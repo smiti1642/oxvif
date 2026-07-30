@@ -1,0 +1,1039 @@
+//! Every `Set → Get` pair on the mock, in one table.
+//!
+//! ## Why this exists
+//!
+//! `docs/active/mock-audit-2026-07.md` §8 names the one structural cause behind
+//! every mock defect found so far:
+//!
+//! > **Nothing distinguishes "deliberately static" from "not wired up yet"** —
+//! > not the type system, not the dispatch table, not the tests.
+//!
+//! `resp_profiles_media2()` (a bug, fixed in `fa1cd91`) and
+//! `resp_audio_sources()` (a perfectly fine stub) have the same signature, live
+//! in the same match block, and are indistinguishable at every level. That is
+//! why five instances of the class were reported from *outside* the project
+//! rather than caught in review.
+//!
+//! The table below is where that distinction is finally recorded. Each pair
+//! declares an [`Expect`]:
+//!
+//! - [`Expect::Works`] — the write must land and the getter must show it.
+//! - [`Expect::Broken`] — a **real defect**, with its audit citation. The write
+//!   is discarded today and the test asserts that it still is.
+//! - [`Expect::Static`] — a **deliberate stub**. The whole family is fixture
+//!   data; nothing pretends otherwise.
+//!
+//! Both non-`Works` arms are asserted, not skipped. Wire one of them up and this
+//! test goes red telling you to move the row — so the list cannot rot into a
+//! permanent blind spot, which is the usual fate of an xfail list.
+//!
+//! ## What it is not
+//!
+//! This is not a fidelity check. It asks one question per pair — *did the value
+//! I wrote come back?* — over the **public API only** (`oxvif::mock` plus the
+//! ordinary client), over real HTTP, against a fresh server per pair.
+#![cfg(feature = "mock-server")]
+
+use std::fmt::Debug;
+use std::future::Future;
+use std::pin::Pin;
+
+use oxvif::OnvifClient;
+use oxvif::mock::MockServer;
+use oxvif::{
+    ImagingSettings, OsdConfiguration, OsdPosition, OsdTextString, RecordingConfiguration,
+    RecordingJobConfiguration, SetDateTimeRequest, UtcDateTime,
+};
+
+// ── Outcome and expectation ──────────────────────────────────────────────────
+
+#[derive(Debug)]
+enum Outcome {
+    /// The value written came back out of the getter.
+    RoundTripped,
+    /// The call succeeded and the getter does not reflect it.
+    Discarded(String),
+    /// The call itself errored. Never expected, for any row — see the second
+    /// assertion in the test.
+    Failed(String),
+}
+
+#[derive(Clone, Copy)]
+enum Expect {
+    /// The write must land.
+    Works,
+    /// A real defect. The `&str` is the audit section that catalogues it.
+    Broken(&'static str),
+    /// Deliberately fixture data on both sides. `docs/active/mock-audit-2026-07.md` §5.
+    Static(&'static str),
+}
+
+impl Expect {
+    fn should_round_trip(self) -> bool {
+        matches!(self, Expect::Works)
+    }
+
+    fn label(self) -> String {
+        match self {
+            Expect::Works => "Works".into(),
+            Expect::Broken(why) => format!("Broken ({why})"),
+            Expect::Static(why) => format!("Static ({why})"),
+        }
+    }
+}
+
+/// Compare what was written against what came back.
+fn cmp<T: PartialEq + Debug>(wrote: T, read: T) -> Outcome {
+    if wrote == read {
+        Outcome::RoundTripped
+    } else {
+        Outcome::Discarded(format!("wrote {wrote:?}, read back {read:?}"))
+    }
+}
+
+/// Await a client call, turning any error into [`Outcome::Failed`] rather than
+/// letting it masquerade as a discarded write.
+macro_rules! call {
+    ($what:literal, $e:expr) => {
+        match $e.await {
+            Ok(v) => v,
+            Err(e) => return Outcome::Failed(format!("{}: {e}", $what)),
+        }
+    };
+}
+
+// ── One device per pair ──────────────────────────────────────────────────────
+
+struct Dev {
+    server: MockServer,
+    client: OnvifClient,
+}
+
+impl Dev {
+    async fn new() -> Self {
+        let server = MockServer::start().await.expect("mock server starts");
+        let client = OnvifClient::new(server.device_url());
+        Self { server, client }
+    }
+
+    fn url(&self, service: &str) -> String {
+        format!("{}/onvif/{service}", self.server.base_url())
+    }
+}
+
+// ── The table ────────────────────────────────────────────────────────────────
+
+type Run = for<'a> fn(&'a Dev) -> Pin<Box<dyn Future<Output = Outcome> + 'a>>;
+
+struct Pair {
+    name: &'static str,
+    expect: Expect,
+    run: Run,
+}
+
+/// `name => expectation, async fn;`
+macro_rules! pairs {
+    ($($name:literal => $expect:expr, $f:ident;)*) => {
+        &[$(Pair {
+            name: $name,
+            expect: $expect,
+            run: {
+                fn wrap<'a>(d: &'a Dev) -> Pin<Box<dyn Future<Output = Outcome> + 'a>> {
+                    Box::pin($f(d))
+                }
+                wrap
+            },
+        }),*]
+    };
+}
+
+const PAIRS: &[Pair] = pairs![
+    // ── Device ──────────────────────────────────────────────────────────────
+    "device/hostname"                  => Expect::Works, hostname;
+    "device/ntp"                       => Expect::Works, ntp;
+    "device/dns"                       => Expect::Works, dns;
+    "device/scopes"                    => Expect::Works, scopes;
+    "device/users-create"              => Expect::Works, users_create;
+    "device/users-delete"              => Expect::Works, users_delete;
+    "device/user-level"                => Expect::Works, user_level;
+    "device/network-interfaces"        => Expect::Broken("audit §3 item 1.8"), network_interfaces;
+    "device/network-protocols"         => Expect::Works, network_protocols;
+    "device/default-gateway"           => Expect::Works, default_gateway;
+    "device/relay-output-settings"     => Expect::Works, relay_output_settings;
+    "device/system-date-and-time"      => Expect::Works, system_date_and_time;
+    "device/discovery-mode"            => Expect::Broken("audit §3 item 1.3"), discovery_mode;
+    "device/storage-configuration"     => Expect::Static("audit §5"), storage_configuration;
+
+    // ── Media1 ──────────────────────────────────────────────────────────────
+    "media1/profile-create"            => Expect::Works, m1_profile_create;
+    "media1/profile-delete"            => Expect::Works, m1_profile_delete;
+    "media1/video-encoder-config"      => Expect::Works, m1_video_encoder_config;
+    "media1/osd-create"                => Expect::Works, m1_osd_create;
+    "media1/osd-set"                   => Expect::Works, m1_osd_set;
+    "media1/osd-delete"                => Expect::Works, m1_osd_delete;
+    "media1/video-source-config"       => Expect::Broken("audit §3 item 1.1"), m1_video_source_config;
+    "media1/add-video-encoder-config"  => Expect::Broken("audit §3 item 1.4"), m1_add_video_encoder;
+    "media1/remove-video-encoder-cfg"  => Expect::Broken("audit §3 item 1.5"), m1_remove_video_encoder;
+    "media1/add-video-source-config"   => Expect::Broken("audit §3 item 1.6"), m1_add_video_source;
+    "media1/remove-video-source-cfg"   => Expect::Broken("audit §3 item 1.6"), m1_remove_video_source;
+    "media1/audio-encoder-config"      => Expect::Static("audit §5"), m1_audio_encoder_config;
+
+    // ── Media2 ──────────────────────────────────────────────────────────────
+    "media2/profile-create"            => Expect::Works, m2_profile_create;
+    "media2/profile-delete"            => Expect::Works, m2_profile_delete;
+    "media2/video-encoder-config"      => Expect::Works, m2_video_encoder_config;
+    "media2/video-source-config"       => Expect::Broken("audit §3 item 1.2"), m2_video_source_config;
+    "media2/add-configuration"         => Expect::Broken("audit §3 item 1.7"), m2_add_configuration;
+    "media2/remove-configuration"      => Expect::Broken("audit §3 item 1.7"), m2_remove_configuration;
+    "media2/metadata-config"           => Expect::Static("audit §5"), m2_metadata_config;
+    "media2/audio-encoder-config"      => Expect::Static("audit §5"), m2_audio_encoder_config;
+
+    // ── PTZ ─────────────────────────────────────────────────────────────────
+    "ptz/preset-set"                   => Expect::Works, ptz_preset_set;
+    "ptz/preset-remove"                => Expect::Works, ptz_preset_remove;
+    "ptz/absolute-move"                => Expect::Works, ptz_absolute_move;
+    "ptz/home-position"                => Expect::Works, ptz_home_position;
+    "ptz/preset-tour-create"           => Expect::Works, ptz_preset_tour_create;
+    "ptz/preset-tour-remove"           => Expect::Works, ptz_preset_tour_remove;
+    "ptz/configuration"                => Expect::Static("audit §5"), ptz_configuration;
+
+    // ── Imaging ─────────────────────────────────────────────────────────────
+    "imaging/settings"                 => Expect::Works, imaging_settings;
+
+    // ── Recording ───────────────────────────────────────────────────────────
+    "recording/create"                 => Expect::Broken("audit §4.2"), recording_create;
+    "recording/delete"                 => Expect::Broken("audit §4.2"), recording_delete;
+    "recording/track-create"           => Expect::Broken("audit §4.2"), recording_track_create;
+    "recording/job-create"             => Expect::Broken("audit §4.2"), recording_job_create;
+    "recording/job-mode"               => Expect::Broken("audit §4.2"), recording_job_mode;
+];
+
+// ── Device checks ────────────────────────────────────────────────────────────
+
+async fn hostname(d: &Dev) -> Outcome {
+    let want = "roundtrip-host-4417";
+    call!("SetHostname", d.client.set_hostname(want));
+    let got = call!("GetHostname", d.client.get_hostname());
+    cmp(want.to_string(), got.name.unwrap_or_default())
+}
+
+async fn ntp(d: &Dev) -> Outcome {
+    let want = "ntp-4418.example.invalid";
+    call!("SetNTP", d.client.set_ntp(false, &[want]));
+    let got = call!("GetNTP", d.client.get_ntp());
+    cmp(vec![want.to_string()], got.servers)
+}
+
+async fn dns(d: &Dev) -> Outcome {
+    let want = "10.44.19.53";
+    call!("SetDNS", d.client.set_dns(false, &[want]));
+    let got = call!("GetDNS", d.client.get_dns());
+    cmp(vec![want.to_string()], got.servers)
+}
+
+async fn scopes(d: &Dev) -> Outcome {
+    let want = "onvif://www.onvif.org/name/roundtrip-4420";
+    call!("SetScopes", d.client.set_scopes(&[want]));
+    let got = call!("GetScopes", d.client.get_scopes());
+    cmp(true, got.iter().any(|s| s == want))
+}
+
+async fn users_create(d: &Dev) -> Outcome {
+    call!(
+        "CreateUsers",
+        d.client.create_users(&[("rt4421", "Pw-4421!", "Operator")])
+    );
+    let got = call!("GetUsers", d.client.get_users());
+    cmp(true, got.iter().any(|u| u.username == "rt4421"))
+}
+
+async fn users_delete(d: &Dev) -> Outcome {
+    call!(
+        "CreateUsers",
+        d.client.create_users(&[("rt4422", "Pw-4422!", "User")])
+    );
+    call!("DeleteUsers", d.client.delete_users(&["rt4422"]));
+    let got = call!("GetUsers", d.client.get_users());
+    cmp(false, got.iter().any(|u| u.username == "rt4422"))
+}
+
+async fn user_level(d: &Dev) -> Outcome {
+    call!(
+        "CreateUsers",
+        d.client.create_users(&[("rt4423", "Pw-4423!", "User")])
+    );
+    call!(
+        "SetUser",
+        d.client.set_user("rt4423", None, "Administrator")
+    );
+    let got = call!("GetUsers", d.client.get_users());
+    let level = got
+        .iter()
+        .find(|u| u.username == "rt4423")
+        .map(|u| u.user_level.clone())
+        .unwrap_or_default();
+    cmp("Administrator".to_string(), level)
+}
+
+/// The **partial** write, and the row this table found on its own: the handler
+/// reads `Enabled`, `FromDHCP`, `Address` and `PrefixLength` out of the body and
+/// silently drops `MTU`, which the client does send and `GetNetworkInterfaces`
+/// does report. Three of five fields landing is what makes it look wired.
+async fn network_interfaces(d: &Dev) -> Outcome {
+    use oxvif::NetworkInterfaceConfig;
+
+    let want_mtu = 1420;
+    let cfg = NetworkInterfaceConfig {
+        enabled: true,
+        mtu: Some(want_mtu),
+        ipv4: None,
+        ipv6: None,
+    };
+    call!(
+        "SetNetworkInterfaces",
+        d.client.set_network_interfaces("eth0", &cfg)
+    );
+    let got = call!("GetNetworkInterfaces", d.client.get_network_interfaces());
+    let mtu = got.iter().find(|i| i.token == "eth0").map(|i| i.mtu);
+    cmp(Some(want_mtu), mtu)
+}
+
+async fn network_protocols(d: &Dev) -> Outcome {
+    let want_port = 8899u32;
+    call!(
+        "SetNetworkProtocols",
+        d.client
+            .set_network_protocols(&[("HTTP", true, &[want_port])])
+    );
+    let got = call!("GetNetworkProtocols", d.client.get_network_protocols());
+    let ports = got
+        .iter()
+        .find(|p| p.name == "HTTP")
+        .map(|p| p.ports.clone())
+        .unwrap_or_default();
+    cmp(vec![want_port], ports)
+}
+
+async fn default_gateway(d: &Dev) -> Outcome {
+    let want = "10.44.24.254";
+    call!(
+        "SetNetworkDefaultGateway",
+        d.client.set_network_default_gateway(&[want])
+    );
+    let got = call!(
+        "GetNetworkDefaultGateway",
+        d.client.get_network_default_gateway()
+    );
+    cmp(vec![want.to_string()], got.ipv4_addresses)
+}
+
+async fn relay_output_settings(d: &Dev) -> Outcome {
+    let want_delay = "PT7S";
+    call!(
+        "SetRelayOutputSettings",
+        d.client
+            .set_relay_output_settings("RelayOutput_1", "Monostable", want_delay, "closed")
+    );
+    let got = call!("GetRelayOutputs", d.client.get_relay_outputs());
+    let delay = got
+        .iter()
+        .find(|r| r.token == "RelayOutput_1")
+        .map(|r| r.delay_time.clone())
+        .unwrap_or_default();
+    cmp(want_delay.to_string(), delay)
+}
+
+async fn system_date_and_time(d: &Dev) -> Outcome {
+    let want_tz = "GMT-11";
+    let req = SetDateTimeRequest {
+        datetime_type: "Manual".into(),
+        daylight_savings: false,
+        timezone: want_tz.into(),
+        utc_datetime: Some(UtcDateTime {
+            year: 2031,
+            month: 3,
+            day: 14,
+            hour: 15,
+            minute: 9,
+            second: 26,
+        }),
+    };
+    call!(
+        "SetSystemDateAndTime",
+        d.client.set_system_date_and_time(&req)
+    );
+    let got = call!("GetSystemDateAndTime", d.client.get_system_date_and_time());
+    cmp(want_tz.to_string(), got.timezone)
+}
+
+/// `GetDiscoveryMode` **is** state-driven; `SetDiscoveryMode` is `resp_empty`.
+/// The exact shape of the reported Media2 bug: a live getter over a discarded
+/// write.
+async fn discovery_mode(d: &Dev) -> Outcome {
+    let want = "NonDiscoverable";
+    call!("SetDiscoveryMode", d.client.set_discovery_mode(want));
+    let got = call!("GetDiscoveryMode", d.client.get_discovery_mode());
+    cmp(want.to_string(), got)
+}
+
+async fn storage_configuration(d: &Dev) -> Outcome {
+    let want_path = "/mnt/roundtrip-4424";
+    call!(
+        "SetStorageConfiguration",
+        d.client
+            .set_storage_configuration("SD_01", "LocalStorage", want_path, "", "")
+    );
+    let got = call!(
+        "GetStorageConfigurations",
+        d.client.get_storage_configurations()
+    );
+    let path = got
+        .iter()
+        .find(|s| s.token == "SD_01")
+        .map(|s| s.local_path.clone())
+        .unwrap_or_default();
+    cmp(want_path.to_string(), path)
+}
+
+// ── Media1 checks ────────────────────────────────────────────────────────────
+
+async fn m1_profile_create(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    let created = call!(
+        "CreateProfile",
+        d.client.create_profile(&url, "rt-4430", Some("RT_M1_4430"))
+    );
+    let got = call!("GetProfiles", d.client.get_profiles(&url));
+    cmp(true, got.iter().any(|p| p.token == created.token))
+}
+
+async fn m1_profile_delete(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    let created = call!(
+        "CreateProfile",
+        d.client.create_profile(&url, "rt-4431", Some("RT_M1_4431"))
+    );
+    call!(
+        "DeleteProfile",
+        d.client.delete_profile(&url, &created.token)
+    );
+    let got = call!("GetProfiles", d.client.get_profiles(&url));
+    cmp(false, got.iter().any(|p| p.token == created.token))
+}
+
+async fn m1_video_encoder_config(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    let mut cfg = call!(
+        "GetVideoEncoderConfiguration",
+        d.client.get_video_encoder_configuration(&url, "VEC_1")
+    );
+    cfg.name = "rt-encoder-4432".into();
+    call!(
+        "SetVideoEncoderConfiguration",
+        d.client.set_video_encoder_configuration(&url, &cfg)
+    );
+    let got = call!(
+        "GetVideoEncoderConfiguration",
+        d.client.get_video_encoder_configuration(&url, "VEC_1")
+    );
+    cmp("rt-encoder-4432".to_string(), got.name)
+}
+
+fn rt_osd(token: &str, text: &str) -> OsdConfiguration {
+    OsdConfiguration {
+        token: token.into(),
+        video_source_config_token: "VSC_1".into(),
+        type_: "Text".into(),
+        position: OsdPosition {
+            type_: "UpperLeft".into(),
+            x: None,
+            y: None,
+        },
+        text_string: Some(OsdTextString {
+            type_: "Plain".into(),
+            plain_text: Some(text.into()),
+            date_format: None,
+            time_format: None,
+            font_size: Some(32),
+            font_color: None,
+            background_color: None,
+            is_persistent_text: None,
+        }),
+        image_path: None,
+    }
+}
+
+async fn m1_osd_create(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    let token = call!(
+        "CreateOSD",
+        d.client.create_osd(&url, &rt_osd("", "rt-osd-4433"))
+    );
+    let got = call!("GetOSDs", d.client.get_osds(&url, Some("VSC_1")));
+    cmp(true, got.iter().any(|o| o.token == token))
+}
+
+async fn m1_osd_set(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    call!(
+        "SetOSD",
+        d.client.set_osd(&url, &rt_osd("OSD_1", "rt-osd-4434"))
+    );
+    let got = call!("GetOSD", d.client.get_osd(&url, "OSD_1"));
+    let text = got
+        .text_string
+        .and_then(|t| t.plain_text)
+        .unwrap_or_default();
+    cmp("rt-osd-4434".to_string(), text)
+}
+
+async fn m1_osd_delete(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    let token = call!(
+        "CreateOSD",
+        d.client.create_osd(&url, &rt_osd("", "rt-osd-4435"))
+    );
+    call!("DeleteOSD", d.client.delete_osd(&url, &token));
+    let got = call!("GetOSDs", d.client.get_osds(&url, Some("VSC_1")));
+    cmp(false, got.iter().any(|o| o.token == token))
+}
+
+async fn m1_video_source_config(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    let mut cfg = call!(
+        "GetVideoSourceConfiguration",
+        d.client.get_video_source_configuration(&url, "VSC_1")
+    );
+    cfg.name = "rt-vsc-4436".into();
+    call!(
+        "SetVideoSourceConfiguration",
+        d.client.set_video_source_configuration(&url, &cfg)
+    );
+    let got = call!(
+        "GetVideoSourceConfiguration",
+        d.client.get_video_source_configuration(&url, "VSC_1")
+    );
+    cmp("rt-vsc-4436".to_string(), got.name)
+}
+
+/// A freshly created profile has nothing bound. Binding an encoder to it and
+/// reading the profile back is the minimal "can I assemble a profile on this
+/// mock?" question — and today the answer is no.
+async fn m1_add_video_encoder(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    let created = call!(
+        "CreateProfile",
+        d.client.create_profile(&url, "rt-4437", Some("RT_M1_4437"))
+    );
+    call!(
+        "AddVideoEncoderConfiguration",
+        d.client
+            .add_video_encoder_configuration(&url, &created.token, "VEC_2")
+    );
+    let got = call!("GetProfile", d.client.get_profile(&url, &created.token));
+    cmp(Some("VEC_2".to_string()), got.video_encoder_token)
+}
+
+async fn m1_remove_video_encoder(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    call!(
+        "RemoveVideoEncoderConfiguration",
+        d.client
+            .remove_video_encoder_configuration(&url, "Profile_1")
+    );
+    let got = call!("GetProfile", d.client.get_profile(&url, "Profile_1"));
+    cmp(None, got.video_encoder_token)
+}
+
+async fn m1_add_video_source(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    let created = call!(
+        "CreateProfile",
+        d.client.create_profile(&url, "rt-4439", Some("RT_M1_4439"))
+    );
+    call!(
+        "AddVideoSourceConfiguration",
+        d.client
+            .add_video_source_configuration(&url, &created.token, "VSC_2")
+    );
+    let got = call!("GetProfile", d.client.get_profile(&url, &created.token));
+    cmp(Some("VSC_2".to_string()), got.video_source_config_token)
+}
+
+async fn m1_remove_video_source(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    call!(
+        "RemoveVideoSourceConfiguration",
+        d.client
+            .remove_video_source_configuration(&url, "Profile_1")
+    );
+    let got = call!("GetProfile", d.client.get_profile(&url, "Profile_1"));
+    cmp(None, got.video_source_config_token)
+}
+
+async fn m1_audio_encoder_config(d: &Dev) -> Outcome {
+    let url = d.url("media");
+    let mut cfg = call!(
+        "GetAudioEncoderConfiguration",
+        d.client.get_audio_encoder_configuration(&url, "AEC_1")
+    );
+    cfg.bitrate = 44;
+    call!(
+        "SetAudioEncoderConfiguration",
+        d.client.set_audio_encoder_configuration(&url, &cfg)
+    );
+    let got = call!(
+        "GetAudioEncoderConfiguration",
+        d.client.get_audio_encoder_configuration(&url, "AEC_1")
+    );
+    cmp(44, got.bitrate)
+}
+
+// ── Media2 checks ────────────────────────────────────────────────────────────
+
+async fn m2_profile_create(d: &Dev) -> Outcome {
+    let url = d.url("media2");
+    let token = call!(
+        "CreateProfile",
+        d.client.create_profile_media2(&url, "rt-4440")
+    );
+    let got = call!("GetProfiles", d.client.get_profiles_media2(&url));
+    cmp(true, got.iter().any(|p| p.token == token))
+}
+
+async fn m2_profile_delete(d: &Dev) -> Outcome {
+    let url = d.url("media2");
+    let token = call!(
+        "CreateProfile",
+        d.client.create_profile_media2(&url, "rt-4441")
+    );
+    call!(
+        "DeleteProfile",
+        d.client.delete_profile_media2(&url, &token)
+    );
+    let got = call!("GetProfiles", d.client.get_profiles_media2(&url));
+    cmp(false, got.iter().any(|p| p.token == token))
+}
+
+async fn m2_video_encoder_config(d: &Dev) -> Outcome {
+    let url = d.url("media2");
+    let mut cfg = call!(
+        "GetVideoEncoderConfiguration",
+        d.client
+            .get_video_encoder_configuration_media2(&url, "VEC_1")
+    );
+    cfg.name = "rt-encoder2-4442".into();
+    call!(
+        "SetVideoEncoderConfiguration",
+        d.client.set_video_encoder_configuration_media2(&url, &cfg)
+    );
+    let got = call!(
+        "GetVideoEncoderConfiguration",
+        d.client
+            .get_video_encoder_configuration_media2(&url, "VEC_1")
+    );
+    cmp("rt-encoder2-4442".to_string(), got.name)
+}
+
+async fn m2_video_source_config(d: &Dev) -> Outcome {
+    let url = d.url("media2");
+    let mut cfg = call!(
+        "GetVideoSourceConfigurations",
+        d.client.get_video_source_configurations_media2(&url)
+    )
+    .into_iter()
+    .find(|c| c.token == "VSC_1")
+    .expect("VSC_1 present on Media2");
+    cfg.name = "rt-vsc2-4443".into();
+    call!(
+        "SetVideoSourceConfiguration",
+        d.client.set_video_source_configuration_media2(&url, &cfg)
+    );
+    let name = call!(
+        "GetVideoSourceConfigurations",
+        d.client.get_video_source_configurations_media2(&url)
+    )
+    .into_iter()
+    .find(|c| c.token == "VSC_1")
+    .map(|c| c.name)
+    .unwrap_or_default();
+    cmp("rt-vsc2-4443".to_string(), name)
+}
+
+async fn m2_add_configuration(d: &Dev) -> Outcome {
+    let url = d.url("media2");
+    let token = call!(
+        "CreateProfile",
+        d.client.create_profile_media2(&url, "rt-4444")
+    );
+    call!(
+        "AddConfiguration",
+        d.client
+            .add_configuration_media2(&url, &token, "VideoEncoder", "VEC_2")
+    );
+    let bound = call!("GetProfiles", d.client.get_profiles_media2(&url))
+        .into_iter()
+        .find(|p| p.token == token)
+        .and_then(|p| p.video_encoder_token);
+    cmp(Some("VEC_2".to_string()), bound)
+}
+
+async fn m2_remove_configuration(d: &Dev) -> Outcome {
+    let url = d.url("media2");
+    call!(
+        "RemoveConfiguration",
+        d.client
+            .remove_configuration_media2(&url, "Profile_1", "VideoEncoder", "VEC_1")
+    );
+    let bound = call!("GetProfiles", d.client.get_profiles_media2(&url))
+        .into_iter()
+        .find(|p| p.token == "Profile_1")
+        .and_then(|p| p.video_encoder_token);
+    cmp(None, bound)
+}
+
+async fn m2_metadata_config(d: &Dev) -> Outcome {
+    let url = d.url("media2");
+    let mut cfg = call!(
+        "GetMetadataConfigurations",
+        d.client
+            .get_metadata_configurations_media2(&url, None, None)
+    )
+    .into_iter()
+    .next()
+    .expect("at least one metadata configuration");
+    cfg.name = "rt-meta-4446".into();
+    call!(
+        "SetMetadataConfiguration",
+        d.client.set_metadata_configuration_media2(&url, &cfg)
+    );
+    let name = call!(
+        "GetMetadataConfigurations",
+        d.client
+            .get_metadata_configurations_media2(&url, None, None)
+    )
+    .into_iter()
+    .next()
+    .map(|c| c.name)
+    .unwrap_or_default();
+    cmp("rt-meta-4446".to_string(), name)
+}
+
+async fn m2_audio_encoder_config(d: &Dev) -> Outcome {
+    let url = d.url("media2");
+    let mut cfg = call!(
+        "GetAudioEncoderConfigurations",
+        d.client.get_audio_encoder_configurations_media2(&url)
+    )
+    .into_iter()
+    .next()
+    .expect("at least one audio encoder configuration");
+    cfg.bitrate = 47;
+    call!(
+        "SetAudioEncoderConfiguration",
+        d.client.set_audio_encoder_configuration_media2(&url, &cfg)
+    );
+    let bitrate = call!(
+        "GetAudioEncoderConfigurations",
+        d.client.get_audio_encoder_configurations_media2(&url)
+    )
+    .into_iter()
+    .next()
+    .map(|c| c.bitrate)
+    .unwrap_or_default();
+    cmp(47, bitrate)
+}
+
+// ── PTZ checks ───────────────────────────────────────────────────────────────
+
+async fn ptz_preset_set(d: &Dev) -> Outcome {
+    let url = d.url("ptz");
+    let token = call!(
+        "SetPreset",
+        d.client
+            .ptz_set_preset(&url, "Profile_1", Some("rt-preset-4450"), None)
+    );
+    let got = call!("GetPresets", d.client.ptz_get_presets(&url, "Profile_1"));
+    cmp(
+        true,
+        got.iter()
+            .any(|p| p.token == token && p.name == "rt-preset-4450"),
+    )
+}
+
+async fn ptz_preset_remove(d: &Dev) -> Outcome {
+    let url = d.url("ptz");
+    let token = call!(
+        "SetPreset",
+        d.client
+            .ptz_set_preset(&url, "Profile_1", Some("rt-preset-4451"), None)
+    );
+    call!(
+        "RemovePreset",
+        d.client.ptz_remove_preset(&url, "Profile_1", &token)
+    );
+    let got = call!("GetPresets", d.client.ptz_get_presets(&url, "Profile_1"));
+    cmp(false, got.iter().any(|p| p.token == token))
+}
+
+async fn ptz_absolute_move(d: &Dev) -> Outcome {
+    let url = d.url("ptz");
+    call!(
+        "AbsoluteMove",
+        d.client
+            .ptz_absolute_move(&url, "Profile_1", 0.42, -0.17, 0.33)
+    );
+    let got = call!("GetStatus", d.client.ptz_get_status(&url, "Profile_1"));
+    cmp(
+        (Some(0.42), Some(-0.17), Some(0.33)),
+        (got.pan, got.tilt, got.zoom),
+    )
+}
+
+/// `SetHomePosition` stores wherever the device currently is, so this drives a
+/// move first, stores it, moves away, and asks to go home.
+async fn ptz_home_position(d: &Dev) -> Outcome {
+    let url = d.url("ptz");
+    call!(
+        "AbsoluteMove",
+        d.client
+            .ptz_absolute_move(&url, "Profile_1", -0.55, 0.25, 0.61)
+    );
+    call!(
+        "SetHomePosition",
+        d.client.ptz_set_home_position(&url, "Profile_1")
+    );
+    call!(
+        "AbsoluteMove",
+        d.client.ptz_absolute_move(&url, "Profile_1", 0.0, 0.0, 0.0)
+    );
+    call!(
+        "GotoHomePosition",
+        d.client.ptz_goto_home_position(&url, "Profile_1", None)
+    );
+    let got = call!("GetStatus", d.client.ptz_get_status(&url, "Profile_1"));
+    cmp(
+        (Some(-0.55), Some(0.25), Some(0.61)),
+        (got.pan, got.tilt, got.zoom),
+    )
+}
+
+async fn ptz_preset_tour_create(d: &Dev) -> Outcome {
+    let url = d.url("ptz");
+    let token = call!(
+        "CreatePresetTour",
+        d.client.ptz_create_preset_tour(&url, "Profile_1")
+    );
+    let got = call!(
+        "GetPresetTours",
+        d.client.ptz_get_preset_tours(&url, "Profile_1")
+    );
+    cmp(
+        true,
+        got.iter()
+            .any(|t| t.token.as_deref() == Some(token.as_str())),
+    )
+}
+
+async fn ptz_preset_tour_remove(d: &Dev) -> Outcome {
+    let url = d.url("ptz");
+    let token = call!(
+        "CreatePresetTour",
+        d.client.ptz_create_preset_tour(&url, "Profile_1")
+    );
+    call!(
+        "RemovePresetTour",
+        d.client.ptz_remove_preset_tour(&url, "Profile_1", &token)
+    );
+    let got = call!(
+        "GetPresetTours",
+        d.client.ptz_get_preset_tours(&url, "Profile_1")
+    );
+    cmp(
+        false,
+        got.iter()
+            .any(|t| t.token.as_deref() == Some(token.as_str())),
+    )
+}
+
+async fn ptz_configuration(d: &Dev) -> Outcome {
+    let url = d.url("ptz");
+    let mut cfg = call!(
+        "GetConfiguration",
+        d.client.ptz_get_configuration(&url, "PTZConfig_1")
+    );
+    cfg.name = "rt-ptzcfg-4456".into();
+    call!(
+        "SetConfiguration",
+        d.client.ptz_set_configuration(&url, &cfg, true)
+    );
+    let got = call!(
+        "GetConfiguration",
+        d.client.ptz_get_configuration(&url, "PTZConfig_1")
+    );
+    cmp("rt-ptzcfg-4456".to_string(), got.name)
+}
+
+// ── Imaging check ────────────────────────────────────────────────────────────
+
+async fn imaging_settings(d: &Dev) -> Outcome {
+    let url = d.url("imaging");
+    let mut settings = call!(
+        "GetImagingSettings",
+        d.client.get_imaging_settings(&url, "VS_1")
+    );
+    settings.brightness = Some(44.0);
+    settings.contrast = Some(61.0);
+    call!(
+        "SetImagingSettings",
+        d.client.set_imaging_settings(&url, "VS_1", &settings)
+    );
+    let got: ImagingSettings = call!(
+        "GetImagingSettings",
+        d.client.get_imaging_settings(&url, "VS_1")
+    );
+    cmp((Some(44.0), Some(61.0)), (got.brightness, got.contrast))
+}
+
+// ── Recording checks ─────────────────────────────────────────────────────────
+
+fn rt_recording_config(name: &str) -> RecordingConfiguration {
+    RecordingConfiguration {
+        source_name: name.into(),
+        source_id: format!("urn:uuid:{name}"),
+        location: "roundtrip".into(),
+        description: "created by mock_roundtrip".into(),
+        content: "Normal".into(),
+        maximum_retention_time: "PT0S".into(),
+    }
+}
+
+async fn recording_create(d: &Dev) -> Outcome {
+    let url = d.url("recording");
+    let token = call!(
+        "CreateRecording",
+        d.client
+            .create_recording(&url, &rt_recording_config("rt-4460"))
+    );
+    let got = call!("GetRecordings", d.client.get_recordings(&url));
+    cmp(true, got.iter().any(|r| r.token == token))
+}
+
+async fn recording_delete(d: &Dev) -> Outcome {
+    let url = d.url("recording");
+    call!(
+        "DeleteRecording",
+        d.client.delete_recording(&url, "Rec_001")
+    );
+    let got = call!("GetRecordings", d.client.get_recordings(&url));
+    cmp(false, got.iter().any(|r| r.token == "Rec_001"))
+}
+
+async fn recording_track_create(d: &Dev) -> Outcome {
+    let url = d.url("recording");
+    let token = call!(
+        "CreateTrack",
+        d.client
+            .create_track(&url, "Rec_001", "Audio", "rt-track-4462")
+    );
+    let got = call!("GetRecordings", d.client.get_recordings(&url));
+    let present = got
+        .iter()
+        .find(|r| r.token == "Rec_001")
+        .is_some_and(|r| r.tracks.iter().any(|t| t.token == token));
+    cmp(true, present)
+}
+
+async fn recording_job_create(d: &Dev) -> Outcome {
+    let url = d.url("recording");
+    let cfg = RecordingJobConfiguration {
+        recording_token: "Rec_001".into(),
+        mode: "Idle".into(),
+        priority: 3,
+        source_token: "Profile_1".into(),
+    };
+    let token = call!(
+        "CreateRecordingJob",
+        d.client.create_recording_job(&url, &cfg)
+    );
+    let got = call!("GetRecordingJobs", d.client.get_recording_jobs(&url));
+    cmp(true, got.iter().any(|j| j.token == token))
+}
+
+async fn recording_job_mode(d: &Dev) -> Outcome {
+    let url = d.url("recording");
+    call!(
+        "SetRecordingJobMode",
+        d.client.set_recording_job_mode(&url, "Job_001", "Idle")
+    );
+    let got = call!("GetRecordingJobs", d.client.get_recording_jobs(&url));
+    let mode = got
+        .iter()
+        .find(|j| j.token == "Job_001")
+        .map(|j| j.mode.clone())
+        .unwrap_or_default();
+    cmp("Idle".to_string(), mode)
+}
+
+// ── The test ─────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn every_get_set_pair_matches_its_declared_expectation() {
+    // Guard on the guard: an empty or gutted table makes every assertion below
+    // vacuously true. 47 pairs at 0.15.0.
+    assert!(
+        PAIRS.len() >= 40,
+        "the pair table has only {} rows — it was gutted, which would make this \
+         test pass for the wrong reason",
+        PAIRS.len()
+    );
+
+    let mut mismatches = Vec::new();
+    let mut failures = Vec::new();
+    let mut round_tripped = 0usize;
+
+    for pair in PAIRS {
+        let dev = Dev::new().await;
+        let outcome = (pair.run)(&dev).await;
+
+        match (&outcome, pair.expect.should_round_trip()) {
+            (Outcome::RoundTripped, true) => round_tripped += 1,
+            (Outcome::Discarded(_), false) => {}
+            (Outcome::RoundTripped, false) => mismatches.push(format!(
+                "{}: declared {} but the write now round-trips.\n      \
+                 If you just wired this up, move the row to `Expect::Works` \
+                 (and strike it from docs/active/mock-audit-2026-07.md).",
+                pair.name,
+                pair.expect.label(),
+            )),
+            (Outcome::Discarded(detail), true) => mismatches.push(format!(
+                "{}: declared Works but the write was discarded — {detail}",
+                pair.name,
+            )),
+            (Outcome::Failed(detail), _) => failures.push(format!("{}: {detail}", pair.name)),
+        }
+    }
+
+    // A row whose *call* errors proves nothing about whether the write landed,
+    // so it can never satisfy a `Broken` or `Static` expectation by accident.
+    assert!(
+        failures.is_empty(),
+        "{} pair(s) errored rather than answering the round-trip question:\n  {}",
+        failures.len(),
+        failures.join("\n  "),
+    );
+    assert!(
+        mismatches.is_empty(),
+        "{} of {} Set/Get pairs disagree with the table:\n  {}",
+        mismatches.len(),
+        PAIRS.len(),
+        mismatches.join("\n  "),
+    );
+
+    // And the positive side is not vacuous either: most of the table works.
+    assert!(
+        round_tripped >= 25,
+        "only {round_tripped} pairs round-tripped — the mock is far more broken \
+         than the table claims",
+    );
+}
