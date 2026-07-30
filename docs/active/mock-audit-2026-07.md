@@ -50,7 +50,8 @@ are the "before" picture the rest of this document reasons about.
   `resp_empty` arms in `dispatch.rs` went from **22 to 13**.
 - **19** getters confirmed state-driven by probe. **4 families have no
   `DeviceState` field at all.**
-- **26 of 27** PTZ handlers never receive the request body.
+- **26 of 27** PTZ handlers never receive the request body. (**All 18 that are
+  per-profile now do**; the remaining 9 are node/config-addressed or static.)
 - `grep -c recording src/mock/state.rs` → **0**.
 - **47** `Set → Get` pairs are now a standing test
   (`tests/mock_roundtrip.rs`). 27 round-tripped, 15 were defects, 5 were
@@ -130,7 +131,7 @@ Per §6: a documented omission is a design decision, an undocumented one is a bu
 Not missing wiring. The shape of `DeviceState` has nowhere to put the truth, so
 these need a (small, local) model change before any handler can be correct.
 
-### 2.1 PTZ is profile-blind, by construction
+### 2.1 PTZ is profile-blind, by construction — **fixed**
 
 ```rust
 pub struct PtzState {
@@ -164,6 +165,33 @@ passes against a mock that ignores the profile entirely. Fails green.
 
 **Size: medium.** Key `presets` and position by profile token; thread `body`
 through the PTZ dispatcher.
+
+#### What was done
+
+`PtzState` is now `{ channels: BTreeMap<String, PtzChannel> }`, and `PtzChannel`
+holds what `PtzState` used to hold whole. **Eighteen dispatch arms gained
+`body`** and go through one `require_profile`, which faults on an absent or
+unknown token rather than falling back to a default head — the fallback is
+precisely what made a token-blind handler indistinguishable from a correct one.
+
+**The four seeded heads deliberately disagree**, per `CLAUDE.md`'s rule that a
+single-channel fixture cannot cover a per-channel feature. They differ in
+position, in preset *count* (2 / 1 / 3 / 0), in preset *names*, and in whether
+they have tours at all. `Profile_4` is empty on purpose: an empty preset list is
+a legitimate device state and the only fixture that catches a renderer which
+substitutes a default when it finds nothing.
+
+`Stop` writes nothing — nothing is moving in the mock — but validates the token
+anyway, so a caller cannot ship code against a head this device does not have.
+
+Tests: 8 new in `tests/mock_multi_sensor.rs` (public API, over HTTP) and 4 new
+unit tests. Perturbing `require_profile` to answer for `Profile_1` regardless of
+what was asked reddens **12** tests; making it fall back silently instead of
+faulting reddens the **3** negatives.
+
+**Still profile-blind and still Tier 3:** `GetConfigurations`, `GetNodes`,
+`GetConfigurationOptions` and `GetCompatibleConfigurations` — those are static
+fixtures on both sides (§5), not wiring gaps.
 
 ### 2.2 Recording / Search / Replay have no state at all
 
@@ -299,7 +327,7 @@ schema-fidelity chase and stall everything else.
 |---|---|
 | ~~1. Property test **round-trip** (§8.1)~~ **done** — `tests/mock_roundtrip.rs` | It was both probe and guard. Produced the Tier 1 list mechanically, confirmed 46 of 47 hand classifications, and added item 1.8. |
 | ~~2. Tier 1 wiring (§3)~~ **done** — all 8 items | Eight rows moved from `Broken` to `Works`; **35 of 47 pairs now round-trip**. Three new cross-service tests in `tests/mock_media1_media2_agree.rs` cover the bindings and the shared source-config writer. |
-| 3. Tier 2.1 PTZ per-profile (§4.1) | Biggest source of green-when-wrong, and closes a rule we already wrote and left half-applied. |
+| ~~3. Tier 2.1 PTZ per-profile (§4.1)~~ **done** | `PtzState` is keyed by profile token; 18 dispatch arms gained `body`; the four seeded heads deliberately disagree. |
 | 4. Property test **token discrimination** (§8.2) | Guards step 3 and the 0.15 media/imaging work. |
 | 5. Tier 2.2 recording state (§4.2) | Unblocks Profile G testing, including the health check's own liveness probe. |
 | 6. Tiers 3 and 4 | Opportunistic. |

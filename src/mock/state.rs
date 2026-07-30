@@ -1,6 +1,7 @@
 //! In-memory mock device state.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::sync::RwLock;
 
 // ── Device State ────────────────────────────────────────────────────────────
@@ -205,8 +206,22 @@ pub struct PtzTour {
     pub spots: Vec<PtzTourSpot>,
 }
 
+/// PTZ state for **one** media profile.
+///
+/// Every PTZ operation that moves or reads the head takes a `ProfileToken`, so
+/// on a multi-head device there is one of these per profile and none of them is
+/// "the device's" position. Same reasoning as [`ImagingState`] and the video
+/// encoder catalogue: with a single global copy, a handler that ignores the
+/// token is indistinguishable from one that reads it, and every test of
+/// "does my code address the right head?" passes against a mock that never
+/// looked.
+///
+/// Until 0.15 this *was* the whole of `PtzState` — one position, one preset
+/// list, one tour list for the entire device — and **26 of 27 PTZ dispatch arms
+/// never received the request body at all**, while the client sent
+/// `ProfileToken` at 20 call sites. `docs/active/mock-audit-2026-07.md` §4.1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PtzState {
+pub struct PtzChannel {
     pub pan: f32,
     pub tilt: f32,
     pub zoom: f32,
@@ -214,8 +229,49 @@ pub struct PtzState {
     pub home_tilt: f32,
     pub home_zoom: f32,
     pub presets: Vec<PtzPreset>,
-    #[serde(default = "default_tours")]
+    #[serde(default)]
     pub tours: Vec<PtzTour>,
+}
+
+impl Default for PtzChannel {
+    /// A head parked at the origin with nothing stored. This is what a profile
+    /// with no seeded channel gets on first use.
+    fn default() -> Self {
+        Self {
+            pan: 0.0,
+            tilt: 0.0,
+            zoom: 0.0,
+            home_pan: 0.0,
+            home_tilt: 0.0,
+            home_zoom: 0.0,
+            presets: Vec::new(),
+            tours: Vec::new(),
+        }
+    }
+}
+
+/// The device's PTZ heads, keyed by media profile token.
+///
+/// `BTreeMap` rather than `HashMap` so a serialised snapshot is stable.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PtzState {
+    #[serde(default = "default_ptz_channels")]
+    pub channels: BTreeMap<String, PtzChannel>,
+}
+
+impl PtzState {
+    /// The channel for `profile`, or `None` if the profile has never been
+    /// touched and was not seeded. Read paths render an empty head rather than
+    /// faulting — a profile with no presets is a legitimate device state.
+    pub fn channel(&self, profile: &str) -> Option<&PtzChannel> {
+        self.channels.get(profile)
+    }
+
+    /// The channel for `profile`, created empty if absent. Write paths use this
+    /// so a seeded state that lists profiles but no PTZ channels still works.
+    pub fn channel_mut(&mut self, profile: &str) -> &mut PtzChannel {
+        self.channels.entry(profile.to_string()).or_default()
+    }
 }
 
 /// Imaging state for **one** video source.
@@ -534,30 +590,73 @@ fn default_discovery_mode() -> String {
 }
 fn default_ptz() -> PtzState {
     PtzState {
-        pan: 0.0,
-        tilt: 0.0,
-        zoom: 0.0,
-        home_pan: 0.0,
-        home_tilt: 0.0,
-        home_zoom: 0.0,
-        presets: vec![
-            PtzPreset {
-                token: "Preset_1".into(),
-                name: "Home".into(),
-                pan: 0.0,
-                tilt: 0.0,
-                zoom: 0.0,
-            },
-            PtzPreset {
-                token: "Preset_2".into(),
-                name: "Door".into(),
-                pan: 0.5,
-                tilt: 0.2,
-                zoom: 0.0,
-            },
-        ],
-        tours: default_tours(),
+        channels: default_ptz_channels(),
     }
+}
+
+fn preset(token: &str, name: &str, pan: f32, tilt: f32, zoom: f32) -> PtzPreset {
+    PtzPreset {
+        token: token.into(),
+        name: name.into(),
+        pan,
+        tilt,
+        zoom,
+    }
+}
+
+/// **The four heads deliberately disagree.**
+///
+/// `CLAUDE.md` — "a single-sensor fixture cannot cover a per-channel feature":
+/// a fixture whose channels give the same answer is passed just as well by a
+/// handler that ignores the token entirely. So these differ in *position*, in
+/// *preset count*, in *preset names*, and in *whether tours exist at all* —
+/// every one of those is something an assertion can read.
+///
+/// Measured before this existed: `ptz_get_status(Profile_1 vs Profile_3)` gave
+/// `pan Some(0.77)` both times, and `ptz_get_presets` gave `2 vs 2`.
+///
+/// `Profile_4` is left completely empty on purpose. An empty preset list is a
+/// legitimate device state and the only fixture that can catch a renderer which
+/// substitutes a default when it finds nothing.
+fn default_ptz_channels() -> BTreeMap<String, PtzChannel> {
+    BTreeMap::from([
+        (
+            "Profile_1".to_string(),
+            PtzChannel {
+                presets: vec![
+                    preset("Preset_1", "Home", 0.0, 0.0, 0.0),
+                    preset("Preset_2", "Door", 0.5, 0.2, 0.0),
+                ],
+                tours: default_tours(),
+                ..PtzChannel::default()
+            },
+        ),
+        (
+            "Profile_2".to_string(),
+            PtzChannel {
+                pan: 0.25,
+                tilt: -0.10,
+                zoom: 0.40,
+                presets: vec![preset("Preset_1", "Gate", 0.25, -0.10, 0.40)],
+                ..PtzChannel::default()
+            },
+        ),
+        (
+            "Profile_3".to_string(),
+            PtzChannel {
+                pan: -0.60,
+                tilt: 0.35,
+                zoom: 0.80,
+                presets: vec![
+                    preset("Preset_1", "Lobby", -0.60, 0.35, 0.80),
+                    preset("Preset_2", "Dock", -0.20, 0.05, 0.10),
+                    preset("Preset_3", "Roof", 0.90, -0.45, 1.0),
+                ],
+                ..PtzChannel::default()
+            },
+        ),
+        ("Profile_4".to_string(), PtzChannel::default()),
+    ])
 }
 
 /// One tour, with **two** stops. A single-stop fixture cannot tell a parser
@@ -1193,21 +1292,101 @@ mod tests {
         assert!(!xml.contains("192.168.1.1"));
     }
 
+    /// Every PTZ request names a profile. Wrapping it here keeps each test
+    /// below reading like the operation it exercises rather than like XML.
+    fn ptz_req(profile: &str, op: &str, inner: &str) -> String {
+        format!("<tptz:{op}><tptz:ProfileToken>{profile}</tptz:ProfileToken>{inner}</tptz:{op}>")
+    }
+
+    fn ptz_ask(profile: &str, op: &str) -> String {
+        ptz_req(profile, op, "")
+    }
+
+    const MOVE_TO: &str = r#"<tptz:Position>
+        <tt:PanTilt x="{X}" y="{Y}"/><tt:Zoom x="{Z}"/>
+      </tptz:Position>"#;
+
+    fn move_to(profile: &str, x: &str, y: &str, z: &str) -> String {
+        ptz_req(
+            profile,
+            "AbsoluteMove",
+            &MOVE_TO
+                .replace("{X}", x)
+                .replace("{Y}", y)
+                .replace("{Z}", z),
+        )
+    }
+
     #[test]
     fn ptz_absolute_move_updates_position() {
         use crate::mock::services::ptz;
         let s = new_state();
-        let body = r#"<tptz:AbsoluteMove>
-            <tptz:Position>
-              <tt:PanTilt x="0.5" y="-0.3"/>
-              <tt:Zoom x="0.7"/>
-            </tt:Position>
-          </tptz:AbsoluteMove>"#;
-        ptz::handle_ptz_absolute_move(&s, body);
-        let xml = ptz::resp_ptz_status(&s);
+        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.5", "-0.3", "0.7"));
+        let xml = ptz::resp_ptz_status(&s, &ptz_ask("Profile_1", "GetStatus"));
         assert!(xml.contains(r#"x="0.5""#));
         assert!(xml.contains(r#"y="-0.3""#));
         assert!(xml.contains(r#"x="0.7""#));
+    }
+
+    /// The whole point of `PtzChannel`: two profiles are two heads.
+    ///
+    /// Before 0.15 this could not be written — `PtzState` held one position for
+    /// the entire device, so moving "Profile_1" moved everything. The measured
+    /// symptom was `ptz_get_status(Profile_1 vs Profile_3)` returning the same
+    /// pan for both.
+    #[test]
+    fn ptz_move_on_one_profile_does_not_move_another() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        let before = ptz::resp_ptz_status(&s, &ptz_ask("Profile_3", "GetStatus"));
+        // Profile_3's seeded position, deliberately not Profile_1's.
+        assert!(before.contains(r#"x="-0.6""#), "got {before}");
+
+        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.5", "-0.3", "0.7"));
+
+        let after = ptz::resp_ptz_status(&s, &ptz_ask("Profile_3", "GetStatus"));
+        assert_eq!(
+            before, after,
+            "moving Profile_1 must not move Profile_3 — they are separate heads"
+        );
+    }
+
+    /// …and the same for the preset list, which is the other half of the state
+    /// that used to be global.
+    #[test]
+    fn ptz_presets_are_per_profile() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        let p1 = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_1", "GetPresets"));
+        let p3 = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_3", "GetPresets"));
+        let p4 = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_4", "GetPresets"));
+
+        // Counts differ, so a handler that ignores the token cannot be right.
+        assert_eq!(p1.matches("<tptz:Preset ").count(), 2, "got {p1}");
+        assert_eq!(p3.matches("<tptz:Preset ").count(), 3, "got {p3}");
+        assert_eq!(p4.matches("<tptz:Preset ").count(), 0, "got {p4}");
+
+        // …and so do the names, so a count-only assertion is not the only guard.
+        assert!(p1.contains("Door") && !p1.contains("Lobby"), "got {p1}");
+        assert!(p3.contains("Lobby") && !p3.contains("Door"), "got {p3}");
+    }
+
+    /// A PTZ request with no `ProfileToken` faults rather than answering for
+    /// some default head. That fallback is exactly what made a token-less
+    /// handler indistinguishable from a correct one.
+    #[test]
+    fn ptz_without_a_profile_token_faults() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        let xml = ptz::resp_ptz_status(&s, "<tptz:GetStatus/>");
+        assert!(xml.contains("NoProfileToken-STATUS-5601"), "got {xml}");
+
+        let unknown = ptz::resp_ptz_status(&s, &ptz_ask("Profile_nope", "GetStatus"));
+        assert!(
+            unknown.contains("NoSuchProfile-STATUS-5601"),
+            "got {unknown}"
+        );
+        assert!(unknown.contains("Profile_nope"), "got {unknown}");
     }
 
     #[test]
@@ -1215,46 +1394,57 @@ mod tests {
         use crate::mock::services::ptz;
         let s = new_state();
         // Move first so SetPreset captures a non-zero position.
-        let move_body = r#"<tptz:AbsoluteMove><tptz:Position>
-            <tt:PanTilt x="0.4" y="0.1"/><tt:Zoom x="0.2"/>
-          </tt:Position></tptz:AbsoluteMove>"#;
-        ptz::handle_ptz_absolute_move(&s, move_body);
+        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.4", "0.1", "0.2"));
 
-        let body = r#"<tptz:SetPreset>
-            <tptz:PresetName>Garden</tptz:PresetName>
-          </tptz:SetPreset>"#;
-        let resp = ptz::handle_ptz_set_preset(&s, body);
-        // Defaults already use Preset_1 and Preset_2, so new one is Preset_3.
-        assert!(resp.contains("Preset_3"));
+        let body = ptz_req(
+            "Profile_1",
+            "SetPreset",
+            "<tptz:PresetName>Garden</tptz:PresetName>",
+        );
+        let resp = ptz::handle_ptz_set_preset(&s, &body);
+        // Profile_1 already has Preset_1 and Preset_2, so the new one is Preset_3.
+        assert!(resp.contains("Preset_3"), "got {resp}");
 
-        let presets = ptz::resp_ptz_presets(&s);
+        let presets = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_1", "GetPresets"));
         assert!(presets.contains("Garden"));
         assert!(presets.contains(r#"x="0.4""#));
+
+        // Profile_2 has its own list and must be untouched.
+        let other = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_2", "GetPresets"));
+        assert!(!other.contains("Garden"), "got {other}");
     }
 
     #[test]
     fn ptz_remove_preset_then_get() {
         use crate::mock::services::ptz;
         let s = new_state();
-        let body = r#"<tptz:RemovePreset>
-            <tptz:PresetToken>Preset_2</tptz:PresetToken>
-          </tptz:RemovePreset>"#;
-        ptz::handle_ptz_remove_preset(&s, body);
-        let xml = ptz::resp_ptz_presets(&s);
+        let body = ptz_req(
+            "Profile_1",
+            "RemovePreset",
+            "<tptz:PresetToken>Preset_2</tptz:PresetToken>",
+        );
+        ptz::handle_ptz_remove_preset(&s, &body);
+        let xml = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_1", "GetPresets"));
         assert!(xml.contains("Preset_1"));
         assert!(!xml.contains(r#"token="Preset_2""#));
+
+        // Profile_3 also has a Preset_2 — removing Profile_1's must not take it.
+        let other = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_3", "GetPresets"));
+        assert!(other.contains(r#"token="Preset_2""#), "got {other}");
     }
 
     #[test]
     fn ptz_goto_preset_jumps_position() {
         use crate::mock::services::ptz;
         let s = new_state();
-        // Preset_2 default: pan=0.5 tilt=0.2 zoom=0.0
-        let body = r#"<tptz:GotoPreset>
-            <tptz:PresetToken>Preset_2</tptz:PresetToken>
-          </tptz:GotoPreset>"#;
-        ptz::handle_ptz_goto_preset(&s, body);
-        let xml = ptz::resp_ptz_status(&s);
+        // Profile_1's Preset_2 ("Door"): pan=0.5 tilt=0.2 zoom=0.0
+        let body = ptz_req(
+            "Profile_1",
+            "GotoPreset",
+            "<tptz:PresetToken>Preset_2</tptz:PresetToken>",
+        );
+        ptz::handle_ptz_goto_preset(&s, &body);
+        let xml = ptz::resp_ptz_status(&s, &ptz_ask("Profile_1", "GetStatus"));
         assert!(xml.contains(r#"x="0.5""#));
         assert!(xml.contains(r#"y="0.2""#));
     }
@@ -1264,21 +1454,41 @@ mod tests {
         use crate::mock::services::ptz;
         let s = new_state();
         // Move, set home, move away, goto home → position should reset to setpoint.
-        let move1 = r#"<tptz:AbsoluteMove><tptz:Position>
-            <tt:PanTilt x="0.8" y="-0.4"/><tt:Zoom x="0.3"/>
-          </tt:Position></tptz:AbsoluteMove>"#;
-        ptz::handle_ptz_absolute_move(&s, move1);
-        ptz::handle_ptz_set_home_position(&s);
+        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.8", "-0.4", "0.3"));
+        ptz::handle_ptz_set_home_position(&s, &ptz_ask("Profile_1", "SetHomePosition"));
 
-        let move2 = r#"<tptz:AbsoluteMove><tptz:Position>
-            <tt:PanTilt x="-0.5" y="0.5"/><tt:Zoom x="0.0"/>
-          </tt:Position></tptz:AbsoluteMove>"#;
-        ptz::handle_ptz_absolute_move(&s, move2);
+        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "-0.5", "0.5", "0.0"));
+        ptz::handle_ptz_goto_home_position(&s, &ptz_ask("Profile_1", "GotoHomePosition"));
 
-        ptz::handle_ptz_goto_home_position(&s);
-        let xml = ptz::resp_ptz_status(&s);
+        let xml = ptz::resp_ptz_status(&s, &ptz_ask("Profile_1", "GetStatus"));
         assert!(xml.contains(r#"x="0.8""#));
         assert!(xml.contains(r#"y="-0.4""#));
+    }
+
+    /// Preset *tours* were global too. Profile_1 ships one and Profile_2 ships
+    /// none, so a tour handler that ignores the profile cannot answer both.
+    #[test]
+    fn ptz_preset_tours_are_per_profile() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        let p1 = ptz::resp_ptz_preset_tours(&s, &ptz_ask("Profile_1", "GetPresetTours"));
+        let p2 = ptz::resp_ptz_preset_tours(&s, &ptz_ask("Profile_2", "GetPresetTours"));
+        assert!(p1.contains("Tour_1"), "got {p1}");
+        assert!(!p2.contains("Tour_1"), "got {p2}");
+
+        // A tour created on Profile_2 is Profile_2's alone.
+        let created =
+            ptz::handle_ptz_create_preset_tour(&s, &ptz_ask("Profile_2", "CreatePresetTour"));
+        assert!(
+            created.contains("Tour_1"),
+            "first tour on this head: {created}"
+        );
+        let p1_after = ptz::resp_ptz_preset_tours(&s, &ptz_ask("Profile_1", "GetPresetTours"));
+        assert_eq!(
+            p1_after.matches("<tptz:PresetTour ").count(),
+            1,
+            "Profile_1 still has exactly its own one tour: {p1_after}"
+        );
     }
 
     // ── OSD CRUD + quota ─────────────────────────────────────────────────

@@ -181,6 +181,32 @@ two-thirds of the test suite.
   and `MediaProfile2` exposes exactly those four, so a success there could never
   be observed by any caller.
 
+- **The mock's PTZ was profile-blind.** It held **one** position, **one** home
+  position, **one** preset list and **one** tour list for the entire device, and
+  **26 of its 27 PTZ dispatch arms never received the request body** — while the
+  client sends `ProfileToken` at 20 call sites. So on a multi-head camera every
+  test of "my code addressed the right head" passed against a mock that could
+  not tell one head from another.
+
+  This is the third item in `CLAUDE.md`'s own multi-sensor checklist. 0.15
+  applied it to Media and Imaging and left PTZ.
+
+  `PtzState` is now `{ channels: BTreeMap<String, PtzChannel> }`, and the
+  **eighteen** per-profile operations — status, presets, the three moves, stop,
+  home, and the whole preset-tour family — take `body` and resolve the head
+  through one `require_profile`. An absent or unknown `ProfileToken` **faults**
+  rather than falling back to a default head; the fallback is exactly what made a
+  token-blind handler indistinguishable from a correct one.
+
+  **The four seeded heads deliberately disagree** — in position, in preset count
+  (2 / 1 / 3 / 0), in preset names, and in whether they have tours at all —
+  because a fixture whose channels agree is passed just as well by a handler that
+  ignores the token. `Profile_4` is empty on purpose: an empty preset list is a
+  legitimate device state, and the only fixture that catches a renderer which
+  substitutes a default when it finds nothing.
+
+  Eight new tests in `tests/mock_multi_sensor.rs` and four new unit tests.
+
 - **`SetNetworkInterfaces` silently dropped `MTU`.** It read `Enabled`,
   `FromDHCP`, `Address` and `PrefixLength` from the request and wrote all four,
   and ignored the fifth — which the client does send and `GetNetworkInterfaces`
@@ -456,6 +482,24 @@ two-thirds of the test suite.
   fields are `#[serde(default)]`, so a persisted state file still loads.
   Media2's `SetVideoEncoderConfiguration` now uses the posted token to *select*
   which channel to write instead of renaming the single global config.
+
+- **`PtzState` is now `{ channels: BTreeMap<String, PtzChannel> }`.** The eight
+  fields it used to hold — `pan`/`tilt`/`zoom`, the three `home_*`, `presets` and
+  `tours` — moved to the new `oxvif::mock::state::PtzChannel`, one per media
+  profile. Code that seeded `DeviceState.ptz.presets` becomes
+  `DeviceState.ptz.channels.insert("Profile_1".into(), PtzChannel { presets, ..Default::default() })`,
+  or `ptz.channel_mut("Profile_1").presets = …`.
+
+  Same reasoning as the `video_encoder` → `video_encoders` change above: a single
+  global copy makes a handler that ignores the token indistinguishable from one
+  that reads it. A persisted state file from 0.14 no longer loads this field and
+  falls back to the four seeded heads.
+
+- **The mock faults on a PTZ request with no `ProfileToken`**, or with one that
+  names no profile: `env:Sender` / `NoProfileToken-STATUS-5601: every PTZ
+  operation is per-profile`, and `ter:NoProfile` /
+  `NoSuchProfile-STATUS-5601: <token>`. Same rationale as the per-channel media
+  faults above — answering for a default head hides a client bug.
 
 ---
 

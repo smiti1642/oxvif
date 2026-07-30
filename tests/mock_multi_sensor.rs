@@ -391,3 +391,225 @@ async fn empty_lens_token_is_refused_as_missing() {
     let err = s.get_imaging_settings("").await.unwrap_err();
     assert_fault(err, "env:Sender", "NoVideoSourceToken-IMGSET-5601");
 }
+
+// ── PTZ per-profile ──────────────────────────────────────────────────────────
+//
+// A dual-head camera has one PTZ endpoint and several profiles, and *every*
+// operation that moves or reads a head takes a `ProfileToken`. Until 0.15 the
+// mock held one position and one preset list for the whole device, and 26 of
+// its 27 PTZ dispatch arms did not even receive the request body — so a test
+// asserting "my code addressed the right head" passed against a mock that could
+// not tell one head from another. `docs/active/mock-audit-2026-07.md` §4.1.
+//
+// The four seeded heads deliberately disagree on position, on preset count, on
+// preset names, and on whether they have tours at all.
+
+/// The measured symptom, inverted into an assertion: this returned the same pan
+/// for both profiles before the state was keyed by profile token.
+#[tokio::test]
+async fn ptz_status_answers_for_the_head_asked_about() {
+    let (_srv, s) = setup().await;
+
+    let one = s.ptz_get_status("Profile_1").await.unwrap();
+    let three = s.ptz_get_status("Profile_3").await.unwrap();
+
+    assert_eq!(
+        (one.pan, one.tilt, one.zoom),
+        (Some(0.0), Some(0.0), Some(0.0))
+    );
+    assert_eq!(
+        (three.pan, three.tilt, three.zoom),
+        (Some(-0.6), Some(0.35), Some(0.8)),
+        "Profile_3 is a different head and is parked somewhere else",
+    );
+}
+
+#[tokio::test]
+async fn ptz_presets_answer_for_the_head_asked_about() {
+    let (_srv, s) = setup().await;
+
+    let one = s.ptz_get_presets("Profile_1").await.unwrap();
+    let three = s.ptz_get_presets("Profile_3").await.unwrap();
+    let four = s.ptz_get_presets("Profile_4").await.unwrap();
+
+    // Counts differ, so a token-blind handler cannot satisfy all three...
+    assert_eq!(one.len(), 2);
+    assert_eq!(three.len(), 3);
+    assert_eq!(four.len(), 0, "an empty preset list is a legitimate answer");
+
+    // ...and so do the names, so the assertion is not count-only.
+    let names = |v: &[oxvif::PtzPreset]| v.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+    assert_eq!(names(&one), ["Home", "Door"]);
+    assert_eq!(names(&three), ["Lobby", "Dock", "Roof"]);
+}
+
+#[tokio::test]
+async fn moving_one_head_does_not_move_the_other() {
+    let (_srv, s) = setup().await;
+
+    let before = s.ptz_get_status("Profile_3").await.unwrap();
+    s.ptz_absolute_move("Profile_1", 0.9, -0.8, 0.1)
+        .await
+        .unwrap();
+
+    let after = s.ptz_get_status("Profile_3").await.unwrap();
+    assert_eq!(
+        (after.pan, after.tilt, after.zoom),
+        (before.pan, before.tilt, before.zoom),
+        "moving Profile_1 must not move Profile_3",
+    );
+    assert_eq!(
+        s.ptz_get_status("Profile_1").await.unwrap().pan,
+        Some(0.9),
+        "...and the head that was asked to move must have moved",
+    );
+}
+
+#[tokio::test]
+async fn a_preset_stored_on_one_head_is_not_visible_on_another() {
+    let (_srv, s) = setup().await;
+
+    let token = s
+        .ptz_set_preset("Profile_2", Some("Loading Bay"), None)
+        .await
+        .unwrap();
+
+    let two = s.ptz_get_presets("Profile_2").await.unwrap();
+    assert!(
+        two.iter()
+            .any(|p| p.token == token && p.name == "Loading Bay")
+    );
+
+    let one = s.ptz_get_presets("Profile_1").await.unwrap();
+    assert!(
+        !one.iter().any(|p| p.name == "Loading Bay"),
+        "Profile_1 has its own preset list: {one:?}",
+    );
+}
+
+/// Home position is per-head too, and this is the pair that would silently pass
+/// against a global one: store home on Profile_2, then send Profile_1 home.
+#[tokio::test]
+async fn home_position_is_per_head() {
+    let (_srv, s) = setup().await;
+
+    s.ptz_absolute_move("Profile_2", 0.7, 0.6, 0.5)
+        .await
+        .unwrap();
+    s.ptz_set_home_position("Profile_2").await.unwrap();
+
+    // Profile_1 has never had a home set, so it goes to the origin, not to
+    // Profile_2's stored position.
+    s.ptz_absolute_move("Profile_1", -0.3, -0.2, 0.9)
+        .await
+        .unwrap();
+    s.ptz_goto_home_position("Profile_1", None).await.unwrap();
+
+    let one = s.ptz_get_status("Profile_1").await.unwrap();
+    assert_eq!(
+        (one.pan, one.tilt, one.zoom),
+        (Some(0.0), Some(0.0), Some(0.0)),
+        "Profile_1 must not inherit Profile_2's home",
+    );
+
+    s.ptz_absolute_move("Profile_2", 0.0, 0.0, 0.0)
+        .await
+        .unwrap();
+    s.ptz_goto_home_position("Profile_2", None).await.unwrap();
+    let two = s.ptz_get_status("Profile_2").await.unwrap();
+    assert_eq!(
+        (two.pan, two.tilt, two.zoom),
+        (Some(0.7), Some(0.6), Some(0.5))
+    );
+}
+
+#[tokio::test]
+async fn preset_tours_are_per_head() {
+    let (_srv, s) = setup().await;
+
+    assert_eq!(s.ptz_get_preset_tours("Profile_1").await.unwrap().len(), 1);
+    assert_eq!(
+        s.ptz_get_preset_tours("Profile_2").await.unwrap().len(),
+        0,
+        "Profile_2 ships no tours",
+    );
+
+    let created = s.ptz_create_preset_tour("Profile_2").await.unwrap();
+    assert_eq!(s.ptz_get_preset_tours("Profile_2").await.unwrap().len(), 1);
+    assert_eq!(
+        s.ptz_get_preset_tours("Profile_1").await.unwrap().len(),
+        1,
+        "creating a tour on Profile_2 must not appear on Profile_1",
+    );
+    // Tour tokens are numbered per head, so both heads now hold a `Tour_1` and
+    // they are different tours.
+    assert_eq!(created, "Tour_1");
+}
+
+/// `GetPresetTourOptions` lists the presets a tour can visit — the *addressed*
+/// head's presets, not the device's.
+#[tokio::test]
+async fn preset_tour_options_list_the_addressed_heads_presets() {
+    let (_srv, s) = setup().await;
+
+    let one = s
+        .ptz_get_preset_tour_options("Profile_1", None)
+        .await
+        .unwrap();
+    let three = s
+        .ptz_get_preset_tour_options("Profile_3", None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        one.tour_spot.preset_detail.preset_tokens.len(),
+        2,
+        "got {one:?}"
+    );
+    assert_eq!(
+        three.tour_spot.preset_detail.preset_tokens.len(),
+        3,
+        "got {three:?}"
+    );
+}
+
+// ── PTZ negatives ────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn ptz_unknown_profile_is_refused() {
+    let (_srv, s) = setup().await;
+
+    let err = s.ptz_get_status("Profile_9").await.unwrap_err();
+    assert_fault(err, "ter:NoProfile", "NoSuchProfile-STATUS-5601: Profile_9");
+
+    let err = s.ptz_get_presets("Profile_9").await.unwrap_err();
+    assert_fault(
+        err,
+        "ter:NoProfile",
+        "NoSuchProfile-PRESETS-5602: Profile_9",
+    );
+
+    let err = s
+        .ptz_absolute_move("Profile_9", 0.0, 0.0, 0.0)
+        .await
+        .unwrap_err();
+    assert_fault(
+        err,
+        "ter:NoProfile",
+        "NoSuchProfile-ABSMOVE-5606: Profile_9",
+    );
+}
+
+/// An empty token is refused as *missing*, not as unknown — the two are
+/// different mistakes and a caller should be able to tell them apart.
+#[tokio::test]
+async fn ptz_empty_profile_token_is_refused_as_missing() {
+    let (_srv, s) = setup().await;
+
+    let err = s.ptz_get_status("").await.unwrap_err();
+    assert_fault(
+        err,
+        "env:Sender",
+        "NoProfileToken-STATUS-5601: every PTZ operation is per-profile",
+    );
+}
