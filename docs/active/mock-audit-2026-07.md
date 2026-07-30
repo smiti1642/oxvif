@@ -1,6 +1,7 @@
 # Mock audit — 2026-07
 
-**Status:** open. Measured at `fa1cd91` (0.15.0 unreleased).
+**Status:** **Tiers 1 and 2 closed; Tiers 3 and 4 open.** Measured at `fa1cd91`
+(0.15.0 unreleased); §9 tracks what has landed since.
 
 Every line below is **measured**, not inferred: either a probe driving the real
 `OnvifClient` against a real `MockServer` over HTTP, or a mechanical read of
@@ -10,6 +11,25 @@ running it, it says so.
 Prompted by an external report (Media2's profile family ignored `DeviceState`,
 fixed in `fa1cd91`). That report named one instance; this is the sweep for the
 class.
+
+**The original measurements are left as measured** — the "before" numbers in §2
+and the probe output quoted in §3 and §4 are the evidence the tiering was built
+on, and rewriting them to match today would destroy the record of what was
+actually wrong. Each section says what was done underneath.
+
+### Where it stands
+
+| | |
+|---|---|
+| **Defects found** | 16 — 8 Tier 1, 2 Tier 2 families, plus item 1.8 which the property test added |
+| **Defects fixed** | all of them |
+| **Standing guards** | `mock_roundtrip.rs` (47 pairs), `mock_token_discrimination.rs` (26 rows), `mock_media1_media2_agree.rs` (10 tests), `dispatch.rs`'s routing test (157 actions) |
+| **`Expect::Broken` rows** | **0** |
+| **Still open** | Tier 3's five declared stubs (§5) and Tier 4's fidelity gaps (§6) — both *declared*, both asserted, neither a lie |
+
+The structural finding in §8 is the part to read before touching `src/mock/`.
+The two property tables are how "deliberately static" is now written down; the
+short version is `CLAUDE.md` step 5c.
 
 ---
 
@@ -371,4 +391,19 @@ schema-fidelity chase and stall everything else.
 | ~~3. Tier 2.1 PTZ per-profile (§4.1)~~ **done** | `PtzState` is keyed by profile token; 18 dispatch arms gained `body`; the four seeded heads deliberately disagree. |
 | ~~4. Property test **token discrimination** (§8.2)~~ **done** — `tests/mock_token_discrimination.rs` | 26 rows; 19 discriminate, 7 declared static. Guards step 3 and the 0.15 media/imaging work. |
 | ~~5. Tier 2.2 recording state (§4.2)~~ **done** | `RecordingState` mirrors `ProfilesState`; all eleven operations wired. Unblocks Profile G testing, including the health check's own liveness chain. |
-| 6. Tiers 3 and 4 | Opportunistic. |
+| 6. Tiers 3 and 4 | **Still open, and deliberately so.** Both are *declared* — every Tier 3 family has a `Static` or `Blind` row asserting it stays a stub, so it cannot quietly become a lie. Fix one and the tables tell you to move the row. |
+
+### What a Tier 3 fix would cost, if it is ever wanted
+
+Not recommended now; recorded so the decision is not re-derived.
+
+| Family | Work |
+|---|---|
+| Audio (both services) | A catalogue in `DeviceState` plus per-token getters — the same shape as `video_encoders`. The largest of the four. |
+| PTZ configurations / nodes | A `PtzConfigEntry` list; would also close Tier 4's coordinate-space gap, since those fields live on `PtzConfiguration`. |
+| Storage configurations | One `Vec<StorageEntry>`; smallest. |
+| Media2 metadata configurations | One `Vec<MetadataEntry>`. |
+
+`SetVideoSourceMode` and `SetRelayOutputState` are **not** on this list: no getter
+exposes the value either writes, so there is no round-trip question to ask. See
+`CLAUDE.md` step 5c.
