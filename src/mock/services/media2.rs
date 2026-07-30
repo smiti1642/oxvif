@@ -1,6 +1,7 @@
 use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
-use crate::mock::state::{SharedState, VideoEncoderState};
-use crate::mock::xml_parse::{extract_attr, extract_tag};
+use crate::mock::services::media;
+use crate::mock::state::{ProfileEntry, SharedState, VideoEncoderState};
+use crate::mock::xml_parse::extract_tag;
 
 const NS: &str = r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#;
 
@@ -12,35 +13,66 @@ fn require_config_token(body: &str, missing_reason: &str) -> Result<String, Stri
         .ok_or_else(|| resp_soap_fault("env:Sender", missing_reason))
 }
 
-pub fn resp_profiles_media2() -> String {
+/// One profile in the Media2 shape.
+///
+/// **Not a prefix swap on `media::render_profile`.** Media1 inlines the whole
+/// configuration (`<tt:VideoSourceConfiguration token="VSC_1"><tt:Name>…
+/// <tt:UseCount>…`); Media2 emits token *references* only, inside a single
+/// `<tr2:Configurations>` wrapper. Two genuinely different shapes over the same
+/// [`ProfileEntry`] — which is why the state is shared and the renderers are not.
+///
+/// Element names match what `MediaProfile2::vec_from_xml` reads: `VideoSource`,
+/// `VideoEncoder`, `AudioSource`, and `Audio` — note the audio encoder is
+/// `<tr2:Audio>`, not `<tr2:AudioEncoder>`.
+fn render_profile_media2(p: &ProfileEntry, tag: &str) -> String {
+    let mut cfgs = String::new();
+    if let Some(t) = &p.video_source_config_token {
+        cfgs.push_str(&format!("<tr2:VideoSource token=\"{t}\"/>"));
+    }
+    if let Some(t) = &p.video_encoder_config_token {
+        cfgs.push_str(&format!("<tr2:VideoEncoder token=\"{t}\"/>"));
+    }
+    if let Some(t) = &p.audio_source_config_token {
+        cfgs.push_str(&format!("<tr2:AudioSource token=\"{t}\"/>"));
+    }
+    if let Some(t) = &p.audio_encoder_config_token {
+        cfgs.push_str(&format!("<tr2:Audio token=\"{t}\"/>"));
+    }
+    // A profile with nothing bound omits the wrapper rather than sending an
+    // empty one — a freshly created profile is exactly that case.
+    let configurations = if cfgs.is_empty() {
+        String::new()
+    } else {
+        format!("<tr2:Configurations>{cfgs}</tr2:Configurations>")
+    };
+    format!(
+        r#"<tr2:{tag} token="{token}" fixed="{fixed}">
+          <tt:Name>{name}</tt:Name>
+          {configurations}
+        </tr2:{tag}>"#,
+        token = p.token,
+        fixed = p.fixed,
+        name = p.name,
+    )
+}
+
+/// The device's profiles, in the Media2 shape.
+///
+/// This used to be a string literal with no `state` parameter, so a caller who
+/// seeded `DeviceState.profiles` got their list from Media1 and four hardcoded
+/// `Profile_A`…`Profile_D` from Media2 — same device, same process, same state,
+/// no error, no overlap in the token sets. Reported by a C++ ONVIF test suite
+/// whose harness seeded 20 profiles and whose DLL, negotiating Media2, received
+/// 4.
+pub fn resp_profiles_media2(state: &SharedState) -> String {
+    let snapshot = state.read().profiles.profiles.clone();
+    let items: String = snapshot
+        .iter()
+        .map(|p| render_profile_media2(p, "Profiles"))
+        .collect();
     soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetProfilesResponse>
-          <tr2:Profiles token="Profile_A" fixed="true">
-            <tt:Name>mainStream</tt:Name>
-            <tr2:Configurations>
-              <tr2:VideoSource token="VSC_1"/>
-              <tr2:VideoEncoder token="VEC_1"/>
-            </tr2:Configurations>
-          </tr2:Profiles>
-          <tr2:Profiles token="Profile_B" fixed="false">
-            <tt:Name>subStream</tt:Name>
-          </tr2:Profiles>
-          <tr2:Profiles token="Profile_C" fixed="true">
-            <tt:Name>mainStream2</tt:Name>
-            <tr2:Configurations>
-              <tr2:VideoSource token="VSC_2"/>
-              <tr2:VideoEncoder token="VEC_3"/>
-            </tr2:Configurations>
-          </tr2:Profiles>
-          <tr2:Profiles token="Profile_D" fixed="false">
-            <tt:Name>subStream2</tt:Name>
-            <tr2:Configurations>
-              <tr2:VideoSource token="VSC_2"/>
-              <tr2:VideoEncoder token="VEC_4"/>
-            </tr2:Configurations>
-          </tr2:Profiles>
-        </tr2:GetProfilesResponse>"#,
+        NS,
+        &format!("<tr2:GetProfilesResponse>{items}</tr2:GetProfilesResponse>"),
     )
 }
 
@@ -212,49 +244,15 @@ pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> Str
 /// state so a following `GetVideoEncoderConfigurations` reflects them. Only the
 /// fields present in the request body are updated.
 pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
-    // The token now *selects* which of the four channels to write, rather than
-    // renaming the single global config it used to be. An absent or unknown
-    // token is a fault: with more than one encoder, writing to a guessed
-    // channel is the same silent-wrong-answer failure the getters avoid.
-    let Some(want) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) else {
-        return resp_soap_fault("env:Sender", "NoConfigToken-SETVEC2-5515");
-    };
-    if !state.read().video_encoders.iter().any(|c| c.token == want) {
-        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-SETVEC2-5516: {want}"));
+    match media::apply_video_encoder_write(
+        state,
+        body,
+        "NoConfigToken-SETVEC2-5515",
+        "NoSuchConfig-SETVEC2-5516",
+    ) {
+        Ok(()) => resp_empty("tr2", "SetVideoEncoderConfigurationResponse"),
+        Err(fault) => fault,
     }
-    state.modify(|s| {
-        let Some(ve) = s.video_encoders.iter_mut().find(|c| c.token == want) else {
-            return;
-        };
-        if let Some(v) = extract_tag(body, "Name") {
-            ve.name = v;
-        }
-        if let Some(v) = extract_tag(body, "Encoding") {
-            ve.encoding = v;
-        }
-        if let Some(v) = extract_tag(body, "Width").and_then(|x| x.parse().ok()) {
-            ve.width = v;
-        }
-        if let Some(v) = extract_tag(body, "Height").and_then(|x| x.parse().ok()) {
-            ve.height = v;
-        }
-        if let Some(v) = extract_tag(body, "Quality").and_then(|x| x.parse().ok()) {
-            ve.quality = v;
-        }
-        if let Some(v) = extract_tag(body, "FrameRateLimit").and_then(|x| x.parse().ok()) {
-            ve.frame_rate_limit = v;
-        }
-        if let Some(v) = extract_tag(body, "BitrateLimit").and_then(|x| x.parse().ok()) {
-            ve.bitrate_limit = v;
-        }
-        if let Some(v) = extract_tag(body, "GovLength").and_then(|x| x.parse().ok()) {
-            ve.gov_length = v;
-        }
-        if let Some(v) = extract_tag(body, "Profile") {
-            ve.profile = v;
-        }
-    });
-    resp_empty("tr2", "SetVideoEncoderConfigurationResponse")
 }
 
 /// Render one `<tr2:Configurations>` element from encoder state, in the flat
@@ -307,13 +305,62 @@ pub fn resp_video_encoder_instances() -> String {
     )
 }
 
-pub fn resp_create_profile_media2() -> String {
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:CreateProfileResponse>
-          <tr2:Token>Profile_New_M2</tr2:Token>
-        </tr2:CreateProfileResponse>"#,
-    )
+/// Create a profile — in the shared list, not in a string literal.
+///
+/// It used to answer with a hardcoded `Profile_New_M2` and take no `state`, so
+/// it reported a success the caller could not then act on: the token it named
+/// appeared in no subsequent `GetProfiles`, from either service. The write now
+/// goes through [`media::create_profile_in_state`], the same call Media1 makes;
+/// only the response envelope differs (Media2 returns the bare token, Media1 the
+/// whole profile).
+pub fn handle_create_profile_media2(state: &SharedState, body: &str) -> String {
+    let inner = extract_tag(body, "CreateProfile").unwrap_or_default();
+    let name = extract_tag(&inner, "Name").unwrap_or_else(|| "Profile".to_string());
+    // `tr2:CreateProfile` carries `Name` and an optional `Configuration` list —
+    // and, unlike `trt:CreateProfile`, **no caller-supplied token**. The device
+    // always assigns.
+    match media::create_profile_in_state(state, &name, None) {
+        media::CreateOutcome::Created(entry) => soap(
+            NS,
+            &format!(
+                "<tr2:CreateProfileResponse><tr2:Token>{}</tr2:Token></tr2:CreateProfileResponse>",
+                entry.token
+            ),
+        ),
+        media::CreateOutcome::Duplicate(t) => resp_soap_fault(
+            "ter:ProfileExists",
+            &format!("Profile token already in use: {t}"),
+        ),
+    }
+}
+
+/// Delete a profile — and actually delete it.
+///
+/// The dispatcher used to answer this with `resp_empty`, an unconditional
+/// success that removed nothing and reported nothing about a token that did not
+/// exist or a fixed profile that cannot be removed.
+pub fn handle_delete_profile_media2(state: &SharedState, body: &str) -> String {
+    let inner = extract_tag(body, "DeleteProfile").unwrap_or_default();
+    // **`Token`, not `ProfileToken`.** `tr2:DeleteProfile` names it `Token`
+    // where `trt:DeleteProfile` says `ProfileToken`. Reusing Media1's handler
+    // wholesale would have read the wrong element and faulted on every valid
+    // request — the reason these are two handlers over one state rather than
+    // one handler with a prefix argument.
+    let token = extract_tag(&inner, "Token").unwrap_or_default();
+    if token.is_empty() {
+        return resp_soap_fault("ter:InvalidArgs", "Token missing");
+    }
+
+    match media::delete_profile_in_state(state, &token) {
+        media::DeleteOutcome::Deleted => resp_empty("tr2", "DeleteProfileResponse"),
+        media::DeleteOutcome::NotFound => {
+            resp_soap_fault("ter:NoProfile", &format!("Profile not found: {token}"))
+        }
+        media::DeleteOutcome::Fixed => resp_soap_fault(
+            "ter:DeletionOfFixedProfile",
+            &format!("Cannot delete fixed profile: {token}"),
+        ),
+    }
 }
 
 pub fn resp_metadata_configurations() -> String {

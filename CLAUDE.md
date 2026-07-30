@@ -385,6 +385,44 @@ they catch a class the missing/fault pair cannot:
     this step, only satisfy it. It asserts *routing*, not payload: give the
     handler a plausible response as well, because nothing checks that for you.
 
+5b. **If the operation exists on both Media1 and Media2, they share one state.**
+    Media1 and Media2 are two views of one device, so an operation present in
+    both dispatchers must read and write the same `DeviceState` — otherwise the
+    mock reports contradictory facts about itself, with no error and nothing
+    failing.
+
+    Two instances shipped before this was written down, both found from
+    outside: Media2's whole profile family was a string literal while Media1's
+    was state-driven (a harness seeding 20 profiles got 20 from one service and
+    4 from the other), and `SetVideoEncoderConfiguration` wrote state on Media2
+    while Media1 answered `resp_empty`.
+
+    The audit is mechanical — for every operation name in both `dispatch_media`
+    and `dispatch_media2`, check whether both arms take `state`:
+
+    ```sh
+    python -c "
+    import io,re
+    s=io.open('src/mock/dispatch.rs',encoding='utf-8').read()
+    def arms(fn):
+        m=re.search(r'fn '+fn+r'\(.*?\n\}\n', s, re.S)
+        return {op:h for op,h in re.findall(r'\"([A-Za-z]+)\" => ([^,]+),', m.group(0))}
+    m1,m2=arms('dispatch_media'),arms('dispatch_media2')
+    for op in sorted(set(m1)&set(m2)):
+        a,b=('state' in m1[op]),('state' in m2[op])
+        if a!=b: print('DIVERGENT:',op)
+    "
+    ```
+
+    Both must be state-driven or both static — a *consistent* stub is fine
+    (audio is static on both sides), a divergent one is the bug. Put the state
+    operation in `services/media.rs` and let each service render its own
+    envelope: the shapes genuinely differ (Media1 inlines whole configurations,
+    Media2 emits token references), and `tr2:DeleteProfile` names its token
+    element `Token` where `trt:DeleteProfile` says `ProfileToken`, so a shared
+    handler reads the wrong element. `tests/mock_media1_media2_agree.rs` is the
+    standing guard.
+
 ### Quality gate (run before every commit)
 
 ```

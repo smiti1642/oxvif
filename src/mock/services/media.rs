@@ -1,4 +1,4 @@
-use crate::mock::helpers::{resp_soap_fault, soap};
+use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
 use crate::mock::state::{
     OSD_QUOTA_DATE, OSD_QUOTA_DATE_AND_TIME, OSD_QUOTA_PLAIN, OSD_QUOTA_TIME, OSD_QUOTA_TOTAL,
     OsdColorEntry, OsdEntry, OsdTextEntry, ProfileEntry, SharedState, VideoEncoderState,
@@ -66,42 +66,33 @@ pub fn resp_snapshot_uri(base: &str) -> String {
     )
 }
 
+pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+    match apply_video_encoder_write(
+        state,
+        body,
+        "NoConfigToken-SETVEC-5517",
+        "NoSuchConfig-SETVEC-5518",
+    ) {
+        Ok(()) => resp_empty("trt", "SetVideoEncoderConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
 pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
     let inner = extract_tag(body, "CreateProfile").unwrap_or_default();
     let name = extract_tag(&inner, "Name").unwrap_or_else(|| "Profile".to_string());
     // Caller may supply an explicit token (rare — most cameras assign).
-    // If supplied, honour it verbatim; otherwise generate one.
     let supplied_token = extract_tag(&inner, "Token");
 
-    // Reject duplicate token if caller supplied one that already exists.
-    if let Some(t) = supplied_token.as_ref()
-        && state.read().profiles.profiles.iter().any(|p| &p.token == t)
-    {
-        return resp_soap_fault(
-            "ter:ProfileExists",
-            &format!("Profile token already in use: {t}"),
-        );
-    }
-
-    let entry = state.modify_returning(|s| {
-        let token = supplied_token.unwrap_or_else(|| {
-            let id = s.profiles.next_token_id;
-            s.profiles.next_token_id += 1;
-            format!("Profile_{id}")
-        });
-        let entry = ProfileEntry {
-            token: token.clone(),
-            name: name.clone(),
-            fixed: false,
-            video_source_config_token: None,
-            video_encoder_config_token: None,
-            audio_source_config_token: None,
-            audio_encoder_config_token: None,
-        };
-        eprintln!("    [STATE] profile created: {token} ({name})");
-        s.profiles.profiles.push(entry.clone());
-        entry
-    });
+    let entry = match create_profile_in_state(state, &name, supplied_token) {
+        CreateOutcome::Created(e) => e,
+        CreateOutcome::Duplicate(t) => {
+            return resp_soap_fault(
+                "ter:ProfileExists",
+                &format!("Profile token already in use: {t}"),
+            );
+        }
+    };
 
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
@@ -121,19 +112,7 @@ pub fn handle_delete_profile(state: &SharedState, body: &str) -> String {
         return resp_soap_fault("ter:InvalidArgs", "ProfileToken missing");
     }
 
-    let outcome = state.modify_returning(|s| {
-        let Some(idx) = s.profiles.profiles.iter().position(|p| p.token == token) else {
-            return DeleteOutcome::NotFound;
-        };
-        if s.profiles.profiles[idx].fixed {
-            return DeleteOutcome::Fixed;
-        }
-        s.profiles.profiles.remove(idx);
-        eprintln!("    [STATE] profile deleted: {token}");
-        DeleteOutcome::Deleted
-    });
-
-    match outcome {
+    match delete_profile_in_state(state, &token) {
         DeleteOutcome::Deleted => soap(
             r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
             "<trt:DeleteProfileResponse/>",
@@ -148,11 +127,153 @@ pub fn handle_delete_profile(state: &SharedState, body: &str) -> String {
     }
 }
 
-enum DeleteOutcome {
+pub(crate) enum DeleteOutcome {
     Deleted,
     NotFound,
     /// Per ONVIF spec, fixed profiles can't be removed.
     Fixed,
+}
+
+pub(crate) enum CreateOutcome {
+    Created(ProfileEntry),
+    /// The caller supplied a token that is already in use.
+    Duplicate(String),
+}
+
+// ── Shared profile-list operations ──────────────────────────────────────────
+//
+// The device has **one** profile list, and Media1 and Media2 are two views of
+// it. What a create or a delete *does* lives here; each service renders its own
+// envelope around the outcome.
+//
+// Split out in 0.15 after a report from a C++ test suite: Media2's profile
+// family took no `state` at all — `GetProfiles` returned a string literal,
+// `CreateProfile` returned a literal token and wrote nothing, and the
+// dispatcher answered `DeleteProfile` with an unconditional empty success. A
+// harness that seeded 20 profiles got 20 from Media1 and 4 from Media2, with no
+// error and no overlap in the token sets. Two renderers over one state is the
+// shape that cannot drift back.
+
+/// Create a profile in the shared list. `supplied_token` is honoured verbatim
+/// when the caller gives one (rare — most cameras assign); otherwise a token is
+/// generated from `next_token_id`.
+pub(crate) fn create_profile_in_state(
+    state: &SharedState,
+    name: &str,
+    supplied_token: Option<String>,
+) -> CreateOutcome {
+    if let Some(t) = supplied_token.as_ref()
+        && state.read().profiles.profiles.iter().any(|p| &p.token == t)
+    {
+        return CreateOutcome::Duplicate(t.clone());
+    }
+
+    let entry = state.modify_returning(|s| {
+        let token = supplied_token.unwrap_or_else(|| {
+            let id = s.profiles.next_token_id;
+            s.profiles.next_token_id += 1;
+            format!("Profile_{id}")
+        });
+        let entry = ProfileEntry {
+            token: token.clone(),
+            name: name.to_string(),
+            fixed: false,
+            video_source_config_token: None,
+            video_encoder_config_token: None,
+            audio_source_config_token: None,
+            audio_encoder_config_token: None,
+        };
+        eprintln!("    [STATE] profile created: {token} ({name})");
+        s.profiles.profiles.push(entry.clone());
+        entry
+    });
+    CreateOutcome::Created(entry)
+}
+
+/// Apply a `SetVideoEncoderConfiguration` body to the addressed channel.
+///
+/// Shared by Media1 and Media2 for the same reason as the profile operations
+/// above: one encoder catalogue, two request shapes. Until 0.15 **Media1's Set
+/// was `resp_empty`** — it reported success and wrote nothing — while Media2's
+/// wrote state, so the identical call changed the device on one service only.
+/// Same class as the reported profile divergence, pointing the other way.
+///
+/// The two bodies differ in exactly one place: Media2's encoder config is flat
+/// and carries `<tt:Profile>`, Media1 nests it as `<tt:H264Profile>` /
+/// `<tt:H265Profile>`. All three are read here — a given body contains at most
+/// one, so there is nothing to disambiguate and no parameter to get wrong.
+///
+/// `Err` is a rendered SOAP fault. The reasons are per-service so an assertion
+/// can tell *which* service refused.
+pub(crate) fn apply_video_encoder_write(
+    state: &SharedState,
+    body: &str,
+    missing_reason: &str,
+    unknown_prefix: &str,
+) -> Result<(), String> {
+    // The token *selects* which of the channels to write. An absent or unknown
+    // token is a fault: with more than one encoder, writing to a guessed channel
+    // is the same silent-wrong-answer failure the getters avoid.
+    let Some(want) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) else {
+        return Err(resp_soap_fault("env:Sender", missing_reason));
+    };
+    if !state.read().video_encoders.iter().any(|c| c.token == want) {
+        return Err(resp_soap_fault(
+            "env:Sender",
+            &format!("{unknown_prefix}: {want}"),
+        ));
+    }
+    state.modify(|s| {
+        let Some(ve) = s.video_encoders.iter_mut().find(|c| c.token == want) else {
+            return;
+        };
+        if let Some(v) = extract_tag(body, "Name") {
+            ve.name = v;
+        }
+        if let Some(v) = extract_tag(body, "Encoding") {
+            ve.encoding = v;
+        }
+        if let Some(v) = extract_tag(body, "Width").and_then(|x| x.parse().ok()) {
+            ve.width = v;
+        }
+        if let Some(v) = extract_tag(body, "Height").and_then(|x| x.parse().ok()) {
+            ve.height = v;
+        }
+        if let Some(v) = extract_tag(body, "Quality").and_then(|x| x.parse().ok()) {
+            ve.quality = v;
+        }
+        if let Some(v) = extract_tag(body, "FrameRateLimit").and_then(|x| x.parse().ok()) {
+            ve.frame_rate_limit = v;
+        }
+        if let Some(v) = extract_tag(body, "BitrateLimit").and_then(|x| x.parse().ok()) {
+            ve.bitrate_limit = v;
+        }
+        if let Some(v) = extract_tag(body, "GovLength").and_then(|x| x.parse().ok()) {
+            ve.gov_length = v;
+        }
+        if let Some(v) = extract_tag(body, "Profile")
+            .or_else(|| extract_tag(body, "H264Profile"))
+            .or_else(|| extract_tag(body, "H265Profile"))
+        {
+            ve.profile = v;
+        }
+    });
+    Ok(())
+}
+
+/// Remove a profile from the shared list, refusing a fixed one.
+pub(crate) fn delete_profile_in_state(state: &SharedState, token: &str) -> DeleteOutcome {
+    state.modify_returning(|s| {
+        let Some(idx) = s.profiles.profiles.iter().position(|p| p.token == token) else {
+            return DeleteOutcome::NotFound;
+        };
+        if s.profiles.profiles[idx].fixed {
+            return DeleteOutcome::Fixed;
+        }
+        s.profiles.profiles.remove(idx);
+        eprintln!("    [STATE] profile deleted: {token}");
+        DeleteOutcome::Deleted
+    })
 }
 
 // ── Profile render helpers ──────────────────────────────────────────────────

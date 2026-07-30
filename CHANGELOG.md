@@ -115,6 +115,46 @@ two-thirds of the test suite.
   other and with nothing else. The mock now sends the nested shape a real
   device sends.
 
+- **Media1 and Media2 answered differently for the same mock device.**
+  (Reported by a C++ ONVIF test suite driving `MockServer`.) Media2's profile
+  family took no `state` at all: `GetProfiles` returned a **string literal**,
+  `CreateProfile` returned a literal token and wrote nothing, and the dispatcher
+  answered `DeleteProfile` with an unconditional empty success. Meanwhile every
+  Media1 equivalent — and Media2's *own* video-encoder family — was state-driven.
+
+  A harness that seeded `DeviceState.profiles` with 20 entries got **20 from
+  Media1 and 4 from Media2**, with no error, no warning, and no overlap in the
+  token sets (`Profile_1…20` vs `Profile_A…D`). The reporter's device-side
+  fixed-array bound could not be exercised at all: asserting `count <= 16`
+  against 4 passes while proving nothing.
+
+  This also contradicted the mock's documented contract — "writes and unrecorded
+  operations fall to synthetic `DeviceState` … so `Set → Get` still round-trips"
+  (`server.rs`). On the Media2 profile family it did not round-trip.
+
+  All three now read and write the shared list. The state operations
+  (`create_profile_in_state`, `delete_profile_in_state`) live once in
+  `services/media.rs`; each service renders its own envelope, because the shapes
+  genuinely differ — Media1 inlines whole configurations, Media2 emits token
+  references inside `<tr2:Configurations>`, and `tr2:DeleteProfile` names its
+  token element `Token` where `trt:DeleteProfile` says `ProfileToken`. A shared
+  handler would have read the wrong element.
+
+- **…and the same defect pointing the other way, in the encoder family.** Found
+  by auditing every operation present in **both** dispatchers for whether it
+  takes `state`: `SetVideoEncoderConfiguration` **wrote state on Media2 and was
+  `resp_empty` on Media1**. So a Media1 encoder write reported success and
+  changed nothing, while the identical Media2 call changed the device. Both now
+  go through one `apply_video_encoder_write`.
+
+  Not reported — the report named an instance, and the audit found the class.
+
+  New `tests/mock_media1_media2_agree.rs` (7 tests, public API only, over real
+  HTTP) pins both directions: the two services must return the same profile token
+  set for a seeded *and* the default device, and a create/delete/encoder-write on
+  either must be visible to the other. Every one of the five perturbations —
+  restoring each old behaviour in turn — goes red.
+
 - **The mock's clock was half-frozen.** `GetSystemDateAndTime` computed the time
   of day from `SystemTime::now()` but hardcoded `<tt:Year>2026</tt:Year>
   <tt:Month>4</tt:Month><tt:Day>15</tt:Day>`, so the reported timestamp drifted a

@@ -102,7 +102,11 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
         }
         "GetVideoEncoderConfigurations" => media::resp_video_encoder_configurations(state, body),
         "GetVideoEncoderConfiguration" => media::resp_video_encoder_configuration(state, body),
-        "SetVideoEncoderConfiguration" => resp_empty("trt", "SetVideoEncoderConfigurationResponse"),
+        // Was `resp_empty` — success with no write, while the Media2 arm below
+        // wrote state. One catalogue, so both must write.
+        "SetVideoEncoderConfiguration" => {
+            media::handle_set_video_encoder_configuration(state, body)
+        }
         "GetVideoEncoderConfigurationOptions" => {
             media::resp_video_encoder_configuration_options(state, body)
         }
@@ -133,9 +137,13 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
 fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => media2::resp_service_capabilities_media2(),
-        "GetProfiles" => media2::resp_profiles_media2(),
-        "CreateProfile" => media2::resp_create_profile_media2(),
-        "DeleteProfile" => resp_empty("tr2", "DeleteProfileResponse"),
+        // All three read and write the *shared* profile list. Until 0.15 they
+        // were a string literal, a literal token, and an unconditional empty
+        // success respectively — so Media1 and Media2 answered differently for
+        // one device and never converged.
+        "GetProfiles" => media2::resp_profiles_media2(state),
+        "CreateProfile" => media2::handle_create_profile_media2(state, body),
+        "DeleteProfile" => media2::handle_delete_profile_media2(state, body),
         "AddConfiguration" => resp_empty("tr2", "AddConfigurationResponse"),
         "RemoveConfiguration" => resp_empty("tr2", "RemoveConfigurationResponse"),
         "GetStreamUri" => media2::resp_stream_uri_media2(),
