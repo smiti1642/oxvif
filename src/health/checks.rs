@@ -12,6 +12,9 @@ use std::future::Future;
 use std::time::{Duration, Instant};
 
 use super::report::{Category, CheckError, CheckResult};
+use crate::types::{
+    Capabilities, DeviceServiceCapabilities, EventsServiceCapabilities, MediaServiceCapabilities,
+};
 use crate::{OnvifError, OnvifSession};
 
 /// Time a `Result<String, OnvifError>` future into a Pass/Fail check.
@@ -341,6 +344,321 @@ pub(super) async fn services(s: &OnvifSession, force: bool, device_url: &str) ->
     };
 
     vec![get_services, media2]
+}
+
+/// One service's `GetServiceCapabilities`. Skips when the service is not
+/// advertised, so an S-only camera is not painted with nine failures.
+///
+/// `fut` is built by the caller but only polled when `advertised` — an async
+/// block is lazy, so an un-advertised service costs no request.
+///
+/// Returns the parsed value alongside the result: three of the nine feed
+/// [`capability_disagreements`], and re-calling for that would double the
+/// request count for no new information.
+async fn caps_check<T, F>(
+    id: &'static str,
+    service: &str,
+    advertised: bool,
+    fut: F,
+) -> (Option<T>, CheckResult)
+where
+    F: Future<Output = Result<T, OnvifError>>,
+{
+    if !advertised {
+        return (
+            None,
+            CheckResult::skip(
+                id,
+                Category::Services,
+                format!("{service} service not advertised"),
+            ),
+        );
+    }
+    let start = Instant::now();
+    match fut.await {
+        Ok(v) => (
+            Some(v),
+            CheckResult::pass(id, Category::Services, "answered").with_elapsed(start.elapsed()),
+        ),
+        Err(e) => (
+            None,
+            CheckResult::fail_from(id, Category::Services, &e).with_elapsed(start.elapsed()),
+        ),
+    }
+}
+
+/// Outcome of cross-checking the facts a device states twice.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct CapabilityCrossCheck {
+    /// Facts the service side stated at all (`Some`), and so had an opinion on.
+    pub checked: usize,
+    /// Sound findings: the device-level response said **yes** and the service
+    /// said **no**. See [`capability_cross_check`] for why only this direction.
+    pub contradictions: Vec<String>,
+    /// The service said yes where the device-level response reads no. Counted
+    /// and reported, but **not** a finding — see the note on direction.
+    pub service_only: usize,
+}
+
+/// Cross-check the facts a device states **twice** — once in the device-level
+/// `GetCapabilities` and again in a service's `GetServiceCapabilities`.
+///
+/// Eighteen attributes appear in both. Everything else a capability report
+/// contains is a claim with nothing to contradict it; these eighteen can be
+/// *wrong* rather than merely unknown, which makes them the only part checkable
+/// without vendor knowledge. A client that trusts either source is guessing when
+/// they differ.
+///
+/// # Only one direction is a finding
+///
+/// This is the subtle part, and getting it wrong makes the check worse than
+/// absent. The device-level [`Capabilities`] uses bare `bool`, so it **cannot
+/// distinguish "said no" from "did not say"** — an omitted `<tt:Network>`
+/// element, which is legal and common, parses as four `false`s. The
+/// service-side types use `Option<bool>` precisely because they can.
+///
+/// So:
+///
+/// - `GetCapabilities=true`, service `Some(false)` → **a real contradiction.**
+///   `true` cannot come from absence; the element was present and said yes.
+/// - `GetCapabilities=false`, service `Some(true)` → **unverifiable.** Either
+///   the device contradicts itself, or it simply omitted the element. Counted as
+///   `service_only` and reported, never warned about.
+///
+/// Measured: oxvif's own mock trips the second case six times — its
+/// `GetCapabilities` omits `<tt:Network>`, `<tt:System>` and `<tt:Security>`
+/// entirely. Treating that direction as a finding would flag every terse but
+/// conformant camera.
+///
+/// A `None` on the service side is not compared at all: "the device did not
+/// mention it" is a third answer, and collapsing it into `false` is the mistake
+/// the `Option<bool>` types exist to prevent.
+///
+/// Deliberately *not* compared: `Capabilities.device.system.firmware_upgrade`
+/// against `DeviceSystemCapabilities::http_firmware_upgrade`. They read like a
+/// pair and are not — one is "can be upgraded", the other "can be upgraded over
+/// HTTP" — so a device with a non-HTTP upgrade path would be flagged for telling
+/// the truth twice.
+fn capability_cross_check(
+    caps: &Capabilities,
+    device: Option<&DeviceServiceCapabilities>,
+    media: Option<&MediaServiceCapabilities>,
+    events: Option<&EventsServiceCapabilities>,
+) -> CapabilityCrossCheck {
+    let mut r = CapabilityCrossCheck::default();
+    let mut cmp = |name: &str, from_caps: bool, from_service: Option<bool>| {
+        let Some(v) = from_service else { return };
+        r.checked += 1;
+        match (from_caps, v) {
+            (true, false) => r.contradictions.push(format!(
+                "{name}: GetCapabilities=true, GetServiceCapabilities=false"
+            )),
+            (false, true) => r.service_only += 1,
+            _ => {}
+        }
+    };
+
+    if let Some(d) = device {
+        let (n, sy, se) = (
+            &caps.device.network,
+            &caps.device.system,
+            &caps.device.security,
+        );
+        cmp("device/IPFilter", n.ip_filter, d.network.ip_filter);
+        cmp(
+            "device/ZeroConfiguration",
+            n.zero_configuration,
+            d.network.zero_configuration,
+        );
+        cmp("device/IPVersion6", n.ip_version6, d.network.ip_version6);
+        cmp("device/DynDNS", n.dyn_dns, d.network.dyn_dns);
+        cmp(
+            "device/DiscoveryResolve",
+            sy.discovery_resolve,
+            d.system.discovery_resolve,
+        );
+        cmp(
+            "device/DiscoveryBye",
+            sy.discovery_bye,
+            d.system.discovery_bye,
+        );
+        cmp(
+            "device/RemoteDiscovery",
+            sy.remote_discovery,
+            d.system.remote_discovery,
+        );
+        cmp(
+            "device/SystemBackup",
+            sy.system_backup,
+            d.system.system_backup,
+        );
+        cmp(
+            "device/SystemLogging",
+            sy.system_logging,
+            d.system.system_logging,
+        );
+        cmp("device/TLS1.2", se.tls_1_2, d.security.tls1_2);
+        cmp(
+            "device/OnboardKeyGeneration",
+            se.onboard_key_generation,
+            d.security.onboard_key_generation,
+        );
+        cmp(
+            "device/AccessPolicyConfig",
+            se.access_policy_config,
+            d.security.access_policy_config,
+        );
+        cmp("device/X.509Token", se.x509_token, d.security.x509_token);
+        cmp(
+            "device/UsernameToken",
+            se.username_token,
+            d.security.username_token,
+        );
+    }
+
+    if let Some(m) = media {
+        let st = &caps.media.streaming;
+        cmp(
+            "media/RTPMulticast",
+            st.rtp_multicast,
+            m.streaming.rtp_multicast,
+        );
+        cmp("media/RTP_TCP", st.rtp_tcp, m.streaming.rtp_tcp);
+        cmp(
+            "media/RTP_RTSP_TCP",
+            st.rtp_rtsp_tcp,
+            m.streaming.rtp_rtsp_tcp,
+        );
+    }
+
+    if let Some(e) = events {
+        cmp(
+            "events/WSSubscriptionPolicySupport",
+            caps.events.ws_subscription_policy,
+            e.ws_subscription_policy_support,
+        );
+    }
+
+    r
+}
+
+/// `GetServiceCapabilities` on all nine services, plus the cross-check of the
+/// facts the device states twice.
+///
+/// `get_capabilities` (the `connect` check) answers *which services exist and
+/// where*; this answers *what each one says it can do*. The nine operations
+/// shipped in 0.15.0 and nothing in the health check asked them until now, which
+/// left the report unable to see the one class of defect it is best placed to
+/// find: a device contradicting itself between the two.
+pub(super) async fn service_capabilities(s: &OnvifSession) -> Vec<CheckResult> {
+    let caps = s.capabilities();
+
+    // The device service is how we got here, so it is never "not advertised".
+    let (device, c_device) = caps_check(
+        "service_caps_device",
+        "Device",
+        true,
+        s.device_get_service_capabilities(),
+    )
+    .await;
+    let (media, c_media) = caps_check(
+        "service_caps_media",
+        "Media",
+        caps.media.url.is_some(),
+        s.media_get_service_capabilities(),
+    )
+    .await;
+    let (events, c_events) = caps_check(
+        "service_caps_events",
+        "Events",
+        caps.events.url.is_some(),
+        s.events_get_service_capabilities(),
+    )
+    .await;
+
+    let mut out = vec![c_device, c_media, c_events];
+
+    // The remaining six have no device-level counterpart to cross-check, so
+    // only the call itself is reported.
+    macro_rules! plain {
+        ($id:literal, $service:literal, $advertised:expr, $call:expr) => {
+            out.push(caps_check($id, $service, $advertised, $call).await.1)
+        };
+    }
+    plain!(
+        "service_caps_media2",
+        "Media2",
+        caps.media2.url.is_some(),
+        s.media2_get_service_capabilities()
+    );
+    plain!(
+        "service_caps_ptz",
+        "PTZ",
+        caps.ptz.url.is_some(),
+        s.ptz_get_service_capabilities()
+    );
+    plain!(
+        "service_caps_imaging",
+        "Imaging",
+        caps.imaging.url.is_some(),
+        s.imaging_get_service_capabilities()
+    );
+    plain!(
+        "service_caps_recording",
+        "Recording",
+        caps.recording.url.is_some(),
+        s.recording_get_service_capabilities()
+    );
+    plain!(
+        "service_caps_search",
+        "Search",
+        caps.search.url.is_some(),
+        s.search_get_service_capabilities()
+    );
+    plain!(
+        "service_caps_replay",
+        "Replay",
+        caps.replay.url.is_some(),
+        s.replay_get_service_capabilities()
+    );
+
+    let x = capability_cross_check(caps, device.as_ref(), media.as_ref(), events.as_ref());
+    const ID: &str = "service_caps_self_consistent";
+    out.push(if x.checked == 0 {
+        // Every comparable attribute was absent, or the calls that carry them
+        // failed. Nothing was checked, so this must not read as a pass.
+        CheckResult::skip(
+            ID,
+            Category::Services,
+            "no attribute stated by both GetCapabilities and GetServiceCapabilities",
+        )
+    } else if x.contradictions.is_empty() {
+        CheckResult::pass(
+            ID,
+            Category::Services,
+            format!(
+                "{} fact(s) cross-checked, no contradiction ({} stated only by the service)",
+                x.checked, x.service_only
+            ),
+        )
+    } else {
+        // The device contradicts itself. A Warn, not a Fail: it still works, and
+        // which source is right is unknowable from here — but a client picking
+        // either one is guessing, so it has to be visible.
+        CheckResult::warn(
+            ID,
+            Category::Services,
+            format!(
+                "device contradicts itself on {}/{} fact(s): {}",
+                x.contradictions.len(),
+                x.checked,
+                x.contradictions.join("; ")
+            ),
+            format!("{}/{} contradict", x.contradictions.len(), x.checked),
+        )
+    });
+
+    out
 }
 
 /// Profile G assessment for the `recording` / `search` / `replay` check ids
@@ -957,5 +1275,175 @@ mod probe_tests {
         // Port is preserved on every candidate.
         let c = service_url_candidates("http://192.168.1.50:8080/onvif/device", "recording");
         assert!(c.iter().all(|u| u.starts_with("http://192.168.1.50:8080")));
+    }
+}
+
+#[cfg(test)]
+mod capability_cross_check_tests {
+    use super::*;
+    use crate::types::{
+        DeviceCapabilities, DeviceSecurityCapabilities, EventsCapabilities, MediaCapabilities,
+        MediaStreamingCapabilities, SecurityCapabilities, StreamingCapabilities,
+    };
+
+    /// A device-level `GetCapabilities` that says yes to four things. Each is a
+    /// distinct fact so a disagreement can be attributed to exactly one of them.
+    fn device_level() -> Capabilities {
+        Capabilities {
+            device: DeviceCapabilities {
+                security: SecurityCapabilities {
+                    username_token: true,
+                    tls_1_2: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            media: MediaCapabilities {
+                streaming: StreamingCapabilities {
+                    rtp_rtsp_tcp: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            events: EventsCapabilities {
+                ws_subscription_policy: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn dev_service(
+        username_token: Option<bool>,
+        tls1_2: Option<bool>,
+    ) -> DeviceServiceCapabilities {
+        DeviceServiceCapabilities {
+            security: DeviceSecurityCapabilities {
+                username_token,
+                tls1_2,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn media_service(rtp_rtsp_tcp: Option<bool>) -> MediaServiceCapabilities {
+        MediaServiceCapabilities {
+            streaming: MediaStreamingCapabilities {
+                rtp_rtsp_tcp,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn events_service(support: Option<bool>) -> EventsServiceCapabilities {
+        EventsServiceCapabilities {
+            ws_subscription_policy_support: support,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_consistent_device_checks_every_stated_fact_and_finds_nothing() {
+        let x = capability_cross_check(
+            &device_level(),
+            Some(&dev_service(Some(true), Some(true))),
+            Some(&media_service(Some(true))),
+            Some(&events_service(Some(true))),
+        );
+        // Exactly the four attributes the fixture stated on both sides — not the
+        // eighteen the function knows about, and not zero.
+        assert_eq!(x.checked, 4, "expected 4 checked facts, got {}", x.checked);
+        assert!(
+            x.contradictions.is_empty(),
+            "unexpected contradictions: {:?}",
+            x.contradictions
+        );
+        assert_eq!(x.service_only, 0);
+    }
+
+    /// `GetCapabilities` said yes, the service says no. `true` cannot come from
+    /// an omitted element, so this direction is a certainty.
+    #[test]
+    fn a_yes_then_no_is_a_contradiction_naming_the_attribute_and_both_values() {
+        // UsernameToken: caps=true, service=false → reported.
+        // TLS1.2:        caps=true, service=true  → agrees, must not be reported.
+        let x = capability_cross_check(
+            &device_level(),
+            Some(&dev_service(Some(false), Some(true))),
+            None,
+            None,
+        );
+        assert_eq!(x.checked, 2);
+        assert_eq!(
+            x.contradictions,
+            ["device/UsernameToken: GetCapabilities=true, GetServiceCapabilities=false"],
+            "the message must name the attribute and both sides",
+        );
+        assert_eq!(x.service_only, 0);
+    }
+
+    /// The asymmetry that makes this check sound. The device-level `Capabilities`
+    /// uses bare `bool`, so `false` there may mean "omitted the element" — legal
+    /// and common. A service claiming a capability the device-level response did
+    /// not mention is therefore counted, never warned about.
+    ///
+    /// Measured: oxvif's own mock hits this six times, and reading it as a
+    /// finding would flag every terse but conformant camera.
+    #[test]
+    fn a_no_then_yes_is_counted_but_is_not_a_contradiction() {
+        // A device-level response that stated nothing at all — every bool false.
+        let silent = Capabilities::default();
+        let x = capability_cross_check(
+            &silent,
+            Some(&dev_service(Some(true), Some(true))),
+            Some(&media_service(Some(true))),
+            Some(&events_service(Some(true))),
+        );
+        assert_eq!(x.checked, 4);
+        assert!(
+            x.contradictions.is_empty(),
+            "`false` in GetCapabilities may be an omitted element, not a denial — \
+             got {:?}",
+            x.contradictions,
+        );
+        assert_eq!(
+            x.service_only, 4,
+            "all four should be recorded as service-only claims",
+        );
+    }
+
+    /// The whole reason the 0.15 capability types use `Option<bool>`: `None` is
+    /// "the device did not mention it", which is not an answer to compare. If
+    /// this ever counted as `false`, a terse service response would look like a
+    /// blanket denial.
+    #[test]
+    fn an_unstated_attribute_is_neither_checked_nor_reported() {
+        let x = capability_cross_check(
+            &device_level(),
+            Some(&dev_service(None, None)),
+            Some(&media_service(None)),
+            Some(&events_service(None)),
+        );
+        assert_eq!(
+            x.checked, 0,
+            "an all-`None` service response has nothing to check",
+        );
+        assert!(
+            x.contradictions.is_empty(),
+            "`None` must not be read as `false`, got {:?}",
+            x.contradictions,
+        );
+        assert_eq!(x.service_only, 0);
+    }
+
+    /// A service whose `GetServiceCapabilities` call failed contributes `None`
+    /// for the whole struct — its facts drop out rather than defaulting to
+    /// `false` and inventing contradictions against a device-level `true`.
+    #[test]
+    fn a_failed_service_call_drops_its_facts_instead_of_defaulting() {
+        let x = capability_cross_check(&device_level(), None, None, None);
+        assert_eq!(x, CapabilityCrossCheck::default());
     }
 }

@@ -189,6 +189,7 @@ impl HealthCheck {
         }
         spawn_check!(checks::device_info);
         spawn_check!(checks::time);
+        spawn_check!(checks::service_capabilities);
         spawn_check!(checks::imaging);
         spawn_check!(checks::ptz);
         spawn_check!(checks::events);
@@ -707,6 +708,140 @@ mod tests {
         assert!(
             matches!(status_of(&report), CheckStatus::Pass),
             "auth-enforced device should pass:\n{report}"
+        );
+    }
+
+    /// The nine `GetServiceCapabilities` operations shipped in 0.15.0; this is
+    /// the health check actually asking them.
+    #[tokio::test]
+    async fn service_capabilities_are_asked_of_every_advertised_service() {
+        let server = MockServer::start().await.unwrap();
+        let report = HealthCheck::new(server.device_url()).run().await;
+
+        // The mock advertises all nine, so all nine must answer — a Skip here
+        // would mean the capability gate read the wrong URL, and a Fail that the
+        // action did not route.
+        for service in [
+            "device",
+            "media",
+            "media2",
+            "ptz",
+            "imaging",
+            "events",
+            "recording",
+            "search",
+            "replay",
+        ] {
+            let id = format!("service_caps_{service}");
+            let c = report
+                .checks
+                .iter()
+                .find(|c| c.id == id)
+                .unwrap_or_else(|| panic!("{id} missing from the report:\n{report}"));
+            assert!(
+                matches!(c.status, CheckStatus::Pass),
+                "{id} should pass against the mock, got {:?}:\n{report}",
+                c.status
+            );
+        }
+    }
+
+    /// The negative half: a service that **refuses** `GetServiceCapabilities`
+    /// must come back as a Fail carrying the device's own reason, not as a Pass
+    /// and not as a Skip.
+    ///
+    /// Without this, `caps_check` could report every outcome as a pass and the
+    /// positive test above would not notice — measured, by mutating exactly that
+    /// and watching the suite stay green.
+    ///
+    /// The fault is armed with the **full URI tail**, not the bare operation
+    /// name: `inject_fault` matches on `action.ends_with(..)` and eight of the
+    /// nine services spell this operation identically, so `"GetServiceCapabilities"`
+    /// alone would be consumed by whichever call happened to arrive first.
+    #[tokio::test]
+    async fn a_service_that_refuses_get_service_capabilities_is_a_failure() {
+        let server = MockServer::start().await.unwrap();
+        server.inject_fault(
+            "ver10/device/wsdl/GetServiceCapabilities",
+            "env:Receiver",
+            "NoServiceCaps-HEALTH-7701",
+        );
+
+        let report = HealthCheck::new(server.device_url()).run().await;
+        let c = report
+            .checks
+            .iter()
+            .find(|c| c.id == "service_caps_device")
+            .expect("service_caps_device present");
+
+        let CheckStatus::Fail(reason) = &c.status else {
+            panic!("expected a Fail, got {:?}:\n{report}", c.status);
+        };
+        // The device's own reason, not a generic "it failed" — this is what
+        // makes the assertion able to fail for the right reason.
+        assert!(
+            reason.contains("NoServiceCaps-HEALTH-7701"),
+            "the injected reason must survive into the check: {reason}"
+        );
+        assert_eq!(
+            c.error.as_ref().map(|e| e.reason.as_str()),
+            Some("NoServiceCaps-HEALTH-7701"),
+            "structured CheckError should carry the same reason:\n{report}"
+        );
+
+        // Its facts drop out of the cross-check rather than defaulting to
+        // `false` and inventing contradictions against the device-level `true`s.
+        let x = report
+            .checks
+            .iter()
+            .find(|c| c.id == "service_caps_self_consistent")
+            .expect("cross-check present");
+        assert!(
+            !matches!(x.status, CheckStatus::Warn(_)),
+            "a failed capability call must not manufacture contradictions: {:?}",
+            x.status
+        );
+    }
+
+    /// The cross-check must be *exercised*, not merely present: assert it
+    /// compared a non-zero number of facts. A Skip would also be "no
+    /// disagreements", and that is the outcome that proves nothing.
+    #[tokio::test]
+    async fn the_mock_does_not_contradict_itself_between_the_two_capability_calls() {
+        let server = MockServer::start().await.unwrap();
+        let report = HealthCheck::new(server.device_url()).run().await;
+
+        let c = report
+            .checks
+            .iter()
+            .find(|c| c.id == "service_caps_self_consistent")
+            .expect("self-consistency check present");
+        assert!(
+            matches!(c.status, CheckStatus::Pass),
+            "the mock should agree with itself, got {:?}:\n{report}",
+            c.status
+        );
+        // "N fact(s) cross-checked, …" — N must not be 0, or a Pass would mean
+        // "nothing was compared" rather than "nothing was wrong".
+        let n: usize = c
+            .detail
+            .split_whitespace()
+            .next()
+            .and_then(|w| w.parse().ok())
+            .unwrap_or_else(|| panic!("unparseable detail {:?}", c.detail));
+        assert!(
+            n >= 14,
+            "the mock states 14 attributes in both GetCapabilities and \
+             GetServiceCapabilities; only {n} were cross-checked, so the mock's \
+             device-level response has lost its Device/Network/System/Security \
+             blocks again: {:?}",
+            c.detail
+        );
+        // …and with both sides stating them, none should be service-only.
+        assert!(
+            c.detail.contains("(0 stated only by the service)"),
+            "the mock should state every cross-checked fact on both sides: {:?}",
+            c.detail
         );
     }
 

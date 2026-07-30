@@ -1098,6 +1098,37 @@ report carries machine-readable facts alongside the human-readable strings:
   authentication. Serving device info anonymously is a security `Warn`; a rejection
   is a `Pass`.
 
+**Per-service capabilities, and the device against itself (0.15+).** Nine
+`service_caps_*` checks ask each advertised service its own
+`GetServiceCapabilities` — `Pass` when it answers, `Skip` when the service is not
+advertised, `Fail` when it is advertised and refuses.
+
+Then `service_caps_self_consistent` does the part no single call can: **eighteen
+attributes are stated twice by the device**, once in the device-level
+`GetCapabilities` and again in a service's `GetServiceCapabilities` (fourteen on
+Device, three on Media streaming, one on Events). Everything else in a capability
+report is a claim with nothing to contradict it; these can be *wrong* rather than
+merely unknown, and a client trusting either source is guessing when they differ.
+
+Only one direction is reported, and the asymmetry is the point:
+
+| `GetCapabilities` | `GetServiceCapabilities` | verdict |
+|---|---|---|
+| `true` | `false` | **contradiction** — `Warn`, naming the attribute |
+| `false` | `true` | counted, never warned |
+| anything | absent | not compared |
+
+The device-level `Capabilities` uses bare `bool` and so **cannot distinguish
+"said no" from "did not say"** — an omitted `<tt:Network>` element, which is
+legal and common, parses as four `false`s. `true` cannot come from absence, so
+only the first row is a certainty. The second is counted and shown in the detail
+(`N stated only by the service`) without a warning. Reading it as a finding would
+flag every terse but conformant camera; oxvif's own mock tripped it six times
+before its `GetCapabilities` was taught to state those blocks.
+
+A contradiction is a `Warn`, not a `Fail`: the device works, and which source is
+right is not knowable from here — but it has to be visible.
+
 > **Note:** the `health` report shape changed in a **breaking** way in 0.12.0
 > (profiles became an object, verdicts/`status.kind` lowercase, `elapsed_ms`
 > nullable). 0.11 output was provisional. See the CHANGELOG.

@@ -262,6 +262,14 @@
 //! against real hardware, the `conformance` example dumps each device's raw
 //! responses next to the parsed summary so silent-parse gaps stand out.
 //!
+//! Since 0.15 it also asks every advertised service its own
+//! `GetServiceCapabilities`, and cross-checks the eighteen attributes a device
+//! states **twice** — once in the device-level `GetCapabilities`, again in a
+//! service's. Only `GetCapabilities` saying yes where the service says no is
+//! reported: the device-level type uses bare `bool` and cannot tell "said no"
+//! from "did not say", so the other direction is counted rather than warned
+//! about. See the `README` for the table.
+//!
 //! [ONVIF]: https://www.onvif.org
 
 pub mod client;

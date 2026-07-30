@@ -329,15 +329,64 @@ pub fn handle_set_user(state: &SharedState, body: &str) -> String {
 
 // ── Static responses (not stateful yet) ─────────────────────────────────────
 
+/// `tds:Capabilities` — the device-level "which services exist and where",
+/// which is a **different operation** from each service's
+/// `GetServiceCapabilities` ([`resp_service_capabilities`] for this one).
+///
+/// `Device/{Network,System,IO,Security}` and
+/// `Events/WSSubscriptionPolicySupport` were absent until 0.15. Two consequences,
+/// both silent:
+///
+/// - `DeviceCapabilities::{network,system,io,security}` had **no mock coverage
+///   at all** — those parsers were exercised only by hand-written unit fixtures,
+///   the arrangement that let the `AFModes` defect survive. Real cameras send
+///   these; the mock has to.
+/// - The device-level type uses bare `bool`, so every absent element parsed as
+///   `false` while `GetServiceCapabilities` said `true`. The health check's
+///   capability cross-check saw six such mismatches on its first run against
+///   this mock.
+///
+/// Every value here is **chosen to agree with [`resp_service_capabilities`]** on
+/// the fourteen attributes the two operations both carry, so the mock is a
+/// self-consistent device. Changing one side without the other is what the
+/// cross-check exists to catch — including here.
 pub fn resp_capabilities(base: &str) -> String {
     soap(
         NS,
         &format!(
             r#"<tds:GetCapabilitiesResponse>
           <tds:Capabilities>
-            <tt:Device><tt:XAddr>{base}/onvif/device</tt:XAddr></tt:Device>
+            <tt:Device>
+              <tt:XAddr>{base}/onvif/device</tt:XAddr>
+              <tt:Network>
+                <tt:IPFilter>false</tt:IPFilter>
+                <tt:ZeroConfiguration>false</tt:ZeroConfiguration>
+                <tt:IPVersion6>true</tt:IPVersion6>
+                <tt:DynDNS>false</tt:DynDNS>
+              </tt:Network>
+              <tt:System>
+                <tt:DiscoveryResolve>false</tt:DiscoveryResolve>
+                <tt:DiscoveryBye>true</tt:DiscoveryBye>
+                <tt:RemoteDiscovery>false</tt:RemoteDiscovery>
+                <tt:SystemBackup>false</tt:SystemBackup>
+                <tt:SystemLogging>true</tt:SystemLogging>
+                <tt:FirmwareUpgrade>true</tt:FirmwareUpgrade>
+              </tt:System>
+              <tt:IO>
+                <tt:InputConnectors>1</tt:InputConnectors>
+                <tt:RelayOutputs>2</tt:RelayOutputs>
+              </tt:IO>
+              <tt:Security>
+                <tt:TLS1.2>true</tt:TLS1.2>
+                <tt:OnboardKeyGeneration>false</tt:OnboardKeyGeneration>
+                <tt:AccessPolicyConfig>false</tt:AccessPolicyConfig>
+                <tt:X.509Token>false</tt:X.509Token>
+                <tt:UsernameToken>true</tt:UsernameToken>
+              </tt:Security>
+            </tt:Device>
             <tt:Events>
               <tt:XAddr>{base}/onvif/events</tt:XAddr>
+              <tt:WSSubscriptionPolicySupport>true</tt:WSSubscriptionPolicySupport>
               <tt:WSPullPointSupport>true</tt:WSPullPointSupport>
             </tt:Events>
             <tt:Imaging><tt:XAddr>{base}/onvif/imaging</tt:XAddr></tt:Imaging>

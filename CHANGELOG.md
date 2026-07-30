@@ -52,6 +52,29 @@ two-thirds of the test suite.
   `Unknown(String)` variant — both schema types end in `Extended`, and a vendor
   string must not turn `ptz_get_preset_tours` into an `Err`.
 
+- **The health check now asks the nine `GetServiceCapabilities`, and checks the
+  device against itself.** Ten new checks under `Category::Services`:
+  `service_caps_{device,media,media2,ptz,imaging,events,recording,search,replay}`
+  — Pass when the service answers, Skip when it is not advertised, Fail when it
+  is advertised and refuses — plus `service_caps_self_consistent`.
+
+  The nine operations shipped earlier in this release and nothing in
+  `src/health/` asked them, which left the report blind to the one defect class
+  it is best placed to find. **Eighteen attributes are stated twice** by a device
+  (fourteen on Device, three on Media streaming, one on Events); everything else
+  in a capability report is a claim with nothing to contradict it.
+
+  **Only `GetCapabilities=true` against a service `false` is reported.** The
+  device-level `Capabilities` uses bare `bool` and so cannot distinguish "said
+  no" from "did not say" — an omitted `<tt:Network>` element, legal and common,
+  parses as four `false`s. `true` cannot come from absence, so that direction is
+  a certainty and the reverse is counted (`N stated only by the service`) without
+  a warning. A contradiction is a `Warn`, not a `Fail`: the device works, and
+  which source is right is not knowable from here.
+
+  Found by this check on its first run: **oxvif's own mock contradicted itself
+  six times** — see the `Fixed` entry below.
+
 - **`ptz_send_auxiliary_command`** — the **PTZ** service's
   `SendAuxiliaryCommand`, which is not the Device operation of the same name
   that oxvif already had. Different endpoint, different request and response
@@ -91,6 +114,26 @@ two-thirds of the test suite.
   reason the defect survived: the mock and the unit fixture agreed with each
   other and with nothing else. The mock now sends the nested shape a real
   device sends.
+
+- **The mock's device-level `GetCapabilities` omitted
+  `Device/{Network,System,IO,Security}` and
+  `Events/WSSubscriptionPolicySupport` entirely.** Two silent consequences:
+
+  `DeviceCapabilities::{network,system,io,security}` had **no mock coverage at
+  all** — those parsers were exercised only by hand-written unit fixtures, the
+  exact arrangement that let the `AFModes` defect below survive. Real cameras
+  send these blocks.
+
+  And because the device-level type uses bare `bool`, every absent element
+  parsed as `false` while `GetServiceCapabilities` said `true` — so the mock
+  looked like a device contradicting itself six times over (`IPVersion6`,
+  `DiscoveryBye`, `SystemLogging`, `TLS1.2`, `UsernameToken`,
+  `WSSubscriptionPolicySupport`). Found by the new capability cross-check on its
+  first run, not by review.
+
+  The mock now sends all four blocks, with every value **chosen to agree with
+  `resp_service_capabilities`** on the fourteen attributes both operations carry.
+  A test pins the agreement: change one side without the other and it goes red.
 
 - `examples/conformance.rs` uses `CapturingTransport`, which is behind the
   `mock` feature, and had no `required-features` entry. A bare `cargo test`
