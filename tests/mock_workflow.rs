@@ -15,6 +15,26 @@ use oxvif::{
     PtzPresetTourState, PtzPresetTourStatus,
 };
 
+/// Assert a SOAP Fault's exact code and reason.
+///
+/// Per `CLAUDE.md`'s "no hollow tests": `assert!(res.is_err())` stays green when
+/// the device returns a completely different error, so the negatives below pin
+/// the fixture's own strings.
+#[track_caller]
+fn assert_fault(err: oxvif::OnvifError, code: &str, reason: &str) {
+    match err {
+        oxvif::OnvifError::Soap(oxvif::soap::SoapError::Fault {
+            code: got_code,
+            reason: got_reason,
+            ..
+        }) => {
+            assert_eq!(got_code, code, "fault code");
+            assert_eq!(got_reason, reason, "fault reason");
+        }
+        other => panic!("expected SoapError::Fault, got {other:?}"),
+    }
+}
+
 /// Start a mock server and a session wired to it. The returned `MockServer`
 /// must be kept alive for the session to keep working (it shuts down on drop).
 async fn setup() -> (MockServer, OnvifSession) {
@@ -145,19 +165,29 @@ async fn events_pull_point() {
 async fn recording_search_replay() {
     let (_srv, s) = setup().await;
 
-    // Recording list (mock seeds one).
-    let _ = s.get_recordings().await.unwrap();
+    // Recording list — the mock seeds two, and they disagree: `Rec_001` carries
+    // a track, `Rec_002` carries none.
+    let recordings = s.get_recordings().await.unwrap();
+    let tokens: Vec<&str> = recordings.iter().map(|r| r.token.as_str()).collect();
+    assert_eq!(tokens, ["Rec_001", "Rec_002"]);
 
     // Search session returns a token.
     let token = s.find_recordings(None, "PT60S").await.unwrap();
     assert!(!token.is_empty());
 
-    // Replay URI for a recording.
+    // Replay URI for a recording. The token must name a recording that exists:
+    // this used to pass `"rec1"`, which matched nothing, and a token-blind
+    // handler answered anyway — the same shape as the `VideoSource_1` token
+    // reconciled in 0.15.
     let uri = s
-        .get_replay_uri("rec1", "RTP-Unicast", "RTSP")
+        .get_replay_uri("Rec_001", "RTP-Unicast", "RTSP")
         .await
         .unwrap();
     assert!(uri.starts_with("rtsp://"));
+    assert!(
+        uri.ends_with("Rec_001"),
+        "the URI must name the recording asked for, got {uri}"
+    );
 }
 
 #[tokio::test]
@@ -392,4 +422,152 @@ async fn auxiliary_commands_are_discoverable_and_accepted() {
 
     // The Device operation is a different endpoint and still answers.
     assert_eq!(s.send_auxiliary_command("tt:Wiper|On").await.unwrap(), "OK");
+}
+
+/// The Profile G lifecycle end to end, which could not be exercised at all
+/// before the mock grew recording state: `CreateRecording` answered `Rec_new`
+/// and `GetRecordings` never listed it. `docs/active/mock-audit-2026-07.md` §4.2.
+///
+/// This matters beyond the mock. `HealthCheck::with_liveness_probes(true)`
+/// claims to "genuinely exercise Profile G" — against a facade, its Profile G
+/// verdict was measuring a door panel.
+#[tokio::test]
+async fn recording_lifecycle_is_observable() {
+    let (_srv, s) = setup().await;
+
+    let before = s.get_recordings().await.unwrap().len();
+
+    let token = s
+        .create_recording(&oxvif::RecordingConfiguration {
+            source_name: "Loading Bay".into(),
+            source_id: "urn:uuid:mock-lifecycle".into(),
+            location: "Bay 4".into(),
+            description: "created by mock_workflow".into(),
+            content: "Motion events".into(),
+            maximum_retention_time: "P7D".into(),
+        })
+        .await
+        .unwrap();
+
+    // The device assigned a token, and it is in the list.
+    let listed = s.get_recordings().await.unwrap();
+    assert_eq!(listed.len(), before + 1);
+    let mine = listed
+        .iter()
+        .find(|r| r.token == token)
+        .unwrap_or_else(|| panic!("{token} not listed: {listed:?}"));
+    assert_eq!(mine.source.name, "Loading Bay");
+    assert_eq!(mine.content, "Motion events");
+    assert!(
+        mine.tracks.is_empty(),
+        "a new recording holds no tracks yet"
+    );
+
+    // Add a track, and read it back off the recording it was added to.
+    let track = s.create_track(&token, "Audio", "audioTrack").await.unwrap();
+    let with_track = s.get_recordings().await.unwrap();
+    let mine = with_track.iter().find(|r| r.token == token).unwrap();
+    assert_eq!(mine.tracks.len(), 1);
+    assert_eq!(mine.tracks[0].token, track);
+    assert_eq!(mine.tracks[0].track_type, "Audio");
+    // …and it went on *this* recording, not on the seeded one.
+    let seeded = with_track.iter().find(|r| r.token == "Rec_001").unwrap();
+    assert_eq!(seeded.tracks.len(), 1);
+    assert_eq!(seeded.tracks[0].token, "VIDEO001");
+
+    // A job for it, then flip its mode and read the new mode back.
+    let job = s
+        .create_recording_job(&oxvif::RecordingJobConfiguration {
+            recording_token: token.clone(),
+            mode: "Idle".into(),
+            priority: 5,
+            source_token: "Profile_1".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        s.get_recording_job_state(&job).await.unwrap().active_state,
+        "Idle"
+    );
+    s.set_recording_job_mode(&job, "Active").await.unwrap();
+    assert_eq!(
+        s.get_recording_job_state(&job).await.unwrap().active_state,
+        "Active"
+    );
+    // The seeded jobs are untouched — job state is a per-token question.
+    assert_eq!(
+        s.get_recording_job_state("Job_002")
+            .await
+            .unwrap()
+            .active_state,
+        "Idle"
+    );
+
+    // The search surface sees it too.
+    let found = s.search_recordings(None).await.unwrap();
+    let mine = found
+        .iter()
+        .find(|r| r.recording_token == token)
+        .unwrap_or_else(|| panic!("a created recording must be findable: {found:?}"));
+    assert_eq!(mine.recording_status, "Initiated");
+    // A brand-new recording has no time bounds yet, and the mock omits them
+    // rather than inventing a range. The seeded ones do carry bounds, so this
+    // distinction is observable rather than merely written down.
+    assert_eq!(mine.earliest_recording, None);
+    assert!(
+        found
+            .iter()
+            .any(|r| r.recording_token == "Rec_001" && r.earliest_recording.is_some()),
+        "the seeded recordings still report their bounds: {found:?}",
+    );
+
+    // Deleting the recording takes its jobs with it — a job pointing at nothing
+    // is not a state a device would report.
+    s.delete_recording(&token).await.unwrap();
+    assert_eq!(s.get_recordings().await.unwrap().len(), before);
+    assert!(
+        !s.get_recording_jobs()
+            .await
+            .unwrap()
+            .iter()
+            .any(|j| j.token == job),
+        "the recording's job must go with it",
+    );
+}
+
+/// Tokens that name nothing are refused, rather than answered for whichever
+/// fixture the handler happened to hold.
+#[tokio::test]
+async fn recording_unknown_tokens_are_refused() {
+    let (_srv, s) = setup().await;
+
+    let err = s.delete_recording("Rec_999").await.unwrap_err();
+    assert_fault(
+        err,
+        "ter:NoRecording",
+        "NoSuchRecording-DELREC-5701: Rec_999",
+    );
+
+    let err = s
+        .get_replay_uri("Rec_999", "RTP-Unicast", "RTSP")
+        .await
+        .unwrap_err();
+    assert_fault(
+        err,
+        "ter:NoRecording",
+        "NoSuchRecording-REPLAY-5709: Rec_999",
+    );
+
+    let err = s.get_recording_job_state("Job_999").await.unwrap_err();
+    assert_fault(err, "ter:NoJob", "NoSuchJob-JOBSTATE-5708: Job_999");
+
+    let err = s
+        .set_recording_job_mode("Job_001", "Sideways")
+        .await
+        .unwrap_err();
+    assert_fault(
+        err,
+        "ter:InvalidArgVal",
+        "BadJobMode-SETJOBMODE-5705: Sideways",
+    );
 }

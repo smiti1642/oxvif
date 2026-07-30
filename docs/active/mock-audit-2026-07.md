@@ -52,11 +52,12 @@ are the "before" picture the rest of this document reasons about.
   `DeviceState` field at all.**
 - **26 of 27** PTZ handlers never receive the request body. (**All 18 that are
   per-profile now do**; the remaining 9 are node/config-addressed or static.)
-- `grep -c recording src/mock/state.rs` → **0**.
+- `grep -c recording src/mock/state.rs` → **0**. (Tier 2.2 added
+  `RecordingState`; all eleven Recording/Search/Replay operations now use it.)
 - **47** `Set → Get` pairs are now a standing test
   (`tests/mock_roundtrip.rs`). 27 round-tripped, 15 were defects, 5 were
-  declared stubs. **After Tier 1: 35 round-trip, 7 defects (all Tier 2), 5
-  declared stubs.**
+  declared stubs. **After Tiers 1 and 2: 40 round-trip, 0 defects, 5 declared
+  stubs** — `Expect::Broken` has no rows left.
 
 ---
 
@@ -193,7 +194,7 @@ faulting reddens the **3** negatives.
 `GetConfigurationOptions` and `GetCompatibleConfigurations` — those are static
 fixtures on both sides (§5), not wiring gaps.
 
-### 2.2 Recording / Search / Replay have no state at all
+### 2.2 Recording / Search / Replay have no state at all — **fixed**
 
 ```sh
 grep -c recording src/mock/state.rs   # 0
@@ -213,6 +214,40 @@ against this — so its Profile G verdict on the mock is measuring a facade.
 
 **Size: medium.** Needs a `recordings: Vec<RecordingEntry>` family, mirroring
 `ProfilesState`.
+
+#### What was done
+
+`RecordingState { recordings, jobs, next_* }` modelled on `ProfilesState`, and
+**all eleven** Recording/Search/Replay operations read or write it. Unknown
+tokens fault instead of being answered — `NoSuchRecording-DELREC-5701` and
+siblings.
+
+Two per-token operations moved from `Blind` to `Discriminates` in
+`tests/mock_token_discrimination.rs`: `GetRecordingJobState` (the job's own mode)
+and `GetReplayUri` (the URI now names the recording). Five rows in
+`tests/mock_roundtrip.rs` moved from `Broken` to `Works`, which leaves that table
+with **no `Broken` rows at all**.
+
+**The fixture disagrees with itself**, same rule as everywhere else: `Rec_001`
+carries a track and `Rec_002` carries none; `Job_001` is `Active` and `Job_002`
+is `Idle`. With one job, `GetRecordingJobState` is indistinguishable from a
+constant.
+
+Three declared simplifications, per §6:
+
+- **No per-search cursor.** `FindRecordings` hands out one token and
+  `GetRecordingSearchResults` renders the whole current list against it. A real
+  device pages and expires searches.
+- **A freshly created recording has no time bounds**, so `Earliest`/`Latest` are
+  omitted rather than faked — both are optional in `tt:RecordingInformation`, and
+  the seeded ones do carry bounds, so the distinction is observable.
+- **Deleting a recording deletes its jobs.** A job pointing at nothing is not a
+  state a device would report.
+
+Found while wiring it: `tests/mock_workflow.rs` was calling
+`get_replay_uri("rec1", …)` — a token matching **nothing**, which the blind
+handler answered anyway. The same shape as the `VideoSource_1` token reconciled
+in 0.15, and it only surfaced because the handler started checking.
 
 ---
 
@@ -310,9 +345,10 @@ table-driven property tests over the public API kill the class:
    fixture disagrees on must produce different answers. **Landed as
    `tests/mock_token_discrimination.rs`** (26 rows). Same contract as the
    round-trip table — `Discriminates` or `Blind(audit §)`, **both arms
-   asserted** — over the public API and real HTTP. 20 discriminate, 6 are
-   declared static. It catches a bug the round-trip table cannot: a handler can
-   persist state perfectly and still answer for the wrong channel.
+   asserted** — over the public API and real HTTP. **19 discriminate, 7 are
+   declared static** (17/9 when it landed; the recording pair moved after §4.2).
+   It catches a bug the round-trip table cannot: a handler can persist state
+   perfectly and still answer for the wrong channel.
 3. **Cross-service agreement** — already landed as
    `tests/mock_media1_media2_agree.rs`.
 
@@ -333,6 +369,6 @@ schema-fidelity chase and stall everything else.
 | ~~1. Property test **round-trip** (§8.1)~~ **done** — `tests/mock_roundtrip.rs` | It was both probe and guard. Produced the Tier 1 list mechanically, confirmed 46 of 47 hand classifications, and added item 1.8. |
 | ~~2. Tier 1 wiring (§3)~~ **done** — all 8 items | Eight rows moved from `Broken` to `Works`; **35 of 47 pairs now round-trip**. Three new cross-service tests in `tests/mock_media1_media2_agree.rs` cover the bindings and the shared source-config writer. |
 | ~~3. Tier 2.1 PTZ per-profile (§4.1)~~ **done** | `PtzState` is keyed by profile token; 18 dispatch arms gained `body`; the four seeded heads deliberately disagree. |
-| ~~4. Property test **token discrimination** (§8.2)~~ **done** — `tests/mock_token_discrimination.rs` | 26 rows; 20 discriminate, 6 declared static. Guards step 3 and the 0.15 media/imaging work. |
-| 5. Tier 2.2 recording state (§4.2) | Unblocks Profile G testing, including the health check's own liveness probe. |
+| ~~4. Property test **token discrimination** (§8.2)~~ **done** — `tests/mock_token_discrimination.rs` | 26 rows; 19 discriminate, 7 declared static. Guards step 3 and the 0.15 media/imaging work. |
+| ~~5. Tier 2.2 recording state (§4.2)~~ **done** | `RecordingState` mirrors `ProfilesState`; all eleven operations wired. Unblocks Profile G testing, including the health check's own liveness chain. |
 | 6. Tiers 3 and 4 | Opportunistic. |

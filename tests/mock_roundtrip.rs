@@ -63,6 +63,13 @@ enum Expect {
     /// The write must land.
     Works,
     /// A real defect. The `&str` is the audit section that catalogues it.
+    ///
+    /// **No row uses this today, and that is the point** — every `Broken` row
+    /// the audit found has been wired up. Kept rather than deleted because it is
+    /// half the contract: the next defect gets a row here with its citation
+    /// instead of a comment or nothing, and the test then asserts the write is
+    /// *still* discarded until someone fixes it.
+    #[allow(dead_code)]
     Broken(&'static str),
     /// Deliberately fixture data on both sides. `docs/active/mock-audit-2026-07.md` §5.
     Static(&'static str),
@@ -201,11 +208,11 @@ const PAIRS: &[Pair] = pairs![
     "imaging/settings"                 => Expect::Works, imaging_settings;
 
     // ── Recording ───────────────────────────────────────────────────────────
-    "recording/create"                 => Expect::Broken("audit §4.2"), recording_create;
-    "recording/delete"                 => Expect::Broken("audit §4.2"), recording_delete;
-    "recording/track-create"           => Expect::Broken("audit §4.2"), recording_track_create;
-    "recording/job-create"             => Expect::Broken("audit §4.2"), recording_job_create;
-    "recording/job-mode"               => Expect::Broken("audit §4.2"), recording_job_mode;
+    "recording/create"                 => Expect::Works                 , recording_create;
+    "recording/delete"                 => Expect::Works                 , recording_delete;
+    "recording/track-create"           => Expect::Works                 , recording_track_create;
+    "recording/job-create"             => Expect::Works                 , recording_job_create;
+    "recording/job-mode"               => Expect::Works                 , recording_job_mode;
 ];
 
 // ── Device checks ────────────────────────────────────────────────────────────
@@ -1032,7 +1039,7 @@ async fn every_get_set_pair_matches_its_declared_expectation() {
 
     // And the positive side is not vacuous either: most of the table works.
     assert!(
-        round_tripped >= 30,
+        round_tripped >= 35,
         "only {round_tripped} pairs round-tripped — the mock is far more broken \
          than the table claims",
     );

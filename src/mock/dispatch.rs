@@ -21,11 +21,11 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             } else if tail.starts_with("ver20/imaging/wsdl/") {
                 dispatch_imaging(op, state, body)
             } else if tail.starts_with("ver10/recording/wsdl/") {
-                dispatch_recording(op)
+                dispatch_recording(op, state, body)
             } else if tail.starts_with("ver10/search/wsdl/") {
-                dispatch_search(op)
+                dispatch_search(op, state)
             } else if tail.starts_with("ver10/replay/wsdl/") {
-                dispatch_replay(op)
+                dispatch_replay(op, state, body)
             } else {
                 None
             }
@@ -260,37 +260,42 @@ fn dispatch_events(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
 // distinct `GetServiceCapabilities` that arrives here as the same string. Until
 // 0.15 they were one match block, which is exactly why that operation could not
 // be added for any of them.
-fn dispatch_recording(op: &str) -> Option<String> {
+// Every arm below was a static fixture until 0.15: `CreateRecording` answered
+// `Rec_new` and `GetRecordings` never listed it, `DeleteRecording` removed
+// nothing, and `GetRecordingJobState` gave the same answer for every job token.
+// Audit §4.2 — the same shape as the reported Media2 `CreateProfile` bug, in a
+// different service.
+fn dispatch_recording(op: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => recording::resp_recording_service_capabilities(),
-        "GetRecordings" => recording::resp_recordings(),
-        "CreateRecording" => recording::resp_create_recording(),
-        "DeleteRecording" => resp_empty("trc", "DeleteRecordingResponse"),
-        "CreateTrack" => recording::resp_create_track(),
-        "DeleteTrack" => resp_empty("trc", "DeleteTrackResponse"),
-        "GetRecordingJobs" => recording::resp_recording_jobs(),
-        "CreateRecordingJob" => recording::resp_create_recording_job(),
-        "SetRecordingJobMode" => resp_empty("trc", "SetRecordingJobModeResponse"),
-        "DeleteRecordingJob" => resp_empty("trc", "DeleteRecordingJobResponse"),
-        "GetRecordingJobState" => recording::resp_recording_job_state(),
+        "GetRecordings" => recording::resp_recordings(state),
+        "CreateRecording" => recording::handle_create_recording(state, body),
+        "DeleteRecording" => recording::handle_delete_recording(state, body),
+        "CreateTrack" => recording::handle_create_track(state, body),
+        "DeleteTrack" => recording::handle_delete_track(state, body),
+        "GetRecordingJobs" => recording::resp_recording_jobs(state),
+        "CreateRecordingJob" => recording::handle_create_recording_job(state, body),
+        "SetRecordingJobMode" => recording::handle_set_recording_job_mode(state, body),
+        "DeleteRecordingJob" => recording::handle_delete_recording_job(state, body),
+        "GetRecordingJobState" => recording::resp_recording_job_state(state, body),
         _ => return None,
     })
 }
 
-fn dispatch_search(op: &str) -> Option<String> {
+fn dispatch_search(op: &str, state: &SharedState) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => recording::resp_search_service_capabilities(),
         "FindRecordings" => recording::resp_find_recordings(),
-        "GetRecordingSearchResults" => recording::resp_recording_search_results(),
+        "GetRecordingSearchResults" => recording::resp_recording_search_results(state),
         "EndSearch" => resp_empty("tse", "EndSearchResponse"),
         _ => return None,
     })
 }
 
-fn dispatch_replay(op: &str) -> Option<String> {
+fn dispatch_replay(op: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => recording::resp_replay_service_capabilities(),
-        "GetReplayUri" => recording::resp_replay_uri(),
+        "GetReplayUri" => recording::resp_replay_uri(state, body),
         _ => return None,
     })
 }

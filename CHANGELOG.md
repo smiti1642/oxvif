@@ -181,6 +181,40 @@ two-thirds of the test suite.
   and `MediaProfile2` exposes exactly those four, so a success there could never
   be observed by any caller.
 
+- **The mock's Recording, Search and Replay services had no state at all.**
+  `grep -c recording src/mock/state.rs` was **0**. `CreateRecording` answered
+  `Rec_new` and `GetRecordings` never listed it; `DeleteRecording` was an
+  unconditional success that removed nothing; `CreateTrack` returned a token that
+  attached to no recording; `SetRecordingJobMode` reported success and changed
+  nothing; and `GetRecordingJobState` returned the same state for every job
+  token. The identical shape to the reported Media2 `CreateProfile` bug, in a
+  different service.
+
+  New `RecordingState { recordings, jobs, next_* }`, modelled on `ProfilesState`,
+  and **all eleven** operations read or write it. Unknown tokens now fault
+  (`NoSuchRecording-DELREC-5701` and siblings) rather than being answered.
+
+  The default fixture disagrees with itself, as everywhere else: `Rec_001`
+  carries a track and `Rec_002` carries none; `Job_001` is `Active` and
+  `Job_002` is `Idle`. With one job, `GetRecordingJobState` is
+  indistinguishable from a constant.
+
+  This is what `HealthCheck::with_liveness_probes(true)` needs to mean anything
+  on the mock. Its Profile G chain is real — `get_recordings` →
+  `search_recordings` → `get_replay_uri` on the first token the search returned —
+  but against canned fixtures none of the links were coupled. `GetReplayUri` now
+  faults on a token that names no recording, so the chain has to hold together.
+
+  Three declared simplifications, stated rather than left to be inferred: no
+  per-search cursor (one token, whole list, no paging or expiry); a freshly
+  created recording omits `Earliest`/`Latest` rather than faking them; and
+  deleting a recording deletes its jobs.
+
+  Found while wiring it: `tests/mock_workflow.rs` was passing `"rec1"` to
+  `get_replay_uri` — a token matching **nothing**, which the blind handler
+  answered anyway. Same shape as the `VideoSource_1` token reconciled elsewhere
+  in this release, and it surfaced only because the handler started checking.
+
 - **The mock's PTZ was profile-blind.** It held **one** position, **one** home
   position, **one** preset list and **one** tour list for the entire device, and
   **26 of its 27 PTZ dispatch arms never received the request body** — while the
@@ -435,7 +469,7 @@ two-thirds of the test suite.
 - **…and every token-taking operation now declares whether the token selects the
   answer.** New `tests/mock_token_discrimination.rs`: **26 rows**, each naming
   two tokens the fixture deliberately disagrees on, declaring
-  `Expect::Discriminates` or `Expect::Blind(audit §)`. **20 discriminate, 6 are
+  `Expect::Discriminates` or `Expect::Blind(audit §)`. **19 discriminate, 7 are
   declared static.**
 
   This catches a bug the round-trip table cannot: a handler can persist state
@@ -510,6 +544,19 @@ two-thirds of the test suite.
   global copy makes a handler that ignores the token indistinguishable from one
   that reads it. A persisted state file from 0.14 no longer loads this field and
   falls back to the four seeded heads.
+
+- **`DeviceState` gained `recording: RecordingState`**, and the Recording,
+  Search and Replay services now refuse tokens that name nothing:
+  `ter:NoRecording` / `NoSuchRecording-DELREC-5701: <token>` and siblings on
+  `DeleteRecording`, `CreateTrack`, `DeleteTrack`, `CreateRecordingJob`,
+  `SetRecordingJobMode`, `DeleteRecordingJob`, `GetRecordingJobState` and
+  `GetReplayUri`. Code that passed a made-up recording token to the mock and got
+  a canned answer now gets a fault — which is the point.
+
+  `CreateRecording` returns `Rec_003`-style assigned tokens instead of the
+  literal `Rec_new`, `CreateTrack` returns `TRACK001`-style instead of
+  `Track_new`, and `CreateRecordingJob` returns `Job_003`-style instead of
+  `Job_new`. `GetRecordingJobs` now lists two seeded jobs rather than one.
 
 - **The mock faults on a PTZ request with no `ProfileToken`**, or with one that
   names no profile: `env:Sender` / `NoProfileToken-STATUS-5601: every PTZ

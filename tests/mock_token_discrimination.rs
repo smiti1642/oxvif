@@ -151,8 +151,8 @@ const ROWS: &[Row] = rows![
     "ptz/compatible-configs"      => Expect::Blind("audit §5 — PTZ configurations are static"), ("Profile_1", "Profile_3"), ptz_compatible_configs;
 
     // ── Recording — audit §4.2, no state at all ─────────────────────────────
-    "recording/replay-uri"        => Expect::Blind("audit §4.2 — no recording state"), ("Rec_001", "Rec_002"), rec_replay_uri;
-    "recording/job-state"         => Expect::Blind("audit §4.2 — no recording state"), ("Job_001", "Job_002"), rec_job_state;
+    "recording/replay-uri"        => Expect::Discriminates, ("Rec_001", "Rec_002"), rec_replay_uri;
+    "recording/job-state"         => Expect::Discriminates, ("Job_001", "Job_002"), rec_job_state;
 ];
 
 // ── Media1 probes ────────────────────────────────────────────────────────────
@@ -380,7 +380,7 @@ async fn every_token_taking_operation_matches_its_declared_expectation() {
     // And the positive side is not vacuous: most of the table really does
     // answer per token.
     assert!(
-        discriminating >= 15,
+        discriminating >= 17,
         "only {discriminating} operations discriminated — the mock is far more \
          token-blind than the table claims",
     );

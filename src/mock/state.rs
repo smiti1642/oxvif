@@ -42,6 +42,8 @@ pub struct DeviceState {
     pub osd: OsdState,
     #[serde(default = "default_profiles")]
     pub profiles: ProfilesState,
+    #[serde(default = "default_recording")]
+    pub recording: RecordingState,
     #[serde(default = "default_video_sources")]
     pub video_sources: Vec<VideoSourceEntry>,
     #[serde(default = "default_video_source_configs")]
@@ -416,6 +418,70 @@ pub struct ProfilesState {
     pub next_token_id: u32,
 }
 
+// ── Recording / Search / Replay ─────────────────────────────────────────────
+//
+// Profile G, modelled on `ProfilesState` above for the same reason.
+//
+// Until 0.15 `grep -c recording src/mock/state.rs` was **0**: every one of the
+// eleven Recording operations was a static fixture, so `CreateRecording`
+// answered `Rec_new` and `GetRecordings` never listed it — the identical shape
+// to the reported Media2 `CreateProfile` bug, in a different service.
+// `docs/active/mock-audit-2026-07.md` §4.2.
+//
+// The consequence went past the mock — see the header of
+// `src/mock/services/recording.rs` for what the health check's Profile G
+// liveness chain was and was not proving against a fixture.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingState {
+    pub recordings: Vec<RecordingEntry>,
+    pub jobs: Vec<RecordingJobEntry>,
+    /// Counters for generated tokens, so a deleted token is never reused.
+    #[serde(default)]
+    pub next_recording_id: u32,
+    #[serde(default)]
+    pub next_track_id: u32,
+    #[serde(default)]
+    pub next_job_id: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingEntry {
+    pub token: String,
+    pub source_id: String,
+    pub source_name: String,
+    pub location: String,
+    pub description: String,
+    pub content: String,
+    pub maximum_retention_time: String,
+    #[serde(default)]
+    pub tracks: Vec<RecordingTrackEntry>,
+    /// Bounds reported by `FindRecordings` / `GetRecordingSearchResults`.
+    pub earliest: String,
+    pub latest: String,
+    /// `Initiated`, `Recording` or `Stopped`.
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingTrackEntry {
+    pub token: String,
+    /// `Video`, `Audio` or `Metadata`.
+    pub track_type: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingJobEntry {
+    pub token: String,
+    pub recording_token: String,
+    /// `Active` or `Idle`.
+    pub mode: String,
+    pub priority: u32,
+    /// Media profile token this job records from.
+    pub source_token: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileEntry {
     pub token: String,
@@ -706,6 +772,68 @@ fn default_osd() -> OsdState {
     }
 }
 
+/// Two recordings and **two** jobs, deliberately disagreeing.
+///
+/// `Rec_001` carries a track and `Rec_002` does not, so a renderer that emits a
+/// fixed track list cannot satisfy both. `Job_001` is `Active` and `Job_002` is
+/// `Idle`, which is what lets `GetRecordingJobState` be a per-token question at
+/// all — with one job it is indistinguishable from a constant.
+fn default_recording() -> RecordingState {
+    RecordingState {
+        recordings: vec![
+            RecordingEntry {
+                token: "Rec_001".into(),
+                source_id: "rtsp://mock/live".into(),
+                source_name: "MockCamera".into(),
+                location: "Lab".into(),
+                description: "Mock recording".into(),
+                content: "Normal".into(),
+                maximum_retention_time: "PT0S".into(),
+                tracks: vec![RecordingTrackEntry {
+                    token: "VIDEO001".into(),
+                    track_type: "Video".into(),
+                    description: "videoTrack".into(),
+                }],
+                earliest: "2026-01-01T00:00:00Z".into(),
+                latest: "2026-04-01T00:00:00Z".into(),
+                status: "Stopped".into(),
+            },
+            RecordingEntry {
+                token: "Rec_002".into(),
+                source_id: String::new(),
+                source_name: "MockCamera".into(),
+                location: String::new(),
+                description: String::new(),
+                content: String::new(),
+                maximum_retention_time: "PT0S".into(),
+                tracks: Vec::new(),
+                earliest: "2026-05-01T00:00:00Z".into(),
+                latest: "2026-06-01T00:00:00Z".into(),
+                status: "Recording".into(),
+            },
+        ],
+        jobs: vec![
+            RecordingJobEntry {
+                token: "Job_001".into(),
+                recording_token: "Rec_001".into(),
+                mode: "Active".into(),
+                priority: 1,
+                source_token: "Profile_1".into(),
+            },
+            RecordingJobEntry {
+                token: "Job_002".into(),
+                recording_token: "Rec_002".into(),
+                mode: "Idle".into(),
+                priority: 2,
+                source_token: "Profile_3".into(),
+            },
+        ],
+        next_recording_id: 3,
+        next_track_id: 2,
+        next_job_id: 3,
+    }
+}
+
 fn default_profiles() -> ProfilesState {
     ProfilesState {
         profiles: vec![
@@ -984,6 +1112,7 @@ impl Default for DeviceState {
             protocols: default_protocols(),
             osd: default_osd(),
             profiles: default_profiles(),
+            recording: default_recording(),
             video_sources: default_video_sources(),
             video_source_configs: default_video_source_configs(),
             video_encoders: default_video_encoders(),
