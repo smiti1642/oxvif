@@ -115,6 +115,33 @@ two-thirds of the test suite.
   other and with nothing else. The mock now sends the nested shape a real
   device sends.
 
+- **The mock's clock was half-frozen.** `GetSystemDateAndTime` computed the time
+  of day from `SystemTime::now()` but hardcoded `<tt:Year>2026</tt:Year>
+  <tt:Month>4</tt:Month><tt:Day>15</tt:Day>`, so the reported timestamp drifted a
+  day further into the past every day — 106 days by the time it was noticed. The
+  hours/minutes/seconds looked right, which is why nobody read the date.
+
+  Nothing failed, but `HealthCheck` compares the device clock against the local
+  one, so a perfectly healthy mock warned about clock skew — and that false
+  positive was the first thing anyone saw on the new `--mock` run. All six
+  components now come from `soap::security::unix_secs_to_ymd_hms`, the same
+  conversion behind the WS-Security `Created` timestamp, so there is one
+  implementation and the existing ISO-8601 tests pin it. A new test asserts the
+  mock's clock is within 120s of local — as a bound, not a literal date, because
+  a literal is what rotted.
+
+- **Two warnings that only exist under a single feature.**
+  `redact::scrub_url_userinfo` was dead code under `--features health` alone (the
+  module is `mock` **or** `health`, but only the recorders use it), and
+  `use crate::metamorph::SurfaceOp` in `record.rs`'s tests was unused under
+  `--features metamorph` alone (its sole consumer is
+  `#[cfg(feature = "mock-server")]`).
+
+  Both are invisible to the quality gate, which lints two of the sixty-four
+  feature combinations — the same hole that shipped the `Arc` import fixed in
+  `8031ab0`, now three instances of one shape. `CLAUDE.md` gains a **per-feature
+  warning sweep** as a publish check; every feature is currently at zero.
+
 - **The mock's device-level `GetCapabilities` omitted
   `Device/{Network,System,IO,Security}` and
   `Events/WSSubscriptionPolicySupport` entirely.** Two silent consequences:
@@ -141,6 +168,34 @@ two-thirds of the test suite.
   reported nothing wrong.
 
 ### Changed
+
+- **The non-ONVIF features are documented example-first.** `health`, `mock` and
+  `metamorph` each open with the shortest thing that works and a runnable
+  snippet, with the reference detail moved below an explicit boundary. Previously
+  the `health` section spent 156 lines on `ProfileState` semantics before showing
+  anything a reader could run, and never mentioned that the mock can be the
+  target — so trying the crate's flagship non-ONVIF feature appeared to require
+  a camera.
+
+- **`examples/healthcheck.rs` gained `--mock`.** One command, no hardware:
+
+  ```sh
+  cargo run --example healthcheck --features health,mock-server -- --mock
+  ```
+
+  It starts a throwaway `MockServer` in-process and runs the full check against
+  it — the real report format, and `--json` / `--baseline` work the same way. The
+  camera path is unchanged and the example still builds with `--features health`
+  alone.
+
+- **`src/metamorph/mod.rs` gained doc examples.** It had **none**, despite being
+  the headline of two releases, so the docs.rs module page was prose only. Three
+  now: clone-and-replay, parse verification + quirk diff, and the `DeviceAdapter`
+  skin.
+
+- **`src/health/mod.rs`'s primary doc example now actually runs.** It drives a
+  real `MockServer` instead of being `no_run`, so `cargo test --doc` proves the
+  documented usage works rather than merely compiling it. Doc tests: 37 → 42.
 
 - **Dependencies brought current.** `base64` **0.22 → 0.23** (the only direct dep
   behind by a major) plus semver-compatible moves for `async-trait` 0.1.91,

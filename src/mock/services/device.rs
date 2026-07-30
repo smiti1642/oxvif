@@ -6,15 +6,27 @@ const NS: &str = r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#;
 
 // ── Stateful Get responses ──────────────────────────────────────────────────
 
+/// The mock's clock. **All six components come from the real current time.**
+///
+/// Until 0.15 the time of day was live but the date was the literal
+/// `2026-04-15`, so the mock reported a timestamp that drifted further into the
+/// past every day — 106 days by the time it was noticed. Nothing failed: the
+/// hours/minutes/seconds looked right, which is exactly why nobody read the
+/// date. What it *did* do was make `HealthCheck`'s clock-skew check warn on a
+/// perfectly healthy mock, so the first thing anyone trying the health check
+/// without a camera saw was a false positive.
+///
+/// The conversion is `soap::security::unix_secs_to_ymd_hms`, the same one behind
+/// the WS-Security `Created` timestamp, so there is one implementation and the
+/// ISO-8601 tests pin it.
 pub fn resp_system_date_and_time(state: &SharedState) -> String {
     let s = state.read();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let secs = now % 60;
-    let mins = (now / 60) % 60;
-    let hours = (now / 3600) % 24;
+    let (year, month, day, hours, mins, secs) =
+        crate::soap::security::unix_secs_to_ymd_hms(now as i64);
     let dst = if s.daylight_savings { "true" } else { "false" };
     soap(
         NS,
@@ -26,7 +38,7 @@ pub fn resp_system_date_and_time(state: &SharedState) -> String {
             <tt:TimeZone><tt:TZ>{tz}</tt:TZ></tt:TimeZone>
             <tt:UTCDateTime>
               <tt:Time><tt:Hour>{hours}</tt:Hour><tt:Minute>{mins}</tt:Minute><tt:Second>{secs}</tt:Second></tt:Time>
-              <tt:Date><tt:Year>2026</tt:Year><tt:Month>4</tt:Month><tt:Day>15</tt:Day></tt:Date>
+              <tt:Date><tt:Year>{year}</tt:Year><tt:Month>{month}</tt:Month><tt:Day>{day}</tt:Day></tt:Date>
             </tt:UTCDateTime>
           </tds:SystemDateAndTime>
         </tds:GetSystemDateAndTimeResponse>"#,

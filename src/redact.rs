@@ -60,6 +60,13 @@ fn blank_between(xml: &str, open: &str, close: &str) -> String {
 /// form where the userinfo contains a `:` — a user/password pair; a bare
 /// `user@host` (no password) is left alone. The replayed URI then carries no
 /// credential, which is the correct shape (RTSP auth is negotiated separately).
+///
+/// The module is compiled for `mock` **or** `health`, but only the recorders use
+/// this one (`fixtures.rs` and `metamorph/fixture.rs`, both `mock`); `health`
+/// needs only [`redact_credentials`]. Without the gate this is dead code under
+/// `--features health` alone — a warning invisible to the quality gate, which
+/// only lints `--all-features` and no-features.
+#[cfg(feature = "mock")]
 pub(crate) fn scrub_url_userinfo(xml: &str) -> String {
     let mut out = String::with_capacity(xml.len());
     let bytes = xml.as_bytes();
@@ -132,6 +139,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "mock")]
     fn scrub_url_userinfo_targets_only_credential_pairs() {
         // A user:password pair is stripped, host/path kept.
         assert_eq!(scrub_url_userinfo("rtsp://u:p@h/x"), "rtsp://h/x");

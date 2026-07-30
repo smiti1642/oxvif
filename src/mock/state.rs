@@ -996,6 +996,37 @@ mod tests {
         MockState::new()
     }
 
+    /// The mock's clock must be the **real** clock, all six components.
+    ///
+    /// It used to compute the time of day from `SystemTime::now()` and hardcode
+    /// `<tt:Year>2026</tt:Year><tt:Month>4</tt:Month><tt:Day>15</tt:Day>`, so
+    /// the reported timestamp drifted a day further into the past every day. It
+    /// broke nothing and failed nothing — but `HealthCheck` compares the device
+    /// clock against the local one, so a healthy mock warned about clock skew,
+    /// and that warning was the first thing anyone saw when trying the health
+    /// check without a camera.
+    ///
+    /// Asserted against the parser rather than the string, and as a skew bound
+    /// rather than an expected date: a literal date would need editing every
+    /// day, which is how the bug got there.
+    #[test]
+    fn system_date_and_time_reports_the_real_clock_not_a_frozen_date() {
+        let xml = device::resp_system_date_and_time(&new_state());
+        let body = crate::soap::parse_soap_body(&xml).expect("mock response is a SOAP envelope");
+        let resp = body
+            .child("GetSystemDateAndTimeResponse")
+            .expect("response element present");
+        let dt = crate::types::SystemDateTime::from_xml(resp)
+            .expect("the mock's own response must parse");
+
+        let skew = dt.utc_offset_secs();
+        assert!(
+            skew.abs() < 120,
+            "the mock's clock is {skew}s off the local clock; a frozen date or a \
+             time-of-day-only computation is back. Response was:\n{xml}"
+        );
+    }
+
     #[test]
     fn get_hostname_returns_default() {
         let s = new_state();

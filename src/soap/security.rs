@@ -122,13 +122,21 @@ pub fn compute_digest(nonce: &[u8], created: &str, password: &str) -> [u8; 20] {
 
 // ── Timestamp formatting ──────────────────────────────────────────────────────
 
-/// Convert a Unix timestamp (seconds) to `"YYYY-MM-DDTHH:MM:SSZ"`.
+/// Split a Unix timestamp (seconds) into `(year, month, day, hour, min, sec)`
+/// UTC.
 ///
 /// Uses the [civil-from-days] algorithm by Howard Hinnant; no external
 /// time-handling crate required.
 ///
+/// Exposed separately from [`unix_secs_to_iso8601`] because ONVIF's
+/// `tt:DateTime` is a *structured* element (`<tt:Year>`, `<tt:Month>`, …), not
+/// an ISO string, so the mock's `GetSystemDateAndTime` needs the components. One
+/// implementation, pinned by the ISO tests below — the mock previously did its
+/// own arithmetic for the time of day and hardcoded the date, which is how it
+/// came to report a timestamp 106 days in the past.
+///
 /// [civil-from-days]: https://howardhinnant.github.io/date_algorithms.html
-pub fn unix_secs_to_iso8601(unix: i64) -> String {
+pub(crate) fn unix_secs_to_ymd_hms(unix: i64) -> (i64, i64, i64, i64, i64, i64) {
     const SECS_PER_DAY: i64 = 86_400;
 
     let time_of_day = unix.rem_euclid(SECS_PER_DAY);
@@ -154,6 +162,12 @@ pub fn unix_secs_to_iso8601(unix: i64) -> String {
     let mo = if mp < 10 { mp + 3 } else { mp - 9 };
     let yr = if mo <= 2 { y + 1 } else { y };
 
+    (yr, mo, d, h, m, s)
+}
+
+/// Convert a Unix timestamp (seconds) to `"YYYY-MM-DDTHH:MM:SSZ"`.
+pub fn unix_secs_to_iso8601(unix: i64) -> String {
+    let (yr, mo, d, h, m, s) = unix_secs_to_ymd_hms(unix);
     format!("{yr:04}-{mo:02}-{d:02}T{h:02}:{m:02}:{s:02}Z")
 }
 

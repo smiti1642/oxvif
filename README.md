@@ -137,9 +137,19 @@ oxvif = { version = "0.15", features = ["serde"] }
 ```
 
 ```rust
+// Any response type, straight to JSON — no shadow structs.
+let profiles = session.get_profiles().await?;
+println!("{}", serde_json::to_string_pretty(&profiles)?);
+
+// …and back again, so they work as request bodies too.
+let round_tripped: Vec<oxvif::MediaProfile> = serde_json::from_str(&json)?;
+```
+
+In a web handler that means the response type *is* the API type:
+
+```rust
 use axum::{Json, http::StatusCode};
 
-// The response types serialize straight to JSON — no shadow structs.
 async fn presets() -> Result<Json<Vec<oxvif::PtzPreset>>, StatusCode> {
     session.ptz_get_presets("Profile_1").await
         .map(Json)
@@ -996,10 +1006,93 @@ println!("Playback: {uri}");
 
 ## Health check (`health` feature)
 
-A fast, scriptable conformance check — point it at a camera and get a
-Pass/Warn/Fail/Skip report with a Profile S/T/G assessment. A readable
-alternative to the official ONVIF Device Test Tool. Opt in with the `health`
-feature; it is pure library code over `OnvifSession` (no extra dependencies).
+Point it at a camera, get a Pass/Warn/Fail/Skip report with a Profile S/T/G
+verdict. A readable alternative to the official ONVIF Device Test Tool — pure
+library code over `OnvifSession`, no extra dependencies.
+
+### Try it now — no camera
+
+```bash
+cargo run --example healthcheck --features health,mock-server -- --mock
+```
+
+That starts a throwaway mock camera in-process and checks it. You get the real
+report format, and you can try `--json` and `--baseline` the same way:
+
+```text
+ONVIF health check — http://127.0.0.1:27365/onvif/device
+  31 pass · 0 warn · 0 fail · 1 skip   (20 ms total)
+
+  [Connectivity]
+    PASS connect                          5ms  GetCapabilities ok
+    PASS get_device_info                  3ms  oxvif-mock MockCam-1080p fw 1.0.0
+
+  [Time]
+    PASS system_date_time                 3ms  skew 0s
+
+  [Services]
+    PASS get_services                     5ms  8 service(s)
+    PASS service_caps_self_consistent     0ms  18 fact(s) cross-checked, no contradiction
+    …
+```
+
+Then point it at your own camera:
+
+```bash
+cargo run --example healthcheck --features health -- \
+    http://192.168.1.100/onvif/device_service admin password
+```
+
+### In your own code
+
+```toml
+[dependencies]
+oxvif = { version = "0.15", features = ["health"] }
+```
+
+```rust
+use oxvif::health::HealthCheck;
+
+#[tokio::main]
+async fn main() {
+    let report = HealthCheck::new("http://192.168.1.100/onvif/device_service")
+        .with_credentials("admin", "password")
+        .run()
+        .await;
+
+    // Human-readable: per-check status, timings, profile verdict.
+    println!("{report}");
+
+    // Or inspect it programmatically.
+    for c in &report.checks {
+        println!("{:?} {} — {}", c.status, c.id, c.detail);
+    }
+    println!("Profile S: {:?}", report.profiles.profile_s.verdict);
+
+    if !report.ok() {
+        std::process::exit(1);   // something actually failed
+    }
+}
+```
+
+`HealthCheck::run()` never returns an error — an unreachable device is a failing
+`connect` check, not an `Err`, so a batch run over a fleet cannot be derailed by
+one bad camera. Checks run concurrently and are read-only unless you opt in
+below.
+
+### Common options
+
+| Builder call | What it adds |
+|---|---|
+| `.with_credentials(user, pass)` | WS-Security + HTTP Digest |
+| `.with_clock_sync(true)` | Sync to the device clock first — fixes spurious auth failures |
+| `.with_liveness_probes(true)` | Actually fetch the snapshot / reach the RTSP port / exercise Profile G |
+| `.with_write_checks(true)` | One non-destructive write round-trip |
+| `.with_force_unsupported(true)` | Hunt for services the device failed to advertise |
+| `.with_capture(true)` | Keep the raw SOAP of every *failing* call, credentials blanked |
+
+`report.to_json()` / `to_json_pretty()` for CI; `report.diff(&previous)` for
+"what changed since the last run".
 
 > **Want this with a GUI?** [**OxDM**](https://github.com/smiti1642/oxdm) — the
 > ONVIF device manager built on this crate — drives the same `HealthCheck` from
@@ -1012,26 +1105,11 @@ feature; it is pure library code over `OnvifSession` (no extra dependencies).
 
 <sub>A batch run over a fleet — demonstrated in **[OxDM](https://github.com/smiti1642/oxdm)**, which drives this crate's `HealthCheck`. The `snapshot 291 KB` / `RTSP OK` / `replay URI OK` badges are the liveness probes below: real bytes fetched, not an advertised URL echoed back.</sub>
 
-```toml
-oxvif = { version = "0.15", features = ["health"] }
-```
+---
 
-```rust
-use oxvif::health::HealthCheck;
+### Reference — what each option actually does
 
-let report = HealthCheck::new("http://192.168.1.100/onvif/device_service")
-    .with_credentials("admin", "password")
-    .run()
-    .await;
-
-println!("{report}"); // readable summary: per-check status + timings + profile verdict
-```
-
-Checks run concurrently and are read-only by default. `HealthReport` exposes the
-individual `CheckResult`s (`status`, `category`, timing) and a
-`ProfileAssessment` if you want to inspect results programmatically rather than
-printing. See `examples/healthcheck.rs` (`cargo run --example healthcheck
---features health`).
+Everything from here down is detail. The block above is enough to use it.
 
 **Active liveness probing (opt-in).** By default the check only confirms the
 device *answered* each SOAP call. Enable `with_liveness_probes(true)` to also
@@ -1185,18 +1263,98 @@ match client.get_capabilities().await {
 
 ## Testing without a real camera
 
-### `oxvif::mock` — test without a real camera
+A built-in, **stateful** mock ONVIF device — `Set` persists, `Get` reflects it —
+covering **every operation oxvif implements** (157 SOAP actions, and a test
+asserts none is missing). Two lenses, one behind the other.
 
-Depending on a physical IP camera in unit tests is painful, and every vendor's
-ONVIF differs. Enable the **`mock`** feature for a built-in, **stateful** mock
-ONVIF device (Set persists, Get reflects it) covering every operation oxvif
-implements. There are two ways to wire it up.
+### Try it now — a test that needs nothing
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.15", features = ["mock"] }           # MockTransport
-# oxvif = { version = "0.15", features = ["mock-server"] }  # adds MockServer
+oxvif = { version = "0.15", features = ["mock"] }
 ```
+
+```rust
+use std::sync::Arc;
+use oxvif::{OnvifClient, mock::MockTransport};
+
+#[tokio::test]
+async fn my_code_handles_a_camera() {
+    let client = OnvifClient::new("http://mock")
+        .with_transport(Arc::new(MockTransport::new()));
+
+    // A real Set → Get round-trip. No network, no sockets, no hardware.
+    client.set_hostname("lab-cam").await.unwrap();
+    assert_eq!(
+        client.get_hostname().await.unwrap().name.as_deref(),
+        Some("lab-cam"),
+    );
+}
+```
+
+`cargo test` — that's it. Nothing to start, nothing to clean up.
+
+### Which one do I want?
+
+|  | `MockTransport` (`mock`) | `MockServer` (`mock-server`) |
+|---|---|---|
+| Wiring | Injected into the client | A real bound port you connect to |
+| Exercises | Your code + the parsers | …**plus** the HTTP transport and WS-Security |
+| Needs | nothing | `axum`, an ephemeral port |
+| Use for | unit tests | integration tests, and driving oxvif from *other* tools |
+
+Start with `MockTransport`. Reach for `MockServer` when you want the real
+transport in the loop, or when something outside your test — OxDM, Frigate, ONVIF
+Device Manager — needs an ONVIF device to talk to.
+
+```rust
+use oxvif::{OnvifSession, mock::MockServer};
+
+#[tokio::test]
+async fn over_real_http() -> Result<(), oxvif::OnvifError> {
+    let server = MockServer::start().await.unwrap();   // ephemeral 127.0.0.1 port
+
+    // An ordinary session — nothing injected, the real HTTP stack runs.
+    let session = OnvifSession::builder(server.device_url()).build().await?;
+    assert_eq!(session.get_device_info().await?.manufacturer, "oxvif-mock");
+    Ok(())
+}   // the server shuts down when dropped
+```
+
+### Making it misbehave
+
+The point of a mock is the cases a real camera won't reproduce on demand:
+
+```rust
+let mock = MockTransport::new();
+
+// Seed the device into the state you need:
+mock.device().modify(|s| s.hostname = "seeded-cam".into());
+
+// Arm a single-shot fault for the next matching call:
+mock.inject_fault("GetProfiles", "ter:NotAuthorized", "denied");
+
+let client = OnvifClient::new("http://mock").with_transport(Arc::new(mock.clone()));
+assert!(client.get_profiles("http://mock/media").await.is_err());  // consumes it
+
+// Then assert what your code did to the device:
+client.set_hostname("after").await.unwrap();
+assert_eq!(mock.device().read().hostname, "after");
+```
+
+`MockTransport` is `Clone` and every clone shares one device state, so the handle
+you keep and the one the client holds are the same device. `MockServer` has the
+same three methods (`.device()`, `.inject_fault()`, `.clear_faults()`).
+
+Both default to **no authentication** so tests stay frictionless — call
+`.with_auth()` (`MockTransport`) or `.enforce_auth(true)`
+(`MockServer::builder()`) to exercise WS-Security.
+
+---
+
+### Reference
+
+Everything from here down is detail. The blocks above are enough to use it.
 
 **1. `MockTransport` — embedded in the client** (in-process, no sockets, no axum):
 
@@ -1420,6 +1578,71 @@ chain and `DeviceState`); everything here is opt-in and feature-gated, and
 oxvif = { version = "0.15", features = ["metamorph"] }         # record / replay in-process
 # oxvif = { version = "0.15", features = ["metamorph-server"] } # + serve the clone over real HTTP
 ```
+
+### The shortest useful thing
+
+Borrow a camera once, keep it forever. Three steps:
+
+```rust
+use std::sync::Arc;
+use oxvif::OnvifClient;
+use oxvif::metamorph::{FixtureStore, MetamorphTransport, record_standard_surface};
+
+// 1. Clone it. This is the ONLY step that needs the camera.
+let clone = record_standard_surface(
+    "http://192.168.1.100/onvif/device_service",
+    Some(("admin", "password")),
+    "hikvision-ds2cd",
+).await?;
+clone.save("clones/hikvision-ds2cd")?;
+
+// 2. Later, on any machine, with no camera anywhere:
+let store  = FixtureStore::load("clones/hikvision-ds2cd")?;
+let client = OnvifClient::new("http://replay")
+    .with_transport(Arc::new(MetamorphTransport::new(store)));
+
+// 3. The real camera's recorded answers, byte for byte.
+let info = client.get_device_info().await?;
+
+// And: will oxvif choke on this device?
+let report = FixtureStore::load("clones/hikvision-ds2cd")?.verify_parsing().await;
+for v in report.failures() {
+    println!("cannot parse {}: {}", v.action, v.error.as_deref().unwrap_or(""));
+}
+```
+
+Saved clones carry **no secrets** — WS-Security `Password`/`Nonce` and any
+`user:pass@` in a URL are scrubbed before anything is written.
+
+Or from the command line, no code at all:
+
+```bash
+# Clone a camera you have
+cargo run --example metamorph_record --features metamorph -- \
+    http://192.168.1.100/onvif/device_service admin password clones/mycam
+
+# Serve the clone on a real port + print how it deviates from oxvif's reference mock
+cargo run --example metamorph_serve --features metamorph-server -- clones/mycam
+
+# No camera at all: put an ONVIF skin on one fixed RTSP stream
+cargo run --example metamorph_adapter --features metamorph
+```
+
+### Which persona do I want?
+
+| I want to… | Use | Needs a camera? |
+|---|---|---|
+| Test against *my* camera's real quirks, offline | `record_standard_surface` → `MetamorphTransport` | once, to clone |
+| Let **other** tools drive the clone (OxDM, Frigate, ODM) | `MockServer::builder().replay(store)` | once, to clone |
+| Know whether oxvif parses a device correctly | `store.verify_parsing()` | once, to clone |
+| See *how* a device deviates from the spec-ideal | `store.diff_against_synthetic()` | once, to clone |
+| Make a non-ONVIF device (RTSP-only) look like ONVIF | `DeviceAdapter` + `AdapterTransport` | **no** |
+
+---
+
+### Reference
+
+Everything from here down is detail. The block above is enough to use it.
 
 ### Clone & replay (Persona B)
 

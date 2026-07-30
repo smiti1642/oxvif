@@ -71,6 +71,32 @@ cargo audit                           # zero vulnerabilities required
 cargo outdated --depth 1              # review; upgrade direct deps if significantly behind
 ```
 
+### The per-feature warning sweep
+
+```sh
+for fs in "" health mock mock-server metamorph metamorph-server serde; do
+  echo -n "$fs: "
+  cargo clippy --all-targets ${fs:+--features $fs} --message-format short 2>&1 \
+    | grep -cE '^(src|examples|tests).*warning'
+done
+```
+
+**All must print 0.** The two per-commit clippy lines cover exactly two of the
+sixty-four feature combinations this crate can be built with, and a warning that
+lives only in one of the other sixty-two is invisible to the whole gate. That is
+not hypothetical — **three instances so far, all the same shape**: an item used
+only under a *narrower* feature than the one gating its module.
+
+| found in | symptom | fix |
+|---|---|---|
+| `8031ab0` | `use std::sync::Arc` in `ptz_tests.rs`, sole consumer `#[cfg(feature = "mock")]` | gate the import |
+| 0.15.0 | `redact::scrub_url_userinfo` dead under `--features health` (module is `mock` **or** `health`; only recorders use it) | `#[cfg(feature = "mock")]` on the fn + its test |
+| 0.15.0 | `use crate::metamorph::SurfaceOp` in `record.rs` tests, sole consumer `#[cfg(feature = "mock-server")]` | gate the import |
+
+The tell is a module gated on `any(feature = A, feature = B)`, or a test module
+whose only user of an import is itself gated. Too slow for every commit (~8
+clippy runs); right before publish is the place.
+
 **Both `cargo doc` forms, and both must be warning-free.** `[package.metadata.docs.rs]`
 sets `all-features = true`, so the plain `cargo doc --no-deps` is *not* what
 docs.rs renders — it is the no-feature build, and this crate has no default
@@ -444,6 +470,9 @@ duplicate of the first.
 
 - [ ] `cargo fmt && cargo clippy --all-targets --all-features -- -D warnings` clean
 - [ ] `cargo clippy --all-targets -- -D warnings` — the no-feature lint pass too
+- [ ] **Per-feature warning sweep** — every single feature at 0 warnings; see
+      [The per-feature warning sweep](#the-per-feature-warning-sweep). Three
+      warnings have shipped through the two-combination gate already.
 - [ ] `cargo test --all-features` — all tests pass
 - [ ] `cargo test` — the no-feature build compiles and passes too
 - [ ] `cargo test --doc` — all doc examples pass

@@ -18,6 +18,61 @@
 //! println!("{report}");
 //! # }
 //! ```
+//!
+//! [`HealthCheck::run`] **never returns an error.** An unreachable or
+//! unauthenticated device is a failing `connect` check inside the report, not an
+//! `Err`, so one bad camera cannot derail a batch run over a fleet. Use
+//! [`HealthReport::ok`] for the pass/fail decision and
+//! [`HealthReport::to_json`] for CI.
+//!
+//! # Try it without a camera
+//!
+//! With the `mock-server` feature you can check a throwaway in-process device.
+//! This is a real run of every check, and it is how the examples below are
+//! verified:
+//!
+//! ```
+//! # #[cfg(feature = "mock-server")]
+//! # #[tokio::main] async fn main() {
+//! use oxvif::health::HealthCheck;
+//! use oxvif::mock::MockServer;
+//!
+//! let server = MockServer::start().await.unwrap();
+//! let report = HealthCheck::new(server.device_url()).run().await;
+//!
+//! assert!(report.ok(), "the mock should be healthy:\n{report}");
+//! println!("{report}");
+//! # }
+//! # #[cfg(not(feature = "mock-server"))] fn main() {}
+//! ```
+//!
+//! From the command line, one line and no hardware:
+//!
+//! ```text
+//! cargo run --example healthcheck --features health,mock-server -- --mock
+//! ```
+//!
+//! # Inspecting the report instead of printing it
+//!
+//! ```no_run
+//! # use oxvif::health::{HealthCheck, CheckStatus};
+//! # async fn run() {
+//! let report = HealthCheck::new("http://192.168.1.100/onvif/device_service")
+//!     .with_liveness_probes(true)   // actually fetch the snapshot, reach the RTSP port
+//!     .run()
+//!     .await;
+//!
+//! for c in &report.checks {
+//!     if let CheckStatus::Fail(reason) = &c.status {
+//!         println!("{} failed: {reason}", c.id);
+//!     }
+//! }
+//!
+//! // What the device *claims* via its scopes, vs what was actually verified.
+//! println!("declared: {:?}", report.declared_profiles);
+//! println!("assessed: {:?}", report.profiles.profile_s.verdict);
+//! # }
+//! ```
 
 mod capture;
 mod checks;

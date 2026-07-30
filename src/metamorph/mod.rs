@@ -1,3 +1,99 @@
+//! Clone a real camera and replay it offline, or put an ONVIF skin on a device
+//! that does not speak ONVIF.
+//!
+//! # Borrow a camera once, keep it forever
+//!
+//! ```no_run
+//! use std::sync::Arc;
+//! use oxvif::OnvifClient;
+//! use oxvif::metamorph::{FixtureStore, MetamorphTransport, record_standard_surface};
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! // The only step that needs the camera.
+//! let clone = record_standard_surface(
+//!     "http://192.168.1.100/onvif/device_service",
+//!     Some(("admin", "password")),   // None for an open device
+//!     "hikvision-ds2cd",
+//! ).await?;
+//! clone.save("clones/hikvision-ds2cd")?;
+//!
+//! // Later, anywhere, with no camera on the network:
+//! let store  = FixtureStore::load("clones/hikvision-ds2cd")?;
+//! let client = OnvifClient::new("http://replay")
+//!     .with_transport(Arc::new(MetamorphTransport::new(store)));
+//!
+//! let info = client.get_device_info().await?;   // the real camera's answer
+//! # Ok(()) }
+//! ```
+//!
+//! A saved clone carries **no secrets**: WS-Security `Password`/`Nonce` and any
+//! `user:pass@` in a URL are scrubbed before anything reaches disk.
+//!
+//! # Will oxvif parse this device correctly?
+//!
+//! ```no_run
+//! # use oxvif::metamorph::FixtureStore;
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let store = FixtureStore::load("clones/hikvision-ds2cd")?;
+//!
+//! // Value/type level: run oxvif's own parsers over every recorded response.
+//! for v in store.verify_parsing().await.failures() {
+//!     println!("cannot parse {}: {}", v.action, v.error.as_deref().unwrap_or(""));
+//! }
+//!
+//! // Shape level: how the device's element paths differ from the reference mock.
+//! for q in &store.diff_against_synthetic().quirks {
+//!     println!("{}: +{:?} -{:?}", q.action, q.only_in_clone, q.only_in_synthetic);
+//! }
+//! # Ok(()) }
+//! ```
+//!
+//! `failures()` excludes operations the device *declined* with a SOAP Fault —
+//! that is correct device behaviour, not an oxvif problem. Use `faulted()` for
+//! those; it matters when sweeping with a restricted account.
+//!
+//! # Make a non-ONVIF device look like ONVIF
+//!
+//! Only two methods are required — enough for an NVR or Frigate to ingest an
+//! RTSP-only camera as ONVIF. Everything else falls through to the synthetic mock.
+//!
+//! ```no_run
+//! use std::sync::Arc;
+//! use oxvif::OnvifClient;
+//! use oxvif::metamorph::{AdapterTransport, DeviceAdapter, DeviceIdentity};
+//!
+//! struct RtspCam { rtsp: String }
+//!
+//! #[async_trait::async_trait]
+//! impl DeviceAdapter for RtspCam {
+//!     fn identity(&self) -> DeviceIdentity {
+//!         DeviceIdentity {
+//!             manufacturer: "Acme".into(),
+//!             model: "RTSP-Skin".into(),
+//!             firmware_version: "1.0".into(),
+//!             serial_number: "SN-0001".into(),
+//!             hardware_id: "HW-0001".into(),
+//!         }
+//!     }
+//!     fn stream_uri(&self, _profile: &str) -> Option<String> {
+//!         Some(self.rtsp.clone())
+//!     }
+//! }
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let adapter = Arc::new(RtspCam { rtsp: "rtsp://192.168.1.77:554/ch1".into() });
+//! let client  = OnvifClient::new("http://adapter")
+//!     .with_transport(Arc::new(AdapterTransport::new(adapter)));
+//!
+//! let info = client.get_device_info().await?;   // identity from the adapter
+//! # Ok(()) }
+//! ```
+//!
+//! Runnable versions of all three: `examples/metamorph_record.rs`,
+//! `metamorph_serve.rs`, `metamorph_adapter.rs`.
+//!
+//! # How it works
+//!
 //! Metamorph personas built on the public mock responder
 //! [`Chain`](crate::mock::Chain) — each slots a responder ahead of the synthetic
 //! terminal, so anything a persona doesn't answer falls through to the mock:

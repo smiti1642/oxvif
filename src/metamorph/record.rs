@@ -204,6 +204,11 @@ async fn record_into(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Only `records_over_http_and_reports_progress` names a `SurfaceOp`, and it
+    // needs a bound port. Ungated this is an unused import under
+    // `--features metamorph` alone — the same warning class as the `Arc` import
+    // fixed in 8031ab0, invisible for the same reason.
+    #[cfg(feature = "mock-server")]
     use crate::metamorph::SurfaceOp;
 
     /// The Dioxus-desktop shape: the callback is a closure that sends into a
