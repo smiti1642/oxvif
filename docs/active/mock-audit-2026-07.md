@@ -307,7 +307,12 @@ table-driven property tests over the public API kill the class:
    confirmed 46 of the 47 classifications in this document on its first run and
    found the 47th (item 1.8).
 2. **Token discrimination** — every token-taking operation: two tokens the
-   fixture disagrees on must produce different answers.
+   fixture disagrees on must produce different answers. **Landed as
+   `tests/mock_token_discrimination.rs`** (26 rows). Same contract as the
+   round-trip table — `Discriminates` or `Blind(audit §)`, **both arms
+   asserted** — over the public API and real HTTP. 20 discriminate, 6 are
+   declared static. It catches a bug the round-trip table cannot: a handler can
+   persist state perfectly and still answer for the wrong channel.
 3. **Cross-service agreement** — already landed as
    `tests/mock_media1_media2_agree.rs`.
 
@@ -328,6 +333,6 @@ schema-fidelity chase and stall everything else.
 | ~~1. Property test **round-trip** (§8.1)~~ **done** — `tests/mock_roundtrip.rs` | It was both probe and guard. Produced the Tier 1 list mechanically, confirmed 46 of 47 hand classifications, and added item 1.8. |
 | ~~2. Tier 1 wiring (§3)~~ **done** — all 8 items | Eight rows moved from `Broken` to `Works`; **35 of 47 pairs now round-trip**. Three new cross-service tests in `tests/mock_media1_media2_agree.rs` cover the bindings and the shared source-config writer. |
 | ~~3. Tier 2.1 PTZ per-profile (§4.1)~~ **done** | `PtzState` is keyed by profile token; 18 dispatch arms gained `body`; the four seeded heads deliberately disagree. |
-| 4. Property test **token discrimination** (§8.2) | Guards step 3 and the 0.15 media/imaging work. |
+| ~~4. Property test **token discrimination** (§8.2)~~ **done** — `tests/mock_token_discrimination.rs` | 26 rows; 20 discriminate, 6 declared static. Guards step 3 and the 0.15 media/imaging work. |
 | 5. Tier 2.2 recording state (§4.2) | Unblocks Profile G testing, including the health check's own liveness probe. |
 | 6. Tiers 3 and 4 | Opportunistic. |

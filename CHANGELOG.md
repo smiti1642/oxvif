@@ -432,6 +432,22 @@ two-thirds of the test suite.
   Tier 2 defects with a citation, 5 are declared stubs.** `CLAUDE.md` step 5c
   makes a row mandatory for every new `Set`.
 
+- **…and every token-taking operation now declares whether the token selects the
+  answer.** New `tests/mock_token_discrimination.rs`: **26 rows**, each naming
+  two tokens the fixture deliberately disagrees on, declaring
+  `Expect::Discriminates` or `Expect::Blind(audit §)`. **20 discriminate, 6 are
+  declared static.**
+
+  This catches a bug the round-trip table cannot: a handler can persist state
+  perfectly and still answer for the wrong channel. That failure is silent by
+  construction — a device answering a token-less request is not obliged to say
+  so, and on a single-sensor camera its default-channel answer is
+  indistinguishable from correct.
+
+  A row's fingerprint keeps the *error* when a call fails, because refusing one
+  token and answering the other is itself discrimination — Imaging's focus
+  operations on the fixed lens are exactly that.
+
 - **The operation coverage tables moved out of `README.md`** into a new
   top-level **`OPERATIONS.md`**. Ten tables and 104 rows were roughly 8% of the
   README and sat below everything a reader actually navigates to; the README's

@@ -454,6 +454,13 @@ they catch a class the missing/fault pair cannot:
       audit states the general rule: a documented omission is a design decision,
       an undocumented one is a bug.
 
+    **And every token-taking operation needs a row in
+    `tests/mock_token_discrimination.rs`** — same contract, `Discriminates` or
+    `Blind(audit §)`, both arms asserted. It catches what the round-trip table
+    cannot: a handler that persists state perfectly and still answers for the
+    wrong channel. Its rows name two tokens the fixture *disagrees on*, which is
+    the executable form of the multi-sensor rule above.
+
     When a write has **no getter that could ever show it** — `SetVideoSourceMode`
     (`VideoSourceMode` has no active-mode field), `SetRelayOutputState`
     (`GetRelayOutputs` never returns the live state) — there is no pair to add.
