@@ -107,6 +107,24 @@ two-thirds of the test suite.
   kept as an additional line, because a no-feature build breaking is its own
   bug. Documented in `CLAUDE.md`.
 
+- **…and a fifth line, `cargo clippy --all-targets -- -D warnings`.** The
+  `--all-features` clippy above is a *different compilation*, and neither
+  `cargo test` line carries `-D warnings`, so a warning existing only in the
+  no-feature build was invisible to all four commands. Measured: an unused
+  `use std::sync::Arc;` in `ptz_tests.rs` whose only consumer was
+  `#[cfg(feature = "mock")]` passed the whole gate and shipped in 0.15.0. Now
+  five lines, and the no-feature pass is at zero warnings.
+
+- **The mock's action coverage is now enforced, not remembered.** New
+  `mock_handles_every_action_the_client_can_send` (`src/mock/dispatch.rs`) pulls
+  every SOAP action URI out of `src/client/*.rs` with `include_str!` and asserts
+  none falls through to the `Not implemented` fault — **157 actions at 0.15.0,
+  all routed.** `CLAUDE.md` step 5a has asked for a handler per new action since
+  0.9.6 with nothing checking it; a missing arm surfaced only as a `[WARN]` line
+  on stderr of whichever test happened to hit it. Deriving the list from the
+  client sources rather than restating it means it cannot drift. Routing only —
+  the response payload still needs a human.
+
 - New coding rules in `CLAUDE.md` for two classes of silent failure found this
   release: **multi-sensor devices** (never omit the token on a per-channel
   query; a single-sensor fixture cannot cover a per-channel feature) and

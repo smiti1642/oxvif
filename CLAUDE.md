@@ -33,11 +33,20 @@ Confirm the git identity is `smiti1642 <smiti1642@gmail.com>` before running
 ```
 cargo fmt
 cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --all-targets -- -D warnings
 cargo test --all-features
 cargo test
 ```
 
-All four must pass cleanly before committing.
+All five must pass cleanly before committing.
+
+**The second clippy line — no features — is not redundant.** A warning that
+exists *only* without features is invisible to every other line: the
+`--all-features` clippy is a different compilation, and neither `cargo test`
+line carries `-D warnings`, so both compile a warning and pass. Measured: an
+unused `use std::sync::Arc;` in `src/tests/client/ptz_tests.rs` whose only
+consumer was `#[cfg(feature = "mock")]` went through this gate clean and shipped
+in 0.15.0 (fixed in `8031ab0`). It was found by an editor, not by the gate.
 
 **`--all-features` is not optional on the first two.** This crate has **no
 default features**, and `src/mock/` is behind `#[cfg(feature = "mock")]`
@@ -342,18 +351,28 @@ they catch a class the missing/fault pair cannot:
     - The behind-the-scenes example binary needs no change — it auto-picks
       up new handlers because they live in the library now.
 
+    **This step is now enforced.**
+    `mock_handles_every_action_the_client_can_send` in `src/mock/dispatch.rs`
+    reads every action URI out of `src/client/*.rs` with `include_str!` and
+    asserts none falls through to the `Not implemented` fault. So a new client
+    method with no dispatch arm fails the gate — you do not have to remember
+    this step, only satisfy it. It asserts *routing*, not payload: give the
+    handler a plausible response as well, because nothing checks that for you.
+
 ### Quality gate (run before every commit)
 
 ```
 cargo fmt
 cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --all-targets -- -D warnings
 cargo test --all-features
 cargo test
 ```
 
-All four must pass cleanly. See [Before every commit](#before-every-commit) for
+All five must pass cleanly. See [Before every commit](#before-every-commit) for
 why `--all-features` is load-bearing — without it the mock tests you just added
-in step 5a are not collected.
+in step 5a are not collected — and why the no-feature clippy line is not a
+duplicate of the first.
 
 ### Documentation
 
@@ -424,6 +443,7 @@ in step 5a are not collected.
 ## Publishing checklist
 
 - [ ] `cargo fmt && cargo clippy --all-targets --all-features -- -D warnings` clean
+- [ ] `cargo clippy --all-targets -- -D warnings` — the no-feature lint pass too
 - [ ] `cargo test --all-features` — all tests pass
 - [ ] `cargo test` — the no-feature build compiles and passes too
 - [ ] `cargo test --doc` — all doc examples pass

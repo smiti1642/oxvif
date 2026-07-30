@@ -329,6 +329,96 @@ mod tests {
         dispatch(action, "http://mock", &state, "")
     }
 
+    /// Every client service module, included at compile time. The test below
+    /// reads the action URIs out of these rather than restating them, so the
+    /// list cannot drift: a client method added without a mock handler fails
+    /// here without anyone remembering to update anything.
+    ///
+    /// `src/session.rs` is not listed — it delegates to `OnvifClient` and
+    /// declares no action URI of its own (verified: zero unique to it).
+    const CLIENT_SOURCES: &[(&str, &str)] = &[
+        ("device", include_str!("../client/device.rs")),
+        ("events", include_str!("../client/events.rs")),
+        ("imaging", include_str!("../client/imaging.rs")),
+        ("media", include_str!("../client/media.rs")),
+        ("media2", include_str!("../client/media2.rs")),
+        ("ptz", include_str!("../client/ptz.rs")),
+        ("recording", include_str!("../client/recording.rs")),
+    ];
+
+    /// Extract every quoted ONVIF / OASIS URI from a Rust source.
+    ///
+    /// Anchored on the opening quote *plus* the scheme and host rather than
+    /// splitting the file on `"`: the client modules are full of XML bodies
+    /// containing `\"`, which throws off any quote-parity scheme. A URI never
+    /// contains an escaped quote, so reading to the next `"` is exact.
+    fn action_uris(src: &str) -> Vec<&str> {
+        const STARTS: [&str; 2] = ["\"http://www.onvif.org/", "\"http://docs.oasis-open.org/"];
+        let mut out = Vec::new();
+        for start in STARTS {
+            let mut rest = src;
+            while let Some(i) = rest.find(start) {
+                let after = &rest[i + 1..]; // past the opening quote
+                let Some(end) = after.find('"') else { break };
+                out.push(&after[..end]);
+                rest = &after[end..];
+            }
+        }
+        out
+    }
+
+    /// An action URI ends in an operation name; a bare namespace does not.
+    /// `…/wsdl` and `…/ConcreteSet\` are both rejected by this.
+    fn is_action(uri: &str) -> bool {
+        let tail = uri.rsplit('/').next().unwrap_or("");
+        tail.starts_with(|c: char| c.is_ascii_uppercase())
+            && tail.chars().all(|c| c.is_ascii_alphanumeric())
+    }
+
+    /// The mock must answer **every** action `OnvifClient` is capable of
+    /// sending. `CLAUDE.md` step 5a asks for a handler per new action, and until
+    /// now nothing enforced it — a missing arm only showed up as a `[WARN]` on
+    /// stderr of whichever test happened to call it, or not at all.
+    ///
+    /// Only routing is asserted, not the payload: an empty body makes several
+    /// operations fault (the per-channel `Get…Options` now *require* a
+    /// `ConfigurationToken`), and a fault means the action was routed and the
+    /// handler had an opinion. The one thing that must never happen is falling
+    /// through to `Not implemented`.
+    #[test]
+    fn mock_handles_every_action_the_client_can_send() {
+        let state = MockState::new();
+        let mut checked = 0usize;
+        let mut unhandled = Vec::new();
+
+        for (service, src) in CLIENT_SOURCES {
+            for uri in action_uris(src) {
+                if !is_action(uri) {
+                    continue;
+                }
+                checked += 1;
+                if dispatch(uri, "http://mock", &state, "").contains("Not implemented") {
+                    unhandled.push(format!("{service}: {uri}"));
+                }
+            }
+        }
+
+        // Guard on the guard: an extractor that finds nothing makes the
+        // assertion below vacuously true. 157 actions at 0.15.0.
+        assert!(
+            checked >= 150,
+            "extracted only {checked} action URIs from the client sources — \
+             `action_uris` is broken, which would make this test pass for the \
+             wrong reason"
+        );
+        assert!(
+            unhandled.is_empty(),
+            "the mock does not route {} action(s) the client can send:\n  {}",
+            unhandled.len(),
+            unhandled.join("\n  "),
+        );
+    }
+
     /// All nine answer, and none of them falls through to the
     /// "Not implemented" fault. This is the test that would have failed before
     /// recording/search/replay were split into three dispatchers.
