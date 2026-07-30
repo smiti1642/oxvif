@@ -3,7 +3,8 @@
 Development-only documentation. **None of this is compiled into the crate** —
 `docs/` is excluded from the published package (`exclude = ["docs/"]` in
 `Cargo.toml`). oxvif's own public API docs live in the top-level
-[`README.md`](../README.md) and on [docs.rs](https://docs.rs/oxvif).
+[`README.md`](../README.md), the coverage tables in
+[`OPERATIONS.md`](../OPERATIONS.md), and on [docs.rs](https://docs.rs/oxvif).
 
 ## Layout
 

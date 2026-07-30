@@ -360,9 +360,13 @@ in step 5a are not collected.
 6. Update `README.md`:
    - Architecture diagram (top of file) if a new service is added
    - Add a new `## <Service> methods` section with method table and code example
-   - Update the `Implemented ONVIF operations` status table (— → ✓)
    - Update test count (`N unit tests`)
    - Update installation version number
+   - **The `Implemented ONVIF operations` coverage tables are not in this file.**
+     They moved to [`OPERATIONS.md`](OPERATIONS.md); `README.md` only links to
+     it. Add the new operation there (— → ✓). A method table updated in the
+     README but not in `OPERATIONS.md` leaves the crate's only coverage
+     statement wrong, and nothing fails.
 6a. **Update the crate-level docs in `src/lib.rs`** — the `//!` header. This is
     what docs.rs renders as the crate's front page, and it is the first thing
     most readers see; the README is the *second*. It does not follow the README
@@ -432,6 +436,7 @@ in step 5a are not collected.
 - [ ] `CHANGELOG.md` updated with new version entry
 - [ ] `Cargo.toml` version bumped
 - [ ] `README.md` installation version updated + content updated
+- [ ] `OPERATIONS.md` coverage tables updated if any operation was added
 - [ ] **`src/lib.rs` crate-level `//!` docs updated** — the docs.rs front page.
       Every feature in `Cargo.toml` has an `## Optional features` bullet; new
       capabilities have a prose section; version numbers in the example

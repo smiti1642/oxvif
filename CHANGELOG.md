@@ -175,6 +175,14 @@ two-thirds of the test suite.
   single state entry. Media1 and Media2 also no longer report different
   encodings for the same token.
 
+- **The operation coverage tables moved out of `README.md`** into a new
+  top-level **`OPERATIONS.md`**. Ten tables and 104 rows were roughly 8% of the
+  README and sat below everything a reader actually navigates to; the README's
+  `## Implemented ONVIF operations` section is now a link. The file ships in the
+  published crate (it is not under the excluded `docs/`), so the link resolves
+  from crates.io. `CLAUDE.md`'s new-service SOP and publishing checklist point
+  at the new location.
+
 ### Breaking
 
 - **`config_token` is now required on four options getters.** The parameter
