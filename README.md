@@ -1432,6 +1432,12 @@ Both default to **no authentication** (frictionless tests) — call `.with_auth(
 (`MockTransport`) / `.enforce_auth(true)` (`MockServer::builder()`) to exercise
 WS-Security. State is in-memory; opt into persistence via `MockState::set_on_change`.
 
+> **Full reference: [`docs/mock-server.md`](docs/mock-server.md).** What the mock
+> answers for all 157 operations, which are state-backed and which are static,
+> the complete seeded fixture, worked request/response examples, the fault
+> catalogue, and what it deliberately does not model. Essential reading if you
+> drive it from a non-Rust ONVIF client.
+
 ### `oxvif::mock` API reference
 
 **`MockTransport`** (`mock` feature) — in-process `Transport`; `Clone` + `Default`;

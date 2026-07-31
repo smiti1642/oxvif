@@ -13,6 +13,7 @@ Development-only documentation. **None of this is compiled into the crate** —
 | [`reference/`](reference/) | **ONVIF protocol reference** — the WSDL/XSD transcriptions used while implementing oxvif. Stable facts, not plans. |
 | [`active/`](active/) | **In-progress plans** — design docs / milestones for work that is under way or not yet finished. |
 | [`done/`](done/) | **Completed plans** — finished design/audit docs, kept as a record. |
+| [`mock-server.md`](mock-server.md) | **Reference for `oxvif::mock`** — the outward-facing one. Routing, envelope/namespace contract, the full state model, the seeded fixture, all 157 operations with which are state-backed and which are static, worked request/response examples, the fault catalogue, and an explicit list of what the mock does *not* model. Read this before driving the mock from anything, Rust or not. |
 | [`dependency-pitfalls.md`](dependency-pitfalls.md) | Standing engineering guide (feature-unification footguns). Not a plan and not ONVIF reference, so it sits at the root; referenced from the release SOP in `CLAUDE.md`. |
 
 A plan graduates from `active/` to `done/` when its milestones are all shipped.

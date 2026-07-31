@@ -1,0 +1,928 @@
+# oxvif mock ONVIF device — reference
+
+A complete reference for `oxvif::mock`: the in-process [`MockTransport`] and the
+bound-port [`MockServer`]. It documents what the mock answers, what it stores,
+what you can change, and — explicitly — what it does **not** model.
+
+Every statement here is checked against the code it describes, and the source
+symbol is named so you can verify it. Where a behaviour is a deliberate
+simplification rather than a fidelity claim, it says so: **an undocumented
+omission is a bug, a documented one is a design decision.**
+
+- **Audience** — anyone driving the mock: oxvif's own tests, a downstream Rust
+  crate, or a non-Rust ONVIF client (Frigate, ODM, gSOAP, a C++ conformance
+  suite) pointed at the bound port.
+- **Version** — 0.15.0.
+- **Feature flags** — `mock` for the transport, `mock-server` for the HTTP
+  server. This crate has **no default features**; nothing below compiles
+  without one of those two.
+
+**Contents**
+
+1. [Quick start](#1-quick-start)
+2. [Request routing](#2-request-routing)
+3. [Envelope and namespace contract](#3-envelope-and-namespace-contract)
+4. [Authentication](#4-authentication)
+5. [State model](#5-state-model)
+6. [Seeded fixture](#6-seeded-fixture)
+7. [Operation reference](#7-operation-reference)
+8. [Worked examples](#8-worked-examples)
+9. [Error model](#9-error-model)
+10. [Fault injection and control endpoints](#10-fault-injection-and-control-endpoints)
+11. [Changing the device](#11-changing-the-device)
+12. [What is guaranteed, and by which test](#12-what-is-guaranteed-and-by-which-test)
+13. [Known limitations](#13-known-limitations)
+14. [Extending the mock](#14-extending-the-mock)
+
+---
+
+## 1. Quick start
+
+### 1.1 In-process transport (`feature = "mock"`)
+
+No sockets, no `axum`, no runtime beyond the one the client already uses. This
+is the fast path and what oxvif's own unit tests use.
+
+```rust
+use std::sync::Arc;
+use oxvif::{OnvifClient, mock::MockTransport};
+
+let client = OnvifClient::new("http://mock")
+    .with_transport(Arc::new(MockTransport::new()));
+let info = client.get_device_info().await?;
+assert_eq!(info.manufacturer, "oxvif-mock");
+```
+
+`MockTransport` is cheap to clone and clones share one device state and one
+fault queue (`src/mock/transport.rs`).
+
+### 1.2 Bound-port HTTP server (`feature = "mock-server"`)
+
+A real TCP listener, for when a test — or another process, or a non-Rust
+client — needs an actual endpoint.
+
+```rust
+use oxvif::mock::MockServer;
+
+let server = MockServer::start().await?;          // ephemeral 127.0.0.1 port
+let client = oxvif::OnvifClient::new(server.device_url());
+```
+
+The server runs on a background task and **shuts down when the `MockServer` is
+dropped** — keep the binding alive for as long as you need it. `MockServer::start()`
+binds `127.0.0.1:0`; use `MockServer::builder().port(8080)` for a fixed port
+(`src/mock/server.rs`).
+
+### 1.3 Builder options
+
+| Method | Default | Effect |
+|---|---|---|
+| `.port(u16)` | `0` (ephemeral) | TCP port to bind. |
+| `.initial_state(DeviceState)` | factory defaults | Seed the whole device. |
+| `.on_change(ChangeHook)` | none | Fired after every mutation — the seam for persistence. The server itself never touches the filesystem. |
+| `.enforce_auth(bool)` | `false` | Require WS-Security `PasswordDigest`. |
+| `.discoverable(Vec<String>)` | off | Answer WS-Discovery `Probe` on UDP `3702` with the given scopes. |
+| `.replay(FixtureStore)` | none | Serve a recorded camera clone (`metamorph` feature). |
+
+`.discoverable()` is **best-effort**: if the `:3702` bind fails (port in use,
+sandboxed CI) the HTTP server still starts, just undiscoverable. At most one
+discoverable server per host.
+
+---
+
+## 2. Request routing
+
+### 2.1 The URL path is not used for routing
+
+Every `POST` to any path is handled by one axum route, `/{*path}`
+(`src/mock/server.rs`). Dispatch keys **entirely on the SOAP action**, which
+SOAP 1.2 carries in the `Content-Type` header:
+
+```
+Content-Type: application/soap+xml; charset=utf-8; action="http://www.onvif.org/ver10/device/wsdl/GetHostname"
+```
+
+`helpers::extract_action` splits that out. Consequences worth knowing:
+
+- Posting a Media action to `/onvif/device` works. The mock will not object.
+- **A missing or malformed `action` parameter yields the "Not implemented"
+  fault**, not a 404 and not a hint about the path.
+- The service URLs the mock advertises (below) are cosmetic — they exist so a
+  client that follows `GetCapabilities` behaves realistically.
+
+### 2.2 Advertised service URLs
+
+`GetCapabilities` and `GetServices` return these, relative to the server's base
+(`src/mock/services/device.rs`):
+
+| Service | XAddr |
+|---|---|
+| Device | `{base}/onvif/device` |
+| Media (1) | `{base}/onvif/media` |
+| Media2 | `{base}/onvif/media2` |
+| PTZ | `{base}/onvif/ptz` |
+| Imaging | `{base}/onvif/imaging` |
+| Events | `{base}/onvif/events` |
+| Recording | `{base}/onvif/recording` |
+| Search | `{base}/onvif/search` |
+| Replay | `{base}/onvif/replay` |
+
+### 2.3 Namespace → dispatcher
+
+`dispatch()` in `src/mock/dispatch.rs` selects a sub-dispatcher by action
+namespace, **not** by the operation name — nine services share the operation
+name `GetServiceCapabilities`, which is the whole reason:
+
+| Action prefix | Dispatcher | Operations |
+|---|---|---|
+| `…/ver10/device/wsdl/` | `dispatch_device` | 39 |
+| `…/ver10/media/wsdl/` | `dispatch_media` | 32 |
+| `…/ver20/media/wsdl/` | `dispatch_media2` | 26 |
+| `…/ver20/ptz/wsdl/` | `dispatch_ptz` | 27 |
+| `…/ver20/imaging/wsdl/` | `dispatch_imaging` | 8 |
+| `…/events/wsdl/` or `docs.oasis-open.org/wsn/` | `dispatch_events` | 8 |
+| `…/ver10/recording/wsdl/` | `dispatch_recording` | 11 |
+| `…/ver10/search/wsdl/` | `dispatch_search` | 4 |
+| `…/ver10/replay/wsdl/` | `dispatch_replay` | 2 |
+
+**157 operations total.** Events is doubly irregular: its action URIs carry a
+portType segment *and* a `Request` suffix, so its operation names are
+`GetServiceCapabilitiesRequest`, `PullMessagesRequest`, and so on.
+
+An action that matches no arm returns:
+
+```xml
+<s:Fault>
+  <s:Code><s:Value>s:Receiver</s:Value></s:Code>
+  <s:Reason><s:Text xml:lang="en">Not implemented: {action}</s:Text></s:Reason>
+</s:Fault>
+```
+
+…and logs `[WARN] unhandled action:` to stderr.
+
+---
+
+## 3. Envelope and namespace contract
+
+Every response is a SOAP 1.2 envelope built by `helpers::soap`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:tt="http://www.onvif.org/ver10/schema"
+            {service namespace}>
+  <s:Body>…</s:Body>
+</s:Envelope>
+```
+
+`xmlns:s` and `xmlns:tt` are always present; each handler adds its own service
+namespace. Two rules are now **mechanically enforced across all 157 operations**
+(`src/mock/dispatch.rs`):
+
+| Guard | Rule |
+|---|---|
+| `no_response_declares_an_attribute_twice` | No repeated attribute name in the envelope start-tag (XML 1.0 §3.1). |
+| `every_response_binds_the_prefixes_it_uses` | Every element prefix used is declared somewhere in the document. |
+
+**Both existed as real defects until 0.15.0**, and neither could fail a test
+here: oxvif's `find_response` matches on *local* name and quick-xml enforces
+neither rule, so the entire suite was green against XML a conforming parser
+rejects. They were found by feeding captured responses to a strict parser.
+If you consume the mock from gSOAP, `lxml`, or anything else namespace-strict,
+this is the section that matters to you.
+
+Namespace prefixes the mock emits, and their bindings (`helpers::namespace_for`):
+
+| Prefix | Namespace |
+|---|---|
+| `tt` | `http://www.onvif.org/ver10/schema` |
+| `tds` | `http://www.onvif.org/ver10/device/wsdl` |
+| `trt` | `http://www.onvif.org/ver10/media/wsdl` |
+| `tr2` | `http://www.onvif.org/ver20/media/wsdl` |
+| `tptz` | `http://www.onvif.org/ver20/ptz/wsdl` |
+| `timg` | `http://www.onvif.org/ver20/imaging/wsdl` |
+| `trc` | `http://www.onvif.org/ver10/recording/wsdl` |
+| `tse` | `http://www.onvif.org/ver10/search/wsdl` |
+| `trp` | `http://www.onvif.org/ver10/replay/wsdl` |
+| `tev` | `http://www.onvif.org/ver10/events/wsdl` |
+| `wsnt` | `http://docs.oasis-open.org/wsn/b-2` |
+| `tns1` | `http://www.onvif.org/ver10/topics` (declared on the element, in event topic sets) |
+
+---
+
+## 4. Authentication
+
+Off by default, so a credential-less client works immediately. Enable with
+`MockTransport::with_auth()` or `MockServerBuilder::enforce_auth(true)`.
+
+When on, the mock validates WS-Security **`PasswordDigest`**
+(`src/mock/auth.rs`) — the same `Base64(SHA1(nonce + created + password))`
+construction a real device uses.
+
+- **Seeded credentials**: `admin` / `admin` (Administrator) and
+  `operator` / `operator` (Operator).
+- **One action is exempt**: `GetSystemDateAndTime`. The ONVIF spec requires it
+  to answer unauthenticated, because a client needs the device clock to build
+  a valid digest in the first place.
+- HTTP Digest is **not** implemented. A client configured for HTTP Digest only
+  will fail against the mock even with correct credentials.
+
+---
+
+## 5. State model
+
+`DeviceState` (`src/mock/state.rs`) is a flat serde struct — 28 fields: 25
+persisted, 3 runtime-only. `MockState` wraps it in a lock exposing
+`read()`, `modify()`, `modify_returning()` and `set_on_change()`.
+
+Every persisted field carries `#[serde(default = …)]`, so a partial JSON
+snapshot loads and the rest falls back to the factory fixture.
+
+| Field | Type | Seeded | Written by |
+|---|---|---|---|
+| `info` | `DeviceInfo` | yes | — (read-only) |
+| `hostname` | `String` | `"mock-camera"` | `SetHostname` |
+| `hostname_from_dhcp` | `bool` | `false` | `SetHostname` |
+| `users` | `Vec<MockUser>` | 2 | `CreateUsers`, `DeleteUsers`, `SetUser` |
+| `scopes` | `Vec<String>` | yes | `SetScopes` |
+| `timezone` | `String` | yes | `SetSystemDateAndTime` |
+| `daylight_savings` | `bool` | `false` | `SetSystemDateAndTime` |
+| `dns` | `DnsState` | yes | `SetDNS` |
+| `ntp` | `NtpState` | yes | `SetNTP` |
+| `gateway_ipv4` | `Vec<String>` | yes | `SetNetworkDefaultGateway` |
+| `discovery_mode` | `String` | `"Discoverable"` | `SetDiscoveryMode` |
+| `imaging_sources` | `Vec<ImagingState>` | 2 | `SetImagingSettings`, `Move`, `Stop` |
+| `ptz` | `PtzState` | 4 channels | 12 PTZ operations |
+| `interface` | `NetworkInterfaceState` | yes | `SetNetworkInterfaces` |
+| `protocols` | `Vec<NetworkProtocolState>` | yes | `SetNetworkProtocols` |
+| `osd` | `OsdState` | yes | `CreateOSD`, `SetOSD`, `DeleteOSD` |
+| `profiles` | `ProfilesState` | 4 | profile create/delete, config add/remove |
+| `recording` | `RecordingState` | 2 recordings, 2 jobs | 8 Recording operations |
+| `video_sources` | `Vec<VideoSourceEntry>` | 2 | — (read-only) |
+| `video_source_configs` | `Vec<VideoSourceConfigEntry>` | 2 | `SetVideoSourceConfiguration` (both services) |
+| `video_encoders` | `Vec<VideoEncoderState>` | 4 | `SetVideoEncoderConfiguration` (both services) |
+| `relay_outputs` | `Vec<RelayOutputState>` | 2 | `SetRelayOutputState`, `SetRelayOutputSettings` |
+| `digital_inputs` | `Vec<DigitalInputState>` | 2 | REST simulator only |
+| `storage` | `Vec<StorageEntry>` | 3 | `SetStorageConfiguration` |
+| `metadata` | `Vec<MetadataEntry>` | 2 | `SetMetadataConfiguration` |
+| `event_seq` | `u64` | runtime | `PullMessages` |
+| `event_filter` | `Option<Vec<String>>` | runtime | `CreatePullPointSubscription` |
+| `pending_io_events` | `Vec<PendingIoEvent>` | runtime | REST simulator |
+
+The last three are `#[serde(skip)]` — per-instance, never persisted.
+
+### 5.1 Media1 and Media2 share one state
+
+They are two views of one device. Any operation present in both dispatchers
+reads and writes the same `DeviceState`; only the rendering differs (Media1
+inlines whole configurations, Media2 emits token references). `tests/mock_media1_media2_agree.rs`
+is the standing guard, and the audit records two shipped bugs from getting
+this wrong.
+
+---
+
+## 6. Seeded fixture
+
+The factory device is a **two-sensor camera**. That is deliberate: a
+single-channel fixture cannot distinguish a handler that honours a token from
+one that ignores it, so every per-channel answer would look correct.
+
+**The seed values disagree on purpose.** Where two entries could plausibly
+carry the same value, they do not.
+
+### 6.1 Identity
+
+| Field | Value |
+|---|---|
+| Manufacturer | `oxvif-mock` |
+| Model | `MockCam-1080p` |
+| Firmware | `1.0.0` |
+| Serial | `MOCK-0001` |
+| Hardware ID | `1.0` |
+
+### 6.2 Video chain
+
+| Sensor | Source config | Encoder configs | Native resolution |
+|---|---|---|---|
+| `VS_1` | `VSC_1` (`VSConfig1`) | `VEC_1` `MainStream` 1920×1080, `VEC_2` `SubStream` 704×480 | 2592×1944 |
+| `VS_2` | `VSC_2` (`VSConfig2`) | `VEC_3` `MainStream2` 1280×720, `VEC_4` | 1280×720 |
+
+`VEC_1` advertises six resolutions up to 2592×1944; `VEC_3`'s list tops out at
+1280×720. **Only `VS_1` advertises H.265.** An assertion that reads a
+resolution list or an encoding set therefore fails if the handler answers for
+the wrong channel.
+
+### 6.3 Profiles
+
+| Token | Name | Fixed | Source cfg | Encoder cfg |
+|---|---|---|---|---|
+| `Profile_1` | `mainStream` | yes | `VSC_1` | `VEC_1` |
+| `Profile_2` | `subStream` | no | `VSC_1` | `VEC_2` |
+| `Profile_3` | `mainStream2` | yes | `VSC_2` | `VEC_3` |
+| `Profile_4` | `subStream2` | no | `VSC_2` | `VEC_4` |
+
+`fixed="true"` profiles refuse deletion (`ter:DeletionOfFixedProfile`).
+
+### 6.4 PTZ — four independent heads
+
+| Profile | Position (pan, tilt, zoom) | Presets | Tours |
+|---|---|---|---|
+| `Profile_1` | 0.0, 0.0, 0.0 | `Home`, `Door` | 1 |
+| `Profile_2` | 0.25, −0.10, 0.40 | `Gate` | 0 |
+| `Profile_3` | −0.60, 0.35, 0.80 | `Lobby`, `Dock`, `Roof` | 0 |
+| `Profile_4` | 0.0, 0.0, 0.0 | *(none)* | 0 |
+
+`Profile_4`'s empty preset list is load-bearing: an empty list is legitimate,
+and it is the only fixture that catches a renderer substituting a default.
+
+### 6.5 Storage
+
+| Token | Type | LocalPath | StorageUri | User |
+|---|---|---|---|---|
+| `SD_01` | `LocalStorage` | `/mnt/sd` | — | — |
+| `NAS_01` | `NFS` | `/mnt/nas` | `nfs://192.168.1.50/records` | `recorder` |
+| `CIFS_01` | `CIFS` | — | `smb://192.168.1.60/cam` | — |
+
+Each optional field is present on some entries and absent on others, so an
+assertion on any one of them can fail on its own.
+
+### 6.6 Metadata (Media2)
+
+| Token | Name | Analytics | PTZ status / position | Multicast | `AnalyticsSupported` |
+|---|---|---|---|---|---|
+| `MetaConf_1` | `MetadataConfig` | true | false / true | `239.0.1.10:40010` | true |
+| `MetaConf_2` | `MetadataMinimal` | false | true / false | *(none)* | false |
+
+### 6.7 Recording
+
+| Recording | Tracks | Bounds | Status |
+|---|---|---|---|
+| `Rec_001` | `VIDEO001` (Video) | 2026-01-01 → 2026-04-01 | `Stopped` |
+| `Rec_002` | *(none)* | 2026-05-01 → 2026-06-01 | `Recording` |
+
+| Job | Recording | Mode |
+|---|---|---|
+| `Job_001` | `Rec_001` | `Active` |
+| `Job_002` | `Rec_002` | `Idle` |
+
+### 6.8 I/O
+
+`RelayOutput_1` (Bistable, idle closed), `RelayOutput_2` (Monostable, `PT1S`,
+idle open); `DigitalInput_1` (idle closed), `DigitalInput_2` (idle open).
+
+### 6.9 Users
+
+`admin` / `admin` (Administrator), `operator` / `operator` (Operator).
+
+---
+
+## 7. Operation reference
+
+**Legend** — ● state-backed (reads or writes `DeviceState`) · ○ static fixture
+(same answer every time) · **T** answers per token, and the seeded fixture
+makes two tokens disagree.
+
+### 7.1 Device — 39 operations
+
+| Operation | | Notes |
+|---|---|---|
+| `GetServiceCapabilities` | ○ | |
+| `GetCapabilities`, `GetServices` | ○ | Emit the base URL. |
+| `GetDeviceInformation` | ● | |
+| `GetSystemDateAndTime` | ● | Clock is the **real current time**, all six components. |
+| `SetSystemDateAndTime` | ● | Writes timezone + DST. |
+| `GetHostname` / `SetHostname` | ● | |
+| `GetNTP` / `SetNTP` | ● | |
+| `GetDNS` / `SetDNS` | ● | |
+| `GetScopes` / `SetScopes` | ● | |
+| `GetUsers`, `CreateUsers`, `DeleteUsers`, `SetUser` | ● | |
+| `GetNetworkInterfaces` / `SetNetworkInterfaces` | ● | Writes `Enabled`, `FromDHCP`, `Address`, `PrefixLength`, `MTU`. |
+| `GetNetworkProtocols` / `SetNetworkProtocols` | ● | |
+| `GetNetworkDefaultGateway` / `SetNetworkDefaultGateway` | ● | |
+| `GetDiscoveryMode` / `SetDiscoveryMode` | ● | Only `Discoverable` / `NonDiscoverable` accepted. |
+| `GetRelayOutputs`, `SetRelayOutputState`, `SetRelayOutputSettings` | ● | See §13 on `SetRelayOutputState`. |
+| `GetDigitalInputs` | ● | Driven by the REST simulator. |
+| `GetStorageConfigurations` / `SetStorageConfiguration` | ● | Unknown token faults; token-less Set creates. |
+| `SendAuxiliaryCommand`, `GetSystemLog`, `GetSystemUris`, `StartFirmwareUpgrade`, `StartSystemRestore`, `SystemReboot`, `SetSystemFactoryDefault` | ○ | Acknowledged, nothing modelled. |
+
+### 7.2 Media1 — 32 operations
+
+| Operation | | Notes |
+|---|---|---|
+| `GetProfiles`, `GetProfile`, `CreateProfile`, `DeleteProfile` | ● | |
+| `GetVideoSources`, `GetVideoSourceConfigurations` | ● | |
+| `GetVideoSourceConfiguration` / `SetVideoSourceConfiguration` | ● **T** | Shared writer with Media2. |
+| `GetVideoSourceConfigurationOptions` | ● **T** | |
+| `GetVideoEncoderConfigurations`, `GetVideoEncoderConfiguration`, `SetVideoEncoderConfiguration` | ● **T** | |
+| `GetVideoEncoderConfigurationOptions` | ● **T** | Nested `Extension` shape — see §13. |
+| `AddVideoEncoderConfiguration`, `RemoveVideoEncoderConfiguration`, `AddVideoSourceConfiguration`, `RemoveVideoSourceConfiguration` | ● | Profile bindings, visible to Media2. |
+| `GetOSD`, `GetOSDs`, `SetOSD`, `CreateOSD`, `DeleteOSD` | ● **T** | |
+| `GetStreamUri`, `GetSnapshotUri` | ○ | One canned URI for every profile. |
+| `GetAudioSources`, `GetAudioSourceConfigurations`, `GetAudioEncoderConfiguration(s)`, `GetAudioEncoderConfigurationOptions`, `SetAudioEncoderConfiguration` | ○ | Declared stub — §13. |
+| `GetOSDOptions`, `GetServiceCapabilities` | ○ | |
+
+### 7.3 Media2 — 26 operations
+
+| Operation | | Notes |
+|---|---|---|
+| `GetProfiles`, `CreateProfile`, `DeleteProfile` | ● | `tr2:DeleteProfile` names its token element `Token`, not `ProfileToken`. |
+| `AddConfiguration`, `RemoveConfiguration` | ● | Resolves **every** child's kind before writing any, so an unmodelled type cannot half-apply. |
+| `GetVideoSourceConfigurations`, `SetVideoSourceConfiguration`, `GetVideoSourceConfigurationOptions` | ● **T** | |
+| `GetVideoEncoderConfigurations`, `SetVideoEncoderConfiguration`, `GetVideoEncoderConfigurationOptions` | ● **T** | |
+| `GetMetadataConfigurations` | ● **T** | `ConfigurationToken` is a **filter** — no match yields an empty list, not a fault. |
+| `GetMetadataConfigurationOptions` | ● **T** | Addressed read — no match **faults**. |
+| `SetMetadataConfiguration` | ● | Unknown token faults. |
+| `GetStreamUri`, `GetSnapshotUri`, `GetVideoEncoderInstances` | ○ | |
+| Audio (5 operations), `GetVideoSourceModes`, `SetVideoSourceMode` | ○ | Declared stubs — §13. |
+
+### 7.4 PTZ — 27 operations
+
+**Every per-profile operation requires `ProfileToken`.** A missing token faults
+(`env:Sender` / `NoProfileToken-…`); a token naming no profile faults
+(`ter:NoProfile` / `NoSuchProfile-…`).
+
+| Operation | | Notes |
+|---|---|---|
+| `GetStatus`, `GetPresets`, `SetPreset`, `RemovePreset`, `GotoPreset` | ● **T** | |
+| `AbsoluteMove`, `RelativeMove`, `ContinuousMove`, `Stop` | ● **T** | Moves are instantaneous; there is no motion model. |
+| `GotoHomePosition`, `SetHomePosition` | ● **T** | |
+| `GetPresetTours`, `GetPresetTour`, `GetPresetTourOptions`, `CreatePresetTour`, `ModifyPresetTour`, `OperatePresetTour`, `RemovePresetTour` | ● **T** | |
+| `GetNodes`, `GetNode`, `GetConfigurations`, `GetConfiguration`, `GetConfigurationOptions`, `GetCompatibleConfigurations`, `SetConfiguration` | ○ | Declared stub — §13. |
+| `SendAuxiliaryCommand`, `GetServiceCapabilities` | ○ | |
+
+### 7.5 Imaging — 8 operations
+
+`GetImagingSettings`, `SetImagingSettings`, `GetOptions`, `GetStatus`,
+`GetMoveOptions`, `Move`, `Stop` are all ● **T**, keyed by
+`VideoSourceToken` (`VS_1` / `VS_2`, which disagree).
+`GetServiceCapabilities` is ○.
+
+### 7.6 Events — 8 operations
+
+| Operation | | Notes |
+|---|---|---|
+| `CreatePullPointSubscriptionRequest` | ● | Stores the topic filter. |
+| `PullMessagesRequest` | ● | Emits a periodic synthetic stream plus any pending REST-injected I/O events; `event_seq` increments per call. |
+| `GetEventPropertiesRequest` | ○ | Topic set. Declares `tns1` on the element. |
+| `SubscribeRequest`, `RenewRequest`, `UnsubscribeRequest`, `SetSynchronizationPointRequest`, `GetServiceCapabilitiesRequest` | ○ | |
+
+### 7.7 Recording / Search / Replay — 17 operations
+
+| Operation | | Notes |
+|---|---|---|
+| `GetRecordings`, `CreateRecording`, `DeleteRecording`, `CreateTrack`, `DeleteTrack` | ● | Deleting a recording deletes its jobs. |
+| `GetRecordingJobs`, `CreateRecordingJob`, `SetRecordingJobMode`, `DeleteRecordingJob`, `GetRecordingJobState` | ● **T** | |
+| `GetRecordingSearchResults` | ● | |
+| `GetReplayUri` | ● **T** | Faults on a token naming no recording. |
+| `FindRecordings` | ○ | One search token; no cursor — see §13. |
+| `EndSearch`, three × `GetServiceCapabilities` | ○ | |
+
+---
+
+## 8. Worked examples
+
+All captured from the real dispatcher and pretty-printed; the envelope
+attributes and element order are verbatim. Request fragments show `<s:Body>`
+only — the client's envelope declares fourteen prefixes and is elided.
+
+### 8.1 A simple read
+
+**Request** — action `http://www.onvif.org/ver10/device/wsdl/GetHostname`
+
+```xml
+<tds:GetHostname/>
+```
+
+**Response**
+
+```xml
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:tt="http://www.onvif.org/ver10/schema"
+            xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+  <s:Body>
+    <tds:GetHostnameResponse>
+      <tds:HostnameInformation>
+        <tt:FromDHCP>false</tt:FromDHCP>
+        <tt:Name>lobby-cam</tt:Name>
+      </tds:HostnameInformation>
+    </tds:GetHostnameResponse>
+  </s:Body>
+</s:Envelope>
+```
+
+### 8.2 A void write
+
+**Request** — action `…/device/wsdl/SetHostname`
+
+```xml
+<tds:SetHostname><tds:Name>lobby-cam</tds:Name></tds:SetHostname>
+```
+
+**Response**
+
+```xml
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:tt="http://www.onvif.org/ver10/schema"
+            xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+  <s:Body><tds:SetHostnameResponse/></s:Body>
+</s:Envelope>
+```
+
+That `xmlns:tds` declaration is new in 0.15.0. Before it, the prefix was
+unbound and the document was not namespace-well-formed (§3).
+
+### 8.3 Media1 vs Media2 — same state, two shapes
+
+`trt:GetProfiles` inlines whole configurations:
+
+```xml
+<trt:Profiles token="Profile_1" fixed="true">
+  <tt:Name>mainStream</tt:Name>
+  <tt:VideoSourceConfiguration token="VSC_1">
+    <tt:Name>VSConfig1</tt:Name>
+    <tt:UseCount>2</tt:UseCount>
+    <tt:SourceToken>VS_1</tt:SourceToken>
+    <tt:Bounds x="0" y="0" width="2592" height="1944"/>
+  </tt:VideoSourceConfiguration>
+  <tt:VideoEncoderConfiguration token="VEC_1">
+    <tt:Name>MainStream</tt:Name>
+    <tt:UseCount>1</tt:UseCount>
+    <tt:Encoding>H264</tt:Encoding>
+    <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
+    <tt:Quality>5</tt:Quality>
+    <tt:RateControl>
+      <tt:FrameRateLimit>25</tt:FrameRateLimit>
+      <tt:EncodingInterval>1</tt:EncodingInterval>
+      <tt:BitrateLimit>4096</tt:BitrateLimit>
+    </tt:RateControl>
+    <tt:H264><tt:GovLength>25</tt:GovLength><tt:H264Profile>Main</tt:H264Profile></tt:H264>
+    <tt:Multicast>
+      <tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>0.0.0.0</tt:IPv4Address></tt:Address>
+      <tt:Port>0</tt:Port><tt:TTL>1</tt:TTL><tt:AutoStart>false</tt:AutoStart>
+    </tt:Multicast>
+    <tt:SessionTimeout>PT0S</tt:SessionTimeout>
+  </tt:VideoEncoderConfiguration>
+</trt:Profiles>
+```
+
+`tr2:GetProfiles` emits token references for the same profile:
+
+```xml
+<tr2:Profiles token="Profile_1" fixed="true">
+  <tt:Name>mainStream</tt:Name>
+  <tr2:Configurations>
+    <tr2:VideoSource token="VSC_1"/>
+    <tr2:VideoEncoder token="VEC_1"/>
+  </tr2:Configurations>
+</tr2:Profiles>
+```
+
+Note `<tr2:Audio>` — not `<tr2:AudioEncoder>` — is the audio encoder reference.
+
+### 8.4 Per-channel answers
+
+The same operation with two tokens gives two answers. `VEC_1` (sensor `VS_1`):
+
+```xml
+<tt:H264>
+  <tt:ResolutionsAvailable><tt:Width>2592</tt:Width><tt:Height>1520</tt:Height></tt:ResolutionsAvailable>
+  <tt:ResolutionsAvailable><tt:Width>2560</tt:Width><tt:Height>1440</tt:Height></tt:ResolutionsAvailable>
+  <tt:ResolutionsAvailable><tt:Width>2304</tt:Width><tt:Height>1296</tt:Height></tt:ResolutionsAvailable>
+  <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
+  <tt:ResolutionsAvailable><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:ResolutionsAvailable>
+  …
+</tt:H264>
+```
+
+`VEC_3` (sensor `VS_2`) returns a list topping out at 1280×720.
+
+**The response also carries a nested `Extension` copy**, which is where ONVIF
+puts the superset:
+
+```
+Options/H264                          no BitrateRange
+Options/Extension/H264                adds BitrateRange
+Options/Extension/Extension/H265      the only place H265 lives
+```
+
+A parser reading only the top level silently drops what the extension added.
+Prefer the deepest node and fall back outward.
+
+### 8.5 PTZ is per-head
+
+`Profile_1`:
+
+```xml
+<tt:PanTilt x="0" y="0" space="http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace"/>
+<tt:Zoom x="0" space="http://www.onvif.org/ver10/tptz/ZoomSpaces/PositionGenericSpace"/>
+```
+
+`Profile_3`:
+
+```xml
+<tt:PanTilt x="-0.6" y="0.35" space="http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace"/>
+<tt:Zoom x="0.8" space="http://www.onvif.org/ver10/tptz/ZoomSpaces/PositionGenericSpace"/>
+```
+
+### 8.6 Optional elements are omitted, not blanked
+
+`GetStorageConfigurations` over the three seeded entries:
+
+```xml
+<tds:StorageConfigurations token="SD_01">
+  <tt:Data type="LocalStorage"><tt:LocalPath>/mnt/sd</tt:LocalPath></tt:Data>
+</tds:StorageConfigurations>
+<tds:StorageConfigurations token="NAS_01">
+  <tt:Data type="NFS">
+    <tt:LocalPath>/mnt/nas</tt:LocalPath>
+    <tt:StorageUri>nfs://192.168.1.50/records</tt:StorageUri>
+    <tt:User><tt:UserName>recorder</tt:UserName></tt:User>
+  </tt:Data>
+</tds:StorageConfigurations>
+<tds:StorageConfigurations token="CIFS_01">
+  <tt:Data type="CIFS"><tt:StorageUri>smb://192.168.1.60/cam</tt:StorageUri></tt:Data>
+</tds:StorageConfigurations>
+```
+
+An absent value is an absent element. Note that `StorageConfiguration` in
+oxvif parses these as `String` with `unwrap_or_default()`, so **an oxvif
+client cannot distinguish omitted from empty here**; `MetadataConfiguration`'s
+multicast fields are `Option`, and there the distinction *is* visible.
+
+### 8.7 A fault
+
+**Request** — `DeleteRecording` with `Rec_999`
+
+```xml
+<trc:DeleteRecording><trc:RecordingToken>Rec_999</trc:RecordingToken></trc:DeleteRecording>
+```
+
+**Response**
+
+```xml
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:tt="http://www.onvif.org/ver10/schema">
+  <s:Body>
+    <s:Fault>
+      <s:Code><s:Value>ter:NoRecording</s:Value></s:Code>
+      <s:Reason><s:Text xml:lang="en">NoSuchRecording-DELREC-5701: Rec_999</s:Text></s:Reason>
+    </s:Fault>
+  </s:Body>
+</s:Envelope>
+```
+
+---
+
+## 9. Error model
+
+### 9.1 Shape
+
+SOAP 1.2 `<s:Fault>` with `Code/Value` and `Reason/Text`
+(`helpers::resp_soap_fault`). HTTP status is **200** — faults are transported
+in the body, as ONVIF devices do.
+
+### 9.2 Reason strings are tagged and unique
+
+Every fault reason carries an operation tag and a numeric id:
+
+```
+NoSuchRecording-DELREC-5701: Rec_999
+│              │      │      └─ the offending value
+│              │      └──────── unique numeric id
+│              └─────────────── operation abbreviation
+└────────────────────────────── condition
+```
+
+This exists so a test can assert *which* operation faulted. A suite that
+asserts only `is_err()` cannot tell `DeleteRecording` from `DeleteTrack`, and
+oxvif's own testing rules ban that.
+
+### 9.3 Codes in use
+
+| Code | Meaning | Example reason tags |
+|---|---|---|
+| `env:Sender` | Malformed or missing required input | `NoProfileToken-STATUS-5601`, `NoStorageType-STOR-5801`, `InvalidDiscoveryMode-5551` |
+| `ter:NoProfile` | Profile token names nothing | `NoSuchProfile-ABSMOVE-5606` |
+| `ter:ProfileExists` | Duplicate profile token on create | |
+| `ter:DeletionOfFixedProfile` | `DeleteProfile` on `fixed="true"` | |
+| `ter:NoConfig` | Configuration token names nothing | `NoSuchMetadataConfig-SETMETA-5811` |
+| `ter:ConfigurationConflict` | Media2 `AddConfiguration` type not modelled | `UnmodelledConfigType-CFG2-5542` |
+| `ter:InvalidArgs` | Bad argument to a Media operation | |
+| `ter:InvalidArgVal` | Value outside the accepted set | `NoSuchStorage-STOR-5802`, `BadJobMode-SETJOBMODE-5705` |
+| `ter:NoRecording` / `ter:NoTrack` / `ter:NoJob` | Recording-family token names nothing | `NoSuchRecording-REPLAY-5709` |
+| `s:Receiver` | Unrouted action | `Not implemented: {action}` |
+
+**Known deviation.** The `ter:` and `env:` prefixes in `Code/Value` are QNames
+but the mock does not declare those prefixes on the fault envelope. Element
+prefixes are all bound (§3); these two live in *text content*, which no parser
+resolves automatically, but a client that resolves fault-code QNames itself
+will not be able to. Recorded rather than changed, because the correct
+expansion is a design question — many real devices emit exactly these strings.
+
+---
+
+## 10. Fault injection and control endpoints
+
+### 10.1 From Rust
+
+```rust
+server.inject_fault("GetProfiles", "ter:NoProfile", "injected");
+// next action whose URI ends with "GetProfiles" faults, once
+server.clear_faults();
+```
+
+Single-shot and consumed on first match. `MockTransport` has the same pair.
+
+### 10.2 Over HTTP (`mock-server` only)
+
+| Endpoint | Method | Parameters |
+|---|---|---|
+| `/admin/inject_fault` | POST | `action` (**required**), `code` (default `s:Receiver`), `reason` (default `Injected fault`) |
+| `/admin/clear_faults` | POST | — |
+| `/mock/snapshot.jpg` | GET | Generated JPEG |
+| `/mock/digital-input/{token}/pulse` | POST | Fires an event, then reverts |
+| `/mock/digital-input/{token}/set` | POST | Latches a state |
+
+A missing `action` returns `400`. These exist so a non-Rust client can drive
+failure paths.
+
+**There is no authentication on `/admin`.** Bind the mock to loopback (the
+default) and do not expose it.
+
+---
+
+## 11. Changing the device
+
+Four seams, in increasing order of intrusiveness.
+
+### 11.1 Mutate state directly
+
+```rust
+server.device().modify(|s| {
+    s.info.model = "MyCam-4K".into();
+    s.video_encoders[0].width = 3840;
+});
+```
+
+`device()` returns the `MockState`; `read()` for assertions, `modify()` for
+changes. This is how tests seed a scenario the ONVIF API cannot express.
+
+### 11.2 Supply a whole `DeviceState`
+
+```rust
+let state: DeviceState = serde_json::from_str(&saved)?;   // `serde` feature
+let server = MockServer::builder().initial_state(state).start().await?;
+```
+
+Every field has a serde default, so a partial JSON document is valid and
+unspecified fields fall back to the factory fixture.
+
+### 11.3 Persist on change
+
+```rust
+let server = MockServer::builder()
+    .on_change(Arc::new(|s: &DeviceState| { /* write to disk */ }))
+    .start().await?;
+```
+
+The library never touches the filesystem itself. This hook is the only seam.
+
+### 11.4 Interpose a responder
+
+`Chain` / `Responder` / `RequestCtx` (`src/mock/responder.rs`) let you splice
+your own handler ahead of the synthetic dispatcher — the mechanism the
+`metamorph` replay clone uses.
+
+### 11.5 What you cannot change through the ONVIF API
+
+These are read-only over SOAP; use §11.1:
+
+- `info` — no ONVIF operation sets device information.
+- `video_sources` — sensor geometry.
+- `digital_inputs` — driven by the REST simulator only.
+- `MetadataEntry::analytics_supported` — a device capability, not part of
+  `tt:MetadataConfiguration`.
+- `use_count` anywhere — derived from bindings on a real device.
+
+---
+
+## 12. What is guaranteed, and by which test
+
+The mock's contract is enforced by property tests over the **public API only**,
+each against a fresh server. If you depend on a behaviour, this is where to
+check whether it is pinned or incidental.
+
+| Guarantee | Test |
+|---|---|
+| Every action the client can send is routed (157) | `mock_handles_every_action_the_client_can_send` (`src/mock/dispatch.rs`) |
+| No response repeats an attribute | `no_response_declares_an_attribute_twice` |
+| No response uses an undeclared prefix | `every_response_binds_the_prefixes_it_uses` |
+| Every `Set` either round-trips or is declared static (48 pairs) | `tests/mock_roundtrip.rs` |
+| Every token-taking operation either discriminates or is declared blind (28 rows) | `tests/mock_token_discrimination.rs` |
+| Media1 and Media2 never disagree about shared state | `tests/mock_media1_media2_agree.rs` |
+| Per-sensor answers really differ | `tests/mock_multi_sensor.rs` |
+| End-to-end flows | `tests/mock_workflow.rs` |
+
+The two tables are the important ones. Each row **declares its intent** —
+`Works` / `Static(§)` for round-trip, `Discriminates` / `Blind(§)` for tokens —
+and **all arms are asserted**. Wire a declared stub up and the test goes red
+telling you to move the row, so the list cannot rot into a permanent blind
+spot. Current state: 48 round-trip pairs (44 working, 4 static, 0 known-broken)
+and 28 token rows (21 discriminating, 7 blind).
+
+---
+
+## 13. Known limitations
+
+Everything here is deliberate and asserted. None of it is a lie the mock tells:
+where a family is static, the getter never claims to reflect a write.
+
+### 13.1 Declared stubs — static on both sides
+
+Pinned by a `Static` row in `tests/mock_roundtrip.rs` or a `Blind` row in
+`tests/mock_token_discrimination.rs`. Catalogued in
+[`active/mock-audit-2026-07.md`](active/mock-audit-2026-07.md) §5.
+
+| Family | What is missing |
+|---|---|
+| **Audio**, both services — sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration` | No `DeviceState` field. One fixed configuration, and writes are discarded. |
+| **PTZ configurations / nodes / options**, `SetConfiguration` | No `DeviceState` field. All four heads report the same configuration. |
+| **Media2 `GetVideoSourceModes` / `SetVideoSourceMode`** | Static. The Set reports success and stores nothing (see below). |
+| **`GetStreamUri` / `GetSnapshotUri`**, both services | One canned URI for every profile. A real device gives each profile its own. |
+| **Media1 `GetOSDOptions`**, **Media2 `GetVideoEncoderInstances`** | Static. |
+
+### 13.2 Fidelity gaps — a parser field nothing feeds
+
+Audit §6.
+
+- **PTZ coordinate spaces and limits.** `PanTiltLimits`, `ZoomLimits` and all
+  eight `*PositionSpace` / `*VelocitySpace` URIs on `PtzConfiguration` are
+  never emitted, so those fields are `None` from the mock forever. (The
+  *status* response does carry a `space` attribute — §8.5 — but the
+  configuration does not.)
+
+### 13.3 Documented simplifications
+
+- **No motion model.** `AbsoluteMove` and friends update position
+  instantaneously; `MoveStatus` is always `IDLE`. There is no timer, so a
+  `Monostable` relay does not auto-revert either — use the REST pulse hook.
+- **No search cursor.** `FindRecordings` hands out one token and
+  `GetRecordingSearchResults` renders the whole current list against it. A real
+  device pages and expires searches.
+- **`Bounds/@x` and `@y` are read from the wire and dropped.**
+  `VideoSourceConfigEntry` models a size, not an offset.
+- **A freshly created recording has no time bounds**, so `Earliest` / `Latest`
+  are omitted rather than faked. The seeded recordings do carry bounds, so the
+  distinction is observable.
+- **Deleting a recording deletes its jobs.** A job pointing at nothing is not
+  a state a device would report.
+- **Media1 encoder options omit `H265`.** Deliberate: it lives only at
+  `Options/Extension/Extension/H265`, and adding it changes what every caller
+  sees. Media2 does advertise H.265, on sensor `VS_1` only.
+- **`SetRelayOutputState` writes `logical_state`, but no ONVIF getter returns
+  it.** `GetRelayOutputs` per spec does not carry live state. The value is
+  observable from Rust via `server.device().read()`, and it drives event
+  emission.
+- **`SetVideoSourceMode` reports success, stores nothing, and has no getter
+  that could ever show it** (`VideoSourceMode` has no active-mode field). This
+  is the one case where the mock currently reports success for an operation it
+  does not model at all; the project's own SOP says such an operation should
+  prefer faulting, and this one has not been changed yet.
+- **PTZ `GetStatus` reports a fixed `UtcTime` of `2026-04-23T00:00:00Z`.**
+  `GetSystemDateAndTime` uses the real clock; this one does not.
+
+### 13.4 Protocol surface not implemented
+
+- HTTP Digest authentication (WS-Security `PasswordDigest` only).
+- RTSP. `GetStreamUri` returns a URI; nothing serves media at it.
+- Analytics, `AudioOutput`, `AudioDecoder` and `PTZ` configuration types are
+  rejected by Media2 `AddConfiguration` with `UnmodelledConfigType-CFG2-5542`,
+  because `ProfileEntry` has exactly four configuration slots.
+
+---
+
+## 14. Extending the mock
+
+The full procedure is `CLAUDE.md` → *Adding a new ONVIF service*, step 5a–5c.
+In short:
+
+1. Add the action URI to the right `dispatch_*` arm in `src/mock/dispatch.rs`.
+2. Add a `resp_<operation>()` or `handle_<operation>()` in
+   `src/mock/services/<service>.rs`.
+3. If the operation exists on **both** Media1 and Media2, it must read and
+   write the same state. Put the state operation in `services/media.rs` and let
+   each service render its own envelope — the shapes genuinely differ.
+4. **Every `Set` needs a row in `tests/mock_roundtrip.rs`**, declaring `Works`,
+   `Broken(audit §)` or `Static(audit §)`.
+5. **Every token-taking operation needs a row in
+   `tests/mock_token_discrimination.rs`**, declaring `Discriminates` or
+   `Blind(audit §)`, naming two tokens the fixture disagrees on.
+
+Steps 4 and 5 are not optional and `Broken` is a legitimate answer — what is
+not legitimate is no row. Nothing else in the codebase distinguishes
+"deliberately static" from "not wired up yet", which is how five instances of
+that class reached users before the tables existed.
+
+Routing is enforced automatically: a client method whose action has no dispatch
+arm fails `mock_handles_every_action_the_client_can_send`. **Payload is not** —
+give the handler a plausible response, because nothing checks that for you.
