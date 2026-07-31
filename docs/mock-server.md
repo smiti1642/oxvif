@@ -433,7 +433,8 @@ makes two tokens disagree.
 | `GetMetadataConfigurationOptions` | ● **T** | Addressed read — no match **faults**. |
 | `SetMetadataConfiguration` | ● | Unknown token faults. |
 | `GetStreamUri`, `GetSnapshotUri`, `GetVideoEncoderInstances` | ○ | |
-| Audio (5 operations), `GetVideoSourceModes`, `SetVideoSourceMode` | ○ | Declared stubs — §13. |
+| Audio (5 operations), `GetVideoSourceModes` | ○ | Declared stubs — §13. |
+| `SetVideoSourceMode` | — | **Always faults** (`ter:ActionNotSupported`). The mock does not model sensor modes and will not claim it does — §13.1. |
 
 ### 7.4 PTZ — 27 operations
 
@@ -710,6 +711,7 @@ oxvif's own testing rules ban that.
 | `ter:InvalidArgs` | Bad argument to a Media operation | |
 | `ter:InvalidArgVal` | Value outside the accepted set | `NoSuchStorage-STOR-5802`, `BadJobMode-SETJOBMODE-5705` |
 | `ter:NoRecording` / `ter:NoTrack` / `ter:NoJob` | Recording-family token names nothing | `NoSuchRecording-REPLAY-5709` |
+| `ter:ActionNotSupported` | Routed, but deliberately not modelled — see §13.1 | `NotModelled-VSMODE-5813` |
 | `s:Receiver` | Unrouted action | `Not implemented: {action}` |
 
 **Known deviation.** The `ter:` and `env:` prefixes in `Code/Value` are QNames
@@ -847,7 +849,7 @@ Pinned by a `Static` row in `tests/mock_roundtrip.rs` or a `Blind` row in
 |---|---|
 | **Audio**, both services — sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration` | No `DeviceState` field. One fixed configuration, and writes are discarded. |
 | **PTZ configurations / nodes / options**, `SetConfiguration` | No `DeviceState` field. All four heads report the same configuration. |
-| **Media2 `GetVideoSourceModes` / `SetVideoSourceMode`** | Static. The Set reports success and stores nothing (see below). |
+| **Media2 `GetVideoSourceModes`** | Static — one mode (`Mode_1`) for every `VideoSourceToken`. `SetVideoSourceMode` is **not** a stub: it faults, see below. |
 | **`GetStreamUri` / `GetSnapshotUri`**, both services | One canned URI for every profile. A real device gives each profile its own. |
 | **Media1 `GetOSDOptions`**, **Media2 `GetVideoEncoderInstances`** | Static. |
 
@@ -860,6 +862,11 @@ Audit §6.
   never emitted, so those fields are `None` from the mock forever. (The
   *status* response does carry a `space` attribute — §8.5 — but the
   configuration does not.)
+- **`VideoSourceMode/@Enabled` is not in oxvif's type.** The ONVIF schema marks
+  the active mode with it; `oxvif::VideoSourceMode` has `token`,
+  `max_framerate`, `max_resolution_*`, `encodings` and `reboot` only. This is
+  why `SetVideoSourceMode` has no getter to answer it, and closing the gap means
+  a public-API change, not a mock change.
 
 ### 13.3 Documented simplifications
 
@@ -883,13 +890,14 @@ Audit §6.
   it.** `GetRelayOutputs` per spec does not carry live state. The value is
   observable from Rust via `server.device().read()`, and it drives event
   emission.
-- **`SetVideoSourceMode` reports success, stores nothing, and has no getter
-  that could ever show it** (`VideoSourceMode` has no active-mode field). This
-  is the one case where the mock currently reports success for an operation it
-  does not model at all; the project's own SOP says such an operation should
-  prefer faulting, and this one has not been changed yet.
-- **PTZ `GetStatus` reports a fixed `UtcTime` of `2026-04-23T00:00:00Z`.**
-  `GetSystemDateAndTime` uses the real clock; this one does not.
+- **`SetVideoSourceMode` faults rather than reporting a success it cannot
+  back.** It answered `<tr2:Reboot>false</tr2:Reboot>` until 0.15 while storing
+  nothing — and, uniquely, **no getter in this crate could ever contradict
+  that**: `GetVideoSourceModes` is static, and oxvif's `VideoSourceMode` type
+  carries no active-mode field. An unfalsifiable success is the one answer a
+  mock must not give, so it now returns `ter:ActionNotSupported` /
+  `NotModelled-VSMODE-5813`. If your code calls this operation, expect a fault
+  and treat it as "unsupported on this device", not as a bug.
 
 ### 13.4 Protocol surface not implemented
 

@@ -125,6 +125,13 @@ two-thirds of the test suite.
   device. Found while wiring, not by the §6 diff that was supposed to catch
   that class.
 
+- **The mock's PTZ `GetStatus` reported a frozen `UtcTime`.** It was the literal
+  `2026-04-23T00:00:00Z` — the second hardcoded clock in the mock, missed when
+  the `2026-04-15` in `GetSystemDateAndTime` was fixed because the two live in
+  different files. Measured at the time of the fix: 99 days in the past, growing
+  by a day a day. It now uses `soap::security::unix_secs_to_iso8601`, the same
+  conversion as the device clock and the WS-Security `Created` header.
+
 - **Media1 video encoder options nested inside `Extension` were silently
   dropped.** ONVIF extends a type by nesting a same-named element one level
   deeper, so the deeper copy is a superset; `XmlNode::child` returns the *first
@@ -521,6 +528,13 @@ two-thirds of the test suite.
   at the new location.
 
 ### Breaking
+
+- **The mock's `SetVideoSourceMode` now faults instead of succeeding.**
+  `ter:ActionNotSupported` / `NotModelled-VSMODE-5813`. It previously answered
+  `<tr2:Reboot>false</tr2:Reboot>` while storing nothing. Code that calls this
+  against `MockTransport` or `MockServer` and unwraps will now fail; treat the
+  fault as "the device does not support sensor-mode switching". Behaviour
+  against a real camera is unchanged — this is a mock-only change.
 
 - **`DeviceState` gained `metadata: Vec<MetadataEntry>`,** and the mock seeds
   **two** metadata configurations (`MetaConf_1`, `MetaConf_2`) where it

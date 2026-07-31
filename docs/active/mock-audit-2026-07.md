@@ -293,7 +293,7 @@ is a family a user might reasonably expect to work.
 | PTZ configurations / nodes / options, `SetConfiguration` | `ptz_get_configurations` — no field; 1 static |
 | ~~Storage configurations, `SetStorageConfiguration`~~ **fixed** | `get_storage_configurations` — no field; 1 static |
 | ~~Media2 metadata configurations, `SetMetadataConfiguration`~~ **fixed** | dispatch read: static both sides |
-| Media2 `SetVideoSourceMode` | dispatch read: static |
+| ~~Media2 `SetVideoSourceMode`~~ **fixed — now faults** | dispatch read: static |
 
 ### What was done — Storage
 
@@ -489,3 +489,17 @@ second round-trip row, since one row cannot cover both paths.
 `SetVideoSourceMode` and `SetRelayOutputState` are **not** on this list: no getter
 exposes the value either writes, so there is no round-trip question to ask. See
 `CLAUDE.md` step 5c.
+
+**Correction (2026-07-31).** Grouping those two together was wrong, and acting
+on step 5c's other half exposed it. Only `SetVideoSourceMode` was reporting a
+success it could not back — it stored nothing, `GetVideoSourceModes` is static,
+and `oxvif::VideoSourceMode` has no active-mode field, so **nothing in this
+crate could ever have contradicted the claim**. It now faults
+(`ter:ActionNotSupported` / `NotModelled-VSMODE-5813`).
+
+`SetRelayOutputState` is a different case and needed no change: it validates the
+token, writes `RelayOutputState::logical_state`, and emits an event. It is
+observable — just not through `GetRelayOutputs`, which by spec does not return
+live state. What the two shared was "no ONVIF getter", which turns out not to be
+the property that matters. The property that matters is **whether any observable
+consequence exists at all** — and the second write has one.

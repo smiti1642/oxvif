@@ -211,7 +211,15 @@ const EXPECTED: &[(&str, &str)] = &[
     ("get_audio_output_configurations_media2", "ok"),
     ("get_audio_decoder_configurations_media2", "ok"),
     ("get_video_source_modes_media2", "ok"),
-    ("set_video_source_mode_media2", "ok"),
+    // Deliberately a fault, not "ok". The mock models no sensor-mode catalogue
+    // and oxvif's `VideoSourceMode` has no active-mode field, so a success here
+    // would be a claim no getter in this crate could ever contradict —
+    // `CLAUDE.md` step 5c. See `media2::resp_set_video_source_mode`.
+    (
+        "set_video_source_mode_media2",
+        "soap-fault:ter:ActionNotSupported:NotModelled-VSMODE-5813: the mock does not switch \
+         video source modes; nothing was stored, and no getter could show it if it had been",
+    ),
     // ── PTZ ───────────────────────────────────────────────────────────────
     ("ptz_absolute_move", "ok"),
     ("ptz_relative_move", "ok"),

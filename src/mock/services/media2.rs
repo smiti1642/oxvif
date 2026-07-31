@@ -671,12 +671,33 @@ pub fn resp_video_source_modes() -> String {
     )
 }
 
+/// `SetVideoSourceMode` — **faults; the mock does not model sensor modes.**
+///
+/// Until 0.15 this answered `<tr2:Reboot>false</tr2:Reboot>`, i.e. "the mode was
+/// switched and no reboot is needed". Nothing was stored, and nothing could
+/// have been: `resp_video_source_modes` is a static one-mode list, and oxvif's
+/// [`VideoSourceMode`](crate::VideoSourceMode) carries no active-mode field, so
+/// **no getter in this crate could ever contradict the claim.** That is the
+/// worst combination a mock can offer — an unfalsifiable success — and it is why
+/// `CLAUDE.md` step 5c says to prefer a fault when a write has no getter that
+/// could show it: the caller then learns the mock does not model the operation
+/// instead of being told, wrongly, that it worked.
+///
+/// This is *not* the same situation as `SetRelayOutputState`, which the same
+/// paragraph once grouped with it: that one really does write
+/// `RelayOutputState::logical_state` and emit an event, so it is observable —
+/// just not through `GetRelayOutputs`, which by spec does not return the live
+/// state.
+///
+/// Wiring it for real means adding `Enabled` to `VideoSourceMode` (the ONVIF
+/// schema has it; oxvif's type does not) and a mode catalogue in `DeviceState`.
+/// That is a public-API change, so it is left as a deliberate gap rather than
+/// smuggled in behind a mock fix — recorded in `docs/mock-server.md` §13.
 pub fn resp_set_video_source_mode() -> String {
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:SetVideoSourceModeResponse>
-          <tr2:Reboot>false</tr2:Reboot>
-        </tr2:SetVideoSourceModeResponse>"#,
+    resp_soap_fault(
+        "ter:ActionNotSupported",
+        "NotModelled-VSMODE-5813: the mock does not switch video source modes; \
+         nothing was stored, and no getter could show it if it had been",
     )
 }
 
