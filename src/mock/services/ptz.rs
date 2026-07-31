@@ -55,6 +55,27 @@ macro_rules! profile {
     };
 }
 
+/// `PTZStatus/UtcTime` — **the real current time**, not a fixed date.
+///
+/// It was the literal `2026-04-23T00:00:00Z` until 0.15: the same defect as the
+/// hardcoded `2026-04-15` in `GetSystemDateAndTime` (see
+/// `device::resp_system_date_and_time`), and missed by the same fix because the
+/// two clocks were written in different files. A caller that trusts
+/// `PTZStatus/UtcTime` — to age a position sample, or to check it against the
+/// device's own clock — got an answer that drifted a day further into the past
+/// with every day that passed, and nothing failed.
+///
+/// The conversion is `soap::security::unix_secs_to_iso8601`, the same one
+/// `GetSystemDateAndTime` and the WS-Security `Created` header use, so the two
+/// clocks now agree by construction rather than by coincidence.
+fn now_iso8601() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    crate::soap::security::unix_secs_to_iso8601(now as i64)
+}
+
 pub fn resp_ptz_status(state: &SharedState, body: &str) -> String {
     let profile = profile!(state, body, "STATUS-5601");
     let snapshot = state
@@ -64,6 +85,7 @@ pub fn resp_ptz_status(state: &SharedState, body: &str) -> String {
         .cloned()
         .unwrap_or_default();
     let p = &snapshot;
+    let utc = now_iso8601();
     soap(
         NS,
         &format!(
@@ -77,7 +99,7 @@ pub fn resp_ptz_status(state: &SharedState, body: &str) -> String {
               <tt:PanTilt>IDLE</tt:PanTilt>
               <tt:Zoom>IDLE</tt:Zoom>
             </tt:MoveStatus>
-            <tt:UtcTime>2026-04-23T00:00:00Z</tt:UtcTime>
+            <tt:UtcTime>{utc}</tt:UtcTime>
           </tptz:PTZStatus>
         </tptz:GetStatusResponse>"#,
             pan = p.pan,

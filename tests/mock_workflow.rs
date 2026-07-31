@@ -131,6 +131,49 @@ async fn ptz_commands() {
     assert_eq!(status.tilt, Some(-0.3));
 }
 
+/// `PTZStatus/UtcTime` must be the *current* date.
+///
+/// It was the literal `2026-04-23T00:00:00Z` until 0.15 — the second hardcoded
+/// clock in the mock, after the `2026-04-15` in `GetSystemDateAndTime`. A frozen
+/// timestamp is invisible to every other test here: nothing else reads the
+/// field, and it stays syntactically valid forever while drifting a day further
+/// into the past each day.
+///
+/// The date is computed independently on this side from `SystemTime`, so the
+/// assertion cannot be satisfied by any constant. Both the before- and after-call
+/// dates are accepted, which is only a real set of two across a midnight
+/// rollover.
+#[tokio::test]
+async fn ptz_status_utc_time_is_the_real_clock() {
+    use oxvif::soap::security::unix_secs_to_iso8601;
+
+    fn today() -> String {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        unix_secs_to_iso8601(secs as i64)[..10].to_string()
+    }
+
+    let (_srv, s) = setup().await;
+    let profile = s.get_profiles().await.unwrap()[0].token.clone();
+
+    let before = today();
+    let status = s.ptz_get_status(&profile).await.unwrap();
+    let after = today();
+
+    let utc = status.utc_time.expect("mock must report PTZStatus/UtcTime");
+    let date = &utc[..10];
+    assert!(
+        date == before || date == after,
+        "PTZStatus/UtcTime {utc} is not today ({before}) — the mock's PTZ clock is frozen again"
+    );
+    assert!(
+        utc.ends_with('Z') && utc.len() == 20,
+        "PTZStatus/UtcTime {utc} is not an ISO-8601 UTC instant"
+    );
+}
+
 #[tokio::test]
 async fn imaging_set_then_get() {
     let (_srv, s) = setup().await;
