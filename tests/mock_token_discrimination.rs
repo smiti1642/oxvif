@@ -354,12 +354,21 @@ async fn rec_job_state(d: &Dev, t: &str) -> String {
 #[tokio::test]
 async fn every_token_taking_operation_matches_its_declared_expectation() {
     // Guard on the guard: a gutted table makes every assertion below vacuous.
-    // 28 rows at 0.15.0: 21 Discriminates, 7 Blind.
-    assert!(
-        ROWS.len() >= 26,
-        "the table has only {} rows — it was gutted, which would make this test \
-         pass for the wrong reason",
-        ROWS.len()
+    //
+    // An exact pin rather than a floor, for the reason spelled out in
+    // `mock_roundtrip.rs`: a floor cannot notice the count *growing* away from
+    // the prose that quotes it, and that is how the published figures went stale.
+    let declared_discriminating = ROWS
+        .iter()
+        .filter(|r| matches!(r.expect, Expect::Discriminates))
+        .count();
+    assert_eq!(
+        (ROWS.len(), declared_discriminating),
+        (28, 21),
+        "the table's shape changed (rows, declared-Discriminates). If that was \
+         deliberate, update this expectation **and** the counts in \
+         docs/mock-server.md §12 and docs/active/mock-audit-2026-07.md §2 in the \
+         same commit.",
     );
 
     let mut mismatches = Vec::new();
@@ -399,11 +408,11 @@ async fn every_token_taking_operation_matches_its_declared_expectation() {
         mismatches.join("\n  "),
     );
 
-    // And the positive side is not vacuous: most of the table really does
-    // answer per token.
-    assert!(
-        discriminating >= 19,
-        "only {discriminating} operations discriminated — the mock is far more \
-         token-blind than the table claims",
+    // And the positive side is not vacuous: every row declared `Discriminates`
+    // really did answer differently for its two tokens.
+    assert_eq!(
+        discriminating, declared_discriminating,
+        "{discriminating} operations discriminated but {declared_discriminating} \
+         rows declare Discriminates — the tally and the table disagree",
     );
 }

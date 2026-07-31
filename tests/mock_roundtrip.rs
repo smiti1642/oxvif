@@ -1058,12 +1058,25 @@ async fn recording_job_mode(d: &Dev) -> Outcome {
 #[tokio::test]
 async fn every_get_set_pair_matches_its_declared_expectation() {
     // Guard on the guard: an empty or gutted table makes every assertion below
-    // vacuously true. 48 pairs at 0.15.0: 44 Works, 4 Static, 0 Broken.
-    assert!(
-        PAIRS.len() >= 45,
-        "the pair table has only {} rows — it was gutted, which would make this \
-         test pass for the wrong reason",
-        PAIRS.len()
+    // vacuously true.
+    //
+    // **This is an exact pin, not a floor, and that is deliberate.** The floor it
+    // replaced (`>= 45`) let the true split drift away from every prose copy of
+    // it — twice: the audit's §2 said "40 round-trip … 5 stubs" against an actual
+    // 42, and after the metadata fix moved a row to `Works` the docs still said
+    // "44 Works, 4 Static" against an actual 45/3. Nothing failed either time,
+    // because a floor cannot notice a number that grew. Now it can.
+    let declared_works = PAIRS
+        .iter()
+        .filter(|p| p.expect.should_round_trip())
+        .count();
+    assert_eq!(
+        (PAIRS.len(), declared_works),
+        (48, 45),
+        "the pair table's shape changed (rows, declared-Works). If that was \
+         deliberate, update this expectation **and** the counts in \
+         docs/mock-server.md §12 and docs/active/mock-audit-2026-07.md §2 in the \
+         same commit — they are the two places that quote it.",
     );
 
     let mut mismatches = Vec::new();
@@ -1108,10 +1121,12 @@ async fn every_get_set_pair_matches_its_declared_expectation() {
         mismatches.join("\n  "),
     );
 
-    // And the positive side is not vacuous either: most of the table works.
-    assert!(
-        round_tripped >= 40,
-        "only {round_tripped} pairs round-tripped — the mock is far more broken \
-         than the table claims",
+    // And the positive side is not vacuous either: every row declared `Works`
+    // actually round-tripped. (`mismatches` already covers this row by row; this
+    // catches a counting bug in the loop itself.)
+    assert_eq!(
+        round_tripped, declared_works,
+        "{round_tripped} pairs round-tripped but {declared_works} rows declare \
+         Works — the tally and the table disagree",
     );
 }

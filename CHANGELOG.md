@@ -343,6 +343,18 @@ two-thirds of the test suite.
 
 ### Changed
 
+- **`oxvif::mock`'s module docs now state what the mock refuses.** 0.15 made the
+  mock materially stricter — per-channel operations require their token and
+  refuse an unknown one, a write either persists or faults, responses are
+  namespace-well-formed, clocks are real, Media1 and Media2 share one state —
+  and none of that was written anywhere a reader of the API docs would find it.
+  The new `# Strictness` section gives each rule, the defect it exists to catch,
+  and the standing test that holds it. The header no longer claims every
+  response is stateful, which was never true of the declared stubs.
+
+  Full reference: `docs/mock-server.md` (repository only; `docs/` is excluded
+  from the published package).
+
 - **The non-ONVIF features are documented example-first.** `health`, `mock` and
   `metamorph` each open with the shortest thing that works and a runnable
   snippet, with the reference detail moved below an explicit boundary. Previously

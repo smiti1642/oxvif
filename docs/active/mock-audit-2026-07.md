@@ -77,7 +77,7 @@ are the "before" picture the rest of this document reasons about.
 - **47** `Set → Get` pairs became a standing test (`tests/mock_roundtrip.rs`).
   27 round-tripped, 15 were defects, 5 were declared stubs. **After Tiers 1
   and 2: 42 round-trip, 0 defects, 5 declared stubs** — `Expect::Broken` has
-  no rows left. **After the Storage and metadata fixes (§5): 48 pairs, 44
+  no rows left. **After the Storage and metadata fixes (§5): 48 pairs, 45
   round-trip, 3 declared stubs; the token table is 28 rows, 21
   discriminating.**
 

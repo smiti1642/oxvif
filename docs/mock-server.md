@@ -829,8 +829,13 @@ The two tables are the important ones. Each row **declares its intent** —
 `Works` / `Static(§)` for round-trip, `Discriminates` / `Blind(§)` for tokens —
 and **all arms are asserted**. Wire a declared stub up and the test goes red
 telling you to move the row, so the list cannot rot into a permanent blind
-spot. Current state: 48 round-trip pairs (44 working, 4 static, 0 known-broken)
-and 28 token rows (21 discriminating, 7 blind).
+spot. Current state: 48 round-trip pairs (**45** working, **3** static, 0
+known-broken) and 28 token rows (21 discriminating, 7 blind).
+
+The three static rows are exactly the two families still unwired —
+`media1/audio-encoder-config`, `media2/audio-encoder-config`,
+`ptz/configuration` — so this count is also the list in §13.1, and the two
+cannot drift apart silently.
 
 ---
 
