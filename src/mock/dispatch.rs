@@ -170,9 +170,11 @@ fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
             media2::resp_video_encoder_configuration_options_media2(state, body)
         }
         "GetVideoEncoderInstances" => media2::resp_video_encoder_instances(),
-        "GetMetadataConfigurations" => media2::resp_metadata_configurations(),
-        "SetMetadataConfiguration" => resp_empty("tr2", "SetMetadataConfigurationResponse"),
-        "GetMetadataConfigurationOptions" => media2::resp_metadata_configuration_options(),
+        "GetMetadataConfigurations" => media2::resp_metadata_configurations(state, body),
+        "SetMetadataConfiguration" => media2::handle_set_metadata_configuration(state, body),
+        "GetMetadataConfigurationOptions" => {
+            media2::resp_metadata_configuration_options(state, body)
+        }
         "GetAudioSourceConfigurations" => media2::resp_audio_source_configurations_media2(),
         "GetAudioEncoderConfigurations" => media2::resp_audio_encoder_configurations_media2(),
         "GetAudioEncoderConfigurationOptions" => {

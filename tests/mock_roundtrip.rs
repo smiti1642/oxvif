@@ -193,7 +193,7 @@ const PAIRS: &[Pair] = pairs![
     "media2/video-source-config"       => Expect::Works                     , m2_video_source_config;
     "media2/add-configuration"         => Expect::Works                     , m2_add_configuration;
     "media2/remove-configuration"      => Expect::Works                     , m2_remove_configuration;
-    "media2/metadata-config"           => Expect::Static("audit §5"), m2_metadata_config;
+    "media2/metadata-config"           => Expect::Works, m2_metadata_config;
     "media2/audio-encoder-config"      => Expect::Static("audit §5"), m2_audio_encoder_config;
 
     // ── PTZ ─────────────────────────────────────────────────────────────────
@@ -755,31 +755,46 @@ async fn m2_remove_configuration(d: &Dev) -> Outcome {
     cmp(None, bound)
 }
 
+/// Writes `name` **and all three booleans**, each flipped away from what the
+/// seed holds, and reads back the addressed configuration by token.
+///
+/// Asserting `name` alone would pass against a handler that stored the name
+/// and dropped the filter flags — the `MTU` shape from the audit's §5c note,
+/// where a partial write is worse than no write.
 async fn m2_metadata_config(d: &Dev) -> Outcome {
     let url = d.url("media2");
     let mut cfg = call!(
         "GetMetadataConfigurations",
         d.client
-            .get_metadata_configurations_media2(&url, None, None)
+            .get_metadata_configurations_media2(&url, Some("MetaConf_1"), None)
     )
     .into_iter()
     .next()
-    .expect("at least one metadata configuration");
+    .expect("MetaConf_1 exists");
+
+    // Seed is analytics=true, ptz_status=false, ptz_position=true. Invert all
+    // three so no field can be satisfied by the value already stored.
     cfg.name = "rt-meta-4446".into();
+    cfg.analytics = false;
+    cfg.ptz_status = true;
+    cfg.ptz_position = false;
     call!(
         "SetMetadataConfiguration",
         d.client.set_metadata_configuration_media2(&url, &cfg)
     );
-    let name = call!(
+
+    let got = call!(
         "GetMetadataConfigurations",
         d.client
-            .get_metadata_configurations_media2(&url, None, None)
+            .get_metadata_configurations_media2(&url, Some("MetaConf_1"), None)
     )
     .into_iter()
-    .next()
-    .map(|c| c.name)
-    .unwrap_or_default();
-    cmp("rt-meta-4446".to_string(), name)
+    .next();
+    cmp(
+        ("rt-meta-4446".to_string(), false, true, false),
+        got.map(|c| (c.name, c.analytics, c.ptz_status, c.ptz_position))
+            .unwrap_or_default(),
+    )
 }
 
 async fn m2_audio_encoder_config(d: &Dev) -> Outcome {

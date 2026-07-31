@@ -23,7 +23,7 @@ actually wrong. Each section says what was done underneath.
 |---|---|
 | **Defects found** | 16 — 8 Tier 1, 2 Tier 2 families, plus item 1.8 which the property test added |
 | **Defects fixed** | all of them |
-| **Standing guards** | `mock_roundtrip.rs` (48 pairs), `mock_token_discrimination.rs` (26 rows), `mock_media1_media2_agree.rs` (10 tests), `dispatch.rs`'s routing test (157 actions) |
+| **Standing guards** | `mock_roundtrip.rs` (48 pairs), `mock_token_discrimination.rs` (28 rows), `mock_media1_media2_agree.rs` (10 tests), `dispatch.rs`'s routing test (157 actions) |
 | **`Expect::Broken` rows** | **0** |
 | **Still open** | Tier 3's four remaining declared stubs (§5) and Tier 4's PTZ coordinate spaces (§6) — both *declared*, both asserted, neither a lie |
 
@@ -77,8 +77,9 @@ are the "before" picture the rest of this document reasons about.
 - **47** `Set → Get` pairs became a standing test (`tests/mock_roundtrip.rs`).
   27 round-tripped, 15 were defects, 5 were declared stubs. **After Tiers 1
   and 2: 42 round-trip, 0 defects, 5 declared stubs** — `Expect::Broken` has
-  no rows left. **After the Storage fix (§5): 48 pairs, 44 round-trip, 4
-  declared stubs.**
+  no rows left. **After the Storage and metadata fixes (§5): 48 pairs, 44
+  round-trip, 3 declared stubs; the token table is 28 rows, 21
+  discriminating.**
 
   *Correction.* This line read "40 round-trip … 5 declared stubs" until the
   Storage work, which does not sum to 47 and was simply wrong; the figure was
@@ -291,7 +292,7 @@ is a family a user might reasonably expect to work.
 | Audio (Media1 + Media2): sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration` | `get_audio_sources` — no `DeviceState` field; 1 static |
 | PTZ configurations / nodes / options, `SetConfiguration` | `ptz_get_configurations` — no field; 1 static |
 | ~~Storage configurations, `SetStorageConfiguration`~~ **fixed** | `get_storage_configurations` — no field; 1 static |
-| Media2 metadata configurations, `SetMetadataConfiguration` | dispatch read: static both sides |
+| ~~Media2 metadata configurations, `SetMetadataConfiguration`~~ **fixed** | dispatch read: static both sides |
 | Media2 `SetVideoSourceMode` | dispatch read: static |
 
 ### What was done — Storage
@@ -313,6 +314,38 @@ Three seeded entries **disagree on every optional field independently** —
 `LocalPath` and omits the rest pass just as well as a correct one.
 
 This closes Tier 4's storage-credential item at the same time (see §6).
+
+### What was done — Media2 metadata
+
+`DeviceState` gained `metadata: Vec<MetadataEntry>`. All **three** operations
+became state-driven, not just the two the row named:
+
+- `GetMetadataConfigurations` renders state and honours the optional
+  `ConfigurationToken`. It is a **filter**, so a token matching nothing gives
+  an empty list rather than a fault — and the test asserts that difference,
+  because the other two operations *do* fault.
+- `GetMetadataConfigurationOptions` answers for the addressed configuration.
+  Leaving it static would have reproduced the multi-sensor failure exactly: a
+  live configurations getter beside an options getter answering for whichever
+  configuration the fixture happened to describe. It also now emits
+  `Options/Extension/AnalyticsSupported`, which
+  `MetadataConfigurationOptions::from_xml` reads and the old fixture omitted
+  entirely — so every caller saw `analytics_supported: false` no matter what.
+  That is the `AFModes` class, found while wiring rather than by the §6 diff.
+- `SetMetadataConfiguration` updates in place and faults on an unknown token.
+  It writes `name` **and all three filter booleans**; a name-only write is the
+  `MTU` shape from §5c, and the round-trip row inverts all three so a partial
+  write cannot pass.
+
+`analytics_supported` is deliberately not writable — it is a device capability
+reported by the options getter, not part of `tt:MetadataConfiguration`, and the
+client never sends it.
+
+The two seeded configurations invert every boolean and disagree on multicast.
+**Unlike Storage, the `Option` distinction here is real:**
+`multicast_address` / `multicast_port` are `Option` on the parser, so
+`MetaConf_2` omitting the block is observable from a client — measured, a
+renderer that always emits multicast reddens the workflow test.
 
 **A claim withdrawn.** The first draft of the renderer carried a comment saying
 that omitting an empty element keeps "the device did not say" distinguishable
@@ -446,7 +479,7 @@ Tier 3 and Tier 4. The estimates stand; the recommendation does not.
 | Audio (both services) | A catalogue in `DeviceState` plus per-token getters — the same shape as `video_encoders`. The largest of the four. | open |
 | PTZ configurations / nodes | A `PtzConfigEntry` list; would also close Tier 4's coordinate-space gap, since those fields live on `PtzConfiguration`. | open |
 | Storage configurations | One `Vec<StorageEntry>`; smallest. | **done** — and it closed §6's storage item, as predicted |
-| Media2 metadata configurations | One `Vec<MetadataEntry>`. | open |
+| Media2 metadata configurations | One `Vec<MetadataEntry>`. | **done** — cost held, but it was three operations, not two |
 
 The Storage estimate held: one `Vec<StorageEntry>`, one renderer, one write
 handler. What it did *not* predict was the create-vs-update split in

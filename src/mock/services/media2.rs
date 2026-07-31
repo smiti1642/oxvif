@@ -447,32 +447,145 @@ pub fn handle_delete_profile_media2(state: &SharedState, body: &str) -> String {
     }
 }
 
-pub fn resp_metadata_configurations() -> String {
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetMetadataConfigurationsResponse>
-          <tr2:Configurations token="MetaConf_1">
-            <tt:Name>MetadataConfig</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:Analytics>true</tt:Analytics>
-            <tt:PTZStatus>
-              <tt:Status>false</tt:Status>
-              <tt:Position>true</tt:Position>
-            </tt:PTZStatus>
-          </tr2:Configurations>
-        </tr2:GetMetadataConfigurationsResponse>"#,
+// ── Metadata configurations ───────────────────────────────────────────────────
+//
+// Audit §5 (Tier 3): the getter, the options getter and `SetMetadataConfiguration`
+// were all static — a consistent stub, so `Get` never claimed to reflect the
+// write, but a family a caller would reasonably expect to work.
+//
+// All three are addressed by the same `ConfigurationToken`, so making only the
+// configurations getter state-driven would leave the options getter answering
+// for the wrong configuration — the exact per-channel failure the multi-sensor
+// rule in `CLAUDE.md` describes.
+
+fn render_metadata(e: &crate::mock::state::MetadataEntry) -> String {
+    // Multicast is genuinely optional in `tt:MetadataConfiguration`, and
+    // `MetadataConfiguration` parses both fields as `Option`. Unlike the
+    // Storage case, omitting the block here **is** observable from a client.
+    let multicast = match (&e.multicast_address, e.multicast_port) {
+        (Some(addr), Some(port)) => format!(
+            "<tt:Multicast>\
+               <tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>{addr}</tt:IPv4Address></tt:Address>\
+               <tt:Port>{port}</tt:Port>\
+             </tt:Multicast>"
+        ),
+        _ => String::new(),
+    };
+    format!(
+        "<tr2:Configurations token=\"{token}\">\
+           <tt:Name>{name}</tt:Name>\
+           <tt:UseCount>{use_count}</tt:UseCount>\
+           <tt:Analytics>{analytics}</tt:Analytics>\
+           <tt:PTZStatus>\
+             <tt:Status>{status}</tt:Status>\
+             <tt:Position>{position}</tt:Position>\
+           </tt:PTZStatus>\
+           {multicast}\
+         </tr2:Configurations>",
+        token = e.token,
+        name = e.name,
+        use_count = e.use_count,
+        analytics = e.analytics,
+        status = e.ptz_status,
+        position = e.ptz_position,
     )
 }
 
-pub fn resp_metadata_configuration_options() -> String {
+/// `GetMetadataConfigurations`. The `ConfigurationToken` filter is optional in
+/// the WSDL: absent means "all", present means exactly that one. A token that
+/// names nothing yields an empty list rather than a fault, matching the
+/// filter semantics — it is a query, not an addressed read.
+pub fn resp_metadata_configurations(state: &SharedState, body: &str) -> String {
+    let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
+    let s = state.read();
+    let items: String = s
+        .metadata
+        .iter()
+        .filter(|e| want.as_deref().is_none_or(|w| w == e.token))
+        .map(render_metadata)
+        .collect();
     soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetMetadataConfigurationOptionsResponse>
-          <tr2:Options>
-            <tt:PTZStatusFilterOptions/>
-          </tr2:Options>
-        </tr2:GetMetadataConfigurationOptionsResponse>"#,
+        NS,
+        &format!(
+            "<tr2:GetMetadataConfigurationsResponse>{items}</tr2:GetMetadataConfigurationsResponse>"
+        ),
     )
+}
+
+/// `GetMetadataConfigurationOptions` — answers for the addressed
+/// configuration. `AnalyticsSupported` lives under `Options/Extension`, which
+/// is where `MetadataConfigurationOptions::from_xml` looks for it; the old
+/// static fixture omitted it entirely, so that parser branch was never fed and
+/// every caller saw `analytics_supported: false`.
+pub fn resp_metadata_configuration_options(state: &SharedState, body: &str) -> String {
+    let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
+    let s = state.read();
+    let entry = match &want {
+        Some(w) => s.metadata.iter().find(|e| &e.token == w),
+        None => s.metadata.first(),
+    };
+    let Some(entry) = entry else {
+        return resp_soap_fault(
+            "ter:NoConfig",
+            &format!(
+                "NoSuchMetadataConfig-METAOPT-5812: {}",
+                want.unwrap_or_default()
+            ),
+        );
+    };
+    let analytics = entry.analytics_supported;
+    soap(
+        NS,
+        &format!(
+            "<tr2:GetMetadataConfigurationOptionsResponse>\
+               <tr2:Options>\
+                 <tt:PTZStatusFilterOptions/>\
+                 <tt:Extension><tt:AnalyticsSupported>{analytics}</tt:AnalyticsSupported></tt:Extension>\
+               </tr2:Options>\
+             </tr2:GetMetadataConfigurationOptionsResponse>"
+        ),
+    )
+}
+
+/// `SetMetadataConfiguration`. Updates in place; an unknown token faults
+/// rather than being silently created, for the same reason as Storage — a typo
+/// must not be indistinguishable from a successful update.
+///
+/// `analytics_supported` is deliberately **not** writable: it is a device
+/// capability reported by the options getter, not part of
+/// `tt:MetadataConfiguration`, and the client never sends it.
+pub fn handle_set_metadata_configuration(state: &SharedState, body: &str) -> String {
+    let Some(token) = crate::mock::xml_parse::extract_attr(body, "Configuration", "token")
+        .filter(|t| !t.is_empty())
+    else {
+        return resp_soap_fault(
+            "env:Sender",
+            "NoMetadataToken-SETMETA-5810: Configuration/@token is required",
+        );
+    };
+    if !state.read().metadata.iter().any(|e| e.token == token) {
+        return resp_soap_fault(
+            "ter:NoConfig",
+            &format!("NoSuchMetadataConfig-SETMETA-5811: {token}"),
+        );
+    }
+    let name = extract_tag(body, "Name").unwrap_or_default();
+    let analytics = extract_tag(body, "Analytics").as_deref() == Some("true");
+    // `Status` and `Position` are both inside `tt:PTZStatus`; read that subtree
+    // so a `Status` element elsewhere in the body cannot be mistaken for it.
+    let ptz = extract_tag(body, "PTZStatus").unwrap_or_default();
+    let ptz_status = extract_tag(&ptz, "Status").as_deref() == Some("true");
+    let ptz_position = extract_tag(&ptz, "Position").as_deref() == Some("true");
+    state.modify(|s| {
+        if let Some(e) = s.metadata.iter_mut().find(|e| e.token == token) {
+            e.name = name.clone();
+            e.analytics = analytics;
+            e.ptz_status = ptz_status;
+            e.ptz_position = ptz_position;
+            eprintln!("    [STATE] metadata config updated: {token}");
+        }
+    });
+    resp_empty("tr2", "SetMetadataConfigurationResponse")
 }
 
 pub fn resp_audio_source_configurations_media2() -> String {

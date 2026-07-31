@@ -56,6 +56,8 @@ pub struct DeviceState {
     pub digital_inputs: Vec<DigitalInputState>,
     #[serde(default = "default_storage")]
     pub storage: Vec<StorageEntry>,
+    #[serde(default = "default_metadata")]
+    pub metadata: Vec<MetadataEntry>,
     /// Monotonic event counter for the pull-point stream (per-instance,
     /// not persisted). Replaces the former process-global `EVENT_SEQ`.
     #[serde(skip)]
@@ -138,6 +140,33 @@ pub struct StorageEntry {
     /// nothing can observe — and a mock that holds a password it never uses is
     /// a worse default than one that visibly does not.
     pub user: String,
+}
+
+// ── Metadata (Media2) ─────────────────────────────────────────────────────────
+
+/// One Media2 metadata stream configuration.
+///
+/// The field set is what `crate::types::MetadataConfiguration` parses, plus
+/// `analytics_supported`, which belongs to the *options* answer rather than
+/// the configuration itself — `GetMetadataConfigurationOptions` is addressed
+/// by the same token and was static too, so without a per-entry value it
+/// could not discriminate.
+///
+/// `multicast_address` / `multicast_port` are `Option` on the parser as well
+/// as here, so unlike the Storage fields the omitted-vs-present distinction
+/// **is** observable from a client and a test can assert it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetadataEntry {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    pub analytics: bool,
+    pub ptz_status: bool,
+    pub ptz_position: bool,
+    pub multicast_address: Option<String>,
+    pub multicast_port: Option<u32>,
+    /// Reported as `Options/Extension/AnalyticsSupported`.
+    pub analytics_supported: bool,
 }
 
 /// One-shot event emitted by the IO simulator endpoint and consumed by
@@ -1114,6 +1143,40 @@ fn default_storage() -> Vec<StorageEntry> {
     ]
 }
 
+/// Two metadata configurations that **disagree on every field**, including the
+/// two `Option`s.
+///
+/// `MetaConf_1` is multicast and analytics-capable; `MetaConf_2` is unicast
+/// (both `Option`s `None`) and not. Every boolean is inverted between them, so
+/// a renderer emitting a constant for any one of `analytics`, `ptz_status`,
+/// `ptz_position` or `analytics_supported` fails on one entry or the other.
+fn default_metadata() -> Vec<MetadataEntry> {
+    vec![
+        MetadataEntry {
+            token: "MetaConf_1".into(),
+            name: "MetadataConfig".into(),
+            use_count: 1,
+            analytics: true,
+            ptz_status: false,
+            ptz_position: true,
+            multicast_address: Some("239.0.1.10".into()),
+            multicast_port: Some(40010),
+            analytics_supported: true,
+        },
+        MetadataEntry {
+            token: "MetaConf_2".into(),
+            name: "MetadataMinimal".into(),
+            use_count: 0,
+            analytics: false,
+            ptz_status: true,
+            ptz_position: false,
+            multicast_address: None,
+            multicast_port: None,
+            analytics_supported: false,
+        },
+    ]
+}
+
 fn default_true() -> bool {
     true
 }
@@ -1194,6 +1257,7 @@ impl Default for DeviceState {
             relay_outputs: default_relay_outputs(),
             digital_inputs: default_digital_inputs(),
             storage: default_storage(),
+            metadata: default_metadata(),
             event_seq: 0,
             event_filter: None,
             pending_io_events: Vec::new(),

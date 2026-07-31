@@ -112,6 +112,19 @@ two-thirds of the test suite.
   fixture cannot distinguish a renderer that reads state from one that
   hard-codes the seed.
 
+- **The mock's Media2 metadata family was static on all three operations.**
+  `GetMetadataConfigurations`, `GetMetadataConfigurationOptions` and
+  `SetMetadataConfiguration` were fixtures (audit §5, Tier 3). `DeviceState`
+  gained `metadata: Vec<MetadataEntry>`; all three now read or write it, the
+  two token-addressed operations fault on an unknown token, and the
+  configurations getter honours its optional `ConfigurationToken` filter.
+
+  The options getter also never emitted `Options/Extension/AnalyticsSupported`,
+  which `MetadataConfigurationOptions::from_xml` reads — so
+  `analytics_supported` came back `false` from the mock regardless of the
+  device. Found while wiring, not by the §6 diff that was supposed to catch
+  that class.
+
 - **Media1 video encoder options nested inside `Extension` were silently
   dropped.** ONVIF extends a type by nesting a same-named element one level
   deeper, so the deeper copy is a superset; `XmlNode::child` returns the *first
@@ -508,6 +521,12 @@ two-thirds of the test suite.
   at the new location.
 
 ### Breaking
+
+- **`DeviceState` gained `metadata: Vec<MetadataEntry>`,** and the mock seeds
+  **two** metadata configurations (`MetaConf_1`, `MetaConf_2`) where it
+  previously reported one. `SetMetadataConfiguration` and
+  `GetMetadataConfigurationOptions` now fault (`ter:NoConfig`) on a token that
+  names no configuration.
 
 - **`DeviceState` gained `storage: Vec<StorageEntry>`,** and the mock now
   seeds **three** storage entries (`SD_01`, `NAS_01`, `CIFS_01`) where it

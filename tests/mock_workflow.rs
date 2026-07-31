@@ -617,6 +617,108 @@ async fn storage_entries_differ_on_every_optional_field() {
     assert_eq!(cifs.user, "");
 }
 
+/// The two metadata configurations invert every boolean, and only one carries
+/// multicast — the `Option` distinction the parser really can see, unlike the
+/// Storage string fields.
+#[tokio::test]
+async fn metadata_configs_differ_on_every_field() {
+    let (srv, s) = setup().await;
+    let url = format!("{}/onvif/media2", srv.base_url());
+    let all = s
+        .client()
+        .get_metadata_configurations_media2(&url, None, None)
+        .await
+        .unwrap();
+    assert_eq!(all.len(), 2, "two seeded metadata configurations");
+
+    let one = all.iter().find(|c| c.token == "MetaConf_1").unwrap();
+    assert_eq!(one.name, "MetadataConfig");
+    assert_eq!(one.use_count, 1);
+    assert!(one.analytics);
+    assert!(!one.ptz_status);
+    assert!(one.ptz_position);
+    assert_eq!(one.multicast_address.as_deref(), Some("239.0.1.10"));
+    assert_eq!(one.multicast_port, Some(40010));
+
+    let two = all.iter().find(|c| c.token == "MetaConf_2").unwrap();
+    assert_eq!(two.name, "MetadataMinimal");
+    assert_eq!(two.use_count, 0);
+    assert!(!two.analytics);
+    assert!(two.ptz_status);
+    assert!(!two.ptz_position);
+    assert_eq!(
+        two.multicast_address, None,
+        "unicast config must omit Multicast, not send it empty"
+    );
+    assert_eq!(two.multicast_port, None);
+
+    // The options getter answers for the addressed configuration. It reported
+    // `analytics_supported: false` for everything before 0.15, because the
+    // static fixture omitted `Extension/AnalyticsSupported` altogether.
+    let o1 = s
+        .client()
+        .get_metadata_configuration_options_media2(&url, Some("MetaConf_1"), None)
+        .await
+        .unwrap();
+    let o2 = s
+        .client()
+        .get_metadata_configuration_options_media2(&url, Some("MetaConf_2"), None)
+        .await
+        .unwrap();
+    assert!(o1.analytics_supported);
+    assert!(!o2.analytics_supported);
+    assert!(o1.ptz_status_filter_supported && o2.ptz_status_filter_supported);
+}
+
+#[tokio::test]
+async fn metadata_unknown_token_is_refused() {
+    let (srv, s) = setup().await;
+    let url = format!("{}/onvif/media2", srv.base_url());
+
+    let mut cfg = s
+        .client()
+        .get_metadata_configurations_media2(&url, Some("MetaConf_1"), None)
+        .await
+        .unwrap()
+        .remove(0);
+    cfg.token = "MetaConf_99".into();
+    let err = s
+        .client()
+        .set_metadata_configuration_media2(&url, &cfg)
+        .await
+        .unwrap_err();
+    assert_fault(
+        err,
+        "ter:NoConfig",
+        "NoSuchMetadataConfig-SETMETA-5811: MetaConf_99",
+    );
+
+    // The options getter is addressed, not a filter, so it faults too — and
+    // with its own tag, so this assertion cannot be satisfied by the one above.
+    let err = s
+        .client()
+        .get_metadata_configuration_options_media2(&url, Some("MetaConf_99"), None)
+        .await
+        .unwrap_err();
+    assert_fault(
+        err,
+        "ter:NoConfig",
+        "NoSuchMetadataConfig-METAOPT-5812: MetaConf_99",
+    );
+
+    // But `GetMetadataConfigurations` is a *filter*: an unmatched token is an
+    // empty list, not an error. Asserting the difference is the point.
+    let empty = s
+        .client()
+        .get_metadata_configurations_media2(&url, Some("MetaConf_99"), None)
+        .await
+        .unwrap();
+    assert!(
+        empty.is_empty(),
+        "a filter that matches nothing returns nothing, and does not fault"
+    );
+}
+
 #[tokio::test]
 async fn storage_unknown_token_is_refused() {
     let (_srv, s) = setup().await;

@@ -136,6 +136,8 @@ const ROWS: &[Row] = rows![
     "media2/encoder-instances"    => Expect::Blind("audit §5 — static"), ("VEC_1", "VEC_3"), m2_encoder_instances;
     "media2/stream-uri"           => Expect::Blind("audit §5 — one canned URL"), ("Profile_1", "Profile_3"), m2_stream_uri;
     "media2/video-source-modes"   => Expect::Blind("audit §5 — static"), ("VS_1", "VS_2"), m2_video_source_modes;
+    "media2/metadata-config"      => Expect::Discriminates, ("MetaConf_1", "MetaConf_2"), m2_metadata_config;
+    "media2/metadata-options"     => Expect::Discriminates, ("MetaConf_1", "MetaConf_2"), m2_metadata_options;
 
     // ── Imaging — per physical lens ─────────────────────────────────────────
     "imaging/settings"            => Expect::Discriminates, ("VS_1", "VS_2"), img_settings;
@@ -255,6 +257,26 @@ async fn m2_video_source_modes(d: &Dev, t: &str) -> String {
     )
 }
 
+async fn m2_metadata_config(d: &Dev, t: &str) -> String {
+    fingerprint(
+        d.client
+            .get_metadata_configurations_media2(&d.url("media2"), Some(t), None)
+            .await,
+    )
+}
+
+/// The options getter is addressed by the same token as the configuration
+/// getter. Before 0.15 it was a static fixture, so it answered identically for
+/// every configuration — and, because it omitted `Extension/AnalyticsSupported`
+/// entirely, every caller saw `analytics_supported: false` regardless.
+async fn m2_metadata_options(d: &Dev, t: &str) -> String {
+    fingerprint(
+        d.client
+            .get_metadata_configuration_options_media2(&d.url("media2"), Some(t), None)
+            .await,
+    )
+}
+
 // ── Imaging probes ───────────────────────────────────────────────────────────
 
 async fn img_settings(d: &Dev, t: &str) -> String {
@@ -332,9 +354,9 @@ async fn rec_job_state(d: &Dev, t: &str) -> String {
 #[tokio::test]
 async fn every_token_taking_operation_matches_its_declared_expectation() {
     // Guard on the guard: a gutted table makes every assertion below vacuous.
-    // 26 rows at 0.15.0.
+    // 28 rows at 0.15.0: 21 Discriminates, 7 Blind.
     assert!(
-        ROWS.len() >= 22,
+        ROWS.len() >= 26,
         "the table has only {} rows — it was gutted, which would make this test \
          pass for the wrong reason",
         ROWS.len()
@@ -380,7 +402,7 @@ async fn every_token_taking_operation_matches_its_declared_expectation() {
     // And the positive side is not vacuous: most of the table really does
     // answer per token.
     assert!(
-        discriminating >= 17,
+        discriminating >= 19,
         "only {discriminating} operations discriminated — the mock is far more \
          token-blind than the table claims",
     );
