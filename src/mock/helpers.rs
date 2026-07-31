@@ -10,9 +10,52 @@ pub fn soap(extra_ns: &str, body: &str) -> String {
     )
 }
 
+/// The namespace URI each prefix the mock emits is bound to.
+///
+/// Kept here rather than at the call sites because [`resp_empty`] is the only
+/// helper that builds an element from a bare prefix string.
+fn namespace_for(prefix: &str) -> Option<&'static str> {
+    Some(match prefix {
+        "tds" => "http://www.onvif.org/ver10/device/wsdl",
+        "trt" => "http://www.onvif.org/ver10/media/wsdl",
+        "tr2" => "http://www.onvif.org/ver20/media/wsdl",
+        "tptz" => "http://www.onvif.org/ver20/ptz/wsdl",
+        "timg" => "http://www.onvif.org/ver20/imaging/wsdl",
+        "trc" => "http://www.onvif.org/ver10/recording/wsdl",
+        "tse" => "http://www.onvif.org/ver10/search/wsdl",
+        "trp" => "http://www.onvif.org/ver10/replay/wsdl",
+        "tev" => "http://www.onvif.org/ver10/events/wsdl",
+        "wsnt" => "http://docs.oasis-open.org/wsn/b-2",
+        _ => return None,
+    })
+}
+
 /// Return an empty `<prefix:Tag/>` response (for void write operations).
+///
+/// **The prefix is declared on the envelope.** Until 0.15 it was not: this
+/// emitted `<tds:SetHostnameResponse/>` inside an envelope declaring only `s`
+/// and `tt`, so `tds` was an *unbound prefix* and the document was not
+/// namespace-well-formed. A conforming parser must reject it.
+///
+/// Nothing in this crate noticed, because `find_response` matches on local
+/// name and quick-xml does not enforce prefix binding — but an external ONVIF
+/// client (gSOAP and friends resolve prefixes strictly) sees a hard parse
+/// error. 53 call sites across nine prefixes were affected, roughly a third of
+/// the operations the mock answers. `no_response_declares_an_attribute_twice`
+/// and `every_response_binds_the_prefixes_it_uses` in `dispatch.rs` are the
+/// standing guards.
 pub fn resp_empty(prefix: &str, tag: &str) -> String {
-    soap("", &format!("<{prefix}:{tag}/>"))
+    let ns = match namespace_for(prefix) {
+        Some(uri) => format!("xmlns:{prefix}=\"{uri}\""),
+        // An unknown prefix is a programming error in the mock, not something
+        // a caller can trigger. Emitting it undeclared would be the old bug,
+        // so fail loudly in tests and degrade to a bare local name otherwise.
+        None => {
+            debug_assert!(false, "resp_empty: no namespace registered for `{prefix}`");
+            return soap("", &format!("<{tag}/>"));
+        }
+    };
+    soap(&ns, &format!("<{prefix}:{tag}/>"))
 }
 
 /// Return a SOAP 1.2 Fault.

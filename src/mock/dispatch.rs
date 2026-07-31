@@ -447,6 +447,154 @@ mod tests {
         );
     }
 
+    /// Attribute names in the first start-tag of `xml`, in order.
+    ///
+    /// Deliberately crude — it only has to see the `<s:Envelope …>` tag, which
+    /// is where every namespace declaration lives.
+    fn envelope_attrs(xml: &str) -> Vec<&str> {
+        let Some(start) = xml.find("<s:Envelope") else {
+            return Vec::new();
+        };
+        let rest = &xml[start..];
+        let Some(end) = rest.find('>') else {
+            return Vec::new();
+        };
+        rest[..end]
+            .split_whitespace()
+            .filter_map(|tok| tok.split('=').next())
+            .filter(|t| t.contains(':') || t.starts_with("xmlns"))
+            .collect()
+    }
+
+    /// **No response may declare the same attribute twice.**
+    ///
+    /// XML 1.0 §3.1 forbids a repeated attribute name in a start-tag, so a
+    /// duplicate makes the whole document not well-formed and a strict parser
+    /// rejects it outright — which is what an external ONVIF client is, and
+    /// how the Media2 profile bug reached this project in the first place.
+    ///
+    /// Two handlers passed `xmlns:tt` as their `extra_ns` when
+    /// [`soap`](crate::mock::helpers::soap) already emits it, so
+    /// `GetStorageConfigurations` and `GetSystemUris` shipped
+    /// `<s:Envelope … xmlns:tt="…" … xmlns:tt="…">`. **Nothing failed**:
+    /// quick-xml takes the first declaration and moves on, so oxvif's own
+    /// parser — and therefore every test in this crate — was blind to it.
+    /// Found by feeding a captured response to Python's `minidom`, which
+    /// refuses it.
+    #[test]
+    fn no_response_declares_an_attribute_twice() {
+        let state = MockState::new();
+        let mut checked = 0usize;
+        let mut dupes = Vec::new();
+
+        for (service, src) in CLIENT_SOURCES {
+            for uri in action_uris(src) {
+                if !is_action(uri) {
+                    continue;
+                }
+                checked += 1;
+                let out = dispatch(uri, "http://mock", &state, "");
+                let attrs = envelope_attrs(&out);
+                for (i, a) in attrs.iter().enumerate() {
+                    if attrs[..i].contains(a) {
+                        dupes.push(format!("{service}: {uri} declares {a} twice"));
+                        break;
+                    }
+                }
+            }
+        }
+
+        assert!(
+            checked >= 150,
+            "extracted only {checked} action URIs — the sweep is broken, which \
+             would make this test pass for the wrong reason"
+        );
+        assert!(
+            dupes.is_empty(),
+            "{} response(s) are not well-formed XML:\n  {}",
+            dupes.len(),
+            dupes.join("\n  "),
+        );
+    }
+
+    /// **Every element prefix a response uses must be declared on the envelope.**
+    ///
+    /// An undeclared prefix is a namespace-well-formedness error: a conforming
+    /// parser rejects the document. `find_response` matches on *local* name and
+    /// quick-xml does not enforce prefix binding, so every test in this crate
+    /// was blind to it — but an external ONVIF client resolves prefixes and
+    /// sees a hard parse error.
+    ///
+    /// [`resp_empty`](crate::mock::helpers::resp_empty) emitted
+    /// `<tds:SetHostnameResponse/>` in an envelope declaring only `s` and `tt`.
+    /// 53 call sites across nine prefixes — about a third of the operations the
+    /// mock answers — were affected. Found by feeding a captured response to a
+    /// strict parser while writing `docs/mock-server.md`.
+    #[test]
+    fn every_response_binds_the_prefixes_it_uses() {
+        let state = MockState::new();
+        let mut checked = 0usize;
+        let mut unbound = Vec::new();
+
+        for (service, src) in CLIENT_SOURCES {
+            for uri in action_uris(src) {
+                if !is_action(uri) {
+                    continue;
+                }
+                checked += 1;
+                let out = dispatch(uri, "http://mock", &state, "");
+                // Every `xmlns:` declaration **anywhere** in the document, not
+                // just on the envelope: a prefix may legally be declared on
+                // the element that uses it, and the event-properties response
+                // does exactly that (`<tns1:VideoSource xmlns:tns1="…">`).
+                //
+                // This deliberately ignores scoping — a prefix declared on a
+                // sibling counts as declared here. The question being asked is
+                // "declared nowhere at all", which is the shape of the real
+                // bug; proper scope tracking would need a real parser.
+                let declared: Vec<&str> = out
+                    .match_indices("xmlns:")
+                    .filter_map(|(i, _)| {
+                        out[i + 6..]
+                            .split('=')
+                            .next()
+                            .filter(|p| !p.is_empty() && !p.contains(char::is_whitespace))
+                    })
+                    .collect();
+                // Element prefixes actually used, anywhere in the document.
+                for cap in out.split('<').skip(1) {
+                    let name = cap
+                        .trim_start_matches('/')
+                        .split([' ', '>', '/', '\n'])
+                        .next()
+                        .unwrap_or("");
+                    let Some((prefix, _)) = name.split_once(':') else {
+                        continue;
+                    };
+                    if prefix.is_empty() || prefix.starts_with('?') || prefix.starts_with('!') {
+                        continue;
+                    }
+                    if !declared.contains(&prefix) {
+                        unbound.push(format!("{service}: {uri} uses undeclared `{prefix}:`"));
+                        break;
+                    }
+                }
+            }
+        }
+
+        assert!(
+            checked >= 150,
+            "extracted only {checked} action URIs — the sweep is broken, which \
+             would make this test pass for the wrong reason"
+        );
+        assert!(
+            unbound.is_empty(),
+            "{} response(s) use a namespace prefix they never declare:\n  {}",
+            unbound.len(),
+            unbound.join("\n  "),
+        );
+    }
+
     /// All nine answer, and none of them falls through to the
     /// "Not implemented" fault. This is the test that would have failed before
     /// recording/search/replay were split into three dispatchers.

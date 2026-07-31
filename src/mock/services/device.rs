@@ -777,8 +777,10 @@ fn render_storage(e: &crate::mock::state::StorageEntry) -> String {
 
 pub fn resp_storage_configurations(state: &SharedState) -> String {
     let items: String = state.read().storage.iter().map(render_storage).collect();
+    // `soap()` already declares `xmlns:tt`; re-declaring it here produced a
+    // duplicate attribute on `<s:Envelope>`, which XML 1.0 §3.1 forbids.
     soap(
-        &format!("{NS} xmlns:tt=\"http://www.onvif.org/ver10/schema\""),
+        NS,
         &format!(
             "<tds:GetStorageConfigurationsResponse>{items}</tds:GetStorageConfigurationsResponse>"
         ),
@@ -841,8 +843,10 @@ pub fn handle_set_storage_configuration(state: &SharedState, body: &str) -> Stri
 }
 
 pub fn resp_system_uris(base: &str) -> String {
+    // As above — `soap()` declares `xmlns:tt`; declaring it twice is a
+    // duplicate attribute and makes the envelope not well-formed.
     soap(
-        &format!("{NS} xmlns:tt=\"http://www.onvif.org/ver10/schema\""),
+        NS,
         &format!(
             r#"<tds:GetSystemUrisResponse>
           <tds:SystemLogUris>
