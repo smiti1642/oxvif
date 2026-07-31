@@ -571,3 +571,74 @@ async fn recording_unknown_tokens_are_refused() {
         "BadJobMode-SETJOBMODE-5705: Sideways",
     );
 }
+
+/// The three seeded storage entries **disagree on every optional field**, and
+/// this asserts the disagreement rather than the presence of a list.
+///
+/// Before 0.15 `GetStorageConfigurations` was one static entry carrying a
+/// `LocalPath` and nothing else, so `storage_uri` and `user` — both parsed by
+/// `StorageConfiguration` — were never fed by the mock at all (audit §6, the
+/// "storage credential fields"). An assertion that only counted entries, or
+/// only read `local_path`, would have passed against that fixture too.
+#[tokio::test]
+async fn storage_entries_differ_on_every_optional_field() {
+    let (_srv, s) = setup().await;
+    let got = s.get_storage_configurations().await.unwrap();
+
+    let by = |t: &str| {
+        got.iter()
+            .find(|e| e.token == t)
+            .unwrap_or_else(|| panic!("no storage entry {t}"))
+            .clone()
+    };
+
+    // A path, no URI, no credentials.
+    let sd = by("SD_01");
+    assert_eq!(sd.storage_type, "LocalStorage");
+    assert_eq!(sd.local_path, "/mnt/sd");
+    assert_eq!(sd.storage_uri, "", "local card has no network URI");
+    assert_eq!(sd.user, "", "local card has no credentials");
+
+    // Every field populated — the only entry that proves `user` is emitted.
+    let nas = by("NAS_01");
+    assert_eq!(nas.storage_type, "NFS");
+    assert_eq!(nas.local_path, "/mnt/nas");
+    assert_eq!(nas.storage_uri, "nfs://192.168.1.50/records");
+    assert_eq!(nas.user, "recorder");
+
+    // A URI and nothing else — the entry that stops `local_path` and `user`
+    // from being satisfiable by a constant, since SD_01 and NAS_01 both carry
+    // a path. It does *not* pin omitted-vs-empty on the wire: the parser
+    // collapses both to `""`, measured.
+    let cifs = by("CIFS_01");
+    assert_eq!(cifs.storage_type, "CIFS");
+    assert_eq!(cifs.local_path, "");
+    assert_eq!(cifs.storage_uri, "smb://192.168.1.60/cam");
+    assert_eq!(cifs.user, "");
+}
+
+#[tokio::test]
+async fn storage_unknown_token_is_refused() {
+    let (_srv, s) = setup().await;
+
+    // A token that names no entry is refused rather than quietly created —
+    // otherwise a typo is indistinguishable from a successful update.
+    let err = s
+        .set_storage_configuration("SD_99", "NFS", "/mnt/x", "", "")
+        .await
+        .unwrap_err();
+    assert_fault(err, "ter:InvalidArgVal", "NoSuchStorage-STOR-5802: SD_99");
+
+    // `Data/@type` is required by the schema; an empty one is refused too,
+    // and with a *different* code than the unknown-token case so asserting
+    // both proves more than asserting either.
+    let err = s
+        .set_storage_configuration("SD_01", "", "/mnt/x", "", "")
+        .await
+        .unwrap_err();
+    assert_fault(
+        err,
+        "env:Sender",
+        "NoStorageType-STOR-5801: Data/@type is required",
+    );
+}

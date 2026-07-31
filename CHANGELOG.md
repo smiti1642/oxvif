@@ -95,6 +95,23 @@ two-thirds of the test suite.
 
 ### Fixed
 
+- **The mock's Storage family was a single static fixture.**
+  `GetStorageConfigurations` always answered one `SD_01` entry carrying a
+  `LocalPath` and nothing else, and `SetStorageConfiguration` was an empty
+  success that wrote nothing (`docs/active/mock-audit-2026-07.md` §5, Tier 3).
+  `DeviceState` gained `storage: Vec<StorageEntry>`; the getter renders it and
+  the setter creates, updates or faults.
+
+  This also closes the audit's §6 "storage credential fields" gap:
+  `StorageUri` and `User/UserName` are parsed by `StorageConfiguration` and
+  were **never emitted by the mock**, so nothing in the crate had ever fed
+  those two parser branches.
+
+  Three seeded entries now disagree on every optional field — `SD_01` (path
+  only), `NAS_01` (all fields), `CIFS_01` (URI only) — because a single
+  fixture cannot distinguish a renderer that reads state from one that
+  hard-codes the seed.
+
 - **Media1 video encoder options nested inside `Extension` were silently
   dropped.** ONVIF extends a type by nesting a same-named element one level
   deeper, so the deeper copy is a superset; `XmlNode::child` returns the *first
@@ -491,6 +508,17 @@ two-thirds of the test suite.
   at the new location.
 
 ### Breaking
+
+- **`DeviceState` gained `storage: Vec<StorageEntry>`,** and the mock now
+  seeds **three** storage entries (`SD_01`, `NAS_01`, `CIFS_01`) where it
+  previously reported one. Code asserting `get_storage_configurations().len()
+  == 1` will fail.
+
+  `SetStorageConfiguration` also changed from an unconditional success:
+  a token naming no entry is now refused with `ter:InvalidArgVal` /
+  `NoSuchStorage-STOR-5802`, and an empty `Data/@type` with `env:Sender` /
+  `NoStorageType-STOR-5801`. A token-less call still means "create", and now
+  really does create.
 
 - **`config_token` is now required on four options getters.** The parameter
   changed from `Option<&str>` to `&str` on:

@@ -169,7 +169,8 @@ const PAIRS: &[Pair] = pairs![
     "device/relay-output-settings"     => Expect::Works, relay_output_settings;
     "device/system-date-and-time"      => Expect::Works, system_date_and_time;
     "device/discovery-mode"            => Expect::Works                     , discovery_mode;
-    "device/storage-configuration"     => Expect::Static("audit §5"), storage_configuration;
+    "device/storage-configuration"     => Expect::Works, storage_configuration;
+    "device/storage-create"            => Expect::Works, storage_create;
 
     // ── Media1 ──────────────────────────────────────────────────────────────
     "media1/profile-create"            => Expect::Works, m1_profile_create;
@@ -383,23 +384,78 @@ async fn discovery_mode(d: &Dev) -> Outcome {
     cmp(want.to_string(), got)
 }
 
+/// Updates every field the client can send, not just `local_path`.
+///
+/// `storage_uri` and `user` are the audit's Tier 4 "storage credential fields"
+/// — parsed by `StorageConfiguration` and never emitted by the mock before
+/// 0.15. Asserting only the path would leave that fix unproved, since the old
+/// static fixture already carried a `LocalPath`.
 async fn storage_configuration(d: &Dev) -> Outcome {
-    let want_path = "/mnt/roundtrip-4424";
+    let want = ("NFS", "/mnt/roundtrip-4424", "nfs://10.9.8.7/rt", "rt-user");
     call!(
         "SetStorageConfiguration",
         d.client
-            .set_storage_configuration("SD_01", "LocalStorage", want_path, "", "")
+            .set_storage_configuration("SD_01", want.0, want.1, want.2, want.3)
     );
     let got = call!(
         "GetStorageConfigurations",
         d.client.get_storage_configurations()
     );
-    let path = got
+    let e = got.iter().find(|s| s.token == "SD_01");
+    // The trailing element is `NAS_01`'s untouched user. A handler that wrote
+    // the update into every entry rather than the addressed one would satisfy
+    // the first four fields and fail here.
+    let untouched = got
         .iter()
-        .find(|s| s.token == "SD_01")
-        .map(|s| s.local_path.clone())
+        .find(|s| s.token == "NAS_01")
+        .map(|s| s.user.clone())
         .unwrap_or_default();
-    cmp(want_path.to_string(), path)
+    cmp(
+        format!("{want:?} + NAS_01 user \"recorder\""),
+        format!(
+            "{:?} + NAS_01 user {untouched:?}",
+            e.map(|s| (
+                s.storage_type.as_str(),
+                s.local_path.as_str(),
+                s.storage_uri.as_str(),
+                s.user.as_str()
+            ))
+            .unwrap_or(("", "", "", ""))
+        ),
+    )
+}
+
+/// A token-less `SetStorageConfiguration` creates a new entry that the getter
+/// then lists. The create path is separate from the update path in the
+/// handler, so one row cannot cover both.
+async fn storage_create(d: &Dev) -> Outcome {
+    let before = call!(
+        "GetStorageConfigurations",
+        d.client.get_storage_configurations()
+    )
+    .len();
+    call!(
+        "SetStorageConfiguration",
+        d.client
+            .set_storage_configuration("", "CIFS", "", "smb://10.1.1.1/new-4425", "")
+    );
+    let after = call!(
+        "GetStorageConfigurations",
+        d.client.get_storage_configurations()
+    );
+    let created = after
+        .iter()
+        .find(|s| s.storage_uri == "smb://10.1.1.1/new-4425");
+    cmp(
+        format!("{} entries, CIFS created", before + 1),
+        format!(
+            "{} entries, {} created",
+            after.len(),
+            created
+                .map(|s| s.storage_type.as_str())
+                .unwrap_or("nothing")
+        ),
+    )
 }
 
 // ── Media1 checks ────────────────────────────────────────────────────────────
@@ -987,9 +1043,9 @@ async fn recording_job_mode(d: &Dev) -> Outcome {
 #[tokio::test]
 async fn every_get_set_pair_matches_its_declared_expectation() {
     // Guard on the guard: an empty or gutted table makes every assertion below
-    // vacuously true. 47 pairs at 0.15.0.
+    // vacuously true. 48 pairs at 0.15.0: 44 Works, 4 Static, 0 Broken.
     assert!(
-        PAIRS.len() >= 40,
+        PAIRS.len() >= 45,
         "the pair table has only {} rows — it was gutted, which would make this \
          test pass for the wrong reason",
         PAIRS.len()
@@ -1039,7 +1095,7 @@ async fn every_get_set_pair_matches_its_declared_expectation() {
 
     // And the positive side is not vacuous either: most of the table works.
     assert!(
-        round_tripped >= 35,
+        round_tripped >= 40,
         "only {round_tripped} pairs round-tripped — the mock is far more broken \
          than the table claims",
     );

@@ -1,6 +1,6 @@
 use crate::mock::helpers::{resp_empty, soap};
 use crate::mock::state::SharedState;
-use crate::mock::xml_parse::{extract_all_tags, extract_tag};
+use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 const NS: &str = r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#;
 
@@ -734,15 +734,110 @@ pub fn resp_send_auxiliary_command() -> String {
     )
 }
 
-pub fn resp_storage_configurations() -> String {
+// ── Storage ───────────────────────────────────────────────────────────────────
+//
+// Until 0.15 this family was one static fixture emitting a single `SD_01`
+// entry with a `LocalPath` and nothing else, and `SetStorageConfiguration`
+// was `resp_empty` — audit §5 (Tier 3) for the dead round-trip and §6
+// (Tier 4) for the credential fields `StorageConfiguration` parses and the
+// mock never fed: `StorageUri` and `User/UserName`.
+//
+// Optional elements are omitted when empty rather than emitted blank, which
+// is what a real device sends. **That distinction is not observable through
+// this client** and no test asserts it: `StorageConfiguration` models these
+// as `String` via `unwrap_or_default()`, so an omitted element and an empty
+// one both parse to `""`. Measured — a renderer changed to emit
+// `<tt:LocalPath></tt:LocalPath>` for `CIFS_01` reddens nothing. Recorded so
+// the next reader does not mistake the shape for a tested guarantee; making
+// it one would mean `Option<String>` on the parser, which is a public API
+// change and not this commit's business.
+
+fn render_storage(e: &crate::mock::state::StorageEntry) -> String {
+    let mut inner = String::new();
+    if !e.local_path.is_empty() {
+        inner.push_str(&format!("<tt:LocalPath>{}</tt:LocalPath>", e.local_path));
+    }
+    if !e.storage_uri.is_empty() {
+        inner.push_str(&format!("<tt:StorageUri>{}</tt:StorageUri>", e.storage_uri));
+    }
+    if !e.user.is_empty() {
+        inner.push_str(&format!(
+            "<tt:User><tt:UserName>{}</tt:UserName></tt:User>",
+            e.user
+        ));
+    }
+    format!(
+        "<tds:StorageConfigurations token=\"{token}\">\
+           <tt:Data type=\"{ty}\">{inner}</tt:Data>\
+         </tds:StorageConfigurations>",
+        token = e.token,
+        ty = e.storage_type,
+    )
+}
+
+pub fn resp_storage_configurations(state: &SharedState) -> String {
+    let items: String = state.read().storage.iter().map(render_storage).collect();
     soap(
         &format!("{NS} xmlns:tt=\"http://www.onvif.org/ver10/schema\""),
-        r#"<tds:GetStorageConfigurationsResponse>
-          <tds:StorageConfigurations token="SD_01">
-            <tt:Data type="LocalStorage"><tt:LocalPath>/mnt/sd</tt:LocalPath></tt:Data>
-          </tds:StorageConfigurations>
-        </tds:GetStorageConfigurationsResponse>"#,
+        &format!(
+            "<tds:GetStorageConfigurationsResponse>{items}</tds:GetStorageConfigurationsResponse>"
+        ),
     )
+}
+
+/// `SetStorageConfiguration` — create when the token attribute is absent,
+/// update in place when it names an existing entry, fault when it names one
+/// that does not exist.
+///
+/// A device that silently created an entry under a token the caller invented
+/// would make a typo indistinguishable from a successful update, so an unknown
+/// token is refused rather than treated as a create.
+pub fn handle_set_storage_configuration(state: &SharedState, body: &str) -> String {
+    let token = extract_attr(body, "StorageConfiguration", "token").unwrap_or_default();
+    let storage_type = extract_attr(body, "Data", "type").unwrap_or_default();
+    if storage_type.is_empty() {
+        return crate::mock::helpers::resp_soap_fault(
+            "env:Sender",
+            "NoStorageType-STOR-5801: Data/@type is required",
+        );
+    }
+    let local_path = extract_tag(body, "LocalPath").unwrap_or_default();
+    let storage_uri = extract_tag(body, "StorageUri").unwrap_or_default();
+    let user = extract_tag(body, "UserName").unwrap_or_default();
+
+    if token.is_empty() {
+        // Create. Tokens are never reused, matching `ProfilesState`.
+        state.modify(|s| {
+            let token = format!("Storage_{:03}", s.storage.len() + 1);
+            eprintln!("    [STATE] storage created: {token}");
+            s.storage.push(crate::mock::state::StorageEntry {
+                token,
+                storage_type: storage_type.clone(),
+                local_path: local_path.clone(),
+                storage_uri: storage_uri.clone(),
+                user: user.clone(),
+            });
+        });
+        return resp_empty("tds", "SetStorageConfigurationResponse");
+    }
+
+    let known = state.read().storage.iter().any(|e| e.token == token);
+    if !known {
+        return crate::mock::helpers::resp_soap_fault(
+            "ter:InvalidArgVal",
+            &format!("NoSuchStorage-STOR-5802: {token}"),
+        );
+    }
+    state.modify(|s| {
+        if let Some(e) = s.storage.iter_mut().find(|e| e.token == token) {
+            e.storage_type = storage_type.clone();
+            e.local_path = local_path.clone();
+            e.storage_uri = storage_uri.clone();
+            e.user = user.clone();
+            eprintln!("    [STATE] storage updated: {token}");
+        }
+    });
+    resp_empty("tds", "SetStorageConfigurationResponse")
 }
 
 pub fn resp_system_uris(base: &str) -> String {

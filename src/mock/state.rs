@@ -54,6 +54,8 @@ pub struct DeviceState {
     pub relay_outputs: Vec<RelayOutputState>,
     #[serde(default = "default_digital_inputs")]
     pub digital_inputs: Vec<DigitalInputState>,
+    #[serde(default = "default_storage")]
+    pub storage: Vec<StorageEntry>,
     /// Monotonic event counter for the pull-point stream (per-instance,
     /// not persisted). Replaces the former process-global `EVENT_SEQ`.
     #[serde(skip)]
@@ -107,6 +109,35 @@ pub struct DigitalInputState {
     /// sensor signals. Drives PullPoint event emission.
     #[serde(default = "default_logical_inactive")]
     pub logical_state: String,
+}
+
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+/// One storage location, as returned by `GetStorageConfigurations` and
+/// written by `SetStorageConfiguration`.
+///
+/// The field set is exactly what `crate::types::StorageConfiguration` parses,
+/// so every field the client can read is a field the mock can store. Before
+/// 0.15 this whole family was a single static fixture that emitted `token`,
+/// `Data/@type` and `LocalPath` only — `storage_uri` and `user` were the
+/// "storage credential fields" of the audit's Tier 4.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageEntry {
+    pub token: String,
+    /// `"LocalStorage"`, `"NFS"`, `"CIFS"` — the `type` attribute of `Data`.
+    pub storage_type: String,
+    /// Mount path on the device. Empty for a share addressed only by URI.
+    pub local_path: String,
+    /// Network URI for NFS / CIFS shares. Empty for local storage.
+    pub storage_uri: String,
+    /// Username for an authenticated share. Empty when none is configured.
+    ///
+    /// The password is **deliberately not modelled**. `tt:UserCredential` has a
+    /// `Password` element, but `StorageConfiguration` does not parse it and no
+    /// getter could return it, so storing it would be write-only state that
+    /// nothing can observe — and a mock that holds a password it never uses is
+    /// a worse default than one that visibly does not.
+    pub user: String,
 }
 
 /// One-shot event emitted by the IO simulator endpoint and consumed by
@@ -1039,6 +1070,50 @@ fn default_digital_inputs() -> Vec<DigitalInputState> {
     ]
 }
 
+/// Three storage locations that **disagree on every field independently**.
+///
+/// A single entry would let a renderer that hard-codes `LocalPath` and omits
+/// `StorageUri`/`User` pass just as well as a correct one — the same
+/// single-fixture blindness the multi-sensor rule in `CLAUDE.md` describes.
+/// Here `local_path`, `storage_uri` and `user` are each present on some
+/// entries and empty on others, and no two entries share a `storage_type`,
+/// so an assertion on any one of them can fail on its own.
+///
+/// Note what this does *not* buy: `StorageConfiguration` parses these as
+/// `String` with `unwrap_or_default()`, so a client cannot tell an omitted
+/// element from an empty one. The empty fields here prove the renderer reads
+/// state rather than hard-coding the seed; they do not pin the wire shape.
+fn default_storage() -> Vec<StorageEntry> {
+    vec![
+        // Local card: a path, no network URI, no credentials.
+        StorageEntry {
+            token: "SD_01".into(),
+            storage_type: "LocalStorage".into(),
+            local_path: "/mnt/sd".into(),
+            storage_uri: String::new(),
+            user: String::new(),
+        },
+        // Authenticated NFS share: every field populated.
+        StorageEntry {
+            token: "NAS_01".into(),
+            storage_type: "NFS".into(),
+            local_path: "/mnt/nas".into(),
+            storage_uri: "nfs://192.168.1.50/records".into(),
+            user: "recorder".into(),
+        },
+        // Anonymous CIFS share: a URI and nothing else. The entry that keeps
+        // "the device did not say" distinguishable from "the device said
+        // empty" on both `local_path` and `user`.
+        StorageEntry {
+            token: "CIFS_01".into(),
+            storage_type: "CIFS".into(),
+            local_path: String::new(),
+            storage_uri: "smb://192.168.1.60/cam".into(),
+            user: String::new(),
+        },
+    ]
+}
+
 fn default_true() -> bool {
     true
 }
@@ -1118,6 +1193,7 @@ impl Default for DeviceState {
             video_encoders: default_video_encoders(),
             relay_outputs: default_relay_outputs(),
             digital_inputs: default_digital_inputs(),
+            storage: default_storage(),
             event_seq: 0,
             event_filter: None,
             pending_io_events: Vec::new(),

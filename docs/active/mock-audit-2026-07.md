@@ -23,9 +23,9 @@ actually wrong. Each section says what was done underneath.
 |---|---|
 | **Defects found** | 16 — 8 Tier 1, 2 Tier 2 families, plus item 1.8 which the property test added |
 | **Defects fixed** | all of them |
-| **Standing guards** | `mock_roundtrip.rs` (47 pairs), `mock_token_discrimination.rs` (26 rows), `mock_media1_media2_agree.rs` (10 tests), `dispatch.rs`'s routing test (157 actions) |
+| **Standing guards** | `mock_roundtrip.rs` (48 pairs), `mock_token_discrimination.rs` (26 rows), `mock_media1_media2_agree.rs` (10 tests), `dispatch.rs`'s routing test (157 actions) |
 | **`Expect::Broken` rows** | **0** |
-| **Still open** | Tier 3's five declared stubs (§5) and Tier 4's fidelity gaps (§6) — both *declared*, both asserted, neither a lie |
+| **Still open** | Tier 3's four remaining declared stubs (§5) and Tier 4's PTZ coordinate spaces (§6) — both *declared*, both asserted, neither a lie |
 
 The structural finding in §8 is the part to read before touching `src/mock/`.
 The two property tables are how "deliberately static" is now written down; the
@@ -74,10 +74,19 @@ are the "before" picture the rest of this document reasons about.
   per-profile now do**; the remaining 9 are node/config-addressed or static.)
 - `grep -c recording src/mock/state.rs` → **0**. (Tier 2.2 added
   `RecordingState`; all eleven Recording/Search/Replay operations now use it.)
-- **47** `Set → Get` pairs are now a standing test
-  (`tests/mock_roundtrip.rs`). 27 round-tripped, 15 were defects, 5 were
-  declared stubs. **After Tiers 1 and 2: 40 round-trip, 0 defects, 5 declared
-  stubs** — `Expect::Broken` has no rows left.
+- **47** `Set → Get` pairs became a standing test (`tests/mock_roundtrip.rs`).
+  27 round-tripped, 15 were defects, 5 were declared stubs. **After Tiers 1
+  and 2: 42 round-trip, 0 defects, 5 declared stubs** — `Expect::Broken` has
+  no rows left. **After the Storage fix (§5): 48 pairs, 44 round-trip, 4
+  declared stubs.**
+
+  *Correction.* This line read "40 round-trip … 5 declared stubs" until the
+  Storage work, which does not sum to 47 and was simply wrong; the figure was
+  42. It went unnoticed because no test asserts the prose — the floor in
+  `mock_roundtrip.rs` was `>= 35`, loose enough to hold under either number.
+  The floors are now `PAIRS.len() >= 45` and `round_tripped >= 40`, and the
+  exact split is a comment beside them where a stale number is at least next
+  to the thing that could contradict it.
 
 ---
 
@@ -281,9 +290,38 @@ is a family a user might reasonably expect to work.
 |---|---|
 | Audio (Media1 + Media2): sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration` | `get_audio_sources` — no `DeviceState` field; 1 static |
 | PTZ configurations / nodes / options, `SetConfiguration` | `ptz_get_configurations` — no field; 1 static |
-| Storage configurations, `SetStorageConfiguration` | `get_storage_configurations` — no field; 1 static |
+| ~~Storage configurations, `SetStorageConfiguration`~~ **fixed** | `get_storage_configurations` — no field; 1 static |
 | Media2 metadata configurations, `SetMetadataConfiguration` | dispatch read: static both sides |
 | Media2 `SetVideoSourceMode` | dispatch read: static |
+
+### What was done — Storage
+
+`DeviceState` gained `storage: Vec<StorageEntry>` with the exact field set
+`crate::types::StorageConfiguration` parses, so every field the client can read
+is one the mock can store. `GetStorageConfigurations` renders it;
+`SetStorageConfiguration` creates when the token attribute is absent, updates
+in place when it names an entry, and **faults when it names one that does not
+exist** (`ter:InvalidArgVal` / `NoSuchStorage-STOR-5802`) — a device that
+silently created an entry under an invented token would make a typo
+indistinguishable from a successful update. An empty `Data/@type` is refused
+too, with a different code (`env:Sender` / `NoStorageType-STOR-5801`), so
+asserting both proves more than asserting either.
+
+Three seeded entries **disagree on every optional field independently** —
+`SD_01` (path, no URI, no credentials), `NAS_01` (everything populated),
+`CIFS_01` (URI only). One entry would let a renderer that hard-codes
+`LocalPath` and omits the rest pass just as well as a correct one.
+
+This closes Tier 4's storage-credential item at the same time (see §6).
+
+**A claim withdrawn.** The first draft of the renderer carried a comment saying
+that omitting an empty element keeps "the device did not say" distinguishable
+from "the device said empty". **It does not, and the mutation proved it:**
+`StorageConfiguration` models these as `String` via `unwrap_or_default()`, so a
+renderer changed to emit `<tt:LocalPath></tt:LocalPath>` reddens nothing. The
+wire shape is still what a real device sends, but it is not a tested guarantee
+and the comment now says so. Making it one means `Option<String>` on the
+parser — a public API change, deliberately not folded into this commit.
 
 ---
 
@@ -302,8 +340,12 @@ extractor missed). **Verified real:**
   eight `*PositionSpace` / `*VelocitySpace` URIs are never emitted. Those
   `PtzConfiguration` fields are `None` from the mock forever; their only
   exercise is a hand-written unit fixture.
-- **Storage credential fields** — `resp_storage_configurations()` is static and
-  omits them.
+- ~~**Storage credential fields** — `resp_storage_configurations()` is static
+  and omits them.~~ **Fixed** with the Tier 3 Storage work above:
+  `StorageUri` and `User/UserName` are now rendered from state, and the
+  round-trip row asserts all four writable fields rather than `local_path`
+  alone. Asserting only the path would have left this unproved, since the old
+  static fixture already carried a `LocalPath`.
 
 **Explicitly not a defect:** Media1 encoder options omit `H265`. That omission is
 deliberate and carries a comment saying why (`services/media.rs:669` — it lives
@@ -354,7 +396,7 @@ checkable from outside, which is where every one of these was found anyway. Thre
 table-driven property tests over the public API kill the class:
 
 1. **Round-trip** — every `(Get, Set)` pair: set a distinctive value, get it back.
-   **Landed as `tests/mock_roundtrip.rs`** (47 pairs). Each row declares
+   **Landed as `tests/mock_roundtrip.rs`** (48 pairs). Each row declares
    `Works` / `Broken(audit §)` / `Static(audit §)`, and **all three arms are
    asserted** — wire a `Broken` row up and the test goes red telling you to move
    it, so the list cannot rot into the permanent blind spot an xfail list usually
@@ -391,18 +433,25 @@ schema-fidelity chase and stall everything else.
 | ~~3. Tier 2.1 PTZ per-profile (§4.1)~~ **done** | `PtzState` is keyed by profile token; 18 dispatch arms gained `body`; the four seeded heads deliberately disagree. |
 | ~~4. Property test **token discrimination** (§8.2)~~ **done** — `tests/mock_token_discrimination.rs` | 26 rows; 19 discriminate, 7 declared static. Guards step 3 and the 0.15 media/imaging work. |
 | ~~5. Tier 2.2 recording state (§4.2)~~ **done** | `RecordingState` mirrors `ProfilesState`; all eleven operations wired. Unblocks Profile G testing, including the health check's own liveness chain. |
-| 6. Tiers 3 and 4 | **Still open, and deliberately so.** Both are *declared* — every Tier 3 family has a `Static` or `Blind` row asserting it stays a stub, so it cannot quietly become a lie. Fix one and the tables tell you to move the row. |
+| 6. Tiers 3 and 4 | **In progress.** The decision to close them before shipping 0.15.0 was taken 2026-07-31. Storage is done; the rest are below. Until each lands it stays *declared* — every remaining Tier 3 family has a `Static` or `Blind` row asserting it is still a stub, so none can quietly become a lie. Fix one and the tables tell you to move the row. |
 
-### What a Tier 3 fix would cost, if it is ever wanted
+### What a Tier 3 fix costs
 
-Not recommended now; recorded so the decision is not re-derived.
+Originally recorded as "not recommended now", so the decision would not be
+re-derived. That decision was **reversed on 2026-07-31**: 0.15.0 waits for
+Tier 3 and Tier 4. The estimates stand; the recommendation does not.
 
-| Family | Work |
-|---|---|
-| Audio (both services) | A catalogue in `DeviceState` plus per-token getters — the same shape as `video_encoders`. The largest of the four. |
-| PTZ configurations / nodes | A `PtzConfigEntry` list; would also close Tier 4's coordinate-space gap, since those fields live on `PtzConfiguration`. |
-| Storage configurations | One `Vec<StorageEntry>`; smallest. |
-| Media2 metadata configurations | One `Vec<MetadataEntry>`. |
+| Family | Work | Status |
+|---|---|---|
+| Audio (both services) | A catalogue in `DeviceState` plus per-token getters — the same shape as `video_encoders`. The largest of the four. | open |
+| PTZ configurations / nodes | A `PtzConfigEntry` list; would also close Tier 4's coordinate-space gap, since those fields live on `PtzConfiguration`. | open |
+| Storage configurations | One `Vec<StorageEntry>`; smallest. | **done** — and it closed §6's storage item, as predicted |
+| Media2 metadata configurations | One `Vec<MetadataEntry>`. | open |
+
+The Storage estimate held: one `Vec<StorageEntry>`, one renderer, one write
+handler. What it did *not* predict was the create-vs-update split in
+`SetStorageConfiguration` (a token-less call means "create") — that needed a
+second round-trip row, since one row cannot cover both paths.
 
 `SetVideoSourceMode` and `SetRelayOutputState` are **not** on this list: no getter
 exposes the value either writes, so there is no round-trip question to ask. See
