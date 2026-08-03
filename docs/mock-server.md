@@ -668,7 +668,7 @@ unbound and the document was not namespace-well-formed (§3).
 </trt:Profiles>
 ```
 
-`tr2:GetProfiles` emits token references for the same profile:
+`tr2:GetProfiles` groups the same profile's configurations under one wrapper:
 
 ```xml
 <tr2:Profiles token="Profile_1" fixed="true">
@@ -676,11 +676,23 @@ unbound and the document was not namespace-well-formed (§3).
   <tr2:Configurations>
     <tr2:VideoSource token="VSC_1"/>
     <tr2:VideoEncoder token="VEC_1"/>
+    <tr2:AudioEncoder token="AEC_1"/>
   </tr2:Configurations>
 </tr2:Profiles>
 ```
 
-Note `<tr2:Audio>` — not `<tr2:AudioEncoder>` — is the audio encoder reference.
+**This paragraph used to say `<tr2:Audio>` is the audio encoder reference.** It
+is `<tr2:AudioEncoder>`; `Audio` was a name oxvif invented, which the parser,
+this mock, a unit fixture and `CLAUDE.md` all agreed on and no device sends.
+See the `Fixed` entry in `CHANGELOG.md` for 0.15.0.
+
+**The token-only elements above are a simplification of this mock, not the
+schema shape.** `tr2:ConfigurationSet` types every member as the *full*
+configuration, so a conformant Media2 device inlines it as Media1 does. One
+consequence is visible from the client: `MediaProfile2::video_source_token`
+reads a `SourceToken` from inside the video source configuration and is
+therefore always `None` here. Tracked in
+`docs/active/mock-schema-conformance-2026-08.md`.
 
 ### 8.4 Per-channel answers
 

@@ -15,15 +15,20 @@ fn require_config_token(body: &str, missing_reason: &str) -> Result<String, Stri
 
 /// One profile in the Media2 shape.
 ///
-/// **Not a prefix swap on `media::render_profile`.** Media1 inlines the whole
-/// configuration (`<tt:VideoSourceConfiguration token="VSC_1"><tt:Name>…
-/// <tt:UseCount>…`); Media2 emits token *references* only, inside a single
-/// `<tr2:Configurations>` wrapper. Two genuinely different shapes over the same
-/// [`ProfileEntry`] — which is why the state is shared and the renderers are not.
+/// **Not a prefix swap on `media::render_profile`.** The two services wrap their
+/// configurations differently — Media1 lists them as siblings of `Name`, Media2
+/// groups them under a single `<tr2:Configurations>` — and the *types* differ
+/// (`VideoEncoder2Configuration`, `AudioEncoder2Configuration`). Two genuinely
+/// different shapes over the same [`ProfileEntry`], which is why the state is
+/// shared and the renderers are not.
 ///
-/// Element names match what `MediaProfile2::vec_from_xml` reads: `VideoSource`,
-/// `VideoEncoder`, `AudioSource`, and `Audio` — note the audio encoder is
-/// `<tr2:Audio>`, not `<tr2:AudioEncoder>`.
+/// **This renderer emits a token attribute and no body, which is a known
+/// simplification, not the schema shape.** `tr2:ConfigurationSet` types each
+/// member as the full configuration, exactly as Media1 does; a conformant Media2
+/// device inlines it. The consequence is visible: `MediaProfile2`'s
+/// `video_source_token` is read from a `SourceToken` *inside* the video source
+/// configuration, so against this mock it is always `None`. Tracked in
+/// `docs/active/mock-schema-conformance-2026-08.md`.
 fn render_profile_media2(p: &ProfileEntry, tag: &str) -> String {
     let mut cfgs = String::new();
     if let Some(t) = &p.video_source_config_token {
@@ -36,7 +41,7 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str) -> String {
         cfgs.push_str(&format!("<tr2:AudioSource token=\"{t}\"/>"));
     }
     if let Some(t) = &p.audio_encoder_config_token {
-        cfgs.push_str(&format!("<tr2:Audio token=\"{t}\"/>"));
+        cfgs.push_str(&format!("<tr2:AudioEncoder token=\"{t}\"/>"));
     }
     // `MediaProfile2::ptz_config_token` reads `Configurations/PTZ@token` and
     // nothing ever fed it: neither profile renderer emitted a PTZ element, and

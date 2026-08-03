@@ -199,6 +199,33 @@ two-thirds of the test suite.
   and said so nowhere. `Profile_1` now carries `ASC_1` + `AEC_1` from state, and
   both services must agree about it.
 
+- **`MediaProfile2::audio_encoder_token` was `None` from every conformant
+  Media2 camera.** `tr2:ConfigurationSet` names its audio encoder member
+  `AudioEncoder`; `MediaProfile2::vec_from_xml` looked for `Audio`, so the
+  lookup never matched anything a real device sends. Reading the profile's
+  audio encoder binding over Media2 has never worked.
+
+  **Sixth instance of the class, and the widest agreement yet.** The mock was
+  written to emit `<tr2:Audio>` *because* the parser read it, with a doc comment
+  saying so — *"note the audio encoder is `<tr2:Audio>`, not
+  `<tr2:AudioEncoder>`"* — the client unit fixture was written to match both,
+  and `CLAUDE.md` step 5b asserted as design that "Media2 emits token
+  references", which made the shape look settled. Parser, fixture, mock and the
+  project's own guidelines all agreed with each other and with no device.
+  `test_get_profiles_media2_parses_audio_ptz_tokens` asserted the field and
+  stayed green throughout, because its fixture used the parser's spelling.
+
+  Found by checking the mock's output against the ONVIF schema set, which is
+  also what settled the design note: `tr2:ConfigurationSet` types every member
+  as the **full** configuration, so a conformant Media2 device inlines it as
+  Media1 does. The mock's token-only rendering is a simplification, now
+  documented as one at the renderer, not the schema shape. One visible
+  consequence is left standing and recorded: `MediaProfile2::video_source_token`
+  reads a `SourceToken` from *inside* the video source configuration, so it is
+  always `None` against the mock — the Imaging hand-off its doc describes cannot
+  be exercised there. Tracked in
+  `docs/active/mock-schema-conformance-2026-08.md`.
+
 - **Media1 `SetAudioEncoderConfiguration` now refuses an incomplete body.**
   `ter:ConfigModify` / `IncompleteAudioEncoder-SETAEC-5715` when `Multicast` or
   `SessionTimeout` is missing — which is the body oxvif itself sent until this

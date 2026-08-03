@@ -203,6 +203,19 @@ async fn test_get_video_encoder_instances_parses_total() {
 
 // ── Round 2 new-field coverage tests ─────────────────────────────────────────
 
+/// The audio encoder member of `tr2:ConfigurationSet` is named `AudioEncoder`.
+///
+/// This fixture said `Audio` until 2026-08-03, because it was written to match
+/// `MediaProfile2::vec_from_xml`, which looked for `Audio`, and the mock was
+/// written to match both — parser, fixture and mock agreeing with each other
+/// and with no conformant device. The consequence was that
+/// `audio_encoder_token` was `None` from **every real Media2 camera** while this
+/// test stayed green. Sixth instance of the class in `CLAUDE.md`.
+///
+/// The element names and prefixes here are the ones a conformant device sends,
+/// not the ones oxvif happens to accept: the parser is namespace-blind
+/// (`XmlNode` strips prefixes), so a fixture that gets the namespace wrong
+/// passes just as well and teaches the next reader the wrong shape.
 #[tokio::test]
 async fn test_get_profiles_media2_parses_audio_ptz_tokens() {
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
@@ -211,14 +224,14 @@ async fn test_get_profiles_media2_parses_audio_ptz_tokens() {
          <s:Body>
            <tr2:GetProfilesResponse>
              <tr2:Profiles token="Profile_1" fixed="false">
-               <tt:Name>main</tt:Name>
-               <tt:Configurations>
-                 <tt:VideoSource token="VideoSrc_1"/>
-                 <tt:VideoEncoder token="VideoEnc_1"/>
-                 <tt:AudioSource token="AudioSrc_1"/>
-                 <tt:Audio token="AudioEnc_1"/>
-                 <tt:PTZ token="PTZConfig_1"/>
-               </tt:Configurations>
+               <tr2:Name>main</tr2:Name>
+               <tr2:Configurations>
+                 <tr2:VideoSource token="VideoSrc_1"/>
+                 <tr2:AudioSource token="AudioSrc_1"/>
+                 <tr2:VideoEncoder token="VideoEnc_1"/>
+                 <tr2:AudioEncoder token="AudioEnc_1"/>
+                 <tr2:PTZ token="PTZConfig_1"/>
+               </tr2:Configurations>
              </tr2:Profiles>
            </tr2:GetProfilesResponse>
          </s:Body>

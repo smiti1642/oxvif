@@ -482,11 +482,25 @@ they catch a class the missing/fault pair cannot:
     Both must be state-driven or both static — a *consistent* stub is fine
     (audio is static on both sides), a divergent one is the bug. Put the state
     operation in `services/media.rs` and let each service render its own
-    envelope: the shapes genuinely differ (Media1 inlines whole configurations,
-    Media2 emits token references), and `tr2:DeleteProfile` names its token
-    element `Token` where `trt:DeleteProfile` says `ProfileToken`, so a shared
-    handler reads the wrong element. `tests/mock_media1_media2_agree.rs` is the
-    standing guard.
+    envelope: the shapes genuinely differ — Media1 lists a profile's
+    configurations as siblings of `Name`, Media2 groups them under one
+    `<tr2:Configurations>`, and the *types* differ
+    (`VideoEncoder2Configuration`, `AudioEncoder2Configuration`) — and
+    `tr2:DeleteProfile` names its token element `Token` where
+    `trt:DeleteProfile` says `ProfileToken`, so a shared handler reads the
+    wrong element. `tests/mock_media1_media2_agree.rs` is the standing guard.
+
+    **This paragraph used to say "Media2 emits token references".** It was
+    wrong, and it was wrong in a way that hid a shipped client defect for two
+    releases: `tr2:ConfigurationSet` types every member as the *full*
+    configuration, so a conformant Media2 device inlines it exactly as Media1
+    does. Believing otherwise made the mock's token-only rendering look like the
+    schema shape rather than the simplification it is, and made the whole
+    element-naming question look settled when it was not — the audio member is
+    `AudioEncoder`, the parser read `Audio`, and the fixture and the mock had
+    both been written to agree with the parser. **Check a shape claim against
+    the WSDL before writing it down here**; a design note in this file is read
+    as settled fact by everything downstream of it.
 
 5c. **Every `Set` needs a row in `tests/mock_roundtrip.rs`.** The table pairs
     each write with the getter that should show it, and each row declares

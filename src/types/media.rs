@@ -212,7 +212,7 @@ impl MediaProfile2 {
                         .and_then(|n| n.attr("token"))
                         .map(str::to_string),
                     audio_encoder_token: p
-                        .path(&["Configurations", "Audio"])
+                        .path(&["Configurations", "AudioEncoder"])
                         .and_then(|n| n.attr("token"))
                         .map(str::to_string),
                     ptz_config_token: p
