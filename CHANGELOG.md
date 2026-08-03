@@ -170,6 +170,30 @@ two-thirds of the test suite.
   token-addressed ones fault on an unknown token, and
   `GetConfigurationOptions` is now per-configuration.
 
+- **The mock's `SetConfiguration` discarded the whole request body.** It was
+  `resp_empty` in the dispatcher: the call reported success and
+  `GetConfiguration` went on answering the fixture, so a get → modify → set →
+  get round trip returned the old values and nothing failed. Every field
+  `PtzConfiguration` can carry is now persisted, and an optional element the
+  request *omits* is cleared rather than preserved — `SetConfiguration` replaces
+  a configuration. A `NodeToken` naming no head is refused rather than stored,
+  because a dangling configuration would fault later, on an operation the caller
+  never touched. `UseCount` and `ForcePersistence` are deliberately not
+  modelled; both are documented where the write happens and in
+  `docs/mock-server.md` §13.3.
+
+  The request is parsed with ONVIF's spelling **only** —
+  `DefaultAbsolutePantTiltPositionSpace`. Accepting both spellings here would
+  have left the round-trip table green if oxvif regressed to writing the
+  corrected one.
+
+- **Media2 `AddConfiguration` still rejected `Type="PTZ"`.** Its fault said
+  there was "no state to write and no getter that could ever show the result" —
+  true when it was written, and false the moment `ProfileEntry` gained a PTZ slot
+  and both profile renderers started emitting it. A fault whose stated reason has
+  quietly become false is worse than no fault. `ConfigKind::Ptz` now binds like
+  the other four kinds and validates its token against `ptz_configs`.
+
 - **The mock's PTZ state was keyed by the wrong thing.** It was the media
   profile token, so `Profile_1` and `Profile_2` — the main and the sub stream of
   *one lens* — were two independent motors: moving one left the other reporting

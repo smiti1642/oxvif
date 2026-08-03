@@ -1,6 +1,8 @@
 # PTZ configurations / nodes / spaces — implementation plan
 
-**Status:** planned, not started. Written 2026-07-31.
+**Status:** done. Written 2026-07-31, all three stages landed 2026-08-03
+(`19250ec`, `1769850`, and the stage-2 commit). §3.5 and §6.4 record what the
+plan did not anticipate; the rest stood.
 **Blocks:** 0.15.0 (decision 2026-07-31 — the release waits for the mock).
 **Closes:** [`mock-audit-2026-07.md`](mock-audit-2026-07.md) §5 Tier 3 (PTZ family)
 and §6 Tier 4 (coordinate spaces and limits) — the last Tier 4 item after
@@ -489,6 +491,23 @@ Media1/Media2 divergence to audit.
 
 Both pins print the two documents that quote the counts; update
 `docs/mock-server.md` §12 and `mock-audit-2026-07.md` §2 in the same commit.
+
+### 6.4 What actually happened
+
+**The token-table deltas above were all consumed by stage 1**, not stage 2 —
+those three handlers stop being string literals in stage 1, so leaving their rows
+out until stage 2 would have meant shipping a commit that knowingly left the
+table incomplete. Stage 2's only table change is `tests/mock_roundtrip.rs`:
+`ptz/configuration` `Static` → `Works`, one new `media2/add-ptz-configuration`
+row, pin `(48, 45)` → `(49, 47)`.
+
+**Stage 1 updated the audit's copy of the token counts and not
+`docs/mock-server.md` §12's**, which still read 28/22 when stage 2 started. The
+pin's failure message names both documents; it fired, and only the count that
+had moved in the *other* table was read. Fixed here.
+
+`docs/mock-server.md` §7.4 also still listed the whole configuration family as a
+declared stub after stage 1 wired six of the seven operations. Fixed here.
 
 ---
 

@@ -777,6 +777,151 @@ pub fn resp_ptz_configuration_options(state: &SharedState, body: &str) -> String
     )
 }
 
+// ── SetConfiguration ─────────────────────────────────────────────────────────
+
+/// The `<tt:Min>` / `<tt:Max>` pair inside an `XRange` or a `YRange`.
+fn min_max(inner: &str) -> Option<(f32, f32)> {
+    let min = extract_tag(inner, "Min")?.parse().ok()?;
+    let max = extract_tag(inner, "Max")?.parse().ok()?;
+    Some((min, max))
+}
+
+/// A `PanTiltLimits` / `ZoomLimits` element, or `None` if the request omitted it.
+///
+/// `kind` is not on the wire: a limit wraps a bare `tt:Range`, and which space it
+/// constrains is implied by which limit it is. It is stored anyway so a
+/// [`SpaceEntry`] read back out of state is still self-describing.
+fn parse_limits(cfg: &str, tag: &str, kind: SpaceKind) -> Option<SpaceEntry> {
+    let range = extract_tag(&extract_tag(cfg, tag)?, "Range")?;
+    Some(SpaceEntry {
+        kind,
+        uri: extract_tag(&range, "URI")?,
+        x_range: min_max(&extract_tag(&range, "XRange")?)?,
+        y_range: extract_tag(&range, "YRange").and_then(|y| min_max(&y)),
+    })
+}
+
+/// The `x` / `y` attributes of a `tt:PanTilt` vector.
+fn pan_tilt_attrs(xml: &str) -> Option<(f32, f32)> {
+    let x = extract_attr(xml, "PanTilt", "x")?.parse().ok()?;
+    let y = extract_attr(xml, "PanTilt", "y")?.parse().ok()?;
+    Some((x, y))
+}
+
+/// `tptz:SetConfiguration` — persist what the client sent.
+///
+/// The body was discarded entirely until now (`resp_empty` in the dispatcher):
+/// the call reported success and `GetConfiguration` went on answering the
+/// fixture, so a get → modify → set → get round trip returned the old values and
+/// nothing failed. That is the audit's §1 LIE cell, and it is the last one in the
+/// PTZ family.
+///
+/// **The request is read with ONVIF's spelling only** —
+/// `DefaultAbsolutePantTiltPositionSpace`, `Pant`, double `t`. A device parses
+/// what its own schema declares, and accepting both spellings here would make
+/// `tests/mock_roundtrip.rs` blind to the client regressing to the corrected one.
+/// Stage 1 closed that hole in the render direction after a perturbation came
+/// back green; this is the same hole in the parse direction.
+///
+/// **Three things are deliberately not written.** `CLAUDE.md` step 5c: a
+/// documented omission is a design decision, an undocumented one is the `MTU`
+/// bug.
+///
+/// - `UseCount` is the device's count of profiles referencing the configuration,
+///   not the caller's to set. The mock does not maintain it for any
+///   configuration family — the video encoder and source counts are fixture
+///   numbers too — so recomputing it here alone would be the odd one out.
+/// - `timeout_min` / `timeout_max` belong to `GetConfigurationOptions`, not to a
+///   configuration. `crate::types::PtzConfiguration` has no such fields, so the
+///   request cannot carry them at all.
+/// - `ForcePersistence` is ignored. Real devices differ too widely on `false`
+///   for a pretend model to beat none — `docs/mock-server.md` §13.3.
+///
+/// Everything else the client can send is written, **including clearing an
+/// optional element the request omits**: `SetConfiguration` replaces the
+/// configuration, so an absent `DefaultPTZSpeed` means "this configuration has
+/// no default speed", not "leave the old one alone".
+pub fn handle_ptz_set_configuration(state: &SharedState, body: &str) -> String {
+    match apply_ptz_configuration(state, body) {
+        Ok(()) => resp_empty("tptz", "SetConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+fn apply_ptz_configuration(state: &SharedState, body: &str) -> Result<(), String> {
+    let Some(token) = extract_attr(body, "PTZConfiguration", "token").filter(|t| !t.is_empty())
+    else {
+        return Err(resp_soap_fault(
+            "env:Sender",
+            "NoConfigToken-SETCFG-5623: SetConfiguration needs a tptz:PTZConfiguration \
+             carrying the token of the configuration it replaces",
+        ));
+    };
+    if !state.read().ptz_configs.iter().any(|c| c.token == token) {
+        return Err(resp_soap_fault(
+            "ter:NoConfig",
+            &format!("NoSuchPTZConfig-SETCFG-5624: {token}"),
+        ));
+    }
+    let cfg = extract_tag(body, "PTZConfiguration").unwrap_or_default();
+
+    // `NodeToken` is the one required child of `PTZConfiguration` in onvif.xsd,
+    // and a configuration that names a head this device does not have is worse
+    // than a rejected write: every later `GetStatus` through a profile bound to
+    // it would resolve to nothing.
+    let Some(node) = extract_tag(&cfg, "NodeToken").filter(|t| !t.is_empty()) else {
+        return Err(resp_soap_fault(
+            "env:Sender",
+            "NoNodeToken-SETCFG-5625: NodeToken is required — a PTZ configuration \
+             that drives no node is not a configuration",
+        ));
+    };
+    if !state.read().ptz_nodes.iter().any(|n| n.token == node) {
+        return Err(resp_soap_fault(
+            "ter:NoEntity",
+            &format!("NoSuchNode-SETCFG-5626: {node}"),
+        ));
+    }
+
+    let name = extract_tag(&cfg, "Name").unwrap_or_default();
+    let timeout = extract_tag(&cfg, "DefaultPTZTimeout");
+    let abs_pt = extract_tag(&cfg, "DefaultAbsolutePantTiltPositionSpace");
+    let abs_z = extract_tag(&cfg, "DefaultAbsoluteZoomPositionSpace");
+    let rel_pt = extract_tag(&cfg, "DefaultRelativePanTiltTranslationSpace");
+    let rel_z = extract_tag(&cfg, "DefaultRelativeZoomTranslationSpace");
+    let cont_pt = extract_tag(&cfg, "DefaultContinuousPanTiltVelocitySpace");
+    let cont_z = extract_tag(&cfg, "DefaultContinuousZoomVelocitySpace");
+    let (speed_pt, speed_z) = match extract_tag(&cfg, "DefaultPTZSpeed") {
+        Some(s) => (
+            pan_tilt_attrs(&s),
+            extract_attr(&s, "Zoom", "x").and_then(|v| v.parse().ok()),
+        ),
+        None => (None, None),
+    };
+    let pt_limits = parse_limits(&cfg, "PanTiltLimits", SpaceKind::AbsolutePanTiltPosition);
+    let z_limits = parse_limits(&cfg, "ZoomLimits", SpaceKind::AbsoluteZoomPosition);
+
+    state.modify(|s| {
+        if let Some(c) = s.ptz_configs.iter_mut().find(|c| c.token == token) {
+            c.name = name.clone();
+            c.node_token = node.clone();
+            c.default_ptz_timeout = timeout.clone();
+            c.abs_pan_tilt_space = abs_pt.clone();
+            c.abs_zoom_space = abs_z.clone();
+            c.rel_pan_tilt_space = rel_pt.clone();
+            c.rel_zoom_space = rel_z.clone();
+            c.cont_pan_tilt_space = cont_pt.clone();
+            c.cont_zoom_space = cont_z.clone();
+            c.default_speed_pan_tilt = speed_pt;
+            c.default_speed_zoom = speed_z;
+            c.pan_tilt_limits = pt_limits.clone();
+            c.zoom_limits = z_limits.clone();
+            eprintln!("    [STATE] PTZ configuration updated: {token} → node {node}");
+        }
+    });
+    Ok(())
+}
+
 // ── GetServiceCapabilities ───────────────────────────────────────────────────
 
 /// `tptz:Capabilities`.

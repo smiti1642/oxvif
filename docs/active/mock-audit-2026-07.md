@@ -23,9 +23,9 @@ actually wrong. Each section says what was done underneath.
 |---|---|
 | **Defects found** | 16 — 8 Tier 1, 2 Tier 2 families, plus item 1.8 which the property test added |
 | **Defects fixed** | all of them |
-| **Standing guards** | `mock_roundtrip.rs` (48 pairs), `mock_token_discrimination.rs` (28 rows), `mock_media1_media2_agree.rs` (10 tests), `dispatch.rs`'s routing test (157 actions) |
+| **Standing guards** | `mock_roundtrip.rs` (49 pairs), `mock_token_discrimination.rs` (31 rows), `mock_media1_media2_agree.rs` (10 tests), `dispatch.rs`'s routing test (157 actions) |
 | **`Expect::Broken` rows** | **0** |
-| **Still open** | Tier 3's four remaining declared stubs (§5) and Tier 4's PTZ coordinate spaces (§6) — both *declared*, both asserted, neither a lie |
+| **Still open** | Tier 3's Audio family (§5) — *declared*, asserted, not a lie. Tier 4 is closed. |
 
 The structural finding in §8 is the part to read before touching `src/mock/`.
 The two property tables are how "deliberately static" is now written down; the
@@ -79,7 +79,8 @@ are the "before" picture the rest of this document reasons about.
   and 2: 42 round-trip, 0 defects, 5 declared stubs** — `Expect::Broken` has
   no rows left. **After the Storage and metadata fixes (§5): 48 pairs, 45
   round-trip, 3 declared stubs; the token table is 28 rows, 22
-  discriminating.**
+  discriminating.** **After the PTZ work: 49 pairs, 47 round-trip, 2 declared
+  stubs; the token table is 31 rows, 25 discriminating.**
 
   *Correction.* This line read "40 round-trip … 5 declared stubs" until the
   Storage work, which does not sum to 47 and was simply wrong; the figure was
@@ -293,7 +294,7 @@ is a family a user might reasonably expect to work.
 | Family | Probe |
 |---|---|
 | Audio (Media1 + Media2): sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration` | `get_audio_sources` — no `DeviceState` field; 1 static |
-| ~~PTZ configurations / nodes / options~~ **fixed** (`SetConfiguration` still discards) | `ptz_get_configurations` — no field; 1 static |
+| ~~PTZ configurations / nodes / options, `SetConfiguration`~~ **fixed** | `ptz_get_configurations` — no field; 1 static |
 | ~~Storage configurations, `SetStorageConfiguration`~~ **fixed** | `get_storage_configurations` — no field; 1 static |
 | ~~Media2 metadata configurations, `SetMetadataConfiguration`~~ **fixed** | dispatch read: static both sides |
 | ~~Media2 `SetVideoSourceMode`~~ **fixed — now faults** | dispatch read: static |

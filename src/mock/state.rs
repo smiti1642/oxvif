@@ -2025,6 +2025,150 @@ mod tests {
         );
     }
 
+    /// A `SetConfiguration` request body, as the client builds it.
+    fn set_config_req(token: &str, node: &str, extra: &str) -> String {
+        format!(
+            r#"<tptz:SetConfiguration>
+                 <tptz:PTZConfiguration token="{token}">
+                   <tt:Name>{token}</tt:Name>
+                   <tt:UseCount>1</tt:UseCount>
+                   <tt:NodeToken>{node}</tt:NodeToken>
+                   {extra}
+                 </tptz:PTZConfiguration>
+                 <tptz:ForcePersistence>true</tptz:ForcePersistence>
+               </tptz:SetConfiguration>"#
+        )
+    }
+
+    /// Writing a `NodeToken` that names no head is refused, and refused
+    /// *before* anything is stored.
+    ///
+    /// A dangling configuration is worse than a rejected write: every later
+    /// `GetStatus` through a profile bound to it resolves to a head that does
+    /// not exist, and the caller sees a fault on an operation they never
+    /// touched.
+    #[test]
+    fn ptz_set_configuration_refuses_a_node_the_device_does_not_have() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        let xml = ptz::handle_ptz_set_configuration(
+            &s,
+            &set_config_req("PTZConfig_1", "PTZNode_nope", ""),
+        );
+        assert!(xml.contains("NoSuchNode-SETCFG-5626"), "got {xml}");
+        assert!(xml.contains("PTZNode_nope"), "got {xml}");
+        assert_eq!(s.read().ptz_configs[0].node_token, "PTZNode_1");
+    }
+
+    #[test]
+    fn ptz_set_configuration_refuses_a_configuration_the_device_does_not_have() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        let xml =
+            ptz::handle_ptz_set_configuration(&s, &set_config_req("PTZConfig_9", "PTZNode_1", ""));
+        assert!(xml.contains("NoSuchPTZConfig-SETCFG-5624"), "got {xml}");
+        assert!(xml.contains("PTZConfig_9"), "got {xml}");
+        assert_eq!(
+            s.read().ptz_configs.len(),
+            2,
+            "no configuration was created"
+        );
+    }
+
+    #[test]
+    fn ptz_set_configuration_without_a_node_token_faults() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        let body = r#"<tptz:SetConfiguration>
+             <tptz:PTZConfiguration token="PTZConfig_1"><tt:Name>x</tt:Name></tptz:PTZConfiguration>
+           </tptz:SetConfiguration>"#;
+        let xml = ptz::handle_ptz_set_configuration(&s, body);
+        assert!(xml.contains("NoNodeToken-SETCFG-5625"), "got {xml}");
+        assert_eq!(s.read().ptz_configs[0].name, "PTZConfig_1");
+    }
+
+    /// The mock parses `Pant` — ONVIF's spelling — and nothing else.
+    ///
+    /// This is the parse-direction half of
+    /// [`ptz_configuration_uses_the_schema_spelling_on_the_wire`]. Accepting
+    /// both spellings here would leave `tests/mock_roundtrip.rs` green if the
+    /// client regressed to writing the corrected one, which is the same
+    /// hollowness a lenient reader created on the client side: the two ends
+    /// would agree with each other and with no conformant device.
+    #[test]
+    fn ptz_set_configuration_reads_only_the_schema_spelling() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        const URI: &str = "http://example.invalid/space/5627";
+
+        let corrected = format!(
+            "<tt:DefaultAbsolutePanTiltPositionSpace>{URI}\
+             </tt:DefaultAbsolutePanTiltPositionSpace>"
+        );
+        ptz::handle_ptz_set_configuration(
+            &s,
+            &set_config_req("PTZConfig_1", "PTZNode_1", &corrected),
+        );
+        assert_eq!(
+            s.read().ptz_configs[0].abs_pan_tilt_space,
+            None,
+            "the corrected spelling is an element onvif.xsd does not declare"
+        );
+
+        let schema = format!(
+            "<tt:DefaultAbsolutePantTiltPositionSpace>{URI}\
+             </tt:DefaultAbsolutePantTiltPositionSpace>"
+        );
+        ptz::handle_ptz_set_configuration(&s, &set_config_req("PTZConfig_1", "PTZNode_1", &schema));
+        assert_eq!(
+            s.read().ptz_configs[0].abs_pan_tilt_space.as_deref(),
+            Some(URI)
+        );
+    }
+
+    /// Binding a PTZ configuration the device does not have is refused, and the
+    /// profile is left unbound rather than pointing at nothing.
+    ///
+    /// The positive direction is `media2/add-ptz-configuration` in
+    /// `tests/mock_roundtrip.rs`; this is the arm that proves `ConfigKind::Ptz`
+    /// validates its token against `ptz_configs` instead of accepting anything,
+    /// which is what the audio kinds do and had to be decided separately.
+    #[test]
+    fn media2_binding_an_unknown_ptz_configuration_faults() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let body = r#"<tr2:AddConfiguration>
+             <tr2:ProfileToken>Profile_4</tr2:ProfileToken>
+             <tr2:Configuration>
+               <tr2:Type>PTZ</tr2:Type>
+               <tr2:Token>PTZConfig_9</tr2:Token>
+             </tr2:Configuration>
+           </tr2:AddConfiguration>"#;
+        let xml = media2::handle_add_configuration_media2(&s, body);
+        assert!(xml.contains("NoSuchConfig-ADDCFG2-5543"), "got {xml}");
+        assert!(xml.contains("PTZConfig_9"), "got {xml}");
+        let s = s.read();
+        let p4 = s
+            .profiles
+            .profiles
+            .iter()
+            .find(|p| p.token == "Profile_4")
+            .expect("Profile_4 exists");
+        assert_eq!(p4.ptz_config_token, None);
+    }
+
+    /// `UseCount` is the device's count of profiles referencing the
+    /// configuration, not a field the caller sets. The request above says `1`;
+    /// `PTZConfig_1` is referenced by `Profile_1` and `Profile_2`, so it stays
+    /// `2`. A documented omission is a design decision — `CLAUDE.md` step 5c.
+    #[test]
+    fn ptz_set_configuration_does_not_take_the_callers_use_count() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        ptz::handle_ptz_set_configuration(&s, &set_config_req("PTZConfig_1", "PTZNode_1", ""));
+        assert_eq!(s.read().ptz_configs[0].use_count, 2);
+    }
+
     /// A profile with no PTZ configuration reaches no head, so PTZ operations
     /// on it fault instead of answering for an empty channel invented on the
     /// spot. `Profile_4` is that profile.

@@ -192,6 +192,7 @@ const PAIRS: &[Pair] = pairs![
     "media2/video-encoder-config"      => Expect::Works, m2_video_encoder_config;
     "media2/video-source-config"       => Expect::Works                     , m2_video_source_config;
     "media2/add-configuration"         => Expect::Works                     , m2_add_configuration;
+    "media2/add-ptz-configuration"     => Expect::Works                     , m2_add_ptz_configuration;
     "media2/remove-configuration"      => Expect::Works                     , m2_remove_configuration;
     "media2/metadata-config"           => Expect::Works, m2_metadata_config;
     "media2/audio-encoder-config"      => Expect::Static("audit §5"), m2_audio_encoder_config;
@@ -203,7 +204,7 @@ const PAIRS: &[Pair] = pairs![
     "ptz/home-position"                => Expect::Works, ptz_home_position;
     "ptz/preset-tour-create"           => Expect::Works, ptz_preset_tour_create;
     "ptz/preset-tour-remove"           => Expect::Works, ptz_preset_tour_remove;
-    "ptz/configuration"                => Expect::Static("audit §5"), ptz_configuration;
+    "ptz/configuration"                => Expect::Works, ptz_configuration;
 
     // ── Imaging ─────────────────────────────────────────────────────────────
     "imaging/settings"                 => Expect::Works, imaging_settings;
@@ -741,6 +742,26 @@ async fn m2_add_configuration(d: &Dev) -> Outcome {
     cmp(Some("VEC_2".to_string()), bound)
 }
 
+/// `AddConfiguration(Type="PTZ")` on the one seeded profile that binds none.
+///
+/// It faulted with `UnmodelledConfigType-CFG2-5542` until the PTZ family was
+/// wired, on the grounds that nothing could ever show the result. `Profile_4`
+/// is the fixture for a profile that is deliberately **not** PTZ-capable, so
+/// binding it here also proves the unbound state was a slot and not an absence.
+async fn m2_add_ptz_configuration(d: &Dev) -> Outcome {
+    let url = d.url("media2");
+    call!(
+        "AddConfiguration",
+        d.client
+            .add_configuration_media2(&url, "Profile_4", "PTZ", "PTZConfig_2")
+    );
+    let bound = call!("GetProfiles", d.client.get_profiles_media2(&url))
+        .into_iter()
+        .find(|p| p.token == "Profile_4")
+        .and_then(|p| p.ptz_config_token);
+    cmp(Some("PTZConfig_2".to_string()), bound)
+}
+
 async fn m2_remove_configuration(d: &Dev) -> Outcome {
     let url = d.url("media2");
     call!(
@@ -934,13 +955,45 @@ async fn ptz_preset_tour_remove(d: &Dev) -> Outcome {
     )
 }
 
+/// Writes **every field `PtzConfiguration` can carry**, each moved away from
+/// what the seed holds, plus one optional cleared to `None` and one assertion on
+/// the configuration that was *not* addressed.
+///
+/// Asserting `name` alone — which is all this did while the row was `Static` —
+/// would pass against a handler that stored the name and dropped the spaces, the
+/// speed and the limits: the `MTU` shape from `CLAUDE.md` step 5c, where a
+/// partial write is worse than no write. The cleared space covers the other
+/// half: `SetConfiguration` *replaces* a configuration, so an element the
+/// request omits must come back absent, not preserved. And `PTZConfig_2`'s
+/// untouched name is what separates "the write landed" from "the write landed on
+/// the configuration I addressed".
 async fn ptz_configuration(d: &Dev) -> Outcome {
     let url = d.url("ptz");
     let mut cfg = call!(
         "GetConfiguration",
         d.client.ptz_get_configuration(&url, "PTZConfig_1")
     );
+    // Seed: PT10S, speed (0.5, 0.5)/0.5, PanTiltLimits ±0.9 × ±0.7,
+    // ZoomLimits 0.0–1.0, all six spaces set.
     cfg.name = "rt-ptzcfg-4456".into();
+    // Re-point the configuration at the other head. `node_token` is the one
+    // required child of `PTZConfiguration`, so leaving it at its seeded value
+    // would let a handler that drops it entirely pass this probe — measured:
+    // deleting the `node_token` write reddened nothing until this line changed.
+    cfg.node_token = "PTZNode_2".into();
+    cfg.default_ptz_timeout = Some("PT7S".into());
+    cfg.default_ptz_speed = Some(oxvif::PtzSpeed {
+        pan_tilt: Some((0.25, 0.75)),
+        zoom: Some(0.9),
+    });
+    cfg.default_rel_zoom_space = None;
+    if let Some(r) = cfg.pan_tilt_limits.as_mut() {
+        r.x_range = (-0.8, 0.8);
+        r.y_range = Some((-0.6, 0.6));
+    }
+    if let Some(r) = cfg.zoom_limits.as_mut() {
+        r.x_range = (0.2, 0.9);
+    }
     call!(
         "SetConfiguration",
         d.client.ptz_set_configuration(&url, &cfg, true)
@@ -949,7 +1002,34 @@ async fn ptz_configuration(d: &Dev) -> Outcome {
         "GetConfiguration",
         d.client.ptz_get_configuration(&url, "PTZConfig_1")
     );
-    cmp("rt-ptzcfg-4456".to_string(), got.name)
+    let other = call!(
+        "GetConfiguration",
+        d.client.ptz_get_configuration(&url, "PTZConfig_2")
+    );
+    cmp(
+        (
+            "rt-ptzcfg-4456".to_string(),
+            "PTZNode_2".to_string(),
+            Some("PT7S".to_string()),
+            Some((0.25_f32, 0.75_f32)),
+            Some(0.9_f32),
+            None,
+            Some(((-0.8_f32, 0.8_f32), Some((-0.6_f32, 0.6_f32)))),
+            Some(((0.2_f32, 0.9_f32), None)),
+            "PTZConfig_2".to_string(),
+        ),
+        (
+            got.name,
+            got.node_token,
+            got.default_ptz_timeout,
+            got.default_ptz_speed.as_ref().and_then(|s| s.pan_tilt),
+            got.default_ptz_speed.as_ref().and_then(|s| s.zoom),
+            got.default_rel_zoom_space,
+            got.pan_tilt_limits.map(|r| (r.x_range, r.y_range)),
+            got.zoom_limits.map(|r| (r.x_range, r.y_range)),
+            other.name,
+        ),
+    )
 }
 
 // ── Imaging check ────────────────────────────────────────────────────────────
@@ -1072,7 +1152,7 @@ async fn every_get_set_pair_matches_its_declared_expectation() {
         .count();
     assert_eq!(
         (PAIRS.len(), declared_works),
-        (48, 45),
+        (49, 47),
         "the pair table's shape changed (rows, declared-Works). If that was \
          deliberate, update this expectation **and** the counts in \
          docs/mock-server.md §12 and docs/active/mock-audit-2026-07.md §2 in the \

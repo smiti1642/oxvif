@@ -362,14 +362,19 @@ pub(crate) fn apply_video_source_write(
 ///
 /// Media1 encodes the kind in the *operation name*
 /// (`AddVideoEncoderConfiguration`); Media2 encodes it in a `<tr2:Type>` element
-/// of one generic `AddConfiguration`. Same four slots either way, so the kind is
+/// of one generic `AddConfiguration`. Same slots either way, so the kind is
 /// resolved at the edge and the state operation below is shared.
+///
+/// `Ptz` is Media2-only: oxvif has no `AddPTZConfiguration`
+/// (`docs/reference/media1.md`), so there is no Media1 arm to keep in step with
+/// it and no divergence for `tests/mock_media1_media2_agree.rs` to audit.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConfigKind {
     VideoSource,
     VideoEncoder,
     AudioSource,
     AudioEncoder,
+    Ptz,
 }
 
 impl ConfigKind {
@@ -381,6 +386,7 @@ impl ConfigKind {
             "VideoEncoder" => Some(Self::VideoEncoder),
             "AudioSource" => Some(Self::AudioSource),
             "AudioEncoder" => Some(Self::AudioEncoder),
+            "PTZ" => Some(Self::Ptz),
             _ => None,
         }
     }
@@ -391,6 +397,7 @@ impl ConfigKind {
             Self::VideoEncoder => &mut p.video_encoder_config_token,
             Self::AudioSource => &mut p.audio_source_config_token,
             Self::AudioEncoder => &mut p.audio_encoder_config_token,
+            Self::Ptz => &mut p.ptz_config_token,
         }
     }
 
@@ -402,6 +409,7 @@ impl ConfigKind {
         match self {
             Self::VideoSource => s.video_source_configs.iter().any(|c| c.token == token),
             Self::VideoEncoder => s.video_encoders.iter().any(|c| c.token == token),
+            Self::Ptz => s.ptz_configs.iter().any(|c| c.token == token),
             Self::AudioSource | Self::AudioEncoder => true,
         }
     }

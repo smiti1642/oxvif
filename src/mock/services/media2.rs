@@ -265,13 +265,20 @@ pub fn handle_set_video_source_configuration_media2(state: &SharedState, body: &
 /// Media1 has four named ones. It writes the *same* profile slots; only the way
 /// the caller names the slot differs.
 ///
-/// A `Type` the mock does not model (`Metadata`, `Analytics`, `PTZ`,
-/// `AudioOutput`, `AudioDecoder`) **faults** rather than reporting success.
-/// `ProfileEntry` has four slots and `MediaProfile2` exposes exactly those four,
-/// so there is no state to write and no getter that could ever show the result —
-/// answering `AddConfigurationResponse` to it would be the audit's LIE cell
-/// (§1), reintroduced by the very commit that removes it. The fault names the
-/// type, so a caller learns *why* instead of being told nothing happened.
+/// A `Type` the mock does not model (`Metadata`, `Analytics`, `AudioOutput`,
+/// `AudioDecoder`) **faults** rather than reporting success. `ProfileEntry` has
+/// no slot for those and `MediaProfile2` exposes none, so there is no state to
+/// write and no getter that could ever show the result — answering
+/// `AddConfigurationResponse` to it would be the audit's LIE cell (§1),
+/// reintroduced by the very commit that removes it. The fault names the type, so
+/// a caller learns *why* instead of being told nothing happened.
+///
+/// **`PTZ` was on that list until the PTZ family was wired.** The moment
+/// `ProfileEntry` grew `ptz_config_token` and both profile renderers started
+/// emitting it, the justification above stopped being true of `PTZ` — there was
+/// now a slot to write and two getters that show it. A fault whose stated reason
+/// has quietly become false is worse than no fault, so `ConfigKind::Ptz` binds
+/// like the other four.
 pub fn handle_add_configuration_media2(state: &SharedState, body: &str) -> String {
     match apply_media2_configuration(state, body, true) {
         Ok(()) => resp_empty("tr2", "AddConfigurationResponse"),

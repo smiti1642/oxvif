@@ -482,7 +482,9 @@ makes two tokens disagree.
 
 **Every per-profile operation requires `ProfileToken`.** A missing token faults
 (`env:Sender` / `NoProfileToken-…`); a token naming no profile faults
-(`ter:NoProfile` / `NoSuchProfile-…`).
+(`ter:NoProfile` / `NoSuchProfile-…`); and a profile that binds no PTZ
+configuration faults (`ter:NoConfig` / `NoPTZConfig-…-5619`), because it
+addresses no head at all — §6.4.
 
 | Operation | | Notes |
 |---|---|---|
@@ -490,7 +492,9 @@ makes two tokens disagree.
 | `AbsoluteMove`, `RelativeMove`, `ContinuousMove`, `Stop` | ● **T** | Moves are instantaneous; there is no motion model. |
 | `GotoHomePosition`, `SetHomePosition` | ● **T** | |
 | `GetPresetTours`, `GetPresetTour`, `GetPresetTourOptions`, `CreatePresetTour`, `ModifyPresetTour`, `OperatePresetTour`, `RemovePresetTour` | ● **T** | |
-| `GetNodes`, `GetNode`, `GetConfigurations`, `GetConfiguration`, `GetConfigurationOptions`, `GetCompatibleConfigurations`, `SetConfiguration` | ○ | Declared stub — §13. |
+| `GetNodes`, `GetConfigurations` | ● | Whole-catalogue reads; no token to discriminate on. |
+| `GetNode`, `GetConfiguration`, `GetConfigurationOptions`, `SetConfiguration` | ● **T** | Addressed by **node** or **configuration** token, not by profile. An unknown token faults. |
+| `GetCompatibleConfigurations` | ● **T** | The profile's bound configuration — or an **empty list**, not a fault, for a profile that is not PTZ-capable. |
 | `SendAuxiliaryCommand`, `GetServiceCapabilities` | ○ | |
 
 ### 7.5 Imaging — 8 operations
@@ -861,8 +865,8 @@ check whether it is pinned or incidental.
 | Every action the client can send is routed (157) | `mock_handles_every_action_the_client_can_send` (`src/mock/dispatch.rs`) |
 | No response repeats an attribute | `no_response_declares_an_attribute_twice` |
 | No response uses an undeclared prefix | `every_response_binds_the_prefixes_it_uses` |
-| Every `Set` either round-trips or is declared static (48 pairs) | `tests/mock_roundtrip.rs` |
-| Every token-taking operation either discriminates or is declared blind (28 rows) | `tests/mock_token_discrimination.rs` |
+| Every `Set` either round-trips or is declared static (49 pairs) | `tests/mock_roundtrip.rs` |
+| Every token-taking operation either discriminates or is declared blind (31 rows) | `tests/mock_token_discrimination.rs` |
 | Media1 and Media2 never disagree about shared state | `tests/mock_media1_media2_agree.rs` |
 | Per-sensor answers really differ | `tests/mock_multi_sensor.rs` |
 | End-to-end flows | `tests/mock_workflow.rs` |
@@ -871,13 +875,18 @@ The two tables are the important ones. Each row **declares its intent** —
 `Works` / `Static(§)` for round-trip, `Discriminates` / `Blind(§)` for tokens —
 and **all arms are asserted**. Wire a declared stub up and the test goes red
 telling you to move the row, so the list cannot rot into a permanent blind
-spot. Current state: 48 round-trip pairs (**45** working, **3** static, 0
-known-broken) and 28 token rows (22 discriminating, 6 blind).
+spot. Current state: 49 round-trip pairs (**47** working, **2** static, 0
+known-broken) and 31 token rows (25 discriminating, 6 blind).
 
-The three static rows are exactly the two families still unwired —
-`media1/audio-encoder-config`, `media2/audio-encoder-config`,
-`ptz/configuration` — so this count is also the list in §13.1, and the two
-cannot drift apart silently.
+The two static rows are exactly the one family still unwired —
+`media1/audio-encoder-config` and `media2/audio-encoder-config` — so this count
+is also the list in §13.1, and the two cannot drift apart silently.
+
+*The token figures read "28 rows, 22 discriminating" until this was written.*
+The PTZ node work took them to 31/25 and updated §6 and the audit but not this
+paragraph. The pin in `tests/mock_token_discrimination.rs` names both documents
+in its failure message for exactly this reason — it fired, and the message was
+read only as far as the count that had changed in the *other* table.
 
 ---
 
@@ -927,6 +936,12 @@ Audit §6.
   device pages and expires searches.
 - **`Bounds/@x` and `@y` are read from the wire and dropped.**
   `VideoSourceConfigEntry` models a size, not an offset.
+- **`SetConfiguration` ignores `ForcePersistence`.** The configuration is always
+  stored as if `true`. Real devices differ too widely on what `false` means —
+  some keep the change until reboot, some until the session ends, some ignore
+  the flag — for a pretend model to be better than none. `UseCount` is likewise
+  left alone: it is the device's count of profiles referencing the
+  configuration, not a field a caller sets.
 - **A freshly created recording has no time bounds**, so `Earliest` / `Latest`
   are omitted rather than faked. The seeded recordings do carry bounds, so the
   distinction is observable.
@@ -952,9 +967,13 @@ Audit §6.
 
 - HTTP Digest authentication (WS-Security `PasswordDigest` only).
 - RTSP. `GetStreamUri` returns a URI; nothing serves media at it.
-- Analytics, `AudioOutput`, `AudioDecoder` and `PTZ` configuration types are
-  rejected by Media2 `AddConfiguration` with `UnmodelledConfigType-CFG2-5542`,
-  because `ProfileEntry` has exactly four configuration slots.
+- `Metadata`, `Analytics`, `AudioOutput` and `AudioDecoder` configuration types
+  are rejected by Media2 `AddConfiguration` with
+  `UnmodelledConfigType-CFG2-5542`, because `ProfileEntry` has no slot for them
+  and `MediaProfile2` exposes none — so a success could never be observed.
+  **`PTZ` was on that list until the PTZ family was wired**; it now binds like
+  the other four, and `docs/active/ptz-wiring-plan-2026-07.md` §6.2 records why
+  leaving it rejected was not an option once the slot existed.
 
 ---
 
