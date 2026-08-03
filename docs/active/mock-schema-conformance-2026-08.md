@@ -192,9 +192,17 @@ Grouped so each lands in one file with one perturbation:
    options extensions (§1.3).
 4. **Required members** — after deduplication, and only the ones that survive
    §2 and §1.1 fallout.
-5. **Strengthen `every_response_binds_the_prefixes_it_uses`** so it asserts an
-   element is in the namespace its type declares, not merely that the prefix is
-   bound. Without this, §5.1 is a one-time cleanup that rots.
+5. ~~**Strengthen `every_response_binds_the_prefixes_it_uses`** so it asserts an
+   element is in the namespace its type declares.~~ **Struck — this cannot be a
+   separate unit.** Asserting that an element is in the namespace its *type*
+   declares requires the schema, so this work unit *is* §6. The existing test
+   keeps its weaker property, which is still worth having because it runs
+   without the schema in every build; the stronger one only exists inside the
+   schema-shape test.
+
+   The consequence is an ordering change, made in §7: **the checker lands before
+   the sweep, not after it.** It is not only the guard — it is the verifier for
+   108 fixes that no other test in this repository can see.
 
 ---
 
@@ -221,11 +229,15 @@ and not a follow-up.
 2. **§2** — fix the checker's `xs:choice` handling, add rollup, and establish
    what the 54 unanchored roots are. Re-run. **Only then is the finding list
    worth acting on**, and only then is a defect count worth quoting.
-3. **§5.5 first, not last** — strengthen the namespace test before fixing the
-   namespaces, so the fixes are landing against something that asserts them.
-4. §5.1 → §5.2 → §5.3 → §5.4, each its own commit, each with the perturbation
-   `CLAUDE.md` requires.
-5. **§6** — land the checker, with the checklist line, in the same pass.
+3. **§6 — land the checker, before any fix.** It is the verifier as well as the
+   guard: the client is namespace-blind and order-independent, so **no existing
+   test in this repository can tell whether any of these 108 fixes worked.**
+   Sweeping first would mean hand-checking every one against a tool that lives
+   in another repository, and calling it done on inspection. Land it with the
+   publishing-checklist line in the same commit.
+4. §5.1 → §5.2 → §5.3 → §5.4, each its own commit, each verified by re-running
+   the checker and each with the perturbation `CLAUDE.md` requires: put the old
+   output back, and the schema-shape test must report it.
 6. `CHANGELOG.md`: these are mock behaviour changes and belong in the entry,
    with §0's blast radius stated so a reader does not conclude the client was
    broken. Per the rule this release's audit produced, that is part of finishing
