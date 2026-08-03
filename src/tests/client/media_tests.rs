@@ -836,6 +836,13 @@ async fn test_get_audio_encoder_configurations_ok() {
     assert_eq!(cfgs[0].sample_rate, 8);
 }
 
+/// The shape a **conformant Media1 device** sends: one `trt:Options` wrapper
+/// (`tt:AudioEncoderConfigurationOptions`) holding a repeated `tt:Options`
+/// (`tt:AudioEncoderConfigurationOption`).
+///
+/// This fixture was flat — `trt:Options` repeated, with `Encoding` as a direct
+/// child — until 0.15, which is Media2's shape, not Media1's. It agreed with
+/// the parser and with nothing else.
 fn get_audio_encoder_configuration_options_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                   xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
@@ -843,14 +850,16 @@ fn get_audio_encoder_configuration_options_xml() -> &'static str {
          <s:Body>
            <trt:GetAudioEncoderConfigurationOptionsResponse>
              <trt:Options>
-               <tt:Encoding>G711</tt:Encoding>
-               <tt:BitrateList><tt:Items>64</tt:Items></tt:BitrateList>
-               <tt:SampleRateList><tt:Items>8</tt:Items></tt:SampleRateList>
-             </trt:Options>
-             <trt:Options>
-               <tt:Encoding>AAC</tt:Encoding>
-               <tt:BitrateList><tt:Items>32 64 128</tt:Items></tt:BitrateList>
-               <tt:SampleRateList><tt:Items>8 16 44</tt:Items></tt:SampleRateList>
+               <tt:Options>
+                 <tt:Encoding>G711</tt:Encoding>
+                 <tt:BitrateList><tt:Items>64</tt:Items></tt:BitrateList>
+                 <tt:SampleRateList><tt:Items>8</tt:Items></tt:SampleRateList>
+               </tt:Options>
+               <tt:Options>
+                 <tt:Encoding>AAC</tt:Encoding>
+                 <tt:BitrateList><tt:Items>32 64 128</tt:Items></tt:BitrateList>
+                 <tt:SampleRateList><tt:Items>8 16 44</tt:Items></tt:SampleRateList>
+               </tt:Options>
              </trt:Options>
            </trt:GetAudioEncoderConfigurationOptionsResponse>
          </s:Body>
@@ -1096,8 +1105,12 @@ async fn test_get_profiles_missing_configs_are_none() {
     assert!(p.ptz_config_token.is_none());
 }
 
-// AudioEncoderConfiguration channels
+// AudioEncoderConfiguration channels — a vendor extension, not an ONVIF member
 
+/// `Channels` is not in `tt:AudioEncoderConfiguration`; a vendor may add it
+/// through the type's trailing `<xs:any>`. It is read when present and `None`
+/// when not — it defaulted to `1` until 0.15, which made "the device said mono"
+/// and "the device said nothing" the same answer.
 #[tokio::test]
 async fn test_get_audio_encoder_configuration_parses_channels() {
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
@@ -1122,8 +1135,17 @@ async fn test_get_audio_encoder_configuration_parses_channels() {
         .get_audio_encoder_configuration("http://192.168.1.1/onvif/media_service", "AudioEnc_1")
         .await
         .unwrap();
-    assert_eq!(cfg.channels, 2);
+    assert_eq!(cfg.channels, Some(2));
     assert_eq!(cfg.encoding.as_str(), "AAC");
+    // The same fixture without the element must not fabricate one.
+    let without = xml.replace("<tt:Channels>2</tt:Channels>", "");
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&without));
+    let cfg = client
+        .get_audio_encoder_configuration("http://192.168.1.1/onvif/media_service", "AudioEnc_1")
+        .await
+        .unwrap();
+    assert_eq!(cfg.channels, None);
 }
 
 // VideoEncoderConfiguration multicast

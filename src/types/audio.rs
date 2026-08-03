@@ -134,8 +134,28 @@ pub struct AudioEncoderConfiguration {
     pub bitrate: u32,
     /// Sample rate in kHz (e.g. 8).
     pub sample_rate: u32,
-    /// Number of audio channels (e.g. 1 for mono, 2 for stereo).
-    pub channels: u32,
+    /// Multicast streaming settings, if the device reported any.
+    ///
+    /// **Required** by `tt:AudioEncoderConfiguration` (Media1) and optional in
+    /// `tt:AudioEncoder2Configuration` (Media2), so a Media1 `Set` that omits
+    /// it is schema-invalid. Read it with the configuration and pass it back.
+    pub multicast: Option<crate::types::MulticastConfiguration>,
+    /// RTSP session timeout as an ISO 8601 duration (e.g. `"PT60S"`).
+    ///
+    /// Required by the Media1 type, absent from the Media2 one.
+    pub session_timeout: Option<String>,
+    /// Channel count, **if the device sent one**.
+    ///
+    /// `Channels` is *not* a member of either ONVIF audio encoder
+    /// configuration type — it belongs to [`AudioSource`]. Both types end in an
+    /// `<xs:any>` wildcard, so a vendor may add it, and it is read back and
+    /// written out at the end of the sequence where the wildcard allows it.
+    ///
+    /// It was `u32` defaulting to `1` until 0.15, which meant every device
+    /// appeared to report mono whether it had said anything or not, and the
+    /// element was emitted mid-sequence where no schema permits it. Use
+    /// [`AudioSource::channels`] for the physical channel count.
+    pub channels: Option<u32>,
 }
 
 impl AudioEncoderConfiguration {
@@ -154,7 +174,11 @@ impl AudioEncoderConfiguration {
                 .unwrap_or_default(),
             bitrate: xml_u32(node, "Bitrate").unwrap_or(0),
             sample_rate: xml_u32(node, "SampleRate").unwrap_or(0),
-            channels: xml_u32(node, "Channels").unwrap_or(1),
+            multicast: node
+                .child("Multicast")
+                .map(crate::types::MulticastConfiguration::from_xml),
+            session_timeout: xml_str(node, "SessionTimeout"),
+            channels: xml_u32(node, "Channels"),
         })
     }
 
@@ -164,9 +188,39 @@ impl AudioEncoderConfiguration {
             .collect()
     }
 
+    /// The `Multicast`, `SessionTimeout` and vendor `Channels` elements, in
+    /// that order — the tail the two services order differently.
+    fn tail(&self) -> (String, String, String) {
+        let multicast = self
+            .multicast
+            .as_ref()
+            .map(crate::types::MulticastConfiguration::to_xml_body)
+            .unwrap_or_default();
+        let session_timeout = self
+            .session_timeout
+            .as_deref()
+            .map(|v| format!("<tt:SessionTimeout>{}</tt:SessionTimeout>", xml_escape(v)))
+            .unwrap_or_default();
+        // Only when the device sent one — see the field doc. Last, because that
+        // is where the type's `<xs:any>` wildcard admits a vendor element.
+        let channels = self
+            .channels
+            .map(|c| format!("<tt:Channels>{c}</tt:Channels>"))
+            .unwrap_or_default();
+        (multicast, session_timeout, channels)
+    }
+
     /// Serialise to a `<trt:Configuration>` XML fragment for
     /// `SetAudioEncoderConfiguration`.
+    ///
+    /// Element order follows the `onvif.xsd` `AudioEncoderConfiguration`
+    /// sequence — `Encoding`, `Bitrate`, `SampleRate`, `Multicast`,
+    /// `SessionTimeout` — as [`VideoEncoderConfiguration`](crate::types::VideoEncoderConfiguration)
+    /// already does for its own. `Multicast` and `SessionTimeout` are
+    /// **required** here; omitting them, as this did until 0.15, makes the
+    /// request invalid against the schema the device validates it with.
     pub(crate) fn to_xml_body(&self) -> String {
+        let (multicast, session_timeout, channels) = self.tail();
         format!(
             "<trt:Configuration token=\"{token}\">\
                <tt:Name>{name}</tt:Name>\
@@ -174,7 +228,7 @@ impl AudioEncoderConfiguration {
                <tt:Encoding>{encoding}</tt:Encoding>\
                <tt:Bitrate>{bitrate}</tt:Bitrate>\
                <tt:SampleRate>{sample_rate}</tt:SampleRate>\
-               <tt:Channels>{channels}</tt:Channels>\
+               {multicast}{session_timeout}{channels}\
              </trt:Configuration>",
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),
@@ -184,26 +238,28 @@ impl AudioEncoderConfiguration {
             encoding = xml_escape(self.encoding.as_str()),
             bitrate = self.bitrate,
             sample_rate = self.sample_rate,
-            channels = self.channels,
         )
     }
 
     /// Serialise to a `<tr2:Configuration>` XML fragment for
     /// `SetAudioEncoderConfiguration` (Media2).
     ///
-    /// Identical to [`to_xml_body`](Self::to_xml_body) apart from the wrapper
-    /// prefix: Media2 operations live in the `tr2:` namespace, so reusing the
-    /// Media1 serialiser would put a `trt:`-prefixed child inside a `tr2:`
-    /// request.
+    /// **Not just a prefix change.** Media2's `tt:AudioEncoder2Configuration`
+    /// puts `Multicast` *before* `Bitrate` and `SampleRate`, and has no
+    /// `SessionTimeout` at all, where Media1's puts it after them. The two
+    /// fragments are identical only when `multicast` is `None`, which is why
+    /// this is a separate function and not a parameterised prefix.
     pub(crate) fn to_xml_body_media2(&self) -> String {
+        let (multicast, _, channels) = self.tail();
         format!(
             "<tr2:Configuration token=\"{token}\">\
                <tt:Name>{name}</tt:Name>\
                <tt:UseCount>{use_count}</tt:UseCount>\
                <tt:Encoding>{encoding}</tt:Encoding>\
+               {multicast}\
                <tt:Bitrate>{bitrate}</tt:Bitrate>\
                <tt:SampleRate>{sample_rate}</tt:SampleRate>\
-               <tt:Channels>{channels}</tt:Channels>\
+               {channels}\
              </tr2:Configuration>",
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),
@@ -211,7 +267,6 @@ impl AudioEncoderConfiguration {
             encoding = xml_escape(self.encoding.as_str()),
             bitrate = self.bitrate,
             sample_rate = self.sample_rate,
-            channels = self.channels,
         )
     }
 }
@@ -241,9 +296,35 @@ pub struct AudioEncoderConfigurationOptions {
 }
 
 impl AudioEncoderConfigurationOptions {
+    /// Parse either service's options response.
+    ///
+    /// **The two services nest differently, and this parser read only Media2's
+    /// shape until 0.15.**
+    ///
+    /// ```text
+    /// Media1  Response/Options              tt:AudioEncoderConfigurationOptions   ← a wrapper
+    ///                 /Options              tt:AudioEncoderConfigurationOption    ← repeated, the real entry
+    /// Media2  Response/Options              tt:AudioEncoder2ConfigurationOptions  ← repeated, IS the entry
+    /// ```
+    ///
+    /// Reading only the outer level gave a Media1 device exactly one entry,
+    /// with the *default* encoding (`G711`) and two empty lists, because
+    /// `Encoding` and the lists are one level further down. Nothing errored —
+    /// `AudioEncoderOptions` derives `Default` — so the caller saw a device
+    /// that plausibly supports G711 at no bitrate.
+    ///
+    /// It survived because the unit fixture and the mock both used the flat
+    /// shape: the fourth instance in this crate of a parser, a fixture and the
+    /// mock agreeing with each other and with no conformant device (see
+    /// `CLAUDE.md`, *Data nested in `Extension` levels*). Descend when the
+    /// child is a wrapper, take it as-is when it is not.
     pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
         let options = resp
             .children_named("Options")
+            .flat_map(|o| {
+                let nested: Vec<&XmlNode> = o.children_named("Options").collect();
+                if nested.is_empty() { vec![o] } else { nested }
+            })
             .map(|opt| {
                 let encoding = xml_str(opt, "Encoding")
                     .map(|s| AudioEncoding::from_str(&s))

@@ -329,6 +329,47 @@ pub struct MulticastConfiguration {
     pub auto_start: bool,
 }
 
+impl MulticastConfiguration {
+    /// Parse a `<tt:Multicast>` element.
+    ///
+    /// `tt:MulticastConfiguration` is one type, shared by the video encoder,
+    /// the audio encoder and both of their Media2 counterparts, so this is
+    /// written once rather than once per host type.
+    pub(crate) fn from_xml(m: &XmlNode) -> Self {
+        Self {
+            address: m
+                .path(&["Address", "IPv4Address"])
+                .map(|n| n.text().to_string())
+                .or_else(|| {
+                    m.path(&["Address", "IPv6Address"])
+                        .map(|n| n.text().to_string())
+                })
+                .unwrap_or_default(),
+            port: xml_u32(m, "Port").unwrap_or(0),
+            ttl: xml_u32(m, "TTL").unwrap_or(0),
+            auto_start: m
+                .child("AutoStart")
+                .is_some_and(|n| n.text() == "true" || n.text() == "1"),
+        }
+    }
+
+    /// Render a `<tt:Multicast>` element.
+    pub(crate) fn to_xml_body(&self) -> String {
+        format!(
+            "<tt:Multicast>\
+               <tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>{}</tt:IPv4Address></tt:Address>\
+               <tt:Port>{}</tt:Port>\
+               <tt:TTL>{}</tt:TTL>\
+               <tt:AutoStart>{}</tt:AutoStart>\
+             </tt:Multicast>",
+            xml_escape(&self.address),
+            self.port,
+            self.ttl,
+            self.auto_start,
+        )
+    }
+}
+
 /// Video codec settings for one stream, returned by `GetVideoEncoderConfiguration(s)`.
 ///
 /// Pass a modified copy to `SetVideoEncoderConfiguration` to change resolution,
@@ -442,21 +483,9 @@ impl VideoEncoderConfiguration {
                 gov_length: xml_u32(n, "GovLength").unwrap_or(0),
                 profile: xml_str(n, "H265Profile").unwrap_or_default(),
             }),
-            multicast: node.child("Multicast").map(|m| MulticastConfiguration {
-                address: m
-                    .path(&["Address", "IPv4Address"])
-                    .map(|n| n.text().to_string())
-                    .or_else(|| {
-                        m.path(&["Address", "IPv6Address"])
-                            .map(|n| n.text().to_string())
-                    })
-                    .unwrap_or_default(),
-                port: xml_u32(m, "Port").unwrap_or(0),
-                ttl: xml_u32(m, "TTL").unwrap_or(0),
-                auto_start: m
-                    .child("AutoStart")
-                    .is_some_and(|n| n.text() == "true" || n.text() == "1"),
-            }),
+            multicast: node
+                .child("Multicast")
+                .map(MulticastConfiguration::from_xml),
             session_timeout: xml_str(node, "SessionTimeout"),
             // GuaranteedFrameRate is an XSD attribute; tolerate the
             // child-element form some devices emit as a fallback.
@@ -516,21 +545,11 @@ impl VideoEncoderConfiguration {
             ),
             None => String::new(),
         };
-        let multicast = match &self.multicast {
-            Some(m) => format!(
-                "<tt:Multicast>\
-                   <tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>{}</tt:IPv4Address></tt:Address>\
-                   <tt:Port>{}</tt:Port>\
-                   <tt:TTL>{}</tt:TTL>\
-                   <tt:AutoStart>{}</tt:AutoStart>\
-                 </tt:Multicast>",
-                xml_escape(&m.address),
-                m.port,
-                m.ttl,
-                m.auto_start,
-            ),
-            None => String::new(),
-        };
+        let multicast = self
+            .multicast
+            .as_ref()
+            .map(MulticastConfiguration::to_xml_body)
+            .unwrap_or_default();
         let session_timeout = match &self.session_timeout {
             Some(v) => format!("<tt:SessionTimeout>{}</tt:SessionTimeout>", xml_escape(v)),
             None => String::new(),

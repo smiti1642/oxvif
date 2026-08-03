@@ -744,7 +744,7 @@ async fn test_get_audio_encoder_configurations_media2_returns_fields() {
     assert_eq!(cfgs[0].encoding.as_str(), "AAC");
     assert_eq!(cfgs[0].bitrate, 128);
     assert_eq!(cfgs[0].sample_rate, 48);
-    assert_eq!(cfgs[0].channels, 2);
+    assert_eq!(cfgs[0].channels, Some(2));
 }
 
 #[tokio::test]
@@ -877,9 +877,9 @@ async fn test_set_metadata_configuration_media2_sends_action_and_exact_body() {
 mod request_body_shapes {
     use super::*;
     use crate::types::{
-        AudioEncoderConfiguration, AudioEncoding, H264Configuration, Resolution, SourceBounds,
-        VideoEncoderConfiguration, VideoEncoderConfiguration2, VideoEncoding, VideoRateControl,
-        VideoRateControl2, VideoSourceConfiguration,
+        AudioEncoderConfiguration, AudioEncoding, H264Configuration, MulticastConfiguration,
+        Resolution, SourceBounds, VideoEncoderConfiguration, VideoEncoderConfiguration2,
+        VideoEncoding, VideoRateControl, VideoRateControl2, VideoSourceConfiguration,
     };
 
     const MEDIA: &str = "http://192.168.1.1/onvif/media_service";
@@ -895,6 +895,9 @@ mod request_body_shapes {
         )
     }
 
+    /// A configuration as a **Media1** device reports it: `Multicast` and
+    /// `SessionTimeout` are required members of `tt:AudioEncoderConfiguration`,
+    /// so a real one always has them, and a `Set` that drops them is invalid.
     fn audio_cfg() -> AudioEncoderConfiguration {
         AudioEncoderConfiguration {
             token: "AEC_1".into(),
@@ -903,11 +906,19 @@ mod request_body_shapes {
             encoding: AudioEncoding::G711,
             bitrate: 64,
             sample_rate: 8,
-            channels: 1,
+            multicast: Some(MulticastConfiguration {
+                address: "239.0.0.7".into(),
+                port: 40004,
+                ttl: 4,
+                auto_start: false,
+            }),
+            session_timeout: Some("PT60S".into()),
+            channels: None,
         }
     }
 
-    /// The serialised audio-encoder fragment Media1 emits — `trt:`-prefixed.
+    /// The serialised audio-encoder fragment Media1 emits — `trt:`-prefixed,
+    /// `Multicast` then `SessionTimeout` after `SampleRate`.
     const AUDIO_CFG_FRAGMENT: &str = concat!(
         r#"<trt:Configuration token="AEC_1">"#,
         "<tt:Name>AudioEncoder</tt:Name>",
@@ -915,20 +926,32 @@ mod request_body_shapes {
         "<tt:Encoding>G711</tt:Encoding>",
         "<tt:Bitrate>64</tt:Bitrate>",
         "<tt:SampleRate>8</tt:SampleRate>",
-        "<tt:Channels>1</tt:Channels>",
+        "<tt:Multicast>",
+        "<tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>239.0.0.7</tt:IPv4Address></tt:Address>",
+        "<tt:Port>40004</tt:Port>",
+        "<tt:TTL>4</tt:TTL>",
+        "<tt:AutoStart>false</tt:AutoStart>",
+        "</tt:Multicast>",
+        "<tt:SessionTimeout>PT60S</tt:SessionTimeout>",
         "</trt:Configuration>",
     );
 
-    /// The same fragment as Media2 must emit it — identical apart from the
-    /// wrapper prefix.
+    /// The Media2 fragment. **Not the same order**, and not just a prefix
+    /// change: `tt:AudioEncoder2Configuration` puts `Multicast` *before*
+    /// `Bitrate` and has no `SessionTimeout` member at all.
     const AUDIO_CFG_FRAGMENT_MEDIA2: &str = concat!(
         r#"<tr2:Configuration token="AEC_1">"#,
         "<tt:Name>AudioEncoder</tt:Name>",
         "<tt:UseCount>1</tt:UseCount>",
         "<tt:Encoding>G711</tt:Encoding>",
+        "<tt:Multicast>",
+        "<tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>239.0.0.7</tt:IPv4Address></tt:Address>",
+        "<tt:Port>40004</tt:Port>",
+        "<tt:TTL>4</tt:TTL>",
+        "<tt:AutoStart>false</tt:AutoStart>",
+        "</tt:Multicast>",
         "<tt:Bitrate>64</tt:Bitrate>",
         "<tt:SampleRate>8</tt:SampleRate>",
-        "<tt:Channels>1</tt:Channels>",
         "</tr2:Configuration>",
     );
 

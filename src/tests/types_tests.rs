@@ -1744,7 +1744,27 @@ mod encoding_serialisation {
             encoding,
             bitrate: 64,
             sample_rate: 8,
-            channels: 1,
+            multicast: None,
+            session_timeout: None,
+            channels: None,
+        }
+    }
+
+    /// The same configuration with the members a **Media1** device is obliged
+    /// to send. `Multicast` and `SessionTimeout` are required by
+    /// `tt:AudioEncoderConfiguration`, and the two services sequence them
+    /// differently, so the minimal fixture above cannot show either fact.
+    fn audio_cfg_full() -> AudioEncoderConfiguration {
+        AudioEncoderConfiguration {
+            multicast: Some(MulticastConfiguration {
+                address: "239.0.0.7".into(),
+                port: 40004,
+                ttl: 4,
+                auto_start: false,
+            }),
+            session_timeout: Some("PT60S".into()),
+            channels: Some(2),
+            ..audio_cfg(AudioEncoding::Aac)
         }
     }
 
@@ -1806,7 +1826,6 @@ mod encoding_serialisation {
                 "<tt:Encoding>G711</tt:Encoding>",
                 "<tt:Bitrate>64</tt:Bitrate>",
                 "<tt:SampleRate>8</tt:SampleRate>",
-                "<tt:Channels>1</tt:Channels>",
                 "</trt:Configuration>",
             )
         );
@@ -1846,7 +1865,6 @@ mod encoding_serialisation {
                 "<tt:Encoding>G711</tt:Encoding>",
                 "<tt:Bitrate>64</tt:Bitrate>",
                 "<tt:SampleRate>8</tt:SampleRate>",
-                "<tt:Channels>1</tt:Channels>",
                 "</tr2:Configuration>",
             )
         );
@@ -1856,7 +1874,8 @@ mod encoding_serialisation {
         );
     }
 
-    /// The two audio serialisers must differ *only* in the wrapper prefix.
+    /// With no optional member set, the two audio serialisers differ *only* in
+    /// the wrapper prefix.
     #[test]
     fn audio_media1_and_media2_differ_only_in_the_wrapper_prefix() {
         let cfg = audio_cfg(AudioEncoding::G726);
@@ -1864,6 +1883,66 @@ mod encoding_serialisation {
             cfg.to_xml_body().replace("trt:Configuration", "NS"),
             cfg.to_xml_body_media2().replace("tr2:Configuration", "NS"),
         );
+    }
+
+    /// …and with them set they differ in **more** than the prefix, because the
+    /// two schema types are not the same type.
+    ///
+    /// `tt:AudioEncoderConfiguration` (Media1) sequences
+    /// `Encoding, Bitrate, SampleRate, Multicast, SessionTimeout`;
+    /// `tt:AudioEncoder2Configuration` (Media2) sequences
+    /// `Encoding, Multicast, Bitrate, SampleRate` and has **no**
+    /// `SessionTimeout` member at all. The test above asserted "identical apart
+    /// from the prefix" and passed only because the fixture set neither.
+    #[test]
+    fn audio_media1_and_media2_sequence_multicast_differently() {
+        let cfg = audio_cfg_full();
+        let m1 = cfg.to_xml_body();
+        let m2 = cfg.to_xml_body_media2();
+
+        // Media1: Multicast after SampleRate. Media2: before Bitrate.
+        let pos = |b: &str, tag: &str| b.find(tag).unwrap_or_else(|| panic!("{tag} in {b}"));
+        assert!(
+            pos(&m1, "<tt:Multicast>") > pos(&m1, "<tt:SampleRate>"),
+            "{m1}"
+        );
+        assert!(
+            pos(&m2, "<tt:Multicast>") < pos(&m2, "<tt:Bitrate>"),
+            "{m2}"
+        );
+
+        assert!(
+            m1.contains("<tt:SessionTimeout>PT60S</tt:SessionTimeout>"),
+            "{m1}"
+        );
+        assert!(
+            !m2.contains("SessionTimeout"),
+            "AudioEncoder2Configuration has no SessionTimeout member: {m2}"
+        );
+
+        // The vendor `Channels` extension goes last on both, where the type's
+        // trailing `<xs:any>` admits it — never mid-sequence, which is where it
+        // was emitted until 0.15.
+        assert!(
+            m1.ends_with("<tt:Channels>2</tt:Channels></trt:Configuration>"),
+            "{m1}"
+        );
+        assert!(
+            m2.ends_with("<tt:Channels>2</tt:Channels></tr2:Configuration>"),
+            "{m2}"
+        );
+
+        assert_ne!(
+            m1.replace("trt:Configuration", "NS"),
+            m2.replace("tr2:Configuration", "NS"),
+        );
+    }
+
+    /// A configuration the device sent no `Channels` for emits none.
+    #[test]
+    fn audio_channels_absent_emits_no_element() {
+        let body = audio_cfg(AudioEncoding::G711).to_xml_body();
+        assert!(!body.contains("Channels"), "body was: {body}");
     }
 
     // ── D4: `xml_escape` must not be bypassed via `Display` ───────────────
@@ -1945,7 +2024,6 @@ mod encoding_serialisation {
                     "<tt:Encoding>{}</tt:Encoding>",
                     "<tt:Bitrate>64</tt:Bitrate>",
                     "<tt:SampleRate>8</tt:SampleRate>",
-                    "<tt:Channels>1</tt:Channels>",
                     "</trt:Configuration>",
                 ),
                 HOSTILE_ENCODING_ESCAPED
@@ -1968,7 +2046,6 @@ mod encoding_serialisation {
                     "<tt:Encoding>{}</tt:Encoding>",
                     "<tt:Bitrate>64</tt:Bitrate>",
                     "<tt:SampleRate>8</tt:SampleRate>",
-                    "<tt:Channels>1</tt:Channels>",
                     "</tr2:Configuration>",
                 ),
                 HOSTILE_ENCODING_ESCAPED

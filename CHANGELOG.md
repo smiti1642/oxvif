@@ -154,6 +154,50 @@ two-thirds of the test suite.
   configuration with every field set, which is the assertion that would have
   caught both this and the limits below.
 
+- **`get_audio_encoder_configuration_options` returned one empty entry from
+  every Media1 device.** The two services nest the response differently and the
+  parser only knew Media2's shape:
+
+  ```text
+  Media1  Response/Options   tt:AudioEncoderConfigurationOptions   ← a wrapper
+                  /Options   tt:AudioEncoderConfigurationOption    ← repeated, the entry
+  Media2  Response/Options   tt:AudioEncoder2ConfigurationOptions  ← repeated, IS the entry
+  ```
+
+  Reading only the outer level found the wrapper, whose `Encoding` and lists
+  are one level further down, so a Media1 caller got exactly one
+  `AudioEncoderOptions` with the *default* encoding `G711` and two empty
+  lists — and no error, because the type derives `Default`. The parser now
+  descends when the child is a wrapper and takes it as-is when it is not, so
+  both services parse correctly.
+
+  It survived because the unit fixture and the mock both used the flat shape:
+  the fourth instance in this crate of a parser, its fixture and the mock
+  agreeing with each other and with no conformant device.
+
+- **`set_audio_encoder_configuration` sent an element no schema declares and
+  omitted two that are required.** `tt:AudioEncoderConfiguration` sequences
+  `Encoding, Bitrate, SampleRate, Multicast, SessionTimeout`; oxvif sent
+  `Encoding, Bitrate, SampleRate, Channels`. `Channels` is not a member of
+  either audio encoder type — it belongs to `tt:AudioSource` — and `Multicast`
+  and `SessionTimeout` are **required**, so the request could not validate and a
+  strict device would reject it outright. `MulticastConfiguration` and
+  `SessionTimeout` are now modelled and round-tripped, exactly as
+  `VideoEncoderConfiguration` has always done for the same two members.
+
+  Media2's `tt:AudioEncoder2Configuration` is a *different type*, not a
+  namespace variant: `Multicast` comes before `Bitrate` and there is no
+  `SessionTimeout` at all. A test asserted the two serialisers "differ only in
+  the wrapper prefix" and passed only because its fixture set neither member.
+
+- **`AudioEncoderConfiguration::channels` reported mono for every device.** It
+  parsed `Channels` with `.unwrap_or(1)` from an element the type does not
+  have, so "the device said mono" and "the device said nothing" were the same
+  answer. It is now `Option<u32>`, read when a vendor supplies it through the
+  type's trailing `<xs:any>` and written back at the end of the sequence where
+  that wildcard admits it — never mid-sequence, where it invalidated the
+  request. Use `AudioSource::channels` for the physical channel count.
+
 - **The mock's PTZ nodes, configurations and coordinate spaces were six string
   literals.** `GetNodes`, `GetNode`, `GetConfigurations`, `GetConfiguration`,
   `GetCompatibleConfigurations` and `GetConfigurationOptions` were fixtures
@@ -636,6 +680,20 @@ two-thirds of the test suite.
   at the new location.
 
 ### Breaking
+
+- **`AudioEncoderConfiguration` gained two fields and changed a third.**
+  `multicast: Option<MulticastConfiguration>` and
+  `session_timeout: Option<String>` are new; `channels` is now `Option<u32>`
+  instead of `u32`. See Fixed for why each. Struct-literal construction and any
+  `cfg.channels` comparison need updating; `..Default::default()` is not
+  available on this type, so the two new fields must be named.
+
+- **`set_audio_encoder_configuration` sends a different request body**, on both
+  services: `Multicast` and `SessionTimeout` are now emitted (Media1), the
+  `Channels` element is no longer invented, and Media2 orders `Multicast`
+  before `Bitrate` where Media1 orders it after `SampleRate`. **This is a change
+  against real cameras, not only the mock** — and the previous body could not
+  validate against the Media1 schema at all.
 
 - **`ptz_set_configuration` now sends the ONVIF spelling
   `DefaultAbsolutePantTiltPositionSpace`,** and sends `PanTiltLimits` /
