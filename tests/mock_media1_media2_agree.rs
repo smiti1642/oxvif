@@ -39,6 +39,10 @@ fn state_with_profiles(n: usize) -> DeviceState {
             video_encoder_config_token: Some("VEC_1".into()),
             audio_source_config_token: None,
             audio_encoder_config_token: None,
+            // Every seeded profile shares one PTZ configuration, so the two
+            // services have something PTZ-shaped to disagree about if either
+            // renderer stops reading `ProfileEntry`.
+            ptz_config_token: Some("PTZConfig_1".into()),
         })
         .collect();
     state
@@ -104,6 +108,65 @@ async fn both_services_agree_on_the_default_device_too() {
     assert_eq!(
         m2, m1,
         "default device disagrees between services.\n  Media1: {m1:?}\n  Media2: {m2:?}",
+    );
+}
+
+/// **The PTZ binding must agree too, and the default device must show both
+/// answers.**
+///
+/// Media1 inlines the whole `<tt:PTZConfiguration>` inside the profile; Media2
+/// emits `<tr2:PTZ token="…"/>` inside `<tr2:Configurations>`. Two genuinely
+/// different shapes over one `ProfileEntry.ptz_config_token` — the same
+/// arrangement that let the profile *list* drift, which is what this file
+/// exists for.
+///
+/// Neither renderer emitted a PTZ element at all before this change:
+/// `MediaProfile::ptz_config_token` and `MediaProfile2::ptz_config_token` were
+/// both parsed and both permanently `None`, so the whole profile → PTZ binding
+/// was unobservable from outside.
+#[tokio::test]
+async fn both_services_agree_on_each_profile_ptz_configuration() {
+    let server = MockServer::start().await.unwrap();
+    let client = OnvifClient::new(server.device_url());
+    let media_url = format!("{}/onvif/media", server.base_url());
+    let media2_url = format!("{}/onvif/media2", server.base_url());
+
+    let m1: Vec<(String, Option<String>)> = client
+        .get_profiles(&media_url)
+        .await
+        .expect("Media1 GetProfiles")
+        .into_iter()
+        .map(|p| (p.token, p.ptz_config_token))
+        .collect();
+    let m2: Vec<(String, Option<String>)> = client
+        .get_profiles_media2(&media2_url)
+        .await
+        .expect("Media2 GetProfiles")
+        .into_iter()
+        .map(|p| (p.token, p.ptz_config_token))
+        .collect();
+
+    assert_eq!(
+        m2, m1,
+        "the two services disagree about which PTZ configuration each profile \
+         is bound to.\n  Media1: {m1:?}\n  Media2: {m2:?}",
+    );
+    // Equality is worthless if every entry is `None` — two renderers that both
+    // emit nothing agree perfectly. The default device must show both answers.
+    assert!(
+        m1.iter().any(|(_, c)| c.is_some()),
+        "no profile is bound to a PTZ configuration: {m1:?}"
+    );
+    assert!(
+        m1.iter().any(|(_, c)| c.is_none()),
+        "every profile is PTZ-bound, so an unbound profile is untested: {m1:?}"
+    );
+    // …and not every bound profile may name the same configuration, or a
+    // renderer emitting a constant token passes.
+    let bound: BTreeSet<String> = m1.iter().filter_map(|(_, c)| c.clone()).collect();
+    assert!(
+        bound.len() >= 2,
+        "all bound profiles name one configuration, so a constant would pass: {bound:?}"
     );
 }
 

@@ -38,6 +38,12 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str) -> String {
     if let Some(t) = &p.audio_encoder_config_token {
         cfgs.push_str(&format!("<tr2:Audio token=\"{t}\"/>"));
     }
+    // `MediaProfile2::ptz_config_token` reads `Configurations/PTZ@token` and
+    // nothing ever fed it: neither profile renderer emitted a PTZ element, and
+    // `ProfileEntry` had no slot to emit from.
+    if let Some(t) = &p.ptz_config_token {
+        cfgs.push_str(&format!("<tr2:PTZ token=\"{t}\"/>"));
+    }
     // A profile with nothing bound omits the wrapper rather than sending an
     // empty one — a freshly created profile is exactly that case.
     let configurations = if cfgs.is_empty() {

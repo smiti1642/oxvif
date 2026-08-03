@@ -34,6 +34,10 @@ pub struct DeviceState {
     pub imaging_sources: Vec<ImagingState>,
     #[serde(default = "default_ptz")]
     pub ptz: PtzState,
+    #[serde(default = "default_ptz_nodes")]
+    pub ptz_nodes: Vec<PtzNodeEntry>,
+    #[serde(default = "default_ptz_configs")]
+    pub ptz_configs: Vec<PtzConfigEntry>,
     #[serde(default = "default_interface")]
     pub interface: NetworkInterfaceState,
     #[serde(default = "default_protocols")]
@@ -312,7 +316,14 @@ impl Default for PtzChannel {
     }
 }
 
-/// The device's PTZ heads, keyed by media profile token.
+/// The device's PTZ heads, keyed by **PTZ node token**.
+///
+/// It was keyed by *profile* token until this change, which made the main and
+/// the sub stream of one lens two independent heads: moving `Profile_1` left
+/// `Profile_2` where it was, though both address the same physical motor. No
+/// camera behaves that way. A profile now reaches a head through its PTZ
+/// configuration — see [`PtzConfigEntry`] — and the two streams of one lens
+/// share one [`PtzChannel`].
 ///
 /// `BTreeMap` rather than `HashMap` so a serialised snapshot is stable.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -322,18 +333,157 @@ pub struct PtzState {
 }
 
 impl PtzState {
-    /// The channel for `profile`, or `None` if the profile has never been
-    /// touched and was not seeded. Read paths render an empty head rather than
-    /// faulting — a profile with no presets is a legitimate device state.
-    pub fn channel(&self, profile: &str) -> Option<&PtzChannel> {
-        self.channels.get(profile)
+    /// The channel for PTZ node `node`, or `None` if it has never been touched
+    /// and was not seeded. Read paths render an empty head rather than
+    /// faulting — a head with no presets is a legitimate device state.
+    pub fn channel(&self, node: &str) -> Option<&PtzChannel> {
+        self.channels.get(node)
     }
 
-    /// The channel for `profile`, created empty if absent. Write paths use this
-    /// so a seeded state that lists profiles but no PTZ channels still works.
-    pub fn channel_mut(&mut self, profile: &str) -> &mut PtzChannel {
-        self.channels.entry(profile.to_string()).or_default()
+    /// The channel for PTZ node `node`, created empty if absent. Write paths
+    /// use this so a seeded state that lists nodes but no PTZ channels still
+    /// works.
+    pub fn channel_mut(&mut self, node: &str) -> &mut PtzChannel {
+        self.channels.entry(node.to_string()).or_default()
     }
+}
+
+// ── PTZ nodes, configurations and coordinate spaces ───────────────────────────
+//
+// A PTZ *node* is the physical head; a PTZ *configuration* is a profile-facing
+// view of one. A media profile reaches a head only through a configuration:
+//
+//     ProfileToken → ProfileEntry.ptz_config_token → PtzConfigEntry.node_token
+//
+// Until this change the mock modelled neither. `GetNodes`, `GetNode`,
+// `GetConfigurations`, `GetConfiguration`, `GetCompatibleConfigurations` and
+// `GetConfigurationOptions` were string literals whose handlers did not receive
+// the request body at all, so all four profiles were told about one node and
+// one configuration, `SupportedPTZSpaces` was sent as an empty element, and
+// `PtzNode::pan_tilt_spaces` / `zoom_spaces` were `Vec::new()` forever.
+// `docs/active/ptz-wiring-plan-2026-07.md` §2.1 and §2.2.
+
+/// Which of the eight `tt:PTZSpaces` slots a [`SpaceEntry`] fills.
+///
+/// Variant order is the schema's sequence order and [`SpaceKind::ALL`] renders
+/// in it. **Only three slots are two-dimensional** — `PanTiltSpeedSpace` is a
+/// `tt:Space1DDescription` despite being a pan/tilt slot, because a combined
+/// pan/tilt *speed* is one non-negative scalar with no direction in it
+/// (`onvif.xsd`, `tt:PTZSpaces`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SpaceKind {
+    AbsolutePanTiltPosition,
+    AbsoluteZoomPosition,
+    RelativePanTiltTranslation,
+    RelativeZoomTranslation,
+    ContinuousPanTiltVelocity,
+    ContinuousZoomVelocity,
+    PanTiltSpeed,
+    ZoomSpeed,
+}
+
+impl SpaceKind {
+    /// Every slot, in `tt:PTZSpaces` sequence order.
+    pub const ALL: [SpaceKind; 8] = [
+        SpaceKind::AbsolutePanTiltPosition,
+        SpaceKind::AbsoluteZoomPosition,
+        SpaceKind::RelativePanTiltTranslation,
+        SpaceKind::RelativeZoomTranslation,
+        SpaceKind::ContinuousPanTiltVelocity,
+        SpaceKind::ContinuousZoomVelocity,
+        SpaceKind::PanTiltSpeed,
+        SpaceKind::ZoomSpeed,
+    ];
+
+    /// The `tt:` element name this slot renders as.
+    pub fn element(self) -> &'static str {
+        match self {
+            SpaceKind::AbsolutePanTiltPosition => "AbsolutePanTiltPositionSpace",
+            SpaceKind::AbsoluteZoomPosition => "AbsoluteZoomPositionSpace",
+            SpaceKind::RelativePanTiltTranslation => "RelativePanTiltTranslationSpace",
+            SpaceKind::RelativeZoomTranslation => "RelativeZoomTranslationSpace",
+            SpaceKind::ContinuousPanTiltVelocity => "ContinuousPanTiltVelocitySpace",
+            SpaceKind::ContinuousZoomVelocity => "ContinuousZoomVelocitySpace",
+            SpaceKind::PanTiltSpeed => "PanTiltSpeedSpace",
+            SpaceKind::ZoomSpeed => "ZoomSpeedSpace",
+        }
+    }
+}
+
+/// One entry in a node's `SupportedPTZSpaces`.
+///
+/// Renders as `tt:Space2DDescription` when `y_range` is set and
+/// `tt:Space1DDescription` when it is not — the schema picks per slot, so the
+/// two must agree (see [`SpaceKind`]).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpaceEntry {
+    pub kind: SpaceKind,
+    pub uri: String,
+    pub x_range: (f32, f32),
+    pub y_range: Option<(f32, f32)>,
+}
+
+/// One physical PTZ head (`tptz:GetNodes` / `GetNode`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtzNodeEntry {
+    pub token: String,
+    pub name: String,
+    pub fixed_home_position: bool,
+    pub home_supported: bool,
+    pub max_presets: u32,
+    #[serde(default)]
+    pub aux_commands: Vec<String>,
+    /// The four pan/tilt slots. **Empty means a zoom-only head** — that is what
+    /// makes a pan/tilt move on `PTZNode_2` refusable.
+    #[serde(default)]
+    pub pan_tilt_spaces: Vec<SpaceEntry>,
+    #[serde(default)]
+    pub zoom_spaces: Vec<SpaceEntry>,
+}
+
+impl PtzNodeEntry {
+    /// Does this head declare the given space slot?
+    ///
+    /// Asked before a move: a head with no `AbsolutePanTiltPositionSpace`
+    /// cannot honour an `AbsoluteMove` that carries a `PanTilt` vector, and
+    /// answering `Ok` would be the mock telling a caller their code works on
+    /// hardware where it does not.
+    pub fn supports(&self, kind: SpaceKind) -> bool {
+        self.pan_tilt_spaces
+            .iter()
+            .chain(self.zoom_spaces.iter())
+            .any(|s| s.kind == kind)
+    }
+}
+
+/// One PTZ configuration (`tptz:GetConfigurations` / `GetConfiguration`).
+///
+/// The field set is what `crate::types::PtzConfiguration` parses, plus the
+/// `PTZTimeout` bounds `GetConfigurationOptions` answers with — those are
+/// per-configuration on a real device and were one static pair here.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PtzConfigEntry {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    /// The [`PtzNodeEntry`] this configuration drives.
+    pub node_token: String,
+    pub default_ptz_timeout: Option<String>,
+    /// `DefaultAbsolutePantTiltPositionSpace` — ONVIF's spelling, `Pant`.
+    pub abs_pan_tilt_space: Option<String>,
+    pub abs_zoom_space: Option<String>,
+    pub rel_pan_tilt_space: Option<String>,
+    pub rel_zoom_space: Option<String>,
+    pub cont_pan_tilt_space: Option<String>,
+    pub cont_zoom_space: Option<String>,
+    pub default_speed_pan_tilt: Option<(f32, f32)>,
+    pub default_speed_zoom: Option<f32>,
+    pub pan_tilt_limits: Option<SpaceEntry>,
+    pub zoom_limits: Option<SpaceEntry>,
+    /// `GetConfigurationOptions` → `PTZTimeout/Min`.
+    pub timeout_min: String,
+    /// `GetConfigurationOptions` → `PTZTimeout/Max`.
+    pub timeout_max: String,
 }
 
 /// Imaging state for **one** video source.
@@ -556,6 +706,11 @@ pub struct ProfileEntry {
     pub audio_source_config_token: Option<String>,
     #[serde(default)]
     pub audio_encoder_config_token: Option<String>,
+    /// The PTZ configuration bound to this profile, and through it the head
+    /// every PTZ operation on this profile addresses. `None` means the profile
+    /// is not PTZ-capable — a legitimate state, and the one `Profile_4` is in.
+    #[serde(default)]
+    pub ptz_config_token: Option<String>,
 }
 
 // ── Video source / encoder state ──────────────────────────────────────────────
@@ -730,7 +885,7 @@ fn preset(token: &str, name: &str, pan: f32, tilt: f32, zoom: f32) -> PtzPreset 
     }
 }
 
-/// **The four heads deliberately disagree.**
+/// **The two heads deliberately disagree.**
 ///
 /// `CLAUDE.md` — "a single-sensor fixture cannot cover a per-channel feature":
 /// a fixture whose channels give the same answer is passed just as well by a
@@ -738,16 +893,25 @@ fn preset(token: &str, name: &str, pan: f32, tilt: f32, zoom: f32) -> PtzPreset 
 /// *preset count*, in *preset names*, and in *whether tours exist at all* —
 /// every one of those is something an assertion can read.
 ///
-/// Measured before this existed: `ptz_get_status(Profile_1 vs Profile_3)` gave
-/// `pan Some(0.77)` both times, and `ptz_get_presets` gave `2 vs 2`.
+/// Measured before per-head state existed: `ptz_get_status(Profile_1 vs
+/// Profile_3)` gave `pan Some(0.77)` both times, and `ptz_get_presets` gave
+/// `2 vs 2`.
 ///
-/// `Profile_4` is left completely empty on purpose. An empty preset list is a
-/// legitimate device state and the only fixture that can catch a renderer which
-/// substitutes a default when it finds nothing.
+/// **Keyed by node, not by profile.** There were four channels here, one per
+/// profile, which made the main and the sub stream of one lens two independent
+/// heads — `Profile_1` and `Profile_2` are the same motor. Their channels are
+/// now one, and `Profile_4`'s has gone: an unbound profile does not reach a
+/// head at all, and asking it for presets faults rather than answering for a
+/// head it does not have.
+///
+/// `PTZNode_2` is zoom-only, so its presets carry **zero pan and tilt** — a
+/// head with no pan/tilt space cannot hold a pan/tilt preset. Their zoom values
+/// (`0.80`, `0.10`, `1.0`) still differ from each other and from `PTZNode_1`'s,
+/// so nothing that reads a position loses its ability to fail.
 fn default_ptz_channels() -> BTreeMap<String, PtzChannel> {
     BTreeMap::from([
         (
-            "Profile_1".to_string(),
+            "PTZNode_1".to_string(),
             PtzChannel {
                 presets: vec![
                     preset("Preset_1", "Home", 0.0, 0.0, 0.0),
@@ -758,31 +922,192 @@ fn default_ptz_channels() -> BTreeMap<String, PtzChannel> {
             },
         ),
         (
-            "Profile_2".to_string(),
+            "PTZNode_2".to_string(),
             PtzChannel {
-                pan: 0.25,
-                tilt: -0.10,
-                zoom: 0.40,
-                presets: vec![preset("Preset_1", "Gate", 0.25, -0.10, 0.40)],
-                ..PtzChannel::default()
-            },
-        ),
-        (
-            "Profile_3".to_string(),
-            PtzChannel {
-                pan: -0.60,
-                tilt: 0.35,
+                pan: 0.0,
+                tilt: 0.0,
                 zoom: 0.80,
                 presets: vec![
-                    preset("Preset_1", "Lobby", -0.60, 0.35, 0.80),
-                    preset("Preset_2", "Dock", -0.20, 0.05, 0.10),
-                    preset("Preset_3", "Roof", 0.90, -0.45, 1.0),
+                    preset("Preset_1", "Lobby", 0.0, 0.0, 0.80),
+                    preset("Preset_2", "Dock", 0.0, 0.0, 0.10),
+                    preset("Preset_3", "Roof", 0.0, 0.0, 1.0),
                 ],
                 ..PtzChannel::default()
             },
         ),
-        ("Profile_4".to_string(), PtzChannel::default()),
     ])
+}
+
+// The eight ONVIF *generic* coordinate spaces, transcribed from the ONVIF PTZ
+// Service Specification (fetched 2026-08-03) together with the ranges it gives
+// for each. The element names and the 1D/2D split come from `onvif.xsd`
+// (`tt:PTZSpaces`), which is the normative source and disagrees with the
+// specification's own examples: the PDF writes `<tt:SpaceURI>` where the schema
+// says `URI`. oxvif's parser follows the schema, so the mock does too.
+const SP_ABS_PT: &str = "http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace";
+const SP_ABS_Z: &str = "http://www.onvif.org/ver10/tptz/ZoomSpaces/PositionGenericSpace";
+const SP_REL_PT: &str = "http://www.onvif.org/ver10/tptz/PanTiltSpaces/TranslationGenericSpace";
+const SP_REL_Z: &str = "http://www.onvif.org/ver10/tptz/ZoomSpaces/TranslationGenericSpace";
+const SP_CONT_PT: &str = "http://www.onvif.org/ver10/tptz/PanTiltSpaces/VelocityGenericSpace";
+const SP_CONT_Z: &str = "http://www.onvif.org/ver10/tptz/ZoomSpaces/VelocityGenericSpace";
+const SP_SPEED_PT: &str = "http://www.onvif.org/ver10/tptz/PanTiltSpaces/GenericSpeedSpace";
+const SP_SPEED_Z: &str = "http://www.onvif.org/ver10/tptz/ZoomSpaces/ZoomGenericSpeedSpace";
+
+fn space(kind: SpaceKind, uri: &str, x: (f32, f32), y: Option<(f32, f32)>) -> SpaceEntry {
+    SpaceEntry {
+        kind,
+        uri: uri.into(),
+        x_range: x,
+        y_range: y,
+    }
+}
+
+/// The four zoom slots, identical on both heads — a zoom-only head still zooms.
+fn zoom_spaces() -> Vec<SpaceEntry> {
+    vec![
+        space(SpaceKind::AbsoluteZoomPosition, SP_ABS_Z, (0.0, 1.0), None),
+        space(
+            SpaceKind::RelativeZoomTranslation,
+            SP_REL_Z,
+            (-1.0, 1.0),
+            None,
+        ),
+        space(
+            SpaceKind::ContinuousZoomVelocity,
+            SP_CONT_Z,
+            (-1.0, 1.0),
+            None,
+        ),
+        space(SpaceKind::ZoomSpeed, SP_SPEED_Z, (0.0, 1.0), None),
+    ]
+}
+
+/// **Two heads, and the second cannot pan or tilt.**
+///
+/// `PTZNode_2` has no pan/tilt space at all. That is not decoration: it is the
+/// only way a test can reach the "this head does not do that" branch through a
+/// real profile, and it matches the rest of the fixture, where sensor 2 is the
+/// lesser lens (1280×720 cap, fixed focus). The two nodes also disagree on
+/// `HomeSupported`, `FixedHomePosition`, `MaximumNumberOfPresets` and whether
+/// auxiliary commands exist — four more things an assertion can read that a
+/// renderer ignoring `NodeToken` cannot get right.
+///
+/// `PanTiltSpeedSpace` is 1D on purpose; see [`SpaceKind`].
+fn default_ptz_nodes() -> Vec<PtzNodeEntry> {
+    vec![
+        PtzNodeEntry {
+            token: "PTZNode_1".into(),
+            name: "Head 1".into(),
+            fixed_home_position: false,
+            home_supported: true,
+            max_presets: 100,
+            aux_commands: vec!["tt:Wiper|On".into(), "tt:Wiper|Off".into()],
+            pan_tilt_spaces: vec![
+                space(
+                    SpaceKind::AbsolutePanTiltPosition,
+                    SP_ABS_PT,
+                    (-1.0, 1.0),
+                    Some((-1.0, 1.0)),
+                ),
+                space(
+                    SpaceKind::RelativePanTiltTranslation,
+                    SP_REL_PT,
+                    (-1.0, 1.0),
+                    Some((-1.0, 1.0)),
+                ),
+                space(
+                    SpaceKind::ContinuousPanTiltVelocity,
+                    SP_CONT_PT,
+                    (-1.0, 1.0),
+                    Some((-1.0, 1.0)),
+                ),
+                space(SpaceKind::PanTiltSpeed, SP_SPEED_PT, (0.0, 1.0), None),
+            ],
+            zoom_spaces: zoom_spaces(),
+        },
+        PtzNodeEntry {
+            token: "PTZNode_2".into(),
+            name: "Head 2 (zoom only)".into(),
+            fixed_home_position: true,
+            home_supported: false,
+            max_presets: 8,
+            aux_commands: Vec::new(),
+            pan_tilt_spaces: Vec::new(),
+            zoom_spaces: zoom_spaces(),
+        },
+    ]
+}
+
+/// **The two configurations disagree on which members are absent.**
+///
+/// `PTZConfig_2` has no `DefaultPTZSpeed`, no `PanTiltLimits` and none of the
+/// three pan/tilt `Default*Space` URIs — because its node cannot pan or tilt.
+/// The absences are the point: an `Option` field is only observable as
+/// `None`-versus-`Some` if some fixture exercises each, and `CLAUDE.md`'s batch
+/// mutation for `Option` parse helpers ("make it return `Some(false)` where it
+/// returns `None`") has nothing to redden otherwise.
+///
+/// They also disagree on `DefaultPTZTimeout` and on the `PTZTimeout` bounds
+/// `GetConfigurationOptions` answers with, which was one static `PT1S`/`PT60S`
+/// pair for the whole device.
+fn default_ptz_configs() -> Vec<PtzConfigEntry> {
+    vec![
+        PtzConfigEntry {
+            token: "PTZConfig_1".into(),
+            name: "PTZConfig_1".into(),
+            // Profile_1 and Profile_2 — the main and sub stream of lens 1.
+            use_count: 2,
+            node_token: "PTZNode_1".into(),
+            default_ptz_timeout: Some("PT10S".into()),
+            abs_pan_tilt_space: Some(SP_ABS_PT.into()),
+            abs_zoom_space: Some(SP_ABS_Z.into()),
+            rel_pan_tilt_space: Some(SP_REL_PT.into()),
+            rel_zoom_space: Some(SP_REL_Z.into()),
+            cont_pan_tilt_space: Some(SP_CONT_PT.into()),
+            cont_zoom_space: Some(SP_CONT_Z.into()),
+            default_speed_pan_tilt: Some((0.5, 0.5)),
+            default_speed_zoom: Some(0.5),
+            pan_tilt_limits: Some(space(
+                SpaceKind::AbsolutePanTiltPosition,
+                SP_ABS_PT,
+                (-0.9, 0.9),
+                Some((-0.7, 0.7)),
+            )),
+            zoom_limits: Some(space(
+                SpaceKind::AbsoluteZoomPosition,
+                SP_ABS_Z,
+                (0.0, 1.0),
+                None,
+            )),
+            timeout_min: "PT1S".into(),
+            timeout_max: "PT60S".into(),
+        },
+        PtzConfigEntry {
+            token: "PTZConfig_2".into(),
+            name: "PTZConfig_2".into(),
+            // Profile_3 only. Profile_4 is deliberately unbound.
+            use_count: 1,
+            node_token: "PTZNode_2".into(),
+            default_ptz_timeout: Some("PT30S".into()),
+            abs_pan_tilt_space: None,
+            abs_zoom_space: Some(SP_ABS_Z.into()),
+            rel_pan_tilt_space: None,
+            rel_zoom_space: Some(SP_REL_Z.into()),
+            cont_pan_tilt_space: None,
+            cont_zoom_space: Some(SP_CONT_Z.into()),
+            default_speed_pan_tilt: None,
+            default_speed_zoom: None,
+            pan_tilt_limits: None,
+            zoom_limits: Some(space(
+                SpaceKind::AbsoluteZoomPosition,
+                SP_ABS_Z,
+                (0.1, 0.95),
+                None,
+            )),
+            timeout_min: "PT5S".into(),
+            timeout_max: "PT30S".into(),
+        },
+    ]
 }
 
 /// One tour, with **two** stops. A single-stop fixture cannot tell a parser
@@ -905,6 +1230,7 @@ fn default_profiles() -> ProfilesState {
                 video_encoder_config_token: Some("VEC_1".into()),
                 audio_source_config_token: None,
                 audio_encoder_config_token: None,
+                ptz_config_token: Some("PTZConfig_1".into()),
             },
             ProfileEntry {
                 token: "Profile_2".into(),
@@ -914,6 +1240,7 @@ fn default_profiles() -> ProfilesState {
                 video_encoder_config_token: Some("VEC_2".into()),
                 audio_source_config_token: None,
                 audio_encoder_config_token: None,
+                ptz_config_token: Some("PTZConfig_1".into()),
             },
             // Sensor 2. Present so the second lens is reachable the way a
             // client actually reaches one — via a profile — and not only by
@@ -926,6 +1253,7 @@ fn default_profiles() -> ProfilesState {
                 video_encoder_config_token: Some("VEC_3".into()),
                 audio_source_config_token: None,
                 audio_encoder_config_token: None,
+                ptz_config_token: Some("PTZConfig_2".into()),
             },
             ProfileEntry {
                 token: "Profile_4".into(),
@@ -935,6 +1263,7 @@ fn default_profiles() -> ProfilesState {
                 video_encoder_config_token: Some("VEC_4".into()),
                 audio_source_config_token: None,
                 audio_encoder_config_token: None,
+                ptz_config_token: None,
             },
         ],
         next_token_id: 5,
@@ -1246,6 +1575,8 @@ impl Default for DeviceState {
             discovery_mode: default_discovery_mode(),
             imaging_sources: default_imaging_sources(),
             ptz: default_ptz(),
+            ptz_nodes: default_ptz_nodes(),
+            ptz_configs: default_ptz_configs(),
             interface: default_interface(),
             protocols: default_protocols(),
             osd: default_osd(),
@@ -1597,19 +1928,23 @@ mod tests {
         assert!(xml.contains(r#"x="0.7""#));
     }
 
-    /// The whole point of `PtzChannel`: two profiles are two heads.
+    /// The whole point of `PtzChannel`: two *lenses* are two heads.
     ///
     /// Before 0.15 this could not be written — `PtzState` held one position for
     /// the entire device, so moving "Profile_1" moved everything. The measured
     /// symptom was `ptz_get_status(Profile_1 vs Profile_3)` returning the same
     /// pan for both.
+    ///
+    /// `Profile_3` is lens 2, which is a zoom-only head, so what distinguishes
+    /// it from lens 1 is its **zoom**, not its pan — a zoom-only head has no
+    /// pan to seed.
     #[test]
     fn ptz_move_on_one_profile_does_not_move_another() {
         use crate::mock::services::ptz;
         let s = new_state();
         let before = ptz::resp_ptz_status(&s, &ptz_ask("Profile_3", "GetStatus"));
-        // Profile_3's seeded position, deliberately not Profile_1's.
-        assert!(before.contains(r#"x="-0.6""#), "got {before}");
+        // PTZNode_2's seeded position, deliberately not PTZNode_1's.
+        assert!(before.contains(r#"x="0.8""#), "got {before}");
 
         ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.5", "-0.3", "0.7"));
 
@@ -1623,21 +1958,89 @@ mod tests {
     /// …and the same for the preset list, which is the other half of the state
     /// that used to be global.
     #[test]
-    fn ptz_presets_are_per_profile() {
+    fn ptz_presets_are_per_head() {
         use crate::mock::services::ptz;
         let s = new_state();
         let p1 = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_1", "GetPresets"));
         let p3 = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_3", "GetPresets"));
-        let p4 = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_4", "GetPresets"));
 
         // Counts differ, so a handler that ignores the token cannot be right.
         assert_eq!(p1.matches("<tptz:Preset ").count(), 2, "got {p1}");
         assert_eq!(p3.matches("<tptz:Preset ").count(), 3, "got {p3}");
-        assert_eq!(p4.matches("<tptz:Preset ").count(), 0, "got {p4}");
 
         // …and so do the names, so a count-only assertion is not the only guard.
         assert!(p1.contains("Door") && !p1.contains("Lobby"), "got {p1}");
         assert!(p3.contains("Lobby") && !p3.contains("Door"), "got {p3}");
+    }
+
+    /// **The main and the sub stream of one lens are one head.**
+    ///
+    /// Stated positively and on its own rather than left implied by the
+    /// negatives around it. Every "these two differ" test here compares
+    /// `Profile_1` with `Profile_3`; a broken resolver that always returned the
+    /// first node would fail those, but nothing in them would notice a resolver
+    /// that got `Profile_2` right only by accident. This asserts the sharing.
+    #[test]
+    fn ptz_main_and_sub_stream_of_one_lens_are_one_head() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.42", "-0.17", "0.63"));
+
+        let sub = ptz::resp_ptz_status(&s, &ptz_ask("Profile_2", "GetStatus"));
+        assert!(
+            sub.contains(r#"x="0.42""#) && sub.contains(r#"y="-0.17""#),
+            "Profile_1 and Profile_2 are the main and sub stream of one lens and \
+             must report one position: {sub}"
+        );
+
+        // …and the other lens must not have moved, or "one head" would be
+        // satisfied by a single global position, which is the bug this replaced.
+        let other = ptz::resp_ptz_status(&s, &ptz_ask("Profile_3", "GetStatus"));
+        assert!(!other.contains(r#"x="0.42""#), "got {other}");
+    }
+
+    /// **The mock must emit the spelling `onvif.xsd` defines, on the wire.**
+    ///
+    /// `PtzConfiguration::from_xml` accepts both spellings — deliberately, so a
+    /// vendor who "corrected" ONVIF's typo still parses — which means no test
+    /// going through the client can tell what the mock actually sent. Measured
+    /// while writing this: swapping the renderer to
+    /// `DefaultAbsolutePanTiltPositionSpace` left all 907 tests green. A
+    /// namespace-strict consumer would have seen an element no schema declares,
+    /// and the mock's whole point is to be the conformant device.
+    ///
+    /// So this asserts the bytes, not the parsed value.
+    #[test]
+    fn ptz_configuration_uses_the_schema_spelling_on_the_wire() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        let xml = ptz::resp_ptz_configurations(&s);
+        assert!(
+            xml.contains("<tt:DefaultAbsolutePantTiltPositionSpace>"),
+            "onvif.xsd spells it `Pant`, double t: {xml}"
+        );
+        assert!(
+            !xml.contains("<tt:DefaultAbsolutePanTiltPositionSpace>"),
+            "the corrected spelling is an element no schema declares: {xml}"
+        );
+    }
+
+    /// A profile with no PTZ configuration reaches no head, so PTZ operations
+    /// on it fault instead of answering for an empty channel invented on the
+    /// spot. `Profile_4` is that profile.
+    ///
+    /// This replaces the old "an empty preset list is a legitimate answer" case.
+    /// That was true, but it was asserted against a profile that should not have
+    /// been answerable at all — and `0 presets` is also what a handler ignoring
+    /// the token returns, so the assertion could not fail for its own reason.
+    #[test]
+    fn ptz_on_a_profile_with_no_configuration_faults() {
+        use crate::mock::services::ptz;
+        let s = new_state();
+        let xml = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_4", "GetPresets"));
+        assert!(xml.contains("NoPTZConfig-PRESETS-5602-5619"), "got {xml}");
+        assert!(xml.contains("Profile_4"), "got {xml}");
+        assert_eq!(xml.matches("<tptz:Preset ").count(), 0, "got {xml}");
     }
 
     /// A PTZ request with no `ProfileToken` faults rather than answering for
@@ -1656,6 +2059,16 @@ mod tests {
             "got {unknown}"
         );
         assert!(unknown.contains("Profile_nope"), "got {unknown}");
+
+        // …and a profile that exists but binds no PTZ configuration is its own
+        // failure with its own code: `ter:NoConfig`, not `ter:NoProfile`.
+        let unbound = ptz::resp_ptz_status(&s, &ptz_ask("Profile_4", "GetStatus"));
+        assert!(
+            unbound.contains("NoPTZConfig-STATUS-5601-5619"),
+            "got {unbound}"
+        );
+        assert!(unbound.contains("ter:NoConfig"), "got {unbound}");
+        assert!(!unbound.contains("NoSuchProfile"), "got {unbound}");
     }
 
     #[test]
@@ -1678,8 +2091,11 @@ mod tests {
         assert!(presets.contains("Garden"));
         assert!(presets.contains(r#"x="0.4""#));
 
-        // Profile_2 has its own list and must be untouched.
-        let other = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_2", "GetPresets"));
+        // Profile_3 is the *other lens* and must be untouched. Deliberately
+        // not Profile_2: that is the sub stream of the same lens, so it shares
+        // this head and **does** see the new preset — see
+        // `ptz_main_and_sub_stream_of_one_lens_are_one_head`.
+        let other = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_3", "GetPresets"));
         assert!(!other.contains("Garden"), "got {other}");
     }
 
@@ -1734,20 +2150,23 @@ mod tests {
         assert!(xml.contains(r#"y="-0.4""#));
     }
 
-    /// Preset *tours* were global too. Profile_1 ships one and Profile_2 ships
-    /// none, so a tour handler that ignores the profile cannot answer both.
+    /// Preset *tours* were global too. Lens 1 ships one and lens 2 ships none,
+    /// so a tour handler that ignores the head cannot answer both.
+    ///
+    /// `Profile_3`, not `Profile_2`: the sub stream of lens 1 now shares lens
+    /// 1's head and therefore lens 1's tours, which is what a camera does.
     #[test]
-    fn ptz_preset_tours_are_per_profile() {
+    fn ptz_preset_tours_are_per_head() {
         use crate::mock::services::ptz;
         let s = new_state();
         let p1 = ptz::resp_ptz_preset_tours(&s, &ptz_ask("Profile_1", "GetPresetTours"));
-        let p2 = ptz::resp_ptz_preset_tours(&s, &ptz_ask("Profile_2", "GetPresetTours"));
+        let p3 = ptz::resp_ptz_preset_tours(&s, &ptz_ask("Profile_3", "GetPresetTours"));
         assert!(p1.contains("Tour_1"), "got {p1}");
-        assert!(!p2.contains("Tour_1"), "got {p2}");
+        assert!(!p3.contains("Tour_1"), "got {p3}");
 
-        // A tour created on Profile_2 is Profile_2's alone.
+        // A tour created on lens 2 is lens 2's alone.
         let created =
-            ptz::handle_ptz_create_preset_tour(&s, &ptz_ask("Profile_2", "CreatePresetTour"));
+            ptz::handle_ptz_create_preset_tour(&s, &ptz_ask("Profile_3", "CreatePresetTour"));
         assert!(
             created.contains("Tour_1"),
             "first tour on this head: {created}"

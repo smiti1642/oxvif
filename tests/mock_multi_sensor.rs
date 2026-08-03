@@ -401,8 +401,16 @@ async fn empty_lens_token_is_refused_as_missing() {
 // asserting "my code addressed the right head" passed against a mock that could
 // not tell one head from another. `docs/active/mock-audit-2026-07.md` §4.1.
 //
-// The four seeded heads deliberately disagree on position, on preset count, on
+// The two seeded heads deliberately disagree on position, on preset count, on
 // preset names, and on whether they have tours at all.
+//
+// **A profile does not own a head — it references one through a PTZ
+// configuration.** `Profile_1` and `Profile_2` are the main and sub stream of
+// lens 1 and share `PTZNode_1`; `Profile_3` is lens 2 and has `PTZNode_2` to
+// itself; `Profile_4` binds no PTZ configuration at all and every PTZ operation
+// on it faults. The tests below were written against a state keyed by *profile*,
+// where `Profile_1` and `Profile_2` were two independent motors — which is not
+// something a camera does, so three of them asserted the mock's mistake.
 
 /// The measured symptom, inverted into an assertion: this returned the same pan
 /// for both profiles before the state was keyed by profile token.
@@ -419,8 +427,10 @@ async fn ptz_status_answers_for_the_head_asked_about() {
     );
     assert_eq!(
         (three.pan, three.tilt, three.zoom),
-        (Some(-0.6), Some(0.35), Some(0.8)),
-        "Profile_3 is a different head and is parked somewhere else",
+        (Some(0.0), Some(0.0), Some(0.8)),
+        "Profile_3 is a different head, parked at a different zoom. Its pan and \
+         tilt are zero because PTZNode_2 is zoom-only — it has no pan/tilt space, \
+         so there is no pan or tilt for it to be parked at.",
     );
 }
 
@@ -430,17 +440,26 @@ async fn ptz_presets_answer_for_the_head_asked_about() {
 
     let one = s.ptz_get_presets("Profile_1").await.unwrap();
     let three = s.ptz_get_presets("Profile_3").await.unwrap();
-    let four = s.ptz_get_presets("Profile_4").await.unwrap();
 
-    // Counts differ, so a token-blind handler cannot satisfy all three...
+    // Counts differ, so a token-blind handler cannot satisfy both...
     assert_eq!(one.len(), 2);
     assert_eq!(three.len(), 3);
-    assert_eq!(four.len(), 0, "an empty preset list is a legitimate answer");
 
     // ...and so do the names, so the assertion is not count-only.
     let names = |v: &[oxvif::PtzPreset]| v.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
     assert_eq!(names(&one), ["Home", "Door"]);
     assert_eq!(names(&three), ["Lobby", "Dock", "Roof"]);
+
+    // `Profile_4` used to be asserted here as "an empty preset list is a
+    // legitimate answer". It is — but that profile binds no PTZ configuration,
+    // so it reaches no head and the honest answer is a fault. An empty list was
+    // also indistinguishable from what a token-blind handler returns.
+    let err = s.ptz_get_presets("Profile_4").await.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("NoPTZConfig-PRESETS-5602-5619") && msg.contains("Profile_4"),
+        "an unbound profile must say so, got: {msg}"
+    );
 }
 
 #[tokio::test]
@@ -465,8 +484,15 @@ async fn moving_one_head_does_not_move_the_other() {
     );
 }
 
+/// **Inverted by this change, and deliberately.**
+///
+/// This used to store a preset on `Profile_2` and assert `Profile_1` could not
+/// see it. `Profile_1` and `Profile_2` are the main and the sub stream of one
+/// lens — one motor, one preset list — so the old assertion was pinning the
+/// mock's own error. What is per-head is the *lens*, so the pair that must not
+/// share is `Profile_1` and `Profile_3`.
 #[tokio::test]
-async fn a_preset_stored_on_one_head_is_not_visible_on_another() {
+async fn a_preset_stored_on_one_lens_is_visible_on_its_other_stream_only() {
     let (_srv, s) = setup().await;
 
     let token = s
@@ -482,24 +508,35 @@ async fn a_preset_stored_on_one_head_is_not_visible_on_another() {
 
     let one = s.ptz_get_presets("Profile_1").await.unwrap();
     assert!(
-        !one.iter().any(|p| p.name == "Loading Bay"),
-        "Profile_1 has its own preset list: {one:?}",
+        one.iter().any(|p| p.name == "Loading Bay"),
+        "Profile_1 is the same lens as Profile_2 and must see its preset: {one:?}",
+    );
+
+    let three = s.ptz_get_presets("Profile_3").await.unwrap();
+    assert!(
+        !three.iter().any(|p| p.name == "Loading Bay"),
+        "Profile_3 is the other lens and has its own preset list: {three:?}",
     );
 }
 
 /// Home position is per-head too, and this is the pair that would silently pass
-/// against a global one: store home on Profile_2, then send Profile_1 home.
+/// against a global one: store home on lens 2, then send lens 1 home.
+///
+/// Lens 2 (`Profile_3`) is zoom-only, so it is positioned with `GotoPreset`
+/// rather than `AbsoluteMove`: **oxvif's `ptz_absolute_move` always emits a
+/// `PanTilt` element**, and a zoom-only head refuses one. That is a real gap in
+/// the client against real zoom-only hardware, not a mock artefact — see
+/// `docs/active/ptz-wiring-plan-2026-07.md` §3.5.
 #[tokio::test]
 async fn home_position_is_per_head() {
     let (_srv, s) = setup().await;
 
-    s.ptz_absolute_move("Profile_2", 0.7, 0.6, 0.5)
-        .await
-        .unwrap();
-    s.ptz_set_home_position("Profile_2").await.unwrap();
+    // Preset_2 on lens 2 is "Dock", zoom 0.10.
+    s.ptz_goto_preset("Profile_3", "Preset_2").await.unwrap();
+    s.ptz_set_home_position("Profile_3").await.unwrap();
 
     // Profile_1 has never had a home set, so it goes to the origin, not to
-    // Profile_2's stored position.
+    // Profile_3's stored position.
     s.ptz_absolute_move("Profile_1", -0.3, -0.2, 0.9)
         .await
         .unwrap();
@@ -509,17 +546,16 @@ async fn home_position_is_per_head() {
     assert_eq!(
         (one.pan, one.tilt, one.zoom),
         (Some(0.0), Some(0.0), Some(0.0)),
-        "Profile_1 must not inherit Profile_2's home",
+        "Profile_1 must not inherit Profile_3's home",
     );
 
-    s.ptz_absolute_move("Profile_2", 0.0, 0.0, 0.0)
-        .await
-        .unwrap();
-    s.ptz_goto_home_position("Profile_2", None).await.unwrap();
-    let two = s.ptz_get_status("Profile_2").await.unwrap();
+    // Preset_3 is "Roof", zoom 1.0 — move away, then go home.
+    s.ptz_goto_preset("Profile_3", "Preset_3").await.unwrap();
+    s.ptz_goto_home_position("Profile_3", None).await.unwrap();
+    let three = s.ptz_get_status("Profile_3").await.unwrap();
     assert_eq!(
-        (two.pan, two.tilt, two.zoom),
-        (Some(0.7), Some(0.6), Some(0.5))
+        (three.pan, three.tilt, three.zoom),
+        (Some(0.0), Some(0.0), Some(0.1))
     );
 }
 
@@ -529,21 +565,282 @@ async fn preset_tours_are_per_head() {
 
     assert_eq!(s.ptz_get_preset_tours("Profile_1").await.unwrap().len(), 1);
     assert_eq!(
-        s.ptz_get_preset_tours("Profile_2").await.unwrap().len(),
+        s.ptz_get_preset_tours("Profile_3").await.unwrap().len(),
         0,
-        "Profile_2 ships no tours",
+        "lens 2 ships no tours",
+    );
+    // The sub stream of lens 1 is the same head, so it sees lens 1's tour.
+    assert_eq!(
+        s.ptz_get_preset_tours("Profile_2").await.unwrap().len(),
+        1,
+        "Profile_2 is the same head as Profile_1",
     );
 
-    let created = s.ptz_create_preset_tour("Profile_2").await.unwrap();
-    assert_eq!(s.ptz_get_preset_tours("Profile_2").await.unwrap().len(), 1);
+    let created = s.ptz_create_preset_tour("Profile_3").await.unwrap();
+    assert_eq!(s.ptz_get_preset_tours("Profile_3").await.unwrap().len(), 1);
     assert_eq!(
         s.ptz_get_preset_tours("Profile_1").await.unwrap().len(),
         1,
-        "creating a tour on Profile_2 must not appear on Profile_1",
+        "creating a tour on lens 2 must not appear on lens 1",
     );
     // Tour tokens are numbered per head, so both heads now hold a `Tour_1` and
     // they are different tours.
     assert_eq!(created, "Tour_1");
+}
+
+// ── PTZ nodes, configurations and coordinate spaces ─────────────────────────
+//
+// These six operations were string literals whose handlers did not receive the
+// request body: one node and one configuration for the whole device, whatever
+// token was asked about, and `<tt:SupportedPTZSpaces/>` — an empty element,
+// which is schema-valid and says the head supports no coordinate space at all.
+// `docs/active/ptz-wiring-plan-2026-07.md` §2.1.
+
+/// The two heads are physically different, and `GetNodes` must say so.
+#[tokio::test]
+async fn ptz_nodes_declare_the_spaces_they_actually_support() {
+    let (_srv, s) = setup().await;
+    let nodes = s.ptz_get_nodes().await.unwrap();
+
+    assert_eq!(nodes.len(), 2, "got {nodes:?}");
+    let one = &nodes[0];
+    let two = &nodes[1];
+    assert_eq!(one.token, "PTZNode_1");
+    assert_eq!(two.token, "PTZNode_2");
+
+    // oxvif buckets four schema slots into each vector: absolute, relative,
+    // continuous and speed.
+    assert_eq!(one.pan_tilt_spaces.len(), 4, "got {one:?}");
+    assert_eq!(one.zoom_spaces.len(), 4, "got {one:?}");
+    assert_eq!(
+        two.pan_tilt_spaces.len(),
+        0,
+        "PTZNode_2 is zoom-only and must declare no pan/tilt space: {two:?}"
+    );
+    assert_eq!(two.zoom_spaces.len(), 4, "got {two:?}");
+
+    // The URIs and ranges are the ONVIF generic ones, so a client can read them
+    // rather than assume `[-1, 1]`.
+    assert_eq!(
+        one.pan_tilt_spaces[0].uri,
+        "http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace"
+    );
+    assert_eq!(one.pan_tilt_spaces[0].x_range, (-1.0, 1.0));
+    assert_eq!(one.pan_tilt_spaces[0].y_range, Some((-1.0, 1.0)));
+    // `PanTiltSpeedSpace` is a Space1DDescription even though it is pan/tilt —
+    // a combined speed is one scalar with no direction in it.
+    let speed = one
+        .pan_tilt_spaces
+        .iter()
+        .find(|sp| sp.uri.ends_with("GenericSpeedSpace"))
+        .expect("PanTiltSpeedSpace");
+    assert_eq!(speed.y_range, None, "PanTiltSpeedSpace is 1D: {speed:?}");
+    assert_eq!(one.zoom_spaces[0].x_range, (0.0, 1.0));
+    assert!(one.zoom_spaces.iter().all(|sp| sp.y_range.is_none()));
+
+    // The heads also disagree about everything else a node reports, so a
+    // renderer that ignores the entry cannot get both right.
+    assert!(one.home_supported && !two.home_supported);
+    assert!(!one.fixed_home_position && two.fixed_home_position);
+    assert_eq!((one.max_presets, two.max_presets), (100, 8));
+    assert_eq!(one.aux_commands.len(), 2, "got {one:?}");
+    assert!(two.aux_commands.is_empty(), "got {two:?}");
+}
+
+#[tokio::test]
+async fn ptz_get_node_answers_for_the_node_asked_about() {
+    let (_srv, s) = setup().await;
+
+    let one = s.ptz_get_node("PTZNode_1").await.unwrap();
+    let two = s.ptz_get_node("PTZNode_2").await.unwrap();
+    assert_eq!(one.token, "PTZNode_1");
+    assert_eq!(two.token, "PTZNode_2");
+    assert_eq!(one.max_presets, 100);
+    assert_eq!(two.max_presets, 8);
+
+    let err = s.ptz_get_node("PTZNode_nope").await.unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("NoSuchNode-GETNODE-5616") && msg.contains("PTZNode_nope"),
+        "got {msg}"
+    );
+}
+
+/// The configurations differ in **which members are absent**, not only in their
+/// values — the only way an assertion can tell `None` from `Some(default)`.
+#[tokio::test]
+async fn ptz_configurations_differ_in_what_they_omit() {
+    let (_srv, s) = setup().await;
+    let cfgs = s.ptz_get_configurations().await.unwrap();
+    assert_eq!(cfgs.len(), 2, "got {cfgs:?}");
+
+    let one = &cfgs[0];
+    let two = &cfgs[1];
+    assert_eq!(
+        (one.token.as_str(), two.token.as_str()),
+        ("PTZConfig_1", "PTZConfig_2")
+    );
+    assert_eq!(one.node_token, "PTZNode_1");
+    assert_eq!(two.node_token, "PTZNode_2");
+    assert_eq!(one.use_count, 2, "Profile_1 and Profile_2 share it");
+    assert_eq!(two.use_count, 1);
+
+    // The `Pant` spelling round-trips: this is the element every conformant
+    // device sends, and it was unreadable by oxvif until 0.15.
+    assert_eq!(
+        one.default_abs_pan_tilt_space.as_deref(),
+        Some("http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace")
+    );
+    assert_eq!(
+        two.default_abs_pan_tilt_space, None,
+        "a zoom-only head has no absolute pan/tilt space: {two:?}"
+    );
+    assert!(two.default_abs_zoom_space.is_some(), "got {two:?}");
+
+    assert_eq!(
+        one.default_ptz_speed.as_ref().map(|sp| sp.pan_tilt),
+        Some(Some((0.5, 0.5)))
+    );
+    assert!(two.default_ptz_speed.is_none(), "got {two:?}");
+
+    let lim = one.pan_tilt_limits.as_ref().expect("PanTiltLimits");
+    assert_eq!(lim.x_range, (-0.9, 0.9));
+    assert_eq!(lim.y_range, Some((-0.7, 0.7)));
+    assert!(two.pan_tilt_limits.is_none(), "got {two:?}");
+    // ZoomLimits is a Space1DDescription — no YRange even when set.
+    let zl = two.zoom_limits.as_ref().expect("ZoomLimits");
+    assert_eq!(zl.x_range, (0.1, 0.95));
+    assert_eq!(zl.y_range, None);
+
+    assert_eq!(one.default_ptz_timeout.as_deref(), Some("PT10S"));
+    assert_eq!(two.default_ptz_timeout.as_deref(), Some("PT30S"));
+}
+
+/// `GetConfigurationOptions` is per configuration. It answered one static
+/// `PT1S`/`PT60S` pair for the whole device, so passing the wrong token gave a
+/// plausible answer with nothing to notice.
+#[tokio::test]
+async fn ptz_configuration_options_are_per_configuration() {
+    let (_srv, s) = setup().await;
+
+    let one = s
+        .ptz_get_configuration_options("PTZConfig_1")
+        .await
+        .unwrap();
+    let two = s
+        .ptz_get_configuration_options("PTZConfig_2")
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            one.ptz_timeout_min.as_deref(),
+            one.ptz_timeout_max.as_deref()
+        ),
+        (Some("PT1S"), Some("PT60S"))
+    );
+    assert_eq!(
+        (
+            two.ptz_timeout_min.as_deref(),
+            two.ptz_timeout_max.as_deref()
+        ),
+        (Some("PT5S"), Some("PT30S"))
+    );
+
+    let err = s
+        .ptz_get_configuration_options("PTZConfig_nope")
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("NoSuchPTZConfig-CFGOPTS-5613"),
+        "got {err}"
+    );
+}
+
+/// **A zoom-only head refuses a move that carries a pan/tilt vector.**
+///
+/// The request is refused even when the vector is `0, 0`: the schema question
+/// is whether the vector is *present*, and a head with no pan/tilt space cannot
+/// honour one. Storing it and answering `Ok` would tell a caller their code
+/// works on hardware where it silently does nothing.
+///
+/// Note what this exposes about the client: `ptz_absolute_move` always emits a
+/// `<tt:PanTilt>` element, so **oxvif cannot drive a zoom-only head at all**
+/// through the absolute/relative/continuous move API. That is a real gap
+/// against real hardware — see the plan doc §3.5.
+#[tokio::test]
+async fn a_zoom_only_head_refuses_a_pan_tilt_move() {
+    let (_srv, s) = setup().await;
+
+    let cases = [
+        (
+            "absolute",
+            s.ptz_absolute_move("Profile_3", 0.0, 0.0, 0.5).await,
+            "ABSMOVE-5620",
+        ),
+        (
+            "relative",
+            s.ptz_relative_move("Profile_3", 0.1, 0.1, 0.0).await,
+            "RELMOVE-5621",
+        ),
+        (
+            "continuous",
+            s.ptz_continuous_move("Profile_3", 0.1, 0.1, 0.0).await,
+            "CONTMOVE-5622",
+        ),
+    ];
+    for (kind, res, tag) in cases {
+        let err = res
+            .expect_err(&format!("{kind} move on a zoom-only head must fail"))
+            .to_string();
+        assert!(
+            err.contains(&format!("NoPanTiltSpace-{tag}")) && err.contains("PTZNode_2"),
+            "{kind} move on a zoom-only head must name the missing space, got: {err}"
+        );
+    }
+
+    // …and the head that *can* pan/tilt is unaffected.
+    s.ptz_absolute_move("Profile_1", 0.2, 0.3, 0.4)
+        .await
+        .unwrap();
+    let one = s.ptz_get_status("Profile_1").await.unwrap();
+    assert_eq!((one.pan, one.tilt), (Some(0.2), Some(0.3)));
+}
+
+/// `GetCompatibleConfigurations` is the **one** per-profile PTZ operation that
+/// must not fault on an unbound profile: "nothing is compatible" is how a
+/// client learns the profile is not PTZ-capable.
+#[tokio::test]
+async fn compatible_configurations_of_an_unbound_profile_are_empty_not_a_fault() {
+    let (_srv, s) = setup().await;
+
+    let one = s
+        .ptz_get_compatible_configurations("Profile_1")
+        .await
+        .unwrap();
+    assert_eq!(one.len(), 1, "got {one:?}");
+    assert_eq!(one[0].token, "PTZConfig_1");
+
+    let three = s
+        .ptz_get_compatible_configurations("Profile_3")
+        .await
+        .unwrap();
+    assert_eq!(three[0].token, "PTZConfig_2", "got {three:?}");
+
+    let four = s
+        .ptz_get_compatible_configurations("Profile_4")
+        .await
+        .expect("an unbound profile is a legitimate answer, not an error");
+    assert!(four.is_empty(), "got {four:?}");
+
+    // …but a profile that does not exist is still a malformed request.
+    let err = s
+        .ptz_get_compatible_configurations("Profile_nope")
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("NoSuchProfile-COMPATCFG-5614"),
+        "got {err}"
+    );
 }
 
 /// `GetPresetTourOptions` lists the presets a tour can visit — the *addressed*

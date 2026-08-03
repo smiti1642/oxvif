@@ -148,9 +148,18 @@ const ROWS: &[Row] = rows![
     // ── PTZ — per head ──────────────────────────────────────────────────────
     "ptz/status"                  => Expect::Discriminates, ("Profile_1", "Profile_3"), ptz_status;
     "ptz/presets"                 => Expect::Discriminates, ("Profile_1", "Profile_3"), ptz_presets;
-    "ptz/preset-tours"            => Expect::Discriminates, ("Profile_1", "Profile_2"), ptz_preset_tours;
+    // `Profile_2` was the second token here until PTZ state was keyed by node.
+    // It is the sub stream of `Profile_1`'s lens and therefore the same head, so
+    // it now answers identically — a row that would have gone quietly Blind.
+    "ptz/preset-tours"            => Expect::Discriminates, ("Profile_1", "Profile_3"), ptz_preset_tours;
     "ptz/preset-tour-options"     => Expect::Discriminates, ("Profile_1", "Profile_3"), ptz_preset_tour_options;
-    "ptz/compatible-configs"      => Expect::Blind("audit §5 — PTZ configurations are static"), ("Profile_1", "Profile_3"), ptz_compatible_configs;
+    "ptz/compatible-configs"      => Expect::Discriminates, ("Profile_1", "Profile_3"), ptz_compatible_configs;
+    // These three take a *node* or *configuration* token, not a profile token,
+    // and had no row at all while their handlers were string literals — the
+    // table only ever covered what someone remembered to list.
+    "ptz/node"                    => Expect::Discriminates, ("PTZNode_1", "PTZNode_2"), ptz_node;
+    "ptz/config"                  => Expect::Discriminates, ("PTZConfig_1", "PTZConfig_2"), ptz_config;
+    "ptz/config-options"          => Expect::Discriminates, ("PTZConfig_1", "PTZConfig_2"), ptz_config_options;
 
     // ── Recording — audit §4.2, no state at all ─────────────────────────────
     "recording/replay-uri"        => Expect::Discriminates, ("Rec_001", "Rec_002"), rec_replay_uri;
@@ -331,6 +340,22 @@ async fn ptz_compatible_configs(d: &Dev, t: &str) -> String {
     )
 }
 
+async fn ptz_node(d: &Dev, t: &str) -> String {
+    fingerprint(d.client.ptz_get_node(&d.url("ptz"), t).await)
+}
+
+async fn ptz_config(d: &Dev, t: &str) -> String {
+    fingerprint(d.client.ptz_get_configuration(&d.url("ptz"), t).await)
+}
+
+async fn ptz_config_options(d: &Dev, t: &str) -> String {
+    fingerprint(
+        d.client
+            .ptz_get_configuration_options(&d.url("ptz"), t)
+            .await,
+    )
+}
+
 // ── Recording probes ─────────────────────────────────────────────────────────
 
 async fn rec_replay_uri(d: &Dev, t: &str) -> String {
@@ -364,7 +389,7 @@ async fn every_token_taking_operation_matches_its_declared_expectation() {
         .count();
     assert_eq!(
         (ROWS.len(), declared_discriminating),
-        (28, 21),
+        (31, 25),
         "the table's shape changed (rows, declared-Discriminates). If that was \
          deliberate, update this expectation **and** the counts in \
          docs/mock-server.md §12 and docs/active/mock-audit-2026-07.md §2 in the \

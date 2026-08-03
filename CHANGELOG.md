@@ -154,6 +154,45 @@ two-thirds of the test suite.
   configuration with every field set, which is the assertion that would have
   caught both this and the limits below.
 
+- **The mock's PTZ nodes, configurations and coordinate spaces were six string
+  literals.** `GetNodes`, `GetNode`, `GetConfigurations`, `GetConfiguration`,
+  `GetCompatibleConfigurations` and `GetConfigurationOptions` were fixtures
+  whose handlers did not receive the request body at all, so every token got the
+  same single node and the same single configuration, and `SupportedPTZSpaces`
+  was sent as `<tt:SupportedPTZSpaces/>` — an empty element, schema-valid, and a
+  claim that the head supports no coordinate space whatever. `PtzNode`'s
+  `pan_tilt_spaces`, `zoom_spaces` and `aux_commands` were therefore empty
+  `Vec`s from the mock forever, and eleven `PtzConfiguration` fields were `None`
+  (audit §5 Tier 3 and §6 Tier 4 — this closes the last Tier 4 item).
+
+  `DeviceState` gained `ptz_nodes: Vec<PtzNodeEntry>` and
+  `ptz_configs: Vec<PtzConfigEntry>`. All six read from them, the
+  token-addressed ones fault on an unknown token, and
+  `GetConfigurationOptions` is now per-configuration.
+
+- **The mock's PTZ state was keyed by the wrong thing.** It was the media
+  profile token, so `Profile_1` and `Profile_2` — the main and the sub stream of
+  *one lens* — were two independent motors: moving one left the other reporting
+  its old position. No camera does that. `PtzState.channels` is now keyed by
+  **PTZ node token**, and a profile reaches a head the way ONVIF says it does:
+
+  ```text
+  ProfileToken → ProfileEntry.ptz_config_token → PtzConfigEntry.node_token
+  ```
+
+  This corrects the 0.15 Tier 2.1 fix, which was right that PTZ is per-channel
+  and wrong about which channel. Three tests that asserted the old behaviour are
+  inverted, and a new positive one states the sharing directly — a resolver that
+  always returned the first node would have satisfied the inversions alone.
+
+- **Neither profile renderer emitted the PTZ binding.**
+  `MediaProfile::ptz_config_token` and `MediaProfile2::ptz_config_token` were
+  parsed and permanently `None`, because `ProfileEntry` had no slot and neither
+  renderer emitted the element. Media1 now inlines `<tt:PTZConfiguration>` and
+  Media2 emits `<tr2:PTZ token="…"/>`, both from the same state, with a new row
+  in `tests/mock_media1_media2_agree.rs`. Not in the audit at all — found while
+  planning the fix.
+
 - **`ptz_set_configuration` silently dropped `PanTiltLimits` and
   `ZoomLimits`.** `PtzConfiguration::from_xml` reads both; `to_xml_body` never
   emitted either. A get → modify limits → set therefore changed nothing and
@@ -589,6 +628,35 @@ two-thirds of the test suite.
   the caller is told instead of the device. Reachable only from a hand-built
   `PtzSpaceRange`, or from a device that returned a non-conformant
   `PanTiltLimits`.
+
+- **The mock is now a two-head PTZ device, and the second head is zoom-only.**
+  It seeded four PTZ channels, one per profile; it now seeds two nodes
+  (`PTZNode_1`, `PTZNode_2`) and two configurations (`PTZConfig_1`,
+  `PTZConfig_2`). `Profile_1` and `Profile_2` share lens 1's head; `Profile_3`
+  has lens 2's; `Profile_4` binds no PTZ configuration and **every PTZ operation
+  on it now faults** with `ter:NoConfig` / `NoPTZConfig-…-5619` instead of
+  answering for an empty channel invented on the spot.
+
+  `PTZNode_2` declares no pan/tilt space, so `AbsoluteMove` / `RelativeMove` /
+  `ContinuousMove` on `Profile_3` are refused (`ter:InvalidArgVal` /
+  `NoPanTiltSpace-…`) when the request carries a `<tt:PanTilt>` element — even
+  `x="0" y="0"`, because the schema question is whether the vector is present.
+
+  `GetCompatibleConfigurations` is the one exception to the unbound-profile
+  fault: it answers an **empty list**, because "nothing is compatible" is how a
+  client learns a profile is not PTZ-capable.
+
+  Code asserting on the old fixture will need updating: `Profile_2` now reports
+  `Profile_1`'s position, presets and tours; `Profile_3`'s seeded position is
+  `(0, 0, 0.80)` rather than `(-0.60, 0.35, 0.80)`, since a zoom-only head has no
+  pan or tilt to be parked at.
+
+  **A consequence worth knowing:** `ptz_absolute_move`, `ptz_relative_move` and
+  `ptz_continuous_move` always emit a `<tt:PanTilt>` element, so oxvif cannot
+  drive a zoom-only head at all through those methods — use `GotoPreset`. That
+  is a real gap against real zoom-only hardware, not a mock quirk; closing it
+  needs new public API and is deliberately not in this release. See
+  `docs/active/ptz-wiring-plan-2026-07.md` §3.5.
 
 - **The mock's `SetVideoSourceMode` now faults instead of succeeding.**
   `ter:ActionNotSupported` / `NotModelled-VSMODE-5813`. It previously answered

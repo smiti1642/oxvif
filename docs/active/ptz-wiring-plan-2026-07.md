@@ -202,6 +202,30 @@ sequence — that part is correct and is not being changed.
 them is a *silent data loss* the way the two above are. Record them in
 `docs/mock-server.md` §13.2 instead.
 
+### 3.5 Found while implementing: oxvif cannot drive a zoom-only head
+
+**Not in the plan as written, and not fixed here.** Recorded 2026-08-03.
+
+`ptz_absolute_move` ([`client/ptz.rs:36`](../../src/client/ptz.rs)),
+`ptz_relative_move` (`:65`) and `ptz_continuous_move` (`:94`) all take
+`pan, tilt, zoom: f32` and **always** emit a `<tt:PanTilt>` element. There is no
+way to send a zoom-only vector.
+
+Decision C makes that visible: `PTZNode_2` refuses any move carrying a pan/tilt
+vector, so no oxvif method can move it. `tests/mock_multi_sensor.rs` positions
+lens 2 with `GotoPreset` instead, which is honest but is a workaround.
+
+This is a **real gap against real hardware**, not a mock artefact — a zoom-only
+ONVIF head (a fixed-mount varifocal, a thermal channel) has exactly the same
+schema, and oxvif would send it an element its `GetNodes` says it does not
+support. The mock was hiding it, in the same way it hid the `Pant` spelling: the
+mock accepted whatever oxvif sent, so oxvif and the mock agreed with each other
+and with nothing else.
+
+Deliberately out of scope for stages 0–2: closing it means new public methods
+(`ptz_absolute_move_zoom`, or `Option<(f32, f32)>` parameters, which is
+breaking), and that is a client decision, not a mock one.
+
 ---
 
 ## 4. Target model

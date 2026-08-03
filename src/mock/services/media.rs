@@ -1,17 +1,17 @@
 use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
 use crate::mock::state::{
     OSD_QUOTA_DATE, OSD_QUOTA_DATE_AND_TIME, OSD_QUOTA_PLAIN, OSD_QUOTA_TIME, OSD_QUOTA_TOTAL,
-    OsdColorEntry, OsdEntry, OsdTextEntry, ProfileEntry, SharedState, VideoEncoderState,
-    VideoSourceConfigEntry,
+    OsdColorEntry, OsdEntry, OsdTextEntry, ProfileEntry, PtzConfigEntry, SharedState,
+    VideoEncoderState, VideoSourceConfigEntry,
 };
 use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 pub fn resp_profiles(state: &SharedState) -> String {
     let snapshot = state.read().profiles.profiles.clone();
-    let (vscs, vecs) = catalogues(state);
+    let (vscs, vecs, ptzs) = catalogues(state);
     let items: String = snapshot
         .iter()
-        .map(|p| render_profile(p, "Profiles", &vscs, &vecs))
+        .map(|p| render_profile(p, "Profiles", &vscs, &vecs, &ptzs))
         .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
@@ -23,13 +23,13 @@ pub fn resp_profile(state: &SharedState, body: &str) -> String {
     let inner = extract_tag(body, "GetProfile").unwrap_or_default();
     let want = extract_tag(&inner, "ProfileToken").unwrap_or_default();
     let snapshot = state.read().profiles.profiles.clone();
-    let (vscs, vecs) = catalogues(state);
+    let (vscs, vecs, ptzs) = catalogues(state);
     match snapshot.iter().find(|p| p.token == want) {
         Some(p) => soap(
             r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
             &format!(
                 "<trt:GetProfileResponse>{}</trt:GetProfileResponse>",
-                render_profile(p, "Profile", &vscs, &vecs)
+                render_profile(p, "Profile", &vscs, &vecs, &ptzs)
             ),
         ),
         None => resp_soap_fault("ter:NoProfile", &format!("Profile not found: {want}")),
@@ -140,7 +140,7 @@ pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
             "<trt:CreateProfileResponse>{}</trt:CreateProfileResponse>",
             // A freshly created profile carries no configurations yet, so the
             // catalogues are never consulted.
-            render_profile(&entry, "Profile", &[], &[])
+            render_profile(&entry, "Profile", &[], &[], &[])
         ),
     )
 }
@@ -222,6 +222,7 @@ pub(crate) fn create_profile_in_state(
             video_encoder_config_token: None,
             audio_source_config_token: None,
             audio_encoder_config_token: None,
+            ptz_config_token: None,
         };
         eprintln!("    [STATE] profile created: {token} ({name})");
         s.profiles.profiles.push(entry.clone());
@@ -528,6 +529,7 @@ fn render_profile(
     tag: &str,
     vscs: &[VideoSourceConfigEntry],
     vecs: &[VideoEncoderState],
+    ptzs: &[PtzConfigEntry],
 ) -> String {
     let vsc = p
         .video_source_config_token
@@ -549,10 +551,20 @@ fn render_profile(
         .as_deref()
         .map(render_aec_inline)
         .unwrap_or_default();
+    // `MediaProfile::ptz_config_token` reads `Profile/PTZConfiguration@token`
+    // and nothing ever fed it. Media1 inlines the whole configuration, as it
+    // does for every other kind; Media2 emits a token reference. The body comes
+    // from `ptz::render_config` so the two services cannot drift.
+    let ptz = p
+        .ptz_config_token
+        .as_deref()
+        .and_then(|t| ptzs.iter().find(|c| c.token == t))
+        .map(|c| super::ptz::render_config(c, "tt:PTZConfiguration"))
+        .unwrap_or_default();
     format!(
         r#"<trt:{tag} token="{token}" fixed="{fixed}">
           <tt:Name>{name}</tt:Name>
-          {vsc}{vec}{asc}{aec}
+          {vsc}{vec}{asc}{aec}{ptz}
         </trt:{tag}>"#,
         token = p.token,
         fixed = p.fixed,
@@ -565,9 +577,19 @@ fn render_profile(
 /// Every caller below needs the pair, and taking one lock rather than two
 /// keeps a responder from rendering a profile whose source config and encoder
 /// config came from different moments.
-fn catalogues(state: &SharedState) -> (Vec<VideoSourceConfigEntry>, Vec<VideoEncoderState>) {
+fn catalogues(
+    state: &SharedState,
+) -> (
+    Vec<VideoSourceConfigEntry>,
+    Vec<VideoEncoderState>,
+    Vec<PtzConfigEntry>,
+) {
     let s = state.read();
-    (s.video_source_configs.clone(), s.video_encoders.clone())
+    (
+        s.video_source_configs.clone(),
+        s.video_encoders.clone(),
+        s.ptz_configs.clone(),
+    )
 }
 
 fn render_vsc_inline(vscs: &[VideoSourceConfigEntry], token: &str) -> String {

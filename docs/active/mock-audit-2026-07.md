@@ -78,7 +78,7 @@ are the "before" picture the rest of this document reasons about.
   27 round-tripped, 15 were defects, 5 were declared stubs. **After Tiers 1
   and 2: 42 round-trip, 0 defects, 5 declared stubs** — `Expect::Broken` has
   no rows left. **After the Storage and metadata fixes (§5): 48 pairs, 45
-  round-trip, 3 declared stubs; the token table is 28 rows, 21
+  round-trip, 3 declared stubs; the token table is 28 rows, 22
   discriminating.**
 
   *Correction.* This line read "40 round-trip … 5 declared stubs" until the
@@ -252,7 +252,10 @@ against this — so its Profile G verdict on the mock is measuring a facade.
 tokens fault instead of being answered — `NoSuchRecording-DELREC-5701` and
 siblings.
 
-Two per-token operations moved from `Blind` to `Discriminates` in
+Three more moved from `Blind` to `Discriminates` when the PTZ family was
+wired (`ptz/compatible-configs`, plus `ptz/node`, `ptz/config` and
+`ptz/config-options`, which had no rows at all). Two per-token operations
+moved in
 `tests/mock_token_discrimination.rs`: `GetRecordingJobState` (the job's own mode)
 and `GetReplayUri` (the URI now names the recording). Five rows in
 `tests/mock_roundtrip.rs` moved from `Broken` to `Works`, which leaves that table
@@ -290,7 +293,7 @@ is a family a user might reasonably expect to work.
 | Family | Probe |
 |---|---|
 | Audio (Media1 + Media2): sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration` | `get_audio_sources` — no `DeviceState` field; 1 static |
-| PTZ configurations / nodes / options, `SetConfiguration` | `ptz_get_configurations` — no field; 1 static |
+| ~~PTZ configurations / nodes / options~~ **fixed** (`SetConfiguration` still discards) | `ptz_get_configurations` — no field; 1 static |
 | ~~Storage configurations, `SetStorageConfiguration`~~ **fixed** | `get_storage_configurations` — no field; 1 static |
 | ~~Media2 metadata configurations, `SetMetadataConfiguration`~~ **fixed** | dispatch read: static both sides |
 | ~~Media2 `SetVideoSourceMode`~~ **fixed — now faults** | dispatch read: static |
@@ -369,10 +372,24 @@ the 384 the mock emits, then diffed. 51 raw candidates; most are false positives
 (attributes rather than elements, tags rendered from a variable, prefixes my
 extractor missed). **Verified real:**
 
-- **PTZ coordinate spaces and limits** — `PanTiltLimits`, `ZoomLimits`, and all
-  eight `*PositionSpace` / `*VelocitySpace` URIs are never emitted. Those
-  `PtzConfiguration` fields are `None` from the mock forever; their only
-  exercise is a hand-written unit fixture.
+- ~~**PTZ coordinate spaces and limits** — `PanTiltLimits`, `ZoomLimits`, and all
+  eight `*PositionSpace` / `*VelocitySpace` URIs are never emitted.~~ **Fixed**
+  2026-08-03 with the PTZ Tier 3 work. `PtzConfigEntry` carries all six default
+  space URIs, `DefaultPTZSpeed` and both limit blocks; `PtzNodeEntry` carries the
+  eight `tt:PTZSpaces` slots, which the mock had been sending as
+  `<tt:SupportedPTZSpaces/>` — an empty element, so `PtzNode::pan_tilt_spaces`,
+  `zoom_spaces` and `aux_commands` were empty `Vec`s from the mock forever.
+  **The node half of this was not in the list above**; it was found while
+  planning the fix, which is a limit of the element-name diff: an element that is
+  emitted but always *empty* looks identical to one that is emitted correctly.
+
+  Two things this closed that the diff could not have found either. oxvif read
+  and wrote `DefaultAbsolutePanTiltPositionSpace`, where `onvif.xsd` spells it
+  `DefaultAbsolutePantTiltPositionSpace` — `Pant`, ONVIF's own normative typo —
+  so the field was `None` from every conformant device *and* `SetConfiguration`
+  sent an element no schema declares. And `PtzConfiguration::to_xml_body` never
+  emitted the limits it parsed, so a get → modify → set lost them silently and
+  returned `Ok(())`. Both were client defects the mock had been agreeing with.
 - ~~**Storage credential fields** — `resp_storage_configurations()` is static
   and omits them.~~ **Fixed** with the Tier 3 Storage work above:
   `StorageUri` and `User/UserName` are now rendered from state, and the
@@ -463,7 +480,7 @@ schema-fidelity chase and stall everything else.
 |---|---|
 | ~~1. Property test **round-trip** (§8.1)~~ **done** — `tests/mock_roundtrip.rs` | It was both probe and guard. Produced the Tier 1 list mechanically, confirmed 46 of 47 hand classifications, and added item 1.8. |
 | ~~2. Tier 1 wiring (§3)~~ **done** — all 8 items | Eight rows moved from `Broken` to `Works`; **35 of 47 pairs now round-trip**. Three new cross-service tests in `tests/mock_media1_media2_agree.rs` cover the bindings and the shared source-config writer. |
-| ~~3. Tier 2.1 PTZ per-profile (§4.1)~~ **done** | `PtzState` is keyed by profile token; 18 dispatch arms gained `body`; the four seeded heads deliberately disagree. |
+| ~~3. Tier 2.1 PTZ per-profile (§4.1)~~ **done**, then **corrected** 2026-08-03 | `PtzState` was keyed by *profile* token; 18 dispatch arms gained `body`. Right that PTZ is per-channel, wrong about which channel: it made the main and the sub stream of one lens two independent motors. It is now keyed by **PTZ node**, reached through the profile's PTZ configuration. |
 | ~~4. Property test **token discrimination** (§8.2)~~ **done** — `tests/mock_token_discrimination.rs` | 26 rows; 19 discriminate, 7 declared static. Guards step 3 and the 0.15 media/imaging work. |
 | ~~5. Tier 2.2 recording state (§4.2)~~ **done** | `RecordingState` mirrors `ProfilesState`; all eleven operations wired. Unblocks Profile G testing, including the health check's own liveness chain. |
 | 6. Tiers 3 and 4 | **In progress.** The decision to close them before shipping 0.15.0 was taken 2026-07-31. Storage is done; the rest are below. Until each lands it stays *declared* — every remaining Tier 3 family has a `Static` or `Blind` row asserting it is still a stub, so none can quietly become a lie. Fix one and the tables tell you to move the row. |

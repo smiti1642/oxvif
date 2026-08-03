@@ -231,7 +231,7 @@ construction a real device uses.
 
 ## 5. State model
 
-`DeviceState` (`src/mock/state.rs`) is a flat serde struct — 28 fields: 25
+`DeviceState` (`src/mock/state.rs`) is a flat serde struct — 30 fields: 27
 persisted, 3 runtime-only. `MockState` wraps it in a lock exposing
 `read()`, `modify()`, `modify_returning()` and `set_on_change()`.
 
@@ -252,7 +252,9 @@ snapshot loads and the rest falls back to the factory fixture.
 | `gateway_ipv4` | `Vec<String>` | yes | `SetNetworkDefaultGateway` |
 | `discovery_mode` | `String` | `"Discoverable"` | `SetDiscoveryMode` |
 | `imaging_sources` | `Vec<ImagingState>` | 2 | `SetImagingSettings`, `Move`, `Stop` |
-| `ptz` | `PtzState` | 4 channels | 12 PTZ operations |
+| `ptz` | `PtzState` | 2 channels, **keyed by PTZ node token** | 12 PTZ operations |
+| `ptz_nodes` | `Vec<PtzNodeEntry>` | 2 | — (read-only) |
+| `ptz_configs` | `Vec<PtzConfigEntry>` | 2 | `SetConfiguration` |
 | `interface` | `NetworkInterfaceState` | yes | `SetNetworkInterfaces` |
 | `protocols` | `Vec<NetworkProtocolState>` | yes | `SetNetworkProtocols` |
 | `osd` | `OsdState` | yes | `CreateOSD`, `SetOSD`, `DeleteOSD` |
@@ -314,26 +316,66 @@ the wrong channel.
 
 ### 6.3 Profiles
 
-| Token | Name | Fixed | Source cfg | Encoder cfg |
-|---|---|---|---|---|
-| `Profile_1` | `mainStream` | yes | `VSC_1` | `VEC_1` |
-| `Profile_2` | `subStream` | no | `VSC_1` | `VEC_2` |
-| `Profile_3` | `mainStream2` | yes | `VSC_2` | `VEC_3` |
-| `Profile_4` | `subStream2` | no | `VSC_2` | `VEC_4` |
+| Token | Name | Fixed | Source cfg | Encoder cfg | PTZ cfg |
+|---|---|---|---|---|---|
+| `Profile_1` | `mainStream` | yes | `VSC_1` | `VEC_1` | `PTZConfig_1` |
+| `Profile_2` | `subStream` | no | `VSC_1` | `VEC_2` | `PTZConfig_1` |
+| `Profile_3` | `mainStream2` | yes | `VSC_2` | `VEC_3` | `PTZConfig_2` |
+| `Profile_4` | `subStream2` | no | `VSC_2` | `VEC_4` | *(none)* |
 
 `fixed="true"` profiles refuse deletion (`ter:DeletionOfFixedProfile`).
 
-### 6.4 PTZ — four independent heads
+`Profile_4` binds no PTZ configuration on purpose: it is the fixture for a
+profile that is **not PTZ-capable**, and every PTZ operation on it faults.
 
-| Profile | Position (pan, tilt, zoom) | Presets | Tours |
+### 6.4 PTZ — two heads, one per lens
+
+**A profile does not own a head.** It reaches one through a PTZ configuration:
+
+```
+ProfileToken → ProfileEntry.ptz_config_token → PtzConfigEntry.node_token → PtzChannel
+```
+
+So the main and the sub stream of one lens are **one** head, which is what a
+camera does. Until 0.15 `PtzState` was keyed by *profile*, and moving
+`Profile_1` left `Profile_2` reporting its old position.
+
+| Node | Reached by | Spaces | Home | Fixed home | Max presets | Aux |
+|---|---|---|---|---|---|---|
+| `PTZNode_1` | `Profile_1`, `Profile_2` (lens 1) | all 8 | yes | no | 100 | 2 |
+| `PTZNode_2` | `Profile_3` (lens 2) | **zoom only** (4) | no | yes | 8 | 0 |
+
+| Node | Position (pan, tilt, zoom) | Presets | Tours |
 |---|---|---|---|
-| `Profile_1` | 0.0, 0.0, 0.0 | `Home`, `Door` | 1 |
-| `Profile_2` | 0.25, −0.10, 0.40 | `Gate` | 0 |
-| `Profile_3` | −0.60, 0.35, 0.80 | `Lobby`, `Dock`, `Roof` | 0 |
-| `Profile_4` | 0.0, 0.0, 0.0 | *(none)* | 0 |
+| `PTZNode_1` | 0.0, 0.0, 0.0 | `Home`, `Door` | 1 |
+| `PTZNode_2` | 0.0, 0.0, 0.80 | `Lobby`, `Dock`, `Roof` | 0 |
 
-`Profile_4`'s empty preset list is load-bearing: an empty list is legitimate,
-and it is the only fixture that catches a renderer substituting a default.
+`PTZNode_2` declares **no pan/tilt space at all**, so `AbsoluteMove`,
+`RelativeMove` and `ContinuousMove` on `Profile_3` are refused if the request
+carries a `<tt:PanTilt>` element — even `x="0" y="0"`, because the question is
+whether the vector is present. Its presets therefore carry zero pan and tilt;
+they differ from each other, and from lens 1's, in **zoom**.
+
+> **This makes lens 2 unreachable through oxvif's move API.**
+> `ptz_absolute_move`, `ptz_relative_move` and `ptz_continuous_move` always emit
+> a `<tt:PanTilt>` element. Use `GotoPreset` to position a zoom-only head. That
+> is a gap in the *client* against real zoom-only hardware, not a mock quirk —
+> `docs/active/ptz-wiring-plan-2026-07.md` §3.5.
+
+### 6.4.1 PTZ configurations
+
+| Token | Node | UseCount | Default spaces | DefaultPTZSpeed | PanTiltLimits | ZoomLimits | Timeout | Options |
+|---|---|---|---|---|---|---|---|---|
+| `PTZConfig_1` | `PTZNode_1` | 2 | all 6 | 0.5 / 0.5 / 0.5 | ±0.9 × ±0.7 | 0.0–1.0 | `PT10S` | `PT1S`–`PT60S` |
+| `PTZConfig_2` | `PTZNode_2` | 1 | the 3 zoom ones | *(absent)* | *(absent)* | 0.1–0.95 | `PT30S` | `PT5S`–`PT30S` |
+
+**The absences are load-bearing.** An `Option` field is only observable as
+`None`-versus-`Some` if some fixture exercises each arm; `CLAUDE.md`'s batch
+mutation for `Option` parse helpers has nothing to redden otherwise.
+
+The absolute pan/tilt space element is spelled
+`DefaultAbsolutePantTiltPositionSpace` — `Pant`, double `t`. That is ONVIF's own
+typo in `onvif.xsd` and it is normative.
 
 ### 6.5 Storage
 
@@ -830,7 +872,7 @@ The two tables are the important ones. Each row **declares its intent** —
 and **all arms are asserted**. Wire a declared stub up and the test goes red
 telling you to move the row, so the list cannot rot into a permanent blind
 spot. Current state: 48 round-trip pairs (**45** working, **3** static, 0
-known-broken) and 28 token rows (21 discriminating, 7 blind).
+known-broken) and 28 token rows (22 discriminating, 6 blind).
 
 The three static rows are exactly the two families still unwired —
 `media1/audio-encoder-config`, `media2/audio-encoder-config`,
@@ -853,7 +895,6 @@ Pinned by a `Static` row in `tests/mock_roundtrip.rs` or a `Blind` row in
 | Family | What is missing |
 |---|---|
 | **Audio**, both services — sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration` | No `DeviceState` field. One fixed configuration, and writes are discarded. |
-| **PTZ configurations / nodes / options**, `SetConfiguration` | No `DeviceState` field. All four heads report the same configuration. |
 | **Media2 `GetVideoSourceModes`** | Static — one mode (`Mode_1`) for every `VideoSourceToken`. `SetVideoSourceMode` is **not** a stub: it faults, see below. |
 | **`GetStreamUri` / `GetSnapshotUri`**, both services | One canned URI for every profile. A real device gives each profile its own. |
 | **Media1 `GetOSDOptions`**, **Media2 `GetVideoEncoderInstances`** | Static. |
@@ -862,11 +903,6 @@ Pinned by a `Static` row in `tests/mock_roundtrip.rs` or a `Blind` row in
 
 Audit §6.
 
-- **PTZ coordinate spaces and limits.** `PanTiltLimits`, `ZoomLimits` and all
-  eight `*PositionSpace` / `*VelocitySpace` URIs on `PtzConfiguration` are
-  never emitted, so those fields are `None` from the mock forever. (The
-  *status* response does carry a `space` attribute — §8.5 — but the
-  configuration does not.)
 - **Four PTZ attributes are not in oxvif's types, so the mock has nowhere to
   put them.** `onvif.xsd` gives `tt:PTZConfiguration` the optional `xs:int`
   attributes `MoveRamp`, `PresetRamp` and `PresetTourRamp`, and `tt:PTZNode`
