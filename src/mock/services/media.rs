@@ -1449,7 +1449,7 @@ pub fn resp_audio_encoder_configuration(state: &SharedState, body: &str) -> Stri
 /// This response was flat — `trt:Options` repeated with `Encoding` as a direct
 /// child — which is *Media2's* shape. `AudioEncoderConfigurationOptions::from_xml`
 /// read that same wrong shape, so the mock and the parser agreed with each other
-/// and with no Media1 device on earth. Both were fixed in 0.16; this is the half
+/// and with no Media1 device on earth. Both were fixed in 0.15; this is the half
 /// that keeps the parser's Media1 branch exercised.
 ///
 /// It was also one static pair for the whole device, so a caller that passed the
@@ -1508,7 +1508,7 @@ pub(crate) fn render_audio_option(o: &AudioOptionEntry, qname: &str) -> String {
 ///
 /// **Refuses a body without `Multicast` or `SessionTimeout`.** Both are
 /// *required* members of `tt:AudioEncoderConfiguration`, so a device validating
-/// the request rejects one that omits them — and oxvif omitted both until 0.16.
+/// the request rejects one that omits them — and oxvif omitted both until 0.15.
 /// Storing what arrives regardless would make the mock the one device on which
 /// the old, invalid body worked, which is the opposite of what it is for.
 ///

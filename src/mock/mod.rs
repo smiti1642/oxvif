@@ -98,7 +98,7 @@
 //! **6. A request the schema would reject is refused.** Media1
 //! `SetAudioEncoderConfiguration` faults on a body missing `Multicast` or
 //! `SessionTimeout` (`ter:ConfigModify`), because a validating device would.
-//! oxvif itself sent that body until 0.16; accepting it here would have made the
+//! oxvif itself sent that body until 0.15; accepting it here would have made the
 //! mock the one device on which the bug did not show.
 //!
 //! What is *not* strict is written down rather than left to discovery:

@@ -804,6 +804,10 @@ impl OnvifSession {
     }
 
     /// Write an audio encoder configuration back to the device.
+    ///
+    /// Read-modify-write — see
+    /// [`OnvifClient::set_audio_encoder_configuration`] for the two members
+    /// Media1 requires and cannot invent.
     pub async fn set_audio_encoder_configuration(
         &self,
         config: &AudioEncoderConfiguration,
@@ -1034,6 +1038,9 @@ impl OnvifSession {
     }
 
     /// Apply an audio encoder configuration via Media2.
+    ///
+    /// Media2's type has no `SessionTimeout` — see
+    /// [`OnvifClient::set_audio_encoder_configuration_media2`].
     pub async fn set_audio_encoder_configuration_media2(
         &self,
         config: &AudioEncoderConfiguration,
@@ -1221,6 +1228,9 @@ impl OnvifSession {
     }
 
     /// Write a PTZ configuration back to the device.
+    ///
+    /// Can return `Err` before sending anything — see
+    /// [`OnvifClient::ptz_set_configuration`].
     pub async fn ptz_set_configuration(
         &self,
         config: &PtzConfiguration,

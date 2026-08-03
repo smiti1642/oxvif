@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.15.0] - 2026-07-29
+## [0.15.0] - 2026-08-03
 
 Headline: **every service can now be asked what it can do, and the PTZ surface
 gains guard tours.** Seventeen new operations — nine `GetServiceCapabilities`,

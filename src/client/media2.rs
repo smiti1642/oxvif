@@ -526,6 +526,15 @@ impl OnvifClient {
     /// Apply an audio encoder configuration via Media2.
     ///
     /// ONVIF Media2 WSDL `SetAudioEncoderConfiguration` — Profile T §8.11.
+    ///
+    /// **This is not the Media1 request with a different prefix.**
+    /// `tt:AudioEncoder2Configuration` orders `Multicast` *before* `Bitrate`
+    /// and has **no `SessionTimeout` member**, so
+    /// [`session_timeout`](AudioEncoderConfiguration::session_timeout) is not
+    /// sent and cannot be changed here — use
+    /// [`set_audio_encoder_configuration`](Self::set_audio_encoder_configuration),
+    /// where it is required. `Multicast` is optional in this type, so `None`
+    /// is a legal thing to send.
     pub async fn set_audio_encoder_configuration_media2(
         &self,
         media2_url: &str,

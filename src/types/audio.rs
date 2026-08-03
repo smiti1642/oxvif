@@ -119,6 +119,15 @@ impl std::fmt::Display for AudioEncoding {
 /// Audio codec settings returned by `GetAudioEncoderConfiguration(s)`.
 ///
 /// Pass a modified copy to `set_audio_encoder_configuration`.
+///
+/// **One Rust type, two ONVIF types.** Media1's
+/// `tt:AudioEncoderConfiguration` requires [`multicast`](Self::multicast) and
+/// [`session_timeout`](Self::session_timeout); Media2's
+/// `tt:AudioEncoder2Configuration` makes `Multicast` optional, puts it before
+/// `Bitrate`, and has no `SessionTimeout` at all. Both are read into this
+/// struct and each service is written in its own shape — so a value that
+/// arrived from one service can be sent to the other, but a Media2 write
+/// carries no `session_timeout` for the device to store.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AudioEncoderConfiguration {
@@ -288,6 +297,11 @@ pub struct AudioEncoderOptions {
 /// Valid parameter ranges for `SetAudioEncoderConfiguration`.
 ///
 /// Contains one [`AudioEncoderOptions`] entry per encoding the device supports.
+///
+/// The two services nest this response differently — Media1 wraps the entries
+/// one level deeper than Media2 — and both shapes are accepted. Until 0.15
+/// only Media2's was, which gave a Media1 device a single entry holding the
+/// default encoding and two empty lists rather than an error.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct AudioEncoderConfigurationOptions {

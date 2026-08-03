@@ -674,6 +674,22 @@ impl OnvifClient {
     /// Obtain the current config via
     /// [`get_audio_encoder_configuration`](Self::get_audio_encoder_configuration),
     /// modify the fields you want to change, then call this method.
+    ///
+    /// **Read-modify-write, not build-from-scratch.**
+    /// `tt:AudioEncoderConfiguration` requires both
+    /// [`multicast`](AudioEncoderConfiguration::multicast) and
+    /// [`session_timeout`](AudioEncoderConfiguration::session_timeout); a
+    /// configuration you assembled yourself with either left `None` produces a
+    /// body a validating device rejects. Nothing here can supply them — only
+    /// the device knows its own multicast settings.
+    ///
+    /// # Changed in 0.15
+    ///
+    /// The request body was `Encoding, Bitrate, SampleRate, Channels`: the two
+    /// required members above were missing, and `Channels` is not a member of
+    /// this type at all — it belongs to [`AudioSource`].
+    /// It is still written, last, where the type's trailing `<xs:any>` allows
+    /// it, rather than mid-sequence where it was.
     pub async fn set_audio_encoder_configuration(
         &self,
         media_url: &str,
@@ -696,6 +712,16 @@ impl OnvifClient {
     /// Retrieve valid parameter ranges for an audio encoder configuration.
     ///
     /// `media_url` comes from [`get_capabilities`](Self::get_capabilities).
+    ///
+    /// # Changed in 0.15
+    ///
+    /// This returned **one entry with the default encoding (`G711`) and two
+    /// empty lists** from every conformant Media1 device. Media1 wraps its
+    /// options one level deeper than Media2 — `Options/Options` — and the
+    /// parser read only the outer level, so it found the wrapper and none of
+    /// the data. Nothing errored, because
+    /// [`AudioEncoderOptions`](crate::types::AudioEncoderOptions) derives
+    /// `Default`. Both nestings are now read.
     pub async fn get_audio_encoder_configuration_options(
         &self,
         media_url: &str,

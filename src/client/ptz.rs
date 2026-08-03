@@ -348,6 +348,21 @@ impl OnvifClient {
     /// Obtain the current config via
     /// [`ptz_get_configuration`](Self::ptz_get_configuration),
     /// modify the fields, then call this method.
+    ///
+    /// [`pan_tilt_limits`](PtzConfiguration::pan_tilt_limits) and
+    /// [`zoom_limits`](PtzConfiguration::zoom_limits) are sent; they were read
+    /// and silently dropped until 0.15, so a round-trip cleared whatever limits
+    /// the device had. The absolute pan/tilt space is written under ONVIF's own
+    /// spelling — see
+    /// [`default_abs_pan_tilt_space`](PtzConfiguration::default_abs_pan_tilt_space).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OnvifError::InvalidArgument`] **before any request is sent**
+    /// when `pan_tilt_limits` is `Some` with `y_range: None`. Its `Range` is a
+    /// `tt:Space2DDescription`, whose `YRange` is required, so there is no
+    /// conformant document to send. `zoom_limits` is one-dimensional and has no
+    /// such constraint.
     pub async fn ptz_set_configuration(
         &self,
         ptz_url: &str,

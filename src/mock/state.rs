@@ -498,7 +498,7 @@ pub struct PtzConfigEntry {
 
 // ── Audio ────────────────────────────────────────────────────────────────────
 //
-// The whole audio family was six string literals until 0.16 — the last Tier 3
+// The whole audio family was six string literals until 0.15 — the last Tier 3
 // entry in `docs/active/mock-audit-2026-07.md` §5. Two facts about it were
 // invisible while it was:
 //
@@ -516,7 +516,7 @@ pub struct PtzConfigEntry {
 pub struct AudioSourceEntry {
     pub token: String,
     /// `Channels` belongs **here**, not on an encoder configuration — the place
-    /// `crate::types::AudioEncoderConfiguration` looked for it until 0.16.
+    /// `crate::types::AudioEncoderConfiguration` looked for it until 0.15.
     pub channels: u32,
 }
 
@@ -2458,7 +2458,7 @@ mod tests {
 
     /// `Multicast` and `SessionTimeout` are required by
     /// `tt:AudioEncoderConfiguration`, so Media1 refuses a body without them —
-    /// which is the body oxvif itself sent until 0.16.
+    /// which is the body oxvif itself sent until 0.15.
     #[test]
     fn media1_set_audio_encoder_requires_multicast_and_session_timeout() {
         use crate::mock::services::media;

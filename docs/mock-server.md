@@ -421,7 +421,7 @@ Media2  Response/Options   tt:AudioEncoder2ConfigurationOptions  ← repeated, I
 Media1's response was flat (Media2's shape) and Media2's was wrapped (Media1's).
 `AudioEncoderConfigurationOptions::from_xml` read only the flat one, so Media1
 agreed with the parser and with no real device, and Media2 agreed with neither.
-Both were fixed in 0.16; the parser now reads either.
+Both were fixed in 0.15; the parser now reads either.
 
 **That makes a client-level test unable to tell the shapes apart**, which is why
 `audio_options_use_media1_nesting_on_the_wire` and its Media2 twin assert raw
@@ -1001,7 +1001,7 @@ Audit §6.
   `SessionTimeout`** (`ter:ConfigModify` / `IncompleteAudioEncoder-SETAEC-5715`).
   Both are *required* members of `tt:AudioEncoderConfiguration`, so a device
   validating the request rejects one that omits them — and oxvif omitted both
-  until 0.16. Accepting it here would make the mock the one device on which the
+  until 0.15. Accepting it here would make the mock the one device on which the
   old, invalid request worked.
 - **A Media2 `SetAudioEncoderConfiguration` never changes `SessionTimeout`.**
   `tt:AudioEncoder2Configuration` has no such member, so a Media2 write cannot
