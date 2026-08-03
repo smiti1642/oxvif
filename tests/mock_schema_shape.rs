@@ -1,0 +1,1022 @@
+//! Does the mock emit XML the ONVIF schema actually declares?
+//!
+//! ## Why this exists
+//!
+//! The mock writes XML as hand-built strings, so it can emit a document no
+//! schema allows and **all five gate lines stay green**. Six instances have been
+//! found so far, every one of them by a human reading a schema file by hand:
+//!
+//! | found | the mock emitted | the schema says |
+//! |---|---|---|
+//! | 0.15.0 | `tt:AFModes` at the top of the focus options | that name is real, but only under `Extension` |
+//! | 0.15.0 | `BitrateRange` at the top level of the options | only under `Extension` |
+//! | 0.15.0 | Media1 options flat | wrapper + repeated entry |
+//! | 0.15.0 | `DefaultAbsolutePanTiltPositionSpace` | `…Pant…`, double `t` |
+//! | 0.15.0 | `tt:ScopeAttribute` | a different name entirely |
+//! | 0.15.0 | Media2 `Audio` | `AudioEncoder` — **this one was a client bug** |
+//!
+//! Three of those were put back one at a time and each turned this test red on
+//! the assertion (`8091892`, schema set of run 3):
+//!
+//! ```text
+//! tt:AFModes          UNKNOWN-CHILD  6 → 7      UNKNOWN-NAME unchanged
+//! PanTilt spelling    UNKNOWN-CHILD  6 → 10     UNKNOWN-NAME 12 → 16
+//! tr2:Audio           MISSING-REQ.  23 → 22     UNKNOWN-NAME 12 → 13
+//! ```
+//!
+//! Two things in that table are worth keeping. **`AFModes` moves
+//! `UNKNOWN-CHILD`, not `UNKNOWN-NAME`** — the name is a real ONVIF element at
+//! a deeper level, so it is an `Extension`-nesting defect rather than a
+//! misspelling, and `docs/active/schema-shape-plan-2026-08.md` said otherwise
+//! until this run measured it. And **`tr2:Audio` leaves the total at 63 while
+//! moving two kinds**, which is why [`PINS`] is per-kind: a single total would
+//! have let this release's client bug back in silently.
+//!
+//! Six for six by hand is not a strategy, and nothing says the class is
+//! exhausted. Worse, **no other test in this repository can see any of it**:
+//! `XmlNode` is namespace-stripped (`src/soap/xml.rs`) and every lookup matches
+//! the local name only, so oxvif's own parser is namespace-blind and
+//! order-independent. A response with every element in the wrong namespace, in
+//! the wrong order, parses identically. `tests/mock_roundtrip.rs` and
+//! `tests/mock_token_discrimination.rs` go through the client, so neither could
+//! ever have caught one.
+//!
+//! ## Why it is `#[ignore]`d, and what that costs
+//!
+//! The ONVIF schema set is © ONVIF 2008-2025. The maintainer's decision
+//! (`docs/active/schema-shape-plan-2026-08.md` §4, D2) is that **nothing derived
+//! from it enters this repository** — not the files, not a generated index, not
+//! a derived fixture, and **not a schema fact hardcoded here**. A
+//! `const REQUIRED: &[&str] = &["TLS1.1", …]` in this file would be the same
+//! redistribution wearing a different extension.
+//!
+//! So every element name, cardinality and sequence below is read at run time
+//! from a directory outside the working tree. This file contains namespace URIs
+//! and its own logic; nothing else.
+//!
+//! ```sh
+//! OXVIF_ONVIF_SCHEMA=/path/to/schema \
+//!   cargo test --features mock --test mock_schema_shape -- --ignored --nocapture
+//! ```
+//!
+//! The directory needs the service WSDLs plus `onvif.xsd` and `common.xsd`;
+//! `onvif.xsd` alone anchors 19% of the output and is not the schema. Fetching
+//! `b-2.xsd` as well is what made the three events findings visible at all.
+//!
+//! **The cost, stated plainly: this check can silently stop being run.** Not in
+//! CI, not for a contributor, not for the maintainer on a machine where the
+//! directory moved. Two things make that survivable, and both are load-bearing:
+//!
+//! - the skip path **prints why**, so a run that checked nothing never looks
+//!   like a run that passed;
+//! - `CLAUDE.md`'s publishing checklist is the only thing that makes it happen.
+//!   That is weaker than a gate line, and is written down as weaker.
+//!
+//! ## What it cannot see
+//!
+//! - **Values.** Ranges, enumerations, lexical spaces. A structural index
+//!   carries names and cardinality.
+//! - **An empty element whose children are all optional.** `<tt:SupportedPTZSpaces/>`
+//!   was a real 0.15.0 defect and is schema-valid. Shape checking answers *is
+//!   this well-formed*, never *does it mean anything*.
+//! - **Whatever the corpus does not reach.** A third of the responses are SOAP
+//!   faults, because the operation needs a body this file does not supply. Those
+//!   contribute no shape evidence, and [`PAYLOAD_FLOOR`] is what stops that
+//!   third quietly becoming two thirds.
+#![cfg(feature = "mock")]
+
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::{Path, PathBuf};
+
+use oxvif::mock::MockTransport;
+use oxvif::transport::Transport;
+
+// ── Namespace URIs. The only external constants this file is allowed. ────────
+
+const XS: &str = "http://www.w3.org/2001/XMLSchema";
+const WSDL: &str = "http://schemas.xmlsoap.org/wsdl/";
+const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
+
+// ── Pins ─────────────────────────────────────────────────────────────────────
+
+/// Distinct findings per kind, as of `8091892` against the schema set described
+/// in the lab's `NOTES.md` run 3.
+///
+/// **These are pins, not targets.** A fix lowers one and the test says so; a
+/// regression raises one and the test says that too. Never edit a number to
+/// make a run green — read the diff the failure prints first.
+///
+/// Quoted in `docs/active/mock-schema-conformance-2026-08.md` §1 and in the
+/// lab's `NOTES.md` (run 3). Change one here and both are wrong.
+const PINS: &[(&str, usize)] = &[
+    ("WRONG-NS", 16),
+    ("MISSING-REQUIRED", 23),
+    ("UNKNOWN-NAME", 12),
+    ("UNKNOWN-CHILD", 6),
+    ("ORDER", 6),
+];
+
+/// Floors on what the run actually covered.
+///
+/// Without these the whole check passes vacuously: an index that loaded nothing
+/// declares nothing missing, and a corpus of faults has no elements to judge.
+/// Measured 1314 / 608 / 105 at `8091892`; the floors sit below that so an
+/// ONVIF release with a few more types does not fail the build, but a schema
+/// directory half-copied does.
+const TYPE_FLOOR: usize = 1_200;
+const ANCHORED_FLOOR: usize = 550;
+/// Responses carrying a payload rather than a SOAP fault.
+const PAYLOAD_FLOOR: usize = 100;
+
+// ── A minimal namespace-aware XML tree ───────────────────────────────────────
+//
+// `oxvif::soap::XmlNode` cannot be used here: it strips namespaces, which is
+// precisely the property under test. quick-xml resolves element names against
+// in-scope declarations, but not QName *values* like `type="tt:IntRange"`, so
+// the prefix map is collected per file and applied by hand.
+
+type Qn = (String, String);
+
+#[derive(Debug)]
+struct Node {
+    ns: String,
+    local: String,
+    attrs: Vec<(String, String)>,
+    kids: Vec<Node>,
+}
+
+impl Node {
+    fn attr(&self, name: &str) -> Option<&str> {
+        self.attrs
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
+    }
+
+    fn xs_kids<'a>(&'a self, local: &'a str) -> impl Iterator<Item = &'a Node> {
+        self.kids
+            .iter()
+            .filter(move |k| k.ns == XS && k.local == local)
+    }
+}
+
+struct Raw {
+    name: String,
+    attrs: Vec<(String, String)>,
+    kids: Vec<Raw>,
+}
+
+/// Parse to a raw tree plus the file's flat prefix map.
+///
+/// Flat rather than scoped because these documents declare every prefix on the
+/// root element; a scoped map would be more code for no measured difference.
+fn parse(xml: &str) -> Result<(Raw, HashMap<String, String>), String> {
+    let mut reader = quick_xml::Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut prefixes: HashMap<String, String> = HashMap::new();
+    let mut stack: Vec<Raw> = Vec::new();
+    let mut root: Option<Raw> = None;
+
+    fn place(stack: &mut [Raw], root: &mut Option<Raw>, n: Raw) {
+        match stack.last_mut() {
+            Some(p) => p.kids.push(n),
+            None => *root = Some(n),
+        }
+    }
+
+    // `Attribute::unescape_value` is `#[cfg(not(feature = "encoding"))]`, and
+    // the dev-dependency turns `encoding` on precisely so the test build
+    // matches a downstream crate that does — see docs/dependency-pitfalls.md.
+    // The decoder-taking form is the one that exists in both builds.
+    let decoder = reader.decoder();
+
+    fn start(
+        e: &quick_xml::events::BytesStart,
+        px: &mut HashMap<String, String>,
+        decoder: quick_xml::encoding::Decoder,
+    ) -> Raw {
+        let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+        let mut attrs = Vec::new();
+        for a in e.attributes().flatten() {
+            let k = String::from_utf8_lossy(a.key.as_ref()).into_owned();
+            let v = a
+                .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, decoder)
+                .map(|v| v.into_owned())
+                .unwrap_or_else(|_| String::from_utf8_lossy(&a.value).into_owned());
+            if k == "xmlns" {
+                px.insert(String::new(), v.clone());
+            } else if let Some(p) = k.strip_prefix("xmlns:") {
+                px.insert(p.to_string(), v.clone());
+            }
+            attrs.push((k, v));
+        }
+        Raw {
+            name,
+            attrs,
+            kids: Vec::new(),
+        }
+    }
+
+    loop {
+        match reader.read_event().map_err(|e| e.to_string())? {
+            quick_xml::events::Event::Start(e) => stack.push(start(&e, &mut prefixes, decoder)),
+            quick_xml::events::Event::Empty(e) => {
+                let n = start(&e, &mut prefixes, decoder);
+                place(&mut stack, &mut root, n);
+            }
+            quick_xml::events::Event::End(_) => {
+                let n = stack.pop().ok_or("unbalanced end tag")?;
+                place(&mut stack, &mut root, n);
+            }
+            quick_xml::events::Event::Eof => break,
+            _ => {}
+        }
+    }
+    root.map(|r| (r, prefixes)).ok_or("no root element".into())
+}
+
+fn resolve_tree(r: Raw, px: &HashMap<String, String>) -> Node {
+    let (prefix, local) = match r.name.split_once(':') {
+        Some((p, l)) => (p, l),
+        None => ("", r.name.as_str()),
+    };
+    Node {
+        ns: px.get(prefix).cloned().unwrap_or_default(),
+        local: local.to_string(),
+        attrs: r.attrs,
+        kids: r.kids.into_iter().map(|k| resolve_tree(k, px)).collect(),
+    }
+}
+
+fn qname(raw: &str, px: &HashMap<String, String>, default_ns: &str) -> Option<Qn> {
+    if raw.is_empty() {
+        return None;
+    }
+    Some(match raw.split_once(':') {
+        Some((p, l)) => (px.get(p).cloned().unwrap_or_default(), l.to_string()),
+        None => (default_ns.to_string(), raw.to_string()),
+    })
+}
+
+// ── The index ────────────────────────────────────────────────────────────────
+
+#[derive(Clone)]
+struct Child {
+    ns: String,
+    name: String,
+    ty: Option<Qn>,
+    min: u32,
+    /// The `xs:choice` this child belongs to, if any. Members of one choice
+    /// share a position in the parent's sequence and are satisfied by *one* of
+    /// them being present — walking a choice as a sequence made the checker
+    /// demand every alternative at once, which was a false positive on the one
+    /// response that uses one.
+    group: Option<u32>,
+}
+
+#[derive(Default)]
+struct Ty {
+    base: Option<Qn>,
+    kids: Vec<Child>,
+    /// The type, or a base of it, has an `xs:any`. A wildcarded type legally
+    /// accepts unknown children, so "unknown child" cannot be reported for it.
+    wild: bool,
+    /// choice id -> its `minOccurs`.
+    groups: BTreeMap<u32, u32>,
+}
+
+#[derive(Default)]
+struct Index {
+    types: HashMap<Qn, Ty>,
+    globals: HashMap<Qn, Option<Qn>>,
+    declared: HashSet<Qn>,
+    known_ns: HashSet<String>,
+    next_group: u32,
+}
+
+fn min_occurs(n: &Node) -> u32 {
+    match n.attr("minOccurs") {
+        None => 1,
+        Some(v) => v.parse().unwrap_or(0),
+    }
+}
+
+/// A readable name for an inline `complexType`.
+///
+/// The event-service responses are almost entirely inline types, so this is
+/// exactly where an opaque serial number made a message useless.
+fn anon_name(owner: &str, local: &str) -> String {
+    if owner.is_empty() {
+        format!("<{local}>")
+    } else {
+        format!("<{owner}/{local}>")
+    }
+}
+
+type Px = HashMap<String, String>;
+
+impl Index {
+    fn load_schema_node(&mut self, sch: &Node, px: &Px) {
+        let tns = sch.attr("targetNamespace").unwrap_or("").to_string();
+        let efd = sch
+            .attr("elementFormDefault")
+            .unwrap_or("unqualified")
+            .to_string();
+        self.known_ns.insert(tns.clone());
+
+        // Global elements first: an `xs:element ref=` may point at one.
+        for el in sch.xs_kids("element") {
+            let Some(nm) = el.attr("name") else { continue };
+            let nm = nm.to_string();
+            let mut ty = el.attr("type").and_then(|v| qname(v, px, &tns));
+            if ty.is_none()
+                && let Some(inline) = el.xs_kids("complexType").next()
+            {
+                let qn = (tns.clone(), anon_name("", &nm));
+                let t = self.parse_type(inline, px, &tns, &efd, &nm);
+                self.types.insert(qn.clone(), t);
+                ty = Some(qn);
+            }
+            self.globals.insert((tns.clone(), nm.clone()), ty);
+            self.declared.insert((tns.clone(), nm));
+        }
+        for ct in sch.xs_kids("complexType") {
+            if let Some(nm) = ct.attr("name") {
+                let nm = nm.to_string();
+                let t = self.parse_type(ct, px, &tns, &efd, &nm);
+                self.types.insert((tns.clone(), nm), t);
+            }
+        }
+    }
+
+    fn parse_type(&mut self, node: &Node, px: &Px, tns: &str, efd: &str, owner: &str) -> Ty {
+        let mut t = Ty::default();
+        self.walk_type(node, px, tns, efd, owner, None, &mut t);
+        t
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn walk_type(
+        &mut self,
+        n: &Node,
+        px: &Px,
+        tns: &str,
+        efd: &str,
+        owner: &str,
+        group: Option<u32>,
+        t: &mut Ty,
+    ) {
+        for c in &n.kids {
+            if c.ns != XS {
+                continue;
+            }
+            match c.local.as_str() {
+                // The anonymous type of an enclosing xs:element; `add_element`
+                // handles it, and descending here would flatten it into the
+                // parent.
+                "complexType" | "annotation" => {}
+                "extension" => {
+                    t.base = c.attr("base").and_then(|v| qname(v, px, tns));
+                    self.walk_type(c, px, tns, efd, owner, group, t);
+                }
+                "any" => t.wild = true,
+                "choice" => {
+                    self.next_group += 1;
+                    let g = self.next_group;
+                    t.groups
+                        .insert(g, u32::from(c.attr("minOccurs") != Some("0")));
+                    self.walk_type(c, px, tns, efd, owner, Some(g), t);
+                }
+                "element" => self.add_element(c, px, tns, efd, owner, group, t),
+                _ => self.walk_type(c, px, tns, efd, owner, group, t),
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn add_element(
+        &mut self,
+        c: &Node,
+        px: &Px,
+        tns: &str,
+        efd: &str,
+        owner: &str,
+        group: Option<u32>,
+        t: &mut Ty,
+    ) {
+        if let Some(r) = c.attr("ref") {
+            let Some((ns, local)) = qname(r, px, tns) else {
+                return;
+            };
+            let ty = self
+                .globals
+                .get(&(ns.clone(), local.clone()))
+                .cloned()
+                .flatten();
+            self.declared.insert((ns.clone(), local.clone()));
+            t.kids.push(Child {
+                ns,
+                name: local,
+                ty,
+                min: min_occurs(c),
+                group,
+            });
+            return;
+        }
+        let local = c.attr("name").unwrap_or("").to_string();
+        let ns = if efd == "qualified" {
+            tns.to_string()
+        } else {
+            String::new()
+        };
+        let mut ty = c.attr("type").and_then(|v| qname(v, px, tns));
+        if ty.is_none()
+            && let Some(inline) = c.xs_kids("complexType").next()
+        {
+            let qn = (tns.to_string(), anon_name(owner, &local));
+            let sub_owner = format!("{owner}/{local}");
+            let sub = self.parse_type(inline, px, tns, efd, &sub_owner);
+            self.types.insert(qn.clone(), sub);
+            ty = Some(qn);
+        }
+        self.declared.insert((ns.clone(), local.clone()));
+        t.kids.push(Child {
+            ns,
+            name: local,
+            ty,
+            min: min_occurs(c),
+            group,
+        });
+    }
+
+    fn load_file(&mut self, path: &Path) -> Result<(), String> {
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let (raw, px) = parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+        let root = resolve_tree(raw, &px);
+        if root.ns == XS && root.local == "schema" {
+            self.load_schema_node(&root, &px);
+        } else {
+            // wsdl:definitions — the response wrapper elements live in each
+            // service WSDL's inline schema, not in onvif.xsd.
+            for tnode in root
+                .kids
+                .iter()
+                .filter(|k| k.ns == WSDL && k.local == "types")
+            {
+                for sch in tnode.xs_kids("schema") {
+                    self.load_schema_node(sch, &px);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Children, wildcard and choice groups for a type, following `xs:extension`.
+    fn resolve(&self, ty: Option<&Qn>) -> (Vec<Child>, bool, BTreeMap<u32, u32>) {
+        fn go(
+            ix: &Index,
+            ty: Option<&Qn>,
+            seen: &mut HashSet<Qn>,
+        ) -> (Vec<Child>, bool, BTreeMap<u32, u32>) {
+            let Some(q) = ty else {
+                return (Vec::new(), false, BTreeMap::new());
+            };
+            if seen.contains(q) {
+                return (Vec::new(), false, BTreeMap::new());
+            }
+            let Some(t) = ix.types.get(q) else {
+                return (Vec::new(), false, BTreeMap::new());
+            };
+            seen.insert(q.clone());
+            let (mut kids, mut wild, mut groups) = (Vec::new(), t.wild, t.groups.clone());
+            if let Some(b) = &t.base {
+                let (bk, bw, bg) = go(ix, Some(b), seen);
+                kids.extend(bk);
+                wild = wild || bw;
+                groups.extend(bg);
+            }
+            kids.extend(t.kids.iter().cloned());
+            (kids, wild, groups)
+        }
+        go(self, ty, &mut HashSet::new())
+    }
+}
+
+// ── Findings ─────────────────────────────────────────────────────────────────
+
+struct Finding {
+    doc: String,
+    kind: &'static str,
+    msg: String,
+}
+
+#[derive(Default)]
+struct Run {
+    findings: Vec<Finding>,
+    anchored: usize,
+    unanchored_children: usize,
+    /// Roots with no global element declaration. SOAP faults belong here and
+    /// are not defects; anything else needs explaining before it is dismissed.
+    unanchored_roots: Vec<(String, String, String)>,
+    /// Elements a WRONG-NS row already explains, so the name check stays quiet.
+    ns_explained: HashSet<(String, String, String, String)>,
+}
+
+impl Run {
+    fn add(&mut self, doc: &str, kind: &'static str, msg: String) {
+        self.findings.push(Finding {
+            doc: doc.to_string(),
+            kind,
+            msg,
+        });
+    }
+
+    fn check_anchored(&mut self, ix: &Index, doc: &str, node: &Node, ty: &Qn, path: &str) {
+        let (kids, wild, groups) = ix.resolve(Some(ty));
+        let by: HashMap<Qn, &Child> = kids
+            .iter()
+            .map(|k| ((k.ns.clone(), k.name.clone()), k))
+            .collect();
+        let mut by_local: HashMap<&str, &Child> = HashMap::new();
+        for k in &kids {
+            by_local.entry(k.name.as_str()).or_insert(k);
+        }
+        let order: Vec<Qn> = kids
+            .iter()
+            .map(|k| (k.ns.clone(), k.name.clone()))
+            .collect();
+
+        // A choice's members share the position of the first of them, so an
+        // alternative standing where a sibling was declared is not an ordering
+        // violation.
+        let mut first_of_group: HashMap<u32, usize> = HashMap::new();
+        let mut pos: HashMap<Qn, usize> = HashMap::new();
+        for (i, k) in kids.iter().enumerate() {
+            if let Some(g) = k.group {
+                first_of_group.entry(g).or_insert(i);
+            }
+            let p = k
+                .group
+                .and_then(|g| first_of_group.get(&g).copied())
+                .unwrap_or(i);
+            pos.entry((k.ns.clone(), k.name.clone())).or_insert(p);
+        }
+
+        let obs: Vec<Qn> = node
+            .kids
+            .iter()
+            .map(|c| (c.ns.clone(), c.local.clone()))
+            .collect();
+        self.anchored += 1;
+
+        // Wrong namespace — the parent declares this local name, elsewhere. One
+        // row covers all three symptoms it used to produce.
+        let mut satisfied: HashSet<Qn> = HashSet::new();
+        let mut resolved: HashMap<Qn, Qn> = HashMap::new();
+        let mut unknown: BTreeSet<String> = BTreeSet::new();
+        for o in &obs {
+            if by.contains_key(o) || !ix.known_ns.contains(&o.0) {
+                continue;
+            }
+            match by_local.get(o.1.as_str()) {
+                Some(want) => {
+                    self.add(
+                        doc,
+                        "WRONG-NS",
+                        format!(
+                            "{path}/{} — emitted in {}, {} declares it in {}",
+                            o.1, o.0, ty.1, want.ns
+                        ),
+                    );
+                    satisfied.insert((want.ns.clone(), want.name.clone()));
+                    resolved.insert(o.clone(), (want.ns.clone(), want.name.clone()));
+                    self.ns_explained.insert((
+                        doc.to_string(),
+                        path.to_string(),
+                        o.0.clone(),
+                        o.1.clone(),
+                    ));
+                }
+                None => {
+                    unknown.insert(o.1.clone());
+                }
+            }
+        }
+        if !unknown.is_empty() && !wild {
+            let names: Vec<&String> = unknown.iter().collect();
+            self.add(
+                doc,
+                "UNKNOWN-CHILD",
+                format!("{path}: {names:?} not declared by {}", ty.1),
+            );
+        }
+
+        let mut prev: i64 = -1;
+        for o in &obs {
+            let key = resolved.get(o).unwrap_or(o);
+            let Some(&i) = pos.get(key) else { continue };
+            if (i as i64) < prev {
+                let emitted: Vec<&str> = obs
+                    .iter()
+                    .map(|x| resolved.get(x).unwrap_or(x))
+                    .filter(|x| pos.contains_key(*x))
+                    .map(|x| x.1.as_str())
+                    .collect();
+                let declared: Vec<&str> = order.iter().map(|x| x.1.as_str()).collect();
+                self.add(
+                    doc,
+                    "ORDER",
+                    format!(
+                        "{path} ({}): emitted {emitted:?}, schema {declared:?}",
+                        ty.1
+                    ),
+                );
+                break;
+            }
+            prev = i as i64;
+        }
+
+        let present: HashSet<&Qn> = obs.iter().chain(satisfied.iter()).collect();
+        let mut missing: BTreeSet<String> = BTreeSet::new();
+        for k in &kids {
+            if k.group.is_none() && k.min >= 1 && !present.contains(&(k.ns.clone(), k.name.clone()))
+            {
+                missing.insert(k.name.clone());
+            }
+        }
+        for (g, gmin) in &groups {
+            if *gmin < 1 {
+                continue;
+            }
+            let members: Vec<&Child> = kids.iter().filter(|k| k.group == Some(*g)).collect();
+            if !members.is_empty()
+                && !members
+                    .iter()
+                    .any(|k| present.contains(&(k.ns.clone(), k.name.clone())))
+            {
+                let names: Vec<&str> = members.iter().map(|k| k.name.as_str()).collect();
+                missing.insert(format!("one of {}", names.join("|")));
+            }
+        }
+        if !missing.is_empty() {
+            let names: Vec<&String> = missing.iter().collect();
+            self.add(
+                doc,
+                "MISSING-REQUIRED",
+                format!("{path} ({}): {names:?}", ty.1),
+            );
+        }
+
+        for c in &node.kids {
+            let key = (c.ns.clone(), c.local.clone());
+            let child = by
+                .get(&key)
+                .or_else(|| resolved.get(&key).and_then(|k| by.get(k)));
+            match child
+                .and_then(|k| k.ty.as_ref())
+                .filter(|t| ix.types.contains_key(*t))
+            {
+                Some(t) => {
+                    let t = t.clone();
+                    self.check_anchored(ix, doc, c, &t, &format!("{path}/{}", c.local));
+                }
+                None => self.unanchored_children += 1,
+            }
+        }
+    }
+
+    fn check_names(&mut self, ix: &Index, doc: &str, node: &Node, path: &str) {
+        for c in &node.kids {
+            let key = (c.ns.clone(), c.local.clone());
+            if ix.known_ns.contains(&c.ns)
+                && !ix.declared.contains(&key)
+                && !self.ns_explained.contains(&(
+                    doc.to_string(),
+                    path.to_string(),
+                    c.ns.clone(),
+                    c.local.clone(),
+                ))
+            {
+                self.add(
+                    doc,
+                    "UNKNOWN-NAME",
+                    format!("{path}/{} — not declared in {}", c.local, c.ns),
+                );
+            }
+            self.check_names(ix, doc, c, &format!("{path}/{}", c.local));
+        }
+    }
+}
+
+// ── The corpus, generated in process ─────────────────────────────────────────
+//
+// Same extraction `mock_handles_every_action_the_client_can_send` uses: read
+// the action URIs straight out of the client sources, so an operation added
+// tomorrow is checked without anyone remembering this file.
+
+const CLIENT_SOURCES: &[(&str, &str)] = &[
+    ("device", include_str!("../src/client/device.rs")),
+    ("events", include_str!("../src/client/events.rs")),
+    ("imaging", include_str!("../src/client/imaging.rs")),
+    ("media", include_str!("../src/client/media.rs")),
+    ("media2", include_str!("../src/client/media2.rs")),
+    ("ptz", include_str!("../src/client/ptz.rs")),
+    ("recording", include_str!("../src/client/recording.rs")),
+];
+
+fn action_uris(src: &str) -> Vec<&str> {
+    const STARTS: [&str; 2] = ["\"http://www.onvif.org/", "\"http://docs.oasis-open.org/"];
+    let mut out = Vec::new();
+    for start in STARTS {
+        let mut rest = src;
+        while let Some(i) = rest.find(start) {
+            let after = &rest[i + 1..];
+            let Some(end) = after.find('"') else { break };
+            out.push(&after[..end]);
+            rest = &after[end..];
+        }
+    }
+    out
+}
+
+fn is_action(uri: &str) -> bool {
+    let tail = uri.rsplit('/').next().unwrap_or("");
+    tail.starts_with(|c: char| c.is_ascii_uppercase())
+        && tail.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// Bodies for the operations that need a token before they will answer with a
+/// payload rather than a fault. These are the mock's *own* seeded tokens.
+///
+/// Every operation missing from here answers with a fault and contributes no
+/// shape evidence — see [`PAYLOAD_FLOOR`].
+fn body_for(op: &str) -> &'static str {
+    match op {
+        "GetVideoEncoderConfigurationOptions" | "GetVideoEncoderConfiguration" => {
+            "<ConfigurationToken>VEC_1</ConfigurationToken>"
+        }
+        "GetVideoSourceConfigurationOptions" | "GetVideoSourceConfiguration" => {
+            "<ConfigurationToken>VSC_1</ConfigurationToken>"
+        }
+        "GetAudioEncoderConfigurationOptions" | "GetAudioEncoderConfiguration" => {
+            "<ConfigurationToken>AEC_1</ConfigurationToken>"
+        }
+        "GetAudioSourceConfiguration" => "<ConfigurationToken>ASC_1</ConfigurationToken>",
+        "GetMetadataConfiguration" | "GetMetadataConfigurationOptions" => {
+            "<ConfigurationToken>MetaConf_1</ConfigurationToken>"
+        }
+        "GetProfile" => "<ProfileToken>Profile_1</ProfileToken>",
+        "GetStreamUri" | "GetSnapshotUri" => {
+            "<ProfileToken>Profile_1</ProfileToken><Token>Profile_1</Token>"
+        }
+        "GetConfiguration" => "<PTZConfigurationToken>PTZConfig_1</PTZConfigurationToken>",
+        "GetConfigurationOptions" => "<ConfigurationToken>PTZConfig_1</ConfigurationToken>",
+        "GetNode" => "<NodeToken>PTZNode_1</NodeToken>",
+        "GetCompatibleConfigurations" | "GetPresets" | "GetPresetTours" => {
+            "<ProfileToken>Profile_1</ProfileToken>"
+        }
+        "GetPresetTour" => {
+            "<ProfileToken>Profile_1</ProfileToken><PresetTourToken>Tour_1</PresetTourToken>"
+        }
+        "GetPresetTourOptions" => "<ProfileToken>Profile_1</ProfileToken>",
+        "GetOSDs" | "GetOSDOptions" => "<ConfigurationToken>VSC_1</ConfigurationToken>",
+        "GetOSD" => "<OSDToken>OSD_1</OSDToken>",
+        "GetRecordingJobState" => "<JobToken>Job_001</JobToken>",
+        "GetReplayUri" => "<RecordingToken>Rec_001</RecordingToken>",
+        "GetRecordingSearchResults" => "<SearchToken>Search_1</SearchToken>",
+        _ => "",
+    }
+}
+
+/// Imaging and PTZ status take a source or profile token under several names.
+fn extra_body(op: &str) -> &'static str {
+    match op {
+        "GetImagingSettings" | "GetOptions" | "GetMoveOptions" | "GetServiceCapabilities" => {
+            "<VideoSourceToken>VS_1</VideoSourceToken>"
+        }
+        "GetStatus" => {
+            "<VideoSourceToken>VS_1</VideoSourceToken><ProfileToken>Profile_1</ProfileToken>"
+        }
+        _ => "",
+    }
+}
+
+// ── The test ─────────────────────────────────────────────────────────────────
+
+fn schema_files(dir: &Path) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            matches!(
+                p.extension().and_then(|e| e.to_str()),
+                Some("xsd") | Some("wsdl")
+            )
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+#[tokio::test]
+#[ignore = "needs the ONVIF schema set; see the module docs and CLAUDE.md's publishing checklist"]
+async fn mock_output_matches_the_onvif_schema() {
+    let Ok(dir) = std::env::var("OXVIF_ONVIF_SCHEMA") else {
+        // Loud on purpose: a run that checked nothing must not read like a pass.
+        eprintln!(
+            "SKIPPED — OXVIF_ONVIF_SCHEMA is unset, so no schema was read and \
+             NOTHING was checked.\n\
+             Point it at a directory holding the ONVIF service WSDLs plus \
+             onvif.xsd and common.xsd.\n\
+             Nothing schema-derived is committed to this repository \
+             (docs/active/schema-shape-plan-2026-08.md §4, D2)."
+        );
+        return;
+    };
+    let dir = PathBuf::from(&dir);
+    let files = schema_files(&dir);
+    // Set but wrong is a failure, not a skip: the run was asked for.
+    assert!(
+        files.len() >= 8,
+        "OXVIF_ONVIF_SCHEMA={} holds {} .xsd/.wsdl files; the set needs at least \
+         the six service WSDLs plus onvif.xsd and common.xsd. onvif.xsd alone \
+         anchors 19% of the output and is not the schema.",
+        dir.display(),
+        files.len()
+    );
+
+    let mut ix = Index::default();
+    // Twice: an `xs:element ref=` may point at a global declared in a file
+    // loaded later. The second pass overwrites with identical values.
+    for _ in 0..2 {
+        for f in &files {
+            ix.load_file(f).expect("schema file parses");
+        }
+    }
+    assert!(
+        ix.types.len() >= TYPE_FLOOR,
+        "index holds {} types, floor is {TYPE_FLOOR}. An index that loads \
+         little declares little missing, so every check below would pass \
+         vacuously.",
+        ix.types.len()
+    );
+
+    // Corpus: one response per action the client can send.
+    let transport = MockTransport::new();
+    let mut docs: Vec<(String, String)> = Vec::new();
+    for (service, src) in CLIENT_SOURCES {
+        for uri in action_uris(src) {
+            if !is_action(uri) {
+                continue;
+            }
+            let op = uri.rsplit('/').next().unwrap_or("");
+            let body = format!("{}{}", body_for(op), extra_body(op));
+            let xml = transport
+                .soap_post("http://mock", uri, body)
+                .await
+                .unwrap_or_else(|e| panic!("{service}/{op}: mock transport failed: {e}"));
+            docs.push((format!("{service}__{op}"), xml));
+        }
+    }
+
+    let mut run = Run::default();
+    let mut payloads = 0;
+    for (name, xml) in &docs {
+        let (raw, px) = parse(xml).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let root = resolve_tree(raw, &px);
+        let Some(body) = root
+            .kids
+            .iter()
+            .find(|k| k.ns == SOAP_ENV && k.local == "Body")
+        else {
+            continue;
+        };
+        for resp in &body.kids {
+            if resp.local != "Fault" {
+                payloads += 1;
+            }
+            let key = (resp.ns.clone(), resp.local.clone());
+            // Anchored first: it fills ns_explained, which the name check reads.
+            match ix.globals.get(&key).cloned().flatten() {
+                Some(ty) if ix.types.contains_key(&ty) => {
+                    run.check_anchored(&ix, name, resp, &ty, &resp.local)
+                }
+                _ => run
+                    .unanchored_roots
+                    .push((name.clone(), resp.ns.clone(), resp.local.clone())),
+            }
+            run.check_names(&ix, name, resp, &resp.local);
+        }
+    }
+
+    // ── Coverage floors, before any finding is believed ──────────────────────
+    assert!(
+        payloads >= PAYLOAD_FLOOR,
+        "only {payloads} of {} responses carried a payload rather than a SOAP \
+         fault (floor {PAYLOAD_FLOOR}). A fault contributes no shape evidence, \
+         so this check silently shrinks as operations start refusing the bodies \
+         in `body_for`.",
+        docs.len()
+    );
+    assert!(
+        run.anchored >= ANCHORED_FLOOR,
+        "only {} subtrees anchored (floor {ANCHORED_FLOOR}). Anchoring needs the \
+         response wrapper element, which lives in the service WSDL — a missing \
+         WSDL shows up here rather than as findings.",
+        run.anchored
+    );
+
+    // ── Report ──────────────────────────────────────────────────────────────
+    // Rolled up: identical rows across documents collapse, keeping the count.
+    // Without this one wrong-namespace element reads as three defects.
+    let mut rolled: BTreeMap<(&str, String), Vec<String>> = BTreeMap::new();
+    for f in &run.findings {
+        rolled
+            .entry((f.kind, f.msg.clone()))
+            .or_default()
+            .push(f.doc.clone());
+    }
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for (kind, _) in rolled.keys() {
+        *counts.entry(kind).or_default() += 1;
+    }
+
+    let faults: Vec<_> = run
+        .unanchored_roots
+        .iter()
+        .filter(|r| r.2 == "Fault")
+        .collect();
+    let other: BTreeSet<String> = run
+        .unanchored_roots
+        .iter()
+        .filter(|r| r.2 != "Fault")
+        .map(|r| format!("{} ({})", r.2, r.1))
+        .collect();
+
+    println!(
+        "schema: {} files, {} types, {} declared elements, {} namespaces",
+        files.len(),
+        ix.types.len(),
+        ix.declared.len(),
+        ix.known_ns.len()
+    );
+    println!(
+        "corpus: {} responses, {} with a payload, {} roots anchored, {} faults, \
+         {} children skipped",
+        docs.len(),
+        payloads,
+        run.anchored,
+        faults.len(),
+        run.unanchored_children
+    );
+    if !other.is_empty() {
+        println!(
+            "  unanchored non-fault roots: {}",
+            other.iter().cloned().collect::<Vec<_>>().join(", ")
+        );
+    }
+    println!(
+        "findings: {} raw, {} distinct {:?}",
+        run.findings.len(),
+        rolled.len(),
+        counts
+    );
+    for ((kind, msg), where_) in &rolled {
+        let at = if where_.len() == 1 {
+            where_[0].clone()
+        } else {
+            format!("{} responses", where_.len())
+        };
+        println!("  {kind:<16} [{at}] {msg}");
+    }
+
+    // ── Pins ────────────────────────────────────────────────────────────────
+    let got: Vec<(&str, usize)> = PINS
+        .iter()
+        .map(|(k, _)| (*k, counts.get(k).copied().unwrap_or(0)))
+        .collect();
+    let unpinned: Vec<&str> = counts
+        .keys()
+        .filter(|k| !PINS.iter().any(|(p, _)| p == *k))
+        .copied()
+        .collect();
+    assert!(
+        unpinned.is_empty(),
+        "finding kinds with no pin: {unpinned:?}. Add them to PINS with the \
+         count this run produced, and say in the commit why they appeared."
+    );
+    assert_eq!(
+        got,
+        PINS.to_vec(),
+        "\nthe distinct finding counts moved.\n\
+         Lower is a fix — update PINS in the same commit as the fix, and update \
+         `docs/active/mock-schema-conformance-2026-08.md` §1 and the lab's \
+         NOTES.md run 3, which both quote these numbers.\n\
+         Higher is a regression — read the rows printed above before touching \
+         PINS.\n\
+         Different schema release — the counts are pinned against one set; say \
+         so rather than editing them silently."
+    );
+}

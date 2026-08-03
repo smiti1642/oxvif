@@ -162,6 +162,41 @@ The tell is a module gated on `any(feature = A, feature = B)`, or a test module
 whose only user of an import is itself gated. Too slow for every commit (~8
 clippy runs); right before publish is the place.
 
+### The schema-shape check
+
+```sh
+OXVIF_ONVIF_SCHEMA=/path/to/onvif/schema \
+  cargo test --features mock --test mock_schema_shape -- --ignored --nocapture
+```
+
+**This is the only thing that runs it.** `tests/mock_schema_shape.rs` is
+`#[ignore]`d and reads the ONVIF schema set at run time from a directory
+*outside* the working tree, because nothing derived from that schema may enter
+this repository (`docs/active/schema-shape-plan-2026-08.md` §4, decision D2 —
+which covers a hardcoded schema fact in a test file just as much as the `.xsd`
+itself). So it cannot join the five gate lines: a fresh clone has nothing to
+read. **That makes it weaker than a gate line, and it is worth saying so.**
+
+Why it exists: the mock writes XML as hand-built strings, and `XmlNode` is
+namespace-stripped, so oxvif's own parser is namespace-blind and
+order-independent. A mock response with every element in the wrong namespace
+and the wrong order parses identically — **no other test here can see the
+class.** Six instances have been found so far, every one by a human reading a
+schema file, and one of them (Media2 `Audio` → `AudioEncoder`, `8091892`) was a
+client bug that a green test had been asserting around for two releases.
+
+Two ways to read the result:
+
+- **It printed `SKIPPED`.** Then nothing was checked. That is the failure mode
+  this whole arrangement has, and the message says so rather than passing
+  quietly.
+- **A pin moved.** `PINS` holds the distinct finding count *per kind*, not a
+  total — measured: putting the Media2 defect back leaves the total at 63 while
+  moving two kinds, so a single total would have let it through. Lower is a
+  fix; update the pin in the same commit and also
+  `docs/active/mock-schema-conformance-2026-08.md` §1, which quotes the same
+  numbers. Never edit a pin to make a run green.
+
 **Both `cargo doc` forms, and both must be warning-free.** `[package.metadata.docs.rs]`
 sets `all-features = true`, so the plain `cargo doc --no-deps` is *not* what
 docs.rs renders — it is the no-feature build, and this crate has no default
@@ -637,6 +672,12 @@ duplicate of the first.
 - [ ] `cargo test --all-features` — all tests pass
 - [ ] `cargo test` — the no-feature build compiles and passes too
 - [ ] `cargo test --doc` — all doc examples pass
+- [ ] **Schema-shape check** — `OXVIF_ONVIF_SCHEMA=… cargo test --features mock
+      --test mock_schema_shape -- --ignored --nocapture`; see
+      [The schema-shape check](#the-schema-shape-check). It is `#[ignore]`d and
+      reads the schema from outside the tree, so **this line is the only thing
+      that runs it**. If it printed `SKIPPED`, nothing was checked — that is not
+      a pass.
 - [ ] `cargo doc --no-deps --all-features` — what docs.rs builds; no warnings
 - [ ] `cargo doc --no-deps` — the default-feature build; no warnings either
 - [ ] `cargo publish --dry-run` — no errors

@@ -131,9 +131,21 @@ optimisation — it is the only way to know a type. **It requires the WSDLs.**
 **Anchoring loses the check that found the most.** Once anchoring is restricted
 to resolvable subtrees, `tt:ScopeAttribute` stops being reported — its parent
 `tds:Scopes` is not a `tt:` element, so nothing anchors it. The unknown-name
-check is what caught `AFModes`, the `Pant` spelling and `ScopeAttribute`; it
-must stay, and to be quiet it needs a *complete* index rather than a resolvable
-one.
+check is what caught the `Pant` spelling and `ScopeAttribute`; it must stay, and
+to be quiet it needs a *complete* index rather than a resolvable one.
+
+**Corrected 2026-08-03, by measurement.** This paragraph and §2's table both
+said the name check caught `AFModes` as well. It does not: `AFModes` **is** a
+real ONVIF element, declared under the focus options' `Extension` level, so the
+name exists and the name check is silent. Putting it back turns the checker red
+through `UNKNOWN-CHILD`, not `UNKNOWN-NAME` — proved by reintroducing it. It is
+an `Extension`-nesting defect, the class `CLAUDE.md` already has a rule for,
+rather than an invented name.
+
+The consequence for this document: **the count "three defects the name check
+found" was two.** `src/mock/services/imaging.rs` and `CHANGELOG.md` both got
+this right at the time, saying `tt:FocusOptions20` has no `AFModes` element,
+which is true and narrower. Only the summary here widened it.
 
 **Both checks are needed, and both need the same missing files.**
 
@@ -145,7 +157,7 @@ Scored against the five known defects plus the ones this investigation found:
 
 | defect | caught by | how |
 |---|---|---|
-| `tt:AFModes` | name check | no such element in the schema |
+| `tt:AFModes` | **anchored** | the name is real — it is declared under the focus options' `Extension` — so it is at the wrong *level*, not misspelled. Measured 2026-08-03; this row said "name check, no such element in the schema" and was wrong |
 | `DefaultAbsolutePanTiltPositionSpace` | name check | same |
 | `tt:ScopeAttribute` | name check | same |
 | Media1 options missing a nesting level | anchored | `Encoding` under a type that does not declare it |
