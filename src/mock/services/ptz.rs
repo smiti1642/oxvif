@@ -17,8 +17,10 @@ fn clamp(v: f32, min: f32, max: f32) -> f32 {
 /// list, or a rendered SOAP Fault.
 ///
 /// **Every PTZ operation that moves or reads a head is per-profile.** Until 0.15
-/// none of them looked: 26 of the 27 dispatch arms did not even receive the
-/// request body, while the client sent `ProfileToken` at 20 call sites. A test
+/// none of them looked: `ProfileToken` appeared nowhere in this file, and 16 of
+/// the 27 dispatch arms did not even receive the request body — the other 11
+/// read a preset token or a vector out of it and ignored the profile. The client
+/// sent `ProfileToken` at 20 call sites throughout. A test
 /// asserting "my code addressed the right head" passed against a mock that
 /// could not tell one head from another. `docs/active/mock-audit-2026-07.md` §4.1.
 ///

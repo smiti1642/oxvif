@@ -664,8 +664,14 @@ mod ptz_configuration {
         }
     }
 
-    /// The assertion that would have caught both defects: every field the
+    /// The assertion that would have caught the *limits* defect: every field the
     /// parser reads must survive being written and read back.
+    ///
+    /// It says nothing about the `Pant` spelling, and never could. 0.14.0 got
+    /// that element wrong on both sides, so the round trip agreed with itself;
+    /// and the reader accepts both spellings today, so regressing the writer
+    /// alone would leave this green too. `writes_only_the_schema_spelling` is
+    /// the one that pins it, by asserting the bytes.
     #[test]
     fn write_then_read_preserves_every_field() {
         let emitted = full_config().to_xml_body().unwrap();

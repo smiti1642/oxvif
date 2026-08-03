@@ -396,8 +396,9 @@ async fn empty_lens_token_is_refused_as_missing() {
 //
 // A dual-head camera has one PTZ endpoint and several profiles, and *every*
 // operation that moves or reads a head takes a `ProfileToken`. Until 0.15 the
-// mock held one position and one preset list for the whole device, and 26 of
-// its 27 PTZ dispatch arms did not even receive the request body — so a test
+// mock held one position and one preset list for the whole device, and no PTZ
+// handler read the `ProfileToken` at all (16 of its 27 dispatch arms never
+// received the request body; the other 11 read something else) — so a test
 // asserting "my code addressed the right head" passed against a mock that could
 // not tell one head from another. `docs/active/mock-audit-2026-07.md` §4.1.
 //

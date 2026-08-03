@@ -198,10 +198,11 @@ fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
 fn dispatch_ptz(op: &str, state: &SharedState, body: &str) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => ptz::resp_ptz_service_capabilities(),
-        // Every arm below is per-profile and takes `body`. Until 0.15 only
-        // `SendAuxiliaryCommand` received it at all, so the mock had one
-        // position and one preset list for the whole device and could not tell
-        // one head from another. Audit §4.1.
+        // Every arm below is per-profile and takes `body`. Until 0.15 sixteen of
+        // them did not receive it at all, and none of the eleven that did looked
+        // at the `ProfileToken` — so the mock had one position and one preset
+        // list for the whole device and could not tell one head from another.
+        // Audit §4.1.
         "GetStatus" => ptz::resp_ptz_status(state, body),
         "GetPresets" => ptz::resp_ptz_presets(state, body),
         "SetPreset" => ptz::handle_ptz_set_preset(state, body),

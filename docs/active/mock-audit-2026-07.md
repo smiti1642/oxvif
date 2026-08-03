@@ -70,10 +70,13 @@ are the "before" picture the rest of this document reasons about.
   `resp_empty` arms in `dispatch.rs` went from **22 to 13**.
 - **19** getters confirmed state-driven by probe. **4 families have no
   `DeviceState` field at all.**
-- **26 of 27** PTZ handlers never receive the request body. (**All 18 that are
-  per-profile now do**; the remaining 9 are node/config-addressed or static.)
+- **0 of 27** PTZ handlers read the `ProfileToken`; **16 of 27** never receive
+  the request body at all. (**All 18 that are per-profile now do, and now read
+  it**; the remaining 9 are node/config-addressed or static.)
 - `grep -c recording src/mock/state.rs` → **0**. (Tier 2.2 added
-  `RecordingState`; all eleven Recording/Search/Replay operations now use it.)
+  `RecordingState`; every data-bearing Recording/Search/Replay operation now
+  uses it — twelve arms. The three `GetServiceCapabilities`, `FindRecordings`
+  and `EndSearch` are static.)
 - **47** `Set → Get` pairs became a standing test (`tests/mock_roundtrip.rs`).
   27 round-tripped, 15 were defects, 5 were declared stubs. **After Tiers 1
   and 2: 42 round-trip, 0 defects, 5 declared stubs** — `Expect::Broken` has
@@ -183,9 +186,11 @@ GAP  ptz_get_status(Profile_1 vs Profile_3)    pan Some(0.77) vs Some(0.77)
 GAP  ptz_get_presets(Profile_1 vs Profile_3)   2 vs 2 presets
 ```
 
-Mechanical read: **26 of 27 PTZ dispatch arms do not receive `body`** (the
-exception is `SendAuxiliaryCommand`, which reads the command, not the profile).
-The client sends `ProfileToken` at **20** call sites.
+Mechanical read: **16 of 27 PTZ dispatch arms do not receive `body`**, and
+**none of the other 11 reads the `ProfileToken`** — they take a preset token, a
+vector or an auxiliary command out of it. `grep -c ProfileToken
+src/mock/services/ptz.rs` is **0**. The client sends `ProfileToken` at **20**
+call sites.
 
 So this is two defects stacked: the handlers cannot see the token, and even if
 they could, the state has one position and one preset list for the whole device.
@@ -204,16 +209,24 @@ through the PTZ dispatcher.
 
 `PtzState` is now `{ channels: BTreeMap<String, PtzChannel> }`, and `PtzChannel`
 holds what `PtzState` used to hold whole. **Eighteen dispatch arms gained
-`body`** and go through one `require_profile`, which faults on an absent or
-unknown token rather than falling back to a default head — the fallback is
-precisely what made a token-blind handler indistinguishable from a correct one.
+`body`** and go through one `require_head`, which validates the token with
+`require_profile` and then walks profile → PTZ configuration → node. It faults on
+an absent or unknown token rather than falling back to a default head — the
+fallback is precisely what made a token-blind handler indistinguishable from a
+correct one.
 
-**The four seeded heads deliberately disagree**, per `CLAUDE.md`'s rule that a
+**The seeded heads deliberately disagree**, per `CLAUDE.md`'s rule that a
 single-channel fixture cannot cover a per-channel feature. They differ in
-position, in preset *count* (2 / 1 / 3 / 0), in preset *names*, and in whether
-they have tours at all. `Profile_4` is empty on purpose: an empty preset list is
-a legitimate device state and the only fixture that catches a renderer which
-substitutes a default when it finds nothing.
+position, in preset *count*, in preset *names*, and in whether they have tours
+at all.
+
+This step seeded four heads, one per profile, with preset counts 2 / 1 / 3 / 0.
+The 2026-08-03 correction below replaced them with **two** heads keyed by PTZ
+node — `PTZNode_1` with 2 presets, `PTZNode_2` with 3 — and `Profile_4` binds no
+PTZ configuration at all, so every PTZ operation on it faults rather than
+returning an empty list. The empty-list case is covered instead by
+`GetCompatibleConfigurations`, which answers an empty list for exactly that
+profile.
 
 `Stop` writes nothing — nothing is moving in the mock — but validates the token
 anyway, so a caller cannot ship code against a head this device does not have.
@@ -489,10 +502,11 @@ table-driven property tests over the public API kill the class:
    found the 47th (item 1.8).
 2. **Token discrimination** — every token-taking operation: two tokens the
    fixture disagrees on must produce different answers. **Landed as
-   `tests/mock_token_discrimination.rs`** (26 rows). Same contract as the
+   `tests/mock_token_discrimination.rs`** (34 rows). Same contract as the
    round-trip table — `Discriminates` or `Blind(audit §)`, **both arms
-   asserted** — over the public API and real HTTP. **19 discriminate, 7 are
-   declared static** (17/9 when it landed; the recording pair moved after §4.2).
+   asserted** — over the public API and real HTTP. **28 discriminate, 6 are
+   declared blind** (17/9 when it landed at 26 rows; the recording pair moved
+   after §4.2, and the PTZ and audio work added the rest).
    It catches a bug the round-trip table cannot: a handler can persist state
    perfectly and still answer for the wrong channel.
 3. **Cross-service agreement** — already landed as
@@ -513,9 +527,9 @@ schema-fidelity chase and stall everything else.
 | Step | Why first |
 |---|---|
 | ~~1. Property test **round-trip** (§8.1)~~ **done** — `tests/mock_roundtrip.rs` | It was both probe and guard. Produced the Tier 1 list mechanically, confirmed 46 of 47 hand classifications, and added item 1.8. |
-| ~~2. Tier 1 wiring (§3)~~ **done** — all 8 items | Eight rows moved from `Broken` to `Works`; **35 of 47 pairs now round-trip**. Three new cross-service tests in `tests/mock_media1_media2_agree.rs` cover the bindings and the shared source-config writer. |
+| ~~2. Tier 1 wiring (§3)~~ **done** — all 8 items | Eight rows moved from `Broken` to `Works`, taking the table to **35 of 47 pairs** at the time (49 of 49 today). Three new cross-service tests in `tests/mock_media1_media2_agree.rs` cover the bindings and the shared source-config writer. |
 | ~~3. Tier 2.1 PTZ per-profile (§4.1)~~ **done**, then **corrected** 2026-08-03 | `PtzState` was keyed by *profile* token; 18 dispatch arms gained `body`. Right that PTZ is per-channel, wrong about which channel: it made the main and the sub stream of one lens two independent motors. It is now keyed by **PTZ node**, reached through the profile's PTZ configuration. |
-| ~~4. Property test **token discrimination** (§8.2)~~ **done** — `tests/mock_token_discrimination.rs` | 26 rows; 19 discriminate, 7 declared static. Guards step 3 and the 0.15 media/imaging work. |
+| ~~4. Property test **token discrimination** (§8.2)~~ **done** — `tests/mock_token_discrimination.rs` | 26 rows on landing, **34 today**; 28 discriminate, 6 declared blind. Guards step 3 and the 0.15 media/imaging work. |
 | ~~5. Tier 2.2 recording state (§4.2)~~ **done** | `RecordingState` mirrors `ProfilesState`; all eleven operations wired. Unblocks Profile G testing, including the health check's own liveness chain. |
 | ~~6. Tiers 3 and 4~~ **done** 2026-08-03 | The decision to close them before shipping 0.15.0 was taken 2026-07-31, and they are closed: Storage, Media2 metadata, `SetVideoSourceMode`, PTZ, and finally Audio. **No `Static` row is left in `tests/mock_roundtrip.rs`.** The `Static` arm itself is kept, unused and `#[allow(dead_code)]`, because it is the only place the distinction can be written down. |
 

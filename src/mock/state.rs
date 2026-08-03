@@ -293,8 +293,9 @@ pub struct PtzTour {
 /// looked.
 ///
 /// Until 0.15 this *was* the whole of `PtzState` — one position, one preset
-/// list, one tour list for the entire device — and **26 of 27 PTZ dispatch arms
-/// never received the request body at all**, while the client sent
+/// list, one tour list for the entire device — and **no PTZ handler read the
+/// `ProfileToken`**: 16 of the 27 dispatch arms never received the request body,
+/// and the 11 that did read something else out of it. The client sent
 /// `ProfileToken` at 20 call sites. `docs/active/mock-audit-2026-07.md` §4.1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PtzChannel {

@@ -161,8 +161,7 @@ pub struct AudioEncoderConfiguration {
     /// written out at the end of the sequence where the wildcard allows it.
     ///
     /// It was `u32` defaulting to `1` until 0.15, which meant every device
-    /// appeared to report mono whether it had said anything or not, and the
-    /// element was emitted mid-sequence where no schema permits it. Use
+    /// appeared to report mono whether it had said anything or not. Use
     /// [`AudioSource::channels`] for the physical channel count.
     pub channels: Option<u32>,
 }

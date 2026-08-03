@@ -138,10 +138,11 @@ on `oxvif` plus `base64 = "0.23"`:
 we make**, and the distinction is why declining it is safe rather than fragile.
 Do not write it up in the README as "no unsafe in the dependency tree".
 
-One thing to watch: `hyper-util` still pulls **base64 0.22** (via
-`axum` / `reqwest` / `mockito`), a separate major that does not unify with ours.
-When it moves to 0.23 the two collapse into one and that sibling's default
-features will apply — the reproduction above is what says that is a non-event.
+One thing to watch: **two** transitive dependencies still pull **base64 0.22** —
+`hyper-util` and `reqwest` — a separate major that does not unify with ours, so
+both are in the lock file. When *both* move to 0.23 the two collapse into one
+and that sibling's default features will apply; the reproduction above is what
+says that is a non-event.
 
 Also in 0.23, and checked: `DecodeError::InvalidLastSymbol` now carries the
 decoded value, so its `Display` text changed. `src/mock/auth.rs` only formats the

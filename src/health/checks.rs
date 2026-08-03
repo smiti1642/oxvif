@@ -425,10 +425,13 @@ pub(super) struct CapabilityCrossCheck {
 ///   the device contradicts itself, or it simply omitted the element. Counted as
 ///   `service_only` and reported, never warned about.
 ///
-/// Measured: oxvif's own mock trips the second case six times — its
-/// `GetCapabilities` omits `<tt:Network>`, `<tt:System>` and `<tt:Security>`
-/// entirely. Treating that direction as a finding would flag every terse but
-/// conformant camera.
+/// Measured on this check's first run: oxvif's own mock tripped the second case
+/// six times, its `GetCapabilities` having omitted `<tt:Network>`,
+/// `<tt:System>` and `<tt:Security>` entirely. Treating that direction as a
+/// finding would flag every terse but conformant camera — so it was counted,
+/// not warned about, and the mock was fixed on its own merits. It now sends all
+/// three blocks, and `health::tests` asserts the run reports **0** stated only
+/// by the service.
 ///
 /// A `None` on the service side is not compared at all: "the device did not
 /// mention it" is a third answer, and collapsing it into `false` is the mistake

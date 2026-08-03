@@ -527,11 +527,10 @@ pub(crate) fn delete_profile_in_state(state: &SharedState, token: &str) -> Delet
 // ── Profile render helpers ──────────────────────────────────────────────────
 //
 // Profiles are rendered with full nested configuration objects (the
-// shape real cameras use). The configuration details for VSC_1, VEC_1,
-// VEC_2 are hardcoded here rather than stored in state — only the
-// *attachment* (which token a profile is bound to) is mutable, which
-// matches what `CreateProfile` / `AddVideoEncoderConfiguration` etc.
-// actually mutate on a real camera.
+// shape real cameras use), and every one of them is read from `DeviceState`
+// through `Catalogues` — video source, video encoder, PTZ, audio source and
+// audio encoder alike. Until 0.15 the details for VSC_1, VEC_1 and VEC_2 were
+// literals here, which is how `VEC_2` came to have three names in three files.
 
 fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
     let vsc = p

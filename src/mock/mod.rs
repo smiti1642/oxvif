@@ -66,8 +66,10 @@
 //! cannot model an operation — currently only Media2 `SetVideoSourceMode` — it
 //! returns a fault (`ter:ActionNotSupported`) rather than a success no getter
 //! could contradict. `tests/mock_roundtrip.rs` pins every `Set` to the getter
-//! that should show it, and a row must declare `Works` or `Static`; wiring a
-//! `Static` row up turns the test red so the declaration cannot rot.
+//! that should show it, and a row must declare `Works`, `Broken` — a real defect
+//! with an audit citation — or `Static`, a deliberate stub. Wiring a `Broken` or
+//! `Static` row up turns the test red so the declaration cannot rot. As of
+//! 0.15.0 all 49 rows are `Works`.
 //!
 //! **3. Responses are namespace-well-formed.** Every element prefix the mock
 //! emits is declared, and no start-tag repeats an attribute. Neither held before

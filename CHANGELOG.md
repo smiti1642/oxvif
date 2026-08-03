@@ -17,7 +17,7 @@ two-thirds of the test suite.
 ### Added
 
 - **`GetServiceCapabilities` on all nine services.** New
-  `src/types/service_capabilities.rs` with nine top-level types and six nested
+  `src/types/service_capabilities.rs` with nine top-level types and eight nested
   ones, plus nine client methods and nine `OnvifSession` wrappers:
   `device_`, `media_`, `media2_`, `ptz_`, `imaging_`, `events_`, `recording_`,
   `search_` and `replay_get_service_capabilities`.
@@ -72,19 +72,29 @@ two-thirds of the test suite.
   a warning. A contradiction is a `Warn`, not a `Fail`: the device works, and
   which source is right is not knowable from here.
 
-  Found by this check on its first run: **oxvif's own mock contradicted itself
-  six times** — see the `Fixed` entry below.
+  Found by this check on its first run: **oxvif's own mock stated six attributes
+  only in the service answer**, its `GetCapabilities` having omitted the elements
+  entirely — the unverifiable direction, so nothing was warned about. It read
+  like a device contradicting itself and the mock was fixed anyway; see the
+  `Fixed` entry below.
 
 - **`ptz_send_auxiliary_command`** — the **PTZ** service's
   `SendAuxiliaryCommand`, which is not the Device operation of the same name
-  that oxvif already had. Different endpoint, different request and response
-  element names, scoped to a media profile, and it returns the device's answer.
+  that oxvif already had. Different endpoint and namespace, different child
+  elements — `ProfileToken` + `AuxiliaryData` answered by `AuxiliaryResponse`,
+  where the Device one sends `AuxiliaryCommand` and reads
+  `AuxiliaryCommandResponse` — scoped to a media profile, and it returns the
+  device's answer. The request and response *wrappers* share the local name
+  `SendAuxiliaryCommand`; only the service they are sent to tells them apart,
+  which is why `src/mock/dispatch.rs` matches the bare string in two dispatchers.
   Cameras that implement a wiper generally implement this one; try it first and
   fall back to `send_auxiliary_command`. Both doc comments now name the other.
 
   The accepted values are vendor-namespaced, so there is deliberately no enum:
-  read `device_get_service_capabilities().misc.auxiliary_commands` for what a
-  given camera advertises.
+  read `DeviceServiceCapabilities::misc` → `auxiliary_commands` for what a given
+  camera advertises. `misc` is an `Option`, so that is
+  `caps.misc.map(|m| m.auxiliary_commands).unwrap_or_default()`, not a bare
+  field path.
 
 - Mock coverage for all seventeen operations. Preset tours are **stateful** —
   a tour created by `CreatePresetTour` comes back from a later
@@ -149,10 +159,16 @@ two-thirds of the test suite.
 
   It survived because the parser, the client unit fixture and the mock all
   agreed with each other and with nothing else — the same shape as the
-  `Extension`-nesting defect above, and the reason the new
-  `write_then_read_preserves_every_field` test exists: it round-trips a
-  configuration with every field set, which is the assertion that would have
-  caught both this and the limits below.
+  `Extension`-nesting defect above.
+
+  Two new tests, because one cannot cover both halves.
+  `write_then_read_preserves_every_field` round-trips a configuration with every
+  field set; that is the assertion that would have caught the **limits** defect
+  below, where the writer emitted nothing the reader could find. It could
+  **not** have caught this one: 0.14.0 misspelled the element on both sides, so
+  a write-then-read agreed with itself perfectly, and the reader is deliberately
+  lenient today, so it still would. The spelling is pinned by
+  `writes_only_the_schema_spelling`, which asserts the emitted bytes.
 
 - **The mock's whole audio family was six string literals, and the two services
   disagreed about the same tokens.** `ASC_1` was `AudioSourceConfig1` reading
@@ -223,15 +239,20 @@ two-thirds of the test suite.
   Media2's `tt:AudioEncoder2Configuration` is a *different type*, not a
   namespace variant: `Multicast` comes before `Bitrate` and there is no
   `SessionTimeout` at all. A test asserted the two serialisers "differ only in
-  the wrapper prefix" and passed only because its fixture set neither member.
+  the wrapper prefix", and it was right at the time — the struct had neither
+  member to order differently, so the two really were identical bar the prefix.
+  The comment stopped being true the moment the members were added, which is
+  why the replacement asserts each service's full fragment.
 
 - **`AudioEncoderConfiguration::channels` reported mono for every device.** It
   parsed `Channels` with `.unwrap_or(1)` from an element the type does not
   have, so "the device said mono" and "the device said nothing" were the same
   answer. It is now `Option<u32>`, read when a vendor supplies it through the
-  type's trailing `<xs:any>` and written back at the end of the sequence where
-  that wildcard admits it — never mid-sequence, where it invalidated the
-  request. Use `AudioSource::channels` for the physical channel count.
+  type's trailing `<xs:any>` and written back at the end of the sequence, which
+  is the only place that wildcard admits it. (In the old body it happened to be
+  last too — but only because the two required members that belong before it
+  were missing; adding them is what made its position a question.) Use
+  `AudioSource::channels` for the physical channel count.
 
 - **The mock's PTZ nodes, configurations and coordinate spaces were six string
   literals.** `GetNodes`, `GetNode`, `GetConfigurations`, `GetConfiguration`,
@@ -241,7 +262,7 @@ two-thirds of the test suite.
   was sent as `<tt:SupportedPTZSpaces/>` — an empty element, schema-valid, and a
   claim that the head supports no coordinate space whatever. `PtzNode`'s
   `pan_tilt_spaces`, `zoom_spaces` and `aux_commands` were therefore empty
-  `Vec`s from the mock forever, and eleven `PtzConfiguration` fields were `None`
+  `Vec`s from the mock forever, and nine `PtzConfiguration` fields were `None`
   (audit §5 Tier 3 and §6 Tier 4 — this closes the last Tier 4 item).
 
   `DeviceState` gained `ptz_nodes: Vec<PtzNodeEntry>` and
@@ -318,8 +339,9 @@ two-thirds of the test suite.
 
   `VideoEncoderConfigurationOptions::from_xml` now prefers the deepest node and
   falls back outward. Found by cross-checking a bug report against a live
-  two-sensor camera; the fixture in the new test is captured verbatim from that
-  device.
+  two-sensor camera. The H264/JPEG fixture is captured verbatim from that
+  device; the H265 one is transcribed from `onvif.xsd`, because that device
+  offers no H265 — which is why they are two tests and each says which it is.
 
 - The mock's `GetVideoEncoderConfigurationOptions` was emitting `BitrateRange`
   at the top level, a position the schema does not allow. That is half the
@@ -361,8 +383,9 @@ two-thirds of the test suite.
 
   Not reported — the report named an instance, and the audit found the class.
 
-  New `tests/mock_media1_media2_agree.rs` (10 tests, public API only, over real
-  HTTP) pins both directions: the two services must return the same profile token
+  New `tests/mock_media1_media2_agree.rs` (12 tests by the end of the release —
+  10 here, plus one each for the PTZ and audio families below; public API only,
+  over real HTTP) pins both directions: the two services must return the same profile token
   set for a seeded *and* the default device, and a create/delete/encoder-write/
   source-config-write/configuration-binding on either must be visible to the
   other. Every one of the five perturbations — restoring each old behaviour in
@@ -373,8 +396,9 @@ two-thirds of the test suite.
   services' `SetVideoSourceConfiguration`, Media1's
   `Add`/`RemoveVideoEncoderConfiguration` and `Add`/`RemoveVideoSourceConfiguration`,
   and Media2's `AddConfiguration`/`RemoveConfiguration` were all `resp_empty` in
-  the dispatcher, over getters that **are** state-driven. `resp_empty` arms in
-  `src/mock/dispatch.rs` went from 22 to 13.
+  the dispatcher, over getters that **are** state-driven. This sweep removed nine
+  `resp_empty` arms from `src/mock/dispatch.rs`; between it and the later ones,
+  the file went from **24** arms at 0.14.0 to **4**.
 
   The Add/Remove family is the one that mattered most: it meant **a profile
   could not be assembled on the mock at all**. Create a profile, add an encoder,
@@ -388,10 +412,13 @@ two-thirds of the test suite.
   one-state-two-renderers shape as the profile and encoder families above.
 
   A Media2 `AddConfiguration` naming a `Type` the mock does not model
-  (`Metadata`, `Analytics`, `PTZ`, `AudioOutput`, `AudioDecoder`) now **faults
-  naming the type** instead of reporting success. `ProfileEntry` has four slots
-  and `MediaProfile2` exposes exactly those four, so a success there could never
-  be observed by any caller.
+  (`Metadata`, `Analytics`, `AudioOutput`, `AudioDecoder`) now **faults naming
+  the type** instead of reporting success, because `ProfileEntry` has no slot to
+  put it in and `MediaProfile2` would never expose it — a success there could
+  not be observed by any caller. `PTZ` was on that list when this was written
+  and came off it later in the release: `ProfileEntry` gained
+  `ptz_config_token`, so `Type="PTZ"` now binds like the other four. See the
+  PTZ entry above.
 
 - **The mock's Recording, Search and Replay services had no state at all.**
   `grep -c recording src/mock/state.rs` was **0**. `CreateRecording` answered
@@ -403,7 +430,10 @@ two-thirds of the test suite.
   different service.
 
   New `RecordingState { recordings, jobs, next_* }`, modelled on `ProfilesState`,
-  and **all eleven** operations read or write it. Unknown tokens now fault
+  and **every data-bearing operation** reads or writes it — ten of the Recording
+  service's eleven, plus `GetRecordingSearchResults` and `GetReplayUri`. The
+  three `GetServiceCapabilities`, `FindRecordings` and `EndSearch` are static and
+  say so. Unknown tokens now fault
   (`NoSuchRecording-DELREC-5701` and siblings) rather than being answered.
 
   The default fixture disagrees with itself, as everywhere else: `Rec_001`
@@ -429,8 +459,11 @@ two-thirds of the test suite.
 
 - **The mock's PTZ was profile-blind.** It held **one** position, **one** home
   position, **one** preset list and **one** tour list for the entire device, and
-  **26 of its 27 PTZ dispatch arms never received the request body** — while the
-  client sends `ProfileToken` at 20 call sites. So on a multi-head camera every
+  **not one of its 27 PTZ dispatch arms read the `ProfileToken`** — the word
+  appears zero times in the pre-0.15 `src/mock/services/ptz.rs`. Sixteen arms
+  never received the request body at all; the eleven that did took a preset
+  token, a vector or an auxiliary command out of it and ignored the profile.
+  Meanwhile the client sends `ProfileToken` at 20 call sites. So on a multi-head camera every
   test of "my code addressed the right head" passed against a mock that could
   not tell one head from another.
 
@@ -440,18 +473,24 @@ two-thirds of the test suite.
   `PtzState` is now `{ channels: BTreeMap<String, PtzChannel> }`, and the
   **eighteen** per-profile operations — status, presets, the three moves, stop,
   home, and the whole preset-tour family — take `body` and resolve the head
-  through one `require_profile`. An absent or unknown `ProfileToken` **faults**
+  through one `require_head`, which validates the token with `require_profile`
+  and then walks profile → PTZ configuration → node. An absent or unknown
+  `ProfileToken` **faults**
   rather than falling back to a default head; the fallback is exactly what made a
   token-blind handler indistinguishable from a correct one.
 
-  **The four seeded heads deliberately disagree** — in position, in preset count
-  (2 / 1 / 3 / 0), in preset names, and in whether they have tours at all —
-  because a fixture whose channels agree is passed just as well by a handler that
-  ignores the token. `Profile_4` is empty on purpose: an empty preset list is a
-  legitimate device state, and the only fixture that catches a renderer which
-  substitutes a default when it finds nothing.
+  **The seeded heads deliberately disagree** — in position, in preset count, in
+  preset names, and in whether they have tours at all — because a fixture whose
+  channels agree is passed just as well by a handler that ignores the token.
 
-  Eight new tests in `tests/mock_multi_sensor.rs` and four new unit tests.
+  This step seeded four heads, one per profile. The entry below
+  (*two-head PTZ device*) replaced that later in the release with two heads
+  keyed by PTZ node token, which is what ships: `PTZNode_1` with 2 presets,
+  `PTZNode_2` with 3, and `Profile_4` bound to no configuration at all so that
+  every PTZ operation on it faults.
+
+  Nine new tests in `tests/mock_multi_sensor.rs` (18 → 27) and four new unit
+  tests.
 
 - **`SetNetworkInterfaces` silently dropped `MTU`.** It read `Enabled`,
   `FromDHCP`, `Address` and `PrefixLength` from the request and wrote all four,
@@ -554,9 +593,10 @@ two-thirds of the test suite.
   now: clone-and-replay, parse verification + quirk diff, and the `DeviceAdapter`
   skin.
 
-- **`src/health/mod.rs`'s primary doc example now actually runs.** It drives a
-  real `MockServer` instead of being `no_run`, so `cargo test --doc` proves the
-  documented usage works rather than merely compiling it. Doc tests: 37 → 42.
+- **`src/health/mod.rs` gained a doc example that actually runs.** Its opening
+  example points at a camera and stays `no_run`; the new second one drives a
+  real `MockServer`, so `cargo test --doc` proves the documented usage works
+  rather than merely compiling it. Doc tests: 42 at 0.15.0.
 
 - **Dependencies brought current.** `base64` **0.22 → 0.23** (the only direct dep
   behind by a major) plus semver-compatible moves for `async-trait` 0.1.91,
@@ -564,6 +604,10 @@ two-thirds of the test suite.
   `thiserror` 2.0.19, `tokio` 1.53.1, and the dev-only `futures` / `toml`.
   `cargo outdated --depth 1` is now empty; `cargo audit` reports zero
   vulnerabilities across 245 crates.
+
+  Two transitive dependencies still pull base64 **0.22** — `hyper-util` and
+  `reqwest` — so both majors are in the tree; see
+  `docs/dependency-pitfalls.md`.
 
   base64 0.23 needed **no code change** — the `Engine` +
   `general_purpose::STANDARD` API oxvif uses is unchanged — and has **zero**
@@ -615,7 +659,7 @@ two-thirds of the test suite.
 - `parse_space_range` in `src/types/ptz_config.rs` is now `pub(crate)`, reused
   by the preset-tour option types rather than duplicated.
 
-- **The mock device is now a two-sensor camera.** `MockState` gained
+- **The mock device is now a two-sensor camera.** `DeviceState` gained
   `video_sources`, `video_source_configs` and `video_encoders` (a `Vec`, where
   there used to be one `video_encoder`), holding two sensors, two source
   configs and four encoder configs — `VS_1`/`VS_2`, `VSC_1`/`VSC_2`,
@@ -637,7 +681,7 @@ two-thirds of the test suite.
 
 - **The mock's Imaging service is now per-`VideoSourceToken`.** Every operation
   in that service carries the token and the mock ignored all seven of them.
-  `MockState::imaging` became `imaging_sources: Vec<ImagingState>`, one entry
+  `DeviceState::imaging` became `imaging_sources: Vec<ImagingState>`, one entry
   per sensor, and `ImagingState` gained `source_token`, `focus_supported` and
   `level_max`.
 
@@ -675,7 +719,7 @@ two-thirds of the test suite.
   encodings for the same token.
 
 - **Every mock `Set` now declares whether it round-trips.** New
-  `tests/mock_roundtrip.rs`: **47 `Set → Get` pairs** in one table, public API
+  `tests/mock_roundtrip.rs`: **49 `Set → Get` pairs** in one table, public API
   only, over real HTTP, with a fresh `MockServer` per pair. Each row declares
   `Expect::Works`, `Expect::Broken(audit §)` — a real defect — or
   `Expect::Static(audit §)` — a deliberate stub. **All three arms are asserted**,
@@ -686,15 +730,18 @@ two-thirds of the test suite.
   wired up yet* — not the type system, not the dispatch table, not the tests.
   `resp_profiles_media2()` (a bug) and `resp_audio_sources()` (a fine stub) had
   the same signature in the same match block, which is why five instances of that
-  class were reported from **outside** the project. Now: **35 round-trip, 7 are
-  Tier 2 defects with a citation, 5 are declared stubs.** `CLAUDE.md` step 5c
-  makes a row mandatory for every new `Set`.
+  class were reported from **outside** the project. The table opened at 35
+  working, 7 `Broken` and 5 `Static`; by the end of the release **all 49 rows are
+  `Works` — no `Broken`, no `Static`**, which is what wiring each declared gap up
+  in turn looks like. `tests/mock_roundtrip.rs` pins `(49, 49)`, and `CLAUDE.md`
+  step 5c makes a row mandatory for every new `Set`.
 
 - **…and every token-taking operation now declares whether the token selects the
-  answer.** New `tests/mock_token_discrimination.rs`: **26 rows**, each naming
-  two tokens the fixture deliberately disagrees on, declaring
-  `Expect::Discriminates` or `Expect::Blind(audit §)`. **19 discriminate, 7 are
-  declared static.**
+  answer.** New `tests/mock_token_discrimination.rs`: **34 rows** by the end of
+  the release (26 when the table landed), each naming two tokens the fixture
+  deliberately disagrees on, declaring `Expect::Discriminates` or
+  `Expect::Blind(audit §)`. **28 discriminate, 6 are declared blind**, pinned as
+  `(34, 28)`.
 
   This catches a bug the round-trip table cannot: a handler can persist state
   perfectly and still answer for the wrong channel. That failure is silent by
@@ -729,6 +776,13 @@ two-thirds of the test suite.
   before `Bitrate` where Media1 orders it after `SampleRate`. **This is a change
   against real cameras, not only the mock** — and the previous body could not
   validate against the Media1 schema at all.
+
+  Both are emitted **when the configuration carries them**, which a value read
+  from a device does. A configuration you assembled yourself with either left
+  `None` still sends a body Media1's schema rejects, and nothing in the client
+  stops it — only the device knows its own multicast settings, so there is no
+  value oxvif could supply. Read-modify-write is the supported shape; the mock
+  refuses the incomplete body so a test notices.
 
 - **`ptz_set_configuration` now sends the ONVIF spelling
   `DefaultAbsolutePantTiltPositionSpace`,** and sends `PanTiltLimits` /
@@ -799,7 +853,7 @@ two-thirds of the test suite.
   `NoStorageType-STOR-5801`. A token-less call still means "create", and now
   really does create.
 
-- **`config_token` is now required on four options getters.** The parameter
+- **`config_token` is now required on five options getters.** The parameter
   changed from `Option<&str>` to `&str` on:
   `get_video_encoder_configuration_options`,
   `get_video_source_configuration_options`,
@@ -834,23 +888,32 @@ two-thirds of the test suite.
   on purpose, because the omission is a client bug that a permissive device
   hides.
 
-- **`MockState::video_encoder` is now `video_encoders: Vec<VideoEncoderState>`**,
+- **`DeviceState::video_encoder` is now `video_encoders: Vec<VideoEncoderState>`**,
   and `VideoEncoderState` gained `source_token` and `resolutions`. Both new
   fields are `#[serde(default)]`, so a persisted state file still loads.
   Media2's `SetVideoEncoderConfiguration` now uses the posted token to *select*
   which channel to write instead of renaming the single global config.
 
-- **`PtzState` is now `{ channels: BTreeMap<String, PtzChannel> }`.** The eight
-  fields it used to hold — `pan`/`tilt`/`zoom`, the three `home_*`, `presets` and
-  `tours` — moved to the new `oxvif::mock::state::PtzChannel`, one per media
-  profile. Code that seeded `DeviceState.ptz.presets` becomes
-  `DeviceState.ptz.channels.insert("Profile_1".into(), PtzChannel { presets, ..Default::default() })`,
-  or `ptz.channel_mut("Profile_1").presets = …`.
+- **`PtzState` is now `{ channels: BTreeMap<String, PtzChannel> }`.** The seven
+  fields it held at 0.14.0 — `pan`/`tilt`/`zoom`, the three `home_*` and
+  `presets` — moved to the new `oxvif::mock::state::PtzChannel`, which also
+  carries the `tours` list added earlier in this release.
+
+  **The map is keyed by PTZ node token, not by profile token.** A profile
+  reaches its head through its PTZ configuration (`ProfileToken` →
+  `ptz_config_token` → `node_token`), so the main and sub stream of one lens
+  share one channel — which is how a real camera behaves and what the seeded
+  `PTZNode_1` / `PTZNode_2` model. Code that seeded `DeviceState.ptz.presets`
+  becomes
+  `DeviceState.ptz.channels.insert("PTZNode_1".into(), PtzChannel { presets, ..Default::default() })`,
+  or `ptz.channel_mut("PTZNode_1").presets = …`. **Inserting under a profile
+  token seeds an entry no read path ever reaches** — the lookup resolves the
+  node first.
 
   Same reasoning as the `video_encoder` → `video_encoders` change above: a single
   global copy makes a handler that ignores the token indistinguishable from one
   that reads it. A persisted state file from 0.14 no longer loads this field and
-  falls back to the four seeded heads.
+  falls back to the two seeded heads.
 
 - **`DeviceState` gained `recording: RecordingState`**, and the Recording,
   Search and Replay services now refuse tokens that name nothing:
