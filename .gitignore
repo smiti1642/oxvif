@@ -21,6 +21,14 @@ legacy/
 .DS_Store
 Cargo.lock
 
+# ONVIF schema set (onvif.xsd, common.xsd, the service WSDLs) — © ONVIF.
+# Never committed, in any form: not the files, not an index generated from them,
+# not a fixture derived from them. The schema-shape check reads them at run time
+# from $OXVIF_ONVIF_SCHEMA. See docs/active/schema-shape-plan-2026-08.md §4 D2.
+schema/
+*.xsd
+*.wsdl
+
 # Local conformance/robustness testing — credentials + captures, never commit.
 # (examples/conformance.rs IS committed; the device list and raw dumps are not.)
 .cameras

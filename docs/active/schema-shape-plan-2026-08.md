@@ -230,24 +230,54 @@ ver10/recording.wsdl   ver10/search.wsdl   ver10/replay.wsdl
 Present in the session scratchpad: `onvif.xsd`, `media1.wsdl`, `media2.wsdl`,
 `ptz.wsdl`. Downloading is an explicit-permission action and has not been done.
 
-**D2. Whether anything derived from the schema is committed.** The schema is
-© ONVIF 2008-2025. Two options:
+**D2 — SETTLED 2026-08-03: nothing derived from the schema enters this
+repository.** The decision is the maintainer's and the reason is licensing
+exposure: oxvif must not carry anything that could put the crate under a
+restriction because it consumed ONVIF's schema or WSDLs (© ONVIF 2008-2025).
 
-- *(a) Nothing committed.* The test reads the schema set from a directory named
-  by `OXVIF_ONVIF_SCHEMA`, and **skips loudly** when unset. Zero licensing
-  question; the check runs only where someone has the files.
-- *(b) A generated index committed* — element names, parent/child relations,
-  cardinality. Structural facts rather than the schema text, and it puts the
-  check in the daily gate. Whether that redistribution is acceptable is not a
-  call this document makes.
+That rules out all of: the `.xsd`/`.wsdl` files themselves, a generated index,
+a bundled fixture derived from them, **and any schema fact hardcoded in the
+checker's own source.** A test containing
 
-(a) is the conservative default and what the rest of this plan assumes.
+```rust
+// NOT ALLOWED — this is schema content, transcribed
+const SECURITY_REQUIRED: &[&str] = &["TLS1.1", "TLS1.2", "SAMLToken", …];
+```
 
-**D3. Gate or publish-time.** Under (a) the test is `#[ignore]`d and gets a line
-in the publishing checklist, next to the per-feature warning sweep. Under (b) it
-joins the five gate lines. A skipping test that reports success is a hollow test
-by this project's own rule — under (a) it must print why it skipped and the
-checklist line is what makes it run.
+is the same redistribution in a different file. **Every element name,
+cardinality and sequence must be read at run time from files outside the
+repository.** The checker source may contain namespace URIs and its own logic —
+nothing else.
+
+The mechanism: the test reads the schema set from a directory named by
+`OXVIF_ONVIF_SCHEMA` and **skips loudly** when it is unset or incomplete.
+
+`/schema/` is added to `.gitignore` so that a local copy placed inside the
+working tree for convenience cannot be committed by accident.
+
+**Not settled, and worth a separate decision:** the repository *already* quotes
+short schema facts in prose — `CHANGELOG.md` gives the
+`tt:AudioEncoderConfiguration` element sequence, `src/types/audio.rs` and
+`src/types/ptz_config.rs` name required members in doc comments, and §5 of this
+plan lists members of four types. Those predate this decision and are how the
+0.15.0 defects are explained. Whether that line stays where it is or gets
+tightened is a question for the maintainer; this plan does not change them.
+
+**D3 — SETTLED, follows from D2.** The test is `#[ignore]`d, driven by the
+environment variable, and earns a line in `CLAUDE.md`'s publishing checklist
+beside the per-feature warning sweep. It cannot join the five gate lines,
+because in a fresh clone it has no schema to read.
+
+**The cost of D2, stated plainly:** this check can silently stop being run. It
+will not run in CI, it will not run for a contributor, and it will not run for
+the maintainer on a machine where the schema directory has moved. Two
+mitigations, both required rather than optional:
+
+- the skip path **prints why** — the missing directory or the missing files by
+  name — so a run that checked nothing never looks like a run that passed;
+- the checklist line is the only thing that makes it happen, so it is worth as
+  much as the checklist is. This is weaker than a gate line and should be
+  written down as weaker.
 
 ---
 
@@ -323,13 +353,17 @@ anything.**
 
 ## 7. Order of work
 
-1. Settle **D1** and **D2**. Nothing below starts without the schema set.
+1. Settle **D1** — the only decision left. **D2 and D3 are settled** (§4);
+   nothing below starts without the schema set on the machine that runs it,
+   outside the working tree.
 2. Finish the corpus: extend the override table until the fault count is only
    the operations that genuinely refuse an empty request, and assert that floor.
 3. Index reader + name check (check 1). Confirm or dismiss §5.1 first — it is
    the cheapest and it has a known answer.
 4. Top-down anchoring + checks 2–4. Report coverage as a number, and assert a
    floor on it, or the check can rot into silence the way the 19% above would.
+   Add the publishing-checklist line to `CLAUDE.md` in the same commit — under
+   D2 the checklist is the only thing that makes this run at all.
 5. Triage §5.2–5.5 with the complete index; fix what survives.
 6. Perturbation, per `CLAUDE.md`: reintroduce `tt:AFModes`, the `PanTilt`
    spelling and the flat Media1 options nesting one at a time. **Each must turn
