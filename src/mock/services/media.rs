@@ -402,16 +402,23 @@ impl ConfigKind {
         }
     }
 
-    /// `true` if `DeviceState` carries a catalogue this token can be checked
-    /// against. The audio families are static fixtures (audit §5), so there is
-    /// nothing to validate a binding against and none is attempted.
+    /// `true` if `DeviceState` carries an entry this token names.
+    ///
+    /// The audio arms returned `true` unconditionally while the audio families
+    /// were static fixtures with no catalogue to check against. `ee7e0b3` gave
+    /// them one, and until this was corrected a bogus `AudioSource` or
+    /// `AudioEncoder` token bound **silently** where a bogus video or PTZ token
+    /// faulted — the profile then rendered no audio at all, with nothing to say
+    /// why. A stale justification outliving its premise, which is the class the
+    /// 0.15.0 audit was looking for.
     fn known_token(self, state: &SharedState, token: &str) -> bool {
         let s = state.read();
         match self {
             Self::VideoSource => s.video_source_configs.iter().any(|c| c.token == token),
             Self::VideoEncoder => s.video_encoders.iter().any(|c| c.token == token),
+            Self::AudioSource => s.audio_source_configs.iter().any(|c| c.token == token),
+            Self::AudioEncoder => s.audio_encoders.iter().any(|c| c.token == token),
             Self::Ptz => s.ptz_configs.iter().any(|c| c.token == token),
-            Self::AudioSource | Self::AudioEncoder => true,
         }
     }
 }

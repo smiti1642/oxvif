@@ -1962,6 +1962,46 @@ mod tests {
         );
     }
 
+    /// `GetSystemLog`'s one line carries the real clock, not a literal.
+    ///
+    /// It read `2026-04-15 12:00:00` until the 0.15.0 audit found it — the same
+    /// frozen date the sweep removed from `GetSystemDateAndTime`, which survived
+    /// because a log line does not look like a clock. Asserted as a bound on the
+    /// parsed date, not against an expected string: a literal here would need
+    /// editing every day, which is how the original got there.
+    #[test]
+    fn system_log_is_stamped_with_the_real_clock() {
+        let stamp = |unix: i64| {
+            let (y, mo, d, h, mi, s) = crate::soap::security::unix_secs_to_ymd_hms(unix);
+            format!("{y:04}-{mo:02}-{d:02} {h:02}:{mi:02}:{s:02}")
+        };
+        let now = || {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+        };
+
+        // Bracket the call rather than compare against a single reading: the
+        // format is fixed-width and zero-padded, so lexicographic order is
+        // chronological order, and a second ticking over mid-test cannot flake.
+        let before = stamp(now());
+        let xml = device::resp_system_log();
+        let after = stamp(now());
+
+        let got = xml
+            .split_once("<tt:String>")
+            .and_then(|(_, rest)| rest.split_once(" mock system started"))
+            .map(|(s, _)| s.to_string())
+            .unwrap_or_else(|| panic!("no stamped log line in:\n{xml}"));
+
+        assert!(
+            before <= got && got <= after,
+            "the system log is stamped {got}, outside [{before}, {after}] — a \
+             frozen literal is back. Response was:\n{xml}"
+        );
+    }
+
     #[test]
     fn get_hostname_returns_default() {
         let s = new_state();
@@ -2558,8 +2598,9 @@ mod tests {
     ///
     /// The positive direction is `media2/add-ptz-configuration` in
     /// `tests/mock_roundtrip.rs`; this is the arm that proves `ConfigKind::Ptz`
-    /// validates its token against `ptz_configs` instead of accepting anything,
-    /// which is what the audio kinds do and had to be decided separately.
+    /// validates its token against `ptz_configs` instead of accepting anything.
+    /// See `media2_binding_an_unknown_audio_configuration_faults` for the audio
+    /// kinds, which accepted anything until their catalogues existed.
     #[test]
     fn media2_binding_an_unknown_ptz_configuration_faults() {
         use crate::mock::services::media2;
@@ -2582,6 +2623,77 @@ mod tests {
             .find(|p| p.token == "Profile_4")
             .expect("Profile_4 exists");
         assert_eq!(p4.ptz_config_token, None);
+    }
+
+    /// Both audio kinds validate their token, and both still bind a real one.
+    ///
+    /// `ConfigKind::known_token` returned `true` unconditionally for
+    /// `AudioSource` and `AudioEncoder`, justified by a comment saying the audio
+    /// families were static fixtures with nothing to check against. `ee7e0b3`
+    /// gave them catalogues and the justification stopped being true, so a
+    /// nonsense token bound silently and the profile then rendered no audio,
+    /// with nothing to say why.
+    ///
+    /// Both directions are asserted for each kind: a bogus token must fault
+    /// *and* leave the slot empty, and a seeded token must still land. Asserting
+    /// only the fault would pass against a `known_token` that returns `false`
+    /// for everything.
+    #[test]
+    fn media2_binding_an_unknown_audio_configuration_faults() {
+        use crate::mock::services::media2;
+        let req = |kind: &str, token: &str| {
+            format!(
+                r#"<tr2:AddConfiguration>
+                     <tr2:ProfileToken>Profile_4</tr2:ProfileToken>
+                     <tr2:Configuration>
+                       <tr2:Type>{kind}</tr2:Type>
+                       <tr2:Token>{token}</tr2:Token>
+                     </tr2:Configuration>
+                   </tr2:AddConfiguration>"#
+            )
+        };
+
+        for (kind, bogus, real) in [
+            ("AudioSource", "ASC_9", "ASC_2"),
+            ("AudioEncoder", "AEC_9", "AEC_2"),
+        ] {
+            let s = new_state();
+            let xml = media2::handle_add_configuration_media2(&s, &req(kind, bogus));
+            assert!(
+                xml.contains("NoSuchConfig-ADDCFG2-5543") && xml.contains(bogus),
+                "{kind}: binding {bogus} must fault naming the token, got {xml}"
+            );
+            let slot = |s: &crate::mock::state::MockState| {
+                let g = s.read();
+                let p = g
+                    .profiles
+                    .profiles
+                    .iter()
+                    .find(|p| p.token == "Profile_4")
+                    .expect("Profile_4 exists");
+                if kind == "AudioSource" {
+                    p.audio_source_config_token.clone()
+                } else {
+                    p.audio_encoder_config_token.clone()
+                }
+            };
+            assert_eq!(
+                slot(&s),
+                None,
+                "{kind}: refused bind must leave the slot empty"
+            );
+
+            let ok = media2::handle_add_configuration_media2(&s, &req(kind, real));
+            assert!(
+                !ok.contains("NoSuchConfig"),
+                "{kind}: {real} is seeded and must bind, got {ok}"
+            );
+            assert_eq!(
+                slot(&s),
+                Some(real.to_string()),
+                "{kind}: {real} did not land"
+            );
+        }
     }
 
     /// `UseCount` is the device's count of profiles referencing the

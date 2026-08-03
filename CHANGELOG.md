@@ -236,6 +236,16 @@ two-thirds of the test suite.
   `SessionTimeout` are now modelled and round-tripped, exactly as
   `VideoEncoderConfiguration` has always done for the same two members.
 
+  Every schema statement in the three audio bullets — this one, the options
+  nesting above and the Media2 type below — was read out of `onvif.xsd`
+  (© ONVIF 2008-2025): the two encoder `complexType`s and their `minOccurs`,
+  `Channels` appearing only on `tt:AudioSource`, and
+  `AudioEncoderConfigurationOptions` holding an unbounded `Options` of type
+  `AudioEncoderConfigurationOption`, which is the double nesting exactly. Re-read
+  2026-08-03, when the release audit flagged these as the one class it could not
+  check — the schema is not vendored in this repository, so a reader cannot
+  verify them from a clone alone.
+
   Media2's `tt:AudioEncoder2Configuration` is a *different type*, not a
   namespace variant: `Multicast` comes before `Bitrate` and there is no
   `SessionTimeout` at all. A test asserted the two serialisers "differ only in
@@ -517,6 +527,30 @@ two-thirds of the test suite.
   implementation and the existing ISO-8601 tests pin it. A new test asserts the
   mock's clock is within 120s of local — as a bound, not a literal date, because
   a literal is what rotted.
+
+  **A second copy of the same date survived that sweep** and was found by the
+  release audit on 2026-08-03: `GetSystemLog` returned the line
+  `2026-04-15 12:00:00 mock system started`. It came through because a log entry
+  does not look like a clock — the sweep went after the clock. It is stamped with
+  the current time now, and `system_log_is_stamped_with_the_real_clock` brackets
+  the call between two readings and asserts the stamp falls inside, so a second
+  ticking over cannot flake it. The mock models no uptime, so "started" is
+  stamped now rather than at a boot instant it does not have.
+
+- **A profile could be bound to an audio configuration that does not exist.**
+  `ConfigKind::known_token` validated `VideoSource`, `VideoEncoder` and `PTZ`
+  tokens against `DeviceState` and returned `true` unconditionally for
+  `AudioSource` and `AudioEncoder`, justified by a comment saying the audio
+  families were static fixtures with no catalogue to check against. That was
+  true when written and stopped being true in this release, when the audio
+  catalogue landed — so a Media2 `AddConfiguration` naming `ASC_9` succeeded,
+  the slot was filled with a token nothing resolves, and the profile then
+  rendered no audio at all with nothing to say why. Both kinds now fault
+  `ter:NoConfig` / `NoSuchConfig-ADDCFG2-5543` like the other three.
+
+  Found by auditing the 0.15.0 entry against source rather than by a test, which
+  is the point: **a justification that outlives its premise is where the next
+  defect is.** `CLAUDE.md` now says to re-read those.
 
 - **Two warnings that only exist under a single feature.**
   `redact::scrub_url_userinfo` was dead code under `--features health` alone (the

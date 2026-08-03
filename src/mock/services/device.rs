@@ -626,14 +626,32 @@ pub fn handle_set_network_default_gateway(state: &SharedState, body: &str) -> St
     resp_empty("tds", "SetNetworkDefaultGatewayResponse")
 }
 
+/// `GetSystemLog` — one line, stamped with the **current** time.
+///
+/// It read `2026-04-15 12:00:00` until this was fixed: the same frozen literal
+/// `GetSystemDateAndTime` carried, surviving the sweep that removed that one
+/// because a log line does not look like a clock. It is the same defect —
+/// a timestamp-shaped string never stops being valid, so nothing fails while it
+/// drifts a day further into the past per day.
+///
+/// The mock models no uptime, so "started" is stamped now rather than at a boot
+/// instant it does not have. `docs/mock-server.md` §13 records that.
 pub fn resp_system_log() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let (year, month, day, hours, mins, secs) =
+        crate::soap::security::unix_secs_to_ymd_hms(now as i64);
     soap(
         NS,
-        r#"<tds:GetSystemLogResponse>
+        &format!(
+            r#"<tds:GetSystemLogResponse>
           <tds:SystemLog>
-            <tt:String>2026-04-15 12:00:00 mock system started</tt:String>
+            <tt:String>{year:04}-{month:02}-{day:02} {hours:02}:{mins:02}:{secs:02} mock system started</tt:String>
           </tds:SystemLog>
-        </tds:GetSystemLogResponse>"#,
+        </tds:GetSystemLogResponse>"#
+        ),
     )
 }
 
