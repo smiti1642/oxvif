@@ -82,6 +82,12 @@ pub struct PtzConfiguration {
     /// Default PTZ operation timeout as ISO 8601 duration (e.g. `"PT5S"`).
     pub default_ptz_timeout: Option<String>,
     /// Default coordinate space URI for absolute pan/tilt moves.
+    ///
+    /// ONVIF spells this element `DefaultAbsolutePantTiltPositionSpace` —
+    /// `Pant`, with a double `t`. The typo is in `onvif.xsd` and is therefore
+    /// normative, so that is what a conformant device sends and what oxvif
+    /// writes back. Parsing also accepts the corrected spelling, for vendors
+    /// who "fixed" it.
     pub default_abs_pan_tilt_space: Option<String>,
     /// Default coordinate space URI for absolute zoom moves.
     pub default_abs_zoom_space: Option<String>,
@@ -114,7 +120,11 @@ impl PtzConfiguration {
             use_count: xml_u32(node, "UseCount").unwrap_or(0),
             node_token: xml_str(node, "NodeToken").unwrap_or_default(),
             default_ptz_timeout: xml_str(node, "DefaultPTZTimeout"),
-            default_abs_pan_tilt_space: xml_str(node, "DefaultAbsolutePanTiltPositionSpace"),
+            // Read lenient: the schema spelling first (`Pant`, ONVIF's own
+            // typo — see the field doc), then the corrected one. Only this one
+            // of the six `Default*Space` elements is affected.
+            default_abs_pan_tilt_space: xml_str(node, "DefaultAbsolutePantTiltPositionSpace")
+                .or_else(|| xml_str(node, "DefaultAbsolutePanTiltPositionSpace")),
             default_abs_zoom_space: xml_str(node, "DefaultAbsoluteZoomPositionSpace"),
             default_rel_pan_tilt_space: xml_str(node, "DefaultRelativePanTiltTranslationSpace"),
             default_rel_zoom_space: xml_str(node, "DefaultRelativeZoomTranslationSpace"),
@@ -143,16 +153,25 @@ impl PtzConfiguration {
 
     /// Serialise to a `<tptz:PTZConfiguration>` XML fragment for
     /// `SetConfiguration`.
-    pub(crate) fn to_xml_body(&self) -> String {
+    ///
+    /// **Returns `Result`, unlike every other `to_xml_body` in this crate.**
+    /// `PanTiltLimits/Range` is a `tt:Space2DDescription`, whose `YRange` is
+    /// *required*; a [`PtzSpaceRange`] with `y_range: None` cannot be rendered
+    /// into it. Sending the element without `YRange` is the exact defect this
+    /// method was changed to stop — writing XML no schema defines — so the
+    /// caller is told instead.
+    pub(crate) fn to_xml_body(&self) -> Result<String, OnvifError> {
         let opt_str = |v: &Option<String>, tag: &str| -> String {
             v.as_deref()
                 .map(|s| format!("<tt:{tag}>{}</tt:{tag}>", xml_escape(s)))
                 .unwrap_or_default()
         };
         let timeout_el = opt_str(&self.default_ptz_timeout, "DefaultPTZTimeout");
+        // Write strict: `Pant`, the spelling onvif.xsd defines. Emitting the
+        // corrected spelling means emitting an element no schema declares.
         let abs_pt = opt_str(
             &self.default_abs_pan_tilt_space,
-            "DefaultAbsolutePanTiltPositionSpace",
+            "DefaultAbsolutePantTiltPositionSpace",
         );
         let abs_z = opt_str(
             &self.default_abs_zoom_space,
@@ -188,19 +207,56 @@ impl PtzConfiguration {
             }
             None => String::new(),
         };
-        format!(
+        // `PanTiltLimits/Range` is `tt:Space2DDescription` (URI + XRange +
+        // YRange); `ZoomLimits/Range` is `tt:Space1DDescription`, which has no
+        // `YRange` at all. Both live after `DefaultPTZTimeout` and before
+        // `Extension` in the schema sequence.
+        let range_el = |r: &PtzSpaceRange, tag: &str, y: &str| {
+            format!(
+                "<tt:{tag}><tt:Range>\
+                   <tt:URI>{uri}</tt:URI>\
+                   <tt:XRange><tt:Min>{xmin}</tt:Min><tt:Max>{xmax}</tt:Max></tt:XRange>\
+                   {y}\
+                 </tt:Range></tt:{tag}>",
+                uri = xml_escape(&r.uri),
+                xmin = r.x_range.0,
+                xmax = r.x_range.1,
+            )
+        };
+        let pt_limits = match &self.pan_tilt_limits {
+            Some(r) => {
+                let (ymin, ymax) = r.y_range.ok_or_else(|| {
+                    OnvifError::InvalidArgument(
+                        "PanTiltLimits/Range is a Space2DDescription and its YRange is required; \
+                         this PtzSpaceRange has y_range: None"
+                            .to_string(),
+                    )
+                })?;
+                let y = format!(
+                    "<tt:YRange><tt:Min>{ymin}</tt:Min><tt:Max>{ymax}</tt:Max></tt:YRange>"
+                );
+                range_el(r, "PanTiltLimits", &y)
+            }
+            None => String::new(),
+        };
+        // `y_range` is dropped here even when set — a 1D space has no Y axis.
+        let z_limits = match &self.zoom_limits {
+            Some(r) => range_el(r, "ZoomLimits", ""),
+            None => String::new(),
+        };
+        Ok(format!(
             "<tptz:PTZConfiguration token=\"{token}\">\
                <tt:Name>{name}</tt:Name>\
                <tt:UseCount>{use_count}</tt:UseCount>\
                <tt:NodeToken>{node_token}</tt:NodeToken>\
                {abs_pt}{abs_z}{rel_pt}{rel_z}{cont_pt}{cont_z}\
-               {speed_el}{timeout_el}\
+               {speed_el}{timeout_el}{pt_limits}{z_limits}\
              </tptz:PTZConfiguration>",
             token = xml_escape(&self.token),
             name = xml_escape(&self.name),
             use_count = self.use_count,
             node_token = xml_escape(&self.node_token),
-        )
+        ))
     }
 }
 

@@ -132,6 +132,39 @@ two-thirds of the test suite.
   by a day a day. It now uses `soap::security::unix_secs_to_iso8601`, the same
   conversion as the device clock and the WS-Security `Created` header.
 
+- **`PtzConfiguration::default_abs_pan_tilt_space` was spelled wrong on both
+  sides, so it never worked in either direction.** `onvif.xsd` names the
+  element `DefaultAbsolutePantTiltPositionSpace` — `Pant`, with a double `t`.
+  The typo is ONVIF's and it is normative. oxvif read and wrote
+  `DefaultAbsolutePanTiltPositionSpace`, so the field came back `None` from
+  every conformant device, and `ptz_set_configuration` sent an element no
+  schema defines: a strict device rejects the whole request, a lenient one
+  drops the field. **Only this one of the six `Default*Space` elements is
+  affected** — the other five were always correct.
+
+  Parsing is now lenient (schema spelling first, corrected spelling as a
+  fallback, for vendors who "fixed" it); writing emits the schema spelling
+  only. Verified against `onvif.xsd` (© ONVIF 2008-2025) fetched during the
+  work, not from memory.
+
+  It survived because the parser, the client unit fixture and the mock all
+  agreed with each other and with nothing else — the same shape as the
+  `Extension`-nesting defect above, and the reason the new
+  `write_then_read_preserves_every_field` test exists: it round-trips a
+  configuration with every field set, which is the assertion that would have
+  caught both this and the limits below.
+
+- **`ptz_set_configuration` silently dropped `PanTiltLimits` and
+  `ZoomLimits`.** `PtzConfiguration::from_xml` reads both; `to_xml_body` never
+  emitted either. A get → modify limits → set therefore changed nothing and
+  returned `Ok(())`. Both are now written, in their schema position (after
+  `DefaultPTZTimeout`, before `Extension`).
+
+  `ZoomLimits/Range` is a `tt:Space1DDescription` and has **no** `YRange`, so a
+  `y_range` set on a zoom limit is dropped rather than emitted;
+  `PanTiltLimits/Range` is a `tt:Space2DDescription` whose `YRange` is
+  *required* — see Breaking.
+
 - **Media1 video encoder options nested inside `Extension` were silently
   dropped.** ONVIF extends a type by nesting a same-named element one level
   deeper, so the deeper copy is a superset; `XmlNode::child` returns the *first
@@ -540,6 +573,22 @@ two-thirds of the test suite.
   at the new location.
 
 ### Breaking
+
+- **`ptz_set_configuration` now sends the ONVIF spelling
+  `DefaultAbsolutePantTiltPositionSpace`,** and sends `PanTiltLimits` /
+  `ZoomLimits`, which it previously dropped. See Fixed. Anything asserting on
+  the exact request body — a proxy, a recorded fixture, a conformance harness —
+  will see three new element names. **This is a change against real cameras,
+  not only the mock.**
+
+- **`ptz_set_configuration` can now return `Err` before it sends anything.**
+  `OnvifError::InvalidArgument` when `pan_tilt_limits` is `Some` with
+  `y_range: None`: `PanTiltLimits/Range` is a `tt:Space2DDescription` whose
+  `YRange` is required, and there is no honest way to render it without one.
+  Emitting the element anyway is the exact defect the bullet above removes, so
+  the caller is told instead of the device. Reachable only from a hand-built
+  `PtzSpaceRange`, or from a device that returned a non-conformant
+  `PanTiltLimits`.
 
 - **The mock's `SetVideoSourceMode` now faults instead of succeeding.**
   `ter:ActionNotSupported` / `NotModelled-VSMODE-5813`. It previously answered

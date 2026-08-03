@@ -361,7 +361,7 @@ impl OnvifClient {
                {}\
                <tptz:ForcePersistence>{persist}</tptz:ForcePersistence>\
              </tptz:SetConfiguration>",
-            config.to_xml_body()
+            config.to_xml_body()?
         );
         let xml = self.call(ptz_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;

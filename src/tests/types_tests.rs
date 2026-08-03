@@ -564,6 +564,195 @@ mod ptz_preset {
     }
 }
 
+// ── PtzConfiguration: the schema spelling, and the limits ────────────────────
+//
+// `onvif.xsd` spells the absolute pan/tilt space element
+// `DefaultAbsolutePantTiltPositionSpace` — `Pant`, double `t`. It is ONVIF's
+// own typo and it is normative. oxvif spelled it `PanTilt` on both sides, so
+// the field was `None` from every conformant device and `SetConfiguration`
+// carried an element no schema defines. `PanTiltLimits` / `ZoomLimits` were
+// read and never written, so a get → modify → set lost them and returned
+// `Ok(())`.
+//
+// It survived because the parser, the client unit fixture and the mock all
+// agreed with each other and with nothing else — the shape `CLAUDE.md`
+// describes under "Data nested in `Extension` levels".
+mod ptz_configuration {
+    use super::*;
+    use crate::types::{PtzConfiguration, PtzSpaceRange, PtzSpeed};
+
+    const PT_URI: &str = "http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace";
+    const Z_URI: &str = "http://www.onvif.org/ver10/tptz/ZoomSpaces/PositionGenericSpace";
+
+    /// What a conformant device sends: the `Pant` spelling, both limit blocks.
+    const SCHEMA_SPELLING: &str = r#"<PTZConfiguration token="PTZConfig_1">
+          <Name>cfg</Name>
+          <UseCount>2</UseCount>
+          <NodeToken>PTZNode_1</NodeToken>
+          <DefaultAbsolutePantTiltPositionSpace>http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace</DefaultAbsolutePantTiltPositionSpace>
+        </PTZConfiguration>"#;
+
+    /// What a vendor who "corrected" ONVIF's typo sends.
+    const CORRECTED_SPELLING: &str = r#"<PTZConfiguration token="PTZConfig_1">
+          <Name>cfg</Name>
+          <UseCount>2</UseCount>
+          <NodeToken>PTZNode_1</NodeToken>
+          <DefaultAbsolutePanTiltPositionSpace>http://www.onvif.org/ver10/tptz/PanTiltSpaces/PositionGenericSpace</DefaultAbsolutePanTiltPositionSpace>
+        </PTZConfiguration>"#;
+
+    #[test]
+    fn reads_the_schema_spelling() {
+        let cfg = PtzConfiguration::from_xml(&parse(SCHEMA_SPELLING)).unwrap();
+        assert_eq!(
+            cfg.default_abs_pan_tilt_space.as_deref(),
+            Some(PT_URI),
+            "DefaultAbsolutePantTiltPositionSpace (the onvif.xsd spelling) was not read"
+        );
+    }
+
+    #[test]
+    fn reads_the_corrected_spelling_too() {
+        let cfg = PtzConfiguration::from_xml(&parse(CORRECTED_SPELLING)).unwrap();
+        assert_eq!(
+            cfg.default_abs_pan_tilt_space.as_deref(),
+            Some(PT_URI),
+            "the lenient fallback to DefaultAbsolutePanTiltPositionSpace is gone"
+        );
+    }
+
+    #[test]
+    fn writes_only_the_schema_spelling() {
+        let cfg = PtzConfiguration::from_xml(&parse(CORRECTED_SPELLING)).unwrap();
+        let xml = cfg.to_xml_body().unwrap();
+        assert!(
+            xml.contains("<tt:DefaultAbsolutePantTiltPositionSpace>"),
+            "SetConfiguration must carry the onvif.xsd spelling, got: {xml}"
+        );
+        assert!(
+            !xml.contains("<tt:DefaultAbsolutePanTiltPositionSpace>"),
+            "the corrected spelling is an element no schema declares: {xml}"
+        );
+    }
+
+    fn full_config() -> PtzConfiguration {
+        PtzConfiguration {
+            token: "PTZConfig_1".into(),
+            name: "cfg".into(),
+            use_count: 2,
+            node_token: "PTZNode_1".into(),
+            default_ptz_timeout: Some("PT10S".into()),
+            default_abs_pan_tilt_space: Some(PT_URI.into()),
+            default_abs_zoom_space: Some(Z_URI.into()),
+            default_rel_pan_tilt_space: Some("urn:rel-pt".into()),
+            default_rel_zoom_space: Some("urn:rel-z".into()),
+            default_cont_pan_tilt_space: Some("urn:cont-pt".into()),
+            default_cont_zoom_space: Some("urn:cont-z".into()),
+            default_ptz_speed: Some(PtzSpeed {
+                pan_tilt: Some((0.25, 0.75)),
+                zoom: Some(0.5),
+            }),
+            pan_tilt_limits: Some(PtzSpaceRange {
+                uri: PT_URI.into(),
+                x_range: (-0.8, 0.9),
+                y_range: Some((-0.6, 0.7)),
+            }),
+            zoom_limits: Some(PtzSpaceRange {
+                uri: Z_URI.into(),
+                x_range: (0.1, 0.95),
+                y_range: None,
+            }),
+        }
+    }
+
+    /// The assertion that would have caught both defects: every field the
+    /// parser reads must survive being written and read back.
+    #[test]
+    fn write_then_read_preserves_every_field() {
+        let emitted = full_config().to_xml_body().unwrap();
+        let re = PtzConfiguration::from_xml(&parse(
+            &emitted.replace("tptz:PTZConfiguration", "PTZConfiguration"),
+        ))
+        .unwrap();
+
+        assert_eq!(re.token, "PTZConfig_1");
+        assert_eq!(re.name, "cfg");
+        assert_eq!(re.use_count, 2);
+        assert_eq!(re.node_token, "PTZNode_1");
+        assert_eq!(re.default_ptz_timeout.as_deref(), Some("PT10S"));
+        assert_eq!(re.default_abs_pan_tilt_space.as_deref(), Some(PT_URI));
+        assert_eq!(re.default_abs_zoom_space.as_deref(), Some(Z_URI));
+        assert_eq!(re.default_rel_pan_tilt_space.as_deref(), Some("urn:rel-pt"));
+        assert_eq!(re.default_rel_zoom_space.as_deref(), Some("urn:rel-z"));
+        assert_eq!(
+            re.default_cont_pan_tilt_space.as_deref(),
+            Some("urn:cont-pt")
+        );
+        assert_eq!(re.default_cont_zoom_space.as_deref(), Some("urn:cont-z"));
+
+        let speed = re.default_ptz_speed.expect("DefaultPTZSpeed was dropped");
+        assert_eq!(speed.pan_tilt, Some((0.25, 0.75)));
+        assert_eq!(speed.zoom, Some(0.5));
+
+        let pt = re.pan_tilt_limits.expect("PanTiltLimits was dropped");
+        assert_eq!(pt.uri, PT_URI);
+        assert_eq!(pt.x_range, (-0.8, 0.9));
+        assert_eq!(pt.y_range, Some((-0.6, 0.7)));
+
+        let z = re.zoom_limits.expect("ZoomLimits was dropped");
+        assert_eq!(z.uri, Z_URI);
+        assert_eq!(z.x_range, (0.1, 0.95));
+    }
+
+    /// `ZoomLimits/Range` is a `tt:Space1DDescription` — no `YRange` exists in
+    /// it, so a `y_range` set on a zoom limit is dropped, not emitted.
+    #[test]
+    fn zoom_limits_never_carry_a_y_range() {
+        let mut cfg = full_config();
+        cfg.pan_tilt_limits = None;
+        cfg.zoom_limits = Some(PtzSpaceRange {
+            uri: Z_URI.into(),
+            x_range: (0.0, 1.0),
+            y_range: Some((-1.0, 1.0)),
+        });
+        let xml = cfg.to_xml_body().unwrap();
+        assert!(xml.contains("<tt:ZoomLimits>"), "ZoomLimits missing: {xml}");
+        assert!(
+            !xml.contains("<tt:YRange>"),
+            "Space1DDescription has no YRange: {xml}"
+        );
+    }
+
+    /// `PanTiltLimits/Range` is a `tt:Space2DDescription`, whose `YRange` is
+    /// required. Rather than emit it without one, the caller is told.
+    #[test]
+    fn pan_tilt_limits_without_a_y_range_is_refused() {
+        let mut cfg = full_config();
+        cfg.pan_tilt_limits = Some(PtzSpaceRange {
+            uri: PT_URI.into(),
+            x_range: (-1.0, 1.0),
+            y_range: None,
+        });
+        let err = cfg.to_xml_body().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid argument: PanTiltLimits/Range is a Space2DDescription and its YRange is \
+             required; this PtzSpaceRange has y_range: None"
+        );
+    }
+
+    /// The schema sequence puts the limits after `DefaultPTZTimeout` and
+    /// before `Extension`, with `PanTiltLimits` ahead of `ZoomLimits`.
+    #[test]
+    fn limits_follow_the_xsd_sequence() {
+        let xml = full_config().to_xml_body().unwrap();
+        let timeout = xml.find("<tt:DefaultPTZTimeout>").expect("timeout");
+        let pt = xml.find("<tt:PanTiltLimits>").expect("PanTiltLimits");
+        let z = xml.find("<tt:ZoomLimits>").expect("ZoomLimits");
+        assert!(timeout < pt, "PanTiltLimits must follow DefaultPTZTimeout");
+        assert!(pt < z, "PanTiltLimits must precede ZoomLimits");
+    }
+}
+
 mod video {
     use super::*;
 
@@ -828,7 +1017,7 @@ mod video {
             pan_tilt_limits: None,
             zoom_limits: None,
         };
-        let xml = cfg.to_xml_body();
+        let xml = cfg.to_xml_body().unwrap();
         // Optional string fields must close as </tt:Tag>, never the
         // malformed <tt:/Tag> the opt_str helper used to emit.
         assert!(xml.contains("<tt:DefaultPTZTimeout>PT5S</tt:DefaultPTZTimeout>"));

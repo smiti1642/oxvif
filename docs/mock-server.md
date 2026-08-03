@@ -867,6 +867,14 @@ Audit §6.
   never emitted, so those fields are `None` from the mock forever. (The
   *status* response does carry a `space` attribute — §8.5 — but the
   configuration does not.)
+- **Four PTZ attributes are not in oxvif's types, so the mock has nowhere to
+  put them.** `onvif.xsd` gives `tt:PTZConfiguration` the optional `xs:int`
+  attributes `MoveRamp`, `PresetRamp` and `PresetTourRamp`, and `tt:PTZNode`
+  the optional `GeoMove` — `oxvif::PtzConfiguration` and `oxvif::PtzNode` parse
+  none of the four. Deliberate: adding public fields is a breaking change, and
+  unlike the `Pant` spelling defect none of these causes *silent data loss*,
+  because nothing in the crate ever claimed to carry them. Read from the
+  schema during the PTZ planning, 2026-07-31.
 - **`VideoSourceMode/@Enabled` is not in oxvif's type.** The ONVIF schema marks
   the active mode with it; `oxvif::VideoSourceMode` has `token`,
   `max_framerate`, `max_resolution_*`, `encodings` and `reboot` only. This is
