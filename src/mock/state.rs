@@ -62,6 +62,16 @@ pub struct DeviceState {
     pub storage: Vec<StorageEntry>,
     #[serde(default = "default_metadata")]
     pub metadata: Vec<MetadataEntry>,
+    #[serde(default = "default_audio_sources")]
+    pub audio_sources: Vec<AudioSourceEntry>,
+    #[serde(default = "default_audio_source_configs")]
+    pub audio_source_configs: Vec<AudioSourceConfigEntry>,
+    #[serde(default = "default_audio_encoders")]
+    pub audio_encoders: Vec<AudioEncoderEntry>,
+    #[serde(default = "default_audio_outputs")]
+    pub audio_outputs: Vec<AudioOutputEntry>,
+    #[serde(default = "default_audio_decoders")]
+    pub audio_decoders: Vec<AudioDecoderEntry>,
     /// Monotonic event counter for the pull-point stream (per-instance,
     /// not persisted). Replaces the former process-global `EVENT_SEQ`.
     #[serde(skip)]
@@ -484,6 +494,109 @@ pub struct PtzConfigEntry {
     pub timeout_min: String,
     /// `GetConfigurationOptions` → `PTZTimeout/Max`.
     pub timeout_max: String,
+}
+
+// ── Audio ────────────────────────────────────────────────────────────────────
+//
+// The whole audio family was six string literals until 0.16 — the last Tier 3
+// entry in `docs/active/mock-audit-2026-07.md` §5. Two facts about it were
+// invisible while it was:
+//
+// 1. **Media1 and Media2 disagreed about the same tokens.** `ASC_1` was
+//    `AudioSourceConfig1` reading `AudioSource_1` on one service and
+//    `AudioSourceConfig` reading `AudioSrc_1` on the other; `AEC_1` was
+//    `AudioEncoder` and `AudioEncoderConfig`. Nothing failed, because
+//    `tests/mock_media1_media2_agree.rs` had no audio row — the audit's §5b
+//    divergence class, hiding inside its §5 stub class.
+// 2. **Both option responses had the wrong shape**, in opposite directions.
+//    See `services/media.rs::resp_audio_encoder_configuration_options`.
+
+/// A physical audio input (`tt:AudioSource`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioSourceEntry {
+    pub token: String,
+    /// `Channels` belongs **here**, not on an encoder configuration — the place
+    /// `crate::types::AudioEncoderConfiguration` looked for it until 0.16.
+    pub channels: u32,
+}
+
+/// `tt:AudioSourceConfiguration` — which input a profile listens to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioSourceConfigEntry {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    pub source_token: String,
+}
+
+/// One `(encoding, bitrates, sample rates)` row of a
+/// `GetAudioEncoderConfigurationOptions` answer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioOptionEntry {
+    pub encoding: String,
+    pub bitrates: Vec<u32>,
+    pub sample_rates: Vec<u32>,
+}
+
+/// Multicast settings, as `tt:MulticastConfiguration` carries them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MulticastEntry {
+    pub address: String,
+    pub port: u32,
+    pub ttl: u32,
+    pub auto_start: bool,
+}
+
+/// `tt:AudioEncoderConfiguration` / `tt:AudioEncoder2Configuration` — **one
+/// entry, rendered two ways.**
+///
+/// The two schema types are not a namespace variant of each other:
+///
+/// ```text
+/// Media1  Encoding, Bitrate, SampleRate, Multicast, SessionTimeout   both required
+/// Media2  Encoding, Multicast?, Bitrate, SampleRate                  no SessionTimeout
+/// ```
+///
+/// So the state is shared (`CLAUDE.md` step 5b) and each service renders its own
+/// sequence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioEncoderEntry {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    pub encoding: String,
+    pub bitrate: u32,
+    pub sample_rate: u32,
+    /// Required by the Media1 type, optional in the Media2 one.
+    #[serde(default)]
+    pub multicast: Option<MulticastEntry>,
+    /// Required by the Media1 type; **the Media2 type has no such member**, so
+    /// a Media2 write cannot express it and must not destroy it.
+    #[serde(default)]
+    pub session_timeout: Option<String>,
+    /// What `GetAudioEncoderConfigurationOptions` answers **for this
+    /// configuration**. It was one static pair for the whole device.
+    #[serde(default)]
+    pub options: Vec<AudioOptionEntry>,
+}
+
+/// `tt:AudioOutputConfiguration` — a speaker (Media2 only in oxvif).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioOutputEntry {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
+    pub output_token: String,
+    pub output_level: u32,
+}
+
+/// `tt:AudioDecoderConfiguration` — a `ConfigurationEntity` and nothing more;
+/// the schema adds no members of its own.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioDecoderEntry {
+    pub token: String,
+    pub name: String,
+    pub use_count: u32,
 }
 
 /// Imaging state for **one** video source.
@@ -1110,6 +1223,119 @@ fn default_ptz_configs() -> Vec<PtzConfigEntry> {
     ]
 }
 
+// ── Audio fixture ────────────────────────────────────────────────────────────
+//
+// **Two of everything, disagreeing on every value an assertion can read.** One
+// audio source and one encoder — what this was — cannot tell a handler that
+// resolves its token from one that ignores it, which is the same reason the
+// video encoder catalogue has four entries and PTZ has two heads.
+
+fn default_audio_sources() -> Vec<AudioSourceEntry> {
+    vec![
+        AudioSourceEntry {
+            token: "AudioSrc_1".into(),
+            channels: 1,
+        },
+        AudioSourceEntry {
+            token: "AudioSrc_2".into(),
+            channels: 2,
+        },
+    ]
+}
+
+fn default_audio_source_configs() -> Vec<AudioSourceConfigEntry> {
+    vec![
+        AudioSourceConfigEntry {
+            token: "ASC_1".into(),
+            name: "AudioSourceConfig1".into(),
+            use_count: 1,
+            source_token: "AudioSrc_1".into(),
+        },
+        AudioSourceConfigEntry {
+            token: "ASC_2".into(),
+            name: "AudioSourceConfig2".into(),
+            use_count: 0,
+            source_token: "AudioSrc_2".into(),
+        },
+    ]
+}
+
+fn default_audio_encoders() -> Vec<AudioEncoderEntry> {
+    vec![
+        AudioEncoderEntry {
+            token: "AEC_1".into(),
+            name: "AudioEncoder1".into(),
+            use_count: 1,
+            encoding: "G711".into(),
+            bitrate: 64,
+            sample_rate: 8,
+            // Both members are *required* by `tt:AudioEncoderConfiguration`, so
+            // a conformant Media1 device always sends them, and this mock is
+            // the conformant device.
+            multicast: Some(MulticastEntry {
+                address: "239.0.0.5".into(),
+                port: 40002,
+                ttl: 5,
+                auto_start: false,
+            }),
+            session_timeout: Some("PT60S".into()),
+            options: vec![AudioOptionEntry {
+                encoding: "G711".into(),
+                bitrates: vec![64],
+                sample_rates: vec![8],
+            }],
+        },
+        AudioEncoderEntry {
+            token: "AEC_2".into(),
+            name: "AudioEncoder2".into(),
+            use_count: 0,
+            encoding: "AAC".into(),
+            bitrate: 128,
+            sample_rate: 48,
+            multicast: Some(MulticastEntry {
+                address: "239.0.0.6".into(),
+                port: 40006,
+                ttl: 3,
+                auto_start: true,
+            }),
+            session_timeout: Some("PT30S".into()),
+            // Two rows against `AEC_1`'s one, and neither encoding overlaps its
+            // list: an options handler that ignores its token cannot produce
+            // this, and a caller that reads `options[0]` cannot get it by luck.
+            options: vec![
+                AudioOptionEntry {
+                    encoding: "AAC".into(),
+                    bitrates: vec![64, 128, 256],
+                    sample_rates: vec![16, 44, 48],
+                },
+                AudioOptionEntry {
+                    encoding: "G726".into(),
+                    bitrates: vec![16, 32],
+                    sample_rates: vec![8],
+                },
+            ],
+        },
+    ]
+}
+
+fn default_audio_outputs() -> Vec<AudioOutputEntry> {
+    vec![AudioOutputEntry {
+        token: "AOC_1".into(),
+        name: "AudioOutput".into(),
+        use_count: 1,
+        output_token: "AudioOut_1".into(),
+        output_level: 50,
+    }]
+}
+
+fn default_audio_decoders() -> Vec<AudioDecoderEntry> {
+    vec![AudioDecoderEntry {
+        token: "ADC_1".into(),
+        name: "AudioDecoder".into(),
+        use_count: 1,
+    }]
+}
+
 /// One tour, with **two** stops. A single-stop fixture cannot tell a parser
 /// that returns the first spot and drops the rest from one that collects them
 /// all, which is the specific defect the `vec_from_xml` rule exists to catch.
@@ -1228,8 +1454,12 @@ fn default_profiles() -> ProfilesState {
                 fixed: true,
                 video_source_config_token: Some("VSC_1".into()),
                 video_encoder_config_token: Some("VEC_1".into()),
-                audio_source_config_token: None,
-                audio_encoder_config_token: None,
+                // The only profile with audio, which is what `ASC_1` and
+                // `AEC_1`'s `UseCount: 1` claims. Every profile was unbound
+                // while the audio family was a string literal, so the two
+                // renderers emitted nothing and agreed perfectly.
+                audio_source_config_token: Some("ASC_1".into()),
+                audio_encoder_config_token: Some("AEC_1".into()),
                 ptz_config_token: Some("PTZConfig_1".into()),
             },
             ProfileEntry {
@@ -1589,6 +1819,11 @@ impl Default for DeviceState {
             digital_inputs: default_digital_inputs(),
             storage: default_storage(),
             metadata: default_metadata(),
+            audio_sources: default_audio_sources(),
+            audio_source_configs: default_audio_source_configs(),
+            audio_encoders: default_audio_encoders(),
+            audio_outputs: default_audio_outputs(),
+            audio_decoders: default_audio_decoders(),
             event_seq: 0,
             event_filter: None,
             pending_io_events: Vec::new(),
@@ -2124,6 +2359,197 @@ mod tests {
             s.read().ptz_configs[0].abs_pan_tilt_space.as_deref(),
             Some(URI)
         );
+    }
+
+    // ── Audio ────────────────────────────────────────────────────────────
+    //
+    // These assert **bytes**, and they have to.
+    //
+    // `AudioEncoderConfigurationOptions::from_xml` reads both nestings — it
+    // must, because the two services genuinely differ — so a test going
+    // through the client parses either shape happily and can no longer tell
+    // which one the mock sent. Exactly the hole the `Pant` spelling test
+    // closes on the PTZ side, and it was found the same way: by a perturbation
+    // that came back green.
+
+    fn set_audio_req(prefix: &str, token: &str, extra: &str) -> String {
+        format!(
+            r#"<{prefix}:SetAudioEncoderConfiguration>
+                 <{prefix}:Configuration token="{token}">
+                   <tt:Name>renamed-5719</tt:Name>
+                   <tt:UseCount>1</tt:UseCount>
+                   <tt:Encoding>G726</tt:Encoding>
+                   <tt:Bitrate>32</tt:Bitrate>
+                   <tt:SampleRate>16</tt:SampleRate>
+                   {extra}
+                 </{prefix}:Configuration>
+               </{prefix}:SetAudioEncoderConfiguration>"#
+        )
+    }
+
+    const MULTICAST_EL: &str = r#"<tt:Multicast>
+        <tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>239.9.9.9</tt:IPv4Address></tt:Address>
+        <tt:Port>41234</tt:Port><tt:TTL>7</tt:TTL><tt:AutoStart>true</tt:AutoStart>
+      </tt:Multicast>"#;
+
+    /// Media1 wraps its option rows; the wrapper is the type
+    /// `tt:AudioEncoderConfigurationOptions` and the rows are
+    /// `tt:AudioEncoderConfigurationOption`.
+    #[test]
+    fn audio_options_use_media1_nesting_on_the_wire() {
+        use crate::mock::services::media;
+        let s = new_state();
+        let body = "<trt:GetAudioEncoderConfigurationOptions>\
+                    <trt:ConfigurationToken>AEC_2</trt:ConfigurationToken>\
+                    </trt:GetAudioEncoderConfigurationOptions>";
+        let xml = media::resp_audio_encoder_configuration_options(&s, body);
+        assert!(xml.contains("<trt:Options><tt:Options>"), "got {xml}");
+        // Two rows for `AEC_2`, and the second is `G726` — a handler ignoring
+        // its token answers `AEC_1`'s single `G711` row.
+        assert_eq!(xml.matches("<tt:Options>").count(), 2, "got {xml}");
+        assert!(xml.contains("<tt:Encoding>G726</tt:Encoding>"), "got {xml}");
+    }
+
+    /// Media2 does not wrap: `Options` is `maxOccurs="unbounded"` and carries
+    /// `Encoding` directly.
+    #[test]
+    fn audio_options_use_media2_nesting_on_the_wire() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let body = "<tr2:GetAudioEncoderConfigurationOptions>\
+                    <tr2:ConfigurationToken>AEC_2</tr2:ConfigurationToken>\
+                    </tr2:GetAudioEncoderConfigurationOptions>";
+        let xml = media2::resp_audio_encoder_configuration_options_media2(&s, body);
+        assert!(
+            !xml.contains("<tt:Options>"),
+            "tt:Options is Media1's wrapper and has no place here: {xml}"
+        );
+        assert_eq!(xml.matches("<tr2:Options>").count(), 2, "got {xml}");
+        assert!(xml.contains("<tt:Encoding>G726</tt:Encoding>"), "got {xml}");
+    }
+
+    /// Media1 renders `Multicast` then `SessionTimeout` after `SampleRate`;
+    /// Media2 renders `Multicast` before `Bitrate` and no `SessionTimeout`.
+    #[test]
+    fn the_two_services_sequence_the_audio_encoder_differently() {
+        use crate::mock::services::{media, media2};
+        let s = new_state();
+        let m1 = media::resp_audio_encoder_configurations(&s);
+        let m2 = media2::resp_audio_encoder_configurations_media2(&s);
+        let pos = |x: &str, t: &str| x.find(t).unwrap_or_else(|| panic!("{t} missing from {x}"));
+
+        assert!(
+            pos(&m1, "<tt:Multicast>") > pos(&m1, "<tt:SampleRate>"),
+            "{m1}"
+        );
+        assert!(
+            m1.contains("<tt:SessionTimeout>PT60S</tt:SessionTimeout>"),
+            "{m1}"
+        );
+        assert!(
+            pos(&m2, "<tt:Multicast>") < pos(&m2, "<tt:Bitrate>"),
+            "{m2}"
+        );
+        assert!(
+            !m2.contains("SessionTimeout"),
+            "tt:AudioEncoder2Configuration has no SessionTimeout member: {m2}"
+        );
+    }
+
+    /// `Multicast` and `SessionTimeout` are required by
+    /// `tt:AudioEncoderConfiguration`, so Media1 refuses a body without them —
+    /// which is the body oxvif itself sent until 0.16.
+    #[test]
+    fn media1_set_audio_encoder_requires_multicast_and_session_timeout() {
+        use crate::mock::services::media;
+        let s = new_state();
+
+        let xml =
+            media::handle_set_audio_encoder_configuration(&s, &set_audio_req("trt", "AEC_1", ""));
+        assert!(
+            xml.contains("IncompleteAudioEncoder-SETAEC-5715"),
+            "got {xml}"
+        );
+        assert!(xml.contains("Multicast=false"), "got {xml}");
+        assert!(xml.contains("SessionTimeout=false"), "got {xml}");
+        assert_eq!(
+            s.read().audio_encoders[0].name,
+            "AudioEncoder1",
+            "not written"
+        );
+
+        // …and accepts one that carries both.
+        let full = format!("{MULTICAST_EL}<tt:SessionTimeout>PT5S</tt:SessionTimeout>");
+        let xml = media::handle_set_audio_encoder_configuration(
+            &s,
+            &set_audio_req("trt", "AEC_1", &full),
+        );
+        assert!(
+            xml.contains("SetAudioEncoderConfigurationResponse"),
+            "got {xml}"
+        );
+        let c = s.read().audio_encoders[0].clone();
+        assert_eq!(c.name, "renamed-5719");
+        assert_eq!(c.session_timeout.as_deref(), Some("PT5S"));
+        assert_eq!(
+            c.multicast
+                .map(|m| (m.address, m.port, m.ttl, m.auto_start)),
+            Some(("239.9.9.9".to_string(), 41234, 7, true))
+        );
+    }
+
+    /// A Media2 write cannot express `SessionTimeout` — its type has no such
+    /// member — so it must leave the stored one alone rather than clearing a
+    /// value the Media1 type requires.
+    #[test]
+    fn media2_set_audio_encoder_preserves_the_session_timeout() {
+        use crate::mock::services::media2;
+        let s = new_state();
+        let xml = media2::handle_set_audio_encoder_configuration_media2(
+            &s,
+            &set_audio_req("tr2", "AEC_1", MULTICAST_EL),
+        );
+        assert!(
+            xml.contains("SetAudioEncoderConfigurationResponse"),
+            "got {xml}"
+        );
+        let c = s.read().audio_encoders[0].clone();
+        assert_eq!(c.name, "renamed-5719", "the write did land");
+        assert_eq!(
+            c.session_timeout.as_deref(),
+            Some("PT60S"),
+            "the seeded timeout must survive a write that cannot carry it"
+        );
+    }
+
+    #[test]
+    fn audio_encoder_operations_fault_on_an_unknown_token() {
+        use crate::mock::services::{media, media2};
+        let s = new_state();
+        let get = media::resp_audio_encoder_configuration(
+            &s,
+            "<trt:ConfigurationToken>AEC_9</trt:ConfigurationToken>",
+        );
+        assert!(get.contains("NoSuchAudioEncoder-GETAEC-5712"), "got {get}");
+        let opts = media::resp_audio_encoder_configuration_options(
+            &s,
+            "<trt:ConfigurationToken>AEC_9</trt:ConfigurationToken>",
+        );
+        assert!(
+            opts.contains("NoSuchAudioEncoder-AECOPTS-5714"),
+            "got {opts}"
+        );
+        let opts2 = media2::resp_audio_encoder_configuration_options_media2(
+            &s,
+            "<tr2:ConfigurationToken>AEC_9</tr2:ConfigurationToken>",
+        );
+        assert!(
+            opts2.contains("NoSuchAudioEncoder-AECOPTS2-5718"),
+            "got {opts2}"
+        );
+        let set =
+            media::handle_set_audio_encoder_configuration(&s, &set_audio_req("trt", "AEC_9", ""));
+        assert!(set.contains("NoSuchAudioEncoder-SETAEC-5715"), "got {set}");
     }
 
     /// Binding a PTZ configuration the device does not have is refused, and the

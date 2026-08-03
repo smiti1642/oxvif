@@ -154,6 +154,41 @@ two-thirds of the test suite.
   configuration with every field set, which is the assertion that would have
   caught both this and the limits below.
 
+- **The mock's whole audio family was six string literals, and the two services
+  disagreed about the same tokens.** `ASC_1` was `AudioSourceConfig1` reading
+  `AudioSource_1` on Media1 and `AudioSourceConfig` reading `AudioSrc_1` on
+  Media2; `AEC_1` was `AudioEncoder` on one and `AudioEncoderConfig` on the
+  other. One device, two answers, from two literals in two files — and nothing
+  failed, because `tests/mock_media1_media2_agree.rs` had no audio row.
+
+  `DeviceState` gained `audio_sources`, `audio_source_configs`,
+  `audio_encoders`, `audio_outputs` and `audio_decoders`. Both services render
+  the same entries in their own schema shapes, `SetAudioEncoderConfiguration`
+  persists on both, and `GetAudioEncoderConfiguration(Options)` are per
+  configuration — they answered one fixture for every token.
+
+  Both option responses also had the **wrong nesting, in opposite directions**:
+  Media1 sent Media2's flat shape and Media2 sent Media1's wrapped one. Since
+  the parser now reads either (above), only a byte-level assertion can tell them
+  apart, which is what `audio_options_use_media1_nesting_on_the_wire` and its
+  Media2 twin do.
+
+  This closes the last Tier 3 family in `docs/active/mock-audit-2026-07.md`.
+  **Every `Set` on the mock now round-trips**; `tests/mock_roundtrip.rs` has no
+  `Static` row left.
+
+- **The mock's profile renderer dropped any audio configuration but `ASC_1` /
+  `AEC_1`.** Both inline renderers were `match token { "ASC_1" => <literal>,
+  _ => String::new() }`, so a profile bound to any other token rendered nothing
+  and said so nowhere. `Profile_1` now carries `ASC_1` + `AEC_1` from state, and
+  both services must agree about it.
+
+- **Media1 `SetAudioEncoderConfiguration` now refuses an incomplete body.**
+  `ter:ConfigModify` / `IncompleteAudioEncoder-SETAEC-5715` when `Multicast` or
+  `SessionTimeout` is missing — which is the body oxvif itself sent until this
+  release. A mock that accepted it would be the one device on which the bug did
+  not show.
+
 - **`get_audio_encoder_configuration_options` returned one empty entry from
   every Media1 device.** The two services nest the response differently and the
   parser only knew Media2's shape:

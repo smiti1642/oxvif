@@ -1,6 +1,6 @@
 use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
 use crate::mock::services::media;
-use crate::mock::state::{ProfileEntry, SharedState, VideoEncoderState};
+use crate::mock::state::{AudioEncoderEntry, ProfileEntry, SharedState, VideoEncoderState};
 use crate::mock::xml_parse::{extract_all_tags, extract_tag};
 
 const NS: &str = r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#;
@@ -601,72 +601,185 @@ pub fn handle_set_metadata_configuration(state: &SharedState, body: &str) -> Str
     resp_empty("tr2", "SetMetadataConfigurationResponse")
 }
 
-pub fn resp_audio_source_configurations_media2() -> String {
+/// The **same** `AudioSourceConfigEntry` list Media1 renders.
+///
+/// `ASC_1` was `AudioSourceConfig1` reading `AudioSource_1` on Media1 and
+/// `AudioSourceConfig` reading `AudioSrc_1` here — one token, two answers, from
+/// two string literals in two files. `tests/mock_media1_media2_agree.rs` had no
+/// audio row, so nothing failed. `CLAUDE.md` step 5b.
+pub fn resp_audio_source_configurations_media2(state: &SharedState) -> String {
+    let items: String = state
+        .read()
+        .audio_source_configs
+        .iter()
+        .map(|c| media::render_audio_source_config(c, "tr2:Configurations"))
+        .collect();
     soap(
         r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetAudioSourceConfigurationsResponse>
-          <tr2:Configurations token="ASC_1">
-            <tt:Name>AudioSourceConfig</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:SourceToken>AudioSrc_1</tt:SourceToken>
-          </tr2:Configurations>
-        </tr2:GetAudioSourceConfigurationsResponse>"#,
+        &format!(
+            "<tr2:GetAudioSourceConfigurationsResponse>{items}\
+             </tr2:GetAudioSourceConfigurationsResponse>"
+        ),
     )
 }
 
-pub fn resp_audio_encoder_configurations_media2() -> String {
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetAudioEncoderConfigurationsResponse>
-          <tr2:Configurations token="AEC_1">
-            <tt:Name>AudioEncoderConfig</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:Encoding>G711</tt:Encoding>
-            <tt:Bitrate>64</tt:Bitrate>
-            <tt:SampleRate>8</tt:SampleRate>
-          </tr2:Configurations>
-        </tr2:GetAudioEncoderConfigurationsResponse>"#,
+/// `tt:AudioEncoder2Configuration` — a **different type** from Media1's, not a
+/// namespace variant of it.
+///
+/// ```text
+/// Media1  Encoding, Bitrate, SampleRate, Multicast, SessionTimeout
+/// Media2  Encoding, Multicast?, Bitrate, SampleRate
+/// ```
+///
+/// Same state, own sequence, and no `SessionTimeout` — the member does not
+/// exist here.
+fn render_audio_encoder_media2(c: &AudioEncoderEntry, qname: &str) -> String {
+    let multicast = c
+        .multicast
+        .as_ref()
+        .map(media::render_multicast)
+        .unwrap_or_default();
+    format!(
+        r#"<{qname} token="{token}">
+          <tt:Name>{name}</tt:Name>
+          <tt:UseCount>{use_count}</tt:UseCount>
+          <tt:Encoding>{encoding}</tt:Encoding>
+          {multicast}
+          <tt:Bitrate>{bitrate}</tt:Bitrate>
+          <tt:SampleRate>{sample_rate}</tt:SampleRate>
+        </{qname}>"#,
+        token = c.token,
+        name = c.name,
+        use_count = c.use_count,
+        encoding = c.encoding,
+        bitrate = c.bitrate,
+        sample_rate = c.sample_rate,
     )
 }
 
-pub fn resp_audio_encoder_configuration_options_media2() -> String {
+pub fn resp_audio_encoder_configurations_media2(state: &SharedState) -> String {
+    let items: String = state
+        .read()
+        .audio_encoders
+        .iter()
+        .map(|c| render_audio_encoder_media2(c, "tr2:Configurations"))
+        .collect();
     soap(
         r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetAudioEncoderConfigurationOptionsResponse>
-          <tr2:Options>
-            <tt:Options>
-              <tt:Encoding>G711</tt:Encoding>
-              <tt:BitrateList><tt:Items>64</tt:Items></tt:BitrateList>
-              <tt:SampleRateList><tt:Items>8</tt:Items></tt:SampleRateList>
-            </tt:Options>
-          </tr2:Options>
-        </tr2:GetAudioEncoderConfigurationOptionsResponse>"#,
+        &format!(
+            "<tr2:GetAudioEncoderConfigurationsResponse>{items}\
+             </tr2:GetAudioEncoderConfigurationsResponse>"
+        ),
     )
 }
 
-pub fn resp_audio_output_configurations() -> String {
+/// Media2's options nesting is **flat**: `Options` is
+/// `tt:AudioEncoder2ConfigurationOptions` with `maxOccurs="unbounded"`, and
+/// `Encoding` / `BitrateList` / `SampleRateList` are its direct children.
+///
+/// This response wrapped them in an extra `tt:Options`, which is Media1's
+/// shape — the mirror image of the mistake Media1's handler was making. Both
+/// were wrong, in opposite directions, and one parser read one of them.
+pub fn resp_audio_encoder_configuration_options_media2(state: &SharedState, body: &str) -> String {
+    let Some(token) = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty()) else {
+        return resp_soap_fault(
+            "env:Sender",
+            "NoConfigToken-AECOPTS2-5717: GetAudioEncoderConfigurationOptions is per configuration",
+        );
+    };
+    let Some(cfg) = state
+        .read()
+        .audio_encoders
+        .iter()
+        .find(|c| c.token == token)
+        .cloned()
+    else {
+        return resp_soap_fault(
+            "ter:NoConfig",
+            &format!("NoSuchAudioEncoder-AECOPTS2-5718: {token}"),
+        );
+    };
+    let items: String = cfg
+        .options
+        .iter()
+        .map(|o| media::render_audio_option(o, "tr2:Options"))
+        .collect();
     soap(
         r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetAudioOutputConfigurationsResponse>
-          <tr2:Configurations token="AOC_1">
-            <tt:Name>AudioOutput</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:OutputToken>AudioOut_1</tt:OutputToken>
-            <tt:OutputLevel>50</tt:OutputLevel>
-          </tr2:Configurations>
-        </tr2:GetAudioOutputConfigurationsResponse>"#,
+        &format!(
+            "<tr2:GetAudioEncoderConfigurationOptionsResponse>{items}\
+             </tr2:GetAudioEncoderConfigurationOptionsResponse>"
+        ),
     )
 }
 
-pub fn resp_audio_decoder_configurations() -> String {
+/// Media2 `SetAudioEncoderConfiguration`.
+///
+/// Shares Media1's writer over the same state, without Media1's
+/// required-member check: `Multicast` is optional in
+/// `tt:AudioEncoder2Configuration` and `SessionTimeout` is not a member, so a
+/// Media2 write leaves the stored timeout alone rather than clearing a value
+/// Media1 requires.
+pub fn handle_set_audio_encoder_configuration_media2(state: &SharedState, body: &str) -> String {
+    match media::apply_audio_encoder_write(state, body, false) {
+        Ok(()) => resp_empty("tr2", "SetAudioEncoderConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+pub fn resp_audio_output_configurations(state: &SharedState) -> String {
+    let items: String = state
+        .read()
+        .audio_outputs
+        .iter()
+        .map(|c| {
+            format!(
+                r#"<tr2:Configurations token="{token}">
+                  <tt:Name>{name}</tt:Name>
+                  <tt:UseCount>{use_count}</tt:UseCount>
+                  <tt:OutputToken>{output}</tt:OutputToken>
+                  <tt:OutputLevel>{level}</tt:OutputLevel>
+                </tr2:Configurations>"#,
+                token = c.token,
+                name = c.name,
+                use_count = c.use_count,
+                output = c.output_token,
+                level = c.output_level,
+            )
+        })
+        .collect();
     soap(
         r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetAudioDecoderConfigurationsResponse>
-          <tr2:Configurations token="ADC_1">
-            <tt:Name>AudioDecoder</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-          </tr2:Configurations>
-        </tr2:GetAudioDecoderConfigurationsResponse>"#,
+        &format!(
+            "<tr2:GetAudioOutputConfigurationsResponse>{items}\
+             </tr2:GetAudioOutputConfigurationsResponse>"
+        ),
+    )
+}
+
+pub fn resp_audio_decoder_configurations(state: &SharedState) -> String {
+    let items: String = state
+        .read()
+        .audio_decoders
+        .iter()
+        .map(|c| {
+            format!(
+                r#"<tr2:Configurations token="{token}">
+                  <tt:Name>{name}</tt:Name>
+                  <tt:UseCount>{use_count}</tt:UseCount>
+                </tr2:Configurations>"#,
+                token = c.token,
+                name = c.name,
+                use_count = c.use_count,
+            )
+        })
+        .collect();
+    soap(
+        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
+        &format!(
+            "<tr2:GetAudioDecoderConfigurationsResponse>{items}\
+             </tr2:GetAudioDecoderConfigurationsResponse>"
+        ),
     )
 }
 

@@ -72,6 +72,15 @@ enum Expect {
     #[allow(dead_code)]
     Broken(&'static str),
     /// Deliberately fixture data on both sides. `docs/active/mock-audit-2026-07.md` §5.
+    ///
+    /// **No row uses this today either**, as of the audio catalogue — the last
+    /// two `Static` rows were `media1/audio-encoder-config` and
+    /// `media2/audio-encoder-config`, and Tier 3 is now empty. Kept for the same
+    /// reason as `Broken`: the next family that is genuinely fixture data gets a
+    /// row here with its citation rather than silence, and the test then asserts
+    /// the write really is discarded. Deleting the arm would delete the only
+    /// place that distinction can be written down.
+    #[allow(dead_code)]
     Static(&'static str),
 }
 
@@ -184,7 +193,7 @@ const PAIRS: &[Pair] = pairs![
     "media1/remove-video-encoder-cfg"  => Expect::Works                     , m1_remove_video_encoder;
     "media1/add-video-source-config"   => Expect::Works                     , m1_add_video_source;
     "media1/remove-video-source-cfg"   => Expect::Works                     , m1_remove_video_source;
-    "media1/audio-encoder-config"      => Expect::Static("audit §5"), m1_audio_encoder_config;
+    "media1/audio-encoder-config"      => Expect::Works, m1_audio_encoder_config;
 
     // ── Media2 ──────────────────────────────────────────────────────────────
     "media2/profile-create"            => Expect::Works, m2_profile_create;
@@ -195,7 +204,7 @@ const PAIRS: &[Pair] = pairs![
     "media2/add-ptz-configuration"     => Expect::Works                     , m2_add_ptz_configuration;
     "media2/remove-configuration"      => Expect::Works                     , m2_remove_configuration;
     "media2/metadata-config"           => Expect::Works, m2_metadata_config;
-    "media2/audio-encoder-config"      => Expect::Static("audit §5"), m2_audio_encoder_config;
+    "media2/audio-encoder-config"      => Expect::Works, m2_audio_encoder_config;
 
     // ── PTZ ─────────────────────────────────────────────────────────────────
     "ptz/preset-set"                   => Expect::Works, ptz_preset_set;
@@ -635,13 +644,30 @@ async fn m1_remove_video_source(d: &Dev) -> Outcome {
     cmp(None, got.video_source_config_token)
 }
 
+/// Writes every member the Media1 type carries, and checks the *other*
+/// configuration is untouched.
+///
+/// `bitrate` alone — all this asserted while the row was `Static` — passes
+/// against a handler that stores the bitrate and drops the encoding, the
+/// multicast group and the session timeout: the `MTU` shape from `CLAUDE.md`
+/// step 5c.
 async fn m1_audio_encoder_config(d: &Dev) -> Outcome {
     let url = d.url("media");
     let mut cfg = call!(
         "GetAudioEncoderConfiguration",
         d.client.get_audio_encoder_configuration(&url, "AEC_1")
     );
+    // Seed: G711 / 64 / 8, multicast 239.0.0.5:40002 ttl 5, PT60S.
+    cfg.name = "rt-aec-4460".into();
+    cfg.encoding = oxvif::AudioEncoding::G726;
     cfg.bitrate = 44;
+    cfg.sample_rate = 16;
+    cfg.session_timeout = Some("PT15S".into());
+    if let Some(m) = cfg.multicast.as_mut() {
+        m.address = "239.0.0.9".into();
+        m.port = 41000;
+        m.auto_start = true;
+    }
     call!(
         "SetAudioEncoderConfiguration",
         d.client.set_audio_encoder_configuration(&url, &cfg)
@@ -650,7 +676,30 @@ async fn m1_audio_encoder_config(d: &Dev) -> Outcome {
         "GetAudioEncoderConfiguration",
         d.client.get_audio_encoder_configuration(&url, "AEC_1")
     );
-    cmp(44, got.bitrate)
+    let other = call!(
+        "GetAudioEncoderConfiguration",
+        d.client.get_audio_encoder_configuration(&url, "AEC_2")
+    );
+    cmp(
+        (
+            "rt-aec-4460".to_string(),
+            "G726".to_string(),
+            44,
+            16,
+            Some(("239.0.0.9".to_string(), 41000, true)),
+            Some("PT15S".to_string()),
+            "AudioEncoder2".to_string(),
+        ),
+        (
+            got.name,
+            got.encoding.as_str().to_string(),
+            got.bitrate,
+            got.sample_rate,
+            got.multicast.map(|m| (m.address, m.port, m.auto_start)),
+            got.session_timeout,
+            other.name,
+        ),
+    )
 }
 
 // ── Media2 checks ────────────────────────────────────────────────────────────
@@ -818,6 +867,14 @@ async fn m2_metadata_config(d: &Dev) -> Outcome {
     )
 }
 
+/// The Media2 write, addressed at the *other* configuration — and the one
+/// assertion only a cross-service read can make.
+///
+/// `tt:AudioEncoder2Configuration` has **no `SessionTimeout` member**, so a
+/// Media2 write cannot express it. It must therefore leave the stored one
+/// alone rather than clearing a value the Media1 type requires — and only
+/// Media1's getter can show that, because Media2's response has nowhere to put
+/// it.
 async fn m2_audio_encoder_config(d: &Dev) -> Outcome {
     let url = d.url("media2");
     let mut cfg = call!(
@@ -825,22 +882,45 @@ async fn m2_audio_encoder_config(d: &Dev) -> Outcome {
         d.client.get_audio_encoder_configurations_media2(&url)
     )
     .into_iter()
-    .next()
-    .expect("at least one audio encoder configuration");
+    .find(|c| c.token == "AEC_2")
+    .expect("AEC_2 exists");
+    // Seed: AAC / 128 / 48, PT30S (which Media2 never sees).
+    cfg.name = "rt-aec2-4461".into();
     cfg.bitrate = 47;
+    cfg.sample_rate = 32;
     call!(
         "SetAudioEncoderConfiguration",
         d.client.set_audio_encoder_configuration_media2(&url, &cfg)
     );
-    let bitrate = call!(
+    let got = call!(
         "GetAudioEncoderConfigurations",
         d.client.get_audio_encoder_configurations_media2(&url)
     )
     .into_iter()
-    .next()
-    .map(|c| c.bitrate)
-    .unwrap_or_default();
-    cmp(47, bitrate)
+    .find(|c| c.token == "AEC_2")
+    .expect("AEC_2 still exists");
+    let through_media1 = call!(
+        "GetAudioEncoderConfiguration",
+        d.client
+            .get_audio_encoder_configuration(&d.url("media"), "AEC_2")
+    );
+    cmp(
+        (
+            "rt-aec2-4461".to_string(),
+            47,
+            32,
+            "rt-aec2-4461".to_string(),
+            Some("PT30S".to_string()),
+        ),
+        (
+            got.name,
+            got.bitrate,
+            got.sample_rate,
+            // Media1 must show the same write — one catalogue, two views.
+            through_media1.name,
+            through_media1.session_timeout,
+        ),
+    )
 }
 
 // ── PTZ checks ───────────────────────────────────────────────────────────────
@@ -1152,7 +1232,7 @@ async fn every_get_set_pair_matches_its_declared_expectation() {
         .count();
     assert_eq!(
         (PAIRS.len(), declared_works),
-        (49, 47),
+        (49, 49),
         "the pair table's shape changed (rows, declared-Works). If that was \
          deliberate, update this expectation **and** the counts in \
          docs/mock-server.md §12 and docs/active/mock-audit-2026-07.md §2 in the \

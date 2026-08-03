@@ -1,6 +1,6 @@
 # Mock audit — 2026-07
 
-**Status:** **Tiers 1 and 2 closed; Tiers 3 and 4 open.** Measured at `fa1cd91`
+**Status:** **all four tiers closed** (2026-08-03). Measured at `fa1cd91`
 (0.15.0 unreleased); §9 tracks what has landed since.
 
 Every line below is **measured**, not inferred: either a probe driving the real
@@ -23,9 +23,9 @@ actually wrong. Each section says what was done underneath.
 |---|---|
 | **Defects found** | 16 — 8 Tier 1, 2 Tier 2 families, plus item 1.8 which the property test added |
 | **Defects fixed** | all of them |
-| **Standing guards** | `mock_roundtrip.rs` (49 pairs), `mock_token_discrimination.rs` (31 rows), `mock_media1_media2_agree.rs` (10 tests), `dispatch.rs`'s routing test (157 actions) |
+| **Standing guards** | `mock_roundtrip.rs` (49 pairs), `mock_token_discrimination.rs` (34 rows), `mock_media1_media2_agree.rs` (11 tests), `dispatch.rs`'s routing test (157 actions) |
 | **`Expect::Broken` rows** | **0** |
-| **Still open** | Tier 3's Audio family (§5) — *declared*, asserted, not a lie. Tier 4 is closed. |
+| **Still open** | **Nothing.** Tiers 1–4 are all closed; the audio catalogue was the last Tier 3 family. What remains are the read-side stubs in `docs/mock-server.md` §13.1, each with a `Blind` row. |
 
 The structural finding in §8 is the part to read before touching `src/mock/`.
 The two property tables are how "deliberately static" is now written down; the
@@ -80,7 +80,9 @@ are the "before" picture the rest of this document reasons about.
   no rows left. **After the Storage and metadata fixes (§5): 48 pairs, 45
   round-trip, 3 declared stubs; the token table is 28 rows, 22
   discriminating.** **After the PTZ work: 49 pairs, 47 round-trip, 2 declared
-  stubs; the token table is 31 rows, 25 discriminating.**
+  stubs; the token table is 31 rows, 25 discriminating.** **After the audio
+  catalogue: 49 pairs, 49 round-trip, 0 declared stubs; the token table is 34
+  rows, 28 discriminating.**
 
   *Correction.* This line read "40 round-trip … 5 declared stubs" until the
   Storage work, which does not sum to 47 and was simply wrong; the figure was
@@ -293,11 +295,42 @@ is a family a user might reasonably expect to work.
 
 | Family | Probe |
 |---|---|
-| Audio (Media1 + Media2): sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration` | `get_audio_sources` — no `DeviceState` field; 1 static |
+| ~~Audio (Media1 + Media2): sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration`~~ **fixed** | `get_audio_sources` — no `DeviceState` field; 1 static |
 | ~~PTZ configurations / nodes / options, `SetConfiguration`~~ **fixed** | `ptz_get_configurations` — no field; 1 static |
 | ~~Storage configurations, `SetStorageConfiguration`~~ **fixed** | `get_storage_configurations` — no field; 1 static |
 | ~~Media2 metadata configurations, `SetMetadataConfiguration`~~ **fixed** | dispatch read: static both sides |
 | ~~Media2 `SetVideoSourceMode`~~ **fixed — now faults** | dispatch read: static |
+
+### What was done — Audio (the last one)
+
+`DeviceState` gained five fields — `audio_sources`, `audio_source_configs`,
+`audio_encoders`, `audio_outputs`, `audio_decoders` — and all eleven operations
+across both services render from them. Two entries wherever a token addresses
+one, disagreeing on every value, so a handler that ignores its token is
+distinguishable from one that reads it.
+
+**Two things this row did not predict, both of which the "consistent stub"
+framing actively hid:**
+
+1. **The two services were not consistent with each other.** `ASC_1` was
+   `AudioSourceConfig1` reading `AudioSource_1` on Media1 and
+   `AudioSourceConfig` reading `AudioSrc_1` on Media2; `AEC_1` was
+   `AudioEncoder` on one and `AudioEncoderConfig` on the other. That is a §5b
+   divergence, not a §5 stub, and it was invisible because
+   `tests/mock_media1_media2_agree.rs` had no audio row — this tier is where
+   nobody looks for one.
+
+2. **Both option responses had the wrong shape, in opposite directions.** Media1
+   sent Media2's flat nesting and Media2 sent Media1's wrapped one. oxvif's
+   parser read only the flat shape, so Media1 agreed with the parser and with no
+   real device. Fixed on the client side first (`7ef8f31`) and here second —
+   and because the parser now reads both, only a **byte-level** assertion can
+   tell the mock's two shapes apart.
+
+The audit's probe methodology could not have found either. Probe B asks "did the
+write come back", probe A asks "is the getter state-driven"; neither compares
+two services' answers to each other, and none of them compares either answer to
+the schema.
 
 ### What was done — Storage
 
@@ -484,7 +517,7 @@ schema-fidelity chase and stall everything else.
 | ~~3. Tier 2.1 PTZ per-profile (§4.1)~~ **done**, then **corrected** 2026-08-03 | `PtzState` was keyed by *profile* token; 18 dispatch arms gained `body`. Right that PTZ is per-channel, wrong about which channel: it made the main and the sub stream of one lens two independent motors. It is now keyed by **PTZ node**, reached through the profile's PTZ configuration. |
 | ~~4. Property test **token discrimination** (§8.2)~~ **done** — `tests/mock_token_discrimination.rs` | 26 rows; 19 discriminate, 7 declared static. Guards step 3 and the 0.15 media/imaging work. |
 | ~~5. Tier 2.2 recording state (§4.2)~~ **done** | `RecordingState` mirrors `ProfilesState`; all eleven operations wired. Unblocks Profile G testing, including the health check's own liveness chain. |
-| 6. Tiers 3 and 4 | **In progress.** The decision to close them before shipping 0.15.0 was taken 2026-07-31. Storage is done; the rest are below. Until each lands it stays *declared* — every remaining Tier 3 family has a `Static` or `Blind` row asserting it is still a stub, so none can quietly become a lie. Fix one and the tables tell you to move the row. |
+| ~~6. Tiers 3 and 4~~ **done** 2026-08-03 | The decision to close them before shipping 0.15.0 was taken 2026-07-31, and they are closed: Storage, Media2 metadata, `SetVideoSourceMode`, PTZ, and finally Audio. **No `Static` row is left in `tests/mock_roundtrip.rs`.** The `Static` arm itself is kept, unused and `#[allow(dead_code)]`, because it is the only place the distinction can be written down. |
 
 ### What a Tier 3 fix costs
 
@@ -494,7 +527,7 @@ Tier 3 and Tier 4. The estimates stand; the recommendation does not.
 
 | Family | Work | Status |
 |---|---|---|
-| Audio (both services) | A catalogue in `DeviceState` plus per-token getters — the same shape as `video_encoders`. The largest of the four. | open |
+| ~~Audio (both services)~~ | A catalogue in `DeviceState` plus per-token getters — the same shape as `video_encoders`. The largest of the four. **The estimate was wrong in kind, not size**: the work was not a catalogue but two schema shapes, two services that disagreed with each other, and a client-side parser bug the mock had been agreeing with. | done |
 | PTZ configurations / nodes | A `PtzConfigEntry` list; would also close Tier 4's coordinate-space gap, since those fields live on `PtzConfiguration`. | open |
 | Storage configurations | One `Vec<StorageEntry>`; smallest. | **done** — and it closed §6's storage item, as predicted |
 | Media2 metadata configurations | One `Vec<MetadataEntry>`. | **done** — cost held, but it was three operations, not two |

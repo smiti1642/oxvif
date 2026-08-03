@@ -1,17 +1,18 @@
 use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
 use crate::mock::state::{
-    OSD_QUOTA_DATE, OSD_QUOTA_DATE_AND_TIME, OSD_QUOTA_PLAIN, OSD_QUOTA_TIME, OSD_QUOTA_TOTAL,
-    OsdColorEntry, OsdEntry, OsdTextEntry, ProfileEntry, PtzConfigEntry, SharedState,
-    VideoEncoderState, VideoSourceConfigEntry,
+    AudioEncoderEntry, AudioOptionEntry, AudioSourceConfigEntry, MulticastEntry, OSD_QUOTA_DATE,
+    OSD_QUOTA_DATE_AND_TIME, OSD_QUOTA_PLAIN, OSD_QUOTA_TIME, OSD_QUOTA_TOTAL, OsdColorEntry,
+    OsdEntry, OsdTextEntry, ProfileEntry, PtzConfigEntry, SharedState, VideoEncoderState,
+    VideoSourceConfigEntry,
 };
 use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 pub fn resp_profiles(state: &SharedState) -> String {
     let snapshot = state.read().profiles.profiles.clone();
-    let (vscs, vecs, ptzs) = catalogues(state);
+    let cat = catalogues(state);
     let items: String = snapshot
         .iter()
-        .map(|p| render_profile(p, "Profiles", &vscs, &vecs, &ptzs))
+        .map(|p| render_profile(p, "Profiles", &cat))
         .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
@@ -23,13 +24,13 @@ pub fn resp_profile(state: &SharedState, body: &str) -> String {
     let inner = extract_tag(body, "GetProfile").unwrap_or_default();
     let want = extract_tag(&inner, "ProfileToken").unwrap_or_default();
     let snapshot = state.read().profiles.profiles.clone();
-    let (vscs, vecs, ptzs) = catalogues(state);
+    let cat = catalogues(state);
     match snapshot.iter().find(|p| p.token == want) {
         Some(p) => soap(
             r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
             &format!(
                 "<trt:GetProfileResponse>{}</trt:GetProfileResponse>",
-                render_profile(p, "Profile", &vscs, &vecs, &ptzs)
+                render_profile(p, "Profile", &cat)
             ),
         ),
         None => resp_soap_fault("ter:NoProfile", &format!("Profile not found: {want}")),
@@ -140,7 +141,7 @@ pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
             "<trt:CreateProfileResponse>{}</trt:CreateProfileResponse>",
             // A freshly created profile carries no configurations yet, so the
             // catalogues are never consulted.
-            render_profile(&entry, "Profile", &[], &[], &[])
+            render_profile(&entry, "Profile", &catalogues(state))
         ),
     )
 }
@@ -532,32 +533,30 @@ pub(crate) fn delete_profile_in_state(state: &SharedState, token: &str) -> Delet
 // matches what `CreateProfile` / `AddVideoEncoderConfiguration` etc.
 // actually mutate on a real camera.
 
-fn render_profile(
-    p: &ProfileEntry,
-    tag: &str,
-    vscs: &[VideoSourceConfigEntry],
-    vecs: &[VideoEncoderState],
-    ptzs: &[PtzConfigEntry],
-) -> String {
+fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
     let vsc = p
         .video_source_config_token
         .as_deref()
-        .map(|t| render_vsc_inline(vscs, t))
+        .map(|t| render_vsc_inline(&cat.vscs, t))
         .unwrap_or_default();
     let vec = p
         .video_encoder_config_token
         .as_deref()
-        .map(|t| render_vec_inline(vecs, t))
+        .map(|t| render_vec_inline(&cat.vecs, t))
         .unwrap_or_default();
+    // Both were `match token { "ASC_1" => <literal>, _ => "" }`, so a profile
+    // bound to any other token rendered **nothing** and said so nowhere.
     let asc = p
         .audio_source_config_token
         .as_deref()
-        .map(render_asc_inline)
+        .and_then(|t| cat.ascs.iter().find(|c| c.token == t))
+        .map(|c| render_audio_source_config(c, "tt:AudioSourceConfiguration"))
         .unwrap_or_default();
     let aec = p
         .audio_encoder_config_token
         .as_deref()
-        .map(render_aec_inline)
+        .and_then(|t| cat.aecs.iter().find(|c| c.token == t))
+        .map(|c| render_audio_encoder(c, "tt:AudioEncoderConfiguration"))
         .unwrap_or_default();
     // `MediaProfile::ptz_config_token` reads `Profile/PTZConfiguration@token`
     // and nothing ever fed it. Media1 inlines the whole configuration, as it
@@ -566,7 +565,7 @@ fn render_profile(
     let ptz = p
         .ptz_config_token
         .as_deref()
-        .and_then(|t| ptzs.iter().find(|c| c.token == t))
+        .and_then(|t| cat.ptzs.iter().find(|c| c.token == t))
         .map(|c| super::ptz::render_config(c, "tt:PTZConfiguration"))
         .unwrap_or_default();
     format!(
@@ -580,24 +579,28 @@ fn render_profile(
     )
 }
 
-/// Clone both per-channel catalogues out under a single read lock.
+/// Every catalogue a profile can inline, cloned under a **single** read lock.
 ///
-/// Every caller below needs the pair, and taking one lock rather than two
-/// keeps a responder from rendering a profile whose source config and encoder
-/// config came from different moments.
-fn catalogues(
-    state: &SharedState,
-) -> (
-    Vec<VideoSourceConfigEntry>,
-    Vec<VideoEncoderState>,
-    Vec<PtzConfigEntry>,
-) {
+/// One lock rather than five keeps a responder from rendering a profile whose
+/// video and audio configurations came from different moments. It was a
+/// three-tuple until the audio catalogue joined it.
+struct Catalogues {
+    vscs: Vec<VideoSourceConfigEntry>,
+    vecs: Vec<VideoEncoderState>,
+    ptzs: Vec<PtzConfigEntry>,
+    ascs: Vec<AudioSourceConfigEntry>,
+    aecs: Vec<AudioEncoderEntry>,
+}
+
+fn catalogues(state: &SharedState) -> Catalogues {
     let s = state.read();
-    (
-        s.video_source_configs.clone(),
-        s.video_encoders.clone(),
-        s.ptz_configs.clone(),
-    )
+    Catalogues {
+        vscs: s.video_source_configs.clone(),
+        vecs: s.video_encoders.clone(),
+        ptzs: s.ptz_configs.clone(),
+        ascs: s.audio_source_configs.clone(),
+        aecs: s.audio_encoders.clone(),
+    }
 }
 
 fn render_vsc_inline(vscs: &[VideoSourceConfigEntry], token: &str) -> String {
@@ -687,30 +690,75 @@ fn render_vec_body(c: &VideoEncoderState, tag: &str) -> String {
     )
 }
 
-fn render_asc_inline(token: &str) -> String {
-    match token {
-        "ASC_1" => r#"<tt:AudioSourceConfiguration token="ASC_1">
-          <tt:Name>AudioSourceConfig1</tt:Name>
-          <tt:UseCount>1</tt:UseCount>
-          <tt:SourceToken>AudioSource_1</tt:SourceToken>
-        </tt:AudioSourceConfiguration>"#
-            .to_string(),
-        _ => String::new(),
-    }
+/// `<tt:Multicast>` — one shape, shared by every configuration that has one.
+pub(crate) fn render_multicast(m: &MulticastEntry) -> String {
+    format!(
+        "<tt:Multicast>\
+           <tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>{addr}</tt:IPv4Address></tt:Address>\
+           <tt:Port>{port}</tt:Port>\
+           <tt:TTL>{ttl}</tt:TTL>\
+           <tt:AutoStart>{auto}</tt:AutoStart>\
+         </tt:Multicast>",
+        addr = m.address,
+        port = m.port,
+        ttl = m.ttl,
+        auto = m.auto_start,
+    )
 }
 
-fn render_aec_inline(token: &str) -> String {
-    match token {
-        "AEC_1" => r#"<tt:AudioEncoderConfiguration token="AEC_1">
-          <tt:Name>AudioEncoder</tt:Name>
-          <tt:UseCount>1</tt:UseCount>
-          <tt:Encoding>G711</tt:Encoding>
-          <tt:Bitrate>64</tt:Bitrate>
-          <tt:SampleRate>8</tt:SampleRate>
-        </tt:AudioEncoderConfiguration>"#
-            .to_string(),
-        _ => String::new(),
-    }
+/// An audio source configuration, in whichever element the caller needs.
+///
+/// Both services render the *same* entry: `ASC_1` was `AudioSourceConfig1`
+/// reading `AudioSource_1` on Media1 and `AudioSourceConfig` reading
+/// `AudioSrc_1` on Media2 — one token, two answers, and no test could see it.
+pub(crate) fn render_audio_source_config(c: &AudioSourceConfigEntry, qname: &str) -> String {
+    format!(
+        r#"<{qname} token="{token}">
+          <tt:Name>{name}</tt:Name>
+          <tt:UseCount>{use_count}</tt:UseCount>
+          <tt:SourceToken>{source}</tt:SourceToken>
+        </{qname}>"#,
+        token = c.token,
+        name = c.name,
+        use_count = c.use_count,
+        source = c.source_token,
+    )
+}
+
+/// An audio encoder configuration **in Media1's sequence**:
+/// `Encoding, Bitrate, SampleRate, Multicast, SessionTimeout`, the last two
+/// required by `tt:AudioEncoderConfiguration`.
+///
+/// Media2's `tt:AudioEncoder2Configuration` is a different type with a
+/// different order and no `SessionTimeout`; it renders in `services/media2.rs`
+/// from this same entry.
+pub(crate) fn render_audio_encoder(c: &AudioEncoderEntry, qname: &str) -> String {
+    let multicast = c
+        .multicast
+        .as_ref()
+        .map(render_multicast)
+        .unwrap_or_default();
+    let timeout = c
+        .session_timeout
+        .as_deref()
+        .map(|t| format!("<tt:SessionTimeout>{t}</tt:SessionTimeout>"))
+        .unwrap_or_default();
+    format!(
+        r#"<{qname} token="{token}">
+          <tt:Name>{name}</tt:Name>
+          <tt:UseCount>{use_count}</tt:UseCount>
+          <tt:Encoding>{encoding}</tt:Encoding>
+          <tt:Bitrate>{bitrate}</tt:Bitrate>
+          <tt:SampleRate>{sample_rate}</tt:SampleRate>
+          {multicast}{timeout}
+        </{qname}>"#,
+        token = c.token,
+        name = c.name,
+        use_count = c.use_count,
+        encoding = c.encoding,
+        bitrate = c.bitrate,
+        sample_rate = c.sample_rate,
+    )
 }
 
 pub fn resp_video_sources(state: &SharedState) -> String {
@@ -772,29 +820,38 @@ pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> Str
     )
 }
 
-pub fn resp_audio_sources() -> String {
+pub fn resp_audio_sources(state: &SharedState) -> String {
+    let items: String = state
+        .read()
+        .audio_sources
+        .iter()
+        .map(|s| {
+            format!(
+                r#"<trt:AudioSources token="{token}"><tt:Channels>{ch}</tt:Channels></trt:AudioSources>"#,
+                token = s.token,
+                ch = s.channels,
+            )
+        })
+        .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetAudioSourcesResponse>
-          <trt:AudioSources token="AudioSource_1">
-            <tt:Channels>1</tt:Channels>
-          </trt:AudioSources>
-        </trt:GetAudioSourcesResponse>"#,
+        &format!("<trt:GetAudioSourcesResponse>{items}</trt:GetAudioSourcesResponse>"),
     )
 }
 
-pub fn resp_audio_encoder_configurations() -> String {
+pub fn resp_audio_encoder_configurations(state: &SharedState) -> String {
+    let items: String = state
+        .read()
+        .audio_encoders
+        .iter()
+        .map(|c| render_audio_encoder(c, "trt:Configurations"))
+        .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetAudioEncoderConfigurationsResponse>
-          <trt:Configurations token="AEC_1">
-            <tt:Name>AudioEncoder</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:Encoding>G711</tt:Encoding>
-            <tt:Bitrate>64</tt:Bitrate>
-            <tt:SampleRate>8</tt:SampleRate>
-          </trt:Configurations>
-        </trt:GetAudioEncoderConfigurationsResponse>"#,
+        &format!(
+            "<trt:GetAudioEncoderConfigurationsResponse>{items}\
+             </trt:GetAudioEncoderConfigurationsResponse>"
+        ),
     )
 }
 
@@ -1336,50 +1393,212 @@ fn _force_use_extract_all() {
     let _ = extract_all_tags("", "");
 }
 
-pub fn resp_audio_source_configurations() -> String {
+pub fn resp_audio_source_configurations(state: &SharedState) -> String {
+    let items: String = state
+        .read()
+        .audio_source_configs
+        .iter()
+        .map(|c| render_audio_source_config(c, "trt:Configurations"))
+        .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetAudioSourceConfigurationsResponse>
-          <trt:Configurations token="ASC_1">
-            <tt:Name>AudioSourceConfig1</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:SourceToken>AudioSource_1</tt:SourceToken>
-          </trt:Configurations>
-        </trt:GetAudioSourceConfigurationsResponse>"#,
+        &format!(
+            "<trt:GetAudioSourceConfigurationsResponse>{items}\
+             </trt:GetAudioSourceConfigurationsResponse>"
+        ),
     )
 }
 
-pub fn resp_audio_encoder_configuration() -> String {
+pub fn resp_audio_encoder_configuration(state: &SharedState, body: &str) -> String {
+    let Some(token) = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty()) else {
+        return resp_soap_fault(
+            "env:Sender",
+            "NoConfigToken-GETAEC-5711: GetAudioEncoderConfiguration names one configuration",
+        );
+    };
+    let Some(cfg) = state
+        .read()
+        .audio_encoders
+        .iter()
+        .find(|c| c.token == token)
+        .cloned()
+    else {
+        return resp_soap_fault(
+            "ter:NoConfig",
+            &format!("NoSuchAudioEncoder-GETAEC-5712: {token}"),
+        );
+    };
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetAudioEncoderConfigurationResponse>
-          <trt:Configuration token="AEC_1">
-            <tt:Name>AudioEncoder</tt:Name>
-            <tt:UseCount>1</tt:UseCount>
-            <tt:Encoding>G711</tt:Encoding>
-            <tt:Bitrate>64</tt:Bitrate>
-            <tt:SampleRate>8</tt:SampleRate>
-          </trt:Configuration>
-        </trt:GetAudioEncoderConfigurationResponse>"#,
+        &format!(
+            "<trt:GetAudioEncoderConfigurationResponse>{}\
+             </trt:GetAudioEncoderConfigurationResponse>",
+            render_audio_encoder(&cfg, "trt:Configuration")
+        ),
     )
 }
 
-pub fn resp_audio_encoder_configuration_options() -> String {
+/// `GetAudioEncoderConfigurationOptions` — **per configuration**, and in
+/// Media1's nesting.
+///
+/// ```text
+/// Response/Options            tt:AudioEncoderConfigurationOptions   ← a wrapper
+///                 /Options    tt:AudioEncoderConfigurationOption    ← repeated, the entry
+/// ```
+///
+/// This response was flat — `trt:Options` repeated with `Encoding` as a direct
+/// child — which is *Media2's* shape. `AudioEncoderConfigurationOptions::from_xml`
+/// read that same wrong shape, so the mock and the parser agreed with each other
+/// and with no Media1 device on earth. Both were fixed in 0.16; this is the half
+/// that keeps the parser's Media1 branch exercised.
+///
+/// It was also one static pair for the whole device, so a caller that passed the
+/// wrong `ConfigurationToken` got a plausible answer and no way to notice.
+pub fn resp_audio_encoder_configuration_options(state: &SharedState, body: &str) -> String {
+    let Some(token) = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty()) else {
+        return resp_soap_fault(
+            "env:Sender",
+            "NoConfigToken-AECOPTS-5713: GetAudioEncoderConfigurationOptions is per configuration",
+        );
+    };
+    let Some(cfg) = state
+        .read()
+        .audio_encoders
+        .iter()
+        .find(|c| c.token == token)
+        .cloned()
+    else {
+        return resp_soap_fault(
+            "ter:NoConfig",
+            &format!("NoSuchAudioEncoder-AECOPTS-5714: {token}"),
+        );
+    };
+    let rows: String = cfg
+        .options
+        .iter()
+        .map(|o| render_audio_option(o, "tt:Options"))
+        .collect();
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetAudioEncoderConfigurationOptionsResponse>
-          <trt:Options>
-            <tt:Encoding>G711</tt:Encoding>
-            <tt:BitrateList><tt:Items>64</tt:Items></tt:BitrateList>
-            <tt:SampleRateList><tt:Items>8</tt:Items></tt:SampleRateList>
-          </trt:Options>
-          <trt:Options>
-            <tt:Encoding>AAC</tt:Encoding>
-            <tt:BitrateList><tt:Items>64 128 256</tt:Items></tt:BitrateList>
-            <tt:SampleRateList><tt:Items>16 32 44</tt:Items></tt:SampleRateList>
-          </trt:Options>
-        </trt:GetAudioEncoderConfigurationOptionsResponse>"#,
+        &format!(
+            "<trt:GetAudioEncoderConfigurationOptionsResponse>\
+               <trt:Options>{rows}</trt:Options>\
+             </trt:GetAudioEncoderConfigurationOptionsResponse>"
+        ),
     )
+}
+
+/// One options row. Media1 wraps these in a `trt:Options` container and names
+/// them `tt:Options`; Media2 emits them directly as repeated `tr2:Options`.
+pub(crate) fn render_audio_option(o: &AudioOptionEntry, qname: &str) -> String {
+    let list = |v: &[u32]| v.iter().map(u32::to_string).collect::<Vec<_>>().join(" ");
+    format!(
+        "<{qname}>\
+           <tt:Encoding>{enc}</tt:Encoding>\
+           <tt:BitrateList><tt:Items>{br}</tt:Items></tt:BitrateList>\
+           <tt:SampleRateList><tt:Items>{sr}</tt:Items></tt:SampleRateList>\
+         </{qname}>",
+        enc = o.encoding,
+        br = list(&o.bitrates),
+        sr = list(&o.sample_rates),
+    )
+}
+
+/// Media1 `SetAudioEncoderConfiguration`.
+///
+/// **Refuses a body without `Multicast` or `SessionTimeout`.** Both are
+/// *required* members of `tt:AudioEncoderConfiguration`, so a device validating
+/// the request rejects one that omits them — and oxvif omitted both until 0.16.
+/// Storing what arrives regardless would make the mock the one device on which
+/// the old, invalid body worked, which is the opposite of what it is for.
+///
+/// Media2's `SetAudioEncoderConfiguration` is deliberately not this strict:
+/// `tt:AudioEncoder2Configuration` makes `Multicast` optional and has no
+/// `SessionTimeout` member at all.
+pub fn handle_set_audio_encoder_configuration(state: &SharedState, body: &str) -> String {
+    match apply_audio_encoder_write(state, body, true) {
+        Ok(()) => resp_empty("trt", "SetAudioEncoderConfigurationResponse"),
+        Err(fault) => fault,
+    }
+}
+
+/// The shared audio-encoder write. `media1` selects the required-member check
+/// and whether `SessionTimeout` may be written.
+pub(crate) fn apply_audio_encoder_write(
+    state: &SharedState,
+    body: &str,
+    media1: bool,
+) -> Result<(), String> {
+    let tag = if media1 {
+        "SETAEC-5715"
+    } else {
+        "SETAEC2-5716"
+    };
+    let Some(token) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) else {
+        return Err(resp_soap_fault(
+            "env:Sender",
+            &format!("NoConfigToken-{tag}: the configuration carries the token it replaces"),
+        ));
+    };
+    if !state.read().audio_encoders.iter().any(|c| c.token == token) {
+        return Err(resp_soap_fault(
+            "ter:NoConfig",
+            &format!("NoSuchAudioEncoder-{tag}: {token}"),
+        ));
+    }
+    let cfg = extract_tag(body, "Configuration").unwrap_or_default();
+    let multicast = extract_tag(&cfg, "Multicast").map(|m| MulticastEntry {
+        address: extract_tag(&m, "IPv4Address").unwrap_or_default(),
+        port: extract_tag(&m, "Port")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0),
+        ttl: extract_tag(&m, "TTL")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0),
+        auto_start: extract_tag(&m, "AutoStart").as_deref() == Some("true"),
+    });
+    let session_timeout = extract_tag(&cfg, "SessionTimeout");
+
+    if media1 && (multicast.is_none() || session_timeout.is_none()) {
+        return Err(resp_soap_fault(
+            "ter:ConfigModify",
+            &format!(
+                "IncompleteAudioEncoder-{tag}: tt:AudioEncoderConfiguration requires both \
+                 Multicast and SessionTimeout; this request carried Multicast={} \
+                 SessionTimeout={}",
+                multicast.is_some(),
+                session_timeout.is_some(),
+            ),
+        ));
+    }
+
+    let name = extract_tag(&cfg, "Name").unwrap_or_default();
+    let encoding = extract_tag(&cfg, "Encoding").unwrap_or_default();
+    let bitrate = extract_tag(&cfg, "Bitrate")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let sample_rate = extract_tag(&cfg, "SampleRate")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+    state.modify(|s| {
+        if let Some(c) = s.audio_encoders.iter_mut().find(|c| c.token == token) {
+            c.name = name.clone();
+            c.encoding = encoding.clone();
+            c.bitrate = bitrate;
+            c.sample_rate = sample_rate;
+            c.multicast = multicast.clone();
+            // Media2 cannot express `SessionTimeout` — its type has no such
+            // member — so a Media2 write leaves the stored one alone rather
+            // than destroying a value Media1 requires. `UseCount` and
+            // `options` are the device's, not the caller's.
+            if media1 {
+                c.session_timeout = session_timeout.clone();
+            }
+            eprintln!("    [STATE] audio encoder updated: {token}");
+        }
+    });
+    Ok(())
 }
 
 // ── GetServiceCapabilities ───────────────────────────────────────────────────

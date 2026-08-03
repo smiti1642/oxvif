@@ -170,6 +170,157 @@ async fn both_services_agree_on_each_profile_ptz_configuration() {
     );
 }
 
+/// The two services must describe the **same** audio catalogue.
+///
+/// They did not. Both families were string literals in two files, and they
+/// disagreed about the very same tokens:
+///
+/// | token | Media1 said | Media2 said |
+/// |---|---|---|
+/// | `ASC_1` | `AudioSourceConfig1` / `AudioSource_1` | `AudioSourceConfig` / `AudioSrc_1` |
+/// | `AEC_1` | `AudioEncoder` | `AudioEncoderConfig` |
+///
+/// Nothing failed, because this file had no audio row — a `CLAUDE.md` step 5b
+/// divergence hiding inside the audit's §5 "consistent stub" class, where by
+/// definition nobody was looking for one.
+///
+/// `SessionTimeout` is deliberately **not** compared: it is a member of
+/// `tt:AudioEncoderConfiguration` and not of `tt:AudioEncoder2Configuration`,
+/// so the two services genuinely differ there and `MediaProfile2` has nowhere
+/// to carry it.
+#[tokio::test]
+async fn both_services_agree_on_the_audio_catalogue() {
+    let server = MockServer::start().await.unwrap();
+    let client = OnvifClient::new(server.device_url());
+    let media_url = format!("{}/onvif/media", server.base_url());
+    let media2_url = format!("{}/onvif/media2", server.base_url());
+
+    let srcs = |v: Vec<oxvif::AudioSourceConfiguration>| {
+        v.into_iter()
+            .map(|c| (c.token, c.name, c.use_count, c.source_token))
+            .collect::<Vec<_>>()
+    };
+    let m1 = srcs(
+        client
+            .get_audio_source_configurations(&media_url)
+            .await
+            .expect("Media1 GetAudioSourceConfigurations"),
+    );
+    let m2 = srcs(
+        client
+            .get_audio_source_configurations_media2(&media2_url)
+            .await
+            .expect("Media2 GetAudioSourceConfigurations"),
+    );
+    assert_eq!(
+        m2, m1,
+        "the two services disagree about the audio source configurations.\n  \
+         Media1: {m1:?}\n  Media2: {m2:?}",
+    );
+    assert!(m1.len() >= 2, "one entry cannot show a drift: {m1:?}");
+
+    let encs = |v: Vec<oxvif::AudioEncoderConfiguration>| {
+        v.into_iter()
+            .map(|c| {
+                (
+                    c.token,
+                    c.name,
+                    c.encoding.as_str().to_string(),
+                    c.bitrate,
+                    c.sample_rate,
+                    c.multicast.map(|m| (m.address, m.port)),
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let m1 = encs(
+        client
+            .get_audio_encoder_configurations(&media_url)
+            .await
+            .expect("Media1 GetAudioEncoderConfigurations"),
+    );
+    let m2 = encs(
+        client
+            .get_audio_encoder_configurations_media2(&media2_url)
+            .await
+            .expect("Media2 GetAudioEncoderConfigurations"),
+    );
+    assert_eq!(
+        m2, m1,
+        "the two services disagree about the audio encoder configurations.\n  \
+         Media1: {m1:?}\n  Media2: {m2:?}",
+    );
+    assert!(m1.len() >= 2, "one entry cannot show a drift: {m1:?}");
+
+    // The options answers must agree too — and they are the pair whose *shapes*
+    // legitimately differ, so agreeing on the parsed content is the only thing
+    // that can be asserted across them.
+    for token in ["AEC_1", "AEC_2"] {
+        let rows = |o: oxvif::AudioEncoderConfigurationOptions| {
+            o.options
+                .into_iter()
+                .map(|r| {
+                    (
+                        r.encoding.as_str().to_string(),
+                        r.bitrate_list,
+                        r.sample_rate_list,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let a = rows(
+            client
+                .get_audio_encoder_configuration_options(&media_url, token)
+                .await
+                .expect("Media1 options"),
+        );
+        let b = rows(
+            client
+                .get_audio_encoder_configuration_options_media2(&media2_url, token)
+                .await
+                .expect("Media2 options"),
+        );
+        assert_eq!(b, a, "the two services disagree about {token}'s options");
+        assert!(
+            !a.is_empty() && !a[0].1.is_empty(),
+            "{token}: an empty options answer is what the old parser produced \
+             from a *correct* Media1 response, so it cannot be the expected \
+             one here: {a:?}"
+        );
+    }
+
+    // …and the profiles must name the same audio configurations.
+    //
+    // Added after a perturbation: emptying `ProfileEntry`'s audio slots in the
+    // seed reddened **nothing**. `MediaProfile::audio_source_token` and
+    // `audio_encoder_token` were parsed by both services and asserted by
+    // neither, which is the same hole the PTZ binding was in.
+    let bindings1: Vec<_> = client
+        .get_profiles(&media_url)
+        .await
+        .expect("Media1 GetProfiles")
+        .into_iter()
+        .map(|p| (p.token, p.audio_source_token, p.audio_encoder_token))
+        .collect();
+    let bindings2: Vec<_> = client
+        .get_profiles_media2(&media2_url)
+        .await
+        .expect("Media2 GetProfiles")
+        .into_iter()
+        .map(|p| (p.token, p.audio_source_token, p.audio_encoder_token))
+        .collect();
+    assert_eq!(
+        bindings2, bindings1,
+        "the two services disagree about each profile's audio bindings.\n  \
+         Media1: {bindings1:?}\n  Media2: {bindings2:?}",
+    );
+    assert!(
+        bindings1.iter().any(|(_, s, e)| s.is_some() && e.is_some()),
+        "no profile carries audio, so two renderers emitting nothing would \
+         agree perfectly: {bindings1:?}"
+    );
+}
+
 /// A Media2 `CreateProfile` must actually create. It used to answer with a
 /// literal token and write nothing — a success the caller could not act on.
 #[tokio::test]

@@ -87,6 +87,20 @@
 //! reads and writes the same state, so they cannot report contradictory facts.
 //! `tests/mock_media1_media2_agree.rs`.
 //!
+//! They are not, however, the same *schema*. Where the two ONVIF types genuinely
+//! differ, the mock differs with them: `tt:AudioEncoderConfiguration` sequences
+//! `Multicast` and `SessionTimeout` after `SampleRate` and requires both, while
+//! `tt:AudioEncoder2Configuration` puts `Multicast` before `Bitrate` and has no
+//! `SessionTimeout` member at all. One catalogue, two renderings — and a Media2
+//! write leaves the stored `SessionTimeout` alone, because it has no way to say
+//! anything about it.
+//!
+//! **6. A request the schema would reject is refused.** Media1
+//! `SetAudioEncoderConfiguration` faults on a body missing `Multicast` or
+//! `SessionTimeout` (`ter:ConfigModify`), because a validating device would.
+//! oxvif itself sent that body until 0.16; accepting it here would have made the
+//! mock the one device on which the bug did not show.
+//!
 //! What is *not* strict is written down rather than left to discovery:
 //! `docs/mock-server.md` §13 lists every declared stub, fidelity gap and
 //! deliberate simplification. If an operation is not on that list and does not

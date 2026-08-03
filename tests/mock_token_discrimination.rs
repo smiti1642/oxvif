@@ -139,6 +139,14 @@ const ROWS: &[Row] = rows![
     "media2/metadata-config"      => Expect::Discriminates, ("MetaConf_1", "MetaConf_2"), m2_metadata_config;
     "media2/metadata-options"     => Expect::Discriminates, ("MetaConf_1", "MetaConf_2"), m2_metadata_options;
 
+    // ── Audio — one catalogue, addressed by configuration token ─────────────
+    // All three answered a single fixture regardless of the token until the
+    // audio family was wired, and none of them had a row: the table only ever
+    // covered what someone remembered to list.
+    "media1/audio-encoder-config" => Expect::Discriminates, ("AEC_1", "AEC_2"), m1_audio_encoder_config;
+    "media1/audio-encoder-options" => Expect::Discriminates, ("AEC_1", "AEC_2"), m1_audio_encoder_options;
+    "media2/audio-encoder-options" => Expect::Discriminates, ("AEC_1", "AEC_2"), m2_audio_encoder_options;
+
     // ── Imaging — per physical lens ─────────────────────────────────────────
     "imaging/settings"            => Expect::Discriminates, ("VS_1", "VS_2"), img_settings;
     "imaging/options"             => Expect::Discriminates, ("VS_1", "VS_2"), img_options;
@@ -286,6 +294,32 @@ async fn m2_metadata_options(d: &Dev, t: &str) -> String {
     )
 }
 
+// ── Audio probes ─────────────────────────────────────────────────────────────
+
+async fn m1_audio_encoder_config(d: &Dev, t: &str) -> String {
+    fingerprint(
+        d.client
+            .get_audio_encoder_configuration(&d.url("media"), t)
+            .await,
+    )
+}
+
+async fn m1_audio_encoder_options(d: &Dev, t: &str) -> String {
+    fingerprint(
+        d.client
+            .get_audio_encoder_configuration_options(&d.url("media"), t)
+            .await,
+    )
+}
+
+async fn m2_audio_encoder_options(d: &Dev, t: &str) -> String {
+    fingerprint(
+        d.client
+            .get_audio_encoder_configuration_options_media2(&d.url("media2"), t)
+            .await,
+    )
+}
+
 // ── Imaging probes ───────────────────────────────────────────────────────────
 
 async fn img_settings(d: &Dev, t: &str) -> String {
@@ -389,7 +423,7 @@ async fn every_token_taking_operation_matches_its_declared_expectation() {
         .count();
     assert_eq!(
         (ROWS.len(), declared_discriminating),
-        (31, 25),
+        (34, 28),
         "the table's shape changed (rows, declared-Discriminates). If that was \
          deliberate, update this expectation **and** the counts in \
          docs/mock-server.md §12 and docs/active/mock-audit-2026-07.md §2 in the \

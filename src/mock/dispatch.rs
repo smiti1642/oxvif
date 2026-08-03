@@ -123,12 +123,16 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
         "RemoveVideoSourceConfiguration" => {
             media::handle_remove_video_source_configuration(state, body)
         }
-        "GetAudioSources" => media::resp_audio_sources(),
-        "GetAudioSourceConfigurations" => media::resp_audio_source_configurations(),
-        "GetAudioEncoderConfiguration" => media::resp_audio_encoder_configuration(),
-        "GetAudioEncoderConfigurations" => media::resp_audio_encoder_configurations(),
-        "SetAudioEncoderConfiguration" => resp_empty("trt", "SetAudioEncoderConfigurationResponse"),
-        "GetAudioEncoderConfigurationOptions" => media::resp_audio_encoder_configuration_options(),
+        "GetAudioSources" => media::resp_audio_sources(state),
+        "GetAudioSourceConfigurations" => media::resp_audio_source_configurations(state),
+        "GetAudioEncoderConfiguration" => media::resp_audio_encoder_configuration(state, body),
+        "GetAudioEncoderConfigurations" => media::resp_audio_encoder_configurations(state),
+        "SetAudioEncoderConfiguration" => {
+            media::handle_set_audio_encoder_configuration(state, body)
+        }
+        "GetAudioEncoderConfigurationOptions" => {
+            media::resp_audio_encoder_configuration_options(state, body)
+        }
         "GetOSD" => media::resp_osd(state, body),
         "GetOSDs" => media::resp_osds(state, body),
         "SetOSD" => media::handle_set_osd(state, body),
@@ -175,14 +179,16 @@ fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
         "GetMetadataConfigurationOptions" => {
             media2::resp_metadata_configuration_options(state, body)
         }
-        "GetAudioSourceConfigurations" => media2::resp_audio_source_configurations_media2(),
-        "GetAudioEncoderConfigurations" => media2::resp_audio_encoder_configurations_media2(),
+        "GetAudioSourceConfigurations" => media2::resp_audio_source_configurations_media2(state),
+        "GetAudioEncoderConfigurations" => media2::resp_audio_encoder_configurations_media2(state),
         "GetAudioEncoderConfigurationOptions" => {
-            media2::resp_audio_encoder_configuration_options_media2()
+            media2::resp_audio_encoder_configuration_options_media2(state, body)
         }
-        "SetAudioEncoderConfiguration" => resp_empty("tr2", "SetAudioEncoderConfigurationResponse"),
-        "GetAudioOutputConfigurations" => media2::resp_audio_output_configurations(),
-        "GetAudioDecoderConfigurations" => media2::resp_audio_decoder_configurations(),
+        "SetAudioEncoderConfiguration" => {
+            media2::handle_set_audio_encoder_configuration_media2(state, body)
+        }
+        "GetAudioOutputConfigurations" => media2::resp_audio_output_configurations(state),
+        "GetAudioDecoderConfigurations" => media2::resp_audio_decoder_configurations(state),
         "GetVideoSourceModes" => media2::resp_video_source_modes(),
         "SetVideoSourceMode" => media2::resp_set_video_source_mode(),
         _ => return None,

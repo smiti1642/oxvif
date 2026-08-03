@@ -231,7 +231,7 @@ construction a real device uses.
 
 ## 5. State model
 
-`DeviceState` (`src/mock/state.rs`) is a flat serde struct — 30 fields: 27
+`DeviceState` (`src/mock/state.rs`) is a flat serde struct — 35 fields: 32
 persisted, 3 runtime-only. `MockState` wraps it in a lock exposing
 `read()`, `modify()`, `modify_returning()` and `set_on_change()`.
 
@@ -266,6 +266,11 @@ snapshot loads and the rest falls back to the factory fixture.
 | `relay_outputs` | `Vec<RelayOutputState>` | 2 | `SetRelayOutputState`, `SetRelayOutputSettings` |
 | `digital_inputs` | `Vec<DigitalInputState>` | 2 | REST simulator only |
 | `storage` | `Vec<StorageEntry>` | 3 | `SetStorageConfiguration` |
+| `audio_sources` | `Vec<AudioSourceEntry>` | 2 | — (read-only) |
+| `audio_source_configs` | `Vec<AudioSourceConfigEntry>` | 2 | — (read-only; no ONVIF setter in oxvif) |
+| `audio_encoders` | `Vec<AudioEncoderEntry>` | 2 | `SetAudioEncoderConfiguration` (both services) |
+| `audio_outputs` | `Vec<AudioOutputEntry>` | 1 | — (read-only) |
+| `audio_decoders` | `Vec<AudioDecoderEntry>` | 1 | — (read-only) |
 | `metadata` | `Vec<MetadataEntry>` | 2 | `SetMetadataConfiguration` |
 | `event_seq` | `u64` | runtime | `PullMessages` |
 | `event_filter` | `Option<Vec<String>>` | runtime | `CreatePullPointSubscription` |
@@ -316,12 +321,12 @@ the wrong channel.
 
 ### 6.3 Profiles
 
-| Token | Name | Fixed | Source cfg | Encoder cfg | PTZ cfg |
-|---|---|---|---|---|---|
-| `Profile_1` | `mainStream` | yes | `VSC_1` | `VEC_1` | `PTZConfig_1` |
-| `Profile_2` | `subStream` | no | `VSC_1` | `VEC_2` | `PTZConfig_1` |
-| `Profile_3` | `mainStream2` | yes | `VSC_2` | `VEC_3` | `PTZConfig_2` |
-| `Profile_4` | `subStream2` | no | `VSC_2` | `VEC_4` | *(none)* |
+| Token | Name | Fixed | Source cfg | Encoder cfg | PTZ cfg | Audio cfg |
+|---|---|---|---|---|---|---|
+| `Profile_1` | `mainStream` | yes | `VSC_1` | `VEC_1` | `PTZConfig_1` | `ASC_1` + `AEC_1` |
+| `Profile_2` | `subStream` | no | `VSC_1` | `VEC_2` | `PTZConfig_1` | *(none)* |
+| `Profile_3` | `mainStream2` | yes | `VSC_2` | `VEC_3` | `PTZConfig_2` | *(none)* |
+| `Profile_4` | `subStream2` | no | `VSC_2` | `VEC_4` | *(none)* | *(none)* |
 
 `fixed="true"` profiles refuse deletion (`ter:DeletionOfFixedProfile`).
 
@@ -377,7 +382,53 @@ The absolute pan/tilt space element is spelled
 `DefaultAbsolutePantTiltPositionSpace` — `Pant`, double `t`. That is ONVIF's own
 typo in `onvif.xsd` and it is normative.
 
-### 6.5 Storage
+### 6.4.2 Audio — one catalogue, two shapes
+
+Two of everything that can be addressed by a token, disagreeing on every value
+an assertion reads.
+
+| Source | Channels | | Source config | Name | UseCount | Reads |
+|---|---|---|---|---|---|---|
+| `AudioSrc_1` | 1 | | `ASC_1` | `AudioSourceConfig1` | 1 | `AudioSrc_1` |
+| `AudioSrc_2` | 2 | | `ASC_2` | `AudioSourceConfig2` | 0 | `AudioSrc_2` |
+
+| Encoder | Encoding | Bitrate | SampleRate | Multicast | SessionTimeout | Options |
+|---|---|---|---|---|---|---|
+| `AEC_1` | `G711` | 64 | 8 | `239.0.0.5:40002` ttl 5 | `PT60S` | 1 row: G711 |
+| `AEC_2` | `AAC` | 128 | 48 | `239.0.0.6:40006` ttl 3 | `PT30S` | 2 rows: AAC, G726 |
+
+Plus one `AOC_1` audio output (`AudioOut_1`, level 50) and one `ADC_1` decoder.
+
+**`Multicast` and `SessionTimeout` are on both encoders on purpose.** Both are
+*required* members of `tt:AudioEncoderConfiguration`, so a conformant Media1
+device always sends them, and this mock is the conformant device.
+
+`Profile_1` is the only profile with audio (§6.3). Every profile was unbound
+while the family was a string literal, so both renderers emitted nothing and
+agreed perfectly.
+
+### 6.5 The two option shapes
+
+`GetAudioEncoderConfigurationOptions` nests **differently on the two services**,
+and the mock had it backwards on both:
+
+```text
+Media1  Response/Options   tt:AudioEncoderConfigurationOptions   ← a wrapper
+                /Options   tt:AudioEncoderConfigurationOption    ← repeated, the entry
+Media2  Response/Options   tt:AudioEncoder2ConfigurationOptions  ← repeated, IS the entry
+```
+
+Media1's response was flat (Media2's shape) and Media2's was wrapped (Media1's).
+`AudioEncoderConfigurationOptions::from_xml` read only the flat one, so Media1
+agreed with the parser and with no real device, and Media2 agreed with neither.
+Both were fixed in 0.16; the parser now reads either.
+
+**That makes a client-level test unable to tell the shapes apart**, which is why
+`audio_options_use_media1_nesting_on_the_wire` and its Media2 twin assert raw
+bytes. Same reason as the PTZ `Pant` spelling test, and found the same way — by
+a perturbation that came back green.
+
+### 6.6 Storage
 
 | Token | Type | LocalPath | StorageUri | User |
 |---|---|---|---|---|
@@ -388,14 +439,14 @@ typo in `onvif.xsd` and it is normative.
 Each optional field is present on some entries and absent on others, so an
 assertion on any one of them can fail on its own.
 
-### 6.6 Metadata (Media2)
+### 6.7 Metadata (Media2)
 
 | Token | Name | Analytics | PTZ status / position | Multicast | `AnalyticsSupported` |
 |---|---|---|---|---|---|
 | `MetaConf_1` | `MetadataConfig` | true | false / true | `239.0.1.10:40010` | true |
 | `MetaConf_2` | `MetadataMinimal` | false | true / false | *(none)* | false |
 
-### 6.7 Recording
+### 6.8 Recording
 
 | Recording | Tracks | Bounds | Status |
 |---|---|---|---|
@@ -407,12 +458,12 @@ assertion on any one of them can fail on its own.
 | `Job_001` | `Rec_001` | `Active` |
 | `Job_002` | `Rec_002` | `Idle` |
 
-### 6.8 I/O
+### 6.9 I/O
 
 `RelayOutput_1` (Bistable, idle closed), `RelayOutput_2` (Monostable, `PT1S`,
 idle open); `DigitalInput_1` (idle closed), `DigitalInput_2` (idle open).
 
-### 6.9 Users
+### 6.10 Users
 
 `admin` / `admin` (Administrator), `operator` / `operator` (Operator).
 
@@ -460,7 +511,9 @@ makes two tokens disagree.
 | `AddVideoEncoderConfiguration`, `RemoveVideoEncoderConfiguration`, `AddVideoSourceConfiguration`, `RemoveVideoSourceConfiguration` | ● | Profile bindings, visible to Media2. |
 | `GetOSD`, `GetOSDs`, `SetOSD`, `CreateOSD`, `DeleteOSD` | ● **T** | |
 | `GetStreamUri`, `GetSnapshotUri` | ○ | One canned URI for every profile. |
-| `GetAudioSources`, `GetAudioSourceConfigurations`, `GetAudioEncoderConfiguration(s)`, `GetAudioEncoderConfigurationOptions`, `SetAudioEncoderConfiguration` | ○ | Declared stub — §13. |
+| `GetAudioSources`, `GetAudioSourceConfigurations`, `GetAudioEncoderConfigurations` | ● | Whole-catalogue reads. |
+| `GetAudioEncoderConfiguration`, `GetAudioEncoderConfigurationOptions` | ● **T** | Per configuration; unknown token faults. Options use Media1's **wrapped** nesting — §6.5. |
+| `SetAudioEncoderConfiguration` | ● | **Refuses a body without `Multicast` or `SessionTimeout`** — both are required by `tt:AudioEncoderConfiguration`. §13.3. |
 | `GetOSDOptions`, `GetServiceCapabilities` | ○ | |
 
 ### 7.3 Media2 — 26 operations
@@ -475,7 +528,10 @@ makes two tokens disagree.
 | `GetMetadataConfigurationOptions` | ● **T** | Addressed read — no match **faults**. |
 | `SetMetadataConfiguration` | ● | Unknown token faults. |
 | `GetStreamUri`, `GetSnapshotUri`, `GetVideoEncoderInstances` | ○ | |
-| Audio (5 operations), `GetVideoSourceModes` | ○ | Declared stubs — §13. |
+| `GetAudioSourceConfigurations`, `GetAudioEncoderConfigurations`, `GetAudioOutputConfigurations`, `GetAudioDecoderConfigurations` | ● | Same state Media1 serves, in Media2's shapes. |
+| `GetAudioEncoderConfigurationOptions` | ● **T** | Media2's **flat** nesting — §6.5. |
+| `SetAudioEncoderConfiguration` | ● | Shares Media1's writer. Not required to carry `Multicast`, and cannot carry `SessionTimeout` — §13.3. |
+| `GetVideoSourceModes` | ○ | Declared stub — §13. |
 | `SetVideoSourceMode` | — | **Always faults** (`ter:ActionNotSupported`). The mock does not model sensor modes and will not claim it does — §13.1. |
 
 ### 7.4 PTZ — 27 operations
@@ -866,7 +922,7 @@ check whether it is pinned or incidental.
 | No response repeats an attribute | `no_response_declares_an_attribute_twice` |
 | No response uses an undeclared prefix | `every_response_binds_the_prefixes_it_uses` |
 | Every `Set` either round-trips or is declared static (49 pairs) | `tests/mock_roundtrip.rs` |
-| Every token-taking operation either discriminates or is declared blind (31 rows) | `tests/mock_token_discrimination.rs` |
+| Every token-taking operation either discriminates or is declared blind (34 rows) | `tests/mock_token_discrimination.rs` |
 | Media1 and Media2 never disagree about shared state | `tests/mock_media1_media2_agree.rs` |
 | Per-sensor answers really differ | `tests/mock_multi_sensor.rs` |
 | End-to-end flows | `tests/mock_workflow.rs` |
@@ -875,12 +931,15 @@ The two tables are the important ones. Each row **declares its intent** —
 `Works` / `Static(§)` for round-trip, `Discriminates` / `Blind(§)` for tokens —
 and **all arms are asserted**. Wire a declared stub up and the test goes red
 telling you to move the row, so the list cannot rot into a permanent blind
-spot. Current state: 49 round-trip pairs (**47** working, **2** static, 0
-known-broken) and 31 token rows (25 discriminating, 6 blind).
+spot. Current state: 49 round-trip pairs (**49** working, **0** static, 0
+known-broken) and 34 token rows (28 discriminating, 6 blind).
 
-The two static rows are exactly the one family still unwired —
-`media1/audio-encoder-config` and `media2/audio-encoder-config` — so this count
-is also the list in §13.1, and the two cannot drift apart silently.
+**Every `Set` on this mock now round-trips.** The last two static rows were the
+audio encoder configurations, and wiring them emptied the audit's Tier 3. Both
+`Expect::Static` and `Expect::Broken` are kept as arms with an `#[allow(dead_code)]`
+and a comment saying why: they are the only place the distinction between
+"deliberately fixture data" and "not wired up yet" can be *written down*, and
+deleting an unused arm is how that distinction goes back to being nowhere.
 
 *The token figures read "28 rows, 22 discriminating" until this was written.*
 The PTZ node work took them to 31/25 and updated §6 and the audit but not this
@@ -897,13 +956,15 @@ where a family is static, the getter never claims to reflect a write.
 
 ### 13.1 Declared stubs — static on both sides
 
-Pinned by a `Static` row in `tests/mock_roundtrip.rs` or a `Blind` row in
-`tests/mock_token_discrimination.rs`. Catalogued in
+Pinned by a `Blind` row in `tests/mock_token_discrimination.rs`. Catalogued in
 [`active/mock-audit-2026-07.md`](active/mock-audit-2026-07.md) §5.
+
+**No `Static` row is left in `tests/mock_roundtrip.rs`** — the audio encoder
+configurations were the last two, and every `Set` on this mock now round-trips.
+What remains here is read-side.
 
 | Family | What is missing |
 |---|---|
-| **Audio**, both services — sources, source configs, encoder configs + options, `SetAudioEncoderConfiguration` | No `DeviceState` field. One fixed configuration, and writes are discarded. |
 | **Media2 `GetVideoSourceModes`** | Static — one mode (`Mode_1`) for every `VideoSourceToken`. `SetVideoSourceMode` is **not** a stub: it faults, see below. |
 | **`GetStreamUri` / `GetSnapshotUri`**, both services | One canned URI for every profile. A real device gives each profile its own. |
 | **Media1 `GetOSDOptions`**, **Media2 `GetVideoEncoderInstances`** | Static. |
@@ -936,6 +997,17 @@ Audit §6.
   device pages and expires searches.
 - **`Bounds/@x` and `@y` are read from the wire and dropped.**
   `VideoSourceConfigEntry` models a size, not an offset.
+- **Media1 `SetAudioEncoderConfiguration` refuses a body without `Multicast` or
+  `SessionTimeout`** (`ter:ConfigModify` / `IncompleteAudioEncoder-SETAEC-5715`).
+  Both are *required* members of `tt:AudioEncoderConfiguration`, so a device
+  validating the request rejects one that omits them — and oxvif omitted both
+  until 0.16. Accepting it here would make the mock the one device on which the
+  old, invalid request worked.
+- **A Media2 `SetAudioEncoderConfiguration` never changes `SessionTimeout`.**
+  `tt:AudioEncoder2Configuration` has no such member, so a Media2 write cannot
+  express it; the stored value is preserved rather than cleared. `Multicast` is
+  optional there and *is* written, including to `None`. `UseCount` and the
+  options list are the device's, not the caller's, and are never written.
 - **`SetConfiguration` ignores `ForcePersistence`.** The configuration is always
   stored as if `true`. Real devices differ too widely on what `false` means —
   some keep the change until reboot, some until the session ends, some ignore
