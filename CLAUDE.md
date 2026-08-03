@@ -28,6 +28,71 @@ Message format:
 Confirm the git identity is `smiti1642 <smiti1642@gmail.com>` before running
 `git commit`.
 
+## Every change updates what claims to describe it
+
+**A change is not finished when the code is right. It is finished when every
+statement about it is still true.** Two surfaces rot silently, and neither is
+covered by any of the five gate lines — nothing in this repo asserts prose.
+
+### The CHANGELOG entry for the release you are in
+
+Not "add a bullet" — **re-read the bullets already there**. Within one release,
+later work routinely falsifies what earlier work wrote.
+
+Measured on 0.15.0 (2026-08-03): an eight-way audit checked the entry's 66
+top-level claims against source, with `v0.14.0` as the baseline, and found **26
+wrong statements**. Not one was invented — every one was true when written. The
+shape of the failure is the lesson:
+
+- **Counts that later work moved** — `47 Set → Get pairs` (49), `26 rows` (34),
+  `six nested types` (8), `resp_empty went 22 → 13` (24 → 4), `config_token is
+  now required on four options getters` in a bullet that then listed five.
+- **Contradicted by a later bullet in the same entry** — `Type="PTZ"` listed
+  among the types `AddConfiguration` refuses, three hundred lines above the
+  bullet announcing that it binds; "the four seeded heads" against a later
+  "two-head PTZ device".
+- **One that would actively mislead** — a migration snippet keying
+  `PtzState.channels` by *profile* token after the map had been re-keyed by
+  *node* token. Following it seeds an entry no read path ever reaches, silently.
+
+The two property tables already print *"update this expectation **and** the
+counts in `docs/mock-server.md` §12 and `docs/active/mock-audit-2026-07.md` §2"*
+when their pin fails. Both of those files were correct. **Only `CHANGELOG.md`
+was wrong — because it was the one place the message did not name.** So: when a
+pinned number is quoted anywhere, name *every* file that quotes it in the pin's
+failure message.
+
+### The doc comments docs.rs actually renders
+
+`cargo doc` builds clean whether or not the prose is true. And the part that is
+easy to miss: **a `pub(crate)` item's doc comment renders nowhere at all.**
+Every `from_xml` / `to_xml_body` in `src/types/` is `pub(crate)`, so reasoning
+written next to a parser fix is invisible to every reader of the crate. Measured
+the same day: the explanations for the Media1/Media2 options nesting, for
+Media1's required `Multicast`/`SessionTimeout`, and for why
+`PtzConfiguration::to_xml_body` returns `Result` were all on private items,
+while the public methods a caller reaches said nothing had changed.
+
+After changing behaviour, check in this order:
+
+1. **The public method or type the caller reaches.** Does its `///` still
+   describe what it does? Does it need an `# Errors` section it did not need
+   before? `ptz_set_configuration` gained a way to fail before sending anything
+   and said so only on a private function.
+2. **`src/lib.rs`'s `//!` header** — see [step 6a](#documentation).
+3. **Any `///` on a private helper that states a *fact*** — a count, a schema
+   shape, "X is a static fixture". These rot the same way and nobody re-reads
+   them. `ConfigKind::known_token` said *"the audio families are static
+   fixtures, so there is nothing to validate a binding against"* for two commits
+   after they gained catalogues — and it was still returning `true` for any
+   audio token, so the stale comment was also a live bug. **A justification that
+   outlives its premise is where to look for the next defect.**
+
+When a change adds intra-doc links, run
+`RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features` and the plain
+form. The publish checklist's two `cargo doc` lines do not set the flag, so a
+broken link is a warning nothing fails on.
+
 ## Before every commit
 
 ```
