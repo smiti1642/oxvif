@@ -103,6 +103,40 @@ two-thirds of the test suite.
   New integration tests `tests/mock_service_capabilities.rs` and two cases in
   `tests/mock_workflow.rs`.
 
+- **`tests/mock_schema_shape.rs` — the mock's XML, checked against the ONVIF
+  schema.** Six shape defects were found during this release, every one of them
+  by a human reading a schema file by hand, and one of them
+  (`MediaProfile2::audio_encoder_token`, below) was a client bug that a green
+  test had been asserting around. **Nothing else in the crate can see the
+  class**: `XmlNode` is namespace-stripped and every lookup matches the local
+  name only, so oxvif's parser is namespace-blind and order-independent — a
+  response with every element in the wrong namespace, in the wrong order,
+  parses identically. Neither `tests/mock_roundtrip.rs` nor
+  `tests/mock_token_discrimination.rs` goes anywhere near it, because both go
+  through the client.
+
+  The test builds its own corpus in process from `MockTransport` — one response
+  per action URI read out of `src/client/*.rs` — and reports wrong-namespace,
+  undeclared-name, unknown-child, sequence-order and missing-required findings,
+  pinned **per kind**. Per kind rather than as a total because it was measured:
+  putting the Media2 defect back leaves the total unchanged while moving two
+  kinds.
+
+  **It is `#[ignore]`d and reads the schema from `$OXVIF_ONVIF_SCHEMA`**, a
+  directory outside the working tree, because nothing derived from the ONVIF
+  schema set (© ONVIF 2008-2025) enters this repository — including a schema
+  fact hardcoded in a test. So it cannot join the five gate lines: a fresh
+  clone has nothing to read. It is driven by a new `CLAUDE.md`
+  publishing-checklist line instead, which is **weaker than a gate line**, and
+  both places say so. The skip path prints why at length, so a run that checked
+  nothing never reads like a run that passed.
+
+  What it cannot see is written down too: values and ranges, an empty element
+  whose children are all optional (`<tt:SupportedPTZSpaces/>` was a real defect
+  this release and is schema-valid), and whatever the corpus does not reach —
+  a third of the responses are SOAP faults today, which is what the coverage
+  floors exist to stop from quietly becoming two thirds.
+
 ### Fixed
 
 - **The mock's Storage family was a single static fixture.**
