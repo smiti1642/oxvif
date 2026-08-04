@@ -6,6 +6,20 @@ use crate::tests::common::*;
 
 // ── Media2 fixtures ───────────────────────────────────────────────────────
 
+/// Two profiles in the shape `tr2:ConfigurationSet` actually declares.
+///
+/// **Every member is the whole configuration, not a token reference.** Each one
+/// is typed as the full configuration — `VideoSource` is
+/// `tt:VideoSourceConfiguration`, the same type `tt:Profile` inlines — so a
+/// bare `<tr2:VideoSource token="VSC_1"/>`, which this fixture and the mock both
+/// sent until 0.15, is a document no conformant device produces. It also made
+/// `video_source_token` untestable, because that field is read from a
+/// `SourceToken` *inside* the configuration.
+///
+/// `Name` is `tr2:`, not `tt:`: `tr2:MediaProfile` declares it locally and
+/// `media2.wsdl` is `elementFormDefault="qualified"`. The bodies are `tt:`
+/// because the *types* come from `onvif.xsd`. `XmlNode` strips prefixes, so
+/// either passes — which is exactly why the fixture has to be right.
 fn profiles_media2_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                       xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
@@ -13,14 +27,25 @@ fn profiles_media2_xml() -> &'static str {
           <s:Body>
             <tr2:GetProfilesResponse>
               <tr2:Profiles token="Profile_A" fixed="true">
-                <tt:Name>mainStream</tt:Name>
+                <tr2:Name>mainStream</tr2:Name>
                 <tr2:Configurations>
-                  <tr2:VideoSource token="VSC_1"/>
-                  <tr2:VideoEncoder token="VEC_1"/>
+                  <tr2:VideoSource token="VSC_1">
+                    <tt:Name>VideoSourceConfig_1</tt:Name>
+                    <tt:UseCount>2</tt:UseCount>
+                    <tt:SourceToken>VS_1</tt:SourceToken>
+                    <tt:Bounds x="0" y="0" width="2592" height="1944"/>
+                  </tr2:VideoSource>
+                  <tr2:VideoEncoder token="VEC_1">
+                    <tt:Name>MainEncoder</tt:Name>
+                    <tt:UseCount>1</tt:UseCount>
+                    <tt:Encoding>H265</tt:Encoding>
+                    <tt:Resolution><tt:Width>2592</tt:Width><tt:Height>1944</tt:Height></tt:Resolution>
+                    <tt:Quality>5</tt:Quality>
+                  </tr2:VideoEncoder>
                 </tr2:Configurations>
               </tr2:Profiles>
               <tr2:Profiles token="Profile_B" fixed="false">
-                <tt:Name>subStream</tt:Name>
+                <tr2:Name>subStream</tr2:Name>
               </tr2:Profiles>
             </tr2:GetProfilesResponse>
           </s:Body>
@@ -126,8 +151,23 @@ async fn test_get_profiles_media2_returns_correct_fields() {
     assert_eq!(profiles[0].token, "Profile_A");
     assert_eq!(profiles[0].name, "mainStream");
     assert!(profiles[0].fixed);
+    assert_eq!(
+        profiles[0].video_source_config_token.as_deref(),
+        Some("VSC_1")
+    );
+    assert_eq!(profiles[0].video_encoder_token.as_deref(), Some("VEC_1"));
+    // The physical source behind the bound configuration. Read from
+    // `VideoSource/SourceToken`, so it is `None` for as long as the response
+    // carries a token reference instead of the configuration — which is what
+    // this fixture sent until 0.15, and why nothing asserted it.
+    assert_eq!(profiles[0].video_source_token.as_deref(), Some("VS_1"));
     assert_eq!(profiles[1].token, "Profile_B");
     assert!(!profiles[1].fixed);
+    // A profile with no `Configurations` at all: every binding must be absent
+    // rather than defaulted, so the two rows disagree on all five.
+    assert_eq!(profiles[1].video_source_config_token, None);
+    assert_eq!(profiles[1].video_source_token, None);
+    assert_eq!(profiles[1].video_encoder_token, None);
 }
 
 #[tokio::test]
@@ -216,6 +256,13 @@ async fn test_get_video_encoder_instances_parses_total() {
 /// not the ones oxvif happens to accept: the parser is namespace-blind
 /// (`XmlNode` strips prefixes), so a fixture that gets the namespace wrong
 /// passes just as well and teaches the next reader the wrong shape.
+///
+/// **And so is the nesting.** Every member of `tr2:ConfigurationSet` is typed as
+/// the *whole* configuration, so the five bare `<tr2:X token="…"/>` elements this
+/// fixture used to carry were the same mistake one level down: a shape that
+/// happened to satisfy this parser and no schema. The members are also in
+/// declaration order — `VideoSource, AudioSource, VideoEncoder, AudioEncoder,
+/// …, PTZ` — which interleaves the media rather than grouping them.
 #[tokio::test]
 async fn test_get_profiles_media2_parses_audio_ptz_tokens() {
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
@@ -226,11 +273,36 @@ async fn test_get_profiles_media2_parses_audio_ptz_tokens() {
              <tr2:Profiles token="Profile_1" fixed="false">
                <tr2:Name>main</tr2:Name>
                <tr2:Configurations>
-                 <tr2:VideoSource token="VideoSrc_1"/>
-                 <tr2:AudioSource token="AudioSrc_1"/>
-                 <tr2:VideoEncoder token="VideoEnc_1"/>
-                 <tr2:AudioEncoder token="AudioEnc_1"/>
-                 <tr2:PTZ token="PTZConfig_1"/>
+                 <tr2:VideoSource token="VideoSrc_1">
+                   <tt:Name>vsc</tt:Name>
+                   <tt:UseCount>1</tt:UseCount>
+                   <tt:SourceToken>VS_9</tt:SourceToken>
+                   <tt:Bounds x="0" y="0" width="1280" height="720"/>
+                 </tr2:VideoSource>
+                 <tr2:AudioSource token="AudioSrc_1">
+                   <tt:Name>asc</tt:Name>
+                   <tt:UseCount>1</tt:UseCount>
+                   <tt:SourceToken>AS_9</tt:SourceToken>
+                 </tr2:AudioSource>
+                 <tr2:VideoEncoder token="VideoEnc_1">
+                   <tt:Name>vec</tt:Name>
+                   <tt:UseCount>1</tt:UseCount>
+                   <tt:Encoding>H264</tt:Encoding>
+                   <tt:Resolution><tt:Width>1280</tt:Width><tt:Height>720</tt:Height></tt:Resolution>
+                   <tt:Quality>4</tt:Quality>
+                 </tr2:VideoEncoder>
+                 <tr2:AudioEncoder token="AudioEnc_1">
+                   <tt:Name>aec</tt:Name>
+                   <tt:UseCount>1</tt:UseCount>
+                   <tt:Encoding>AAC</tt:Encoding>
+                   <tt:Bitrate>64</tt:Bitrate>
+                   <tt:SampleRate>16</tt:SampleRate>
+                 </tr2:AudioEncoder>
+                 <tr2:PTZ token="PTZConfig_1">
+                   <tt:Name>ptz</tt:Name>
+                   <tt:UseCount>1</tt:UseCount>
+                   <tt:NodeToken>PTZNode_9</tt:NodeToken>
+                 </tr2:PTZ>
                </tr2:Configurations>
              </tr2:Profiles>
            </tr2:GetProfilesResponse>
@@ -243,9 +315,15 @@ async fn test_get_profiles_media2_parses_audio_ptz_tokens() {
         .await
         .unwrap();
     let p = &profiles[0];
+    assert_eq!(p.video_source_config_token.as_deref(), Some("VideoSrc_1"));
+    assert_eq!(p.video_encoder_token.as_deref(), Some("VideoEnc_1"));
     assert_eq!(p.audio_source_token.as_deref(), Some("AudioSrc_1"));
     assert_eq!(p.audio_encoder_token.as_deref(), Some("AudioEnc_1"));
     assert_eq!(p.ptz_config_token.as_deref(), Some("PTZConfig_1"));
+    // The one field the token-only shape could never produce. `VS_9` is
+    // deliberately unlike the configuration token above it, so a parser reading
+    // the wrong attribute cannot land on it by accident.
+    assert_eq!(p.video_source_token.as_deref(), Some("VS_9"));
 }
 
 // ── Media2 AddConfiguration / RemoveConfiguration ─────────────────────────

@@ -287,8 +287,11 @@ The last three are `#[serde(skip)]` — per-instance, never persisted.
 ### 5.1 Media1 and Media2 share one state
 
 They are two views of one device. Any operation present in both dispatchers
-reads and writes the same `DeviceState`; only the rendering differs (Media1
-inlines whole configurations, Media2 emits token references). `tests/mock_media1_media2_agree.rs`
+reads and writes the same `DeviceState`; only the rendering differs (both
+inline whole configurations, but Media1 lists them as siblings of `Name` where
+Media2 groups them under `<tr2:Configurations>`, and two of the types differ).
+This said *"Media2 emits token references"* until 0.15 — see §8.3.
+`tests/mock_media1_media2_agree.rs`
 is the standing guard, and the audit records two shipped bugs from getting
 this wrong.
 
@@ -689,11 +692,18 @@ unbound and the document was not namespace-well-formed (§3).
 
 ```xml
 <tr2:Profiles token="Profile_1" fixed="true">
-  <tt:Name>mainStream</tt:Name>
+  <tr2:Name>mainStream</tr2:Name>
   <tr2:Configurations>
-    <tr2:VideoSource token="VSC_1"/>
-    <tr2:VideoEncoder token="VEC_1"/>
-    <tr2:AudioEncoder token="AEC_1"/>
+    <tr2:VideoSource token="VSC_1">
+      <tt:Name>VSConfig1</tt:Name>
+      <tt:UseCount>2</tt:UseCount>
+      <tt:SourceToken>VS_1</tt:SourceToken>
+      <tt:Bounds x="0" y="0" width="2592" height="1944"/>
+    </tr2:VideoSource>
+    <tr2:AudioSource token="ASC_1">…</tr2:AudioSource>
+    <tr2:VideoEncoder token="VEC_1">…</tr2:VideoEncoder>
+    <tr2:AudioEncoder token="AEC_1">…</tr2:AudioEncoder>
+    <tr2:PTZ token="PTZConfig_1">…</tr2:PTZ>
   </tr2:Configurations>
 </tr2:Profiles>
 ```
@@ -703,13 +713,28 @@ is `<tr2:AudioEncoder>`; `Audio` was a name oxvif invented, which the parser,
 this mock, a unit fixture and `CLAUDE.md` all agreed on and no device sends.
 See the `Fixed` entry in `CHANGELOG.md` for 0.15.0.
 
-**The token-only elements above are a simplification of this mock, not the
-schema shape.** `tr2:ConfigurationSet` types every member as the *full*
-configuration, so a conformant Media2 device inlines it as Media1 does. One
-consequence is visible from the client: `MediaProfile2::video_source_token`
-reads a `SourceToken` from inside the video source configuration and is
-therefore always `None` here. Tracked in
-`docs/active/mock-schema-conformance-2026-08.md`.
+**And it used to say the members carried a token and no body**, with the note
+that ~~*"the token-only elements above are a simplification of this mock, not the
+schema shape"*~~ and that `MediaProfile2::video_source_token` was ~~*"therefore
+always `None` here"*~~. Both were true, and both stopped being true in 0.15:
+`tr2:ConfigurationSet` types every member as the *full* configuration, so this
+mock now inlines it as Media1 does, and `video_source_token` reports `VS_1`.
+
+Two things the shape above still does not share with Media1:
+
+- **The member names.** `VideoSource`, not `VideoSourceConfiguration` — and
+  `Name` is `tr2:` here (declared locally in `media2.wsdl`) where Media1's is
+  `tt:`.
+- **Two of the types.** `VideoEncoder` is `tt:VideoEncoder2Configuration` and
+  `AudioEncoder` is `tt:AudioEncoder2Configuration`, which have their own
+  member sequences and no `SessionTimeout`. The other three members —
+  `VideoSource`, `AudioSource`, `PTZ` — are the *same* types `tt:Profile`
+  inlines, and are rendered by the same helpers.
+
+**The sequence is `VideoSource, AudioSource, VideoEncoder, AudioEncoder,
+Analytics, PTZ, …`** — audio source sits between the two video members, and
+`tt:Profile` interleaves the same way. Two separate declarations that happen to
+agree; neither licenses assuming the other.
 
 ### 8.4 Per-channel answers
 

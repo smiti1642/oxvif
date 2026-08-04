@@ -153,12 +153,38 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   pinned. **A one-name defect that moves three counters is the reason a
 ///   per-kind pin is not merely more precise than a total — a total would have
 ///   let a compensating pair of edits through.**
+/// - §5.4, the two `GetProfiles` responses — `MISSING-REQUIRED` 21 → 16,
+///   `ORDER` 5 → 3, `UNKNOWN-NAME` 8 → **9**.
+///
+///   The five required-member rows were **one decision**: Media2 rendered each
+///   configuration as `<tr2:VideoSource token="…"/>`, and `tr2:ConfigurationSet`
+///   types every member as the *whole* configuration — `VideoSource` is
+///   `tt:VideoSourceConfiguration`, the same type `tt:Profile` inlines. So one
+///   renderer omitted the required members of five different types at once.
+///   The two order rows are unrelated to it and to each other: `tt:Profile` and
+///   `tr2:ConfigurationSet` are different types in different schemas that happen
+///   to agree on interleaving audio source between the two video members, and
+///   each was derived on its own. Perturbed one at a time: token references back
+///   moves `MISSING-REQUIRED` 16 → 21 and leaves `ORDER` at 3; either order back
+///   moves `ORDER` 3 → 4 and nothing else.
+///
+///   **`UNKNOWN-NAME` went up, and that is the honest number.** Inlining the
+///   video encoder reuses `render_video_encoder`, the same helper
+///   `GetVideoEncoderConfigurations` uses, so the `tt:Profile` element it emits
+///   now appears at a second path — one more distinct row for a defect that was
+///   already counted once. `tt:VideoEncoder2Configuration` declares `Profile`
+///   and `GovLength` as **attributes**, and `VideoEncoderConfiguration2` parses
+///   both as child elements, so fixing it is a client change and belongs to the
+///   `UNKNOWN-NAME` work unit; when it lands, both rows close together. The
+///   alternative was a second copy of the encoder body that could drift from the
+///   list getter, which is the failure mode `CLAUDE.md` step 5b exists for —
+///   a duplicated renderer is worse than a counted defect.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
-    ("MISSING-REQUIRED", 21),
-    ("UNKNOWN-NAME", 8),
+    ("MISSING-REQUIRED", 16),
+    ("UNKNOWN-NAME", 9),
     ("UNKNOWN-CHILD", 4),
-    ("ORDER", 5),
+    ("ORDER", 3),
 ];
 
 /// Floors on what the run actually covered.

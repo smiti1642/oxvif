@@ -239,6 +239,64 @@ two-thirds of the test suite.
   Media2 `Audio` → `AudioEncoder` shape and needed both changed at once.
   Tracked in `docs/active/mock-schema-conformance-2026-08.md` §1.3.
 
+- **The mock's Media2 `GetProfiles` sent a token and no body for every bound
+  configuration, and both `GetProfiles` responses had audio and video the wrong
+  way round.** Seven schema-shape rows, one renderer each way:
+  `MISSING-REQUIRED` 21 → 16, `ORDER` 5 → 3.
+
+  `tr2:ConfigurationSet` types **every** member as the full configuration —
+  `VideoSource` is `tt:VideoSourceConfiguration`, the same type `tt:Profile`
+  inlines — so `<tr2:VideoSource token="VSC_1"/>` omitted the required members
+  of five different types from one line of code. **This is the "documented
+  simplification" the `AudioEncoder` fix above left standing**, and what it cost
+  was not cosmetic: `MediaProfile2::video_source_token` is read from a
+  `SourceToken` *inside* the video source configuration, so it was permanently
+  `None` against the mock — a public field that was parsed, documented as the
+  hand-off to the Imaging service, and impossible to exercise. It now reports
+  `VS_1`.
+
+  Each member is inlined by the helper the corresponding **list getter already
+  used** — `render_vsc_body`, `render_audio_source_config`,
+  `render_video_encoder`, `render_audio_encoder_media2`, `ptz::render_config` —
+  so a profile cannot describe a configuration differently from the getter that
+  lists it. Two of the five types genuinely differ from Media1's
+  (`VideoEncoder2Configuration`, `AudioEncoder2Configuration`); the other three
+  are shared, which is why three of the helpers live in `services/media.rs`.
+
+  The two order rows are a separate defect from the inlining and from each
+  other. `tt:Profile` and `tr2:ConfigurationSet` are different types in
+  different schemas whose members do not even share names, and both place the
+  **audio source between the two video members** — video and audio are not
+  grouped by medium, which is the arrangement both renderers assumed. Each order
+  was derived on its own; that they agree is a fact about ONVIF, not something
+  either licenses assuming of the other.
+
+  Perturbed in three independent parts: token references back moves
+  `MISSING-REQUIRED` 16 → 21 with `ORDER` unmoved at 3; either order back moves
+  `ORDER` 3 → 4 and nothing else. Each failed on the pin assertion.
+
+  **`UNKNOWN-NAME` went 8 → 9, and the increase is not a new defect.** Reusing
+  `render_video_encoder` means the `tt:Profile` element it already emitted now
+  appears at a second path and is counted twice.
+  `tt:VideoEncoder2Configuration` declares `Profile` and `GovLength` as
+  **attributes** and `VideoEncoderConfiguration2::from_xml` parses both as child
+  elements, so closing it is a client change and is left for that work unit,
+  where it closes both rows at once. A second copy of the encoder body, free to
+  drift from the list getter, would have been worse than a counted row.
+
+  **Nothing in the existing suite went red** when the output moved — 821 lib
+  tests before and after. Every assertion about a Media2 profile read a *token*,
+  and tokens were the one thing the old shape got right. Closed by asserting
+  what only the inlined shape can show: `video_source_token` on both services
+  and in both client fixtures, plus a new
+  `a_config_write_shows_inside_both_services_profiles` that repoints `VSC_1` at
+  the other sensor and re-reads it *through a profile*, which is the only thing
+  that can tell a state-driven renderer from one emitting a plausible constant.
+  Both Media2 profile fixtures in `src/tests/client/media2_tests.rs` carried the
+  token-only shape too — one of them under a doc comment promising *"the element
+  names and prefixes here are the ones a conformant device sends"* — the same
+  mock-and-fixture-agree-with-each-other failure, one level down.
+
 - **The mock answers a DeviceIO endpoint.** `{base}/onvif/deviceio`, advertised
   in `GetCapabilities` (`Capabilities/Extension/DeviceIO`) **and** `GetServices`,
   dispatching `…/ver10/deviceio/wsdl/` and rendering `GetDigitalInputs` in
@@ -489,12 +547,17 @@ two-thirds of the test suite.
   Found by checking the mock's output against the ONVIF schema set, which is
   also what settled the design note: `tr2:ConfigurationSet` types every member
   as the **full** configuration, so a conformant Media2 device inlines it as
-  Media1 does. The mock's token-only rendering is a simplification, now
+  Media1 does. ~~The mock's token-only rendering is a simplification, now
   documented as one at the renderer, not the schema shape. One visible
   consequence is left standing and recorded: `MediaProfile2::video_source_token`
   reads a `SourceToken` from *inside* the video source configuration, so it is
   always `None` against the mock — the Imaging hand-off its doc describes cannot
-  be exercised there. Tracked in
+  be exercised there.~~ **Superseded later in this release** — the mock inlines,
+  and `video_source_token` reports `VS_1`; see the Media2 `GetProfiles` bullet
+  under Added. The struck sentences are kept because the sequence is the
+  lesson: the same finding was first read as settling a *client* bug and leaving
+  a mock simplification, and the "simplification" turned out to be the thing
+  making a public field untestable. Tracked in
   `docs/active/mock-schema-conformance-2026-08.md`.
 
 - **Media1 `SetAudioEncoderConfiguration` now refuses an incomplete body.**
@@ -621,7 +684,10 @@ two-thirds of the test suite.
   `MediaProfile::ptz_config_token` and `MediaProfile2::ptz_config_token` were
   parsed and permanently `None`, because `ProfileEntry` had no slot and neither
   renderer emitted the element. Media1 now inlines `<tt:PTZConfiguration>` and
-  Media2 emits `<tr2:PTZ token="…"/>`, both from the same state, with a new row
+  Media2 ~~emits `<tr2:PTZ token="…"/>`~~ inlines the same body as `<tr2:PTZ>`
+  (`tr2:ConfigurationSet` types `PTZ` as `tt:PTZConfiguration` too, so both come
+  from `ptz::render_config` — see the Media2 `GetProfiles` bullet under Added),
+  both from the same state, with a new row
   in `tests/mock_media1_media2_agree.rs`. Not in the audit at all — found while
   planning the fix.
 
@@ -677,10 +743,15 @@ two-thirds of the test suite.
   All three now read and write the shared list. The state operations
   (`create_profile_in_state`, `delete_profile_in_state`) live once in
   `services/media.rs`; each service renders its own envelope, because the shapes
-  genuinely differ — Media1 inlines whole configurations, Media2 emits token
-  references inside `<tr2:Configurations>`, and `tr2:DeleteProfile` names its
+  genuinely differ — Media1 lists a profile's configurations as siblings of
+  `Name`, Media2 groups them under `<tr2:Configurations>` with different member
+  names and two different types, and `tr2:DeleteProfile` names its
   token element `Token` where `trt:DeleteProfile` says `ProfileToken`. A shared
   handler would have read the wrong element.
+
+  This read ~~*"Media1 inlines whole configurations, Media2 emits token
+  references inside `<tr2:Configurations>`"*~~ until the Media2 `GetProfiles`
+  bullet under Added. Both inline; the difference was never the nesting.
 
 - **…and the same defect pointing the other way, in the encoder family.** Found
   by auditing every operation present in **both** dispatchers for whether it

@@ -519,23 +519,38 @@ they catch a class the missing/fault pair cannot:
     operation in `services/media.rs` and let each service render its own
     envelope: the shapes genuinely differ — Media1 lists a profile's
     configurations as siblings of `Name`, Media2 groups them under one
-    `<tr2:Configurations>`, and the *types* differ
-    (`VideoEncoder2Configuration`, `AudioEncoder2Configuration`) — and
+    `<tr2:Configurations>`, the member *names* differ (`VideoSource` against
+    `VideoSourceConfiguration`), the two sequences are separate declarations,
+    and two of the *types* differ (`VideoEncoder2Configuration`,
+    `AudioEncoder2Configuration`) — and
     `tr2:DeleteProfile` names its token element `Token` where
     `trt:DeleteProfile` says `ProfileToken`, so a shared handler reads the
     wrong element. `tests/mock_media1_media2_agree.rs` is the standing guard.
 
+    **What is *not* a difference is the nesting.** `tr2:ConfigurationSet` types
+    every member as the *full* configuration — three of the five are the very
+    types `tt:Profile` inlines — so both services inline, and each member's body
+    comes from the helper the corresponding list getter uses. Two renderers over
+    one state, not two bodies for one configuration.
+
     **This paragraph used to say "Media2 emits token references".** It was
     wrong, and it was wrong in a way that hid a shipped client defect for two
-    releases: `tr2:ConfigurationSet` types every member as the *full*
-    configuration, so a conformant Media2 device inlines it exactly as Media1
-    does. Believing otherwise made the mock's token-only rendering look like the
-    schema shape rather than the simplification it is, and made the whole
-    element-naming question look settled when it was not — the audio member is
-    `AudioEncoder`, the parser read `Audio`, and the fixture and the mock had
-    both been written to agree with the parser. **Check a shape claim against
-    the WSDL before writing it down here**; a design note in this file is read
-    as settled fact by everything downstream of it.
+    releases; believing it made the whole element-naming question look settled
+    when it was not — the audio member is `AudioEncoder`, the parser read
+    `Audio`, and the fixture and the mock had both been written to agree with
+    the parser. **Check a shape claim against the WSDL before writing it down
+    here**; a design note in this file is read as settled fact by everything
+    downstream of it.
+
+    **It then said the mock's token-only rendering was "a documented
+    simplification", and that outlived its premise too.** A simplification is
+    defensible while nothing depends on the omission, and something did:
+    `MediaProfile2::video_source_token` is read from a `SourceToken` *inside*
+    the video source configuration, so it was permanently `None` against the
+    mock — a field that existed, was parsed, and could not be exercised. The
+    mock inlines as of 0.15. **When a shape claim here is downgraded from "the
+    schema says" to "we chose", re-ask what the choice costs** — the second
+    sentence is where the first one's defect goes to hide.
 
 5c. **Every `Set` needs a row in `tests/mock_roundtrip.rs`.** The table pairs
     each write with the getter that should show it, and each row declares

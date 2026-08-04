@@ -574,10 +574,17 @@ fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
         .and_then(|t| cat.ptzs.iter().find(|c| c.token == t))
         .map(|c| super::ptz::render_config(c, "tt:PTZConfiguration"))
         .unwrap_or_default();
+    // **Audio source before video encoder.** `tt:Profile`'s sequence is
+    // `Name, VideoSourceConfiguration, AudioSourceConfiguration,
+    // VideoEncoderConfiguration, AudioEncoderConfiguration, …` — video and
+    // audio are *not* grouped by medium, which is the order this emitted until
+    // 0.15 and the order every reader assumes. `tr2:ConfigurationSet` happens
+    // to declare the same interleaving, but it is a different type in a
+    // different schema and each order is derived on its own.
     format!(
         r#"<trt:{tag} token="{token}" fixed="{fixed}">
           <tt:Name>{name}</tt:Name>
-          {vsc}{vec}{asc}{aec}{ptz}
+          {vsc}{asc}{vec}{aec}{ptz}
         </trt:{tag}>"#,
         token = p.token,
         fixed = p.fixed,
@@ -590,15 +597,15 @@ fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
 /// One lock rather than five keeps a responder from rendering a profile whose
 /// video and audio configurations came from different moments. It was a
 /// three-tuple until the audio catalogue joined it.
-struct Catalogues {
-    vscs: Vec<VideoSourceConfigEntry>,
-    vecs: Vec<VideoEncoderState>,
-    ptzs: Vec<PtzConfigEntry>,
-    ascs: Vec<AudioSourceConfigEntry>,
-    aecs: Vec<AudioEncoderEntry>,
+pub(crate) struct Catalogues {
+    pub(crate) vscs: Vec<VideoSourceConfigEntry>,
+    pub(crate) vecs: Vec<VideoEncoderState>,
+    pub(crate) ptzs: Vec<PtzConfigEntry>,
+    pub(crate) ascs: Vec<AudioSourceConfigEntry>,
+    pub(crate) aecs: Vec<AudioEncoderEntry>,
 }
 
-fn catalogues(state: &SharedState) -> Catalogues {
+pub(crate) fn catalogues(state: &SharedState) -> Catalogues {
     let s = state.read();
     Catalogues {
         vscs: s.video_source_configs.clone(),
@@ -617,9 +624,12 @@ fn render_vsc_inline(vscs: &[VideoSourceConfigEntry], token: &str) -> String {
 }
 
 /// The shared `VideoSourceConfiguration` payload. `tag` differs by context —
-/// `tt:VideoSourceConfiguration` inline in a profile, `trt:Configurations` in
-/// a list, `trt:Configuration` for the singular getter.
-fn render_vsc_body(c: &VideoSourceConfigEntry, tag: &str) -> String {
+/// `tt:VideoSourceConfiguration` inline in a Media1 profile, `tr2:VideoSource`
+/// inline in a Media2 one, `trt:Configurations` in a list, `trt:Configuration`
+/// for the singular getter. The *body* is the same in all four because the type
+/// is the same: `tr2:ConfigurationSet/VideoSource` is typed
+/// `tt:VideoSourceConfiguration`, exactly as `tt:Profile`'s member is.
+pub(crate) fn render_vsc_body(c: &VideoSourceConfigEntry, tag: &str) -> String {
     format!(
         r#"<{tag} token="{token}">
           <tt:Name>{name}</tt:Name>

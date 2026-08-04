@@ -125,9 +125,22 @@ ORDER              6     children out of the declared sequence order
 
 **After §5.0 this is 62 distinct, `UNKNOWN-NAME` 11; after §5.1, 46 distinct
 with `WRONG-NS` 0; after the imaging slice of §5.2 + §5.3, 38 distinct —
-`MISSING-REQUIRED` 21, `UNKNOWN-NAME` 8, `UNKNOWN-CHILD` 4, `ORDER` 5.**
+`MISSING-REQUIRED` 21, `UNKNOWN-NAME` 8, `UNKNOWN-CHILD` 4, `ORDER` 5; after
+the `GetProfiles` slice of §5.2 + §5.4, 32 distinct — `MISSING-REQUIRED` 16,
+`UNKNOWN-NAME` **9**, `UNKNOWN-CHILD` 4, `ORDER` 3.**
 `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
 block is the baseline the sweep started from and is left as it was.
+
+**`UNKNOWN-NAME` went up by one, and it is not a new defect.** Inlining the
+Media2 configurations reuses `render_video_encoder`, the same helper the list
+getter uses, so the `tt:Profile` element it already emitted now appears at a
+second path and is counted a second time.
+`tt:VideoEncoder2Configuration` declares `Profile` and `GovLength` as
+**attributes**; `VideoEncoderConfiguration2::from_xml` parses both as child
+elements, so closing it is a client change and belongs to §5.3, where it will
+close both rows at once. The alternative — a second copy of the encoder body,
+free to drift from the list getter — is the failure `CLAUDE.md` step 5b exists
+to prevent, so the counted row was preferred to the duplicate renderer.
 
 This paragraph used to end *"No other kind has moved."* True of §5.0 and §5.1,
 and it stopped being true at the imaging slice: **eight rows across four kinds,
@@ -196,8 +209,8 @@ only via the checker, for the first:
 
 | response | what is out of place |
 |---|---|
-| Media1 `GetProfiles` → `Profile` | the video encoder configuration is emitted before the audio source configuration; the schema has them the other way round |
-| Media2 `GetProfiles` → `ConfigurationSet` | the same inversion |
+| ~~Media1 `GetProfiles` → `Profile`~~ **fixed** | the video encoder configuration is emitted before the audio source configuration; the schema has them the other way round |
+| ~~Media2 `GetProfiles` → `ConfigurationSet`~~ **fixed** | the same inversion |
 | ~~`GetOptions` → `ImagingOptions20`~~ **fixed** | badly scrambled — most members are in a different position. Only `WideDynamicRange` held its index; `BacklightCompensation` moved from last to first. **The schema order is not alphabetical, though it looks it** — `WideDynamicRange` precedes `WhiteBalance`, so sorting the members is a wrong fix that gets nine of ten right |
 | Media2 `GetMetadataConfigurations` | analytics emitted before PTZ status (**two rows**, one per configuration in the response — one cause) |
 | `GetOSDOptions` → `OSDTextOptions` | the font-size range is emitted last, the schema places it second |
@@ -205,7 +218,17 @@ only via the checker, for the first:
 Media1 `GetProfiles` is the most-used response in the crate.
 
 The Media2 row used to read *"plus an `Audio` child where the schema names
-`AudioEncoder`"*. That part is fixed (`8091892`); the inversion is not.
+`AudioEncoder`"*. That part is fixed (`8091892`); ~~the inversion is not~~ and
+so is the inversion, in §5.4.
+
+**"The same inversion" is a description of the symptom, not of the cause, and
+the two rows had to be derived separately.** `tt:Profile` and
+`tr2:ConfigurationSet` are different types declared in different schemas —
+`onvif.xsd` and `media2.wsdl` — whose members do not even share names
+(`AudioSourceConfiguration` against `AudioSource`). That they agree on placing
+the audio source between the two video members is a fact about ONVIF, not
+something either order licenses assuming of the other. Perturbed independently:
+either one alone moves `ORDER` by exactly one.
 
 ### 1.3 Undeclared element names — the `AFModes` class again
 
@@ -290,11 +313,30 @@ response, and recording source information — the last of which
 `src/mock/state.rs` already **stores** and does not render, the same shape as
 the `MTU` bug.
 
-Five of the 23 are the Media2 `ConfigurationSet` members
+~~Five of the 23 are the Media2 `ConfigurationSet` members
 (`VideoSource`, `AudioSource`, `VideoEncoder`, `AudioEncoder`, `PTZ`), which
 are **one** decision: `8091892` established that a conformant device inlines
 the full configuration, and this mock renders a token-only reference. Fixing
-that closes five rows at once and is the largest single change in the sweep.
+that closes five rows at once and is the largest single change in the sweep.~~
+
+**Done in §5.4 — `MISSING-REQUIRED` 21 → 16, exactly the five rows, from one
+edit to `render_profile_media2`.** Two things the prediction did not say:
+
+- **It is one decision but not one renderer.** Each member is inlined by the
+  helper the corresponding *list* getter already used —
+  `media::render_vsc_body`, `media::render_audio_source_config`,
+  `render_video_encoder`, `render_audio_encoder_media2`,
+  `ptz::render_config` — so a profile cannot describe a configuration
+  differently from the getter that lists it. `render_vsc_body` and
+  `render_video_encoder` needed only a `qname` parameter; the other three
+  already had one.
+- **Inlining is only worth having if the inlined copy tracks state.** Nothing in
+  §1.4, and nothing the checker reports, distinguishes a renderer reading
+  `DeviceState` from one emitting a plausible constant: both satisfy every
+  required member. `a_config_write_shows_inside_both_services_profiles` in
+  `tests/mock_media1_media2_agree.rs` is the assertion that can — it repoints
+  `VSC_1` at the other sensor and re-reads it *through a profile* on both
+  services.
 
 ### 1.5 `GetDigitalInputs` was sent to the wrong service — a client bug
 
@@ -375,10 +417,28 @@ Two consequences, both landed:
 - `CLAUDE.md` step 5b corrected, with the old claim quoted and a rule beside
   it: **check a shape claim against the WSDL before writing it down there.**
 
-Still open, deliberately: the mock renders a token-only reference rather than
+~~Still open, deliberately: the mock renders a token-only reference rather than
 inlining. That is now a documented simplification rather than a claim about the
 schema, and it is the five `MISSING-REQUIRED` rows of §1.4 — the largest single
-change in the sweep.
+change in the sweep.~~
+
+**Closed in §5.4.** The mock inlines. A documented simplification is only
+defensible while nothing depends on the omission, and something did:
+`MediaProfile2::video_source_token` is read from a `SourceToken` *inside* the
+video source configuration, so against this mock it was permanently `None` —
+the field existed, was parsed, and could not be exercised. The same argument
+that made `8091892` a client bug rather than a mock nicety applies one level
+down: a mock that emits a shape no device produces cannot test the parser that
+reads the shape devices do produce.
+
+Third consequence of §3, only visible once the mock moved: **the unit fixtures
+had been written to the token-only shape too**, and
+`test_get_profiles_media2_parses_audio_ptz_tokens` carried a doc comment
+promising *"the element names and prefixes here are the ones a conformant device
+sends"*. The names were right and the nesting was not — the same
+mock-and-fixture-agree-with-each-other failure `8091892` found one level up.
+Both Media2 profile fixtures now carry the configurations, which is what makes
+`video_source_token` assertable at all.
 
 ---
 
@@ -516,8 +576,9 @@ Grouped so each lands in one file with one perturbation:
    is the reusable part: **when a guard you expected to fire stays silent, the
    silence is the finding.**
 2. **Sequence order** — five renderers, six rows (§1.2). **Imaging done**
-   (`ImagingOptions20`, `ORDER` 6 → 5); four renderers left — both `GetProfiles`
-   inversions, Media2 `GetMetadataConfigurations`, `GetOSDOptions`.
+   (`ImagingOptions20`, `ORDER` 6 → 5); **both `GetProfiles` inversions done**
+   with §5.4 (`ORDER` 5 → 3). Two renderers left — Media2
+   `GetMetadataConfigurations`, `GetOSDOptions`.
 3. **Undeclared names** — `ScopeAttribute`, the imaging focus options, the
    options extensions (§1.3). Settle `UsernameToken` by type rather than
    renaming it. **Imaging done** — the `GetMoveOptions` focus names, which were
@@ -530,9 +591,36 @@ Grouped so each lands in one file with one perturbation:
    perturbation run. It was perturbed in **two independent halves**: the focus
    names alone leave `ORDER` at 5, the order alone leaves the other three
    kinds unmoved, so neither half is resting on the other's evidence.
-4. **Required members** (§1.4). The Media2 `ConfigurationSet` inlining is five
-   of the rows and is the largest change here; the rest are a renderer dropping
-   state it already holds.
+4. **Required members** (§1.4). ~~The Media2 `ConfigurationSet` inlining is five
+   of the rows and is the largest change here~~; the rest are a renderer
+   dropping state it already holds.
+
+   **The inlining is done — see §5.4.** Sixteen rows left, none of which is
+   the `ConfigurationSet` family.
+5.4 ~~**The two `GetProfiles` responses**~~ **Done. `MISSING-REQUIRED` 21 → 16,
+   `ORDER` 5 → 3, `UNKNOWN-NAME` 8 → 9.**
+
+   Taken as one bucket across units 2 and 4, on the same argument the imaging
+   slice used: the seven rows live in two renderers that share one state
+   snapshot, so they share one perturbation run. Perturbed in **three
+   independent parts**, none resting on another's evidence:
+
+   | put back | moves |
+   |---|---|
+   | Media2 token-only references | `MISSING-REQUIRED` 16 → 21, `UNKNOWN-NAME` 9 → 8, `ORDER` unchanged at 3 |
+   | Media1 `tt:Profile` order | `ORDER` 3 → 4, nothing else |
+   | Media2 `tr2:ConfigurationSet` order | `ORDER` 3 → 4, nothing else |
+
+   Each failed on the pin assertion and reverted green. The first line is also
+   the proof that the extra `UNKNOWN-NAME` row is caused by the inlining and by
+   nothing else.
+
+   **Nothing in the existing suite went red** when the mock's output moved —
+   821 lib tests before and after — which is §4's lesson repeating: every
+   assertion about a Media2 profile read a *token*, and tokens were the one
+   thing the token-only shape got right. The gap was closed by asserting what
+   only the inlined shape can show (`video_source_token`, on both services and
+   in both unit fixtures) and by adding the state-tracking test named in §1.4.
 5. ~~**Strengthen `every_response_binds_the_prefixes_it_uses`** so it asserts an
    element is in the namespace its type declares.~~ **Struck — this cannot be a
    separate unit.** Asserting that an element is in the namespace its *type*

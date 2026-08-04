@@ -17,45 +17,78 @@ fn require_config_token(body: &str, missing_reason: &str) -> Result<String, Stri
 ///
 /// **Not a prefix swap on `media::render_profile`.** The two services wrap their
 /// configurations differently — Media1 lists them as siblings of `Name`, Media2
-/// groups them under a single `<tr2:Configurations>` — and the *types* differ
+/// groups them under a single `<tr2:Configurations>` — the member *names* differ
+/// (`VideoSource` against `VideoSourceConfiguration`), the *sequence* is a
+/// different declaration in a different schema, and two of the *types* differ
 /// (`VideoEncoder2Configuration`, `AudioEncoder2Configuration`). Two genuinely
 /// different shapes over the same [`ProfileEntry`], which is why the state is
 /// shared and the renderers are not.
 ///
-/// **This renderer emits a token attribute and no body, which is a known
-/// simplification, not the schema shape.** `tr2:ConfigurationSet` types each
-/// member as the full configuration, exactly as Media1 does; a conformant Media2
-/// device inlines it. The consequence is visible: `MediaProfile2`'s
-/// `video_source_token` is read from a `SourceToken` *inside* the video source
-/// configuration, so against this mock it is always `None`. Tracked in
-/// `docs/active/mock-schema-conformance-2026-08.md`.
-fn render_profile_media2(p: &ProfileEntry, tag: &str) -> String {
-    let mut cfgs = String::new();
-    if let Some(t) = &p.video_source_config_token {
-        cfgs.push_str(&format!("<tr2:VideoSource token=\"{t}\"/>"));
-    }
-    if let Some(t) = &p.video_encoder_config_token {
-        cfgs.push_str(&format!("<tr2:VideoEncoder token=\"{t}\"/>"));
-    }
-    if let Some(t) = &p.audio_source_config_token {
-        cfgs.push_str(&format!("<tr2:AudioSource token=\"{t}\"/>"));
-    }
-    if let Some(t) = &p.audio_encoder_config_token {
-        cfgs.push_str(&format!("<tr2:AudioEncoder token=\"{t}\"/>"));
-    }
+/// **Each member carries the whole configuration, not a token reference.**
+/// `tr2:ConfigurationSet` types every member as the full configuration —
+/// `VideoSource` is `tt:VideoSourceConfiguration`, the same type `tt:Profile`
+/// inlines — so a conformant Media2 device sends the body, and this renderer
+/// now does too. It emitted `<tr2:VideoSource token="…"/>` and nothing else
+/// until 0.15, which was five distinct required-member violations at once and
+/// left `MediaProfile2::video_source_token` permanently `None`, because that
+/// field is read from a `SourceToken` *inside* the configuration.
+///
+/// The `token` attribute stays: it is `use="required"` on every one of these
+/// types, and the five `*_token` fields on [`MediaProfile2`] read it.
+///
+/// Every body comes from the same helper the corresponding list getter uses, so
+/// a profile can never disagree with `GetVideoEncoderConfigurations` about a
+/// configuration they both name.
+///
+/// [`MediaProfile2`]: crate::MediaProfile2
+fn render_profile_media2(p: &ProfileEntry, tag: &str, cat: &media::Catalogues) -> String {
+    // Declaration order of `tr2:ConfigurationSet`: VideoSource, AudioSource,
+    // VideoEncoder, AudioEncoder, Analytics, PTZ, … — audio source sits
+    // *between* the two video members. This emitted the two video members
+    // together until 0.15.
+    let vsc = p
+        .video_source_config_token
+        .as_deref()
+        .and_then(|t| cat.vscs.iter().find(|c| c.token == t))
+        .map(|c| media::render_vsc_body(c, "tr2:VideoSource"))
+        .unwrap_or_default();
+    let asc = p
+        .audio_source_config_token
+        .as_deref()
+        .and_then(|t| cat.ascs.iter().find(|c| c.token == t))
+        .map(|c| media::render_audio_source_config(c, "tr2:AudioSource"))
+        .unwrap_or_default();
+    let vec = p
+        .video_encoder_config_token
+        .as_deref()
+        .and_then(|t| cat.vecs.iter().find(|c| c.token == t))
+        .map(|c| render_video_encoder(c, "tr2:VideoEncoder"))
+        .unwrap_or_default();
+    let aec = p
+        .audio_encoder_config_token
+        .as_deref()
+        .and_then(|t| cat.aecs.iter().find(|c| c.token == t))
+        .map(|c| render_audio_encoder_media2(c, "tr2:AudioEncoder"))
+        .unwrap_or_default();
     // `MediaProfile2::ptz_config_token` reads `Configurations/PTZ@token` and
     // nothing ever fed it: neither profile renderer emitted a PTZ element, and
-    // `ProfileEntry` had no slot to emit from.
-    if let Some(t) = &p.ptz_config_token {
-        cfgs.push_str(&format!("<tr2:PTZ token=\"{t}\"/>"));
-    }
+    // `ProfileEntry` had no slot to emit from. `PTZ` is `tt:PTZConfiguration`
+    // here and in `tt:Profile`, so both services render it from
+    // `ptz::render_config`.
+    let ptz = p
+        .ptz_config_token
+        .as_deref()
+        .and_then(|t| cat.ptzs.iter().find(|c| c.token == t))
+        .map(|c| super::ptz::render_config(c, "tr2:PTZ"))
+        .unwrap_or_default();
     // A profile with nothing bound omits the wrapper rather than sending an
     // empty one — a freshly created profile is exactly that case.
-    let configurations = if cfgs.is_empty() {
-        String::new()
-    } else {
-        format!("<tr2:Configurations>{cfgs}</tr2:Configurations>")
-    };
+    let configurations =
+        if vsc.is_empty() && asc.is_empty() && vec.is_empty() && aec.is_empty() && ptz.is_empty() {
+            String::new()
+        } else {
+            format!("<tr2:Configurations>{vsc}{asc}{vec}{aec}{ptz}</tr2:Configurations>")
+        };
     // `tr2:Name`, not `tt:Name`: `tr2:MediaProfile` declares `Name` locally and
     // `media2.wsdl` sets `elementFormDefault="qualified"`, so it is in the
     // Media2 namespace. Media1's `tt:Profile` declares its own `Name` in
@@ -81,9 +114,10 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str) -> String {
 /// 4.
 pub fn resp_profiles_media2(state: &SharedState) -> String {
     let snapshot = state.read().profiles.profiles.clone();
+    let cat = media::catalogues(state);
     let items: String = snapshot
         .iter()
-        .map(|p| render_profile_media2(p, "Profiles"))
+        .map(|p| render_profile_media2(p, "Profiles", &cat))
         .collect();
     soap(
         NS,
@@ -245,7 +279,7 @@ pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> Str
     let items: String = vecs
         .iter()
         .filter(|c| want.as_deref().is_none_or(|t| t == c.token))
-        .map(render_video_encoder)
+        .map(|c| render_video_encoder(c, "tr2:Configurations"))
         .collect();
     soap(
         NS,
@@ -361,11 +395,17 @@ pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -
     }
 }
 
-/// Render one `<tr2:Configurations>` element from encoder state, in the flat
-/// Media2 shape `VideoEncoderConfiguration2::from_xml` expects.
-fn render_video_encoder(ve: &VideoEncoderState) -> String {
+/// One `tt:VideoEncoder2Configuration`, in the flat Media2 shape
+/// `VideoEncoderConfiguration2::from_xml` expects.
+///
+/// `qname` differs by context — `tr2:Configurations` in the list getter,
+/// `tr2:VideoEncoder` inlined in a profile. One body for both, because
+/// `tr2:ConfigurationSet/VideoEncoder` and
+/// `tr2:GetVideoEncoderConfigurationsResponse/Configurations` are the *same*
+/// type; a second copy could drift and nothing here would notice.
+fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> String {
     format!(
-        r#"<tr2:Configurations token="{token}">
+        r#"<{qname} token="{token}">
             <tt:Name>{name}</tt:Name>
             <tt:UseCount>{use_count}</tt:UseCount>
             <tt:Encoding>{encoding}</tt:Encoding>
@@ -377,7 +417,7 @@ fn render_video_encoder(ve: &VideoEncoderState) -> String {
             <tt:GovLength>{gov}</tt:GovLength>
             <tt:Profile>{profile}</tt:Profile>
             <tt:Quality>{quality}</tt:Quality>
-          </tr2:Configurations>"#,
+          </{qname}>"#,
         token = ve.token,
         name = ve.name,
         use_count = ve.use_count,

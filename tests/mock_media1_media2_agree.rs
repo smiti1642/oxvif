@@ -114,11 +114,16 @@ async fn both_services_agree_on_the_default_device_too() {
 /// **The PTZ binding must agree too, and the default device must show both
 /// answers.**
 ///
-/// Media1 inlines the whole `<tt:PTZConfiguration>` inside the profile; Media2
-/// emits `<tr2:PTZ token="…"/>` inside `<tr2:Configurations>`. Two genuinely
+/// Media1 inlines the whole `<tt:PTZConfiguration>` as a sibling of `Name`;
+/// Media2 inlines it as `<tr2:PTZ>` inside `<tr2:Configurations>`. Two genuinely
 /// different shapes over one `ProfileEntry.ptz_config_token` — the same
 /// arrangement that let the profile *list* drift, which is what this file
 /// exists for.
+///
+/// This comment said Media2 "emits `<tr2:PTZ token="…"/>`" until 0.15. It did,
+/// and that was the defect: `tr2:ConfigurationSet` types `PTZ` as
+/// `tt:PTZConfiguration`, the same type Media1 inlines, so both now render from
+/// `ptz::render_config` and cannot describe one configuration two ways.
 ///
 /// Neither renderer emitted a PTZ element at all before this change:
 /// `MediaProfile::ptz_config_token` and `MediaProfile2::ptz_config_token` were
@@ -525,12 +530,109 @@ async fn a_media2_configuration_binding_is_visible_to_media1() {
         Some("VSC_2"),
         "a Media2 binding must be visible to Media1",
     );
-    // Media1 inlines the whole configuration, so it also resolves the *source*
-    // behind the config — the token reference Media2 sends does not.
+    // Both services inline the whole configuration, so both resolve the bound
+    // config to its physical source. Media2 emitted `<tr2:VideoSource
+    // token="…"/>` until 0.15, which left this permanently `None` on that side
+    // and made "Media1 resolves it, Media2 does not" read like a property of the
+    // two schemas rather than the mock defect it was.
     assert_eq!(
         via_media1.video_source_token.as_deref(),
         Some("VS_2"),
         "Media1 resolves the bound config to its physical source",
+    );
+    let via_media2 = client
+        .get_profiles_media2(&media2_url)
+        .await
+        .expect("Media2 GetProfiles")
+        .into_iter()
+        .find(|p| p.token == token)
+        .expect("the created profile is on Media2 too");
+    assert_eq!(
+        (
+            via_media2.video_source_config_token.as_deref(),
+            via_media2.video_source_token.as_deref()
+        ),
+        (Some("VSC_2"), Some("VS_2")),
+        "Media2 must resolve the same binding to the same physical source",
+    );
+}
+
+/// Inlining is only worth anything if the inlined copy is **read from the same
+/// state the list getter reads**, so a write through either service shows up
+/// inside every profile bound to that configuration.
+///
+/// A renderer that inlined a plausible constant would satisfy every other test
+/// in this file: the token sets would match, the bindings would match, and the
+/// required members would all be present. Only mutating a configuration and
+/// re-reading it *through a profile* can tell the two apart.
+#[tokio::test]
+async fn a_config_write_shows_inside_both_services_profiles() {
+    let server = MockServer::start().await.unwrap();
+    let client = OnvifClient::new(server.device_url());
+    let media_url = format!("{}/onvif/media", server.base_url());
+    let media2_url = format!("{}/onvif/media2", server.base_url());
+
+    // Which profiles are bound to VSC_1, and what source do they report now?
+    let bound_to_vsc1 = |ps: Vec<oxvif::MediaProfile2>| -> Vec<(String, Option<String>)> {
+        ps.into_iter()
+            .filter(|p| p.video_source_config_token.as_deref() == Some("VSC_1"))
+            .map(|p| (p.token, p.video_source_token))
+            .collect()
+    };
+    let before = bound_to_vsc1(
+        client
+            .get_profiles_media2(&media2_url)
+            .await
+            .expect("Media2 GetProfiles"),
+    );
+    assert!(
+        !before.is_empty(),
+        "no profile is bound to VSC_1, so this test cannot observe the write"
+    );
+    assert!(
+        before.iter().all(|(_, s)| s.as_deref() == Some("VS_1")),
+        "the fixture must start somewhere other than where we write: {before:?}"
+    );
+
+    // Repoint VSC_1 at the *other* sensor through Media1.
+    let mut cfg = client
+        .get_video_source_configuration(&media_url, "VSC_1")
+        .await
+        .expect("read VSC_1");
+    cfg.source_token = "VS_2".into();
+    client
+        .set_video_source_configuration(&media_url, &cfg)
+        .await
+        .expect("Media1 SetVideoSourceConfiguration");
+
+    let after2 = bound_to_vsc1(
+        client
+            .get_profiles_media2(&media2_url)
+            .await
+            .expect("Media2 GetProfiles"),
+    );
+    assert!(
+        after2.iter().all(|(_, s)| s.as_deref() == Some("VS_2")),
+        "Media2 inlines a copy that does not track the catalogue: {after2:?}"
+    );
+    assert_eq!(
+        after2.len(),
+        before.len(),
+        "the same profiles must still be bound to VSC_1"
+    );
+
+    // …and Media1's inline copy moved with it, from the same catalogue.
+    let after1: Vec<(String, Option<String>)> = client
+        .get_profiles(&media_url)
+        .await
+        .expect("Media1 GetProfiles")
+        .into_iter()
+        .filter(|p| p.video_source_config_token.as_deref() == Some("VSC_1"))
+        .map(|p| (p.token, p.video_source_token))
+        .collect();
+    assert_eq!(
+        after1, after2,
+        "the two services disagree about the source behind VSC_1 after a write",
     );
 }
 
