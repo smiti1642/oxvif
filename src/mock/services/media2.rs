@@ -228,6 +228,12 @@ pub fn resp_video_source_configuration_options_media2(state: &SharedState, body:
 /// `ProfilesSupported` was visible at all, and only because no `tt:` element
 /// anywhere is spelled that way (Media1 says `H264ProfilesSupported`).
 ///
+/// **That last sentence is now history, not a live limitation.** The checker
+/// reads `xs:attribute` as of 0.15 and reports `ATTR-AS-ELEMENT`, which asks
+/// whether a name the type *declares* is on the right side of the
+/// element/attribute line — a question no `xs:any` can suppress. Putting any of
+/// the three back opens a row.
+///
 /// There is no `FrameRateRange` on this type. The mock emitted one, and the
 /// checker could not see that either: `FrameRateRange` *is* a real `tt:` element
 /// on `H264Options` and `Mpeg4Options`, the Media1 types. It is replaced here by
@@ -439,7 +445,9 @@ pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -
 /// `Resolution`, `RateControl`, `Multicast` and `Quality` as child elements.
 /// This rendered them as elements until 0.15, agreeing with the client bug it
 /// was written beside — and the type carries an `xs:any`, so the shape checker's
-/// `UNKNOWN-CHILD` rule could not report `GovLength` at all.
+/// `UNKNOWN-CHILD` rule could not report `GovLength` at all. Its
+/// `ATTR-AS-ELEMENT` rule, added later in 0.15, can: reverting this line opens
+/// two rows, one here and one on the profile that inlines the same helper.
 fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> String {
     format!(
         r#"<{qname} token="{token}" GovLength="{gov}" Profile="{profile}">

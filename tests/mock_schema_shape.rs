@@ -37,14 +37,30 @@
 //! have let this release's client bug back in silently.
 //!
 //! Nine for nine by hand is not a strategy, and **every count in [`PINS`] being
-//! zero does not say the class is closed.** Three things this file structurally
-//! cannot see keep it open: it reads `xs:element` and never `xs:attribute`, so
-//! a member moved to an attribute is invisible in both directions; a type
-//! carrying an `xs:any` sets `Ty::wild` and suppresses `UNKNOWN-CHILD` for the
-//! whole type; and an element whose children are all optional is schema-valid
-//! empty. Four of the ten instances above were found *in spite of* the counts
-//! rather than by them. Worse, **no other test in this repository can see any
-//! of it**:
+//! zero does not say the class is closed.** Two things this file structurally
+//! cannot see keep it open: a type carrying an `xs:any` sets `Ty::wild` and
+//! suppresses `UNKNOWN-CHILD` for the whole type; and an element whose children
+//! are all optional is schema-valid empty. Four of the ten instances above were
+//! found *in spite of* the counts rather than by them.
+//!
+//! **This paragraph said *three* things until §5.11**, and the third was that
+//! the file read `xs:element` and never `xs:attribute`. It does now — see
+//! `MISSING-ATTR`, `UNKNOWN-ATTR`, `ATTR-AS-ELEMENT` and `ELEMENT-AS-ATTR` in
+//! [`PINS`]. The one worth knowing about is `ATTR-AS-ELEMENT`, because it is
+//! the *only* check here an `xs:any` cannot suppress: a wildcard licenses
+//! children the type does not name, and a name the type declares on the
+//! attribute side is not one of those. That is measured — putting `GovLength`
+//! back as an element, the defect §5.5 records as having moved **nothing**,
+//! now opens two rows.
+//!
+//! Reading attributes does not shrink the first blind spot, and it is worth
+//! saying why rather than leaving it to look like an oversight: 325 of the
+//! set's 335 `xs:anyAttribute`s are `##any`, as are 290 of the 393 `xs:any`s,
+//! and both wildcards on `tt:VideoEncoder2Configuration` are. So refining the
+//! wildcard by its `namespace=` — the obvious next move — would not have caught
+//! any instance in the table above.
+//!
+//! Worse, **no other test in this repository can see any of it**:
 //! `XmlNode` is namespace-stripped (`src/soap/xml.rs`) and every lookup matches
 //! the local name only, so oxvif's own parser is namespace-blind and
 //! order-independent. A response with every element in the wrong namespace, in
@@ -86,7 +102,16 @@
 //! ## What it cannot see
 //!
 //! - **Values.** Ranges, enumerations, lexical spaces. A structural index
-//!   carries names and cardinality.
+//!   carries names and cardinality. This is where reading attributes helps
+//!   *least*: an `xs:list`-typed attribute holds a whole space-separated
+//!   collection, so `ProfilesSupported="Main High"` and a one-element list are
+//!   the same shape.
+//! - **An optional attribute the mock never emits.** 49 of the reached types
+//!   declare attributes and the mock emits far fewer than it could —
+//!   `tt:SecurityCapabilities` 18 of 23, `tt:VideoEncoder2Configuration` 3 of
+//!   7. Every one of those is `use="optional"`, so absence is legal and no
+//!   check can call it. It is also exactly how `FrameRatesSupported` hid: a
+//!   member the mock never emitted under any spelling.
 //! - **An empty element whose children are all optional.** `<tt:SupportedPTZSpaces/>`
 //!   was a real 0.15.0 defect and is schema-valid. Shape checking answers *is
 //!   this well-formed*, never *does it mean anything*.
@@ -105,6 +130,7 @@ use oxvif::transport::Transport;
 // ── Namespace URIs. The only external constants this file is allowed. ────────
 
 const XS: &str = "http://www.w3.org/2001/XMLSchema";
+const XSI: &str = "http://www.w3.org/2001/XMLSchema-instance";
 const WSDL: &str = "http://schemas.xmlsoap.org/wsdl/";
 const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 
@@ -202,11 +228,14 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///     an `xs:any`, which sets `Ty::wild` and suppresses `UNKNOWN-CHILD` for
 ///     the whole type. A wildcarded type is a blind spot for *every* misplaced
 ///     child whose name exists somewhere in the namespace.
-///   - Nothing here reads attributes at all. A row disappearing proves the
-///     element is gone, **not** that the attribute that replaced it is spelled
-///     right or carried at all. `tests/mock_workflow.rs`'s
+///   - Nothing here read attributes at all *when this was written*, so a row
+///     disappearing proved the element was gone and **not** that the attribute
+///     replacing it was spelled right or carried at all.
+///     `tests/mock_workflow.rs`'s
 ///     `media2_encoder_gov_length_and_profile_are_attributes` is what asserts
 ///     that, by driving the client against the mock and reading the values.
+///     §5.11 closed the gap in this file too: `GovLength` as an element is now
+///     two `ATTR-AS-ELEMENT` rows.
 /// - §5.6, the whole `GetCapabilities` tree — `MISSING-REQUIRED` 16 → **11**,
 ///   `UNKNOWN-NAME` 7 → **6**, `ORDER` and `UNKNOWN-CHILD` unmoved. Six rows,
 ///   two independent halves, perturbed separately.
@@ -275,9 +304,10 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   element. Both were client defects — the seventh and eighth of the sweep.
 ///
 ///   **Only one of the six was ever visible here, and the count is the weakest
-///   evidence in this list.** Nothing in this file reads attributes at all, so
-///   a closed row proves the element is gone and says nothing about whether the
-///   attribute that replaced it is spelled right or read at all. On top of that:
+///   evidence in this list.** Nothing in this file read attributes when this was
+///   written (§5.11 changed that), so a closed row proved the element was gone
+///   and said nothing about whether the attribute replacing it was spelled right
+///   or read at all. On top of that:
 ///
 ///   - `GovLengthRange` and `FrameRateRange` moved **nothing**. Both are real
 ///     `tt:` elements on `H264Options` / `Mpeg4Options` — the *Media1* options
@@ -365,12 +395,48 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   `tests/mock_workflow.rs`, plus the health cross-check, whose comparison set
 ///   grew from 17 facts to 24 because seven of the newly modelled members are
 ///   also `xs:attribute`s of `tds:SecurityCapabilities`.
+/// - §5.11, reading `xs:attribute` — four new kinds, **all four at 0 on the
+///   first run**, and the five element kinds unmoved. A first run that passes
+///   has proved nothing, so each was perturbed on its own:
+///
+///   | kind | perturbation | rows |
+///   |---|---|---|
+///   | `ATTR-AS-ELEMENT` | `GovLength` back to a child element | 2 |
+///   | `MISSING-ATTR` | required `token=` renamed on the encoder | 2 |
+///   | `UNKNOWN-ATTR` | `Bogus="1"` on a `tt:FloatRange` | 1 |
+///   | `ELEMENT-AS-ATTR` | `Name` moved to an attribute | 2 |
+///
+///   **The zero is worth less than the four perturbations are.** It says the
+///   172 anchored nodes on the 49 attribute-declaring types the corpus reaches
+///   carry every one of their 27 required attributes and nothing undeclared —
+///   not that the mock is attribute-conformant, and certainly not that the
+///   *client* reads the attributes ONVIF declares. Four of the sweep's eleven
+///   client bugs were element/attribute confusions and this file could see none
+///   of them; it can now see the half that shows up in the mock's output, which
+///   is the half that made three of those four visible in the first place.
+///
+///   Two things the perturbations settled that the counts could not:
+///
+///   - **`ATTR-AS-ELEMENT` and `ELEMENT-AS-ATTR` fire through an `xs:any` /
+///     `xs:anyAttribute`.** Both perturbations above landed on
+///     `tt:VideoEncoder2Configuration`, which carries both wildcards. They ask
+///     whether a name the type *declares* is on the right side of the
+///     element/attribute line, and no wildcard licenses that.
+///   - **`UNKNOWN-ATTR` does not.** Renaming `token=` to `NotAToken=` opened a
+///     `MISSING-ATTR` row and **no** `UNKNOWN-ATTR` row, because that type's
+///     `xs:anyAttribute` is `##any`. `UNKNOWN-ATTR` is live on the 386 anchored
+///     nodes whose type has neither attributes nor a wildcard, and blind on the
+///     rest — the attribute-side mirror of `Ty::wild`, with the same shape.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
     ("MISSING-REQUIRED", 0),
     ("UNKNOWN-NAME", 0),
     ("UNKNOWN-CHILD", 0),
     ("ORDER", 0),
+    ("MISSING-ATTR", 0),
+    ("UNKNOWN-ATTR", 0),
+    ("ATTR-AS-ELEMENT", 0),
+    ("ELEMENT-AS-ATTR", 0),
 ];
 
 /// Floors on what the run actually covered.
@@ -384,6 +450,14 @@ const TYPE_FLOOR: usize = 1_200;
 const ANCHORED_FLOOR: usize = 550;
 /// Responses carrying a payload rather than a SOAP fault.
 const PAYLOAD_FLOOR: usize = 100;
+/// Emitted attributes compared against a declaration. Measured 334 across 172
+/// anchored nodes on 49 attribute-declaring types, 27 of which carry a required
+/// attribute.
+///
+/// The four attribute kinds are the only checks here whose *input* can vanish
+/// without any of them going red — a renderer rewrite that stopped emitting
+/// attributes would leave them all at zero and read as clean.
+const ATTR_FLOOR: usize = 250;
 
 // ── A minimal namespace-aware XML tree ───────────────────────────────────────
 //
@@ -394,20 +468,32 @@ const PAYLOAD_FLOOR: usize = 100;
 
 type Qn = (String, String);
 
+/// An attribute with its prefix already resolved. Namespace declarations are
+/// dropped here: `xmlns:tt="…"` is not an attribute of the element it sits on.
+#[derive(Debug)]
+struct Attrib {
+    ns: String,
+    local: String,
+    value: String,
+}
+
 #[derive(Debug)]
 struct Node {
     ns: String,
     local: String,
-    attrs: Vec<(String, String)>,
+    attrs: Vec<Attrib>,
     kids: Vec<Node>,
 }
 
 impl Node {
+    /// Every attribute this file reads off a *schema* node (`name`, `type`,
+    /// `ref`, `minOccurs`, `use`, `form`, `targetNamespace`, …) is unprefixed,
+    /// so looking only in the empty namespace is the whole contract.
     fn attr(&self, name: &str) -> Option<&str> {
         self.attrs
             .iter()
-            .find(|(k, _)| k == name)
-            .map(|(_, v)| v.as_str())
+            .find(|a| a.ns.is_empty() && a.local == name)
+            .map(|a| a.value.as_str())
     }
 
     fn xs_kids<'a>(&'a self, local: &'a str) -> impl Iterator<Item = &'a Node> {
@@ -500,7 +586,18 @@ fn resolve_tree(r: Raw, px: &HashMap<String, String>) -> Node {
     Node {
         ns: px.get(prefix).cloned().unwrap_or_default(),
         local: local.to_string(),
-        attrs: r.attrs,
+        attrs: r
+            .attrs
+            .into_iter()
+            .filter_map(|(k, value)| {
+                let (ns, local) = split_attr(&k, px)?;
+                Some(Attrib {
+                    ns,
+                    local: local.to_string(),
+                    value,
+                })
+            })
+            .collect(),
         kids: r.kids.into_iter().map(|k| resolve_tree(k, px)).collect(),
     }
 }
@@ -531,6 +628,19 @@ struct Child {
     group: Option<u32>,
 }
 
+/// An `xs:attribute` on a type.
+///
+/// `ns` is almost always empty: `attributeFormDefault` is `unqualified` (or
+/// absent, which means the same) on every schema in the set, and only three
+/// declarations in it use `ref=`. An unprefixed attribute is in *no* namespace
+/// — unlike an element, it never picks up the default `xmlns`.
+#[derive(Clone)]
+struct Attr {
+    ns: String,
+    name: String,
+    required: bool,
+}
+
 #[derive(Default)]
 struct Ty {
     base: Option<Qn>,
@@ -540,6 +650,12 @@ struct Ty {
     wild: bool,
     /// choice id -> its `minOccurs`.
     groups: BTreeMap<u32, u32>,
+    attrs: Vec<Attr>,
+    /// The attribute-side mirror of [`Ty::wild`]: an `xs:anyAttribute`. 336 of
+    /// the set's 1314 types carry one and all but ten are `##any`, so
+    /// `UNKNOWN-ATTR` is suppressed on a quarter of the index — but *not* on
+    /// `ATTR-AS-ELEMENT`, which asks a question no wildcard can answer.
+    wild_attr: bool,
 }
 
 #[derive(Default)]
@@ -572,17 +688,61 @@ fn anon_name(owner: &str, local: &str) -> String {
 
 type Px = HashMap<String, String>;
 
+/// One `xs:schema`'s resolution context: prefix map, target namespace and the
+/// two `*FormDefault`s that decide whether a locally-declared name is qualified.
+///
+/// Bundled rather than threaded because the element and attribute walks need
+/// different halves of it and both are already recursive.
+struct Sch<'a> {
+    px: &'a Px,
+    tns: &'a str,
+    efd: &'a str,
+    afd: &'a str,
+}
+
+impl Sch<'_> {
+    /// The namespace a *locally declared* element takes.
+    fn el_ns(&self, form: Option<&str>) -> String {
+        if form.unwrap_or(self.efd) == "qualified" {
+            self.tns.to_string()
+        } else {
+            String::new()
+        }
+    }
+
+    /// The same for an attribute. Separate default, and the set says
+    /// `unqualified` everywhere — but reading it is what keeps that a
+    /// measurement rather than a constant this file is not allowed to hold.
+    fn attr_ns(&self, form: Option<&str>) -> String {
+        if form.unwrap_or(self.afd) == "qualified" {
+            self.tns.to_string()
+        } else {
+            String::new()
+        }
+    }
+}
+
 impl Index {
-    fn load_schema_node(&mut self, sch: &Node, px: &Px) {
-        let tns = sch.attr("targetNamespace").unwrap_or("").to_string();
-        let efd = sch
+    fn load_schema_node(&mut self, node: &Node, px: &Px) {
+        let tns = node.attr("targetNamespace").unwrap_or("").to_string();
+        let efd = node
             .attr("elementFormDefault")
             .unwrap_or("unqualified")
             .to_string();
+        let afd = node
+            .attr("attributeFormDefault")
+            .unwrap_or("unqualified")
+            .to_string();
+        let sch = Sch {
+            px,
+            tns: &tns,
+            efd: &efd,
+            afd: &afd,
+        };
         self.known_ns.insert(tns.clone());
 
         // Global elements first: an `xs:element ref=` may point at one.
-        for el in sch.xs_kids("element") {
+        for el in node.xs_kids("element") {
             let Some(nm) = el.attr("name") else { continue };
             let nm = nm.to_string();
             let mut ty = el.attr("type").and_then(|v| qname(v, px, &tns));
@@ -590,39 +750,29 @@ impl Index {
                 && let Some(inline) = el.xs_kids("complexType").next()
             {
                 let qn = (tns.clone(), anon_name("", &nm));
-                let t = self.parse_type(inline, px, &tns, &efd, &nm);
+                let t = self.parse_type(inline, &sch, &nm);
                 self.types.insert(qn.clone(), t);
                 ty = Some(qn);
             }
             self.globals.insert((tns.clone(), nm.clone()), ty);
             self.declared.insert((tns.clone(), nm));
         }
-        for ct in sch.xs_kids("complexType") {
+        for ct in node.xs_kids("complexType") {
             if let Some(nm) = ct.attr("name") {
                 let nm = nm.to_string();
-                let t = self.parse_type(ct, px, &tns, &efd, &nm);
+                let t = self.parse_type(ct, &sch, &nm);
                 self.types.insert((tns.clone(), nm), t);
             }
         }
     }
 
-    fn parse_type(&mut self, node: &Node, px: &Px, tns: &str, efd: &str, owner: &str) -> Ty {
+    fn parse_type(&mut self, node: &Node, sch: &Sch, owner: &str) -> Ty {
         let mut t = Ty::default();
-        self.walk_type(node, px, tns, efd, owner, None, &mut t);
+        self.walk_type(node, sch, owner, None, &mut t);
         t
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn walk_type(
-        &mut self,
-        n: &Node,
-        px: &Px,
-        tns: &str,
-        efd: &str,
-        owner: &str,
-        group: Option<u32>,
-        t: &mut Ty,
-    ) {
+    fn walk_type(&mut self, n: &Node, sch: &Sch, owner: &str, group: Option<u32>, t: &mut Ty) {
         for c in &n.kids {
             if c.ns != XS {
                 continue;
@@ -633,34 +783,30 @@ impl Index {
                 // parent.
                 "complexType" | "annotation" => {}
                 "extension" => {
-                    t.base = c.attr("base").and_then(|v| qname(v, px, tns));
-                    self.walk_type(c, px, tns, efd, owner, group, t);
+                    t.base = c.attr("base").and_then(|v| qname(v, sch.px, sch.tns));
+                    self.walk_type(c, sch, owner, group, t);
                 }
                 "any" => t.wild = true,
+                "anyAttribute" => t.wild_attr = true,
+                // Terminal: an `xs:attribute` can hold only an inline
+                // `xs:simpleType`, so descending would find nothing and the
+                // `_` arm's recursion would be wasted.
+                "attribute" => add_attribute(c, sch, t),
                 "choice" => {
                     self.next_group += 1;
                     let g = self.next_group;
                     t.groups
                         .insert(g, u32::from(c.attr("minOccurs") != Some("0")));
-                    self.walk_type(c, px, tns, efd, owner, Some(g), t);
+                    self.walk_type(c, sch, owner, Some(g), t);
                 }
-                "element" => self.add_element(c, px, tns, efd, owner, group, t),
-                _ => self.walk_type(c, px, tns, efd, owner, group, t),
+                "element" => self.add_element(c, sch, owner, group, t),
+                _ => self.walk_type(c, sch, owner, group, t),
             }
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn add_element(
-        &mut self,
-        c: &Node,
-        px: &Px,
-        tns: &str,
-        efd: &str,
-        owner: &str,
-        group: Option<u32>,
-        t: &mut Ty,
-    ) {
+    fn add_element(&mut self, c: &Node, sch: &Sch, owner: &str, group: Option<u32>, t: &mut Ty) {
+        let (px, tns) = (sch.px, sch.tns);
         if let Some(r) = c.attr("ref") {
             let Some((ns, local)) = qname(r, px, tns) else {
                 return;
@@ -681,18 +827,14 @@ impl Index {
             return;
         }
         let local = c.attr("name").unwrap_or("").to_string();
-        let ns = if efd == "qualified" {
-            tns.to_string()
-        } else {
-            String::new()
-        };
+        let ns = sch.el_ns(c.attr("form"));
         let mut ty = c.attr("type").and_then(|v| qname(v, px, tns));
         if ty.is_none()
             && let Some(inline) = c.xs_kids("complexType").next()
         {
             let qn = (tns.to_string(), anon_name(owner, &local));
             let sub_owner = format!("{owner}/{local}");
-            let sub = self.parse_type(inline, px, tns, efd, &sub_owner);
+            let sub = self.parse_type(inline, sch, &sub_owner);
             self.types.insert(qn.clone(), sub);
             ty = Some(qn);
         }
@@ -728,34 +870,81 @@ impl Index {
         Ok(())
     }
 
-    /// Children, wildcard and choice groups for a type, following `xs:extension`.
-    fn resolve(&self, ty: Option<&Qn>) -> (Vec<Child>, bool, BTreeMap<u32, u32>) {
-        fn go(
-            ix: &Index,
-            ty: Option<&Qn>,
-            seen: &mut HashSet<Qn>,
-        ) -> (Vec<Child>, bool, BTreeMap<u32, u32>) {
+    /// Children, attributes, wildcards and choice groups for a type, following
+    /// `xs:extension`.
+    fn resolve(&self, ty: Option<&Qn>) -> Resolved {
+        fn go(ix: &Index, ty: Option<&Qn>, seen: &mut HashSet<Qn>) -> Resolved {
             let Some(q) = ty else {
-                return (Vec::new(), false, BTreeMap::new());
+                return Resolved::default();
             };
             if seen.contains(q) {
-                return (Vec::new(), false, BTreeMap::new());
+                return Resolved::default();
             }
             let Some(t) = ix.types.get(q) else {
-                return (Vec::new(), false, BTreeMap::new());
+                return Resolved::default();
             };
             seen.insert(q.clone());
-            let (mut kids, mut wild, mut groups) = (Vec::new(), t.wild, t.groups.clone());
+            let mut r = Resolved {
+                wild: t.wild,
+                wild_attr: t.wild_attr,
+                groups: t.groups.clone(),
+                ..Resolved::default()
+            };
             if let Some(b) = &t.base {
-                let (bk, bw, bg) = go(ix, Some(b), seen);
-                kids.extend(bk);
-                wild = wild || bw;
-                groups.extend(bg);
+                let base = go(ix, Some(b), seen);
+                r.kids.extend(base.kids);
+                r.attrs.extend(base.attrs);
+                r.wild = r.wild || base.wild;
+                r.wild_attr = r.wild_attr || base.wild_attr;
+                r.groups.extend(base.groups);
             }
-            kids.extend(t.kids.iter().cloned());
-            (kids, wild, groups)
+            r.kids.extend(t.kids.iter().cloned());
+            r.attrs.extend(t.attrs.iter().cloned());
+            r
         }
         go(self, ty, &mut HashSet::new())
+    }
+}
+
+#[derive(Default)]
+struct Resolved {
+    kids: Vec<Child>,
+    attrs: Vec<Attr>,
+    wild: bool,
+    wild_attr: bool,
+    groups: BTreeMap<u32, u32>,
+}
+
+/// An `xs:attribute` inside a type: either a local declaration or a `ref=` at
+/// a global one, whose QName carries the namespace on its own.
+fn add_attribute(c: &Node, sch: &Sch, t: &mut Ty) {
+    let required = c.attr("use") == Some("required");
+    let (ns, name) = match c.attr("ref") {
+        Some(r) => match qname(r, sch.px, sch.tns) {
+            Some(q) => q,
+            None => return,
+        },
+        None => match c.attr("name") {
+            Some(n) => (sch.attr_ns(c.attr("form")), n.to_string()),
+            None => return,
+        },
+    };
+    t.attrs.push(Attr { ns, name, required });
+}
+
+/// Split an emitted attribute key into (namespace, local name).
+///
+/// Namespace declarations are not attributes for this purpose, and an
+/// unprefixed attribute is in **no** namespace — it does not inherit the
+/// default `xmlns` the way an element does.
+fn split_attr<'a>(key: &'a str, px: &Px) -> Option<(String, &'a str)> {
+    if key == "xmlns" {
+        return None;
+    }
+    match key.split_once(':') {
+        Some(("xmlns", _)) => None,
+        Some((p, local)) => Some((px.get(p).cloned().unwrap_or_default(), local)),
+        None => Some((String::new(), key)),
     }
 }
 
@@ -772,11 +961,16 @@ struct Run {
     findings: Vec<Finding>,
     anchored: usize,
     unanchored_children: usize,
+    /// Emitted attributes actually compared against a declaration. Zero here
+    /// with the attribute checks in place would mean the walk indexes nothing
+    /// and all four attribute kinds pass vacuously — see [`ATTR_FLOOR`].
+    attrs_checked: usize,
     /// Roots with no global element declaration. SOAP faults belong here and
     /// are not defects; anything else needs explaining before it is dismissed.
     unanchored_roots: Vec<(String, String, String)>,
-    /// Elements a WRONG-NS row already explains, so the name check stays quiet.
-    ns_explained: HashSet<(String, String, String, String)>,
+    /// Elements a `WRONG-NS` or `ATTR-AS-ELEMENT` row already explains, so the
+    /// name check does not bill the same defect twice.
+    explained: HashSet<(String, String, String, String)>,
 }
 
 impl Run {
@@ -789,7 +983,13 @@ impl Run {
     }
 
     fn check_anchored(&mut self, ix: &Index, doc: &str, node: &Node, ty: &Qn, path: &str) {
-        let (kids, wild, groups) = ix.resolve(Some(ty));
+        let Resolved {
+            kids,
+            attrs,
+            wild,
+            wild_attr,
+            groups,
+        } = ix.resolve(Some(ty));
         let by: HashMap<Qn, &Child> = kids
             .iter()
             .map(|k| ((k.ns.clone(), k.name.clone()), k))
@@ -802,6 +1002,14 @@ impl Run {
             .iter()
             .map(|k| (k.ns.clone(), k.name.clone()))
             .collect();
+        let by_attr: HashSet<Qn> = attrs
+            .iter()
+            .map(|a| (a.ns.clone(), a.name.clone()))
+            .collect();
+        // Attributes by local name. Paired with `by_local`, this is what lets
+        // the two confusion checks ask whether a name the type does not accept
+        // *here* is one it declares on the other side.
+        let attr_locals: HashSet<&str> = attrs.iter().map(|a| a.name.as_str()).collect();
 
         // A choice's members share the position of the first of them, so an
         // alternative standing where a sibling was declared is not an ordering
@@ -847,7 +1055,24 @@ impl Run {
                     );
                     satisfied.insert((want.ns.clone(), want.name.clone()));
                     resolved.insert(o.clone(), (want.ns.clone(), want.name.clone()));
-                    self.ns_explained.insert((
+                    self.explained.insert((
+                        doc.to_string(),
+                        path.to_string(),
+                        o.0.clone(),
+                        o.1.clone(),
+                    ));
+                }
+                // Declared, but on the other side of the element/attribute
+                // line. Reported whatever `wild` says: an `xs:any` licenses
+                // *unknown* children, and this name is not unknown — the type
+                // names it, as something an element position cannot hold.
+                None if attr_locals.contains(o.1.as_str()) => {
+                    self.add(
+                        doc,
+                        "ATTR-AS-ELEMENT",
+                        format!("{path}/{} — {} declares it as an xs:attribute", o.1, ty.1),
+                    );
+                    self.explained.insert((
                         doc.to_string(),
                         path.to_string(),
                         o.0.clone(),
@@ -924,6 +1149,47 @@ impl Run {
             );
         }
 
+        // ── Attributes ───────────────────────────────────────────────────────
+        // `xsi:` is instance machinery, legal on any element and declared by no
+        // type. Namespace declarations were dropped in `resolve_tree`.
+        let mut seen_attr: HashSet<Qn> = HashSet::new();
+        for a in &node.attrs {
+            if a.ns == XSI {
+                continue;
+            }
+            let key = (a.ns.clone(), a.local.clone());
+            seen_attr.insert(key.clone());
+            self.attrs_checked += 1;
+            if by_attr.contains(&key) {
+                continue;
+            }
+            if by_local.contains_key(a.local.as_str()) {
+                self.add(
+                    doc,
+                    "ELEMENT-AS-ATTR",
+                    format!(
+                        "{path}/@{} — {} declares it as an xs:element",
+                        a.local, ty.1
+                    ),
+                );
+            } else if !wild_attr {
+                self.add(
+                    doc,
+                    "UNKNOWN-ATTR",
+                    format!("{path}/@{} — not declared by {}", a.local, ty.1),
+                );
+            }
+        }
+        let missing_attr: BTreeSet<&str> = attrs
+            .iter()
+            .filter(|a| a.required && !seen_attr.contains(&(a.ns.clone(), a.name.clone())))
+            .map(|a| a.name.as_str())
+            .collect();
+        if !missing_attr.is_empty() {
+            let names: Vec<&str> = missing_attr.into_iter().collect();
+            self.add(doc, "MISSING-ATTR", format!("{path} ({}): {names:?}", ty.1));
+        }
+
         for c in &node.kids {
             let key = (c.ns.clone(), c.local.clone());
             let child = by
@@ -947,7 +1213,7 @@ impl Run {
             let key = (c.ns.clone(), c.local.clone());
             if ix.known_ns.contains(&c.ns)
                 && !ix.declared.contains(&key)
-                && !self.ns_explained.contains(&(
+                && !self.explained.contains(&(
                     doc.to_string(),
                     path.to_string(),
                     c.ns.clone(),
@@ -1155,7 +1421,7 @@ async fn mock_output_matches_the_onvif_schema() {
                 payloads += 1;
             }
             let key = (resp.ns.clone(), resp.local.clone());
-            // Anchored first: it fills ns_explained, which the name check reads.
+            // Anchored first: it fills `explained`, which the name check reads.
             match ix.globals.get(&key).cloned().flatten() {
                 Some(ty) if ix.types.contains_key(&ty) => {
                     run.check_anchored(&ix, name, resp, &ty, &resp.local)
@@ -1176,6 +1442,14 @@ async fn mock_output_matches_the_onvif_schema() {
          so this check silently shrinks as operations start refusing the bodies \
          in `body_for`.",
         docs.len()
+    );
+    assert!(
+        run.attrs_checked >= ATTR_FLOOR,
+        "only {} emitted attributes were compared against a declaration (floor \
+         {ATTR_FLOOR}). All four attribute kinds report on what the mock emits, \
+         so a renderer that stopped emitting attributes would leave every one of \
+         them at zero and read as clean.",
+        run.attrs_checked
     );
     assert!(
         run.anchored >= ANCHORED_FLOOR,
@@ -1212,21 +1486,25 @@ async fn mock_output_matches_the_onvif_schema() {
         .map(|r| format!("{} ({})", r.2, r.1))
         .collect();
 
+    let declared_attrs: usize = ix.types.values().map(|t| t.attrs.len()).sum();
     println!(
-        "schema: {} files, {} types, {} declared elements, {} namespaces",
+        "schema: {} files, {} types, {} declared elements, {} declared attributes, \
+         {} namespaces",
         files.len(),
         ix.types.len(),
         ix.declared.len(),
+        declared_attrs,
         ix.known_ns.len()
     );
     println!(
         "corpus: {} responses, {} with a payload, {} roots anchored, {} faults, \
-         {} children skipped",
+         {} children skipped, {} attributes checked",
         docs.len(),
         payloads,
         run.anchored,
         faults.len(),
-        run.unanchored_children
+        run.unanchored_children,
+        run.attrs_checked
     );
     if !other.is_empty() {
         println!(

@@ -10,13 +10,22 @@ The status line above used to end *"Nothing in the sweep is fixed yet."* That
 was true when written and stopped being true at §5.0; it is replaced rather
 than deleted, because the sentence is what a reader would have trusted.
 
-**Zero on every kind does not mean the class is closed** — see §6. The checker
-reads `xs:element` and never `xs:attribute`, a type carrying an `xs:any`
-suppresses `UNKNOWN-CHILD` for the whole type, and an element whose children are
-all optional is schema-valid empty. Five of the eleven client-facing bugs in §0
-were found *in spite of* the counts — and the eleventh was found with every kind
-already at 0, against a mock the checker calls fully conformant. **This said
-"Four of the ten" until §5.10.**
+**Zero on every kind does not mean the class is closed** — see §6. A type
+carrying an `xs:any` suppresses `UNKNOWN-CHILD` for the whole type, and an
+element whose children are all optional is schema-valid empty. Five of the
+eleven client-facing bugs in §0 were found *in spite of* the counts — and the
+eleventh was found with every kind already at 0, against a mock the checker
+calls fully conformant. **This said "Four of the ten" until §5.10.**
+
+**It also listed a third category — "reads `xs:element` and never
+`xs:attribute`" — until §5.11, which closed it.** The checker now reports
+`MISSING-ATTR`, `UNKNOWN-ATTR`, `ATTR-AS-ELEMENT` and `ELEMENT-AS-ATTR`; all
+four came out at 0 and all four were perturbed to prove they can move. What that
+bought is one specific thing: `ATTR-AS-ELEMENT` is the only kind an `xs:any`
+cannot suppress, so `GovLength` rendered as an element — §0.5, which moved
+*nothing* when it was found — is now two rows. What it did not buy is the other
+direction: this file still reads the mock's output and never the client's
+parsing of it, which is how §0.11 was missed with every kind at 0.
 
 The checker, the schema and the raw findings live in the sibling repository
 `onvif-schema-lab` (local, never pushed) because of decision D2 in
@@ -1273,14 +1282,16 @@ by hand. Fixing the findings without landing the checker leaves the class
 exactly as exposed as it was this morning — and this release already produced
 the lesson that a number nothing asserts drifts.
 
-**All five pins now read 0, and that is the weakest the guard has ever been.**
+**All nine pins now read 0, and that is the weakest the guard has ever been.**
 A pin at 0 moves for a regression the checker can see, and this document has
-recorded three whole categories it cannot: it reads `xs:element` and never
-`xs:attribute` (§0.5, §0.7, §0.8 were each one visible row out of several
-members), a type carrying an `xs:any` suppresses `UNKNOWN-CHILD` for the entire
-type (§0.5, §0.10), and an element whose children are all optional is
-schema-valid empty (§1.4's `Spaces`). A zero says *nothing the checker looks at
-is wrong*, which is a much smaller claim than *the mock is conformant*. The
+recorded three whole categories it cannot. §5.11 closed the first of them — the
+checker read `xs:element` and never `xs:attribute` (§0.5, §0.7, §0.8 were each
+one visible row out of several members), and now reports four attribute kinds,
+of which `ATTR-AS-ELEMENT` is the one that reaches those three. Two stand: a
+type carrying an `xs:any` suppresses `UNKNOWN-CHILD` for the entire type (§0.5,
+§0.10), and an element whose children are all optional is schema-valid empty
+(§1.4's `Spaces`). A zero says *nothing the checker looks at is wrong*, which is
+a much smaller claim than *the mock is conformant*. The
 per-operation value assertions in `tests/mock_workflow.rs` are what carry the
 rest, and they are named per unit in §5 for that reason.
 

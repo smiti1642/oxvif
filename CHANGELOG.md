@@ -366,8 +366,9 @@ two-thirds of the test suite.
   (2 against 3) so a parser reading one entry for both goes red.
 
 - **The mock omitted seven required members, one undeclared name and one
-  sequence order — the last fourteen schema-shape rows.** All five counts are
-  now **0**; the movement per group is recorded in `PINS`
+  sequence order — the last fourteen schema-shape rows.** All five element
+  counts are now **0** (the four attribute kinds came later, and are also 0);
+  the movement per group is recorded in `PINS`
   (`tests/mock_schema_shape.rs`) and in
   `docs/active/mock-schema-conformance-2026-08.md` §1, and each of the four
   groups was perturbed on its own.
@@ -415,11 +416,40 @@ two-thirds of the test suite.
     `ORDER` 1 → 0.
 
   **Zero on every kind does not mean the class is closed**, and
-  `tests/mock_schema_shape.rs` now says so where the pins are. It reads
-  `xs:element` and never `xs:attribute`; a type carrying an `xs:any` suppresses
-  `UNKNOWN-CHILD` for the whole type; and an element whose children are all
-  optional is schema-valid empty. Four of the ten client-facing bugs this sweep
-  found were found in spite of the counts rather than by them.
+  `tests/mock_schema_shape.rs` now says so where the pins are. A type carrying
+  an `xs:any` suppresses `UNKNOWN-CHILD` for the whole type; and an element
+  whose children are all optional is schema-valid empty. Five of the eleven
+  client-facing bugs this sweep found were found in spite of the counts rather
+  than by them.
+
+- **The schema-shape checker reads `xs:attribute`.** It had five kinds, all
+  about elements; it now has nine. `MISSING-ATTR` reports a `use="required"`
+  attribute the mock omits, `UNKNOWN-ATTR` one the type does not declare,
+  and — the two that matter — `ATTR-AS-ELEMENT` and `ELEMENT-AS-ATTR` report a
+  name declared on the *other* side of the element/attribute line.
+  - `ATTR-AS-ELEMENT` is the only kind here an `xs:any` cannot suppress. A
+    wildcard licenses children the type does not name; a name the type declares
+    as an attribute is not one of those. Measured: putting `GovLength` back as
+    a child element — the client bug above, which moved **no** counter when it
+    was found — now opens two rows.
+  - **All four came out at 0, which proves nothing on its own**, so each was
+    perturbed separately: `GovLength` as an element (2 rows), the required
+    `token=` renamed (2), `Bogus="1"` on a `tt:FloatRange` (1), `Name` moved to
+    an attribute (2). The last two both landed on a type carrying an
+    `xs:anyAttribute`, which is how the split was confirmed: the wildcard
+    suppressed `UNKNOWN-ATTR` and did not suppress `ELEMENT-AS-ATTR`.
+  - `Node` now resolves attribute prefixes at parse time, and `Sch` bundles the
+    per-schema resolution context so `attributeFormDefault` is *read* rather
+    than assumed — the set says `unqualified` everywhere, and decision D2 does
+    not allow that fact to be written down here as a constant.
+  - New `ATTR_FLOOR` coverage floor, measured at 334 attributes checked across
+    172 anchored nodes on 49 attribute-declaring types (27 with a required
+    attribute). All four attribute kinds report on what the mock *emits*, so a
+    renderer that stopped emitting attributes would leave every one of them at
+    zero and read as clean.
+  - What it still cannot do: the client's parsing. Four of the eleven client
+    bugs this sweep found were element/attribute confusions, and this checker
+    sees only the half of each that shows up in the mock's output.
 
 - **`VideoEncoderConfiguration2::gov_length` and `::profile` were `None` from
   every conformant Media2 camera, and `set_video_encoder_configuration_media2`
