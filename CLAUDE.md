@@ -36,6 +36,19 @@ covered by any of the five gate lines — nothing in this repo asserts prose.
 
 ### The CHANGELOG entry for the release you are in
 
+**Keep the entry to what a reader deciding whether to upgrade needs**: what
+changed, what broke, how to migrate. The forensics — schema citations, measured
+counts, the perturbation that verified each fix — go in
+`docs/releases/<version>.md`, which the entry links to. Measured on 0.15.0: the
+entry reached 2,006 lines, 57% of the whole changelog and **seven times the
+previous largest release**, because it tried to be both. Splitting it lost
+nothing and took it to ~700.
+
+The split also has a failure mode worth naming: `docs/` is excluded from the
+published package (`Cargo.toml`), so the link out **must be an absolute GitHub
+URL**, and it must point at a branch rather than the release tag if the file
+was added after the tag.
+
 Not "add a bullet" — **re-read the bullets already there**. Within one release,
 later work routinely falsifies what earlier work wrote.
 
