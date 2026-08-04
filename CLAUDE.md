@@ -181,9 +181,28 @@ Why it exists: the mock writes XML as hand-built strings, and `XmlNode` is
 namespace-stripped, so oxvif's own parser is namespace-blind and
 order-independent. A mock response with every element in the wrong namespace
 and the wrong order parses identically — **no other test here can see the
-class.** Six instances have been found so far, every one by a human reading a
-schema file, and one of them (Media2 `Audio` → `AudioEncoder`, `8091892`) was a
-client bug that a green test had been asserting around for two releases.
+class.** Six instances were found before the checker existed, every one by a
+human reading a schema file. **This sentence used to end there, and used to say
+"one of them was a client bug".** As of the 0.15.0 sweep it is five client bugs
+out of the set, and the two the checker found on its own are the ones worth
+knowing about:
+
+| client bug | how it surfaced |
+|---|---|
+| Media2 `Audio` → `AudioEncoder` | by hand, `8091892` |
+| `GetDigitalInputs` sent to device management | the checker's **unanchored-root** line, not a pin |
+| `set_storage_configuration` request body in `tt:` | asking why a guard that should have fired stayed silent |
+| `ImagingMoveOptions` reading `PositionSpace`/`SpeedSpace` | fixing the mock, which then disagreed with the client |
+| `VideoEncoder2Configuration` `GovLength`/`Profile` read as elements | reusing a renderer, which surfaced the row at a second path |
+
+Three of those five were found *because a mock fix made the client disagree with
+it*. That is the argument for fixing the mock even though no caller sees the
+mock: **a conformant mock turns a silent client bug into a visible
+disagreement** — but only if some test actually drives the client through the
+mock and asserts a value, which is why `tests/mock_workflow.rs` gained
+`imaging_move_options_ranges_survive_the_round_trip` and
+`media2_encoder_gov_length_and_profile_are_attributes`. A hollow positive there
+(`let _ = client.foo().await.unwrap();`) breaks the whole chain.
 
 Two ways to read the result:
 
@@ -418,9 +437,28 @@ proved nothing yet:
 For a whole batch, mutate the library instead and diff the failing test **names**
 before and after: make `SoapError::missing()` ignore its argument, or make the
 fault parser in `src/soap/xml.rs` return a constant `code`/`reason`. Every real
-negative goes red; every hollow one stays green. Run it **unfiltered and with
-`--all-features`** — a `cargo test <filter>` run silently excludes the
-integration crates, and a no-feature run silently excludes every mock test.
+negative goes red; every hollow one stays green. Run it **unfiltered, with
+`--all-features`, and with `--no-fail-fast`** — a `cargo test <filter>` run
+silently excludes the integration crates, and a no-feature run silently excludes
+every mock test.
+
+**`--no-fail-fast` is not a nicety, and this line said only "unfiltered and with
+`--all-features`" until it was measured.** Cargo stops after the first target
+that fails, and a batch mutation is *designed* to make targets fail — so the
+`src/lib.rs` unit target reddens and cargo never runs the nine integration
+crates at all. Measured on `987cd0c`, mutating one field of
+`VideoEncoderConfiguration2::from_xml`:
+
+```
+cargo test --all-features                 1 of 10 targets ran, 3 tests red
+cargo test --all-features --no-fail-fast  10 targets ran,     4 tests red
+```
+
+The fourth was `media2_encoder_gov_length_and_profile_are_attributes` in
+`tests/mock_workflow.rs` — the guard that mutation exists to validate. Without
+the flag the batch mutation reports a *smaller* red set than the truth, which is
+the one direction of error this technique cannot survive: a hollow test and an
+unreached test look identical in the diff of failing names.
 
 Two batch mutations worth keeping in the rotation beyond those two, because
 they catch a class the missing/fault pair cannot:
