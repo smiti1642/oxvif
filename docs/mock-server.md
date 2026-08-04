@@ -135,7 +135,8 @@ name `GetServiceCapabilities`, which is the whole reason:
 
 | Action prefix | Dispatcher | Operations |
 |---|---|---|
-| `…/ver10/device/wsdl/` | `dispatch_device` | 39 |
+| `…/ver10/device/wsdl/` | `dispatch_device` | 38 |
+| `…/ver10/deviceio/wsdl/` | `dispatch_device_io` | 1 |
 | `…/ver10/media/wsdl/` | `dispatch_media` | 32 |
 | `…/ver20/media/wsdl/` | `dispatch_media2` | 26 |
 | `…/ver20/ptz/wsdl/` | `dispatch_ptz` | 27 |
@@ -145,7 +146,12 @@ name `GetServiceCapabilities`, which is the whole reason:
 | `…/ver10/search/wsdl/` | `dispatch_search` | 4 |
 | `…/ver10/replay/wsdl/` | `dispatch_replay` | 2 |
 
-**157 operations total.** Events is doubly irregular: its action URIs carry a
+**157 operations total** — unchanged in 0.15.0; `GetDigitalInputs` moved from
+`dispatch_device` to `dispatch_device_io`, it was not added. The `deviceio`
+prefix is lowercase because that is how `deviceio.wsdl` spells its soapActions,
+while the elements it declares are in `…/ver10/deviceIO/wsdl`.
+
+Events is doubly irregular: its action URIs carry a
 portType segment *and* a `Request` suffix, so its operation names are
 `GetServiceCapabilitiesRequest`, `PullMessagesRequest`, and so on.
 
@@ -475,7 +481,7 @@ idle open); `DigitalInput_1` (idle closed), `DigitalInput_2` (idle open).
 (same answer every time) · **T** answers per token, and the seeded fixture
 makes two tokens disagree.
 
-### 7.1 Device — 39 operations
+### 7.1 Device — 38 operations
 
 | Operation | | Notes |
 |---|---|---|
@@ -493,10 +499,21 @@ makes two tokens disagree.
 | `GetNetworkProtocols` / `SetNetworkProtocols` | ● | |
 | `GetNetworkDefaultGateway` / `SetNetworkDefaultGateway` | ● | |
 | `GetDiscoveryMode` / `SetDiscoveryMode` | ● | Only `Discoverable` / `NonDiscoverable` accepted. |
-| `GetRelayOutputs`, `SetRelayOutputState`, `SetRelayOutputSettings` | ● | See §13 on `SetRelayOutputState`. |
-| `GetDigitalInputs` | ● | Driven by the REST simulator. |
+| `GetRelayOutputs`, `SetRelayOutputState`, `SetRelayOutputSettings` | ● | See §13 on `SetRelayOutputState`. Device-service operations even though DeviceIO binds them too — `deviceio.wsdl` types their messages with the `tds:` elements. |
 | `GetStorageConfigurations` / `SetStorageConfiguration` | ● | Unknown token faults; token-less Set creates. |
 | `SendAuxiliaryCommand`, `GetSystemLog`, `GetSystemUris`, `StartFirmwareUpgrade`, `StartSystemRestore`, `SystemReboot`, `SetSystemFactoryDefault` | ○ | Acknowledged, nothing modelled. |
+
+### 7.1a DeviceIO — 1 operation
+
+Answered at `{base}/onvif/deviceio`, advertised by both `GetCapabilities`
+(`Capabilities/Extension/DeviceIO`) and `GetServices`. The action segment is
+lowercase `deviceio`; the elements are in `…/ver10/deviceIO/wsdl`. Shares one
+`DeviceState` with §7.1 — `dispatch_device_io` reaches the same
+`services/device.rs` renderer.
+
+| Operation | | Notes |
+|---|---|---|
+| `GetDigitalInputs` | ● | Driven by the REST simulator. Was answered at the device endpoint in `tds:` until 0.15.0. |
 
 ### 7.2 Media1 — 32 operations
 
@@ -938,6 +955,17 @@ check whether it is pinned or incidental.
 | Media1 and Media2 never disagree about shared state | `tests/mock_media1_media2_agree.rs` |
 | Per-sensor answers really differ | `tests/mock_multi_sensor.rs` |
 | End-to-end flows | `tests/mock_workflow.rs` |
+| The XML matches the ONVIF schema — namespaces, names, cardinality, sequence order | `tests/mock_schema_shape.rs` — **not a guarantee in the same sense**, see below |
+
+The last row is weaker than the others and is listed so nobody mistakes it for a
+gate. It is `#[ignore]`d and reads the ONVIF schema set at run time from
+`$OXVIF_ONVIF_SCHEMA`, a directory outside the tree, because nothing derived
+from that schema may enter this repository. A `CLAUDE.md` publishing-checklist
+line is the only thing that runs it, and if it printed `SKIPPED` then nothing
+was checked. It is nonetheless the only thing here that can see a wrong
+namespace or a wrong sequence order at all: the client parser is
+namespace-blind and order-independent, so every other row above passes just as
+happily against XML no conformant device would emit.
 
 The two tables are the important ones. Each row **declares its intent** —
 `Works` / `Static(§)` for round-trip, `Discriminates` / `Blind(§)` for tokens —

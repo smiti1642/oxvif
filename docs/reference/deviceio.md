@@ -3,9 +3,24 @@
 > Reference for implementing oxvif — not part of the crate. Shared types: [types.md](types.md).
 
 - **WSDL:** https://www.onvif.org/ver10/deviceio.wsdl
-- **Namespace:** `http://www.onvif.org/ver10/deviceio/wsdl` (prefix `tmd`)
+- **Namespace:** `http://www.onvif.org/ver10/deviceIO/wsdl` (prefix `tmd`) —
+  capital `IO`. The soapActions the same WSDL binds spell that segment
+  `deviceio`, lowercase. Both spellings below are verbatim; the mismatch is
+  ONVIF's, and a client that "corrects" either one stops matching.
+  *(Corrected 2026-08-04: this line gave only the lowercase form, as if it were
+  the namespace too.)*
 - **ONVIF Profile:** T
-- **oxvif status:** ❌ not implemented. No `src/client/deviceio.rs`.
+- **oxvif status:** ⚠️ one operation. `GetDigitalInputs` is implemented on
+  [`OnvifClient`](../../src/client/device.rs), taking the DeviceIO endpoint as
+  an argument; there is no `src/client/deviceio.rs` and nothing else here is
+  implemented.
+
+  **This page was right before the code was.** It has said `GetDigitalInputs`
+  belongs to DeviceIO since it was written in 2026-05, while
+  `src/client/device.rs` sent it to device management until 0.15.0 — the same
+  shape as `ScopeAttribute`, where the correct name sat in a comment 150 lines
+  from the bug. A reference page nothing executes is worth checking against
+  the code, not only the other way round.
 
 DeviceIO exposes the physical I/O of a device: video/audio sources & outputs, relay outputs,
 digital inputs, and serial ports. Several operations overlap the Device service (relay outputs)

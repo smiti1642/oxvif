@@ -452,8 +452,29 @@ for s in &scopes {
 | `get_relay_outputs()` | List relay output ports → `Vec<RelayOutput>` |
 | `set_relay_output_state(token, state)` | Set relay electrical state (`"active"` / `"inactive"`) |
 | `set_relay_output_settings(token, mode, delay, idle)` | Configure relay mode/delay/idle-state |
+| `get_digital_inputs(deviceio_url)` | List digital input ports → `Vec<DigitalInput>` — **DeviceIO endpoint**, see below |
 | `get_storage_configurations()` | List SD/NAS storage locations → `Vec<StorageConfiguration>` |
 | `set_storage_configuration(token, ...)` | Create or update a storage configuration entry |
+
+`get_digital_inputs` is the one method in this table that does **not** go to the
+device service. Digital inputs live on DeviceIO, so it takes that endpoint:
+
+```rust
+let caps = client.get_capabilities().await?;
+let deviceio = caps.device_io.url.as_deref().unwrap();
+for input in client.get_digital_inputs(deviceio).await? {
+    println!("{} idle={}", input.token, input.idle_state);
+}
+```
+
+A device that advertises no DeviceIO endpoint does not implement the operation.
+If `caps.device_io.url` is `None`, fall back to `get_services()` and look for
+`OnvifService::is_device_io()` — some firmware lists DeviceIO there and not in
+`GetCapabilities`. `OnvifSession::get_digital_inputs()` does both for you.
+
+The three relay-output methods above genuinely are device-service operations,
+even though DeviceIO offers them too: `deviceio.wsdl` types those messages with
+the device service's own elements.
 
 ---
 

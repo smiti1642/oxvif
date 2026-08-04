@@ -99,8 +99,8 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 
 // ── Pins ─────────────────────────────────────────────────────────────────────
 
-/// Distinct findings per kind, as of `8091892` against the schema set described
-/// in the lab's `NOTES.md` run 3.
+/// Distinct findings per kind, against the schema set described in the lab's
+/// `NOTES.md` run 3.
 ///
 /// **These are pins, not targets.** A fix lowers one and the test says so; a
 /// regression raises one and the test says that too. Never edit a number to
@@ -108,10 +108,26 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///
 /// Quoted in `docs/active/mock-schema-conformance-2026-08.md` §1 and in the
 /// lab's `NOTES.md` (run 3). Change one here and both are wrong.
+///
+/// Movement so far:
+///
+/// - `8091892` … `1e92fbc` — 16 / 23 / **12** / 6 / 6, the baseline this file
+///   landed with.
+/// - §5.0, `GetDigitalInputs` to the DeviceIO service — `UNKNOWN-NAME` 12 → 11.
+///   The one row was the `DigitalInputs` *child*; the response root itself was
+///   the corpus's single **unanchored non-fault root** and contributed nothing
+///   to any count, because an unanchored root is not judged at all.
+///
+///   Measured, and the reason the anchoring assertion below exists: putting
+///   only the wrapper's namespace back leaves all five numbers here at
+///   16 / 23 / 11 / 6 / 6 and the run still fails — on the anchoring assertion.
+///   **The pins do not see a wrong-service defect.** They saw one row of this
+///   one by luck, because the mock happened to render the child in the same
+///   wrong namespace.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 16),
     ("MISSING-REQUIRED", 23),
-    ("UNKNOWN-NAME", 12),
+    ("UNKNOWN-NAME", 11),
     ("UNKNOWN-CHILD", 6),
     ("ORDER", 6),
 ];
@@ -991,6 +1007,33 @@ async fn mock_output_matches_the_onvif_schema() {
         };
         println!("  {kind:<16} [{at}] {msg}");
     }
+
+    // ── Every non-fault root must anchor ─────────────────────────────────────
+    //
+    // A root that anchors to no global element is a response the schema set
+    // does not declare *in the namespace the mock put it in*. Once the schema
+    // set is complete that means one of two things, and both are defects:
+    // the element name is wrong, or — the interesting one — the operation is
+    // addressed to the wrong service.
+    //
+    // This is a stronger claim than the pins and is asserted separately,
+    // because it is not a count: it went from "one, cause unknown" to zero, and
+    // the one was `GetDigitalInputs` sent to device management, which
+    // `deviceio.wsdl` declares and `devicemgmt.wsdl` does not. It cost a single
+    // `UNKNOWN-NAME` row, so the pins alone would have made it look like the
+    // smallest finding in the set rather than the only client-facing one.
+    //
+    // Faults are excluded: there is no soap-envelope schema in the set, so all
+    // 50 of them are unanchored by construction.
+    assert!(
+        other.is_empty(),
+        "\n{} response root(s) anchor to no declared element: {}\n\
+         Each is either a misnamed response or an operation sent to the wrong \
+         service — check which WSDL declares the element before assuming the \
+         schema set is incomplete.",
+        other.len(),
+        other.iter().cloned().collect::<Vec<_>>().join(", ")
+    );
 
     // ── Pins ────────────────────────────────────────────────────────────────
     let got: Vec<(&str, usize)> = PINS

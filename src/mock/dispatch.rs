@@ -12,6 +12,8 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
         } else if let Some(tail) = action.strip_prefix("http://www.onvif.org/") {
             if tail.starts_with("ver10/device/wsdl/") {
                 dispatch_device(op, base, state, body)
+            } else if tail.starts_with("ver10/deviceio/wsdl/") {
+                dispatch_device_io(op, state)
             } else if tail.starts_with("ver20/media/wsdl/") {
                 dispatch_media2(op, base, state, body)
             } else if tail.starts_with("ver10/media/wsdl/") {
@@ -70,7 +72,6 @@ fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
         "GetRelayOutputs" => device::resp_relay_outputs(state),
         "SetRelayOutputState" => device::handle_set_relay_output_state(state, body),
         "SetRelayOutputSettings" => device::handle_set_relay_output_settings(state, body),
-        "GetDigitalInputs" => device::resp_digital_inputs(state),
         "SetSystemFactoryDefault" => resp_empty("tds", "SetSystemFactoryDefaultResponse"),
         "GetStorageConfigurations" => device::resp_storage_configurations(state),
         "SetStorageConfiguration" => device::handle_set_storage_configuration(state, body),
@@ -80,6 +81,21 @@ fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
         "GetDiscoveryMode" => device::resp_discovery_mode(state),
         "SetDiscoveryMode" => device::handle_set_discovery_mode(state, body),
         "SystemReboot" => device::resp_system_reboot(),
+        _ => return None,
+    })
+}
+
+/// DeviceIO — a separate service and a separate endpoint, sharing one
+/// `DeviceState` with the device service the way Media1 and Media2 do.
+///
+/// The client only reaches one operation here. The relay-output operations
+/// DeviceIO *also* binds are answered by [`dispatch_device`] instead, which is
+/// correct rather than a shortcut: `deviceio.wsdl` types their messages with
+/// the `tds:` elements, so the device service is a conformant place to answer
+/// them and is where oxvif addresses them.
+fn dispatch_device_io(op: &str, state: &SharedState) -> Option<String> {
+    Some(match op {
+        "GetDigitalInputs" => device::resp_digital_inputs(state),
         _ => return None,
     })
 }

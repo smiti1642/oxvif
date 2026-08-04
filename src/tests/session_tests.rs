@@ -44,7 +44,13 @@ impl Transport for SequenceTransport {
 // ── XML fixtures ──────────────────────────────────────────────────────────
 
 /// Full capabilities response including all service URLs (Media, PTZ, Imaging,
-/// Events, Recording, Search, Replay, Media2).
+/// Events, DeviceIO, Recording, Search, Replay, Media2).
+///
+/// **It must stay complete**, because `session_with` relies on it: the builder
+/// falls back to `GetServices` when any of those URLs is missing, which
+/// consumes a second scripted response and every delegate test then runs out
+/// one short. That is exactly what happened when `DeviceIO` joined the
+/// fallback set and this fixture had not.
 fn caps_full_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                   xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
@@ -58,6 +64,7 @@ fn caps_full_xml() -> &'static str {
             <tt:Imaging>  <tt:XAddr>http://cam/onvif/imaging</tt:XAddr>   </tt:Imaging>
             <tt:Events>   <tt:XAddr>http://cam/onvif/events</tt:XAddr>    </tt:Events>
             <tt:Extension>
+              <tt:DeviceIO>  <tt:XAddr>http://cam/onvif/deviceio</tt:XAddr>  </tt:DeviceIO>
               <tt:Recording> <tt:XAddr>http://cam/onvif/recording</tt:XAddr> </tt:Recording>
               <tt:Search>    <tt:XAddr>http://cam/onvif/search</tt:XAddr>    </tt:Search>
               <tt:Replay>    <tt:XAddr>http://cam/onvif/replay</tt:XAddr>    </tt:Replay>
@@ -236,6 +243,10 @@ async fn test_builder_stores_capabilities() {
     assert_eq!(caps.search.url.as_deref(), Some("http://cam/onvif/search"));
     assert_eq!(caps.replay.url.as_deref(), Some("http://cam/onvif/replay"));
     assert_eq!(caps.media2.url.as_deref(), Some("http://cam/onvif/media2"));
+    assert_eq!(
+        caps.device_io.url.as_deref(),
+        Some("http://cam/onvif/deviceio")
+    );
 }
 
 #[tokio::test]
@@ -448,6 +459,39 @@ fn fill_missing_service_urls_fills_missing_from_get_services() {
     assert_eq!(caps.replay.url.as_deref(), Some("http://cam/onvif/Replay"));
 }
 
+/// DeviceIO is filled from `GetServices` under **either** spelling of the
+/// namespace segment. `deviceio.wsdl` writes `targetNamespace="…/deviceIO/…"`
+/// and spells every soapAction `…/deviceio/…`, so firmware copies both; an
+/// exact match would find the endpoint on only some devices and
+/// `get_digital_inputs` would then fail with a missing-URL error on the rest.
+#[test]
+fn fill_missing_service_urls_matches_deviceio_in_either_casing() {
+    for ns in [
+        "http://www.onvif.org/ver10/deviceIO/wsdl",
+        "http://www.onvif.org/ver10/deviceio/wsdl",
+    ] {
+        let mut caps = Capabilities::default();
+        fill_missing_service_urls(&mut caps, &[svc(ns, "http://cam/onvif/DeviceIO")]);
+        assert_eq!(
+            caps.device_io.url.as_deref(),
+            Some("http://cam/onvif/DeviceIO"),
+            "namespace {ns} did not resolve to the DeviceIO endpoint"
+        );
+    }
+
+    // And it does not swallow the device-management service, whose namespace
+    // differs from DeviceIO's by those two letters alone.
+    let mut caps = Capabilities::default();
+    fill_missing_service_urls(
+        &mut caps,
+        &[svc(
+            "http://www.onvif.org/ver10/device/wsdl",
+            "http://cam/onvif/device",
+        )],
+    );
+    assert_eq!(caps.device_io.url, None);
+}
+
 #[test]
 fn fill_missing_service_urls_does_not_override_existing() {
     let services = vec![svc(
@@ -464,6 +508,26 @@ fn fill_missing_service_urls_does_not_override_existing() {
         caps.recording.url.as_deref(),
         Some("http://cam/onvif/FromCapabilities")
     );
+}
+
+/// A device that advertises no DeviceIO endpoint cannot answer
+/// `GetDigitalInputs` at all — the session must say which URL is missing rather
+/// than fall back to the device service, which is where this was sent until
+/// 0.15 and where a real camera has no such operation.
+///
+/// Asserts the field path, not just the variant: `session_device_only` is
+/// missing every service URL, so a bare `MissingField(_)` would pass on any of
+/// them and prove nothing about DeviceIO.
+#[tokio::test]
+async fn test_missing_device_io_url_returns_error_naming_deviceio() {
+    let session = session_device_only().await;
+    let err = session.get_digital_inputs().await.unwrap_err();
+    match err {
+        OnvifError::Soap(crate::soap::SoapError::MissingField(f)) => {
+            assert_eq!(f, "DeviceIO service URL");
+        }
+        other => panic!("expected MissingField(\"DeviceIO service URL\"), got {other:?}"),
+    }
 }
 
 #[tokio::test]

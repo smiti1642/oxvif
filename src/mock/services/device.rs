@@ -4,6 +4,11 @@ use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 const NS: &str = r#"xmlns:tds="http://www.onvif.org/ver10/device/wsdl""#;
 
+/// DeviceIO's namespace, used by `resp_digital_inputs` alone. The capital `IO`
+/// is `deviceio.wsdl`'s `targetNamespace`; its soapActions spell the same
+/// segment lowercase, which is why `dispatch` routes on `ver10/deviceio/`.
+const NS_TMD: &str = r#"xmlns:tmd="http://www.onvif.org/ver10/deviceIO/wsdl""#;
+
 // ── Stateful Get responses ──────────────────────────────────────────────────
 
 /// The mock's clock. **All six components come from the real current time.**
@@ -407,7 +412,12 @@ pub fn resp_capabilities(base: &str) -> String {
                 <tt:FirmwareUpgrade>true</tt:FirmwareUpgrade>
               </tt:System>
               <tt:IO>
-                <tt:InputConnectors>1</tt:InputConnectors>
+                <!-- 2, not 1: `default_digital_inputs` seeds two, and
+                     `GetDigitalInputs` returns both. This said 1 while the
+                     state said 2 — one device stating a fact two ways, which
+                     is the class `CLAUDE.md` step 5b exists to prevent. Found
+                     when the DeviceIO block below made it a third statement. -->
+                <tt:InputConnectors>2</tt:InputConnectors>
                 <tt:RelayOutputs>2</tt:RelayOutputs>
               </tt:IO>
               <tt:Security>
@@ -434,6 +444,25 @@ pub fn resp_capabilities(base: &str) -> String {
             </tt:Media>
             <tt:PTZ><tt:XAddr>{base}/onvif/ptz</tt:XAddr></tt:PTZ>
             <tt:Extension>
+              <!-- DeviceIO first: `tt:CapabilitiesExtension` sequences it ahead
+                   of Recording/Search/Replay. It is the endpoint
+                   `GetDigitalInputs` is addressed to.
+
+                   All five counts are required by `tt:DeviceIOCapabilities`,
+                   and each is the length of the matching `DeviceState`
+                   collection — `default_video_sources`, `default_audio_sources`,
+                   `default_audio_outputs`, `default_relay_outputs`. Video
+                   outputs are 0 because the mock models none at all; a nonzero
+                   count here would advertise a `GetVideoOutputs` it cannot
+                   answer. -->
+              <tt:DeviceIO>
+                <tt:XAddr>{base}/onvif/deviceio</tt:XAddr>
+                <tt:VideoSources>2</tt:VideoSources>
+                <tt:VideoOutputs>0</tt:VideoOutputs>
+                <tt:AudioSources>2</tt:AudioSources>
+                <tt:AudioOutputs>2</tt:AudioOutputs>
+                <tt:RelayOutputs>2</tt:RelayOutputs>
+              </tt:DeviceIO>
               <tt:Recording><tt:XAddr>{base}/onvif/recording</tt:XAddr></tt:Recording>
               <tt:Search><tt:XAddr>{base}/onvif/search</tt:XAddr></tt:Search>
               <tt:Replay><tt:XAddr>{base}/onvif/replay</tt:XAddr></tt:Replay>
@@ -452,6 +481,7 @@ pub fn resp_services(base: &str) -> String {
         &format!(
             r#"<tds:GetServicesResponse>
           <tds:Service><tds:Namespace>http://www.onvif.org/ver10/device/wsdl</tds:Namespace><tds:XAddr>{base}/onvif/device</tds:XAddr><tds:Version><tt:Major>2</tt:Major><tt:Minor>6</tt:Minor></tds:Version></tds:Service>
+          <tds:Service><tds:Namespace>http://www.onvif.org/ver10/deviceIO/wsdl</tds:Namespace><tds:XAddr>{base}/onvif/deviceio</tds:XAddr><tds:Version><tt:Major>2</tt:Major><tt:Minor>0</tt:Minor></tds:Version></tds:Service>
           <tds:Service><tds:Namespace>http://www.onvif.org/ver10/media/wsdl</tds:Namespace><tds:XAddr>{base}/onvif/media</tds:XAddr><tds:Version><tt:Major>2</tt:Major><tt:Minor>6</tt:Minor></tds:Version></tds:Service>
           <tds:Service><tds:Namespace>http://www.onvif.org/ver20/media/wsdl</tds:Namespace><tds:XAddr>{base}/onvif/media2</tds:XAddr><tds:Version><tt:Major>2</tt:Major><tt:Minor>0</tt:Minor></tds:Version></tds:Service>
           <tds:Service><tds:Namespace>http://www.onvif.org/ver20/ptz/wsdl</tds:Namespace><tds:XAddr>{base}/onvif/ptz</tds:XAddr><tds:Version><tt:Major>2</tt:Major><tt:Minor>0</tt:Minor></tds:Version></tds:Service>
@@ -725,6 +755,13 @@ pub fn handle_set_relay_output_settings(state: &SharedState, body: &str) -> Stri
     resp_empty("tds", "SetRelayOutputSettingsResponse")
 }
 
+/// `GetDigitalInputs` — **a DeviceIO operation**, answered from the same
+/// `DeviceState` as the relay outputs beside it. Routed from
+/// `dispatch_device_io`, not `dispatch_device`.
+///
+/// It lives in this file rather than a `services/deviceio.rs` because it is the
+/// one DeviceIO operation the client sends and it reads device state; a file
+/// holding a single function would say less than this comment does.
 pub fn resp_digital_inputs(state: &SharedState) -> String {
     let s = state.read();
     let entries: String = s
@@ -732,14 +769,14 @@ pub fn resp_digital_inputs(state: &SharedState) -> String {
         .iter()
         .map(|d| {
             format!(
-                r#"<tds:DigitalInputs token="{}" IdleState="{}"/>"#,
+                r#"<tmd:DigitalInputs token="{}" IdleState="{}"/>"#,
                 d.token, d.idle_state
             )
         })
         .collect();
     soap(
-        NS,
-        &format!("<tds:GetDigitalInputsResponse>{entries}</tds:GetDigitalInputsResponse>"),
+        NS_TMD,
+        &format!("<tmd:GetDigitalInputsResponse>{entries}</tmd:GetDigitalInputsResponse>"),
     )
 }
 

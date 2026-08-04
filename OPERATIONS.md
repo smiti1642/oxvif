@@ -40,6 +40,23 @@ relative one is dead for anyone reading this from the registry tarball.
 | `GetRelayOutputs` / `SetRelayOutputState` / `SetRelayOutputSettings` | ✓ |
 | `GetStorageConfigurations` / `SetStorageConfiguration` | ✓ |
 
+`GetRelayOutputs` / `SetRelayOutputState` / `SetRelayOutputSettings` are listed
+here and not under DeviceIO on purpose: `deviceio.wsdl` types those three
+messages with the **device service's** elements and binds them in both
+portTypes, so the device endpoint is a conformant place to send them.
+`GetDigitalInputs` is not like them — see below.
+
+### DeviceIO Service
+
+| Operation | Status |
+|-----------|--------|
+| `GetDigitalInputs` | ✓ |
+
+A separate endpoint, discovered from `Capabilities.device_io` or
+`OnvifService::is_device_io()`, and passed to `get_digital_inputs`. It had no
+row in this file at all until 0.15.0, while the crate had implemented it since
+0.9.9 — against the device service, which does not declare it.
+
 ### Media Service (Media1)
 
 | Operation | Status |

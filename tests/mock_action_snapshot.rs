@@ -17,6 +17,7 @@ use std::sync::Arc;
 // Only the SOAP *action* drives `MockTransport`'s dispatcher, so these URLs
 // are cosmetic — they exist to keep the call sites readable.
 const DEVICE: &str = "http://mock/onvif/device_service";
+const DEVICEIO: &str = "http://mock/onvif/deviceio_service";
 const MEDIA: &str = "http://mock/onvif/media_service";
 const MEDIA2: &str = "http://mock/onvif/media2_service";
 const PTZ: &str = "http://mock/onvif/ptz_service";
@@ -359,7 +360,7 @@ async fn observed() -> Vec<(&'static str, String)> {
         "set_relay_output_state",
         set_relay_output_state(RELAY, "active")
     );
-    probe!(out, "get_digital_inputs", get_digital_inputs());
+    probe!(out, "get_digital_inputs", get_digital_inputs(DEVICEIO));
     probe!(
         out,
         "set_system_factory_default",

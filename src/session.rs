@@ -148,6 +148,7 @@ impl OnvifSessionBuilder {
             || caps.search.url.is_none()
             || caps.replay.url.is_none()
             || caps.media2.url.is_none()
+            || caps.device_io.url.is_none()
         {
             if let Ok(services) = client.get_services().await {
                 fill_missing_service_urls(&mut caps, &services);
@@ -176,6 +177,13 @@ fn fill_missing_service_urls(caps: &mut Capabilities, services: &[OnvifService])
         // Media2 = ver20/media/wsdl (Media1 is ver10/media/wsdl — don't match it).
         if caps.media2.url.is_none() && ns.contains("/ver20/media/wsdl") {
             caps.media2.url = Some(svc.url.clone());
+        }
+        // DeviceIO carries `GetDigitalInputs`. Matched via `is_device_io`
+        // rather than `contains`, because the namespace segment is spelled
+        // `deviceIO` in the WSDL and `deviceio` in its own soapActions and
+        // firmware copies either.
+        if caps.device_io.url.is_none() && svc.is_device_io() {
+            caps.device_io.url = Some(svc.url.clone());
         }
     }
 }
@@ -228,6 +236,14 @@ impl OnvifSession {
             .url
             .as_deref()
             .ok_or_else(|| SoapError::missing("Media2 service URL").into())
+    }
+
+    fn device_io_url(&self) -> Result<&str, OnvifError> {
+        self.caps
+            .device_io
+            .url
+            .as_deref()
+            .ok_or_else(|| SoapError::missing("DeviceIO service URL").into())
     }
 
     fn ptz_url(&self) -> Result<&str, OnvifError> {
@@ -457,8 +473,12 @@ impl OnvifSession {
     }
 
     /// Retrieve all digital input port configurations.
+    ///
+    /// Errors with a missing-field error naming `DeviceIO service URL` when the
+    /// device advertises no DeviceIO endpoint — unlike the relay-output
+    /// operations beside it, this one does not live on the device service.
     pub async fn get_digital_inputs(&self) -> Result<Vec<DigitalInput>, OnvifError> {
-        self.client.get_digital_inputs().await
+        self.client.get_digital_inputs(self.device_io_url()?).await
     }
 
     /// Enable or disable network protocols (HTTP, HTTPS, RTSP, etc.).

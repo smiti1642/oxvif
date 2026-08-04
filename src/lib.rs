@@ -14,7 +14,7 @@
 //! | Profile | Description | Coverage | Notes |
 //! |---------|-------------|----------|-------|
 //! | **Profile S** | Video streaming | ~95% | All core operations implemented |
-//! | **Profile T** | Advanced streaming (H.265, focus, OSD, audio) | ~95% | HTTP Digest Auth, Media2 audio/metadata/analytics config, PTZ compat + preset tours, per-service capabilities; Analytics rules and DeviceIO not yet implemented |
+//! | **Profile T** | Advanced streaming (H.265, focus, OSD, audio) | ~95% | HTTP Digest Auth, Media2 audio/metadata/analytics config, PTZ compat + preset tours, per-service capabilities; Analytics rules not yet implemented, and DeviceIO only for `get_digital_inputs` |
 //! | **Profile G** | Recording & playback | ~85% | Read/search/replay + full recording/job write management; live-source job binding not yet implemented |
 //!
 //! ## Supported services
@@ -24,6 +24,11 @@
 //!   storage configurations, system log/URIs, factory default, discovery mode,
 //!   firmware upgrade / system restore (upload-URI flow),
 //!   auxiliary commands (wiper/IR lamp)
+//! - **DeviceIO** — digital inputs, and nothing else yet. A separate endpoint
+//!   from device management: pass `capabilities().device_io.url` to
+//!   `get_digital_inputs`, or let `OnvifSession` resolve it. The relay-output
+//!   operations stay under **Device** above, because `deviceio.wsdl` types
+//!   those messages with the device service's own elements
 //! - **Media1 / Media2** — profiles, RTSP/snapshot URIs, video + audio config, OSD,
 //!   metadata config, audio decoder/output config, video source modes,
 //!   unified AddConfiguration/RemoveConfiguration
@@ -38,8 +43,10 @@
 //! - **Replay** — get RTSP playback URI for a stored recording
 //! - **WS-Discovery** — UDP multicast probe to find cameras on the local network
 //!
-//! Every one of the nine services above also answers its own
-//! `GetServiceCapabilities` — see [Per-service capabilities](#per-service-capabilities).
+//! Nine of those services also answer their own `GetServiceCapabilities` — see
+//! [Per-service capabilities](#per-service-capabilities). DeviceIO is not one
+//! of them: only `GetDigitalInputs` is implemented there. WS-Discovery is a UDP
+//! protocol, not a SOAP service, and has none.
 //!
 //! ## Per-service capabilities
 //!

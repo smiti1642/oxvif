@@ -259,6 +259,19 @@ impl OnvifService {
         self.namespace == "http://www.onvif.org/ver20/media/wsdl"
     }
 
+    /// Returns `true` if this entry is the DeviceIO service — the endpoint
+    /// [`get_digital_inputs`](crate::OnvifClient::get_digital_inputs) needs.
+    ///
+    /// The comparison is case-insensitive on purpose. `deviceio.wsdl` declares
+    /// `targetNamespace="…/ver10/deviceIO/wsdl"` but spells the same segment
+    /// `deviceio` in every `soapAction` it binds, so firmware copying one or
+    /// the other is common; an exact match would silently fail to find the
+    /// service on half of them.
+    pub fn is_device_io(&self) -> bool {
+        self.namespace
+            .eq_ignore_ascii_case("http://www.onvif.org/ver10/deviceio/wsdl")
+    }
+
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
         Ok(resp
             .children_named("Service")

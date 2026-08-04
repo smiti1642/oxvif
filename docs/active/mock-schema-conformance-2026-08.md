@@ -27,8 +27,8 @@ exceptions were found by looking at the two things the sentence dismissed:
    `MediaProfile2::audio_encoder_token` had been `None` from every conformant
    device. It was flagged in §3 as "the only finding that could reach the
    client"; it did.
-2. **`GetDigitalInputs` is sent to the wrong service** — §1.5, *not* fixed. It
-   was hiding inside "54 unanchored roots, cause not yet established", which
+2. **`GetDigitalInputs` was sent to the wrong service** — §1.5, fixed in §5.0.
+   It was hiding inside "54 unanchored roots, cause not yet established", which
    §2 explicitly declined to call a defect. Establishing the cause was what
    turned one of them into a defect.
 
@@ -64,8 +64,19 @@ can never be detected in the field either. The mock is the only place it can be
 caught, which is why the mock being wrong matters more here than it would
 elsewhere.
 
-**Nothing here is a reason to delay 0.15.0** — except §1.5, which is a
-one-line client fix and should ride along rather than wait for the sweep.
+**Nothing here is a reason to delay 0.15.0** — except §1.5, which rode along
+rather than waiting for the sweep.
+
+This line used to call §1.5 *"a one-line client fix"*, contradicting §1.5's own
+*"not purely a string change; scope it before writing it."* **§1.5 was right.**
+Measured when it was done: the action string and the body prefix are two lines,
+and the rest is a service that did not exist anywhere in the crate — a
+`tmd` namespace binding, a dispatch route, a mock `GetServices` entry and a
+`Capabilities/Extension/DeviceIO` block (whose five required counts are a
+finding of their own), a session URL resolver, a `GetServices` fallback that
+tolerates both spellings of `deviceIO`, and a breaking signature change. Eleven
+files. The habit worth keeping is the one §1.5 used: **say what the fix needs
+where the finding is recorded, and let the summary defer to it.**
 
 ---
 
@@ -83,6 +94,18 @@ ORDER              6     children out of the declared sequence order
                  ───
                   63     distinct  (99 raw)
 ```
+
+**After §5.0 this is 62 distinct, `UNKNOWN-NAME` 11.** The other four kinds are
+unmoved. `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
+block is the baseline the sweep started from and is left as it was.
+
+The single row §5.0 removed is worth naming, because it is the whole argument
+for the anchoring assertion that fix added: it was the `DigitalInputs` *child*.
+The response **root** was the corpus's one unanchored non-fault root, and an
+unanchored root is not judged at all — so the defect that mattered contributed
+**zero** to every number in this table. Putting only the wrapper's namespace
+back leaves all five counts identical and the test still fails, on the
+anchoring assertion rather than a pin.
 
 **This replaces run 2's 108, which was not a defect count.** Almost the whole
 difference is rollup, not suppression: one element in the wrong namespace used
@@ -186,7 +209,10 @@ are **one** decision: `8091892` established that a conformant device inlines
 the full configuration, and this mock renders a token-only reference. Fixing
 that closes five rows at once and is the largest single change in the sweep.
 
-### 1.5 `GetDigitalInputs` is sent to the wrong service — a client bug
+### 1.5 `GetDigitalInputs` was sent to the wrong service — a client bug
+
+**Fixed — see §5.0 for what it took and what it moved.** Everything below is
+the finding as established, kept unchanged.
 
 Not a mock finding. It surfaced from the "54 unanchored roots" of §2, which is
 why establishing that cause came before acting on anything.
@@ -294,10 +320,44 @@ change in the sweep.
 
 Grouped so each lands in one file with one perturbation:
 
-0. **`GetDigitalInputs` → the DeviceIO service** (§1.5). A client fix, not a
-   mock one, and the only unit that changes what a caller sees. Needs the
-   DeviceIO endpoint resolved from `GetServices`, so it is not a string swap.
-   Independent of everything else; do it first or in parallel.
+0. ~~**`GetDigitalInputs` → the DeviceIO service** (§1.5).~~ **Done.** A client
+   fix, not a mock one, and the only unit that changes what a caller sees.
+
+   `get_digital_inputs` takes a `deviceio_url` — **a breaking signature
+   change**, and correct: the crate is stateless and every other non-device
+   service already takes its endpoint. `OnvifSession::get_digital_inputs()` is
+   unchanged for callers; it resolves the URL itself.
+
+   What it needed beyond the two strings, since the summary in §0 had guessed
+   "one line":
+
+   - `tmd` → `…/ver10/deviceIO/wsdl` in `src/soap/envelope.rs`.
+   - `OnvifService::is_device_io()`, **case-insensitive**. The WSDL's
+     `targetNamespace` capitalises `deviceIO` and every soapAction it binds
+     spells the same segment `deviceio`; firmware copies either, and an exact
+     match would find the endpoint on only some devices.
+   - `Capabilities::device_io` already existed and was parsed but never used;
+     the session fills it from `GetServices` too, and errors with
+     `MissingField("DeviceIO service URL")` when the device has none.
+   - The mock advertises the endpoint in **both** discovery paths, dispatches
+     `ver10/deviceio/wsdl/`, and renders the response in `tmd:`.
+   - `tt:DeviceIOCapabilities` requires five counts beside `XAddr`. Adding the
+     block with only `XAddr` raised `MISSING-REQUIRED` 23 → 24 — a new defect,
+     introduced and caught inside one edit. They are filled from the seeded
+     collections, and `VideoOutputs` is `0` because the mock models none.
+   - **`tt:IO/InputConnectors` said 1 while `default_digital_inputs` seeds 2.**
+     Pre-existing, found only because the DeviceIO block made the mock state
+     the same fact a third time. Now 2.
+
+   The guard: **every non-fault response root must anchor**, asserted separately
+   from the pins. See §1 for why the pins could not have carried this.
+
+   `docs/reference/deviceio.md` had said since 2026-05 that this operation
+   belongs to DeviceIO. It was right for three months while the client was
+   wrong — the `ScopeAttribute` shape exactly (§1.3), where the correct answer
+   sat in the repository the whole time. It also claimed *"❌ not implemented"*,
+   which is how a reader would have missed the contradiction. Both corrected.
+   `OPERATIONS.md` had **no row at all** for an operation shipped in 0.9.9.
 1. **Namespace correctness, per service** — device, Media2, recording, events.
    "Render this subtree under the namespace its type declares" — and **read
    §1.1's table before writing any of it**, because three of the sixteen rows
@@ -354,7 +414,7 @@ and not a follow-up.
    Sweeping first would mean hand-checking every one against a tool that lives
    in another repository, and calling it done on inspection. Land it with the
    publishing-checklist line in the same commit.
-4. §5.0 → §5.1 → §5.2 → §5.3 → §5.4, each its own commit, each verified by
+4. ~~§5.0~~ **done** → §5.1 → §5.2 → §5.3 → §5.4, each its own commit, each verified by
    re-running the checker (**re-dump the corpus first**) and each with the
    perturbation `CLAUDE.md` requires: put the old output back, and the
    schema-shape test must report it.

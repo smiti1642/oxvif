@@ -137,7 +137,74 @@ two-thirds of the test suite.
   a third of the responses are SOAP faults today, which is what the coverage
   floors exist to stop from quietly becoming two thirds.
 
+  It also asserts that **every non-fault response root anchors to a declared
+  element** — separately from the pins, because it is not a count. A root that
+  anchors nowhere is a response the schema does not declare *in the namespace it
+  was emitted in*, which means either a misnamed response or an operation sent
+  to the wrong service. That was one root when this test landed, and it was
+  `GetDigitalInputs` (see Fixed). Measured afterwards: putting only the wrapper
+  namespace back leaves all five pinned counts identical and the run still
+  fails, on this assertion. **The pins cannot see a wrong-service defect** —
+  they happened to catch one row of that one, because the mock rendered the
+  child in the same wrong namespace.
+
+- **The mock answers a DeviceIO endpoint.** `{base}/onvif/deviceio`, advertised
+  in `GetCapabilities` (`Capabilities/Extension/DeviceIO`) **and** `GetServices`,
+  dispatching `…/ver10/deviceio/wsdl/` and rendering `GetDigitalInputs` in
+  `tmd:`. It shares one `DeviceState` with the device service, the way Media1
+  and Media2 do.
+
+  Adding the capabilities block surfaced two more things, both worth the
+  paragraph:
+
+  - `tt:DeviceIOCapabilities` requires five counts beside `XAddr`
+    (`VideoSources`, `VideoOutputs`, `AudioSources`, `AudioOutputs`,
+    `RelayOutputs`). An `XAddr`-only block raised `MISSING-REQUIRED` 23 → 24 —
+    a defect introduced and caught inside one edit. Each is now the length of
+    the matching seeded collection; `VideoOutputs` is `0` because the mock
+    models none, and advertising more would promise a `GetVideoOutputs` it
+    cannot answer.
+  - **`tt:IO/InputConnectors` said 1 while `default_digital_inputs` seeds 2**,
+    and `GetDigitalInputs` returned both. Pre-existing, and found only because
+    the DeviceIO block made the mock state the same fact a third time. Now 2.
+
 ### Fixed
+
+- **`GetDigitalInputs` was sent to the device service, which does not implement
+  it.** `deviceio.wsdl` is the only WSDL declaring `GetDigitalInputs` and
+  `GetDigitalInputsResponse`; `devicemgmt.wsdl` declares neither, and its one
+  occurrence of the string is prose inside an enumeration's documentation. Since
+  0.9.9 oxvif sent `…/ver10/device/wsdl/GetDigitalInputs` with a `tds:` body to
+  the device endpoint. **Against a real camera the operation is simply not
+  there.** Now `…/ver10/deviceio/wsdl/GetDigitalInputs`, a `tmd:` body, and the
+  DeviceIO endpoint — see Breaking.
+
+  The action segment is lowercase `deviceio` while the elements live in
+  `…/ver10/deviceIO/wsdl` with a capital `IO`. Both are verbatim from the WSDL;
+  the mismatch is ONVIF's. `OnvifService::is_device_io()` matches
+  case-insensitively for the same reason — firmware copies one spelling or the
+  other into `GetServices`, and an exact match would find the endpoint on only
+  some devices.
+
+  `GetRelayOutputs` / `SetRelayOutputSettings` / `SetRelayOutputState` sit
+  beside it in the same file and are **not** affected: DeviceIO binds them too,
+  but types their messages with the device service's own `tds:` elements, so
+  they appear in both portTypes and oxvif was already right about them. That
+  difference is what made this a finding rather than a guess about service
+  names.
+
+  **No test in this repository could see it, and none could have.** The mock
+  answered whatever action it was asked for, so mock and client agreed — the
+  same "parser, fixture and mock agreeing with each other and with nothing
+  else" shape as the Media2 audio-encoder bug below. It was found by
+  `tests/mock_schema_shape.rs` printing it as the corpus's one **unanchored
+  non-fault response root**, and that print is now an assertion.
+
+  `docs/reference/deviceio.md` has said `GetDigitalInputs` belongs to DeviceIO
+  since it was written in 2026-05 — right for three months while the code was
+  wrong, and it also said the service was "not implemented", which is how the
+  contradiction stayed invisible. Corrected, along with its namespace casing.
+  `OPERATIONS.md` had no row for the operation at all.
 
 - **The mock's Storage family was a single static fixture.**
   `GetStorageConfigurations` always answered one `SD_01` entry carrying a
@@ -857,6 +924,27 @@ two-thirds of the test suite.
   at the new location.
 
 ### Breaking
+
+- **`OnvifClient::get_digital_inputs` takes a `deviceio_url`.** It was
+  `get_digital_inputs()`, addressed to the device service. `GetDigitalInputs` is
+  a **DeviceIO** operation — see Fixed — and DeviceIO is a separate endpoint, so
+  it now takes one the way every other non-device service in this crate does.
+
+  ```rust
+  // before
+  let inputs = client.get_digital_inputs().await?;
+
+  // after
+  let caps = client.get_capabilities().await?;
+  let deviceio = caps.device_io.url.as_deref().unwrap();
+  let inputs = client.get_digital_inputs(deviceio).await?;
+  ```
+
+  `OnvifSession::get_digital_inputs()` is **unchanged for callers** — it
+  resolves the endpoint itself, from `GetCapabilities` or, failing that,
+  `GetServices`. If the device advertises no DeviceIO service it now returns
+  `SoapError::MissingField("DeviceIO service URL")` instead of sending a request
+  the device service does not implement.
 
 - **`AudioEncoderConfiguration` gained two fields and changed a third.**
   `multicast: Option<MulticastConfiguration>` and

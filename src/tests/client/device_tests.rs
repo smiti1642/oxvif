@@ -1188,14 +1188,22 @@ async fn test_set_relay_output_settings_sends_correct_body() {
 
 // ── get_digital_inputs ────────────────────────────────────────────────────────
 
+// `GetDigitalInputs` is a **DeviceIO** operation, so these fixtures are in
+// `tmd:` and the client is given a DeviceIO endpoint distinct from the device
+// service URL. Until 0.15 it was sent to the device service in `tds:`, and no
+// test here could see that — the parser is namespace-blind and `MockTransport`
+// answers whatever it is asked. `…_is_addressed_to_the_deviceio_endpoint` below
+// is the assertion that can; it is the reason this block is worth reading.
+const DEVICEIO_URL: &str = "http://192.168.1.1/onvif/deviceio";
+
 fn get_digital_inputs_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+                     xmlns:tmd="http://www.onvif.org/ver10/deviceIO/wsdl">
          <s:Body>
-           <tds:GetDigitalInputsResponse>
-             <tds:DigitalInputs token="DigitalInput_1" IdleState="closed"/>
-             <tds:DigitalInputs token="DigitalInput_2" IdleState="open"/>
-           </tds:GetDigitalInputsResponse>
+           <tmd:GetDigitalInputsResponse>
+             <tmd:DigitalInputs token="DigitalInput_1" IdleState="closed"/>
+             <tmd:DigitalInputs token="DigitalInput_2" IdleState="open"/>
+           </tmd:GetDigitalInputsResponse>
          </s:Body>
        </s:Envelope>"#
 }
@@ -1205,7 +1213,7 @@ async fn test_get_digital_inputs_returns_fields() {
     let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
         .with_transport(mock(get_digital_inputs_xml()));
 
-    let inputs = client.get_digital_inputs().await.unwrap();
+    let inputs = client.get_digital_inputs(DEVICEIO_URL).await.unwrap();
     assert_eq!(inputs.len(), 2);
     assert_eq!(inputs[0].token, "DigitalInput_1");
     assert_eq!(inputs[0].idle_state, "closed");
@@ -1214,18 +1222,44 @@ async fn test_get_digital_inputs_returns_fields() {
 }
 
 #[tokio::test]
+async fn test_get_digital_inputs_is_addressed_to_the_deviceio_endpoint() {
+    let (transport, captured) = RecordingTransport::new(get_digital_inputs_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client.get_digital_inputs(DEVICEIO_URL).await.unwrap();
+    let c = captured.lock().unwrap();
+
+    // The URL is the DeviceIO endpoint passed in, *not* the device service the
+    // client was constructed with. Those differ here on purpose.
+    assert_eq!(c.url, DEVICEIO_URL);
+    // Lowercase `deviceio` — the action string `deviceio.wsdl` binds. The
+    // elements are in `deviceIO`; asserting both spellings in one test is what
+    // stops a later "consistency" edit from breaking one of them.
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/deviceio/wsdl/GetDigitalInputs"
+    );
+    assert!(c.body.contains("<tmd:GetDigitalInputs/>"));
+    assert!(
+        c.body
+            .contains(r#"xmlns:tmd="http://www.onvif.org/ver10/deviceIO/wsdl""#)
+    );
+}
+
+#[tokio::test]
 async fn test_get_digital_inputs_missing_token_returns_err() {
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+                     xmlns:tmd="http://www.onvif.org/ver10/deviceIO/wsdl">
          <s:Body>
-           <tds:GetDigitalInputsResponse>
-             <tds:DigitalInputs IdleState="closed"/>
-           </tds:GetDigitalInputsResponse>
+           <tmd:GetDigitalInputsResponse>
+             <tmd:DigitalInputs IdleState="closed"/>
+           </tmd:GetDigitalInputsResponse>
          </s:Body>
        </s:Envelope>"#;
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    let err = client.get_digital_inputs().await.unwrap_err();
+    let err = client.get_digital_inputs(DEVICEIO_URL).await.unwrap_err();
     assert_missing_field(err, "DigitalInputs/@token");
 }
 
@@ -1233,16 +1267,16 @@ async fn test_get_digital_inputs_missing_token_returns_err() {
 async fn test_get_digital_inputs_missing_idle_state_ok() {
     // Some firmwares omit IdleState entirely. Treat as unknown rather than err.
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                     xmlns:tds="http://www.onvif.org/ver10/device/wsdl">
+                     xmlns:tmd="http://www.onvif.org/ver10/deviceIO/wsdl">
          <s:Body>
-           <tds:GetDigitalInputsResponse>
-             <tds:DigitalInputs token="DI_A"/>
-           </tds:GetDigitalInputsResponse>
+           <tmd:GetDigitalInputsResponse>
+             <tmd:DigitalInputs token="DI_A"/>
+           </tmd:GetDigitalInputsResponse>
          </s:Body>
        </s:Envelope>"#;
     let client =
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
-    let inputs = client.get_digital_inputs().await.unwrap();
+    let inputs = client.get_digital_inputs(DEVICEIO_URL).await.unwrap();
     assert_eq!(inputs.len(), 1);
     assert_eq!(inputs[0].token, "DI_A");
     assert_eq!(inputs[0].idle_state, "");

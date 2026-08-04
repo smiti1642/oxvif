@@ -700,13 +700,30 @@ impl OnvifClient {
 
     /// Retrieve all digital input port configurations.
     ///
+    /// **This operation belongs to the DeviceIO service, not device
+    /// management**, so `deviceio_url` is a separate endpoint — discover it from
+    /// [`Capabilities::device_io`](crate::Capabilities::device_io), or from
+    /// [`get_services`](Self::get_services) via
+    /// [`OnvifService::is_device_io`](crate::OnvifService::is_device_io). A
+    /// device that does not advertise DeviceIO does not answer this at all;
+    /// [`get_relay_outputs`](Self::get_relay_outputs) is the neighbouring
+    /// operation that genuinely *is* device management.
+    ///
     /// The response carries each input's idle state (open/closed). Live
     /// transitions arrive through PullPoint subscriptions on the
     /// `tns1:Device/Trigger/DigitalInput` topic, not here.
-    pub async fn get_digital_inputs(&self) -> Result<Vec<DigitalInput>, OnvifError> {
-        const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetDigitalInputs";
-        const BODY: &str = "<tds:GetDigitalInputs/>";
-        let xml = self.call(&self.device_url, ACTION, BODY).await?;
+    ///
+    /// The action spells the namespace segment `deviceio` while the elements
+    /// live in `…/ver10/deviceIO/wsdl`. Both spellings are taken verbatim from
+    /// `deviceio.wsdl`; the mismatch is ONVIF's, and a device matching on the
+    /// action string will reject a "corrected" one.
+    pub async fn get_digital_inputs(
+        &self,
+        deviceio_url: &str,
+    ) -> Result<Vec<DigitalInput>, OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/deviceio/wsdl/GetDigitalInputs";
+        const BODY: &str = "<tmd:GetDigitalInputs/>";
+        let xml = self.call(deviceio_url, ACTION, BODY).await?;
         let body_node = parse_soap_body(&xml)?;
         let resp = find_response(&body_node, "GetDigitalInputsResponse")?;
         DigitalInput::vec_from_xml(resp)

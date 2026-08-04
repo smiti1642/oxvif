@@ -33,6 +33,10 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("wsnt", "http://docs.oasis-open.org/wsn/b-2"),
     ("tt", "http://www.onvif.org/ver10/schema"),
     ("tds", "http://www.onvif.org/ver10/device/wsdl"),
+    // DeviceIO. The capital `IO` is the WSDL's `targetNamespace`; the SOAP
+    // actions it binds spell the same segment `deviceio`. That is ONVIF's own
+    // inconsistency, not a typo — see `get_digital_inputs`.
+    ("tmd", "http://www.onvif.org/ver10/deviceIO/wsdl"),
     ("trt", "http://www.onvif.org/ver10/media/wsdl"),
     ("tr2", "http://www.onvif.org/ver20/media/wsdl"),
     ("tev", "http://www.onvif.org/ver10/events/wsdl"),
