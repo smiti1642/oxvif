@@ -11,12 +11,24 @@ use crate::mock::state::SharedState;
 use crate::mock::xml_parse::extract_tag;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// `GetEventPropertiesResponse` mixes three namespaces, and which one each
+/// member takes is decided by `event.wsdl` per element, not per response:
+///
+/// - `TopicNamespaceLocation` — declared locally, so `tev:`
+/// - `FixedTopicSet`, `TopicExpressionDialect` — `ref="wsnt:…"`, so **`wsnt:`**
+/// - `TopicSet` — `ref="wstop:…"`, so `wstop:`
+///
+/// Until 0.15.0 the mock put `FixedTopicSet` under `wstop:` (next to
+/// `TopicSet`, which is `wstop:`) and `TopicExpressionDialect` under `tev:`
+/// (next to `TopicNamespaceLocation`, which is `tev:`). Both were wrong by
+/// exactly the same reasoning: **the neighbouring element's namespace is not
+/// evidence.**
 pub fn resp_event_properties() -> String {
     soap(
-        r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wstop="http://docs.oasis-open.org/wsn/t-1""#,
+        r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2" xmlns:wstop="http://docs.oasis-open.org/wsn/t-1""#,
         r#"<tev:GetEventPropertiesResponse>
           <tev:TopicNamespaceLocation>http://www.onvif.org/onvif/ver10/topics/topicns.xml</tev:TopicNamespaceLocation>
-          <wstop:FixedTopicSet>true</wstop:FixedTopicSet>
+          <wsnt:FixedTopicSet>true</wsnt:FixedTopicSet>
           <wstop:TopicSet>
             <tns1:VideoSource wstop:topic="false" xmlns:tns1="http://www.onvif.org/ver10/topics">
               <tns1:MotionAlarm wstop:topic="true"/>
@@ -33,7 +45,7 @@ pub fn resp_event_properties() -> String {
               </tns1:Trigger>
             </tns1:Device>
           </wstop:TopicSet>
-          <tev:TopicExpressionDialect>http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet</tev:TopicExpressionDialect>
+          <wsnt:TopicExpressionDialect>http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet</wsnt:TopicExpressionDialect>
         </tev:GetEventPropertiesResponse>"#,
     )
 }
@@ -89,15 +101,22 @@ pub fn resp_create_pull_point_subscription(base: &str, state: &SharedState, body
     state.modify(|s| s.event_filter = new_filter);
 
     let now = now_rfc3339();
+    // `CurrentTime` / `TerminationTime` are **`wsnt:`** here — `event.wsdl`
+    // declares them on this response as `ref="wsnt:…"`.
+    //
+    // `PullMessagesResponse` below declares two elements of the *same two
+    // names* locally, so there they are `tev:` and must stay `tev:`. Same file,
+    // same service, same names, two namespaces. This is why the sweep was done
+    // per declaration and not with a search-and-replace on the name.
     soap(
-        r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsa="http://www.w3.org/2005/08/addressing""#,
+        r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2" xmlns:wsa="http://www.w3.org/2005/08/addressing""#,
         &format!(
             r#"<tev:CreatePullPointSubscriptionResponse>
           <tev:SubscriptionReference>
             <wsa:Address>{base}/onvif/events/subscription_1</wsa:Address>
           </tev:SubscriptionReference>
-          <tev:CurrentTime>{now}</tev:CurrentTime>
-          <tev:TerminationTime>{now}</tev:TerminationTime>
+          <wsnt:CurrentTime>{now}</wsnt:CurrentTime>
+          <wsnt:TerminationTime>{now}</wsnt:TerminationTime>
         </tev:CreatePullPointSubscriptionResponse>"#
         ),
     )

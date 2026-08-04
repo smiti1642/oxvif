@@ -17,11 +17,11 @@ each stays in the lab.**
 
 ## 0. Blast radius, established before anything else
 
-**Two of the findings are client-facing bugs. The rest are mock fidelity.**
+**Three client-facing bugs so far. The rest are mock fidelity.**
 
 This section originally read *"no finding below is a client-facing bug"*, and
-that was wrong twice over — kept here rather than deleted, because both
-exceptions were found by looking at the two things the sentence dismissed:
+that was wrong three times over — kept here rather than deleted, because every
+exception was found by looking at something the sentence dismissed:
 
 1. **Media2's audio encoder element name** — §3, fixed in `8091892`.
    `MediaProfile2::audio_encoder_token` had been `None` from every conformant
@@ -31,6 +31,16 @@ exceptions were found by looking at the two things the sentence dismissed:
    It was hiding inside "54 unanchored roots, cause not yet established", which
    §2 explicitly declined to call a defect. Establishing the cause was what
    turned one of them into a defect.
+3. **`set_storage_configuration` sent five elements in the wrong namespace in
+   its *request body*** — §5.1a, fixed with §5.1. This one the checker cannot
+   see at all: it reads the mock's responses and never a client request. It was
+   found by asking why §4's predicted red never happened.
+
+**The pattern across all three is worth naming: each came from the sentence
+that dismissed a category.** "No finding is client-facing", "54 unanchored
+roots, cause not established", "the byte assertions will catch it". A
+dismissal in this document has so far been the best available index of where
+the next defect is.
 
 So the safe reading of §0 is not "the client is fine" but **"the client is
 unaffected by *namespace* and *order*, which is most of the set."** That much
@@ -95,8 +105,8 @@ ORDER              6     children out of the declared sequence order
                   63     distinct  (99 raw)
 ```
 
-**After §5.0 this is 62 distinct, `UNKNOWN-NAME` 11.** The other four kinds are
-unmoved. `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
+**After §5.0 this is 62 distinct, `UNKNOWN-NAME` 11; after §5.1, 46 distinct
+with `WRONG-NS` 0.** No other kind has moved. `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
 block is the baseline the sweep started from and is left as it was.
 
 The single row §5.0 removed is worth naming, because it is the whole argument
@@ -120,6 +130,11 @@ the lab's `NOTES.md`, run 3.
 five.
 
 ### 1.1 The dominant class was on nobody's list: wrong namespace
+
+**Fixed in §5.1 — the table there supersedes this one**, which named the
+directions correctly but read as though the unit of the fix were the *element
+name*. It is the *declaration*: two responses of one service can put the same
+element name in two namespaces, and both events and recording do.
 
 16 rows, and the direction is **not** uniformly "`tt:` where a service
 namespace belongs" — which is what run 2 read like and what the fix would have
@@ -297,12 +312,30 @@ change in the sweep.
 
 ## 4. What will break when the mock's output moves
 
-- **167 byte-level `contains("<prefix:…")` assertions** across eight files.
+- ~~**167 byte-level `contains("<prefix:…")` assertions** across eight files.
   **68 of them assert on mock output** — 62 in `src/mock/state.rs`, 6 in
   `src/mock/dispatch.rs` — and every one that names a prefix that moves will go
   red. That is the intended signal, not collateral: those assertions exist
   because the client parser cannot see prefixes, so they are the only thing that
-  can.
+  can.~~
+
+  **Measured when §5.1 landed: not one of them moved.** All sixteen
+  `WRONG-NS` rows were fixed and the whole suite stayed green — 818 lib tests
+  before and after, byte for byte.
+
+  The counting was right and the inference was wrong. Of the 62 in
+  `src/mock/state.rs`, 60 name a `tt:` element and **none of the 60 names an
+  element that had to move.** They cluster on `GetSystemDateAndTime`,
+  `GetHostname`, `GetNTP`, `GetNetworkProtocols`, the PTZ spaces — settled
+  parts of the mock that nobody suspected — while every one of the sixteen
+  defects lived in a nested element of a *service-declared* type that no
+  assertion had ever named. An assertion count is not coverage of the thing
+  about to change.
+
+  The one assertion in the whole repository that named a moved element was
+  `src/tests/client/device_tests.rs`, on a **client request body**, and it
+  turned out to be asserting a second client-facing bug rather than guarding
+  against one — see §5.1.
 - The remaining 99 are on client-*emitted* request bodies and on fixture
   parsing, and are unaffected — except `src/tests/client/device_tests.rs:403`
   and `:407`, which encode `ScopeAttribute` in a fixture and must move with the
@@ -358,10 +391,49 @@ Grouped so each lands in one file with one perturbation:
    sat in the repository the whole time. It also claimed *"❌ not implemented"*,
    which is how a reader would have missed the contradiction. Both corrected.
    `OPERATIONS.md` had **no row at all** for an operation shipped in 0.9.9.
-1. **Namespace correctness, per service** — device, Media2, recording, events.
-   "Render this subtree under the namespace its type declares" — and **read
-   §1.1's table before writing any of it**, because three of the sixteen rows
-   move the *other* way and a uniform sweep would break them.
+1. ~~**Namespace correctness, per service** — device, Media2, recording,
+   events.~~ **Done. `WRONG-NS` 16 → 0, no other kind moved.**
+
+   §1.1's warning held, and understated it. Four families, four directions:
+
+   | family | was | is | why |
+   |---|---|---|---|
+   | storage (`Data`, `LocalPath`, `StorageUri`, `User`, `UserName`) | `tt:` | `tds:` | declared in `devicemgmt.wsdl`'s own qualified schema; **none of the five exists in `tt:` at all** |
+   | Media2 (`Profiles/Name`, `Info/Total`, the four `VideoSourceMode` members) | `tt:` | `tr2:` | declared locally in `media2.wsdl` |
+   | recording (`JobItem/JobToken`, `JobItem/JobConfiguration`) | `trc:` | **`tt:`** | `JobItem` is typed `tt:GetRecordingJobsResponseItem`, a complexType in `onvif.xsd` |
+   | events (`CurrentTime`, `TerminationTime`, `TopicExpressionDialect`, `FixedTopicSet`) | `tev:` / `wstop:` | **`wsnt:`** | `ref="wsnt:…"` in `event.wsdl` |
+
+   Two traps that a name-based sweep walks straight into, both inside a single
+   file:
+
+   - **`CurrentTime` and `TerminationTime` are `wsnt:` on
+     `CreatePullPointSubscriptionResponse` and `tev:` on
+     `PullMessagesResponse`.** `event.wsdl` declares the first pair by `ref` and
+     the second pair locally. Same two names, same service, same file.
+   - **`JobToken` and `JobConfiguration` are `tt:` on
+     `GetRecordingJobsResponse` and `trc:` on `CreateRecordingJobResponse`**,
+     for the same reason in reverse.
+
+   Perturbed one family at a time: 5 / 6 / 2 / 3 rows come back, each on the
+   assertion, each reverted green.
+
+   **One of the four was not driven by the checker.** `wstop:FixedTopicSet` →
+   `wsnt:` produces *no* `WRONG-NS` row when reverted, because `t-1.xsd` is not
+   in the schema set so `wstop:` is an unknown namespace the checker skips. It
+   showed up only as a name inside a `MISSING-REQUIRED` row's list, which does
+   not move a count. It was found by reading `event.wsdl`. **The count going to
+   zero does not mean the class is closed.**
+
+1a. **`set_storage_configuration` sent the same five elements in `tt:` in its
+   *request body*** — a second client-facing defect, against real cameras, and
+   **structurally invisible to the checker**, which reads the mock's responses
+   and never the client's requests. Fixed in the same commit; the two would
+   otherwise have disagreed, which is the failure this whole exercise exists to
+   remove.
+
+   It was found by asking why §4's predicted red did not happen. That question
+   is the reusable part: **when a guard you expected to fire stays silent, the
+   silence is the finding.**
 2. **Sequence order** — five renderers, six rows (§1.2).
 3. **Undeclared names** — `ScopeAttribute`, the imaging focus options, the
    options extensions (§1.3). Settle `UsernameToken` by type rather than
@@ -414,7 +486,7 @@ and not a follow-up.
    Sweeping first would mean hand-checking every one against a tool that lives
    in another repository, and calling it done on inspection. Land it with the
    publishing-checklist line in the same commit.
-4. ~~§5.0~~ **done** → §5.1 → §5.2 → §5.3 → §5.4, each its own commit, each verified by
+4. ~~§5.0~~ **done** → ~~§5.1~~ **done** → §5.2 → §5.3 → §5.4, each its own commit, each verified by
    re-running the checker (**re-dump the corpus first**) and each with the
    perturbation `CLAUDE.md` requires: put the old output back, and the
    schema-shape test must report it.

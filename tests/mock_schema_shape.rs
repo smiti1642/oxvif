@@ -124,8 +124,21 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   **The pins do not see a wrong-service defect.** They saw one row of this
 ///   one by luck, because the mock happened to render the child in the same
 ///   wrong namespace.
+/// - §5.1, namespace correctness — `WRONG-NS` 16 → **0**, no other kind moved.
+///   Four families, and three of them could not have been fixed by any rule
+///   about element *names*: storage `tt:` → `tds:`, Media2 `tt:` → `tr2:`,
+///   recording `trc:` → **`tt:`**, events `tev:`/`wstop:` → **`wsnt:`**.
+///   `CurrentTime` and `TerminationTime` are `wsnt:` on
+///   `CreatePullPointSubscriptionResponse` and `tev:` on
+///   `PullMessagesResponse` — same two names, same WSDL, two namespaces.
+///
+///   **Zero is the weakest pin here, not the strongest.** A careless edit can
+///   leave it green by making a *different* mistake: a name undeclared anywhere
+///   reports `UNKNOWN-NAME`, and a name undeclared *by its parent* reports
+///   `UNKNOWN-CHILD`. Only a name that the parent declares in some other
+///   namespace lands in this bucket.
 const PINS: &[(&str, usize)] = &[
-    ("WRONG-NS", 16),
+    ("WRONG-NS", 0),
     ("MISSING-REQUIRED", 23),
     ("UNKNOWN-NAME", 11),
     ("UNKNOWN-CHILD", 6),

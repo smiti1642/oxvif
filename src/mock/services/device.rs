@@ -807,23 +807,35 @@ pub fn resp_send_auxiliary_command() -> String {
 // it one would mean `Option<String>` on the parser, which is a public API
 // change and not this commit's business.
 
+/// Every element here is `tds:`, not `tt:`.
+///
+/// `StorageConfiguration`, `StorageConfigurationData` and `UserCredential` are
+/// all declared in `devicemgmt.wsdl`'s own `<wsdl:types>`, which is
+/// `elementFormDefault="qualified"` — so `Data`, `LocalPath`, `StorageUri`,
+/// `User` and `UserName` are in the device-service namespace. The mock emitted
+/// the whole subtree in `tt:` until 0.15.0, on the assumption that a nested
+/// element belongs to the shared schema. **The namespace follows the
+/// declaration, not the depth.**
 fn render_storage(e: &crate::mock::state::StorageEntry) -> String {
     let mut inner = String::new();
     if !e.local_path.is_empty() {
-        inner.push_str(&format!("<tt:LocalPath>{}</tt:LocalPath>", e.local_path));
+        inner.push_str(&format!("<tds:LocalPath>{}</tds:LocalPath>", e.local_path));
     }
     if !e.storage_uri.is_empty() {
-        inner.push_str(&format!("<tt:StorageUri>{}</tt:StorageUri>", e.storage_uri));
+        inner.push_str(&format!(
+            "<tds:StorageUri>{}</tds:StorageUri>",
+            e.storage_uri
+        ));
     }
     if !e.user.is_empty() {
         inner.push_str(&format!(
-            "<tt:User><tt:UserName>{}</tt:UserName></tt:User>",
+            "<tds:User><tds:UserName>{}</tds:UserName></tds:User>",
             e.user
         ));
     }
     format!(
         "<tds:StorageConfigurations token=\"{token}\">\
-           <tt:Data type=\"{ty}\">{inner}</tt:Data>\
+           <tds:Data type=\"{ty}\">{inner}</tds:Data>\
          </tds:StorageConfigurations>",
         token = e.token,
         ty = e.storage_type,

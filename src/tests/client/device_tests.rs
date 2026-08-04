@@ -1404,7 +1404,7 @@ async fn test_set_storage_configuration_sends_correct_body() {
         OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
 
     client
-        .set_storage_configuration("SD_01", "LocalStorage", "/mnt/sd", "", "")
+        .set_storage_configuration("SD_01", "LocalStorage", "/mnt/sd", "nfs://h/r", "admin")
         .await
         .unwrap();
 
@@ -1414,7 +1414,27 @@ async fn test_set_storage_configuration_sends_correct_body() {
         "http://www.onvif.org/ver10/device/wsdl/SetStorageConfiguration"
     );
     assert!(c.body.contains("type=\"LocalStorage\""));
-    assert!(c.body.contains("<tt:LocalPath>/mnt/sd</tt:LocalPath>"));
+    // All four in `tds:`. `devicemgmt.wsdl` declares `Data`, `LocalPath`,
+    // `StorageUri`, `User` and `UserName` in its own qualified schema, and none
+    // of the five exists in the `tt:` namespace — the body sent `tt:` until
+    // 0.15.0. Asserting all four rather than one because they were one bug:
+    // asserting `LocalPath` alone is what let the other three ship.
+    assert!(c.body.contains("<tds:Data type=\"LocalStorage\">"));
+    assert!(c.body.contains("<tds:LocalPath>/mnt/sd</tds:LocalPath>"));
+    assert!(
+        c.body
+            .contains("<tds:StorageUri>nfs://h/r</tds:StorageUri>")
+    );
+    assert!(
+        c.body
+            .contains("<tds:User><tds:UserName>admin</tds:UserName></tds:User>")
+    );
+    // And nothing left behind in `tt:`.
+    assert!(
+        !c.body.contains("<tt:"),
+        "body still emits tt: — {}",
+        c.body
+    );
 }
 
 // ── get_system_uris ───────────────────────────────────────────────────────────

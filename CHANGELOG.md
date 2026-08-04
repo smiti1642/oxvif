@@ -148,6 +148,44 @@ two-thirds of the test suite.
   they happened to catch one row of that one, because the mock rendered the
   child in the same wrong namespace.
 
+- **The mock emitted sixteen elements in the wrong XML namespace.** All sixteen
+  fixed; the schema-shape check's `WRONG-NS` count is 0 and no other kind moved.
+  **No caller is affected** — `XmlNode` is namespace-stripped, so oxvif's parser
+  reads these identically either way. What was affected is the `mock-server`
+  feature, which `src/mock/mod.rs` offers "for cross-process / non-Rust
+  clients": a conformant client resolving by qualified name found nothing.
+
+  Four families, four different directions, and **three of them cannot be
+  derived from the element name**:
+
+  | | was | is |
+  |---|---|---|
+  | storage `Data` / `LocalPath` / `StorageUri` / `User` / `UserName` | `tt:` | `tds:` |
+  | Media2 `Profiles/Name`, `Info/Total`, the four `VideoSourceMode` members | `tt:` | `tr2:` |
+  | recording `JobItem/JobToken`, `JobItem/JobConfiguration` | `trc:` | **`tt:`** |
+  | events `CurrentTime`, `TerminationTime`, `TopicExpressionDialect`, `FixedTopicSet` | `tev:` / `wstop:` | **`wsnt:`** |
+
+  Two places where one service puts one element name in two namespaces, so a
+  search-and-replace on the name would have broken as much as it fixed:
+
+  - `CurrentTime` and `TerminationTime` are `wsnt:` on
+    `CreatePullPointSubscriptionResponse` and `tev:` on `PullMessagesResponse`.
+    `event.wsdl` declares the first pair by `ref` and the second pair locally.
+  - `JobToken` and `JobConfiguration` are `tt:` on `GetRecordingJobsResponse`
+    (typed `tt:GetRecordingJobsResponseItem`) and `trc:` on
+    `CreateRecordingJobResponse` (declared locally).
+
+  And one subtlety inside a single element: `VideoSourceMode/MaxResolution`
+  became `tr2:MaxResolution`, but its `Width` and `Height` stay `tt:`. The
+  element name follows its declaration; its content follows its type.
+
+  Perturbed one family at a time — 5 / 6 / 2 / 3 rows come back, each on the
+  assertion, each reverted green. **One of the four was not driven by the check
+  at all**: `wstop:FixedTopicSet` → `wsnt:` produces no finding when reverted,
+  because `t-1.xsd` is not in the schema set and `wstop:` is a namespace the
+  checker skips. It came from reading `event.wsdl`. A count reaching zero is
+  not the same as a class being closed, and this is why.
+
 - **The mock answers a DeviceIO endpoint.** `{base}/onvif/deviceio`, advertised
   in `GetCapabilities` (`Capabilities/Extension/DeviceIO`) **and** `GetServices`,
   dispatching `…/ver10/deviceio/wsdl/` and rendering `GetDigitalInputs` in
@@ -169,6 +207,22 @@ two-thirds of the test suite.
     the DeviceIO block made the mock state the same fact a third time. Now 2.
 
 ### Fixed
+
+- **`set_storage_configuration` sent five elements in the wrong XML namespace.**
+  `Data`, `LocalPath`, `StorageUri`, `User` and `UserName` went out as `tt:`.
+  `devicemgmt.wsdl` declares `StorageConfiguration`, `StorageConfigurationData`
+  and `UserCredential` in its own `elementFormDefault="qualified"` schema, so
+  all five are `tds:` — **and none of the five names exists in the `tt:`
+  namespace at all.** This is a request body, so a device that validates it can
+  reject the call or silently drop the fields; oxvif has sent it since storage
+  support landed.
+
+  `tests/mock_schema_shape.rs` **cannot see this and never could**: it checks
+  the mock's *responses*. It was found by asking why the mock-side namespace
+  sweep (below) reddened no existing test — the one assertion in the repository
+  that named a moved element was asserting this bug rather than guarding
+  against it. The test now asserts all four elements plus "nothing left in
+  `tt:`", because asserting `LocalPath` alone is what let the other four ship.
 
 - **`GetDigitalInputs` was sent to the device service, which does not implement
   it.** `deviceio.wsdl` is the only WSDL declaring `GetDigitalInputs` and

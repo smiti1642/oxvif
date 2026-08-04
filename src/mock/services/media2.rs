@@ -56,9 +56,13 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str) -> String {
     } else {
         format!("<tr2:Configurations>{cfgs}</tr2:Configurations>")
     };
+    // `tr2:Name`, not `tt:Name`: `tr2:MediaProfile` declares `Name` locally and
+    // `media2.wsdl` sets `elementFormDefault="qualified"`, so it is in the
+    // Media2 namespace. Media1's `tt:Profile` declares its own `Name` in
+    // `onvif.xsd`, which is why the same-looking element differs by service.
     format!(
         r#"<tr2:{tag} token="{token}" fixed="{fixed}">
-          <tt:Name>{name}</tt:Name>
+          <tr2:Name>{name}</tr2:Name>
           {configurations}
         </tr2:{tag}>"#,
         token = p.token,
@@ -393,7 +397,7 @@ pub fn resp_video_encoder_instances() -> String {
         r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
         r#"<tr2:GetVideoEncoderInstancesResponse>
           <tr2:Info>
-            <tt:Total>4</tt:Total>
+            <tr2:Total>4</tr2:Total>
             <tt:Encoding>
               <tt:Encoding>H264</tt:Encoding>
               <tt:Number>2</tt:Number>
@@ -788,15 +792,22 @@ pub fn resp_audio_decoder_configurations(state: &SharedState) -> String {
     )
 }
 
+/// All four members are `tr2:` — `tr2:VideoSourceMode` declares them locally
+/// and `media2.wsdl` is `elementFormDefault="qualified"`.
+///
+/// **`MaxResolution`'s children are not.** The element name follows its
+/// declaration; its *content* follows its type, and `MaxResolution` is typed
+/// `tt:VideoResolution`, whose `Width` and `Height` are declared in
+/// `onvif.xsd`. Moving a subtree wholesale is the mistake to avoid here.
 pub fn resp_video_source_modes() -> String {
     soap(
         r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
         r#"<tr2:GetVideoSourceModesResponse>
           <tr2:VideoSourceModes token="Mode_1">
-            <tt:MaxFramerate>30</tt:MaxFramerate>
-            <tt:MaxResolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:MaxResolution>
-            <tt:Encodings>H264 H265</tt:Encodings>
-            <tt:Reboot>false</tt:Reboot>
+            <tr2:MaxFramerate>30</tr2:MaxFramerate>
+            <tr2:MaxResolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tr2:MaxResolution>
+            <tr2:Encodings>H264 H265</tr2:Encodings>
+            <tr2:Reboot>false</tr2:Reboot>
           </tr2:VideoSourceModes>
         </tr2:GetVideoSourceModesResponse>"#,
     )

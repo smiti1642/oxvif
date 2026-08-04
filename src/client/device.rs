@@ -811,30 +811,43 @@ impl OnvifClient {
         } else {
             format!(" token=\"{}\"", xml_escape(token))
         };
+        // Every element of this body is `tds:`. `StorageConfiguration`,
+        // `StorageConfigurationData` and `UserCredential` are declared in
+        // `devicemgmt.wsdl`'s own `<wsdl:types>`, which is
+        // `elementFormDefault="qualified"` — none of these five names exists in
+        // the `tt:` namespace at all.
+        //
+        // All five were `tt:` until 0.15.0. **A request body is not covered by
+        // `tests/mock_schema_shape.rs`**, which checks the mock's *responses*;
+        // this was found only by asking why that check's namespace sweep
+        // reddened nothing here.
         let user_el = if user.is_empty() {
             String::new()
         } else {
             format!(
-                "<tt:User><tt:UserName>{}</tt:UserName></tt:User>",
+                "<tds:User><tds:UserName>{}</tds:UserName></tds:User>",
                 xml_escape(user)
             )
         };
         let local_path_el = if local_path.is_empty() {
             String::new()
         } else {
-            format!("<tt:LocalPath>{}</tt:LocalPath>", xml_escape(local_path))
+            format!("<tds:LocalPath>{}</tds:LocalPath>", xml_escape(local_path))
         };
         let storage_uri_el = if storage_uri.is_empty() {
             String::new()
         } else {
-            format!("<tt:StorageUri>{}</tt:StorageUri>", xml_escape(storage_uri))
+            format!(
+                "<tds:StorageUri>{}</tds:StorageUri>",
+                xml_escape(storage_uri)
+            )
         };
         let body = format!(
             "<tds:SetStorageConfiguration>\
                <tds:StorageConfiguration{token_attr}>\
-                 <tt:Data type=\"{storage_type_escaped}\">\
+                 <tds:Data type=\"{storage_type_escaped}\">\
                    {local_path_el}{storage_uri_el}{user_el}\
-                 </tt:Data>\
+                 </tds:Data>\
                </tds:StorageConfiguration>\
              </tds:SetStorageConfiguration>",
             storage_type_escaped = xml_escape(storage_type),

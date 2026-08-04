@@ -75,11 +75,26 @@ fn render_recording(r: &RecordingEntry) -> String {
     )
 }
 
+/// `JobItem` is `trc:` — it is declared locally in `recording.wsdl`. Its two
+/// children are **`tt:`**, because `JobItem` is typed
+/// `tt:GetRecordingJobsResponseItem`, a complexType declared in `onvif.xsd`.
+///
+/// This runs the *opposite* way to the rest of the 0.15.0 namespace sweep,
+/// where the fix was `tt:` → a service namespace. A uniform "push it into the
+/// service namespace" pass would have broken these two rows while fixing the
+/// other thirteen.
+///
+/// And the same two names go the other way one operation over:
+/// `CreateRecordingJobResponse` declares its own `JobToken` and
+/// `JobConfiguration` locally, so **those are `trc:`** and
+/// `handle_create_recording_job` is right to emit `trc:JobToken`. Same names,
+/// same service, different namespace — match on the declaration, never on the
+/// name.
 fn render_job(j: &RecordingJobEntry) -> String {
     format!(
         r#"<trc:JobItem>
-          <trc:JobToken>{token}</trc:JobToken>
-          <trc:JobConfiguration>
+          <tt:JobToken>{token}</tt:JobToken>
+          <tt:JobConfiguration>
             <tt:RecordingToken>{rt}</tt:RecordingToken>
             <tt:Mode>{mode}</tt:Mode>
             <tt:Priority>{priority}</tt:Priority>
@@ -88,7 +103,7 @@ fn render_job(j: &RecordingJobEntry) -> String {
                 <tt:Token>{src}</tt:Token>
               </tt:SourceToken>
             </tt:Source>
-          </trc:JobConfiguration>
+          </tt:JobConfiguration>
         </trc:JobItem>"#,
         token = j.token,
         rt = j.recording_token,
