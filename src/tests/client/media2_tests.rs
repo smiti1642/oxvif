@@ -108,22 +108,30 @@ fn video_encoder_configuration_options_media2_xml() -> &'static str {
         </s:Envelope>"#
 }
 
+/// `tr2:EncoderInstanceInfo` declares `Codec` (`[0..*]`) then `Total`, and
+/// `tr2:EncoderInstance` declares `Encoding` then `Number` — **every one of
+/// them `tr2:`**, because `media2.wsdl`'s inline schema is
+/// `elementFormDefault="qualified"`.
+///
+/// This fixture had all four wrong until 0.15.0: it named the wrapper
+/// `Encoding` after its own first child, put everything in `tt:`, and put
+/// `Total` first. Only the wrapper name mattered to the parser, which is why it
+/// stayed green — and why `encodings` came back empty from a real device.
 fn video_encoder_instances_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                      xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"
-                      xmlns:tt="http://www.onvif.org/ver10/schema">
+                      xmlns:tr2="http://www.onvif.org/ver20/media/wsdl">
           <s:Body>
             <tr2:GetVideoEncoderInstancesResponse>
               <tr2:Info>
-                <tt:Total>4</tt:Total>
-                <tt:Encoding>
-                  <tt:Encoding>H264</tt:Encoding>
-                  <tt:Number>2</tt:Number>
-                </tt:Encoding>
-                <tt:Encoding>
-                  <tt:Encoding>H265</tt:Encoding>
-                  <tt:Number>2</tt:Number>
-                </tt:Encoding>
+                <tr2:Codec>
+                  <tr2:Encoding>H264</tr2:Encoding>
+                  <tr2:Number>2</tr2:Number>
+                </tr2:Codec>
+                <tr2:Codec>
+                  <tr2:Encoding>H265</tr2:Encoding>
+                  <tr2:Number>3</tr2:Number>
+                </tr2:Codec>
+                <tr2:Total>4</tr2:Total>
               </tr2:Info>
             </tr2:GetVideoEncoderInstancesResponse>
           </s:Body>
@@ -244,6 +252,13 @@ async fn test_get_video_encoder_instances_parses_total() {
         crate::types::VideoEncoding::H264
     );
     assert_eq!(inst.encodings[0].number, 2);
+    // The two codecs disagree on `Number` (2 against 3), so a parser reading
+    // the first entry for both, or reading `Total` into either, goes red here.
+    assert_eq!(
+        inst.encodings[1].encoding,
+        crate::types::VideoEncoding::H265
+    );
+    assert_eq!(inst.encodings[1].number, 3);
 }
 
 // ── Round 2 new-field coverage tests ─────────────────────────────────────────

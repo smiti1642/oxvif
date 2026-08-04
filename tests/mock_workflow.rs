@@ -449,6 +449,93 @@ async fn recording_search_replay() {
     );
 }
 
+/// `GetRecordings` reports every member of `tt:RecordingSourceInformation`.
+///
+/// All five are `minOccurs=1`. The mock rendered four of them and had no field
+/// at all for `Address`, so `CreateRecording` accepted one and discarded it —
+/// the `SetNetworkInterfaces`/`MTU` shape. Nothing failed, because
+/// `RecordingSourceInformation::address` is `Option` and `None` reads as "the
+/// device did not say".
+///
+/// The two seeded recordings **disagree on all five**, so a renderer that
+/// answers from a constant, or from the first entry for both, goes red here.
+/// `Rec_002`'s empty address is the case that keeps `None` observable: the
+/// element is required, so it goes out empty rather than being dropped.
+#[tokio::test]
+async fn recording_source_information_is_complete_and_per_recording() {
+    let (_srv, s) = setup().await;
+
+    let recs = s.get_recordings().await.unwrap();
+    let one = recs.iter().find(|r| r.token == "Rec_001").expect("Rec_001");
+    assert_eq!(one.source.source_id, "rtsp://mock/live");
+    assert_eq!(one.source.name, "MockCamera");
+    assert_eq!(one.source.location, "Lab");
+    assert_eq!(one.source.description, "Mock recording");
+    assert_eq!(
+        one.source.address.as_deref(),
+        Some("http://192.168.1.100/onvif/device_service")
+    );
+
+    let two = recs.iter().find(|r| r.token == "Rec_002").expect("Rec_002");
+    assert_eq!(two.source.source_id, "");
+    assert_eq!(two.source.location, "");
+    assert_eq!(
+        two.source.address, None,
+        "an entry with no address sends the required element empty, and empty \
+         must still read as None"
+    );
+}
+
+/// `SystemLogUris` holds repeated **`SystemLog`**, not `SystemLogUri`.
+///
+/// `SystemLogUri` is the *type*. Reading the type name as the element name left
+/// `system_log_uri` `None` against every conformant device, and the mock had
+/// been written to agree with the parser — so mock, unit fixture and client all
+/// agreed with each other and with nothing else. This drives the real chain.
+#[tokio::test]
+async fn system_log_uri_is_reported() {
+    let (_srv, s) = setup().await;
+
+    let uris = s.get_system_uris().await.unwrap();
+    let log = uris.system_log_uri.expect("SystemLogUris/SystemLog/Uri");
+    assert!(log.ends_with("/syslog"), "got {log}");
+    // The two siblings still parse, so the assertion above is about the log
+    // entry and not about the whole response being missed.
+    assert!(
+        uris.support_info_uri
+            .expect("SupportInfoUri")
+            .ends_with("/support")
+    );
+    assert!(
+        uris.system_backup_uri
+            .expect("SystemBackupUri")
+            .ends_with("/backup")
+    );
+}
+
+/// `tr2:EncoderInstanceInfo` groups instances under **`Codec`**, with `Encoding`
+/// one level inside it.
+///
+/// The parser iterated `children_named("Encoding")`, which matched the wrapper
+/// only because the mock had *named* the wrapper `Encoding`. Against a real
+/// device `encodings` was empty while `total` still parsed — a half-populated
+/// struct, which is harder to notice than an error.
+#[tokio::test]
+async fn media2_encoder_instances_are_grouped_by_codec() {
+    let (_srv, s) = setup().await;
+
+    let inst = s.get_video_encoder_instances_media2("VSC_1").await.unwrap();
+    assert_eq!(inst.total, 4);
+    assert_eq!(
+        inst.encodings.len(),
+        2,
+        "the two Codec entries must both be seen"
+    );
+    assert_eq!(inst.encodings[0].encoding, oxvif::VideoEncoding::H264);
+    assert_eq!(inst.encodings[1].encoding, oxvif::VideoEncoding::H265);
+    assert_eq!(inst.encodings[0].number + inst.encodings[1].number, 4);
+}
+
 #[tokio::test]
 async fn io_relay_and_digital_input_flow() {
     let (srv, s) = setup().await;

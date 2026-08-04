@@ -3,7 +3,7 @@
 //! ## Why this exists
 //!
 //! The mock writes XML as hand-built strings, so it can emit a document no
-//! schema allows and **all five gate lines stay green**. Seven instances have
+//! schema allows and **all five gate lines stay green**. Nine instances have
 //! been found so far, every one of them by a human reading a schema file by
 //! hand:
 //!
@@ -16,6 +16,8 @@
 //! | 0.15.0 | `tt:ScopeAttribute` | a different name entirely |
 //! | 0.15.0 | Media2 `Audio` | `AudioEncoder` — **this one was a client bug** |
 //! | 0.15.0 | Media2 `<tt:GovLength>` / `<tt:Profile>` elements | `xs:attribute` on the configuration — **also a client bug** |
+//! | 0.15.0 | `tt:SystemLogUri` under `SystemLogUris` | `SystemLog`; `SystemLogUri` is the *type* — **also a client bug** |
+//! | 0.15.0 | `tt:Encoding` wrapping the Media2 encoder instances | `tr2:Codec`, with `Encoding` one level *inside* it — **also a client bug** |
 //!
 //! Three of those were put back one at a time and each turned this test red on
 //! the assertion (`8091892`, schema set of run 3):
@@ -34,8 +36,15 @@
 //! moving two kinds**, which is why [`PINS`] is per-kind: a single total would
 //! have let this release's client bug back in silently.
 //!
-//! Six for six by hand is not a strategy, and nothing says the class is
-//! exhausted. Worse, **no other test in this repository can see any of it**:
+//! Nine for nine by hand is not a strategy, and **every count in [`PINS`] being
+//! zero does not say the class is closed.** Three things this file structurally
+//! cannot see keep it open: it reads `xs:element` and never `xs:attribute`, so
+//! a member moved to an attribute is invisible in both directions; a type
+//! carrying an `xs:any` sets `Ty::wild` and suppresses `UNKNOWN-CHILD` for the
+//! whole type; and an element whose children are all optional is schema-valid
+//! empty. Four of the ten instances above were found *in spite of* the counts
+//! rather than by them. Worse, **no other test in this repository can see any
+//! of it**:
 //! `XmlNode` is namespace-stripped (`src/soap/xml.rs`) and every lookup matches
 //! the local name only, so oxvif's own parser is namespace-blind and
 //! order-independent. A response with every element in the wrong namespace, in
@@ -293,12 +302,53 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   `video_source_options_max_profiles_is_an_attribute` in
 ///   `tests/mock_workflow.rs` are what assert the six members, by reading the
 ///   values back through the client; reverting either side reddens both.
+/// - §5.9, the last fourteen rows — `MISSING-REQUIRED` 7 → **0**, `UNKNOWN-NAME`
+///   4 → **0**, `UNKNOWN-CHILD` 2 → **0**, `ORDER` 1 → **0**. Four independent
+///   groups, perturbed one at a time; no group opened a row for another.
+///
+///   | group | delta when put back |
+///   |---|---|
+///   | device `ScopeDef` + `SystemLog` | `MISSING-REQUIRED` +1, `UNKNOWN-NAME` +3, `UNKNOWN-CHILD` +2 |
+///   | recording / search required members | `MISSING-REQUIRED` +4 |
+///   | PTZ `Spaces` + the two event dialects | `MISSING-REQUIRED` +2 |
+///   | OSD order + Media2 encoder instances | `ORDER` +1, `UNKNOWN-NAME` +1 |
+///
+///   **Every kind is now 0, and the caveat on `WRONG-NS` above applies to all
+///   five.** A zero is the weakest pin in this file, not the strongest: it can
+///   stay green while a *different* mistake is made, and it moves only for
+///   defects the checker can see at all. Two of this group were **client**
+///   defects — the ninth and tenth of the sweep — and each cost exactly one
+///   visible row while breaking a field for every conformant device:
+///
+///   - `SystemUris::from_xml` walked `SystemLogUris/SystemLogUri/Uri`.
+///     `tt:SystemLogUriList` declares **`SystemLog`**; `SystemLogUri` is the
+///     *type*. So `system_log_uri` was `None` from every real device, and the
+///     unit fixture had been written to agree with the parser.
+///   - `VideoEncoderInstances::from_xml` iterated `children_named("Encoding")`.
+///     `tr2:EncoderInstanceInfo` declares **`Codec`**, and `Encoding` is a child
+///     *of* `Codec` — the two levels share a name, and `XmlNode` strips
+///     namespaces, so `encodings` came back empty while `total` still parsed.
+///     Three further errors in that one subtree moved **nothing**: the wrapper
+///     and both leaves were in `tt:` rather than `tr2:`, and `Total` came first.
+///     `tt:Encoding` is a real name in `tt:`, so no `UNKNOWN-NAME`;
+///     `tr2:EncoderInstanceInfo` carries an `xs:any`, so no `UNKNOWN-CHILD`;
+///     and one recognised child cannot violate a sequence, so no `ORDER`.
+///
+///   Two more this file could not have judged either way. `PTZConfigurationOptions`
+///   needed `Spaces`, and `<tt:Spaces/>` would have cleared the row while
+///   asserting the head supports no coordinate space — the empty-element blind
+///   spot named above, and a real 0.15.0 defect on the sibling element. It is
+///   filled from the node the configuration drives, so `PTZConfig_2` reports
+///   zoom slots only. And `GetRecordingsResponseItem/Tracks` is `[1]` over a
+///   list that is `[0..*]`, so a recording holding nothing sends the wrapper
+///   *empty* — the count cannot tell that apart from the wrapper being dropped
+///   for a recording that does have tracks.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
-    ("MISSING-REQUIRED", 7),
-    ("UNKNOWN-NAME", 4),
-    ("UNKNOWN-CHILD", 2),
-    ("ORDER", 1),
+    ("MISSING-REQUIRED", 0),
+    ("UNKNOWN-NAME", 0),
+    ("UNKNOWN-CHILD", 0),
+    ("ORDER", 0),
 ];
 
 /// Floors on what the run actually covered.

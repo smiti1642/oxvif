@@ -326,6 +326,101 @@ two-thirds of the test suite.
 
 ### Fixed
 
+- **`get_system_uris().system_log_uri` was `None` from every conformant
+  device.** `tt:SystemLogUriList` declares one child element, **`SystemLog`**,
+  *typed* `tt:SystemLogUri` — and `SystemUris::from_xml` (`src/types/device.rs`)
+  walked `SystemLogUris/SystemLogUri/Uri`, reading the type name as though it
+  were the element name. `tt:SystemLogUri` itself declares `Type` then `Uri`;
+  the mock spelled the first `LogType`.
+
+  **Ninth client-facing bug of this sweep, and the third instance of
+  mock-and-fixture-agreeing-with-the-parser.** `resp_system_uris`
+  (`src/mock/services/device.rs`) emitted `<tt:SystemLogUri>` and
+  `get_system_uris_xml` in `src/tests/client/device_tests.rs` matched it, so all
+  three agreed with each other and with nothing else. `XmlNode` strips
+  namespaces and matches local names, so nothing about the lookup looked wrong.
+  `system_log_uri_is_reported` in `tests/mock_workflow.rs` now drives the real
+  chain; the unit fixture sends the schema names, so it can fail for the reason
+  it was written.
+
+- **`get_video_encoder_instances_media2().encodings` was empty from every
+  conformant device, while `total` still parsed.** `tr2:EncoderInstanceInfo`
+  declares `Codec` (`tr2:EncoderInstance`, `[0..*]`) then `Total`, and
+  `tr2:EncoderInstance` declares `Encoding` then `Number`.
+  `VideoEncoderInstances::from_xml` (`src/types/video.rs`) iterated
+  `children_named("Encoding")` — the name of a child *of* `Codec`, one level
+  down. A half-populated struct rather than an error, which is harder to notice.
+
+  **Tenth client-facing bug, and the widest gap in the sweep between the defect
+  and what the checker could see.** The mock's whole subtree was wrong in four
+  ways — wrapper named `Encoding` after its own first child, wrapper and both
+  leaves in `tt:` rather than `tr2:`, and `Total` emitted first — and only
+  `Number` produced a row. `tt:Encoding` is a real name in `tt:`, so no
+  `UNKNOWN-NAME`; `tr2:EncoderInstanceInfo` carries an `xs:any`, which
+  suppresses `UNKNOWN-CHILD` for the whole type; and one recognised child cannot
+  violate a sequence, so no `ORDER` either. `UNKNOWN-NAME` 1 → 0.
+  `media2_encoder_instances_are_grouped_by_codec` in `tests/mock_workflow.rs`
+  is what asserts the two entries, and the unit fixtures in
+  `src/tests/client/media2_tests.rs` and `src/tests/types_tests.rs` now carry
+  the conformant shape; the client fixture's two codecs disagree on `Number`
+  (2 against 3) so a parser reading one entry for both goes red.
+
+- **The mock omitted seven required members, one undeclared name and one
+  sequence order — the last fourteen schema-shape rows.** All five counts are
+  now **0**; the movement per group is recorded in `PINS`
+  (`tests/mock_schema_shape.rs`) and in
+  `docs/active/mock-schema-conformance-2026-08.md` §1, and each of the four
+  groups was perturbed on its own.
+
+  - **`GetScopes`** emitted `<tt:ScopeAttribute>`, a name ONVIF declares
+    nowhere. `tt:Scope` declares `ScopeDef` (the `Fixed`/`Configurable`
+    enumeration) then `ScopeItem`, both required — so one wrong name reported
+    in three kinds at once. The correct name had been sitting in a comment 150
+    lines below the bug in the same file since the `SetScopes` fix. The client
+    reads `ScopeItem` only, so this one was mock-and-fixture, not a client bug.
+  - **`GetRecordings` and `GetRecordingSearchResults` disagreed about the same
+    recording.** All five members of `tt:RecordingSourceInformation` are `[1]`;
+    the search results rendered `Name` alone, dropping three that
+    `RecordingState` already held, and **`Address` had no field at all** — so
+    `CreateRecording` read it out of the request and discarded it while
+    `RecordingSourceInformation::address` kept parsing it. That is the
+    `SetNetworkInterfaces`/`MTU` shape. One `render_source`
+    (`src/mock/services/recording.rs`) now serves both getters. An entry with no
+    address sends the **empty** required element rather than omitting it, which
+    is what keeps `address: None` observable — `Rec_001` carries one and
+    `Rec_002` does not.
+  - **`GetRecordings` dropped the `Tracks` wrapper for a recording holding
+    nothing.** `tt:GetRecordingsResponseItem/Tracks` is `[1]` over a
+    `tt:GetTracksResponseList` whose `Track` is `[0..*]`, so the wrapper goes out
+    empty. `Rec_002` and every freshly created recording were the cases.
+  - **`EndSearch` answered with an empty body.** `search.wsdl` declares one
+    required child, `Endpoint`, an `xs:dateTime`. Nothing noticed because
+    `end_search` returns `()` and only checks the response element is present.
+    It reads `soap::security::unix_secs_to_iso8601`, the same conversion
+    `GetSystemDateAndTime` and `PTZStatus/UtcTime` use.
+  - **PTZ `GetConfigurationOptions` omitted the required `Spaces`.** Emitting
+    `<tt:Spaces/>` would have cleared the row and re-created the *other* 0.15.0
+    defect — an empty spaces block is schema-valid and claims the head supports
+    no coordinate space at all. `render_spaces_body` is factored out of
+    `render_node` (`src/mock/services/ptz.rs`) and reused, so the answer is the
+    spaces of the node the configuration drives: `PTZConfig_2` drives
+    `PTZNode_2`, which cannot pan or tilt, and reports its four zoom slots and
+    nothing else. **No shape checker can tell those two fixes apart.**
+  - **`GetEventProperties` omitted `MessageContentFilterDialect` and
+    `MessageContentSchemaLocation`**, both `[1]` and both declared locally in
+    `event.wsdl`, so both `tev:`. They sit either side of the optional
+    `ProducerPropertiesFilterDialect` in the sequence.
+  - **`GetOSDOptions` emitted `FontSizeRange` last.** `tt:OSDTextOptions`
+    places it second, between the repeated `Type` and the `DateFormat` list.
+    `ORDER` 1 → 0.
+
+  **Zero on every kind does not mean the class is closed**, and
+  `tests/mock_schema_shape.rs` now says so where the pins are. It reads
+  `xs:element` and never `xs:attribute`; a type carrying an `xs:any` suppresses
+  `UNKNOWN-CHILD` for the whole type; and an element whose children are all
+  optional is schema-valid empty. Four of the ten client-facing bugs this sweep
+  found were found in spite of the counts rather than by them.
+
 - **`VideoEncoderConfiguration2::gov_length` and `::profile` were `None` from
   every conformant Media2 camera, and `set_video_encoder_configuration_media2`
   silently discarded both.** `tt:VideoEncoder2Configuration` declares
@@ -568,7 +663,8 @@ two-thirds of the test suite.
   `Multicast` and `SessionTimeout` entirely. Six schema-shape rows:
   `MISSING-REQUIRED` 11 → 7 (three of the four; the fourth was the options
   getter above) and `ORDER` 3 → 1, the last remaining `ORDER` row being
-  `GetOSDOptions`.
+  `GetOSDOptions` — which the last bullet of this sweep then closed, taking
+  `ORDER` to 0.
 
   **`Multicast` was omitted on a comment that said it was optional.** It is
   `[1]`, and so are its own `Address`, `Port`, `TTL` and `AutoStart` — that

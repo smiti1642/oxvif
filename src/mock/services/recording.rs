@@ -43,35 +43,59 @@ fn render_recording(r: &RecordingEntry) -> String {
             )
         })
         .collect();
-    // A recording with no tracks omits the wrapper rather than sending an empty
-    // one — that is the `Rec_002` case, and a freshly created recording too.
-    let tracks = if tracks.is_empty() {
-        String::new()
-    } else {
-        format!("<tt:Tracks>{tracks}</tt:Tracks>")
-    };
+    // `tt:GetRecordingsResponseItem/Tracks` is [1] and `tt:GetTracksResponseList`
+    // declares `Track` as [0..*], so a recording holding nothing sends the
+    // wrapper *empty* rather than omitting it. Until 0.15.0 the wrapper was
+    // dropped whenever the list was — that is `Rec_002` and every freshly
+    // created recording — which is a shape no conformant device produces.
     format!(
         r#"<trc:RecordingItem>
           <tt:RecordingToken>{token}</tt:RecordingToken>
           <tt:Configuration>
-            <tt:Source>
-              <tt:SourceId>{source_id}</tt:SourceId>
-              <tt:Name>{name}</tt:Name>
-              <tt:Location>{location}</tt:Location>
-              <tt:Description>{description}</tt:Description>
-            </tt:Source>
+            {source}
             <tt:Content>{content}</tt:Content>
             <tt:MaximumRetentionTime>{retention}</tt:MaximumRetentionTime>
           </tt:Configuration>
-          {tracks}
+          <tt:Tracks>{tracks}</tt:Tracks>
         </trc:RecordingItem>"#,
         token = r.token,
+        source = render_source(r),
+        content = r.content,
+        retention = r.maximum_retention_time,
+    )
+}
+
+/// `tt:RecordingSourceInformation`, rendered once for both getters.
+///
+/// All five members are `minOccurs=1` and go out in schema order — `SourceId`,
+/// `Name`, `Location`, `Description`, `Address`. Two things this fixes:
+///
+/// - `GetRecordingSearchResults` sent `Name` alone, dropping four required
+///   members that `RecordingState` was already holding. Rendering from state
+///   rather than re-deciding per response is what keeps the two getters from
+///   disagreeing about one recording.
+/// - `Address` had no field at all, so `CreateRecording` read it out of the
+///   request and discarded it while the client kept parsing it.
+///
+/// An entry with no address sends the element **empty** rather than omitting
+/// it: the member is required, and `RecordingSourceInformation::address`
+/// filters empty text to `None`, so "the device did not say" stays observable.
+/// `Rec_001` carries one and `Rec_002` does not, which is what makes that
+/// distinction assertable.
+fn render_source(r: &RecordingEntry) -> String {
+    format!(
+        "<tt:Source>\
+           <tt:SourceId>{source_id}</tt:SourceId>\
+           <tt:Name>{name}</tt:Name>\
+           <tt:Location>{location}</tt:Location>\
+           <tt:Description>{description}</tt:Description>\
+           <tt:Address>{address}</tt:Address>\
+         </tt:Source>",
         source_id = r.source_id,
         name = r.source_name,
         location = r.location,
         description = r.description,
-        content = r.content,
-        retention = r.maximum_retention_time,
+        address = r.address,
     )
 }
 
@@ -143,6 +167,7 @@ pub fn handle_create_recording(state: &SharedState, body: &str) -> String {
             source_name: extract_tag(&source, "Name").unwrap_or_default(),
             location: extract_tag(&source, "Location").unwrap_or_default(),
             description: extract_tag(&source, "Description").unwrap_or_default(),
+            address: extract_tag(&source, "Address").unwrap_or_default(),
             content: extract_tag(&cfg, "Content").unwrap_or_default(),
             maximum_retention_time: extract_tag(&cfg, "MaximumRetentionTime")
                 .unwrap_or_else(|| "PT0S".into()),
@@ -424,15 +449,13 @@ pub fn resp_recording_search_results(state: &SharedState) -> String {
             format!(
                 r#"<tt:RecordingInformation>
                   <tt:RecordingToken>{token}</tt:RecordingToken>
-                  <tt:Source>
-                    <tt:Name>{name}</tt:Name>
-                  </tt:Source>
+                  {source}
                   {bounds}
                   <tt:Content>{content}</tt:Content>
                   <tt:RecordingStatus>{status}</tt:RecordingStatus>
                 </tt:RecordingInformation>"#,
                 token = r.token,
-                name = r.source_name,
+                source = render_source(r),
                 content = r.content,
                 status = r.status,
             )
@@ -447,6 +470,31 @@ pub fn resp_recording_search_results(state: &SharedState) -> String {
             {items}
           </tse:ResultList>
         </tse:GetRecordingSearchResultsResponse>"#
+        ),
+    )
+}
+
+/// `EndSearchResponse` is **not** an empty response.
+///
+/// `search.wsdl` declares one required child, `Endpoint`, an `xs:dateTime`
+/// naming the point in time the search reached before it was released. The
+/// mock answered with `resp_empty` until 0.15.0, which is a body no conformant
+/// device sends — and nothing noticed, because `end_search` returns `()` and
+/// only checks that the response element is present.
+///
+/// The clock is `soap::security::unix_secs_to_iso8601`, the same conversion
+/// `GetSystemDateAndTime` and `PTZStatus/UtcTime` use, so the mock has one
+/// clock rather than three.
+pub fn resp_end_search() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let endpoint = crate::soap::security::unix_secs_to_iso8601(now as i64);
+    soap(
+        TSE,
+        &format!(
+            "<tse:EndSearchResponse><tse:Endpoint>{endpoint}</tse:Endpoint></tse:EndSearchResponse>"
         ),
     )
 }

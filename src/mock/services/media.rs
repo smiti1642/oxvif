@@ -1270,15 +1270,15 @@ pub fn resp_osd_options() -> String {
               <tt:Type>Date</tt:Type>
               <tt:Type>Time</tt:Type>
               <tt:Type>DateAndTime</tt:Type>
+              <tt:FontSizeRange>
+                <tt:Min>8</tt:Min>
+                <tt:Max>72</tt:Max>
+              </tt:FontSizeRange>
               <tt:DateFormat>MM/dd/yyyy</tt:DateFormat>
               <tt:DateFormat>yyyy-MM-dd</tt:DateFormat>
               <tt:DateFormat>dd.MM.yyyy</tt:DateFormat>
               <tt:TimeFormat>HH:mm:ss</tt:TimeFormat>
               <tt:TimeFormat>hh:mm:ss tt</tt:TimeFormat>
-              <tt:FontSizeRange>
-                <tt:Min>8</tt:Min>
-                <tt:Max>72</tt:Max>
-              </tt:FontSizeRange>
             </tt:TextOption>
           </trt:OSDOptions>
         </trt:GetOSDOptionsResponse>"#

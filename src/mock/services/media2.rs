@@ -467,20 +467,35 @@ fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> String {
     )
 }
 
+/// `tr2:EncoderInstanceInfo` declares `Codec` (`tr2:EncoderInstance`, `[0..*]`)
+/// then `Total`, in that order — and `tr2:EncoderInstance` declares `Encoding`
+/// then `Number`. Every name here is `tr2:`: both types live in `media2.wsdl`'s
+/// inline schema, which is `elementFormDefault="qualified"`.
+///
+/// The mock had the whole subtree wrong in four ways at once: the repeated
+/// wrapper was named `Encoding` after its own first child rather than `Codec`,
+/// the wrapper and both leaves were in `tt:`, and `Total` came first. Only one
+/// row was ever visible — `tt:Encoding` *is* a real name in `tt:` (on the video
+/// encoder configurations), and `tr2:EncoderInstanceInfo` carries an `xs:any`,
+/// which suppresses the unknown-child rule for the whole type.
+///
+/// It was also a **client** defect: `VideoEncoderInstances::from_xml` iterated
+/// `children_named("Encoding")`, so against a conformant device `encodings`
+/// came back empty and the mock had been written to agree with it.
 pub fn resp_video_encoder_instances() -> String {
     soap(
         r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
         r#"<tr2:GetVideoEncoderInstancesResponse>
           <tr2:Info>
+            <tr2:Codec>
+              <tr2:Encoding>H264</tr2:Encoding>
+              <tr2:Number>2</tr2:Number>
+            </tr2:Codec>
+            <tr2:Codec>
+              <tr2:Encoding>H265</tr2:Encoding>
+              <tr2:Number>2</tr2:Number>
+            </tr2:Codec>
             <tr2:Total>4</tr2:Total>
-            <tt:Encoding>
-              <tt:Encoding>H264</tt:Encoding>
-              <tt:Number>2</tt:Number>
-            </tt:Encoding>
-            <tt:Encoding>
-              <tt:Encoding>H265</tt:Encoding>
-              <tt:Number>2</tt:Number>
-            </tt:Encoding>
           </tr2:Info>
         </tr2:GetVideoEncoderInstancesResponse>"#,
     )

@@ -1076,6 +1076,16 @@ pub struct EncoderInstanceInfo {
 }
 
 impl VideoEncoderInstances {
+    /// # The repeated element is `Codec`, not `Encoding`
+    ///
+    /// `tr2:EncoderInstanceInfo` declares `Codec` (a `tr2:EncoderInstance`)
+    /// repeated, then `Total`. `Encoding` is a child *of* `Codec`, not the
+    /// wrapper — until 0.15.0 this iterated `children_named("Encoding")`, which
+    /// matched nothing on a conformant device and left [`encodings`] empty
+    /// while `total` still parsed. `XmlNode` is namespace-stripped and matches
+    /// local names, so the two levels sharing a name is what hid it.
+    ///
+    /// [`encodings`]: VideoEncoderInstances::encodings
     pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
         let info = resp
             .child("Info")
@@ -1083,7 +1093,7 @@ impl VideoEncoderInstances {
         Ok(Self {
             total: xml_u32(info, "Total").unwrap_or(0),
             encodings: info
-                .children_named("Encoding")
+                .children_named("Codec")
                 .map(|e| EncoderInstanceInfo {
                     encoding: xml_str(e, "Encoding")
                         .map(|s| VideoEncoding::from_str(&s))

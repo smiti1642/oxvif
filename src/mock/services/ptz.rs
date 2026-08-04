@@ -529,10 +529,15 @@ fn render_limits(s: &SpaceEntry, tag: &str) -> String {
     )
 }
 
-fn render_node(n: &PtzNodeEntry, tag: &str) -> String {
-    // `tt:PTZSpaces` is an xs:sequence, so the slots go out in schema order
-    // rather than in whatever order the state happens to hold them.
-    let spaces: String = SpaceKind::ALL
+/// The body of a `tt:PTZSpaces`, without the wrapper element.
+///
+/// `tt:PTZSpaces` is an `xs:sequence`, so the slots go out in schema order
+/// rather than in whatever order the state happens to hold them. Shared by
+/// `GetNodes`/`GetNode` (`tt:SupportedPTZSpaces`) and `GetConfigurationOptions`
+/// (`tt:Spaces`) so one node cannot describe two different sets of spaces
+/// depending on which operation asked.
+fn render_spaces_body(n: &PtzNodeEntry) -> String {
+    SpaceKind::ALL
         .iter()
         .flat_map(|k| {
             n.pan_tilt_spaces
@@ -541,7 +546,11 @@ fn render_node(n: &PtzNodeEntry, tag: &str) -> String {
                 .filter(move |s| s.kind == *k)
         })
         .map(render_space)
-        .collect();
+        .collect()
+}
+
+fn render_node(n: &PtzNodeEntry, tag: &str) -> String {
+    let spaces: String = render_spaces_body(n);
     let aux: String = n
         .aux_commands
         .iter()
@@ -743,6 +752,19 @@ pub fn resp_ptz_compatible_configurations(state: &SharedState, body: &str) -> St
 /// configurations answer differently (`PT1S`–`PT60S` against `PT5S`–`PT30S`).
 /// It was one static pair for the whole device, so a caller that passed the
 /// wrong token got a plausible answer and no way to notice.
+///
+/// # `Spaces` is required, and an empty one would satisfy the schema
+///
+/// `tt:PTZConfigurationOptions` declares `Spaces` (`tt:PTZSpaces`) then
+/// `PTZTimeout`, both `minOccurs=1`. The mock sent `PTZTimeout` alone until
+/// 0.15.0. Emitting `<tt:Spaces/>` would clear the shape finding and re-create
+/// the *other* 0.15.0 defect this file already records — an empty spaces block
+/// is schema-valid and claims the head supports no coordinate space at all.
+///
+/// So the spaces come from the node this configuration drives, through the same
+/// [`render_spaces_body`] `GetNodes` uses. That makes the answer discriminating
+/// as well: `PTZConfig_2` drives `PTZNode_2`, which cannot pan or tilt, so it
+/// reports the four zoom slots and none of the pan/tilt ones.
 pub fn resp_ptz_configuration_options(state: &SharedState, body: &str) -> String {
     let Some(token) = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty()) else {
         return resp_soap_fault(
@@ -762,11 +784,19 @@ pub fn resp_ptz_configuration_options(state: &SharedState, body: &str) -> String
             &format!("NoSuchPTZConfig-CFGOPTS-5613: {token}"),
         );
     };
+    let spaces = state
+        .read()
+        .ptz_nodes
+        .iter()
+        .find(|n| n.token == cfg.node_token)
+        .map(render_spaces_body)
+        .unwrap_or_default();
     soap(
         NS,
         &format!(
             r#"<tptz:GetConfigurationOptionsResponse>
           <tptz:PTZConfigurationOptions>
+            <tt:Spaces>{spaces}</tt:Spaces>
             <tt:PTZTimeout>
               <tt:Min>{min}</tt:Min>
               <tt:Max>{max}</tt:Max>

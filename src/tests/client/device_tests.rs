@@ -400,11 +400,11 @@ fn get_scopes_xml() -> &'static str {
           <s:Body>
             <tds:GetScopesResponse>
               <tds:Scopes>
-                <tt:ScopeAttribute>Fixed</tt:ScopeAttribute>
+                <tt:ScopeDef>Fixed</tt:ScopeDef>
                 <tt:ScopeItem>onvif://www.onvif.org/name/Camera1</tt:ScopeItem>
               </tds:Scopes>
               <tds:Scopes>
-                <tt:ScopeAttribute>Fixed</tt:ScopeAttribute>
+                <tt:ScopeDef>Configurable</tt:ScopeDef>
                 <tt:ScopeItem>onvif://www.onvif.org/location/country/taiwan</tt:ScopeItem>
               </tds:Scopes>
             </tds:GetScopesResponse>
@@ -1439,6 +1439,10 @@ async fn test_set_storage_configuration_sends_correct_body() {
 
 // ── get_system_uris ───────────────────────────────────────────────────────────
 
+/// The repeated entry is **`SystemLog`** and its enumeration is **`Type`** —
+/// `SystemLogUri` is the *type* name. This fixture said `SystemLogUri`/`LogType`
+/// until 0.15.0, agreeing with a parser that read the type name as an element,
+/// so the assertion below could not fail for the reason it was written.
 fn get_system_uris_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                      xmlns:tds="http://www.onvif.org/ver10/device/wsdl"
@@ -1446,10 +1450,10 @@ fn get_system_uris_xml() -> &'static str {
          <s:Body>
            <tds:GetSystemUrisResponse>
              <tds:SystemLogUris>
-               <tt:SystemLogUri>
+               <tt:SystemLog>
+                 <tt:Type>System</tt:Type>
                  <tt:Uri>http://192.168.1.1/log</tt:Uri>
-                 <tt:LogType>System</tt:LogType>
-               </tt:SystemLogUri>
+               </tt:SystemLog>
              </tds:SystemLogUris>
              <tds:SupportInfoUri>http://192.168.1.1/support</tds:SupportInfoUri>
              <tds:SystemBackupUri>http://192.168.1.1/backup</tds:SystemBackupUri>

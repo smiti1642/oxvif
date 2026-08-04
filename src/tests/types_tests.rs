@@ -1476,17 +1476,28 @@ mod media2 {
 
     // ── VideoEncoderInstances ─────────────────────────────────────────────
 
+    /// The repeated wrapper is **`Codec`**; `Encoding` is a child *of* it.
+    ///
+    /// This fixture named the wrapper `Encoding` until 0.15.0, matching a
+    /// parser that iterated `children_named("Encoding")` — so it could not fail
+    /// for the reason it was written, and `encodings` was empty against every
+    /// conformant device. The two levels sharing a name is exactly what hid it:
+    /// `XmlNode` strips namespaces, and `Encoding` inside `Encoding` reads as
+    /// plausible.
+    ///
+    /// `Total` also goes **last**: `tr2:EncoderInstanceInfo` declares `Codec`
+    /// then `Total`.
     const INSTANCES_XML: &str = r#"<GetVideoEncoderInstancesResponse>
           <Info>
-            <Total>4</Total>
-            <Encoding>
+            <Codec>
               <Encoding>H264</Encoding>
               <Number>2</Number>
-            </Encoding>
-            <Encoding>
+            </Codec>
+            <Codec>
               <Encoding>H265</Encoding>
               <Number>2</Number>
-            </Encoding>
+            </Codec>
+            <Total>4</Total>
           </Info>
         </GetVideoEncoderInstancesResponse>"#;
 

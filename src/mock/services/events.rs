@@ -23,6 +23,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// (next to `TopicNamespaceLocation`, which is `tev:`). Both were wrong by
 /// exactly the same reasoning: **the neighbouring element's namespace is not
 /// evidence.**
+///
+/// Two more members are `minOccurs=1` and were absent entirely:
+/// `MessageContentFilterDialect` and `MessageContentSchemaLocation`, both
+/// declared locally and so both `tev:`. They sit either side of the optional
+/// `ProducerPropertiesFilterDialect` in the sequence, which is why the schema
+/// order below is not the order the two names suggest.
 pub fn resp_event_properties() -> String {
     soap(
         r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2" xmlns:wstop="http://docs.oasis-open.org/wsn/t-1""#,
@@ -46,6 +52,8 @@ pub fn resp_event_properties() -> String {
             </tns1:Device>
           </wstop:TopicSet>
           <wsnt:TopicExpressionDialect>http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet</wsnt:TopicExpressionDialect>
+          <tev:MessageContentFilterDialect>http://www.onvif.org/ver10/tev/messageContentFilter/ItemFilter</tev:MessageContentFilterDialect>
+          <tev:MessageContentSchemaLocation>http://www.onvif.org/onvif/ver10/schema/onvif.xsd</tev:MessageContentSchemaLocation>
         </tev:GetEventPropertiesResponse>"#,
     )
 }

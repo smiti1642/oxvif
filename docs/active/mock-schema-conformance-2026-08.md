@@ -1,10 +1,20 @@
 # The mock's XML does not match the schema — triage and plan
 
-**Status** — investigated 2026-08-03. §3 fixed in `8091892`; the checker's own
-defects fixed and the corpus re-dumped at that commit, so **the numbers below
-are run 3's and run 2's 108 is superseded**. Nothing in the sweep is fixed yet.
-Written against a working checker and the complete ONVIF schema set, not from
-memory.
+**Status** — investigated 2026-08-03, **sweep complete 2026-08-04. Every §5
+work unit is done and all five kinds are at 0.** §3 fixed in `8091892`; the
+checker's own defects fixed and the corpus re-dumped at that commit, so **the
+numbers below are run 3's and run 2's 108 is superseded**. Written against a
+working checker and the complete ONVIF schema set, not from memory.
+
+The status line above used to end *"Nothing in the sweep is fixed yet."* That
+was true when written and stopped being true at §5.0; it is replaced rather
+than deleted, because the sentence is what a reader would have trusted.
+
+**Zero on every kind does not mean the class is closed** — see §6. The checker
+reads `xs:element` and never `xs:attribute`, a type carrying an `xs:any`
+suppresses `UNKNOWN-CHILD` for the whole type, and an element whose children are
+all optional is schema-valid empty. Four of the ten client-facing bugs in §0
+were found *in spite of* the counts.
 
 The checker, the schema and the raw findings live in the sibling repository
 `onvif-schema-lab` (local, never pushed) because of decision D2 in
@@ -17,12 +27,14 @@ each stays in the lab.**
 
 ## 0. Blast radius, established before anything else
 
-**Eight client-facing bugs so far. The rest are mock fidelity.**
+**Ten client-facing bugs. The rest are mock fidelity.**
 
 This line said *"Three client-facing bugs so far"* until §1.3's fourth landed,
 *"Four client-facing bugs so far"* until §5.5's fifth did, *"Five"* until
-§5.7's sixth did, and *"Six"* until §5.8's seventh and eighth did — one work
-unit, two types, so it moved by two.
+§5.7's sixth did, *"Six"* until §5.8's seventh and eighth did — one work
+unit, two types, so it moved by two — and **"Eight client-facing bugs so far"**
+until §5.9's ninth and tenth did. The *"so far"* is dropped: §5 is complete, so
+this is the count for the sweep rather than a running total.
 
 This section originally read *"no finding below is a client-facing bug"*, and
 that was wrong five times over — kept here rather than deleted, because every
@@ -82,6 +94,30 @@ exception was found by looking at something the sentence dismissed:
    §5.8. `MaximumNumberOfProfiles` is an `xs:attribute` of
    `tt:VideoSourceConfigurationOptions`; the field was `None` from every
    conformant device, on **both** Media1 and Media2, which return the same type.
+
+9. **`SystemUris::from_xml` read a *type* name as an element name** — §1.3,
+   §5.9. `tt:SystemLogUriList` declares one child element, `SystemLog`, *typed*
+   `tt:SystemLogUri`. The parser walked `SystemLogUris/SystemLogUri/Uri`, so
+   `system_log_uri` was `None` from every conformant device, and both the mock
+   and `get_system_uris_xml` in `src/tests/client/device_tests.rs` had been
+   written to agree with it — (1)'s shape a third time. §1.3 listed
+   *"`SystemLogUri` and its `LogType`"* among the undeclared names and said
+   nothing about the client.
+
+10. **`VideoEncoderInstances::from_xml` iterated the wrong level** — §1.3, §5.9.
+    `tr2:EncoderInstanceInfo` declares `Codec` repeated, and `Encoding` is a
+    child *of* `Codec`; the parser iterated `children_named("Encoding")`, so
+    `encodings` was empty while `total` still parsed — a half-populated struct,
+    which is harder to notice than an error. The two levels sharing a name is
+    what hid it, and `XmlNode` strips namespaces so the `tt:`/`tr2:` difference
+    could not disambiguate them either.
+
+**(9) and (10) share a shape the first eight do not: the wrong name was a real
+ONVIF name at a *different level or in a different role*.** (5), (7) and (8) were
+elements that should have been attributes; (9) is a type name read as an element
+name and (10) is a child name read as its own parent. Neither is a misspelling,
+so no amount of care about spelling would have caught either — only reading the
+declaration.
 
 **(7) and (8) were both named in §1.3, correctly and in detail, and stayed
 open for a work unit anyway.** That is the opposite failure from (6): not a
@@ -197,9 +233,25 @@ the `GetProfiles` slice of §5.2 + §5.4, 32 distinct — `MISSING-REQUIRED` 16,
 `MISSING-REQUIRED` **11**, `UNKNOWN-NAME` **6**, `UNKNOWN-CHILD` 4, `ORDER` 3;
 after §5.7, 16 distinct — `MISSING-REQUIRED` **7**, `UNKNOWN-NAME` **5**,
 `UNKNOWN-CHILD` **3**, `ORDER` **1**; after §5.8, 14 distinct —
-`UNKNOWN-NAME` **4**, `UNKNOWN-CHILD` **2**, the other two unmoved.**
+`UNKNOWN-NAME` **4**, `UNKNOWN-CHILD` **2**, the other two unmoved; after §5.9,
+**0 distinct — every kind at 0.****
 `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
 block is the baseline the sweep started from and is left as it was.
+
+§5.9's fourteen rows were four independent groups, each perturbed on its own
+against the all-zero pins:
+
+| group | delta when the old output is put back |
+|---|---|
+| device — `ScopeDef`, `SystemLog` | `MISSING-REQUIRED` +1, `UNKNOWN-NAME` +3, `UNKNOWN-CHILD` +2 |
+| recording / search required members | `MISSING-REQUIRED` +4 |
+| PTZ `Spaces`, the two event dialects | `MISSING-REQUIRED` +2 |
+| OSD order, Media2 encoder instances | `ORDER` +1, `UNKNOWN-NAME` +1 |
+
+They sum to the 7 / 4 / 2 / 1 the group started from, and **no group opened a
+row for another** — which is not automatic: every element added is a fresh
+chance at a wrong namespace or position, and this group added a whole
+`tt:PTZSpaces` subtree.
 
 **`UNKNOWN-NAME` went up by one, and it is not a new defect.** Inlining the
 Media2 configurations reuses `render_video_encoder`, the same helper the list
@@ -290,7 +342,18 @@ only via the checker, for the first:
 | ~~Media2 `GetProfiles` → `ConfigurationSet`~~ **fixed** | the same inversion |
 | ~~`GetOptions` → `ImagingOptions20`~~ **fixed** | badly scrambled — most members are in a different position. Only `WideDynamicRange` held its index; `BacklightCompensation` moved from last to first. **The schema order is not alphabetical, though it looks it** — `WideDynamicRange` precedes `WhiteBalance`, so sorting the members is a wrong fix that gets nine of ten right |
 | ~~Media2 `GetMetadataConfigurations`~~ **fixed** (§5.7) | analytics emitted before PTZ status (**two rows**, one per configuration in the response — one cause) |
-| `GetOSDOptions` → `OSDTextOptions` | the font-size range is emitted last, the schema places it second |
+| ~~`GetOSDOptions` → `OSDTextOptions`~~ **fixed** (§5.9) | the font-size range is emitted last, the schema places it second |
+
+**`ORDER` is now 0.** The one row left was the OSD text options, and moving
+`FontSizeRange` from last to second is the whole fix — `tt:OSDTextOptions`
+declares `Type` (repeated), `FontSizeRange`, `DateFormat`, `TimeFormat`,
+`FontColor`, `BackgroundColor`, `Extension`, and the mock emits the first four.
+
+A zero here proves less than the five rows above suggest. The rule fires only
+when **two or more** children of a type are recognised: `GetVideoEncoderInstances`
+had `Total` before the repeated wrapper, which is a real sequence violation, and
+`ORDER` never saw it because the wrapper was misnamed and therefore not
+recognised at all. §5.9 fixed both in one edit and only the OSD row moved.
 
 Media1 `GetProfiles` is the most-used response in the crate.
 
@@ -312,12 +375,15 @@ either one alone moves `ORDER` by exactly one.
 12 `UNKNOWN-NAME` rows; the six that are not §1.5 or a duplicate of a
 `UNKNOWN-CHILD` row below:
 
-- `ScopeAttribute` in `GetScopes`. **The correct name is already in this
-  repository**, in a comment 150 lines below the bug at
-  `src/mock/services/device.rs:277`. The mock emits the wrong one at `:124` and
-  the client unit fixture agrees with it at
-  `src/tests/client/device_tests.rs:403` and `:407`. oxvif's parser reads
-  neither name — it takes `ScopeItem` only — so the client is unaffected.
+- ~~`ScopeAttribute` in `GetScopes`.~~ **Fixed** — §5.9. **The correct name was
+  already in this repository**, in a comment 150 lines below the bug at
+  `src/mock/services/device.rs:277`. The mock emitted the wrong one at `:124`
+  and the client unit fixture agreed with it at
+  `src/tests/client/device_tests.rs:403` and `:407`. The finding was right in
+  every particular, including that the client is unaffected — oxvif's parser
+  reads `ScopeItem` only. `tt:Scope` declares `ScopeDef` then `ScopeItem`, both
+  `[1]`, so this closed a `MISSING-REQUIRED`, an `UNKNOWN-CHILD` and an
+  `UNKNOWN-NAME` at once: three kinds, one name, the pattern §1 warns about.
 - ~~Imaging `GetMoveOptions` emits space-style names (`PositionSpace`,
   `SpeedSpace`) under the absolute and continuous focus options where the
   schema declares a position and a speed. Same service and same class as the
@@ -369,9 +435,22 @@ either one alone moves `ORDER` by exactly one.
   ~~`ProfilesSupported` under the video encoder configuration options;~~
   **both fixed** — §5.8, and both were client bugs (§0.7, §0.8), as the two
   bullets below had already established.
-  ~~`Profile` inside a video encoder configuration;~~ `Number` under an encoder
-  instance; ~~`UsernameToken` under the device security capabilities;~~
-  `SystemLogUri` and its `LogType` in `GetSystemUris`.
+  ~~`Profile` inside a video encoder configuration;~~ ~~`Number` under an encoder
+  instance;~~ ~~`UsernameToken` under the device security capabilities;~~
+  ~~`SystemLogUri` and its `LogType` in `GetSystemUris`.~~ **The last two are
+  fixed in §5.9, and both were client bugs — §0.9 and §0.10.** This list called
+  them undeclared names and stopped there, which is the §0 failure again: the
+  entry that names a bug correctly and never reaches the blast-radius count.
+
+  Neither was a rename in the sense this list assumes. `SystemLogUri` **is** a
+  declared ONVIF name — it is the `complexType` that `SystemLog` is typed as, so
+  the mistake was reading a type name as an element name, and the `LogType` next
+  to it should have been `Type`. `Number` **is** a declared `tr2:` element — on
+  `tr2:EncoderInstance`, one level below where the mock put it — and it reported
+  here only because the mock also placed it in `tt:`. Its parent
+  `tr2:EncoderInstanceInfo` carries an `xs:any`, so three further errors in that
+  one subtree (wrapper named `Encoding` instead of `Codec`, the whole subtree in
+  `tt:`, `Total` first) moved **no** counter at all.
 
   **`UsernameToken` is fixed** — §5.6, and it was neither a rename nor a mock
   fidelity item: it was two *types* mixed into one element, and the mock's copy
@@ -487,18 +566,47 @@ seventeen.
 
 23 rows. After §1.1 fallout is discounted, the genuine omissions are:
 ~~device capabilities (system, security, events, recording, search)~~
-(**fixed** — §5.6, all five, `MISSING-REQUIRED` 16 → 11), `Scope`'s
+(**fixed** — §5.6, all five, `MISSING-REQUIRED` 16 → 11), ~~`Scope`'s
 `ScopeDef`, `GetRecordings` → `Tracks`, `EndSearch` → `Endpoint`, PTZ
-configuration options → `Spaces`, ~~the metadata configuration's `Multicast` /
+configuration options → `Spaces`~~, ~~the metadata configuration's `Multicast` /
 `SessionTimeout` and multicast `AutoStart` / `TTL`, the metadata PTZ-status
 filter options~~ (**fixed** — §5.7, all four rows, `MISSING-REQUIRED` 11 → 7),
 ~~imaging focus position and speed~~ (**fixed** — they were
 absent only because the invented `…Space` names stood in their place, so they
-closed with §1.3's rename rather than as omissions in their own right), the
+closed with §1.3's rename rather than as omissions in their own right), ~~the
 event-properties
 response, and recording source information — the last of which
 `src/mock/state.rs` already **stores** and does not render, the same shape as
-the `MTU` bug.
+the `MTU` bug.~~
+
+**All seven remaining rows are fixed in §5.9 — `MISSING-REQUIRED` 7 → 0.** Four
+things measured that this paragraph did not say:
+
+- **The `MTU` prediction was right, and understated.** `RecordingState` stored
+  `source_id`, `source_name`, `location` and `description`, and
+  `GetRecordingSearchResults` rendered `Name` alone — so it dropped three
+  members it was already holding. But `Address` had **no field at all**, so
+  `CreateRecording` read it out of the request and threw it away while
+  `RecordingSourceInformation::address` kept parsing it. Storing-and-not-
+  rendering was the smaller half.
+- **A required member over an empty list means an empty wrapper, not no
+  wrapper.** `GetRecordingsResponseItem/Tracks` is `[1]` and
+  `tt:GetTracksResponseList` declares `Track` as `[0..*]`, so a recording
+  holding nothing sends `<tt:Tracks/>`. Same for `Address`: the element is
+  required, the *value* may be empty, and empty is what keeps
+  `address: Option` observable as `None`.
+- **`EndSearch` was not an empty response at all.** `search.wsdl` declares one
+  required child, `Endpoint`, an `xs:dateTime`. The mock answered `resp_empty`
+  and nothing noticed, because `end_search` returns `()` and only checks that
+  the response element is present. It is now the third caller of
+  `soap::security::unix_secs_to_iso8601`, so the mock has one clock.
+- **`Spaces` is the one row where clearing the finding was the wrong fix.**
+  `<tt:Spaces/>` satisfies `tt:PTZConfigurationOptions` and asserts the head
+  supports no coordinate space — precisely the 0.15.0 `SupportedPTZSpaces`
+  defect, on the sibling element. It is filled from the node the configuration
+  drives, through the same helper `GetNodes` uses, so `PTZConfig_2` reports the
+  four zoom slots and no pan/tilt ones. **A shape checker cannot tell those two
+  fixes apart**, which is the §6 argument in one row.
 
 ~~Five of the 23 are the Media2 `ConfigurationSet` members
 (`VideoSource`, `AudioSource`, `VideoEncoder`, `AudioEncoder`, `PTZ`), which
@@ -765,9 +873,21 @@ Grouped so each lands in one file with one perturbation:
 2. **Sequence order** — five renderers, six rows (§1.2). **Imaging done**
    (`ImagingOptions20`, `ORDER` 6 → 5); **both `GetProfiles` inversions done**
    with §5.4 (`ORDER` 5 → 3); **Media2 `GetMetadataConfigurations` done** with
-   §5.7 (`ORDER` 3 → 1). One renderer left — `GetOSDOptions`.
-3. **Undeclared names** — `ScopeAttribute`, the imaging focus options, the
-   options extensions (§1.3). ~~Settle `UsernameToken` by type rather than
+   §5.7 (`ORDER` 3 → 1). **`GetOSDOptions` done** with §5.9 (`ORDER` 1 → **0**)
+   — `tt:OSDTextOptions` places `FontSizeRange` second, between the repeated
+   `Type` and the `DateFormat` list, and the mock emitted it last.
+
+   *"five renderers, six rows"* was right as a count and misleading as a plan:
+   the sixth renderer, `resp_video_encoder_instances`, also had a real sequence
+   violation (`Total` before the repeated wrapper) and **`ORDER` never saw it**,
+   because the wrapper was misnamed and an unrecognised child cannot be out of
+   sequence. It closed in §5.9 as part of the name fix. The unit of an `ORDER`
+   row is *"a renderer with at least two recognised children"*, not *"a renderer
+   in the wrong order"*.
+3. ~~**Undeclared names** — `ScopeAttribute`, the imaging focus options, the
+   options extensions (§1.3).~~ **Done — `UNKNOWN-NAME` and `UNKNOWN-CHILD` both
+   0.** §5.9 took the last three rows: `ScopeAttribute`, `SystemLogUri`/`LogType`
+   and the encoder-instance `Number`. ~~Settle `UsernameToken` by type rather than
    renaming it.~~ **`UsernameToken` done** — §5.6; settling it by type was the
    right instruction and there was no element to rename it to.
    **`AnalyticsSupported` done** — §5.7, and it needed the same treatment for
@@ -787,8 +907,18 @@ Grouped so each lands in one file with one perturbation:
    dropping state it already holds.
 
    **The inlining is done — see §5.4.** ~~Sixteen rows left, none of which is
-   the `ConfigurationSet` family.~~ ~~**Eleven rows left**~~ **Seven rows left**
-   — §5.6 took the five device-capabilities rows, which were the next largest
+   the `ConfigurationSet` family.~~ ~~**Eleven rows left**~~ ~~**Seven rows
+   left**~~ **None left — §5.9 took the last seven, `MISSING-REQUIRED` 7 → 0.**
+
+   *"the rest are a renderer dropping state it already holds"* held for four of
+   those seven and failed for three, in three different ways: `Address` was
+   state the renderer could not have held because the field did not exist,
+   `EndSearch/Endpoint` is a value with no state behind it at all, and PTZ
+   `Spaces` is the row where rendering *something* would have been worse than
+   the omission. Reading the sentence as a plan would have produced a green
+   checker and one new defect.
+
+   §5.6 took the five device-capabilities rows, which were the next largest
    group and, unlike the `ConfigurationSet` family, were five *different* types
    rather than one decision; §5.7 took the four metadata rows, of which three
    were one renderer dropping members it could have rendered from state it
@@ -979,6 +1109,41 @@ Grouped so each lands in one file with one perturbation:
    apply — but `dispatch_media` has no metadata arm at all and the crate has no
    Media1 metadata client method, so there is no second renderer to disagree and
    nothing for `tests/mock_media1_media2_agree.rs` to guard.
+
+   5.9 ~~**The last fourteen rows**~~ **Done. `MISSING-REQUIRED` 7 → 0,
+   `UNKNOWN-NAME` 4 → 0, `UNKNOWN-CHILD` 2 → 0, `ORDER` 1 → 0. §5 is complete.**
+
+   Four groups in four files, each perturbed on its own; the deltas are in §1.
+   Two were client bugs (§0.9, §0.10) and two more were rows where the checker
+   could not have judged the fix either way.
+
+   - **device** (`src/mock/services/device.rs`) — `ScopeAttribute` → `ScopeDef`,
+     and `SystemLogUri`/`LogType` → `SystemLog`/`Type`. §4's predicted blast
+     radius was exact: `src/tests/client/device_tests.rs:403` and `:407` had to
+     move with the mock. The scope fixture's two entries now say `Fixed` and
+     `Configurable` rather than `Fixed` twice, so the enumeration is a value an
+     assertion could read rather than a constant.
+   - **recording / search** (`src/mock/services/recording.rs`) — see §1.4. One
+     new field on `RecordingEntry`, one `render_source` shared by both getters
+     so the two views of one recording cannot disagree, an always-present
+     `<tt:Tracks>`, and a real `EndSearchResponse`.
+   - **PTZ and events** (`ptz.rs`, `events.rs`) — `render_spaces_body` factored
+     out of `render_node` and reused, so `GetConfigurationOptions` reports the
+     spaces of the node the configuration drives; the two required event
+     dialects added, which sit either side of the optional
+     `ProducerPropertiesFilterDialect` in `event.wsdl`'s sequence.
+   - **media** (`media.rs`, `media2.rs`) — `FontSizeRange` to its declared
+     position, and the whole `GetVideoEncoderInstances` subtree rebuilt:
+     `tr2:Codec` wrapping `tr2:Encoding` + `tr2:Number`, then `tr2:Total`.
+
+   **Three tests in `tests/mock_workflow.rs` assert what the counts cannot** —
+   `recording_source_information_is_complete_and_per_recording`,
+   `system_log_uri_is_reported` and
+   `media2_encoder_instances_are_grouped_by_codec`. The first reads all five
+   source members for **both** seeded recordings, which disagree on every one of
+   them, and pins `Rec_002`'s empty `Address` as `None`; the other two drive the
+   two client fixes end to end. Reverting either side of any of the three
+   reddens it.
 5. ~~**Strengthen `every_response_binds_the_prefixes_it_uses`** so it asserts an
    element is in the namespace its type declares.~~ **Struck — this cannot be a
    separate unit.** Asserting that an element is in the namespace its *type*
@@ -1000,6 +1165,17 @@ by hand. Fixing the findings without landing the checker leaves the class
 exactly as exposed as it was this morning — and this release already produced
 the lesson that a number nothing asserts drifts.
 
+**All five pins now read 0, and that is the weakest the guard has ever been.**
+A pin at 0 moves for a regression the checker can see, and this document has
+recorded three whole categories it cannot: it reads `xs:element` and never
+`xs:attribute` (§0.5, §0.7, §0.8 were each one visible row out of several
+members), a type carrying an `xs:any` suppresses `UNKNOWN-CHILD` for the entire
+type (§0.5, §0.10), and an element whose children are all optional is
+schema-valid empty (§1.4's `Spaces`). A zero says *nothing the checker looks at
+is wrong*, which is a much smaller claim than *the mock is conformant*. The
+per-operation value assertions in `tests/mock_workflow.rs` are what carry the
+rest, and they are named per unit in §5 for that reason.
+
 The checker must land as `tests/mock_schema_shape.rs` per
 [`schema-shape-plan-2026-08.md`](schema-shape-plan-2026-08.md) §3.3 — reading
 the schema at run time from `$OXVIF_ONVIF_SCHEMA`, skipping loudly without it,
@@ -1018,17 +1194,31 @@ and not a follow-up.
    met: the finding list is now worth acting on, and 63 distinct is a number
    worth quoting. It also produced §1.5, a client bug that was sitting inside
    the line that said *"not a mock defect until that is settled"*.
-3. **§6 — land the checker, before any fix.** It is the verifier as well as the
-   guard: the client is namespace-blind and order-independent, so **no existing
-   test in this repository can tell whether any of these fixes worked.**
-   Sweeping first would mean hand-checking every one against a tool that lives
-   in another repository, and calling it done on inspection. Land it with the
-   publishing-checklist line in the same commit.
-4. ~~§5.0~~ **done** → ~~§5.1~~ **done** → §5.2 → §5.3 → §5.4, each its own commit, each verified by
-   re-running the checker (**re-dump the corpus first**) and each with the
-   perturbation `CLAUDE.md` requires: put the old output back, and the
-   schema-shape test must report it.
-6. `CHANGELOG.md`: these are mock behaviour changes and belong in the entry,
+3. ~~**§6 — land the checker, before any fix.**~~ **Done, `1e92fbc`.** It is the
+   verifier as well as the guard: the client is namespace-blind and
+   order-independent, so **no existing test in this repository can tell whether
+   any of these fixes worked.** Sweeping first would mean hand-checking every one
+   against a tool that lives in another repository, and calling it done on
+   inspection. It landed with the publishing-checklist line in the same commit,
+   as required.
+4. ~~§5.0 → §5.1 → §5.2 → §5.3 → §5.4~~ **all done, and §5.5 through §5.9 with
+   them — §5 is complete.** Each was its own commit, each verified by re-running
+   the checker and each with the perturbation `CLAUDE.md` requires: put the old
+   output back, and the schema-shape test must report it. §5.9 was four
+   independent groups and needed four perturbations, one per group, because a
+   single revert of all fourteen rows would not have shown which group owned
+   which delta.
+
+   **This list stopped at §5.4 and the sweep ran to §5.9.** The five extra units
+   are not scope creep: §5.5, §5.7 and §5.8 each *became* a unit when a row this
+   document had filed as mock fidelity turned out to be a client bug, and §5.6
+   and §5.9 were the residue after the named groups closed. The plan's numbering
+   was a plan for the rows it had triaged, not for the ones triage got wrong.
+5. `CHANGELOG.md`: these are mock behaviour changes and belong in the entry,
    with §0's blast radius stated so a reader does not conclude the client was
    broken. Per the rule this release's audit produced, that is part of finishing
-   the work rather than a step after it.
+   the work rather than a step after it. **Done in each unit's own commit.**
+
+   This item was numbered `6.` in a five-item list. Corrected rather than
+   silently renumbered, because the gap is the sort of thing that makes a reader
+   look for a missing step.

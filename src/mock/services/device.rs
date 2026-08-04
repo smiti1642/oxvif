@@ -119,6 +119,12 @@ pub fn resp_ntp(state: &SharedState) -> String {
     )
 }
 
+/// `tt:Scope` declares exactly two children, both required and in this order:
+/// `ScopeDef` (the `Fixed`/`Configurable` enumeration) then `ScopeItem` (the
+/// URI). The mock said `ScopeAttribute` for the first until 0.15.0 — a name
+/// ONVIF declares nowhere, as element or attribute — and the correct one was
+/// sitting 150 lines below in [`handle_set_scopes`]' comment the whole time.
+/// The client only ever reads `ScopeItem`, so nothing failed.
 pub fn resp_scopes(state: &SharedState) -> String {
     let s = state.read();
     let items: String = s
@@ -126,7 +132,7 @@ pub fn resp_scopes(state: &SharedState) -> String {
         .iter()
         .map(|scope| {
             format!(
-                r#"<tds:Scopes><tt:ScopeAttribute>Fixed</tt:ScopeAttribute><tt:ScopeItem>{scope}</tt:ScopeItem></tds:Scopes>"#
+                r#"<tds:Scopes><tt:ScopeDef>Fixed</tt:ScopeDef><tt:ScopeItem>{scope}</tt:ScopeItem></tds:Scopes>"#
             )
         })
         .collect();
@@ -978,6 +984,14 @@ pub fn handle_set_storage_configuration(state: &SharedState, body: &str) -> Stri
     resp_empty("tds", "SetStorageConfigurationResponse")
 }
 
+/// `tt:SystemLogUriList` holds repeated **`SystemLog`** entries, each a
+/// `tt:SystemLogUri` — and that is the *type* name, not an element name. The
+/// mock emitted the type name as the element and called the enumeration
+/// `LogType`; `tt:SystemLogUri` declares `Type` then `Uri`, in that order.
+///
+/// This one was also a **client** defect: `SystemUris::from_xml` walked
+/// `SystemLogUris/SystemLogUri/Uri`, so every conformant device returned
+/// `system_log_uri: None` and the mock was written to agree with the parser.
 pub fn resp_system_uris(base: &str) -> String {
     // As above — `soap()` declares `xmlns:tt`; declaring it twice is a
     // duplicate attribute and makes the envelope not well-formed.
@@ -986,7 +1000,7 @@ pub fn resp_system_uris(base: &str) -> String {
         &format!(
             r#"<tds:GetSystemUrisResponse>
           <tds:SystemLogUris>
-            <tt:SystemLogUri><tt:Uri>{base}/syslog</tt:Uri><tt:LogType>System</tt:LogType></tt:SystemLogUri>
+            <tt:SystemLog><tt:Type>System</tt:Type><tt:Uri>{base}/syslog</tt:Uri></tt:SystemLog>
           </tds:SystemLogUris>
           <tds:SupportInfoUri>{base}/support</tds:SupportInfoUri>
           <tds:SystemBackupUri>{base}/backup</tds:SystemBackupUri>

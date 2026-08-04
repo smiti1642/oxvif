@@ -312,7 +312,7 @@ fn dispatch_search(op: &str, state: &SharedState) -> Option<String> {
         "GetServiceCapabilities" => recording::resp_search_service_capabilities(),
         "FindRecordings" => recording::resp_find_recordings(),
         "GetRecordingSearchResults" => recording::resp_recording_search_results(state),
-        "EndSearch" => resp_empty("tse", "EndSearchResponse"),
+        "EndSearch" => recording::resp_end_search(),
         _ => return None,
     })
 }

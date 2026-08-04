@@ -787,6 +787,14 @@ pub struct RecordingEntry {
     pub source_name: String,
     pub location: String,
     pub description: String,
+    /// `tt:RecordingSourceInformation/Address` — required by the schema and
+    /// read by [`RecordingSourceInformation::address`]. It had no home here
+    /// until 0.15.0, so `CreateRecording` accepted it and threw it away and
+    /// both getters dropped it: the `SetNetworkInterfaces`/`MTU` shape.
+    ///
+    /// [`RecordingSourceInformation::address`]: crate::RecordingSourceInformation::address
+    #[serde(default)]
+    pub address: String,
     pub content: String,
     pub maximum_retention_time: String,
     #[serde(default)]
@@ -1410,6 +1418,7 @@ fn default_recording() -> RecordingState {
                 source_name: "MockCamera".into(),
                 location: "Lab".into(),
                 description: "Mock recording".into(),
+                address: "http://192.168.1.100/onvif/device_service".into(),
                 content: "Normal".into(),
                 maximum_retention_time: "PT0S".into(),
                 tracks: vec![RecordingTrackEntry {
@@ -1427,6 +1436,7 @@ fn default_recording() -> RecordingState {
                 source_name: "MockCamera".into(),
                 location: String::new(),
                 description: String::new(),
+                address: String::new(),
                 content: String::new(),
                 maximum_retention_time: "PT0S".into(),
                 tracks: Vec::new(),

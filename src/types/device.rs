@@ -778,10 +778,20 @@ pub struct SystemUris {
 }
 
 impl SystemUris {
+    /// # The repeated element is `SystemLog`, not `SystemLogUri`
+    ///
+    /// `SystemLogUris` is typed `tt:SystemLogUriList`, whose one child element
+    /// is named **`SystemLog`** and *typed* `tt:SystemLogUri`. Until 0.15.0
+    /// this walked `SystemLogUris/SystemLogUri/Uri`, reading the type name as
+    /// though it were the element name, so [`system_log_uri`] came back `None`
+    /// from every conformant device. `XmlNode` strips namespaces and matches on
+    /// the local name alone, so nothing about the lookup looked wrong.
+    ///
+    /// [`system_log_uri`]: SystemUris::system_log_uri
     pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
         Ok(Self {
             system_log_uri: resp
-                .path(&["SystemLogUris", "SystemLogUri", "Uri"])
+                .path(&["SystemLogUris", "SystemLog", "Uri"])
                 .map(|n| n.text().to_string())
                 .filter(|s| !s.is_empty()),
             support_info_uri: xml_str(resp, "SupportInfoUri"),

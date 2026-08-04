@@ -575,7 +575,7 @@ addresses no head at all — §6.4.
 | `GotoHomePosition`, `SetHomePosition` | ● **T** | |
 | `GetPresetTours`, `GetPresetTour`, `GetPresetTourOptions`, `CreatePresetTour`, `ModifyPresetTour`, `OperatePresetTour`, `RemovePresetTour` | ● **T** | |
 | `GetNodes`, `GetConfigurations` | ● | Whole-catalogue reads; no token to discriminate on. |
-| `GetNode`, `GetConfiguration`, `GetConfigurationOptions`, `SetConfiguration` | ● **T** | Addressed by **node** or **configuration** token, not by profile. An unknown token faults. |
+| `GetNode`, `GetConfiguration`, `GetConfigurationOptions`, `SetConfiguration` | ● **T** | Addressed by **node** or **configuration** token, not by profile. An unknown token faults. `GetConfigurationOptions` reports the coordinate spaces of the node its configuration drives, so `PTZConfig_2` answers with zoom slots only. |
 | `GetCompatibleConfigurations` | ● **T** | The profile's bound configuration — or an **empty list**, not a fault, for a profile that is not PTZ-capable. |
 | `SendAuxiliaryCommand`, `GetServiceCapabilities` | ○ | |
 
@@ -604,7 +604,7 @@ addresses no head at all — §6.4.
 | `GetRecordingSearchResults` | ● | |
 | `GetReplayUri` | ● **T** | Faults on a token naming no recording. |
 | `FindRecordings` | ○ | One search token; no cursor — see §13. |
-| `EndSearch`, three × `GetServiceCapabilities` | ○ | |
+| `EndSearch`, three × `GetServiceCapabilities` | ○ | `EndSearchResponse` carries the required `Endpoint`, read from the same clock as `GetSystemDateAndTime`. It was an empty body until 0.15.0. |
 
 ---
 
@@ -1011,6 +1011,15 @@ was checked. It is nonetheless the only thing here that can see a wrong
 namespace or a wrong sequence order at all: the client parser is
 namespace-blind and order-independent, so every other row above passes just as
 happily against XML no conformant device would emit.
+
+**As of 0.15.0 all five of its counts are 0.** That is not the same as "the
+mock is conformant". It reads `xs:element` and never `xs:attribute`; a type
+carrying an `xs:any` suppresses its unknown-child rule for the whole type; and
+an element whose children are all optional is schema-valid empty — `<tt:Spaces/>`
+would have cleared a finding while claiming the head supports no coordinate
+space. Four of the ten client-facing bugs the 0.15.0 sweep found were found
+*in spite of* the counts rather than by them, and what asserts the part the
+counts miss is the per-operation value assertions in `tests/mock_workflow.rs`.
 
 The two tables are the important ones. Each row **declares its intent** —
 `Works` / `Static(§)` for round-trip, `Discriminates` / `Blind(§)` for tokens —
