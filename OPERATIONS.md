@@ -20,11 +20,11 @@ relative one is dead for anyone reading this from the registry tarball.
 | `GetServices` | ✓ |
 | `GetServiceCapabilities` | ✓ |
 | `GetDeviceInformation` | ✓ |
-| `GetSystemDateAndTime` | ✓ |
+| `GetSystemDateAndTime` / `SetSystemDateAndTime` | ✓ |
 | `GetHostname` / `SetHostname` | ✓ |
 | `GetNTP` / `SetNTP` | ✓ |
 | `SystemReboot` | ✓ |
-| `GetScopes` | ✓ |
+| `GetScopes` / `SetScopes` | ✓ |
 | `GetUsers` / `CreateUsers` / `DeleteUsers` / `SetUser` | ✓ |
 | `GetNetworkInterfaces` / `SetNetworkInterfaces` | ✓ |
 | `GetNetworkProtocols` / `SetNetworkProtocols` | ✓ |
@@ -80,6 +80,9 @@ row in this file at all until 0.15.0, while the crate had implemented it since
 | `GetAudioEncoderConfigurations` / `GetAudioEncoderConfiguration` | ✓ |
 | `SetAudioEncoderConfiguration` | ✓ |
 | `GetAudioEncoderConfigurationOptions` | ✓ |
+| `GetOSDs` / `GetOSD` | ✓ |
+| `GetOSDOptions` | ✓ |
+| `CreateOSD` / `SetOSD` / `DeleteOSD` | ✓ |
 
 ### Media2 Service
 
@@ -124,6 +127,7 @@ row in this file at all until 0.15.0, while the crate had implemented it since
 | `CreatePresetTour` / `ModifyPresetTour` | ✓ |
 | `OperatePresetTour` / `RemovePresetTour` | ✓ |
 | `SendAuxiliaryCommand` | ✓ |
+| `GotoHomePosition` / `SetHomePosition` | ✓ |
 
 ### Imaging Service
 

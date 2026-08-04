@@ -422,6 +422,35 @@ two-thirds of the test suite.
   client-facing bugs this sweep found were found in spite of the counts rather
   than by them.
 
+- **Release documentation audit: four wrong statements, all corrected here.**
+  Nothing in this repository asserts prose, so the surfaces below were checked
+  mechanically against source rather than re-read.
+  - **`OPERATIONS.md` was missing ten implemented operations** — the crate's
+    only coverage statement, understating it. The six OSD calls (`GetOSDs`,
+    `GetOSD`, `GetOSDOptions`, `CreateOSD`, `SetOSD`, `DeleteOSD`) appeared
+    nowhere in the file; `SetScopes` and `SetSystemDateAndTime` had only their
+    getters; `GotoHomePosition` and `SetHomePosition` were absent from PTZ.
+    Checked in **both** directions — no row claimed an operation the client
+    cannot send.
+  - **`README.md` documented 141 of the 159 public client methods.** The gap
+    was almost entirely this release's own work: the Media2 audio and metadata
+    families, `add_configuration_media2` / `remove_configuration_media2`,
+    `get_video_source_modes_media2` / `set_video_source_mode_media2`, plus
+    `set_scopes`, `set_system_date_and_time`, `set_network_default_gateway`,
+    `set_synchronization_point` and `ptz_get_compatible_configurations`.
+  - Two counts in this entry had been moved by later work in this same
+    release — `tests/mock_media1_media2_agree.rs` is 13 tests, not 12, and
+    `OPERATIONS.md` is eleven tables and 105 rows now that DeviceIO has its own.
+  - Verified correct and left alone, so the next audit need not re-derive them:
+    all ten per-dispatcher operation counts and the total of 157 in
+    `docs/mock-server.md`; `tests/mock_roundtrip.rs` at 49 rows all `Works`
+    with pin `(49, 49)`; `tests/mock_token_discrimination.rs` at 34 rows =
+    28 + 6 with pin `(34, 28)`; the health cross-check's 24 facts; the
+    metamorph sweep's 52 operations; one `## Optional features` bullet per
+    `Cargo.toml` feature; every version snippet at `0.15`; and **zero** dangling
+    symbol references across `CHANGELOG.md`, `README.md`, `OPERATIONS.md`,
+    `src/lib.rs` and `docs/mock-server.md`.
+
 - **`OnvifClient::get_osd_options().position_types` was empty from every
   conformant camera.** `tt:OSDConfigurationOptions` declares `PositionOption`
   as `type="xs:string" maxOccurs="unbounded"` — one element per position, text
@@ -1220,8 +1249,8 @@ two-thirds of the test suite.
 
   Not reported — the report named an instance, and the audit found the class.
 
-  New `tests/mock_media1_media2_agree.rs` (12 tests by the end of the release —
-  10 here, plus one each for the PTZ and audio families below; public API only,
+  New `tests/mock_media1_media2_agree.rs` (13 tests by the end of the release —
+  11 here, plus one each for the PTZ and audio families below; public API only,
   over real HTTP) pins both directions: the two services must return the same profile token
   set for a seeded *and* the default device, and a create/delete/encoder-write/
   source-config-write/configuration-binding on either must be visible to the
@@ -1692,7 +1721,11 @@ two-thirds of the test suite.
 - **The operation coverage tables moved out of `README.md`** into a new
   top-level **`OPERATIONS.md`**. Ten tables and 104 rows were roughly 8% of the
   README and sat below everything a reader actually navigates to; the README's
-  `## Implemented ONVIF operations` section is now a link. The file ships in the
+  `## Implemented ONVIF operations` section is now a link. **The file is eleven
+  tables and 105 rows now** — this release's own DeviceIO split added a table,
+  and the release audit found ten implemented operations with no row at all
+  (the six OSD calls, `SetScopes`, `SetSystemDateAndTime`, `GotoHomePosition`,
+  `SetHomePosition`). The file ships in the
   published crate (it is not under the excluded `docs/`), so the link resolves
   from crates.io. `CLAUDE.md`'s new-service SOP and publishing checklist point
   at the new location.

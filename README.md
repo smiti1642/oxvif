@@ -423,6 +423,16 @@ for s in &scopes {
 }
 ```
 
+### `set_scopes(scopes) -> Result<(), OnvifError>`
+
+Replaces the device's *configurable* scopes with `scopes: &[&str]`. Fixed scopes
+the device reports as non-configurable are untouched.
+
+### `set_system_date_and_time(req) -> Result<(), OnvifError>`
+
+Sets the clock — manual or NTP, with timezone and DST. Takes a
+`SetDateTimeRequest`; pair it with `get_system_date_and_time()`.
+
 ### User management
 
 | Method | Description |
@@ -443,6 +453,7 @@ for s in &scopes {
 | `get_dns()` | DNS servers + DHCP flag → `DnsInformation` |
 | `set_dns(from_dhcp, servers)` | Set DNS servers |
 | `get_network_default_gateway()` | Default gateway addresses → `NetworkGateway` |
+| `set_network_default_gateway(ipv4_addresses)` | Replace the IPv4 default gateway list |
 | `get_discovery_mode()` | Current WS-Discovery mode (`"Discoverable"` / `"NonDiscoverable"`) |
 | `set_discovery_mode(mode)` | Change WS-Discovery mode |
 
@@ -567,6 +578,19 @@ Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 suppor
 | `get_video_encoder_instances_media2(url, config_token)` | `VideoEncoderInstances` | Encoder capacity |
 | `create_profile_media2(url, name)` | `String` | Create profile, returns new token |
 | `delete_profile_media2(url, token)` | `()` | |
+| `add_configuration_media2(url, profile, kind, token)` | `()` | Bind a configuration to a profile |
+| `remove_configuration_media2(url, profile, kind, token)` | `()` | Unbind it |
+| `get_metadata_configurations_media2(url, config_token, profile_token)` | `Vec<MetadataConfiguration>` | |
+| `set_metadata_configuration_media2(url, config)` | `()` | |
+| `get_metadata_configuration_options_media2(url, config_token, profile_token)` | `MetadataConfigurationOptions` | |
+| `get_audio_source_configurations_media2(url)` | `Vec<AudioSourceConfiguration>` | |
+| `get_audio_encoder_configurations_media2(url)` | `Vec<AudioEncoderConfiguration>` | |
+| `get_audio_encoder_configuration_options_media2(url, config_token)` | `AudioEncoderConfigurationOptions` | |
+| `set_audio_encoder_configuration_media2(url, config)` | `()` | |
+| `get_audio_output_configurations_media2(url)` | `Vec<AudioOutputConfiguration>` | |
+| `get_audio_decoder_configurations_media2(url)` | `Vec<AudioDecoderConfiguration>` | |
+| `get_video_source_modes_media2(url, video_source_token)` | `Vec<VideoSourceMode>` | Sensor modes |
+| `set_video_source_mode_media2(url, source_token, mode_token)` | `bool` | `true` if the device needs a reboot |
 
 ---
 
@@ -590,6 +614,7 @@ All PTZ methods use `ptz_url` from `caps.ptz_url`. Coordinates use the ONVIF nor
 | `ptz_set_configuration(ptz_url, config, force_persist)` | Write PTZ configuration back to device |
 | `ptz_get_configuration_options(ptz_url, token)` | Valid timeout ranges for a PTZ configuration |
 | `ptz_get_nodes(ptz_url)` | List PTZ nodes (capabilities, preset count, home support) |
+| `ptz_get_compatible_configurations(ptz_url, profile_token)` | Configurations the device will accept for this profile |
 | `ptz_goto_home_position(ptz_url, profile_token, speed)` | Move to the configured home position |
 | `ptz_set_home_position(ptz_url, profile_token)` | Save current position as home |
 | `ptz_get_service_capabilities(ptz_url)` | What the PTZ service supports |
@@ -862,6 +887,10 @@ let new_time = client.renew_subscription(&sub.reference_url, "PT60S").await?;
 // 5. Cancel
 client.unsubscribe(&sub.reference_url).await?;
 ```
+
+`set_synchronization_point(subscription_url)` asks the device to re-send the
+current state of every property topic on the subscription, so a client that
+just connected does not have to wait for the next change to learn it.
 
 ### Continuous event stream
 
