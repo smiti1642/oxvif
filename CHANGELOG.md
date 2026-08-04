@@ -211,10 +211,14 @@ two-thirds of the test suite.
   `WideDynamicRange` precedes `WhiteBalance`. Sorting the members gets nine of
   ten right and leaves the row standing.
 
-  **No oxvif caller is affected**, for the same reason as the namespace fixes:
-  `XmlNode` matches local names only, so the invented names simply parsed as
-  absent, exactly as they had been. The `mock-server` feature is what was
-  affected.
+  **No oxvif caller is affected** *by this bullet's change*, for the same
+  reason as the namespace fixes: `XmlNode` matches local names only, so the
+  invented names simply parsed as absent, exactly as they had been. The
+  `mock-server` feature is what was affected here. Read on its own that sentence
+  now misleads, and it is kept rather than deleted because the qualifier is the
+  point: the *parser* read the same invented names, and fixing that — under
+  Fixed, `imaging_get_move_options` — is what a caller can observe. Neither
+  change alone moves a caller's result; both together do.
 
   `imaging_move_options_fault_on_a_fixed_lens` in `src/mock/state.rs` was the
   one assertion in the repository that named a moved element — it pinned
@@ -222,18 +226,18 @@ two-thirds of the test suite.
   output that was guarding an invented name. Re-aimed at `<tt:Position>`, and
   it now also asserts no `…Space>` element appears in a focus response at all.
 
-  **Still open, and deliberately not fixed here:**
-  `ImagingMoveOptions::from_xml` (`src/types/imaging.rs`) reads
-  `PositionSpace`, `SpeedSpace` and `DistanceSpace`, so
-  `absolute_position_range`, `absolute_speed_range`, `relative_distance_range`,
-  `relative_speed_range` and `continuous_speed_range` are **always `None`
-  against a conformant device**, and the fixture in
-  `src/tests/client/imaging_tests.rs` was written to agree with the parser. It
-  is the `tt:AFModes` defect below with the roles reversed — there the fixture
-  was right and the mock was wrong, so fixing the mock was enough; here the
-  fixture and the parser are wrong together, which is the Media2
-  `Audio` → `AudioEncoder` shape and needs both changed at once. Tracked in
-  `docs/active/mock-schema-conformance-2026-08.md` §1.3.
+  ~~**Still open, and deliberately not fixed here:**~~ **Now fixed** — see
+  `imaging_get_move_options` under Fixed. The finding as recorded was right:
+  `ImagingMoveOptions::from_xml` (`src/types/imaging.rs`) read `PositionSpace`,
+  `SpeedSpace` and `DistanceSpace`, so `absolute_position_range`,
+  `absolute_speed_range`, `relative_distance_range`, `relative_speed_range` and
+  `continuous_speed_range` were **always `None` against a conformant device**,
+  and the fixture in `src/tests/client/imaging_tests.rs` was written to agree
+  with the parser. It is the `tt:AFModes` defect below with the roles reversed —
+  there the fixture was right and the mock was wrong, so fixing the mock was
+  enough; here the fixture and the parser were wrong together, which is the
+  Media2 `Audio` → `AudioEncoder` shape and needed both changed at once.
+  Tracked in `docs/active/mock-schema-conformance-2026-08.md` §1.3.
 
 - **The mock answers a DeviceIO endpoint.** `{base}/onvif/deviceio`, advertised
   in `GetCapabilities` (`Capabilities/Extension/DeviceIO`) **and** `GetServices`,
@@ -256,6 +260,69 @@ two-thirds of the test suite.
     the DeviceIO block made the mock state the same fact a third time. Now 2.
 
 ### Fixed
+
+- **`imaging_get_move_options` returned `None` for all five of its ranges
+  against every conformant camera.** `ImagingMoveOptions::from_xml`
+  (`src/types/imaging.rs`) read `PositionSpace`, `SpeedSpace` and
+  `DistanceSpace`. `tt:AbsoluteFocusOptions` declares `Position` then `Speed`,
+  `tt:RelativeFocusOptions20` declares `Distance` then `Speed`, and
+  `tt:ContinuousFocusOptions` declares `Speed` — all plain `tt:FloatRange`. The
+  `…Space` vocabulary is PTZ's, where a space is a URI naming a coordinate
+  system (`AbsolutePanTiltPositionSpace`); focus has no such concept and none of
+  the three invented names is declared for these types. So
+  `absolute_position_range`, `absolute_speed_range`, `relative_distance_range`,
+  `relative_speed_range` and `continuous_speed_range` now carry values where
+  they were unconditionally `None`.
+
+  **This is a behaviour change a caller can observe, and it is not listed under
+  Breaking.** No signature, field name or field type moved, and code that
+  branches on `None` still compiles and still runs — it now takes the other
+  branch, which is the whole point of the fix. What *is* new is a way for the
+  call to fail, so `OnvifClient::imaging_get_move_options` gained an `# Errors`
+  section it did not have, and `OnvifSession`'s delegate points at it.
+
+  **Cardinality, which the rename alone does not settle.** All three focus
+  families are `[0..1]` under `tt:MoveOptions20`, so an absent family stays
+  `None` — a lens offering only continuous focus is an ordinary device, and the
+  mock is one. But each family declares exactly one **required** range —
+  `Absolute/Position`, `Relative/Distance`, `Continuous/Speed` — and only the
+  two `Speed` members under Absolute and Relative are optional. A family present
+  *without* its required range is now `SoapError::MissingField` naming the path,
+  because `None` there is indistinguishable from "this device does not offer
+  that move type", which is the one fact a caller reads these options to learn.
+
+  **What let this ship is the gap the fix closes, not the wrong names.** The
+  mock-side rename above corrected the *mock* to the same three names and no
+  test went red, because nothing in the repository drove the client against the
+  mock for this operation. The only mock-side call was
+  `s.imaging_get_move_options("VS_1").await.unwrap()` inside
+  `focus_operations_are_refused_on_the_fixed_lens`
+  (`tests/mock_multi_sensor.rs`) — a hollow positive that asserts no field —
+  and the unit fixture in `src/tests/client/imaging_tests.rs` had been written
+  to agree with the parser rather than the schema. New
+  `imaging_move_options_ranges_survive_the_round_trip` (`tests/mock_workflow.rs`)
+  drives the real client against the real `MockServer` over HTTP and asserts the
+  bounds, so **either** side drifting reddens it. Measured: reverting only the
+  parser fails it on `.expect("mock emits tt:Absolute/tt:Position")`; reverting
+  only the mock's `tt:Absolute/tt:Speed` fails it on
+  `.expect("mock emits tt:Absolute/tt:Speed")`; both are assertion failures, not
+  compile errors.
+
+  The unit fixture now spells all three members correctly, adds the `Relative`
+  family it never had, and gives each of the five bounds a **distinct** pair so
+  no assertion can pass by reading the wrong range. It deliberately omits
+  `Relative/Speed`: `relative_speed_range` being `None` while
+  `relative_distance_range` is `Some` is the only thing that proves the parser
+  honours `minOccurs="0"`. `test_imaging_get_move_options_parses_ranges` asserts
+  all five fields where it asserted two, and two new negatives pin the two
+  distinct `MissingField` paths.
+
+  `tests/mock_schema_shape.rs` **cannot see this and never could** — it checks
+  the mock's *responses*, never the client's parsing, the same blind spot as the
+  `set_storage_configuration` request-body bug below. Its pins are therefore
+  unmoved by this fix, verified by running it before and after: `67 raw, 38
+  distinct {MISSING-REQUIRED 21, ORDER 5, UNKNOWN-CHILD 4, UNKNOWN-NAME 8}` both
+  times.
 
 - **`set_storage_configuration` sent five elements in the wrong XML namespace.**
   `Data`, `LocalPath`, `StorageUri`, `User` and `UserName` went out as `tt:`.

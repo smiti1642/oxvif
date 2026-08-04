@@ -147,6 +147,19 @@ impl OnvifClient {
     }
 
     /// Retrieve the valid focus movement ranges for a video source.
+    ///
+    /// Each of the three focus families is optional: a device that offers only
+    /// continuous focus leaves the absolute and relative ranges `None`.
+    ///
+    /// # Errors
+    ///
+    /// Besides transport and SOAP faults, returns
+    /// [`SoapError::MissingField`](crate::soap::SoapError::MissingField) if the
+    /// response omits `MoveOptions`, or if a focus family is present without the
+    /// range the schema declares required for it — `Absolute/Position`,
+    /// `Relative/Distance` or `Continuous/Speed`. Those are reported rather than
+    /// flattened to `None`, so a malformed response cannot be mistaken for a
+    /// device that does not support the move type.
     pub async fn imaging_get_move_options(
         &self,
         imaging_url: &str,

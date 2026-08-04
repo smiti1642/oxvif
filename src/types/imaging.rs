@@ -422,6 +422,11 @@ impl ImagingStatus {
 // ── ImagingMoveOptions ────────────────────────────────────────────────────────
 
 /// Valid focus movement ranges returned by `imaging_get_move_options`.
+///
+/// A `None` range means the device did not offer that focus family, or — for
+/// the two speed ranges under absolute and relative — offered the family but
+/// not a speed bound for it. It never means "the response was malformed"; see
+/// [`OnvifClient::imaging_get_move_options`](crate::OnvifClient::imaging_get_move_options).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct ImagingMoveOptions {
@@ -438,32 +443,87 @@ pub struct ImagingMoveOptions {
 }
 
 impl ImagingMoveOptions {
+    /// Parse `timg:GetMoveOptionsResponse`.
+    ///
+    /// The three focus families under `tt:MoveOptions20` — `Absolute`,
+    /// `Relative`, `Continuous` — are each `[0..1]`, so an absent family is
+    /// `None` and not an error. A lens that offers continuous focus and nothing
+    /// else is an ordinary device, and the mock is one.
+    ///
+    /// **Inside a family the members are not all optional.**
+    /// `tt:AbsoluteFocusOptions` declares `Position` required then `Speed`
+    /// optional; `tt:RelativeFocusOptions20` declares `Distance` required then
+    /// `Speed` optional; `tt:ContinuousFocusOptions` declares `Speed` alone,
+    /// its only member and required. So all three families have exactly one
+    /// required range, and a family present *without* it is a malformed
+    /// response — reporting `None` there would be indistinguishable from "this
+    /// device does not offer that move type", which is the one fact a caller
+    /// reads these options to learn. Hence: the three required members are
+    /// `Err`, the two optional `Speed` members are `None`.
+    ///
+    /// The member names are `Position`, `Distance` and `Speed`. This parser
+    /// read `PositionSpace`, `SpeedSpace` and `DistanceSpace` through 0.14 —
+    /// vocabulary borrowed from PTZ, where a *space* is a URI naming a
+    /// coordinate system (`AbsolutePanTiltPositionSpace`). Focus has no such
+    /// concept and none of those names is declared for these types, so all five
+    /// public ranges came back `None` from every conformant device. The mock
+    /// emitted the same invented names, and the unit fixture had been written to
+    /// agree with the parser, so nothing here could see it.
     pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
         let opts = resp
             .child("MoveOptions")
             .ok_or_else(|| SoapError::missing("MoveOptions"))?;
 
-        let range = |parent: &str, child: &str| {
-            opts.child(parent)
-                .and_then(|p| p.child(child))
-                .map(|n| FloatRange {
-                    min: n
-                        .child("Min")
-                        .and_then(|m| m.text().parse().ok())
-                        .unwrap_or(0.0),
-                    max: n
-                        .child("Max")
-                        .and_then(|m| m.text().parse().ok())
-                        .unwrap_or(0.0),
-                })
+        fn float_range(n: &XmlNode) -> FloatRange {
+            FloatRange {
+                min: n
+                    .child("Min")
+                    .and_then(|m| m.text().parse().ok())
+                    .unwrap_or(0.0),
+                max: n
+                    .child("Max")
+                    .and_then(|m| m.text().parse().ok())
+                    .unwrap_or(0.0),
+            }
+        }
+
+        // Absent family → `None`; present family missing its required range →
+        // `Err` naming the path, so the caller can tell malformed from
+        // unsupported.
+        let required = |family: Option<&XmlNode>,
+                        member: &str,
+                        path: &'static str|
+         -> Result<Option<FloatRange>, OnvifError> {
+            match family {
+                None => Ok(None),
+                Some(f) => f
+                    .child(member)
+                    .map(|n| Some(float_range(n)))
+                    .ok_or_else(|| SoapError::missing(path).into()),
+            }
         };
+        // `Speed` is `minOccurs="0"` under both Absolute and Relative.
+        let optional_speed =
+            |family: Option<&XmlNode>| family.and_then(|f| f.child("Speed")).map(float_range);
+
+        let absolute = opts.child("Absolute");
+        let relative = opts.child("Relative");
+        let continuous = opts.child("Continuous");
 
         Ok(Self {
-            absolute_position_range: range("Absolute", "PositionSpace"),
-            absolute_speed_range: range("Absolute", "SpeedSpace"),
-            relative_distance_range: range("Relative", "DistanceSpace"),
-            relative_speed_range: range("Relative", "SpeedSpace"),
-            continuous_speed_range: range("Continuous", "SpeedSpace"),
+            absolute_position_range: required(
+                absolute,
+                "Position",
+                "MoveOptions/Absolute/Position",
+            )?,
+            absolute_speed_range: optional_speed(absolute),
+            relative_distance_range: required(
+                relative,
+                "Distance",
+                "MoveOptions/Relative/Distance",
+            )?,
+            relative_speed_range: optional_speed(relative),
+            continuous_speed_range: required(continuous, "Speed", "MoveOptions/Continuous/Speed")?,
         })
     }
 }

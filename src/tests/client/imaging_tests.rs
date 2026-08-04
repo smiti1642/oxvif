@@ -167,18 +167,35 @@ fn imaging_get_status_xml() -> &'static str {
         </s:Envelope>"#
 }
 
+/// The member names are `Position`, `Distance` and `Speed`.
+///
+/// This fixture said `PositionSpace` / `SpeedSpace` through 0.14 — names taken
+/// from PTZ, where a *space* is a URI naming a coordinate system. It had been
+/// written to agree with `ImagingMoveOptions::from_xml`, which read the same
+/// invented names, so `test_imaging_get_move_options_parses_ranges` was green
+/// while every range came back `None` from a real camera.
+///
+/// The five bounds below are deliberately all different, so no assertion can
+/// pass by reading the wrong range. `Relative` carries `Distance` and **no**
+/// `Speed`: that member is `minOccurs="0"`, and `relative_speed_range` being
+/// `None` while `relative_distance_range` is `Some` is the only thing that
+/// proves the parser honours the distinction.
 fn imaging_move_options_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                      xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl">
+                      xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl"
+                      xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <timg:GetMoveOptionsResponse>
               <timg:MoveOptions>
-                <tt:Absolute xmlns:tt="http://www.onvif.org/ver10/schema">
-                  <tt:PositionSpace><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:PositionSpace>
-                  <tt:SpeedSpace><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:SpeedSpace>
+                <tt:Absolute>
+                  <tt:Position><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:Position>
+                  <tt:Speed><tt:Min>0.05</tt:Min><tt:Max>0.9</tt:Max></tt:Speed>
                 </tt:Absolute>
-                <tt:Continuous xmlns:tt="http://www.onvif.org/ver10/schema">
-                  <tt:SpeedSpace><tt:Min>-1.0</tt:Min><tt:Max>1.0</tt:Max></tt:SpeedSpace>
+                <tt:Relative>
+                  <tt:Distance><tt:Min>-0.75</tt:Min><tt:Max>0.75</tt:Max></tt:Distance>
+                </tt:Relative>
+                <tt:Continuous>
+                  <tt:Speed><tt:Min>-1.0</tt:Min><tt:Max>1.0</tt:Max></tt:Speed>
                 </tt:Continuous>
               </timg:MoveOptions>
             </timg:GetMoveOptionsResponse>
@@ -342,11 +359,108 @@ async fn test_imaging_get_move_options_parses_ranges() {
         .await
         .unwrap();
 
-    let abs = opts.absolute_position_range.unwrap();
-    assert!((abs.min - 0.0).abs() < 0.001);
-    assert!((abs.max - 1.0).abs() < 0.001);
-    let cont = opts.continuous_speed_range.unwrap();
-    assert!((cont.min - -1.0).abs() < 0.001);
+    // All five fields, each against its own distinct pair of bounds. Asserting
+    // only two of them is what let the `…Space` bug survive: the other three
+    // were `None` and nothing said so.
+    let abs = opts.absolute_position_range.expect("Absolute/Position");
+    assert_eq!((abs.min, abs.max), (0.0, 1.0));
+    let abs_speed = opts.absolute_speed_range.expect("Absolute/Speed");
+    assert_eq!((abs_speed.min, abs_speed.max), (0.05, 0.9));
+    let dist = opts.relative_distance_range.expect("Relative/Distance");
+    assert_eq!((dist.min, dist.max), (-0.75, 0.75));
+    let cont = opts.continuous_speed_range.expect("Continuous/Speed");
+    assert_eq!((cont.min, cont.max), (-1.0, 1.0));
+
+    // `Speed` is optional under `Relative` and the fixture omits it. This is
+    // the assertion that separates "parsed the right element" from "returned
+    // Some for anything it found".
+    assert!(
+        opts.relative_speed_range.is_none(),
+        "Relative carries no Speed in the fixture"
+    );
+}
+
+#[tokio::test]
+async fn test_imaging_get_move_options_absent_families_are_none() {
+    // `Absolute`, `Relative` and `Continuous` are each [0..1] under
+    // `tt:MoveOptions20`, so a lens offering none of them is a legal response
+    // that must parse rather than error.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                   xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl">
+                   <s:Body>
+                     <timg:GetMoveOptionsResponse>
+                       <timg:MoveOptions/>
+                     </timg:GetMoveOptionsResponse>
+                   </s:Body>
+                 </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let opts = client
+        .imaging_get_move_options("http://192.168.1.1/onvif/imaging", "video_source")
+        .await
+        .unwrap();
+
+    assert!(opts.absolute_position_range.is_none());
+    assert!(opts.absolute_speed_range.is_none());
+    assert!(opts.relative_distance_range.is_none());
+    assert!(opts.relative_speed_range.is_none());
+    assert!(opts.continuous_speed_range.is_none());
+}
+
+#[tokio::test]
+async fn test_imaging_get_move_options_family_without_its_required_range_errs() {
+    // `tt:ContinuousFocusOptions` declares `Speed` as its only member, and it
+    // is required — so a `Continuous` element without it is malformed, not a
+    // device that offers continuous focus with no speed bound. Reporting the
+    // path is the difference between the two.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                   xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl"
+                   xmlns:tt="http://www.onvif.org/ver10/schema">
+                   <s:Body>
+                     <timg:GetMoveOptionsResponse>
+                       <timg:MoveOptions><tt:Continuous/></timg:MoveOptions>
+                     </timg:GetMoveOptionsResponse>
+                   </s:Body>
+                 </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .imaging_get_move_options("http://192.168.1.1/onvif/imaging", "video_source")
+        .await
+        .unwrap_err();
+
+    assert_missing_field(err, "MoveOptions/Continuous/Speed");
+}
+
+#[tokio::test]
+async fn test_imaging_get_move_options_absolute_without_position_errs() {
+    // Same rule on `tt:AbsoluteFocusOptions`, whose required member is
+    // `Position` while its `Speed` is optional — so a family carrying only the
+    // optional member still errs, and on the *other* path string.
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                   xmlns:timg="http://www.onvif.org/ver20/imaging/wsdl"
+                   xmlns:tt="http://www.onvif.org/ver10/schema">
+                   <s:Body>
+                     <timg:GetMoveOptionsResponse>
+                       <timg:MoveOptions>
+                         <tt:Absolute>
+                           <tt:Speed><tt:Min>0.1</tt:Min><tt:Max>0.4</tt:Max></tt:Speed>
+                         </tt:Absolute>
+                       </timg:MoveOptions>
+                     </timg:GetMoveOptionsResponse>
+                   </s:Body>
+                 </s:Envelope>"#;
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+
+    let err = client
+        .imaging_get_move_options("http://192.168.1.1/onvif/imaging", "video_source")
+        .await
+        .unwrap_err();
+
+    assert_missing_field(err, "MoveOptions/Absolute/Position");
 }
 
 #[tokio::test]

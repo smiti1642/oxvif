@@ -189,6 +189,49 @@ async fn imaging_set_then_get() {
     assert_eq!(after.brightness, Some(33.0));
 }
 
+/// The client's focus-range parser and the mock's focus-range renderer must
+/// agree on element names.
+///
+/// **Nothing in this repository connected them until this test.** Through 0.14
+/// both sides said `PositionSpace` / `SpeedSpace` — names borrowed from PTZ and
+/// declared nowhere for focus — so every range was `None` against a real
+/// camera. `455c40a` corrected the mock and the client parser stayed wrong, and
+/// still no test went red: the only mock-driven call was
+/// `s.imaging_get_move_options("VS_1").await.unwrap()` in
+/// `tests/mock_multi_sensor.rs`, a hollow positive that asserts no field, and
+/// the unit fixture in `src/tests/client/imaging_tests.rs` had been written to
+/// agree with the parser rather than the schema.
+///
+/// So this asserts the *values* the mock emits, not that the call succeeded.
+/// Either side drifting off the schema names reddens it.
+#[tokio::test]
+async fn imaging_move_options_ranges_survive_the_round_trip() {
+    let (_srv, s) = setup().await;
+
+    let opts = s.imaging_get_move_options("VS_1").await.unwrap();
+
+    let pos = opts
+        .absolute_position_range
+        .expect("mock emits tt:Absolute/tt:Position");
+    assert_eq!((pos.min, pos.max), (0.0, 1.0));
+
+    let abs_speed = opts
+        .absolute_speed_range
+        .expect("mock emits tt:Absolute/tt:Speed");
+    assert_eq!((abs_speed.min, abs_speed.max), (0.0, 1.0));
+
+    let cont = opts
+        .continuous_speed_range
+        .expect("mock emits tt:Continuous/tt:Speed");
+    assert_eq!((cont.min, cont.max), (-1.0, 1.0));
+
+    // The mock models absolute and continuous focus and omits `Relative`
+    // entirely — a legal shape, since all three families are [0..1]. `None`
+    // here is the mock's actual answer, not a parse failure.
+    assert!(opts.relative_distance_range.is_none());
+    assert!(opts.relative_speed_range.is_none());
+}
+
 #[tokio::test]
 async fn events_pull_point() {
     let (_srv, s) = setup().await;

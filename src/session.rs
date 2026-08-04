@@ -1442,6 +1442,9 @@ impl OnvifSession {
     }
 
     /// Retrieve valid focus movement ranges.
+    ///
+    /// See [`OnvifClient::imaging_get_move_options`] for which ranges are
+    /// optional and which missing element is an error.
     pub async fn imaging_get_move_options(
         &self,
         video_source_token: &str,

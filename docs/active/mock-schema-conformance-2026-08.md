@@ -17,10 +17,12 @@ each stays in the lab.**
 
 ## 0. Blast radius, established before anything else
 
-**Three client-facing bugs so far. The rest are mock fidelity.**
+**Four client-facing bugs so far. The rest are mock fidelity.**
+
+This line said *"Three client-facing bugs so far"* until §1.3's fourth landed.
 
 This section originally read *"no finding below is a client-facing bug"*, and
-that was wrong three times over — kept here rather than deleted, because every
+that was wrong four times over — kept here rather than deleted, because every
 exception was found by looking at something the sentence dismissed:
 
 1. **Media2's audio encoder element name** — §3, fixed in `8091892`.
@@ -35,12 +37,28 @@ exception was found by looking at something the sentence dismissed:
    its *request body*** — §5.1a, fixed with §5.1. This one the checker cannot
    see at all: it reads the mock's responses and never a client request. It was
    found by asking why §4's predicted red never happened.
+4. **`ImagingMoveOptions::from_xml` read three invented element names** — §1.3.
+   All five of `imaging_get_move_options`'s ranges were `None` against a
+   conformant camera. Recorded in §1.3 as *"Not fixed here — out of this work
+   unit's scope"*, which is the fourth dismissal, and the fourth to be a defect.
+   The checker cannot see this one either, for the *same* reason as (3) and a
+   different one from what §0 argues below: it judges the mock's output, not
+   oxvif's parsing of it. Fixing it moved no pin, which was checked rather than
+   assumed.
 
-**The pattern across all three is worth naming: each came from the sentence
+**The pattern across all four is worth naming: each came from the sentence
 that dismissed a category.** "No finding is client-facing", "54 unanchored
-roots, cause not established", "the byte assertions will catch it". A
-dismissal in this document has so far been the best available index of where
-the next defect is.
+roots, cause not established", "the byte assertions will catch it", "out of
+this work unit's scope". A dismissal in this document has so far been the best
+available index of where the next defect is.
+
+**And (4) sharpens what "the checker cannot see it" means.** Two distinct blind
+spots have now produced a bug each: it never reads a client *request* (3), and
+it never reads the client's *parser* (4). Both are one-sided — the checker
+compares the mock against the schema, and every other pair in the triangle
+(client↔schema, client↔mock) is unwatched by it. §6's guard argument covers
+client↔mock; nothing here covers client↔schema except a human with the WSDL
+open.
 
 So the safe reading of §0 is not "the client is fine" but **"the client is
 unaffected by *namespace* and *order*, which is most of the set."** That much
@@ -218,8 +236,32 @@ The Media2 row used to read *"plus an `Audio` child where the schema names
   so every range it returns is `None` against a conformant device, and the unit
   fixture in `src/tests/client/imaging_tests.rs` was written to agree with it.
   Same shape as the Media2 `Audio` → `AudioEncoder` client bug of `8091892`.
-  **Not fixed here** — out of this work unit's scope, and it needs the fixture
-  and the getter changed together.
+  ~~**Not fixed here** — out of this work unit's scope, and it needs the fixture
+  and the getter changed together.~~ **Fixed.** The finding was right in every
+  particular; only the deferral is superseded. Three things measured when it was
+  done that the finding did not say:
+
+  - **"the same four invented names" is three, not four.** `PositionSpace`,
+    `SpeedSpace` and `DistanceSpace` — the parser called `range("Absolute",
+    "SpeedSpace")` and `range("Continuous", "SpeedSpace")`, two call sites of
+    one name. Five *ranges* came from three wrong names.
+  - **The rename alone does not settle the parse.** All three focus families are
+    `[0..1]`, so an absent family is `None` — but each declares exactly one
+    required range (`Absolute/Position`, `Relative/Distance`,
+    `Continuous/Speed`) and only the two `Speed` members under Absolute and
+    Relative are optional. A present family missing its required range is now
+    `MissingField`, since `None` there is indistinguishable from "the device
+    does not offer that move type".
+  - **The real gap was that nothing connected the two sides.** The mock had
+    already been corrected here, and no test noticed the client still
+    disagreeing: the only mock-driven call was
+    `s.imaging_get_move_options("VS_1").await.unwrap()` in
+    `tests/mock_multi_sensor.rs`, asserting no field.
+    `imaging_move_options_ranges_survive_the_round_trip` in
+    `tests/mock_workflow.rs` now asserts the bounds, and reverting *either* side
+    reddens it. Of the imaging getters this was the only one with the gap —
+    settings, options, status and service capabilities are each asserted
+    field-by-field against the mock elsewhere in `tests/`.
 - `AnalyticsSupported` under the Media2 metadata options extension;
   `MaximumNumberOfProfiles` under the video source configuration options;
   `ProfilesSupported` under the video encoder configuration options; `Profile`
