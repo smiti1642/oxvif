@@ -403,11 +403,17 @@ pub(super) struct CapabilityCrossCheck {
 /// Cross-check the facts a device states **twice** — once in the device-level
 /// `GetCapabilities` and again in a service's `GetServiceCapabilities`.
 ///
-/// Eighteen attributes appear in both. Everything else a capability report
-/// contains is a claim with nothing to contradict it; these eighteen can be
+/// Seventeen attributes appear in both. Everything else a capability report
+/// contains is a claim with nothing to contradict it; these seventeen can be
 /// *wrong* rather than merely unknown, which makes them the only part checkable
 /// without vendor knowledge. A client that trusts either source is guessing when
 /// they differ.
+///
+/// **This said "eighteen" until 0.15.** The eighteenth was `UsernameToken`,
+/// which is not a twice-stated fact at all — see the comment where it was
+/// removed below. A name appearing on both types is not enough; it has to be
+/// declared on both, and `xs:attribute` here versus `xs:element` there is the
+/// distinction that decides it.
 ///
 /// # Only one direction is a finding
 ///
@@ -512,11 +518,15 @@ fn capability_cross_check(
             d.security.access_policy_config,
         );
         cmp("device/X.509Token", se.x509_token, d.security.x509_token);
-        cmp(
-            "device/UsernameToken",
-            se.username_token,
-            d.security.username_token,
-        );
+        // `device/UsernameToken` used to be compared here and is not a pair.
+        // `tt:SecurityCapabilities` — the device-level type — declares eight
+        // members and `UsernameToken` is not among them; the name exists only as
+        // an `xs:attribute` on `tds:SecurityCapabilities`, the service-level
+        // type. So `se.username_token` is `false` on every conformant device and
+        // the comparison could only ever produce a spurious `service_only`,
+        // never a contradiction. It appeared to work solely because oxvif's mock
+        // emitted a `<tt:UsernameToken>` element no camera sends — mock and
+        // check agreeing with each other and with nothing else.
     }
 
     if let Some(m) = media {
@@ -1291,11 +1301,19 @@ mod capability_cross_check_tests {
 
     /// A device-level `GetCapabilities` that says yes to four things. Each is a
     /// distinct fact so a disagreement can be attributed to exactly one of them.
+    ///
+    /// The security pair is `X.509Token`, **not** `UsernameToken`, which these
+    /// fixtures used until 0.15. `UsernameToken` is declared only as an
+    /// `xs:attribute` on the service-level type, so it was never a twice-stated
+    /// fact and the cross-check no longer compares it; a test built on it was
+    /// asserting against a comparison that could not fire on a real device.
+    /// `X.509Token` is an element on `tt:SecurityCapabilities` and an attribute
+    /// on `tds:SecurityCapabilities` — a genuine pair.
     fn device_level() -> Capabilities {
         Capabilities {
             device: DeviceCapabilities {
                 security: SecurityCapabilities {
-                    username_token: true,
+                    x509_token: true,
                     tls_1_2: true,
                     ..Default::default()
                 },
@@ -1316,13 +1334,10 @@ mod capability_cross_check_tests {
         }
     }
 
-    fn dev_service(
-        username_token: Option<bool>,
-        tls1_2: Option<bool>,
-    ) -> DeviceServiceCapabilities {
+    fn dev_service(x509_token: Option<bool>, tls1_2: Option<bool>) -> DeviceServiceCapabilities {
         DeviceServiceCapabilities {
             security: DeviceSecurityCapabilities {
-                username_token,
+                x509_token,
                 tls1_2,
                 ..Default::default()
             },
@@ -1356,7 +1371,7 @@ mod capability_cross_check_tests {
             Some(&events_service(Some(true))),
         );
         // Exactly the four attributes the fixture stated on both sides — not the
-        // eighteen the function knows about, and not zero.
+        // seventeen the function knows about, and not zero.
         assert_eq!(x.checked, 4, "expected 4 checked facts, got {}", x.checked);
         assert!(
             x.contradictions.is_empty(),
@@ -1370,8 +1385,8 @@ mod capability_cross_check_tests {
     /// an omitted element, so this direction is a certainty.
     #[test]
     fn a_yes_then_no_is_a_contradiction_naming_the_attribute_and_both_values() {
-        // UsernameToken: caps=true, service=false → reported.
-        // TLS1.2:        caps=true, service=true  → agrees, must not be reported.
+        // X.509Token: caps=true, service=false → reported.
+        // TLS1.2:     caps=true, service=true  → agrees, must not be reported.
         let x = capability_cross_check(
             &device_level(),
             Some(&dev_service(Some(false), Some(true))),
@@ -1381,7 +1396,7 @@ mod capability_cross_check_tests {
         assert_eq!(x.checked, 2);
         assert_eq!(
             x.contradictions,
-            ["device/UsernameToken: GetCapabilities=true, GetServiceCapabilities=false"],
+            ["device/X.509Token: GetCapabilities=true, GetServiceCapabilities=false"],
             "the message must name the attribute and both sides",
         );
         assert_eq!(x.service_only, 0);

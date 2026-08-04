@@ -198,10 +198,34 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///     right or carried at all. `tests/mock_workflow.rs`'s
 ///     `media2_encoder_gov_length_and_profile_are_attributes` is what asserts
 ///     that, by driving the client against the mock and reading the values.
+/// - §5.6, the whole `GetCapabilities` tree — `MISSING-REQUIRED` 16 → **11**,
+///   `UNKNOWN-NAME` 7 → **6**, `ORDER` and `UNKNOWN-CHILD` unmoved. Six rows,
+///   two independent halves, perturbed separately.
+///
+///   The five required-member rows were five *different* types each rendered
+///   down to the members oxvif's parser happens to read — `SecurityCapabilities`
+///   missing four, `SystemCapabilities` one, `EventCapabilities` one,
+///   `RecordingCapabilities` five, `SearchCapabilities` one. Putting all five
+///   back moves `MISSING-REQUIRED` 11 → 16 and nothing else. **Adding required
+///   members opened no new row**, which is not automatic: every added element is
+///   a fresh chance at a wrong namespace or position, and `SupportedVersions`
+///   carries two required children of its own.
+///
+///   The sixth row was `Device/Security/UsernameToken`, and it is the one place
+///   here where the count is the *weaker* evidence. Removing it moves
+///   `UNKNOWN-NAME` 6 → 7 and proves only that the element is gone. What it
+///   cannot show is that dropping it was right rather than a rename:
+///   `UsernameToken` is declared **only** as an `xs:attribute` on
+///   `tds:SecurityCapabilities`, never as an element anywhere in any of the
+///   fifteen files, and it is not reachable through `SecurityCapabilitiesExtension`
+///   or `…Extension2` either. So there was no element to rename it to, and the
+///   fact belongs to the operation that already carries it. `src/health/`'s
+///   cross-check had paired the two names across the two types and is what
+///   asserts the consequence.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
-    ("MISSING-REQUIRED", 16),
-    ("UNKNOWN-NAME", 7),
+    ("MISSING-REQUIRED", 11),
+    ("UNKNOWN-NAME", 6),
     ("UNKNOWN-CHILD", 4),
     ("ORDER", 3),
 ];

@@ -325,12 +325,24 @@ emitted that the type does not have.** All eight are `minOccurs=1`: `TLS1.1`,
 `KerberosToken`, `RELToken`, and emits `<tt:UsernameToken>`, for which
 `grep -c 'name="UsernameToken"' onvif.xsd` is **0**.
 
-**Needs `devicemgmt.wsdl` to settle.** `UsernameToken` is plausibly a member of
+~~**Needs `devicemgmt.wsdl` to settle.** `UsernameToken` is plausibly a member of
 the *service*-capabilities type (`tds:SecurityCapabilities`, a different type
 with attributes) rather than the device-level `tt:` one. If so the mock is
 mixing the two. Note `src/health/checks.rs` cross-references `UsernameToken` as
 one of its eighteen twice-stated attributes, so whichever way this lands, the
-health check has an opinion about it.
+health check has an opinion about it.~~
+
+**Settled — the guess was right.** `devicemgmt.wsdl` declares `UsernameToken` as
+an `xs:attribute` on `tds:SecurityCapabilities`; parsing all fifteen files finds
+the name **nowhere else in any form**, and it is not reachable through
+`SecurityCapabilitiesExtension` (`TLS1.0` + `Extension`) or `…Extension2`
+(`Dot1X`, `SupportedEAPMethod`, `RemoteUserHandling`). So there is no element to
+rename it to and the mock drops it. The health check's opinion turned out to be
+the substance rather than a side effect: the cross-check pair was unsound — the
+device-level side reads an element that type never declares, so it is `false` on
+every conformant camera — and it is removed, taking eighteen twice-stated
+attributes to seventeen. See `docs/active/mock-schema-conformance-2026-08.md`
+§1.3 and §5.6.
 
 **5.4 `tt:RecordingSourceInformation` — four of five required members omitted.**
 Requires `SourceId`, `Name`, `Location`, `Description`, `Address`; the mock

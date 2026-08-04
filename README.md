@@ -1053,7 +1053,7 @@ ONVIF health check — http://127.0.0.1:27365/onvif/device
 
   [Services]
     PASS get_services                     5ms  8 service(s)
-    PASS service_caps_self_consistent     0ms  18 fact(s) cross-checked, no contradiction
+    PASS service_caps_self_consistent     0ms  17 fact(s) cross-checked, no contradiction
     …
 ```
 
@@ -1202,9 +1202,9 @@ report carries machine-readable facts alongside the human-readable strings:
 `GetServiceCapabilities` — `Pass` when it answers, `Skip` when the service is not
 advertised, `Fail` when it is advertised and refuses.
 
-Then `service_caps_self_consistent` does the part no single call can: **eighteen
+Then `service_caps_self_consistent` does the part no single call can: **seventeen
 attributes are stated twice by the device**, once in the device-level
-`GetCapabilities` and again in a service's `GetServiceCapabilities` (fourteen on
+`GetCapabilities` and again in a service's `GetServiceCapabilities` (thirteen on
 Device, three on Media streaming, one on Events). Everything else in a capability
 report is a claim with nothing to contradict it; these can be *wrong* rather than
 merely unknown, and a client trusting either source is guessing when they differ.

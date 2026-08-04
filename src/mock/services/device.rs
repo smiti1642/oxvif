@@ -385,10 +385,19 @@ pub fn handle_set_user(state: &SharedState, body: &str) -> String {
 ///   capability cross-check saw six such mismatches on its first run against
 ///   this mock.
 ///
-/// Every value here is **chosen to agree with [`resp_service_capabilities`]** on
-/// the fourteen attributes the two operations both carry, so the mock is a
+/// Every value here is **chosen to agree with [`resp_service_capabilities`]**
+/// on the attributes the two operations both carry, so the mock is a
 /// self-consistent device. Changing one side without the other is what the
-/// cross-check exists to catch — including here.
+/// cross-check exists to catch — including here. Since 0.15 that agreement also
+/// covers `TLS1.1`, `SAMLToken`, `KerberosToken` and `RELToken`, and it no
+/// longer covers `UsernameToken` — see the comment on `<tt:Security>` for why
+/// that one is **not** a fact this operation can state.
+///
+/// The required members of `Security`, `System`, `Events`, `Recording` and
+/// `Search` were all incomplete until they were checked against the schema
+/// rather than against the parser. `tests/mock_schema_shape.rs` is what sees
+/// this class: every subtree here parses identically whether or not its required
+/// siblings are present, so no other test in this repository can.
 pub fn resp_capabilities(base: &str) -> String {
     soap(
         NS,
@@ -410,6 +419,16 @@ pub fn resp_capabilities(base: &str) -> String {
                 <tt:SystemBackup>false</tt:SystemBackup>
                 <tt:SystemLogging>true</tt:SystemLogging>
                 <tt:FirmwareUpgrade>true</tt:FirmwareUpgrade>
+                <!-- Required, and last in the sequence before the optional
+                     `Extension`. `tt:OnvifVersion` is Major + Minor, both
+                     required elements. The one version here is 2.6 because that
+                     is what `resp_services` states for the device management
+                     service; a second entry would be a version this mock does
+                     not claim anywhere else. -->
+                <tt:SupportedVersions>
+                  <tt:Major>2</tt:Major>
+                  <tt:Minor>6</tt:Minor>
+                </tt:SupportedVersions>
               </tt:System>
               <tt:IO>
                 <!-- 2, not 1: `default_digital_inputs` seeds two, and
@@ -420,18 +439,42 @@ pub fn resp_capabilities(base: &str) -> String {
                 <tt:InputConnectors>2</tt:InputConnectors>
                 <tt:RelayOutputs>2</tt:RelayOutputs>
               </tt:IO>
+              <!-- `tt:SecurityCapabilities` (onvif.xsd) declares eight required
+                   *elements* in this order, and **`UsernameToken` is not one of
+                   them**. That name belongs to `tds:SecurityCapabilities` in
+                   devicemgmt.wsdl, where it is an `xs:attribute` — the type
+                   `GetServiceCapabilities` answers with, and where
+                   `resp_service_capabilities` below already carries it. The mock
+                   emitted `<tt:UsernameToken>` here until 0.15, mixing the two
+                   types; it is dropped rather than renamed, because the fact it
+                   states has a correct home one operation away.
+
+                   `TLS1.0`, `Dot1X` and `RemoteUserHandling` are likewise absent
+                   from this type — they live under `Extension` / `Extension2`,
+                   which the mock does not send.
+
+                   All eight values agree with the matching `tds:Security`
+                   attribute in `resp_service_capabilities`. -->
               <tt:Security>
+                <tt:TLS1.1>false</tt:TLS1.1>
                 <tt:TLS1.2>true</tt:TLS1.2>
                 <tt:OnboardKeyGeneration>false</tt:OnboardKeyGeneration>
                 <tt:AccessPolicyConfig>false</tt:AccessPolicyConfig>
                 <tt:X.509Token>false</tt:X.509Token>
-                <tt:UsernameToken>true</tt:UsernameToken>
+                <tt:SAMLToken>false</tt:SAMLToken>
+                <tt:KerberosToken>false</tt:KerberosToken>
+                <tt:RELToken>false</tt:RELToken>
               </tt:Security>
             </tt:Device>
             <tt:Events>
               <tt:XAddr>{base}/onvif/events</tt:XAddr>
               <tt:WSSubscriptionPolicySupport>true</tt:WSSubscriptionPolicySupport>
               <tt:WSPullPointSupport>true</tt:WSPullPointSupport>
+              <!-- Required, fourth and last of the declared children. `false`
+                   agrees with `resp_event_service_capabilities`, whose doc
+                   comment records the same fact: the mock serves pull-point and
+                   `Subscribe` and has no pausable-subscription manager. -->
+              <tt:WSPausableSubscriptionManagerInterfaceSupport>false</tt:WSPausableSubscriptionManagerInterfaceSupport>
             </tt:Events>
             <tt:Imaging><tt:XAddr>{base}/onvif/imaging</tt:XAddr></tt:Imaging>
             <tt:Media>
@@ -463,8 +506,34 @@ pub fn resp_capabilities(base: &str) -> String {
                 <tt:AudioOutputs>2</tt:AudioOutputs>
                 <tt:RelayOutputs>2</tt:RelayOutputs>
               </tt:DeviceIO>
-              <tt:Recording><tt:XAddr>{base}/onvif/recording</tt:XAddr></tt:Recording>
-              <tt:Search><tt:XAddr>{base}/onvif/search</tt:XAddr></tt:Search>
+              <!-- `tt:RecordingCapabilities` declares six required elements in
+                   this order — `XAddr` alone was not a legal document.
+                   `ReceiverSource` is **false**: the mock serves no receiver
+                   service at all, so a `true` here would advertise a source it
+                   cannot bind. `MediaProfileSource` is true — the seeded
+                   recording jobs source from `Profile_1` / `Profile_3`.
+                   `DynamicRecordings` / `DynamicTracks` are true and agree with
+                   `resp_recording_service_capabilities`; the mock implements
+                   Create/DeleteRecording and Create/DeleteTrack.
+                   `MaxStringLength` is the one value here with no counterpart
+                   anywhere else in the mock — nothing in `DeviceState` bounds a
+                   name — so it is a plain constant. -->
+              <tt:Recording>
+                <tt:XAddr>{base}/onvif/recording</tt:XAddr>
+                <tt:ReceiverSource>false</tt:ReceiverSource>
+                <tt:MediaProfileSource>true</tt:MediaProfileSource>
+                <tt:DynamicRecordings>true</tt:DynamicRecordings>
+                <tt:DynamicTracks>true</tt:DynamicTracks>
+                <tt:MaxStringLength>64</tt:MaxStringLength>
+              </tt:Recording>
+              <!-- `MetadataSearch` is required and agrees with
+                   `resp_search_service_capabilities`. `NLSearch` and
+                   `ImageSearch` are the only optional members and are omitted;
+                   the mock implements neither. -->
+              <tt:Search>
+                <tt:XAddr>{base}/onvif/search</tt:XAddr>
+                <tt:MetadataSearch>false</tt:MetadataSearch>
+              </tt:Search>
               <tt:Replay><tt:XAddr>{base}/onvif/replay</tt:XAddr></tt:Replay>
               <!-- Media2 is advertised via GetServices (ver20/media/wsdl), not
                    here — the Capabilities Media2 extension is non-standard. -->

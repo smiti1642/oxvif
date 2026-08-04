@@ -148,7 +148,8 @@ with `WRONG-NS` 0; after the imaging slice of §5.2 + §5.3, 38 distinct —
 `MISSING-REQUIRED` 21, `UNKNOWN-NAME` 8, `UNKNOWN-CHILD` 4, `ORDER` 5; after
 the `GetProfiles` slice of §5.2 + §5.4, 32 distinct — `MISSING-REQUIRED` 16,
 `UNKNOWN-NAME` **9**, `UNKNOWN-CHILD` 4, `ORDER` 3; after §5.5, 30 distinct —
-`UNKNOWN-NAME` **7**, no other kind moved.**
+`UNKNOWN-NAME` **7**, no other kind moved; after §5.6, 24 distinct —
+`MISSING-REQUIRED` **11**, `UNKNOWN-NAME` **6**, `UNKNOWN-CHILD` 4, `ORDER` 3.**
 `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
 block is the baseline the sweep started from and is left as it was.
 
@@ -317,8 +318,12 @@ either one alone moves `ORDER` by exactly one.
   `MaximumNumberOfProfiles` under the video source configuration options;
   `ProfilesSupported` under the video encoder configuration options;
   ~~`Profile` inside a video encoder configuration;~~ `Number` under an encoder
-  instance; `UsernameToken` under the device security capabilities;
+  instance; ~~`UsernameToken` under the device security capabilities;~~
   `SystemLogUri` and its `LogType` in `GetSystemUris`.
+
+  **`UsernameToken` is fixed** — §5.6, and it was neither a rename nor a mock
+  fidelity item: it was two *types* mixed into one element, and the mock's copy
+  had been propping up an unsound health check. See the settled analysis below.
 
   **`Profile` is fixed** — §5.5, and it was a client bug (§0.5), not the mock
   fidelity item this flat list implied. `tt:VideoEncoder2Configuration` declares
@@ -354,16 +359,50 @@ either one alone moves `ORDER` by exactly one.
   Three of the eight names on this list are attributes, and the first two were
   triaged as misspellings for a fortnight.
 
-`UsernameToken` is worth a second look rather than a rename: the name plausibly
-belongs to the device *service* capabilities type, which is a different type in
-`devicemgmt.wsdl`. If so the mock is mixing the two types, and
-`src/health/checks.rs` cross-checks that attribute as one of its eighteen
-twice-stated ones, so it has an opinion either way.
+**`UsernameToken` is settled — §5.6.** This section used to read:
+
+> `UsernameToken` is worth a second look rather than a rename: the name plausibly
+> belongs to the device *service* capabilities type, which is a different type in
+> `devicemgmt.wsdl`. If so the mock is mixing the two types, and
+> `src/health/checks.rs` cross-checks that attribute as one of its eighteen
+> twice-stated ones, so it has an opinion either way.
+
+The guess was right and the consequence was larger than "either way". Measured
+against the schema set, parsing every one of the fifteen files:
+
+- `tt:SecurityCapabilities` (`onvif.xsd`) declares **eight `xs:element`s** —
+  `TLS1.1`, `TLS1.2`, `OnboardKeyGeneration`, `AccessPolicyConfig`,
+  `X.509Token`, `SAMLToken`, `KerberosToken`, `RELToken` — then an
+  `xs:any ##other` and an optional `Extension`. No `UsernameToken`.
+- `tds:SecurityCapabilities` (`devicemgmt.wsdl`) declares **23
+  `xs:attribute`s**, `UsernameToken` among them, and is the type
+  `GetServiceCapabilities` answers with.
+- `UsernameToken` appears **nowhere else in any of the fifteen files, in any
+  form** — and it is not reachable through `SecurityCapabilitiesExtension`
+  (`TLS1.0` + `Extension`) or `…Extension2` (`Dot1X`, `SupportedEAPMethod`,
+  `RemoteUserHandling`) either.
+
+So there is no element to rename it to. The mock drops it, and the fact keeps
+its correct home in `resp_service_capabilities`, which already carries it as an
+attribute.
+
+**The health-check consequence is the part worth recording.**
+`capability_cross_check` had paired `caps.device.security.username_token`
+against `d.security.username_token` as one of its eighteen twice-stated facts.
+It is not one: the device-level side reads an element that type never declares,
+so on **every conformant camera** it is `false`, and the comparison can only
+ever produce a spurious `service_only` — never the contradiction it exists to
+find. It looked like it worked for exactly one reason: oxvif's mock emitted a
+`<tt:UsernameToken>` no camera sends. Mock and check agreeing with each other
+and with nothing else — the same shape as the Media2 `Audio` defect in §0.5,
+one level up. The pair is removed; eighteen twice-stated attributes are
+seventeen.
 
 ### 1.4 Required members omitted
 
-23 rows. After §1.1 fallout is discounted, the genuine omissions are: device
-capabilities (system, security, events, recording, search), `Scope`'s
+23 rows. After §1.1 fallout is discounted, the genuine omissions are:
+~~device capabilities (system, security, events, recording, search)~~
+(**fixed** — §5.6, all five, `MISSING-REQUIRED` 16 → 11), `Scope`'s
 `ScopeDef`, `GetRecordings` → `Tracks`, `EndSearch` → `Endpoint`, PTZ
 configuration options → `Spaces`, the metadata configuration's `Multicast` /
 `SessionTimeout` and multicast `AutoStart` / `TTL`, the metadata PTZ-status
@@ -642,8 +681,10 @@ Grouped so each lands in one file with one perturbation:
    with §5.4 (`ORDER` 5 → 3). Two renderers left — Media2
    `GetMetadataConfigurations`, `GetOSDOptions`.
 3. **Undeclared names** — `ScopeAttribute`, the imaging focus options, the
-   options extensions (§1.3). Settle `UsernameToken` by type rather than
-   renaming it. **Imaging done** — the `GetMoveOptions` focus names, which were
+   options extensions (§1.3). ~~Settle `UsernameToken` by type rather than
+   renaming it.~~ **`UsernameToken` done** — §5.6; settling it by type was the
+   right instruction and there was no element to rename it to.
+   **Imaging done** — the `GetMoveOptions` focus names, which were
    seven of the eight imaging rows and moved three kinds between them; see §1.3
    for why that is not the `AFModes` class it was filed as, and for the
    client-side half that is still open.
@@ -657,8 +698,11 @@ Grouped so each lands in one file with one perturbation:
    of the rows and is the largest change here~~; the rest are a renderer
    dropping state it already holds.
 
-   **The inlining is done — see §5.4.** Sixteen rows left, none of which is
-   the `ConfigurationSet` family.
+   **The inlining is done — see §5.4.** ~~Sixteen rows left, none of which is
+   the `ConfigurationSet` family.~~ **Eleven rows left** — §5.6 took the five
+   device-capabilities rows, which were the next largest group and, unlike the
+   `ConfigurationSet` family, were five *different* types rather than one
+   decision.
 5.4 ~~**The two `GetProfiles` responses**~~ **Done. `MISSING-REQUIRED` 21 → 16,
    `ORDER` 5 → 3, `UNKNOWN-NAME` 8 → 9.**
 
@@ -737,6 +781,57 @@ Grouped so each lands in one file with one perturbation:
    cleanly through the mock. It now reads the Media2 attribute or the element
    *inside* Media1's `<tt:H264>` / `<tt:H265>` block, which are the only two
    shapes either schema declares. **A lenient mock cannot be a guard.**
+5.6 ~~**The `GetCapabilities` tree**~~ **Done. `MISSING-REQUIRED` 16 → 11,
+   `UNKNOWN-NAME` 7 → 6, `UNKNOWN-CHILD` and `ORDER` unmoved.** Six rows in one
+   renderer, `resp_capabilities` in `src/mock/services/device.rs`, taken as one
+   bucket across units 3 and 4 on the same argument the imaging and
+   `GetProfiles` slices used: one renderer, one state snapshot, one perturbation
+   run.
+
+   Perturbed in **two independent halves**, since the required members and the
+   `UsernameToken` decision share nothing:
+
+   | put back | moves |
+   |---|---|
+   | all five sets of required members | `MISSING-REQUIRED` 11 → 16, every other kind unchanged |
+   | `<tt:UsernameToken>` | `UNKNOWN-NAME` 6 → 7, every other kind unchanged |
+
+   Each failed on the pin assertion, not a compile error, and each reverted
+   green.
+
+   **Adding required members opened no new row, and that was not a given.**
+   Twelve elements that had never been emitted are twelve fresh chances at a
+   wrong namespace or a wrong position, and `SupportedVersions` carries two
+   required children of its own (`tt:OnvifVersion` = `Major` + `Minor`). The
+   thing that made it safe was reading the sequence order out of each type
+   before writing, rather than appending: `TLS1.1` goes *first* in
+   `tt:SecurityCapabilities` and `SAMLToken`/`KerberosToken`/`RELToken` last, so
+   appending all four would have traded five `MISSING-REQUIRED` rows for an
+   `ORDER` row.
+
+   **The values are the mock's answers about itself, and three of them are
+   `false` on purpose.** `ReceiverSource` is false because the mock serves no
+   receiver service at all; `MetadataSearch` and
+   `WSPausableSubscriptionManagerInterfaceSupport` are false because the mock
+   implements neither, and both already said so in the matching
+   `GetServiceCapabilities`. Every value that appears in both operations agrees
+   with `resp_service_capabilities` / `resp_recording_service_capabilities` /
+   `resp_search_service_capabilities` / `resp_event_service_capabilities` — the
+   agreement `src/health/checks.rs` exists to police, and it now covers four
+   more attributes (`TLS1.1`, `SAMLToken`, `KerberosToken`, `RELToken`) than it
+   did. `MaxStringLength` is the one invented constant, and it is commented as
+   such: nothing in `DeviceState` bounds a name.
+
+   **One existing test went red, and it was the right one.**
+   `the_mock_does_not_contradict_itself_between_the_two_capability_calls` in
+   `src/health/mod.rs` asserts the mock states every cross-checked fact on both
+   sides; dropping `<tt:UsernameToken>` made it report `1 stated only by the
+   service`. That is the check correctly noticing that the pair was never real
+   — see §1.3. Fixed by removing the unsound comparison, not by weakening the
+   assertion: the test still demands `0 stated only by the service`, and its
+   coverage floor was **raised** from `n >= 14` to the exact measured `n >= 17`,
+   so losing any one capability block now fails it where a floor of 14 would
+   have absorbed the loss of `<tt:Security>`.
 5. ~~**Strengthen `every_response_binds_the_prefixes_it_uses`** so it asserts an
    element is in the namespace its type declares.~~ **Struck — this cannot be a
    separate unit.** Asserting that an element is in the namespace its *type*

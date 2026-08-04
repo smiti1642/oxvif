@@ -884,12 +884,31 @@ mod tests {
             .next()
             .and_then(|w| w.parse().ok())
             .unwrap_or_else(|| panic!("unparseable detail {:?}", c.detail));
+        // 17, measured: 13 device + 3 media + 1 events. The floor is the exact
+        // count rather than a loose 14, so losing *any* one block fails here —
+        // dropping `<tt:Security>` alone leaves 13, which a floor of 14 would
+        // have caught but a floor of 13 would not. Adding a genuine new pair
+        // raises `n` and still passes, which is the direction that should.
+        //
+        // This was `>= 14` and the message said "the mock states 14 attributes
+        // in both" until 0.15. The real total was 18 then and is 17 now:
+        // `device/UsernameToken` was removed from the cross-check because
+        // `tt:SecurityCapabilities` never declared it — see
+        // `checks::capability_cross_check`.
         assert!(
-            n >= 14,
-            "the mock states 14 attributes in both GetCapabilities and \
+            n >= 17,
+            "the mock states 17 attributes in both GetCapabilities and \
              GetServiceCapabilities; only {n} were cross-checked, so the mock's \
              device-level response has lost its Device/Network/System/Security \
-             blocks again: {:?}",
+             blocks again: {:?}\n\
+             If the drop is deliberate, update this expectation **and** every \
+             file that quotes the number: `README.md` (the sample health \
+             output and the `service_caps_self_consistent` prose), \
+             `src/lib.rs`'s crate header, `src/health/checks.rs` \
+             (`capability_cross_check`'s doc comment and the `checked` \
+             assertion in `capability_cross_check_tests`), `CHANGELOG.md`'s \
+             0.15.0 entry, and \
+             `docs/active/mock-schema-conformance-2026-08.md` §1.3.",
             c.detail
         );
         // …and with both sides stating them, none should be service-only.

@@ -60,9 +60,10 @@ two-thirds of the test suite.
 
   The nine operations shipped earlier in this release and nothing in
   `src/health/` asked them, which left the report blind to the one defect class
-  it is best placed to find. **Eighteen attributes are stated twice** by a device
-  (fourteen on Device, three on Media streaming, one on Events); everything else
-  in a capability report is a claim with nothing to contradict it.
+  it is best placed to find. **Seventeen attributes are stated twice** by a
+  device (thirteen on Device, three on Media streaming, one on Events);
+  everything else in a capability report is a claim with nothing to contradict
+  it.
 
   **Only `GetCapabilities=true` against a service `false` is reported.** The
   device-level `Capabilities` uses bare `bool` and so cannot distinguish "said
@@ -381,6 +382,61 @@ two-thirds of the test suite.
   would have been silently understood. It now reads Media2's attribute or the
   element *inside* Media1's `<tt:H264>` / `<tt:H265>` block, the only two shapes
   either schema declares. A lenient mock cannot be a guard.
+
+- **The mock's `GetCapabilities` omitted required members from five capability
+  types and emitted one element the schema declares on a different type.** Six
+  schema-shape rows in one renderer, `resp_capabilities`
+  (`src/mock/services/device.rs`): `MISSING-REQUIRED` 16 → 11, `UNKNOWN-NAME`
+  7 → 6, `UNKNOWN-CHILD` and `ORDER` unmoved.
+
+  The five omissions were five *different* types, each rendered down to the
+  members oxvif's own parser happens to read — `tt:SecurityCapabilities` missing
+  four (`TLS1.1`, `SAMLToken`, `KerberosToken`, `RELToken`),
+  `tt:SystemCapabilities` missing `SupportedVersions`, `tt:EventCapabilities`
+  missing `WSPausableSubscriptionManagerInterfaceSupport`,
+  `tt:RecordingCapabilities` missing five of its six, and
+  `tt:SearchCapabilities` missing `MetadataSearch`. **A parser-shaped mock is
+  the recurring shape of this whole sweep**: every one of these subtrees parses
+  identically with or without its required siblings, so nothing but the schema
+  check could see them.
+
+  **Adding twelve never-before-emitted elements opened no new row, which was
+  not automatic.** Each is a fresh chance at a wrong namespace or position, and
+  `SupportedVersions` carries two required children of its own (`tt:OnvifVersion`
+  = `Major` + `Minor`). Reading each type's sequence order before writing is
+  what avoided it: `TLS1.1` is *first* in `tt:SecurityCapabilities` and the
+  three token members *last*, so appending all four would have traded five
+  `MISSING-REQUIRED` rows for an `ORDER` row.
+
+- **`<tt:UsernameToken>` was two ONVIF types mixed into one element, and it had
+  been propping up an unsound health check.** `tt:SecurityCapabilities`
+  (`onvif.xsd`) — the type the device-level `GetCapabilities` answers with —
+  declares eight `xs:element`s and `UsernameToken` is not among them. The name
+  exists in the schema set exactly once: as an **`xs:attribute`** on
+  `tds:SecurityCapabilities` (`devicemgmt.wsdl`), the *service* capabilities
+  type, where `resp_service_capabilities` already carries it correctly. It is
+  not reachable through `SecurityCapabilitiesExtension` or `…Extension2` either,
+  so there was no element to rename it to; the mock simply stops emitting it.
+
+  **The consequence was in `src/health/checks.rs`, not the mock.**
+  `capability_cross_check` had paired the device-level `username_token` against
+  the service-level one as one of its eighteen twice-stated facts. It is not a
+  pair: the device-level side reads an element that type never declares, so on
+  **every conformant camera** it is `false` and the comparison can only ever
+  produce a spurious "stated only by the service" — never the contradiction it
+  exists to find. It appeared to work for exactly one reason: oxvif's mock
+  emitted an element no camera sends. Mock and check agreeing with each other
+  and with nothing else — the `MediaProfile2::audio_encoder_token` shape one
+  level up. The pair is removed; **eighteen twice-stated attributes are
+  seventeen** (thirteen on Device), and the counts quoted in `README.md`,
+  `src/lib.rs` and earlier in this entry are corrected to match.
+
+  `the_mock_does_not_contradict_itself_between_the_two_capability_calls` was the
+  one existing test that went red, reporting `1 stated only by the service`.
+  That is the check correctly noticing the pair was never real. Its coverage
+  floor was **raised** rather than relaxed — from `n >= 14` to the exact
+  measured `n >= 17` — so losing any single capability block now fails it, where
+  a floor of 14 would have absorbed the loss of `<tt:Security>` entirely.
 
 - **`imaging_get_move_options` returned `None` for all five of its ranges
   against every conformant camera.** `ImagingMoveOptions::from_xml`
@@ -1013,8 +1069,14 @@ two-thirds of the test suite.
   first run, not by review.
 
   The mock now sends all four blocks, with every value **chosen to agree with
-  `resp_service_capabilities`** on the fourteen attributes both operations carry.
-  A test pins the agreement: change one side without the other and it goes red.
+  `resp_service_capabilities`** on the attributes both operations carry. A test
+  pins the agreement: change one side without the other and it goes red.
+
+  **Later in this release the schema-shape check corrected two things above.**
+  `UsernameToken` is not one of the twice-stated attributes at all — see the
+  `<tt:UsernameToken>` bullet above — so it is no longer among the
+  cross-checked names, and the count that bullet gave as "fourteen attributes
+  both operations carry" is thirteen on Device / seventeen overall.
 
 - `examples/conformance.rs` uses `CapturingTransport`, which is behind the
   `mock` feature, and had no `required-features` entry. A bare `cargo test`
