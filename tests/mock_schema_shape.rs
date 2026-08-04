@@ -119,6 +119,14 @@
 //!   faults, because the operation needs a body this file does not supply. Those
 //!   contribute no shape evidence, and [`PAYLOAD_FLOOR`] is what stops that
 //!   third quietly becoming two thirds.
+//! - **Requests.** Nothing here reads what the *client* sends, which is how
+//!   `set_storage_configuration` shipped five elements in `tt:`.
+//!
+//! `children skipped` is **not** on this list, though it was read that way for
+//! most of the sweep. 1149 of the 1152 are text leaves — `xs:int`, `xs:float`,
+//! `xs:anyURI` — with nothing inside to judge, so the count rising means the
+//! mock emits more values, not that the blind spot grew. The three that are not
+//! leaves are what [`PINS`] §5.12 is about.
 #![cfg(feature = "mock")]
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -427,6 +435,32 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///     `xs:anyAttribute` is `##any`. `UNKNOWN-ATTR` is live on the 386 anchored
 ///     nodes whose type has neither attributes nor a wildcard, and blind on the
 ///     rest — the attribute-side mirror of `Ty::wild`, with the same shape.
+/// - §5.12, `SIMPLE-TYPE-KIDS` — a tenth kind, pinned at **1**, which is the
+///   defect it was written to expose. It lands before the fix on purpose.
+///
+///   The walk stops at any child whose declared type is not in the index, and
+///   `children skipped` had been quoted as a growing blind spot — 986 → 1152
+///   across the sweep. **Measured, that reading was wrong**: 1149 of the 1152
+///   are leaves (349 `xs:int`, 184 `xs:float`, 154 `xs:anyURI`, …) with nothing
+///   inside to judge, so the number growing only means the mock emits more
+///   values. Exactly **three** skipped subtrees have element children.
+///
+///   Two of the three are `TopicSet` and `Message`, declared with no type at
+///   all, and stay silent. The third was a real defect and a **client** one —
+///   the twelfth of the sweep. `tt:OSDConfigurationOptions` declares
+///   `PositionOption` as `type="xs:string" maxOccurs="unbounded"`, a repeated
+///   plain string; the mock emitted one wrapper holding `<tt:Type>` children,
+///   `OsdOptions::from_xml` read that wrapper, and the doc comment on
+///   `apply_vendor_extensions` called the *conformant* flat shape a Genetec
+///   deviation from the spec. So `position_types` was empty from every
+///   conformant device on the strict client path, and the mock, the parser and
+///   the comment all agreed with each other.
+///
+///   `Index::is_simple` answers only where the answer is certain — a built-in
+///   `xs:*` type, or a named `xs:simpleType` in the index. A type merely
+///   *absent* from the index is unknown, not simple, and reports nothing;
+///   otherwise every element from a namespace the schema set does not cover
+///   would open a row.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
     ("MISSING-REQUIRED", 0),
@@ -437,6 +471,7 @@ const PINS: &[(&str, usize)] = &[
     ("UNKNOWN-ATTR", 0),
     ("ATTR-AS-ELEMENT", 0),
     ("ELEMENT-AS-ATTR", 0),
+    ("SIMPLE-TYPE-KIDS", 1),
 ];
 
 /// Floors on what the run actually covered.
@@ -663,6 +698,10 @@ struct Index {
     types: HashMap<Qn, Ty>,
     globals: HashMap<Qn, Option<Qn>>,
     declared: HashSet<Qn>,
+    /// Named `xs:simpleType`s. An element declared with one of these — or with
+    /// a built-in `xs:*` type — holds text and **cannot** have element
+    /// children, which is the whole of the `SIMPLE-TYPE-KIDS` rule.
+    simple: HashSet<Qn>,
     known_ns: HashSet<String>,
     next_group: u32,
 }
@@ -764,6 +803,20 @@ impl Index {
                 self.types.insert((tns.clone(), nm), t);
             }
         }
+        for st in node.xs_kids("simpleType") {
+            if let Some(nm) = st.attr("name") {
+                self.simple.insert((tns.clone(), nm.to_string()));
+            }
+        }
+    }
+
+    /// Can an element of this type hold element children?
+    ///
+    /// Only answered where the answer is certain. A type that is simply absent
+    /// from the index — a namespace the set does not cover — is *unknown*, not
+    /// simple, and must stay silent.
+    fn is_simple(&self, ty: &Qn) -> bool {
+        ty.0 == XS || self.simple.contains(ty)
     }
 
     fn parse_type(&mut self, node: &Node, sch: &Sch, owner: &str) -> Ty {
@@ -1195,15 +1248,35 @@ impl Run {
             let child = by
                 .get(&key)
                 .or_else(|| resolved.get(&key).and_then(|k| by.get(k)));
-            match child
-                .and_then(|k| k.ty.as_ref())
-                .filter(|t| ix.types.contains_key(*t))
-            {
+            let declared_ty = child.and_then(|k| k.ty.as_ref());
+            match declared_ty.filter(|t| ix.types.contains_key(*t)) {
                 Some(t) => {
                     let t = t.clone();
                     self.check_anchored(ix, doc, c, &t, &format!("{path}/{}", c.local));
                 }
-                None => self.unanchored_children += 1,
+                None => {
+                    self.unanchored_children += 1;
+                    // A subtree the walk stops at is normally a leaf — 1149 of
+                    // the 1152 skipped are `xs:int`, `xs:float`, `xs:anyURI`
+                    // and friends, with nothing inside to judge. The exception
+                    // is worth a row: an element the schema types as *text*
+                    // that the mock filled with a tree. Nothing else here can
+                    // see that, because the walk stops before judging it.
+                    if let Some(t) = declared_ty.filter(|t| ix.is_simple(t))
+                        && !c.kids.is_empty()
+                    {
+                        let inner: Vec<&str> =
+                            c.kids.iter().map(|k| k.local.as_str()).take(4).collect();
+                        self.add(
+                            doc,
+                            "SIMPLE-TYPE-KIDS",
+                            format!(
+                                "{path}/{} is {}, which holds text — emitted {inner:?}",
+                                c.local, t.1
+                            ),
+                        );
+                    }
+                }
             }
         }
     }
