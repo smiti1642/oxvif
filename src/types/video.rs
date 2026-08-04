@@ -755,6 +755,22 @@ impl VideoEncoderConfigurationOptions {
 /// `gov_length` and `profile` are top-level fields, not nested under a codec
 /// sub-struct. Use with `get_video_encoder_configurations_media2` and
 /// `set_video_encoder_configuration_media2`.
+///
+/// # Changed in 0.15
+///
+/// `gov_length` and `profile` are read from, and written as, **XML attributes**
+/// on the configuration element — `tt:VideoEncoder2Configuration` declares
+/// `GovLength` and `Profile` as `xs:attribute`, alongside `AnchorFrameDistance`,
+/// `GuaranteedFrameRate`, `Signed` and the inherited required `token`. Its only
+/// child *elements* are `Name`, `UseCount`, `Encoding`, `Resolution`,
+/// `RateControl`, `Multicast` and `Quality`. Earlier releases parsed and emitted
+/// both as child elements, so a conformant device's values were silently
+/// dropped on read and silently ignored on write.
+///
+/// The two names look like elements because they *are* elements elsewhere:
+/// Media1 nests `GovLength` inside `tt:H264Configuration` / `tt:Mpeg4Configuration`
+/// and calls the profile `H264Profile`. Media2 flattened them into attributes of
+/// one type.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoEncoderConfiguration2 {
@@ -815,8 +831,17 @@ impl VideoEncoderConfiguration2 {
                 frame_rate_limit: xml_u32(rc, "FrameRateLimit").unwrap_or(0),
                 bitrate_limit: xml_u32(rc, "BitrateLimit").unwrap_or(0),
             }),
-            gov_length: xml_u32(node, "GovLength"),
-            profile: xml_str(node, "Profile"),
+            // Attributes, not child elements. `tt:VideoEncoder2Configuration`
+            // declares `GovLength` and `Profile` as `xs:attribute`; the same
+            // two names are child elements on Media1's `tt:H264Configuration`,
+            // which is how the element form got written here in the first
+            // place. Reading them with `xml_u32`/`xml_str` returned `None`
+            // against every conformant device.
+            gov_length: node.attr("GovLength").and_then(|v| v.trim().parse().ok()),
+            profile: node
+                .attr("Profile")
+                .filter(|p| !p.is_empty())
+                .map(str::to_string),
         })
     }
 
@@ -842,21 +867,24 @@ impl VideoEncoderConfiguration2 {
             ),
             None => String::new(),
         };
+        // Attributes on the configuration element — see the type's docs. An
+        // absent `Option` omits the attribute rather than writing an empty one:
+        // both are `use="optional"` and a device is entitled to reject `""`.
         let gov = self
             .gov_length
-            .map(|g| format!("<tt:GovLength>{g}</tt:GovLength>"))
+            .map(|g| format!(" GovLength=\"{g}\""))
             .unwrap_or_default();
         let profile = self
             .profile
             .as_deref()
-            .map(|p| format!("<tt:Profile>{}</tt:Profile>", xml_escape(p)))
+            .map(|p| format!(" Profile=\"{}\"", xml_escape(p)))
             .unwrap_or_default();
         format!(
-            "<tr2:Configuration token=\"{token}\">\
+            "<tr2:Configuration token=\"{token}\"{gov}{profile}>\
                <tt:Name>{name}</tt:Name>\
                <tt:UseCount>{use_count}</tt:UseCount>\
                <tt:Encoding>{encoding}</tt:Encoding>\
-               {res}{rate}{gov}{profile}\
+               {res}{rate}\
                <tt:Quality>{quality}</tt:Quality>\
              </tr2:Configuration>",
             token = xml_escape(&self.token),

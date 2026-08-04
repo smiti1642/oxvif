@@ -1547,6 +1547,12 @@ fn default_video_source_configs() -> Vec<VideoSourceConfigEntry> {
 ///
 /// See the section comment above [`VideoEncoderState`] for why the two sensors
 /// deliberately disagree about what they can do.
+///
+/// `gov_length` was 25 on all four until 0.15, which made any assertion reading
+/// it pass just as well against a renderer that ignored the field — the same
+/// coincidence the differing `resolutions` lists exist to rule out. The four are
+/// now 25 / 30 / 50 / 15 against profiles Main / Main / High / Baseline, so
+/// `VEC_1` and `VEC_3` disagree on *both* attributes.
 fn default_video_encoders() -> Vec<VideoEncoderState> {
     vec![
         // ── Sensor 1 (VS_1, 5MP) ────────────────────────────────────────────
@@ -1582,7 +1588,7 @@ fn default_video_encoders() -> Vec<VideoEncoderState> {
             quality: 4.0,
             frame_rate_limit: 15,
             bitrate_limit: 1024,
-            gov_length: 25,
+            gov_length: 30,
             profile: "Main".into(),
             source_token: "VS_1".into(),
             resolutions: vec![(1280, 720), (704, 480), (352, 240)],
@@ -1598,7 +1604,7 @@ fn default_video_encoders() -> Vec<VideoEncoderState> {
             quality: 5.0,
             frame_rate_limit: 25,
             bitrate_limit: 2048,
-            gov_length: 25,
+            gov_length: 50,
             profile: "High".into(),
             source_token: "VS_2".into(),
             resolutions: vec![(1280, 720), (704, 480), (480, 240), (352, 240)],
@@ -1613,7 +1619,7 @@ fn default_video_encoders() -> Vec<VideoEncoderState> {
             quality: 3.0,
             frame_rate_limit: 10,
             bitrate_limit: 512,
-            gov_length: 25,
+            gov_length: 15,
             profile: "Baseline".into(),
             source_token: "VS_2".into(),
             resolutions: vec![(704, 480), (480, 240), (352, 240)],
@@ -3699,13 +3705,15 @@ mod tests {
     fn media2_set_video_encoder_writes_only_the_named_channel() {
         use crate::mock::services::media2;
         let s = new_state();
-        let body = r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_3">
+        // `GovLength` / `Profile` are attributes of `tr2:Configuration` — the
+        // shape `tt:VideoEncoder2Configuration` declares and the one the client
+        // now sends. `Baseline` is deliberately *not* VEC_3's factory profile
+        // (`High`), so the assertion below cannot pass on the untouched value.
+        let body = r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_3" GovLength="60" Profile="Baseline">
             <tt:Name>Retuned</tt:Name>
             <tt:Encoding>H264</tt:Encoding>
             <tt:Resolution><tt:Width>704</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
             <tt:RateControl><tt:FrameRateLimit>12</tt:FrameRateLimit><tt:BitrateLimit>777</tt:BitrateLimit></tt:RateControl>
-            <tt:GovLength>60</tt:GovLength>
-            <tt:Profile>High</tt:Profile>
             <tt:Quality>6</tt:Quality>
           </tr2:Configuration></tr2:SetVideoEncoderConfiguration>"#;
         let resp = media2::handle_set_video_encoder_configuration(&s, body);
@@ -3719,10 +3727,13 @@ mod tests {
         assert_eq!((three.width, three.height), (704, 480));
         assert_eq!(three.bitrate_limit, 777);
         assert_eq!(three.gov_length, 60);
+        assert_eq!(three.profile, "Baseline");
         // The other three keep their factory values — in particular VEC_1 must
         // not have picked up VEC_3's bitrate.
         assert_eq!(by("VEC_1").bitrate_limit, 4096);
         assert_eq!(by("VEC_1").name, "MainStream");
+        assert_eq!(by("VEC_1").gov_length, 25);
+        assert_eq!(by("VEC_1").profile, "Main");
         assert_eq!(by("VEC_2").bitrate_limit, 1024);
         assert_eq!(by("VEC_4").bitrate_limit, 512);
     }

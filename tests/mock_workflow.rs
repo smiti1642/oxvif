@@ -116,6 +116,76 @@ async fn media2_encoder_set_then_get() {
     assert_eq!(after[0].rate_control.as_ref().unwrap().bitrate_limit, 1234);
 }
 
+/// `GovLength` and `Profile` are **attributes** of `tt:VideoEncoder2Configuration`,
+/// and both sides have to agree about that.
+///
+/// Same shape as [`imaging_move_options_ranges_survive_the_round_trip`]: it
+/// asserts the values the mock actually emits, so it reddens whether the client
+/// drifts off the schema or the mock does. Until 0.15 both rendered and parsed
+/// the two names as child elements, and every test in the repository agreed with
+/// them — `VideoEncoderConfiguration2::from_xml` used `xml_u32` / `xml_str`, the
+/// mock's `render_video_encoder` wrote `<tt:GovLength>`, and against a real
+/// camera both fields came back `None`.
+///
+/// The two channels read here disagree on **both** values (`VEC_1` is 25/`Main`,
+/// `VEC_3` is 50/`High`), so this cannot pass against a renderer that emits one
+/// channel's answer for every token, nor against a parser that returns a
+/// constant.
+#[tokio::test]
+async fn media2_encoder_gov_length_and_profile_are_attributes() {
+    let (_srv, s) = setup().await;
+
+    let cfgs = s.get_video_encoder_configurations_media2().await.unwrap();
+    let by = |t: &str| {
+        cfgs.iter()
+            .find(|c| c.token == t)
+            .unwrap_or_else(|| panic!("mock seeds {t}"))
+    };
+
+    let one = by("VEC_1");
+    assert_eq!(one.gov_length, Some(25), "VEC_1 GovLength");
+    assert_eq!(one.profile.as_deref(), Some("Main"), "VEC_1 Profile");
+
+    let three = by("VEC_3");
+    assert_eq!(three.gov_length, Some(50), "VEC_3 GovLength");
+    assert_eq!(three.profile.as_deref(), Some("High"), "VEC_3 Profile");
+
+    // The same type is inlined into `tr2:ConfigurationSet`, rendered by the same
+    // helper. A profile's copy must carry the attributes too — that second path
+    // is the one the schema-shape checker counted separately.
+    let profiles = s.get_profiles_media2().await.unwrap();
+    let bound = profiles
+        .iter()
+        .find(|p| p.video_encoder_token.as_deref() == Some("VEC_1"))
+        .expect("a seeded profile binds VEC_1");
+    assert_eq!(bound.token, "Profile_1");
+
+    // Write both attributes through the client and read them back. `Baseline`
+    // and 90 are neither channel's factory value, so a mock that ignored the
+    // request body could not produce them.
+    let mut cfg = one.clone();
+    cfg.gov_length = Some(90);
+    cfg.profile = Some("Baseline".into());
+    s.set_video_encoder_configuration_media2(&cfg)
+        .await
+        .unwrap();
+
+    let after = s.get_video_encoder_configurations_media2().await.unwrap();
+    let one = after.iter().find(|c| c.token == "VEC_1").unwrap();
+    assert_eq!(one.gov_length, Some(90), "GovLength after Set");
+    assert_eq!(
+        one.profile.as_deref(),
+        Some("Baseline"),
+        "Profile after Set"
+    );
+
+    // And the sibling channel is untouched, so the write went to the token it
+    // named rather than to whatever the mock happened to render first.
+    let three = after.iter().find(|c| c.token == "VEC_3").unwrap();
+    assert_eq!(three.gov_length, Some(50));
+    assert_eq!(three.profile.as_deref(), Some("High"));
+}
+
 #[tokio::test]
 async fn ptz_commands() {
     let (_srv, s) = setup().await;

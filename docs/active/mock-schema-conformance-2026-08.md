@@ -17,12 +17,13 @@ each stays in the lab.**
 
 ## 0. Blast radius, established before anything else
 
-**Four client-facing bugs so far. The rest are mock fidelity.**
+**Five client-facing bugs so far. The rest are mock fidelity.**
 
-This line said *"Three client-facing bugs so far"* until §1.3's fourth landed.
+This line said *"Three client-facing bugs so far"* until §1.3's fourth landed,
+and *"Four client-facing bugs so far"* until §5.5's fifth did.
 
 This section originally read *"no finding below is a client-facing bug"*, and
-that was wrong four times over — kept here rather than deleted, because every
+that was wrong five times over — kept here rather than deleted, because every
 exception was found by looking at something the sentence dismissed:
 
 1. **Media2's audio encoder element name** — §3, fixed in `8091892`.
@@ -46,11 +47,30 @@ exception was found by looking at something the sentence dismissed:
    oxvif's parsing of it. Fixing it moved no pin, which was checked rather than
    assumed.
 
-**The pattern across all four is worth naming: each came from the sentence
+5. **`VideoEncoderConfiguration2` read and wrote `GovLength` and `Profile` as
+   child elements** — §1.3, §5.5. `tt:VideoEncoder2Configuration` declares both
+   as `xs:attribute`, so both fields were `None` from every conformant device
+   and both values were silently dropped by
+   `set_video_encoder_configuration_media2`. §1.3 listed *"`Profile` inside a
+   video encoder configuration"* among eight undeclared names with no comment,
+   and §1 called the row *"not a new defect"* — true of the row, since it was
+   the same defect counted at a second path, and read as *not a defect*.
+
+**The pattern across all five is worth naming: each came from the sentence
 that dismissed a category.** "No finding is client-facing", "54 unanchored
 roots, cause not established", "the byte assertions will catch it", "out of
-this work unit's scope". A dismissal in this document has so far been the best
-available index of where the next defect is.
+this work unit's scope", "not a new defect". A dismissal in this document has so
+far been the best available index of where the next defect is.
+
+**(5) adds a blind spot the other four do not have.** (3) and (4) are things the
+checker cannot see; (5) is a thing it saw and *undercounted by construction*.
+`GovLength` moved no counter in either direction — the name is a real `tt:`
+element on `H264Configuration`, so `UNKNOWN-NAME` could not fire, and
+`tt:VideoEncoder2Configuration` carries an `xs:any`, which suppresses
+`UNKNOWN-CHILD` for the entire type. **A wildcarded type is invisible to the
+child check, and a name that is real somewhere else is invisible to the name
+check.** Half of this defect was reported only because the *other* half happened
+to be a name declared nowhere.
 
 **And (4) sharpens what "the checker cannot see it" means.** Two distinct blind
 spots have now produced a bug each: it never reads a client *request* (3), and
@@ -127,7 +147,8 @@ ORDER              6     children out of the declared sequence order
 with `WRONG-NS` 0; after the imaging slice of §5.2 + §5.3, 38 distinct —
 `MISSING-REQUIRED` 21, `UNKNOWN-NAME` 8, `UNKNOWN-CHILD` 4, `ORDER` 5; after
 the `GetProfiles` slice of §5.2 + §5.4, 32 distinct — `MISSING-REQUIRED` 16,
-`UNKNOWN-NAME` **9**, `UNKNOWN-CHILD` 4, `ORDER` 3.**
+`UNKNOWN-NAME` **9**, `UNKNOWN-CHILD` 4, `ORDER` 3; after §5.5, 30 distinct —
+`UNKNOWN-NAME` **7**, no other kind moved.**
 `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
 block is the baseline the sweep started from and is left as it was.
 
@@ -141,6 +162,13 @@ elements, so closing it is a client change and belongs to §5.3, where it will
 close both rows at once. The alternative — a second copy of the encoder body,
 free to drift from the list getter — is the failure `CLAUDE.md` step 5b exists
 to prevent, so the counted row was preferred to the duplicate renderer.
+
+**That paragraph was right about the arithmetic and wrong about the reading.**
+§5.5 landed the fix and both rows did close together, 9 → 7, exactly as
+predicted — but *"it is not a new defect"* was taken downstream to mean *not a
+defect*, and it was the fifth client-facing one (§0). It also landed in §5.5
+rather than §5.3, because §5.3 shipped without it. The accurate form of the
+sentence is: **the row was not new; the bug it named was never triaged.**
 
 This paragraph used to end *"No other kind has moved."* True of §5.0 and §5.1,
 and it stopped being true at the imaging slice: **eight rows across four kinds,
@@ -287,10 +315,44 @@ either one alone moves `ORDER` by exactly one.
     field-by-field against the mock elsewhere in `tests/`.
 - `AnalyticsSupported` under the Media2 metadata options extension;
   `MaximumNumberOfProfiles` under the video source configuration options;
-  `ProfilesSupported` under the video encoder configuration options; `Profile`
-  inside a video encoder configuration; `Number` under an encoder instance;
-  `UsernameToken` under the device security capabilities; `SystemLogUri` and
-  its `LogType` in `GetSystemUris`.
+  `ProfilesSupported` under the video encoder configuration options;
+  ~~`Profile` inside a video encoder configuration;~~ `Number` under an encoder
+  instance; `UsernameToken` under the device security capabilities;
+  `SystemLogUri` and its `LogType` in `GetSystemUris`.
+
+  **`Profile` is fixed** — §5.5, and it was a client bug (§0.5), not the mock
+  fidelity item this flat list implied. `tt:VideoEncoder2Configuration` declares
+  it as `xs:attribute`, together with `GovLength`, `AnchorFrameDistance`,
+  `GuaranteedFrameRate`, `Signed` and `SecureStreamingProtocolAlgorithm`; the
+  type's only child elements are `Name`, `UseCount` (inherited from
+  `tt:ConfigurationEntity`, which also carries the required `token` attribute),
+  `Encoding`, `Resolution`, `RateControl`, `Multicast` and `Quality`.
+
+  **Two more names on this list are the same class**, parsed against the schema
+  while §5.5 was being written, and neither is a rename:
+
+  - `ProfilesSupported` is an `xs:attribute` of
+    `tt:VideoEncoder2ConfigurationOptions`, of type `tt:StringAttrList` —
+    which is `<xs:list itemType="xs:string"/>`, so **one attribute holds the
+    whole space-separated list**. The mock's repeated `<tt:ProfilesSupported>`
+    element and `VideoEncoderOptions2::profiles`' `children_named(…)` are both
+    wrong, and unlike §5.5 the fix changes the *cardinality* of the parse, not
+    only where it reads from. **Not fixed in §5.5** — it is a different type
+    (`tt:VideoEncoder2ConfigurationOptions`, not
+    `tt:VideoEncoder2Configuration`) and a separate client-facing bug; it would
+    take `UNKNOWN-NAME` 7 → 6.
+  - `MaximumNumberOfProfiles` is an `xs:attribute` of
+    `tt:VideoSourceConfigurationOptions`. It is also a real *element*, on the
+    unrelated `tt:ProfileCapabilities`, which is why it reports only as
+    `UNKNOWN-CHILD` and never as `UNKNOWN-NAME` — the same double-declaration
+    that hid `GovLength` completely.
+  - `AnalyticsSupported` is declared **nowhere** in `tt:`, as element or
+    attribute. That one is a rename, and belongs to the class this section was
+    named for.
+
+  **Read the declaration before assuming an undeclared name wants renaming.**
+  Three of the eight names on this list are attributes, and the first two were
+  triaged as misspellings for a fortnight.
 
 `UsernameToken` is worth a second look rather than a rename: the name plausibly
 belongs to the device *service* capabilities type, which is a different type in
@@ -621,6 +683,60 @@ Grouped so each lands in one file with one perturbation:
    thing the token-only shape got right. The gap was closed by asserting what
    only the inlined shape can show (`video_source_token`, on both services and
    in both unit fixtures) and by adding the state-tracking test named in §1.4.
+5.5 ~~**`Profile` inside a video encoder configuration**~~ **Done.
+   `UNKNOWN-NAME` 9 → 7, no other kind moved.** The fifth client-facing bug
+   (§0.5): `tt:VideoEncoder2Configuration` declares `GovLength` and `Profile`
+   as `xs:attribute`, and `VideoEncoderConfiguration2` read *and wrote* them as
+   child elements. Fixed on both sides plus the mock, which had been written to
+   agree with the parser.
+
+   **The pin movement is the weakest evidence in this whole section, and it has
+   to be said rather than left to the count.** Two rows closed and both were
+   `Profile`. `GovLength` moved nothing in either direction, for two independent
+   reasons — the name is a real element on `tt:H264Configuration`, so
+   `UNKNOWN-NAME` cannot fire, and `tt:VideoEncoder2Configuration` has an
+   `xs:any`, so `UNKNOWN-CHILD` is suppressed for the whole type. And the
+   checker reads elements only: **a row disappearing proves the element is gone,
+   never that the attribute replacing it is right.**
+
+   So the verification is a test, not a number.
+   `media2_encoder_gov_length_and_profile_are_attributes` in
+   `tests/mock_workflow.rs` drives the client against the mock and asserts the
+   values — `VEC_1` at 25/`Main`, `VEC_3` at 50/`High`, which disagree on both
+   so no constant can satisfy them — then writes 90/`Baseline` through
+   `set_video_encoder_configuration_media2` and reads it back. Same shape as
+   `imaging_move_options_ranges_survive_the_round_trip`, and for the same reason
+   §1.3 gives: **the real gap was that nothing connected the two sides.** The
+   mock's four encoders all carried `gov_length: 25` until this unit, which
+   would have let a token-blind renderer pass; they are 25 / 30 / 50 / 15 now.
+
+   Perturbed in three parts, each red on an assertion and each reverted green:
+
+   | put back | reddens, on which assertion |
+   |---|---|
+   | client `from_xml` element read | the workflow test — `VEC_1 GovLength`, `None` vs `Some(25)` |
+   | mock `render_video_encoder` element form | the workflow test, *same* assertion and same values — it asserts agreement, so either side shows |
+   | client `to_xml_body` element form | three: `set_video_encoder_configuration_media2_body_is_exact` on the body fragment, `test_video_encoder_configuration2_to_xml_body` on `GovLength="50"`, and the workflow test's read-back — `GovLength after Set`, `Some(25)` vs `Some(90)` |
+
+   All three failed on an assertion, never on a compile error, and each reverted
+   green. **The second row is the one worth having**: the first and third would
+   both be caught by a client-only test, and only an agreement test reddens when
+   the *mock* drifts.
+
+   **`cargo test --all-features` did not show the third row's workflow failure.**
+   Cargo fail-fasts on the first failing *target*, and the lib target runs first,
+   so the two lib assertions masked the integration one. `CLAUDE.md` already says
+   to run the batch unfiltered; the addition is that unfiltered is not the same
+   as complete — use `--no-fail-fast`, or run the target directly, when checking
+   *which* tests a perturbation reddens.
+
+   The last row is why the mock's write path was tightened at the same time.
+   `apply_video_encoder_write` used to take `extract_tag(body, "GovLength")`
+   against the whole body, which accepts both the attribute form and the
+   pre-0.15 element form — so a client that regressed would have round-tripped
+   cleanly through the mock. It now reads the Media2 attribute or the element
+   *inside* Media1's `<tt:H264>` / `<tt:H265>` block, which are the only two
+   shapes either schema declares. **A lenient mock cannot be a guard.**
 5. ~~**Strengthen `every_response_binds_the_prefixes_it_uses`** so it asserts an
    element is in the namespace its type declares.~~ **Struck — this cannot be a
    separate unit.** Asserting that an element is in the namespace its *type*

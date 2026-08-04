@@ -540,7 +540,7 @@ Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 suppor
 | Feature | Media1 | Media2 |
 |---------|--------|--------|
 | H.265 | Via `Other(String)` | Native `VideoEncoding::H265` |
-| Encoder config | Nested `H264`/`H265` sub-struct | Flat — `gov_length` and `profile` at top level |
+| Encoder config | Nested `H264`/`H265` sub-struct | Flat — `gov_length` and `profile` are top-level fields, and XML **attributes** on the wire |
 | `GetStreamUri` response | `<MediaUri>` wrapper | Just `<Uri>` string |
 | Write operations | Require `<ForcePersistence>true` | No `ForcePersistence` |
 

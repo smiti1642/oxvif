@@ -731,6 +731,14 @@ Two things the shape above still does not share with Media1:
   `VideoSource`, `AudioSource`, `PTZ` — are the *same* types `tt:Profile`
   inlines, and are rendered by the same helpers.
 
+  `tt:VideoEncoder2Configuration` also moves two members Media1 keeps as
+  elements into **attributes** — the full opening tag is
+  `<tr2:VideoEncoder token="VEC_1" GovLength="25" Profile="Main">`, where
+  Media1 nests the same two facts as `<tt:H264><tt:GovLength>…</tt:GovLength>
+  <tt:H264Profile>…</tt:H264Profile></tt:H264>`. This mock emitted them as
+  `<tt:GovLength>` / `<tt:Profile>` children until 0.15, matching a client bug
+  of the same shape; see the `Fixed` entry in `CHANGELOG.md` for 0.15.0.
+
 **The sequence is `VideoSource, AudioSource, VideoEncoder, AudioEncoder,
 Analytics, PTZ, …`** — audio source sits between the two video members, and
 `tt:Profile` interleaves the same way. Two separate declarations that happen to

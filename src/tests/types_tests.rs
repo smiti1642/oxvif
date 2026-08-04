@@ -1264,7 +1264,9 @@ mod media2 {
 
     // ── VideoEncoderConfiguration2 ────────────────────────────────────────
 
-    const H265_CONFIG: &str = r#"<Configurations token="VEC_H265">
+    /// `GovLength` and `Profile` are attributes — `tt:VideoEncoder2Configuration`
+    /// declares them as `xs:attribute`, not as members of its sequence.
+    const H265_CONFIG: &str = r#"<Configurations token="VEC_H265" GovLength="60" Profile="Main">
           <Name>H265Stream</Name>
           <UseCount>1</UseCount>
           <Encoding>H265</Encoding>
@@ -1274,9 +1276,30 @@ mod media2 {
             <FrameRateLimit>30</FrameRateLimit>
             <BitrateLimit>8192</BitrateLimit>
           </RateControl>
+        </Configurations>"#;
+
+    /// The pre-0.15 shape: the same two names as child elements. A device does
+    /// not send this, and neither does the mock — parsing it must yield `None`
+    /// for both rather than quietly accepting the old form, or every assertion
+    /// on the fixture above would hold for a parser that reads either.
+    const H265_CONFIG_ELEMENT_FORM: &str = r#"<Configurations token="VEC_H265">
+          <Name>H265Stream</Name>
+          <UseCount>1</UseCount>
+          <Encoding>H265</Encoding>
+          <Resolution><Width>3840</Width><Height>2160</Height></Resolution>
+          <Quality>7</Quality>
           <GovLength>60</GovLength>
           <Profile>Main</Profile>
         </Configurations>"#;
+
+    #[test]
+    fn test_video_encoder_configuration2_ignores_the_element_form() {
+        let cfg = VideoEncoderConfiguration2::from_xml(&parse(H265_CONFIG_ELEMENT_FORM)).unwrap();
+        assert_eq!(cfg.token, "VEC_H265");
+        assert_eq!(cfg.name, "H265Stream");
+        assert_eq!(cfg.gov_length, None);
+        assert_eq!(cfg.profile, None);
+    }
 
     #[test]
     fn test_video_encoder_configuration2_from_xml_h265() {
@@ -1324,10 +1347,37 @@ mod media2 {
         assert!(xml.contains("<tt:Width>1920</tt:Width>"));
         assert!(xml.contains("<tt:FrameRateLimit>25</tt:FrameRateLimit>"));
         assert!(xml.contains("<tt:BitrateLimit>4096</tt:BitrateLimit>"));
-        assert!(xml.contains("<tt:GovLength>50</tt:GovLength>"));
-        assert!(xml.contains("<tt:Profile>Main</tt:Profile>"));
+        // Attributes of the configuration element, not children of it.
+        assert!(xml.contains(r#" GovLength="50""#));
+        assert!(xml.contains(r#" Profile="Main""#));
+        assert!(!xml.contains("<tt:GovLength>"));
+        assert!(!xml.contains("<tt:Profile>"));
         // No EncodingInterval (Media2 only has FrameRateLimit + BitrateLimit)
         assert!(!xml.contains("EncodingInterval"));
+    }
+
+    /// `None` must omit the attribute, not write `GovLength=""` — both are
+    /// `use="optional"` and an empty `xs:int` is not a legal lexical value.
+    #[test]
+    fn test_video_encoder_configuration2_to_xml_body_omits_absent_attributes() {
+        let cfg = VideoEncoderConfiguration2 {
+            token: "enc2".into(),
+            name: "Plain".into(),
+            use_count: 1,
+            encoding: VideoEncoding::H264,
+            resolution: Resolution {
+                width: 640,
+                height: 480,
+            },
+            quality: 3.0,
+            rate_control: None,
+            gov_length: None,
+            profile: None,
+        };
+        let xml = cfg.to_xml_body();
+        assert!(xml.contains(r#"<tr2:Configuration token="enc2">"#));
+        assert!(!xml.contains("GovLength"));
+        assert!(!xml.contains("Profile"));
     }
 
     // ── VideoEncoderConfigurationOptions2 ────────────────────────────────

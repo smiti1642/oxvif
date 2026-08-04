@@ -280,9 +280,15 @@ two-thirds of the test suite.
   appears at a second path and is counted twice.
   `tt:VideoEncoder2Configuration` declares `Profile` and `GovLength` as
   **attributes** and `VideoEncoderConfiguration2::from_xml` parses both as child
-  elements, so closing it is a client change and is left for that work unit,
-  where it closes both rows at once. A second copy of the encoder body, free to
-  drift from the list getter, would have been worse than a counted row.
+  elements, so closing it is a client change. A second copy of the encoder body,
+  free to drift from the list getter, would have been worse than a counted row.
+
+  ~~*"…and is left for that work unit, where it closes both rows at once."*~~
+  **It landed later in this same release** — see the
+  `VideoEncoderConfiguration2` entry under `Fixed` below. Both rows did close
+  together, `UNKNOWN-NAME` 9 → 7. The wording is corrected rather than removed
+  because the sentence read, downstream, as *the client is fine here*; it was
+  this release's second client-facing bug.
 
   **Nothing in the existing suite went red** when the output moved — 821 lib
   tests before and after. Every assertion about a Media2 profile read a *token*,
@@ -318,6 +324,63 @@ two-thirds of the test suite.
     the DeviceIO block made the mock state the same fact a third time. Now 2.
 
 ### Fixed
+
+- **`VideoEncoderConfiguration2::gov_length` and `::profile` were `None` from
+  every conformant Media2 camera, and `set_video_encoder_configuration_media2`
+  silently discarded both.** `tt:VideoEncoder2Configuration` declares
+  `GovLength` and `Profile` as `xs:attribute` — together with
+  `AnchorFrameDistance`, `GuaranteedFrameRate`, `Signed`,
+  `SecureStreamingProtocolAlgorithm`, and the required `token` it inherits from
+  `tt:ConfigurationEntity`. Its child *elements* are only `Name`, `UseCount`
+  (both inherited), `Encoding`, `Resolution`, `RateControl`, `Multicast` and
+  `Quality`. `from_xml` (`src/types/video.rs`) read both names with `xml_u32` /
+  `xml_str`, and `to_xml_body` emitted `<tt:GovLength>` / `<tt:Profile>` between
+  `RateControl` and `Quality`. Both now use the attribute, and an absent
+  `Option` omits the attribute rather than writing an empty one.
+
+  **Seventh instance of the mock-and-fixture-agree class, and the second client
+  bug in it this release** — after the Media2 `Audio` → `AudioEncoder` defect
+  above, which has the same anatomy: `render_video_encoder`
+  (`src/mock/services/media2.rs`) rendered the element form because the parser
+  read it, and three fixtures were written to match — the two Media2 encoder
+  fixtures in `src/tests/client/media2_tests.rs`, `H265_CONFIG` in
+  `src/tests/types_tests.rs`, and the request-body assertion
+  `set_video_encoder_configuration_media2_body_is_exact`, which pinned the wrong
+  shape byte-for-byte.
+
+  **The two names hid for different reasons, and only one was reportable.**
+  `Profile` is declared nowhere else in `tt:`, so the schema-shape checker saw
+  it (`UNKNOWN-NAME` 9 → 7 on the fix, no other kind moving). `GovLength` moved
+  **no counter at all**: it is a real element on `tt:H264Configuration` and
+  `tt:Mpeg4Configuration`, which satisfies the name check, and
+  `tt:VideoEncoder2Configuration` carries an `xs:any`, which suppresses the
+  unknown-child check for the whole type. A wildcarded type is invisible to that
+  check, and a name real somewhere else is invisible to the other.
+
+  **So the count is not the verification, and the checker cannot supply one:
+  it reads elements and never attributes.** A row disappearing proves the
+  element is gone, not that the attribute replacing it is right.
+  `media2_encoder_gov_length_and_profile_are_attributes` in
+  `tests/mock_workflow.rs` is what proves it — it drives the client against a
+  real `MockServer` and asserts the values (`VEC_1` 25/`Main`, `VEC_3`
+  50/`High`), then writes 90/`Baseline` and reads it back. Same shape as
+  `imaging_move_options_ranges_survive_the_round_trip`; reverting *either* side
+  reddens it on the same assertion.
+
+- **The mock's four video encoders all carried `gov_length: 25`.** Any
+  assertion reading it therefore passed against a renderer that ignored the
+  token, which is the coincidence the differing `resolutions` lists already
+  exist to rule out. They are 25 / 30 / 50 / 15 now, against profiles Main /
+  Main / High / Baseline, so `VEC_1` and `VEC_3` disagree on both.
+
+- **The mock accepted a `SetVideoEncoderConfiguration` body no schema
+  declares.** `apply_video_encoder_write` (`src/mock/services/media.rs`) took
+  `extract_tag(body, "GovLength")` against the whole body and `extract_tag(body,
+  "Profile")` ahead of the codec-specific names, so both the attribute form and
+  the pre-0.15 element form round-tripped cleanly — a client that regressed
+  would have been silently understood. It now reads Media2's attribute or the
+  element *inside* Media1's `<tt:H264>` / `<tt:H265>` block, the only two shapes
+  either schema declares. A lenient mock cannot be a guard.
 
 - **`imaging_get_move_options` returned `None` for all five of its ranges
   against every conformant camera.** `ImagingMoveOptions::from_xml`

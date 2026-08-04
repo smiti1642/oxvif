@@ -241,9 +241,14 @@ pub(crate) fn create_profile_in_state(
 /// Same class as the reported profile divergence, pointing the other way.
 ///
 /// The two bodies differ in exactly one place: Media2's encoder config is flat
-/// and carries `<tt:Profile>`, Media1 nests it as `<tt:H264Profile>` /
-/// `<tt:H265Profile>`. All three are read here — a given body contains at most
-/// one, so there is nothing to disambiguate and no parameter to get wrong.
+/// and carries `GovLength` / `Profile` as **attributes** of
+/// `tr2:Configuration`, which is what `tt:VideoEncoder2Configuration` declares;
+/// Media1 nests the gov length inside `<tt:H264>` and names the profile
+/// `<tt:H264Profile>` / `<tt:H265Profile>`. Every form is read here — a given
+/// body contains at most one, so there is nothing to disambiguate and no
+/// parameter to get wrong. The attribute is tried first: until 0.15 both sides
+/// used the element form, so a body still carrying `<tt:GovLength>` is a
+/// pre-0.15 caller, not a conformant one.
 ///
 /// `Err` is a rendered SOAP fault. The reasons are per-service so an assertion
 /// can tell *which* service refused.
@@ -290,10 +295,22 @@ pub(crate) fn apply_video_encoder_write(
         if let Some(v) = extract_tag(body, "BitrateLimit").and_then(|x| x.parse().ok()) {
             ve.bitrate_limit = v;
         }
-        if let Some(v) = extract_tag(body, "GovLength").and_then(|x| x.parse().ok()) {
+        // Media2 sends `GovLength` / `Profile` as attributes of
+        // `tr2:Configuration`; Media1 sends the gov length as an element
+        // *inside* `<tt:H264>` / `<tt:H265>` and the profile as
+        // `<tt:H264Profile>` / `<tt:H265Profile>`. Neither schema declares a
+        // flat `<tt:GovLength>` or `<tt:Profile>` child of the configuration,
+        // so neither is accepted here: reading the codec block by name rather
+        // than searching the whole body is what keeps a client that regresses
+        // to the pre-0.15 element form from being silently understood.
+        let codec = extract_tag(body, "H264").or_else(|| extract_tag(body, "H265"));
+        if let Some(v) = extract_attr(body, "Configuration", "GovLength")
+            .or_else(|| codec.as_deref().and_then(|c| extract_tag(c, "GovLength")))
+            .and_then(|x| x.parse().ok())
+        {
             ve.gov_length = v;
         }
-        if let Some(v) = extract_tag(body, "Profile")
+        if let Some(v) = extract_attr(body, "Configuration", "Profile")
             .or_else(|| extract_tag(body, "H264Profile"))
             .or_else(|| extract_tag(body, "H265Profile"))
         {

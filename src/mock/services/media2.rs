@@ -403,9 +403,16 @@ pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -
 /// `tr2:ConfigurationSet/VideoEncoder` and
 /// `tr2:GetVideoEncoderConfigurationsResponse/Configurations` are the *same*
 /// type; a second copy could drift and nothing here would notice.
+///
+/// **`GovLength` and `Profile` are attributes.** `tt:VideoEncoder2Configuration`
+/// declares both as `xs:attribute` and only `Name`, `UseCount`, `Encoding`,
+/// `Resolution`, `RateControl`, `Multicast` and `Quality` as child elements.
+/// This rendered them as elements until 0.15, agreeing with the client bug it
+/// was written beside — and the type carries an `xs:any`, so the shape checker's
+/// `UNKNOWN-CHILD` rule could not report `GovLength` at all.
 fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> String {
     format!(
-        r#"<{qname} token="{token}">
+        r#"<{qname} token="{token}" GovLength="{gov}" Profile="{profile}">
             <tt:Name>{name}</tt:Name>
             <tt:UseCount>{use_count}</tt:UseCount>
             <tt:Encoding>{encoding}</tt:Encoding>
@@ -414,8 +421,6 @@ fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> String {
               <tt:FrameRateLimit>{fr}</tt:FrameRateLimit>
               <tt:BitrateLimit>{br}</tt:BitrateLimit>
             </tt:RateControl>
-            <tt:GovLength>{gov}</tt:GovLength>
-            <tt:Profile>{profile}</tt:Profile>
             <tt:Quality>{quality}</tt:Quality>
           </{qname}>"#,
         token = ve.token,

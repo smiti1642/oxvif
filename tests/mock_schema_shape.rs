@@ -3,8 +3,9 @@
 //! ## Why this exists
 //!
 //! The mock writes XML as hand-built strings, so it can emit a document no
-//! schema allows and **all five gate lines stay green**. Six instances have been
-//! found so far, every one of them by a human reading a schema file by hand:
+//! schema allows and **all five gate lines stay green**. Seven instances have
+//! been found so far, every one of them by a human reading a schema file by
+//! hand:
 //!
 //! | found | the mock emitted | the schema says |
 //! |---|---|---|
@@ -14,6 +15,7 @@
 //! | 0.15.0 | `DefaultAbsolutePanTiltPositionSpace` | `…Pant…`, double `t` |
 //! | 0.15.0 | `tt:ScopeAttribute` | a different name entirely |
 //! | 0.15.0 | Media2 `Audio` | `AudioEncoder` — **this one was a client bug** |
+//! | 0.15.0 | Media2 `<tt:GovLength>` / `<tt:Profile>` elements | `xs:attribute` on the configuration — **also a client bug** |
 //!
 //! Three of those were put back one at a time and each turned this test red on
 //! the assertion (`8091892`, schema set of run 3):
@@ -168,21 +170,38 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   moves `MISSING-REQUIRED` 16 → 21 and leaves `ORDER` at 3; either order back
 ///   moves `ORDER` 3 → 4 and nothing else.
 ///
-///   **`UNKNOWN-NAME` went up, and that is the honest number.** Inlining the
+///   **`UNKNOWN-NAME` went up, and that was the honest number.** Inlining the
 ///   video encoder reuses `render_video_encoder`, the same helper
-///   `GetVideoEncoderConfigurations` uses, so the `tt:Profile` element it emits
-///   now appears at a second path — one more distinct row for a defect that was
-///   already counted once. `tt:VideoEncoder2Configuration` declares `Profile`
-///   and `GovLength` as **attributes**, and `VideoEncoderConfiguration2` parses
-///   both as child elements, so fixing it is a client change and belongs to the
-///   `UNKNOWN-NAME` work unit; when it lands, both rows close together. The
-///   alternative was a second copy of the encoder body that could drift from the
-///   list getter, which is the failure mode `CLAUDE.md` step 5b exists for —
-///   a duplicated renderer is worse than a counted defect.
+///   `GetVideoEncoderConfigurations` uses, so the `tt:Profile` element it emitted
+///   appeared at a second path — one more distinct row for a defect already
+///   counted once. Taking the second copy instead was rejected: a duplicated
+///   renderer that can drift from the list getter is the failure mode
+///   `CLAUDE.md` step 5b exists for, and is worse than a counted defect. Both
+///   rows closed together in §5.5, as that entry predicted they would.
+/// - §5.5, `GovLength` / `Profile` on the Media2 encoder — `UNKNOWN-NAME`
+///   9 → **7**, no other kind moved. `tt:VideoEncoder2Configuration` declares
+///   both as `xs:attribute`; `VideoEncoderConfiguration2` parsed and emitted
+///   them as child elements and the mock rendered them that way to match, so
+///   this was a **client** defect, the second one this sweep has found.
+///
+///   **The two rows that closed were both `Profile`, and the count is weaker
+///   evidence than it looks.** Only `Profile` was ever visible here:
+///
+///   - `GovLength` moved **nothing**, in either direction. The name is a real
+///     `tt:` element on `H264Configuration` and `Mpeg4Configuration`, so
+///     `UNKNOWN-NAME` never fired; and `tt:VideoEncoder2Configuration` carries
+///     an `xs:any`, which sets `Ty::wild` and suppresses `UNKNOWN-CHILD` for
+///     the whole type. A wildcarded type is a blind spot for *every* misplaced
+///     child whose name exists somewhere in the namespace.
+///   - Nothing here reads attributes at all. A row disappearing proves the
+///     element is gone, **not** that the attribute that replaced it is spelled
+///     right or carried at all. `tests/mock_workflow.rs`'s
+///     `media2_encoder_gov_length_and_profile_are_attributes` is what asserts
+///     that, by driving the client against the mock and reading the values.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
     ("MISSING-REQUIRED", 16),
-    ("UNKNOWN-NAME", 9),
+    ("UNKNOWN-NAME", 7),
     ("UNKNOWN-CHILD", 4),
     ("ORDER", 3),
 ];

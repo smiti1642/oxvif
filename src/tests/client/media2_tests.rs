@@ -69,7 +69,7 @@ fn video_encoder_configurations_media2_xml() -> &'static str {
                       xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <tr2:GetVideoEncoderConfigurationsResponse>
-              <tr2:Configurations token="VEC_H265">
+              <tr2:Configurations token="VEC_H265" GovLength="60" Profile="Main">
                 <tt:Name>H265Stream</tt:Name>
                 <tt:UseCount>1</tt:UseCount>
                 <tt:Encoding>H265</tt:Encoding>
@@ -79,8 +79,6 @@ fn video_encoder_configurations_media2_xml() -> &'static str {
                   <tt:FrameRateLimit>30</tt:FrameRateLimit>
                   <tt:BitrateLimit>8192</tt:BitrateLimit>
                 </tt:RateControl>
-                <tt:GovLength>60</tt:GovLength>
-                <tt:Profile>Main</tt:Profile>
               </tr2:Configurations>
             </tr2:GetVideoEncoderConfigurationsResponse>
           </s:Body>
@@ -734,7 +732,7 @@ async fn test_get_video_encoder_configuration_media2_returns_first_configuration
                     xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <tr2:GetVideoEncoderConfigurationsResponse>
-              <tr2:Configurations token="VEC_M2_1">
+              <tr2:Configurations token="VEC_M2_1" GovLength="45" Profile="High">
                 <tt:Name>Media2Encoder</tt:Name>
                 <tt:UseCount>2</tt:UseCount>
                 <tt:Encoding>H264</tt:Encoding>
@@ -744,8 +742,6 @@ async fn test_get_video_encoder_configuration_media2_returns_first_configuration
                   <tt:FrameRateLimit>15</tt:FrameRateLimit>
                   <tt:BitrateLimit>2048</tt:BitrateLimit>
                 </tt:RateControl>
-                <tt:GovLength>45</tt:GovLength>
-                <tt:Profile>High</tt:Profile>
               </tr2:Configurations>
             </tr2:GetVideoEncoderConfigurationsResponse>
           </s:Body>
@@ -1286,8 +1282,13 @@ mod request_body_shapes {
     }
 
     /// Media2 `SetVideoEncoderConfiguration`: `tr2:`-prefixed Configuration,
-    /// `GovLength` + `Profile` between RateControl and Quality, no
-    /// `EncodingInterval`, no `ForcePersistence`.
+    /// `GovLength` + `Profile` as **attributes** of it, no `EncodingInterval`,
+    /// no `ForcePersistence`.
+    ///
+    /// `tt:VideoEncoder2Configuration` declares both names as `xs:attribute`.
+    /// Until 0.15 this asserted them as child elements between `RateControl` and
+    /// `Quality` — a shape no conformant device accepts, and the assertion was
+    /// written to agree with the serialiser rather than with the schema.
     #[tokio::test]
     async fn set_video_encoder_configuration_media2_body_is_exact() {
         let (transport, captured) =
@@ -1307,7 +1308,7 @@ mod request_body_shapes {
         );
         let expected = concat!(
             "<tr2:SetVideoEncoderConfiguration>",
-            r#"<tr2:Configuration token="VEC_1">"#,
+            r#"<tr2:Configuration token="VEC_1" GovLength="50" Profile="Main">"#,
             "<tt:Name>MainStream</tt:Name>",
             "<tt:UseCount>1</tt:UseCount>",
             "<tt:Encoding>H265</tt:Encoding>",
@@ -1316,8 +1317,6 @@ mod request_body_shapes {
             "<tt:FrameRateLimit>25</tt:FrameRateLimit>",
             "<tt:BitrateLimit>4096</tt:BitrateLimit>",
             "</tt:RateControl>",
-            "<tt:GovLength>50</tt:GovLength>",
-            "<tt:Profile>Main</tt:Profile>",
             "<tt:Quality>5</tt:Quality>",
             "</tr2:Configuration>",
             "</tr2:SetVideoEncoderConfiguration>",
@@ -1325,6 +1324,13 @@ mod request_body_shapes {
         assert!(
             c.body.contains(expected),
             "Media2 video encoder body drifted.\nexpected fragment:\n{expected}\nactual body:\n{}",
+            c.body
+        );
+        // The `contains` above would still hold if the serialiser *also* wrote
+        // the pre-0.15 element form somewhere else in the body, so name it.
+        assert!(
+            !c.body.contains("<tt:GovLength>") && !c.body.contains("<tt:Profile>"),
+            "Media2 must send GovLength/Profile as attributes only: {}",
             c.body
         );
         assert!(
