@@ -137,12 +137,28 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   reports `UNKNOWN-NAME`, and a name undeclared *by its parent* reports
 ///   `UNKNOWN-CHILD`. Only a name that the parent declares in some other
 ///   namespace lands in this bucket.
+/// - §5.2 + §5.3, the imaging slice — `MISSING-REQUIRED` 23 → 21, `UNKNOWN-NAME`
+///   11 → 8, `UNKNOWN-CHILD` 6 → 4, `ORDER` 6 → 5. Eight rows, and **seven of
+///   them were one defect**: `GetMoveOptions` rendered the focus ranges as
+///   `PositionSpace` / `SpeedSpace`, borrowing PTZ's *space* vocabulary for a
+///   type that has none, where the schema declares a plain `Position` and
+///   `Speed`. One wrong name therefore reported in three kinds at once — the
+///   name is undeclared (`UNKNOWN-NAME`), the parent does not accept it
+///   (`UNKNOWN-CHILD`), and the real required child is then absent
+///   (`MISSING-REQUIRED`). The eighth row is `GetOptions`, which emitted
+///   `tt:ImagingOptions20`'s ten children in a plausible but invented order.
+///
+///   Putting the four `…Space` names back moves exactly those three kinds and
+///   leaves `ORDER` at 5, so the two halves of this bucket are independently
+///   pinned. **A one-name defect that moves three counters is the reason a
+///   per-kind pin is not merely more precise than a total — a total would have
+///   let a compensating pair of edits through.**
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
-    ("MISSING-REQUIRED", 23),
-    ("UNKNOWN-NAME", 11),
-    ("UNKNOWN-CHILD", 6),
-    ("ORDER", 6),
+    ("MISSING-REQUIRED", 21),
+    ("UNKNOWN-NAME", 8),
+    ("UNKNOWN-CHILD", 4),
+    ("ORDER", 5),
 ];
 
 /// Floors on what the run actually covered.

@@ -106,8 +106,19 @@ ORDER              6     children out of the declared sequence order
 ```
 
 **After §5.0 this is 62 distinct, `UNKNOWN-NAME` 11; after §5.1, 46 distinct
-with `WRONG-NS` 0.** No other kind has moved. `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
+with `WRONG-NS` 0; after the imaging slice of §5.2 + §5.3, 38 distinct —
+`MISSING-REQUIRED` 21, `UNKNOWN-NAME` 8, `UNKNOWN-CHILD` 4, `ORDER` 5.**
+`tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
 block is the baseline the sweep started from and is left as it was.
+
+This paragraph used to end *"No other kind has moved."* True of §5.0 and §5.1,
+and it stopped being true at the imaging slice: **eight rows across four kinds,
+of which seven were one wrong element name.** `GetMoveOptions` rendered the
+focus ranges as `PositionSpace` / `SpeedSpace`. One undeclared name reports in
+three kinds at once — undeclared (`UNKNOWN-NAME`), not accepted by its parent
+(`UNKNOWN-CHILD`), and the real required child therefore absent
+(`MISSING-REQUIRED`) — so a fix that moves several counters at once is not
+evidence of several fixes, and the reverse reading is the one to distrust.
 
 The single row §5.0 removed is worth naming, because it is the whole argument
 for the anchoring assertion that fix added: it was the `DigitalInputs` *child*.
@@ -169,7 +180,7 @@ only via the checker, for the first:
 |---|---|
 | Media1 `GetProfiles` → `Profile` | the video encoder configuration is emitted before the audio source configuration; the schema has them the other way round |
 | Media2 `GetProfiles` → `ConfigurationSet` | the same inversion |
-| `GetOptions` → `ImagingOptions20` | badly scrambled — most members are in a different position |
+| ~~`GetOptions` → `ImagingOptions20`~~ **fixed** | badly scrambled — most members are in a different position. Only `WideDynamicRange` held its index; `BacklightCompensation` moved from last to first. **The schema order is not alphabetical, though it looks it** — `WideDynamicRange` precedes `WhiteBalance`, so sorting the members is a wrong fix that gets nine of ten right |
 | Media2 `GetMetadataConfigurations` | analytics emitted before PTZ status (**two rows**, one per configuration in the response — one cause) |
 | `GetOSDOptions` → `OSDTextOptions` | the font-size range is emitted last, the schema places it second |
 
@@ -189,10 +200,26 @@ The Media2 row used to read *"plus an `Audio` child where the schema names
   the client unit fixture agrees with it at
   `src/tests/client/device_tests.rs:403` and `:407`. oxvif's parser reads
   neither name — it takes `ScopeItem` only — so the client is unaffected.
-- Imaging `GetMoveOptions` emits space-style names (`PositionSpace`,
+- ~~Imaging `GetMoveOptions` emits space-style names (`PositionSpace`,
   `SpeedSpace`) under the absolute and continuous focus options where the
   schema declares a position and a speed. Same service and same class as the
-  `tt:AFModes` defect fixed in 0.15.0.
+  `tt:AFModes` defect fixed in 0.15.0.~~ **Fixed.** The finding was right; the
+  classification was not. It is **not** the `AFModes` class — `AFModes` is a
+  real ONVIF name at a deeper level, which is why reverting it moves
+  `UNKNOWN-CHILD` alone. `PositionSpace` and `SpeedSpace` are declared nowhere
+  in `tt:` for focus at all: the vocabulary is borrowed from PTZ, where a
+  *space* is a URI naming a coordinate system. Reverting the three names moves
+  three kinds — `UNKNOWN-NAME` 8 → 11, `UNKNOWN-CHILD` 4 → 6 and
+  `MISSING-REQUIRED` 21 → 23, the last because the required `Position` and
+  `Speed` are then absent.
+
+  **`ImagingMoveOptions::from_xml` reads the same four invented names**
+  (`src/types/imaging.rs`, `PositionSpace` / `SpeedSpace` / `DistanceSpace`),
+  so every range it returns is `None` against a conformant device, and the unit
+  fixture in `src/tests/client/imaging_tests.rs` was written to agree with it.
+  Same shape as the Media2 `Audio` → `AudioEncoder` client bug of `8091892`.
+  **Not fixed here** — out of this work unit's scope, and it needs the fixture
+  and the getter changed together.
 - `AnalyticsSupported` under the Media2 metadata options extension;
   `MaximumNumberOfProfiles` under the video source configuration options;
   `ProfilesSupported` under the video encoder configuration options; `Profile`
@@ -213,7 +240,10 @@ capabilities (system, security, events, recording, search), `Scope`'s
 `ScopeDef`, `GetRecordings` → `Tracks`, `EndSearch` → `Endpoint`, PTZ
 configuration options → `Spaces`, the metadata configuration's `Multicast` /
 `SessionTimeout` and multicast `AutoStart` / `TTL`, the metadata PTZ-status
-filter options, imaging focus position and speed, the event-properties
+filter options, ~~imaging focus position and speed~~ (**fixed** — they were
+absent only because the invented `…Space` names stood in their place, so they
+closed with §1.3's rename rather than as omissions in their own right), the
+event-properties
 response, and recording source information — the last of which
 `src/mock/state.rs` already **stores** and does not render, the same shape as
 the `MTU` bug.
@@ -336,6 +366,15 @@ change in the sweep.
   `src/tests/client/device_tests.rs`, on a **client request body**, and it
   turned out to be asserting a second client-facing bug rather than guarding
   against one — see §5.1.
+
+  **The imaging slice moved exactly one of the 62**, and it is the shape the
+  struck bullet predicted for all of them:
+  `imaging_move_options_fault_on_a_fixed_lens` in `src/mock/state.rs` asserted
+  `contains("<tt:PositionSpace>")` — an assertion that existed to pin the mock's
+  output and was pinning an invented name. So the count is not coverage, but
+  the mechanism is real when an assertion happens to name the defect. Re-aimed
+  at `<tt:Position>`, and it now also asserts that no `…Space>` element appears
+  in a focus response at all, which is the thing that was actually wrong.
 - The remaining 99 are on client-*emitted* request bodies and on fixture
   parsing, and are unaffected — except `src/tests/client/device_tests.rs:403`
   and `:407`, which encode `ScopeAttribute` in a fixture and must move with the
@@ -434,10 +473,21 @@ Grouped so each lands in one file with one perturbation:
    It was found by asking why §4's predicted red did not happen. That question
    is the reusable part: **when a guard you expected to fire stays silent, the
    silence is the finding.**
-2. **Sequence order** — five renderers, six rows (§1.2).
+2. **Sequence order** — five renderers, six rows (§1.2). **Imaging done**
+   (`ImagingOptions20`, `ORDER` 6 → 5); four renderers left — both `GetProfiles`
+   inversions, Media2 `GetMetadataConfigurations`, `GetOSDOptions`.
 3. **Undeclared names** — `ScopeAttribute`, the imaging focus options, the
    options extensions (§1.3). Settle `UsernameToken` by type rather than
-   renaming it.
+   renaming it. **Imaging done** — the `GetMoveOptions` focus names, which were
+   seven of the eight imaging rows and moved three kinds between them; see §1.3
+   for why that is not the `AFModes` class it was filed as, and for the
+   client-side half that is still open.
+
+   The imaging slice was taken as one bucket across units 2 and 3 rather than
+   by unit, because both live in `src/mock/services/imaging.rs` and share one
+   perturbation run. It was perturbed in **two independent halves**: the focus
+   names alone leave `ORDER` at 5, the order alone leaves the other three
+   kinds unmoved, so neither half is resting on the other's evidence.
 4. **Required members** (§1.4). The Media2 `ConfigurationSet` inlining is five
    of the rows and is the largest change here; the rest are a renderer dropping
    state it already holds.

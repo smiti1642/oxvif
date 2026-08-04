@@ -208,33 +208,40 @@ pub fn resp_imaging_options(state: &SharedState, body: &str) -> String {
     soap(
         NS,
         &format!(
+            // `tt:ImagingOptions20` is an xs:sequence — children in schema
+            // order: BacklightCompensation, Brightness, ColorSaturation,
+            // Contrast, Exposure, Focus, IrCutFilterModes, Sharpness,
+            // WideDynamicRange, WhiteBalance, Extension. It is the same order
+            // `tt:ImagingSettings20` uses above except that the settings type
+            // spells the filter element `IrCutFilter`, singular and scalar,
+            // where the options type repeats `IrCutFilterModes`.
             r#"<timg:GetOptionsResponse>
           <timg:ImagingOptions>
+            <tt:BacklightCompensation>
+              <tt:Mode>OFF</tt:Mode>
+              <tt:Mode>ON</tt:Mode>
+            </tt:BacklightCompensation>
             <tt:Brightness><tt:Min>0</tt:Min><tt:Max>{max}</tt:Max></tt:Brightness>
             <tt:ColorSaturation><tt:Min>0</tt:Min><tt:Max>{max}</tt:Max></tt:ColorSaturation>
             <tt:Contrast><tt:Min>0</tt:Min><tt:Max>{max}</tt:Max></tt:Contrast>
-            <tt:Sharpness><tt:Min>0</tt:Min><tt:Max>{max}</tt:Max></tt:Sharpness>
-            <tt:IrCutFilterModes>ON</tt:IrCutFilterModes>
-            <tt:IrCutFilterModes>OFF</tt:IrCutFilterModes>
-            <tt:IrCutFilterModes>AUTO</tt:IrCutFilterModes>
-            <tt:WhiteBalance>
-              <tt:Mode>AUTO</tt:Mode>
-              <tt:Mode>MANUAL</tt:Mode>
-            </tt:WhiteBalance>
             <tt:Exposure>
               <tt:Mode>AUTO</tt:Mode>
               <tt:Mode>MANUAL</tt:Mode>
             </tt:Exposure>
             {focus}
+            <tt:IrCutFilterModes>ON</tt:IrCutFilterModes>
+            <tt:IrCutFilterModes>OFF</tt:IrCutFilterModes>
+            <tt:IrCutFilterModes>AUTO</tt:IrCutFilterModes>
+            <tt:Sharpness><tt:Min>0</tt:Min><tt:Max>{max}</tt:Max></tt:Sharpness>
             <tt:WideDynamicRange>
               <tt:Mode>OFF</tt:Mode>
               <tt:Mode>ON</tt:Mode>
               <tt:Level><tt:Min>0</tt:Min><tt:Max>{max}</tt:Max></tt:Level>
             </tt:WideDynamicRange>
-            <tt:BacklightCompensation>
-              <tt:Mode>OFF</tt:Mode>
-              <tt:Mode>ON</tt:Mode>
-            </tt:BacklightCompensation>
+            <tt:WhiteBalance>
+              <tt:Mode>AUTO</tt:Mode>
+              <tt:Mode>MANUAL</tt:Mode>
+            </tt:WhiteBalance>
           </timg:ImagingOptions>
         </timg:GetOptionsResponse>"#,
             max = img.level_max,
@@ -287,16 +294,32 @@ pub fn resp_imaging_move_options(state: &SharedState, body: &str) -> String {
         return fault;
     }
 
+    // `tt:MoveOptions20` is an xs:sequence of Absolute, Relative, Continuous —
+    // all three optional. The mock models absolute and continuous focus and
+    // omits `Relative`, which is a legal shape rather than a gap.
+    //
+    // **The children are `Position` and `Speed`, not `PositionSpace` and
+    // `SpeedSpace`.** `tt:AbsoluteFocusOptions` declares `Position` (required)
+    // then `Speed` (optional); `tt:ContinuousFocusOptions` declares `Speed`
+    // alone, and it is required. Both are plain `tt:FloatRange` — Min then Max.
+    //
+    // The `…Space` spelling the mock used until 0.15 is borrowed from PTZ,
+    // where a *space* is a URI naming a coordinate system
+    // (`AbsolutePanTiltPositionSpace`). Focus has no such concept: these are
+    // bare numeric ranges. Nothing in this repository could see the difference
+    // — `XmlNode` matches on local names only, so the invented names simply
+    // parsed as absent — and the unit fixture in `imaging_tests.rs` had been
+    // written to agree with them.
     soap(
         NS,
         r#"<timg:GetMoveOptionsResponse>
           <timg:MoveOptions>
             <tt:Absolute>
-              <tt:PositionSpace><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:PositionSpace>
-              <tt:SpeedSpace><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:SpeedSpace>
+              <tt:Position><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:Position>
+              <tt:Speed><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:Speed>
             </tt:Absolute>
             <tt:Continuous>
-              <tt:SpeedSpace><tt:Min>-1.0</tt:Min><tt:Max>1.0</tt:Max></tt:SpeedSpace>
+              <tt:Speed><tt:Min>-1.0</tt:Min><tt:Max>1.0</tt:Max></tt:Speed>
             </tt:Continuous>
           </timg:MoveOptions>
         </timg:GetMoveOptionsResponse>"#,

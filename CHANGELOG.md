@@ -186,6 +186,55 @@ two-thirds of the test suite.
   checker skips. It came from reading `event.wsdl`. A count reaching zero is
   not the same as a class being closed, and this is why.
 
+- **The mock's Imaging service emitted eight non-conformant rows, and seven of
+  them were one wrong element name.** `GetMoveOptions` rendered the focus
+  ranges as `tt:PositionSpace` and `tt:SpeedSpace`. `tt:AbsoluteFocusOptions`
+  declares `Position` (required) then `Speed` (optional), and
+  `tt:ContinuousFocusOptions` declares `Speed` alone, required — all three
+  plain `tt:FloatRange`. The `…Space` vocabulary is PTZ's, where a space is a
+  URI naming a coordinate system (`AbsolutePanTiltPositionSpace`); focus has no
+  such concept and the names are declared nowhere in `tt:`.
+
+  **One undeclared name reports in three kinds at once** — undeclared
+  (`UNKNOWN-NAME`), not accepted by its parent (`UNKNOWN-CHILD`), and the real
+  required child therefore absent (`MISSING-REQUIRED`). Measured by putting the
+  three names back on their own: `UNKNOWN-NAME` 8 → 11, `UNKNOWN-CHILD` 4 → 6,
+  `MISSING-REQUIRED` 21 → 23, `ORDER` unmoved. So a fix that moves several
+  pinned counters is not evidence of several fixes — and this is a second
+  reason the pins are per kind, distinct from the Media2 case above: there the
+  total stayed put while two kinds moved, here one edit moves three.
+
+  The eighth row is `GetOptions`, which emitted `tt:ImagingOptions20`'s ten
+  members in an invented order (`ORDER` 6 → 5, perturbed separately, and it
+  leaves the other three kinds unmoved). Worth recording because the obvious
+  repair is wrong: **the schema sequence looks alphabetical and is not** —
+  `WideDynamicRange` precedes `WhiteBalance`. Sorting the members gets nine of
+  ten right and leaves the row standing.
+
+  **No oxvif caller is affected**, for the same reason as the namespace fixes:
+  `XmlNode` matches local names only, so the invented names simply parsed as
+  absent, exactly as they had been. The `mock-server` feature is what was
+  affected.
+
+  `imaging_move_options_fault_on_a_fixed_lens` in `src/mock/state.rs` was the
+  one assertion in the repository that named a moved element — it pinned
+  `contains("<tt:PositionSpace>")`, an assertion written to guard the mock's
+  output that was guarding an invented name. Re-aimed at `<tt:Position>`, and
+  it now also asserts no `…Space>` element appears in a focus response at all.
+
+  **Still open, and deliberately not fixed here:**
+  `ImagingMoveOptions::from_xml` (`src/types/imaging.rs`) reads
+  `PositionSpace`, `SpeedSpace` and `DistanceSpace`, so
+  `absolute_position_range`, `absolute_speed_range`, `relative_distance_range`,
+  `relative_speed_range` and `continuous_speed_range` are **always `None`
+  against a conformant device**, and the fixture in
+  `src/tests/client/imaging_tests.rs` was written to agree with the parser. It
+  is the `tt:AFModes` defect below with the roles reversed — there the fixture
+  was right and the mock was wrong, so fixing the mock was enough; here the
+  fixture and the parser are wrong together, which is the Media2
+  `Audio` → `AudioEncoder` shape and needs both changed at once. Tracked in
+  `docs/active/mock-schema-conformance-2026-08.md` §1.3.
+
 - **The mock answers a DeviceIO endpoint.** `{base}/onvif/deviceio`, advertised
   in `GetCapabilities` (`Capabilities/Extension/DeviceIO`) **and** `GetServices`,
   dispatching `…/ver10/deviceio/wsdl/` and rendering `GetDigitalInputs` in

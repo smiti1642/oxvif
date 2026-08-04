@@ -3884,14 +3884,20 @@ mod tests {
         use crate::mock::services::imaging;
         let s = new_state();
         let one = imaging::resp_imaging_move_options(&s, &img_body("GetMoveOptions", "VS_1"));
-        assert!(one.contains("<tt:PositionSpace>"), "{one}");
+        // `tt:AbsoluteFocusOptions` is Position + Speed; the `…Space` spelling
+        // this used to assert is PTZ's, and is not declared for focus at all.
+        assert!(
+            one.contains("<tt:Position><tt:Min>0.0</tt:Min><tt:Max>1.0</tt:Max></tt:Position>"),
+            "{one}"
+        );
+        assert!(!one.contains("Space>"), "{one}");
 
         let two = imaging::resp_imaging_move_options(&s, &img_body("GetMoveOptions", "VS_2"));
         assert!(
             two.contains("NoFocusSupport-IMGMOVEOPT-5611: VS_2"),
             "got: {two}"
         );
-        assert!(!two.contains("<tt:PositionSpace>"));
+        assert!(!two.contains("<tt:Position>"));
     }
 
     #[test]
