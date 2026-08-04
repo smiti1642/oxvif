@@ -361,14 +361,18 @@ impl OsdOptions {
                 .children_named("Type")
                 .map(|n| n.text().to_string())
                 .collect(),
+            // `tt:OSDConfigurationOptions/PositionOption` is
+            // `type="xs:string" maxOccurs="unbounded"` — one element per
+            // position, text body. This read a `<PositionOption>` wrapper for
+            // nested `<Type>` children until 0.15, so it returned empty from
+            // every conformant device; the wrapper is handled as a vendor
+            // shape in `apply_vendor_extensions`, which is the way round the
+            // schema puts it.
             position_types: opts
-                .child("PositionOption")
-                .map(|p| {
-                    p.children_named("Type")
-                        .map(|n| n.text().to_string())
-                        .collect()
-                })
-                .unwrap_or_default(),
+                .children_named("PositionOption")
+                .map(|n| n.text().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
             text_types: text_opt
                 .map(|t| {
                     t.children_named("Type")
@@ -406,12 +410,21 @@ impl OsdOptions {
     ///    with the count living in `Total`. Populates
     ///    [`max_per_text_type`](Self::max_per_text_type) and, if
     ///    [`max_osd`](Self::max_osd) is `0`, fills it from `Total`.
-    /// 2. **Flat `<PositionOption>UpperLeft</PositionOption>` siblings.**
-    ///    The spec shape is a single `<PositionOption>` wrapper
-    ///    holding nested `<Type>` children; Genetec (and some Dahua
-    ///    firmwares) instead emit each entry as a separate sibling.
+    /// 2. **A `<PositionOption>` wrapper holding nested `<Type>` children.**
     ///    Repopulates [`position_types`](Self::position_types) when
     ///    the strict parser found nothing.
+    ///
+    ///    **This entry said the opposite until 0.15**, and the mock and
+    ///    [`from_xml`](Self::from_xml) had both been written to agree with it:
+    ///    it called the wrapper "the spec shape" and the flat siblings a
+    ///    Genetec deviation. `tt:OSDConfigurationOptions` declares
+    ///    `PositionOption` as `type="xs:string" maxOccurs="unbounded"` — the
+    ///    repeated plain string *is* the spec shape, so
+    ///    `OnvifClient::get_osd_options` returned no positions at all from a
+    ///    conformant camera, and only `OnvifSession` recovered them, by a path
+    ///    documented as a workaround. The wrapper is kept here because a
+    ///    firmware that sends it is still a firmware someone points at this
+    ///    crate.
     ///
     /// Idempotent — calling twice on the same XML produces the same
     /// result.
@@ -433,14 +446,16 @@ impl OsdOptions {
             }
         }
 
-        if self.position_types.is_empty() {
-            let flat: Vec<String> = opts
-                .children_named("PositionOption")
+        if self.position_types.is_empty()
+            && let Some(wrapper) = opts.child("PositionOption")
+        {
+            let nested: Vec<String> = wrapper
+                .children_named("Type")
                 .map(|n| n.text().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
-            if !flat.is_empty() {
-                self.position_types = flat;
+            if !nested.is_empty() {
+                self.position_types = nested;
             }
         }
     }

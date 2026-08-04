@@ -422,6 +422,47 @@ two-thirds of the test suite.
   client-facing bugs this sweep found were found in spite of the counts rather
   than by them.
 
+- **`OnvifClient::get_osd_options().position_types` was empty from every
+  conformant camera.** `tt:OSDConfigurationOptions` declares `PositionOption`
+  as `type="xs:string" maxOccurs="unbounded"` — one element per position, text
+  body. `OsdOptions::from_xml` instead read a single `<PositionOption>` wrapper
+  for nested `<Type>` children, so the strict client path returned nothing;
+  only `OnvifSession` recovered the positions, and only through
+  `apply_vendor_extensions`, whose doc comment called the *conformant* shape a
+  Genetec deviation from the spec.
+  - The mock had been written to match the parser, so the two agreed with each
+    other and with the wrong comment. `resp_osd_options` now emits five
+    repeated `<tt:PositionOption>` siblings.
+  - `apply_vendor_extensions` keeps the wrapper, with the roles swapped: a
+    firmware that sends it is still a firmware someone points at this crate.
+  - **Nothing could have caught this.** The unit fixture carried no
+    `PositionOption` in *either* shape, and the shape checker stopped its walk
+    at any child whose type is not a complex type — so the whole invented
+    subtree was skipped rather than judged. The new `SIMPLE-TYPE-KIDS` kind is
+    what reports it; reverting the mock alone raises it 0 → 1.
+  - Perturbed both sides separately. Parser back to the wrapper: three tests
+    red (`test_get_osd_options_parses_max_and_types`,
+    `osd_position_options_are_repeated_strings_on_the_strict_path`,
+    `test_get_osd_options_parses_conformant_position_options`). Mock back to
+    the wrapper: the checker row returns and the mock-driven test reddens.
+  - Two session tests were renamed because their names asserted the wrong shape
+    was the spec's — `..._enriches_flat_position_options` →
+    `..._parses_conformant_position_options`, and
+    `..._strict_shape_still_parses` → `..._wrapper_shape_still_parses`.
+
+- **The schema-shape checker gained a tenth kind, `SIMPLE-TYPE-KIDS`**, for an
+  element the schema types as text that the mock filled with a tree. `Index`
+  now indexes named `xs:simpleType`s, and `is_simple` answers only where the
+  answer is certain — a built-in `xs:*` type or a named `xs:simpleType`; a type
+  merely absent from the index is *unknown*, not simple, and stays silent.
+  - It also corrected a number this entry had been quoting as a growing blind
+    spot. **`children skipped` is not one**: 1149 of the 1152 are text leaves
+    (349 `xs:int`, 184 `xs:float`, 154 `xs:anyURI`, …) with nothing inside to
+    judge, so the count rising means the mock emits more values. Exactly three
+    skipped subtrees have element children; two are `TopicSet` and `Message`,
+    declared with no type at all, and the third was the `PositionOption` bug
+    above.
+
 - **The schema-shape checker reads `xs:attribute`.** It had five kinds, all
   about elements; it now has nine. `MISSING-ATTR` reports a `use="required"`
   attribute the mock omits, `UNKNOWN-ATTR` one the type does not declare,

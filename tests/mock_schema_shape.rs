@@ -471,7 +471,7 @@ const PINS: &[(&str, usize)] = &[
     ("UNKNOWN-ATTR", 0),
     ("ATTR-AS-ELEMENT", 0),
     ("ELEMENT-AS-ATTR", 0),
-    ("SIMPLE-TYPE-KIDS", 1),
+    ("SIMPLE-TYPE-KIDS", 0),
 ];
 
 /// Floors on what the run actually covered.

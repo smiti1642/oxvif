@@ -761,11 +761,17 @@ impl OnvifSession {
     /// [`OsdOptions`] is enriched with vendor-extension data the
     /// spec doesn't define — specifically the per-text-type quotas
     /// some cameras stash in XML attributes on
-    /// `<MaximumNumberOfOSDs>`, and the flat `<PositionOption>`
-    /// shape Genetec / some Dahua firmwares emit. Doing this
-    /// enrichment here keeps `OnvifClient` strictly spec-compliant
-    /// while still letting application code (UIs, validators) see
-    /// the real-world quirks.
+    /// `<MaximumNumberOfOSDs>`, and a `<PositionOption>` *wrapper*
+    /// holding nested `<Type>` children. Doing this enrichment here
+    /// keeps `OnvifClient` strictly spec-compliant while still
+    /// letting application code (UIs, validators) see the
+    /// real-world quirks.
+    ///
+    /// **This named the wrong shape until 0.15**, calling the flat
+    /// repeated `<PositionOption>` a Genetec/Dahua quirk. The schema
+    /// declares it `type="xs:string" maxOccurs="unbounded"`, so the
+    /// flat form is the spec's and `OnvifClient` reads it directly;
+    /// the wrapper is what needs the tolerance.
     ///
     /// [`OnvifClient::get_osd_options`]: crate::OnvifClient::get_osd_options
     pub async fn get_osd_options(&self, config_token: &str) -> Result<OsdOptions, OnvifError> {

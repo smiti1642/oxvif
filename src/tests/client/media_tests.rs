@@ -922,6 +922,8 @@ fn get_osd_options_xml() -> &'static str {
                 <tt:MaximumNumberOfOSDs>4</tt:MaximumNumberOfOSDs>
                 <tt:Type>Text</tt:Type>
                 <tt:Type>Image</tt:Type>
+                <tt:PositionOption>UpperLeft</tt:PositionOption>
+                <tt:PositionOption>LowerRight</tt:PositionOption>
               </trt:OSDOptions>
             </trt:GetOSDOptionsResponse>
           </s:Body>
@@ -1020,6 +1022,11 @@ async fn test_get_osd_options_parses_max_and_types() {
 
     assert_eq!(opts.max_osd, 4);
     assert_eq!(opts.types, vec!["Text", "Image"]);
+    // `PositionOption` is `xs:string maxOccurs="unbounded"` — repeated
+    // siblings, not a wrapper. The fixture carried none at all until 0.15, so
+    // the strict path returned an empty list from every conformant device and
+    // nothing here could tell.
+    assert_eq!(opts.position_types, vec!["UpperLeft", "LowerRight"]);
 }
 
 #[tokio::test]

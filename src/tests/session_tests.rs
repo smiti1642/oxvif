@@ -658,9 +658,12 @@ async fn test_get_osd_options_enriches_per_type_quotas_from_attrs() {
 }
 
 #[tokio::test]
-async fn test_get_osd_options_enriches_flat_position_options() {
-    // Genetec / some-Dahua shape: PositionOption entries are flat
-    // siblings with text bodies, not the textbook nested <Type> children.
+async fn test_get_osd_options_parses_conformant_position_options() {
+    // The conformant shape: `tt:OSDConfigurationOptions/PositionOption` is
+    // `type="xs:string" maxOccurs="unbounded"`, so one element per position.
+    // This test was named `..._enriches_flat_position_options` and its comment
+    // called this the "Genetec / some-Dahua shape" until 0.15 — it is the
+    // spec's, and the strict parser reads it directly now, with no enrichment.
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                               xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
                               xmlns:tt="http://www.onvif.org/ver10/schema">
@@ -686,8 +689,12 @@ async fn test_get_osd_options_enriches_flat_position_options() {
 }
 
 #[tokio::test]
-async fn test_get_osd_options_strict_shape_still_parses() {
-    // Spec-strict shape — enrichment must be a no-op, not a regression.
+async fn test_get_osd_options_wrapper_shape_still_parses() {
+    // The `<PositionOption>` wrapper holding `<Type>` children. This test was
+    // named `..._strict_shape_still_parses` until 0.15, when the schema settled
+    // which of the two shapes is the spec's: it is the other one. The wrapper
+    // is kept as a vendor tolerance, so this must still parse — via
+    // `apply_vendor_extensions`, which is the session path only.
     let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                               xmlns:trt="http://www.onvif.org/ver10/media/wsdl"
                               xmlns:tt="http://www.onvif.org/ver10/schema">

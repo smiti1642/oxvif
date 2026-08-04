@@ -10,9 +10,9 @@
 
 use oxvif::mock::MockServer;
 use oxvif::{
-    ImagingSettings, OnvifSession, PtzPresetTour, PtzPresetTourDirection, PtzPresetTourOperation,
-    PtzPresetTourPresetDetail, PtzPresetTourSpot, PtzPresetTourStartingCondition,
-    PtzPresetTourState, PtzPresetTourStatus,
+    ImagingSettings, OnvifClient, OnvifSession, PtzPresetTour, PtzPresetTourDirection,
+    PtzPresetTourOperation, PtzPresetTourPresetDetail, PtzPresetTourSpot,
+    PtzPresetTourStartingCondition, PtzPresetTourState, PtzPresetTourStatus,
 };
 
 /// Assert a SOAP Fault's exact code and reason.
@@ -1170,5 +1170,42 @@ async fn device_security_capabilities_include_both_extension_levels() {
         svc.username_token,
         Some(true),
         "UsernameToken is stated here and nowhere else"
+    );
+}
+
+/// `PositionOption` is a **repeated plain string**, and the strict client path
+/// has to read it that way.
+///
+/// `tt:OSDConfigurationOptions` declares it `type="xs:string"
+/// maxOccurs="unbounded"`. Until 0.15 the mock emitted one `<tt:PositionOption>`
+/// wrapper holding `<tt:Type>` children, `OsdOptions::from_xml` read that
+/// wrapper, and a doc comment on `apply_vendor_extensions` called the real
+/// shape a vendor deviation — so all three agreed with each other and
+/// `OnvifClient::get_osd_options` returned no positions at all from a
+/// conformant camera. The unit fixture carried no `PositionOption` in either
+/// shape, which is why nothing went red.
+///
+/// This drives the **client**, not the session, so it exercises the strict path
+/// with no vendor enrichment on top: the wrapper fallback lives in
+/// `apply_vendor_extensions` and `OnvifSession` is the only caller of it.
+#[tokio::test]
+async fn osd_position_options_are_repeated_strings_on_the_strict_path() {
+    let (srv, _s) = setup().await;
+    let client = OnvifClient::new(srv.device_url());
+    let media = format!("{}/onvif/media", srv.base_url());
+
+    let opts = client.get_osd_options(&media, "VSC_1").await.unwrap();
+
+    assert_eq!(
+        opts.position_types,
+        vec![
+            "UpperLeft",
+            "UpperRight",
+            "LowerLeft",
+            "LowerRight",
+            "Custom"
+        ],
+        "the mock emits five repeated <tt:PositionOption> siblings; reading a \
+         wrapper's <tt:Type> children instead yields an empty list"
     );
 }

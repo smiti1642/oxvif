@@ -13,9 +13,10 @@ than deleted, because the sentence is what a reader would have trusted.
 **Zero on every kind does not mean the class is closed** — see §6. A type
 carrying an `xs:any` suppresses `UNKNOWN-CHILD` for the whole type, and an
 element whose children are all optional is schema-valid empty. Five of the
-eleven client-facing bugs in §0 were found *in spite of* the counts — and the
+twelve client-facing bugs in §0 were found *in spite of* the counts — and the
 eleventh was found with every kind already at 0, against a mock the checker
-calls fully conformant. **This said "Four of the ten" until §5.10.**
+calls fully conformant. **This said "Four of the ten" until §5.10, and "Five of
+the eleven" until §5.12.**
 
 **It also listed a third category — "reads `xs:element` and never
 `xs:attribute`" — until §5.11, which closed it.** The checker now reports
@@ -151,14 +152,30 @@ exception was found by looking at something the sentence dismissed:
     `RemoteUserHandling`), so four more facts a device states were unreadable.
     The field is removed and the eight missing members added.
 
-**(11) is the only one of the eleven the checker was silent on in *both*
+12. **`OsdOptions::position_types` was empty from every conformant camera.**
+    `tt:OSDConfigurationOptions` declares `PositionOption` as
+    `type="xs:string" maxOccurs="unbounded"` — repeated plain strings.
+    `from_xml` read a single `<PositionOption>` wrapper for nested `<Type>`
+    children instead, the mock emitted that invented wrapper to match, and
+    `apply_vendor_extensions` documented the *conformant* shape as a Genetec
+    deviation. Only `OnvifSession` recovered the positions, by the path
+    labelled a workaround. Found by §5.12's new `SIMPLE-TYPE-KIDS` kind.
+
+**(11) is the only one of the twelve the checker was silent on in *both*
 directions**, and that is worth stating plainly rather than as a caveat. (3) and
 (4) were things it could not see; (5), (7), (8), (9) and (10) each cost it at
-least one visible row. Here §5.6 had already made the mock conformant, so the
-run reported 0 on every kind while the client read four of twelve members and
-one name that does not exist anywhere. **A clean checker run is compatible with
-a client that reads almost nothing** — the one-sidedness argued below, at its
-limit.
+least one visible row, and (12) is what a *new* kind bought. Here §5.6 had
+already made the mock conformant, so the run reported 0 on every kind while the
+client read four of twelve members and one name that does not exist anywhere.
+**A clean checker run is compatible with a client that reads almost nothing** —
+the one-sidedness argued below, at its limit.
+
+**(12) is the counter-example to that pessimism, and the reason the checker was
+worth extending rather than retiring.** It was invisible for the same structural
+reason as the rest — the walk stopped at `PositionOption` because `xs:string` is
+not a complex type, so the invented subtree was skipped rather than judged — and
+one rule using information the checker already had turned it into a row. Cost:
+about twenty lines. That is a better return than any of the fixes below.
 
 **(9) and (10) share a shape the first eight do not: the wrong name was a real
 ONVIF name at a *different level or in a different role*.** (5), (7) and (8) were
@@ -1282,7 +1299,7 @@ by hand. Fixing the findings without landing the checker leaves the class
 exactly as exposed as it was this morning — and this release already produced
 the lesson that a number nothing asserts drifts.
 
-**All nine pins now read 0, and that is the weakest the guard has ever been.**
+**All ten pins now read 0, and that is the weakest the guard has ever been.**
 A pin at 0 moves for a regression the checker can see, and this document has
 recorded three whole categories it cannot. §5.11 closed the first of them — the
 checker read `xs:element` and never `xs:attribute` (§0.5, §0.7, §0.8 were each

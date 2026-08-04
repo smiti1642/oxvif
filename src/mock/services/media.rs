@@ -1249,6 +1249,17 @@ pub fn handle_delete_osd(state: &SharedState, body: &str) -> String {
 /// on `<MaximumNumberOfOSDs>`. This is the Genetec/late-Hikvision shape;
 /// `oxvif::OnvifSession::get_osd_options` parses the attributes (the
 /// strict `OnvifClient` ignores them, by design).
+///
+/// **`PositionOption` is a repeated plain string, not a wrapper.**
+/// `tt:OSDConfigurationOptions` declares it `type="xs:string"
+/// maxOccurs="unbounded"`, so a conformant device sends one element per
+/// position. This emitted a single `<tt:PositionOption>` holding `<tt:Type>`
+/// children until 0.15 — a shape no device produces — because the parser it
+/// was written beside read that wrapper and a doc comment called the real
+/// shape a Genetec deviation. The shape checker could not see it either: it
+/// stops the walk at any child whose type is not a complex type, so the whole
+/// invented subtree was skipped rather than judged. Its `SIMPLE-TYPE-KIDS`
+/// rule is what reports it now.
 pub fn resp_osd_options() -> String {
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
@@ -1258,13 +1269,11 @@ pub fn resp_osd_options() -> String {
             <tt:MaximumNumberOfOSDs Total="{OSD_QUOTA_TOTAL}" Plain="{OSD_QUOTA_PLAIN}" Date="{OSD_QUOTA_DATE}" Time="{OSD_QUOTA_TIME}" DateAndTime="{OSD_QUOTA_DATE_AND_TIME}"/>
             <tt:Type>Text</tt:Type>
             <tt:Type>Image</tt:Type>
-            <tt:PositionOption>
-              <tt:Type>UpperLeft</tt:Type>
-              <tt:Type>UpperRight</tt:Type>
-              <tt:Type>LowerLeft</tt:Type>
-              <tt:Type>LowerRight</tt:Type>
-              <tt:Type>Custom</tt:Type>
-            </tt:PositionOption>
+            <tt:PositionOption>UpperLeft</tt:PositionOption>
+            <tt:PositionOption>UpperRight</tt:PositionOption>
+            <tt:PositionOption>LowerLeft</tt:PositionOption>
+            <tt:PositionOption>LowerRight</tt:PositionOption>
+            <tt:PositionOption>Custom</tt:PositionOption>
             <tt:TextOption>
               <tt:Type>Plain</tt:Type>
               <tt:Type>Date</tt:Type>

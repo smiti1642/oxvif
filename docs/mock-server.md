@@ -1012,11 +1012,11 @@ namespace or a wrong sequence order at all: the client parser is
 namespace-blind and order-independent, so every other row above passes just as
 happily against XML no conformant device would emit.
 
-**As of 0.15.0 all nine of its counts are 0.** That is not the same as "the
+**As of 0.15.0 all ten of its counts are 0.** That is not the same as "the
 mock is conformant". A type carrying an `xs:any` suppresses its unknown-child
 rule for the whole type; and an element whose children are all optional is
 schema-valid empty — `<tt:Spaces/>` would have cleared a finding while claiming
-the head supports no coordinate space. Five of the eleven client-facing bugs
+the head supports no coordinate space. Five of the twelve client-facing bugs
 the 0.15.0 sweep found were found *in spite of* the counts rather than by them,
 and what asserts the part the counts miss is the per-operation value assertions
 in `tests/mock_workflow.rs`.
