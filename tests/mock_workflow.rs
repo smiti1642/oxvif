@@ -1101,3 +1101,74 @@ async fn storage_unknown_token_is_refused() {
         "NoStorageType-STOR-5801: Data/@type is required",
     );
 }
+
+/// `tt:SecurityCapabilities` declares eight required child elements, then an
+/// optional `Extension` adding `TLS1.0`, whose own optional `Extension` adds
+/// `Dot1X`, `SupportedEAPMethod` `[0..*]` and `RemoteUserHandling`. Twelve
+/// members over three levels — oxvif modelled four, all at the top, and read a
+/// ninth top-level element (`UsernameToken`) that this type does not declare at
+/// any level. That one is an `xs:attribute` of the *service*-level
+/// `tds:SecurityCapabilities`, so the field was `false` from every conformant
+/// camera; it is removed, and the fact is asserted below where it really lives.
+///
+/// The schema-shape checker cannot confirm any of this: it reads the mock's
+/// output against the schema and never the client's parsing of it, so with a
+/// conformant mock its verdict is the same whether oxvif reads these elements,
+/// reads them one level too high, or does not read them at all. **This test is
+/// what closes that gap**, by reading the values back through a real
+/// `MockServer` over HTTP.
+///
+/// The values are chosen so the nesting is observable rather than merely
+/// written down: `Dot1X` is `true` and the EAP list non-empty two levels down,
+/// where every top-level sibling except the two TLS members is `false`. A
+/// parser that ignores `Extension` reports both as their `Default`.
+#[tokio::test]
+async fn device_security_capabilities_include_both_extension_levels() {
+    let (_srv, s) = setup().await;
+
+    // Cached from the `GetCapabilities` issued during `build()`.
+    let sec = &s.capabilities().device.security;
+
+    // The eight declared at the top level, in schema order.
+    assert!(sec.tls_1_1, "TLS1.1");
+    assert!(sec.tls_1_2, "TLS1.2");
+    assert!(!sec.onboard_key_generation, "OnboardKeyGeneration");
+    assert!(!sec.access_policy_config, "AccessPolicyConfig");
+    assert!(!sec.x509_token, "X.509Token");
+    assert!(!sec.saml_token, "SAMLToken");
+    assert!(!sec.kerberos_token, "KerberosToken");
+    assert!(!sec.rel_token, "RELToken");
+
+    // `Extension`, and `Extension/Extension` below it.
+    assert!(!sec.tls_1_0, "TLS1.0 lives in Extension");
+    assert!(sec.dot1x, "Dot1X lives in Extension/Extension");
+    assert!(!sec.remote_user_handling, "RemoteUserHandling");
+    assert_eq!(
+        sec.supported_eap_methods,
+        [13, 21],
+        "repeated SupportedEAPMethod elements in Extension/Extension"
+    );
+
+    // The same eleven facts, from the other operation, where they are
+    // attributes of a different type. The mock is one device, so the two must
+    // agree — and `UsernameToken` is a fact only this side can state.
+    let svc = s.device_get_service_capabilities().await.unwrap().security;
+    assert_eq!(svc.tls1_0, Some(sec.tls_1_0));
+    assert_eq!(svc.tls1_1, Some(sec.tls_1_1));
+    assert_eq!(svc.tls1_2, Some(sec.tls_1_2));
+    assert_eq!(svc.onboard_key_generation, Some(sec.onboard_key_generation));
+    assert_eq!(svc.access_policy_config, Some(sec.access_policy_config));
+    assert_eq!(svc.x509_token, Some(sec.x509_token));
+    assert_eq!(svc.saml_token, Some(sec.saml_token));
+    assert_eq!(svc.kerberos_token, Some(sec.kerberos_token));
+    assert_eq!(svc.rel_token, Some(sec.rel_token));
+    assert_eq!(svc.dot1x, Some(sec.dot1x));
+    assert_eq!(svc.remote_user_handling, Some(sec.remote_user_handling));
+    // One `tt:IntList` attribute against the repeated elements above.
+    assert_eq!(svc.supported_eap_methods, sec.supported_eap_methods);
+    assert_eq!(
+        svc.username_token,
+        Some(true),
+        "UsernameToken is stated here and nowhere else"
+    );
+}

@@ -270,7 +270,7 @@
 //! responses next to the parsed summary so silent-parse gaps stand out.
 //!
 //! Since 0.15 it also asks every advertised service its own
-//! `GetServiceCapabilities`, and cross-checks the seventeen attributes a device
+//! `GetServiceCapabilities`, and cross-checks the twenty-four facts a device
 //! states **twice** — once in the device-level `GetCapabilities`, again in a
 //! service's. Only `GetCapabilities` saying yes where the service says no is
 //! reported: the device-level type uses bare `bool` and cannot tell "said no"

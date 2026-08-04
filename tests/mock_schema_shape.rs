@@ -343,6 +343,28 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   list that is `[0..*]`, so a recording holding nothing sends the wrapper
 ///   *empty* — the count cannot tell that apart from the wrapper being dropped
 ///   for a recording that does have tracks.
+/// - §5.10, `SecurityCapabilities` — **every kind unmoved, all five still 0.**
+///   The eleventh and last client-facing bug of the sweep, and the clearest
+///   demonstration of this file's one-sidedness: it reads the mock's output
+///   against the schema and never the client's parsing of it, so it had nothing
+///   to say either way.
+///
+///   `§5.6` had already fixed the mock's `<tt:Security>` — the eight required
+///   elements present, `<tt:UsernameToken>` gone. The client was left reading
+///   that undeclared element (`false` from every conformant camera), modelling
+///   only four of the eight, and modelling **none** of the four that
+///   `tt:SecurityCapabilitiesExtension` (`TLS1.0`) and `…Extension2` (`Dot1X`,
+///   `SupportedEAPMethod` `[0..*]`, `RemoteUserHandling`) add. A conformant mock
+///   and a parser reading four of twelve members is exactly the state this file
+///   reports as clean.
+///
+///   The mock now sends both extension levels. Both are `minOccurs="0"`, so
+///   omitting them was never a row here and adding them opened none —
+///   `roots anchored` moved 697 → 699 and every kind stayed 0. What asserts the
+///   fix is `device_security_capabilities_include_both_extension_levels` in
+///   `tests/mock_workflow.rs`, plus the health cross-check, whose comparison set
+///   grew from 17 facts to 24 because seven of the newly modelled members are
+///   also `xs:attribute`s of `tds:SecurityCapabilities`.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
     ("MISSING-REQUIRED", 0),

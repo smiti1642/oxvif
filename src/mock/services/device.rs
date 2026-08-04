@@ -394,10 +394,13 @@ pub fn handle_set_user(state: &SharedState, body: &str) -> String {
 /// Every value here is **chosen to agree with [`resp_service_capabilities`]**
 /// on the attributes the two operations both carry, so the mock is a
 /// self-consistent device. Changing one side without the other is what the
-/// cross-check exists to catch — including here. Since 0.15 that agreement also
-/// covers `TLS1.1`, `SAMLToken`, `KerberosToken` and `RELToken`, and it no
-/// longer covers `UsernameToken` — see the comment on `<tt:Security>` for why
-/// that one is **not** a fact this operation can state.
+/// cross-check exists to catch — including here. Since 0.15 that agreement
+/// covers **all eleven** security facts the two types both declare —
+/// `TLS1.0`/`1.1`/`1.2`, `OnboardKeyGeneration`, `AccessPolicyConfig`,
+/// `X.509Token`, `SAMLToken`, `KerberosToken`, `RELToken`, `Dot1X`,
+/// `RemoteUserHandling` — and it does **not** cover `UsernameToken`; see the
+/// comment on `<tt:Security>` for why that one is not a fact this operation can
+/// state.
 ///
 /// The required members of `Security`, `System`, `Events`, `Recording` and
 /// `Search` were all incomplete until they were checked against the schema
@@ -455,14 +458,30 @@ pub fn resp_capabilities(base: &str) -> String {
                    types; it is dropped rather than renamed, because the fact it
                    states has a correct home one operation away.
 
-                   `TLS1.0`, `Dot1X` and `RemoteUserHandling` are likewise absent
-                   from this type — they live under `Extension` / `Extension2`,
-                   which the mock does not send.
+                   `TLS1.0` is **not** absent from this type, and this comment
+                   said it was (alongside `Dot1X` and `RemoteUserHandling`) until
+                   the client caught up. It is one level down, in the optional
+                   `Extension`, whose own optional `Extension` adds `Dot1X`,
+                   `SupportedEAPMethod` `[0..*]` and `RemoteUserHandling`. Both
+                   levels are sent, because a mock that omits every optional
+                   extension cannot show a client that reads the top level only
+                   to be wrong — which is exactly what oxvif was doing.
 
-                   All eight values agree with the matching `tds:Security`
-                   attribute in `resp_service_capabilities`. -->
+                   `Dot1X` is `true` and carries two EAP methods. That is the one
+                   capability here the mock claims without serving: 802.1X has no
+                   ONVIF operation in this crate, so unlike the receiver service
+                   or metadata search there is no request a caller can make that
+                   the mock would then have to refuse. It is `true` so that
+                   `Extension/Extension` holds at least one value distinguishable
+                   from an absent extension. `Dot1XConfigurations` on
+                   `tds:Network` stays absent: the mock models no configuration
+                   entries, and "did not say" is the honest answer for a count.
+
+                   Every value here agrees with the matching `tds:Security`
+                   attribute in `resp_service_capabilities` — all eleven that
+                   both types declare, not just the eight at this level. -->
               <tt:Security>
-                <tt:TLS1.1>false</tt:TLS1.1>
+                <tt:TLS1.1>true</tt:TLS1.1>
                 <tt:TLS1.2>true</tt:TLS1.2>
                 <tt:OnboardKeyGeneration>false</tt:OnboardKeyGeneration>
                 <tt:AccessPolicyConfig>false</tt:AccessPolicyConfig>
@@ -470,6 +489,20 @@ pub fn resp_capabilities(base: &str) -> String {
                 <tt:SAMLToken>false</tt:SAMLToken>
                 <tt:KerberosToken>false</tt:KerberosToken>
                 <tt:RELToken>false</tt:RELToken>
+                <tt:Extension>
+                  <tt:TLS1.0>false</tt:TLS1.0>
+                  <tt:Extension>
+                    <tt:Dot1X>true</tt:Dot1X>
+                    <!-- 13 = EAP-TLS, 21 = EAP-TTLS. Repeated elements, one
+                         number each — the service-level side carries the same
+                         two in ONE `SupportedEAPMethods` attribute, because
+                         that one is a `tt:IntList`. Same fact, two
+                         cardinalities. -->
+                    <tt:SupportedEAPMethod>13</tt:SupportedEAPMethod>
+                    <tt:SupportedEAPMethod>21</tt:SupportedEAPMethod>
+                    <tt:RemoteUserHandling>false</tt:RemoteUserHandling>
+                  </tt:Extension>
+                </tt:Extension>
               </tt:Security>
             </tt:Device>
             <tt:Events>
@@ -1060,6 +1093,9 @@ pub fn resp_system_reboot() -> String {
 /// - `Misc/@AuxiliaryCommands` is the discoverable list behind
 ///   `SendAuxiliaryCommand`; the values match what `resp_send_auxiliary_command`
 ///   accepts.
+/// - `SupportedEAPMethods` is a `tt:IntList` — the whole collection in one
+///   attribute, where `resp_capabilities` sends the same two numbers as
+///   repeated `<tt:SupportedEAPMethod>` elements.
 pub fn resp_service_capabilities() -> String {
     soap(
         NS,
@@ -1074,12 +1110,12 @@ pub fn resp_service_capabilities() -> String {
                          NTP="1"
                          DHCPv6="false"/>
             <tds:Security TLS1.0="false"
-                          TLS1.1="false"
+                          TLS1.1="true"
                           TLS1.2="true"
                           OnboardKeyGeneration="false"
                           AccessPolicyConfig="false"
                           DefaultAccessPolicy="false"
-                          Dot1X="false"
+                          Dot1X="true"
                           RemoteUserHandling="false"
                           X.509Token="false"
                           SAMLToken="false"
@@ -1087,6 +1123,7 @@ pub fn resp_service_capabilities() -> String {
                           UsernameToken="true"
                           HttpDigest="true"
                           RELToken="false"
+                          SupportedEAPMethods="13 21"
                           MaxUsers="8"
                           MaxUserNameLength="32"
                           MaxPasswordLength="64"/>

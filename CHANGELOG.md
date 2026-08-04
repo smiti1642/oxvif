@@ -624,12 +624,27 @@ two-thirds of the test suite.
   seventeen** (thirteen on Device), and the counts quoted in `README.md`,
   `src/lib.rs` and earlier in this entry are corrected to match.
 
+  ~~eighteen twice-stated attributes are seventeen (thirteen on Device)~~
+  **Seventeen was right about the check and wrong about the schema, and the
+  `SecurityCapabilities` bullet below takes it to twenty-four (twenty on
+  Device).** Both types declare **eleven** security facts; the device-level
+  side had fields for four, so the corrected count silently became a count of
+  what oxvif modelled rather than of what the device states twice. Removing a
+  false pair is not the same as asking how many true ones are missing.
+
+  **The client field was left in place and is removed below.** This bullet ends
+  at the mock and the health check; `SecurityCapabilities::username_token` in
+  `src/types/capabilities.rs` went on reading the element for four more commits,
+  `false` from every conformant camera. It was reported in this commit's message
+  as *"deliberately not fixed"* and nothing carried that forward.
+
   `the_mock_does_not_contradict_itself_between_the_two_capability_calls` was the
   one existing test that went red, reporting `1 stated only by the service`.
   That is the check correctly noticing the pair was never real. Its coverage
   floor was **raised** rather than relaxed — from `n >= 14` to the exact
   measured `n >= 17` — so losing any single capability block now fails it, where
-  a floor of 14 would have absorbed the loss of `<tt:Security>` entirely.
+  a floor of 14 would have absorbed the loss of `<tt:Security>` entirely. (It is
+  `n >= 24` as of the bullet below.)
 
 - **`MetadataConfigurationOptions::analytics_supported` read an element ONVIF
   does not declare.** `MetadataConfigurationOptions::from_xml`
@@ -1330,6 +1345,75 @@ two-thirds of the test suite.
   `<tt:UsernameToken>` bullet above — so it is no longer among the
   cross-checked names, and the count that bullet gave as "fourteen attributes
   both operations carry" is thirteen on Device / seventeen overall.
+  ~~thirteen on Device / seventeen overall~~ **Corrected again**, by the
+  `SecurityCapabilities` bullet below: **twenty on Device / twenty-four
+  overall**. Seventeen was still a count of what the check *compares*, and the
+  device-level type had fields for four of the eleven security facts both
+  operations state.
+
+- **`SecurityCapabilities` read an element ONVIF does not declare, and modelled
+  four of the twelve members it does.** `Capabilities::from_xml`
+  (`src/types/capabilities.rs`) built `Device/Security` from five element reads.
+  One of them, `UsernameToken`, is declared at **no level** of
+  `tt:SecurityCapabilities` — see the `<tt:UsernameToken>` bullet above, which
+  established exactly that and then fixed only the mock — so the public field
+  was `false` from every conformant camera. The eleventh and last client-facing
+  bug of the schema-conformance sweep. **Breaking**; migration below.
+
+  The other four reads were correct and there should have been eleven more.
+  `tt:SecurityCapabilities` declares eight required elements — `TLS1.1`,
+  `TLS1.2`, `OnboardKeyGeneration`, `AccessPolicyConfig`, `X.509Token`,
+  `SAMLToken`, `KerberosToken`, `RELToken` — then an optional `Extension` adding
+  `TLS1.0`, whose own optional `Extension` adds `Dot1X`, `SupportedEAPMethod`
+  (`[0..*]`, `xs:int`) and `RemoteUserHandling`. oxvif modelled four of the
+  eight and **none** of the four below them, so a device stating 802.1X support
+  or its EAP methods had no field to state it into. All eight are added:
+  `tls_1_1`, `saml_token`, `kerberos_token`, `rel_token`, `tls_1_0`, `dot1x`,
+  `supported_eap_methods: Vec<u32>`, `remote_user_handling`. They are bare
+  `bool` / `Vec`, matching the rest of this family — the `Option<bool>`
+  distinction belongs to the `GetServiceCapabilities` types, which can tell
+  "said no" from "did not say".
+
+  **The extension nesting here is not the shape `CLAUDE.md` warns about.** For
+  the Media1 encoder options the deeper copy repeats the shallower one and is a
+  superset, so a parser must prefer the deepest and fall back outward. Here each
+  level declares *different* members, so every field is at exactly one depth and
+  there is nothing to fall back to. The failure mode is the same either way: a
+  parser reading only the top level reports the deeper members as `false`/empty
+  and no test fails.
+
+  `resp_capabilities` (`src/mock/services/device.rs`) now sends both extension
+  levels, with `TLS1.1` and `Dot1X` `true` on **both** capability operations so
+  the chain carries values an absent extension cannot produce, and
+  `SupportedEAPMethods="13 21"` added to `tds:Security` — one `tt:IntList`
+  attribute against two repeated elements, the same fact at two cardinalities.
+  `Dot1X` is the one capability the mock claims without serving, and the comment
+  there says why: 802.1X has no ONVIF operation in this crate, so unlike the
+  receiver service or metadata search there is no request a caller can make that
+  the mock would then have to refuse.
+
+  **The schema-shape checker could not see any of this, and still cannot.** It
+  reads the mock's output against the schema and never the client's parsing of
+  it; the mock's `<tt:Security>` had been conformant since the bullet above, so
+  the run was 0 on every kind while the client read four of twelve members and
+  one name that exists nowhere. It is still 0 after the fix. What asserts the
+  fix is `device_security_capabilities_include_both_extension_levels`
+  (`tests/mock_workflow.rs`), which drives a live `MockServer` and asserts all
+  twelve members, then re-asserts eleven of them against
+  `GetServiceCapabilities`. Reverting the client parse reddens it on `TLS1.1`;
+  reverting only the mock's extension levels reddens it on `Dot1X`.
+
+  **`capability_cross_check` goes from seventeen facts to twenty-four**
+  (`src/health/checks.rs`), because seven of the newly modelled members are also
+  `xs:attribute`s of `tds:SecurityCapabilities`: `TLS1.0`, `TLS1.1`,
+  `SAMLToken`, `KerberosToken`, `RELToken`, `Dot1X`, `RemoteUserHandling`. The
+  device-level side simply had no field to compare them against before. Twenty
+  on Device (four network, five system, eleven security), three on Media
+  streaming, one on Events. `src/health/mod.rs`'s coverage floor moves `n >= 17`
+  → `n >= 24`, and `README.md` / `src/lib.rs` / the two corrected bullets above
+  are updated to match. `SupportedEAPMethod` is twice-stated too and is
+  deliberately **not** compared: the comparison takes booleans, and two lists
+  can differ by ordering or subsetting without either side being wrong.
 
 - `examples/conformance.rs` uses `CapturingTransport`, which is behind the
   `mock` feature, and had no `required-features` entry. A bare `cargo test`
@@ -1564,6 +1648,34 @@ two-thirds of the test suite.
   `GetServices`. If the device advertises no DeviceIO service it now returns
   `SoapError::MissingField("DeviceIO service URL")` instead of sending a request
   the device service does not implement.
+
+- **`SecurityCapabilities::username_token` is removed**, and eight fields are
+  added. See Fixed. `tt:SecurityCapabilities` — the type the device-level
+  `GetCapabilities` answers with — declares that name at no level, so the field
+  was `false` from every conformant device and there is no element to repoint it
+  at. The fact belongs to the *service*-level `tds:SecurityCapabilities`, where
+  it is an `xs:attribute` this crate already parses.
+
+  ```rust
+  // before — false on every conformant camera
+  let caps = client.get_capabilities().await?;
+  if caps.device.security.username_token { … }
+
+  // after — the same fact, from the operation that declares it
+  let svc = client.device_get_service_capabilities().await?;
+  if svc.security.username_token == Some(true) { … }
+  ```
+
+  Note the type change in the migration: the service-level family is
+  `Option<bool>`, so `Some(false)` ("the device said no") is distinct from
+  `None` ("the device did not say"). `== Some(true)` is the direct replacement
+  for the old bare `bool`; `unwrap_or(false)` reads the same.
+
+  The eight additions are **not** breaking for field access, but they are for
+  any code constructing `SecurityCapabilities` with an exhaustive struct
+  literal: `tls_1_1`, `saml_token`, `kerberos_token`, `rel_token`, `tls_1_0`,
+  `dot1x`, `supported_eap_methods: Vec<u32>`, `remote_user_handling`. The type
+  still derives `Default`, so `..Default::default()` covers them.
 
 - **`MetadataConfigurationOptions::analytics_supported` is removed**, replaced by
   `pan_tilt_status_supported` and `zoom_status_supported`. See Fixed: the field

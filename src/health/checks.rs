@@ -403,17 +403,23 @@ pub(super) struct CapabilityCrossCheck {
 /// Cross-check the facts a device states **twice** — once in the device-level
 /// `GetCapabilities` and again in a service's `GetServiceCapabilities`.
 ///
-/// Seventeen attributes appear in both. Everything else a capability report
-/// contains is a claim with nothing to contradict it; these seventeen can be
+/// Twenty-four facts appear in both. Everything else a capability report
+/// contains is a claim with nothing to contradict it; these twenty-four can be
 /// *wrong* rather than merely unknown, which makes them the only part checkable
 /// without vendor knowledge. A client that trusts either source is guessing when
 /// they differ.
 ///
-/// **This said "eighteen" until 0.15.** The eighteenth was `UsernameToken`,
-/// which is not a twice-stated fact at all — see the comment where it was
-/// removed below. A name appearing on both types is not enough; it has to be
-/// declared on both, and `xs:attribute` here versus `xs:element` there is the
-/// distinction that decides it.
+/// **This said "eighteen" until 0.15, then "seventeen", and both were about the
+/// wrong thing.** The eighteenth was `UsernameToken`, which is not a
+/// twice-stated fact at all — see the comment where it was removed below. A
+/// name appearing on both types is not enough; it has to be declared on both,
+/// and `xs:attribute` here versus `xs:element` there is the distinction that
+/// decides it. But the corrected seventeen was still a count of what *this
+/// function compares*, read as a count of what the two types both declare —
+/// and those had drifted apart, because `SecurityCapabilities` modelled four
+/// of the eleven security facts stated twice. Twenty is the number now on the
+/// device side (four network, five system, eleven security), and twenty-four
+/// with media and events.
 ///
 /// # Only one direction is a finding
 ///
@@ -506,6 +512,13 @@ fn capability_cross_check(
             sy.system_logging,
             d.system.system_logging,
         );
+        // Eleven security pairs. Seven of them arrived in 0.15 with the fields
+        // that read them: `SecurityCapabilities` modelled only four of the
+        // eight members `tt:SecurityCapabilities` declares and none of the four
+        // its two `Extension` levels add, so there was nothing on the
+        // device-level side to compare the rest against.
+        cmp("device/TLS1.0", se.tls_1_0, d.security.tls1_0);
+        cmp("device/TLS1.1", se.tls_1_1, d.security.tls1_1);
         cmp("device/TLS1.2", se.tls_1_2, d.security.tls1_2);
         cmp(
             "device/OnboardKeyGeneration",
@@ -518,15 +531,34 @@ fn capability_cross_check(
             d.security.access_policy_config,
         );
         cmp("device/X.509Token", se.x509_token, d.security.x509_token);
+        cmp("device/SAMLToken", se.saml_token, d.security.saml_token);
+        cmp(
+            "device/KerberosToken",
+            se.kerberos_token,
+            d.security.kerberos_token,
+        );
+        cmp("device/RELToken", se.rel_token, d.security.rel_token);
+        cmp("device/Dot1X", se.dot1x, d.security.dot1x);
+        cmp(
+            "device/RemoteUserHandling",
+            se.remote_user_handling,
+            d.security.remote_user_handling,
+        );
         // `device/UsernameToken` used to be compared here and is not a pair.
         // `tt:SecurityCapabilities` — the device-level type — declares eight
         // members and `UsernameToken` is not among them; the name exists only as
         // an `xs:attribute` on `tds:SecurityCapabilities`, the service-level
-        // type. So `se.username_token` is `false` on every conformant device and
-        // the comparison could only ever produce a spurious `service_only`,
+        // type. So `se.username_token` was `false` on every conformant device
+        // and the comparison could only ever produce a spurious `service_only`,
         // never a contradiction. It appeared to work solely because oxvif's mock
         // emitted a `<tt:UsernameToken>` element no camera sends — mock and
-        // check agreeing with each other and with nothing else.
+        // check agreeing with each other and with nothing else. The field was
+        // removed from `SecurityCapabilities` in 0.15.
+        //
+        // `SupportedEAPMethod` / `SupportedEAPMethods` is twice-stated too and
+        // is deliberately not compared: `cmp` takes booleans, and two lists can
+        // differ by ordering or by one being a subset without either side being
+        // wrong.
     }
 
     if let Some(m) = media {
@@ -1371,7 +1403,7 @@ mod capability_cross_check_tests {
             Some(&events_service(Some(true))),
         );
         // Exactly the four attributes the fixture stated on both sides — not the
-        // seventeen the function knows about, and not zero.
+        // twenty-four the function knows about, and not zero.
         assert_eq!(x.checked, 4, "expected 4 checked facts, got {}", x.checked);
         assert!(
             x.contradictions.is_empty(),

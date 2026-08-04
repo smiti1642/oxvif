@@ -2137,12 +2137,12 @@ fn device_service_capabilities_xml() -> &'static str {
                              NTP="1"
                              DHCPv6="false"/>
                 <tds:Security TLS1.0="false"
-                              TLS1.1="false"
+                              TLS1.1="true"
                               TLS1.2="true"
                               OnboardKeyGeneration="false"
                               AccessPolicyConfig="false"
                               DefaultAccessPolicy="false"
-                              Dot1X="false"
+                              Dot1X="true"
                               RemoteUserHandling="false"
                               X.509Token="false"
                               SAMLToken="false"
@@ -2150,6 +2150,7 @@ fn device_service_capabilities_xml() -> &'static str {
                               UsernameToken="true"
                               HttpDigest="true"
                               RELToken="false"
+                              SupportedEAPMethods="13 21"
                               MaxUsers="8"
                               MaxUserNameLength="32"
                               MaxPasswordLength="64"/>
@@ -2195,7 +2196,11 @@ async fn device_service_capabilities_parses_all_four_children() {
     assert_eq!(caps.security.max_users, Some(8));
     assert_eq!(caps.security.max_password_length, Some(64));
     assert_eq!(caps.security.json_web_token, None);
-    assert!(caps.security.supported_eap_methods.is_empty());
+    // `SupportedEAPMethods` is a `tt:IntList` — one attribute carrying the
+    // whole collection, where the device-level `GetCapabilities` sends the same
+    // two numbers as repeated elements. `hashing_algorithms` stays the
+    // absent-list case, so both are covered.
+    assert_eq!(caps.security.supported_eap_methods, [13, 21]);
     assert!(caps.security.hashing_algorithms.is_empty());
 
     // System — `Some(false)` and `None` in the same struct. A parser that

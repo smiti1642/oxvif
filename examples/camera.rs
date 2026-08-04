@@ -280,8 +280,8 @@ fn print_capabilities(caps: &Capabilities) {
     if caps.events.ws_pull_point {
         println!("  Events    : WS-PullPoint");
     }
-    if caps.device.security.username_token {
-        println!("  Auth      : UsernameToken");
+    if caps.device.security.tls_1_2 {
+        println!("  Security  : TLS 1.2");
     }
     if caps.device.system.firmware_upgrade {
         println!("  System    : firmware upgrade supported");
@@ -1265,12 +1265,24 @@ async fn device_management(cfg: &Config) -> Result<(), OnvifError> {
 
     // Device security flags (from capabilities)
     section("Security capabilities");
+    // `UsernameToken` is not one of these: it is stated by
+    // `device_get_service_capabilities`, not by `GetCapabilities`.
     let sec = &caps.device.security;
-    println!("  UsernameToken      : {}", sec.username_token);
-    println!("  TLS 1.2            : {}", sec.tls_1_2);
+    println!(
+        "  TLS 1.0 / 1.1 / 1.2: {} / {} / {}",
+        sec.tls_1_0, sec.tls_1_1, sec.tls_1_2
+    );
     println!("  X.509 token        : {}", sec.x509_token);
+    println!(
+        "  SAML / Kerberos    : {} / {}",
+        sec.saml_token, sec.kerberos_token
+    );
+    println!("  REL token          : {}", sec.rel_token);
     println!("  Onboard key gen    : {}", sec.onboard_key_generation);
     println!("  Access policy cfg  : {}", sec.access_policy_config);
+    println!("  802.1X             : {}", sec.dot1x);
+    println!("  EAP methods        : {:?}", sec.supported_eap_methods);
+    println!("  Remote user handling: {}", sec.remote_user_handling);
 
     // Device system flags
     section("System capabilities");

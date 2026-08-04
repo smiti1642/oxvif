@@ -13,8 +13,10 @@ than deleted, because the sentence is what a reader would have trusted.
 **Zero on every kind does not mean the class is closed** — see §6. The checker
 reads `xs:element` and never `xs:attribute`, a type carrying an `xs:any`
 suppresses `UNKNOWN-CHILD` for the whole type, and an element whose children are
-all optional is schema-valid empty. Four of the ten client-facing bugs in §0
-were found *in spite of* the counts.
+all optional is schema-valid empty. Five of the eleven client-facing bugs in §0
+were found *in spite of* the counts — and the eleventh was found with every kind
+already at 0, against a mock the checker calls fully conformant. **This said
+"Four of the ten" until §5.10.**
 
 The checker, the schema and the raw findings live in the sibling repository
 `onvif-schema-lab` (local, never pushed) because of decision D2 in
@@ -27,14 +29,31 @@ each stays in the lab.**
 
 ## 0. Blast radius, established before anything else
 
-**Ten client-facing bugs. The rest are mock fidelity.**
+**Eleven client-facing bugs. The rest are mock fidelity.**
 
 This line said *"Three client-facing bugs so far"* until §1.3's fourth landed,
 *"Four client-facing bugs so far"* until §5.5's fifth did, *"Five"* until
 §5.7's sixth did, *"Six"* until §5.8's seventh and eighth did — one work
 unit, two types, so it moved by two — and **"Eight client-facing bugs so far"**
-until §5.9's ninth and tenth did. The *"so far"* is dropped: §5 is complete, so
-this is the count for the sweep rather than a running total.
+until §5.9's ninth and tenth did. It then read:
+
+> **Ten client-facing bugs. The rest are mock fidelity.** […] The *"so far"* is
+> dropped: §5 is complete, so this is the count for the sweep rather than a
+> running total.
+
+**Dropping the *"so far"* was the mistake, and it is the same mistake this
+section keeps recording.** §5 being complete bounds what the *checker* still
+reports; it does not bound the client, because the checker never reads the
+client. The eleventh (§5.10) was named in §1.3 the whole time — the
+`UsernameToken` paragraph established that `tt:SecurityCapabilities` declares
+eight elements and that this was not one of them, and `SecurityCapabilities` in
+`src/types/capabilities.rs` was left reading it. §5.6 fixed the mock and its own
+commit message said in as many words that the client field was *"deliberately
+not fixed, reported instead"*. So the count stood at ten with the eleventh
+written down twice. That is (7)/(8)'s failure again — *a right classification
+nobody scheduled* — and the rule §0 already states applies to a **commit
+message** as much as to a subsection: when something concludes "client-facing",
+it belongs in this count the same day, open or not.
 
 This section originally read *"no finding below is a client-facing bug"*, and
 that was wrong five times over — kept here rather than deleted, because every
@@ -111,6 +130,26 @@ exception was found by looking at something the sentence dismissed:
     which is harder to notice than an error. The two levels sharing a name is
     what hid it, and `XmlNode` strips namespaces so the `tt:`/`tr2:` difference
     could not disambiguate them either.
+
+11. **`SecurityCapabilities` read an undeclared element and modelled four of
+    twelve members** — §1.3, §5.10. `username_token` read
+    `Device/Security/UsernameToken`, which `tt:SecurityCapabilities` declares at
+    no level — it is an `xs:attribute` of the service-level
+    `tds:SecurityCapabilities` — so the public field was `false` from every
+    conformant camera. On top of that the type modelled only four of the eight
+    required elements, and **none** of the four its two `Extension` levels add
+    (`TLS1.0`; then `Dot1X`, `SupportedEAPMethod` `[0..*]`,
+    `RemoteUserHandling`), so four more facts a device states were unreadable.
+    The field is removed and the eight missing members added.
+
+**(11) is the only one of the eleven the checker was silent on in *both*
+directions**, and that is worth stating plainly rather than as a caveat. (3) and
+(4) were things it could not see; (5), (7), (8), (9) and (10) each cost it at
+least one visible row. Here §5.6 had already made the mock conformant, so the
+run reported 0 on every kind while the client read four of twelve members and
+one name that does not exist anywhere. **A clean checker run is compatible with
+a client that reads almost nothing** — the one-sidedness argued below, at its
+limit.
 
 **(9) and (10) share a shape the first eight do not: the wrong name was a real
 ONVIF name at a *different level or in a different role*.** (5), (7) and (8) were
@@ -234,7 +273,8 @@ the `GetProfiles` slice of §5.2 + §5.4, 32 distinct — `MISSING-REQUIRED` 16,
 after §5.7, 16 distinct — `MISSING-REQUIRED` **7**, `UNKNOWN-NAME` **5**,
 `UNKNOWN-CHILD` **3**, `ORDER` **1**; after §5.8, 14 distinct —
 `UNKNOWN-NAME` **4**, `UNKNOWN-CHILD` **2**, the other two unmoved; after §5.9,
-**0 distinct — every kind at 0.****
+**0 distinct — every kind at 0**; after §5.10, still 0 on every kind, which is
+the point of that unit rather than a footnote to it.**
 `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
 block is the baseline the sweep started from and is left as it was.
 
@@ -550,6 +590,31 @@ So there is no element to rename it to. The mock drops it, and the fact keeps
 its correct home in `resp_service_capabilities`, which already carries it as an
 attribute.
 
+**And the client kept reading it for four commits — §5.10.** The three bullets
+above were written with the schema open and are all correct; what none of them
+asked is what `src/types/capabilities.rs` does with the name.
+`SecurityCapabilities::username_token` read `Device/Security/UsernameToken`, so
+the public field was `false` from every conformant camera — the eleventh
+client-facing bug, and §0's count did not move for it because §5.6's own commit
+message filed it as *"deliberately not fixed, reported instead"* and nothing
+carried that forward.
+
+Two further facts the same three bullets contain and nobody read off them:
+
+- the eight declared elements are `TLS1.1`, `TLS1.2`, `OnboardKeyGeneration`,
+  `AccessPolicyConfig`, `X.509Token`, `SAMLToken`, `KerberosToken`, `RELToken`,
+  and `SecurityCapabilities` modelled **four**;
+- the extension chain is `TLS1.0`, then `Dot1X` / `SupportedEAPMethod` `[0..*]`
+  / `RemoteUserHandling`, and it modelled **none** — the third bullet listed all
+  four, as evidence that `UsernameToken` was not among them.
+
+So the paragraph that settled the removal also enumerated eight members the
+crate could not read, in the sentence used to rule one out. **A list written to
+prove an absence is still a list of what is present.** All eight are modelled as
+of §5.10, and seven of them are `xs:attribute`s of `tds:SecurityCapabilities`
+too, which took `capability_cross_check` from seventeen twice-stated facts to
+twenty-four.
+
 **The health-check consequence is the part worth recording.**
 `capability_cross_check` had paired `caps.device.security.username_token`
 against `d.security.username_token` as one of its eighteen twice-stated facts.
@@ -561,6 +626,16 @@ find. It looked like it worked for exactly one reason: oxvif's mock emitted a
 and with nothing else — the same shape as the Media2 `Audio` defect in §0.5,
 one level up. The pair is removed; eighteen twice-stated attributes are
 seventeen.
+
+**Seventeen is now twenty-four — and the correction is not the one this
+paragraph looks like it made.** Removing `UsernameToken` fixed a pair that was
+never real. What it did not do is ask how many *real* pairs the check was
+missing: `tt:SecurityCapabilities` and `tds:SecurityCapabilities` both declare
+eleven security facts, and the check compared four, because the device-level
+side had fields for four. §5.10 adds the other seven. Both numbers were counts
+of *what the function compares*, read as counts of *what the two types both
+declare*, which is the drift a corrected count is least likely to be re-examined
+for.
 
 ### 1.4 Required members omitted
 
@@ -1144,6 +1219,39 @@ Grouped so each lands in one file with one perturbation:
    them, and pins `Rec_002`'s empty `Address` as `None`; the other two drive the
    two client fixes end to end. Reverting either side of any of the three
    reddens it.
+
+   5.10 **`SecurityCapabilities` — the eleventh client-facing bug, and the one
+   the checker never had an opinion on. Every kind unmoved at 0.**
+
+   This unit was opened *after* §5 was declared complete, which is itself the
+   finding: §5.6 had made `<tt:Security>` conformant, so the run went to 0 with
+   the client still reading `Device/Security/UsernameToken` — an element
+   `tt:SecurityCapabilities` declares at no level — and modelling four of its
+   twelve members. §0.11 and §1.3 carry the detail.
+
+   - **`src/types/capabilities.rs`** — `username_token` removed (**breaking**);
+     `TLS1.1`, `SAMLToken`, `KerberosToken`, `RELToken` added at the top level;
+     `TLS1.0` from `Extension`; `Dot1X`, `SupportedEAPMethod` `[0..*]` and
+     `RemoteUserHandling` from `Extension/Extension`. The three levels declare
+     *different* members, so unlike the Media1 encoder options there is nothing
+     to prefer or fall back to — each member is read at one fixed depth.
+   - **`src/mock/services/device.rs`** — `<tt:Security>` gains both extension
+     levels; `TLS1.1` and `Dot1X` are `true` on **both** operations, so the
+     extension chain carries at least one value an absent extension cannot
+     produce. `SupportedEAPMethods="13 21"` added to `tds:Security`: one
+     `tt:IntList` attribute against two repeated elements, the same fact at two
+     cardinalities.
+   - **`src/health/checks.rs`** — seven new comparisons, 17 facts → 24. The
+     device-level side finally has fields for the eleven security facts both
+     types declare. `src/health/mod.rs`'s floor moves 17 → 24.
+   - **`tests/mock_workflow.rs`** —
+     `device_security_capabilities_include_both_extension_levels` is the
+     deliverable, since the checker cannot see this class at all: it asserts all
+     twelve members through a live `MockServer` and then re-asserts eleven of
+     them against `GetServiceCapabilities`. Reverting the client parse reddens
+     it on `TLS1.1`; reverting only the extension levels in the mock reddens it
+     on `Dot1X lives in Extension/Extension`; both also redden the health
+     self-consistency test on *"N stated only by the service"*.
 5. ~~**Strengthen `every_response_binds_the_prefixes_it_uses`** so it asserts an
    element is in the namespace its type declares.~~ **Struck — this cannot be a
    separate unit.** Asserting that an element is in the namespace its *type*

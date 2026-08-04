@@ -296,10 +296,16 @@ caps.analytics.url     // Analytics service
 caps.media2_url        // Media2 service (None on many cameras — use GetServices)
 
 caps.device.system.firmware_upgrade
-caps.device.security.username_token
+caps.device.security.tls_1_2
+caps.device.security.dot1x          // from Security/Extension/Extension
 caps.media.streaming.rtp_rtsp_tcp
 caps.events.ws_pull_point
 ```
+
+`SecurityCapabilities` models all twelve members `tt:SecurityCapabilities`
+declares across its three levels. `username_token` is **not** among them and
+was removed in 0.15.0 — ONVIF declares that name only on the *service*-level
+type, so read it from `device_get_service_capabilities().security`.
 
 ### Per-service capabilities — `*_get_service_capabilities()`
 
@@ -1053,7 +1059,7 @@ ONVIF health check — http://127.0.0.1:27365/onvif/device
 
   [Services]
     PASS get_services                     5ms  8 service(s)
-    PASS service_caps_self_consistent     0ms  17 fact(s) cross-checked, no contradiction
+    PASS service_caps_self_consistent     0ms  24 fact(s) cross-checked, no contradiction
     …
 ```
 
@@ -1202,10 +1208,11 @@ report carries machine-readable facts alongside the human-readable strings:
 `GetServiceCapabilities` — `Pass` when it answers, `Skip` when the service is not
 advertised, `Fail` when it is advertised and refuses.
 
-Then `service_caps_self_consistent` does the part no single call can: **seventeen
-attributes are stated twice by the device**, once in the device-level
-`GetCapabilities` and again in a service's `GetServiceCapabilities` (thirteen on
-Device, three on Media streaming, one on Events). Everything else in a capability
+Then `service_caps_self_consistent` does the part no single call can:
+**twenty-four attributes are stated twice by the device**, once in the
+device-level `GetCapabilities` and again in a service's
+`GetServiceCapabilities` (twenty on Device — four network, five system, eleven
+security — three on Media streaming, one on Events). Everything else in a capability
 report is a claim with nothing to contradict it; these can be *wrong* rather than
 merely unknown, and a client trusting either source is guessing when they differ.
 

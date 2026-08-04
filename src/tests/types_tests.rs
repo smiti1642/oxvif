@@ -31,12 +31,32 @@ mod capabilities {
                 <InputConnectors>1</InputConnectors>
                 <RelayOutputs>2</RelayOutputs>
               </IO>
+              <!-- The eight declared elements, then the two `Extension` levels.
+                   `TLS1.0` is deliberately `true` while its top-level siblings
+                   `TLS1.1` and `X.509Token` are `false`: a parser reading the
+                   extension members at the top level reports `tls_1_0` as
+                   `false`, so the nesting is observable rather than merely
+                   written down. Same for `RemoteUserHandling`, which is `true`
+                   two levels down while `SAMLToken` above it is `false`. -->
               <Security>
+                <TLS1.1>false</TLS1.1>
                 <TLS1.2>true</TLS1.2>
                 <OnboardKeyGeneration>false</OnboardKeyGeneration>
                 <AccessPolicyConfig>false</AccessPolicyConfig>
                 <X.509Token>false</X.509Token>
-                <UsernameToken>true</UsernameToken>
+                <SAMLToken>false</SAMLToken>
+                <KerberosToken>true</KerberosToken>
+                <RELToken>false</RELToken>
+                <Extension>
+                  <TLS1.0>true</TLS1.0>
+                  <Extension>
+                    <Dot1X>true</Dot1X>
+                    <SupportedEAPMethod>13</SupportedEAPMethod>
+                    <SupportedEAPMethod>21</SupportedEAPMethod>
+                    <SupportedEAPMethod>25</SupportedEAPMethod>
+                    <RemoteUserHandling>true</RemoteUserHandling>
+                  </Extension>
+                </Extension>
               </Security>
             </Device>
             <Media>
@@ -158,13 +178,67 @@ mod capabilities {
         assert_eq!(caps.device.io.relay_outputs, Some(2));
     }
 
+    /// All eight declared elements plus the four the two `Extension` levels
+    /// add. `username_token` is gone: `tt:SecurityCapabilities` declares no
+    /// such element at any level — the name belongs to the service-level
+    /// `tds:SecurityCapabilities`, as an attribute, and
+    /// `device_service_capabilities_parses_all_four_children` covers it there.
     #[test]
     fn test_device_security_capabilities() {
-        let caps = Capabilities::from_xml(&parse(FULL)).unwrap();
-        assert!(caps.device.security.tls_1_2);
-        assert!(!caps.device.security.onboard_key_generation);
-        assert!(!caps.device.security.x509_token);
-        assert!(caps.device.security.username_token);
+        let sec = &Capabilities::from_xml(&parse(FULL))
+            .unwrap()
+            .device
+            .security;
+
+        // The eight top-level members.
+        assert!(!sec.tls_1_1);
+        assert!(sec.tls_1_2);
+        assert!(!sec.onboard_key_generation);
+        assert!(!sec.access_policy_config);
+        assert!(!sec.x509_token);
+        assert!(!sec.saml_token);
+        assert!(sec.kerberos_token);
+        assert!(!sec.rel_token);
+
+        // `Extension` — `true` where every top-level sibling is `false`, so a
+        // parser reading this one level up cannot pass.
+        assert!(sec.tls_1_0);
+
+        // `Extension/Extension`.
+        assert!(sec.dot1x);
+        assert!(sec.remote_user_handling);
+        assert_eq!(sec.supported_eap_methods, [13, 21, 25]);
+    }
+
+    /// A device that sends the eight required members and neither `Extension`.
+    /// Legal, and the shape most cameras send — the four extension fields must
+    /// read `false` / empty without the eight above them being disturbed.
+    #[test]
+    fn test_device_security_without_extensions() {
+        let xml = r#"<GetCapabilitiesResponse>
+              <Capabilities>
+                <Device>
+                  <XAddr>http://192.168.1.1/onvif/device_service</XAddr>
+                  <Security>
+                    <TLS1.1>true</TLS1.1>
+                    <TLS1.2>true</TLS1.2>
+                    <OnboardKeyGeneration>true</OnboardKeyGeneration>
+                    <AccessPolicyConfig>false</AccessPolicyConfig>
+                    <X.509Token>false</X.509Token>
+                    <SAMLToken>false</SAMLToken>
+                    <KerberosToken>false</KerberosToken>
+                    <RELToken>false</RELToken>
+                  </Security>
+                </Device>
+              </Capabilities>
+            </GetCapabilitiesResponse>"#;
+        let sec = &Capabilities::from_xml(&parse(xml)).unwrap().device.security;
+        assert!(sec.tls_1_1);
+        assert!(sec.onboard_key_generation);
+        assert!(!sec.tls_1_0);
+        assert!(!sec.dot1x);
+        assert!(!sec.remote_user_handling);
+        assert!(sec.supported_eap_methods.is_empty());
     }
 
     // ── Media sub-capabilities ────────────────────────────────────────────
@@ -229,7 +303,7 @@ mod capabilities {
         let caps = Capabilities::from_xml(&parse(xml)).unwrap();
         assert!(!caps.device.network.ip_filter);
         assert!(!caps.device.system.firmware_upgrade);
-        assert!(!caps.device.security.username_token);
+        assert!(!caps.device.security.tls_1_2);
         assert!(!caps.media.streaming.rtp_tcp);
         assert!(!caps.events.ws_pull_point);
     }

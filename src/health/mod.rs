@@ -884,23 +884,26 @@ mod tests {
             .next()
             .and_then(|w| w.parse().ok())
             .unwrap_or_else(|| panic!("unparseable detail {:?}", c.detail));
-        // 17, measured: 13 device + 3 media + 1 events. The floor is the exact
-        // count rather than a loose 14, so losing *any* one block fails here —
-        // dropping `<tt:Security>` alone leaves 13, which a floor of 14 would
-        // have caught but a floor of 13 would not. Adding a genuine new pair
-        // raises `n` and still passes, which is the direction that should.
+        // 24, measured: 20 device (4 network + 5 system + 11 security) + 3 media
+        // + 1 events. The floor is the exact count rather than a loose one, so
+        // losing *any* one block fails here — dropping `<tt:Security>` alone
+        // leaves 13, and dropping only its two `Extension` levels leaves 20.
+        // Adding a genuine new pair raises `n` and still passes, which is the
+        // direction that should.
         //
         // This was `>= 14` and the message said "the mock states 14 attributes
-        // in both" until 0.15. The real total was 18 then and is 17 now:
-        // `device/UsernameToken` was removed from the cross-check because
-        // `tt:SecurityCapabilities` never declared it — see
+        // in both" until 0.15, then `>= 17`. 18 → 17 was `device/UsernameToken`
+        // leaving the cross-check because `tt:SecurityCapabilities` never
+        // declared it; 17 → 24 is the seven security facts that type *does*
+        // declare and `SecurityCapabilities` did not model until 0.15 — see
         // `checks::capability_cross_check`.
         assert!(
-            n >= 17,
-            "the mock states 17 attributes in both GetCapabilities and \
+            n >= 24,
+            "the mock states 24 attributes in both GetCapabilities and \
              GetServiceCapabilities; only {n} were cross-checked, so the mock's \
              device-level response has lost its Device/Network/System/Security \
-             blocks again: {:?}\n\
+             blocks again — or the two `Extension` levels inside Security, \
+             which carry four of them: {:?}\n\
              If the drop is deliberate, update this expectation **and** every \
              file that quotes the number: `README.md` (the sample health \
              output and the `service_caps_self_consistent` prose), \

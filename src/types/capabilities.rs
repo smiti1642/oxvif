@@ -61,10 +61,40 @@ pub struct IoCapabilities {
 ///
 /// From the device-level `GetCapabilities`. The device service's own answer is
 /// [`DeviceSecurityCapabilities`](super::DeviceSecurityCapabilities), which
-/// covers all three TLS versions and the user-account limits.
+/// states every fact below as an `xs:attribute` and adds the user-account
+/// limits, the hashing algorithms and `HttpDigest` / `JsonWebToken` /
+/// `DefaultAccessPolicy` / `UsernameToken` on top.
+///
+/// # Where each field comes from
+///
+/// `tt:SecurityCapabilities` declares eight required child elements, then an
+/// optional `Extension` that adds one more, which itself holds an optional
+/// `Extension` adding three. Every field here is at a fixed depth:
+///
+/// | field | path under `Device/Security` |
+/// |---|---|
+/// | [`tls_1_1`](Self::tls_1_1) … [`rel_token`](Self::rel_token) | direct child |
+/// | [`tls_1_0`](Self::tls_1_0) | `Extension` |
+/// | [`dot1x`](Self::dot1x), [`supported_eap_methods`](Self::supported_eap_methods), [`remote_user_handling`](Self::remote_user_handling) | `Extension/Extension` |
+///
+/// Unlike the Media1 encoder options, the deeper levels do **not** repeat the
+/// shallower ones, so there is nothing to prefer or fall back to — a member is
+/// only ever at one depth. A parser reading the top level alone reports the
+/// last four as `false` / empty on every device, which is what oxvif did before
+/// 0.15.0.
+///
+/// # `UsernameToken` is not here
+///
+/// It never was a member of this type: the name is declared only as an
+/// `xs:attribute` of the service-level `tds:SecurityCapabilities`. The field
+/// that reads it is
+/// [`DeviceSecurityCapabilities::username_token`](super::DeviceSecurityCapabilities::username_token),
+/// one operation away.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct SecurityCapabilities {
+    /// TLS 1.1 is supported for HTTPS.
+    pub tls_1_1: bool,
     /// TLS 1.2 is supported for HTTPS.
     pub tls_1_2: bool,
     /// The device can generate a key pair itself, so a private key never has to
@@ -74,8 +104,24 @@ pub struct SecurityCapabilities {
     pub access_policy_config: bool,
     /// WS-Security X.509 certificate tokens are accepted for authentication.
     pub x509_token: bool,
-    /// `true` if the device supports WS-Security `UsernameToken`.
-    pub username_token: bool,
+    /// WS-Security SAML tokens are accepted for authentication.
+    pub saml_token: bool,
+    /// WS-Security Kerberos tokens are accepted for authentication.
+    pub kerberos_token: bool,
+    /// WS-Security REL tokens are accepted for authentication.
+    pub rel_token: bool,
+    /// TLS 1.0 is supported for HTTPS. Sent one level down, in `Extension`.
+    pub tls_1_0: bool,
+    /// IEEE 802.1X port authentication is supported. Sent two levels down, in
+    /// `Extension/Extension`.
+    pub dot1x: bool,
+    /// EAP method numbers the device offers for 802.1X, in the order sent.
+    /// Repeated `SupportedEAPMethod` elements in `Extension/Extension`; empty
+    /// when the device sent none.
+    pub supported_eap_methods: Vec<u32>,
+    /// User accounts can be managed on a remote server rather than on the
+    /// device. Sent two levels down, in `Extension/Extension`.
+    pub remote_user_handling: bool,
 }
 
 /// Device management service capabilities.
@@ -393,14 +439,44 @@ fn parse_device_caps(d: &XmlNode) -> DeviceCapabilities {
             .unwrap_or_default(),
         security: d
             .child("Security")
-            .map(|n| SecurityCapabilities {
-                tls_1_2: xml_bool(n, "TLS1.2"),
-                onboard_key_generation: xml_bool(n, "OnboardKeyGeneration"),
-                access_policy_config: xml_bool(n, "AccessPolicyConfig"),
-                x509_token: xml_bool(n, "X.509Token"),
-                username_token: xml_bool(n, "UsernameToken"),
+            .map(parse_security_caps)
+            .unwrap_or_default(),
+    }
+}
+
+/// `tt:SecurityCapabilities` across all three of its levels.
+///
+/// The eight top-level members are required, so a conformant device sends all
+/// of them; `Extension` and `Extension/Extension` are each optional, and the
+/// members they add exist at that depth **only** — they are not repeats of a
+/// shallower copy. So each is read at one fixed path and an absent extension
+/// leaves its members at their `Default`, which for a `bool` in this family
+/// means "the device did not say yes".
+///
+/// `UsernameToken` used to be read here as a direct child. It is not declared
+/// on this type at any level; see the type's docs.
+fn parse_security_caps(n: &XmlNode) -> SecurityCapabilities {
+    let ext = n.child("Extension");
+    let ext2 = ext.and_then(|e| e.child("Extension"));
+    SecurityCapabilities {
+        tls_1_1: xml_bool(n, "TLS1.1"),
+        tls_1_2: xml_bool(n, "TLS1.2"),
+        onboard_key_generation: xml_bool(n, "OnboardKeyGeneration"),
+        access_policy_config: xml_bool(n, "AccessPolicyConfig"),
+        x509_token: xml_bool(n, "X.509Token"),
+        saml_token: xml_bool(n, "SAMLToken"),
+        kerberos_token: xml_bool(n, "KerberosToken"),
+        rel_token: xml_bool(n, "RELToken"),
+        tls_1_0: ext.is_some_and(|e| xml_bool(e, "TLS1.0")),
+        dot1x: ext2.is_some_and(|e| xml_bool(e, "Dot1X")),
+        supported_eap_methods: ext2
+            .map(|e| {
+                e.children_named("SupportedEAPMethod")
+                    .filter_map(|m| m.text().parse().ok())
+                    .collect()
             })
             .unwrap_or_default(),
+        remote_user_handling: ext2.is_some_and(|e| xml_bool(e, "RemoteUserHandling")),
     }
 }
 
