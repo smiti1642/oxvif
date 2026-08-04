@@ -194,8 +194,18 @@ knowing about:
 | `set_storage_configuration` request body in `tt:` | asking why a guard that should have fired stayed silent |
 | `ImagingMoveOptions` reading `PositionSpace`/`SpeedSpace` | fixing the mock, which then disagreed with the client |
 | `VideoEncoder2Configuration` `GovLength`/`Profile` read as elements | reusing a renderer, which surfaced the row at a second path |
+| `MetadataConfigurationOptions::analytics_supported` | a name declared nowhere in the schema set — the fix was to delete the field |
+| `VideoEncoderOptions2` list attributes read as repeated elements | `xs:list` attributes: a **cardinality** error, not a location one |
+| `SystemUris::system_log_uri` walking `SystemLogUri` | the *type* name read as though it were the *element* name |
+| `VideoEncoderInstances::encodings` walking `Encoding` | two levels sharing a name, and `XmlNode` matches local names |
+| `SecurityCapabilities`: one undeclared member, eight declared ones unread | comparing the struct against the type member-by-member |
 
-Three of those five were found *because a mock fix made the client disagree with
+**Ten, and nine of them in one sweep.** The counts in this section were "six
+instances, one client bug" when the checker landed and "five client bugs" a day
+later; both were true when written. If you are about to quote a number from this
+file, re-derive it.
+
+Six of the ten were found *because a mock fix made the client disagree with
 it*. That is the argument for fixing the mock even though no caller sees the
 mock: **a conformant mock turns a silent client bug into a visible
 disagreement** — but only if some test actually drives the client through the
