@@ -852,8 +852,7 @@ mod video {
     // ── VideoSourceConfigurationOptions ───────────────────────────────────
 
     const VSCO_XML: &str = r#"<GetVideoSourceConfigurationOptionsResponse>
-          <Options>
-            <MaximumNumberOfProfiles>5</MaximumNumberOfProfiles>
+          <Options MaximumNumberOfProfiles="5">
             <BoundsRange>
               <XRange><Min>0</Min><Max>0</Max></XRange>
               <YRange><Min>0</Min><Max>0</Max></YRange>
@@ -1382,26 +1381,24 @@ mod media2 {
 
     // ── VideoEncoderConfigurationOptions2 ────────────────────────────────
 
+    // `GovLengthRange`, `FrameRatesSupported` and `ProfilesSupported` are
+    // `xs:attribute`s of `tt:VideoEncoder2ConfigurationOptions`, the last two
+    // `xs:list`-typed so one attribute carries the whole list. `12.5` is in the
+    // H264 rates on purpose: a parser reading integers drops it and the length
+    // assertion below goes red.
     const OPTIONS2_XML: &str = r#"<GetVideoEncoderConfigurationOptionsResponse>
-          <Options>
+          <Options GovLengthRange="1 150" FrameRatesSupported="30 25 12.5" ProfilesSupported="Baseline Main High">
             <Encoding>H264</Encoding>
             <QualityRange><Min>1</Min><Max>10</Max></QualityRange>
             <ResolutionsAvailable><Width>1920</Width><Height>1080</Height></ResolutionsAvailable>
             <ResolutionsAvailable><Width>1280</Width><Height>720</Height></ResolutionsAvailable>
             <BitrateRange><Min>32</Min><Max>16384</Max></BitrateRange>
-            <GovLengthRange><Min>1</Min><Max>150</Max></GovLengthRange>
-            <ProfilesSupported>Baseline</ProfilesSupported>
-            <ProfilesSupported>Main</ProfilesSupported>
-            <ProfilesSupported>High</ProfilesSupported>
           </Options>
-          <Options>
+          <Options GovLengthRange="2 200" FrameRatesSupported="60" ProfilesSupported="Main Main10">
             <Encoding>H265</Encoding>
             <QualityRange><Min>1</Min><Max>10</Max></QualityRange>
             <ResolutionsAvailable><Width>3840</Width><Height>2160</Height></ResolutionsAvailable>
             <BitrateRange><Min>64</Min><Max>32768</Max></BitrateRange>
-            <GovLengthRange><Min>1</Min><Max>200</Max></GovLengthRange>
-            <ProfilesSupported>Main</ProfilesSupported>
-            <ProfilesSupported>Main10</ProfilesSupported>
           </Options>
         </GetVideoEncoderConfigurationOptionsResponse>"#;
 
@@ -1416,10 +1413,14 @@ mod media2 {
         assert!((qr.min - 1.0).abs() < 1e-5);
         assert!((qr.max - 10.0).abs() < 1e-5);
         assert_eq!(h264.resolutions.len(), 2);
-        assert_eq!(h264.profiles.len(), 3);
-        assert_eq!(h264.profiles[1], "Main");
+        assert_eq!(h264.profiles, ["Baseline", "Main", "High"]);
         let br = h264.bitrate_range.unwrap();
         assert_eq!(br.max, 16384);
+        let glr = h264.gov_length_range.unwrap();
+        assert_eq!((glr.min, glr.max), (1, 150));
+        assert_eq!(h264.frame_rates.len(), 3, "12.5 must survive the parse");
+        assert!((h264.frame_rates[0] - 30.0).abs() < 1e-5);
+        assert!((h264.frame_rates[2] - 12.5).abs() < 1e-5);
 
         let h265 = &opts.options[1];
         assert_eq!(h265.encoding, VideoEncoding::H265);
@@ -1431,10 +1432,46 @@ mod media2 {
                 height: 2160
             }
         );
-        assert_eq!(h265.profiles.len(), 2);
-        assert_eq!(h265.profiles[0], "Main");
+        assert_eq!(h265.profiles, ["Main", "Main10"]);
         let glr = h265.gov_length_range.unwrap();
-        assert_eq!(glr.max, 200);
+        assert_eq!((glr.min, glr.max), (2, 200));
+        assert_eq!(h265.frame_rates.len(), 1);
+        assert!((h265.frame_rates[0] - 60.0).abs() < 1e-5);
+    }
+
+    /// The two list attributes and the range attribute are each independently
+    /// absent-able, and a `tt:IntList` that is not exactly two values is not a
+    /// range. Without this, nothing distinguishes "the device did not say" from
+    /// "the parser read the wrong place".
+    #[test]
+    fn test_video_encoder_options2_absent_and_malformed_attributes() {
+        const XML: &str = r#"<GetVideoEncoderConfigurationOptionsResponse>
+              <Options>
+                <Encoding>H264</Encoding>
+                <BitrateRange><Min>32</Min><Max>16384</Max></BitrateRange>
+              </Options>
+              <Options GovLengthRange="1 2 3" ProfilesSupported="Main">
+                <Encoding>H265</Encoding>
+                <BitrateRange><Min>64</Min><Max>32768</Max></BitrateRange>
+              </Options>
+            </GetVideoEncoderConfigurationOptionsResponse>"#;
+
+        let opts = VideoEncoderConfigurationOptions2::from_xml(&parse(XML)).unwrap();
+
+        let bare = &opts.options[0];
+        assert_eq!(bare.gov_length_range, None);
+        assert!(bare.profiles.is_empty());
+        assert!(bare.frame_rates.is_empty());
+        // The one element it did carry still parses, so "absent" above is about
+        // the attributes and not about the whole entry being skipped.
+        assert_eq!(bare.bitrate_range.unwrap().max, 16384);
+
+        let odd = &opts.options[1];
+        assert_eq!(
+            odd.gov_length_range, None,
+            "three values are not a lower/upper pair"
+        );
+        assert_eq!(odd.profiles, ["Main"]);
     }
 
     // ── VideoEncoderInstances ─────────────────────────────────────────────

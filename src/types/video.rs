@@ -60,6 +60,35 @@ pub(super) fn parse_int_range_node(node: &XmlNode) -> IntRange {
     }
 }
 
+/// Splits a whitespace-separated **attribute** value into parsed items.
+///
+/// Several members of `tt:VideoEncoder2ConfigurationOptions` are `xs:list`-typed
+/// attributes — `tt:IntList`, `tt:FloatList` and `tt:StringAttrList` are each
+/// `<xs:list itemType="…"/>` — so a single attribute carries the whole
+/// collection. Reading them as repeated child elements, which this crate did
+/// until 0.15, returns an empty `Vec` from every conformant device.
+fn attr_list<T: std::str::FromStr>(node: &XmlNode, name: &str) -> Vec<T> {
+    node.attr(name)
+        .map(|v| {
+            v.split_whitespace()
+                .filter_map(|s| s.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Reads a `tt:IntList` attribute the schema constrains to *exactly two* values,
+/// the lower and upper bound.
+///
+/// Any other count is not a range the caller could act on, so it reads as
+/// absent rather than as a half-guessed one.
+fn attr_int_range(node: &XmlNode, name: &str) -> Option<IntRange> {
+    match attr_list::<i32>(node, name)[..] {
+        [min, max] => Some(IntRange { min, max }),
+        _ => None,
+    }
+}
+
 // ── VideoSource ───────────────────────────────────────────────────────────────
 
 /// A physical video input channel returned by `GetVideoSources`.
@@ -208,6 +237,30 @@ impl VideoSourceConfiguration {
 // ── VideoSourceConfigurationOptions ──────────────────────────────────────────
 
 /// Valid parameter ranges for `SetVideoSourceConfiguration`.
+///
+/// # Changed in 0.15
+///
+/// `max_limit` is read from the **XML attribute** `MaximumNumberOfProfiles` on
+/// the `Options` element. `tt:VideoSourceConfigurationOptions` declares it as
+/// `xs:attribute`; its only child *elements* are `BoundsRange`,
+/// `VideoSourceTokensAvailable` and `Extension`. Earlier releases looked for a
+/// child element of that name, so the field was `None` from every conformant
+/// device.
+///
+/// The name looks like an element because it *is* one elsewhere. ONVIF declares
+/// it four times, and only here and on the two `GetServiceCapabilities` profile
+/// types is it an attribute:
+///
+/// | declared on | form | oxvif reads it as |
+/// |---|---|---|
+/// | `tt:VideoSourceConfigurationOptions` | attribute | `max_limit`, **here** |
+/// | `tt:ProfileCapabilities` (`GetCapabilities`) | element | [`MediaCapabilities::max_profiles`] |
+/// | `trt:ProfileCapabilities` (`GetServiceCapabilities`) | attribute | [`MediaProfileCapabilities::maximum_number_of_profiles`] |
+/// | `tr2:ProfileCapabilities` (`GetServiceCapabilities`) | attribute | [`Media2ProfileCapabilities::maximum_number_of_profiles`] |
+///
+/// [`MediaCapabilities::max_profiles`]: crate::MediaCapabilities::max_profiles
+/// [`MediaProfileCapabilities::maximum_number_of_profiles`]: crate::MediaProfileCapabilities::maximum_number_of_profiles
+/// [`Media2ProfileCapabilities::maximum_number_of_profiles`]: crate::Media2ProfileCapabilities::maximum_number_of_profiles
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct VideoSourceConfigurationOptions {
@@ -239,7 +292,11 @@ impl VideoSourceConfigurationOptions {
             .child("Options")
             .ok_or_else(|| SoapError::missing("Options"))?;
         Ok(Self {
-            max_limit: xml_u32(opts, "MaximumNumberOfProfiles"),
+            // An `xs:attribute` of `tt:VideoSourceConfigurationOptions`, not a
+            // child element — see the type's doc comment.
+            max_limit: opts
+                .attr("MaximumNumberOfProfiles")
+                .and_then(|v| v.trim().parse().ok()),
             bounds_range: opts.child("BoundsRange").map(|br| BoundsRange {
                 x_range: br
                     .child("XRange")
@@ -912,6 +969,31 @@ pub struct VideoEncoderConfigurationOptions2 {
 }
 
 /// Per-encoding options entry within [`VideoEncoderConfigurationOptions2`].
+///
+/// # Changed in 0.15
+///
+/// `gov_length_range`, `frame_rates` and `profiles` are read from **XML
+/// attributes** on the `Options` element, not from child elements.
+/// `tt:VideoEncoder2ConfigurationOptions` declares exactly four child elements —
+/// `Encoding`, `QualityRange`, `ResolutionsAvailable` and `BitrateRange` — and
+/// everything else as `xs:attribute`. Earlier releases read all three as
+/// elements, so all three came back empty or `None` from every conformant
+/// device.
+///
+/// Two of them are `xs:list`-typed, which makes this a change of *cardinality*
+/// and not only of location: `ProfilesSupported` is a `tt:StringAttrList` and
+/// `FrameRatesSupported` a `tt:FloatList`, so **one** attribute carries the
+/// whole space-separated collection where the parser had expected N repeated
+/// elements. `GovLengthRange` is a `tt:IntList` the schema constrains to exactly
+/// two values, the lower and upper bound — the same information the Media1
+/// `<tt:GovLengthRange><tt:Min/><tt:Max/></tt:GovLengthRange>` element carries,
+/// spelled as an attribute.
+///
+/// The names look like elements because on Media1 they are: `tt:H264Options`
+/// declares `GovLengthRange`, `FrameRateRange` and `EncodingIntervalRange` as
+/// `tt:IntRange` *elements*, and its profile list as repeated
+/// `H264ProfilesSupported` elements. Media2 flattened the same facts into
+/// attributes of one type. [`H264Options`] is unchanged and correct.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default)]
 pub struct VideoEncoderOptions2 {
@@ -923,11 +1005,11 @@ pub struct VideoEncoderOptions2 {
     pub resolutions: Vec<Resolution>,
     /// Accepted bitrates, in kbps.
     pub bitrate_range: Option<IntRange>,
-    /// Discrete supported frame rates (may be empty if range is used instead).
-    pub frame_rates: Vec<u32>,
-    /// Accepted frame rates as a range. Devices report either this or
-    /// `frame_rates`, rarely both.
-    pub frame_rate_range: Option<IntRange>,
+    /// Discrete supported target frame rates, in fps, highest first.
+    ///
+    /// Fractional rates such as `12.5` are ordinary here, which is why this is
+    /// `f32` and not an integer type — `tt:FloatList` is a list of `xs:float`.
+    pub frame_rates: Vec<f32>,
     /// Accepted GOV lengths — frames between keyframes.
     pub gov_length_range: Option<IntRange>,
     /// Supported codec profiles (e.g. `"Main"`, `"High"`).
@@ -958,16 +1040,13 @@ impl VideoEncoderConfigurationOptions2 {
                         .filter_map(parse_resolution)
                         .collect(),
                     bitrate_range: opt.child("BitrateRange").map(parse_int_range_node),
-                    frame_rates: opt
-                        .children_named("FrameRatesSupported")
-                        .filter_map(|n| n.text().parse().ok())
-                        .collect(),
-                    frame_rate_range: opt.child("FrameRateRange").map(parse_int_range_node),
-                    gov_length_range: opt.child("GovLengthRange").map(parse_int_range_node),
-                    profiles: opt
-                        .children_named("ProfilesSupported")
-                        .map(|n| n.text().to_string())
-                        .collect(),
+                    // The three below are `xs:attribute`s, two of them
+                    // `xs:list`-typed — see the type's doc comment. There is no
+                    // `FrameRateRange` on this type at all; the discrete
+                    // `FrameRatesSupported` list is what Media2 offers instead.
+                    frame_rates: attr_list(opt, "FrameRatesSupported"),
+                    gov_length_range: attr_int_range(opt, "GovLengthRange"),
+                    profiles: attr_list(opt, "ProfilesSupported"),
                 })
                 .collect(),
         })

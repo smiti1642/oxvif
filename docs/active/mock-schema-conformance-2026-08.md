@@ -17,11 +17,12 @@ each stays in the lab.**
 
 ## 0. Blast radius, established before anything else
 
-**Six client-facing bugs so far. The rest are mock fidelity.**
+**Eight client-facing bugs so far. The rest are mock fidelity.**
 
 This line said *"Three client-facing bugs so far"* until §1.3's fourth landed,
-*"Four client-facing bugs so far"* until §5.5's fifth did, and *"Five"* until
-§5.7's sixth did.
+*"Four client-facing bugs so far"* until §5.5's fifth did, *"Five"* until
+§5.7's sixth did, and *"Six"* until §5.8's seventh and eighth did — one work
+unit, two types, so it moved by two.
 
 This section originally read *"no finding below is a client-facing bug"*, and
 that was wrong five times over — kept here rather than deleted, because every
@@ -66,6 +67,31 @@ exception was found by looking at something the sentence dismissed:
    `tt:MetadataConfigurationOptionsExtension` to rename it to. Both the mock and
    the unit fixture had been written to agree with the parser, which is (1)'s
    shape exactly.
+
+7. **`VideoEncoderOptions2` read three `xs:attribute`s as elements, two of them
+   `xs:list`-typed** — §1.3, §5.8. `tt:VideoEncoder2ConfigurationOptions`
+   declares exactly `Encoding`, `QualityRange`, `ResolutionsAvailable` and
+   `BitrateRange` as child elements; `GovLengthRange`, `FrameRatesSupported`
+   and `ProfilesSupported` are attributes, so `gov_length_range` was `None` and
+   `profiles` / `frame_rates` empty from every conformant device. It also
+   carried a `frame_rate_range` field for an element the type does not declare
+   at any level, and read `frame_rates` as `u32` where the schema says
+   `xs:float`, so a device offering `12.5` fps lost that entry twice over.
+
+8. **`VideoSourceConfigurationOptions::max_limit` read an element** — §1.3,
+   §5.8. `MaximumNumberOfProfiles` is an `xs:attribute` of
+   `tt:VideoSourceConfigurationOptions`; the field was `None` from every
+   conformant device, on **both** Media1 and Media2, which return the same type.
+
+**(7) and (8) were both named in §1.3, correctly and in detail, and stayed
+open for a work unit anyway.** That is the opposite failure from (6): not a
+wrong classification but a right one nobody scheduled. §1.3 called (7) *"a
+separate client-facing bug"* in those words and §0's count did not move,
+because §0 counts bugs *fixed or being fixed* and §1.3 was writing about a bug
+*found*. The two sections had no link between them. That is worth a rule of
+its own: **when a subsection concludes "client-facing", it belongs in §0's
+count the same day, open or not** — otherwise the blast-radius section
+undercounts exactly the thing it exists to bound.
 
 **The pattern across the first five is worth naming: each came from the sentence
 that dismissed a category.** "No finding is client-facing", "54 unanchored
@@ -170,7 +196,8 @@ the `GetProfiles` slice of §5.2 + §5.4, 32 distinct — `MISSING-REQUIRED` 16,
 `UNKNOWN-NAME` **7**, no other kind moved; after §5.6, 24 distinct —
 `MISSING-REQUIRED` **11**, `UNKNOWN-NAME` **6**, `UNKNOWN-CHILD` 4, `ORDER` 3;
 after §5.7, 16 distinct — `MISSING-REQUIRED` **7**, `UNKNOWN-NAME` **5**,
-`UNKNOWN-CHILD` **3**, `ORDER` **1**.**
+`UNKNOWN-CHILD` **3**, `ORDER` **1**; after §5.8, 14 distinct —
+`UNKNOWN-NAME` **4**, `UNKNOWN-CHILD` **2**, the other two unmoved.**
 `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
 block is the baseline the sweep started from and is left as it was.
 
@@ -338,8 +365,10 @@ either one alone moves `ORDER` by exactly one.
 - ~~`AnalyticsSupported` under the Media2 metadata options extension;~~
   **fixed** — §5.7, and it was a client bug (§0.6) and a deletion, not the
   rename this list said below;
-  `MaximumNumberOfProfiles` under the video source configuration options;
-  `ProfilesSupported` under the video encoder configuration options;
+  ~~`MaximumNumberOfProfiles` under the video source configuration options;~~
+  ~~`ProfilesSupported` under the video encoder configuration options;~~
+  **both fixed** — §5.8, and both were client bugs (§0.7, §0.8), as the two
+  bullets below had already established.
   ~~`Profile` inside a video encoder configuration;~~ `Number` under an encoder
   instance; ~~`UsernameToken` under the device security capabilities;~~
   `SystemLogUri` and its `LogType` in `GetSystemUris`.
@@ -367,13 +396,30 @@ either one alone moves `ORDER` by exactly one.
     wrong, and unlike §5.5 the fix changes the *cardinality* of the parse, not
     only where it reads from. **Not fixed in §5.5** — it is a different type
     (`tt:VideoEncoder2ConfigurationOptions`, not
-    `tt:VideoEncoder2Configuration`) and a separate client-facing bug; it would
-    take `UNKNOWN-NAME` 7 → 6.
+    `tt:VideoEncoder2Configuration`) and a separate client-facing bug.
+
+    **Fixed in §5.8.** Two corrections to the sentence above. It said the fix
+    *"would take `UNKNOWN-NAME` 7 → 6"* — true when written, stale by the time
+    it was done: §5.6 and §5.7 had taken the kind to 5, and §5.8 measured
+    5 → **4**. And *"the fix changes the cardinality of the parse, not only
+    where it reads from"* understates the scope by four members: parsing the
+    whole type against the schema found `GovLengthRange` and
+    `FrameRatesSupported` misclassified the same way — invisible to the checker,
+    because both are real `tt:` elements on the *Media1* options types — plus a
+    `frame_rate_range` field for an element `tt:VideoEncoder2ConfigurationOptions`
+    does not declare, and `frame_rates` typed `u32` against a `tt:FloatList`.
+    **One visible row, six wrong members.** The lesson is the one §1.3 keeps
+    restating: the row names a symptom, and the type has to be read out whole.
   - `MaximumNumberOfProfiles` is an `xs:attribute` of
     `tt:VideoSourceConfigurationOptions`. It is also a real *element*, on the
     unrelated `tt:ProfileCapabilities`, which is why it reports only as
     `UNKNOWN-CHILD` and never as `UNKNOWN-NAME` — the same double-declaration
     that hid `GovLength` completely.
+
+    **Fixed in §5.8**, `UNKNOWN-CHILD` 3 → **2**. Media1 and Media2 return the
+    same type from `GetVideoSourceConfigurationOptions`, so this was two
+    renderers and one parser, and `video_source_options_max_profiles_is_an_attribute`
+    asserts both services rather than the one the row happened to name.
   - `AnalyticsSupported` is declared **nowhere** in `tt:`, as element or
     attribute. ~~That one is a rename, and belongs to the class this section was
     named for.~~ **Wrong, and wrong in the direction this section keeps warning

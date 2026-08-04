@@ -368,6 +368,104 @@ two-thirds of the test suite.
   `imaging_move_options_ranges_survive_the_round_trip`; reverting *either* side
   reddens it on the same assertion.
 
+- **`VideoEncoderOptions2` read three attributes as elements, two of them
+  lists, and `VideoSourceConfigurationOptions::max_limit` read a fourth.** The
+  seventh and eighth client-facing bugs of this sweep, and the same class as
+  the `VideoEncoderConfiguration2` entry above — one type up, on the *options*
+  siblings.
+
+  `tt:VideoEncoder2ConfigurationOptions` declares exactly four child elements —
+  `Encoding`, `QualityRange`, `ResolutionsAvailable`, `BitrateRange` — and
+  everything else as `xs:attribute`: `GovLengthRange`, `FrameRatesSupported`,
+  `ProfilesSupported`, `MaxAnchorFrameDistance`, `ConstantBitRateSupported`,
+  `AverageBitRateSupported`, `GuaranteedFrameRateSupported`,
+  `SecureStreamingProtocolAlgorithms` and `SigningSupported`.
+  `VideoEncoderOptions2::from_xml` (`src/types/video.rs`) read the first three
+  with `child(…)` / `children_named(…)`, so `gov_length_range` was `None` and
+  `profiles` and `frame_rates` were **empty** from every conformant device.
+
+  **Two of the three are `xs:list`-typed, so this changed the parse's
+  cardinality and not only its location.** `tt:StringAttrList` and
+  `tt:FloatList` are each `<xs:list itemType="…"/>` — one attribute carries the
+  whole space-separated collection where the parser had expected N repeated
+  elements. `tt:IntList` is the third, and the schema constrains
+  `GovLengthRange` to exactly two values, the lower and upper bound; anything
+  else reads as `None`, since a three-value list is not a range a caller could
+  act on.
+
+  Two further members were wrong in ways no row could show: `frame_rate_range`
+  named an element the type does not declare at any level (removed — see
+  Breaking), and `frame_rates` was `Vec<u32>` against a list of `xs:float`.
+
+  `tt:VideoSourceConfigurationOptions` is the second type: `MaximumNumberOfProfiles`
+  is an `xs:attribute` there, its only child elements being `BoundsRange`,
+  `VideoSourceTokensAvailable` and `Extension`. `max_limit` used `xml_u32`, so
+  it too was `None` from every conformant device — on **both** services, since
+  Media1 and Media2 return the same type from
+  `GetVideoSourceConfigurationOptions`.
+
+  **Six wrong members, one visible row.** The schema-shape checker moved
+  `UNKNOWN-NAME` 5 → 4 and `UNKNOWN-CHILD` 3 → 2, and every part of that
+  understates the work:
+
+  - `ProfilesSupported` was the one reportable name, because no `tt:` element
+    anywhere is spelled that way — Media1 says `H264ProfilesSupported`.
+  - `GovLengthRange` and `FrameRateRange` moved **nothing**, in either
+    direction. Both are real `tt:` elements on `tt:H264Options` and
+    `tt:Mpeg4Options`, which satisfies the name check, and
+    `tt:VideoEncoder2ConfigurationOptions` carries an `xs:any`, which
+    suppresses the unknown-child check for the whole type. Exactly the pair of
+    blind spots that hid `GovLength` in the entry above.
+  - `FrameRatesSupported` moved nothing for a third reason: the mock had never
+    emitted it under any spelling.
+  - `MaximumNumberOfProfiles` reported as `UNKNOWN-CHILD` only, never
+    `UNKNOWN-NAME`, because it *is* an element on the unrelated
+    `tt:ProfileCapabilities`, reached through
+    `GetCapabilities`' `Media/Extension/ProfileCapabilities`.
+
+    That name is declared four times across the schema set and is an
+    `xs:attribute` in three of them — on `tt:VideoSourceConfigurationOptions`
+    (the bug), and on `trt:ProfileCapabilities` and `tr2:ProfileCapabilities`,
+    the two `GetServiceCapabilities` types. oxvif already read both correct
+    forms correctly: `MediaCapabilities::max_profiles` as an element
+    (`src/types/capabilities.rs`) and
+    `MediaServiceCapabilities::maximum_number_of_profiles` as an attribute
+    (`src/types/service_capabilities.rs`), via `attr_num`. The one that was
+    wrong was the one nobody had cross-checked.
+
+  So, as with `GovLength`, the count is not the verification.
+  `media2_encoder_options_lists_are_attributes` and
+  `video_source_options_max_profiles_is_an_attribute` in
+  `tests/mock_workflow.rs` are what prove it: they drive the client against a
+  real `MockServer` and assert the values, and reverting *either* the parser or
+  the mock renderer reddens both on an assertion. `src/tests/types_tests.rs`
+  gained a negative for the absent and malformed-list cases, so "the device did
+  not say" stays distinguishable from "the parser read the wrong place".
+
+  **Media1 was checked and deliberately left alone.** `tt:H264Options`,
+  `tt:JpegOptions` and `tt:Mpeg4Options` declare `GovLengthRange`,
+  `FrameRateRange` and `EncodingIntervalRange` as `tt:IntRange` *elements* and
+  the profile list as repeated `H264ProfilesSupported` elements. The Media1
+  parser at `src/types/video.rs` is correct as written; a uniform sweep across
+  both services would have broken it.
+
+  Not fixed, and not previously modelled: the six remaining attributes of
+  `tt:VideoEncoder2ConfigurationOptions` listed above, and
+  `tt:VideoSourceConfigurationOptionsExtension` (`Rotate`). Absent members, not
+  misclassified ones — new fields rather than corrections, so they are left for
+  a release that wants them.
+
+- **The mock's Media2 encoder options were identical on both sensors.**
+  `resp_video_encoder_configuration_options_media2`
+  (`src/mock/services/media2.rs`) rendered the same `GovLengthRange` and the
+  same three H.264 profiles whichever channel was addressed, so an assertion
+  reading either would have passed against a renderer that ignored the token —
+  the coincidence the differing `resolutions` lists already exist to rule out,
+  one field over. Sensor 1 now offers GOV `1 300`, rates `30 25 15 12.5` and
+  profiles `Baseline Main High`; sensor 2 offers `2 150`, `20 10` and
+  `Baseline Main`. The fractional `12.5` is deliberate: it is what makes the
+  `Vec<f32>` change observable in a test.
+
 - **The mock's four video encoders all carried `gov_length: 25`.** Any
   assertion reading it therefore passed against a renderer that ignored the
   token, which is the coincidence the differing `resolutions` lists already
@@ -1390,6 +1488,37 @@ two-thirds of the test suite.
 
   `ptz_status_filter_supported` is unchanged, and still reports whether the
   device sent the block at all.
+
+- **`VideoEncoderOptions2::frame_rate_range` is removed and `::frame_rates`
+  is now `Vec<f32>`.** See Fixed. `tt:VideoEncoder2ConfigurationOptions`
+  declares no `FrameRateRange` at any level, so the field was `None` from every
+  conformant device and there is no element to repoint it at; what Media2
+  offers instead is the discrete `FrameRatesSupported` list, whose item type is
+  `xs:float`. `frame_rates` was `Vec<u32>`, which silently dropped every
+  fractional rate a device advertised — `12.5` is an ordinary value here.
+
+  ```rust
+  // before — always None on Media2, and the u32 list dropped 12.5
+  let opts = client.get_video_encoder_configuration_options_media2(url, tok).await?;
+  if let Some(r) = opts.options[0].frame_rate_range {
+      println!("{}-{} fps", r.min, r.max);
+  }
+
+  // after — the discrete list the schema declares
+  let opts = client.get_video_encoder_configuration_options_media2(url, tok).await?;
+  let rates = &opts.options[0].frame_rates;          // Vec<f32>, highest first
+  println!("{rates:?}");
+  // if you specifically want the bounds:
+  if let (Some(hi), Some(lo)) = (rates.first(), rates.last()) {
+      println!("{lo}-{hi} fps");
+  }
+  ```
+
+  Media1 is **unaffected**: `tt:H264Options` / `tt:JpegOptions` / `tt:Mpeg4Options`
+  genuinely declare `FrameRateRange` as a `tt:IntRange` *element*, so
+  `H264Options::frame_rate_range`, `JpegOptions::frame_rate_range` and their
+  H265 sibling keep both their name and their type. The two services differ
+  here, and a uniform sweep would have broken the correct one.
 
 - **`AudioEncoderConfiguration` gained two fields and changed a third.**
   `multicast: Option<MulticastConfiguration>` and

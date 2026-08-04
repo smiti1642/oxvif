@@ -175,6 +175,11 @@ pub fn resp_video_source_configurations_media2(state: &SharedState) -> String {
 }
 
 /// Per-channel — the bounds ceiling is the addressed sensor's own resolution.
+///
+/// The response type is `tt:VideoSourceConfigurationOptions`, the same one
+/// Media1 returns, so `MaximumNumberOfProfiles` is an `xs:attribute` here for
+/// the same reason and with the same value — see
+/// [`super::media::resp_video_source_configuration_options`].
 pub fn resp_video_source_configuration_options_media2(state: &SharedState, body: &str) -> String {
     let want = match require_config_token(body, "NoConfigToken-VSCOPT2-5511") {
         Ok(t) => t,
@@ -188,8 +193,7 @@ pub fn resp_video_source_configuration_options_media2(state: &SharedState, body:
         NS,
         &format!(
             r#"<tr2:GetVideoSourceConfigurationOptionsResponse>
-          <tr2:Options>
-            <tt:MaximumNumberOfProfiles>5</tt:MaximumNumberOfProfiles>
+          <tr2:Options MaximumNumberOfProfiles="5">
             <tt:BoundsRange>
               <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
               <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
@@ -209,6 +213,30 @@ pub fn resp_video_source_configuration_options_media2(state: &SharedState, body:
 /// Per-channel. Media2 returns one `Options` block **per encoding**, so the
 /// H.265 block is offered only where the sensor can actually do it — sensor 1.
 /// Sensor 2 gets H.264 alone, at its own smaller resolution list.
+///
+/// **`GovLengthRange`, `FrameRatesSupported` and `ProfilesSupported` are
+/// attributes, and two of them are lists.**
+/// `tt:VideoEncoder2ConfigurationOptions` declares exactly `Encoding`,
+/// `QualityRange`, `ResolutionsAvailable` and `BitrateRange` as child elements;
+/// everything else is `xs:attribute`. `tt:StringAttrList` and `tt:FloatList` are
+/// each `<xs:list itemType="…"/>`, so one attribute holds the whole
+/// space-separated collection rather than N repeated elements.
+///
+/// This emitted all three as elements until 0.15, agreeing with the client bug
+/// it was written beside — and, because the type carries an `xs:any`, the shape
+/// checker's `UNKNOWN-CHILD` rule could not report any of them. Only
+/// `ProfilesSupported` was visible at all, and only because no `tt:` element
+/// anywhere is spelled that way (Media1 says `H264ProfilesSupported`).
+///
+/// There is no `FrameRateRange` on this type. The mock emitted one, and the
+/// checker could not see that either: `FrameRateRange` *is* a real `tt:` element
+/// on `H264Options` and `Mpeg4Options`, the Media1 types. It is replaced here by
+/// the discrete `FrameRatesSupported` list the schema does declare, whose values
+/// are `xs:float` — `12.5` below is deliberate, and a parser reading integers
+/// drops it silently.
+///
+/// The three lists differ **per sensor**, so a handler that ignored the token
+/// could not produce both answers.
 pub fn resp_video_encoder_configuration_options_media2(state: &SharedState, body: &str) -> String {
     let want = match require_config_token(body, "NoConfigToken-VECOPT2-5513") {
         Ok(t) => t,
@@ -230,18 +258,25 @@ pub fn resp_video_encoder_configuration_options_media2(state: &SharedState, body
         })
         .collect();
 
+    // The 5MP sensor is the more capable one all the way down: longer GOVs, more
+    // frame rates and more H.264 profiles. Nothing shared between the two
+    // branches, so an answer for the wrong channel is visible in every list.
+    let is_sensor_1 = c.source_token == "VS_1";
+    let (h264_gov, h264_rates, h264_profiles, h264_bitrate) = if is_sensor_1 {
+        ("1 300", "30 25 15 12.5", "Baseline Main High", 16384)
+    } else {
+        ("2 150", "20 10", "Baseline Main", 8192)
+    };
+
     // Only the 5MP sensor advertises H.265. Nothing else in the mock lets a
     // test tell "this device supports H265" from "this *channel* supports it".
-    let h265 = if c.source_token == "VS_1" {
+    let h265 = if is_sensor_1 {
         format!(
-            r#"<tr2:Options>
+            r#"<tr2:Options GovLengthRange="1 600" FrameRatesSupported="60 30" ProfilesSupported="Main Main10">
             <tt:Encoding>H265</tt:Encoding>
             <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
             {resolutions}
             <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>32768</tt:Max></tt:BitrateRange>
-            <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>60</tt:Max></tt:FrameRateRange>
-            <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>600</tt:Max></tt:GovLengthRange>
-            <tt:ProfilesSupported>Main</tt:ProfilesSupported>
           </tr2:Options>"#
         )
     } else {
@@ -252,16 +287,11 @@ pub fn resp_video_encoder_configuration_options_media2(state: &SharedState, body
         NS,
         &format!(
             r#"<tr2:GetVideoEncoderConfigurationOptionsResponse>
-          <tr2:Options>
+          <tr2:Options GovLengthRange="{h264_gov}" FrameRatesSupported="{h264_rates}" ProfilesSupported="{h264_profiles}">
             <tt:Encoding>H264</tt:Encoding>
             <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
             {resolutions}
-            <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
-            <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
-            <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
-            <tt:ProfilesSupported>Baseline</tt:ProfilesSupported>
-            <tt:ProfilesSupported>Main</tt:ProfilesSupported>
-            <tt:ProfilesSupported>High</tt:ProfilesSupported>
+            <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>{h264_bitrate}</tt:Max></tt:BitrateRange>
           </tr2:Options>
           {h265}
         </tr2:GetVideoEncoderConfigurationOptionsResponse>"#

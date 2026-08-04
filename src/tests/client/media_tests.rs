@@ -1431,8 +1431,7 @@ fn video_source_configuration_options_xml() -> &'static str {
                       xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <trt:GetVideoSourceConfigurationOptionsResponse>
-              <trt:Options>
-                <tt:MaximumNumberOfProfiles>6</tt:MaximumNumberOfProfiles>
+              <trt:Options MaximumNumberOfProfiles="6">
                 <tt:BoundsRange>
                   <tt:XRange><tt:Min>0</tt:Min><tt:Max>640</tt:Max></tt:XRange>
                   <tt:YRange><tt:Min>0</tt:Min><tt:Max>360</tt:Max></tt:YRange>

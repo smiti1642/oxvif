@@ -250,11 +250,54 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   `tt:AnalyticsCapabilities/AnalyticsModuleSupport`, a different operation.
 ///   `metadata_configs_differ_on_every_field` in `tests/mock_workflow.rs` is
 ///   what asserts the two required booleans that replaced it, per token.
+/// - §5.8, the two Media2 *options* types — `UNKNOWN-NAME` 5 → **4**,
+///   `UNKNOWN-CHILD` 3 → **2**, `MISSING-REQUIRED` and `ORDER` unmoved. Two rows
+///   closed, and **six members were misclassified to close them**, which is the
+///   widest gap between what this file measures and what the work was.
+///
+///   `tt:VideoEncoder2ConfigurationOptions` declares exactly four child elements
+///   — `Encoding`, `QualityRange`, `ResolutionsAvailable`, `BitrateRange` — and
+///   everything else as `xs:attribute`. `VideoEncoderOptions2` read
+///   `GovLengthRange`, `FrameRatesSupported` and `ProfilesSupported` as
+///   elements, so all three were empty or `None` from every conformant device;
+///   it also carried a `frame_rate_range` field for an element the type does not
+///   declare at any level. `tt:VideoSourceConfigurationOptions` declares
+///   `MaximumNumberOfProfiles` as an `xs:attribute`, and `max_limit` read an
+///   element. Both were client defects — the seventh and eighth of the sweep.
+///
+///   **Only one of the six was ever visible here, and the count is the weakest
+///   evidence in this list.** Nothing in this file reads attributes at all, so
+///   a closed row proves the element is gone and says nothing about whether the
+///   attribute that replaced it is spelled right or read at all. On top of that:
+///
+///   - `GovLengthRange` and `FrameRateRange` moved **nothing**. Both are real
+///     `tt:` elements on `H264Options` / `Mpeg4Options` — the *Media1* options
+///     types, which genuinely declare their ranges as elements and were
+///     correct — so `UNKNOWN-NAME` could not fire; and
+///     `tt:VideoEncoder2ConfigurationOptions` carries an `xs:any`, which sets
+///     `Ty::wild` and suppresses `UNKNOWN-CHILD` for the whole type. This is
+///     §5.5's blind spot again, on the sibling type.
+///   - `FrameRatesSupported` moved nothing either, for a third reason: the mock
+///     had never emitted it under any spelling.
+///   - `ProfilesSupported` was the one visible name, undeclared as an element
+///     anywhere (Media1 says `H264ProfilesSupported`).
+///   - `MaximumNumberOfProfiles` reported as `UNKNOWN-CHILD` and never as
+///     `UNKNOWN-NAME`, because it *is* an element on the unrelated
+///     `tt:ProfileCapabilities`, and `tt:VideoSourceConfigurationOptions` has no
+///     `xs:any` to suppress the child rule.
+///
+///   Two of the attributes are `xs:list`-typed, so the fix changed the parse's
+///   *cardinality*: `tt:StringAttrList` and `tt:FloatList` are each
+///   `<xs:list itemType="…"/>`, one attribute for the whole collection.
+///   `media2_encoder_options_lists_are_attributes` and
+///   `video_source_options_max_profiles_is_an_attribute` in
+///   `tests/mock_workflow.rs` are what assert the six members, by reading the
+///   values back through the client; reverting either side reddens both.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
     ("MISSING-REQUIRED", 7),
-    ("UNKNOWN-NAME", 5),
-    ("UNKNOWN-CHILD", 3),
+    ("UNKNOWN-NAME", 4),
+    ("UNKNOWN-CHILD", 2),
     ("ORDER", 1),
 ];
 

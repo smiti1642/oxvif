@@ -150,8 +150,7 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurationOptions" => soap(
             r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
             r#"<trt:GetVideoSourceConfigurationOptionsResponse>
-              <trt:Options>
-                <tt:MaximumNumberOfProfiles>5</tt:MaximumNumberOfProfiles>
+              <trt:Options MaximumNumberOfProfiles="5">
                 <tt:BoundsRange>
                   <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
                   <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
@@ -326,8 +325,7 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions" => soap(
             r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
             r#"<tr2:GetVideoSourceConfigurationOptionsResponse>
-              <tr2:Options>
-                <tt:MaximumNumberOfProfiles>5</tt:MaximumNumberOfProfiles>
+              <tr2:Options MaximumNumberOfProfiles="5">
                 <tt:BoundsRange>
                   <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
                   <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
@@ -341,7 +339,7 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurations" => soap(
             r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
             r#"<tr2:GetVideoEncoderConfigurationsResponse>
-              <tr2:Configurations token="VEC2_1">
+              <tr2:Configurations token="VEC2_1" GovLength="30" Profile="Main">
                 <tt:Name>MainStream-H265</tt:Name><tt:UseCount>1</tt:UseCount>
                 <tt:Encoding>H265</tt:Encoding>
                 <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution>
@@ -350,8 +348,6 @@ fn dispatch(action: &str, base: &str) -> String {
                   <tt:FrameRateLimit>30</tt:FrameRateLimit>
                   <tt:BitrateLimit>8192</tt:BitrateLimit>
                 </tt:RateControl>
-                <tt:GovLength>30</tt:GovLength>
-                <tt:Profile>Main</tt:Profile>
               </tr2:Configurations>
             </tr2:GetVideoEncoderConfigurationsResponse>"#,
         ),
@@ -361,15 +357,12 @@ fn dispatch(action: &str, base: &str) -> String {
         "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurationOptions" => soap(
             r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
             r#"<tr2:GetVideoEncoderConfigurationOptionsResponse>
-              <tr2:Options>
+              <tr2:Options GovLengthRange="1 600" FrameRatesSupported="60 30 12.5" ProfilesSupported="Main Main10">
                 <tt:Encoding>H265</tt:Encoding>
                 <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
                 <tt:ResolutionsAvailable><tt:Width>3840</tt:Width><tt:Height>2160</tt:Height></tt:ResolutionsAvailable>
                 <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
                 <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>32768</tt:Max></tt:BitrateRange>
-                <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>60</tt:Max></tt:FrameRateRange>
-                <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>600</tt:Max></tt:GovLengthRange>
-                <tt:ProfilesSupported>Main</tt:ProfilesSupported>
               </tr2:Options>
             </tr2:GetVideoEncoderConfigurationOptionsResponse>"#,
         ),

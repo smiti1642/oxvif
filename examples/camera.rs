@@ -1970,8 +1970,17 @@ async fn video_config_media2(cfg: &Config) -> Result<(), OnvifError> {
                 if let Some(gr) = opt.gov_length_range {
                     println!("    GoP: {}-{}", gr.min, gr.max);
                 }
-                if let Some(fr) = opt.frame_rate_range {
-                    println!("    FPS: {}-{}", fr.min, fr.max);
+                // Media2 advertises discrete frame rates, not a range — the
+                // `FrameRatesSupported` attribute is a list of `xs:float`.
+                if !opt.frame_rates.is_empty() {
+                    println!(
+                        "    FPS: {}",
+                        opt.frame_rates
+                            .iter()
+                            .map(|f| f.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
                 }
             }
         }

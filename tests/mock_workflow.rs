@@ -186,6 +186,109 @@ async fn media2_encoder_gov_length_and_profile_are_attributes() {
     assert_eq!(three.profile.as_deref(), Some("High"));
 }
 
+/// `tt:VideoEncoder2ConfigurationOptions` declares only `Encoding`,
+/// `QualityRange`, `ResolutionsAvailable` and `BitrateRange` as child elements.
+/// `GovLengthRange`, `FrameRatesSupported` and `ProfilesSupported` are
+/// `xs:attribute`s, and the last two are `xs:list`-typed — one attribute holds
+/// the whole space-separated collection, so this is a change of cardinality and
+/// not only of location.
+///
+/// The checker in `tests/mock_schema_shape.rs` can see almost none of this:
+/// the type carries an `xs:any`, which suppresses its `UNKNOWN-CHILD` rule for
+/// the whole type, and `GovLengthRange` / `FrameRateRange` are real `tt:`
+/// element names on the *Media1* options types, so `UNKNOWN-NAME` cannot fire
+/// for them either. Only `ProfilesSupported` was ever visible. **This test is
+/// what asserts the rest**, by reading the values back through the client.
+///
+/// The two sensors disagree on all three, so an answer for the wrong channel is
+/// as red as an unread attribute.
+#[tokio::test]
+async fn media2_encoder_options_lists_are_attributes() {
+    let (_srv, s) = setup().await;
+
+    let by = |o: &oxvif::VideoEncoderConfigurationOptions2, enc: &str| {
+        o.options
+            .iter()
+            .find(|x| x.encoding.as_str() == enc)
+            .unwrap_or_else(|| panic!("mock offers {enc}"))
+            .clone()
+    };
+
+    // Sensor 1, the 5MP lens.
+    let lens1 = s
+        .get_video_encoder_configuration_options_media2("VEC_1")
+        .await
+        .unwrap();
+
+    let h264 = by(&lens1, "H264");
+    let gov = h264.gov_length_range.expect("GovLengthRange attribute");
+    assert_eq!((gov.min, gov.max), (1, 300), "VEC_1 H264 GovLengthRange");
+    assert_eq!(
+        h264.profiles,
+        ["Baseline", "Main", "High"],
+        "one attribute, three profiles"
+    );
+    // 12.5 fps is why this list is `f32`: an integer parse drops it and the
+    // length goes to three.
+    assert_eq!(h264.frame_rates.len(), 4, "VEC_1 H264 FrameRatesSupported");
+    assert!((h264.frame_rates[0] - 30.0).abs() < 1e-5);
+    assert!((h264.frame_rates[3] - 12.5).abs() < 1e-5, "fractional rate");
+
+    let h265 = by(&lens1, "H265");
+    let gov = h265.gov_length_range.expect("GovLengthRange attribute");
+    assert_eq!((gov.min, gov.max), (1, 600), "VEC_1 H265 GovLengthRange");
+    assert_eq!(h265.profiles, ["Main", "Main10"]);
+    assert_eq!(h265.frame_rates.len(), 2);
+
+    // Sensor 2, the 720p lens — every list is a different one.
+    let lens2 = s
+        .get_video_encoder_configuration_options_media2("VEC_3")
+        .await
+        .unwrap();
+
+    let h264_2 = by(&lens2, "H264");
+    let gov2 = h264_2.gov_length_range.expect("GovLengthRange attribute");
+    assert_eq!((gov2.min, gov2.max), (2, 150), "VEC_3 H264 GovLengthRange");
+    assert_eq!(h264_2.profiles, ["Baseline", "Main"]);
+    assert_eq!(h264_2.frame_rates.len(), 2);
+
+    // Stated as the inequality too, so dropping the token cannot leave this
+    // green by handing both callers the same answer.
+    assert_ne!(gov.max, gov2.max);
+    assert_ne!(h264.profiles, h264_2.profiles);
+    assert_ne!(h264.frame_rates.len(), h264_2.frame_rates.len());
+}
+
+/// `MaximumNumberOfProfiles` is an `xs:attribute` of
+/// `tt:VideoSourceConfigurationOptions`, whose only child elements are
+/// `BoundsRange`, `VideoSourceTokensAvailable` and `Extension`.
+///
+/// Media1 and Media2 return the *same* type here, so both are asserted — a fix
+/// applied to one renderer and not the other is the divergence `CLAUDE.md`
+/// step 5b exists for.
+#[tokio::test]
+async fn video_source_options_max_profiles_is_an_attribute() {
+    let (_srv, s) = setup().await;
+
+    let m1 = s
+        .get_video_source_configuration_options("VSC_1")
+        .await
+        .unwrap();
+    assert_eq!(m1.max_limit, Some(5), "Media1 MaximumNumberOfProfiles");
+    // The sibling elements still parse, so the assertion above is about the
+    // attribute and not about the whole `Options` block being missed.
+    assert_eq!(m1.source_tokens, ["VS_1"]);
+    assert_eq!(m1.bounds_range.expect("BoundsRange").width_range.max, 2592);
+
+    let m2 = s
+        .get_video_source_configuration_options_media2("VSC_2")
+        .await
+        .unwrap();
+    assert_eq!(m2.max_limit, Some(5), "Media2 MaximumNumberOfProfiles");
+    assert_eq!(m2.source_tokens, ["VS_2"]);
+    assert_eq!(m2.bounds_range.expect("BoundsRange").width_range.max, 1280);
+}
+
 #[tokio::test]
 async fn ptz_commands() {
     let (_srv, s) = setup().await;

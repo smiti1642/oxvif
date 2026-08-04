@@ -91,20 +91,17 @@ fn video_encoder_configuration_options_media2_xml() -> &'static str {
                       xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <tr2:GetVideoEncoderConfigurationOptionsResponse>
-              <tr2:Options>
+              <tr2:Options ProfilesSupported="Main" FrameRatesSupported="30 15" GovLengthRange="1 120">
                 <tt:Encoding>H264</tt:Encoding>
                 <tt:QualityRange><tt:Min>1</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
                 <tt:ResolutionsAvailable><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:ResolutionsAvailable>
                 <tt:BitrateRange><tt:Min>32</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
-                <tt:ProfilesSupported>Main</tt:ProfilesSupported>
               </tr2:Options>
-              <tr2:Options>
+              <tr2:Options ProfilesSupported="Main Main10" FrameRatesSupported="60 30 12.5" GovLengthRange="1 240">
                 <tt:Encoding>H265</tt:Encoding>
                 <tt:QualityRange><tt:Min>1</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
                 <tt:ResolutionsAvailable><tt:Width>3840</tt:Width><tt:Height>2160</tt:Height></tt:ResolutionsAvailable>
                 <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>32768</tt:Max></tt:BitrateRange>
-                <tt:ProfilesSupported>Main</tt:ProfilesSupported>
-                <tt:ProfilesSupported>Main10</tt:ProfilesSupported>
               </tr2:Options>
             </tr2:GetVideoEncoderConfigurationOptionsResponse>
           </s:Body>
@@ -217,7 +214,17 @@ async fn test_get_video_encoder_configuration_options_media2_parses_options() {
     assert_eq!(opts.options.len(), 2);
     assert_eq!(opts.options[0].encoding, crate::types::VideoEncoding::H264);
     assert_eq!(opts.options[1].encoding, crate::types::VideoEncoding::H265);
-    assert_eq!(opts.options[1].profiles.len(), 2);
+
+    // The three list/range members are attributes, and the two `Options` blocks
+    // disagree on every one of them — so reading the wrong block, or reading
+    // elements that are not there, cannot produce this.
+    assert_eq!(opts.options[0].profiles, ["Main"]);
+    assert_eq!(opts.options[1].profiles, ["Main", "Main10"]);
+    assert_eq!(opts.options[0].gov_length_range.unwrap().max, 120);
+    assert_eq!(opts.options[1].gov_length_range.unwrap().max, 240);
+    assert_eq!(opts.options[0].frame_rates.len(), 2);
+    assert_eq!(opts.options[1].frame_rates.len(), 3);
+    assert!((opts.options[1].frame_rates[2] - 12.5).abs() < 1e-5);
 }
 
 #[tokio::test]
@@ -689,8 +696,7 @@ fn video_source_configuration_options_media2_xml() -> &'static str {
                     xmlns:tt="http://www.onvif.org/ver10/schema">
           <s:Body>
             <tr2:GetVideoSourceConfigurationOptionsResponse>
-              <tr2:Options>
-                <tt:MaximumNumberOfProfiles>9</tt:MaximumNumberOfProfiles>
+              <tr2:Options MaximumNumberOfProfiles="9">
                 <tt:BoundsRange>
                   <tt:XRange><tt:Min>0</tt:Min><tt:Max>1920</tt:Max></tt:XRange>
                   <tt:YRange><tt:Min>0</tt:Min><tt:Max>1080</tt:Max></tt:YRange>

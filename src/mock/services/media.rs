@@ -953,6 +953,14 @@ pub fn resp_video_source_configuration(state: &SharedState, body: &str) -> Strin
 /// `BoundsRange` maxima are the addressed **sensor's** own resolution, so the
 /// two channels report different ceilings; `VideoSourceTokensAvailable` names
 /// only the sensor this configuration is attached to.
+///
+/// **`MaximumNumberOfProfiles` is an attribute.**
+/// `tt:VideoSourceConfigurationOptions` declares it as `xs:attribute` and only
+/// `BoundsRange`, `VideoSourceTokensAvailable` and `Extension` as child
+/// elements. This emitted it as an element until 0.15, agreeing with the client
+/// bug it was written beside. Media1 and Media2 return the *same* type here, so
+/// `resp_video_source_configuration_options_media2` carries the identical
+/// correction.
 pub fn resp_video_source_configuration_options(state: &SharedState, body: &str) -> String {
     let want = match require_config_token(body, "NoConfigToken-VSCOPT-5503") {
         Ok(t) => t,
@@ -966,8 +974,7 @@ pub fn resp_video_source_configuration_options(state: &SharedState, body: &str) 
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
         &format!(
             r#"<trt:GetVideoSourceConfigurationOptionsResponse>
-          <trt:Options>
-            <tt:MaximumNumberOfProfiles>5</tt:MaximumNumberOfProfiles>
+          <trt:Options MaximumNumberOfProfiles="5">
             <tt:BoundsRange>
               <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
               <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
