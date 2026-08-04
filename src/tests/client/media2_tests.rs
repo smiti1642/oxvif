@@ -881,10 +881,8 @@ async fn test_get_metadata_configuration_options_media2_returns_flags() {
               <tr2:Options>
                 <tt:PTZStatusFilterOptions>
                   <tt:PanTiltStatusSupported>true</tt:PanTiltStatusSupported>
+                  <tt:ZoomStatusSupported>false</tt:ZoomStatusSupported>
                 </tt:PTZStatusFilterOptions>
-                <tt:Extension>
-                  <tt:AnalyticsSupported>true</tt:AnalyticsSupported>
-                </tt:Extension>
               </tr2:Options>
             </tr2:GetMetadataConfigurationOptionsResponse>
           </s:Body>
@@ -898,7 +896,10 @@ async fn test_get_metadata_configuration_options_media2_returns_flags() {
         .unwrap();
 
     assert!(opts.ptz_status_filter_supported);
-    assert!(opts.analytics_supported);
+    // The two required booleans disagree in this fixture, so a parser that
+    // returned a constant for either would fail on one of them.
+    assert!(opts.pan_tilt_status_supported);
+    assert!(!opts.zoom_status_supported);
 }
 
 #[tokio::test]

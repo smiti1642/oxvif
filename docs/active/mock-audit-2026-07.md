@@ -377,19 +377,26 @@ became state-driven, not just the two the row named:
 - `GetMetadataConfigurationOptions` answers for the addressed configuration.
   Leaving it static would have reproduced the multi-sensor failure exactly: a
   live configurations getter beside an options getter answering for whichever
-  configuration the fixture happened to describe. It also now emits
+  configuration the fixture happened to describe. ~~It also now emits
   `Options/Extension/AnalyticsSupported`, which
   `MetadataConfigurationOptions::from_xml` reads and the old fixture omitted
   entirely — so every caller saw `analytics_supported: false` no matter what.
-  That is the `AFModes` class, found while wiring rather than by the §6 diff.
+  That is the `AFModes` class, found while wiring rather than by the §6 diff.~~
+  **Superseded** — `AnalyticsSupported` is declared nowhere in the ONVIF schema
+  set, so this wired the mock to an invented parser branch. Both sides are gone;
+  the options getter now emits the two members
+  `tt:PTZStatusFilterOptions` requires, and those carry the per-token answer.
+  See `mock-schema-conformance-2026-08.md` §5.7.
 - `SetMetadataConfiguration` updates in place and faults on an unknown token.
   It writes `name` **and all three filter booleans**; a name-only write is the
   `MTU` shape from §5c, and the round-trip row inverts all three so a partial
   write cannot pass.
 
-`analytics_supported` is deliberately not writable — it is a device capability
-reported by the options getter, not part of `tt:MetadataConfiguration`, and the
-client never sends it.
+The `PTZStatusFilterOptions` booleans are deliberately not writable — they are
+device capabilities reported by the options getter, not part of
+`tt:MetadataConfiguration`, and the client never sends them. (This sentence
+said `analytics_supported` until that field was removed; the reasoning survived
+the field.)
 
 The two seeded configurations invert every boolean and disagree on multicast.
 **Unlike Storage, the `Option` distinction here is real:**

@@ -525,29 +525,47 @@ pub fn handle_delete_profile_media2(state: &SharedState, body: &str) -> String {
 // for the wrong configuration — the exact per-channel failure the multi-sensor
 // rule in `CLAUDE.md` describes.
 
+/// `TTL` and `SessionTimeout` are constants because there is nothing to store
+/// them from: `MetadataConfiguration::to_xml_body` sends neither, so no
+/// `SetMetadataConfiguration` the client can issue carries either value. A
+/// documented omission, not the `MTU` bug — see `CLAUDE.md` step 5c.
+const METADATA_MULTICAST_TTL: u32 = 1;
+const METADATA_SESSION_TIMEOUT: &str = "PT60S";
+
+/// `tt:MetadataConfiguration`, in the sequence order the schema declares:
+/// `Name`, `UseCount`, `PTZStatus`, `Events`, `Analytics`, `Multicast`,
+/// `SessionTimeout`, then the three extension members. `Events` is `[0..1]` and
+/// the mock models no event filter, so it is the one omission here.
+///
+/// Two things this renderer used to get wrong. `Analytics` came *before*
+/// `PTZStatus`, which no `xs:sequence` permits; and `Multicast` was emitted
+/// only when the entry had an address, on the reasoning that the block was
+/// optional. It is `[1]`, as are its own `Address`, `Port`, `TTL` and
+/// `AutoStart`. What is optional is `tt:IPAddress/IPv4Address`, so an entry
+/// with no group sends the block with the address left out and `AutoStart`
+/// false — still `None` to `MetadataConfiguration::multicast_address`, and now
+/// a shape a conformant device actually produces.
 fn render_metadata(e: &crate::mock::state::MetadataEntry) -> String {
-    // Multicast is genuinely optional in `tt:MetadataConfiguration`, and
-    // `MetadataConfiguration` parses both fields as `Option`. Unlike the
-    // Storage case, omitting the block here **is** observable from a client.
-    let multicast = match (&e.multicast_address, e.multicast_port) {
-        (Some(addr), Some(port)) => format!(
-            "<tt:Multicast>\
-               <tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>{addr}</tt:IPv4Address></tt:Address>\
-               <tt:Port>{port}</tt:Port>\
-             </tt:Multicast>"
-        ),
-        _ => String::new(),
+    let ipv4 = match &e.multicast_address {
+        Some(addr) => format!("<tt:IPv4Address>{addr}</tt:IPv4Address>"),
+        None => String::new(),
     };
     format!(
         "<tr2:Configurations token=\"{token}\">\
            <tt:Name>{name}</tt:Name>\
            <tt:UseCount>{use_count}</tt:UseCount>\
-           <tt:Analytics>{analytics}</tt:Analytics>\
            <tt:PTZStatus>\
              <tt:Status>{status}</tt:Status>\
              <tt:Position>{position}</tt:Position>\
            </tt:PTZStatus>\
-           {multicast}\
+           <tt:Analytics>{analytics}</tt:Analytics>\
+           <tt:Multicast>\
+             <tt:Address><tt:Type>IPv4</tt:Type>{ipv4}</tt:Address>\
+             <tt:Port>{port}</tt:Port>\
+             <tt:TTL>{METADATA_MULTICAST_TTL}</tt:TTL>\
+             <tt:AutoStart>{auto_start}</tt:AutoStart>\
+           </tt:Multicast>\
+           <tt:SessionTimeout>{METADATA_SESSION_TIMEOUT}</tt:SessionTimeout>\
          </tr2:Configurations>",
         token = e.token,
         name = e.name,
@@ -555,6 +573,8 @@ fn render_metadata(e: &crate::mock::state::MetadataEntry) -> String {
         analytics = e.analytics,
         status = e.ptz_status,
         position = e.ptz_position,
+        port = e.multicast_port,
+        auto_start = e.multicast_address.is_some(),
     )
 }
 
@@ -580,10 +600,20 @@ pub fn resp_metadata_configurations(state: &SharedState, body: &str) -> String {
 }
 
 /// `GetMetadataConfigurationOptions` — answers for the addressed
-/// configuration. `AnalyticsSupported` lives under `Options/Extension`, which
-/// is where `MetadataConfigurationOptions::from_xml` looks for it; the old
-/// static fixture omitted it entirely, so that parser branch was never fed and
-/// every caller saw `analytics_supported: false`.
+/// configuration.
+///
+/// This used to send `<tt:PTZStatusFilterOptions/>` empty plus an
+/// `<tt:Extension><tt:AnalyticsSupported>`. **`AnalyticsSupported` is declared
+/// nowhere in the ONVIF schema set, as element or attribute**, and it is not a
+/// misspelling of anything: `tt:MetadataConfigurationOptionsExtension` declares
+/// exactly `CompressionType` (`[0..*]`) and a further `Extension`. Whether a
+/// device can produce analytics metadata is answered by `GetCapabilities` —
+/// `tt:AnalyticsCapabilities/AnalyticsModuleSupport` — a different operation
+/// entirely, so the element is dropped rather than renamed.
+///
+/// `tt:PTZStatusFilterOptions` requires `PanTiltStatusSupported` and
+/// `ZoomStatusSupported` in that order, and they are what carries the
+/// per-configuration answer now.
 pub fn resp_metadata_configuration_options(state: &SharedState, body: &str) -> String {
     let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
     let s = state.read();
@@ -600,14 +630,17 @@ pub fn resp_metadata_configuration_options(state: &SharedState, body: &str) -> S
             ),
         );
     };
-    let analytics = entry.analytics_supported;
+    let pan_tilt = entry.pan_tilt_status_supported;
+    let zoom = entry.zoom_status_supported;
     soap(
         NS,
         &format!(
             "<tr2:GetMetadataConfigurationOptionsResponse>\
                <tr2:Options>\
-                 <tt:PTZStatusFilterOptions/>\
-                 <tt:Extension><tt:AnalyticsSupported>{analytics}</tt:AnalyticsSupported></tt:Extension>\
+                 <tt:PTZStatusFilterOptions>\
+                   <tt:PanTiltStatusSupported>{pan_tilt}</tt:PanTiltStatusSupported>\
+                   <tt:ZoomStatusSupported>{zoom}</tt:ZoomStatusSupported>\
+                 </tt:PTZStatusFilterOptions>\
                </tr2:Options>\
              </tr2:GetMetadataConfigurationOptionsResponse>"
         ),
@@ -618,9 +651,11 @@ pub fn resp_metadata_configuration_options(state: &SharedState, body: &str) -> S
 /// rather than being silently created, for the same reason as Storage — a typo
 /// must not be indistinguishable from a successful update.
 ///
-/// `analytics_supported` is deliberately **not** writable: it is a device
-/// capability reported by the options getter, not part of
-/// `tt:MetadataConfiguration`, and the client never sends it.
+/// The two `PTZStatusFilterOptions` booleans are deliberately **not** writable:
+/// they are device capabilities reported by the options getter, not part of
+/// `tt:MetadataConfiguration`, and the client never sends them. Neither are
+/// `Multicast` and `SessionTimeout` — `MetadataConfiguration::to_xml_body`
+/// carries neither, so there is no value to store.
 pub fn handle_set_metadata_configuration(state: &SharedState, body: &str) -> String {
     let Some(token) = crate::mock::xml_parse::extract_attr(body, "Configuration", "token")
         .filter(|t| !t.is_empty())

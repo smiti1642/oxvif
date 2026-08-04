@@ -17,10 +17,11 @@ each stays in the lab.**
 
 ## 0. Blast radius, established before anything else
 
-**Five client-facing bugs so far. The rest are mock fidelity.**
+**Six client-facing bugs so far. The rest are mock fidelity.**
 
 This line said *"Three client-facing bugs so far"* until §1.3's fourth landed,
-and *"Four client-facing bugs so far"* until §5.5's fifth did.
+*"Four client-facing bugs so far"* until §5.5's fifth did, and *"Five"* until
+§5.7's sixth did.
 
 This section originally read *"no finding below is a client-facing bug"*, and
 that was wrong five times over — kept here rather than deleted, because every
@@ -56,11 +57,29 @@ exception was found by looking at something the sentence dismissed:
    and §1 called the row *"not a new defect"* — true of the row, since it was
    the same defect counted at a second path, and read as *not a defect*.
 
-**The pattern across all five is worth naming: each came from the sentence
+6. **`MetadataConfigurationOptions::analytics_supported` read an element ONVIF
+   declares nowhere** — §1.3, §5.7. `Options/Extension/AnalyticsSupported` is not
+   in any of the fifteen files, in any form, so the field was `false` from every
+   conformant device. §1.3 had it in the same eight-name list as (5), with the
+   comment *"That one is a rename"* — a **positive** classification this time,
+   not a dismissal, and wrong: there is no element at any level of
+   `tt:MetadataConfigurationOptionsExtension` to rename it to. Both the mock and
+   the unit fixture had been written to agree with the parser, which is (1)'s
+   shape exactly.
+
+**The pattern across the first five is worth naming: each came from the sentence
 that dismissed a category.** "No finding is client-facing", "54 unanchored
 roots, cause not established", "the byte assertions will catch it", "out of
 this work unit's scope", "not a new defect". A dismissal in this document has so
 far been the best available index of where the next defect is.
+
+**(6) is the first that came from a confident *assertion* instead.** *"That one
+is a rename"* named the fix, so nobody re-derived it; it survived from triage
+until the work unit opened. So the index is wider than "dismissals": it is any
+sentence here that settles a question **without the schema open**, in either
+direction. The already-stated rule two paragraphs below it — *"Read the
+declaration before assuming an undeclared name wants renaming"* — was the
+correct instruction and the same paragraph broke it.
 
 **(5) adds a blind spot the other four do not have.** (3) and (4) are things the
 checker cannot see; (5) is a thing it saw and *undercounted by construction*.
@@ -149,7 +168,9 @@ with `WRONG-NS` 0; after the imaging slice of §5.2 + §5.3, 38 distinct —
 the `GetProfiles` slice of §5.2 + §5.4, 32 distinct — `MISSING-REQUIRED` 16,
 `UNKNOWN-NAME` **9**, `UNKNOWN-CHILD` 4, `ORDER` 3; after §5.5, 30 distinct —
 `UNKNOWN-NAME` **7**, no other kind moved; after §5.6, 24 distinct —
-`MISSING-REQUIRED` **11**, `UNKNOWN-NAME` **6**, `UNKNOWN-CHILD` 4, `ORDER` 3.**
+`MISSING-REQUIRED` **11**, `UNKNOWN-NAME` **6**, `UNKNOWN-CHILD` 4, `ORDER` 3;
+after §5.7, 16 distinct — `MISSING-REQUIRED` **7**, `UNKNOWN-NAME` **5**,
+`UNKNOWN-CHILD` **3**, `ORDER` **1**.**
 `tests/mock_schema_shape.rs` `PINS` carries the live numbers; this
 block is the baseline the sweep started from and is left as it was.
 
@@ -241,7 +262,7 @@ only via the checker, for the first:
 | ~~Media1 `GetProfiles` → `Profile`~~ **fixed** | the video encoder configuration is emitted before the audio source configuration; the schema has them the other way round |
 | ~~Media2 `GetProfiles` → `ConfigurationSet`~~ **fixed** | the same inversion |
 | ~~`GetOptions` → `ImagingOptions20`~~ **fixed** | badly scrambled — most members are in a different position. Only `WideDynamicRange` held its index; `BacklightCompensation` moved from last to first. **The schema order is not alphabetical, though it looks it** — `WideDynamicRange` precedes `WhiteBalance`, so sorting the members is a wrong fix that gets nine of ten right |
-| Media2 `GetMetadataConfigurations` | analytics emitted before PTZ status (**two rows**, one per configuration in the response — one cause) |
+| ~~Media2 `GetMetadataConfigurations`~~ **fixed** (§5.7) | analytics emitted before PTZ status (**two rows**, one per configuration in the response — one cause) |
 | `GetOSDOptions` → `OSDTextOptions` | the font-size range is emitted last, the schema places it second |
 
 Media1 `GetProfiles` is the most-used response in the crate.
@@ -314,7 +335,9 @@ either one alone moves `ORDER` by exactly one.
     reddens it. Of the imaging getters this was the only one with the gap —
     settings, options, status and service capabilities are each asserted
     field-by-field against the mock elsewhere in `tests/`.
-- `AnalyticsSupported` under the Media2 metadata options extension;
+- ~~`AnalyticsSupported` under the Media2 metadata options extension;~~
+  **fixed** — §5.7, and it was a client bug (§0.6) and a deletion, not the
+  rename this list said below;
   `MaximumNumberOfProfiles` under the video source configuration options;
   `ProfilesSupported` under the video encoder configuration options;
   ~~`Profile` inside a video encoder configuration;~~ `Number` under an encoder
@@ -352,8 +375,24 @@ either one alone moves `ORDER` by exactly one.
     `UNKNOWN-CHILD` and never as `UNKNOWN-NAME` — the same double-declaration
     that hid `GovLength` completely.
   - `AnalyticsSupported` is declared **nowhere** in `tt:`, as element or
-    attribute. That one is a rename, and belongs to the class this section was
-    named for.
+    attribute. ~~That one is a rename, and belongs to the class this section was
+    named for.~~ **Wrong, and wrong in the direction this section keeps warning
+    about.** Re-measured in §5.7 by parsing all fifteen files:
+    `tt:MetadataConfigurationOptionsExtension` declares exactly `CompressionType`
+    (`[0..*]`) and a further `Extension` typed
+    `tt:MetadataConfigurationOptionsExtension2`, which is an
+    `xs:any ##targetNamespace` and nothing else. **There is no element to rename
+    it to at any level of the extension chain.** It is the `UsernameToken` shape,
+    not the `AFModes` shape: a fact that belongs to a different operation —
+    `GetCapabilities`' `tt:AnalyticsCapabilities/AnalyticsModuleSupport` — and
+    the fix is to delete it. It was also the sixth client-facing bug, because
+    `MetadataConfigurationOptions::from_xml` read the same invented name; §0's
+    count is five no longer.
+
+    The sentence directly above this list — *"Read the declaration before
+    assuming an undeclared name wants renaming"* — was written about the three
+    attributes and is right about this one too: **four of the eight names on this
+    list were not renames, and this was the last one still filed as one.**
 
   **Read the declaration before assuming an undeclared name wants renaming.**
   Three of the eight names on this list are attributes, and the first two were
@@ -404,9 +443,10 @@ seventeen.
 ~~device capabilities (system, security, events, recording, search)~~
 (**fixed** — §5.6, all five, `MISSING-REQUIRED` 16 → 11), `Scope`'s
 `ScopeDef`, `GetRecordings` → `Tracks`, `EndSearch` → `Endpoint`, PTZ
-configuration options → `Spaces`, the metadata configuration's `Multicast` /
+configuration options → `Spaces`, ~~the metadata configuration's `Multicast` /
 `SessionTimeout` and multicast `AutoStart` / `TTL`, the metadata PTZ-status
-filter options, ~~imaging focus position and speed~~ (**fixed** — they were
+filter options~~ (**fixed** — §5.7, all four rows, `MISSING-REQUIRED` 11 → 7),
+~~imaging focus position and speed~~ (**fixed** — they were
 absent only because the invented `…Space` names stood in their place, so they
 closed with §1.3's rename rather than as omissions in their own right), the
 event-properties
@@ -678,12 +718,14 @@ Grouped so each lands in one file with one perturbation:
    silence is the finding.**
 2. **Sequence order** — five renderers, six rows (§1.2). **Imaging done**
    (`ImagingOptions20`, `ORDER` 6 → 5); **both `GetProfiles` inversions done**
-   with §5.4 (`ORDER` 5 → 3). Two renderers left — Media2
-   `GetMetadataConfigurations`, `GetOSDOptions`.
+   with §5.4 (`ORDER` 5 → 3); **Media2 `GetMetadataConfigurations` done** with
+   §5.7 (`ORDER` 3 → 1). One renderer left — `GetOSDOptions`.
 3. **Undeclared names** — `ScopeAttribute`, the imaging focus options, the
    options extensions (§1.3). ~~Settle `UsernameToken` by type rather than
    renaming it.~~ **`UsernameToken` done** — §5.6; settling it by type was the
    right instruction and there was no element to rename it to.
+   **`AnalyticsSupported` done** — §5.7, and it needed the same treatment for
+   the same reason, which §1.3 had explicitly ruled out.
    **Imaging done** — the `GetMoveOptions` focus names, which were
    seven of the eight imaging rows and moved three kinds between them; see §1.3
    for why that is not the `AFModes` class it was filed as, and for the
@@ -699,10 +741,14 @@ Grouped so each lands in one file with one perturbation:
    dropping state it already holds.
 
    **The inlining is done — see §5.4.** ~~Sixteen rows left, none of which is
-   the `ConfigurationSet` family.~~ **Eleven rows left** — §5.6 took the five
-   device-capabilities rows, which were the next largest group and, unlike the
-   `ConfigurationSet` family, were five *different* types rather than one
-   decision.
+   the `ConfigurationSet` family.~~ ~~**Eleven rows left**~~ **Seven rows left**
+   — §5.6 took the five device-capabilities rows, which were the next largest
+   group and, unlike the `ConfigurationSet` family, were five *different* types
+   rather than one decision; §5.7 took the four metadata rows, of which three
+   were one renderer dropping members it could have rendered from state it
+   already held — *"the rest are a renderer dropping state it already holds"*
+   was right about those and wrong about the fourth, which was the options
+   getter emitting a required element **empty**.
 5.4 ~~**The two `GetProfiles` responses**~~ **Done. `MISSING-REQUIRED` 21 → 16,
    `ORDER` 5 → 3, `UNKNOWN-NAME` 8 → 9.**
 
@@ -832,6 +878,61 @@ Grouped so each lands in one file with one perturbation:
    coverage floor was **raised** from `n >= 14` to the exact measured `n >= 17`,
    so losing any one capability block now fails it where a floor of 14 would
    have absorbed the loss of `<tt:Security>`.
+5.7 ~~**The Media2 metadata family**~~ **Done. `MISSING-REQUIRED` 11 → 7,
+   `ORDER` 3 → 1, `UNKNOWN-CHILD` 4 → 3, `UNKNOWN-NAME` 6 → 5.** Eight rows in
+   two renderers in `src/mock/services/media2.rs`, taken as one bucket across
+   units 2, 3 and 4 on the argument the imaging, `GetProfiles` and
+   `GetCapabilities` slices used: one file, one state snapshot, one perturbation
+   run.
+
+   Perturbed in **two independent halves**, since the two renderers share only
+   the state entry:
+
+   | put back | moves |
+   |---|---|
+   | `render_metadata`'s order and its omitted `Multicast` / `SessionTimeout` | `MISSING-REQUIRED` 7 → 10, `ORDER` 1 → 3, nothing else |
+   | the empty `<tt:PTZStatusFilterOptions/>` + `Extension/AnalyticsSupported` | `MISSING-REQUIRED` 7 → 8, `UNKNOWN-CHILD` 3 → 4, `UNKNOWN-NAME` 5 → 6 |
+
+   Each failed on the pin assertion, not a compile error, and each reverted
+   green. The split is also what shows the eight rows are 5 + 3 rather than one
+   cause counted twice: the four `MISSING-REQUIRED` rows §1.4 lists together
+   belong to two different renderers, three to one and one to the other.
+
+   **Two of the eight rows were one element, and the count is again the weaker
+   evidence.** `AnalyticsSupported` reported as undeclared *and* as not accepted
+   by its parent; removing it moves both. What settles that removing it was
+   right rather than a rename is §1.3's corrected entry — there is no element to
+   rename it to — and the consequence is §0.6, a client field deleted. What
+   asserts the replacement is `metadata_configs_differ_on_every_field` in
+   `tests/mock_workflow.rs`, which reads both required booleans through the
+   client for **both** tokens; the seeds invert them, so no constant satisfies
+   it.
+
+   **The comment that caused three of the rows is the finding worth keeping.**
+   `render_metadata` said *"Multicast is genuinely optional in
+   `tt:MetadataConfiguration`"* and emitted the block only for a configuration
+   with an address. It is `[1]`. The comment was not a stale justification in
+   the usual sense — it was never true — and it had been written to explain why
+   the mock differed from the audio configurations right beside it, which do
+   emit the block. `CLAUDE.md`'s *"a justification that outlives its premise is
+   where to look for the next defect"* generalises: **a justification that
+   explains why one renderer differs from its neighbour is worth checking even
+   when it is new.**
+
+   **No new row opened**, which is not automatic: `tt:MulticastConfiguration`
+   has four required members of its own and `tt:IPAddress` a required `Type`,
+   so eight elements never previously emitted here went in. Reading
+   `tt:MetadataConfiguration`'s sequence first is what kept it clean — appending
+   `Multicast` after `Analytics` would have been right and appending
+   `SessionTimeout` after the extension members would not.
+
+   **Media1 needed nothing, and that was checked rather than assumed.**
+   `media1.wsdl` and `media2.wsdl` type their `GetMetadataConfigurationsResponse`
+   `Configurations` identically (`tt:MetadataConfiguration`) and their `Options`
+   identically (`tt:MetadataConfigurationOptions`), so `CLAUDE.md` step 5b would
+   apply — but `dispatch_media` has no metadata arm at all and the crate has no
+   Media1 metadata client method, so there is no second renderer to disagree and
+   nothing for `tests/mock_media1_media2_agree.rs` to guard.
 5. ~~**Strengthen `every_response_binds_the_prefixes_it_uses`** so it asserts an
    element is in the namespace its type declares.~~ **Struck — this cannot be a
    separate unit.** Asserting that an element is in the namespace its *type*

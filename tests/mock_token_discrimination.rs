@@ -284,8 +284,10 @@ async fn m2_metadata_config(d: &Dev, t: &str) -> String {
 
 /// The options getter is addressed by the same token as the configuration
 /// getter. Before 0.15 it was a static fixture, so it answered identically for
-/// every configuration — and, because it omitted `Extension/AnalyticsSupported`
-/// entirely, every caller saw `analytics_supported: false` regardless.
+/// every configuration. What it discriminates on is
+/// `PTZStatusFilterOptions/PanTiltStatusSupported` and `ZoomStatusSupported`,
+/// the two members that type requires; the seeds invert both, so a renderer
+/// emitting a constant for either fails one token or the other.
 async fn m2_metadata_options(d: &Dev, t: &str) -> String {
     fingerprint(
         d.client

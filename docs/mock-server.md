@@ -450,10 +450,16 @@ assertion on any one of them can fail on its own.
 
 ### 6.7 Metadata (Media2)
 
-| Token | Name | Analytics | PTZ status / position | Multicast | `AnalyticsSupported` |
+| Token | Name | Analytics | PTZ status / position | Multicast | Pan/tilt · zoom status supported |
 |---|---|---|---|---|---|
-| `MetaConf_1` | `MetadataConfig` | true | false / true | `239.0.1.10:40010` | true |
-| `MetaConf_2` | `MetadataMinimal` | false | true / false | *(none)* | false |
+| `MetaConf_1` | `MetadataConfig` | true | false / true | `239.0.1.10:40010` | true · false |
+| `MetaConf_2` | `MetadataMinimal` | false | true / false | *(no group)* | false · true |
+
+`tt:MetadataConfiguration/Multicast` is **required**, so both configurations
+send the block; `MetaConf_2` omits the optional `Address/IPv4Address` inside it
+and reports `AutoStart` false, which is how a conformant device says "no group".
+The last column is `Options/PTZStatusFilterOptions`, answered per token by
+`GetMetadataConfigurationOptions`.
 
 ### 6.8 Recording
 
@@ -812,7 +818,10 @@ Prefer the deepest node and fall back outward.
 An absent value is an absent element. Note that `StorageConfiguration` in
 oxvif parses these as `String` with `unwrap_or_default()`, so **an oxvif
 client cannot distinguish omitted from empty here**; `MetadataConfiguration`'s
-multicast fields are `Option`, and there the distinction *is* visible.
+`multicast_address` is `Option` and reads the genuinely optional
+`Multicast/Address/IPv4Address`, so there the distinction *is* visible.
+(`multicast_port` is not a second instance: `Multicast/Port` is required, so the
+mock sends `0` for a configuration with no group.)
 
 ### 8.7 A fault
 
@@ -966,8 +975,11 @@ These are read-only over SOAP; use §11.1:
 - `info` — no ONVIF operation sets device information.
 - `video_sources` — sensor geometry.
 - `digital_inputs` — driven by the REST simulator only.
-- `MetadataEntry::analytics_supported` — a device capability, not part of
-  `tt:MetadataConfiguration`.
+- `MetadataEntry::pan_tilt_status_supported` / `zoom_status_supported` — device
+  capabilities, not part of `tt:MetadataConfiguration`.
+- `MetadataEntry::multicast_address` / `multicast_port` —
+  `MetadataConfiguration::to_xml_body` carries no `Multicast`, so no
+  `SetMetadataConfiguration` can express them.
 - `use_count` anywhere — derived from bindings on a real device.
 
 ---

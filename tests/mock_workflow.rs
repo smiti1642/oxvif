@@ -773,9 +773,13 @@ async fn storage_entries_differ_on_every_optional_field() {
     assert_eq!(cifs.user, "");
 }
 
-/// The two metadata configurations invert every boolean, and only one carries
-/// multicast — the `Option` distinction the parser really can see, unlike the
-/// Storage string fields.
+/// The two metadata configurations invert every boolean, and only one carries a
+/// multicast address — the `Option` distinction the parser really can see,
+/// unlike the Storage string fields.
+///
+/// `tt:MetadataConfiguration/Multicast` is required, so both configurations
+/// send the block; what distinguishes them is the optional
+/// `tt:IPAddress/IPv4Address` inside it.
 #[tokio::test]
 async fn metadata_configs_differ_on_every_field() {
     let (srv, s) = setup().await;
@@ -804,13 +808,18 @@ async fn metadata_configs_differ_on_every_field() {
     assert!(!two.ptz_position);
     assert_eq!(
         two.multicast_address, None,
-        "unicast config must omit Multicast, not send it empty"
+        "a config with no group must omit IPv4Address, not send it empty"
     );
-    assert_eq!(two.multicast_port, None);
+    assert_eq!(
+        two.multicast_port,
+        Some(0),
+        "Multicast/Port is required, so it is 0 rather than absent"
+    );
 
-    // The options getter answers for the addressed configuration. It reported
-    // `analytics_supported: false` for everything before 0.15, because the
-    // static fixture omitted `Extension/AnalyticsSupported` altogether.
+    // The options getter answers for the addressed configuration, and the two
+    // members `tt:PTZStatusFilterOptions` requires are what it discriminates
+    // on. They were an `Extension/AnalyticsSupported` that ONVIF does not
+    // declare until 0.15.
     let o1 = s
         .client()
         .get_metadata_configuration_options_media2(&url, Some("MetaConf_1"), None)
@@ -821,8 +830,10 @@ async fn metadata_configs_differ_on_every_field() {
         .get_metadata_configuration_options_media2(&url, Some("MetaConf_2"), None)
         .await
         .unwrap();
-    assert!(o1.analytics_supported);
-    assert!(!o2.analytics_supported);
+    assert!(o1.pan_tilt_status_supported);
+    assert!(!o1.zoom_status_supported);
+    assert!(!o2.pan_tilt_status_supported);
+    assert!(o2.zoom_status_supported);
     assert!(o1.ptz_status_filter_supported && o2.ptz_status_filter_supported);
 }
 

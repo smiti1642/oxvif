@@ -438,6 +438,57 @@ two-thirds of the test suite.
   measured `n >= 17` — so losing any single capability block now fails it, where
   a floor of 14 would have absorbed the loss of `<tt:Security>` entirely.
 
+- **`MetadataConfigurationOptions::analytics_supported` read an element ONVIF
+  does not declare.** `MetadataConfigurationOptions::from_xml`
+  (`src/types/media.rs`) read `Options/Extension/AnalyticsSupported`. Parsing all
+  fifteen schema files: **`AnalyticsSupported` appears nowhere, as element or
+  attribute**, and `tt:MetadataConfigurationOptionsExtension` declares exactly
+  `CompressionType` (`[0..*]`) and a further `Extension`. So the field was
+  `false` from every conformant device — the sixth client-facing bug of this
+  sweep, and the `MediaProfile2::audio_encoder_token` shape again.
+
+  **Unlike the other five, this one had no name to rename it to.** The fact it
+  was trying to state — can this device produce analytics metadata — belongs to
+  `GetCapabilities`, as `tt:AnalyticsCapabilities/AnalyticsModuleSupport`. So the
+  field is removed rather than repointed, and the two members
+  `tt:PTZStatusFilterOptions` actually requires take its place:
+  `pan_tilt_status_supported` and `zoom_status_supported` (see Breaking).
+
+  The mock had been written to agree with the parser, twice over: the unit
+  fixture in `src/tests/client/media2_tests.rs` sent
+  `<tt:Extension><tt:AnalyticsSupported>` and the mock's
+  `resp_metadata_configuration_options` sent an **empty**
+  `<tt:PTZStatusFilterOptions/>` beside it, so the required pair was never
+  emitted anywhere in the crate. Two schema-shape rows for one element —
+  `UNKNOWN-NAME` 6 → 5 and `UNKNOWN-CHILD` 4 → 3 — plus the `MISSING-REQUIRED`
+  row the empty element caused.
+
+- **The mock's Media2 metadata configurations were missing two required members
+  and had two out of order.** `render_metadata`
+  (`src/mock/services/media2.rs`) emitted `Analytics` before `PTZStatus`, which
+  `tt:MetadataConfiguration`'s `xs:sequence` does not permit, and omitted
+  `Multicast` and `SessionTimeout` entirely. Six schema-shape rows:
+  `MISSING-REQUIRED` 11 → 7 (three of the four; the fourth was the options
+  getter above) and `ORDER` 3 → 1, the last remaining `ORDER` row being
+  `GetOSDOptions`.
+
+  **`Multicast` was omitted on a comment that said it was optional.** It is
+  `[1]`, and so are its own `Address`, `Port`, `TTL` and `AutoStart` — that
+  comment is quoted and corrected where it lived, in `MetadataEntry`
+  (`src/mock/state.rs`). The member that really is optional is
+  `tt:IPAddress/IPv4Address`, so a configuration with no group configured now
+  sends the block and leaves the address out, with `AutoStart` false. That keeps
+  `MetadataConfiguration::multicast_address` observable as `None` — the
+  distinction `metadata_configs_differ_on_every_field` was written for — while
+  emitting a shape a conformant device actually produces.
+  `MetadataEntry::multicast_port` is `u32` rather than `Option<u32>` for the
+  same reason, and the unconfigured entry reads back `Some(0)`.
+
+  `TTL` and `SessionTimeout` are constants, and named as such where they are
+  written: `MetadataConfiguration::to_xml_body` carries neither, so no
+  `SetMetadataConfiguration` the client can issue supplies a value to store.
+  A documented omission, not the `MTU` bug.
+
 - **`imaging_get_move_options` returned `None` for all five of its ranges
   against every conformant camera.** `ImagingMoveOptions::from_xml`
   (`src/types/imaging.rs`) read `PositionSpace`, `SpeedSpace` and
@@ -577,11 +628,19 @@ two-thirds of the test suite.
   two token-addressed operations fault on an unknown token, and the
   configurations getter honours its optional `ConfigurationToken` filter.
 
-  The options getter also never emitted `Options/Extension/AnalyticsSupported`,
+  ~~The options getter also never emitted `Options/Extension/AnalyticsSupported`,
   which `MetadataConfigurationOptions::from_xml` reads — so
   `analytics_supported` came back `false` from the mock regardless of the
   device. Found while wiring, not by the §6 diff that was supposed to catch
-  that class.
+  that class.~~
+
+  **Superseded later in this release, and the correction is the interesting
+  part.** `AnalyticsSupported` is declared **nowhere** in the ONVIF schema set,
+  as element or attribute, so wiring the mock to emit it made the mock agree
+  with an invented parser branch rather than with a device. Both sides are gone;
+  see "`MetadataConfigurationOptions::analytics_supported` read an element ONVIF
+  does not declare" below. The `Multicast` / `SessionTimeout` claim in the state
+  comment was wrong the same way — both are required, not optional.
 
 - **The mock's PTZ `GetStatus` reported a frozen `UtcTime`.** It was the literal
   `2026-04-23T00:00:00Z` — the second hardcoded clock in the mock, missed when
@@ -1311,6 +1370,26 @@ two-thirds of the test suite.
   `GetServices`. If the device advertises no DeviceIO service it now returns
   `SoapError::MissingField("DeviceIO service URL")` instead of sending a request
   the device service does not implement.
+
+- **`MetadataConfigurationOptions::analytics_supported` is removed**, replaced by
+  `pan_tilt_status_supported` and `zoom_status_supported`. See Fixed: the field
+  read `Options/Extension/AnalyticsSupported`, which no ONVIF schema declares, so
+  it was `false` from every conformant device and there is no element to repoint
+  it at. The two replacements are the members `tt:PTZStatusFilterOptions`
+  requires.
+
+  ```rust
+  // before
+  let opts = client.get_metadata_configuration_options_media2(url, tok, None).await?;
+  if opts.analytics_supported { … }
+
+  // after — the analytics fact lives on a different operation
+  let caps = client.get_capabilities().await?;
+  if caps.analytics.analytics_module_support { … }
+  ```
+
+  `ptz_status_filter_supported` is unchanged, and still reports whether the
+  device sent the block at all.
 
 - **`AudioEncoderConfiguration` gained two fields and changed a third.**
   `multicast: Option<MulticastConfiguration>` and

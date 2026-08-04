@@ -160,15 +160,20 @@ pub struct StorageEntry {
 
 /// One Media2 metadata stream configuration.
 ///
-/// The field set is what `crate::types::MetadataConfiguration` parses, plus
-/// `analytics_supported`, which belongs to the *options* answer rather than
-/// the configuration itself — `GetMetadataConfigurationOptions` is addressed
-/// by the same token and was static too, so without a per-entry value it
-/// could not discriminate.
+/// The field set is what `crate::types::MetadataConfiguration` parses, plus the
+/// two `tt:PTZStatusFilterOptions` booleans, which belong to the *options*
+/// answer rather than the configuration itself — `GetMetadataConfigurationOptions`
+/// is addressed by the same token, so without a per-entry value it could not
+/// discriminate.
 ///
-/// `multicast_address` / `multicast_port` are `Option` on the parser as well
-/// as here, so unlike the Storage fields the omitted-vs-present distinction
-/// **is** observable from a client and a test can assert it.
+/// **`tt:MetadataConfiguration/Multicast` is `[1]`, and so are `Address`,
+/// `Port`, `TTL` and `AutoStart` inside it.** This doc used to say the block was
+/// *"genuinely optional"* and that the omitted-vs-present distinction was the
+/// observable one; it is not, and no conformant device omits it. The one member
+/// that really is optional is `tt:IPAddress/IPv4Address`, so an entry with no
+/// group configured still sends the block and simply leaves the address out —
+/// which keeps `MetadataConfiguration::multicast_address` reachable as `None`,
+/// the distinction the test was written for.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetadataEntry {
     pub token: String,
@@ -177,10 +182,16 @@ pub struct MetadataEntry {
     pub analytics: bool,
     pub ptz_status: bool,
     pub ptz_position: bool,
+    /// `Multicast/Address/IPv4Address` — the block's only optional member.
+    /// `None` also renders `AutoStart` false: no group, nothing to start.
     pub multicast_address: Option<String>,
-    pub multicast_port: Option<u32>,
-    /// Reported as `Options/Extension/AnalyticsSupported`.
-    pub analytics_supported: bool,
+    /// `Multicast/Port` — required, so an unconfigured entry sends `0` rather
+    /// than nothing.
+    pub multicast_port: u32,
+    /// Reported as `Options/PTZStatusFilterOptions/PanTiltStatusSupported`.
+    pub pan_tilt_status_supported: bool,
+    /// Reported as `Options/PTZStatusFilterOptions/ZoomStatusSupported`.
+    pub zoom_status_supported: bool,
 }
 
 /// One-shot event emitted by the IO simulator endpoint and consumed by
@@ -1709,13 +1720,13 @@ fn default_storage() -> Vec<StorageEntry> {
     ]
 }
 
-/// Two metadata configurations that **disagree on every field**, including the
-/// two `Option`s.
+/// Two metadata configurations that **disagree on every field**.
 ///
-/// `MetaConf_1` is multicast and analytics-capable; `MetaConf_2` is unicast
-/// (both `Option`s `None`) and not. Every boolean is inverted between them, so
-/// a renderer emitting a constant for any one of `analytics`, `ptz_status`,
-/// `ptz_position` or `analytics_supported` fails on one entry or the other.
+/// `MetaConf_1` has a multicast group and reports pan/tilt status;
+/// `MetaConf_2` has none and reports zoom status. Every boolean is inverted
+/// between them, so a renderer emitting a constant for any one of `analytics`,
+/// `ptz_status`, `ptz_position`, `pan_tilt_status_supported` or
+/// `zoom_status_supported` fails on one entry or the other.
 fn default_metadata() -> Vec<MetadataEntry> {
     vec![
         MetadataEntry {
@@ -1726,8 +1737,9 @@ fn default_metadata() -> Vec<MetadataEntry> {
             ptz_status: false,
             ptz_position: true,
             multicast_address: Some("239.0.1.10".into()),
-            multicast_port: Some(40010),
-            analytics_supported: true,
+            multicast_port: 40010,
+            pan_tilt_status_supported: true,
+            zoom_status_supported: false,
         },
         MetadataEntry {
             token: "MetaConf_2".into(),
@@ -1737,8 +1749,9 @@ fn default_metadata() -> Vec<MetadataEntry> {
             ptz_status: true,
             ptz_position: false,
             multicast_address: None,
-            multicast_port: None,
-            analytics_supported: false,
+            multicast_port: 0,
+            pan_tilt_status_supported: false,
+            zoom_status_supported: true,
         },
     ]
 }

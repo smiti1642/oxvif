@@ -222,12 +222,40 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 ///   fact belongs to the operation that already carries it. `src/health/`'s
 ///   cross-check had paired the two names across the two types and is what
 ///   asserts the consequence.
+/// - §5.7, the Media2 metadata family — `MISSING-REQUIRED` 11 → **7**,
+///   `ORDER` 3 → **1**, `UNKNOWN-CHILD` 4 → **3**, `UNKNOWN-NAME` 6 → **5**.
+///   Eight rows, two renderers in `src/mock/services/media2.rs`, perturbed as
+///   two independent halves.
+///
+///   `render_metadata` carried six of the eight: `Analytics` before `PTZStatus`
+///   (one row per seeded configuration, one cause), and `Multicast` /
+///   `SessionTimeout` absent. Putting it back moves `MISSING-REQUIRED` 7 → 11
+///   and `ORDER` 1 → 3, nothing else. **`tt:MetadataConfiguration/Multicast` is
+///   `[1]`**, and so are the `Address`, `Port`, `TTL` and `AutoStart` inside it;
+///   the mock had emitted the block only for a configuration with an address, on
+///   a comment claiming it was optional. Only `tt:IPAddress/IPv4Address` is, so
+///   an unconfigured entry sends the block and omits the address — which is what
+///   keeps `MetadataConfiguration::multicast_address` observable as `None`.
+///
+///   `resp_metadata_configuration_options` carried the other two, and they are
+///   one element: `Extension/AnalyticsSupported`, undeclared **and** not
+///   accepted by its parent. Putting it back moves `UNKNOWN-CHILD` 3 → 4 and
+///   `UNKNOWN-NAME` 5 → 6; putting the empty `<tt:PTZStatusFilterOptions/>` back
+///   moves `MISSING-REQUIRED` alone. As with `UsernameToken`, the count proves
+///   only that the element is gone. What settles it is that `AnalyticsSupported`
+///   is declared **nowhere** in the schema set, as element or attribute, and
+///   `tt:MetadataConfigurationOptionsExtension` declares exactly
+///   `CompressionType` and a further `Extension` — so there was nothing to
+///   rename it to, and the fact it stated is `GetCapabilities`'
+///   `tt:AnalyticsCapabilities/AnalyticsModuleSupport`, a different operation.
+///   `metadata_configs_differ_on_every_field` in `tests/mock_workflow.rs` is
+///   what asserts the two required booleans that replaced it, per token.
 const PINS: &[(&str, usize)] = &[
     ("WRONG-NS", 0),
-    ("MISSING-REQUIRED", 11),
-    ("UNKNOWN-NAME", 6),
-    ("UNKNOWN-CHILD", 4),
-    ("ORDER", 3),
+    ("MISSING-REQUIRED", 7),
+    ("UNKNOWN-NAME", 5),
+    ("UNKNOWN-CHILD", 3),
+    ("ORDER", 1),
 ];
 
 /// Floors on what the run actually covered.

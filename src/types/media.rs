@@ -311,24 +311,37 @@ impl MetadataConfiguration {
 
 /// Valid ranges for metadata configuration returned by
 /// `GetMetadataConfigurationOptions` (Media2).
+///
+/// This type used to carry an `analytics_supported` flag read from
+/// `Options/Extension/AnalyticsSupported`. **No such element or attribute is
+/// declared anywhere in the ONVIF schema set** — `tt:MetadataConfigurationOptionsExtension`
+/// declares only `CompressionType` and a further `Extension` — so the field was
+/// `false` from every conformant device. Analytics support is reported by
+/// `GetCapabilities`, as `tt:AnalyticsCapabilities/AnalyticsModuleSupport`.
+/// The two booleans `tt:PTZStatusFilterOptions` actually requires replace it.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct MetadataConfigurationOptions {
-    /// The device accepts a PTZ status filter — i.e. `ptz_status` /
-    /// `ptz_position` on [`MetadataConfiguration`] are settable.
+    /// The device sent a `tt:PTZStatusFilterOptions` block — i.e. `ptz_status` /
+    /// `ptz_position` on [`MetadataConfiguration`] are settable. The schema
+    /// makes the block required, so a conformant device always sends it.
     pub ptz_status_filter_supported: bool,
-    /// The device can embed analytics events in the metadata stream.
-    pub analytics_supported: bool,
+    /// `tt:PTZStatusFilterOptions/PanTiltStatusSupported` — the metadata stream
+    /// can carry pan/tilt move status.
+    pub pan_tilt_status_supported: bool,
+    /// `tt:PTZStatusFilterOptions/ZoomStatusSupported` — the metadata stream can
+    /// carry zoom move status.
+    pub zoom_status_supported: bool,
 }
 
 impl MetadataConfigurationOptions {
     pub(crate) fn from_xml(resp: &XmlNode) -> Result<Self, OnvifError> {
         let opts = resp.child("Options").unwrap_or(resp);
+        let ptz = opts.child("PTZStatusFilterOptions");
         Ok(Self {
-            ptz_status_filter_supported: opts.child("PTZStatusFilterOptions").is_some(),
-            analytics_supported: opts
-                .path(&["Extension", "AnalyticsSupported"])
-                .is_some_and(|n| n.text() == "true" || n.text() == "1"),
+            ptz_status_filter_supported: ptz.is_some(),
+            pan_tilt_status_supported: ptz.is_some_and(|p| xml_bool(p, "PanTiltStatusSupported")),
+            zoom_status_supported: ptz.is_some_and(|p| xml_bool(p, "ZoomStatusSupported")),
         })
     }
 }
