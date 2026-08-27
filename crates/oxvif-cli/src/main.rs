@@ -1,15 +1,19 @@
 use std::{
     env,
     ffi::OsString,
+    io::{self, Read},
     process::ExitCode,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use clap::{ArgAction, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use oxvif_cli::{
-    AppError, Application, CommandRequest, DescribeRequest, ExecutionOptions, OutputFormat,
-    ResultMeta, render_error, render_success,
+    AppError, Application, CommandRequest, DescribeRequest, DeviceAddRequest, DeviceConnectRequest,
+    DeviceCredentialSetRequest, DeviceIdRequest, DeviceRenameRequest, DeviceUpdate,
+    DeviceUpdateRequest, ExecutionOptions, NewDevice, OutputFormat, ResultMeta, SecretString,
+    TargetSelector, render_error, render_success,
 };
+use tokio::time::Instant;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -21,6 +25,10 @@ struct Cli {
     /// Select terminal, JSON, or newline-delimited JSON output.
     #[arg(long, value_enum, default_value_t, global = true)]
     output: CliOutputFormat,
+
+    /// Select a saved device by immutable ID.
+    #[arg(long, global = true)]
+    device: Option<String>,
 
     /// Never prompt or open a GUI; fail when required input is missing.
     #[arg(long, global = true)]
@@ -55,9 +63,90 @@ struct Cli {
 enum Commands {
     /// List implemented commands or describe one command.
     Describe {
-        /// Stable dotted command name, for example `media.stream-uri`.
+        /// Stable dotted command name, for example `device.info`.
         command: Option<String>,
     },
+    /// Manage saved devices and perform device-level operations.
+    Device {
+        #[command(subcommand)]
+        command: DeviceCommands,
+    },
+    /// Select the current device for interactive commands.
+    Use { id: String },
+    /// Show the current interactive device selection.
+    Current,
+}
+
+#[derive(Debug, Subcommand)]
+enum DeviceCommands {
+    /// Save a new device under an immutable ID.
+    Add {
+        id: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long = "target")]
+        add_target: String,
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+    },
+    /// List all saved devices.
+    List,
+    /// Show one saved device without revealing its password.
+    Show { id: String },
+    /// Update a saved device display name, target, or tags.
+    Update {
+        id: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long = "target")]
+        updated_target: Option<String>,
+        #[arg(long = "tag", conflicts_with = "clear_tags")]
+        tags: Vec<String>,
+        #[arg(long)]
+        clear_tags: bool,
+    },
+    /// Change the display name while preserving the immutable ID.
+    Rename {
+        id: String,
+        #[arg(long)]
+        name: String,
+    },
+    /// Remove a saved device and its stored credential.
+    Remove { id: String },
+    /// Store or delete a device password in the OS credential store.
+    Credential {
+        #[command(subcommand)]
+        command: CredentialCommands,
+    },
+    /// Verify connectivity and authentication.
+    Test {
+        id: Option<String>,
+        /// Use a direct ONVIF URL, hostname, or IP without saving it.
+        #[arg(long)]
+        target: Option<String>,
+    },
+    /// Read live ONVIF device information.
+    Info {
+        /// Use a direct ONVIF URL, hostname, or IP without saving it.
+        #[arg(long)]
+        target: Option<String>,
+    },
+    /// Read live information and update cached registry metadata.
+    Refresh { id: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum CredentialCommands {
+    /// Store a password in the native OS credential store.
+    Set {
+        id: String,
+        #[arg(long)]
+        username: Option<String>,
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    /// Delete a password from the native OS credential store.
+    Delete { id: String },
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
@@ -79,11 +168,12 @@ impl From<CliOutputFormat> for OutputFormat {
     }
 }
 
-fn main() -> ExitCode {
-    ExitCode::from(run(env::args_os().collect()))
+#[tokio::main]
+async fn main() -> ExitCode {
+    ExitCode::from(run(env::args_os().collect()).await)
 }
 
-fn run(arguments: Vec<OsString>) -> u8 {
+async fn run(arguments: Vec<OsString>) -> u8 {
     let requested_format = requested_output(&arguments);
     let cli = match Cli::try_parse_from(&arguments) {
         Ok(cli) => cli,
@@ -112,13 +202,24 @@ fn run(arguments: Vec<OsString>) -> u8 {
         verbosity: cli.verbose,
         quiet: cli.quiet,
     };
-    let request = match cli.command {
-        Commands::Describe { command } => CommandRequest::Describe(DescribeRequest { command }),
+    let request = match build_request(cli.command, cli.device) {
+        Ok(request) => request,
+        Err(error) => {
+            emit_error(format, &error, None);
+            return error.exit_code();
+        }
     };
     let command_name = request.name();
     let started = Instant::now();
+    let application = match Application::system() {
+        Ok(application) => application,
+        Err(error) => {
+            emit_error(format, &error, Some(command_name));
+            return error.exit_code();
+        }
+    };
 
-    match Application.execute(request, &options) {
+    match application.execute(request, &options).await {
         Ok(success) => match render_success(format, &success) {
             Ok(rendered) => {
                 println!("{rendered}");
@@ -138,6 +239,139 @@ fn run(arguments: Vec<OsString>) -> u8 {
             emit_error_with_meta(format, &error, &meta);
             error.exit_code()
         }
+    }
+}
+
+fn build_request(
+    command: Commands,
+    selected_device: Option<String>,
+) -> Result<CommandRequest, AppError> {
+    let selector = |target| TargetSelector {
+        device: selected_device.clone(),
+        target,
+    };
+
+    match command {
+        Commands::Describe { command } => Ok(CommandRequest::Describe(DescribeRequest { command })),
+        Commands::Use { id } => Ok(CommandRequest::Use(DeviceIdRequest { id })),
+        Commands::Current => Ok(CommandRequest::Current),
+        Commands::Device { command } => match command {
+            DeviceCommands::Add {
+                id,
+                name,
+                add_target,
+                tags,
+            } => Ok(CommandRequest::DeviceAdd(DeviceAddRequest {
+                device: NewDevice {
+                    id,
+                    name,
+                    target: add_target,
+                    tags,
+                },
+            })),
+            DeviceCommands::List => Ok(CommandRequest::DeviceList),
+            DeviceCommands::Show { id } => Ok(CommandRequest::DeviceShow(DeviceIdRequest { id })),
+            DeviceCommands::Update {
+                id,
+                name,
+                updated_target,
+                tags,
+                clear_tags,
+            } => Ok(CommandRequest::DeviceUpdate(DeviceUpdateRequest {
+                id,
+                update: DeviceUpdate {
+                    name,
+                    target: updated_target,
+                    tags: if clear_tags || !tags.is_empty() {
+                        Some(tags)
+                    } else {
+                        None
+                    },
+                },
+            })),
+            DeviceCommands::Rename { id, name } => {
+                Ok(CommandRequest::DeviceRename(DeviceRenameRequest {
+                    id,
+                    name,
+                }))
+            }
+            DeviceCommands::Remove { id } => {
+                Ok(CommandRequest::DeviceRemove(DeviceIdRequest { id }))
+            }
+            DeviceCommands::Credential { command } => match command {
+                CredentialCommands::Set {
+                    id,
+                    username,
+                    password_stdin,
+                } => {
+                    let username = username
+                        .or_else(|| env::var("OXVIF_USERNAME").ok())
+                        .ok_or_else(|| {
+                            AppError::invalid_argument("Provide --username or set OXVIF_USERNAME.")
+                        })?;
+                    let password = if password_stdin {
+                        read_password_from_stdin()?
+                    } else {
+                        env::var("OXVIF_PASSWORD").map_err(|_| {
+                            AppError::invalid_argument(
+                                "Pass --password-stdin or set OXVIF_PASSWORD.",
+                            )
+                        })?
+                    };
+                    Ok(CommandRequest::DeviceCredentialSet(
+                        DeviceCredentialSetRequest {
+                            id,
+                            username,
+                            password: SecretString::new(password)?,
+                        },
+                    ))
+                }
+                CredentialCommands::Delete { id } => {
+                    Ok(CommandRequest::DeviceCredentialDelete(DeviceIdRequest {
+                        id,
+                    }))
+                }
+            },
+            DeviceCommands::Test { id, target } => {
+                let mut selector = selector(target);
+                if let Some(id) = id {
+                    if selector.device.is_some() || selector.target.is_some() {
+                        return Err(AppError::invalid_argument(
+                            "A positional device ID cannot be combined with --device or --target.",
+                        ));
+                    }
+                    selector.device = Some(id);
+                }
+                Ok(CommandRequest::DeviceTest(DeviceConnectRequest {
+                    selector,
+                }))
+            }
+            DeviceCommands::Info { target } => {
+                Ok(CommandRequest::DeviceInfo(DeviceConnectRequest {
+                    selector: selector(target),
+                }))
+            }
+            DeviceCommands::Refresh { id } => {
+                Ok(CommandRequest::DeviceRefresh(DeviceIdRequest { id }))
+            }
+        },
+    }
+}
+
+fn read_password_from_stdin() -> Result<String, AppError> {
+    let mut password = String::new();
+    io::stdin()
+        .read_to_string(&mut password)
+        .map_err(|error| AppError::invalid_argument(format!("Failed to read password: {error}")))?;
+    while password.ends_with(['\r', '\n']) {
+        password.pop();
+    }
+    if password.is_empty() {
+        Err(AppError::invalid_argument(
+            "Password stdin was empty; no credential was stored.",
+        ))
+    } else {
+        Ok(password)
     }
 }
 
@@ -225,5 +459,11 @@ mod tests {
     fn rejects_zero_and_unknown_units() {
         assert!(parse_duration("0s").is_err());
         assert!(parse_duration("10h").is_err());
+    }
+
+    #[test]
+    fn secret_debug_output_is_redacted() {
+        let secret = SecretString::new("do-not-print").expect("secret should construct");
+        assert_eq!(format!("{secret:?}"), "SecretString([REDACTED])");
     }
 }

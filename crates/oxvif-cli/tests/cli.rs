@@ -1,10 +1,25 @@
-use std::process::{Command, Output};
+use std::{
+    fs,
+    path::Path,
+    process::{Command, Output, Stdio},
+};
 
 use serde_json::Value;
 
 fn run(arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_oxvif"))
         .args(arguments)
+        .output()
+        .expect("oxvif binary should run")
+}
+
+fn run_isolated(arguments: &[&str], config_dir: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_oxvif"))
+        .args(arguments)
+        .env("OXVIF_CONFIG_DIR", config_dir)
+        .env_remove("OXVIF_DEVICE")
+        .env_remove("OXVIF_USERNAME")
+        .env_remove("OXVIF_PASSWORD")
         .output()
         .expect("oxvif binary should run")
 }
@@ -93,4 +108,119 @@ fn jsonl_is_one_complete_line() {
     assert_eq!(rendered.lines().count(), 1);
     let document: Value = serde_json::from_str(rendered.trim()).expect("line should be JSON");
     assert_eq!(document["ok"], true);
+}
+
+#[test]
+fn named_device_registry_round_trips_through_cli() {
+    let directory = tempfile::tempdir().expect("temp directory");
+
+    let add = run_isolated(
+        &[
+            "device",
+            "add",
+            "front-door",
+            "--name",
+            "Front Door",
+            "--target",
+            "192.168.1.20",
+            "--tag",
+            "outdoor",
+            "--output",
+            "json",
+        ],
+        directory.path(),
+    );
+    assert!(add.status.success(), "{}", stderr(&add));
+    let added: Value = serde_json::from_slice(&add.stdout).expect("add should return JSON");
+    assert_eq!(added["data"]["kind"], "device_record");
+    assert_eq!(added["data"]["device"]["id"], "front-door");
+    assert_eq!(
+        added["data"]["device"]["target"],
+        "http://192.168.1.20/onvif/device_service"
+    );
+
+    let select = run_isolated(&["use", "front-door"], directory.path());
+    assert!(select.status.success(), "{}", stderr(&select));
+
+    let current = run_isolated(&["current", "--output", "json"], directory.path());
+    assert!(current.status.success(), "{}", stderr(&current));
+    let current: Value =
+        serde_json::from_slice(&current.stdout).expect("current should return JSON");
+    assert_eq!(current["data"]["device"]["id"], "front-door");
+
+    let rename = run_isolated(
+        &["device", "rename", "front-door", "--name", "Main Entrance"],
+        directory.path(),
+    );
+    assert!(rename.status.success(), "{}", stderr(&rename));
+
+    let list = run_isolated(&["device", "list", "--output=json"], directory.path());
+    assert!(list.status.success(), "{}", stderr(&list));
+    let list: Value = serde_json::from_slice(&list.stdout).expect("list should return JSON");
+    assert_eq!(list["data"]["devices"][0]["name"], "Main Entrance");
+    assert_eq!(list["data"]["current_device"], "front-door");
+    assert_eq!(list["data"]["devices"][0]["has_credentials"], false);
+
+    let registry = fs::read_to_string(directory.path().join("devices.toml"))
+        .expect("registry should be readable");
+    assert!(!registry.to_ascii_lowercase().contains("password"));
+
+    let remove = run_isolated(&["device", "remove", "front-door"], directory.path());
+    assert!(remove.status.success(), "{}", stderr(&remove));
+    let current = run_isolated(&["current", "--output=json"], directory.path());
+    let current: Value =
+        serde_json::from_slice(&current.stdout).expect("current should return JSON");
+    assert!(current["data"]["device"].is_null());
+}
+
+#[test]
+fn invalid_device_id_is_a_structured_error() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let output = run_isolated(
+        &[
+            "device",
+            "add",
+            "Front Door",
+            "--target",
+            "192.168.1.20",
+            "--output",
+            "json",
+        ],
+        directory.path(),
+    );
+
+    assert_eq!(output.status.code(), Some(2));
+    let document: Value = serde_json::from_slice(&output.stdout).expect("error should be JSON");
+    assert_eq!(document["error"]["code"], "INVALID_ARGUMENT");
+    assert!(!directory.path().join("devices.toml").exists());
+}
+
+#[test]
+fn concurrent_registry_writers_do_not_lose_devices() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let mut children = Vec::new();
+    for index in 0..8 {
+        let id = format!("camera-{index}");
+        let target = format!("192.168.1.{}", index + 20);
+        let child = Command::new(env!("CARGO_BIN_EXE_oxvif"))
+            .args(["device", "add", &id, "--target", &target])
+            .env("OXVIF_CONFIG_DIR", directory.path())
+            .env_remove("OXVIF_DEVICE")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("concurrent oxvif process should start");
+        children.push(child);
+    }
+    for mut child in children {
+        assert!(child.wait().expect("child should finish").success());
+    }
+
+    let list = run_isolated(&["device", "list", "--output=json"], directory.path());
+    assert!(list.status.success(), "{}", stderr(&list));
+    let list: Value = serde_json::from_slice(&list.stdout).expect("list should return JSON");
+    assert_eq!(list["data"]["devices"].as_array().unwrap().len(), 8);
+    let registry = fs::read_to_string(directory.path().join("devices.toml"))
+        .expect("registry should remain readable");
+    assert_eq!(registry.matches("[devices.camera-").count(), 8);
 }

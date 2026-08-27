@@ -121,6 +121,24 @@ oxvif = "0.15"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
+### Command-line tool
+
+The separately published `oxvif-cli` package installs an executable named
+`oxvif`. It provides stable human and JSON output, a named-device registry,
+and native OS credential storage:
+
+```sh
+cargo install oxvif-cli --locked
+oxvif device add front-door --target 192.168.1.100 --name "Front Door"
+oxvif device credential set front-door --username admin --password-stdin
+oxvif --device front-door device test
+oxvif --device front-door device info --output json --non-interactive
+```
+
+Passwords are never stored in the registry; `--password-stdin` writes them to
+the native credential store. See the
+[`oxvif-cli` README](crates/oxvif-cli/README.md) for the current command surface.
+
 ---
 
 ## Serde support (`serde` feature)

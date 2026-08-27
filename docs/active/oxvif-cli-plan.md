@@ -2,11 +2,11 @@
 
 **Status:** active. Written 2026-08-26 from the product discussion that
 established the package boundary, human/Agent contract, and named-device
-registry. **Stage 0 was completed in the working tree on 2026-08-26:** the
-workspace, `oxvif-cli` crate, typed command/result contract, `describe`, human
-renderer, JSON/JSONL envelopes, structured argument errors, and integration
-tests are present. Command spelling that is explicitly marked provisional may
-still change before the first release.
+registry. **Stage 0 landed as `9590663` on 2026-08-27. Stage 1 was completed on
+2026-08-27.** The workspace, typed command/result contract,
+named-device registry, Windows credential backend, human and Agent renderers,
+and first read-only live-device operations are present. Command spelling that
+is explicitly marked provisional may still change before the first release.
 
 **Package:** crates.io package `oxvif-cli`, installed binary `oxvif`.
 
@@ -440,7 +440,7 @@ Delivered and verified:
   built without warnings.
 - `cargo fmt --all -- --check` and `git diff --check`: clean.
 
-### Stage 1 — registry and credentials
+### Stage 1 — registry and credentials — complete 2026-08-27
 
 - Implement versioned, atomic device-registry storage.
 - Implement `device add/list/show/update/rename/remove/test/refresh`.
@@ -453,8 +453,46 @@ Delivered and verified:
 - Add concurrency, migration, atomic-write, corruption, and secret-redaction
   tests.
 
-**Exit:** a device can be discovered, saved once, selected by stable ID, and
-reused without a password appearing in arguments or the registry.
+**Exit:** a direct device endpoint can be saved once, selected by stable ID,
+and reused without a password appearing in arguments or the registry.
+Discovery feeds registration in Stage 2; making it a Stage 1 exit condition
+would contradict the stage ordering.
+
+Delivered:
+
+- `devices.toml` schema version 1 under the platform user configuration
+  directory, with `OXVIF_CONFIG_DIR` isolation for tests and containers.
+- Cross-process `fs2` locking plus `atomic-write-file` replacement; eight
+  concurrent CLI writers are covered by an integration test.
+- Immutable `[a-z0-9][a-z0-9_-]*` IDs, mutable display name/target/tags, cached
+  device information, and a serial-change replacement warning.
+- `device add/list/show/update/rename/remove`, `use`, and `current`.
+- Credential abstraction with a Windows Credential Manager backend and an
+  in-memory test backend. The registry holds a credential reference and
+  username, never the password.
+- `device credential set/delete`; secret-bearing request types redact `Debug`
+  and are intentionally not `Clone`.
+- `device test/info/refresh` by explicit `--device`, direct `--target`,
+  `OXVIF_DEVICE`, or current device, in that order where applicable.
+- Timeouts, bounded retries, stable error codes, JSON/JSONL results, and target
+  identity metadata on the first live-device vertical slice.
+- A Windows real-device run stored the password in Credential Manager, removed
+  password environment variables, then passed `use`, `device test`,
+  `device info`, `device refresh`, `device list`, and `device remove` against a
+  GeoVision GV-GDRN4800-2F. The temporary registry and credential were removed.
+
+Verified after the final Stage 1 change:
+
+- `cargo +1.88.0 check -p oxvif-cli`: clean at the corrected workspace MSRV.
+- `cargo test -p oxvif-cli`: 22 passed across library, binary, and CLI process
+  suites.
+- `cargo test --workspace --all-features`: 967 passed, 3 ignored, 0 failed.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`: no
+  findings.
+- `cargo rustdoc -p oxvif-cli --lib -- -D warnings`: clean.
+- `cargo package -p oxvif-cli --allow-dirty`: 15 files packaged and rebuilt
+  successfully against the crates.io `oxvif 0.15.0` dependency.
+- `cargo fmt --all -- --check` and `git diff --check`: clean.
 
 ### Stage 2 — read-only diagnostic MVP
 
@@ -519,24 +557,30 @@ The first crates.io release is ready only when all of the following are true:
 
 ---
 
-## 10. Open decisions before implementation
+## 10. Decisions closed by Stage 1
 
-These do not invalidate the decisions above, but Stage 0 or Stage 1 must close
-them explicitly:
+1. The workspace MSRV is Rust 1.88. The previous 1.85 declaration was stale:
+   both existing let-chain syntax and `diqwest 3.2` require 1.88. Stage 1
+   verifies the CLI with that exact compiler. `keyring 3.6.3` is retained as
+   the tested Windows-native credential backend behind the CLI's own trait.
+2. `use` is user-scoped in version 1. Project-local current-device state is
+   deferred until a concrete workflow justifies its concurrency and Git rules.
+3. A bare IP/host is normalized to the conventional
+   `/onvif/device_service` path. The normalized endpoint is always returned in
+   result metadata. Discovery-based resolution follows in Stage 2.
+4. Registry writers take an OS-released `fs2` exclusive lock and replace the
+   TOML atomically. The lock file may persist after exit; the OS lock does not,
+   so no stale-lock deletion policy is needed.
+5. Tags ship with the single-device registry. Groups remain a Stage 3 fleet
+   feature.
+6. Exit codes now distinguish invalid input, not found, conflict, missing
+   target, registry/configuration, credentials, network/device connection, and
+   internal failures.
 
-1. Exact CLI argument-parser and secure credential-backend crates after an
-   MSRV, dependency, and maintenance review.
-2. Whether `use` is user-scoped only or also supports a project-local current
-   device; if project-local state exists, whether it is ignored by default by
-   version control.
-3. Whether a bare IP is normalized to the conventional device-service path or
-   resolved through discovery first; either behavior must be visible in
-   metadata.
-4. Registry locking behavior across multiple processes and the stale-lock
-   recovery policy.
-5. Schema distribution format for `describe`: JSON Schema, a smaller internal
-   description format, or both.
-6. Exact exit-code allocation and which warnings make a fleet command partially
-   successful.
-7. Whether tags/groups belong in the first release or immediately after the
-   single-device registry stabilizes.
+## 11. Remaining decisions
+
+1. Schema distribution format for `describe`: JSON Schema, the current smaller
+   internal description format, or both.
+2. Which warnings make a future fleet command partially successful and the
+   exact aggregate exit-code behavior.
+3. Native credential backends and packaging policy for non-Windows platforms.

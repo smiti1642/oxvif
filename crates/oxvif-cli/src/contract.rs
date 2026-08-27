@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::AppError;
+use crate::{AppError, DeviceUpdate, DeviceView, NewDevice};
 
 /// Version of the structured stdout contract.
 pub const SCHEMA_VERSION: &str = "1";
@@ -25,11 +25,24 @@ impl OutputFormat {
 }
 
 /// A request understood by the application layer.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum CommandRequest {
     /// List commands or describe one command.
     Describe(DescribeRequest),
+    DeviceAdd(DeviceAddRequest),
+    DeviceList,
+    DeviceShow(DeviceIdRequest),
+    DeviceUpdate(DeviceUpdateRequest),
+    DeviceRename(DeviceRenameRequest),
+    DeviceRemove(DeviceIdRequest),
+    DeviceCredentialSet(DeviceCredentialSetRequest),
+    DeviceCredentialDelete(DeviceIdRequest),
+    Use(DeviceIdRequest),
+    Current,
+    DeviceTest(DeviceConnectRequest),
+    DeviceInfo(DeviceConnectRequest),
+    DeviceRefresh(DeviceIdRequest),
 }
 
 impl CommandRequest {
@@ -37,6 +50,19 @@ impl CommandRequest {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::Describe(_) => "describe",
+            Self::DeviceAdd(_) => "device.add",
+            Self::DeviceList => "device.list",
+            Self::DeviceShow(_) => "device.show",
+            Self::DeviceUpdate(_) => "device.update",
+            Self::DeviceRename(_) => "device.rename",
+            Self::DeviceRemove(_) => "device.remove",
+            Self::DeviceCredentialSet(_) => "device.credential.set",
+            Self::DeviceCredentialDelete(_) => "device.credential.delete",
+            Self::Use(_) => "use",
+            Self::Current => "current",
+            Self::DeviceTest(_) => "device.test",
+            Self::DeviceInfo(_) => "device.info",
+            Self::DeviceRefresh(_) => "device.refresh",
         }
     }
 }
@@ -46,6 +72,70 @@ impl CommandRequest {
 pub struct DescribeRequest {
     /// Dotted command name, or `None` to list the available commands.
     pub command: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeviceAddRequest {
+    pub device: NewDevice,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeviceIdRequest {
+    pub id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeviceUpdateRequest {
+    pub id: String,
+    pub update: DeviceUpdate,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeviceRenameRequest {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Eq, PartialEq)]
+pub struct SecretString(String);
+
+impl SecretString {
+    pub fn new(secret: impl Into<String>) -> Result<Self, AppError> {
+        let secret = secret.into();
+        if secret.is_empty() {
+            Err(AppError::invalid_argument("Password must not be empty."))
+        } else {
+            Ok(Self(secret))
+        }
+    }
+
+    pub fn expose_secret(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for SecretString {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("SecretString([REDACTED])")
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct DeviceCredentialSetRequest {
+    pub id: String,
+    pub username: String,
+    pub password: SecretString,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct TargetSelector {
+    pub device: Option<String>,
+    pub target: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DeviceConnectRequest {
+    pub selector: TargetSelector,
 }
 
 /// Risk attached to a command in the self-description surface.
@@ -105,8 +195,50 @@ pub struct CommandDescriptor {
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum CommandData {
-    CommandList { commands: Vec<CommandDescriptor> },
-    CommandDescription { command: CommandDescriptor },
+    CommandList {
+        commands: Vec<CommandDescriptor>,
+    },
+    CommandDescription {
+        command: CommandDescriptor,
+    },
+    DeviceList {
+        devices: Vec<DeviceView>,
+        current_device: Option<String>,
+    },
+    DeviceRecord {
+        action: String,
+        device: DeviceView,
+    },
+    DeviceRemoved {
+        id: String,
+    },
+    CurrentDevice {
+        device: Option<DeviceView>,
+    },
+    CredentialUpdated {
+        action: String,
+        device: DeviceView,
+    },
+    DeviceTest {
+        device_id: Option<String>,
+        target: String,
+        authenticated: bool,
+        information: LiveDeviceInfo,
+    },
+    DeviceInformation {
+        device_id: Option<String>,
+        target: String,
+        information: LiveDeviceInfo,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct LiveDeviceInfo {
+    pub manufacturer: String,
+    pub model: String,
+    pub firmware_version: String,
+    pub serial_number: String,
+    pub hardware_id: String,
 }
 
 /// A non-fatal condition associated with an otherwise successful result.
