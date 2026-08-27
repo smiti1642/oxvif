@@ -66,6 +66,12 @@ runner instead of a useful operating environment.
 | 13 | Can discovery results be reused? | Yes. A named discovery snapshot preserves one scan until explicitly refreshed or removed. |
 | 14 | Can filtered discoveries be registered in bulk? | Yes, through explicit `device import --plan` and `--apply`; scanning itself never mutates the registry. |
 | 15 | How are credentials reused across many cameras? | Named credential profiles may be referenced by many devices. Groups never imply credential inheritance. |
+| 16 | How does an installed Agent learn safe operation rules? | Root help points to embedded, version-matched `agent guide` and `agent prompt` commands; `describe` remains the machine contract. |
+| 17 | May the pre-release structured contract change? | Yes. The UX correction raises stdout schema to v2 before the first public CLI release. |
+| 18 | Which selectors may delete a registry device? | `device remove` requires the immutable global ID; read/live and reversible registry operations may use `group/local-alias`. |
+| 19 | Where are discovery records persisted? | Registry v3 indexes snapshots stored as separate atomic files; v2 embedded snapshots migrate without data loss. |
+| 20 | What does discovery do by default? | `discover scan` is ephemeral; `--save` is an explicit local write. Partial interface failure is a successful result with warnings; total failure is typed failure. |
+| 21 | What is the first filter language? | Typed `field[:operator]=value`, `eq/neq/contains/prefix/in`, and explicit `--match all|any`; no implicit firmware version ordering. |
 
 ---
 
@@ -405,7 +411,7 @@ Every structured success uses the same top-level contract:
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "ok": true,
   "data": {},
   "warnings": [],
@@ -421,7 +427,7 @@ Errors are data, not prose requiring interpretation:
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "ok": false,
   "error": {
     "code": "AUTH_CLOCK_SKEW",
@@ -604,6 +610,20 @@ Verified after the first slice:
 Remaining in Stage 2A: authenticated discovery enrichment, deterministic bulk
 import ID/alias proposals, import `--plan/--apply`, snapshot refresh lifecycle,
 explicit interface selection, and set resolution for future batch commands.
+
+UX contract correction approved 2026-08-27:
+
+- Add embedded `agent guide` and `agent prompt`; root help routes Agents to the
+  guide and structured `describe` surface.
+- Raise the structured stdout contract to schema v2 and report canonical IDs,
+  original selectors, and explicit credential source/status.
+- Make connection selectors/options consistent and stop advertising ignored
+  global options. `device remove` remains global-ID-only by design.
+- Raise the registry to v3 and atomically move snapshots out of `devices.toml`.
+- Make discovery ephemeral unless `--save` is present, expose interface and
+  partial-failure diagnostics, and merge duplicate observations.
+- Add typed filter operators, all/any matching, View explanation output,
+  Unicode-aware rendering, and complete Agent-readable command descriptors.
 
 ### Stage 2B — read-only diagnostic MVP
 

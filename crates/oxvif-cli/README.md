@@ -9,7 +9,13 @@ The package installs an executable named `oxvif`:
 cargo install oxvif-cli --locked
 oxvif describe
 oxvif describe --output json --non-interactive
+oxvif agent guide --output json
 ```
+
+Root help includes a short Agent onboarding hint. `agent guide` returns the
+version-matched operational and security rules embedded in the installed
+binary; `agent prompt` prints a compact prompt suitable for Agent instructions.
+The structured stdout contract is currently schema version 2.
 
 ## Named devices
 

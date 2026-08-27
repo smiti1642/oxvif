@@ -44,6 +44,25 @@ pub fn render_error(
 
 fn render_human(success: &CommandSuccess) -> String {
     let mut rendered = match &success.data {
+        CommandData::AgentGuide { guide } => {
+            let mut output = format!(
+                "oxvif Agent operation guide v{}\nCLI version: {}\nSchema version: {}\n\nRules:\n",
+                guide.guide_version, guide.cli_version, guide.schema_version
+            );
+            for rule in &guide.rules {
+                let _ = writeln!(output, "- {rule}");
+            }
+            output.push_str("\nRecommended workflow:\n");
+            for step in &guide.recommended_workflow {
+                let _ = writeln!(output, "- {step}");
+            }
+            output.push_str("\nSecurity requirements:\n");
+            for requirement in &guide.security_requirements {
+                let _ = writeln!(output, "- {requirement}");
+            }
+            output
+        }
+        CommandData::AgentPrompt { prompt } => prompt.clone(),
         CommandData::CommandList { commands } => {
             let mut output = String::from("COMMAND   RISK   AUTH  SUMMARY\n");
             for command in commands {

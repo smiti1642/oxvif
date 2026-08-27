@@ -64,6 +64,12 @@ impl Application {
         let started = Instant::now();
         let command_name = request.name();
         let outcome = match request {
+            CommandRequest::AgentGuide => Outcome::data(CommandData::AgentGuide {
+                guide: crate::agent::guide(),
+            }),
+            CommandRequest::AgentPrompt => Outcome::data(CommandData::AgentPrompt {
+                prompt: crate::agent::prompt(),
+            }),
             CommandRequest::Describe(request) => Outcome::data(describe::execute(request)?),
             CommandRequest::DeviceAdd(request) => {
                 let device = self.registry.add(request.device)?;
@@ -79,19 +85,21 @@ impl Application {
             CommandRequest::DeviceShow(request) => {
                 let id = self.registry.resolve_device_selector(&request.id)?;
                 let device = self.registry.get(&id)?;
-                Outcome::device("shown", device)
+                Outcome::device_selected("shown", device, request.id)
             }
             CommandRequest::DeviceUpdate(request) => {
-                let device = self.registry.update(&request.id, request.update)?;
-                Outcome::device("updated", device)
+                let id = self.registry.resolve_device_selector(&request.id)?;
+                let device = self.registry.update(&id, request.update)?;
+                Outcome::device_selected("updated", device, request.id)
             }
             CommandRequest::DeviceRename(request) => {
-                let device = self.registry.rename(&request.id, &request.name)?;
-                Outcome::device("renamed", device)
+                let id = self.registry.resolve_device_selector(&request.id)?;
+                let device = self.registry.rename(&id, &request.name)?;
+                Outcome::device_selected("renamed", device, request.id)
             }
             CommandRequest::DeviceRemove(request) => self.remove_device(&request.id)?,
             CommandRequest::DeviceCredentialSet(request) => {
-                let id = request.id;
+                let id = self.registry.resolve_device_selector(&request.id)?;
                 self.registry.get(&id)?;
                 let reference = credential_reference(&id);
                 self.credentials
@@ -113,15 +121,18 @@ impl Application {
                     },
                     warnings: Vec::new(),
                     device_id: Some(device.id),
+                    selected_by: Some(request.id),
                     target: Some(device.target),
                 }
             }
             CommandRequest::DeviceCredentialDelete(request) => {
-                let stored = self.registry.get_stored(&request.id)?;
+                let selected_by = request.id;
+                let id = self.registry.resolve_device_selector(&selected_by)?;
+                let stored = self.registry.get_stored(&id)?;
                 if let Some(reference) = stored.credential_ref() {
                     self.credentials.delete(reference)?;
                 }
-                let device = self.registry.clear_credentials(&request.id)?;
+                let device = self.registry.clear_credentials(&id)?;
                 Outcome {
                     data: CommandData::CredentialUpdated {
                         action: "deleted".to_owned(),
@@ -129,14 +140,16 @@ impl Application {
                     },
                     warnings: Vec::new(),
                     device_id: Some(device.id),
+                    selected_by: Some(selected_by),
                     target: Some(device.target),
                 }
             }
             CommandRequest::DeviceCredentialUseProfile(request) => {
+                let id = self.registry.resolve_device_selector(&request.device_id)?;
                 let device = self
                     .registry
-                    .assign_credential_profile(&request.device_id, &request.profile_id)?;
-                Outcome::device("credential profile assigned", device)
+                    .assign_credential_profile(&id, &request.profile_id)?;
+                Outcome::device_selected("credential profile assigned", device, request.device_id)
             }
             CommandRequest::CredentialProfileSet(request) => {
                 let id = request.id;
@@ -292,12 +305,13 @@ impl Application {
             CommandRequest::Use(request) => {
                 let id = self.registry.resolve_device_selector(&request.id)?;
                 let device = self.registry.set_current(&id)?;
-                Outcome::device("selected", device)
+                Outcome::device_selected("selected", device, request.id)
             }
             CommandRequest::Current => {
                 let device = self.registry.current()?;
                 Outcome {
                     device_id: device.as_ref().map(|device| device.id.clone()),
+                    selected_by: None,
                     target: device.as_ref().map(|device| device.target.clone()),
                     data: CommandData::CurrentDevice { device },
                     warnings: Vec::new(),
@@ -315,6 +329,7 @@ impl Application {
                     },
                     warnings: Vec::new(),
                     device_id: resolved.device_id,
+                    selected_by: resolved.selected_by,
                     target: Some(resolved.target),
                 }
             }
@@ -329,6 +344,7 @@ impl Application {
                     },
                     warnings: Vec::new(),
                     device_id: resolved.device_id,
+                    selected_by: resolved.selected_by,
                     target: Some(resolved.target),
                 }
             }
@@ -355,6 +371,7 @@ impl Application {
                     },
                 )?;
                 let mut outcome = Outcome::device("refreshed", device);
+                outcome.selected_by = Some(request.id);
                 outcome.warnings = warnings;
                 outcome
             }
@@ -366,6 +383,7 @@ impl Application {
             meta: ResultMeta {
                 command: Some(command_name.to_owned()),
                 device_id: outcome.device_id,
+                selected_by: outcome.selected_by,
                 target: outcome.target,
                 elapsed_ms: elapsed_millis(started),
             },
@@ -382,6 +400,7 @@ impl Application {
             data: CommandData::DeviceRemoved { id: id.to_owned() },
             warnings: Vec::new(),
             device_id: Some(id.to_owned()),
+            selected_by: None,
             target: Some(stored.target().to_owned()),
         })
     }
@@ -444,6 +463,7 @@ impl Application {
             )));
         }
         Ok(ResolvedTarget {
+            selected_by: Some(id.to_owned()),
             device_id: Some(canonical_id),
             target: stored.target().to_owned(),
             username,
@@ -461,6 +481,7 @@ impl Application {
         }
         Ok(ResolvedTarget {
             device_id: None,
+            selected_by: None,
             target: normalize_target(target)?,
             username,
             password,
@@ -498,6 +519,7 @@ impl Application {
 
 struct ResolvedTarget {
     device_id: Option<String>,
+    selected_by: Option<String>,
     target: String,
     username: Option<String>,
     password: Option<String>,
@@ -507,6 +529,7 @@ struct Outcome {
     data: CommandData,
     warnings: Vec<Warning>,
     device_id: Option<String>,
+    selected_by: Option<String>,
     target: Option<String>,
 }
 
@@ -516,6 +539,7 @@ impl Outcome {
             data,
             warnings: Vec::new(),
             device_id: None,
+            selected_by: None,
             target: None,
         }
     }
@@ -528,8 +552,15 @@ impl Outcome {
             },
             warnings: Vec::new(),
             device_id: Some(device.id),
+            selected_by: None,
             target: Some(device.target),
         }
+    }
+
+    fn device_selected(action: &str, device: crate::DeviceView, selected_by: String) -> Self {
+        let mut outcome = Self::device(action, device);
+        outcome.selected_by = Some(selected_by);
+        outcome
     }
 }
 

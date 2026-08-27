@@ -4,6 +4,7 @@
 //! server, can construct the same typed requests and consume the same results
 //! without parsing command-line arguments or terminal output.
 
+mod agent;
 mod application;
 mod contract;
 mod credential;
@@ -15,7 +16,7 @@ mod registry;
 
 pub use application::{Application, ExecutionOptions};
 pub use contract::{
-    ArgumentDescriptor, CommandData, CommandDescriptor, CommandRequest, CommandSuccess,
+    AgentGuide, ArgumentDescriptor, CommandData, CommandDescriptor, CommandRequest, CommandSuccess,
     CredentialProfileSetRequest, DescribeRequest, DeviceAddRequest, DeviceConnectRequest,
     DeviceCredentialProfileRequest, DeviceCredentialSetRequest, DeviceIdRequest,
     DeviceRenameRequest, DeviceUpdateRequest, DiscoverScanRequest, DiscoverySnapshotShowRequest,

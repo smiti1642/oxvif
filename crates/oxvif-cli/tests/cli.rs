@@ -43,15 +43,33 @@ fn describe_has_readable_terminal_output() {
 }
 
 #[test]
+fn root_help_routes_agents_to_the_embedded_guide() {
+    let output = run(&["--help"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(stdout(&output).contains("AI AGENTS"));
+    assert!(stdout(&output).contains("oxvif agent guide --output json"));
+}
+
+#[test]
+fn registry_subcommand_help_omits_connection_only_options() {
+    let output = run(&["group", "--help"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let help = stdout(&output);
+    assert!(!help.contains("--device"));
+    assert!(!help.contains("--timeout"));
+    assert!(!help.contains("--retries"));
+}
+
+#[test]
 fn describe_json_has_stable_envelope() {
     let output = run(&["describe", "--output", "json", "--non-interactive"]);
 
     assert!(output.status.success(), "{}", stderr(&output));
     let document: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(document["schema_version"], "1");
+    assert_eq!(document["schema_version"], "2");
     assert_eq!(document["ok"], true);
     assert_eq!(document["data"]["kind"], "command_list");
-    assert_eq!(document["data"]["commands"][0]["name"], "describe");
+    assert_eq!(document["data"]["commands"][0]["name"], "agent.guide");
     assert_eq!(document["data"]["commands"][0]["risk"], "read");
     assert_eq!(document["meta"]["command"], "describe");
     assert!(stderr(&output).is_empty());
@@ -80,7 +98,7 @@ fn unknown_described_command_is_structured_error() {
 
     assert_eq!(output.status.code(), Some(3));
     let document: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(document["schema_version"], "1");
+    assert_eq!(document["schema_version"], "2");
     assert_eq!(document["ok"], false);
     assert_eq!(document["error"]["code"], "COMMAND_NOT_FOUND");
     assert_eq!(document["error"]["retryable"], false);
@@ -108,6 +126,37 @@ fn jsonl_is_one_complete_line() {
     assert_eq!(rendered.lines().count(), 1);
     let document: Value = serde_json::from_str(rendered.trim()).expect("line should be JSON");
     assert_eq!(document["ok"], true);
+}
+
+#[test]
+fn agent_guide_and_prompt_are_embedded_and_versioned() {
+    let guide = run(&["agent", "guide", "--output", "json", "--non-interactive"]);
+    assert!(guide.status.success(), "{}", stderr(&guide));
+    let document: Value = serde_json::from_slice(&guide.stdout).expect("guide should be JSON");
+    assert_eq!(document["schema_version"], "2");
+    assert_eq!(document["data"]["kind"], "agent_guide");
+    assert_eq!(document["data"]["guide"]["guide_version"], "1");
+    assert!(
+        document["data"]["guide"]["security_requirements"]
+            .as_array()
+            .is_some_and(|rules| !rules.is_empty())
+    );
+
+    let prompt = run(&["agent", "prompt"]);
+    assert!(prompt.status.success(), "{}", stderr(&prompt));
+    assert!(stdout(&prompt).contains("--non-interactive"));
+}
+
+#[test]
+fn irrelevant_root_device_selector_is_rejected() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let output = run_isolated(
+        &["--device", "camera", "group", "list", "--output=json"],
+        directory.path(),
+    );
+    assert_eq!(output.status.code(), Some(2));
+    let document: Value = serde_json::from_slice(&output.stdout).expect("error should be JSON");
+    assert_eq!(document["error"]["code"], "INVALID_ARGUMENT");
 }
 
 #[test]

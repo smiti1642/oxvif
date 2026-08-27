@@ -18,11 +18,14 @@ use oxvif_cli::{
 };
 use tokio::time::Instant;
 
+const AGENT_HELP: &str = "AI AGENTS:\n  Run `oxvif agent guide --output json` before operating devices.\n  Use structured output, --non-interactive, and an explicit device selector.\n  Never place passwords in command arguments, output, or logs.";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "oxvif",
     version,
-    about = "Human- and Agent-friendly ONVIF camera operations"
+    about = "Human- and Agent-friendly ONVIF camera operations",
+    after_help = AGENT_HELP
 )]
 struct Cli {
     /// Select terminal, JSON, or newline-delimited JSON output.
@@ -30,7 +33,7 @@ struct Cli {
     output: CliOutputFormat,
 
     /// Select a saved device by immutable ID.
-    #[arg(long, global = true)]
+    #[arg(long)]
     device: Option<String>,
 
     /// Never prompt or open a GUI; fail when required input is missing.
@@ -42,12 +45,11 @@ struct Cli {
         long,
         default_value = "10s",
         value_parser = parse_duration,
-        global = true
     )]
     timeout: Duration,
 
     /// Number of retries allowed for retryable failures.
-    #[arg(long, default_value_t = 0, global = true)]
+    #[arg(long, default_value_t = 0)]
     retries: u32,
 
     /// Increase diagnostic verbosity; repeat for more detail.
@@ -64,6 +66,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// Show version-matched operational guidance for AI Agents.
+    Agent {
+        #[command(subcommand)]
+        command: AgentCommands,
+    },
     /// List implemented commands or describe one command.
     Describe {
         /// Stable dotted command name, for example `device.info`.
@@ -98,6 +105,14 @@ enum Commands {
     Use { id: String },
     /// Show the current interactive device selection.
     Current,
+}
+
+#[derive(Debug, Subcommand)]
+enum AgentCommands {
+    /// Return the versioned Agent operation guide.
+    Guide,
+    /// Print a compact prompt suitable for an Agent's instructions.
+    Prompt,
 }
 
 #[derive(Debug, Subcommand)]
@@ -150,6 +165,8 @@ enum DeviceCommands {
     },
     /// Read live ONVIF device information.
     Info {
+        /// Saved device selector: a global ID or group/local-alias.
+        id: Option<String>,
         /// Use a direct ONVIF URL, hostname, or IP without saving it.
         #[arg(long)]
         target: Option<String>,
@@ -376,7 +393,11 @@ fn build_request(
         target,
     };
 
-    match command {
+    let request = match command {
+        Commands::Agent { command } => Ok(match command {
+            AgentCommands::Guide => CommandRequest::AgentGuide,
+            AgentCommands::Prompt => CommandRequest::AgentPrompt,
+        }),
         Commands::Describe { command } => Ok(CommandRequest::Describe(DescribeRequest { command })),
         Commands::Use { id } => Ok(CommandRequest::Use(DeviceIdRequest { id })),
         Commands::Current => Ok(CommandRequest::Current),
@@ -551,16 +572,37 @@ fn build_request(
                     selector,
                 }))
             }
-            DeviceCommands::Info { target } => {
+            DeviceCommands::Info { id, target } => {
+                let mut selector = selector(target);
+                if let Some(id) = id {
+                    if selector.device.is_some() || selector.target.is_some() {
+                        return Err(AppError::invalid_argument(
+                            "A positional device selector cannot be combined with --device or --target.",
+                        ));
+                    }
+                    selector.device = Some(id);
+                }
                 Ok(CommandRequest::DeviceInfo(DeviceConnectRequest {
-                    selector: selector(target),
+                    selector,
                 }))
             }
             DeviceCommands::Refresh { id } => {
                 Ok(CommandRequest::DeviceRefresh(DeviceIdRequest { id }))
             }
         },
+    }?;
+
+    if selected_device.is_some()
+        && !matches!(
+            request,
+            CommandRequest::DeviceTest(_) | CommandRequest::DeviceInfo(_)
+        )
+    {
+        return Err(AppError::invalid_argument(
+            "Root --device is accepted only by commands that operate on a selected device.",
+        ));
     }
+    Ok(request)
 }
 
 fn read_password_from_stdin() -> Result<String, AppError> {

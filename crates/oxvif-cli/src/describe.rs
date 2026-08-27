@@ -18,6 +18,14 @@ pub(crate) fn execute(request: DescribeRequest) -> Result<CommandData, AppError>
 
 fn descriptors() -> Vec<CommandDescriptor> {
     vec![
+        read_descriptor(
+            "agent.guide",
+            "Return version-matched Agent operation and security rules.",
+        ),
+        read_descriptor(
+            "agent.prompt",
+            "Return a compact prompt for an Agent operating oxvif.",
+        ),
         describe_descriptor(),
         registry_descriptor(
             "device.add",
@@ -270,8 +278,8 @@ mod tests {
             panic!("expected command list");
         };
 
-        assert_eq!(commands.len(), 34);
-        assert_eq!(commands[0].name, "describe");
+        assert_eq!(commands.len(), 36);
+        assert_eq!(commands[0].name, "agent.guide");
     }
 
     #[test]

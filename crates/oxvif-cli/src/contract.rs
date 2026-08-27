@@ -7,7 +7,7 @@ use crate::{
 };
 
 /// Version of the structured stdout contract.
-pub const SCHEMA_VERSION: &str = "1";
+pub const SCHEMA_VERSION: &str = "2";
 
 /// Presentation format requested by the caller.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -32,6 +32,8 @@ impl OutputFormat {
 #[derive(Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum CommandRequest {
+    AgentGuide,
+    AgentPrompt,
     /// List commands or describe one command.
     Describe(DescribeRequest),
     DeviceAdd(DeviceAddRequest),
@@ -73,6 +75,8 @@ impl CommandRequest {
     /// Stable dotted name used in metadata and diagnostics.
     pub const fn name(&self) -> &'static str {
         match self {
+            Self::AgentGuide => "agent.guide",
+            Self::AgentPrompt => "agent.prompt",
             Self::Describe(_) => "describe",
             Self::DeviceAdd(_) => "device.add",
             Self::DeviceList => "device.list",
@@ -291,6 +295,12 @@ pub struct CommandDescriptor {
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum CommandData {
+    AgentGuide {
+        guide: AgentGuide,
+    },
+    AgentPrompt {
+        prompt: String,
+    },
     CommandList {
         commands: Vec<CommandDescriptor>,
     },
@@ -373,6 +383,17 @@ pub struct LiveDeviceInfo {
     pub hardware_id: String,
 }
 
+/// Versioned operational rules embedded in the installed binary for Agents.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct AgentGuide {
+    pub guide_version: &'static str,
+    pub cli_version: &'static str,
+    pub schema_version: &'static str,
+    pub rules: Vec<&'static str>,
+    pub recommended_workflow: Vec<&'static str>,
+    pub security_requirements: Vec<&'static str>,
+}
+
 /// A non-fatal condition associated with an otherwise successful result.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Warning {
@@ -387,6 +408,8 @@ pub struct ResultMeta {
     pub command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected_by: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
     pub elapsed_ms: u64,
