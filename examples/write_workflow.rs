@@ -749,15 +749,15 @@ async fn main() {
 
     // get VSCs → set first one
     let vscs_m2 = c.get_video_source_configurations_media2(&media2_url).await;
-    if let Ok(mut vscs) = vscs_m2 {
-        if let Some(vsc) = vscs.first_mut() {
-            vsc.name = "VSConfig1-m2-updated".into();
-            check(
-                "set_video_source_configuration_media2(VSC_1)",
-                c.set_video_source_configuration_media2(&media2_url, vsc)
-                    .await,
-            );
-        }
+    if let Ok(mut vscs) = vscs_m2
+        && let Some(vsc) = vscs.first_mut()
+    {
+        vsc.name = "VSConfig1-m2-updated".into();
+        check(
+            "set_video_source_configuration_media2(VSC_1)",
+            c.set_video_source_configuration_media2(&media2_url, vsc)
+                .await,
+        );
     }
 
     let vsc_opts_m2 = c

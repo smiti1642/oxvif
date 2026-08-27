@@ -5,6 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.16.0] - 2026-08-27
+
+Headline: **oxvif now ships the library support required by the new fleet-ready
+`oxvif` CLI.** Discovery gains fallible, interface-aware APIs while the
+workspace adds the separately publishable `oxvif-cli 0.1.0` package.
+
+### Added
+
+- `discovery::probe_result` and `discovery::probe_result_on` expose discovery
+  failures instead of collapsing them into an empty device list.
+- `discovery::discovery_interfaces` reports eligible local IPv4 interfaces so
+  callers can select and diagnose multicast paths explicitly.
+- Workspace package `oxvif-cli 0.1.0`, installed as `oxvif`, with named device
+  inventory, Groups, Views, credential profiles, versioned discovery snapshots,
+  fingerprinted import plan/apply, read-only ONVIF diagnostics, Agent guidance,
+  and deterministic bounded fleet execution.
+
+### Changed
+
+- The legacy `discovery::probe` remains available and delegates to the new
+  fallible implementation while preserving its empty-on-error behavior.
+- The workspace release order is `oxvif 0.16.0` first, followed by
+  `oxvif-cli 0.1.0`, so the CLI tarball verifies against crates.io.
+
+---
+
 ## [0.15.0] - 2026-08-03
 
 Headline: **every service can now be asked what it can do, and the PTZ surface

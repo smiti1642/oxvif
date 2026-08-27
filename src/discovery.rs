@@ -693,14 +693,14 @@ fn collect_discovery_events(root: &XmlNode) -> Vec<(DiscoveryEvent, Option<AppSe
                 seq,
             )];
         }
-    } else if action.ends_with("/Bye") {
-        if let Some(bye) = body.child("Bye") {
-            let endpoint = bye
-                .path(&["EndpointReference", "Address"])
-                .map(|n| n.text().to_string())
-                .unwrap_or_default();
-            return vec![(DiscoveryEvent::Bye { endpoint }, seq)];
-        }
+    } else if action.ends_with("/Bye")
+        && let Some(bye) = body.child("Bye")
+    {
+        let endpoint = bye
+            .path(&["EndpointReference", "Address"])
+            .map(|n| n.text().to_string())
+            .unwrap_or_default();
+        return vec![(DiscoveryEvent::Bye { endpoint }, seq)];
     }
     vec![]
 }

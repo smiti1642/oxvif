@@ -60,10 +60,10 @@ async fn main() {
 fn resolve_state_path() -> PathBuf {
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
-        if args[i] == "--config" {
-            if let Some(p) = args.get(i + 1) {
-                return PathBuf::from(p);
-            }
+        if args[i] == "--config"
+            && let Some(p) = args.get(i + 1)
+        {
+            return PathBuf::from(p);
         }
     }
     dirs::home_dir()

@@ -165,7 +165,7 @@ pub fn resp_pull_messages(state: &SharedState) -> String {
             "VideoSourceToken",
             "VS_1",
             "IsMotion",
-            if (seq / 2) % 2 == 0 { "true" } else { "false" },
+            if (seq / 2) & 1 == 0 { "true" } else { "false" },
         )
     } else {
         (

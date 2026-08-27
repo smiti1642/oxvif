@@ -120,10 +120,11 @@ pub(crate) struct AuthResponder {
 #[async_trait]
 impl Responder for AuthResponder {
     async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
-        if self.enforce_auth && auth::requires_auth(ctx.action) {
-            if let Err(reason) = auth::validate_ws_security(ctx.body, ctx.state) {
-                return Some(auth::auth_fault(&reason));
-            }
+        if self.enforce_auth
+            && auth::requires_auth(ctx.action)
+            && let Err(reason) = auth::validate_ws_security(ctx.body, ctx.state)
+        {
+            return Some(auth::auth_fault(&reason));
         }
         None
     }

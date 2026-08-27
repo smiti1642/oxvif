@@ -434,10 +434,10 @@ impl OsdOptions {
         };
 
         if let Some(max_elem) = opts.child("MaximumNumberOfOSDs") {
-            if self.max_osd == 0 {
-                if let Some(total) = max_elem.attr("Total").and_then(|s| s.parse().ok()) {
-                    self.max_osd = total;
-                }
+            if self.max_osd == 0
+                && let Some(total) = max_elem.attr("Total").and_then(|s| s.parse().ok())
+            {
+                self.max_osd = total;
             }
             for name in ["Plain", "Date", "Time", "DateAndTime"] {
                 if let Some(v) = max_elem.attr(name).and_then(|s| s.parse::<u32>().ok()) {

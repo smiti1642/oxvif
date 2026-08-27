@@ -1019,40 +1019,40 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     }
 
     // ── 30. Event stream (brief) ──────────────────────────────────────────────
-    if let Some(ref ev_url) = caps.events.url {
-        if caps.events.ws_pull_point {
-            section("event_stream (3 s probe)");
-            match client
-                .create_pull_point_subscription(ev_url, None, Some("PT60S"))
-                .await
-            {
-                Ok(sub) => {
-                    let mut stream = client.event_stream(&sub.reference_url, "PT2S", 5);
-                    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
-                    let mut count = 0usize;
-                    loop {
-                        match tokio::time::timeout_at(deadline, stream.next()).await {
-                            Ok(Some(Ok(msg))) => {
-                                count += 1;
-                                println!("  Event: {}", msg.topic);
-                                if count >= 3 {
-                                    break;
-                                }
-                            }
-                            Ok(Some(Err(e))) => {
-                                println!("  (stream error — {e})");
+    if let Some(ref ev_url) = caps.events.url
+        && caps.events.ws_pull_point
+    {
+        section("event_stream (3 s probe)");
+        match client
+            .create_pull_point_subscription(ev_url, None, Some("PT60S"))
+            .await
+        {
+            Ok(sub) => {
+                let mut stream = client.event_stream(&sub.reference_url, "PT2S", 5);
+                let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+                let mut count = 0usize;
+                loop {
+                    match tokio::time::timeout_at(deadline, stream.next()).await {
+                        Ok(Some(Ok(msg))) => {
+                            count += 1;
+                            println!("  Event: {}", msg.topic);
+                            if count >= 3 {
                                 break;
                             }
-                            Ok(None) | Err(_) => break,
                         }
+                        Ok(Some(Err(e))) => {
+                            println!("  (stream error — {e})");
+                            break;
+                        }
+                        Ok(None) | Err(_) => break,
                     }
-                    if count == 0 {
-                        println!("  No events in 3 s");
-                    }
-                    let _ = client.unsubscribe(&sub.reference_url).await;
                 }
-                Err(e) => println!("  (skipped — {e})"),
+                if count == 0 {
+                    println!("  No events in 3 s");
+                }
+                let _ = client.unsubscribe(&sub.reference_url).await;
             }
+            Err(e) => println!("  (skipped — {e})"),
         }
     }
 

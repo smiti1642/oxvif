@@ -144,15 +144,14 @@ impl OnvifSessionBuilder {
         // Capabilities `Media2` extension is non-standard). Fall back to
         // GetServices to fill any missing recording/search/replay/media2 URL so
         // those services work on standards-compliant cameras.
-        if caps.recording.url.is_none()
+        if (caps.recording.url.is_none()
             || caps.search.url.is_none()
             || caps.replay.url.is_none()
             || caps.media2.url.is_none()
-            || caps.device_io.url.is_none()
+            || caps.device_io.url.is_none())
+            && let Ok(services) = client.get_services().await
         {
-            if let Ok(services) = client.get_services().await {
-                fill_missing_service_urls(&mut caps, &services);
-            }
+            fill_missing_service_urls(&mut caps, &services);
         }
 
         Ok(OnvifSession { client, caps })

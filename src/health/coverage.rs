@@ -87,15 +87,15 @@ pub(super) async fn coverage(s: &OnvifSession, tap: &CoverageTransport) -> Vec<C
         let Some(raw) = tap.raw_for(op) else {
             return;
         };
-        if let Some(m) = count_items(&raw, &format!("{op}Response"), item_path) {
-            if m > parsed {
-                out.push(CheckResult::warn(
-                    id,
-                    Category::Coverage,
-                    format!("parsed {parsed} of {m} items — possible parser gap"),
-                    format!("{parsed}/{m}"),
-                ));
-            }
+        if let Some(m) = count_items(&raw, &format!("{op}Response"), item_path)
+            && m > parsed
+        {
+            out.push(CheckResult::warn(
+                id,
+                Category::Coverage,
+                format!("parsed {parsed} of {m} items — possible parser gap"),
+                format!("{parsed}/{m}"),
+            ));
         }
     };
 

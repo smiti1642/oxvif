@@ -788,7 +788,31 @@ The first crates.io release is ready only when all of the following are true:
    target, registry/configuration, credentials, network/device connection, and
    internal failures.
 
-## 11. Remaining decisions
+## 11. 0.1 release gate (2026-08-27)
+
+- Versions are fixed at `oxvif 0.16.0` and `oxvif-cli 0.1.0`; publish the
+  library first and the CLI second.
+- `cargo test --workspace --all-features`: 1004 passed, 3 ignored, 0 failed
+  across 14 suites.
+- `cargo +1.88.0 check --workspace --all-features`: clean at the workspace
+  MSRV.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`:
+  clean on current stable Rust.
+- `cargo rustdoc` with `-D warnings`: clean for both the all-feature library
+  and CLI public library surface.
+- `cargo package -p oxvif`: 115 files, 661.6 KiB compressed, and the generated
+  tarball rebuilt successfully.
+- `cargo package -p oxvif-cli --list`: 17 intended files. Package preparation
+  correctly waits for `oxvif ^0.16.0` to exist on crates.io; after publishing
+  the library, run the verifying CLI package command before publishing it.
+- Isolated read-only LAN verification discovered 195 devices and enriched 38
+  with one authorized credential profile. A selected GeoVision device passed
+  info, capabilities, profiles, stream URI, snapshot URI, PTZ presets, and
+  health report generation; returned media URIs contained no userinfo. PTZ
+  status returned the device's typed `Optional Action Not Implemented` fault.
+  The temporary native credential and isolated registry were removed.
+
+## 12. Remaining decisions
 
 1. Schema distribution format for `describe`: JSON Schema, the current smaller
    internal description format, or both.

@@ -10,7 +10,7 @@ repository = "https://github.com/smiti1642/oxvif"
 
 [package]
 name = "oxvif"
-version = "0.15.0"
+version = "0.16.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Async Rust client library for the ONVIF IP camera protocol"

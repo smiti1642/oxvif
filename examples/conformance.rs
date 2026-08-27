@@ -126,20 +126,20 @@ async fn main() {
                 .await
                 .map(|v| format!("{} config(s)", v.len())),
         );
-        if let Ok(srcs) = s.get_video_sources().await {
-            if let Some(src) = srcs.first() {
-                report(
-                    "imaging_options",
-                    s.get_imaging_options(&src.token).await.map(|o| {
-                        format!(
-                            "exp_time={} gain={} iris={}  (false where the device reports a range = field-defaulting)",
-                            o.exposure_time_range.is_some(),
-                            o.gain_range.is_some(),
-                            o.iris_range.is_some(),
-                        )
-                    }),
-                );
-            }
+        if let Ok(srcs) = s.get_video_sources().await
+            && let Some(src) = srcs.first()
+        {
+            report(
+                "imaging_options",
+                s.get_imaging_options(&src.token).await.map(|o| {
+                    format!(
+                        "exp_time={} gain={} iris={}  (false where the device reports a range = field-defaulting)",
+                        o.exposure_time_range.is_some(),
+                        o.gain_range.is_some(),
+                        o.iris_range.is_some(),
+                    )
+                }),
+            );
         }
         report(
             "ptz_nodes",
