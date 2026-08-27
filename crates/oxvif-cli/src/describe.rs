@@ -166,6 +166,17 @@ fn descriptors() -> Vec<CommandDescriptor> {
                 optional("interface", "interface name | IPv4[]"),
             ],
         ),
+        descriptor(
+            "discover.refresh",
+            "Re-run discovery and atomically replace an existing named snapshot.",
+            RiskLevel::Write,
+            false,
+            false,
+            vec![
+                required("snapshot", "string"),
+                optional("interface", "interface name | IPv4[]"),
+            ],
+        ),
         enrich_descriptor(),
         read_descriptor("discover.snapshots", "List named discovery snapshots."),
         read_descriptor(
@@ -230,6 +241,8 @@ fn import_descriptor() -> CommandDescriptor {
             optional("group", "group ID"),
             optional("credential-profile", "credential profile ID"),
             optional("tag", "string[]"),
+            optional("overrides", "versioned JSON file"),
+            optional("overrides-stdin", "versioned JSON on stdin"),
             optional("plan", "boolean"),
             optional("apply", "boolean"),
             optional("expect-plan", "sha256 fingerprint"),
@@ -320,7 +333,8 @@ fn descriptor(
         retryable: name.starts_with("device.test")
             || name.starts_with("device.info")
             || name.starts_with("device.refresh")
-            || name == "discover.scan",
+            || name == "discover.scan"
+            || name == "discover.refresh",
         arguments,
         output: OutputDescriptor {
             value_type: "object".to_owned(),
@@ -385,7 +399,7 @@ mod tests {
             panic!("expected command list");
         };
 
-        assert_eq!(commands.len(), 38);
+        assert_eq!(commands.len(), 39);
         assert_eq!(commands[0].name, "agent.guide");
     }
 

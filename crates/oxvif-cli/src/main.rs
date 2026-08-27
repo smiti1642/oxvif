@@ -1,7 +1,9 @@
 use std::{
     env,
     ffi::OsString,
+    fs,
     io::{self, Read},
+    path::{Path, PathBuf},
     process::ExitCode,
     time::Duration,
 };
@@ -12,10 +14,11 @@ use oxvif_cli::{
     DeviceAddRequest, DeviceConnectRequest, DeviceCredentialProfileRequest,
     DeviceCredentialSetRequest, DeviceFilter, DeviceIdRequest, DeviceImportRequest,
     DeviceRenameRequest, DeviceUpdate, DeviceUpdateRequest, DiscoverScanRequest,
-    DiscoveryEnrichRequest, DiscoveryFilter, DiscoverySnapshotShowRequest, ExecutionOptions,
-    GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode, MatchMode,
-    NewDevice, NewGroup, NewSavedView, OutputFormat, ResourceIdRequest, ResultMeta, SecretString,
-    TargetSelector, ViewCreateRequest, render_error, render_success,
+    DiscoveryEnrichRequest, DiscoveryFilter, DiscoveryImportOverride, DiscoveryImportOverrides,
+    DiscoveryRefreshRequest, DiscoverySnapshotShowRequest, ExecutionOptions, GroupCreateRequest,
+    GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode, MatchMode, NewDevice, NewGroup,
+    NewSavedView, OutputFormat, ResourceIdRequest, ResultMeta, SecretString, TargetSelector,
+    ViewCreateRequest, render_error, render_success,
 };
 use tokio::time::Instant;
 
@@ -164,6 +167,12 @@ enum DeviceCommands {
         credential_profile: Option<String>,
         #[arg(long = "tag")]
         tags: Vec<String>,
+        /// Read versioned, secret-free ID/alias overrides from a JSON file.
+        #[arg(long, value_name = "FILE", conflicts_with = "overrides_stdin")]
+        overrides: Option<PathBuf>,
+        /// Read versioned, secret-free ID/alias overrides from stdin.
+        #[arg(long, conflicts_with = "overrides")]
+        overrides_stdin: bool,
         #[arg(long, conflicts_with = "apply", required_unless_present = "apply")]
         plan: bool,
         #[arg(long, conflicts_with = "plan", required_unless_present = "plan")]
@@ -289,6 +298,13 @@ enum DiscoverCommands {
     Scan {
         #[arg(long)]
         save: Option<String>,
+        /// Limit multicast discovery to an interface name or IPv4 address.
+        #[arg(long = "interface")]
+        interfaces: Vec<String>,
+    },
+    /// Re-run discovery and atomically replace an existing named snapshot.
+    Refresh {
+        snapshot: String,
         /// Limit multicast discovery to an interface name or IPv4 address.
         #[arg(long = "interface")]
         interfaces: Vec<String>,
@@ -524,6 +540,13 @@ fn build_request(
                     interfaces,
                 }))
             }
+            DiscoverCommands::Refresh {
+                snapshot,
+                interfaces,
+            } => Ok(CommandRequest::DiscoveryRefresh(DiscoveryRefreshRequest {
+                id: snapshot,
+                interfaces,
+            })),
             DiscoverCommands::Enrich {
                 snapshot,
                 credential_profile,
@@ -604,6 +627,8 @@ fn build_request(
                 group,
                 credential_profile,
                 tags,
+                overrides,
+                overrides_stdin,
                 plan: _,
                 apply,
                 expect_plan,
@@ -619,6 +644,7 @@ fn build_request(
                     group_id: group,
                     credential_profile,
                     tags,
+                    overrides: read_import_overrides(overrides.as_deref(), overrides_stdin)?,
                     mode: if apply {
                         ImportMode::Apply
                     } else {
@@ -716,6 +742,52 @@ fn read_password_from_stdin() -> Result<String, AppError> {
     } else {
         Ok(password)
     }
+}
+
+fn read_import_overrides(
+    path: Option<&Path>,
+    from_stdin: bool,
+) -> Result<Vec<DiscoveryImportOverride>, AppError> {
+    let contents = match (path, from_stdin) {
+        (Some(path), false) => fs::read(path).map_err(|error| {
+            AppError::invalid_argument(format!(
+                "Failed to read import overrides from {}: {error}",
+                path.display()
+            ))
+        })?,
+        (None, true) => {
+            let mut contents = Vec::new();
+            io::stdin().read_to_end(&mut contents).map_err(|error| {
+                AppError::invalid_argument(format!(
+                    "Failed to read import overrides from stdin: {error}"
+                ))
+            })?;
+            contents
+        }
+        (None, false) => return Ok(Vec::new()),
+        (Some(_), true) => {
+            return Err(AppError::invalid_argument(
+                "Use only one of --overrides or --overrides-stdin.",
+            ));
+        }
+    };
+    const MAX_OVERRIDE_BYTES: usize = 1024 * 1024;
+    if contents.len() > MAX_OVERRIDE_BYTES {
+        return Err(AppError::invalid_argument(
+            "Import overrides exceed the 1 MiB input limit.",
+        ));
+    }
+    let document: DiscoveryImportOverrides =
+        serde_json::from_slice(&contents).map_err(|error| {
+            AppError::invalid_argument(format!("Invalid import override JSON: {error}"))
+        })?;
+    if document.version != 1 {
+        return Err(AppError::invalid_argument(format!(
+            "Unsupported import override version {}; expected version 1.",
+            document.version
+        )));
+    }
+    Ok(document.devices)
 }
 
 fn credential_input(
@@ -825,5 +897,30 @@ mod tests {
     fn secret_debug_output_is_redacted() {
         let secret = SecretString::new("do-not-print").expect("secret should construct");
         assert_eq!(format!("{secret:?}"), "SecretString([REDACTED])");
+    }
+
+    #[test]
+    fn reads_versioned_import_overrides() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let path = directory.path().join("overrides.json");
+        fs::write(
+            &path,
+            r#"{"version":1,"devices":[{"endpoint":"uuid:camera","id":"front-door"}]}"#,
+        )
+        .expect("fixture should write");
+
+        let overrides = read_import_overrides(Some(&path), false).expect("overrides should parse");
+        assert_eq!(overrides.len(), 1);
+        assert_eq!(overrides[0].id.as_deref(), Some("front-door"));
+    }
+
+    #[test]
+    fn rejects_unknown_import_override_version() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let path = directory.path().join("overrides.json");
+        fs::write(&path, r#"{"version":2,"devices":[]}"#).expect("fixture should write");
+
+        let error = read_import_overrides(Some(&path), false).expect_err("version must fail");
+        assert_eq!(error.code, oxvif_cli::ErrorCode::InvalidArgument);
     }
 }

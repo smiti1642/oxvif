@@ -20,10 +20,11 @@ pub use contract::{
     CredentialProfileSetRequest, DescribeRequest, DeviceAddRequest, DeviceConnectRequest,
     DeviceCredentialProfileRequest, DeviceCredentialSetRequest, DeviceIdRequest,
     DeviceImportRequest, DeviceRenameRequest, DeviceUpdateRequest, DiscoverScanRequest,
-    DiscoveryEnrichRequest, DiscoverySnapshotShowRequest, ErrorEnvelope, GroupCreateRequest,
-    GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode, LiveDeviceInfo, OutputDescriptor,
-    OutputFormat, ResourceIdRequest, ResultMeta, RiskLevel, SCHEMA_VERSION, SecretString,
-    SuccessEnvelope, TargetSelector, ViewCreateRequest, ViewEvaluateRequest, Warning,
+    DiscoveryEnrichRequest, DiscoveryRefreshRequest, DiscoverySnapshotShowRequest, ErrorEnvelope,
+    GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode,
+    LiveDeviceInfo, OutputDescriptor, OutputFormat, ResourceIdRequest, ResultMeta, RiskLevel,
+    SCHEMA_VERSION, SecretString, SuccessEnvelope, TargetSelector, ViewCreateRequest,
+    ViewEvaluateRequest, Warning,
 };
 pub use credential::{
     CredentialStore, MemoryCredentialStore, SystemCredentialStore, credential_profile_reference,
@@ -32,9 +33,10 @@ pub use credential::{
 pub use error::{AppError, ErrorCode};
 pub use inventory::{
     CredentialProfileView, DeviceFilter, DeviceFilterField, DiscoveryFilter, DiscoveryFilterField,
-    DiscoveryImportPlan, DiscoveryImportProposal, DiscoveryRecord, DiscoverySnapshotSummary,
-    DiscoverySnapshotView, FilterExplanation, FilterOperator, GroupMemberView, GroupView,
-    ImportDisposition, MatchMode, NewGroup, NewSavedView, SavedView, ViewExplanation,
+    DiscoveryImportOverride, DiscoveryImportOverrides, DiscoveryImportPlan,
+    DiscoveryImportProposal, DiscoveryRecord, DiscoverySnapshotSummary, DiscoverySnapshotView,
+    FilterExplanation, FilterOperator, GroupMemberView, GroupView, ImportDisposition, MatchMode,
+    NewGroup, NewSavedView, SavedView, ViewExplanation,
 };
 pub use output::{render_error, render_success};
 pub use registry::{

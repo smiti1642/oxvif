@@ -283,6 +283,9 @@ pub struct DiscoveryRecord {
 pub struct DiscoverySnapshotSummary {
     pub id: String,
     pub saved_at_unix_ms: u64,
+    pub generation: u64,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub interfaces: Vec<String>,
     pub device_count: usize,
 }
 
@@ -291,7 +294,28 @@ pub struct DiscoverySnapshotSummary {
 pub struct DiscoverySnapshotView {
     pub id: String,
     pub saved_at_unix_ms: u64,
+    pub generation: u64,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub interfaces: Vec<String>,
     pub devices: Vec<DiscoveryRecord>,
+}
+
+/// One explicit identity override for a discovery import record.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+pub struct DiscoveryImportOverride {
+    pub endpoint: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+}
+
+/// Versioned, secret-free import override document accepted from a file or stdin.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+pub struct DiscoveryImportOverrides {
+    pub version: u32,
+    #[serde(default)]
+    pub devices: Vec<DiscoveryImportOverride>,
 }
 
 /// Outcome proposed for one record in a discovery import plan.
@@ -329,12 +353,15 @@ pub struct DiscoveryImportProposal {
 pub struct DiscoveryImportPlan {
     pub fingerprint: String,
     pub snapshot_id: String,
+    pub snapshot_generation: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credential_profile: Option<String>,
     pub tags: Vec<String>,
     pub filters: Vec<DiscoveryFilter>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<DiscoveryImportOverride>,
     pub total_records: usize,
     pub create_count: usize,
     pub already_present_count: usize,

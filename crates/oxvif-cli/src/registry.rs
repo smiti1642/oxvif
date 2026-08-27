@@ -17,9 +17,9 @@ use url::Url;
 
 use crate::{
     AppError, CredentialProfileView, DeviceFilter, DeviceImportRequest, DiscoveryFilter,
-    DiscoveryImportPlan, DiscoveryImportProposal, DiscoveryRecord, DiscoverySnapshotSummary,
-    DiscoverySnapshotView, GroupMemberView, GroupView, ImportDisposition, NewGroup, NewSavedView,
-    SavedView,
+    DiscoveryImportOverride, DiscoveryImportPlan, DiscoveryImportProposal, DiscoveryRecord,
+    DiscoverySnapshotSummary, DiscoverySnapshotView, GroupMemberView, GroupView, ImportDisposition,
+    NewGroup, NewSavedView, SavedView,
     inventory::{device_matches, discovery_matches},
 };
 
@@ -655,8 +655,18 @@ impl RegistryStore {
         id: &str,
         devices: Vec<DiscoveryRecord>,
     ) -> Result<DiscoverySnapshotView, AppError> {
+        self.save_discovery_snapshot_with_interfaces(id, devices, Vec::new())
+    }
+
+    pub fn save_discovery_snapshot_with_interfaces(
+        &self,
+        id: &str,
+        devices: Vec<DiscoveryRecord>,
+        interfaces: Vec<String>,
+    ) -> Result<DiscoverySnapshotView, AppError> {
         validate_resource_id("discovery snapshot", id)?;
         let devices = normalize_discovery_records(devices);
+        let interfaces = normalize_interfaces(interfaces);
         let saved_at_unix_ms = unix_millis()?;
         self.mutate(|registry| {
             if registry.discovery_snapshots.contains_key(id) {
@@ -664,6 +674,8 @@ impl RegistryStore {
             }
             let snapshot = StoredDiscoverySnapshot {
                 saved_at_unix_ms,
+                generation: 1,
+                interfaces,
                 devices,
             };
             let view = snapshot.view(id, &[]);
@@ -700,6 +712,34 @@ impl RegistryStore {
             }
             let snapshot = StoredDiscoverySnapshot {
                 saved_at_unix_ms,
+                generation: next_snapshot_generation(previous.generation)?,
+                interfaces: previous.interfaces,
+                devices,
+            };
+            let view = snapshot.view(id, &[]);
+            registry
+                .discovery_snapshots
+                .insert(id.to_owned(), SnapshotEntry::Embedded(snapshot));
+            Ok(view)
+        })
+    }
+
+    pub fn refresh_discovery_snapshot(
+        &self,
+        id: &str,
+        devices: Vec<DiscoveryRecord>,
+        interfaces: Vec<String>,
+    ) -> Result<DiscoverySnapshotView, AppError> {
+        validate_resource_id("discovery snapshot", id)?;
+        let devices = normalize_discovery_records(devices);
+        let interfaces = normalize_interfaces(interfaces);
+        let saved_at_unix_ms = unix_millis()?;
+        self.mutate(|registry| {
+            let previous = self.discovery_snapshot_from_registry(registry, id)?;
+            let snapshot = StoredDiscoverySnapshot {
+                saved_at_unix_ms,
+                generation: next_snapshot_generation(previous.generation)?,
+                interfaces,
                 devices,
             };
             let view = snapshot.view(id, &[]);
@@ -735,6 +775,7 @@ impl RegistryStore {
             SnapshotEntry::External(summary) => {
                 let snapshot = self.read_snapshot_file(id)?;
                 if snapshot.saved_at_unix_ms != summary.saved_at_unix_ms
+                    || snapshot.generation != summary.generation
                     || snapshot.devices.len() != summary.device_count
                 {
                     return Err(AppError::registry_corrupt(format!(
@@ -754,7 +795,13 @@ impl RegistryStore {
         let tags = normalize_tags(request.tags.clone())?;
         let registry = self.load_unlocked()?;
         let snapshot = self.discovery_snapshot_from_registry(&registry, &request.snapshot_id)?;
-        build_discovery_import_plan(&registry, &snapshot.devices, request, tags)
+        build_discovery_import_plan(
+            &registry,
+            &snapshot.devices,
+            snapshot.generation,
+            request,
+            tags,
+        )
     }
 
     pub fn apply_discovery_import(
@@ -766,8 +813,13 @@ impl RegistryStore {
         let tags = normalize_tags(request.tags.clone())?;
         self.mutate(|registry| {
             let snapshot = self.discovery_snapshot_from_registry(registry, &request.snapshot_id)?;
-            let plan =
-                build_discovery_import_plan(registry, &snapshot.devices, request, tags.clone())?;
+            let plan = build_discovery_import_plan(
+                registry,
+                &snapshot.devices,
+                snapshot.generation,
+                request,
+                tags.clone(),
+            )?;
             if plan.fingerprint != expected_fingerprint {
                 return Err(AppError::import_plan_mismatch(
                     expected_fingerprint,
@@ -907,6 +959,7 @@ impl RegistryStore {
             SnapshotEntry::External(summary) => {
                 let snapshot = self.read_snapshot_file(id)?;
                 if snapshot.saved_at_unix_ms != summary.saved_at_unix_ms
+                    || snapshot.generation != summary.generation
                     || snapshot.devices.len() != summary.device_count
                 {
                     return Err(AppError::registry_corrupt(format!(
@@ -942,6 +995,8 @@ impl RegistryStore {
                 id,
                 SnapshotEntry::External(SnapshotIndexEntry {
                     saved_at_unix_ms: snapshot.saved_at_unix_ms,
+                    generation: snapshot.generation,
+                    interfaces: snapshot.interfaces.clone(),
                     device_count: snapshot.devices.len(),
                 }),
             );
@@ -958,6 +1013,8 @@ impl RegistryStore {
             version: SNAPSHOT_FILE_VERSION,
             id: id.to_owned(),
             saved_at_unix_ms: snapshot.saved_at_unix_ms,
+            generation: snapshot.generation,
+            interfaces: snapshot.interfaces.clone(),
             devices: snapshot.devices.clone(),
         };
         let serialized = serde_json::to_vec_pretty(&document)
@@ -993,6 +1050,8 @@ impl RegistryStore {
         }
         Ok(StoredDiscoverySnapshot {
             saved_at_unix_ms: document.saved_at_unix_ms,
+            generation: document.generation,
+            interfaces: document.interfaces,
             devices: document.devices,
         })
     }
@@ -1234,6 +1293,10 @@ impl StoredView {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct StoredDiscoverySnapshot {
     saved_at_unix_ms: u64,
+    #[serde(default = "initial_snapshot_generation")]
+    generation: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    interfaces: Vec<String>,
     devices: Vec<DiscoveryRecord>,
 }
 
@@ -1251,6 +1314,8 @@ impl SnapshotEntry {
             Self::External(summary) => DiscoverySnapshotSummary {
                 id: id.to_owned(),
                 saved_at_unix_ms: summary.saved_at_unix_ms,
+                generation: summary.generation,
+                interfaces: summary.interfaces.clone(),
                 device_count: summary.device_count,
             },
         }
@@ -1260,6 +1325,10 @@ impl SnapshotEntry {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct SnapshotIndexEntry {
     saved_at_unix_ms: u64,
+    #[serde(default = "initial_snapshot_generation")]
+    generation: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    interfaces: Vec<String>,
     device_count: usize,
 }
 
@@ -1268,6 +1337,10 @@ struct SnapshotFile {
     version: u32,
     id: String,
     saved_at_unix_ms: u64,
+    #[serde(default = "initial_snapshot_generation")]
+    generation: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    interfaces: Vec<String>,
     devices: Vec<DiscoveryRecord>,
 }
 
@@ -1276,6 +1349,8 @@ impl StoredDiscoverySnapshot {
         DiscoverySnapshotSummary {
             id: id.to_owned(),
             saved_at_unix_ms: self.saved_at_unix_ms,
+            generation: self.generation,
+            interfaces: self.interfaces.clone(),
             device_count: self.devices.len(),
         }
     }
@@ -1284,6 +1359,8 @@ impl StoredDiscoverySnapshot {
         DiscoverySnapshotView {
             id: id.to_owned(),
             saved_at_unix_ms: self.saved_at_unix_ms,
+            generation: self.generation,
+            interfaces: self.interfaces.clone(),
             devices: self
                 .devices
                 .iter()
@@ -1326,6 +1403,7 @@ pub fn validate_device_id(id: &str) -> Result<(), AppError> {
 fn build_discovery_import_plan(
     registry: &RegistryFile,
     records: &[DiscoveryRecord],
+    snapshot_generation: u64,
     request: &DeviceImportRequest,
     tags: Vec<String>,
 ) -> Result<DiscoveryImportPlan, AppError> {
@@ -1348,6 +1426,11 @@ fn build_discovery_import_plan(
     let mut filters = request.filters.clone();
     filters.sort();
     filters.dedup();
+    let overrides = normalize_import_overrides(records, request)?;
+    let override_by_endpoint = overrides
+        .iter()
+        .map(|item| (item.endpoint.as_str(), item))
+        .collect::<BTreeMap<_, _>>();
     let mut proposals = Vec::with_capacity(records.len());
     let mut identity_candidates = Vec::with_capacity(records.len());
     for record in records {
@@ -1373,7 +1456,10 @@ fn build_discovery_import_plan(
             .filter_map(|target| normalize_target(target).ok())
             .min();
         let device_uuid = discovery_uuid(record);
-        let proposed_id = propose_import_id(record, target.as_deref());
+        let import_override = override_by_endpoint.get(record.endpoint.as_str()).copied();
+        let proposed_id = import_override
+            .and_then(|item| item.id.clone())
+            .or_else(|| propose_import_id(record, target.as_deref()));
         let mut matching_ids = BTreeSet::new();
         for (id, device) in &registry.devices {
             if device_uuid.as_deref().is_some_and(|uuid| {
@@ -1422,7 +1508,11 @@ fn build_discovery_import_plan(
             disposition = ImportDisposition::Conflict;
             reasons.push("Proposed device ID is occupied by another device.".to_owned());
         }
-        let group_alias = request.group_id.as_ref().and(proposed_id.clone());
+        let group_alias = request.group_id.as_ref().and_then(|_| {
+            import_override
+                .and_then(|item| item.alias.clone())
+                .or_else(|| proposed_id.clone())
+        });
         if disposition == ImportDisposition::Create
             && let (Some(group_id), Some(alias)) =
                 (request.group_id.as_deref(), group_alias.as_deref())
@@ -1468,10 +1558,12 @@ fn build_discovery_import_plan(
     let mut plan = DiscoveryImportPlan {
         fingerprint: String::new(),
         snapshot_id: request.snapshot_id.clone(),
+        snapshot_generation,
         group_id: request.group_id.clone(),
         credential_profile: request.credential_profile.clone(),
         tags,
         filters,
+        overrides,
         total_records: proposals.len(),
         create_count,
         already_present_count,
@@ -1536,15 +1628,99 @@ fn count_disposition(
 fn import_plan_fingerprint(plan: &DiscoveryImportPlan) -> Result<String, AppError> {
     let canonical = serde_json::to_vec(&(
         &plan.snapshot_id,
+        plan.snapshot_generation,
         &plan.group_id,
         &plan.credential_profile,
         &plan.tags,
         &plan.filters,
+        &plan.overrides,
         &plan.proposals,
     ))
     .map_err(|error| AppError::serialization_failed(error.to_string()))?;
     let digest = Sha256::digest(canonical);
     Ok(format!("sha256:{digest:x}"))
+}
+
+fn normalize_import_overrides(
+    records: &[DiscoveryRecord],
+    request: &DeviceImportRequest,
+) -> Result<Vec<DiscoveryImportOverride>, AppError> {
+    let endpoints = records
+        .iter()
+        .map(|record| record.endpoint.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut overrides = request.overrides.clone();
+    for item in &mut overrides {
+        item.endpoint = item.endpoint.trim().to_owned();
+        if item.endpoint.is_empty() {
+            return Err(AppError::invalid_argument(
+                "Import override endpoint must not be empty.",
+            ));
+        }
+        if !endpoints.contains(item.endpoint.as_str()) {
+            return Err(AppError::invalid_argument(format!(
+                "Import override endpoint `{}` is absent from snapshot `{}`.",
+                item.endpoint, request.snapshot_id
+            )));
+        }
+        item.id = item
+            .id
+            .take()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        item.alias = item
+            .alias
+            .take()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty());
+        if item.id.is_none() && item.alias.is_none() {
+            return Err(AppError::invalid_argument(format!(
+                "Import override for `{}` must set `id`, `alias`, or both.",
+                item.endpoint
+            )));
+        }
+        if let Some(id) = item.id.as_deref() {
+            validate_device_id(id)?;
+        }
+        if let Some(alias) = item.alias.as_deref() {
+            validate_resource_id("group alias", alias)?;
+            if request.group_id.is_none() {
+                return Err(AppError::invalid_argument(format!(
+                    "Import override alias `{alias}` requires --group."
+                )));
+            }
+        }
+    }
+    overrides.sort();
+    if overrides
+        .windows(2)
+        .any(|items| items[0].endpoint == items[1].endpoint)
+    {
+        return Err(AppError::invalid_argument(
+            "Import overrides contain duplicate endpoints.",
+        ));
+    }
+    Ok(overrides)
+}
+
+fn initial_snapshot_generation() -> u64 {
+    1
+}
+
+fn next_snapshot_generation(generation: u64) -> Result<u64, AppError> {
+    generation
+        .checked_add(1)
+        .ok_or_else(|| AppError::registry_corrupt("Discovery snapshot generation overflowed."))
+}
+
+fn normalize_interfaces(mut interfaces: Vec<String>) -> Vec<String> {
+    for interface in &mut interfaces {
+        *interface = interface.trim().to_owned();
+    }
+    interfaces.retain(|interface| !interface.is_empty());
+    interfaces.sort();
+    interfaces.dedup();
+    interfaces
 }
 
 fn discovery_record_fingerprint(record: &DiscoveryRecord) -> Result<String, AppError> {
@@ -2184,6 +2360,7 @@ xaddrs = ["http://192.0.2.50/onvif/device_service"]
             group_id: Some("factory".to_owned()),
             credential_profile: Some("factory-admin".to_owned()),
             tags: vec!["discovered".to_owned()],
+            overrides: Vec::new(),
             mode: crate::ImportMode::Plan,
             expected_fingerprint: None,
         };
@@ -2251,6 +2428,7 @@ xaddrs = ["http://192.0.2.50/onvif/device_service"]
             group_id: None,
             credential_profile: None,
             tags: Vec::new(),
+            overrides: Vec::new(),
             mode: crate::ImportMode::Plan,
             expected_fingerprint: None,
         };
@@ -2309,6 +2487,7 @@ xaddrs = ["http://192.0.2.50/onvif/device_service"]
             group_id: None,
             credential_profile: None,
             tags: Vec::new(),
+            overrides: Vec::new(),
             mode: crate::ImportMode::Plan,
             expected_fingerprint: None,
         };
@@ -2363,6 +2542,7 @@ xaddrs = ["http://192.0.2.50/onvif/device_service"]
             group_id: None,
             credential_profile: None,
             tags: vec!["fleet".to_owned()],
+            overrides: Vec::new(),
             mode: crate::ImportMode::Plan,
             expected_fingerprint: None,
         };
@@ -2378,6 +2558,115 @@ xaddrs = ["http://192.0.2.50/onvif/device_service"]
         assert_eq!(first.create_count, 102);
         assert_eq!(first.filtered_out_count, 103);
         assert_eq!(first.conflict_count, 0);
+    }
+
+    #[test]
+    fn snapshot_refresh_increments_generation_and_invalidates_old_plan() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        let record = DiscoveryRecord {
+            endpoint: "uuid:refreshable".to_owned(),
+            types: Vec::new(),
+            scopes: Vec::new(),
+            xaddrs: vec!["http://192.0.2.120/onvif/device_service".to_owned()],
+            manufacturer: None,
+            model: None,
+            firmware_version: None,
+            serial_number: None,
+        };
+        let initial = store
+            .save_discovery_snapshot_with_interfaces(
+                "scan",
+                vec![record.clone()],
+                vec!["Ethernet=192.0.2.10".to_owned()],
+            )
+            .expect("snapshot should save");
+        let request = DeviceImportRequest {
+            snapshot_id: "scan".to_owned(),
+            filters: Vec::new(),
+            group_id: None,
+            credential_profile: None,
+            tags: Vec::new(),
+            overrides: Vec::new(),
+            mode: crate::ImportMode::Plan,
+            expected_fingerprint: None,
+        };
+        let old_plan = store
+            .plan_discovery_import(&request)
+            .expect("old plan should build");
+        let refreshed = store
+            .refresh_discovery_snapshot("scan", vec![record], vec!["Wi-Fi=192.0.2.11".to_owned()])
+            .expect("snapshot should refresh");
+
+        assert_eq!(initial.generation, 1);
+        assert_eq!(refreshed.generation, 2);
+        assert_eq!(refreshed.interfaces, vec!["Wi-Fi=192.0.2.11"]);
+        let new_plan = store
+            .plan_discovery_import(&request)
+            .expect("new plan should build");
+        assert_ne!(old_plan.fingerprint, new_plan.fingerprint);
+        let error = store
+            .apply_discovery_import(&request, &old_plan.fingerprint)
+            .expect_err("old plan must be stale");
+        assert_eq!(error.code, crate::ErrorCode::ImportPlanMismatch);
+    }
+
+    #[test]
+    fn import_overrides_control_id_alias_and_fingerprint() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        store
+            .create_group(NewGroup {
+                id: "factory".to_owned(),
+                name: None,
+            })
+            .expect("group should create");
+        store
+            .save_discovery_snapshot(
+                "scan",
+                vec![DiscoveryRecord {
+                    endpoint: "uuid:override-me".to_owned(),
+                    types: Vec::new(),
+                    scopes: Vec::new(),
+                    xaddrs: vec!["http://192.0.2.121/onvif/device_service".to_owned()],
+                    manufacturer: None,
+                    model: None,
+                    firmware_version: None,
+                    serial_number: None,
+                }],
+            )
+            .expect("snapshot should save");
+        let mut request = DeviceImportRequest {
+            snapshot_id: "scan".to_owned(),
+            filters: Vec::new(),
+            group_id: Some("factory".to_owned()),
+            credential_profile: None,
+            tags: Vec::new(),
+            overrides: Vec::new(),
+            mode: crate::ImportMode::Plan,
+            expected_fingerprint: None,
+        };
+        let default_plan = store
+            .plan_discovery_import(&request)
+            .expect("default plan should build");
+        request.overrides = vec![DiscoveryImportOverride {
+            endpoint: "uuid:override-me".to_owned(),
+            id: Some("loading-bay".to_owned()),
+            alias: Some("cam-042".to_owned()),
+        }];
+        let overridden = store
+            .plan_discovery_import(&request)
+            .expect("override plan should build");
+
+        assert_ne!(default_plan.fingerprint, overridden.fingerprint);
+        assert_eq!(
+            overridden.proposals[0].device_id.as_deref(),
+            Some("loading-bay")
+        );
+        assert_eq!(
+            overridden.proposals[0].group_alias.as_deref(),
+            Some("cam-042")
+        );
     }
 
     #[test]
@@ -2406,6 +2695,7 @@ xaddrs = ["http://192.0.2.50/onvif/device_service"]
             group_id: None,
             credential_profile: None,
             tags: Vec::new(),
+            overrides: Vec::new(),
             mode: crate::ImportMode::Plan,
             expected_fingerprint: None,
         };

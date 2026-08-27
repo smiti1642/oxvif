@@ -654,9 +654,11 @@ Verified after the first slice:
   apply, stale fingerprint rejection, idempotent re-plan, partial enrichment,
   total enrichment failure, and a deterministic 205-record inventory.
 
-Remaining in Stage 2A: explicit snapshot rescan/refresh lifecycle, user-provided
-ID/alias override maps for resolving exceptional conflicts, and set resolution
-for future batch commands.
+Stage 2A discovery lifecycle is complete: snapshots expose monotonically
+increasing generations and scan-interface metadata; explicit refresh atomically
+rescans an existing name; enrichment and refresh invalidate stale plans; and
+versioned secret-free JSON overrides can deterministically replace proposed IDs
+and Group-local aliases. Set resolution continues in Stage 3 with batch commands.
 
 UX contract correction approved 2026-08-27:
 

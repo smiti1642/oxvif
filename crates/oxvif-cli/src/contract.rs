@@ -62,6 +62,7 @@ pub enum CommandRequest {
     ViewEvaluate(ViewEvaluateRequest),
     ViewDelete(ResourceIdRequest),
     DiscoverScan(DiscoverScanRequest),
+    DiscoveryRefresh(DiscoveryRefreshRequest),
     DiscoveryEnrich(DiscoveryEnrichRequest),
     DiscoverySnapshotList,
     DiscoverySnapshotShow(DiscoverySnapshotShowRequest),
@@ -106,6 +107,7 @@ impl CommandRequest {
             Self::ViewEvaluate(_) => "view.evaluate",
             Self::ViewDelete(_) => "view.delete",
             Self::DiscoverScan(_) => "discover.scan",
+            Self::DiscoveryRefresh(_) => "discover.refresh",
             Self::DiscoveryEnrich(_) => "discover.enrich",
             Self::DiscoverySnapshotList => "discover.snapshots",
             Self::DiscoverySnapshotShow(_) => "discover.list",
@@ -166,6 +168,7 @@ pub struct DeviceImportRequest {
     pub group_id: Option<String>,
     pub credential_profile: Option<String>,
     pub tags: Vec<String>,
+    pub overrides: Vec<crate::DiscoveryImportOverride>,
     pub mode: ImportMode,
     pub expected_fingerprint: Option<String>,
 }
@@ -246,6 +249,12 @@ pub struct ViewEvaluateRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiscoverScanRequest {
     pub snapshot_id: Option<String>,
+    pub interfaces: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiscoveryRefreshRequest {
+    pub id: String,
     pub interfaces: Vec<String>,
 }
 

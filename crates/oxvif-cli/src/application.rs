@@ -300,62 +300,39 @@ impl Application {
                 view: self.registry.delete_view(&request.id)?,
             }),
             CommandRequest::DiscoverScan(request) => {
-                let selected = resolve_discovery_interfaces(&request.interfaces)?;
-                let selected_interfaces = selected
-                    .iter()
-                    .map(|(_, label)| label.clone())
-                    .collect::<Vec<_>>();
-                let mut tasks = tokio::task::JoinSet::new();
-                for (address, label) in selected {
-                    let timeout = options.timeout;
-                    tasks.spawn(async move {
-                        let result = oxvif::discovery::probe_result_on(timeout, &[address]).await;
-                        (label, result)
-                    });
-                }
-
-                let mut observations = Vec::new();
-                let mut warnings = Vec::new();
-                let mut successful_interfaces = 0usize;
-                while let Some(result) = tasks.join_next().await {
-                    match result {
-                        Ok((_, Ok(discovered))) => {
-                            successful_interfaces += 1;
-                            observations.extend(discovered);
-                        }
-                        Ok((label, Err(error))) => warnings.push(Warning {
-                            code: "DISCOVERY_INTERFACE_FAILED".to_owned(),
-                            message: format!("Discovery on `{label}` failed: {error}"),
-                        }),
-                        Err(error) => warnings.push(Warning {
-                            code: "DISCOVERY_INTERFACE_FAILED".to_owned(),
-                            message: format!("A discovery interface task failed: {error}"),
-                        }),
-                    }
-                }
-                if successful_interfaces == 0 {
-                    return Err(AppError::discovery_failed(
-                        warnings
-                            .iter()
-                            .map(|warning| warning.message.as_str())
-                            .collect::<Vec<_>>()
-                            .join("; "),
-                    ));
-                }
-                let devices = merge_discovery_observations(observations);
+                let (devices, selected_interfaces, warnings) =
+                    scan_discovery_interfaces(&request.interfaces, options.timeout).await?;
                 let saved_snapshot = request
                     .snapshot_id
                     .as_deref()
-                    .map(|id| self.registry.save_discovery_snapshot(id, devices.clone()))
+                    .map(|id| {
+                        self.registry.save_discovery_snapshot_with_interfaces(
+                            id,
+                            devices.clone(),
+                            selected_interfaces.clone(),
+                        )
+                    })
                     .transpose()?
-                    .map(|snapshot| crate::DiscoverySnapshotSummary {
-                        id: snapshot.id,
-                        saved_at_unix_ms: snapshot.saved_at_unix_ms,
-                        device_count: snapshot.devices.len(),
-                    });
+                    .map(snapshot_summary);
                 let mut outcome = Outcome::data(CommandData::DiscoveryScan {
                     devices,
                     saved_snapshot,
+                    interfaces: selected_interfaces,
+                });
+                outcome.warnings = warnings;
+                outcome
+            }
+            CommandRequest::DiscoveryRefresh(request) => {
+                let (devices, selected_interfaces, warnings) =
+                    scan_discovery_interfaces(&request.interfaces, options.timeout).await?;
+                let snapshot = self.registry.refresh_discovery_snapshot(
+                    &request.id,
+                    devices.clone(),
+                    selected_interfaces.clone(),
+                )?;
+                let mut outcome = Outcome::data(CommandData::DiscoveryScan {
+                    devices,
+                    saved_snapshot: Some(snapshot_summary(snapshot)),
                     interfaces: selected_interfaces,
                 });
                 outcome.warnings = warnings;
@@ -486,11 +463,7 @@ impl Application {
                     .registry
                     .replace_discovery_snapshot(&request.id, devices)?;
                 let mut outcome = Outcome::data(CommandData::DiscoveryEnrichment {
-                    snapshot: crate::DiscoverySnapshotSummary {
-                        id: snapshot.id,
-                        saved_at_unix_ms: snapshot.saved_at_unix_ms,
-                        device_count: snapshot.devices.len(),
-                    },
+                    snapshot: snapshot_summary(snapshot),
                     attempted,
                     enriched,
                     failed,
@@ -746,6 +719,68 @@ async fn fetch_live_information(
     Err(AppError::device_connection_failed(
         last_error.unwrap_or_else(|| "Device request failed without an error.".to_owned()),
     ))
+}
+
+async fn scan_discovery_interfaces(
+    selectors: &[String],
+    timeout: Duration,
+) -> Result<(Vec<crate::DiscoveryRecord>, Vec<String>, Vec<Warning>), AppError> {
+    let selected = resolve_discovery_interfaces(selectors)?;
+    let selected_interfaces = selected
+        .iter()
+        .map(|(_, label)| label.clone())
+        .collect::<Vec<_>>();
+    let mut tasks = tokio::task::JoinSet::new();
+    for (address, label) in selected {
+        tasks.spawn(async move {
+            let result = oxvif::discovery::probe_result_on(timeout, &[address]).await;
+            (label, result)
+        });
+    }
+
+    let mut observations = Vec::new();
+    let mut warnings = Vec::new();
+    let mut successful_interfaces = 0usize;
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok((_, Ok(discovered))) => {
+                successful_interfaces += 1;
+                observations.extend(discovered);
+            }
+            Ok((label, Err(error))) => warnings.push(Warning {
+                code: "DISCOVERY_INTERFACE_FAILED".to_owned(),
+                message: format!("Discovery on `{label}` failed: {error}"),
+            }),
+            Err(error) => warnings.push(Warning {
+                code: "DISCOVERY_INTERFACE_FAILED".to_owned(),
+                message: format!("A discovery interface task failed: {error}"),
+            }),
+        }
+    }
+    if successful_interfaces == 0 {
+        return Err(AppError::discovery_failed(
+            warnings
+                .iter()
+                .map(|warning| warning.message.as_str())
+                .collect::<Vec<_>>()
+                .join("; "),
+        ));
+    }
+    Ok((
+        merge_discovery_observations(observations),
+        selected_interfaces,
+        warnings,
+    ))
+}
+
+fn snapshot_summary(snapshot: crate::DiscoverySnapshotView) -> crate::DiscoverySnapshotSummary {
+    crate::DiscoverySnapshotSummary {
+        id: snapshot.id,
+        saved_at_unix_ms: snapshot.saved_at_unix_ms,
+        generation: snapshot.generation,
+        interfaces: snapshot.interfaces,
+        device_count: snapshot.devices.len(),
+    }
 }
 
 fn resolve_discovery_interfaces(selectors: &[String]) -> Result<Vec<(Ipv4Addr, String)>, AppError> {

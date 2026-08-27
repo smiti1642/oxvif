@@ -70,6 +70,7 @@ devices:
 ```sh
 oxvif --timeout 3s discover scan
 oxvif --timeout 3s discover scan --interface Ethernet --save factory-scan
+oxvif --timeout 3s discover refresh factory-scan --interface Ethernet
 oxvif discover snapshots
 oxvif discover list factory-scan --filter ip-cidr=192.168.20.0/24
 oxvif discover enrich factory-scan --credential-profile factory-admin \
@@ -83,6 +84,11 @@ include `endpoint`, `uuid`, `type`, `scope`, `xaddr`, `ip-cidr`, and enriched
 identity fields. Enrichment uses bounded concurrency and writes only identity
 metadata back to the snapshot; `discover scan` and `discover enrich` never add
 registered devices.
+
+Each saved snapshot exposes a monotonically increasing `generation` plus the
+interfaces used for its latest scan. `discover refresh` atomically replaces the
+record set, while enrich updates metadata; both increment the generation and
+invalidate older import fingerprints.
 
 Bulk import is a fingerprinted plan/apply workflow. A plan is read-only; apply
 requires the exact fingerprint from a freshly reviewed plan and atomically
@@ -103,6 +109,21 @@ oxvif device import --from factory-scan \
   --tag discovered \
   --apply --expect-plan sha256:...
 ```
+
+Exceptional IDs and Group-local aliases can be supplied without secrets in a
+versioned JSON file (or via `--overrides-stdin`):
+
+```json
+{
+  "version": 1,
+  "devices": [
+    { "endpoint": "urn:uuid:...", "id": "loading-bay", "alias": "cam-042" }
+  ]
+}
+```
+
+Pass it as `--overrides overrides.json` to both plan and apply. The normalized
+override document and snapshot generation are included in the plan fingerprint.
 
 ## Credentials
 
