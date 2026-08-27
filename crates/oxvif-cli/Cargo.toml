@@ -1,0 +1,21 @@
+[package]
+name = "oxvif-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Human- and Agent-friendly CLI for ONVIF cameras"
+readme = "README.md"
+keywords = ["onvif", "camera", "cli", "rtsp"]
+categories = ["command-line-utilities", "network-programming", "multimedia"]
+
+[[bin]]
+name = "oxvif"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.6.6", features = ["derive"] }
+oxvif = { version = "0.15.0", path = "../.." }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

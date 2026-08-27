@@ -1,0 +1,542 @@
+# oxvif CLI — human and Agent operation surface plan
+
+**Status:** active. Written 2026-08-26 from the product discussion that
+established the package boundary, human/Agent contract, and named-device
+registry. **Stage 0 was completed in the working tree on 2026-08-26:** the
+workspace, `oxvif-cli` crate, typed command/result contract, `describe`, human
+renderer, JSON/JSONL envelopes, structured argument errors, and integration
+tests are present. Command spelling that is explicitly marked provisional may
+still change before the first release.
+
+**Package:** crates.io package `oxvif-cli`, installed binary `oxvif`.
+
+**Repository decision:** keep the CLI in this repository as a workspace member.
+`cargo install oxvif-cli` depends on the crates.io package name, not on the CLI
+having a separate Git repository. The library and CLI therefore remain
+independently publishable without giving up atomic library/CLI changes and the
+existing mock-based integration tests.
+
+---
+
+## 1. Product decision
+
+The CLI is not merely a human-friendly wrapper around selected
+`OnvifClient` methods. It is the stable ONVIF operation surface shared by:
+
+- humans working interactively in a terminal;
+- Agents invoking a local command and consuming structured results;
+- CI and fleet automation;
+- a possible future MCP server built on the same application layer.
+
+The first release is **diagnostic-first**: discover, register, identify,
+inspect, obtain media URIs, read PTZ state, and run health checks. Mutating
+device operations follow only after the output contract, error taxonomy, and
+safety model are stable.
+
+The CLI's durable workflow is:
+
+```text
+discover -> device add -> device list -> select by ID -> execute operation
+```
+
+A named-device registry is part of the MVP. Without it, every invocation must
+repeat an address and credentials and the CLI remains a stateless example
+runner instead of a useful operating environment.
+
+---
+
+## 2. Decisions taken
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | New repository? | **No.** Add `crates/oxvif-cli` to this repository. |
+| 2 | Package and executable names? | Package `oxvif-cli`; executable `oxvif`. |
+| 3 | Human-only CLI with JSON added later? | **No.** Human and Agent contracts are first-class from the start. |
+| 4 | Separate Agent commands? | **No.** One command model; Agents request structured output and non-interactive behavior. |
+| 5 | Persist known cameras? | **Yes.** A named-device registry is an MVP capability. |
+| 6 | Stable reference key? | A machine-safe immutable device ID, separate from the mutable human display name. |
+| 7 | Global active device for Agents? | **No.** Humans may use `use`; Agents should select explicitly with `--device`. |
+| 8 | Store passwords in the registry? | **Never.** Store only a credential reference; secrets live in an OS credential store. |
+| 9 | First-release writes? | Avoid them. Start with a high-value read-only surface. |
+| 10 | MCP now? | Not in the MVP, but keep the application layer reusable so MCP does not reimplement behavior. |
+
+---
+
+## 3. Repository and crate shape
+
+The existing root remains the `oxvif` library package and becomes a workspace
+root. The initial shape is:
+
+```text
+oxvif/
+|-- Cargo.toml
+|-- src/                         oxvif library
+`-- crates/
+    `-- oxvif-cli/
+        |-- Cargo.toml           package = "oxvif-cli"
+        `-- src/
+            |-- lib.rs           reusable application surface
+            |-- main.rs          thin CLI adapter
+            |-- commands/
+            |-- registry/
+            |-- credential/
+            |-- output/
+            `-- error.rs
+```
+
+The CLI manifest publishes a differently named executable:
+
+```toml
+[package]
+name = "oxvif-cli"
+
+[[bin]]
+name = "oxvif"
+path = "src/main.rs"
+
+[dependencies]
+oxvif = { version = "0.15", path = "../.." }
+```
+
+The `version` is required for publication; `path` is the local workspace
+override. Release order is library first, CLI second. Installation becomes:
+
+```sh
+cargo install oxvif-cli --locked
+oxvif --version
+```
+
+`main.rs` is responsible only for argument parsing, constructing a typed
+command request, invoking the application layer, rendering the result, and
+returning an exit code. Argument-parser types must not leak into command
+execution. A future MCP adapter consumes the same typed requests and results.
+
+---
+
+## 4. Named-device registry
+
+### 4.1 Identity model
+
+Every saved device has at least four distinct identifiers or labels:
+
+| Field | Example | Semantics |
+|---|---|---|
+| `id` | `front-door` | Immutable, unique, machine-safe key used by Agents and scripts. |
+| `name` | `前門攝影機` | Mutable display name for humans. |
+| `device_uuid` | `uuid:abcd...` | ONVIF-reported physical-device identity when available. |
+| `target` | `http://192.168.1.100/onvif/device_service` | Current connection endpoint; mutable and not identity. |
+
+The ID grammar is deliberately narrow and shell-safe:
+
+```text
+[a-z0-9][a-z0-9_-]*
+```
+
+Changing a display name does not invalidate automation:
+
+```sh
+oxvif device rename front-door --name "大廳入口"
+```
+
+An address change updates `target`; it does not create a new device. A UUID or
+serial-number mismatch at a previously known address must produce a warning
+that the physical device may have been replaced.
+
+### 4.2 Registry commands
+
+The canonical registry surface is:
+
+```sh
+oxvif device add <id>
+oxvif device list
+oxvif device show <id>
+oxvif device update <id>
+oxvif device rename <id>
+oxvif device remove <id>
+oxvif device test <id>
+oxvif device refresh <id>
+```
+
+Initial registration:
+
+```sh
+oxvif device add front-door \
+  --name "前門攝影機" \
+  --target 192.168.1.100 \
+  --username admin \
+  --password-stdin
+```
+
+Discovery can feed registration without copying endpoint details by hand:
+
+```sh
+oxvif discover --output json
+oxvif device add front-door --from-discovery uuid:abcd
+```
+
+Interactive discovery may offer to save a selected result. Under
+`--non-interactive`, it must never prompt and must require an explicit result
+identity and device ID.
+
+### 4.3 Selection and conda-like convenience
+
+Humans may select a current device:
+
+```sh
+oxvif use front-door
+oxvif current
+oxvif device info
+oxvif health check
+```
+
+Explicit selection is always available and is the required Agent practice:
+
+```sh
+oxvif --device front-door device info
+oxvif --device front-door media stream-uri
+oxvif --device front-door ptz status
+```
+
+Ambient global state is unsafe for concurrent Agents: one Agent can run
+`use front-door` while another runs `use warehouse`. Target resolution must
+therefore have a documented precedence:
+
+```text
+--device
+-> OXVIF_DEVICE
+-> project-local current device, if supported
+-> user current device
+-> structured MISSING_TARGET error
+```
+
+An Agent should normally use `--device` even when a current device exists.
+Tests must cover two concurrent invocations selecting different devices and
+prove that neither reads or changes the other's target.
+
+### 4.4 Stored shape
+
+The user registry lives in the platform-appropriate application configuration
+directory. On Windows this resolves beneath `%APPDATA%\oxvif`; code must not
+hard-code that path for other platforms. A versioned TOML representation may
+look like:
+
+```toml
+version = 1
+current_device = "front-door"
+
+[devices.front-door]
+name = "前門攝影機"
+target = "http://192.168.1.100/onvif/device_service"
+device_uuid = "uuid:abcd"
+manufacturer = "Hikvision"
+model = "DS-2CD2043G2"
+serial_number = "redacted-example"
+credential_ref = "oxvif/device/front-door"
+tags = ["entrance", "outdoor"]
+```
+
+Rules:
+
+- The registry never contains a password, token, digest, or URL-embedded
+  credential.
+- `credential_ref` identifies a secret in the OS credential store; it is not
+  itself secret.
+- Manufacturer, model, endpoint, service URLs, and last-seen information are
+  cached observations. `device refresh` revalidates them.
+- Import/export excludes credentials. Export is safe to inspect and commit
+  only after explicit redaction tests pass.
+- Registry writes are atomic. A crash must not truncate the inventory.
+- The file has a schema version and migrations; incompatible newer versions
+  fail clearly instead of being overwritten.
+
+### 4.5 Credentials
+
+The preferred enrollment flow accepts a username as ordinary configuration
+and a password through stdin:
+
+```sh
+oxvif device add front-door --username admin --password-stdin
+```
+
+Environment variables may support ephemeral automation:
+
+```text
+OXVIF_USERNAME
+OXVIF_PASSWORD
+```
+
+Passing `--auth admin:password` is not the documented default because command
+arguments appear in shell history and process listings. Renderer, trace, and
+error tests must prove that credentials cannot appear in stdout, stderr,
+registry files, or diagnostic bundles.
+
+The credential backend is an abstraction. The first supported OS backend may
+be Windows, but command and registry models cannot encode a Windows-only API.
+
+---
+
+## 5. Operational command model
+
+Commands are organized by user-facing ONVIF domain rather than exposing SOAP
+method names as the primary interface:
+
+```sh
+oxvif discover
+oxvif device info
+oxvif device capabilities
+oxvif device services
+oxvif media profiles
+oxvif media stream-uri
+oxvif media snapshot-uri
+oxvif ptz status
+oxvif ptz presets
+oxvif health check
+```
+
+All target-taking commands accept a saved ID via `--device`. Direct targets
+remain important for one-shot use:
+
+```sh
+oxvif --target 192.168.1.100 device info
+oxvif --target http://192.168.1.100/onvif/device_service device info
+```
+
+`--device` and `--target` are mutually exclusive. A bare IP may be normalized
+or resolved, but the resolved endpoint must be reported in result metadata;
+the CLI must not silently hide an incorrect endpoint guess.
+
+The implementation should extract reusable behavior from the existing
+examples rather than rename `examples/camera.rs` into the production binary.
+That example currently mixes parsing, connection setup, behavior, and human
+rendering and is a source of operations to migrate, not the target
+architecture.
+
+---
+
+## 6. Human and Agent contract
+
+There is one semantic command surface. Presentation and interaction are
+explicit policies:
+
+```text
+--output table|json|jsonl
+--non-interactive
+--timeout <duration>
+--retries <count>
+--verbose
+--quiet
+```
+
+There is no vague `--agent` switch. Agents request `--output json` or
+`--output jsonl` plus `--non-interactive`. Non-interactive execution fails
+immediately with a structured error if required input or confirmation is
+missing.
+
+### 6.1 Self-description
+
+Agents must not need to scrape human help text:
+
+```sh
+oxvif describe --output json
+oxvif describe media.stream-uri --output json
+```
+
+Description output includes the command's argument schema, result schema,
+authentication requirement, risk level, retry behavior, and whether it can
+change device state.
+
+### 6.2 Stable result envelope
+
+Every structured success uses the same top-level contract:
+
+```json
+{
+  "schema_version": "1",
+  "ok": true,
+  "data": {},
+  "warnings": [],
+  "meta": {
+    "device_id": "front-door",
+    "target": "http://192.168.1.100/onvif/device_service",
+    "elapsed_ms": 142
+  }
+}
+```
+
+Errors are data, not prose requiring interpretation:
+
+```json
+{
+  "schema_version": "1",
+  "ok": false,
+  "error": {
+    "code": "AUTH_CLOCK_SKEW",
+    "message": "Device clock differs by 312 seconds",
+    "retryable": true,
+    "suggested_action": "Retry with clock synchronization enabled"
+  }
+}
+```
+
+Human-readable data goes to stdout, diagnostics to stderr. Structured mode
+must remain valid JSON even when verbose diagnostics are enabled. Exit codes
+are documented and stable; an Agent never needs to parse an English error to
+distinguish authentication, reachability, unsupported service, invalid input,
+or a dangerous operation requiring authorization.
+
+JSONL is required for discovery and future fleet operations so partial results
+can stream without waiting for every target.
+
+---
+
+## 7. Safety model for later writes
+
+Each command declares one of three risk classes:
+
+| Risk | Examples | Default policy |
+|---|---|---|
+| read | info, profiles, health, PTZ status | Allowed. |
+| write | preset changes, imaging settings | Explicit write authorization. |
+| dangerous | network changes, reboot, factory reset, firmware | Plan/apply plus explicit confirmation. |
+
+Dangerous commands should produce a typed plan before application. A plan
+records the target's stable identity, before/after values, expected disconnect
+or reboot, reversibility, expiry, and a plan ID. It must not apply to a device
+whose identity no longer matches.
+
+Continuous PTZ motion must require a duration or another bounded stop policy so
+an interrupted Agent cannot leave a camera moving indefinitely. Retryable
+errors and idempotency rules must be part of the structured command contract
+before write commands ship.
+
+---
+
+## 8. Delivery stages
+
+### Stage 0 — workspace and contracts — complete 2026-08-26
+
+- Convert the repository into a workspace without changing the published
+  `oxvif` library package.
+- Add `crates/oxvif-cli` with a thin binary and reusable library surface.
+- Define typed command request/result, structured envelope, error codes, exit
+  codes, output policy, and `describe` schema.
+- Add snapshot tests for human, JSON, and error output.
+
+**Exit:** `cargo run -p oxvif-cli -- --help`, `describe --output json`, and all
+existing library feature combinations pass.
+
+Delivered and verified:
+
+- `cargo test -p oxvif-cli`: 10 tests passed across unit, binary-unit, and CLI
+  integration suites.
+- `cargo test -p oxvif`: 542 passed, 1 ignored under the library's default
+  feature set.
+- `cargo test --workspace --all-features`: 955 passed, 3 ignored, 0 failed.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`: no
+  findings.
+- `cargo package -p oxvif-cli --allow-dirty`: packaged 13 files and rebuilt the
+  package against the crates.io `oxvif 0.15.0` dependency successfully.
+- `cargo rustdoc -p oxvif-cli --lib -- -D warnings`: public API documentation
+  built without warnings.
+- `cargo fmt --all -- --check` and `git diff --check`: clean.
+
+### Stage 1 — registry and credentials
+
+- Implement versioned, atomic device-registry storage.
+- Implement `device add/list/show/update/rename/remove/test/refresh`.
+- Implement immutable IDs, mutable display names, UUID/serial replacement
+  detection, and credential references.
+- Implement `use`, `current`, `--device`, `--target`, and documented resolution
+  precedence.
+- Implement the credential abstraction and at least the target platform's
+  secure backend.
+- Add concurrency, migration, atomic-write, corruption, and secret-redaction
+  tests.
+
+**Exit:** a device can be discovered, saved once, selected by stable ID, and
+reused without a password appearing in arguments or the registry.
+
+### Stage 2 — read-only diagnostic MVP
+
+- Migrate discovery, device information, capabilities/services, media
+  profiles, stream/snapshot URI, PTZ status/presets, and health checks through
+  the application layer.
+- Support table, JSON, and JSONL where appropriate.
+- Run end-to-end against `MockTransport`, `MockServer`, and a multi-device
+  mock fleet; no real camera is required for the release gate.
+
+**Exit:** the ten-command diagnostic surface works by direct target and saved
+device ID in both human and non-interactive structured modes.
+
+### Stage 3 — Agent hardening and fleet foundations
+
+- Stabilize schema version 1 and publish command schemas.
+- Add timeouts, bounded retries, retryability metadata, and cancellation
+  behavior.
+- Add device tags/groups and JSONL batch health/inspection if the single-device
+  contract has remained stable.
+- Test concurrent Agents using different explicit device IDs.
+
+**Exit:** an Agent can discover capabilities, select a saved target, perform a
+  diagnostic workflow, and recover from every expected failure without
+  reading human prose or encountering a prompt.
+
+### Stage 4 — controlled writes
+
+- Add write-risk metadata and explicit authorization.
+- Add plan/apply for dangerous operations.
+- Add idempotency and bounded PTZ movement.
+- Begin with reversible operations; network, firmware, factory reset, and user
+  management land only with dedicated integration tests and recovery notes.
+
+### Stage 5 — optional MCP adapter
+
+- Expose typed tools such as `discover_devices`, `inspect_device`,
+  `list_media_profiles`, `get_stream_uri`, `get_ptz_status`,
+  `plan_device_change`, and `apply_device_change`.
+- Reuse the CLI application's requests, results, errors, credential lookup,
+  and safety policy. MCP must not become a second implementation.
+
+---
+
+## 9. MVP release gate
+
+The first crates.io release is ready only when all of the following are true:
+
+- `cargo install oxvif-cli --locked` installs an `oxvif` executable.
+- Existing `oxvif` default and all-feature tests remain green.
+- Every MVP command works against the built-in mock without a physical camera.
+- A saved device can be referenced by stable ID and its display name can change
+  without breaking that reference.
+- Concurrent explicit selections do not share mutable current-device state.
+- Registry files and all outputs pass credential redaction tests.
+- `--non-interactive` never opens a GUI or waits for input.
+- JSON/JSONL output validates against the published schema and contains no
+  terminal decoration.
+- Error code, retryability, target identity, and elapsed-time metadata are
+  present for Agent consumers.
+- Direct URL/IP operation remains available when persistence is unwanted.
+
+---
+
+## 10. Open decisions before implementation
+
+These do not invalidate the decisions above, but Stage 0 or Stage 1 must close
+them explicitly:
+
+1. Exact CLI argument-parser and secure credential-backend crates after an
+   MSRV, dependency, and maintenance review.
+2. Whether `use` is user-scoped only or also supports a project-local current
+   device; if project-local state exists, whether it is ignored by default by
+   version control.
+3. Whether a bare IP is normalized to the conventional device-service path or
+   resolved through discovery first; either behavior must be visible in
+   metadata.
+4. Registry locking behavior across multiple processes and the stale-lock
+   recovery policy.
+5. Schema distribution format for `describe`: JSON Schema, a smaller internal
+   description format, or both.
+6. Exact exit-code allocation and which warnings make a fleet command partially
+   successful.
+7. Whether tags/groups belong in the first release or immediately after the
+   single-device registry stabilizes.
