@@ -27,9 +27,46 @@ oxvif use front-door
 oxvif current
 ```
 
-The registry is versioned, process-locked, and atomically replaced. Its display
+The schema-v2 registry automatically reads schema v1, is process-locked, and is
+atomically replaced. Its display
 name, target, tags, and cached device metadata may change; the device ID does
 not. Set `OXVIF_CONFIG_DIR` to isolate the registry for tests or containers.
+
+## Fleet inventory
+
+Static Groups have explicit membership and a local alias for each member.
+Dynamic Views are saved filters evaluated against current device metadata:
+
+```sh
+oxvif group create taipei-f1 --name "Taipei F1"
+oxvif group member add taipei-f1 front-door --alias cam-023
+oxvif device show taipei-f1/cam-023
+oxvif use taipei-f1/cam-023
+
+oxvif view create outdoor-geovision \
+  --filter tag=outdoor \
+  --filter manufacturer=GeoVision
+oxvif view evaluate outdoor-geovision --output json
+```
+
+`group/local-alias` always resolves exactly one canonical device. Removing a
+device removes its Group memberships; it does not remove the Groups or Views.
+Device filter fields currently include `id`, `name`, `target`, `uuid`,
+`manufacturer`, `model`, `firmware`, `serial`, `tag`, and `ip-cidr`.
+
+WS-Discovery results can be retained and filtered without registering any
+devices:
+
+```sh
+oxvif --timeout 3s discover scan --save factory-scan
+oxvif discover snapshots
+oxvif discover list factory-scan --filter ip-cidr=192.168.20.0/24
+oxvif discover remove factory-scan
+```
+
+Discovery filters include `endpoint`, `uuid`, `type`, `scope`, `xaddr`,
+`ip-cidr`, and enriched identity fields. Enrichment and explicit bulk import
+plan/apply are the next Stage 2A slice; `discover scan` never adds devices.
 
 ## Credentials
 
@@ -42,6 +79,17 @@ oxvif device credential set front-door \
   --password-stdin
 
 oxvif device credential delete front-door
+```
+
+One native secret can be shared through an explicitly assigned credential
+profile. Groups never imply credential inheritance:
+
+```sh
+oxvif credential profile set factory-admin \
+  --username admin \
+  --password-stdin
+oxvif device credential use-profile front-door factory-admin
+oxvif credential profile list
 ```
 
 `OXVIF_USERNAME` and `OXVIF_PASSWORD` support ephemeral automation and direct

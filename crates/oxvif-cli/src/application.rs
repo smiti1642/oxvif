@@ -6,7 +6,7 @@ use tokio::time::{Instant, timeout};
 use crate::{
     AppError, CommandData, CommandRequest, CommandSuccess, CredentialStore, DeviceMetadata,
     LiveDeviceInfo, RegistryStore, ResultMeta, SystemCredentialStore, Warning,
-    credential_reference, describe, normalize_target,
+    credential_profile_reference, credential_reference, describe, normalize_target,
 };
 
 /// Invocation policy shared by CLI and future non-CLI adapters.
@@ -77,7 +77,8 @@ impl Application {
                 })
             }
             CommandRequest::DeviceShow(request) => {
-                let device = self.registry.get(&request.id)?;
+                let id = self.registry.resolve_device_selector(&request.id)?;
+                let device = self.registry.get(&id)?;
                 Outcome::device("shown", device)
             }
             CommandRequest::DeviceUpdate(request) => {
@@ -131,8 +132,166 @@ impl Application {
                     target: Some(device.target),
                 }
             }
+            CommandRequest::DeviceCredentialUseProfile(request) => {
+                let device = self
+                    .registry
+                    .assign_credential_profile(&request.device_id, &request.profile_id)?;
+                Outcome::device("credential profile assigned", device)
+            }
+            CommandRequest::CredentialProfileSet(request) => {
+                let id = request.id;
+                let reference = credential_profile_reference(&id);
+                let previous = match self.registry.get_stored_credential_profile(&id) {
+                    Ok(profile) => Some(profile),
+                    Err(error) if error.code == crate::ErrorCode::ResourceNotFound => None,
+                    Err(error) => return Err(error),
+                };
+                let previous_secret = match &previous {
+                    Some(profile) => self.credentials.get(profile.credential_ref())?,
+                    None => None,
+                };
+                self.credentials
+                    .set(&reference, request.password.expose_secret())?;
+                let profile =
+                    match self
+                        .registry
+                        .set_credential_profile(&id, &request.username, &reference)
+                    {
+                        Ok(profile) => profile,
+                        Err(error) => {
+                            if let Some(secret) = previous_secret {
+                                let _ = self.credentials.set(&reference, &secret);
+                            } else {
+                                let _ = self.credentials.delete(&reference);
+                            }
+                            return Err(error);
+                        }
+                    };
+                Outcome::data(CommandData::CredentialProfileRecord {
+                    action: if previous.is_some() { "updated" } else { "set" }.to_owned(),
+                    profile,
+                })
+            }
+            CommandRequest::CredentialProfileList => {
+                Outcome::data(CommandData::CredentialProfileList {
+                    profiles: self.registry.list_credential_profiles()?,
+                })
+            }
+            CommandRequest::CredentialProfileShow(request) => {
+                Outcome::data(CommandData::CredentialProfileRecord {
+                    action: "shown".to_owned(),
+                    profile: self.registry.get_credential_profile(&request.id)?,
+                })
+            }
+            CommandRequest::CredentialProfileDelete(request) => {
+                let profile = self.registry.remove_credential_profile(&request.id)?;
+                if let Err(error) = self.credentials.delete(profile.credential_ref()) {
+                    let _ = self.registry.set_credential_profile(
+                        &request.id,
+                        profile.username(),
+                        profile.credential_ref(),
+                    );
+                    return Err(error);
+                }
+                Outcome::data(CommandData::ResourceRemoved {
+                    resource: "credential_profile".to_owned(),
+                    id: request.id,
+                })
+            }
+            CommandRequest::GroupCreate(request) => Outcome::data(CommandData::GroupRecord {
+                action: "created".to_owned(),
+                group: self.registry.create_group(request.group)?,
+            }),
+            CommandRequest::GroupList => Outcome::data(CommandData::GroupList {
+                groups: self.registry.list_groups()?,
+            }),
+            CommandRequest::GroupShow(request) => Outcome::data(CommandData::GroupRecord {
+                action: "shown".to_owned(),
+                group: self.registry.get_group(&request.id)?,
+            }),
+            CommandRequest::GroupDelete(request) => Outcome::data(CommandData::GroupRecord {
+                action: "deleted".to_owned(),
+                group: self.registry.delete_group(&request.id)?,
+            }),
+            CommandRequest::GroupMemberAdd(request) => Outcome::data(CommandData::GroupRecord {
+                action: "member added".to_owned(),
+                group: self.registry.add_group_member(
+                    &request.group_id,
+                    &request.device_id,
+                    &request.alias,
+                )?,
+            }),
+            CommandRequest::GroupMemberRemove(request) => Outcome::data(CommandData::GroupRecord {
+                action: "member removed".to_owned(),
+                group: self
+                    .registry
+                    .remove_group_member(&request.group_id, &request.alias)?,
+            }),
+            CommandRequest::ViewCreate(request) => Outcome::data(CommandData::ViewRecord {
+                action: "created".to_owned(),
+                view: self.registry.create_view(request.view)?,
+            }),
+            CommandRequest::ViewList => Outcome::data(CommandData::ViewList {
+                views: self.registry.list_views()?,
+            }),
+            CommandRequest::ViewShow(request) => Outcome::data(CommandData::ViewRecord {
+                action: "shown".to_owned(),
+                view: self.registry.get_view(&request.id)?,
+            }),
+            CommandRequest::ViewEvaluate(request) => {
+                let view = self.registry.get_view(&request.id)?;
+                let devices = self.registry.evaluate_view(&request.id)?;
+                Outcome::data(CommandData::ViewEvaluation { view, devices })
+            }
+            CommandRequest::ViewDelete(request) => Outcome::data(CommandData::ViewRecord {
+                action: "deleted".to_owned(),
+                view: self.registry.delete_view(&request.id)?,
+            }),
+            CommandRequest::DiscoverScan(request) => {
+                let discovered = oxvif::discovery::probe(options.timeout).await;
+                let devices = discovered
+                    .into_iter()
+                    .map(|device| crate::DiscoveryRecord {
+                        endpoint: device.endpoint,
+                        types: device.types,
+                        scopes: device.scopes,
+                        xaddrs: device.xaddrs,
+                        manufacturer: None,
+                        model: None,
+                        firmware_version: None,
+                        serial_number: None,
+                    })
+                    .collect();
+                Outcome::data(CommandData::DiscoverySnapshotRecord {
+                    action: "saved".to_owned(),
+                    snapshot: self
+                        .registry
+                        .save_discovery_snapshot(&request.snapshot_id, devices)?,
+                })
+            }
+            CommandRequest::DiscoverySnapshotList => {
+                Outcome::data(CommandData::DiscoverySnapshotList {
+                    snapshots: self.registry.list_discovery_snapshots()?,
+                })
+            }
+            CommandRequest::DiscoverySnapshotShow(request) => {
+                Outcome::data(CommandData::DiscoverySnapshotRecord {
+                    action: "shown".to_owned(),
+                    snapshot: self
+                        .registry
+                        .get_discovery_snapshot(&request.id, &request.filters)?,
+                })
+            }
+            CommandRequest::DiscoverySnapshotRemove(request) => {
+                self.registry.remove_discovery_snapshot(&request.id)?;
+                Outcome::data(CommandData::ResourceRemoved {
+                    resource: "discovery_snapshot".to_owned(),
+                    id: request.id,
+                })
+            }
             CommandRequest::Use(request) => {
-                let device = self.registry.set_current(&request.id)?;
+                let id = self.registry.resolve_device_selector(&request.id)?;
+                let device = self.registry.set_current(&id)?;
                 Outcome::device("selected", device)
             }
             CommandRequest::Current => {
@@ -174,19 +333,20 @@ impl Application {
                 }
             }
             CommandRequest::DeviceRefresh(request) => {
-                let previous = self.registry.get(&request.id)?;
-                let resolved = self.resolve_saved(&request.id)?;
+                let id = self.registry.resolve_device_selector(&request.id)?;
+                let previous = self.registry.get(&id)?;
+                let resolved = self.resolve_saved(&id)?;
                 let information = self.fetch_device_info(&resolved, options).await?;
                 let mut warnings = Vec::new();
                 if let Some(warning) = identity_change_warning(
-                    &request.id,
+                    &id,
                     previous.serial_number.as_deref(),
                     &information.serial_number,
                 ) {
                     warnings.push(warning);
                 }
                 let device = self.registry.update_metadata(
-                    &request.id,
+                    &id,
                     DeviceMetadata {
                         manufacturer: information.manufacturer,
                         model: information.model,
@@ -250,32 +410,41 @@ impl Application {
     }
 
     fn resolve_saved(&self, id: &str) -> Result<ResolvedTarget, AppError> {
-        let stored = self.registry.get_stored(id)?;
-        let password = match stored.credential_ref() {
+        let canonical_id = self.registry.resolve_device_selector(id)?;
+        let stored = self.registry.get_stored(&canonical_id)?;
+        let profile = stored
+            .credential_profile()
+            .map(|profile_id| self.registry.get_stored_credential_profile(profile_id))
+            .transpose()?;
+        let credential_ref = profile
+            .as_ref()
+            .map(|profile| profile.credential_ref())
+            .or_else(|| stored.credential_ref());
+        let password = match credential_ref {
             Some(reference) => self.credentials.get(reference)?.ok_or_else(|| {
                 AppError::credential_unavailable(format!(
-                    "Credential `{reference}` is referenced by `{id}` but does not exist."
+                    "Credential `{reference}` is referenced by `{canonical_id}` but does not exist."
                 ))
             })?,
             None => env::var("OXVIF_PASSWORD").unwrap_or_default(),
         };
-        let username = stored
-            .username()
-            .map(str::to_owned)
+        let username = profile
+            .as_ref()
+            .map(|profile| profile.username().to_owned())
+            .or_else(|| stored.username().map(str::to_owned))
             .or_else(|| env::var("OXVIF_USERNAME").ok());
-        let password =
-            if stored.credential_ref().is_some() || env::var_os("OXVIF_PASSWORD").is_some() {
-                Some(password)
-            } else {
-                None
-            };
+        let password = if credential_ref.is_some() || env::var_os("OXVIF_PASSWORD").is_some() {
+            Some(password)
+        } else {
+            None
+        };
         if password.is_some() && username.is_none() {
             return Err(AppError::credential_unavailable(format!(
-                "Device `{id}` has a password but no username."
+                "Device `{canonical_id}` has a password but no username."
             )));
         }
         Ok(ResolvedTarget {
-            device_id: Some(id.to_owned()),
+            device_id: Some(canonical_id),
             target: stored.target().to_owned(),
             username,
             password,
@@ -467,6 +636,85 @@ mod tests {
                 .expect("credential lookup should work"),
             None
         );
+    }
+
+    #[tokio::test]
+    async fn reusable_credential_profile_is_shared_and_cannot_be_deleted_while_in_use() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        let credentials = Arc::new(MemoryCredentialStore::default());
+        let application = Application::with_stores(registry.clone(), credentials.clone());
+        let options = ExecutionOptions::default();
+        for id in ["camera-a", "camera-b"] {
+            application
+                .execute(
+                    CommandRequest::DeviceAdd(DeviceAddRequest {
+                        device: NewDevice {
+                            id: id.to_owned(),
+                            name: None,
+                            target: "192.0.2.20".to_owned(),
+                            tags: Vec::new(),
+                        },
+                    }),
+                    &options,
+                )
+                .await
+                .expect("device should add");
+        }
+        application
+            .execute(
+                CommandRequest::CredentialProfileSet(crate::CredentialProfileSetRequest {
+                    id: "factory-admin".to_owned(),
+                    username: "admin".to_owned(),
+                    password: SecretString::new("shared-secret").expect("secret should construct"),
+                }),
+                &options,
+            )
+            .await
+            .expect("profile should set");
+        for id in ["camera-a", "camera-b"] {
+            application
+                .execute(
+                    CommandRequest::DeviceCredentialUseProfile(
+                        crate::DeviceCredentialProfileRequest {
+                            device_id: id.to_owned(),
+                            profile_id: "factory-admin".to_owned(),
+                        },
+                    ),
+                    &options,
+                )
+                .await
+                .expect("profile should assign");
+        }
+
+        assert_eq!(
+            credentials
+                .get("profile/factory-admin")
+                .expect("credential should load")
+                .as_deref(),
+            Some("shared-secret")
+        );
+        assert_eq!(
+            registry
+                .get("camera-a")
+                .expect("device should load")
+                .credential_profile
+                .as_deref(),
+            Some("factory-admin")
+        );
+        let error = application
+            .execute(
+                CommandRequest::CredentialProfileDelete(crate::ResourceIdRequest {
+                    id: "factory-admin".to_owned(),
+                }),
+                &options,
+            )
+            .await
+            .expect_err("in-use profile must not delete");
+        assert_eq!(error.code, crate::ErrorCode::ResourceInUse);
+        let registry_contents = std::fs::read_to_string(directory.path().join("devices.toml"))
+            .expect("registry should exist");
+        assert!(!registry_contents.contains("shared-secret"));
     }
 
     #[test]

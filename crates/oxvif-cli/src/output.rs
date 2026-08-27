@@ -129,6 +129,128 @@ fn render_human(success: &CommandSuccess) -> String {
             device.id,
             device.username.as_deref().unwrap_or("none")
         ),
+        CommandData::CredentialProfileList { profiles } => {
+            if profiles.is_empty() {
+                String::from("No credential profiles.")
+            } else {
+                let mut output =
+                    String::from("ID               USERNAME             CREDENTIALS\n");
+                for profile in profiles {
+                    let _ = writeln!(
+                        output,
+                        "{:<16} {:<20} {}",
+                        profile.id,
+                        profile.username,
+                        yes_no(profile.has_credentials)
+                    );
+                }
+                output
+            }
+        }
+        CommandData::CredentialProfileRecord { action, profile } => format!(
+            "Credential profile {action}.\nID: {}\nUsername: {}\nCredentials: {}",
+            profile.id,
+            profile.username,
+            yes_no(profile.has_credentials)
+        ),
+        CommandData::GroupList { groups } => {
+            if groups.is_empty() {
+                String::from("No groups.")
+            } else {
+                let mut output = String::from("ID               NAME                 MEMBERS\n");
+                for group in groups {
+                    let _ = writeln!(
+                        output,
+                        "{:<16} {:<20} {}",
+                        group.id,
+                        group.name,
+                        group.members.len()
+                    );
+                }
+                output
+            }
+        }
+        CommandData::GroupRecord { action, group } => {
+            let mut output = format!(
+                "Group {action}.\nID: {}\nName: {}\nMembers: {}",
+                group.id,
+                group.name,
+                group.members.len()
+            );
+            for member in &group.members {
+                let _ = write!(
+                    output,
+                    "\n  {}/{} -> {}",
+                    group.id, member.alias, member.device_id
+                );
+            }
+            output
+        }
+        CommandData::ViewList { views } => {
+            if views.is_empty() {
+                String::from("No views.")
+            } else {
+                let mut output = String::from("ID               NAME                 FILTERS\n");
+                for view in views {
+                    let _ = writeln!(
+                        output,
+                        "{:<16} {:<20} {}",
+                        view.id,
+                        view.name,
+                        view.filters.len()
+                    );
+                }
+                output
+            }
+        }
+        CommandData::ViewRecord { action, view } => format!(
+            "View {action}.\nID: {}\nName: {}\nFilters: {}",
+            view.id,
+            view.name,
+            format_device_filters(&view.filters)
+        ),
+        CommandData::ViewEvaluation { view, devices } => {
+            let mut output = format!("View `{}` matched {} device(s).\n", view.id, devices.len());
+            for device in devices {
+                let _ = writeln!(output, "{}  {}  {}", device.id, device.name, device.target);
+            }
+            output
+        }
+        CommandData::DiscoverySnapshotList { snapshots } => {
+            if snapshots.is_empty() {
+                String::from("No discovery snapshots.")
+            } else {
+                let mut output = String::from("ID               DEVICES  SAVED_AT_UNIX_MS\n");
+                for snapshot in snapshots {
+                    let _ = writeln!(
+                        output,
+                        "{:<16} {:<8} {}",
+                        snapshot.id, snapshot.device_count, snapshot.saved_at_unix_ms
+                    );
+                }
+                output
+            }
+        }
+        CommandData::DiscoverySnapshotRecord { action, snapshot } => {
+            let mut output = format!(
+                "Discovery snapshot {action}.\nID: {}\nDevices: {}\nSaved at (Unix ms): {}",
+                snapshot.id,
+                snapshot.devices.len(),
+                snapshot.saved_at_unix_ms
+            );
+            for device in &snapshot.devices {
+                let _ = write!(
+                    output,
+                    "\n  {}  {}",
+                    device.endpoint,
+                    device.xaddrs.first().map_or("(no XAddr)", String::as_str)
+                );
+            }
+            output
+        }
+        CommandData::ResourceRemoved { resource, id } => {
+            format!("{resource} `{id}` removed.")
+        }
         CommandData::DeviceTest {
             device_id,
             target,
@@ -169,6 +291,9 @@ fn render_device(device: &crate::DeviceView) -> String {
     if !device.tags.is_empty() {
         let _ = write!(output, "\nTags: {}", device.tags.join(", "));
     }
+    if let Some(profile) = &device.credential_profile {
+        let _ = write!(output, "\nCredential profile: {profile}");
+    }
     if let Some(manufacturer) = &device.manufacturer {
         let _ = write!(output, "\nManufacturer: {manufacturer}");
     }
@@ -179,6 +304,14 @@ fn render_device(device: &crate::DeviceView) -> String {
         let _ = write!(output, "\nFirmware: {firmware}");
     }
     output
+}
+
+fn format_device_filters(filters: &[crate::DeviceFilter]) -> String {
+    filters
+        .iter()
+        .map(|filter| format!("{:?}={}", filter.field, filter.value))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn render_live_information(information: &crate::LiveDeviceInfo) -> String {

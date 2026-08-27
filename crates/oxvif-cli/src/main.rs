@@ -8,10 +8,13 @@ use std::{
 
 use clap::{ArgAction, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use oxvif_cli::{
-    AppError, Application, CommandRequest, DescribeRequest, DeviceAddRequest, DeviceConnectRequest,
-    DeviceCredentialSetRequest, DeviceIdRequest, DeviceRenameRequest, DeviceUpdate,
-    DeviceUpdateRequest, ExecutionOptions, NewDevice, OutputFormat, ResultMeta, SecretString,
-    TargetSelector, render_error, render_success,
+    AppError, Application, CommandRequest, CredentialProfileSetRequest, DescribeRequest,
+    DeviceAddRequest, DeviceConnectRequest, DeviceCredentialProfileRequest,
+    DeviceCredentialSetRequest, DeviceFilter, DeviceIdRequest, DeviceRenameRequest, DeviceUpdate,
+    DeviceUpdateRequest, DiscoverScanRequest, DiscoveryFilter, DiscoverySnapshotShowRequest,
+    ExecutionOptions, GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest,
+    NewDevice, NewGroup, NewSavedView, OutputFormat, ResourceIdRequest, ResultMeta, SecretString,
+    TargetSelector, ViewCreateRequest, render_error, render_success,
 };
 use tokio::time::Instant;
 
@@ -70,6 +73,26 @@ enum Commands {
     Device {
         #[command(subcommand)]
         command: DeviceCommands,
+    },
+    /// Manage static groups and Group-local device aliases.
+    Group {
+        #[command(subcommand)]
+        command: GroupCommands,
+    },
+    /// Manage saved dynamic filters over registered devices.
+    View {
+        #[command(subcommand)]
+        command: ViewCommands,
+    },
+    /// Manage reusable credentials stored outside the registry.
+    Credential {
+        #[command(subcommand)]
+        command: CredentialRootCommands,
+    },
+    /// Scan for ONVIF devices and manage named discovery snapshots.
+    Discover {
+        #[command(subcommand)]
+        command: DiscoverCommands,
     },
     /// Select the current device for interactive commands.
     Use { id: String },
@@ -136,6 +159,106 @@ enum DeviceCommands {
 }
 
 #[derive(Debug, Subcommand)]
+enum GroupCommands {
+    /// Create an empty static Group.
+    Create {
+        id: String,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// List static Groups.
+    List,
+    /// Show one Group and its explicit members.
+    Show { id: String },
+    /// Delete a Group without deleting its devices.
+    Delete { id: String },
+    /// Add or remove Group members.
+    Member {
+        #[command(subcommand)]
+        command: GroupMemberCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum GroupMemberCommands {
+    /// Add a device with an alias unique inside this Group.
+    Add {
+        group_id: String,
+        device_id: String,
+        #[arg(long)]
+        alias: String,
+    },
+    /// Remove a member by its Group-local alias.
+    Remove { group_id: String, alias: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum ViewCommands {
+    /// Save a dynamic device filter.
+    Create {
+        id: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long = "filter", required = true)]
+        filters: Vec<DeviceFilter>,
+    },
+    /// List saved dynamic Views.
+    List,
+    /// Show one View definition.
+    Show { id: String },
+    /// Evaluate a View against current registered-device metadata.
+    Evaluate { id: String },
+    /// Delete a saved View.
+    Delete { id: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum CredentialRootCommands {
+    /// Manage reusable credential profiles.
+    Profile {
+        #[command(subcommand)]
+        command: CredentialProfileCommands,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum CredentialProfileCommands {
+    /// Create or update a reusable credential profile.
+    Set {
+        id: String,
+        #[arg(long)]
+        username: Option<String>,
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    /// List credential profiles without exposing secrets.
+    List,
+    /// Show one credential profile without exposing its secret.
+    Show { id: String },
+    /// Delete an unused credential profile and its native secret.
+    Delete { id: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum DiscoverCommands {
+    /// Run WS-Discovery and save a deterministic named snapshot.
+    Scan {
+        #[arg(long)]
+        save: String,
+    },
+    /// List records from one snapshot, optionally filtering them.
+    List {
+        snapshot: String,
+        #[arg(long = "filter")]
+        filters: Vec<DiscoveryFilter>,
+    },
+    /// List named discovery snapshots.
+    Snapshots,
+    /// Remove a named discovery snapshot.
+    Remove { snapshot: String },
+}
+
+#[derive(Debug, Subcommand)]
 enum CredentialCommands {
     /// Store a password in the native OS credential store.
     Set {
@@ -147,6 +270,8 @@ enum CredentialCommands {
     },
     /// Delete a password from the native OS credential store.
     Delete { id: String },
+    /// Assign a reusable credential profile to a device.
+    UseProfile { id: String, profile: String },
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
@@ -255,6 +380,93 @@ fn build_request(
         Commands::Describe { command } => Ok(CommandRequest::Describe(DescribeRequest { command })),
         Commands::Use { id } => Ok(CommandRequest::Use(DeviceIdRequest { id })),
         Commands::Current => Ok(CommandRequest::Current),
+        Commands::Group { command } => match command {
+            GroupCommands::Create { id, name } => {
+                Ok(CommandRequest::GroupCreate(GroupCreateRequest {
+                    group: NewGroup { id, name },
+                }))
+            }
+            GroupCommands::List => Ok(CommandRequest::GroupList),
+            GroupCommands::Show { id } => Ok(CommandRequest::GroupShow(ResourceIdRequest { id })),
+            GroupCommands::Delete { id } => {
+                Ok(CommandRequest::GroupDelete(ResourceIdRequest { id }))
+            }
+            GroupCommands::Member { command } => match command {
+                GroupMemberCommands::Add {
+                    group_id,
+                    device_id,
+                    alias,
+                } => Ok(CommandRequest::GroupMemberAdd(GroupMemberAddRequest {
+                    group_id,
+                    device_id,
+                    alias,
+                })),
+                GroupMemberCommands::Remove { group_id, alias } => Ok(
+                    CommandRequest::GroupMemberRemove(GroupMemberRemoveRequest { group_id, alias }),
+                ),
+            },
+        },
+        Commands::View { command } => match command {
+            ViewCommands::Create { id, name, filters } => {
+                Ok(CommandRequest::ViewCreate(ViewCreateRequest {
+                    view: NewSavedView { id, name, filters },
+                }))
+            }
+            ViewCommands::List => Ok(CommandRequest::ViewList),
+            ViewCommands::Show { id } => Ok(CommandRequest::ViewShow(ResourceIdRequest { id })),
+            ViewCommands::Evaluate { id } => {
+                Ok(CommandRequest::ViewEvaluate(ResourceIdRequest { id }))
+            }
+            ViewCommands::Delete { id } => Ok(CommandRequest::ViewDelete(ResourceIdRequest { id })),
+        },
+        Commands::Credential { command } => match command {
+            CredentialRootCommands::Profile { command } => match command {
+                CredentialProfileCommands::Set {
+                    id,
+                    username,
+                    password_stdin,
+                } => {
+                    let (username, password) = credential_input(username, password_stdin)?;
+                    Ok(CommandRequest::CredentialProfileSet(
+                        CredentialProfileSetRequest {
+                            id,
+                            username,
+                            password,
+                        },
+                    ))
+                }
+                CredentialProfileCommands::List => Ok(CommandRequest::CredentialProfileList),
+                CredentialProfileCommands::Show { id } => {
+                    Ok(CommandRequest::CredentialProfileShow(ResourceIdRequest {
+                        id,
+                    }))
+                }
+                CredentialProfileCommands::Delete { id } => {
+                    Ok(CommandRequest::CredentialProfileDelete(ResourceIdRequest {
+                        id,
+                    }))
+                }
+            },
+        },
+        Commands::Discover { command } => match command {
+            DiscoverCommands::Scan { save } => {
+                Ok(CommandRequest::DiscoverScan(DiscoverScanRequest {
+                    snapshot_id: save,
+                }))
+            }
+            DiscoverCommands::List { snapshot, filters } => Ok(
+                CommandRequest::DiscoverySnapshotShow(DiscoverySnapshotShowRequest {
+                    id: snapshot,
+                    filters,
+                }),
+            ),
+            DiscoverCommands::Snapshots => Ok(CommandRequest::DiscoverySnapshotList),
+            DiscoverCommands::Remove { snapshot } => {
+                Ok(CommandRequest::DiscoverySnapshotRemove(ResourceIdRequest {
+                    id: snapshot,
+                }))
+            }
+        },
         Commands::Device { command } => match command {
             DeviceCommands::Add {
                 id,
@@ -304,25 +516,12 @@ fn build_request(
                     username,
                     password_stdin,
                 } => {
-                    let username = username
-                        .or_else(|| env::var("OXVIF_USERNAME").ok())
-                        .ok_or_else(|| {
-                            AppError::invalid_argument("Provide --username or set OXVIF_USERNAME.")
-                        })?;
-                    let password = if password_stdin {
-                        read_password_from_stdin()?
-                    } else {
-                        env::var("OXVIF_PASSWORD").map_err(|_| {
-                            AppError::invalid_argument(
-                                "Pass --password-stdin or set OXVIF_PASSWORD.",
-                            )
-                        })?
-                    };
+                    let (username, password) = credential_input(username, password_stdin)?;
                     Ok(CommandRequest::DeviceCredentialSet(
                         DeviceCredentialSetRequest {
                             id,
                             username,
-                            password: SecretString::new(password)?,
+                            password,
                         },
                     ))
                 }
@@ -331,6 +530,12 @@ fn build_request(
                         id,
                     }))
                 }
+                CredentialCommands::UseProfile { id, profile } => Ok(
+                    CommandRequest::DeviceCredentialUseProfile(DeviceCredentialProfileRequest {
+                        device_id: id,
+                        profile_id: profile,
+                    }),
+                ),
             },
             DeviceCommands::Test { id, target } => {
                 let mut selector = selector(target);
@@ -373,6 +578,23 @@ fn read_password_from_stdin() -> Result<String, AppError> {
     } else {
         Ok(password)
     }
+}
+
+fn credential_input(
+    username: Option<String>,
+    password_stdin: bool,
+) -> Result<(String, SecretString), AppError> {
+    let username = username
+        .or_else(|| env::var("OXVIF_USERNAME").ok())
+        .ok_or_else(|| AppError::invalid_argument("Provide --username or set OXVIF_USERNAME."))?;
+    let password = if password_stdin {
+        read_password_from_stdin()?
+    } else {
+        env::var("OXVIF_PASSWORD").map_err(|_| {
+            AppError::invalid_argument("Pass --password-stdin or set OXVIF_PASSWORD.")
+        })?
+    };
+    Ok((username, SecretString::new(password)?))
 }
 
 fn emit_error(format: OutputFormat, error: &AppError, command: Option<&str>) {

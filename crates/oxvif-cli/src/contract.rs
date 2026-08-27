@@ -1,6 +1,10 @@
 use serde::Serialize;
 
-use crate::{AppError, DeviceUpdate, DeviceView, NewDevice};
+use crate::{
+    AppError, CredentialProfileView, DeviceUpdate, DeviceView, DiscoveryFilter,
+    DiscoverySnapshotSummary, DiscoverySnapshotView, GroupView, NewDevice, NewGroup, NewSavedView,
+    SavedView,
+};
 
 /// Version of the structured stdout contract.
 pub const SCHEMA_VERSION: &str = "1";
@@ -38,6 +42,26 @@ pub enum CommandRequest {
     DeviceRemove(DeviceIdRequest),
     DeviceCredentialSet(DeviceCredentialSetRequest),
     DeviceCredentialDelete(DeviceIdRequest),
+    DeviceCredentialUseProfile(DeviceCredentialProfileRequest),
+    CredentialProfileSet(CredentialProfileSetRequest),
+    CredentialProfileList,
+    CredentialProfileShow(ResourceIdRequest),
+    CredentialProfileDelete(ResourceIdRequest),
+    GroupCreate(GroupCreateRequest),
+    GroupList,
+    GroupShow(ResourceIdRequest),
+    GroupDelete(ResourceIdRequest),
+    GroupMemberAdd(GroupMemberAddRequest),
+    GroupMemberRemove(GroupMemberRemoveRequest),
+    ViewCreate(ViewCreateRequest),
+    ViewList,
+    ViewShow(ResourceIdRequest),
+    ViewEvaluate(ResourceIdRequest),
+    ViewDelete(ResourceIdRequest),
+    DiscoverScan(DiscoverScanRequest),
+    DiscoverySnapshotList,
+    DiscoverySnapshotShow(DiscoverySnapshotShowRequest),
+    DiscoverySnapshotRemove(ResourceIdRequest),
     Use(DeviceIdRequest),
     Current,
     DeviceTest(DeviceConnectRequest),
@@ -58,6 +82,26 @@ impl CommandRequest {
             Self::DeviceRemove(_) => "device.remove",
             Self::DeviceCredentialSet(_) => "device.credential.set",
             Self::DeviceCredentialDelete(_) => "device.credential.delete",
+            Self::DeviceCredentialUseProfile(_) => "device.credential.use-profile",
+            Self::CredentialProfileSet(_) => "credential.profile.set",
+            Self::CredentialProfileList => "credential.profile.list",
+            Self::CredentialProfileShow(_) => "credential.profile.show",
+            Self::CredentialProfileDelete(_) => "credential.profile.delete",
+            Self::GroupCreate(_) => "group.create",
+            Self::GroupList => "group.list",
+            Self::GroupShow(_) => "group.show",
+            Self::GroupDelete(_) => "group.delete",
+            Self::GroupMemberAdd(_) => "group.member.add",
+            Self::GroupMemberRemove(_) => "group.member.remove",
+            Self::ViewCreate(_) => "view.create",
+            Self::ViewList => "view.list",
+            Self::ViewShow(_) => "view.show",
+            Self::ViewEvaluate(_) => "view.evaluate",
+            Self::ViewDelete(_) => "view.delete",
+            Self::DiscoverScan(_) => "discover.scan",
+            Self::DiscoverySnapshotList => "discover.snapshots",
+            Self::DiscoverySnapshotShow(_) => "discover.list",
+            Self::DiscoverySnapshotRemove(_) => "discover.remove",
             Self::Use(_) => "use",
             Self::Current => "current",
             Self::DeviceTest(_) => "device.test",
@@ -81,6 +125,11 @@ pub struct DeviceAddRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeviceIdRequest {
+    pub id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResourceIdRequest {
     pub id: String,
 }
 
@@ -125,6 +174,53 @@ pub struct DeviceCredentialSetRequest {
     pub id: String,
     pub username: String,
     pub password: SecretString,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeviceCredentialProfileRequest {
+    pub device_id: String,
+    pub profile_id: String,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct CredentialProfileSetRequest {
+    pub id: String,
+    pub username: String,
+    pub password: SecretString,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupCreateRequest {
+    pub group: NewGroup,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupMemberAddRequest {
+    pub group_id: String,
+    pub device_id: String,
+    pub alias: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GroupMemberRemoveRequest {
+    pub group_id: String,
+    pub alias: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ViewCreateRequest {
+    pub view: NewSavedView,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiscoverScanRequest {
+    pub snapshot_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiscoverySnapshotShowRequest {
+    pub id: String,
+    pub filters: Vec<DiscoveryFilter>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -218,6 +314,42 @@ pub enum CommandData {
     CredentialUpdated {
         action: String,
         device: DeviceView,
+    },
+    CredentialProfileList {
+        profiles: Vec<CredentialProfileView>,
+    },
+    CredentialProfileRecord {
+        action: String,
+        profile: CredentialProfileView,
+    },
+    GroupList {
+        groups: Vec<GroupView>,
+    },
+    GroupRecord {
+        action: String,
+        group: GroupView,
+    },
+    ViewList {
+        views: Vec<SavedView>,
+    },
+    ViewRecord {
+        action: String,
+        view: SavedView,
+    },
+    ViewEvaluation {
+        view: SavedView,
+        devices: Vec<DeviceView>,
+    },
+    DiscoverySnapshotList {
+        snapshots: Vec<DiscoverySnapshotSummary>,
+    },
+    DiscoverySnapshotRecord {
+        action: String,
+        snapshot: DiscoverySnapshotView,
+    },
+    ResourceRemoved {
+        resource: String,
+        id: String,
     },
     DeviceTest {
         device_id: Option<String>,

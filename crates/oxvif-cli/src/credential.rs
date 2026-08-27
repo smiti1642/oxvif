@@ -111,6 +111,10 @@ pub fn credential_reference(device_id: &str) -> String {
     format!("device/{device_id}")
 }
 
+pub fn credential_profile_reference(profile_id: &str) -> String {
+    format!("profile/{profile_id}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

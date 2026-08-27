@@ -55,6 +55,86 @@ fn descriptors() -> Vec<CommandDescriptor> {
             "device.credential.delete",
             "Delete a device password from the native OS credential store.",
         ),
+        credential_descriptor(
+            "device.credential.use-profile",
+            "Assign a reusable credential profile to a saved device.",
+        ),
+        credential_descriptor(
+            "credential.profile.set",
+            "Create or update a reusable native credential profile.",
+        ),
+        read_descriptor(
+            "credential.profile.list",
+            "List credential profiles without exposing secrets.",
+        ),
+        read_descriptor(
+            "credential.profile.show",
+            "Show one credential profile without exposing its secret.",
+        ),
+        credential_descriptor(
+            "credential.profile.delete",
+            "Delete an unused credential profile and its native secret.",
+        ),
+        registry_descriptor(
+            "group.create",
+            "Create an empty static device Group.",
+            vec![required("id", "string")],
+        ),
+        read_descriptor("group.list", "List static device Groups."),
+        read_descriptor("group.show", "Show a Group and its explicit members."),
+        registry_descriptor(
+            "group.delete",
+            "Delete a Group without deleting its member devices.",
+            vec![required("id", "string")],
+        ),
+        registry_descriptor(
+            "group.member.add",
+            "Add one canonical device under a Group-local alias.",
+            vec![
+                required("group_id", "string"),
+                required("device_id", "string"),
+                required("alias", "string"),
+            ],
+        ),
+        registry_descriptor(
+            "group.member.remove",
+            "Remove one member by its Group-local alias.",
+            vec![required("group_id", "string"), required("alias", "string")],
+        ),
+        registry_descriptor(
+            "view.create",
+            "Create a dynamic View from typed device filters.",
+            vec![
+                required("id", "string"),
+                required("filter", "field=value[]"),
+            ],
+        ),
+        read_descriptor("view.list", "List dynamic Views."),
+        read_descriptor("view.show", "Show one dynamic View definition."),
+        read_descriptor(
+            "view.evaluate",
+            "Evaluate a View against current registered-device metadata.",
+        ),
+        registry_descriptor(
+            "view.delete",
+            "Delete a dynamic View.",
+            vec![required("id", "string")],
+        ),
+        registry_descriptor(
+            "discover.scan",
+            "Run WS-Discovery and save a deterministic named snapshot.",
+            vec![required("save", "string")],
+        ),
+        read_descriptor("discover.snapshots", "List named discovery snapshots."),
+        read_descriptor(
+            "discover.list",
+            "List and filter records in one discovery snapshot.",
+        ),
+        registry_descriptor(
+            "discover.remove",
+            "Remove one named discovery snapshot.",
+            vec![required("snapshot", "string")],
+        ),
         registry_descriptor(
             "use",
             "Select the current device for interactive human commands.",
@@ -146,7 +226,8 @@ fn descriptor(
         mutates_device,
         retryable: name.starts_with("device.test")
             || name.starts_with("device.info")
-            || name.starts_with("device.refresh"),
+            || name.starts_with("device.refresh")
+            || name == "discover.scan",
         arguments,
         output: OutputDescriptor {
             value_type: "object".to_owned(),
@@ -189,7 +270,7 @@ mod tests {
             panic!("expected command list");
         };
 
-        assert_eq!(commands.len(), 14);
+        assert_eq!(commands.len(), 34);
         assert_eq!(commands[0].name, "describe");
     }
 

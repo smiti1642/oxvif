@@ -3,7 +3,8 @@
 **Status:** active. Written 2026-08-26 from the product discussion that
 established the package boundary, human/Agent contract, and named-device
 registry. **Stage 0 landed as `9590663` on 2026-08-27. Stage 1 was completed on
-2026-08-27.** The workspace, typed command/result contract,
+2026-08-27, and the first Stage 2A fleet-inventory slice was completed the same
+day.** The workspace, typed command/result contract,
 named-device registry, Windows credential backend, human and Agent renderers,
 and first read-only live-device operations are present. Command spelling that
 is explicitly marked provisional may still change before the first release.
@@ -33,10 +34,11 @@ inspect, obtain media URIs, read PTZ state, and run health checks. Mutating
 device operations follow only after the output contract, error taxonomy, and
 safety model are stable.
 
-The CLI's durable workflow is:
+The CLI's durable workflow scales from one camera to a fleet:
 
 ```text
-discover -> device add -> device list -> select by ID -> execute operation
+discover scan -> save snapshot -> filter/enrich -> import plan/apply
+-> organize as groups/views -> select one device or a set -> execute operation
 ```
 
 A named-device registry is part of the MVP. Without it, every invocation must
@@ -59,6 +61,11 @@ runner instead of a useful operating environment.
 | 8 | Store passwords in the registry? | **Never.** Store only a credential reference; secrets live in an OS credential store. |
 | 9 | First-release writes? | Avoid them. Start with a high-value read-only surface. |
 | 10 | MCP now? | Not in the MVP, but keep the application layer reusable so MCP does not reimplement behavior. |
+| 11 | How are 200+ cameras organized? | Static Groups hold explicit membership; dynamic Views hold saved filters. The two must not be conflated. |
+| 12 | How is one camera selected inside a Group? | `group-id/local-alias` resolves exactly one device while the immutable global device ID remains canonical. |
+| 13 | Can discovery results be reused? | Yes. A named discovery snapshot preserves one scan until explicitly refreshed or removed. |
+| 14 | Can filtered discoveries be registered in bulk? | Yes, through explicit `device import --plan` and `--apply`; scanning itself never mutates the registry. |
+| 15 | How are credentials reused across many cameras? | Named credential profiles may be referenced by many devices. Groups never imply credential inheritance. |
 
 ---
 
@@ -272,6 +279,53 @@ registry files, or diagnostic bundles.
 
 The credential backend is an abstraction. The first supported OS backend may
 be Windows, but command and registry models cannot encode a Windows-only API.
+
+### 4.6 Fleet inventory, Groups, Views, and discovery snapshots
+
+The inventory model keeps four concepts distinct:
+
+| Concept | Meaning | Membership changes automatically? |
+|---|---|---|
+| Device | One registered physical camera with an immutable global ID. | No. |
+| Group | An explicitly managed static set, such as a site or floor. | No. |
+| View | A named filter evaluated against current registered-device metadata. | Yes. |
+| Discovery snapshot | The preserved result of one network scan, including unregistered devices. | Only when explicitly refreshed. |
+
+A Group may assign a unique local alias to each member. `--device
+taipei-f1/cam-023` resolves exactly one camera; `--group taipei-f1` resolves a
+set and is accepted only by commands with defined batch semantics. A device
+may belong to multiple Groups and have a different local alias in each. Global
+device IDs remain immutable and are the canonical identity returned to Agents.
+
+Discovery, enrichment, and registration are separate operations:
+
+```sh
+oxvif discover scan --save factory-scan
+oxvif discover list factory-scan --filter ip-cidr=192.168.20.0/24
+oxvif discover enrich factory-scan --credential-profile factory-admin
+oxvif device import --from factory-scan --filter manufacturer=GeoVision \
+  --group taipei-f1 --credential-profile factory-admin --plan
+oxvif device import --from factory-scan --filter manufacturer=GeoVision \
+  --group taipei-f1 --credential-profile factory-admin --apply
+```
+
+Native discovery filters may use interface, endpoint/IP, UUID, ONVIF type, and
+scope because WS-Discovery supplies those fields. Manufacturer, model,
+firmware, serial number, capabilities, and health are enriched fields and must
+not appear available until authenticated follow-up calls populate them. Human
+flags and Agent requests compile to the same typed filter expression.
+
+A named credential profile stores one secret in the OS credential backend and
+can be referenced by many devices. The registry stores only the profile
+reference and username. A device may override its profile explicitly. Groups
+never provide implicit credential inheritance because a device can belong to
+multiple Groups with conflicting defaults.
+
+`discover scan`, `discover list`, and `discover enrich` never add registry
+devices. Bulk import always produces a deterministic plan before an explicit
+apply. The plan includes proposed global IDs, Group-local aliases, matched and
+skipped records, duplicate UUIDs, endpoint conflicts, and credential
+references, but never secret material.
 
 ---
 
@@ -494,7 +548,64 @@ Verified after the final Stage 1 change:
   successfully against the crates.io `oxvif 0.15.0` dependency.
 - `cargo fmt --all -- --check` and `git diff --check`: clean.
 
-### Stage 2 — read-only diagnostic MVP
+### Stage 2A — discovery and fleet inventory foundation
+
+- Add named discovery snapshots with explicit refresh/removal lifecycle.
+- Add typed native and enriched filters with deterministic JSON rendering.
+- Add static Groups, dynamic Views, and unique Group-local aliases.
+- Resolve `--device <group-id>/<local-alias>` to exactly one canonical device;
+  reserve `--group` and `--view` for commands with batch semantics.
+- Add named credential profiles that many devices can reference without Group
+  inheritance or duplicated secrets.
+- Add discovery enrichment and bulk `device import --plan/--apply`, including
+  UUID deduplication, endpoint conflicts, ID/alias proposals, and redaction.
+- Test at least a 205-device mock inventory, concurrent readers/writers, stable
+  filter ordering, duplicate identities, and interrupted imports.
+
+**Exit:** a 205-device discovery can be saved, filtered, enriched, previewed,
+imported, grouped, viewed dynamically, and resolved as either one exact camera
+or an explicit set without leaking credentials or silently mutating inventory.
+
+First slice delivered 2026-08-27:
+
+- Registry schema v2 automatically loads schema v1 and persists the migration
+  on the next atomic write. New maps remain deterministic `BTreeMap` data.
+- Static Group CRUD and explicit member add/remove with unique local aliases.
+  `group/local-alias` resolves exactly one canonical device for `use`, show,
+  and live read operations. Removing a device cleans all Group memberships.
+- Dynamic View CRUD and evaluation with typed `field=value` filters over ID,
+  name, target, UUID, manufacturer, model, firmware, serial, tag, and IP CIDR.
+- Named discovery snapshot scan/list/filter/remove. Native filters cover
+  endpoint/UUID, type, scope, XAddr, and IP CIDR; enriched identity fields are
+  represented but remain empty until the enrichment slice lands.
+- Reusable credential-profile set/list/show/delete and explicit per-device
+  assignment. A profile secret lives once in the native credential store;
+  deletion is refused while referenced and Groups never inherit credentials.
+- Registry-load integrity checks reject missing current devices, dangling
+  Group members, duplicate members, and missing credential profiles.
+- A generated 205-device inventory test verifies deterministic dynamic View
+  evaluation. Schema migration, Group cleanup/conflicts, snapshot
+  sorting/deduplication/filtering, credential redaction, and CLI selection are
+  covered by focused tests.
+- A three-second real multicast smoke test found 190 devices, saved and listed
+  the isolated snapshot, removed it, and deleted the temporary registry.
+
+Verified after the first slice:
+
+- `cargo +1.88.0 check -p oxvif-cli`: clean at the workspace MSRV.
+- `cargo test -p oxvif-cli`: 30 passed across library, binary, and CLI process
+  suites.
+- `cargo test --workspace --all-features`: 975 passed, 3 ignored, 0 failed.
+- `cargo clippy -p oxvif-cli --all-targets --no-deps -- -D warnings`: clean.
+- `cargo rustdoc -p oxvif-cli --lib -- -D warnings`: clean.
+- `cargo package -p oxvif-cli --allow-dirty`: 16 files packaged and rebuilt
+  successfully against the crates.io `oxvif 0.15.0` dependency.
+
+Remaining in Stage 2A: authenticated discovery enrichment, deterministic bulk
+import ID/alias proposals, import `--plan/--apply`, snapshot refresh lifecycle,
+explicit interface selection, and set resolution for future batch commands.
+
+### Stage 2B — read-only diagnostic MVP
 
 - Migrate discovery, device information, capabilities/services, media
   profiles, stream/snapshot URI, PTZ status/presets, and health checks through
@@ -503,16 +614,17 @@ Verified after the final Stage 1 change:
 - Run end-to-end against `MockTransport`, `MockServer`, and a multi-device
   mock fleet; no real camera is required for the release gate.
 
-**Exit:** the ten-command diagnostic surface works by direct target and saved
-device ID in both human and non-interactive structured modes.
+**Exit:** the ten-command diagnostic surface works by direct target, immutable
+device ID, and `group/local-alias` in both human and non-interactive structured
+modes. Set selection is enabled only where batch behavior is specified.
 
-### Stage 3 — Agent hardening and fleet foundations
+### Stage 3 — Agent hardening and fleet execution
 
 - Stabilize schema version 1 and publish command schemas.
 - Add timeouts, bounded retries, retryability metadata, and cancellation
   behavior.
-- Add device tags/groups and JSONL batch health/inspection if the single-device
-  contract has remained stable.
+- Add bounded parallel health/inspection over `--group` and `--view`, including
+  rate limits, deterministic JSONL, partial success, and aggregate exit codes.
 - Test concurrent Agents using different explicit device IDs.
 
 **Exit:** an Agent can discover capabilities, select a saved target, perform a
@@ -546,6 +658,10 @@ The first crates.io release is ready only when all of the following are true:
 - Every MVP command works against the built-in mock without a physical camera.
 - A saved device can be referenced by stable ID and its display name can change
   without breaking that reference.
+- A 205-device mock inventory supports deterministic discovery filtering,
+  import planning, static Group membership, dynamic Views, and exact
+  `group/local-alias` resolution.
+- Discovery never changes the registry; only explicit import apply does.
 - Concurrent explicit selections do not share mutable current-device state.
 - Registry files and all outputs pass credential redaction tests.
 - `--non-interactive` never opens a GUI or waits for input.
@@ -571,8 +687,10 @@ The first crates.io release is ready only when all of the following are true:
 4. Registry writers take an OS-released `fs2` exclusive lock and replace the
    TOML atomically. The lock file may persist after exit; the OS lock does not,
    so no stale-lock deletion policy is needed.
-5. Tags ship with the single-device registry. Groups remain a Stage 3 fleet
-   feature.
+5. Tags ship with the single-device registry. Static Groups, dynamic Views,
+   Group-local aliases, discovery snapshots, reusable credential profiles, and
+   import plan/apply move into Stage 2A because the known operating environment
+   contains 205 cameras; a flat inventory is not an adequate discovery MVP.
 6. Exit codes now distinguish invalid input, not found, conflict, missing
    target, registry/configuration, credentials, network/device connection, and
    internal failures.

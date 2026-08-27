@@ -131,6 +131,10 @@ and native OS credential storage:
 cargo install oxvif-cli --locked
 oxvif device add front-door --target 192.168.1.100 --name "Front Door"
 oxvif device credential set front-door --username admin --password-stdin
+oxvif group create taipei-f1
+oxvif group member add taipei-f1 front-door --alias cam-023
+oxvif view create outdoor --filter tag=outdoor
+oxvif discover scan --save factory-scan
 oxvif --device front-door device test
 oxvif --device front-door device info --output json --non-interactive
 ```

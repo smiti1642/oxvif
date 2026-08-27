@@ -224,3 +224,71 @@ fn concurrent_registry_writers_do_not_lose_devices() {
         .expect("registry should remain readable");
     assert_eq!(registry.matches("[devices.camera-").count(), 8);
 }
+
+#[test]
+fn group_alias_and_dynamic_view_work_through_cli() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    for (id, ip, tag) in [
+        ("global-a", "192.168.20.21", "outdoor"),
+        ("global-b", "192.168.20.22", "indoor"),
+    ] {
+        let output = run_isolated(
+            &["device", "add", id, "--target", ip, "--tag", tag],
+            directory.path(),
+        );
+        assert!(output.status.success(), "{}", stderr(&output));
+    }
+
+    let group = run_isolated(
+        &["group", "create", "taipei-f1", "--name", "Taipei F1"],
+        directory.path(),
+    );
+    assert!(group.status.success(), "{}", stderr(&group));
+    let member = run_isolated(
+        &[
+            "group",
+            "member",
+            "add",
+            "taipei-f1",
+            "global-a",
+            "--alias",
+            "cam-023",
+        ],
+        directory.path(),
+    );
+    assert!(member.status.success(), "{}", stderr(&member));
+
+    let selected = run_isolated(&["use", "taipei-f1/cam-023"], directory.path());
+    assert!(selected.status.success(), "{}", stderr(&selected));
+    let current = run_isolated(&["current", "--output=json"], directory.path());
+    let current: Value = serde_json::from_slice(&current.stdout).expect("current should be JSON");
+    assert_eq!(current["data"]["device"]["id"], "global-a");
+
+    let view = run_isolated(
+        &["view", "create", "outdoor", "--filter", "tag=outdoor"],
+        directory.path(),
+    );
+    assert!(view.status.success(), "{}", stderr(&view));
+    let evaluated = run_isolated(
+        &["view", "evaluate", "outdoor", "--output=json"],
+        directory.path(),
+    );
+    assert!(evaluated.status.success(), "{}", stderr(&evaluated));
+    let evaluated: Value =
+        serde_json::from_slice(&evaluated.stdout).expect("View result should be JSON");
+    assert_eq!(evaluated["data"]["kind"], "view_evaluation");
+    assert_eq!(evaluated["data"]["devices"].as_array().unwrap().len(), 1);
+    assert_eq!(evaluated["data"]["devices"][0]["id"], "global-a");
+
+    let remove = run_isolated(&["device", "remove", "global-a"], directory.path());
+    assert!(remove.status.success(), "{}", stderr(&remove));
+    let group = run_isolated(
+        &["group", "show", "taipei-f1", "--output=json"],
+        directory.path(),
+    );
+    let group: Value = serde_json::from_slice(&group.stdout).expect("Group should be JSON");
+    assert_eq!(
+        group["data"]["group"]["members"].as_array().unwrap().len(),
+        0
+    );
+}

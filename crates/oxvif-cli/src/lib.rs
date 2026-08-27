@@ -9,21 +9,30 @@ mod contract;
 mod credential;
 mod describe;
 mod error;
+mod inventory;
 mod output;
 mod registry;
 
 pub use application::{Application, ExecutionOptions};
 pub use contract::{
     ArgumentDescriptor, CommandData, CommandDescriptor, CommandRequest, CommandSuccess,
-    DescribeRequest, DeviceAddRequest, DeviceConnectRequest, DeviceCredentialSetRequest,
-    DeviceIdRequest, DeviceRenameRequest, DeviceUpdateRequest, ErrorEnvelope, LiveDeviceInfo,
-    OutputDescriptor, OutputFormat, ResultMeta, RiskLevel, SCHEMA_VERSION, SecretString,
-    SuccessEnvelope, TargetSelector, Warning,
+    CredentialProfileSetRequest, DescribeRequest, DeviceAddRequest, DeviceConnectRequest,
+    DeviceCredentialProfileRequest, DeviceCredentialSetRequest, DeviceIdRequest,
+    DeviceRenameRequest, DeviceUpdateRequest, DiscoverScanRequest, DiscoverySnapshotShowRequest,
+    ErrorEnvelope, GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest,
+    LiveDeviceInfo, OutputDescriptor, OutputFormat, ResourceIdRequest, ResultMeta, RiskLevel,
+    SCHEMA_VERSION, SecretString, SuccessEnvelope, TargetSelector, ViewCreateRequest, Warning,
 };
 pub use credential::{
-    CredentialStore, MemoryCredentialStore, SystemCredentialStore, credential_reference,
+    CredentialStore, MemoryCredentialStore, SystemCredentialStore, credential_profile_reference,
+    credential_reference,
 };
 pub use error::{AppError, ErrorCode};
+pub use inventory::{
+    CredentialProfileView, DeviceFilter, DeviceFilterField, DiscoveryFilter, DiscoveryFilterField,
+    DiscoveryRecord, DiscoverySnapshotSummary, DiscoverySnapshotView, GroupMemberView, GroupView,
+    NewGroup, NewSavedView, SavedView,
+};
 pub use output::{render_error, render_success};
 pub use registry::{
     DeviceMetadata, DeviceUpdate, DeviceView, NewDevice, REGISTRY_VERSION, RegistryStore,

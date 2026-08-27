@@ -9,6 +9,9 @@ pub enum ErrorCode {
     CommandNotFound,
     DeviceNotFound,
     DeviceAlreadyExists,
+    ResourceNotFound,
+    ResourceAlreadyExists,
+    ResourceInUse,
     MissingTarget,
     ConfigUnavailable,
     RegistryIo,
@@ -24,8 +27,8 @@ impl ErrorCode {
     pub const fn exit_code(self) -> u8 {
         match self {
             Self::InvalidArgument => 2,
-            Self::CommandNotFound | Self::DeviceNotFound => 3,
-            Self::DeviceAlreadyExists => 4,
+            Self::CommandNotFound | Self::DeviceNotFound | Self::ResourceNotFound => 3,
+            Self::DeviceAlreadyExists | Self::ResourceAlreadyExists | Self::ResourceInUse => 4,
             Self::MissingTarget => 5,
             Self::ConfigUnavailable
             | Self::RegistryIo
@@ -43,6 +46,9 @@ impl ErrorCode {
             Self::CommandNotFound => "COMMAND_NOT_FOUND",
             Self::DeviceNotFound => "DEVICE_NOT_FOUND",
             Self::DeviceAlreadyExists => "DEVICE_ALREADY_EXISTS",
+            Self::ResourceNotFound => "RESOURCE_NOT_FOUND",
+            Self::ResourceAlreadyExists => "RESOURCE_ALREADY_EXISTS",
+            Self::ResourceInUse => "RESOURCE_IN_USE",
             Self::MissingTarget => "MISSING_TARGET",
             Self::ConfigUnavailable => "CONFIG_UNAVAILABLE",
             Self::RegistryIo => "REGISTRY_IO",
@@ -103,6 +109,35 @@ impl AppError {
             retryable: false,
             suggested_action: Some(
                 "Choose another immutable ID or run `oxvif device update`.".to_owned(),
+            ),
+        }
+    }
+
+    pub fn resource_not_found(kind: &str, id: &str) -> Self {
+        Self {
+            code: ErrorCode::ResourceNotFound,
+            message: format!("No {kind} has ID `{id}`."),
+            retryable: false,
+            suggested_action: Some(format!("List saved {kind}s and choose an existing ID.")),
+        }
+    }
+
+    pub fn resource_exists(kind: &str, id: &str) -> Self {
+        Self {
+            code: ErrorCode::ResourceAlreadyExists,
+            message: format!("A {kind} already has ID `{id}`."),
+            retryable: false,
+            suggested_action: Some("Choose another immutable ID.".to_owned()),
+        }
+    }
+
+    pub fn resource_in_use(message: impl Into<String>) -> Self {
+        Self {
+            code: ErrorCode::ResourceInUse,
+            message: message.into(),
+            retryable: false,
+            suggested_action: Some(
+                "Remove the references before deleting this resource.".to_owned(),
             ),
         }
     }

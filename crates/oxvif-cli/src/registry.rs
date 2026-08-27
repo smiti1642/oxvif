@@ -1,10 +1,11 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     env,
     fs::{self, File, OpenOptions},
     io::Write,
     net::IpAddr,
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use atomic_write_file::AtomicWriteFile;
@@ -13,9 +14,14 @@ use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::AppError;
+use crate::{
+    AppError, CredentialProfileView, DeviceFilter, DiscoveryFilter, DiscoveryRecord,
+    DiscoverySnapshotSummary, DiscoverySnapshotView, GroupMemberView, GroupView, NewGroup,
+    NewSavedView, SavedView,
+    inventory::{device_matches, discovery_matches},
+};
 
-pub const REGISTRY_VERSION: u32 = 1;
+pub const REGISTRY_VERSION: u32 = 2;
 const REGISTRY_FILE_NAME: &str = "devices.toml";
 const LOCK_FILE_NAME: &str = "devices.lock";
 
@@ -37,6 +43,8 @@ pub struct DeviceView {
     pub serial_number: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_profile: Option<String>,
     pub has_credentials: bool,
     pub tags: Vec<String>,
 }
@@ -156,6 +164,7 @@ impl RegistryStore {
                 serial_number: None,
                 username: None,
                 credential_ref: None,
+                credential_profile: None,
                 tags,
             };
             let view = device.view(&id);
@@ -217,6 +226,9 @@ impl RegistryStore {
             if registry.current_device.as_deref() == Some(id) {
                 registry.current_device = None;
             }
+            for group in registry.groups.values_mut() {
+                group.members.retain(|_, device_id| device_id != id);
+            }
             Ok(removed)
         })
     }
@@ -253,6 +265,200 @@ impl RegistryStore {
             .transpose()
     }
 
+    /// Resolve either a canonical device ID or `group-id/local-alias`.
+    pub fn resolve_device_selector(&self, selector: &str) -> Result<String, AppError> {
+        if let Some((group_id, alias)) = selector.split_once('/') {
+            if alias.contains('/') {
+                return Err(AppError::invalid_argument(
+                    "A grouped device selector must be `group-id/local-alias`.",
+                ));
+            }
+            validate_resource_id("group", group_id)?;
+            validate_resource_id("Group-local alias", alias)?;
+            let registry = self.load_unlocked()?;
+            let group = registry
+                .groups
+                .get(group_id)
+                .ok_or_else(|| AppError::resource_not_found("group", group_id))?;
+            return group
+                .members
+                .get(alias)
+                .cloned()
+                .ok_or_else(|| AppError::resource_not_found("Group-local alias", selector));
+        }
+        validate_device_id(selector)?;
+        self.get(selector)?;
+        Ok(selector.to_owned())
+    }
+
+    pub fn list_groups(&self) -> Result<Vec<GroupView>, AppError> {
+        Ok(self
+            .load_unlocked()?
+            .groups
+            .iter()
+            .map(|(id, group)| group.view(id))
+            .collect())
+    }
+
+    pub fn get_group(&self, id: &str) -> Result<GroupView, AppError> {
+        validate_resource_id("group", id)?;
+        self.load_unlocked()?
+            .groups
+            .get(id)
+            .map(|group| group.view(id))
+            .ok_or_else(|| AppError::resource_not_found("group", id))
+    }
+
+    pub fn create_group(&self, group: NewGroup) -> Result<GroupView, AppError> {
+        validate_resource_id("group", &group.id)?;
+        let id = group.id;
+        let name = normalized_name(group.name.as_deref(), &id)?;
+        self.mutate(|registry| {
+            if registry.groups.contains_key(&id) {
+                return Err(AppError::resource_exists("group", &id));
+            }
+            let group = StoredGroup {
+                name,
+                members: BTreeMap::new(),
+            };
+            let view = group.view(&id);
+            registry.groups.insert(id, group);
+            Ok(view)
+        })
+    }
+
+    pub fn delete_group(&self, id: &str) -> Result<GroupView, AppError> {
+        validate_resource_id("group", id)?;
+        self.mutate(|registry| {
+            registry
+                .groups
+                .remove(id)
+                .map(|group| group.view(id))
+                .ok_or_else(|| AppError::resource_not_found("group", id))
+        })
+    }
+
+    pub fn add_group_member(
+        &self,
+        group_id: &str,
+        device_id: &str,
+        alias: &str,
+    ) -> Result<GroupView, AppError> {
+        validate_resource_id("group", group_id)?;
+        validate_device_id(device_id)?;
+        validate_resource_id("Group-local alias", alias)?;
+        self.mutate(|registry| {
+            if !registry.devices.contains_key(device_id) {
+                return Err(AppError::device_not_found(device_id));
+            }
+            let group = registry
+                .groups
+                .get_mut(group_id)
+                .ok_or_else(|| AppError::resource_not_found("group", group_id))?;
+            if let Some(existing) = group.members.get(alias) {
+                return Err(AppError::resource_in_use(format!(
+                    "Alias `{group_id}/{alias}` already selects device `{existing}`."
+                )));
+            }
+            if let Some((existing_alias, _)) = group
+                .members
+                .iter()
+                .find(|(_, member_device_id)| member_device_id.as_str() == device_id)
+            {
+                return Err(AppError::resource_in_use(format!(
+                    "Device `{device_id}` is already in group `{group_id}` as `{existing_alias}`."
+                )));
+            }
+            group.members.insert(alias.to_owned(), device_id.to_owned());
+            Ok(group.view(group_id))
+        })
+    }
+
+    pub fn remove_group_member(&self, group_id: &str, alias: &str) -> Result<GroupView, AppError> {
+        validate_resource_id("group", group_id)?;
+        validate_resource_id("Group-local alias", alias)?;
+        self.mutate(|registry| {
+            let group = registry
+                .groups
+                .get_mut(group_id)
+                .ok_or_else(|| AppError::resource_not_found("group", group_id))?;
+            if group.members.remove(alias).is_none() {
+                return Err(AppError::resource_not_found(
+                    "Group-local alias",
+                    &format!("{group_id}/{alias}"),
+                ));
+            }
+            Ok(group.view(group_id))
+        })
+    }
+
+    pub fn list_views(&self) -> Result<Vec<SavedView>, AppError> {
+        Ok(self
+            .load_unlocked()?
+            .views
+            .iter()
+            .map(|(id, view)| view.view(id))
+            .collect())
+    }
+
+    pub fn get_view(&self, id: &str) -> Result<SavedView, AppError> {
+        validate_resource_id("view", id)?;
+        self.load_unlocked()?
+            .views
+            .get(id)
+            .map(|view| view.view(id))
+            .ok_or_else(|| AppError::resource_not_found("view", id))
+    }
+
+    pub fn create_view(&self, view: NewSavedView) -> Result<SavedView, AppError> {
+        validate_resource_id("view", &view.id)?;
+        if view.filters.is_empty() {
+            return Err(AppError::invalid_argument(
+                "A dynamic View requires at least one --filter field=value clause.",
+            ));
+        }
+        let id = view.id;
+        let name = normalized_name(view.name.as_deref(), &id)?;
+        let mut filters = view.filters;
+        filters.sort();
+        filters.dedup();
+        self.mutate(|registry| {
+            if registry.views.contains_key(&id) {
+                return Err(AppError::resource_exists("view", &id));
+            }
+            let view = StoredView { name, filters };
+            let result = view.view(&id);
+            registry.views.insert(id, view);
+            Ok(result)
+        })
+    }
+
+    pub fn delete_view(&self, id: &str) -> Result<SavedView, AppError> {
+        validate_resource_id("view", id)?;
+        self.mutate(|registry| {
+            registry
+                .views
+                .remove(id)
+                .map(|view| view.view(id))
+                .ok_or_else(|| AppError::resource_not_found("view", id))
+        })
+    }
+
+    pub fn evaluate_view(&self, id: &str) -> Result<Vec<DeviceView>, AppError> {
+        validate_resource_id("view", id)?;
+        let registry = self.load_unlocked()?;
+        let view = registry
+            .views
+            .get(id)
+            .ok_or_else(|| AppError::resource_not_found("view", id))?;
+        Ok(registry
+            .devices
+            .iter()
+            .map(|(device_id, device)| device.view(device_id))
+            .filter(|device| device_matches(device, &view.filters))
+            .collect())
+    }
+
     pub fn set_credentials(
         &self,
         id: &str,
@@ -271,6 +477,7 @@ impl RegistryStore {
                 .ok_or_else(|| AppError::device_not_found(id))?;
             device.username = Some(username.to_owned());
             device.credential_ref = Some(credential_ref.to_owned());
+            device.credential_profile = None;
             Ok(device.view(id))
         })
     }
@@ -284,7 +491,173 @@ impl RegistryStore {
                 .ok_or_else(|| AppError::device_not_found(id))?;
             device.username = None;
             device.credential_ref = None;
+            device.credential_profile = None;
             Ok(device.view(id))
+        })
+    }
+
+    pub fn list_credential_profiles(&self) -> Result<Vec<CredentialProfileView>, AppError> {
+        Ok(self
+            .load_unlocked()?
+            .credential_profiles
+            .iter()
+            .map(|(id, profile)| profile.view(id))
+            .collect())
+    }
+
+    pub fn get_credential_profile(&self, id: &str) -> Result<CredentialProfileView, AppError> {
+        validate_resource_id("credential profile", id)?;
+        self.load_unlocked()?
+            .credential_profiles
+            .get(id)
+            .map(|profile| profile.view(id))
+            .ok_or_else(|| AppError::resource_not_found("credential profile", id))
+    }
+
+    pub(crate) fn get_stored_credential_profile(
+        &self,
+        id: &str,
+    ) -> Result<StoredCredentialProfile, AppError> {
+        validate_resource_id("credential profile", id)?;
+        self.load_unlocked()?
+            .credential_profiles
+            .get(id)
+            .cloned()
+            .ok_or_else(|| AppError::resource_not_found("credential profile", id))
+    }
+
+    pub fn set_credential_profile(
+        &self,
+        id: &str,
+        username: &str,
+        credential_ref: &str,
+    ) -> Result<CredentialProfileView, AppError> {
+        validate_resource_id("credential profile", id)?;
+        let username = username.trim();
+        if username.is_empty() {
+            return Err(AppError::invalid_argument("Username must not be empty."));
+        }
+        self.mutate(|registry| {
+            let profile = StoredCredentialProfile {
+                username: username.to_owned(),
+                credential_ref: credential_ref.to_owned(),
+            };
+            let view = profile.view(id);
+            registry.credential_profiles.insert(id.to_owned(), profile);
+            Ok(view)
+        })
+    }
+
+    pub(crate) fn remove_credential_profile(
+        &self,
+        id: &str,
+    ) -> Result<StoredCredentialProfile, AppError> {
+        validate_resource_id("credential profile", id)?;
+        self.mutate(|registry| {
+            let users: Vec<&str> = registry
+                .devices
+                .iter()
+                .filter(|(_, device)| device.credential_profile.as_deref() == Some(id))
+                .map(|(device_id, _)| device_id.as_str())
+                .collect();
+            if !users.is_empty() {
+                return Err(AppError::resource_in_use(format!(
+                    "Credential profile `{id}` is used by device(s): {}.",
+                    users.join(", ")
+                )));
+            }
+            registry
+                .credential_profiles
+                .remove(id)
+                .ok_or_else(|| AppError::resource_not_found("credential profile", id))
+        })
+    }
+
+    pub fn assign_credential_profile(
+        &self,
+        device_id: &str,
+        profile_id: &str,
+    ) -> Result<DeviceView, AppError> {
+        validate_device_id(device_id)?;
+        validate_resource_id("credential profile", profile_id)?;
+        self.mutate(|registry| {
+            if !registry.credential_profiles.contains_key(profile_id) {
+                return Err(AppError::resource_not_found(
+                    "credential profile",
+                    profile_id,
+                ));
+            }
+            let device = registry
+                .devices
+                .get_mut(device_id)
+                .ok_or_else(|| AppError::device_not_found(device_id))?;
+            if device.credential_ref.is_some() {
+                return Err(AppError::resource_in_use(format!(
+                    "Device `{device_id}` has a device-specific credential; delete it before assigning profile `{profile_id}`."
+                )));
+            }
+            device.username = None;
+            device.credential_ref = None;
+            device.credential_profile = Some(profile_id.to_owned());
+            Ok(device.view(device_id))
+        })
+    }
+
+    pub fn save_discovery_snapshot(
+        &self,
+        id: &str,
+        devices: Vec<DiscoveryRecord>,
+    ) -> Result<DiscoverySnapshotView, AppError> {
+        validate_resource_id("discovery snapshot", id)?;
+        let devices = normalize_discovery_records(devices);
+        let saved_at_unix_ms = unix_millis()?;
+        self.mutate(|registry| {
+            if registry.discovery_snapshots.contains_key(id) {
+                return Err(AppError::resource_exists("discovery snapshot", id));
+            }
+            let snapshot = StoredDiscoverySnapshot {
+                saved_at_unix_ms,
+                devices,
+            };
+            let view = snapshot.view(id, &[]);
+            registry.discovery_snapshots.insert(id.to_owned(), snapshot);
+            Ok(view)
+        })
+    }
+
+    pub fn list_discovery_snapshots(&self) -> Result<Vec<DiscoverySnapshotSummary>, AppError> {
+        Ok(self
+            .load_unlocked()?
+            .discovery_snapshots
+            .iter()
+            .map(|(id, snapshot)| snapshot.summary(id))
+            .collect())
+    }
+
+    pub fn get_discovery_snapshot(
+        &self,
+        id: &str,
+        filters: &[DiscoveryFilter],
+    ) -> Result<DiscoverySnapshotView, AppError> {
+        validate_resource_id("discovery snapshot", id)?;
+        self.load_unlocked()?
+            .discovery_snapshots
+            .get(id)
+            .map(|snapshot| snapshot.view(id, filters))
+            .ok_or_else(|| AppError::resource_not_found("discovery snapshot", id))
+    }
+
+    pub fn remove_discovery_snapshot(
+        &self,
+        id: &str,
+    ) -> Result<DiscoverySnapshotSummary, AppError> {
+        validate_resource_id("discovery snapshot", id)?;
+        self.mutate(|registry| {
+            registry
+                .discovery_snapshots
+                .remove(id)
+                .map(|snapshot| snapshot.summary(id))
+                .ok_or_else(|| AppError::resource_not_found("discovery snapshot", id))
         })
     }
 
@@ -320,18 +693,20 @@ impl RegistryStore {
                 )));
             }
         };
-        let registry: RegistryFile = toml::from_str(&contents).map_err(|error| {
+        let mut registry: RegistryFile = toml::from_str(&contents).map_err(|error| {
             AppError::registry_corrupt(format!(
                 "Failed to parse {}: {error}",
                 self.registry_path.display()
             ))
         })?;
-        if registry.version != REGISTRY_VERSION {
+        if registry.version > REGISTRY_VERSION || registry.version == 0 {
             return Err(AppError::registry_version(
                 registry.version,
                 REGISTRY_VERSION,
             ));
         }
+        registry.version = REGISTRY_VERSION;
+        validate_registry(&registry)?;
         Ok(registry)
     }
 
@@ -397,6 +772,14 @@ struct RegistryFile {
     current_device: Option<String>,
     #[serde(default)]
     devices: BTreeMap<String, StoredDevice>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    groups: BTreeMap<String, StoredGroup>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    views: BTreeMap<String, StoredView>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    discovery_snapshots: BTreeMap<String, StoredDiscoverySnapshot>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    credential_profiles: BTreeMap<String, StoredCredentialProfile>,
 }
 
 impl Default for RegistryFile {
@@ -405,6 +788,10 @@ impl Default for RegistryFile {
             version: REGISTRY_VERSION,
             current_device: None,
             devices: BTreeMap::new(),
+            groups: BTreeMap::new(),
+            views: BTreeMap::new(),
+            discovery_snapshots: BTreeMap::new(),
+            credential_profiles: BTreeMap::new(),
         }
     }
 }
@@ -427,6 +814,8 @@ pub(crate) struct StoredDevice {
     username: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     credential_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credential_profile: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     tags: Vec<String>,
 }
@@ -443,7 +832,8 @@ impl StoredDevice {
             firmware_version: self.firmware_version.clone(),
             serial_number: self.serial_number.clone(),
             username: self.username.clone(),
-            has_credentials: self.credential_ref.is_some(),
+            credential_profile: self.credential_profile.clone(),
+            has_credentials: self.credential_ref.is_some() || self.credential_profile.is_some(),
             tags: self.tags.clone(),
         }
     }
@@ -459,9 +849,110 @@ impl StoredDevice {
     pub(crate) fn credential_ref(&self) -> Option<&str> {
         self.credential_ref.as_deref()
     }
+
+    pub(crate) fn credential_profile(&self) -> Option<&str> {
+        self.credential_profile.as_deref()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct StoredGroup {
+    name: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    members: BTreeMap<String, String>,
+}
+
+impl StoredGroup {
+    fn view(&self, id: &str) -> GroupView {
+        GroupView {
+            id: id.to_owned(),
+            name: self.name.clone(),
+            members: self
+                .members
+                .iter()
+                .map(|(alias, device_id)| GroupMemberView {
+                    alias: alias.clone(),
+                    device_id: device_id.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct StoredView {
+    name: String,
+    filters: Vec<DeviceFilter>,
+}
+
+impl StoredView {
+    fn view(&self, id: &str) -> SavedView {
+        SavedView {
+            id: id.to_owned(),
+            name: self.name.clone(),
+            filters: self.filters.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct StoredDiscoverySnapshot {
+    saved_at_unix_ms: u64,
+    devices: Vec<DiscoveryRecord>,
+}
+
+impl StoredDiscoverySnapshot {
+    fn summary(&self, id: &str) -> DiscoverySnapshotSummary {
+        DiscoverySnapshotSummary {
+            id: id.to_owned(),
+            saved_at_unix_ms: self.saved_at_unix_ms,
+            device_count: self.devices.len(),
+        }
+    }
+
+    fn view(&self, id: &str, filters: &[DiscoveryFilter]) -> DiscoverySnapshotView {
+        DiscoverySnapshotView {
+            id: id.to_owned(),
+            saved_at_unix_ms: self.saved_at_unix_ms,
+            devices: self
+                .devices
+                .iter()
+                .filter(|device| discovery_matches(device, filters))
+                .cloned()
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct StoredCredentialProfile {
+    username: String,
+    credential_ref: String,
+}
+
+impl StoredCredentialProfile {
+    fn view(&self, id: &str) -> CredentialProfileView {
+        CredentialProfileView {
+            id: id.to_owned(),
+            username: self.username.clone(),
+            has_credentials: true,
+        }
+    }
+
+    pub(crate) fn username(&self) -> &str {
+        &self.username
+    }
+
+    pub(crate) fn credential_ref(&self) -> &str {
+        &self.credential_ref
+    }
 }
 
 pub fn validate_device_id(id: &str) -> Result<(), AppError> {
+    validate_resource_id("device", id)
+}
+
+fn validate_resource_id(kind: &str, id: &str) -> Result<(), AppError> {
     let valid = !id.is_empty()
         && id
             .bytes()
@@ -477,9 +968,66 @@ pub fn validate_device_id(id: &str) -> Result<(), AppError> {
         Ok(())
     } else {
         Err(AppError::invalid_argument(format!(
-            "Invalid device ID `{id}`; expected [a-z0-9][a-z0-9_-]*."
+            "Invalid {kind} ID `{id}`; expected [a-z0-9][a-z0-9_-]*."
         )))
     }
+}
+
+fn normalize_discovery_records(mut devices: Vec<DiscoveryRecord>) -> Vec<DiscoveryRecord> {
+    for device in &mut devices {
+        device.types.sort();
+        device.types.dedup();
+        device.scopes.sort();
+        device.scopes.dedup();
+        device.xaddrs.sort();
+        device.xaddrs.dedup();
+    }
+    devices.sort_by(|left, right| left.endpoint.cmp(&right.endpoint));
+    devices.dedup_by(|left, right| left.endpoint == right.endpoint);
+    devices
+}
+
+fn validate_registry(registry: &RegistryFile) -> Result<(), AppError> {
+    if let Some(current) = &registry.current_device
+        && !registry.devices.contains_key(current)
+    {
+        return Err(AppError::registry_corrupt(format!(
+            "Current device `{current}` does not exist."
+        )));
+    }
+    for (group_id, group) in &registry.groups {
+        let mut device_ids = BTreeSet::new();
+        for (alias, device_id) in &group.members {
+            if !registry.devices.contains_key(device_id) {
+                return Err(AppError::registry_corrupt(format!(
+                    "Group selector `{group_id}/{alias}` references missing device `{device_id}`."
+                )));
+            }
+            if !device_ids.insert(device_id) {
+                return Err(AppError::registry_corrupt(format!(
+                    "Group `{group_id}` contains device `{device_id}` more than once."
+                )));
+            }
+        }
+    }
+    for (device_id, device) in &registry.devices {
+        if let Some(profile_id) = &device.credential_profile
+            && !registry.credential_profiles.contains_key(profile_id)
+        {
+            return Err(AppError::registry_corrupt(format!(
+                "Device `{device_id}` references missing credential profile `{profile_id}`."
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn unix_millis() -> Result<u64, AppError> {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| AppError::internal(format!("System clock predates Unix epoch: {error}")))?
+        .as_millis();
+    Ok(u64::try_from(millis).unwrap_or(u64::MAX))
 }
 
 pub fn normalize_target(target: &str) -> Result<String, AppError> {
@@ -590,7 +1138,7 @@ mod tests {
         assert_eq!(store.get("front-door").expect("device should load"), added);
         let contents = fs::read_to_string(directory.path().join(REGISTRY_FILE_NAME))
             .expect("registry should exist");
-        assert!(contents.starts_with("version = 1"));
+        assert!(contents.starts_with("version = 2"));
         assert!(!contents.to_ascii_lowercase().contains("password"));
     }
 
@@ -625,5 +1173,178 @@ mod tests {
         let contents = fs::read_to_string(directory.path().join(REGISTRY_FILE_NAME))
             .expect("fixture should remain");
         assert_eq!(contents, "version = 999\n");
+    }
+
+    #[test]
+    fn version_one_registry_migrates_on_next_write() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        fs::write(
+            directory.path().join(REGISTRY_FILE_NAME),
+            r#"version = 1
+
+[devices.legacy]
+name = "Legacy"
+target = "http://192.0.2.10/onvif/device_service"
+"#,
+        )
+        .expect("v1 fixture should write");
+        let store = RegistryStore::at(directory.path());
+        assert_eq!(
+            store.get("legacy").expect("v1 device should load").name,
+            "Legacy"
+        );
+
+        store
+            .create_group(NewGroup {
+                id: "migrated".to_owned(),
+                name: None,
+            })
+            .expect("first write should migrate");
+        let contents = fs::read_to_string(directory.path().join(REGISTRY_FILE_NAME))
+            .expect("registry should load");
+        assert!(contents.starts_with("version = 2"));
+        assert!(contents.contains("[devices.legacy]"));
+    }
+
+    #[test]
+    fn group_alias_resolves_exact_device_and_is_cleaned_on_removal() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        store
+            .add(NewDevice {
+                id: "camera-global".to_owned(),
+                name: None,
+                target: "192.0.2.20".to_owned(),
+                tags: Vec::new(),
+            })
+            .expect("device should add");
+        store
+            .create_group(NewGroup {
+                id: "taipei-f1".to_owned(),
+                name: Some("Taipei floor 1".to_owned()),
+            })
+            .expect("group should add");
+        store
+            .add_group_member("taipei-f1", "camera-global", "cam-023")
+            .expect("member should add");
+
+        assert_eq!(
+            store
+                .resolve_device_selector("taipei-f1/cam-023")
+                .expect("selector should resolve"),
+            "camera-global"
+        );
+        assert!(
+            store
+                .add_group_member("taipei-f1", "camera-global", "duplicate")
+                .is_err()
+        );
+        store.remove("camera-global").expect("device should remove");
+        assert!(
+            store
+                .get_group("taipei-f1")
+                .expect("group should remain")
+                .members
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn dynamic_view_filters_a_205_device_inventory_deterministically() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let mut registry = RegistryFile::default();
+        for index in 1..=205 {
+            let id = format!("cam-{index:03}");
+            registry.devices.insert(
+                id,
+                StoredDevice {
+                    name: format!("Camera {index:03}"),
+                    target: format!("http://192.168.20.{index}/onvif/device_service"),
+                    device_uuid: Some(format!("uuid:camera-{index:03}")),
+                    manufacturer: Some(
+                        if index % 2 == 0 { "Other" } else { "GeoVision" }.to_owned(),
+                    ),
+                    model: None,
+                    firmware_version: None,
+                    serial_number: None,
+                    username: None,
+                    credential_ref: None,
+                    credential_profile: None,
+                    tags: vec![if index % 2 == 0 { "indoor" } else { "outdoor" }.to_owned()],
+                },
+            );
+        }
+        fs::write(
+            directory.path().join(REGISTRY_FILE_NAME),
+            toml::to_string_pretty(&registry).expect("fixture should serialize"),
+        )
+        .expect("fixture should write");
+        let store = RegistryStore::at(directory.path());
+        store
+            .create_view(NewSavedView {
+                id: "geovision".to_owned(),
+                name: None,
+                filters: vec![
+                    "manufacturer=GeoVision"
+                        .parse()
+                        .expect("filter should parse"),
+                ],
+            })
+            .expect("view should create");
+        let devices = store
+            .evaluate_view("geovision")
+            .expect("view should evaluate");
+        assert_eq!(devices.len(), 103);
+        assert_eq!(devices.first().expect("first device").id, "cam-001");
+        assert_eq!(devices.last().expect("last device").id, "cam-205");
+    }
+
+    #[test]
+    fn discovery_snapshot_is_sorted_deduplicated_and_filterable() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        let record = |endpoint: &str, ip: &str| DiscoveryRecord {
+            endpoint: endpoint.to_owned(),
+            types: vec!["NetworkVideoTransmitter".to_owned()],
+            scopes: vec!["onvif://www.onvif.org/location/floor1".to_owned()],
+            xaddrs: vec![format!("http://{ip}/onvif/device_service")],
+            manufacturer: None,
+            model: None,
+            firmware_version: None,
+            serial_number: None,
+        };
+        store
+            .save_discovery_snapshot(
+                "factory-scan",
+                vec![
+                    record("uuid:b", "192.168.30.2"),
+                    record("uuid:a", "192.168.20.1"),
+                    record("uuid:a", "192.168.20.1"),
+                ],
+            )
+            .expect("snapshot should save");
+        let filtered = store
+            .get_discovery_snapshot(
+                "factory-scan",
+                &["ip-cidr=192.168.20.0/24"
+                    .parse()
+                    .expect("filter should parse")],
+            )
+            .expect("snapshot should filter");
+        assert_eq!(filtered.devices.len(), 1);
+        assert_eq!(filtered.devices[0].endpoint, "uuid:a");
+        assert_eq!(
+            store
+                .list_discovery_snapshots()
+                .expect("snapshots should list")[0]
+                .device_count,
+            2
+        );
+        assert!(
+            store
+                .save_discovery_snapshot("factory-scan", vec![record("uuid:c", "192.168.20.3")])
+                .is_err(),
+            "saving under an existing snapshot ID must not silently replace it"
+        );
     }
 }
