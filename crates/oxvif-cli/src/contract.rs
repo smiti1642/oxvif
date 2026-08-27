@@ -42,6 +42,7 @@ pub enum CommandRequest {
     DeviceUpdate(DeviceUpdateRequest),
     DeviceRename(DeviceRenameRequest),
     DeviceRemove(DeviceIdRequest),
+    DeviceImport(DeviceImportRequest),
     DeviceCredentialSet(DeviceCredentialSetRequest),
     DeviceCredentialDelete(DeviceIdRequest),
     DeviceCredentialUseProfile(DeviceCredentialProfileRequest),
@@ -61,6 +62,7 @@ pub enum CommandRequest {
     ViewEvaluate(ViewEvaluateRequest),
     ViewDelete(ResourceIdRequest),
     DiscoverScan(DiscoverScanRequest),
+    DiscoveryEnrich(DiscoveryEnrichRequest),
     DiscoverySnapshotList,
     DiscoverySnapshotShow(DiscoverySnapshotShowRequest),
     DiscoverySnapshotRemove(ResourceIdRequest),
@@ -84,6 +86,7 @@ impl CommandRequest {
             Self::DeviceUpdate(_) => "device.update",
             Self::DeviceRename(_) => "device.rename",
             Self::DeviceRemove(_) => "device.remove",
+            Self::DeviceImport(_) => "device.import",
             Self::DeviceCredentialSet(_) => "device.credential.set",
             Self::DeviceCredentialDelete(_) => "device.credential.delete",
             Self::DeviceCredentialUseProfile(_) => "device.credential.use-profile",
@@ -103,6 +106,7 @@ impl CommandRequest {
             Self::ViewEvaluate(_) => "view.evaluate",
             Self::ViewDelete(_) => "view.delete",
             Self::DiscoverScan(_) => "discover.scan",
+            Self::DiscoveryEnrich(_) => "discover.enrich",
             Self::DiscoverySnapshotList => "discover.snapshots",
             Self::DiscoverySnapshotShow(_) => "discover.list",
             Self::DiscoverySnapshotRemove(_) => "discover.remove",
@@ -147,6 +151,23 @@ pub struct DeviceUpdateRequest {
 pub struct DeviceRenameRequest {
     pub id: String,
     pub name: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ImportMode {
+    Plan,
+    Apply,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeviceImportRequest {
+    pub snapshot_id: String,
+    pub filters: Vec<DiscoveryFilter>,
+    pub group_id: Option<String>,
+    pub credential_profile: Option<String>,
+    pub tags: Vec<String>,
+    pub mode: ImportMode,
+    pub expected_fingerprint: Option<String>,
 }
 
 #[derive(Eq, PartialEq)]
@@ -226,6 +247,14 @@ pub struct ViewEvaluateRequest {
 pub struct DiscoverScanRequest {
     pub snapshot_id: Option<String>,
     pub interfaces: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiscoveryEnrichRequest {
+    pub id: String,
+    pub credential_profile: String,
+    pub filters: Vec<DiscoveryFilter>,
+    pub jobs: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -327,6 +356,11 @@ pub enum CommandData {
     DeviceRemoved {
         id: String,
     },
+    DeviceImport {
+        applied: bool,
+        plan: crate::DiscoveryImportPlan,
+        devices: Vec<DeviceView>,
+    },
     CurrentDevice {
         device: Option<DeviceView>,
     },
@@ -372,6 +406,12 @@ pub enum CommandData {
         devices: Vec<crate::DiscoveryRecord>,
         saved_snapshot: Option<DiscoverySnapshotSummary>,
         interfaces: Vec<String>,
+    },
+    DiscoveryEnrichment {
+        snapshot: DiscoverySnapshotSummary,
+        attempted: usize,
+        enriched: usize,
+        failed: usize,
     },
     ResourceRemoved {
         resource: String,

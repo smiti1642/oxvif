@@ -12,12 +12,14 @@ use atomic_write_file::AtomicWriteFile;
 use directories::BaseDirs;
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::{
-    AppError, CredentialProfileView, DeviceFilter, DiscoveryFilter, DiscoveryRecord,
-    DiscoverySnapshotSummary, DiscoverySnapshotView, GroupMemberView, GroupView, NewGroup,
-    NewSavedView, SavedView,
+    AppError, CredentialProfileView, DeviceFilter, DeviceImportRequest, DiscoveryFilter,
+    DiscoveryImportPlan, DiscoveryImportProposal, DiscoveryRecord, DiscoverySnapshotSummary,
+    DiscoverySnapshotView, GroupMemberView, GroupView, ImportDisposition, NewGroup, NewSavedView,
+    SavedView,
     inventory::{device_matches, discovery_matches},
 };
 
@@ -672,6 +674,42 @@ impl RegistryStore {
         })
     }
 
+    pub fn replace_discovery_snapshot(
+        &self,
+        id: &str,
+        devices: Vec<DiscoveryRecord>,
+    ) -> Result<DiscoverySnapshotView, AppError> {
+        validate_resource_id("discovery snapshot", id)?;
+        let devices = normalize_discovery_records(devices);
+        let saved_at_unix_ms = unix_millis()?;
+        self.mutate(|registry| {
+            let previous = self.discovery_snapshot_from_registry(registry, id)?;
+            let previous_endpoints = previous
+                .devices
+                .iter()
+                .map(|device| device.endpoint.as_str())
+                .collect::<BTreeSet<_>>();
+            let replacement_endpoints = devices
+                .iter()
+                .map(|device| device.endpoint.as_str())
+                .collect::<BTreeSet<_>>();
+            if previous_endpoints != replacement_endpoints {
+                return Err(AppError::invalid_argument(
+                    "Discovery enrichment must preserve the snapshot's endpoint set.",
+                ));
+            }
+            let snapshot = StoredDiscoverySnapshot {
+                saved_at_unix_ms,
+                devices,
+            };
+            let view = snapshot.view(id, &[]);
+            registry
+                .discovery_snapshots
+                .insert(id.to_owned(), SnapshotEntry::Embedded(snapshot));
+            Ok(view)
+        })
+    }
+
     pub fn list_discovery_snapshots(&self) -> Result<Vec<DiscoverySnapshotSummary>, AppError> {
         Ok(self
             .load_unlocked()?
@@ -706,6 +744,104 @@ impl RegistryStore {
                 Ok(snapshot.view(id, filters))
             }
         }
+    }
+
+    pub fn plan_discovery_import(
+        &self,
+        request: &DeviceImportRequest,
+    ) -> Result<DiscoveryImportPlan, AppError> {
+        validate_resource_id("discovery snapshot", &request.snapshot_id)?;
+        let tags = normalize_tags(request.tags.clone())?;
+        let registry = self.load_unlocked()?;
+        let snapshot = self.discovery_snapshot_from_registry(&registry, &request.snapshot_id)?;
+        build_discovery_import_plan(&registry, &snapshot.devices, request, tags)
+    }
+
+    pub fn apply_discovery_import(
+        &self,
+        request: &DeviceImportRequest,
+        expected_fingerprint: &str,
+    ) -> Result<(DiscoveryImportPlan, Vec<DeviceView>), AppError> {
+        validate_resource_id("discovery snapshot", &request.snapshot_id)?;
+        let tags = normalize_tags(request.tags.clone())?;
+        self.mutate(|registry| {
+            let snapshot = self.discovery_snapshot_from_registry(registry, &request.snapshot_id)?;
+            let plan =
+                build_discovery_import_plan(registry, &snapshot.devices, request, tags.clone())?;
+            if plan.fingerprint != expected_fingerprint {
+                return Err(AppError::import_plan_mismatch(
+                    expected_fingerprint,
+                    &plan.fingerprint,
+                ));
+            }
+            if plan.conflict_count != 0 {
+                return Err(AppError::resource_in_use(format!(
+                    "Import plan `{}` contains {} conflict(s); no devices were changed.",
+                    plan.fingerprint, plan.conflict_count
+                )));
+            }
+
+            let records = snapshot
+                .devices
+                .iter()
+                .map(|record| (record.endpoint.as_str(), record))
+                .collect::<BTreeMap<_, _>>();
+            let mut imported = Vec::new();
+            for proposal in plan
+                .proposals
+                .iter()
+                .filter(|proposal| proposal.disposition == ImportDisposition::Create)
+            {
+                let record = records.get(proposal.endpoint.as_str()).ok_or_else(|| {
+                    AppError::registry_corrupt(format!(
+                        "Import proposal endpoint `{}` is absent from snapshot `{}`.",
+                        proposal.endpoint, request.snapshot_id
+                    ))
+                })?;
+                let id = proposal.device_id.as_deref().ok_or_else(|| {
+                    AppError::internal("Create import proposal has no device ID.")
+                })?;
+                let target = proposal
+                    .target
+                    .as_deref()
+                    .ok_or_else(|| AppError::internal("Create import proposal has no target."))?;
+                let name = proposal.name.as_deref().ok_or_else(|| {
+                    AppError::internal("Create import proposal has no display name.")
+                })?;
+                if registry.devices.contains_key(id) {
+                    return Err(AppError::import_plan_mismatch(
+                        expected_fingerprint,
+                        "registry-changed-during-apply",
+                    ));
+                }
+                let device = StoredDevice {
+                    name: name.to_owned(),
+                    target: target.to_owned(),
+                    device_uuid: discovery_uuid(record),
+                    manufacturer: record.manufacturer.clone(),
+                    model: record.model.clone(),
+                    firmware_version: record.firmware_version.clone(),
+                    serial_number: record.serial_number.clone(),
+                    username: None,
+                    credential_ref: None,
+                    credential_profile: request.credential_profile.clone(),
+                    tags: tags.clone(),
+                };
+                imported.push(device.view(id));
+                registry.devices.insert(id.to_owned(), device);
+                if let Some(group_id) = request.group_id.as_deref() {
+                    let alias = proposal.group_alias.as_deref().ok_or_else(|| {
+                        AppError::internal("Grouped import proposal has no alias.")
+                    })?;
+                    let group = registry
+                        .groups
+                        .get_mut(group_id)
+                        .ok_or_else(|| AppError::resource_not_found("group", group_id))?;
+                    group.members.insert(alias.to_owned(), id.to_owned());
+                }
+            }
+            Ok((plan, imported))
+        })
     }
 
     pub fn remove_discovery_snapshot(
@@ -755,6 +891,31 @@ impl RegistryStore {
 
     fn snapshot_path(&self, id: &str) -> PathBuf {
         self.snapshots_dir.join(format!("{id}.json"))
+    }
+
+    fn discovery_snapshot_from_registry(
+        &self,
+        registry: &RegistryFile,
+        id: &str,
+    ) -> Result<StoredDiscoverySnapshot, AppError> {
+        let entry = registry
+            .discovery_snapshots
+            .get(id)
+            .ok_or_else(|| AppError::resource_not_found("discovery snapshot", id))?;
+        match entry {
+            SnapshotEntry::Embedded(snapshot) => Ok(snapshot.clone()),
+            SnapshotEntry::External(summary) => {
+                let snapshot = self.read_snapshot_file(id)?;
+                if snapshot.saved_at_unix_ms != summary.saved_at_unix_ms
+                    || snapshot.devices.len() != summary.device_count
+                {
+                    return Err(AppError::registry_corrupt(format!(
+                        "Discovery snapshot `{id}` does not match its registry index."
+                    )));
+                }
+                Ok(snapshot)
+            }
+        }
     }
 
     fn externalize_snapshots(&self, registry: &mut RegistryFile) -> Result<(), AppError> {
@@ -1160,6 +1321,326 @@ impl StoredCredentialProfile {
 
 pub fn validate_device_id(id: &str) -> Result<(), AppError> {
     validate_resource_id("device", id)
+}
+
+fn build_discovery_import_plan(
+    registry: &RegistryFile,
+    records: &[DiscoveryRecord],
+    request: &DeviceImportRequest,
+    tags: Vec<String>,
+) -> Result<DiscoveryImportPlan, AppError> {
+    if let Some(group_id) = request.group_id.as_deref() {
+        validate_resource_id("group", group_id)?;
+        if !registry.groups.contains_key(group_id) {
+            return Err(AppError::resource_not_found("group", group_id));
+        }
+    }
+    if let Some(profile_id) = request.credential_profile.as_deref() {
+        validate_resource_id("credential profile", profile_id)?;
+        if !registry.credential_profiles.contains_key(profile_id) {
+            return Err(AppError::resource_not_found(
+                "credential profile",
+                profile_id,
+            ));
+        }
+    }
+
+    let mut filters = request.filters.clone();
+    filters.sort();
+    filters.dedup();
+    let mut proposals = Vec::with_capacity(records.len());
+    let mut identity_candidates = Vec::with_capacity(records.len());
+    for record in records {
+        if !discovery_matches(record, &filters) {
+            proposals.push(DiscoveryImportProposal {
+                endpoint: record.endpoint.clone(),
+                source_fingerprint: discovery_record_fingerprint(record)?,
+                device_id: None,
+                existing_device_id: None,
+                name: None,
+                target: None,
+                group_alias: None,
+                disposition: ImportDisposition::FilteredOut,
+                reasons: vec!["Record does not match the import filters.".to_owned()],
+            });
+            identity_candidates.push(Vec::new());
+            continue;
+        }
+
+        let target = record
+            .xaddrs
+            .iter()
+            .filter_map(|target| normalize_target(target).ok())
+            .min();
+        let device_uuid = discovery_uuid(record);
+        let proposed_id = propose_import_id(record, target.as_deref());
+        let mut matching_ids = BTreeSet::new();
+        for (id, device) in &registry.devices {
+            if device_uuid.as_deref().is_some_and(|uuid| {
+                device
+                    .device_uuid
+                    .as_deref()
+                    .is_some_and(|existing| existing.eq_ignore_ascii_case(uuid))
+            }) || target
+                .as_deref()
+                .is_some_and(|target| device.target == target)
+            {
+                matching_ids.insert(id.clone());
+            }
+        }
+
+        let mut reasons = Vec::new();
+        let mut disposition = ImportDisposition::Create;
+        let existing_device_id = if matching_ids.len() == 1 {
+            disposition = ImportDisposition::AlreadyPresent;
+            reasons.push("UUID or normalized target is already registered.".to_owned());
+            matching_ids.first().cloned()
+        } else if matching_ids.len() > 1 {
+            disposition = ImportDisposition::Conflict;
+            reasons.push(format!(
+                "UUID/target maps to multiple registered devices: {}.",
+                matching_ids.into_iter().collect::<Vec<_>>().join(", ")
+            ));
+            None
+        } else {
+            None
+        };
+
+        if target.is_none() {
+            disposition = ImportDisposition::Conflict;
+            reasons.push("Record has no valid credential-free ONVIF XAddr.".to_owned());
+        }
+        if proposed_id.is_none() {
+            disposition = ImportDisposition::Conflict;
+            reasons.push("No deterministic device ID can be derived.".to_owned());
+        }
+        if disposition == ImportDisposition::Create
+            && proposed_id
+                .as_deref()
+                .is_some_and(|id| registry.devices.contains_key(id))
+        {
+            disposition = ImportDisposition::Conflict;
+            reasons.push("Proposed device ID is occupied by another device.".to_owned());
+        }
+        let group_alias = request.group_id.as_ref().and(proposed_id.clone());
+        if disposition == ImportDisposition::Create
+            && let (Some(group_id), Some(alias)) =
+                (request.group_id.as_deref(), group_alias.as_deref())
+            && registry
+                .groups
+                .get(group_id)
+                .is_some_and(|group| group.members.contains_key(alias))
+        {
+            disposition = ImportDisposition::Conflict;
+            reasons.push(format!(
+                "Group alias `{group_id}/{alias}` is already occupied."
+            ));
+        }
+
+        let mut identities = Vec::new();
+        if let Some(uuid) = &device_uuid {
+            identities.push(format!("uuid:{uuid}"));
+        }
+        if let Some(target) = &target {
+            identities.push(format!("target:{target}"));
+        }
+        proposals.push(DiscoveryImportProposal {
+            endpoint: record.endpoint.clone(),
+            source_fingerprint: discovery_record_fingerprint(record)?,
+            device_id: existing_device_id.clone().or(proposed_id),
+            existing_device_id,
+            name: target
+                .as_deref()
+                .and_then(|target| propose_import_name(record, target)),
+            target,
+            group_alias,
+            disposition,
+            reasons,
+        });
+        identity_candidates.push(identities);
+    }
+
+    mark_duplicate_proposals(&mut proposals, &identity_candidates);
+    let create_count = count_disposition(&proposals, ImportDisposition::Create);
+    let already_present_count = count_disposition(&proposals, ImportDisposition::AlreadyPresent);
+    let filtered_out_count = count_disposition(&proposals, ImportDisposition::FilteredOut);
+    let conflict_count = count_disposition(&proposals, ImportDisposition::Conflict);
+    let mut plan = DiscoveryImportPlan {
+        fingerprint: String::new(),
+        snapshot_id: request.snapshot_id.clone(),
+        group_id: request.group_id.clone(),
+        credential_profile: request.credential_profile.clone(),
+        tags,
+        filters,
+        total_records: proposals.len(),
+        create_count,
+        already_present_count,
+        filtered_out_count,
+        conflict_count,
+        proposals,
+    };
+    plan.fingerprint = import_plan_fingerprint(&plan)?;
+    Ok(plan)
+}
+
+fn mark_duplicate_proposals(proposals: &mut [DiscoveryImportProposal], identities: &[Vec<String>]) {
+    let collisions = {
+        let mut seen_identity = BTreeMap::<&str, usize>::new();
+        let mut seen_id = BTreeMap::<&str, usize>::new();
+        let mut collisions = Vec::new();
+        for (index, proposal) in proposals.iter().enumerate() {
+            if !matches!(
+                proposal.disposition,
+                ImportDisposition::Create | ImportDisposition::Conflict
+            ) {
+                continue;
+            }
+            for identity in &identities[index] {
+                if let Some(previous) = seen_identity.insert(identity, index) {
+                    collisions.push((
+                        previous,
+                        index,
+                        "Duplicate discovery UUID or target in snapshot.",
+                    ));
+                }
+            }
+            if let Some(id) = proposal.device_id.as_deref()
+                && let Some(previous) = seen_id.insert(id, index)
+                && previous != index
+            {
+                collisions.push((previous, index, "Duplicate proposed device ID in snapshot."));
+            }
+        }
+        collisions
+    };
+    for (left, right, reason) in collisions {
+        for index in [left, right] {
+            proposals[index].disposition = ImportDisposition::Conflict;
+            if !proposals[index].reasons.iter().any(|item| item == reason) {
+                proposals[index].reasons.push(reason.to_owned());
+            }
+        }
+    }
+}
+
+fn count_disposition(
+    proposals: &[DiscoveryImportProposal],
+    disposition: ImportDisposition,
+) -> usize {
+    proposals
+        .iter()
+        .filter(|proposal| proposal.disposition == disposition)
+        .count()
+}
+
+fn import_plan_fingerprint(plan: &DiscoveryImportPlan) -> Result<String, AppError> {
+    let canonical = serde_json::to_vec(&(
+        &plan.snapshot_id,
+        &plan.group_id,
+        &plan.credential_profile,
+        &plan.tags,
+        &plan.filters,
+        &plan.proposals,
+    ))
+    .map_err(|error| AppError::serialization_failed(error.to_string()))?;
+    let digest = Sha256::digest(canonical);
+    Ok(format!("sha256:{digest:x}"))
+}
+
+fn discovery_record_fingerprint(record: &DiscoveryRecord) -> Result<String, AppError> {
+    let canonical = serde_json::to_vec(record)
+        .map_err(|error| AppError::serialization_failed(error.to_string()))?;
+    let digest = Sha256::digest(canonical);
+    Ok(format!("sha256:{digest:x}"))
+}
+
+fn discovery_uuid(record: &DiscoveryRecord) -> Option<String> {
+    let endpoint = record.endpoint.trim();
+    let lowercase = endpoint.to_ascii_lowercase();
+    for prefix in ["urn:uuid:", "uuid:"] {
+        if let Some(uuid) = lowercase.strip_prefix(prefix)
+            && !uuid.is_empty()
+        {
+            return Some(uuid.to_owned());
+        }
+    }
+    None
+}
+
+fn propose_import_id(record: &DiscoveryRecord, target: Option<&str>) -> Option<String> {
+    let identity = discovery_uuid(record)
+        .or_else(|| (!record.endpoint.trim().is_empty()).then(|| record.endpoint.clone()))
+        .and_then(|value| slug(&value))
+        .or_else(|| target.and_then(target_host).and_then(|host| slug(&host)));
+    identity.map(|identity| format!("cam-{identity}"))
+}
+
+fn propose_import_name(record: &DiscoveryRecord, target: &str) -> Option<String> {
+    record
+        .scopes
+        .iter()
+        .find_map(|scope| {
+            let (_, name) = scope.split_once("/name/")?;
+            let name = percent_decode(name).trim().to_owned();
+            (!name.is_empty()).then_some(name)
+        })
+        .or_else(|| {
+            record
+                .model
+                .clone()
+                .filter(|model| !model.trim().is_empty())
+        })
+        .or_else(|| target_host(target))
+}
+
+fn target_host(target: &str) -> Option<String> {
+    Url::parse(target).ok()?.host_str().map(str::to_owned)
+}
+
+fn slug(value: &str) -> Option<String> {
+    let mut result = String::new();
+    let mut separator = false;
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() {
+            if separator && !result.is_empty() {
+                result.push('-');
+            }
+            result.push(character.to_ascii_lowercase());
+            separator = false;
+        } else {
+            separator = true;
+        }
+    }
+    (!result.is_empty()).then_some(result)
+}
+
+fn percent_decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && let (Some(high), Some(low)) =
+                (hex_value(bytes[index + 1]), hex_value(bytes[index + 2]))
+        {
+            decoded.push((high << 4) | low);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
+
+const fn hex_value(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn validate_resource_id(kind: &str, id: &str) -> Result<(), AppError> {
@@ -1667,5 +2148,278 @@ xaddrs = ["http://192.0.2.50/onvif/device_service"]
                 .expect("snapshot should read")
                 .contains("uuid:legacy")
         );
+    }
+
+    #[test]
+    fn discovery_import_is_fingerprinted_atomic_and_idempotent() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        store
+            .create_group(NewGroup {
+                id: "factory".to_owned(),
+                name: None,
+            })
+            .expect("group should create");
+        store
+            .set_credential_profile("factory-admin", "admin", "profile/factory-admin")
+            .expect("profile should create");
+        store
+            .save_discovery_snapshot(
+                "scan",
+                vec![DiscoveryRecord {
+                    endpoint: "urn:uuid:11111111-2222-3333-4444-555555555555".to_owned(),
+                    types: Vec::new(),
+                    scopes: vec!["onvif://www.onvif.org/name/Loading%20Bay".to_owned()],
+                    xaddrs: vec!["http://192.0.2.80/onvif/device_service".to_owned()],
+                    manufacturer: Some("GeoVision".to_owned()),
+                    model: Some("GV-Camera".to_owned()),
+                    firmware_version: Some("1.0".to_owned()),
+                    serial_number: Some("SERIAL-80".to_owned()),
+                }],
+            )
+            .expect("snapshot should save");
+        let request = DeviceImportRequest {
+            snapshot_id: "scan".to_owned(),
+            filters: vec![],
+            group_id: Some("factory".to_owned()),
+            credential_profile: Some("factory-admin".to_owned()),
+            tags: vec!["discovered".to_owned()],
+            mode: crate::ImportMode::Plan,
+            expected_fingerprint: None,
+        };
+
+        let plan = store
+            .plan_discovery_import(&request)
+            .expect("plan should build");
+        assert!(plan.fingerprint.starts_with("sha256:"));
+        assert_eq!(plan.create_count, 1);
+        assert_eq!(plan.conflict_count, 0);
+        assert_eq!(
+            plan.proposals[0].device_id.as_deref(),
+            Some("cam-11111111-2222-3333-4444-555555555555")
+        );
+        assert_eq!(plan.proposals[0].name.as_deref(), Some("Loading Bay"));
+
+        let (applied, devices) = store
+            .apply_discovery_import(&request, &plan.fingerprint)
+            .expect("fresh plan should apply");
+        assert_eq!(applied.fingerprint, plan.fingerprint);
+        assert_eq!(devices.len(), 1);
+        assert_eq!(
+            devices[0].credential_profile.as_deref(),
+            Some("factory-admin")
+        );
+        assert_eq!(devices[0].tags, vec!["discovered"]);
+        assert_eq!(
+            store
+                .get_group("factory")
+                .expect("group should load")
+                .members[0]
+                .device_id,
+            devices[0].id
+        );
+
+        let repeated = store
+            .plan_discovery_import(&request)
+            .expect("repeat plan should build");
+        assert_eq!(repeated.create_count, 0);
+        assert_eq!(repeated.already_present_count, 1);
+    }
+
+    #[test]
+    fn stale_import_fingerprint_is_rejected_before_mutation() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        store
+            .save_discovery_snapshot(
+                "scan",
+                vec![DiscoveryRecord {
+                    endpoint: "uuid:stale-camera".to_owned(),
+                    types: Vec::new(),
+                    scopes: Vec::new(),
+                    xaddrs: vec!["http://192.0.2.90/onvif/device_service".to_owned()],
+                    manufacturer: None,
+                    model: None,
+                    firmware_version: None,
+                    serial_number: None,
+                }],
+            )
+            .expect("snapshot should save");
+        let request = DeviceImportRequest {
+            snapshot_id: "scan".to_owned(),
+            filters: Vec::new(),
+            group_id: None,
+            credential_profile: None,
+            tags: Vec::new(),
+            mode: crate::ImportMode::Plan,
+            expected_fingerprint: None,
+        };
+        let plan = store
+            .plan_discovery_import(&request)
+            .expect("plan should build");
+        store
+            .add(NewDevice {
+                id: "cam-stale-camera".to_owned(),
+                name: None,
+                target: "192.0.2.91".to_owned(),
+                tags: Vec::new(),
+            })
+            .expect("conflicting device should add");
+
+        let error = store
+            .apply_discovery_import(&request, &plan.fingerprint)
+            .expect_err("stale plan must fail");
+        assert_eq!(error.code, crate::ErrorCode::ImportPlanMismatch);
+        assert_eq!(store.list().expect("registry should load").0.len(), 1);
+    }
+
+    #[test]
+    fn conflicting_import_applies_nothing() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        let record = |endpoint: &str, target: Option<&str>| DiscoveryRecord {
+            endpoint: endpoint.to_owned(),
+            types: Vec::new(),
+            scopes: Vec::new(),
+            xaddrs: target.into_iter().map(str::to_owned).collect(),
+            manufacturer: Some("GeoVision".to_owned()),
+            model: None,
+            firmware_version: None,
+            serial_number: None,
+        };
+        store
+            .save_discovery_snapshot(
+                "scan",
+                vec![
+                    record(
+                        "uuid:valid-camera",
+                        Some("http://192.0.2.100/onvif/device_service"),
+                    ),
+                    record("uuid:missing-target", None),
+                ],
+            )
+            .expect("snapshot should save");
+        let request = DeviceImportRequest {
+            snapshot_id: "scan".to_owned(),
+            filters: vec![
+                "manufacturer=GeoVision"
+                    .parse()
+                    .expect("filter should parse"),
+            ],
+            group_id: None,
+            credential_profile: None,
+            tags: Vec::new(),
+            mode: crate::ImportMode::Plan,
+            expected_fingerprint: None,
+        };
+        let plan = store
+            .plan_discovery_import(&request)
+            .expect("plan should build");
+        assert_eq!(plan.create_count, 1);
+        assert_eq!(plan.conflict_count, 1);
+
+        let error = store
+            .apply_discovery_import(&request, &plan.fingerprint)
+            .expect_err("conflicting plan must not apply");
+        assert_eq!(error.code, crate::ErrorCode::ResourceInUse);
+        assert!(store.list().expect("registry should load").0.is_empty());
+    }
+
+    #[test]
+    fn import_plan_scales_deterministically_to_205_devices() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        let mut records = (1..=205)
+            .map(|number| DiscoveryRecord {
+                endpoint: format!("uuid:fleet-{number:03}"),
+                types: vec!["NetworkVideoTransmitter".to_owned()],
+                scopes: Vec::new(),
+                xaddrs: vec![format!(
+                    "http://10.0.{}.{}/onvif/device_service",
+                    number / 200,
+                    number % 200 + 1
+                )],
+                manufacturer: Some(if number % 2 == 0 {
+                    "GeoVision".to_owned()
+                } else {
+                    "Other".to_owned()
+                }),
+                model: None,
+                firmware_version: None,
+                serial_number: Some(format!("SERIAL-{number:03}")),
+            })
+            .collect::<Vec<_>>();
+        records.reverse();
+        store
+            .save_discovery_snapshot("fleet", records)
+            .expect("fleet snapshot should save");
+        let request = DeviceImportRequest {
+            snapshot_id: "fleet".to_owned(),
+            filters: vec![
+                "manufacturer=GeoVision"
+                    .parse()
+                    .expect("filter should parse"),
+            ],
+            group_id: None,
+            credential_profile: None,
+            tags: vec!["fleet".to_owned()],
+            mode: crate::ImportMode::Plan,
+            expected_fingerprint: None,
+        };
+
+        let first = store
+            .plan_discovery_import(&request)
+            .expect("first plan should build");
+        let second = store
+            .plan_discovery_import(&request)
+            .expect("second plan should build");
+        assert_eq!(first.fingerprint, second.fingerprint);
+        assert_eq!(first.total_records, 205);
+        assert_eq!(first.create_count, 102);
+        assert_eq!(first.filtered_out_count, 103);
+        assert_eq!(first.conflict_count, 0);
+    }
+
+    #[test]
+    fn import_plan_rejects_distinct_uuids_sharing_one_target() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        let record = |endpoint: &str| DiscoveryRecord {
+            endpoint: endpoint.to_owned(),
+            types: Vec::new(),
+            scopes: Vec::new(),
+            xaddrs: vec!["http://192.0.2.130/onvif/device_service".to_owned()],
+            manufacturer: None,
+            model: None,
+            firmware_version: None,
+            serial_number: None,
+        };
+        store
+            .save_discovery_snapshot(
+                "duplicates",
+                vec![record("uuid:first"), record("uuid:second")],
+            )
+            .expect("snapshot should save");
+        let request = DeviceImportRequest {
+            snapshot_id: "duplicates".to_owned(),
+            filters: Vec::new(),
+            group_id: None,
+            credential_profile: None,
+            tags: Vec::new(),
+            mode: crate::ImportMode::Plan,
+            expected_fingerprint: None,
+        };
+
+        let plan = store
+            .plan_discovery_import(&request)
+            .expect("plan should build");
+        assert_eq!(plan.create_count, 0);
+        assert_eq!(plan.conflict_count, 2);
+        assert!(plan.proposals.iter().all(|proposal| {
+            proposal
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("UUID or target"))
+        }));
     }
 }

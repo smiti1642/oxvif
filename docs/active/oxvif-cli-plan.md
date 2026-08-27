@@ -333,6 +333,44 @@ apply. The plan includes proposed global IDs, Group-local aliases, matched and
 skipped records, duplicate UUIDs, endpoint conflicts, and credential
 references, but never secret material.
 
+#### Stage 2A import/enrichment contract — locked 2026-08-27
+
+The next implementation slice closes the discovery-to-inventory loop with
+these rules:
+
+1. `discover enrich SNAPSHOT --credential-profile PROFILE [--filter ...]`
+   authenticates each selected usable XAddr with bounded concurrency and
+   atomically replaces that snapshot. Per-device failures are warnings; total
+   failure is typed. Secrets remain in the native credential backend and never
+   enter snapshot JSON.
+2. `device import --from SNAPSHOT ... --plan` is read-only and returns every
+   source record as `create`, `already_present`, `filtered_out`, or `conflict`.
+   Ordering, proposed IDs, aliases, names, and targets are deterministic.
+3. IDs prefer the WS-Discovery UUID, then the endpoint, then the target host;
+   they are normalized to `[a-z0-9][a-z0-9_-]*`. Display names prefer the
+   ONVIF name scope, enriched model, target host, then the proposed ID.
+4. Existing UUID or normalized-target matches are `already_present` and are
+   never silently overwritten. An occupied proposed ID, duplicate identity,
+   invalid/missing target, Group-alias collision, or incompatible credential
+   assignment is an explicit conflict.
+5. A plan carries a SHA-256 fingerprint. `--apply` requires
+   `--expect-plan FINGERPRINT`, recomputes and validates the plan while holding
+   the registry lock, rejects stale/conflicting plans before any mutation, and
+   creates devices plus Group membership in one atomic registry replacement.
+6. Applying again is safe: the next plan reports imported devices as
+   `already_present`. Import never deletes or updates an existing device.
+
+Canonical flow:
+
+```sh
+oxvif discover enrich factory-scan --credential-profile factory-admin
+oxvif device import --from factory-scan --filter manufacturer=GeoVision \
+  --group taipei-f1 --credential-profile factory-admin --plan --output json
+oxvif device import --from factory-scan --filter manufacturer=GeoVision \
+  --group taipei-f1 --credential-profile factory-admin --apply \
+  --expect-plan sha256:...
+```
+
 ---
 
 ## 5. Operational command model
@@ -563,8 +601,10 @@ Verified after the final Stage 1 change:
   reserve `--group` and `--view` for commands with batch semantics.
 - Add named credential profiles that many devices can reference without Group
   inheritance or duplicated secrets.
-- Add discovery enrichment and bulk `device import --plan/--apply`, including
-  UUID deduplication, endpoint conflicts, ID/alias proposals, and redaction.
+- Discovery enrichment and bulk `device import --plan/--apply`, including UUID
+  deduplication, endpoint conflicts, ID/alias proposals, and redaction.
+  **Implemented 2026-08-27** with bounded enrichment, SHA-256 plan binding,
+  stale-plan rejection, and atomic registry apply.
 - Test at least a 205-device mock inventory, concurrent readers/writers, stable
   filter ordering, duplicate identities, and interrupted imports.
 
@@ -581,9 +621,9 @@ First slice delivered 2026-08-27:
   and live read operations. Removing a device cleans all Group memberships.
 - Dynamic View CRUD and evaluation with typed `field=value` filters over ID,
   name, target, UUID, manufacturer, model, firmware, serial, tag, and IP CIDR.
-- Named discovery snapshot scan/list/filter/remove. Native filters cover
+- Named discovery snapshot scan/list/filter/remove/enrich. Native filters cover
   endpoint/UUID, type, scope, XAddr, and IP CIDR; enriched identity fields are
-  represented but remain empty until the enrichment slice lands.
+  populated through a native credential profile with per-device warnings.
 - Reusable credential-profile set/list/show/delete and explicit per-device
   assignment. A profile secret lives once in the native credential store;
   deletion is refused while referenced and Groups never inherit credentials.
@@ -599,19 +639,24 @@ First slice delivered 2026-08-27:
 Verified after the first slice:
 
 - `cargo +1.88.0 check -p oxvif-cli`: clean at the workspace MSRV.
-- `cargo test -p oxvif-cli`: 40 passed across library, binary, and CLI process
+- `cargo test -p oxvif-cli`: 49 passed across library, binary, and CLI process
   suites.
-- `cargo test --workspace --all-features`: 985 passed, 3 ignored, 0 failed.
+- `cargo test --workspace --all-features`: 994 passed, 3 ignored, 0 failed.
 - `cargo clippy -p oxvif-cli --all-targets --no-deps -- -D warnings`: clean.
 - `cargo rustdoc -p oxvif-cli --lib -- -D warnings`: clean.
 - `cargo package -p oxvif-cli --allow-dirty --no-verify`: 17 files packaged.
   Final tarball verification requires publishing an oxvif release containing
   `probe_result`, `probe_result_on`, and `discovery_interfaces` before
   publishing `oxvif-cli`; workspace and MSRV builds use the local dependency.
+- Isolated real-LAN verification: 194 observations produced 192 creates and
+  two shared-target conflicts; apply rejected the conflicting plan with exit 4
+  and left the inventory empty. Mock and CLI process tests cover successful
+  apply, stale fingerprint rejection, idempotent re-plan, partial enrichment,
+  total enrichment failure, and a deterministic 205-record inventory.
 
-Remaining in Stage 2A: authenticated discovery enrichment, deterministic bulk
-import ID/alias proposals, import `--plan/--apply`, snapshot refresh lifecycle,
-and set resolution for future batch commands.
+Remaining in Stage 2A: explicit snapshot rescan/refresh lifecycle, user-provided
+ID/alias override maps for resolving exceptional conflicts, and set resolution
+for future batch commands.
 
 UX contract correction approved 2026-08-27:
 
@@ -632,6 +677,12 @@ selectors, registry-v3 external snapshots, ephemeral discovery, explicit
 interface selection, duplicate observation merge, typed View filters,
 `--match all|any`, `view evaluate --explain`, credential status, readable fleet
 output, and per-interface partial-failure warnings are implemented.
+
+Discovery-to-inventory closure status 2026-08-27: authenticated bounded
+`discover enrich`, deterministic per-record import proposals, filtered/existing/
+conflict classifications, SHA-256 plan fingerprints, stale-plan rejection,
+atomic device plus Group creation, credential-profile references, and
+idempotent re-planning are implemented.
 
 ### Stage 2B — read-only diagnostic MVP
 

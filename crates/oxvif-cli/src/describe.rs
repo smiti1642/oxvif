@@ -55,6 +55,7 @@ fn descriptors() -> Vec<CommandDescriptor> {
             "Remove a saved device and its stored credential.",
             vec![required("id", "string")],
         ),
+        import_descriptor(),
         credential_descriptor(
             "device.credential.set",
             "Store a device password in the native OS credential store.",
@@ -165,6 +166,7 @@ fn descriptors() -> Vec<CommandDescriptor> {
                 optional("interface", "interface name | IPv4[]"),
             ],
         ),
+        enrich_descriptor(),
         read_descriptor("discover.snapshots", "List named discovery snapshots."),
         read_descriptor(
             "discover.list",
@@ -213,6 +215,55 @@ fn describe_descriptor() -> CommandDescriptor {
         possible_errors: vec!["COMMAND_NOT_FOUND".to_owned()],
         examples: vec!["oxvif describe device.info --output json".to_owned()],
     }
+}
+
+fn import_descriptor() -> CommandDescriptor {
+    let mut command = descriptor(
+        "device.import",
+        "Plan or atomically apply devices from a discovery snapshot.",
+        RiskLevel::Write,
+        false,
+        false,
+        vec![
+            required("from", "discovery snapshot ID"),
+            optional("filter", "field=value[]"),
+            optional("group", "group ID"),
+            optional("credential-profile", "credential profile ID"),
+            optional("tag", "string[]"),
+            optional("plan", "boolean"),
+            optional("apply", "boolean"),
+            optional("expect-plan", "sha256 fingerprint"),
+        ],
+    );
+    command
+        .possible_errors
+        .push("IMPORT_PLAN_MISMATCH".to_owned());
+    command.examples = vec![
+        "oxvif device import --from scan --plan --output json".to_owned(),
+        "oxvif device import --from scan --apply --expect-plan sha256:... --output json".to_owned(),
+    ];
+    command
+}
+
+fn enrich_descriptor() -> CommandDescriptor {
+    let mut command = descriptor(
+        "discover.enrich",
+        "Authenticate snapshot records and cache device identity metadata.",
+        RiskLevel::Write,
+        true,
+        false,
+        vec![
+            required("snapshot", "string"),
+            required("credential-profile", "credential profile ID"),
+            optional("filter", "field=value[]"),
+            optional("jobs", "integer 1..64"),
+        ],
+    );
+    command.examples = vec![
+        "oxvif discover enrich scan --credential-profile factory-admin --jobs 16 --output json"
+            .to_owned(),
+    ];
+    command
 }
 
 fn read_descriptor(name: &str, summary: &str) -> CommandDescriptor {
@@ -334,7 +385,7 @@ mod tests {
             panic!("expected command list");
         };
 
-        assert_eq!(commands.len(), 36);
+        assert_eq!(commands.len(), 38);
         assert_eq!(commands[0].name, "agent.guide");
     }
 

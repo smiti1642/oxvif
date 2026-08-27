@@ -98,6 +98,41 @@ impl Application {
                 Outcome::device_selected("renamed", device, request.id)
             }
             CommandRequest::DeviceRemove(request) => self.remove_device(&request.id)?,
+            CommandRequest::DeviceImport(request) => {
+                if let Some(profile_id) = request.credential_profile.as_deref() {
+                    let profile = self.registry.get_stored_credential_profile(profile_id)?;
+                    if self.credentials.get(profile.credential_ref())?.is_none() {
+                        return Err(AppError::credential_unavailable(format!(
+                            "Credential profile `{profile_id}` has no native secret."
+                        )));
+                    }
+                }
+                match request.mode {
+                    crate::ImportMode::Plan => {
+                        let plan = self.registry.plan_discovery_import(&request)?;
+                        Outcome::data(CommandData::DeviceImport {
+                            applied: false,
+                            plan,
+                            devices: Vec::new(),
+                        })
+                    }
+                    crate::ImportMode::Apply => {
+                        let expected =
+                            request.expected_fingerprint.as_deref().ok_or_else(|| {
+                                AppError::invalid_argument(
+                                    "`device import --apply` requires an expected plan fingerprint.",
+                                )
+                            })?;
+                        let (plan, devices) =
+                            self.registry.apply_discovery_import(&request, expected)?;
+                        Outcome::data(CommandData::DeviceImport {
+                            applied: true,
+                            plan,
+                            devices,
+                        })
+                    }
+                }
+            }
             CommandRequest::DeviceCredentialSet(request) => {
                 let id = self.registry.resolve_device_selector(&request.id)?;
                 self.registry.get(&id)?;
@@ -326,6 +361,143 @@ impl Application {
                 outcome.warnings = warnings;
                 outcome
             }
+            CommandRequest::DiscoveryEnrich(request) => {
+                let profile = self
+                    .registry
+                    .get_stored_credential_profile(&request.credential_profile)?;
+                let password =
+                    self.credentials
+                        .get(profile.credential_ref())?
+                        .ok_or_else(|| {
+                            AppError::credential_unavailable(format!(
+                                "Credential profile `{}` has no native secret.",
+                                request.credential_profile
+                            ))
+                        })?;
+                let snapshot = self.registry.get_discovery_snapshot(&request.id, &[])?;
+                if snapshot.devices.is_empty() {
+                    return Err(AppError::discovery_failed(format!(
+                        "Discovery snapshot `{}` is empty.",
+                        request.id
+                    )));
+                }
+                let selected = self
+                    .registry
+                    .get_discovery_snapshot(&request.id, &request.filters)?
+                    .devices
+                    .into_iter()
+                    .map(|device| device.endpoint)
+                    .collect::<std::collections::BTreeSet<_>>();
+                if selected.is_empty() {
+                    return Err(AppError::invalid_argument(
+                        "No discovery records match the enrichment filters.",
+                    ));
+                }
+                let attempted = selected.len();
+                let mut devices = snapshot.devices;
+                let mut candidates = Vec::new();
+                let mut warnings = Vec::new();
+                for (index, device) in devices.iter().enumerate() {
+                    if !selected.contains(&device.endpoint) {
+                        continue;
+                    }
+                    let target = device
+                        .xaddrs
+                        .iter()
+                        .find_map(|target| normalize_target(target).ok());
+                    if let Some(target) = target {
+                        candidates.push((index, device.endpoint.clone(), target));
+                    } else {
+                        warnings.push(Warning {
+                            code: "DISCOVERY_ENRICH_NO_TARGET".to_owned(),
+                            message: format!(
+                                "Discovery endpoint `{}` has no valid ONVIF XAddr.",
+                                device.endpoint
+                            ),
+                        });
+                    }
+                }
+
+                let mut queue = candidates.into_iter();
+                let mut tasks = tokio::task::JoinSet::new();
+                for _ in 0..request.jobs {
+                    let Some((index, endpoint, target)) = queue.next() else {
+                        break;
+                    };
+                    let username = profile.username().to_owned();
+                    let password = password.clone();
+                    let options = options.clone();
+                    tasks.spawn(async move {
+                        let result = fetch_live_information(
+                            &target,
+                            Some(&username),
+                            Some(&password),
+                            &options,
+                        )
+                        .await;
+                        (index, endpoint, result)
+                    });
+                }
+
+                let mut enriched = 0usize;
+                while let Some(joined) = tasks.join_next().await {
+                    match joined {
+                        Ok((index, _, Ok(information))) => {
+                            let device = &mut devices[index];
+                            device.manufacturer = Some(information.manufacturer);
+                            device.model = Some(information.model);
+                            device.firmware_version = Some(information.firmware_version);
+                            device.serial_number = Some(information.serial_number);
+                            enriched += 1;
+                        }
+                        Ok((_, endpoint, Err(error))) => warnings.push(Warning {
+                            code: "DISCOVERY_ENRICH_FAILED".to_owned(),
+                            message: format!("Failed to enrich `{endpoint}`: {}", error.message),
+                        }),
+                        Err(error) => warnings.push(Warning {
+                            code: "DISCOVERY_ENRICH_FAILED".to_owned(),
+                            message: format!("An enrichment task failed: {error}"),
+                        }),
+                    }
+                    if let Some((index, endpoint, target)) = queue.next() {
+                        let username = profile.username().to_owned();
+                        let password = password.clone();
+                        let options = options.clone();
+                        tasks.spawn(async move {
+                            let result = fetch_live_information(
+                                &target,
+                                Some(&username),
+                                Some(&password),
+                                &options,
+                            )
+                            .await;
+                            (index, endpoint, result)
+                        });
+                    }
+                }
+                if enriched == 0 {
+                    return Err(AppError::discovery_failed(format!(
+                        "Enrichment failed for every record in snapshot `{}`.",
+                        request.id
+                    )));
+                }
+                let failed = attempted - enriched;
+                let snapshot = self
+                    .registry
+                    .replace_discovery_snapshot(&request.id, devices)?;
+                let mut outcome = Outcome::data(CommandData::DiscoveryEnrichment {
+                    snapshot: crate::DiscoverySnapshotSummary {
+                        id: snapshot.id,
+                        saved_at_unix_ms: snapshot.saved_at_unix_ms,
+                        device_count: snapshot.devices.len(),
+                    },
+                    attempted,
+                    enriched,
+                    failed,
+                });
+                outcome.warnings = warnings;
+                outcome
+            }
             CommandRequest::DiscoverySnapshotList => {
                 Outcome::data(CommandData::DiscoverySnapshotList {
                     snapshots: self.registry.list_discovery_snapshots()?,
@@ -537,28 +709,43 @@ impl Application {
         resolved: &ResolvedTarget,
         options: &ExecutionOptions,
     ) -> Result<LiveDeviceInfo, AppError> {
-        let attempts = options.retries.saturating_add(1);
-        let mut last_error = None;
-        for _ in 0..attempts {
-            let mut client = OnvifClient::new(&resolved.target);
-            if let (Some(username), Some(password)) = (&resolved.username, &resolved.password) {
-                client = client.with_credentials(username, password);
-            }
-            match timeout(options.timeout, client.get_device_info()).await {
-                Ok(Ok(information)) => return Ok(live_information(information)),
-                Ok(Err(error)) => last_error = Some(error.to_string()),
-                Err(_) => {
-                    last_error = Some(format!(
-                        "Request exceeded the {} ms timeout.",
-                        options.timeout.as_millis()
-                    ));
-                }
+        fetch_live_information(
+            &resolved.target,
+            resolved.username.as_deref(),
+            resolved.password.as_deref(),
+            options,
+        )
+        .await
+    }
+}
+
+async fn fetch_live_information(
+    target: &str,
+    username: Option<&str>,
+    password: Option<&str>,
+    options: &ExecutionOptions,
+) -> Result<LiveDeviceInfo, AppError> {
+    let attempts = options.retries.saturating_add(1);
+    let mut last_error = None;
+    for _ in 0..attempts {
+        let mut client = OnvifClient::new(target);
+        if let (Some(username), Some(password)) = (username, password) {
+            client = client.with_credentials(username, password);
+        }
+        match timeout(options.timeout, client.get_device_info()).await {
+            Ok(Ok(information)) => return Ok(live_information(information)),
+            Ok(Err(error)) => last_error = Some(error.to_string()),
+            Err(_) => {
+                last_error = Some(format!(
+                    "Request exceeded the {} ms timeout.",
+                    options.timeout.as_millis()
+                ));
             }
         }
-        Err(AppError::device_connection_failed(
-            last_error.unwrap_or_else(|| "Device request failed without an error.".to_owned()),
-        ))
     }
+    Err(AppError::device_connection_failed(
+        last_error.unwrap_or_else(|| "Device request failed without an error.".to_owned()),
+    ))
 }
 
 fn resolve_discovery_interfaces(selectors: &[String]) -> Result<Vec<(Ipv4Addr, String)>, AppError> {
@@ -885,6 +1072,142 @@ mod tests {
         let registry_contents = std::fs::read_to_string(directory.path().join("devices.toml"))
             .expect("registry should exist");
         assert!(!registry_contents.contains("shared-secret"));
+    }
+
+    #[tokio::test]
+    async fn discovery_enrichment_uses_profile_and_atomically_updates_snapshot() {
+        let server = oxvif::mock::MockServer::builder()
+            .enforce_auth(true)
+            .start()
+            .await
+            .expect("mock server should start");
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        let credentials = Arc::new(MemoryCredentialStore::default());
+        credentials
+            .set("profile/factory-admin", "admin")
+            .expect("secret should set");
+        registry
+            .set_credential_profile("factory-admin", "admin", "profile/factory-admin")
+            .expect("profile should set");
+        registry
+            .save_discovery_snapshot(
+                "scan",
+                vec![
+                    crate::DiscoveryRecord {
+                        endpoint: "uuid:mock-camera".to_owned(),
+                        types: Vec::new(),
+                        scopes: Vec::new(),
+                        xaddrs: vec![server.device_url().to_owned()],
+                        manufacturer: None,
+                        model: None,
+                        firmware_version: None,
+                        serial_number: None,
+                    },
+                    crate::DiscoveryRecord {
+                        endpoint: "uuid:no-target".to_owned(),
+                        types: Vec::new(),
+                        scopes: Vec::new(),
+                        xaddrs: Vec::new(),
+                        manufacturer: None,
+                        model: None,
+                        firmware_version: None,
+                        serial_number: None,
+                    },
+                ],
+            )
+            .expect("snapshot should save");
+        let application = Application::with_stores(registry.clone(), credentials);
+
+        let result = application
+            .execute(
+                CommandRequest::DiscoveryEnrich(crate::DiscoveryEnrichRequest {
+                    id: "scan".to_owned(),
+                    credential_profile: "factory-admin".to_owned(),
+                    filters: Vec::new(),
+                    jobs: 2,
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect("enrichment should succeed");
+        let CommandData::DiscoveryEnrichment {
+            enriched, failed, ..
+        } = result.data
+        else {
+            panic!("expected enrichment result");
+        };
+        assert_eq!(enriched, 1);
+        assert_eq!(failed, 1);
+        assert_eq!(result.warnings.len(), 1);
+        let snapshot = registry
+            .get_discovery_snapshot("scan", &[])
+            .expect("snapshot should load");
+        assert!(
+            snapshot
+                .devices
+                .iter()
+                .find(|device| device.endpoint == "uuid:mock-camera")
+                .expect("mock endpoint should remain")
+                .manufacturer
+                .is_some()
+        );
+        let persisted =
+            std::fs::read_to_string(directory.path().join("snapshots").join("scan.json"))
+                .expect("snapshot file should read");
+        assert!(!persisted.contains("admin"));
+    }
+
+    #[tokio::test]
+    async fn total_discovery_enrichment_failure_preserves_snapshot() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        let credentials = Arc::new(MemoryCredentialStore::default());
+        credentials
+            .set("profile/factory-admin", "secret")
+            .expect("secret should set");
+        registry
+            .set_credential_profile("factory-admin", "admin", "profile/factory-admin")
+            .expect("profile should set");
+        registry
+            .save_discovery_snapshot(
+                "scan",
+                vec![crate::DiscoveryRecord {
+                    endpoint: "uuid:no-target".to_owned(),
+                    types: Vec::new(),
+                    scopes: Vec::new(),
+                    xaddrs: Vec::new(),
+                    manufacturer: None,
+                    model: None,
+                    firmware_version: None,
+                    serial_number: None,
+                }],
+            )
+            .expect("snapshot should save");
+        let before = registry
+            .get_discovery_snapshot("scan", &[])
+            .expect("snapshot should load");
+        let application = Application::with_stores(registry.clone(), credentials);
+        let error = application
+            .execute(
+                CommandRequest::DiscoveryEnrich(crate::DiscoveryEnrichRequest {
+                    id: "scan".to_owned(),
+                    credential_profile: "factory-admin".to_owned(),
+                    filters: Vec::new(),
+                    jobs: 1,
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect_err("total failure should be typed");
+        assert_eq!(error.code, crate::ErrorCode::DiscoveryFailed);
+        assert_eq!(
+            registry
+                .get_discovery_snapshot("scan", &[])
+                .expect("snapshot should remain")
+                .devices,
+            before.devices
+        );
     }
 
     #[test]

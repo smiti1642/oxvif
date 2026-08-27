@@ -23,6 +23,7 @@ ipnet = "2.11"
 oxvif = { version = "0.15.0", path = "../.." }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 toml = "1.0"
 url = "2.5"
@@ -31,4 +32,5 @@ url = "2.5"
 keyring = { version = "3.6.3", default-features = false, features = ["windows-native"] }
 
 [dev-dependencies]
+oxvif = { path = "../..", features = ["mock-server"] }
 tempfile = "3"

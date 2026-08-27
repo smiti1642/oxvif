@@ -1,6 +1,6 @@
 use crate::{AgentGuide, SCHEMA_VERSION};
 
-pub const GUIDE_VERSION: &str = "1";
+pub const GUIDE_VERSION: &str = "2";
 
 pub fn guide() -> AgentGuide {
     AgentGuide {
@@ -15,12 +15,14 @@ pub fn guide() -> AgentGuide {
             "Check ok, schema_version, warnings, error.code, and retryable on every result.",
             "Do not invoke write or dangerous operations without explicit authorization.",
             "Use plan/apply when an operation exposes that workflow.",
+            "For device import, apply only the fingerprint returned by a freshly reviewed plan.",
         ],
         recommended_workflow: vec![
             "Run `oxvif agent guide --output json` and verify its schema version.",
             "Run `oxvif describe --output json` to discover implemented commands.",
             "Select the target explicitly and execute one typed command.",
             "Persist canonical device IDs returned in result metadata.",
+            "Enrich and filter a discovery snapshot, review its import plan, then apply that exact fingerprint.",
             "Retry only when the structured error says retryable=true.",
         ],
         security_requirements: vec![

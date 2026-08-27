@@ -294,6 +294,55 @@ pub struct DiscoverySnapshotView {
     pub devices: Vec<DiscoveryRecord>,
 }
 
+/// Outcome proposed for one record in a discovery import plan.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportDisposition {
+    Create,
+    AlreadyPresent,
+    FilteredOut,
+    Conflict,
+}
+
+/// Deterministic import proposal for one discovery record.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DiscoveryImportProposal {
+    pub endpoint: String,
+    pub source_fingerprint: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub existing_device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_alias: Option<String>,
+    pub disposition: ImportDisposition,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub reasons: Vec<String>,
+}
+
+/// Read-only, fingerprinted plan returned before a bulk import is applied.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DiscoveryImportPlan {
+    pub fingerprint: String,
+    pub snapshot_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_profile: Option<String>,
+    pub tags: Vec<String>,
+    pub filters: Vec<DiscoveryFilter>,
+    pub total_records: usize,
+    pub create_count: usize,
+    pub already_present_count: usize,
+    pub filtered_out_count: usize,
+    pub conflict_count: usize,
+    pub proposals: Vec<DiscoveryImportProposal>,
+}
+
 /// Safe view of a reusable credential profile. Secret material is never present.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CredentialProfileView {
@@ -369,9 +418,11 @@ fn collection_compare(values: &[String], filter: &DeviceFilter) -> bool {
 
 pub(crate) fn discovery_matches(device: &DiscoveryRecord, filters: &[DiscoveryFilter]) -> bool {
     filters.iter().all(|filter| match filter.field {
-        DiscoveryFilterField::Endpoint | DiscoveryFilterField::DeviceUuid => {
-            equal(&device.endpoint, &filter.value)
-        }
+        DiscoveryFilterField::Endpoint => equal(&device.endpoint, &filter.value),
+        DiscoveryFilterField::DeviceUuid => equal(
+            discovery_uuid_value(&device.endpoint),
+            discovery_uuid_value(&filter.value),
+        ),
         DiscoveryFilterField::Type => device.types.iter().any(|value| equal(value, &filter.value)),
         DiscoveryFilterField::Scope => device
             .scopes
@@ -414,6 +465,23 @@ fn equal(left: &str, right: &str) -> bool {
 
 fn optional_equal(left: &Option<String>, right: &str) -> bool {
     left.as_deref().is_some_and(|left| equal(left, right))
+}
+
+fn discovery_uuid_value(value: &str) -> &str {
+    let value = value.trim();
+    if value
+        .get(..9)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("urn:uuid:"))
+    {
+        value.get(9..).unwrap_or(value)
+    } else if value
+        .get(..5)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("uuid:"))
+    {
+        value.get(5..).unwrap_or(value)
+    } else {
+        value
+    }
 }
 
 fn target_in_cidr(target: &str, cidr: &str) -> bool {
@@ -463,6 +531,28 @@ mod tests {
         assert!(!target_in_cidr(
             "http://192.168.30.15/onvif/device_service",
             "192.168.20.0/24"
+        ));
+    }
+
+    #[test]
+    fn discovery_uuid_filter_accepts_bare_or_prefixed_uuid() {
+        let device = DiscoveryRecord {
+            endpoint: "urn:uuid:ABC-123".to_owned(),
+            types: Vec::new(),
+            scopes: Vec::new(),
+            xaddrs: Vec::new(),
+            manufacturer: None,
+            model: None,
+            firmware_version: None,
+            serial_number: None,
+        };
+        assert!(discovery_matches(
+            &device,
+            &["uuid=abc-123".parse().expect("filter should parse")]
+        ));
+        assert!(discovery_matches(
+            &device,
+            &["uuid=uuid:ABC-123".parse().expect("filter should parse")]
         ));
     }
 

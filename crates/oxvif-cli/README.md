@@ -72,14 +72,37 @@ oxvif --timeout 3s discover scan
 oxvif --timeout 3s discover scan --interface Ethernet --save factory-scan
 oxvif discover snapshots
 oxvif discover list factory-scan --filter ip-cidr=192.168.20.0/24
+oxvif discover enrich factory-scan --credential-profile factory-admin \
+  --filter ip-cidr=192.168.20.0/24 --jobs 16
 oxvif discover remove factory-scan
 ```
 
 `--interface` may be repeated and accepts a local interface name or IPv4
 address. Scans are ephemeral unless `--save` is supplied. Discovery filters
 include `endpoint`, `uuid`, `type`, `scope`, `xaddr`, `ip-cidr`, and enriched
-identity fields. Enrichment and explicit bulk import plan/apply are the next
-Stage 2A slice; `discover scan` never adds devices.
+identity fields. Enrichment uses bounded concurrency and writes only identity
+metadata back to the snapshot; `discover scan` and `discover enrich` never add
+registered devices.
+
+Bulk import is a fingerprinted plan/apply workflow. A plan is read-only; apply
+requires the exact fingerprint from a freshly reviewed plan and atomically
+creates devices plus optional Group membership:
+
+```sh
+oxvif device import --from factory-scan \
+  --filter manufacturer=GeoVision \
+  --group taipei-f1 \
+  --credential-profile factory-admin \
+  --tag discovered \
+  --plan --output json
+
+oxvif device import --from factory-scan \
+  --filter manufacturer=GeoVision \
+  --group taipei-f1 \
+  --credential-profile factory-admin \
+  --tag discovered \
+  --apply --expect-plan sha256:...
+```
 
 ## Credentials
 

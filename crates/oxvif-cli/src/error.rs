@@ -12,6 +12,7 @@ pub enum ErrorCode {
     ResourceNotFound,
     ResourceAlreadyExists,
     ResourceInUse,
+    ImportPlanMismatch,
     MissingTarget,
     ConfigUnavailable,
     RegistryIo,
@@ -29,7 +30,10 @@ impl ErrorCode {
         match self {
             Self::InvalidArgument => 2,
             Self::CommandNotFound | Self::DeviceNotFound | Self::ResourceNotFound => 3,
-            Self::DeviceAlreadyExists | Self::ResourceAlreadyExists | Self::ResourceInUse => 4,
+            Self::DeviceAlreadyExists
+            | Self::ResourceAlreadyExists
+            | Self::ResourceInUse
+            | Self::ImportPlanMismatch => 4,
             Self::MissingTarget => 5,
             Self::ConfigUnavailable
             | Self::RegistryIo
@@ -50,6 +54,7 @@ impl ErrorCode {
             Self::ResourceNotFound => "RESOURCE_NOT_FOUND",
             Self::ResourceAlreadyExists => "RESOURCE_ALREADY_EXISTS",
             Self::ResourceInUse => "RESOURCE_IN_USE",
+            Self::ImportPlanMismatch => "IMPORT_PLAN_MISMATCH",
             Self::MissingTarget => "MISSING_TARGET",
             Self::ConfigUnavailable => "CONFIG_UNAVAILABLE",
             Self::RegistryIo => "REGISTRY_IO",
@@ -140,6 +145,20 @@ impl AppError {
             retryable: false,
             suggested_action: Some(
                 "Remove the references before deleting this resource.".to_owned(),
+            ),
+        }
+    }
+
+    pub fn import_plan_mismatch(expected: &str, actual: &str) -> Self {
+        Self {
+            code: ErrorCode::ImportPlanMismatch,
+            message: format!(
+                "Import plan fingerprint mismatch: expected `{expected}`, current plan is `{actual}`."
+            ),
+            retryable: false,
+            suggested_action: Some(
+                "Run `device import --plan` again, review it, then apply its fingerprint."
+                    .to_owned(),
             ),
         }
     }

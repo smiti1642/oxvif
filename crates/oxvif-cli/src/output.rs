@@ -138,6 +138,38 @@ fn render_human(success: &CommandSuccess) -> String {
             format!("Device {action}.\n{}", render_device(device))
         }
         CommandData::DeviceRemoved { id } => format!("Device `{id}` removed."),
+        CommandData::DeviceImport {
+            applied,
+            plan,
+            devices,
+        } => {
+            let mut output = format!(
+                "Import {}.\nSnapshot: {}\nFingerprint: {}\nCreate: {} | Existing: {} | Filtered: {} | Conflicts: {}",
+                if *applied { "applied" } else { "plan" },
+                plan.snapshot_id,
+                plan.fingerprint,
+                plan.create_count,
+                plan.already_present_count,
+                plan.filtered_out_count,
+                plan.conflict_count
+            );
+            for proposal in &plan.proposals {
+                let _ = write!(
+                    output,
+                    "\n  {:?} | {} | {}",
+                    proposal.disposition,
+                    proposal.device_id.as_deref().unwrap_or("-"),
+                    proposal.target.as_deref().unwrap_or("-")
+                );
+                if !proposal.reasons.is_empty() {
+                    let _ = write!(output, " | {}", proposal.reasons.join("; "));
+                }
+            }
+            if *applied {
+                let _ = write!(output, "\nImported devices: {}", devices.len());
+            }
+            output
+        }
         CommandData::CurrentDevice { device } => match device {
             Some(device) => format!("Current device:\n{}", render_device(device)),
             None => String::from("No current device selected."),
@@ -311,6 +343,15 @@ fn render_human(success: &CommandSuccess) -> String {
             }
             output
         }
+        CommandData::DiscoveryEnrichment {
+            snapshot,
+            attempted,
+            enriched,
+            failed,
+        } => format!(
+            "Discovery snapshot enriched.\nID: {}\nDevices: {}\nAttempted: {} | Enriched: {} | Failed: {}",
+            snapshot.id, snapshot.device_count, attempted, enriched, failed
+        ),
         CommandData::ResourceRemoved { resource, id } => {
             format!("{resource} `{id}` removed.")
         }

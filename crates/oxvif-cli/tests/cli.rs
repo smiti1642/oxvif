@@ -4,6 +4,7 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+use oxvif_cli::{DiscoveryRecord, RegistryStore};
 use serde_json::Value;
 
 fn run(arguments: &[&str]) -> Output {
@@ -71,6 +72,16 @@ fn discovery_and_view_help_expose_fleet_controls() {
     let view = run(&["view", "evaluate", "--help"]);
     assert!(view.status.success(), "{}", stderr(&view));
     assert!(stdout(&view).contains("--explain"));
+
+    let import = run(&["device", "import", "--help"]);
+    assert!(import.status.success(), "{}", stderr(&import));
+    let help = stdout(&import);
+    assert!(help.contains("--expect-plan"));
+    assert!(help.contains("--apply"));
+
+    let enrich = run(&["discover", "enrich", "--help"]);
+    assert!(enrich.status.success(), "{}", stderr(&enrich));
+    assert!(stdout(&enrich).contains("--credential-profile"));
 }
 
 #[test]
@@ -148,7 +159,7 @@ fn agent_guide_and_prompt_are_embedded_and_versioned() {
     let document: Value = serde_json::from_slice(&guide.stdout).expect("guide should be JSON");
     assert_eq!(document["schema_version"], "2");
     assert_eq!(document["data"]["kind"], "agent_guide");
-    assert_eq!(document["data"]["guide"]["guide_version"], "1");
+    assert_eq!(document["data"]["guide"]["guide_version"], "2");
     assert!(
         document["data"]["guide"]["security_requirements"]
             .as_array()
@@ -353,4 +364,107 @@ fn group_alias_and_dynamic_view_work_through_cli() {
         group["data"]["group"]["members"].as_array().unwrap().len(),
         0
     );
+}
+
+#[test]
+fn device_import_cli_requires_and_applies_reviewed_fingerprint() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let store = RegistryStore::at(directory.path());
+    store
+        .save_discovery_snapshot(
+            "scan",
+            vec![DiscoveryRecord {
+                endpoint: "uuid:cli-camera".to_owned(),
+                types: Vec::new(),
+                scopes: vec!["onvif://www.onvif.org/name/CLI%20Camera".to_owned()],
+                xaddrs: vec!["http://192.0.2.120/onvif/device_service".to_owned()],
+                manufacturer: None,
+                model: None,
+                firmware_version: None,
+                serial_number: None,
+            }],
+        )
+        .expect("snapshot should save");
+
+    let plan = run_isolated(
+        &[
+            "device",
+            "import",
+            "--from",
+            "scan",
+            "--filter",
+            "endpoint=uuid:cli-camera",
+            "--plan",
+            "--output=json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert!(plan.status.success(), "{}", stderr(&plan));
+    let document: Value = serde_json::from_slice(&plan.stdout).expect("plan should be JSON");
+    assert_eq!(document["data"]["kind"], "device_import");
+    assert_eq!(document["data"]["plan"]["create_count"], 1);
+    assert!(store.list().expect("registry should load").0.is_empty());
+    let fingerprint = document["data"]["plan"]["fingerprint"]
+        .as_str()
+        .expect("fingerprint should exist")
+        .to_owned();
+
+    let stale = run_isolated(
+        &[
+            "device",
+            "import",
+            "--from",
+            "scan",
+            "--filter",
+            "endpoint=uuid:cli-camera",
+            "--apply",
+            "--expect-plan",
+            "sha256:stale",
+            "--output=json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert_eq!(stale.status.code(), Some(4));
+    let stale: Value = serde_json::from_slice(&stale.stdout).expect("error should be JSON");
+    assert_eq!(stale["error"]["code"], "IMPORT_PLAN_MISMATCH");
+    assert!(store.list().expect("registry should load").0.is_empty());
+
+    let apply = run_isolated(
+        &[
+            "device",
+            "import",
+            "--from",
+            "scan",
+            "--filter",
+            "endpoint=uuid:cli-camera",
+            "--apply",
+            "--expect-plan",
+            &fingerprint,
+            "--output=json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert!(apply.status.success(), "{}", stderr(&apply));
+    let document: Value = serde_json::from_slice(&apply.stdout).expect("apply should be JSON");
+    assert_eq!(document["data"]["applied"], true);
+    assert_eq!(document["data"]["devices"][0]["id"], "cam-cli-camera");
+    assert_eq!(store.list().expect("registry should load").0.len(), 1);
+
+    let missing_fingerprint = run_isolated(
+        &[
+            "device",
+            "import",
+            "--from",
+            "scan",
+            "--filter",
+            "endpoint=uuid:cli-camera",
+            "--apply",
+            "--output=json",
+        ],
+        directory.path(),
+    );
+    assert_eq!(missing_fingerprint.status.code(), Some(2));
 }

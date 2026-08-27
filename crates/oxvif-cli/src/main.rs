@@ -10,11 +10,12 @@ use clap::{ArgAction, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use oxvif_cli::{
     AppError, Application, CommandRequest, CredentialProfileSetRequest, DescribeRequest,
     DeviceAddRequest, DeviceConnectRequest, DeviceCredentialProfileRequest,
-    DeviceCredentialSetRequest, DeviceFilter, DeviceIdRequest, DeviceRenameRequest, DeviceUpdate,
-    DeviceUpdateRequest, DiscoverScanRequest, DiscoveryFilter, DiscoverySnapshotShowRequest,
-    ExecutionOptions, GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest,
-    MatchMode, NewDevice, NewGroup, NewSavedView, OutputFormat, ResourceIdRequest, ResultMeta,
-    SecretString, TargetSelector, ViewCreateRequest, render_error, render_success,
+    DeviceCredentialSetRequest, DeviceFilter, DeviceIdRequest, DeviceImportRequest,
+    DeviceRenameRequest, DeviceUpdate, DeviceUpdateRequest, DiscoverScanRequest,
+    DiscoveryEnrichRequest, DiscoveryFilter, DiscoverySnapshotShowRequest, ExecutionOptions,
+    GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode, MatchMode,
+    NewDevice, NewGroup, NewSavedView, OutputFormat, ResourceIdRequest, ResultMeta, SecretString,
+    TargetSelector, ViewCreateRequest, render_error, render_success,
 };
 use tokio::time::Instant;
 
@@ -151,6 +152,25 @@ enum DeviceCommands {
     },
     /// Remove a saved device and its stored credential.
     Remove { id: String },
+    /// Plan or atomically apply devices from a discovery snapshot.
+    Import {
+        #[arg(long = "from")]
+        snapshot: String,
+        #[arg(long = "filter")]
+        filters: Vec<DiscoveryFilter>,
+        #[arg(long)]
+        group: Option<String>,
+        #[arg(long)]
+        credential_profile: Option<String>,
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+        #[arg(long, conflicts_with = "apply", required_unless_present = "apply")]
+        plan: bool,
+        #[arg(long, conflicts_with = "plan", required_unless_present = "plan")]
+        apply: bool,
+        #[arg(long, requires = "apply")]
+        expect_plan: Option<String>,
+    },
     /// Store or delete a device password in the OS credential store.
     Credential {
         #[command(subcommand)]
@@ -272,6 +292,16 @@ enum DiscoverCommands {
         /// Limit multicast discovery to an interface name or IPv4 address.
         #[arg(long = "interface")]
         interfaces: Vec<String>,
+    },
+    /// Authenticate discovered devices and cache their identity metadata.
+    Enrich {
+        snapshot: String,
+        #[arg(long)]
+        credential_profile: String,
+        #[arg(long = "filter")]
+        filters: Vec<DiscoveryFilter>,
+        #[arg(long, default_value_t = 16)]
+        jobs: usize,
     },
     /// List records from one snapshot, optionally filtering them.
     List {
@@ -494,6 +524,24 @@ fn build_request(
                     interfaces,
                 }))
             }
+            DiscoverCommands::Enrich {
+                snapshot,
+                credential_profile,
+                filters,
+                jobs,
+            } => {
+                if !(1..=64).contains(&jobs) {
+                    return Err(AppError::invalid_argument(
+                        "--jobs must be between 1 and 64.",
+                    ));
+                }
+                Ok(CommandRequest::DiscoveryEnrich(DiscoveryEnrichRequest {
+                    id: snapshot,
+                    credential_profile,
+                    filters,
+                    jobs,
+                }))
+            }
             DiscoverCommands::List { snapshot, filters } => Ok(
                 CommandRequest::DiscoverySnapshotShow(DiscoverySnapshotShowRequest {
                     id: snapshot,
@@ -549,6 +597,35 @@ fn build_request(
             }
             DeviceCommands::Remove { id } => {
                 Ok(CommandRequest::DeviceRemove(DeviceIdRequest { id }))
+            }
+            DeviceCommands::Import {
+                snapshot,
+                filters,
+                group,
+                credential_profile,
+                tags,
+                plan: _,
+                apply,
+                expect_plan,
+            } => {
+                if apply && expect_plan.is_none() {
+                    return Err(AppError::invalid_argument(
+                        "`device import --apply` requires --expect-plan from a fresh plan.",
+                    ));
+                }
+                Ok(CommandRequest::DeviceImport(DeviceImportRequest {
+                    snapshot_id: snapshot,
+                    filters,
+                    group_id: group,
+                    credential_profile,
+                    tags,
+                    mode: if apply {
+                        ImportMode::Apply
+                    } else {
+                        ImportMode::Plan
+                    },
+                    expected_fingerprint: expect_plan,
+                }))
             }
             DeviceCommands::Credential { command } => match command {
                 CredentialCommands::Set {
