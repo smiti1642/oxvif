@@ -33,8 +33,9 @@ oxvif use front-door
 oxvif current
 ```
 
-The schema-v2 registry automatically reads schema v1, is process-locked, and is
-atomically replaced. Its display
+The schema-v3 registry automatically reads schema v1/v2, is process-locked, and
+is atomically replaced. Discovery records live in separate atomic files under
+`snapshots/`, so ordinary inventory commands do not parse every scan. Its display
 name, target, tags, and cached device metadata may change; the device ID does
 not. Set `OXVIF_CONFIG_DIR` to isolate the registry for tests or containers.
 

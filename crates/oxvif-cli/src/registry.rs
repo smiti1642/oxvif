@@ -21,9 +21,11 @@ use crate::{
     inventory::{device_matches, discovery_matches},
 };
 
-pub const REGISTRY_VERSION: u32 = 2;
+pub const REGISTRY_VERSION: u32 = 3;
 const REGISTRY_FILE_NAME: &str = "devices.toml";
 const LOCK_FILE_NAME: &str = "devices.lock";
+const SNAPSHOTS_DIR_NAME: &str = "snapshots";
+const SNAPSHOT_FILE_VERSION: u32 = 1;
 
 /// Safe, serializable view of one saved ONVIF device.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -80,6 +82,7 @@ pub struct RegistryStore {
     config_dir: PathBuf,
     registry_path: PathBuf,
     lock_path: PathBuf,
+    snapshots_dir: PathBuf,
 }
 
 impl RegistryStore {
@@ -107,6 +110,7 @@ impl RegistryStore {
         Self {
             registry_path: config_dir.join(REGISTRY_FILE_NAME),
             lock_path: config_dir.join(LOCK_FILE_NAME),
+            snapshots_dir: config_dir.join(SNAPSHOTS_DIR_NAME),
             config_dir,
         }
     }
@@ -620,7 +624,9 @@ impl RegistryStore {
                 devices,
             };
             let view = snapshot.view(id, &[]);
-            registry.discovery_snapshots.insert(id.to_owned(), snapshot);
+            registry
+                .discovery_snapshots
+                .insert(id.to_owned(), SnapshotEntry::Embedded(snapshot));
             Ok(view)
         })
     }
@@ -640,11 +646,25 @@ impl RegistryStore {
         filters: &[DiscoveryFilter],
     ) -> Result<DiscoverySnapshotView, AppError> {
         validate_resource_id("discovery snapshot", id)?;
-        self.load_unlocked()?
+        let registry = self.load_unlocked()?;
+        let snapshot = registry
             .discovery_snapshots
             .get(id)
-            .map(|snapshot| snapshot.view(id, filters))
-            .ok_or_else(|| AppError::resource_not_found("discovery snapshot", id))
+            .ok_or_else(|| AppError::resource_not_found("discovery snapshot", id))?;
+        match snapshot {
+            SnapshotEntry::Embedded(snapshot) => Ok(snapshot.view(id, filters)),
+            SnapshotEntry::External(summary) => {
+                let snapshot = self.read_snapshot_file(id)?;
+                if snapshot.saved_at_unix_ms != summary.saved_at_unix_ms
+                    || snapshot.devices.len() != summary.device_count
+                {
+                    return Err(AppError::registry_corrupt(format!(
+                        "Discovery snapshot `{id}` does not match its registry index."
+                    )));
+                }
+                Ok(snapshot.view(id, filters))
+            }
+        }
     }
 
     pub fn remove_discovery_snapshot(
@@ -652,13 +672,25 @@ impl RegistryStore {
         id: &str,
     ) -> Result<DiscoverySnapshotSummary, AppError> {
         validate_resource_id("discovery snapshot", id)?;
-        self.mutate(|registry| {
+        let removed = self.mutate(|registry| {
             registry
                 .discovery_snapshots
                 .remove(id)
                 .map(|snapshot| snapshot.summary(id))
                 .ok_or_else(|| AppError::resource_not_found("discovery snapshot", id))
-        })
+        })?;
+        let path = self.snapshot_path(id);
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(AppError::registry_io(format!(
+                    "Removed snapshot `{id}` from the registry but failed to delete {}: {error}",
+                    path.display()
+                )));
+            }
+        }
+        Ok(removed)
     }
 
     pub fn update_metadata(
@@ -677,6 +709,89 @@ impl RegistryStore {
             device.firmware_version = Some(metadata.firmware_version);
             device.serial_number = Some(metadata.serial_number);
             Ok(device.view(id))
+        })
+    }
+
+    fn snapshot_path(&self, id: &str) -> PathBuf {
+        self.snapshots_dir.join(format!("{id}.json"))
+    }
+
+    fn externalize_snapshots(&self, registry: &mut RegistryFile) -> Result<(), AppError> {
+        let embedded: Vec<(String, StoredDiscoverySnapshot)> = registry
+            .discovery_snapshots
+            .iter()
+            .filter_map(|(id, entry)| match entry {
+                SnapshotEntry::Embedded(snapshot) => Some((id.clone(), snapshot.clone())),
+                SnapshotEntry::External(_) => None,
+            })
+            .collect();
+        if embedded.is_empty() {
+            return Ok(());
+        }
+        fs::create_dir_all(&self.snapshots_dir).map_err(|error| {
+            AppError::registry_io(format!(
+                "Failed to create {}: {error}",
+                self.snapshots_dir.display()
+            ))
+        })?;
+        for (id, snapshot) in embedded {
+            self.write_snapshot_file(&id, &snapshot)?;
+            registry.discovery_snapshots.insert(
+                id,
+                SnapshotEntry::External(SnapshotIndexEntry {
+                    saved_at_unix_ms: snapshot.saved_at_unix_ms,
+                    device_count: snapshot.devices.len(),
+                }),
+            );
+        }
+        Ok(())
+    }
+
+    fn write_snapshot_file(
+        &self,
+        id: &str,
+        snapshot: &StoredDiscoverySnapshot,
+    ) -> Result<(), AppError> {
+        let document = SnapshotFile {
+            version: SNAPSHOT_FILE_VERSION,
+            id: id.to_owned(),
+            saved_at_unix_ms: snapshot.saved_at_unix_ms,
+            devices: snapshot.devices.clone(),
+        };
+        let serialized = serde_json::to_vec_pretty(&document)
+            .map_err(|error| AppError::serialization_failed(error.to_string()))?;
+        let path = self.snapshot_path(id);
+        let mut destination = AtomicWriteFile::options().open(&path).map_err(|error| {
+            AppError::registry_io(format!("Failed to prepare {}: {error}", path.display()))
+        })?;
+        destination.write_all(&serialized).map_err(|error| {
+            AppError::registry_io(format!("Failed to write {}: {error}", path.display()))
+        })?;
+        destination.commit().map_err(|error| {
+            AppError::registry_io(format!(
+                "Failed to atomically replace {}: {error}",
+                path.display()
+            ))
+        })
+    }
+
+    fn read_snapshot_file(&self, id: &str) -> Result<StoredDiscoverySnapshot, AppError> {
+        let path = self.snapshot_path(id);
+        let contents = fs::read(&path).map_err(|error| {
+            AppError::registry_io(format!("Failed to read {}: {error}", path.display()))
+        })?;
+        let document: SnapshotFile = serde_json::from_slice(&contents).map_err(|error| {
+            AppError::registry_corrupt(format!("Failed to parse {}: {error}", path.display()))
+        })?;
+        if document.version != SNAPSHOT_FILE_VERSION || document.id != id {
+            return Err(AppError::registry_corrupt(format!(
+                "Discovery snapshot file {} has incompatible identity or version.",
+                path.display()
+            )));
+        }
+        Ok(StoredDiscoverySnapshot {
+            saved_at_unix_ms: document.saved_at_unix_ms,
+            devices: document.devices,
         })
     }
 
@@ -729,7 +844,9 @@ impl RegistryStore {
         })?;
 
         let mut registry = self.load_unlocked()?;
+        self.externalize_snapshots(&mut registry)?;
         let result = operation(&mut registry)?;
+        self.externalize_snapshots(&mut registry)?;
         let serialized = toml::to_string_pretty(&registry).map_err(|error| {
             AppError::registry_io(format!("Failed to serialize the device registry: {error}"))
         })?;
@@ -777,7 +894,7 @@ struct RegistryFile {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     views: BTreeMap<String, StoredView>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    discovery_snapshots: BTreeMap<String, StoredDiscoverySnapshot>,
+    discovery_snapshots: BTreeMap<String, SnapshotEntry>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     credential_profiles: BTreeMap<String, StoredCredentialProfile>,
 }
@@ -901,6 +1018,40 @@ struct StoredDiscoverySnapshot {
     devices: Vec<DiscoveryRecord>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum SnapshotEntry {
+    Embedded(StoredDiscoverySnapshot),
+    External(SnapshotIndexEntry),
+}
+
+impl SnapshotEntry {
+    fn summary(&self, id: &str) -> DiscoverySnapshotSummary {
+        match self {
+            Self::Embedded(snapshot) => snapshot.summary(id),
+            Self::External(summary) => DiscoverySnapshotSummary {
+                id: id.to_owned(),
+                saved_at_unix_ms: summary.saved_at_unix_ms,
+                device_count: summary.device_count,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct SnapshotIndexEntry {
+    saved_at_unix_ms: u64,
+    device_count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct SnapshotFile {
+    version: u32,
+    id: String,
+    saved_at_unix_ms: u64,
+    devices: Vec<DiscoveryRecord>,
+}
+
 impl StoredDiscoverySnapshot {
     fn summary(&self, id: &str) -> DiscoverySnapshotSummary {
         DiscoverySnapshotSummary {
@@ -979,12 +1130,28 @@ fn normalize_discovery_records(mut devices: Vec<DiscoveryRecord>) -> Vec<Discove
         device.types.dedup();
         device.scopes.sort();
         device.scopes.dedup();
+        device.xaddrs = device
+            .xaddrs
+            .iter()
+            .map(|xaddr| redact_url_credentials(xaddr))
+            .collect();
         device.xaddrs.sort();
         device.xaddrs.dedup();
     }
     devices.sort_by(|left, right| left.endpoint.cmp(&right.endpoint));
     devices.dedup_by(|left, right| left.endpoint == right.endpoint);
     devices
+}
+
+fn redact_url_credentials(value: &str) -> String {
+    let Ok(mut url) = Url::parse(value) else {
+        return value.to_owned();
+    };
+    if !url.username().is_empty() || url.password().is_some() {
+        let _ = url.set_username("");
+        let _ = url.set_password(None);
+    }
+    url.to_string()
 }
 
 fn validate_registry(registry: &RegistryFile) -> Result<(), AppError> {
@@ -1052,6 +1219,11 @@ pub fn normalize_target(target: &str) -> Result<String, AppError> {
             "Device target must be an HTTP(S) URL or host/IP address.",
         ));
     }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(AppError::invalid_argument(
+            "Device targets must not contain URL-embedded credentials.",
+        ));
+    }
     Ok(parsed.to_string())
 }
 
@@ -1108,6 +1280,7 @@ mod tests {
             normalize_target("http://camera.local:8080/custom").expect("URL should parse"),
             "http://camera.local:8080/custom"
         );
+        assert!(normalize_target("http://admin:secret@camera.local/onvif").is_err());
     }
 
     #[test]
@@ -1138,7 +1311,7 @@ mod tests {
         assert_eq!(store.get("front-door").expect("device should load"), added);
         let contents = fs::read_to_string(directory.path().join(REGISTRY_FILE_NAME))
             .expect("registry should exist");
-        assert!(contents.starts_with("version = 2"));
+        assert!(contents.starts_with("version = 3"));
         assert!(!contents.to_ascii_lowercase().contains("password"));
     }
 
@@ -1202,7 +1375,7 @@ target = "http://192.0.2.10/onvif/device_service"
             .expect("first write should migrate");
         let contents = fs::read_to_string(directory.path().join(REGISTRY_FILE_NAME))
             .expect("registry should load");
-        assert!(contents.starts_with("version = 2"));
+        assert!(contents.starts_with("version = 3"));
         assert!(contents.contains("[devices.legacy]"));
     }
 
@@ -1340,11 +1513,99 @@ target = "http://192.0.2.10/onvif/device_service"
                 .device_count,
             2
         );
+        let registry_contents =
+            fs::read_to_string(directory.path().join(REGISTRY_FILE_NAME)).expect("registry");
+        assert!(!registry_contents.contains("uuid:a"));
+        assert!(
+            directory
+                .path()
+                .join(SNAPSHOTS_DIR_NAME)
+                .join("factory-scan.json")
+                .exists()
+        );
         assert!(
             store
                 .save_discovery_snapshot("factory-scan", vec![record("uuid:c", "192.168.20.3")])
                 .is_err(),
             "saving under an existing snapshot ID must not silently replace it"
+        );
+    }
+
+    #[test]
+    fn snapshot_persistence_redacts_url_credentials() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        store
+            .save_discovery_snapshot(
+                "redacted",
+                vec![DiscoveryRecord {
+                    endpoint: "uuid:redacted".to_owned(),
+                    types: Vec::new(),
+                    scopes: Vec::new(),
+                    xaddrs: vec!["http://admin:secret@192.0.2.60/onvif/device_service".to_owned()],
+                    manufacturer: None,
+                    model: None,
+                    firmware_version: None,
+                    serial_number: None,
+                }],
+            )
+            .expect("snapshot should save");
+        let contents = fs::read_to_string(
+            directory
+                .path()
+                .join(SNAPSHOTS_DIR_NAME)
+                .join("redacted.json"),
+        )
+        .expect("snapshot should read");
+        assert!(!contents.contains("secret"));
+        assert!(!contents.contains("admin@"));
+    }
+
+    #[test]
+    fn version_two_embedded_snapshots_migrate_to_separate_files() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        fs::write(
+            directory.path().join(REGISTRY_FILE_NAME),
+            r#"version = 2
+
+[discovery_snapshots.old-scan]
+saved_at_unix_ms = 123
+
+[[discovery_snapshots.old-scan.devices]]
+endpoint = "uuid:legacy"
+xaddrs = ["http://192.0.2.50/onvif/device_service"]
+"#,
+        )
+        .expect("v2 fixture should write");
+        let store = RegistryStore::at(directory.path());
+        assert_eq!(
+            store
+                .get_discovery_snapshot("old-scan", &[])
+                .expect("embedded snapshot should remain readable")
+                .devices
+                .len(),
+            1
+        );
+
+        store
+            .create_group(NewGroup {
+                id: "migration-trigger".to_owned(),
+                name: None,
+            })
+            .expect("next write should migrate");
+        let registry = fs::read_to_string(directory.path().join(REGISTRY_FILE_NAME))
+            .expect("registry should read");
+        assert!(registry.starts_with("version = 3"));
+        assert!(!registry.contains("uuid:legacy"));
+        let snapshot = directory
+            .path()
+            .join(SNAPSHOTS_DIR_NAME)
+            .join("old-scan.json");
+        assert!(snapshot.exists());
+        assert!(
+            fs::read_to_string(snapshot)
+                .expect("snapshot should read")
+                .contains("uuid:legacy")
         );
     }
 }
