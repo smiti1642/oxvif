@@ -4,7 +4,7 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
-use oxvif_cli::{DiscoveryRecord, RegistryStore};
+use oxvif_cli::{DiscoveryRecord, NewDevice, NewGroup, RegistryStore};
 use serde_json::Value;
 
 fn run(arguments: &[&str]) -> Output {
@@ -49,6 +49,96 @@ fn root_help_routes_agents_to_the_embedded_guide() {
     assert!(output.status.success(), "{}", stderr(&output));
     assert!(stdout(&output).contains("AI AGENTS"));
     assert!(stdout(&output).contains("oxvif agent guide --output json"));
+    assert!(stdout(&output).contains("--group"));
+    assert!(stdout(&output).contains("--view"));
+    assert!(stdout(&output).contains("--jobs"));
+}
+
+#[test]
+fn fleet_jobs_require_a_bounded_set_selector() {
+    let output = run(&[
+        "--jobs",
+        "3",
+        "device",
+        "capabilities",
+        "--target",
+        "127.0.0.1",
+        "--output",
+        "json",
+    ]);
+
+    assert_eq!(output.status.code(), Some(2));
+    let document: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(document["error"]["code"], "INVALID_ARGUMENT");
+    assert!(
+        document["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("--jobs")
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn fleet_jsonl_is_deterministic_and_partial_exit_is_six() {
+    let server = oxvif::mock::MockServer::start()
+        .await
+        .expect("mock server should start");
+    let directory = tempfile::tempdir().expect("temp directory");
+    let registry = RegistryStore::at(directory.path());
+    for (id, target) in [
+        ("camera-a", server.device_url()),
+        ("camera-b", "http://127.0.0.1:9/onvif/device_service"),
+    ] {
+        registry
+            .add(NewDevice {
+                id: id.to_owned(),
+                name: None,
+                target: target.to_owned(),
+                tags: Vec::new(),
+            })
+            .expect("device should add");
+    }
+    registry
+        .create_group(NewGroup {
+            id: "fleet".to_owned(),
+            name: None,
+        })
+        .expect("group should create");
+    registry
+        .add_group_member("fleet", "camera-b", "cam-002")
+        .expect("member B should add");
+    registry
+        .add_group_member("fleet", "camera-a", "cam-001")
+        .expect("member A should add");
+
+    let output = run_isolated(
+        &[
+            "--timeout",
+            "2s",
+            "--group",
+            "fleet",
+            "--jobs",
+            "2",
+            "device",
+            "capabilities",
+            "--output",
+            "jsonl",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+
+    assert_eq!(output.status.code(), Some(6), "{}", stderr(&output));
+    let lines = stdout(&output)
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("line should be JSON"))
+        .collect::<Vec<_>>();
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0]["data"]["item"]["device_id"], "camera-a");
+    assert_eq!(lines[1]["data"]["item"]["device_id"], "camera-b");
+    assert_eq!(lines[2]["data"]["kind"], "fleet_summary");
+    assert_eq!(lines[2]["data"]["succeeded"], 1);
+    assert_eq!(lines[2]["data"]["failed"], 1);
 }
 
 #[test]
@@ -90,7 +180,7 @@ fn describe_json_has_stable_envelope() {
 
     assert!(output.status.success(), "{}", stderr(&output));
     let document: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(document["schema_version"], "2");
+    assert_eq!(document["schema_version"], "3");
     assert_eq!(document["ok"], true);
     assert_eq!(document["data"]["kind"], "command_list");
     assert_eq!(document["data"]["commands"][0]["name"], "agent.guide");
@@ -122,7 +212,7 @@ fn unknown_described_command_is_structured_error() {
 
     assert_eq!(output.status.code(), Some(3));
     let document: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
-    assert_eq!(document["schema_version"], "2");
+    assert_eq!(document["schema_version"], "3");
     assert_eq!(document["ok"], false);
     assert_eq!(document["error"]["code"], "COMMAND_NOT_FOUND");
     assert_eq!(document["error"]["retryable"], false);
@@ -157,9 +247,9 @@ fn agent_guide_and_prompt_are_embedded_and_versioned() {
     let guide = run(&["agent", "guide", "--output", "json", "--non-interactive"]);
     assert!(guide.status.success(), "{}", stderr(&guide));
     let document: Value = serde_json::from_slice(&guide.stdout).expect("guide should be JSON");
-    assert_eq!(document["schema_version"], "2");
+    assert_eq!(document["schema_version"], "3");
     assert_eq!(document["data"]["kind"], "agent_guide");
-    assert_eq!(document["data"]["guide"]["guide_version"], "2");
+    assert_eq!(document["data"]["guide"]["guide_version"], "3");
     assert!(
         document["data"]["guide"]["security_requirements"]
             .as_array()

@@ -40,6 +40,18 @@ struct Cli {
     #[arg(long)]
     device: Option<String>,
 
+    /// Select every explicit member of a static Group for a fleet diagnostic.
+    #[arg(long, conflicts_with_all = ["device", "view"])]
+    group: Option<String>,
+
+    /// Select every current match of a dynamic View for a fleet diagnostic.
+    #[arg(long, conflicts_with_all = ["device", "group"])]
+    view: Option<String>,
+
+    /// Bound concurrent work for Group/View diagnostics (default 16, maximum 64).
+    #[arg(long)]
+    jobs: Option<usize>,
+
     /// Never prompt or open a GUI; fail when required input is missing.
     #[arg(long, global = true)]
     non_interactive: bool,
@@ -474,14 +486,27 @@ async fn run(arguments: Vec<OsString>) -> u8 {
     };
 
     let format = OutputFormat::from(cli.output);
+    let set_selected = cli.group.is_some() || cli.view.is_some();
+    if cli.jobs.is_some() && !set_selected {
+        let error = AppError::invalid_argument("--jobs requires --group or --view.");
+        emit_error(format, &error, None);
+        return error.exit_code();
+    }
+    let jobs = cli.jobs.unwrap_or(16);
+    if !(1..=64).contains(&jobs) {
+        let error = AppError::invalid_argument("--jobs must be between 1 and 64.");
+        emit_error(format, &error, None);
+        return error.exit_code();
+    }
     let options = ExecutionOptions {
         non_interactive: cli.non_interactive,
         timeout: cli.timeout,
         retries: cli.retries,
         verbosity: cli.verbose,
         quiet: cli.quiet,
+        jobs,
     };
-    let request = match build_request(cli.command, cli.device) {
+    let request = match build_request(cli.command, cli.device, cli.group, cli.view) {
         Ok(request) => request,
         Err(error) => {
             emit_error(format, &error, None);
@@ -502,7 +527,7 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         Ok(success) => match render_success(format, &success) {
             Ok(rendered) => {
                 println!("{rendered}");
-                0
+                success.exit_code()
             }
             Err(error) => {
                 emit_error(format, &error, Some(command_name));
@@ -524,10 +549,14 @@ async fn run(arguments: Vec<OsString>) -> u8 {
 fn build_request(
     command: Commands,
     selected_device: Option<String>,
+    selected_group: Option<String>,
+    selected_view: Option<String>,
 ) -> Result<CommandRequest, AppError> {
     let selector = |target| TargetSelector {
         device: selected_device.clone(),
         target,
+        group: selected_group.clone(),
+        view: selected_view.clone(),
     };
 
     let request = match command {
@@ -802,29 +831,13 @@ fn build_request(
                 ),
             },
             DeviceCommands::Test { id, target } => {
-                let mut selector = selector(target);
-                if let Some(id) = id {
-                    if selector.device.is_some() || selector.target.is_some() {
-                        return Err(AppError::invalid_argument(
-                            "A positional device ID cannot be combined with --device or --target.",
-                        ));
-                    }
-                    selector.device = Some(id);
-                }
+                let selector = selector_with_positional(selector(target), id)?;
                 Ok(CommandRequest::DeviceTest(DeviceConnectRequest {
                     selector,
                 }))
             }
             DeviceCommands::Info { id, target } => {
-                let mut selector = selector(target);
-                if let Some(id) = id {
-                    if selector.device.is_some() || selector.target.is_some() {
-                        return Err(AppError::invalid_argument(
-                            "A positional device selector cannot be combined with --device or --target.",
-                        ));
-                    }
-                    selector.device = Some(id);
-                }
+                let selector = selector_with_positional(selector(target), id)?;
                 Ok(CommandRequest::DeviceInfo(DeviceConnectRequest {
                     selector,
                 }))
@@ -847,7 +860,7 @@ fn build_request(
         },
     }?;
 
-    if selected_device.is_some()
+    if (selected_device.is_some() || selected_group.is_some() || selected_view.is_some())
         && !matches!(
             request,
             CommandRequest::DeviceTest(_)
@@ -863,7 +876,7 @@ fn build_request(
         )
     {
         return Err(AppError::invalid_argument(
-            "Root --device is accepted only by commands that operate on a selected device.",
+            "Root --device/--group/--view is accepted only by commands that operate on selected devices.",
         ));
     }
     Ok(request)
@@ -874,9 +887,13 @@ fn selector_with_positional(
     id: Option<String>,
 ) -> Result<TargetSelector, AppError> {
     if let Some(id) = id {
-        if selector.device.is_some() || selector.target.is_some() {
+        if selector.device.is_some()
+            || selector.target.is_some()
+            || selector.group.is_some()
+            || selector.view.is_some()
+        {
             return Err(AppError::invalid_argument(
-                "A positional device selector cannot be combined with --device or --target.",
+                "A positional device selector cannot be combined with --device, --target, --group, or --view.",
             ));
         }
         selector.device = Some(id);

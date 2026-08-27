@@ -10,8 +10,7 @@ pub fn render_success(format: OutputFormat, success: &CommandSuccess) -> Result<
         OutputFormat::Table => Ok(render_human(success)),
         OutputFormat::Json => serde_json::to_string_pretty(&SuccessEnvelope::from(success))
             .map_err(|error| AppError::serialization_failed(error.to_string())),
-        OutputFormat::JsonLines => serde_json::to_string(&SuccessEnvelope::from(success))
-            .map_err(|error| AppError::serialization_failed(error.to_string())),
+        OutputFormat::JsonLines => render_json_lines(success),
     }
 }
 
@@ -400,12 +399,102 @@ fn render_human(success: &CommandSuccess) -> String {
             serde_json::to_string_pretty(result)
                 .unwrap_or_else(|_| "(result serialization failed)".to_owned())
         ),
+        CommandData::FleetDiagnostic {
+            operation,
+            selection_kind,
+            selection_id,
+            total,
+            succeeded,
+            failed,
+            items,
+        } => {
+            let mut output = format!(
+                "Operation: {operation}\nSelection: {selection_kind} `{selection_id}`\nTotal: {total} | Succeeded: {succeeded} | Failed: {failed}\nSTATUS | DEVICE | SELECTED BY | TARGET"
+            );
+            for item in items {
+                let _ = write!(
+                    output,
+                    "\n{} | {} | {} | {}",
+                    if item.ok { "OK" } else { "FAILED" },
+                    item.device_id,
+                    item.selected_by,
+                    item.target
+                );
+                if let Some(error) = &item.error {
+                    let _ = write!(output, " | {}: {}", error.code, error.message);
+                }
+            }
+            output
+        }
     };
 
     while rendered.ends_with('\n') {
         rendered.pop();
     }
     rendered
+}
+
+fn render_json_lines(success: &CommandSuccess) -> Result<String, AppError> {
+    let CommandData::FleetDiagnostic {
+        operation,
+        selection_kind,
+        selection_id,
+        total,
+        succeeded,
+        failed,
+        items,
+    } = &success.data
+    else {
+        return serde_json::to_string(&SuccessEnvelope::from(success))
+            .map_err(|error| AppError::serialization_failed(error.to_string()));
+    };
+
+    let mut lines = Vec::with_capacity(items.len() + 1);
+    for item in items {
+        let document = serde_json::json!({
+            "schema_version": crate::SCHEMA_VERSION,
+            "ok": item.ok,
+            "data": {
+                "kind": "fleet_item",
+                "operation": operation,
+                "selection_kind": selection_kind,
+                "selection_id": selection_id,
+                "item": item,
+            },
+            "warnings": [],
+            "meta": {
+                "command": success.meta.command,
+                "device_id": item.device_id,
+                "selected_by": item.selected_by,
+                "target": item.target,
+                "elapsed_ms": item.elapsed_ms,
+            }
+        });
+        lines.push(
+            serde_json::to_string(&document)
+                .map_err(|error| AppError::serialization_failed(error.to_string()))?,
+        );
+    }
+    let summary = serde_json::json!({
+        "schema_version": crate::SCHEMA_VERSION,
+        "ok": *failed == 0,
+        "data": {
+            "kind": "fleet_summary",
+            "operation": operation,
+            "selection_kind": selection_kind,
+            "selection_id": selection_id,
+            "total": total,
+            "succeeded": succeeded,
+            "failed": failed,
+        },
+        "warnings": success.warnings,
+        "meta": success.meta,
+    });
+    lines.push(
+        serde_json::to_string(&summary)
+            .map_err(|error| AppError::serialization_failed(error.to_string()))?,
+    );
+    Ok(lines.join("\n"))
 }
 
 fn render_device(device: &crate::DeviceView) -> String {

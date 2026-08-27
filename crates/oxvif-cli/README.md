@@ -15,7 +15,7 @@ oxvif agent guide --output json
 Root help includes a short Agent onboarding hint. `agent guide` returns the
 version-matched operational and security rules embedded in the installed
 binary; `agent prompt` prints a compact prompt suitable for Agent instructions.
-The structured stdout contract is currently schema version 2.
+The structured stdout contract is schema version 3 for the 0.1 release.
 
 ## Named devices
 
@@ -145,6 +145,19 @@ oxvif --timeout 20s --device front-door health check --output json
 
 Returned stream and snapshot URLs have URI userinfo removed. The default health
 check performs no write round-trip, liveness fetch, or raw exchange capture.
+
+Group/View fleet diagnostics use bounded concurrency (16 jobs by default, 64
+maximum) and always sort results by canonical device ID:
+
+```sh
+oxvif --group taipei-f1 --jobs 16 health check --output jsonl
+oxvif --view outdoor-geovision media profiles --output json
+```
+
+JSONL emits one `fleet_item` line per device followed by one `fleet_summary`
+line. Full success exits 0, partial success exits 6, and complete failure emits
+the typed `FLEET_FAILED` error. No fleet selection relies on the ambient current
+device.
 
 ## Credentials
 

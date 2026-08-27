@@ -17,6 +17,7 @@ pub struct ExecutionOptions {
     pub retries: u32,
     pub verbosity: u8,
     pub quiet: bool,
+    pub jobs: usize,
 }
 
 impl Default for ExecutionOptions {
@@ -27,6 +28,7 @@ impl Default for ExecutionOptions {
             retries: 0,
             verbosity: 0,
             quiet: false,
+            jobs: 16,
         }
     }
 }
@@ -507,34 +509,52 @@ impl Application {
                 }
             }
             CommandRequest::DeviceTest(request) => {
-                let resolved = self.resolve_target(request.selector)?;
-                let information = self.fetch_device_info(&resolved, options).await?;
-                Outcome {
-                    data: CommandData::DeviceTest {
-                        device_id: resolved.device_id.clone(),
-                        target: resolved.target.clone(),
-                        authenticated: resolved.password.is_some(),
-                        information,
-                    },
-                    warnings: Vec::new(),
-                    device_id: resolved.device_id,
-                    selected_by: resolved.selected_by,
-                    target: Some(resolved.target),
+                if request.selector.group.is_some() || request.selector.view.is_some() {
+                    self.device_diagnostic(
+                        request.selector,
+                        DiagnosticOperation::DeviceTest,
+                        options,
+                    )
+                    .await?
+                } else {
+                    let resolved = self.resolve_target(request.selector)?;
+                    let information = self.fetch_device_info(&resolved, options).await?;
+                    Outcome {
+                        data: CommandData::DeviceTest {
+                            device_id: resolved.device_id.clone(),
+                            target: resolved.target.clone(),
+                            authenticated: resolved.password.is_some(),
+                            information,
+                        },
+                        warnings: Vec::new(),
+                        device_id: resolved.device_id,
+                        selected_by: resolved.selected_by,
+                        target: Some(resolved.target),
+                    }
                 }
             }
             CommandRequest::DeviceInfo(request) => {
-                let resolved = self.resolve_target(request.selector)?;
-                let information = self.fetch_device_info(&resolved, options).await?;
-                Outcome {
-                    data: CommandData::DeviceInformation {
-                        device_id: resolved.device_id.clone(),
-                        target: resolved.target.clone(),
-                        information,
-                    },
-                    warnings: Vec::new(),
-                    device_id: resolved.device_id,
-                    selected_by: resolved.selected_by,
-                    target: Some(resolved.target),
+                if request.selector.group.is_some() || request.selector.view.is_some() {
+                    self.device_diagnostic(
+                        request.selector,
+                        DiagnosticOperation::DeviceInformation,
+                        options,
+                    )
+                    .await?
+                } else {
+                    let resolved = self.resolve_target(request.selector)?;
+                    let information = self.fetch_device_info(&resolved, options).await?;
+                    Outcome {
+                        data: CommandData::DeviceInformation {
+                            device_id: resolved.device_id.clone(),
+                            target: resolved.target.clone(),
+                            information,
+                        },
+                        warnings: Vec::new(),
+                        device_id: resolved.device_id,
+                        selected_by: resolved.selected_by,
+                        target: Some(resolved.target),
+                    }
                 }
             }
             CommandRequest::DeviceCapabilities(request) => {
@@ -647,6 +667,11 @@ impl Application {
     }
 
     fn resolve_target(&self, selector: crate::TargetSelector) -> Result<ResolvedTarget, AppError> {
+        if selector.group.is_some() || selector.view.is_some() {
+            return Err(AppError::invalid_argument(
+                "Group/View selection requires a fleet-capable diagnostic command.",
+            ));
+        }
         if selector.device.is_some() && selector.target.is_some() {
             return Err(AppError::invalid_argument(
                 "--device and --target are mutually exclusive.",
@@ -749,6 +774,9 @@ impl Application {
         operation: DiagnosticOperation,
         options: &ExecutionOptions,
     ) -> Result<Outcome, AppError> {
+        if selector.group.is_some() || selector.view.is_some() {
+            return self.fleet_diagnostic(selector, operation, options).await;
+        }
         let resolved = self.resolve_target(selector)?;
         let operation_name = operation.name().to_owned();
         let result = execute_diagnostic(&resolved, operation, options).await?;
@@ -765,9 +793,135 @@ impl Application {
             target: Some(resolved.target),
         })
     }
+
+    async fn fleet_diagnostic(
+        &self,
+        selector: crate::TargetSelector,
+        operation: DiagnosticOperation,
+        options: &ExecutionOptions,
+    ) -> Result<Outcome, AppError> {
+        if selector.device.is_some() || selector.target.is_some() {
+            return Err(AppError::invalid_argument(
+                "A fleet selector cannot be combined with --device or --target.",
+            ));
+        }
+        let (selection_kind, selection_id, selected) = match (selector.group, selector.view) {
+            (Some(_), Some(_)) => {
+                return Err(AppError::invalid_argument(
+                    "--group and --view are mutually exclusive.",
+                ));
+            }
+            (Some(group_id), None) => {
+                let group = self.registry.get_group(&group_id)?;
+                let selected = group
+                    .members
+                    .into_iter()
+                    .map(|member| (format!("{group_id}/{}", member.alias), member.device_id))
+                    .collect::<Vec<_>>();
+                ("group".to_owned(), group_id, selected)
+            }
+            (None, Some(view_id)) => {
+                let selected = self
+                    .registry
+                    .evaluate_view(&view_id)?
+                    .into_iter()
+                    .map(|device| (format!("view:{view_id}/{}", device.id), device.id))
+                    .collect::<Vec<_>>();
+                ("view".to_owned(), view_id, selected)
+            }
+            (None, None) => return Err(AppError::missing_target()),
+        };
+        if selected.is_empty() {
+            return Err(AppError::invalid_argument(format!(
+                "Selected {selection_kind} `{selection_id}` contains no devices."
+            )));
+        }
+
+        let operation_name = operation.name().to_owned();
+        let mut items = Vec::with_capacity(selected.len());
+        let mut queue = Vec::new();
+        for (selected_by, device_id) in selected {
+            let target = self
+                .registry
+                .get(&device_id)
+                .map(|device| device.target)
+                .unwrap_or_default();
+            match self.resolve_saved(&device_id) {
+                Ok(mut resolved) => {
+                    resolved.selected_by = Some(selected_by.clone());
+                    queue.push((selected_by, resolved));
+                }
+                Err(error) => items.push(crate::FleetDiagnosticItem {
+                    device_id,
+                    selected_by,
+                    target,
+                    ok: false,
+                    result: None,
+                    error: Some(fleet_item_error(error)),
+                    elapsed_ms: 0,
+                }),
+            }
+        }
+
+        let mut queue = queue.into_iter();
+        let mut tasks = tokio::task::JoinSet::new();
+        for _ in 0..options.jobs {
+            let Some((selected_by, resolved)) = queue.next() else {
+                break;
+            };
+            spawn_diagnostic_task(
+                &mut tasks,
+                selected_by,
+                resolved,
+                operation.clone(),
+                options,
+            );
+        }
+        while let Some(joined) = tasks.join_next().await {
+            match joined {
+                Ok(item) => items.push(item),
+                Err(error) => {
+                    return Err(AppError::internal(format!("Fleet task failed: {error}")));
+                }
+            }
+            if let Some((selected_by, resolved)) = queue.next() {
+                spawn_diagnostic_task(
+                    &mut tasks,
+                    selected_by,
+                    resolved,
+                    operation.clone(),
+                    options,
+                );
+            }
+        }
+        items.sort_by(|left, right| {
+            left.device_id
+                .cmp(&right.device_id)
+                .then_with(|| left.selected_by.cmp(&right.selected_by))
+        });
+        let succeeded = items.iter().filter(|item| item.ok).count();
+        let failed = items.len() - succeeded;
+        if succeeded == 0 {
+            return Err(AppError::fleet_failed(format!(
+                "{operation_name} failed for all {failed} device(s) selected by {selection_kind} `{selection_id}`."
+            )));
+        }
+        Ok(Outcome::data(CommandData::FleetDiagnostic {
+            operation: operation_name,
+            selection_kind,
+            selection_id,
+            total: items.len(),
+            succeeded,
+            failed,
+            items,
+        }))
+    }
 }
 
+#[derive(Clone)]
 enum DiagnosticOperation {
+    DeviceTest,
+    DeviceInformation,
     Capabilities,
     Services,
     MediaProfiles,
@@ -781,6 +935,8 @@ enum DiagnosticOperation {
 impl DiagnosticOperation {
     fn name(&self) -> &'static str {
         match self {
+            Self::DeviceTest => "device.test",
+            Self::DeviceInformation => "device.info",
             Self::Capabilities => "device.capabilities",
             Self::Services => "device.services",
             Self::MediaProfiles => "media.profiles",
@@ -790,6 +946,52 @@ impl DiagnosticOperation {
             Self::PtzPresets(_) => "ptz.presets",
             Self::Health => "health.check",
         }
+    }
+}
+
+fn spawn_diagnostic_task(
+    tasks: &mut tokio::task::JoinSet<crate::FleetDiagnosticItem>,
+    selected_by: String,
+    resolved: ResolvedTarget,
+    operation: DiagnosticOperation,
+    options: &ExecutionOptions,
+) {
+    let options = options.clone();
+    tasks.spawn(async move {
+        let started = Instant::now();
+        let device_id = resolved
+            .device_id
+            .clone()
+            .unwrap_or_else(|| "(unknown)".to_owned());
+        let target = resolved.target.clone();
+        match execute_diagnostic(&resolved, operation, &options).await {
+            Ok(result) => crate::FleetDiagnosticItem {
+                device_id,
+                selected_by,
+                target,
+                ok: true,
+                result: Some(result),
+                error: None,
+                elapsed_ms: elapsed_millis(started),
+            },
+            Err(error) => crate::FleetDiagnosticItem {
+                device_id,
+                selected_by,
+                target,
+                ok: false,
+                result: None,
+                error: Some(fleet_item_error(error)),
+                elapsed_ms: elapsed_millis(started),
+            },
+        }
+    });
+}
+
+fn fleet_item_error(error: AppError) -> crate::FleetItemError {
+    crate::FleetItemError {
+        code: error.code.as_str().to_owned(),
+        message: error.message,
+        retryable: error.retryable,
     }
 }
 
@@ -813,6 +1015,16 @@ async fn execute_diagnostic(
             }
             let session = builder.build().await.map_err(|error| error.to_string())?;
             let mut value = match &operation {
+                DiagnosticOperation::DeviceTest => {
+                    let information = session.get_device_info().await.map_err(|e| e.to_string())?;
+                    serde_json::to_value(serde_json::json!({
+                        "authenticated": resolved.password.is_some(),
+                        "information": information,
+                    }))
+                }
+                DiagnosticOperation::DeviceInformation => serde_json::to_value(
+                    session.get_device_info().await.map_err(|e| e.to_string())?,
+                ),
                 DiagnosticOperation::Capabilities => serde_json::to_value(session.capabilities()),
                 DiagnosticOperation::Services => {
                     serde_json::to_value(session.get_services().await.map_err(|e| e.to_string())?)
@@ -882,8 +1094,32 @@ async fn execute_health_check(
             options.timeout.as_millis()
         ))
     })?;
-    let mut value = serde_json::to_value(report)
-        .map_err(|error| AppError::serialization_failed(error.to_string()))?;
+    let passed = report
+        .checks
+        .iter()
+        .filter(|check| matches!(check.status, oxvif::health::CheckStatus::Pass))
+        .count();
+    let warned = report
+        .checks
+        .iter()
+        .filter(|check| matches!(check.status, oxvif::health::CheckStatus::Warn(_)))
+        .count();
+    let failed = report
+        .checks
+        .iter()
+        .filter(|check| matches!(check.status, oxvif::health::CheckStatus::Fail(_)))
+        .count();
+    let skipped = report.checks.len() - passed - warned - failed;
+    let mut value = serde_json::json!({
+        "healthy": report.ok(),
+        "summary": {
+            "passed": passed,
+            "warned": warned,
+            "failed": failed,
+            "skipped": skipped,
+        },
+        "report": report,
+    });
     sanitize_uri_values(&mut value);
     Ok(value)
 }
@@ -1099,6 +1335,7 @@ fn merge_unique(target: &mut Vec<String>, incoming: Vec<String>) {
     target.dedup();
 }
 
+#[derive(Clone)]
 struct ResolvedTarget {
     device_id: Option<String>,
     selected_by: Option<String>,
@@ -1479,6 +1716,7 @@ mod tests {
         let target = || crate::TargetSelector {
             device: None,
             target: Some(server.device_url().to_owned()),
+            ..crate::TargetSelector::default()
         };
         let options = ExecutionOptions {
             timeout: Duration::from_secs(20),
@@ -1541,6 +1779,172 @@ mod tests {
                 .expect("diagnostic should succeed");
             assert!(matches!(result.data, CommandData::DeviceDiagnostic { .. }));
         }
+    }
+
+    #[tokio::test]
+    async fn group_and_view_diagnostics_are_bounded_deterministic_and_partial() {
+        let server_a = oxvif::mock::MockServer::start()
+            .await
+            .expect("mock A should start");
+        let server_b = oxvif::mock::MockServer::start()
+            .await
+            .expect("mock B should start");
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        for (id, target, tags) in [
+            (
+                "camera-a",
+                server_a.device_url(),
+                vec!["healthy".to_owned()],
+            ),
+            (
+                "camera-b",
+                server_b.device_url(),
+                vec!["healthy".to_owned()],
+            ),
+            (
+                "camera-c",
+                "http://127.0.0.1:9/onvif/device_service",
+                Vec::new(),
+            ),
+        ] {
+            registry
+                .add(NewDevice {
+                    id: id.to_owned(),
+                    name: None,
+                    target: target.to_owned(),
+                    tags,
+                })
+                .expect("device should add");
+        }
+        registry
+            .create_group(crate::NewGroup {
+                id: "factory".to_owned(),
+                name: None,
+            })
+            .expect("group should create");
+        for (id, alias) in [
+            ("camera-c", "cam-003"),
+            ("camera-a", "cam-001"),
+            ("camera-b", "cam-002"),
+        ] {
+            registry
+                .add_group_member("factory", id, alias)
+                .expect("member should add");
+        }
+        registry
+            .create_view(crate::NewSavedView {
+                id: "healthy".to_owned(),
+                name: None,
+                filters: vec!["tag=healthy".parse().expect("filter should parse")],
+                match_mode: crate::MatchMode::All,
+            })
+            .expect("view should create");
+        let application =
+            Application::with_stores(registry, Arc::new(MemoryCredentialStore::default()));
+        let options = ExecutionOptions {
+            timeout: Duration::from_secs(2),
+            jobs: 2,
+            ..ExecutionOptions::default()
+        };
+
+        let partial = application
+            .execute(
+                CommandRequest::DeviceCapabilities(crate::DeviceConnectRequest {
+                    selector: crate::TargetSelector {
+                        group: Some("factory".to_owned()),
+                        ..crate::TargetSelector::default()
+                    },
+                }),
+                &options,
+            )
+            .await
+            .expect("partial fleet should return structured items");
+        assert_eq!(partial.exit_code(), 6);
+        let CommandData::FleetDiagnostic {
+            succeeded,
+            failed,
+            items,
+            ..
+        } = &partial.data
+        else {
+            panic!("expected fleet result");
+        };
+        assert_eq!((*succeeded, *failed), (2, 1));
+        assert_eq!(
+            items
+                .iter()
+                .map(|item| item.device_id.as_str())
+                .collect::<Vec<_>>(),
+            ["camera-a", "camera-b", "camera-c"]
+        );
+        let jsonl = crate::render_success(crate::OutputFormat::JsonLines, &partial)
+            .expect("JSONL should render");
+        let lines = jsonl.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 4);
+        let summary: serde_json::Value =
+            serde_json::from_str(lines[3]).expect("summary should parse");
+        assert_eq!(summary["data"]["kind"], "fleet_summary");
+        assert_eq!(summary["ok"], false);
+
+        let successful = application
+            .execute(
+                CommandRequest::DeviceServices(crate::DeviceConnectRequest {
+                    selector: crate::TargetSelector {
+                        view: Some("healthy".to_owned()),
+                        ..crate::TargetSelector::default()
+                    },
+                }),
+                &options,
+            )
+            .await
+            .expect("view fleet should succeed");
+        assert_eq!(successful.exit_code(), 0);
+        let CommandData::FleetDiagnostic { failed, total, .. } = successful.data else {
+            panic!("expected fleet result");
+        };
+        assert_eq!((total, failed), (2, 0));
+    }
+
+    #[tokio::test]
+    async fn all_failed_fleet_is_a_typed_error() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        registry
+            .add(NewDevice {
+                id: "offline".to_owned(),
+                name: None,
+                target: "http://127.0.0.1:9/onvif/device_service".to_owned(),
+                tags: Vec::new(),
+            })
+            .expect("device should add");
+        registry
+            .create_group(crate::NewGroup {
+                id: "offline".to_owned(),
+                name: None,
+            })
+            .expect("group should create");
+        registry
+            .add_group_member("offline", "offline", "cam-001")
+            .expect("member should add");
+        let application =
+            Application::with_stores(registry, Arc::new(MemoryCredentialStore::default()));
+        let error = application
+            .execute(
+                CommandRequest::DeviceCapabilities(crate::DeviceConnectRequest {
+                    selector: crate::TargetSelector {
+                        group: Some("offline".to_owned()),
+                        ..crate::TargetSelector::default()
+                    },
+                }),
+                &ExecutionOptions {
+                    timeout: Duration::from_secs(1),
+                    ..ExecutionOptions::default()
+                },
+            )
+            .await
+            .expect_err("all failures should be an error");
+        assert_eq!(error.code, crate::ErrorCode::FleetFailed);
     }
 
     #[test]

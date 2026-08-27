@@ -449,7 +449,7 @@ Every structured success uses the same top-level contract:
 
 ```json
 {
-  "schema_version": "2",
+  "schema_version": "3",
   "ok": true,
   "data": {},
   "warnings": [],
@@ -465,7 +465,7 @@ Errors are data, not prose requiring interpretation:
 
 ```json
 {
-  "schema_version": "2",
+  "schema_version": "3",
   "ok": false,
   "error": {
     "code": "AUTH_CLOCK_SKEW",
@@ -674,7 +674,7 @@ UX contract correction approved 2026-08-27:
 - Add typed filter operators, all/any matching, View explanation output,
   Unicode-aware rendering, and complete Agent-readable command descriptors.
 
-Implementation status 2026-08-27: the schema-v2 Agent contract, consistent
+Implementation status 2026-08-27: the schema-v3 Agent contract, consistent
 selectors, registry-v3 external snapshots, ephemeral discovery, explicit
 interface selection, duplicate observation merge, typed View filters,
 `--match all|any`, `view evaluate --explain`, credential status, readable fleet
@@ -707,7 +707,7 @@ and deterministic partial-success output are completed in Stage 3.
 
 ### Stage 3 — Agent hardening and fleet execution
 
-- Stabilize schema version 1 and publish command schemas.
+- Stabilize schema version 3 and publish command descriptors.
 - Add timeouts, bounded retries, retryability metadata, and cancellation
   behavior.
 - Add bounded parallel health/inspection over `--group` and `--view`, including
@@ -716,7 +716,13 @@ and deterministic partial-success output are completed in Stage 3.
 
 **Exit:** an Agent can discover capabilities, select a saved target, perform a
   diagnostic workflow, and recover from every expected failure without
-  reading human prose or encountering a prompt.
+reading human prose or encountering a prompt.
+
+Implementation status 2026-08-27: Group/View selectors resolve to canonical
+devices for every read-only diagnostic, jobs default to 16 and are capped at
+64, completion order is normalized by device ID, JSONL emits per-device records
+plus a final aggregate, partial success exits 6, and total failure is the typed
+`FLEET_FAILED` error. Agent guide v3 documents this contract.
 
 ### Stage 4 — controlled writes
 
@@ -786,6 +792,4 @@ The first crates.io release is ready only when all of the following are true:
 
 1. Schema distribution format for `describe`: JSON Schema, the current smaller
    internal description format, or both.
-2. Which warnings make a future fleet command partially successful and the
-   exact aggregate exit-code behavior.
-3. Native credential backends and packaging policy for non-Windows platforms.
+2. Native credential backends and packaging policy for non-Windows platforms.

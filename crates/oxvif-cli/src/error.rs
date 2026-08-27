@@ -21,6 +21,7 @@ pub enum ErrorCode {
     CredentialUnavailable,
     DeviceConnectionFailed,
     DiscoveryFailed,
+    FleetFailed,
     SerializationFailed,
     Internal,
 }
@@ -40,7 +41,7 @@ impl ErrorCode {
             | Self::RegistryCorrupt
             | Self::RegistryVersionUnsupported => 10,
             Self::CredentialUnavailable => 11,
-            Self::DeviceConnectionFailed | Self::DiscoveryFailed => 20,
+            Self::DeviceConnectionFailed | Self::DiscoveryFailed | Self::FleetFailed => 20,
             Self::SerializationFailed | Self::Internal => 70,
         }
     }
@@ -63,6 +64,7 @@ impl ErrorCode {
             Self::CredentialUnavailable => "CREDENTIAL_UNAVAILABLE",
             Self::DeviceConnectionFailed => "DEVICE_CONNECTION_FAILED",
             Self::DiscoveryFailed => "DISCOVERY_FAILED",
+            Self::FleetFailed => "FLEET_FAILED",
             Self::SerializationFailed => "SERIALIZATION_FAILED",
             Self::Internal => "INTERNAL",
         }
@@ -169,7 +171,20 @@ impl AppError {
             message: "No device target was selected.".to_owned(),
             retryable: false,
             suggested_action: Some(
-                "Pass --device/--target, set OXVIF_DEVICE, or run `oxvif use <id>`.".to_owned(),
+                "Pass --device/--target/--group/--view, set OXVIF_DEVICE, or run `oxvif use <id>`."
+                    .to_owned(),
+            ),
+        }
+    }
+
+    pub fn fleet_failed(message: impl Into<String>) -> Self {
+        Self {
+            code: ErrorCode::FleetFailed,
+            message: message.into(),
+            retryable: true,
+            suggested_action: Some(
+                "Inspect device credentials/connectivity or retry with a narrower Group/View."
+                    .to_owned(),
             ),
         }
     }

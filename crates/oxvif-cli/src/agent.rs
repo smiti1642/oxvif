@@ -1,6 +1,6 @@
 use crate::{AgentGuide, SCHEMA_VERSION};
 
-pub const GUIDE_VERSION: &str = "2";
+pub const GUIDE_VERSION: &str = "3";
 
 pub fn guide() -> AgentGuide {
     AgentGuide {
@@ -16,6 +16,8 @@ pub fn guide() -> AgentGuide {
             "Do not invoke write or dangerous operations without explicit authorization.",
             "Use plan/apply when an operation exposes that workflow.",
             "For device import, apply only the fingerprint returned by a freshly reviewed plan.",
+            "For fleet work, use exactly one explicit --group or --view selector and keep --jobs at 64 or below.",
+            "Treat fleet exit 6 as partial success: inspect every item and the final JSONL summary before retrying failures.",
         ],
         recommended_workflow: vec![
             "Run `oxvif agent guide --output json` and verify its schema version.",
@@ -23,6 +25,7 @@ pub fn guide() -> AgentGuide {
             "Select the target explicitly and execute one typed command.",
             "Persist canonical device IDs returned in result metadata.",
             "Enrich and filter a discovery snapshot, review its import plan, then apply that exact fingerprint.",
+            "Run read-only inspection against a Group/View with JSONL and consume device lines followed by the aggregate summary.",
             "Retry only when the structured error says retryable=true.",
         ],
         security_requirements: vec![

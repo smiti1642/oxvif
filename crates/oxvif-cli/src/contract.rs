@@ -7,7 +7,7 @@ use crate::{
 };
 
 /// Version of the structured stdout contract.
-pub const SCHEMA_VERSION: &str = "2";
+pub const SCHEMA_VERSION: &str = "3";
 
 /// Presentation format requested by the caller.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -292,6 +292,8 @@ pub struct DiscoverySnapshotShowRequest {
 pub struct TargetSelector {
     pub device: Option<String>,
     pub target: Option<String>,
+    pub group: Option<String>,
+    pub view: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -303,6 +305,26 @@ pub struct DeviceConnectRequest {
 pub struct ProfileConnectRequest {
     pub selector: TargetSelector,
     pub profile: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct FleetItemError {
+    pub code: String,
+    pub message: String,
+    pub retryable: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct FleetDiagnosticItem {
+    pub device_id: String,
+    pub selected_by: String,
+    pub target: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<FleetItemError>,
+    pub elapsed_ms: u64,
 }
 
 /// Risk attached to a command in the self-description surface.
@@ -465,6 +487,15 @@ pub enum CommandData {
         target: String,
         result: serde_json::Value,
     },
+    FleetDiagnostic {
+        operation: String,
+        selection_kind: String,
+        selection_id: String,
+        total: usize,
+        succeeded: usize,
+        failed: usize,
+        items: Vec<FleetDiagnosticItem>,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -516,6 +547,17 @@ pub struct CommandSuccess {
     pub meta: ResultMeta,
 }
 
+impl CommandSuccess {
+    pub fn exit_code(&self) -> u8 {
+        match &self.data {
+            CommandData::FleetDiagnostic {
+                succeeded, failed, ..
+            } if *succeeded > 0 && *failed > 0 => 6,
+            _ => 0,
+        }
+    }
+}
+
 /// Stable success envelope for JSON and JSONL output.
 #[derive(Debug, Serialize)]
 pub struct SuccessEnvelope<'a> {
@@ -530,7 +572,7 @@ impl<'a> From<&'a CommandSuccess> for SuccessEnvelope<'a> {
     fn from(value: &'a CommandSuccess) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
-            ok: true,
+            ok: value.exit_code() == 0,
             data: &value.data,
             warnings: &value.warnings,
             meta: &value.meta,

@@ -341,6 +341,9 @@ fn device_read_descriptor(name: &str, summary: &str) -> CommandDescriptor {
         vec![
             optional("device", "string"),
             optional("target", "url | host"),
+            optional("group", "static Group ID"),
+            optional("view", "dynamic View ID"),
+            optional("jobs", "integer 1..64"),
         ],
     )
 }
