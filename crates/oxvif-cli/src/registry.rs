@@ -47,6 +47,9 @@ pub struct DeviceView {
     pub username: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credential_profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_source: Option<String>,
+    pub credential_availability: String,
     pub has_credentials: bool,
     pub tags: Vec<String>,
 }
@@ -430,7 +433,11 @@ impl RegistryStore {
             if registry.views.contains_key(&id) {
                 return Err(AppError::resource_exists("view", &id));
             }
-            let view = StoredView { name, filters };
+            let view = StoredView {
+                name,
+                filters,
+                match_mode: view.match_mode,
+            };
             let result = view.view(&id);
             registry.views.insert(id, view);
             Ok(result)
@@ -449,18 +456,52 @@ impl RegistryStore {
     }
 
     pub fn evaluate_view(&self, id: &str) -> Result<Vec<DeviceView>, AppError> {
+        self.evaluate_view_explained(id).map(|(devices, _)| devices)
+    }
+
+    pub fn evaluate_view_explained(
+        &self,
+        id: &str,
+    ) -> Result<(Vec<DeviceView>, crate::ViewExplanation), AppError> {
         validate_resource_id("view", id)?;
         let registry = self.load_unlocked()?;
         let view = registry
             .views
             .get(id)
             .ok_or_else(|| AppError::resource_not_found("view", id))?;
-        Ok(registry
+        let all_devices = registry
             .devices
             .iter()
             .map(|(device_id, device)| device.view(device_id))
-            .filter(|device| device_matches(device, &view.filters))
-            .collect())
+            .collect::<Vec<_>>();
+        let devices = all_devices
+            .iter()
+            .filter(|device| device_matches(device, &view.filters, view.match_mode))
+            .cloned()
+            .collect::<Vec<_>>();
+        let filters = view
+            .filters
+            .iter()
+            .map(|filter| {
+                let matched_devices = all_devices
+                    .iter()
+                    .filter(|device| {
+                        device_matches(device, std::slice::from_ref(filter), crate::MatchMode::All)
+                    })
+                    .count();
+                crate::FilterExplanation {
+                    filter: filter.clone(),
+                    matched_devices,
+                    unmatched_devices: all_devices.len() - matched_devices,
+                }
+            })
+            .collect();
+        let explanation = crate::ViewExplanation {
+            evaluated_devices: all_devices.len(),
+            matched_devices: devices.len(),
+            filters,
+        };
+        Ok((devices, explanation))
     }
 
     pub fn set_credentials(
@@ -950,6 +991,20 @@ impl StoredDevice {
             serial_number: self.serial_number.clone(),
             username: self.username.clone(),
             credential_profile: self.credential_profile.clone(),
+            credential_source: if self.credential_profile.is_some() {
+                Some("profile".to_owned())
+            } else if self.credential_ref.is_some() {
+                Some("device".to_owned())
+            } else {
+                None
+            },
+            credential_availability: if self.credential_ref.is_some()
+                || self.credential_profile.is_some()
+            {
+                "unverified".to_owned()
+            } else {
+                "none".to_owned()
+            },
             has_credentials: self.credential_ref.is_some() || self.credential_profile.is_some(),
             tags: self.tags.clone(),
         }
@@ -1000,6 +1055,8 @@ impl StoredGroup {
 struct StoredView {
     name: String,
     filters: Vec<DeviceFilter>,
+    #[serde(default)]
+    match_mode: crate::MatchMode,
 }
 
 impl StoredView {
@@ -1008,6 +1065,7 @@ impl StoredView {
             id: id.to_owned(),
             name: self.name.clone(),
             filters: self.filters.clone(),
+            match_mode: self.match_mode,
         }
     }
 }
@@ -1087,6 +1145,7 @@ impl StoredCredentialProfile {
             id: id.to_owned(),
             username: self.username.clone(),
             has_credentials: true,
+            credential_availability: "unverified".to_owned(),
         }
     }
 
@@ -1462,6 +1521,7 @@ target = "http://192.0.2.10/onvif/device_service"
                         .parse()
                         .expect("filter should parse"),
                 ],
+                match_mode: crate::MatchMode::All,
             })
             .expect("view should create");
         let devices = store

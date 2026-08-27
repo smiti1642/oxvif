@@ -58,7 +58,7 @@ pub enum CommandRequest {
     ViewCreate(ViewCreateRequest),
     ViewList,
     ViewShow(ResourceIdRequest),
-    ViewEvaluate(ResourceIdRequest),
+    ViewEvaluate(ViewEvaluateRequest),
     ViewDelete(ResourceIdRequest),
     DiscoverScan(DiscoverScanRequest),
     DiscoverySnapshotList,
@@ -217,8 +217,15 @@ pub struct ViewCreateRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ViewEvaluateRequest {
+    pub id: String,
+    pub explain: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiscoverScanRequest {
-    pub snapshot_id: String,
+    pub snapshot_id: Option<String>,
+    pub interfaces: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -288,6 +295,8 @@ pub struct CommandDescriptor {
     pub retryable: bool,
     pub arguments: Vec<ArgumentDescriptor>,
     pub output: OutputDescriptor,
+    pub possible_errors: Vec<String>,
+    pub examples: Vec<String>,
 }
 
 /// Typed result variants returned by application commands.
@@ -349,6 +358,8 @@ pub enum CommandData {
     ViewEvaluation {
         view: SavedView,
         devices: Vec<DeviceView>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        explanation: Option<crate::ViewExplanation>,
     },
     DiscoverySnapshotList {
         snapshots: Vec<DiscoverySnapshotSummary>,
@@ -356,6 +367,11 @@ pub enum CommandData {
     DiscoverySnapshotRecord {
         action: String,
         snapshot: DiscoverySnapshotView,
+    },
+    DiscoveryScan {
+        devices: Vec<crate::DiscoveryRecord>,
+        saved_snapshot: Option<DiscoverySnapshotSummary>,
+        interfaces: Vec<String>,
     },
     ResourceRemoved {
         resource: String,

@@ -306,7 +306,10 @@ pub mod types;
 mod tests;
 
 pub use client::{OnvifClient, notification_listener};
-pub use discovery::{DiscoveredDevice, DiscoveryEvent, probe_unicast};
+pub use discovery::{
+    DiscoveredDevice, DiscoveryEvent, DiscoveryInterface, discovery_interfaces, probe_result,
+    probe_result_on, probe_unicast,
+};
 pub use error::OnvifError;
 #[cfg(feature = "mock")]
 pub use fixtures::{CapturingTransport, FixtureTransport};

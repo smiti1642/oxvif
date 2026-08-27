@@ -1,4 +1,4 @@
-use std::{env, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, env, net::Ipv4Addr, sync::Arc, time::Duration};
 
 use oxvif::{DeviceInfo, OnvifClient};
 use tokio::time::{Instant, timeout};
@@ -253,34 +253,78 @@ impl Application {
             }),
             CommandRequest::ViewEvaluate(request) => {
                 let view = self.registry.get_view(&request.id)?;
-                let devices = self.registry.evaluate_view(&request.id)?;
-                Outcome::data(CommandData::ViewEvaluation { view, devices })
+                let (devices, explanation) = self.registry.evaluate_view_explained(&request.id)?;
+                Outcome::data(CommandData::ViewEvaluation {
+                    view,
+                    devices,
+                    explanation: request.explain.then_some(explanation),
+                })
             }
             CommandRequest::ViewDelete(request) => Outcome::data(CommandData::ViewRecord {
                 action: "deleted".to_owned(),
                 view: self.registry.delete_view(&request.id)?,
             }),
             CommandRequest::DiscoverScan(request) => {
-                let discovered = oxvif::discovery::probe(options.timeout).await;
-                let devices = discovered
-                    .into_iter()
-                    .map(|device| crate::DiscoveryRecord {
-                        endpoint: device.endpoint,
-                        types: device.types,
-                        scopes: device.scopes,
-                        xaddrs: device.xaddrs,
-                        manufacturer: None,
-                        model: None,
-                        firmware_version: None,
-                        serial_number: None,
-                    })
-                    .collect();
-                Outcome::data(CommandData::DiscoverySnapshotRecord {
-                    action: "saved".to_owned(),
-                    snapshot: self
-                        .registry
-                        .save_discovery_snapshot(&request.snapshot_id, devices)?,
-                })
+                let selected = resolve_discovery_interfaces(&request.interfaces)?;
+                let selected_interfaces = selected
+                    .iter()
+                    .map(|(_, label)| label.clone())
+                    .collect::<Vec<_>>();
+                let mut tasks = tokio::task::JoinSet::new();
+                for (address, label) in selected {
+                    let timeout = options.timeout;
+                    tasks.spawn(async move {
+                        let result = oxvif::discovery::probe_result_on(timeout, &[address]).await;
+                        (label, result)
+                    });
+                }
+
+                let mut observations = Vec::new();
+                let mut warnings = Vec::new();
+                let mut successful_interfaces = 0usize;
+                while let Some(result) = tasks.join_next().await {
+                    match result {
+                        Ok((_, Ok(discovered))) => {
+                            successful_interfaces += 1;
+                            observations.extend(discovered);
+                        }
+                        Ok((label, Err(error))) => warnings.push(Warning {
+                            code: "DISCOVERY_INTERFACE_FAILED".to_owned(),
+                            message: format!("Discovery on `{label}` failed: {error}"),
+                        }),
+                        Err(error) => warnings.push(Warning {
+                            code: "DISCOVERY_INTERFACE_FAILED".to_owned(),
+                            message: format!("A discovery interface task failed: {error}"),
+                        }),
+                    }
+                }
+                if successful_interfaces == 0 {
+                    return Err(AppError::discovery_failed(
+                        warnings
+                            .iter()
+                            .map(|warning| warning.message.as_str())
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    ));
+                }
+                let devices = merge_discovery_observations(observations);
+                let saved_snapshot = request
+                    .snapshot_id
+                    .as_deref()
+                    .map(|id| self.registry.save_discovery_snapshot(id, devices.clone()))
+                    .transpose()?
+                    .map(|snapshot| crate::DiscoverySnapshotSummary {
+                        id: snapshot.id,
+                        saved_at_unix_ms: snapshot.saved_at_unix_ms,
+                        device_count: snapshot.devices.len(),
+                    });
+                let mut outcome = Outcome::data(CommandData::DiscoveryScan {
+                    devices,
+                    saved_snapshot,
+                    interfaces: selected_interfaces,
+                });
+                outcome.warnings = warnings;
+                outcome
             }
             CommandRequest::DiscoverySnapshotList => {
                 Outcome::data(CommandData::DiscoverySnapshotList {
@@ -515,6 +559,101 @@ impl Application {
             last_error.unwrap_or_else(|| "Device request failed without an error.".to_owned()),
         ))
     }
+}
+
+fn resolve_discovery_interfaces(selectors: &[String]) -> Result<Vec<(Ipv4Addr, String)>, AppError> {
+    let available = oxvif::discovery::discovery_interfaces()
+        .map_err(|error| AppError::discovery_failed(error.to_string()))?;
+    if available.is_empty() {
+        return Err(AppError::discovery_failed(
+            "No non-loopback IPv4 discovery interfaces are available.",
+        ));
+    }
+    if selectors.is_empty() {
+        return Ok(available
+            .into_iter()
+            .map(|interface| {
+                (
+                    interface.address,
+                    format!("{}={}", interface.name, interface.address),
+                )
+            })
+            .collect());
+    }
+
+    let mut selected = Vec::new();
+    for selector in selectors {
+        if let Ok(address) = selector.parse::<Ipv4Addr>() {
+            if !available
+                .iter()
+                .any(|interface| interface.address == address)
+            {
+                return Err(AppError::invalid_argument(format!(
+                    "IPv4 address `{selector}` is not assigned to a local discovery interface."
+                )));
+            }
+            let interface = available
+                .iter()
+                .find(|interface| interface.address == address)
+                .expect("address presence checked above");
+            selected.push((address, format!("{}={}", interface.name, interface.address)));
+            continue;
+        }
+
+        let matches = available
+            .iter()
+            .filter(|interface| interface.name.eq_ignore_ascii_case(selector))
+            .collect::<Vec<_>>();
+        if matches.is_empty() {
+            let choices = available
+                .iter()
+                .map(|interface| format!("{}={}", interface.name, interface.address))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(AppError::invalid_argument(format!(
+                "Unknown discovery interface `{selector}`. Available interfaces: {choices}"
+            )));
+        }
+        for interface in matches {
+            selected.push((
+                interface.address,
+                format!("{}={}", interface.name, interface.address),
+            ));
+        }
+    }
+    selected.sort();
+    selected.dedup();
+    Ok(selected)
+}
+
+fn merge_discovery_observations(
+    observations: Vec<oxvif::DiscoveredDevice>,
+) -> Vec<crate::DiscoveryRecord> {
+    let mut devices = BTreeMap::<String, crate::DiscoveryRecord>::new();
+    for observation in observations {
+        let record = devices
+            .entry(observation.endpoint.clone())
+            .or_insert_with(|| crate::DiscoveryRecord {
+                endpoint: observation.endpoint,
+                types: Vec::new(),
+                scopes: Vec::new(),
+                xaddrs: Vec::new(),
+                manufacturer: None,
+                model: None,
+                firmware_version: None,
+                serial_number: None,
+            });
+        merge_unique(&mut record.types, observation.types);
+        merge_unique(&mut record.scopes, observation.scopes);
+        merge_unique(&mut record.xaddrs, observation.xaddrs);
+    }
+    devices.into_values().collect()
+}
+
+fn merge_unique(target: &mut Vec<String>, incoming: Vec<String>) {
+    target.extend(incoming);
+    target.sort();
+    target.dedup();
 }
 
 struct ResolvedTarget {
@@ -756,5 +895,28 @@ mod tests {
             .expect("changed serial should warn");
         assert_eq!(warning.code, "DEVICE_IDENTITY_CHANGED");
         assert!(warning.message.contains("replacement device"));
+    }
+
+    #[test]
+    fn discovery_observations_merge_fields_across_interfaces() {
+        let devices = merge_discovery_observations(vec![
+            oxvif::DiscoveredDevice {
+                endpoint: "urn:uuid:camera".to_owned(),
+                types: vec!["Device".to_owned()],
+                scopes: vec!["scope:a".to_owned()],
+                xaddrs: vec!["http://192.0.2.10/onvif/device_service".to_owned()],
+            },
+            oxvif::DiscoveredDevice {
+                endpoint: "urn:uuid:camera".to_owned(),
+                types: vec!["NetworkVideoTransmitter".to_owned()],
+                scopes: vec!["scope:b".to_owned()],
+                xaddrs: vec!["http://198.51.100.10/onvif/device_service".to_owned()],
+            },
+        ]);
+
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].types.len(), 2);
+        assert_eq!(devices[0].scopes.len(), 2);
+        assert_eq!(devices[0].xaddrs.len(), 2);
     }
 }

@@ -44,6 +44,39 @@ pub enum DeviceFilterField {
     IpCidr,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FilterOperator {
+    #[default]
+    Eq,
+    Neq,
+    Contains,
+    Prefix,
+    In,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MatchMode {
+    #[default]
+    All,
+    Any,
+}
+
+impl FromStr for MatchMode {
+    type Err = AppError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "all" => Ok(Self::All),
+            "any" => Ok(Self::Any),
+            _ => Err(AppError::invalid_argument(
+                "--match must be `all` or `any`.",
+            )),
+        }
+    }
+}
+
 impl DeviceFilterField {
     fn parse(value: &str) -> Result<Self, AppError> {
         match value {
@@ -68,6 +101,8 @@ impl DeviceFilterField {
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub struct DeviceFilter {
     pub field: DeviceFilterField,
+    #[serde(default)]
+    pub operator: FilterOperator,
     pub value: String,
 }
 
@@ -75,15 +110,54 @@ impl FromStr for DeviceFilter {
     type Err = AppError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let (field, value) = split_filter(value)?;
+        let (field_spec, value) = split_filter(value)?;
+        let (field, operator) = field_spec
+            .split_once(':')
+            .map_or((field_spec, "eq"), |(field, operator)| (field, operator));
         let field = DeviceFilterField::parse(field)?;
-        if field == DeviceFilterField::IpCidr {
+        let operator = match operator {
+            "eq" => FilterOperator::Eq,
+            "neq" => FilterOperator::Neq,
+            "contains" => FilterOperator::Contains,
+            "prefix" => FilterOperator::Prefix,
+            "in" => FilterOperator::In,
+            _ => {
+                return Err(AppError::invalid_argument(format!(
+                    "Unknown filter operator `{operator}`."
+                )));
+            }
+        };
+        if operator == FilterOperator::In
+            && field != DeviceFilterField::IpCidr
+            && field != DeviceFilterField::Target
+        {
+            return Err(AppError::invalid_argument(
+                "The `in` operator is supported only for target/ip-cidr fields.",
+            ));
+        }
+        if field == DeviceFilterField::IpCidr
+            && !matches!(
+                operator,
+                FilterOperator::Eq | FilterOperator::Neq | FilterOperator::In
+            )
+        {
+            return Err(AppError::invalid_argument(
+                "The ip-cidr field supports only `in`, `eq`, and `neq`.",
+            ));
+        }
+        if operator == FilterOperator::In || field == DeviceFilterField::IpCidr {
             value.parse::<IpNet>().map_err(|error| {
                 AppError::invalid_argument(format!("Invalid IP CIDR `{value}`: {error}"))
             })?;
         }
+        let operator = if field == DeviceFilterField::IpCidr && operator == FilterOperator::Eq {
+            FilterOperator::In
+        } else {
+            operator
+        };
         Ok(Self {
             field,
+            operator,
             value: value.to_owned(),
         })
     }
@@ -95,6 +169,7 @@ pub struct SavedView {
     pub id: String,
     pub name: String,
     pub filters: Vec<DeviceFilter>,
+    pub match_mode: MatchMode,
 }
 
 /// Fields accepted when a dynamic View is created.
@@ -103,6 +178,23 @@ pub struct NewSavedView {
     pub id: String,
     pub name: Option<String>,
     pub filters: Vec<DeviceFilter>,
+    pub match_mode: MatchMode,
+}
+
+/// Match counts for one clause when `view evaluate --explain` is requested.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct FilterExplanation {
+    pub filter: DeviceFilter,
+    pub matched_devices: usize,
+    pub unmatched_devices: usize,
+}
+
+/// Aggregate explanation of a saved View evaluation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ViewExplanation {
+    pub evaluated_devices: usize,
+    pub matched_devices: usize,
+    pub filters: Vec<FilterExplanation>,
 }
 
 /// A WS-Discovery field accepted by snapshot filtering.
@@ -208,23 +300,71 @@ pub struct CredentialProfileView {
     pub id: String,
     pub username: String,
     pub has_credentials: bool,
+    pub credential_availability: String,
 }
 
-pub(crate) fn device_matches(device: &DeviceView, filters: &[DeviceFilter]) -> bool {
-    filters.iter().all(|filter| match filter.field {
-        DeviceFilterField::Id => equal(&device.id, &filter.value),
-        DeviceFilterField::Name => equal(&device.name, &filter.value),
-        DeviceFilterField::Target => equal(&device.target, &filter.value),
-        DeviceFilterField::DeviceUuid => optional_equal(&device.device_uuid, &filter.value),
-        DeviceFilterField::Manufacturer => optional_equal(&device.manufacturer, &filter.value),
-        DeviceFilterField::Model => optional_equal(&device.model, &filter.value),
-        DeviceFilterField::FirmwareVersion => {
-            optional_equal(&device.firmware_version, &filter.value)
+pub(crate) fn device_matches(
+    device: &DeviceView,
+    filters: &[DeviceFilter],
+    match_mode: MatchMode,
+) -> bool {
+    let matches = |filter: &DeviceFilter| match filter.field {
+        DeviceFilterField::Id => compare(&device.id, filter),
+        DeviceFilterField::Name => compare(&device.name, filter),
+        DeviceFilterField::Target => compare_target(&device.target, filter),
+        DeviceFilterField::DeviceUuid => optional_compare(&device.device_uuid, filter),
+        DeviceFilterField::Manufacturer => optional_compare(&device.manufacturer, filter),
+        DeviceFilterField::Model => optional_compare(&device.model, filter),
+        DeviceFilterField::FirmwareVersion => optional_compare(&device.firmware_version, filter),
+        DeviceFilterField::SerialNumber => optional_compare(&device.serial_number, filter),
+        DeviceFilterField::Tag => collection_compare(&device.tags, filter),
+        DeviceFilterField::IpCidr => {
+            let contained = target_in_cidr(&device.target, &filter.value);
+            if filter.operator == FilterOperator::Neq {
+                !contained
+            } else {
+                contained
+            }
         }
-        DeviceFilterField::SerialNumber => optional_equal(&device.serial_number, &filter.value),
-        DeviceFilterField::Tag => device.tags.iter().any(|tag| equal(tag, &filter.value)),
-        DeviceFilterField::IpCidr => target_in_cidr(&device.target, &filter.value),
-    })
+    };
+    match match_mode {
+        MatchMode::All => filters.iter().all(matches),
+        MatchMode::Any => filters.iter().any(matches),
+    }
+}
+
+fn compare(left: &str, filter: &DeviceFilter) -> bool {
+    match filter.operator {
+        FilterOperator::Eq => equal(left, &filter.value),
+        FilterOperator::Neq => !equal(left, &filter.value),
+        FilterOperator::Contains => left
+            .to_ascii_lowercase()
+            .contains(&filter.value.to_ascii_lowercase()),
+        FilterOperator::Prefix => left
+            .to_ascii_lowercase()
+            .starts_with(&filter.value.to_ascii_lowercase()),
+        FilterOperator::In => target_in_cidr(left, &filter.value),
+    }
+}
+
+fn compare_target(left: &str, filter: &DeviceFilter) -> bool {
+    if filter.operator == FilterOperator::In {
+        target_in_cidr(left, &filter.value)
+    } else {
+        compare(left, filter)
+    }
+}
+
+fn optional_compare(left: &Option<String>, filter: &DeviceFilter) -> bool {
+    left.as_deref().is_some_and(|left| compare(left, filter))
+}
+
+fn collection_compare(values: &[String], filter: &DeviceFilter) -> bool {
+    if filter.operator == FilterOperator::Neq {
+        !values.is_empty() && values.iter().all(|value| compare(value, filter))
+    } else {
+        values.iter().any(|value| compare(value, filter))
+    }
 }
 
 pub(crate) fn discovery_matches(device: &DiscoveryRecord, filters: &[DiscoveryFilter]) -> bool {
@@ -306,6 +446,12 @@ mod tests {
         assert!("ip-cidr=192.168.0.0/24".parse::<DeviceFilter>().is_ok());
         assert!("unknown=value".parse::<DeviceFilter>().is_err());
         assert!("tag=".parse::<DeviceFilter>().is_err());
+        assert!("ip-cidr:neq=192.168.0.0/24".parse::<DeviceFilter>().is_ok());
+        assert!(
+            "ip-cidr:contains=192.168.0.0/24"
+                .parse::<DeviceFilter>()
+                .is_err()
+        );
     }
 
     #[test]
@@ -318,5 +464,18 @@ mod tests {
             "http://192.168.30.15/onvif/device_service",
             "192.168.20.0/24"
         ));
+    }
+
+    #[test]
+    fn tag_neq_requires_every_existing_tag_to_differ() {
+        let filter = "tag:neq=outdoor"
+            .parse::<DeviceFilter>()
+            .expect("valid filter");
+        assert!(!collection_compare(
+            &["outdoor".to_owned(), "loading-bay".to_owned()],
+            &filter
+        ));
+        assert!(collection_compare(&["indoor".to_owned()], &filter));
+        assert!(!collection_compare(&[], &filter));
     }
 }

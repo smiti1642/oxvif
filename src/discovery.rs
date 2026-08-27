@@ -20,7 +20,7 @@
 //! ```
 
 use std::collections::HashSet;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
 use tokio::net::UdpSocket;
@@ -51,6 +51,16 @@ pub struct DiscoveredDevice {
     ///
     /// [`OnvifClient::new`]: crate::client::OnvifClient::new
     pub xaddrs: Vec<String>,
+}
+
+/// One local IPv4 interface that can be selected for multicast discovery.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct DiscoveryInterface {
+    /// Operating-system interface name.
+    pub name: String,
+    /// Non-loopback IPv4 address assigned to the interface.
+    pub address: Ipv4Addr,
 }
 
 impl DiscoveredDevice {
@@ -122,6 +132,58 @@ pub async fn probe(timeout_dur: Duration) -> Vec<DiscoveredDevice> {
     probe_inner(1, timeout_dur, Duration::ZERO, WSD_MULTICAST)
         .await
         .unwrap_or_default()
+}
+
+/// Send one WS-Discovery round and preserve I/O failure information.
+///
+/// This is the automation-oriented counterpart to [`probe`], whose legacy
+/// contract intentionally converts failures to an empty vector.
+pub async fn probe_result(timeout_dur: Duration) -> std::io::Result<Vec<DiscoveredDevice>> {
+    probe_inner(1, timeout_dur, Duration::ZERO, WSD_MULTICAST).await
+}
+
+/// List the local non-loopback IPv4 interfaces available to discovery.
+pub fn discovery_interfaces() -> std::io::Result<Vec<DiscoveryInterface>> {
+    let mut interfaces = if_addrs::get_if_addrs()?
+        .into_iter()
+        .filter_map(|interface| {
+            if interface.is_loopback() {
+                return None;
+            }
+            match interface.addr {
+                if_addrs::IfAddr::V4(address) => Some(DiscoveryInterface {
+                    name: interface.name,
+                    address: address.ip,
+                }),
+                _ => None,
+            }
+        })
+        .collect::<Vec<_>>();
+    interfaces.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then(left.address.cmp(&right.address))
+    });
+    interfaces.dedup();
+    Ok(interfaces)
+}
+
+/// Send one WS-Discovery round only through the selected local IPv4 addresses.
+pub async fn probe_result_on(
+    timeout_dur: Duration,
+    interfaces: &[Ipv4Addr],
+) -> std::io::Result<Vec<DiscoveredDevice>> {
+    if interfaces.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "at least one discovery interface is required",
+        ));
+    }
+    let raw = probe_once_on(timeout_dur, WSD_MULTICAST, Some(interfaces)).await?;
+    let mut devices = Vec::new();
+    let mut seen = HashSet::new();
+    merge_probe_responses(raw, &mut devices, &mut seen);
+    Ok(devices)
 }
 
 /// Send multiple `Probe` rounds and collect deduplicated `ProbeMatch`
@@ -282,9 +344,22 @@ fn merge_probe_responses(
         for d in matches {
             if seen.insert(d.endpoint.clone()) {
                 out.push(d);
+            } else if let Some(existing) = out
+                .iter_mut()
+                .find(|existing| existing.endpoint == d.endpoint)
+            {
+                merge_unique(&mut existing.types, d.types);
+                merge_unique(&mut existing.scopes, d.scopes);
+                merge_unique(&mut existing.xaddrs, d.xaddrs);
             }
         }
     }
+}
+
+fn merge_unique(target: &mut Vec<String>, incoming: Vec<String>) {
+    target.extend(incoming);
+    target.sort();
+    target.dedup();
 }
 
 /// Send NVT + Device probes to a single unicast target and collect responses.
@@ -338,6 +413,14 @@ async fn probe_unicast_inner(
 /// Extracted so multi-round callers can loop this while keeping a single
 /// cross-round dedup set.
 async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<Vec<u8>>> {
+    probe_once_on(timeout_dur, target, None).await
+}
+
+async fn probe_once_on(
+    timeout_dur: Duration,
+    target: &str,
+    selected_interfaces: Option<&[Ipv4Addr]>,
+) -> std::io::Result<Vec<Vec<u8>>> {
     use std::net::{Ipv4Addr, SocketAddrV4};
     use std::sync::{Arc, Mutex};
 
@@ -356,9 +439,14 @@ async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<
     // Send a Probe from every non-loopback IPv4 interface so cameras on any
     // subnet receive it.  0.0.0.0 is always included first as a catch-all
     // (also lets loopback targets work in tests).
-    let bind_ips: Vec<Ipv4Addr> = std::iter::once(Ipv4Addr::UNSPECIFIED)
-        .chain(local_ipv4_addrs())
-        .collect();
+    let bind_ips: Vec<Ipv4Addr> = selected_interfaces.map_or_else(
+        || {
+            std::iter::once(Ipv4Addr::UNSPECIFIED)
+                .chain(local_ipv4_addrs())
+                .collect()
+        },
+        |interfaces| interfaces.to_vec(),
+    );
 
     // Raw datagrams collected by per-interface listener tasks.
     let received: Arc<Mutex<Vec<Vec<u8>>>> = Arc::new(Mutex::new(Vec::new()));
@@ -367,6 +455,7 @@ async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<
     // aborts every per-NIC listener task. Plain `tokio::spawn` would orphan
     // them and they'd keep holding sockets until their own timeout elapses.
     let mut join_set: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
+    let mut listener_count = 0usize;
 
     for ip in bind_ips {
         // Use socket2 to set IP_MULTICAST_IF before converting to tokio.
@@ -396,6 +485,7 @@ async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<
         let Ok(sock) = UdpSocket::from_std(raw.into()) else {
             continue;
         };
+        listener_count += 1;
         let _ = sock.send_to(nvt_probe.as_bytes(), target).await;
         let _ = sock.send_to(device_probe.as_bytes(), target).await;
 
@@ -422,6 +512,13 @@ async fn probe_once(timeout_dur: Duration, target: &str) -> std::io::Result<Vec<
                 }
             }
         });
+    }
+
+    if listener_count == 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AddrNotAvailable,
+            "no selected discovery interface could be bound",
+        ));
     }
 
     // join_all awaits every spawned task to completion. If the surrounding

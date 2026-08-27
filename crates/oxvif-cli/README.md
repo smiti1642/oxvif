@@ -52,28 +52,34 @@ oxvif use taipei-f1/cam-023
 
 oxvif view create outdoor-geovision \
   --filter tag=outdoor \
-  --filter manufacturer=GeoVision
-oxvif view evaluate outdoor-geovision --output json
+  --filter manufacturer:contains=GeoVision \
+  --match all
+oxvif view evaluate outdoor-geovision --explain --output json
 ```
 
 `group/local-alias` always resolves exactly one canonical device. Removing a
 device removes its Group memberships; it does not remove the Groups or Views.
 Device filter fields currently include `id`, `name`, `target`, `uuid`,
-`manufacturer`, `model`, `firmware`, `serial`, `tag`, and `ip-cidr`.
+`manufacturer`, `model`, `firmware`, `serial`, `tag`, and `ip-cidr`. Operators
+use `field[:operator]=value`: `eq`, `neq`, `contains`, `prefix`, and `in`.
+Views combine clauses with `--match all` (default) or `--match any`.
 
 WS-Discovery results can be retained and filtered without registering any
 devices:
 
 ```sh
-oxvif --timeout 3s discover scan --save factory-scan
+oxvif --timeout 3s discover scan
+oxvif --timeout 3s discover scan --interface Ethernet --save factory-scan
 oxvif discover snapshots
 oxvif discover list factory-scan --filter ip-cidr=192.168.20.0/24
 oxvif discover remove factory-scan
 ```
 
-Discovery filters include `endpoint`, `uuid`, `type`, `scope`, `xaddr`,
-`ip-cidr`, and enriched identity fields. Enrichment and explicit bulk import
-plan/apply are the next Stage 2A slice; `discover scan` never adds devices.
+`--interface` may be repeated and accepts a local interface name or IPv4
+address. Scans are ephemeral unless `--save` is supplied. Discovery filters
+include `endpoint`, `uuid`, `type`, `scope`, `xaddr`, `ip-cidr`, and enriched
+identity fields. Enrichment and explicit bulk import plan/apply are the next
+Stage 2A slice; `discover scan` never adds devices.
 
 ## Credentials
 

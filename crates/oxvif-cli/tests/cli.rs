@@ -61,6 +61,19 @@ fn registry_subcommand_help_omits_connection_only_options() {
 }
 
 #[test]
+fn discovery_and_view_help_expose_fleet_controls() {
+    let discovery = run(&["discover", "scan", "--help"]);
+    assert!(discovery.status.success(), "{}", stderr(&discovery));
+    let help = stdout(&discovery);
+    assert!(help.contains("--interface"));
+    assert!(help.contains("--save"));
+
+    let view = run(&["view", "evaluate", "--help"]);
+    assert!(view.status.success(), "{}", stderr(&view));
+    assert!(stdout(&view).contains("--explain"));
+}
+
+#[test]
 fn describe_json_has_stable_envelope() {
     let output = run(&["describe", "--output", "json", "--non-interactive"]);
 

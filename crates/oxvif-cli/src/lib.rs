@@ -22,7 +22,8 @@ pub use contract::{
     DeviceRenameRequest, DeviceUpdateRequest, DiscoverScanRequest, DiscoverySnapshotShowRequest,
     ErrorEnvelope, GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest,
     LiveDeviceInfo, OutputDescriptor, OutputFormat, ResourceIdRequest, ResultMeta, RiskLevel,
-    SCHEMA_VERSION, SecretString, SuccessEnvelope, TargetSelector, ViewCreateRequest, Warning,
+    SCHEMA_VERSION, SecretString, SuccessEnvelope, TargetSelector, ViewCreateRequest,
+    ViewEvaluateRequest, Warning,
 };
 pub use credential::{
     CredentialStore, MemoryCredentialStore, SystemCredentialStore, credential_profile_reference,
@@ -31,8 +32,9 @@ pub use credential::{
 pub use error::{AppError, ErrorCode};
 pub use inventory::{
     CredentialProfileView, DeviceFilter, DeviceFilterField, DiscoveryFilter, DiscoveryFilterField,
-    DiscoveryRecord, DiscoverySnapshotSummary, DiscoverySnapshotView, GroupMemberView, GroupView,
-    NewGroup, NewSavedView, SavedView,
+    DiscoveryRecord, DiscoverySnapshotSummary, DiscoverySnapshotView, FilterExplanation,
+    FilterOperator, GroupMemberView, GroupView, MatchMode, NewGroup, NewSavedView, SavedView,
+    ViewExplanation,
 };
 pub use output::{render_error, render_success};
 pub use registry::{

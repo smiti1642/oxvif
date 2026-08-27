@@ -118,8 +118,7 @@ fn render_human(success: &CommandSuccess) -> String {
             if devices.is_empty() {
                 String::from("No saved devices.")
             } else {
-                let mut output =
-                    String::from("CURRENT  ID               NAME                 TARGET\n");
+                let mut output = String::from("CURRENT | ID | NAME | TARGET\n");
                 for device in devices {
                     let current = if current_device.as_deref() == Some(&device.id) {
                         "*"
@@ -128,7 +127,7 @@ fn render_human(success: &CommandSuccess) -> String {
                     };
                     let _ = writeln!(
                         output,
-                        "{:<7}  {:<16} {:<20} {}",
+                        "{} | {} | {} | {}",
                         current, device.id, device.name, device.target
                     );
                 }
@@ -223,13 +222,36 @@ fn render_human(success: &CommandSuccess) -> String {
             }
         }
         CommandData::ViewRecord { action, view } => format!(
-            "View {action}.\nID: {}\nName: {}\nFilters: {}",
+            "View {action}.\nID: {}\nName: {}\nMatch: {:?}\nFilters: {}",
             view.id,
             view.name,
+            view.match_mode,
             format_device_filters(&view.filters)
         ),
-        CommandData::ViewEvaluation { view, devices } => {
+        CommandData::ViewEvaluation {
+            view,
+            devices,
+            explanation,
+        } => {
             let mut output = format!("View `{}` matched {} device(s).\n", view.id, devices.len());
+            if let Some(explanation) = explanation {
+                let _ = writeln!(
+                    output,
+                    "Evaluated: {} | Match mode: {:?}",
+                    explanation.evaluated_devices, view.match_mode
+                );
+                for item in &explanation.filters {
+                    let _ = writeln!(
+                        output,
+                        "  {:?}:{:?}={} | matched {} | excluded {}",
+                        item.filter.field,
+                        item.filter.operator,
+                        item.filter.value,
+                        item.matched_devices,
+                        item.unmatched_devices
+                    );
+                }
+            }
             for device in devices {
                 let _ = writeln!(output, "{}  {}  {}", device.id, device.name, device.target);
             }
@@ -258,6 +280,28 @@ fn render_human(success: &CommandSuccess) -> String {
                 snapshot.saved_at_unix_ms
             );
             for device in &snapshot.devices {
+                let _ = write!(
+                    output,
+                    "\n  {}  {}",
+                    device.endpoint,
+                    device.xaddrs.first().map_or("(no XAddr)", String::as_str)
+                );
+            }
+            output
+        }
+        CommandData::DiscoveryScan {
+            devices,
+            saved_snapshot,
+            interfaces,
+        } => {
+            let mut output = format!("Discovery found {} device(s).", devices.len());
+            if !interfaces.is_empty() {
+                let _ = write!(output, "\nInterfaces: {}", interfaces.join(", "));
+            }
+            if let Some(snapshot) = saved_snapshot {
+                let _ = write!(output, "\nSaved snapshot: {}", snapshot.id);
+            }
+            for device in devices {
                 let _ = write!(
                     output,
                     "\n  {}  {}",
@@ -300,12 +344,13 @@ fn render_human(success: &CommandSuccess) -> String {
 
 fn render_device(device: &crate::DeviceView) -> String {
     let mut output = format!(
-        "ID: {}\nName: {}\nTarget: {}\nUsername: {}\nCredentials: {}",
+        "ID: {}\nName: {}\nTarget: {}\nUsername: {}\nCredential source: {}\nCredential availability: {}",
         device.id,
         device.name,
         device.target,
         device.username.as_deref().unwrap_or("none"),
-        yes_no(device.has_credentials)
+        device.credential_source.as_deref().unwrap_or("none"),
+        device.credential_availability
     );
     if !device.tags.is_empty() {
         let _ = write!(output, "\nTags: {}", device.tags.join(", "));
@@ -328,7 +373,21 @@ fn render_device(device: &crate::DeviceView) -> String {
 fn format_device_filters(filters: &[crate::DeviceFilter]) -> String {
     filters
         .iter()
-        .map(|filter| format!("{:?}={}", filter.field, filter.value))
+        .map(|filter| {
+            let field = serde_json::to_value(filter.field)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .unwrap_or_else(|| format!("{:?}", filter.field));
+            let operator = serde_json::to_value(filter.operator)
+                .ok()
+                .and_then(|value| value.as_str().map(str::to_owned))
+                .unwrap_or_else(|| format!("{:?}", filter.operator));
+            if operator == "eq" {
+                format!("{field}={}", filter.value)
+            } else {
+                format!("{field}:{operator}={}", filter.value)
+            }
+        })
         .collect::<Vec<_>>()
         .join(", ")
 }

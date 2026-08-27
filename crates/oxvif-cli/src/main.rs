@@ -13,8 +13,8 @@ use oxvif_cli::{
     DeviceCredentialSetRequest, DeviceFilter, DeviceIdRequest, DeviceRenameRequest, DeviceUpdate,
     DeviceUpdateRequest, DiscoverScanRequest, DiscoveryFilter, DiscoverySnapshotShowRequest,
     ExecutionOptions, GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest,
-    NewDevice, NewGroup, NewSavedView, OutputFormat, ResourceIdRequest, ResultMeta, SecretString,
-    TargetSelector, ViewCreateRequest, render_error, render_success,
+    MatchMode, NewDevice, NewGroup, NewSavedView, OutputFormat, ResourceIdRequest, ResultMeta,
+    SecretString, TargetSelector, ViewCreateRequest, render_error, render_success,
 };
 use tokio::time::Instant;
 
@@ -218,13 +218,20 @@ enum ViewCommands {
         name: Option<String>,
         #[arg(long = "filter", required = true)]
         filters: Vec<DeviceFilter>,
+        #[arg(long = "match", default_value = "all")]
+        match_mode: MatchMode,
     },
     /// List saved dynamic Views.
     List,
     /// Show one View definition.
     Show { id: String },
     /// Evaluate a View against current registered-device metadata.
-    Evaluate { id: String },
+    Evaluate {
+        id: String,
+        /// Include per-filter match counts in the result.
+        #[arg(long)]
+        explain: bool,
+    },
     /// Delete a saved View.
     Delete { id: String },
 }
@@ -261,7 +268,10 @@ enum DiscoverCommands {
     /// Run WS-Discovery and save a deterministic named snapshot.
     Scan {
         #[arg(long)]
-        save: String,
+        save: Option<String>,
+        /// Limit multicast discovery to an interface name or IPv4 address.
+        #[arg(long = "interface")]
+        interfaces: Vec<String>,
     },
     /// List records from one snapshot, optionally filtering them.
     List {
@@ -428,16 +438,24 @@ fn build_request(
             },
         },
         Commands::View { command } => match command {
-            ViewCommands::Create { id, name, filters } => {
-                Ok(CommandRequest::ViewCreate(ViewCreateRequest {
-                    view: NewSavedView { id, name, filters },
-                }))
-            }
+            ViewCommands::Create {
+                id,
+                name,
+                filters,
+                match_mode,
+            } => Ok(CommandRequest::ViewCreate(ViewCreateRequest {
+                view: NewSavedView {
+                    id,
+                    name,
+                    filters,
+                    match_mode,
+                },
+            })),
             ViewCommands::List => Ok(CommandRequest::ViewList),
             ViewCommands::Show { id } => Ok(CommandRequest::ViewShow(ResourceIdRequest { id })),
-            ViewCommands::Evaluate { id } => {
-                Ok(CommandRequest::ViewEvaluate(ResourceIdRequest { id }))
-            }
+            ViewCommands::Evaluate { id, explain } => Ok(CommandRequest::ViewEvaluate(
+                oxvif_cli::ViewEvaluateRequest { id, explain },
+            )),
             ViewCommands::Delete { id } => Ok(CommandRequest::ViewDelete(ResourceIdRequest { id })),
         },
         Commands::Credential { command } => match command {
@@ -470,9 +488,10 @@ fn build_request(
             },
         },
         Commands::Discover { command } => match command {
-            DiscoverCommands::Scan { save } => {
+            DiscoverCommands::Scan { save, interfaces } => {
                 Ok(CommandRequest::DiscoverScan(DiscoverScanRequest {
                     snapshot_id: save,
+                    interfaces,
                 }))
             }
             DiscoverCommands::List { snapshot, filters } => Ok(

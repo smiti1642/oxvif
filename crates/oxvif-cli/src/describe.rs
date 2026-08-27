@@ -114,24 +114,56 @@ fn descriptors() -> Vec<CommandDescriptor> {
             "Create a dynamic View from typed device filters.",
             vec![
                 required("id", "string"),
-                required("filter", "field=value[]"),
+                argument_with_values(
+                    "filter",
+                    "field[:operator]=value[]",
+                    true,
+                    &[
+                        "id",
+                        "name",
+                        "target",
+                        "uuid",
+                        "manufacturer",
+                        "model",
+                        "firmware",
+                        "serial",
+                        "tag",
+                        "ip-cidr",
+                        "eq",
+                        "neq",
+                        "contains",
+                        "prefix",
+                        "in",
+                    ],
+                ),
+                argument_with_values("match", "string", false, &["all", "any"]),
             ],
         ),
         read_descriptor("view.list", "List dynamic Views."),
         read_descriptor("view.show", "Show one dynamic View definition."),
-        read_descriptor(
+        descriptor(
             "view.evaluate",
             "Evaluate a View against current registered-device metadata.",
+            RiskLevel::Read,
+            false,
+            false,
+            vec![required("id", "string"), optional("explain", "boolean")],
         ),
         registry_descriptor(
             "view.delete",
             "Delete a dynamic View.",
             vec![required("id", "string")],
         ),
-        registry_descriptor(
+        descriptor(
             "discover.scan",
-            "Run WS-Discovery and save a deterministic named snapshot.",
-            vec![required("save", "string")],
+            "Run ephemeral WS-Discovery; optionally save a named snapshot.",
+            RiskLevel::Write,
+            false,
+            false,
+            vec![
+                optional("save", "string"),
+                optional("interface", "interface name | IPv4[]"),
+            ],
         ),
         read_descriptor("discover.snapshots", "List named discovery snapshots."),
         read_descriptor(
@@ -178,6 +210,8 @@ fn describe_descriptor() -> CommandDescriptor {
             description: "Implemented command descriptors and their machine-readable contracts."
                 .to_owned(),
         },
+        possible_errors: vec!["COMMAND_NOT_FOUND".to_owned()],
+        examples: vec!["oxvif describe device.info --output json".to_owned()],
     }
 }
 
@@ -241,6 +275,14 @@ fn descriptor(
             value_type: "object".to_owned(),
             description: "A typed command result inside the stable oxvif envelope.".to_owned(),
         },
+        possible_errors: vec![
+            "INVALID_ARGUMENT".to_owned(),
+            "RESOURCE_NOT_FOUND".to_owned(),
+            "CREDENTIAL_UNAVAILABLE".to_owned(),
+            "DEVICE_CONNECTION_FAILED".to_owned(),
+            "DISCOVERY_FAILED".to_owned(),
+        ],
+        examples: Vec::new(),
     }
 }
 
@@ -264,6 +306,20 @@ fn argument(name: &str, value_type: &str, required: bool) -> ArgumentDescriptor 
         },
         allowed_values: Vec::new(),
     }
+}
+
+fn argument_with_values(
+    name: &str,
+    value_type: &str,
+    required: bool,
+    allowed_values: &[&str],
+) -> ArgumentDescriptor {
+    let mut argument = argument(name, value_type, required);
+    argument.allowed_values = allowed_values
+        .iter()
+        .map(|value| (*value).to_owned())
+        .collect();
+    argument
 }
 
 #[cfg(test)]

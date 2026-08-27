@@ -19,6 +19,7 @@ pub enum ErrorCode {
     RegistryVersionUnsupported,
     CredentialUnavailable,
     DeviceConnectionFailed,
+    DiscoveryFailed,
     SerializationFailed,
     Internal,
 }
@@ -35,7 +36,7 @@ impl ErrorCode {
             | Self::RegistryCorrupt
             | Self::RegistryVersionUnsupported => 10,
             Self::CredentialUnavailable => 11,
-            Self::DeviceConnectionFailed => 20,
+            Self::DeviceConnectionFailed | Self::DiscoveryFailed => 20,
             Self::SerializationFailed | Self::Internal => 70,
         }
     }
@@ -56,6 +57,7 @@ impl ErrorCode {
             Self::RegistryVersionUnsupported => "REGISTRY_VERSION_UNSUPPORTED",
             Self::CredentialUnavailable => "CREDENTIAL_UNAVAILABLE",
             Self::DeviceConnectionFailed => "DEVICE_CONNECTION_FAILED",
+            Self::DiscoveryFailed => "DISCOVERY_FAILED",
             Self::SerializationFailed => "SERIALIZATION_FAILED",
             Self::Internal => "INTERNAL",
         }
@@ -214,6 +216,18 @@ impl AppError {
             retryable: true,
             suggested_action: Some(
                 "Verify target reachability, credentials, and device clock synchronization."
+                    .to_owned(),
+            ),
+        }
+    }
+
+    pub fn discovery_failed(message: impl Into<String>) -> Self {
+        Self {
+            code: ErrorCode::DiscoveryFailed,
+            message: message.into(),
+            retryable: true,
+            suggested_action: Some(
+                "Check local network interfaces, multicast routing, and firewall policy."
                     .to_owned(),
             ),
         }

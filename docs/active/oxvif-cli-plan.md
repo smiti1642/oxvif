@@ -599,17 +599,19 @@ First slice delivered 2026-08-27:
 Verified after the first slice:
 
 - `cargo +1.88.0 check -p oxvif-cli`: clean at the workspace MSRV.
-- `cargo test -p oxvif-cli`: 30 passed across library, binary, and CLI process
+- `cargo test -p oxvif-cli`: 40 passed across library, binary, and CLI process
   suites.
-- `cargo test --workspace --all-features`: 975 passed, 3 ignored, 0 failed.
+- `cargo test --workspace --all-features`: 985 passed, 3 ignored, 0 failed.
 - `cargo clippy -p oxvif-cli --all-targets --no-deps -- -D warnings`: clean.
 - `cargo rustdoc -p oxvif-cli --lib -- -D warnings`: clean.
-- `cargo package -p oxvif-cli --allow-dirty`: 16 files packaged and rebuilt
-  successfully against the crates.io `oxvif 0.15.0` dependency.
+- `cargo package -p oxvif-cli --allow-dirty --no-verify`: 17 files packaged.
+  Final tarball verification requires publishing an oxvif release containing
+  `probe_result`, `probe_result_on`, and `discovery_interfaces` before
+  publishing `oxvif-cli`; workspace and MSRV builds use the local dependency.
 
 Remaining in Stage 2A: authenticated discovery enrichment, deterministic bulk
 import ID/alias proposals, import `--plan/--apply`, snapshot refresh lifecycle,
-explicit interface selection, and set resolution for future batch commands.
+and set resolution for future batch commands.
 
 UX contract correction approved 2026-08-27:
 
@@ -624,6 +626,12 @@ UX contract correction approved 2026-08-27:
   partial-failure diagnostics, and merge duplicate observations.
 - Add typed filter operators, all/any matching, View explanation output,
   Unicode-aware rendering, and complete Agent-readable command descriptors.
+
+Implementation status 2026-08-27: the schema-v2 Agent contract, consistent
+selectors, registry-v3 external snapshots, ephemeral discovery, explicit
+interface selection, duplicate observation merge, typed View filters,
+`--match all|any`, `view evaluate --explain`, credential status, readable fleet
+output, and per-interface partial-failure warnings are implemented.
 
 ### Stage 2B — read-only diagnostic MVP
 
