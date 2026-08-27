@@ -22,9 +22,9 @@ pub use contract::{
     DeviceImportRequest, DeviceRenameRequest, DeviceUpdateRequest, DiscoverScanRequest,
     DiscoveryEnrichRequest, DiscoveryRefreshRequest, DiscoverySnapshotShowRequest, ErrorEnvelope,
     GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode,
-    LiveDeviceInfo, OutputDescriptor, OutputFormat, ResourceIdRequest, ResultMeta, RiskLevel,
-    SCHEMA_VERSION, SecretString, SuccessEnvelope, TargetSelector, ViewCreateRequest,
-    ViewEvaluateRequest, Warning,
+    LiveDeviceInfo, OutputDescriptor, OutputFormat, ProfileConnectRequest, ResourceIdRequest,
+    ResultMeta, RiskLevel, SCHEMA_VERSION, SecretString, SuccessEnvelope, TargetSelector,
+    ViewCreateRequest, ViewEvaluateRequest, Warning,
 };
 pub use credential::{
     CredentialStore, MemoryCredentialStore, SystemCredentialStore, credential_profile_reference,

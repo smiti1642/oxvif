@@ -71,6 +71,14 @@ pub enum CommandRequest {
     Current,
     DeviceTest(DeviceConnectRequest),
     DeviceInfo(DeviceConnectRequest),
+    DeviceCapabilities(DeviceConnectRequest),
+    DeviceServices(DeviceConnectRequest),
+    MediaProfiles(DeviceConnectRequest),
+    MediaStreamUri(ProfileConnectRequest),
+    MediaSnapshotUri(ProfileConnectRequest),
+    PtzStatus(ProfileConnectRequest),
+    PtzPresets(ProfileConnectRequest),
+    HealthCheck(DeviceConnectRequest),
     DeviceRefresh(DeviceIdRequest),
 }
 
@@ -116,6 +124,14 @@ impl CommandRequest {
             Self::Current => "current",
             Self::DeviceTest(_) => "device.test",
             Self::DeviceInfo(_) => "device.info",
+            Self::DeviceCapabilities(_) => "device.capabilities",
+            Self::DeviceServices(_) => "device.services",
+            Self::MediaProfiles(_) => "media.profiles",
+            Self::MediaStreamUri(_) => "media.stream-uri",
+            Self::MediaSnapshotUri(_) => "media.snapshot-uri",
+            Self::PtzStatus(_) => "ptz.status",
+            Self::PtzPresets(_) => "ptz.presets",
+            Self::HealthCheck(_) => "health.check",
             Self::DeviceRefresh(_) => "device.refresh",
         }
     }
@@ -283,6 +299,12 @@ pub struct DeviceConnectRequest {
     pub selector: TargetSelector,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProfileConnectRequest {
+    pub selector: TargetSelector,
+    pub profile: String,
+}
+
 /// Risk attached to a command in the self-description surface.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -436,6 +458,12 @@ pub enum CommandData {
         device_id: Option<String>,
         target: String,
         information: LiveDeviceInfo,
+    },
+    DeviceDiagnostic {
+        operation: String,
+        device_id: Option<String>,
+        target: String,
+        result: serde_json::Value,
     },
 }
 

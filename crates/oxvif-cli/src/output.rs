@@ -293,12 +293,16 @@ fn render_human(success: &CommandSuccess) -> String {
             if snapshots.is_empty() {
                 String::from("No discovery snapshots.")
             } else {
-                let mut output = String::from("ID               DEVICES  SAVED_AT_UNIX_MS\n");
+                let mut output =
+                    String::from("ID               GENERATION  DEVICES  SAVED_AT_UNIX_MS\n");
                 for snapshot in snapshots {
                     let _ = writeln!(
                         output,
-                        "{:<16} {:<8} {}",
-                        snapshot.id, snapshot.device_count, snapshot.saved_at_unix_ms
+                        "{:<16} {:<11} {:<8} {}",
+                        snapshot.id,
+                        snapshot.generation,
+                        snapshot.device_count,
+                        snapshot.saved_at_unix_ms
                     );
                 }
                 output
@@ -306,8 +310,14 @@ fn render_human(success: &CommandSuccess) -> String {
         }
         CommandData::DiscoverySnapshotRecord { action, snapshot } => {
             let mut output = format!(
-                "Discovery snapshot {action}.\nID: {}\nDevices: {}\nSaved at (Unix ms): {}",
+                "Discovery snapshot {action}.\nID: {}\nGeneration: {}\nInterfaces: {}\nDevices: {}\nSaved at (Unix ms): {}",
                 snapshot.id,
+                snapshot.generation,
+                if snapshot.interfaces.is_empty() {
+                    "(unknown)".to_owned()
+                } else {
+                    snapshot.interfaces.join(", ")
+                },
                 snapshot.devices.len(),
                 snapshot.saved_at_unix_ms
             );
@@ -331,7 +341,11 @@ fn render_human(success: &CommandSuccess) -> String {
                 let _ = write!(output, "\nInterfaces: {}", interfaces.join(", "));
             }
             if let Some(snapshot) = saved_snapshot {
-                let _ = write!(output, "\nSaved snapshot: {}", snapshot.id);
+                let _ = write!(
+                    output,
+                    "\nSaved snapshot: {} (generation {})",
+                    snapshot.id, snapshot.generation
+                );
             }
             for device in devices {
                 let _ = write!(
@@ -374,6 +388,17 @@ fn render_human(success: &CommandSuccess) -> String {
             "Device ID: {}\nTarget: {target}\n{}",
             device_id.as_deref().unwrap_or("(direct target)"),
             render_live_information(information)
+        ),
+        CommandData::DeviceDiagnostic {
+            operation,
+            device_id,
+            target,
+            result,
+        } => format!(
+            "Operation: {operation}\nDevice ID: {}\nTarget: {target}\nResult:\n{}",
+            device_id.as_deref().unwrap_or("(direct target)"),
+            serde_json::to_string_pretty(result)
+                .unwrap_or_else(|_| "(result serialization failed)".to_owned())
         ),
     };
 

@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, env, net::Ipv4Addr, sync::Arc, time::Duration};
 
-use oxvif::{DeviceInfo, OnvifClient};
+use oxvif::{DeviceInfo, OnvifClient, OnvifSession, health::HealthCheck};
 use tokio::time::{Instant, timeout};
 
 use crate::{
@@ -537,6 +537,58 @@ impl Application {
                     target: Some(resolved.target),
                 }
             }
+            CommandRequest::DeviceCapabilities(request) => {
+                self.device_diagnostic(request.selector, DiagnosticOperation::Capabilities, options)
+                    .await?
+            }
+            CommandRequest::DeviceServices(request) => {
+                self.device_diagnostic(request.selector, DiagnosticOperation::Services, options)
+                    .await?
+            }
+            CommandRequest::MediaProfiles(request) => {
+                self.device_diagnostic(
+                    request.selector,
+                    DiagnosticOperation::MediaProfiles,
+                    options,
+                )
+                .await?
+            }
+            CommandRequest::MediaStreamUri(request) => {
+                self.device_diagnostic(
+                    request.selector,
+                    DiagnosticOperation::MediaStreamUri(request.profile),
+                    options,
+                )
+                .await?
+            }
+            CommandRequest::MediaSnapshotUri(request) => {
+                self.device_diagnostic(
+                    request.selector,
+                    DiagnosticOperation::MediaSnapshotUri(request.profile),
+                    options,
+                )
+                .await?
+            }
+            CommandRequest::PtzStatus(request) => {
+                self.device_diagnostic(
+                    request.selector,
+                    DiagnosticOperation::PtzStatus(request.profile),
+                    options,
+                )
+                .await?
+            }
+            CommandRequest::PtzPresets(request) => {
+                self.device_diagnostic(
+                    request.selector,
+                    DiagnosticOperation::PtzPresets(request.profile),
+                    options,
+                )
+                .await?
+            }
+            CommandRequest::HealthCheck(request) => {
+                self.device_diagnostic(request.selector, DiagnosticOperation::Health, options)
+                    .await?
+            }
             CommandRequest::DeviceRefresh(request) => {
                 let id = self.registry.resolve_device_selector(&request.id)?;
                 let previous = self.registry.get(&id)?;
@@ -689,6 +741,175 @@ impl Application {
             options,
         )
         .await
+    }
+
+    async fn device_diagnostic(
+        &self,
+        selector: crate::TargetSelector,
+        operation: DiagnosticOperation,
+        options: &ExecutionOptions,
+    ) -> Result<Outcome, AppError> {
+        let resolved = self.resolve_target(selector)?;
+        let operation_name = operation.name().to_owned();
+        let result = execute_diagnostic(&resolved, operation, options).await?;
+        Ok(Outcome {
+            data: CommandData::DeviceDiagnostic {
+                operation: operation_name,
+                device_id: resolved.device_id.clone(),
+                target: resolved.target.clone(),
+                result,
+            },
+            warnings: Vec::new(),
+            device_id: resolved.device_id,
+            selected_by: resolved.selected_by,
+            target: Some(resolved.target),
+        })
+    }
+}
+
+enum DiagnosticOperation {
+    Capabilities,
+    Services,
+    MediaProfiles,
+    MediaStreamUri(String),
+    MediaSnapshotUri(String),
+    PtzStatus(String),
+    PtzPresets(String),
+    Health,
+}
+
+impl DiagnosticOperation {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Capabilities => "device.capabilities",
+            Self::Services => "device.services",
+            Self::MediaProfiles => "media.profiles",
+            Self::MediaStreamUri(_) => "media.stream-uri",
+            Self::MediaSnapshotUri(_) => "media.snapshot-uri",
+            Self::PtzStatus(_) => "ptz.status",
+            Self::PtzPresets(_) => "ptz.presets",
+            Self::Health => "health.check",
+        }
+    }
+}
+
+async fn execute_diagnostic(
+    resolved: &ResolvedTarget,
+    operation: DiagnosticOperation,
+    options: &ExecutionOptions,
+) -> Result<serde_json::Value, AppError> {
+    if matches!(&operation, DiagnosticOperation::Health) {
+        return execute_health_check(resolved, options).await;
+    }
+    let attempts = options.retries.saturating_add(1);
+    let mut last_error = None;
+    for _ in 0..attempts {
+        let future = async {
+            let mut builder = OnvifSession::builder(&resolved.target);
+            if let (Some(username), Some(password)) =
+                (resolved.username.as_deref(), resolved.password.as_deref())
+            {
+                builder = builder.with_credentials(username, password);
+            }
+            let session = builder.build().await.map_err(|error| error.to_string())?;
+            let mut value = match &operation {
+                DiagnosticOperation::Capabilities => serde_json::to_value(session.capabilities()),
+                DiagnosticOperation::Services => {
+                    serde_json::to_value(session.get_services().await.map_err(|e| e.to_string())?)
+                }
+                DiagnosticOperation::MediaProfiles => {
+                    serde_json::to_value(session.get_profiles().await.map_err(|e| e.to_string())?)
+                }
+                DiagnosticOperation::MediaStreamUri(profile) => serde_json::to_value(
+                    session
+                        .get_stream_uri(profile)
+                        .await
+                        .map_err(|e| e.to_string())?,
+                ),
+                DiagnosticOperation::MediaSnapshotUri(profile) => serde_json::to_value(
+                    session
+                        .get_snapshot_uri(profile)
+                        .await
+                        .map_err(|e| e.to_string())?,
+                ),
+                DiagnosticOperation::PtzStatus(profile) => serde_json::to_value(
+                    session
+                        .ptz_get_status(profile)
+                        .await
+                        .map_err(|e| e.to_string())?,
+                ),
+                DiagnosticOperation::PtzPresets(profile) => serde_json::to_value(
+                    session
+                        .ptz_get_presets(profile)
+                        .await
+                        .map_err(|e| e.to_string())?,
+                ),
+                DiagnosticOperation::Health => unreachable!("health is handled above"),
+            }
+            .map_err(|error| error.to_string())?;
+            sanitize_uri_values(&mut value);
+            Ok::<_, String>(value)
+        };
+        match timeout(options.timeout, future).await {
+            Ok(Ok(value)) => return Ok(value),
+            Ok(Err(error)) => last_error = Some(error),
+            Err(_) => {
+                last_error = Some(format!(
+                    "Diagnostic exceeded the {} ms timeout.",
+                    options.timeout.as_millis()
+                ));
+            }
+        }
+    }
+    Err(AppError::device_connection_failed(
+        last_error.unwrap_or_else(|| "Device diagnostic failed without an error.".to_owned()),
+    ))
+}
+
+async fn execute_health_check(
+    resolved: &ResolvedTarget,
+    options: &ExecutionOptions,
+) -> Result<serde_json::Value, AppError> {
+    let mut check = HealthCheck::new(&resolved.target);
+    if let (Some(username), Some(password)) =
+        (resolved.username.as_deref(), resolved.password.as_deref())
+    {
+        check = check.with_credentials(username, password);
+    }
+    let report = timeout(options.timeout, check.run()).await.map_err(|_| {
+        AppError::device_connection_failed(format!(
+            "Health check exceeded the {} ms timeout.",
+            options.timeout.as_millis()
+        ))
+    })?;
+    let mut value = serde_json::to_value(report)
+        .map_err(|error| AppError::serialization_failed(error.to_string()))?;
+    sanitize_uri_values(&mut value);
+    Ok(value)
+}
+
+fn sanitize_uri_values(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                sanitize_uri_values(item);
+            }
+        }
+        serde_json::Value::Object(fields) => {
+            for value in fields.values_mut() {
+                sanitize_uri_values(value);
+            }
+        }
+        serde_json::Value::String(text) => {
+            if let Ok(mut uri) = url::Url::parse(text)
+                && (!uri.username().is_empty() || uri.password().is_some())
+            {
+                let _ = uri.set_username("");
+                let _ = uri.set_password(None);
+                *text = uri.to_string();
+            }
+        }
+        _ => {}
     }
 }
 
@@ -1243,6 +1464,96 @@ mod tests {
                 .devices,
             before.devices
         );
+    }
+
+    #[tokio::test]
+    async fn read_only_diagnostics_run_against_mock_device() {
+        let server = oxvif::mock::MockServer::start()
+            .await
+            .expect("mock server should start");
+        let directory = tempfile::tempdir().expect("temp directory");
+        let application = Application::with_stores(
+            RegistryStore::at(directory.path()),
+            Arc::new(MemoryCredentialStore::default()),
+        );
+        let target = || crate::TargetSelector {
+            device: None,
+            target: Some(server.device_url().to_owned()),
+        };
+        let options = ExecutionOptions {
+            timeout: Duration::from_secs(20),
+            ..ExecutionOptions::default()
+        };
+
+        let capabilities = application
+            .execute(
+                CommandRequest::DeviceCapabilities(crate::DeviceConnectRequest {
+                    selector: target(),
+                }),
+                &options,
+            )
+            .await
+            .expect("capabilities should succeed");
+        let CommandData::DeviceDiagnostic { result, .. } = capabilities.data else {
+            panic!("expected diagnostic result");
+        };
+        assert!(result.get("media").is_some());
+
+        let profiles = application
+            .execute(
+                CommandRequest::MediaProfiles(crate::DeviceConnectRequest { selector: target() }),
+                &options,
+            )
+            .await
+            .expect("profiles should succeed");
+        let CommandData::DeviceDiagnostic { result, .. } = profiles.data else {
+            panic!("expected diagnostic result");
+        };
+        let profile = result[0]["token"]
+            .as_str()
+            .expect("profile token")
+            .to_owned();
+
+        let requests = [
+            CommandRequest::DeviceServices(crate::DeviceConnectRequest { selector: target() }),
+            CommandRequest::MediaStreamUri(crate::ProfileConnectRequest {
+                selector: target(),
+                profile: profile.clone(),
+            }),
+            CommandRequest::MediaSnapshotUri(crate::ProfileConnectRequest {
+                selector: target(),
+                profile: profile.clone(),
+            }),
+            CommandRequest::PtzStatus(crate::ProfileConnectRequest {
+                selector: target(),
+                profile: profile.clone(),
+            }),
+            CommandRequest::PtzPresets(crate::ProfileConnectRequest {
+                selector: target(),
+                profile,
+            }),
+            CommandRequest::HealthCheck(crate::DeviceConnectRequest { selector: target() }),
+        ];
+        for request in requests {
+            let result = application
+                .execute(request, &options)
+                .await
+                .expect("diagnostic should succeed");
+            assert!(matches!(result.data, CommandData::DeviceDiagnostic { .. }));
+        }
+    }
+
+    #[test]
+    fn diagnostic_uri_sanitizer_removes_userinfo() {
+        let mut value = serde_json::json!({
+            "uri": "rtsp://admin:top-secret@192.0.2.10/stream",
+            "nested": ["http://user:pass@example.test/snapshot.jpg"]
+        });
+        sanitize_uri_values(&mut value);
+
+        assert_eq!(value["uri"], "rtsp://192.0.2.10/stream");
+        assert_eq!(value["nested"][0], "http://example.test/snapshot.jpg");
+        assert!(!value.to_string().contains("top-secret"));
     }
 
     #[test]

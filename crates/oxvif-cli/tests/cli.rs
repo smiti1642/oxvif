@@ -114,7 +114,7 @@ fn describes_one_command() {
 fn unknown_described_command_is_structured_error() {
     let output = run(&[
         "describe",
-        "media.stream-uri",
+        "device.factory-reset",
         "--output",
         "json",
         "--non-interactive",

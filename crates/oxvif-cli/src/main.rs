@@ -17,8 +17,8 @@ use oxvif_cli::{
     DiscoveryEnrichRequest, DiscoveryFilter, DiscoveryImportOverride, DiscoveryImportOverrides,
     DiscoveryRefreshRequest, DiscoverySnapshotShowRequest, ExecutionOptions, GroupCreateRequest,
     GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode, MatchMode, NewDevice, NewGroup,
-    NewSavedView, OutputFormat, ResourceIdRequest, ResultMeta, SecretString, TargetSelector,
-    ViewCreateRequest, render_error, render_success,
+    NewSavedView, OutputFormat, ProfileConnectRequest, ResourceIdRequest, ResultMeta, SecretString,
+    TargetSelector, ViewCreateRequest, render_error, render_success,
 };
 use tokio::time::Instant;
 
@@ -84,6 +84,21 @@ enum Commands {
     Device {
         #[command(subcommand)]
         command: DeviceCommands,
+    },
+    /// Inspect media profiles and obtain read-only media URIs.
+    Media {
+        #[command(subcommand)]
+        command: MediaCommands,
+    },
+    /// Inspect PTZ state and presets without moving the camera.
+    Ptz {
+        #[command(subcommand)]
+        command: PtzCommands,
+    },
+    /// Run read-only device health diagnostics.
+    Health {
+        #[command(subcommand)]
+        command: HealthCommands,
     },
     /// Manage static groups and Group-local device aliases.
     Group {
@@ -200,8 +215,74 @@ enum DeviceCommands {
         #[arg(long)]
         target: Option<String>,
     },
+    /// Read the device's advertised ONVIF capabilities.
+    Capabilities {
+        /// Saved device selector: a global ID or group/local-alias.
+        id: Option<String>,
+        /// Use a direct ONVIF URL, hostname, or IP without saving it.
+        #[arg(long)]
+        target: Option<String>,
+    },
+    /// List all ONVIF service endpoints advertised by the device.
+    Services {
+        /// Saved device selector: a global ID or group/local-alias.
+        id: Option<String>,
+        /// Use a direct ONVIF URL, hostname, or IP without saving it.
+        #[arg(long)]
+        target: Option<String>,
+    },
     /// Read live information and update cached registry metadata.
     Refresh { id: String },
+}
+
+#[derive(Debug, Subcommand)]
+enum MediaCommands {
+    /// List Media1 profiles.
+    Profiles {
+        #[arg(long)]
+        target: Option<String>,
+    },
+    /// Get the RTSP URI for one media profile.
+    StreamUri {
+        #[arg(long)]
+        profile: String,
+        #[arg(long)]
+        target: Option<String>,
+    },
+    /// Get the snapshot URI for one media profile.
+    SnapshotUri {
+        #[arg(long)]
+        profile: String,
+        #[arg(long)]
+        target: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum PtzCommands {
+    /// Read current PTZ position and movement state.
+    Status {
+        #[arg(long)]
+        profile: String,
+        #[arg(long)]
+        target: Option<String>,
+    },
+    /// List stored PTZ presets without moving the camera.
+    Presets {
+        #[arg(long)]
+        profile: String,
+        #[arg(long)]
+        target: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum HealthCommands {
+    /// Run the default read-only health and conformance checks.
+    Check {
+        #[arg(long)]
+        target: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -578,6 +659,46 @@ fn build_request(
                 }))
             }
         },
+        Commands::Media { command } => match command {
+            MediaCommands::Profiles { target } => {
+                Ok(CommandRequest::MediaProfiles(DeviceConnectRequest {
+                    selector: selector(target),
+                }))
+            }
+            MediaCommands::StreamUri { profile, target } => {
+                Ok(CommandRequest::MediaStreamUri(ProfileConnectRequest {
+                    selector: selector(target),
+                    profile,
+                }))
+            }
+            MediaCommands::SnapshotUri { profile, target } => {
+                Ok(CommandRequest::MediaSnapshotUri(ProfileConnectRequest {
+                    selector: selector(target),
+                    profile,
+                }))
+            }
+        },
+        Commands::Ptz { command } => match command {
+            PtzCommands::Status { profile, target } => {
+                Ok(CommandRequest::PtzStatus(ProfileConnectRequest {
+                    selector: selector(target),
+                    profile,
+                }))
+            }
+            PtzCommands::Presets { profile, target } => {
+                Ok(CommandRequest::PtzPresets(ProfileConnectRequest {
+                    selector: selector(target),
+                    profile,
+                }))
+            }
+        },
+        Commands::Health { command } => match command {
+            HealthCommands::Check { target } => {
+                Ok(CommandRequest::HealthCheck(DeviceConnectRequest {
+                    selector: selector(target),
+                }))
+            }
+        },
         Commands::Device { command } => match command {
             DeviceCommands::Add {
                 id,
@@ -708,6 +829,18 @@ fn build_request(
                     selector,
                 }))
             }
+            DeviceCommands::Capabilities { id, target } => {
+                let selector = selector_with_positional(selector(target), id)?;
+                Ok(CommandRequest::DeviceCapabilities(DeviceConnectRequest {
+                    selector,
+                }))
+            }
+            DeviceCommands::Services { id, target } => {
+                let selector = selector_with_positional(selector(target), id)?;
+                Ok(CommandRequest::DeviceServices(DeviceConnectRequest {
+                    selector,
+                }))
+            }
             DeviceCommands::Refresh { id } => {
                 Ok(CommandRequest::DeviceRefresh(DeviceIdRequest { id }))
             }
@@ -717,7 +850,16 @@ fn build_request(
     if selected_device.is_some()
         && !matches!(
             request,
-            CommandRequest::DeviceTest(_) | CommandRequest::DeviceInfo(_)
+            CommandRequest::DeviceTest(_)
+                | CommandRequest::DeviceInfo(_)
+                | CommandRequest::DeviceCapabilities(_)
+                | CommandRequest::DeviceServices(_)
+                | CommandRequest::MediaProfiles(_)
+                | CommandRequest::MediaStreamUri(_)
+                | CommandRequest::MediaSnapshotUri(_)
+                | CommandRequest::PtzStatus(_)
+                | CommandRequest::PtzPresets(_)
+                | CommandRequest::HealthCheck(_)
         )
     {
         return Err(AppError::invalid_argument(
@@ -725,6 +867,21 @@ fn build_request(
         ));
     }
     Ok(request)
+}
+
+fn selector_with_positional(
+    mut selector: TargetSelector,
+    id: Option<String>,
+) -> Result<TargetSelector, AppError> {
+    if let Some(id) = id {
+        if selector.device.is_some() || selector.target.is_some() {
+            return Err(AppError::invalid_argument(
+                "A positional device selector cannot be combined with --device or --target.",
+            ));
+        }
+        selector.device = Some(id);
+    }
+    Ok(selector)
 }
 
 fn read_password_from_stdin() -> Result<String, AppError> {

@@ -197,6 +197,35 @@ fn descriptors() -> Vec<CommandDescriptor> {
         device_read_descriptor("device.test", "Verify connectivity and authentication."),
         device_read_descriptor("device.info", "Read live ONVIF device information."),
         device_read_descriptor(
+            "device.capabilities",
+            "Read the device's advertised ONVIF capabilities.",
+        ),
+        device_read_descriptor(
+            "device.services",
+            "List all ONVIF service endpoints advertised by the device.",
+        ),
+        device_read_descriptor("media.profiles", "List Media1 profiles."),
+        profile_read_descriptor(
+            "media.stream-uri",
+            "Get the credential-sanitized RTSP URI for one media profile.",
+        ),
+        profile_read_descriptor(
+            "media.snapshot-uri",
+            "Get the credential-sanitized snapshot URI for one media profile.",
+        ),
+        profile_read_descriptor(
+            "ptz.status",
+            "Read current PTZ position and movement state.",
+        ),
+        profile_read_descriptor(
+            "ptz.presets",
+            "List stored PTZ presets without moving the camera.",
+        ),
+        device_read_descriptor(
+            "health.check",
+            "Run default read-only health and conformance checks.",
+        ),
+        device_read_descriptor(
             "device.refresh",
             "Read live device information and update cached registry metadata.",
         ),
@@ -316,6 +345,14 @@ fn device_read_descriptor(name: &str, summary: &str) -> CommandDescriptor {
     )
 }
 
+fn profile_read_descriptor(name: &str, summary: &str) -> CommandDescriptor {
+    let mut command = device_read_descriptor(name, summary);
+    command
+        .arguments
+        .push(required("profile", "media profile token"));
+    command
+}
+
 fn descriptor(
     name: &str,
     summary: &str,
@@ -333,6 +370,11 @@ fn descriptor(
         retryable: name.starts_with("device.test")
             || name.starts_with("device.info")
             || name.starts_with("device.refresh")
+            || name.starts_with("device.capabilities")
+            || name.starts_with("device.services")
+            || name.starts_with("media.")
+            || name.starts_with("ptz.")
+            || name == "health.check"
             || name == "discover.scan"
             || name == "discover.refresh",
         arguments,
@@ -399,14 +441,14 @@ mod tests {
             panic!("expected command list");
         };
 
-        assert_eq!(commands.len(), 39);
+        assert_eq!(commands.len(), 47);
         assert_eq!(commands[0].name, "agent.guide");
     }
 
     #[test]
     fn unknown_command_is_typed_error() {
         let error = execute(DescribeRequest {
-            command: Some("media.stream-uri".to_owned()),
+            command: Some("device.factory-reset".to_owned()),
         })
         .expect_err("unimplemented command should fail");
 

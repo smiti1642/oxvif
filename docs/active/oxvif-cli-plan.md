@@ -699,6 +699,12 @@ idempotent re-planning are implemented.
 device ID, and `group/local-alias` in both human and non-interactive structured
 modes. Set selection is enabled only where batch behavior is specified.
 
+Implementation status 2026-08-27: single-target capabilities/services, Media1
+profiles and credential-sanitized stream/snapshot URIs, PTZ status/presets, and
+the default read-only health report all execute through the shared application
+layer. MockServer covers the complete diagnostic path. Group/View set selection
+and deterministic partial-success output are completed in Stage 3.
+
 ### Stage 3 — Agent hardening and fleet execution
 
 - Stabilize schema version 1 and publish command schemas.

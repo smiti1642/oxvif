@@ -125,6 +125,27 @@ versioned JSON file (or via `--overrides-stdin`):
 Pass it as `--overrides overrides.json` to both plan and apply. The normalized
 override document and snapshot generation are included in the plan fingerprint.
 
+## Read-only diagnostics
+
+The 0.1 device surface is diagnostic-only. Every command accepts a saved device
+through root `--device` or an ephemeral endpoint through command-level
+`--target`; credentials are resolved from the saved device/profile or the
+`OXVIF_USERNAME` and `OXVIF_PASSWORD` environment variables.
+
+```sh
+oxvif --device front-door device capabilities --output json
+oxvif --device front-door device services --output json
+oxvif --device front-door media profiles --output json
+oxvif --device front-door media stream-uri --profile Profile_1 --output json
+oxvif --device front-door media snapshot-uri --profile Profile_1 --output json
+oxvif --device front-door ptz status --profile Profile_1 --output json
+oxvif --device front-door ptz presets --profile Profile_1 --output json
+oxvif --timeout 20s --device front-door health check --output json
+```
+
+Returned stream and snapshot URLs have URI userinfo removed. The default health
+check performs no write round-trip, liveness fetch, or raw exchange capture.
+
 ## Credentials
 
 Passwords never enter `devices.toml`. On Windows they are stored in Windows
