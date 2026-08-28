@@ -143,10 +143,12 @@ oxvif --group taipei-f1 --jobs 16 health check --output jsonl --non-interactive
 
 Passwords are never stored in the registry; `--password-stdin` writes them to
 the native credential store. The standalone
-[`oxvif CLI usage guide`](docs/oxvif-cli.md) covers installation, Agent
-onboarding, discovery and import, Groups and Views, read-only diagnostics,
-fleet execution, output formats, and exit codes. Package-specific details are
-also available in the [`oxvif-cli` README](crates/oxvif-cli/README.md).
+[`oxvif CLI documentation`](docs/oxvif-cli.md) covers installation, command
+conventions, Agent automation, discovery and import, Groups and Views,
+read-only diagnostics, fleet execution, output formats, and exit codes. A
+[Traditional Chinese version](docs/oxvif-cli.zh-TW.md) is also available.
+Package-specific details remain in the
+[`oxvif-cli` README](crates/oxvif-cli/README.md).
 
 ---
 
