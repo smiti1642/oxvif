@@ -2,27 +2,94 @@ use std::{
     env,
     ffi::OsString,
     fs,
-    io::{self, Read},
+    io::{self, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     time::Duration,
 };
 
-use clap::{ArgAction, Parser, Subcommand, ValueEnum, error::ErrorKind};
+use clap::{ArgAction, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
+use clap_complete::{Shell, generate};
 use oxvif_cli::{
-    AppError, Application, CommandRequest, CredentialProfileSetRequest, DescribeRequest,
-    DeviceAddRequest, DeviceConnectRequest, DeviceCredentialProfileRequest,
+    AppError, Application, CommandData, CommandRequest, CredentialProfileSetRequest,
+    DescribeRequest, DeviceAddRequest, DeviceConnectRequest, DeviceCredentialProfileRequest,
     DeviceCredentialSetRequest, DeviceFilter, DeviceIdRequest, DeviceImportRequest,
-    DeviceRenameRequest, DeviceUpdate, DeviceUpdateRequest, DiscoverScanRequest,
-    DiscoveryEnrichRequest, DiscoveryFilter, DiscoveryImportOverride, DiscoveryImportOverrides,
-    DiscoveryRefreshRequest, DiscoverySnapshotShowRequest, ExecutionOptions, GroupCreateRequest,
-    GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode, MatchMode, NewDevice, NewGroup,
-    NewSavedView, OutputFormat, ProfileConnectRequest, ResourceIdRequest, ResultMeta, SecretString,
-    TargetSelector, ViewCreateRequest, render_error, render_success,
+    DeviceRenameRequest, DeviceSetupRequest, DeviceUpdate, DeviceUpdateRequest,
+    DiscoverScanRequest, DiscoveryEnrichRequest, DiscoveryFilter, DiscoveryImportOverride,
+    DiscoveryImportOverrides, DiscoveryRefreshRequest, DiscoverySnapshotShowRequest,
+    ExecutionOptions, GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest,
+    ImportMode, MatchMode, NewDevice, NewGroup, NewSavedView, OutputFormat, ProfileConnectRequest,
+    ResourceIdRequest, ResultMeta, SecretString, TargetSelector, ViewCreateRequest, render_error,
+    render_success,
 };
 use tokio::time::Instant;
 
 const AGENT_HELP: &str = "AI AGENTS:\n  Run `oxvif agent guide --output json` before operating devices.\n  Use structured output, --non-interactive, and an explicit device selector.\n  Never place passwords in command arguments, output, or logs.";
+
+trait Prompt {
+    fn text(&self, label: &str) -> Result<String, AppError>;
+    fn password(&self, label: &str) -> Result<String, AppError>;
+    fn select(&self, label: &str, choices: &[String]) -> Result<usize, AppError>;
+}
+
+struct SystemPrompt;
+
+impl SystemPrompt {
+    fn ensure_terminal() -> Result<(), AppError> {
+        if io::stdin().is_terminal() && io::stderr().is_terminal() {
+            Ok(())
+        } else {
+            Err(AppError::invalid_argument(
+                "Interactive input requires a terminal; provide explicit input or use --non-interactive.",
+            ))
+        }
+    }
+}
+
+impl Prompt for SystemPrompt {
+    fn text(&self, label: &str) -> Result<String, AppError> {
+        Self::ensure_terminal()?;
+        eprint!("{label}");
+        io::stderr().flush().map_err(|error| {
+            AppError::invalid_argument(format!("Failed to display prompt: {error}"))
+        })?;
+        let mut value = String::new();
+        io::stdin().read_line(&mut value).map_err(|error| {
+            AppError::invalid_argument(format!("Failed to read input: {error}"))
+        })?;
+        Ok(value.trim().to_owned())
+    }
+
+    fn password(&self, label: &str) -> Result<String, AppError> {
+        Self::ensure_terminal()?;
+        rpassword::prompt_password(label).map_err(|error| {
+            AppError::invalid_argument(format!("Failed to read password: {error}"))
+        })
+    }
+
+    fn select(&self, label: &str, choices: &[String]) -> Result<usize, AppError> {
+        Self::ensure_terminal()?;
+        eprintln!("{label}");
+        for (index, choice) in choices.iter().enumerate() {
+            eprintln!("  {}. {choice}", index + 1);
+        }
+        let answer = self.text("Selection [1]: ")?;
+        let selected = if answer.is_empty() {
+            1
+        } else {
+            answer.parse::<usize>().map_err(|_| {
+                AppError::invalid_argument("Profile selection must be a displayed number.")
+            })?
+        };
+        if !(1..=choices.len()).contains(&selected) {
+            return Err(AppError::invalid_argument(format!(
+                "Profile selection must be between 1 and {}.",
+                choices.len()
+            )));
+        }
+        Ok(selected - 1)
+    }
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -33,8 +100,16 @@ const AGENT_HELP: &str = "AI AGENTS:\n  Run `oxvif agent guide --output json` be
 )]
 struct Cli {
     /// Select terminal, JSON, or newline-delimited JSON output.
-    #[arg(long, value_enum, default_value_t, global = true)]
-    output: CliOutputFormat,
+    #[arg(long, value_enum, global = true, conflicts_with_all = ["json", "jsonl"])]
+    output: Option<CliOutputFormat>,
+
+    /// Shorthand for --output json.
+    #[arg(long, global = true, conflicts_with_all = ["output", "jsonl"])]
+    json: bool,
+
+    /// Shorthand for --output jsonl.
+    #[arg(long, global = true, conflicts_with_all = ["output", "json"])]
+    jsonl: bool,
 
     /// Select a saved device by immutable ID.
     #[arg(long)]
@@ -82,6 +157,79 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// Securely register, authenticate, verify, and select a device.
+    Setup {
+        /// Immutable ID used to select this saved device.
+        id: String,
+        /// Device host, IP address, or ONVIF device-service URL.
+        target: String,
+        /// Human-readable display name.
+        #[arg(long)]
+        name: Option<String>,
+        /// Searchable tag; repeat to assign more than one.
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+        /// ONVIF username; prompted when omitted in an interactive terminal.
+        #[arg(long)]
+        username: Option<String>,
+        /// Read the password from stdin instead of prompting securely.
+        #[arg(long)]
+        password_stdin: bool,
+        /// Save without a live authentication check; may retain an unreachable or incorrectly authenticated device.
+        #[arg(long)]
+        no_verify: bool,
+        /// Do not make the new device the current interactive device.
+        #[arg(long)]
+        no_use: bool,
+    },
+    /// Securely set a saved device credential.
+    Auth {
+        /// Exact saved-device ID or Group-local alias.
+        id: String,
+        /// ONVIF username; prompted when omitted in an interactive terminal.
+        #[arg(long)]
+        username: Option<String>,
+        /// Read the password from stdin instead of prompting securely.
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    /// Show device information using an optional saved-device selector.
+    Info {
+        /// Exact saved-device ID or Group-local alias; otherwise use the current device interactively.
+        id: Option<String>,
+    },
+    /// Verify device connectivity using an optional saved-device selector.
+    Test {
+        /// Exact saved-device ID or Group-local alias; otherwise use the current device interactively.
+        id: Option<String>,
+    },
+    /// List media profiles using an optional saved-device selector.
+    Profiles {
+        /// Exact saved-device ID or Group-local alias; otherwise use the current device interactively.
+        id: Option<String>,
+    },
+    /// Get a stream URI, selecting a profile interactively when needed.
+    Stream {
+        /// Exact saved-device ID or Group-local alias; otherwise use the current device interactively.
+        id: Option<String>,
+        /// Exact media profile token; prompted when omitted and multiple profiles exist.
+        #[arg(long)]
+        profile: Option<String>,
+    },
+    /// Get a snapshot URI, selecting a profile interactively when needed.
+    Snapshot {
+        /// Exact saved-device ID or Group-local alias; otherwise use the current device interactively.
+        id: Option<String>,
+        /// Exact media profile token; prompted when omitted and multiple profiles exist.
+        #[arg(long)]
+        profile: Option<String>,
+    },
+    /// List saved devices.
+    Devices,
+    /// List static Groups.
+    Groups,
+    /// List dynamic Views.
+    Views,
     /// Show version-matched operational guidance for AI Agents.
     Agent {
         #[command(subcommand)]
@@ -110,7 +258,7 @@ enum Commands {
     /// Run read-only device health diagnostics.
     Health {
         #[command(subcommand)]
-        command: HealthCommands,
+        command: Option<HealthCommands>,
     },
     /// Manage static groups and Group-local device aliases.
     Group {
@@ -130,7 +278,12 @@ enum Commands {
     /// Scan for ONVIF devices and manage named discovery snapshots.
     Discover {
         #[command(subcommand)]
-        command: DiscoverCommands,
+        command: Option<DiscoverCommands>,
+    },
+    /// Generate a shell completion script on stdout.
+    Completion {
+        #[arg(value_enum)]
+        shell: Shell,
     },
     /// Select the current device for interactive commands.
     Use { id: String },
@@ -292,6 +445,8 @@ enum PtzCommands {
 enum HealthCommands {
     /// Run the default read-only health and conformance checks.
     Check {
+        /// Saved device selector: a global ID or group/local-alias.
+        id: Option<String>,
         #[arg(long)]
         target: Option<String>,
     },
@@ -465,6 +620,7 @@ async fn main() -> ExitCode {
 }
 
 async fn run(arguments: Vec<OsString>) -> u8 {
+    let arguments = normalize_human_arguments(arguments);
     let requested_format = requested_output(&arguments);
     let cli = match Cli::try_parse_from(&arguments) {
         Ok(cli) => cli,
@@ -485,7 +641,12 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         }
     };
 
-    let format = OutputFormat::from(cli.output);
+    if let Commands::Completion { shell } = &cli.command {
+        generate_completion(*shell);
+        return 0;
+    }
+
+    let format = selected_output(cli.output, cli.json, cli.jsonl);
     let set_selected = cli.group.is_some() || cli.view.is_some();
     if cli.jobs.is_some() && !set_selected {
         let error = AppError::invalid_argument("--jobs requires --group or --view.");
@@ -506,7 +667,32 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         quiet: cli.quiet,
         jobs,
     };
-    let request = match build_request(cli.command, cli.device, cli.group, cli.view) {
+    let application = match Application::system() {
+        Ok(application) => application,
+        Err(error) => {
+            emit_error(format, &error, None);
+            return error.exit_code();
+        }
+    };
+    if let Err(error) = preflight_human_command(&cli.command, &application) {
+        emit_error(format, &error, None);
+        return error.exit_code();
+    }
+    let implicit_human_context = quick_command_uses_ambient_device(
+        &cli.command,
+        cli.device.as_deref(),
+        cli.group.as_deref(),
+        cli.view.as_deref(),
+    );
+    let prompt = SystemPrompt;
+    let request = match build_request(
+        cli.command,
+        cli.device,
+        cli.group,
+        cli.view,
+        cli.non_interactive,
+        &prompt,
+    ) {
         Ok(request) => request,
         Err(error) => {
             emit_error(format, &error, None);
@@ -515,18 +701,31 @@ async fn run(arguments: Vec<OsString>) -> u8 {
     };
     let command_name = request.name();
     let started = Instant::now();
-    let application = match Application::system() {
-        Ok(application) => application,
+
+    let request = match choose_profile_if_needed(request, &application, &options, &prompt).await {
+        Ok(request) => request,
         Err(error) => {
             emit_error(format, &error, Some(command_name));
             return error.exit_code();
         }
     };
+    let command_name = request.name();
 
     match application.execute(request, &options).await {
         Ok(success) => match render_success(format, &success) {
             Ok(rendered) => {
-                println!("{rendered}");
+                if format == OutputFormat::Table
+                    && implicit_human_context
+                    && !options.quiet
+                    && let (Some(device_id), Some(target)) = (
+                        success.meta.device_id.as_deref(),
+                        success.meta.target.as_deref(),
+                    )
+                {
+                    println!("Using device: {device_id} ({target})\n\n{rendered}");
+                } else {
+                    println!("{rendered}");
+                }
                 success.exit_code()
             }
             Err(error) => {
@@ -551,6 +750,8 @@ fn build_request(
     selected_device: Option<String>,
     selected_group: Option<String>,
     selected_view: Option<String>,
+    non_interactive: bool,
+    prompt: &dyn Prompt,
 ) -> Result<CommandRequest, AppError> {
     let selector = |target| TargetSelector {
         device: selected_device.clone(),
@@ -560,6 +761,87 @@ fn build_request(
     };
 
     let request = match command {
+        Commands::Setup {
+            id,
+            target,
+            name,
+            tags,
+            username,
+            password_stdin,
+            no_verify,
+            no_use,
+        } => {
+            reject_root_selector(
+                selected_device.as_deref(),
+                selected_group.as_deref(),
+                selected_view.as_deref(),
+                "setup",
+            )?;
+            let (username, password) =
+                human_credential_input(username, password_stdin, non_interactive, prompt)?;
+            Ok(CommandRequest::DeviceSetup(DeviceSetupRequest {
+                device: NewDevice {
+                    id,
+                    name,
+                    target,
+                    tags,
+                },
+                username,
+                password,
+                verify: !no_verify,
+                set_current: !no_use,
+            }))
+        }
+        Commands::Auth {
+            id,
+            username,
+            password_stdin,
+        } => {
+            let (username, password) =
+                human_credential_input(username, password_stdin, non_interactive, prompt)?;
+            Ok(CommandRequest::DeviceCredentialSet(
+                DeviceCredentialSetRequest {
+                    id,
+                    username,
+                    password,
+                },
+            ))
+        }
+        Commands::Info { id } => {
+            let selector = quick_selector(selector(None), id, non_interactive)?;
+            Ok(CommandRequest::DeviceInfo(DeviceConnectRequest {
+                selector,
+            }))
+        }
+        Commands::Test { id } => {
+            let selector = quick_selector(selector(None), id, non_interactive)?;
+            Ok(CommandRequest::DeviceTest(DeviceConnectRequest {
+                selector,
+            }))
+        }
+        Commands::Profiles { id } => {
+            let selector = quick_selector(selector(None), id, non_interactive)?;
+            Ok(CommandRequest::MediaProfiles(DeviceConnectRequest {
+                selector,
+            }))
+        }
+        Commands::Stream { id, profile } => {
+            let selector = quick_selector(selector(None), id, non_interactive)?;
+            Ok(CommandRequest::MediaStreamUri(ProfileConnectRequest {
+                selector,
+                profile: profile.unwrap_or_default(),
+            }))
+        }
+        Commands::Snapshot { id, profile } => {
+            let selector = quick_selector(selector(None), id, non_interactive)?;
+            Ok(CommandRequest::MediaSnapshotUri(ProfileConnectRequest {
+                selector,
+                profile: profile.unwrap_or_default(),
+            }))
+        }
+        Commands::Devices => Ok(CommandRequest::DeviceList),
+        Commands::Groups => Ok(CommandRequest::GroupList),
+        Commands::Views => Ok(CommandRequest::ViewList),
         Commands::Agent { command } => Ok(match command {
             AgentCommands::Guide => CommandRequest::AgentGuide,
             AgentCommands::Prompt => CommandRequest::AgentPrompt,
@@ -644,49 +926,55 @@ fn build_request(
             },
         },
         Commands::Discover { command } => match command {
-            DiscoverCommands::Scan { save, interfaces } => {
-                Ok(CommandRequest::DiscoverScan(DiscoverScanRequest {
-                    snapshot_id: save,
-                    interfaces,
-                }))
-            }
-            DiscoverCommands::Refresh {
-                snapshot,
-                interfaces,
-            } => Ok(CommandRequest::DiscoveryRefresh(DiscoveryRefreshRequest {
-                id: snapshot,
-                interfaces,
+            None => Ok(CommandRequest::DiscoverScan(DiscoverScanRequest {
+                snapshot_id: None,
+                interfaces: Vec::new(),
             })),
-            DiscoverCommands::Enrich {
-                snapshot,
-                credential_profile,
-                filters,
-                jobs,
-            } => {
-                if !(1..=64).contains(&jobs) {
-                    return Err(AppError::invalid_argument(
-                        "--jobs must be between 1 and 64.",
-                    ));
+            Some(command) => match command {
+                DiscoverCommands::Scan { save, interfaces } => {
+                    Ok(CommandRequest::DiscoverScan(DiscoverScanRequest {
+                        snapshot_id: save,
+                        interfaces,
+                    }))
                 }
-                Ok(CommandRequest::DiscoveryEnrich(DiscoveryEnrichRequest {
+                DiscoverCommands::Refresh {
+                    snapshot,
+                    interfaces,
+                } => Ok(CommandRequest::DiscoveryRefresh(DiscoveryRefreshRequest {
                     id: snapshot,
+                    interfaces,
+                })),
+                DiscoverCommands::Enrich {
+                    snapshot,
                     credential_profile,
                     filters,
                     jobs,
-                }))
-            }
-            DiscoverCommands::List { snapshot, filters } => Ok(
-                CommandRequest::DiscoverySnapshotShow(DiscoverySnapshotShowRequest {
-                    id: snapshot,
-                    filters,
-                }),
-            ),
-            DiscoverCommands::Snapshots => Ok(CommandRequest::DiscoverySnapshotList),
-            DiscoverCommands::Remove { snapshot } => {
-                Ok(CommandRequest::DiscoverySnapshotRemove(ResourceIdRequest {
-                    id: snapshot,
-                }))
-            }
+                } => {
+                    if !(1..=64).contains(&jobs) {
+                        return Err(AppError::invalid_argument(
+                            "--jobs must be between 1 and 64.",
+                        ));
+                    }
+                    Ok(CommandRequest::DiscoveryEnrich(DiscoveryEnrichRequest {
+                        id: snapshot,
+                        credential_profile,
+                        filters,
+                        jobs,
+                    }))
+                }
+                DiscoverCommands::List { snapshot, filters } => Ok(
+                    CommandRequest::DiscoverySnapshotShow(DiscoverySnapshotShowRequest {
+                        id: snapshot,
+                        filters,
+                    }),
+                ),
+                DiscoverCommands::Snapshots => Ok(CommandRequest::DiscoverySnapshotList),
+                DiscoverCommands::Remove { snapshot } => {
+                    Ok(CommandRequest::DiscoverySnapshotRemove(ResourceIdRequest {
+                        id: snapshot,
+                    }))
+                }
+            },
         },
         Commands::Media { command } => match command {
             MediaCommands::Profiles { target } => {
@@ -722,9 +1010,21 @@ fn build_request(
             }
         },
         Commands::Health { command } => match command {
-            HealthCommands::Check { target } => {
+            None => Ok(CommandRequest::HealthCheck(DeviceConnectRequest {
+                selector: quick_selector(selector(None), None, non_interactive)?,
+            })),
+            Some(HealthCommands::Check { id, target }) => {
+                let selector = selector_with_positional(selector(target), id)?;
+                if non_interactive
+                    && selector.device.is_none()
+                    && selector.target.is_none()
+                    && selector.group.is_none()
+                    && selector.view.is_none()
+                {
+                    return Err(AppError::missing_target());
+                }
                 Ok(CommandRequest::HealthCheck(DeviceConnectRequest {
-                    selector: selector(target),
+                    selector,
                 }))
             }
         },
@@ -858,6 +1158,11 @@ fn build_request(
                 Ok(CommandRequest::DeviceRefresh(DeviceIdRequest { id }))
             }
         },
+        Commands::Completion { .. } => {
+            return Err(AppError::internal(
+                "Completion generation should be handled before application dispatch.",
+            ));
+        }
     }?;
 
     if (selected_device.is_some() || selected_group.is_some() || selected_view.is_some())
@@ -882,6 +1187,280 @@ fn build_request(
     Ok(request)
 }
 
+fn preflight_human_command(command: &Commands, application: &Application) -> Result<(), AppError> {
+    match command {
+        Commands::Setup {
+            id,
+            target,
+            name,
+            tags,
+            ..
+        } => application.preflight_setup(&NewDevice {
+            id: id.clone(),
+            name: name.clone(),
+            target: target.clone(),
+            tags: tags.clone(),
+        }),
+        Commands::Auth { id, .. } => {
+            let canonical_id = application.registry().resolve_device_selector(id)?;
+            application.registry().get(&canonical_id).map(|_| ())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn reject_root_selector(
+    device: Option<&str>,
+    group: Option<&str>,
+    view: Option<&str>,
+    command: &str,
+) -> Result<(), AppError> {
+    if device.is_some() || group.is_some() || view.is_some() {
+        Err(AppError::invalid_argument(format!(
+            "`{command}` does not accept --device, --group, or --view."
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+fn human_credential_input(
+    username: Option<String>,
+    password_stdin: bool,
+    non_interactive: bool,
+    prompt: &dyn Prompt,
+) -> Result<(String, SecretString), AppError> {
+    let username = match username.or_else(|| env::var("OXVIF_USERNAME").ok()) {
+        Some(username) => username,
+        None if non_interactive => {
+            return Err(AppError::invalid_argument(
+                "Provide --username or OXVIF_USERNAME under --non-interactive.",
+            ));
+        }
+        None => prompt.text("Username: ")?,
+    };
+    let username = username.trim().to_owned();
+    if username.is_empty() {
+        return Err(AppError::invalid_argument("Username must not be empty."));
+    }
+
+    let password = if password_stdin {
+        read_password_from_stdin()?
+    } else if let Ok(password) = env::var("OXVIF_PASSWORD") {
+        password
+    } else if non_interactive {
+        return Err(AppError::invalid_argument(
+            "Pass --password-stdin or set OXVIF_PASSWORD under --non-interactive.",
+        ));
+    } else {
+        prompt.password("Password: ")?
+    };
+    Ok((username, SecretString::new(password)?))
+}
+
+fn selected_output(output: Option<CliOutputFormat>, json: bool, jsonl: bool) -> OutputFormat {
+    if json {
+        OutputFormat::Json
+    } else if jsonl {
+        OutputFormat::JsonLines
+    } else {
+        output.unwrap_or_default().into()
+    }
+}
+
+fn quick_command_uses_ambient_device(
+    command: &Commands,
+    selected_device: Option<&str>,
+    selected_group: Option<&str>,
+    selected_view: Option<&str>,
+) -> bool {
+    if selected_device.is_some() || selected_group.is_some() || selected_view.is_some() {
+        return false;
+    }
+    match command {
+        Commands::Info { id }
+        | Commands::Test { id }
+        | Commands::Profiles { id }
+        | Commands::Stream { id, .. }
+        | Commands::Snapshot { id, .. } => id.is_none(),
+        Commands::Health { command: None } => true,
+        Commands::Health {
+            command: Some(HealthCommands::Check { id, target }),
+        } => id.is_none() && target.is_none(),
+        _ => false,
+    }
+}
+
+async fn choose_profile_if_needed(
+    request: CommandRequest,
+    application: &Application,
+    options: &ExecutionOptions,
+    prompt: &dyn Prompt,
+) -> Result<CommandRequest, AppError> {
+    enum Kind {
+        Stream,
+        Snapshot,
+    }
+
+    let (selector, kind) = match &request {
+        CommandRequest::MediaStreamUri(request) if request.profile.is_empty() => {
+            (request.selector.clone(), Kind::Stream)
+        }
+        CommandRequest::MediaSnapshotUri(request) if request.profile.is_empty() => {
+            (request.selector.clone(), Kind::Snapshot)
+        }
+        _ => return Ok(request),
+    };
+    if selector.group.is_some() || selector.view.is_some() {
+        return Err(AppError::invalid_argument(
+            "Fleet stream/snapshot operations require an explicit --profile.",
+        ));
+    }
+
+    let profiles = application
+        .execute(
+            CommandRequest::MediaProfiles(DeviceConnectRequest {
+                selector: selector.clone(),
+            }),
+            options,
+        )
+        .await?;
+    let CommandData::DeviceDiagnostic { result, .. } = profiles.data else {
+        return Err(AppError::internal(
+            "Media profile selection returned an unexpected result.",
+        ));
+    };
+    let values = result
+        .as_array()
+        .ok_or_else(|| AppError::internal("Media profile selection did not return an array."))?;
+    let profiles = values
+        .iter()
+        .filter_map(|value| {
+            let token = value.get("token")?.as_str()?.to_owned();
+            let name = value
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("(unnamed)")
+                .to_owned();
+            Some((token, name))
+        })
+        .collect::<Vec<_>>();
+    if profiles.is_empty() {
+        return Err(AppError::invalid_argument(
+            "The selected device exposes no usable media profiles.",
+        ));
+    }
+    let profile = if profiles.len() == 1 {
+        profiles[0].0.clone()
+    } else if options.non_interactive {
+        return Err(AppError::invalid_argument(format!(
+            "Multiple media profiles are available; pass --profile with one of: {}.",
+            profiles
+                .iter()
+                .map(|(token, _)| token.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )));
+    } else {
+        let choices = profiles
+            .iter()
+            .map(|(token, name)| format!("{name} ({token})"))
+            .collect::<Vec<_>>();
+        profiles[prompt.select("Select a media profile:", &choices)?]
+            .0
+            .clone()
+    };
+
+    Ok(match kind {
+        Kind::Stream => CommandRequest::MediaStreamUri(ProfileConnectRequest { selector, profile }),
+        Kind::Snapshot => {
+            CommandRequest::MediaSnapshotUri(ProfileConnectRequest { selector, profile })
+        }
+    })
+}
+
+fn generate_completion(shell: Shell) {
+    write_completion(shell, &mut io::stdout());
+}
+
+fn write_completion<W: Write>(shell: Shell, writer: &mut W) {
+    let mut command = Cli::command();
+    let binary_name = command.get_name().to_owned();
+    generate(shell, &mut command, binary_name, writer);
+}
+
+fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
+    let mut index = 1usize;
+    while index < arguments.len() {
+        let argument = arguments[index].to_string_lossy();
+        if matches!(
+            argument.as_ref(),
+            "--non-interactive" | "--json" | "--jsonl" | "--quiet" | "-q"
+        ) || argument.starts_with("-v")
+        {
+            index += 1;
+            continue;
+        }
+        if matches!(
+            argument.as_ref(),
+            "--output" | "--device" | "--group" | "--view" | "--jobs" | "--timeout" | "--retries"
+        ) {
+            index += 2;
+            continue;
+        }
+        if argument.starts_with("--") && argument.contains('=') {
+            index += 1;
+            continue;
+        }
+        break;
+    }
+
+    if arguments
+        .get(index)
+        .is_some_and(|argument| argument == "health")
+    {
+        let has_explicit_subcommand = arguments
+            .get(index + 1)
+            .is_some_and(|argument| argument == "check" || argument == "help");
+        if !has_explicit_subcommand {
+            arguments.insert(index + 1, OsString::from("check"));
+        }
+
+        let mut moved = Vec::new();
+        let mut scan = index + 2;
+        while scan < arguments.len() {
+            let (takes_value, inline_value) = {
+                let argument = arguments[scan].to_string_lossy();
+                let takes_value = matches!(
+                    argument.as_ref(),
+                    "--device" | "--group" | "--view" | "--jobs" | "--timeout" | "--retries"
+                );
+                let inline_value = [
+                    "--device=",
+                    "--group=",
+                    "--view=",
+                    "--jobs=",
+                    "--timeout=",
+                    "--retries=",
+                ]
+                .iter()
+                .any(|prefix| argument.starts_with(prefix));
+                (takes_value, inline_value)
+            };
+            if takes_value && scan + 1 < arguments.len() {
+                moved.push(arguments.remove(scan));
+                moved.push(arguments.remove(scan));
+            } else if inline_value {
+                moved.push(arguments.remove(scan));
+            } else {
+                scan += 1;
+            }
+        }
+        arguments.splice(index..index, moved);
+    }
+    arguments
+}
+
 fn selector_with_positional(
     mut selector: TargetSelector,
     id: Option<String>,
@@ -899,6 +1478,24 @@ fn selector_with_positional(
         selector.device = Some(id);
     }
     Ok(selector)
+}
+
+fn quick_selector(
+    selector: TargetSelector,
+    id: Option<String>,
+    non_interactive: bool,
+) -> Result<TargetSelector, AppError> {
+    let selector = selector_with_positional(selector, id)?;
+    if non_interactive
+        && selector.device.is_none()
+        && selector.target.is_none()
+        && selector.group.is_none()
+        && selector.view.is_none()
+    {
+        Err(AppError::missing_target())
+    } else {
+        Ok(selector)
+    }
 }
 
 fn read_password_from_stdin() -> Result<String, AppError> {
@@ -1003,6 +1600,12 @@ fn requested_output(arguments: &[OsString]) -> OutputFormat {
         .filter_map(|argument| argument.to_str())
         .peekable();
     while let Some(argument) = arguments.next() {
+        if argument == "--json" {
+            return OutputFormat::Json;
+        }
+        if argument == "--jsonl" {
+            return OutputFormat::JsonLines;
+        }
         if let Some(value) = argument.strip_prefix("--output=") {
             return parse_output_hint(value);
         }
@@ -1054,6 +1657,35 @@ fn elapsed_millis(started: Instant) -> u64 {
 mod tests {
     use super::*;
 
+    struct FixedPrompt;
+
+    impl Prompt for FixedPrompt {
+        fn text(&self, _label: &str) -> Result<String, AppError> {
+            Ok("admin".to_owned())
+        }
+
+        fn password(&self, _label: &str) -> Result<String, AppError> {
+            Ok("prompt-secret".to_owned())
+        }
+
+        fn select(&self, _label: &str, _choices: &[String]) -> Result<usize, AppError> {
+            Ok(0)
+        }
+    }
+
+    fn parsed_request(arguments: &[&str]) -> Result<CommandRequest, AppError> {
+        let arguments = normalize_human_arguments(arguments.iter().map(OsString::from).collect());
+        let cli = Cli::try_parse_from(arguments).expect("arguments should parse");
+        build_request(
+            cli.command,
+            cli.device,
+            cli.group,
+            cli.view,
+            cli.non_interactive,
+            &FixedPrompt,
+        )
+    }
+
     #[test]
     fn parses_supported_durations() {
         assert_eq!(parse_duration("250ms"), Ok(Duration::from_millis(250)));
@@ -1096,5 +1728,157 @@ mod tests {
 
         let error = read_import_overrides(Some(&path), false).expect_err("version must fail");
         assert_eq!(error.code, oxvif_cli::ErrorCode::InvalidArgument);
+    }
+
+    #[test]
+    fn human_quick_commands_map_to_canonical_requests() {
+        let cases = [
+            (&["oxvif", "info", "front-door"][..], "device.info"),
+            (&["oxvif", "test", "front-door"][..], "device.test"),
+            (&["oxvif", "profiles", "front-door"][..], "media.profiles"),
+            (
+                &["oxvif", "stream", "front-door", "--profile", "main"][..],
+                "media.stream-uri",
+            ),
+            (
+                &["oxvif", "snapshot", "front-door", "--profile", "main"][..],
+                "media.snapshot-uri",
+            ),
+            (&["oxvif", "health", "front-door"][..], "health.check"),
+            (&["oxvif", "devices"][..], "device.list"),
+            (&["oxvif", "groups"][..], "group.list"),
+            (&["oxvif", "views"][..], "view.list"),
+        ];
+
+        for (arguments, expected) in cases {
+            assert_eq!(
+                parsed_request(arguments)
+                    .expect("quick command should build")
+                    .name(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn human_positional_selector_conflicts_with_root_selector() {
+        let error = parsed_request(&["oxvif", "--device", "other", "info", "front-door"])
+            .expect_err("conflicting selectors must fail");
+        assert_eq!(error.code, oxvif_cli::ErrorCode::InvalidArgument);
+    }
+
+    #[test]
+    fn bare_discover_is_an_ephemeral_scan() {
+        let request = parsed_request(&["oxvif", "discover"]).expect("discover should build");
+        let CommandRequest::DiscoverScan(request) = request else {
+            panic!("expected discovery scan");
+        };
+        assert_eq!(request.snapshot_id, None);
+        assert!(request.interfaces.is_empty());
+    }
+
+    #[test]
+    fn health_shortcut_inserts_the_canonical_check_subcommand() {
+        let arguments = normalize_human_arguments(
+            ["oxvif", "--timeout", "20s", "health", "front-door"]
+                .into_iter()
+                .map(OsString::from)
+                .collect(),
+        );
+        assert_eq!(arguments[4], "check");
+        assert_eq!(arguments[5], "front-door");
+    }
+
+    #[test]
+    fn health_shortcut_accepts_fleet_options_after_the_action() {
+        let arguments = normalize_human_arguments(
+            ["oxvif", "health", "--group", "fleet", "--jobs", "2"]
+                .into_iter()
+                .map(OsString::from)
+                .collect(),
+        );
+        let cli = Cli::try_parse_from(arguments).expect("health fleet syntax should parse");
+        assert_eq!(cli.group.as_deref(), Some("fleet"));
+        assert_eq!(cli.jobs, Some(2));
+        let request = build_request(
+            cli.command,
+            cli.device,
+            cli.group,
+            cli.view,
+            cli.non_interactive,
+            &FixedPrompt,
+        )
+        .expect("health fleet request should build");
+        let CommandRequest::HealthCheck(request) = request else {
+            panic!("expected health request");
+        };
+        assert_eq!(request.selector.group.as_deref(), Some("fleet"));
+    }
+
+    #[test]
+    fn output_shorthands_select_structured_formats() {
+        let json = Cli::try_parse_from(["oxvif", "--json", "devices"]).expect("json parse");
+        assert_eq!(
+            selected_output(json.output, json.json, json.jsonl),
+            OutputFormat::Json
+        );
+        let jsonl = Cli::try_parse_from(["oxvif", "devices", "--jsonl"]).expect("jsonl parse");
+        assert_eq!(
+            selected_output(jsonl.output, jsonl.json, jsonl.jsonl),
+            OutputFormat::JsonLines
+        );
+    }
+
+    #[test]
+    fn non_interactive_quick_command_requires_an_explicit_selector() {
+        let error = parsed_request(&["oxvif", "info", "--non-interactive"])
+            .expect_err("ambient state must not be used by unattended shortcuts");
+        assert_eq!(error.code, oxvif_cli::ErrorCode::MissingTarget);
+    }
+
+    #[tokio::test]
+    async fn quick_stream_selects_a_profile_before_dispatch() {
+        let server = oxvif::mock::MockServer::start()
+            .await
+            .expect("mock server should start");
+        let directory = tempfile::tempdir().expect("temp directory");
+        let application = Application::with_stores(
+            oxvif_cli::RegistryStore::at(directory.path()),
+            std::sync::Arc::new(oxvif_cli::MemoryCredentialStore::default()),
+        );
+        let request = CommandRequest::MediaStreamUri(ProfileConnectRequest {
+            selector: TargetSelector {
+                target: Some(server.device_url().to_owned()),
+                ..TargetSelector::default()
+            },
+            profile: String::new(),
+        });
+
+        let request = choose_profile_if_needed(
+            request,
+            &application,
+            &ExecutionOptions {
+                timeout: Duration::from_secs(20),
+                ..ExecutionOptions::default()
+            },
+            &FixedPrompt,
+        )
+        .await
+        .expect("profile should be selected");
+        let CommandRequest::MediaStreamUri(request) = request else {
+            panic!("expected stream request");
+        };
+        assert!(!request.profile.is_empty());
+    }
+
+    #[test]
+    fn completion_scripts_are_generated_for_supported_shells() {
+        for shell in [Shell::Bash, Shell::Zsh, Shell::Fish, Shell::PowerShell] {
+            let mut output = Vec::new();
+            write_completion(shell, &mut output);
+            let output = String::from_utf8(output).expect("completion must be UTF-8");
+            assert!(output.contains("oxvif"));
+            assert!(output.contains("info"));
+        }
     }
 }

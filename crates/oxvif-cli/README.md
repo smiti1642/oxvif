@@ -17,6 +17,33 @@ version-matched operational and security rules embedded in the installed
 binary; `agent prompt` prints a compact prompt suitable for Agent instructions.
 The structured stdout contract is schema version 3 for the 0.1 release.
 
+## Human quick start
+
+Onboard one camera with a no-echo password prompt, live verification, native
+credential storage, and current-device selection:
+
+```sh
+oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance --username admin
+oxvif info
+oxvif health
+oxvif stream
+```
+
+One-shot human commands accept an exact canonical ID or `group/local-alias`:
+
+```sh
+oxvif test front-door
+oxvif profiles taipei-f1/cam-023
+oxvif snapshot front-door --profile Profile_1
+oxvif health --group taipei-f1 --jobs 16
+```
+
+`auth` securely updates a native credential, `devices`/`groups`/`views` list
+inventory, and `--json`/`--jsonl` abbreviate structured output selection.
+These commands map to the same typed requests as the canonical namespaces.
+Agents should continue using explicit selectors, canonical command paths,
+structured output, and `--non-interactive`.
+
 ## Named devices
 
 Save an endpoint once under an immutable, Agent-safe ID:
@@ -68,6 +95,7 @@ WS-Discovery results can be retained and filtered without registering any
 devices:
 
 ```sh
+oxvif discover
 oxvif --timeout 3s discover scan
 oxvif --timeout 3s discover scan --interface Ethernet --save factory-scan
 oxvif --timeout 3s discover refresh factory-scan --interface Ethernet
@@ -202,6 +230,15 @@ oxvif device info --target 192.168.1.100 --output json --non-interactive
 Agents should use explicit `--device`, `--output json`, and
 `--non-interactive`. `use` and `current` are conveniences for interactive human
 sessions; an Agent should not depend on ambient current-device state.
+
+Generate static shell completion without accessing the registry or network:
+
+```sh
+oxvif completion bash
+oxvif completion zsh
+oxvif completion fish
+oxvif completion powershell
+```
 
 Further discovery, health, media, and PTZ operations are tracked in the
 [oxvif CLI plan](https://github.com/smiti1642/oxvif/blob/master/docs/active/oxvif-cli-plan.md).

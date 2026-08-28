@@ -2,6 +2,49 @@
 
 [English documentation](oxvif-cli.md)
 
+## 人類使用者快捷操作
+
+第一次設定攝影機時，可以用一個指令完成安全密碼輸入、連線驗證、原生 credential storage
+與 current-device 選擇：
+
+```sh
+oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance --username admin
+```
+
+密碼會透過不顯示輸入內容的 terminal prompt 讀取，不會出現在 command argument、registry
+或 log。設定完成後，日常操作可以直接使用：
+
+```sh
+oxvif info
+oxvif test
+oxvif health
+oxvif profiles
+oxvif stream
+oxvif snapshot
+```
+
+不切換 current device 時，可傳入精確的 canonical ID 或 `group/local-alias`：
+
+```sh
+oxvif info front-door
+oxvif profiles taipei-f1/cam-023
+oxvif health --group taipei-f1 --jobs 16
+```
+
+`stream` 與 `snapshot` 只有一個 profile 時會自動選擇；有多個 profile 時，人類終端會顯示
+選單，`--non-interactive` 則會要求明確傳入 `--profile`。Agent 仍應使用完整 canonical
+command、明確 selector、structured output 與 `--non-interactive`。
+
+直接執行 `oxvif discover` 是安全的一次性掃描，不會儲存 snapshot 或註冊裝置。Shell
+completion 可用下列指令產生：
+
+```sh
+oxvif completion bash
+oxvif completion zsh
+oxvif completion fish
+oxvif completion powershell
+```
+
 `oxvif-cli` 是 [`oxvif`](../README.md) ONVIF client library 的命令列操作介面；
 套件名稱是 `oxvif-cli`，安裝後的執行檔名稱則是 `oxvif`。它同時服務兩類使用者：
 

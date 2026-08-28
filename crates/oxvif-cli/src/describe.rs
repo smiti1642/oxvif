@@ -27,6 +27,40 @@ fn descriptors() -> Vec<CommandDescriptor> {
             "Return a compact prompt for an Agent operating oxvif.",
         ),
         describe_descriptor(),
+        descriptor(
+            "setup",
+            "Securely register, authenticate, verify, and select one device.",
+            RiskLevel::Write,
+            true,
+            false,
+            vec![
+                required("id", "string"),
+                required("target", "url | host"),
+                optional("name", "string"),
+                optional("tag", "string[]"),
+                optional("username", "string"),
+                optional("password-stdin", "boolean"),
+                optional("no-verify", "boolean"),
+                optional("no-use", "boolean"),
+            ],
+        ),
+        credential_descriptor(
+            "auth",
+            "Securely set a saved device credential, prompting in an interactive terminal.",
+        ),
+        device_read_descriptor("info", "Human shortcut for device.info."),
+        device_read_descriptor("test", "Human shortcut for device.test."),
+        device_read_descriptor("health", "Human shortcut for health.check."),
+        device_read_descriptor("profiles", "Human shortcut for media.profiles."),
+        quick_profile_descriptor("stream", "Human shortcut for media.stream-uri."),
+        quick_profile_descriptor("snapshot", "Human shortcut for media.snapshot-uri."),
+        read_descriptor("devices", "Human shortcut for device.list."),
+        read_descriptor("groups", "Human shortcut for group.list."),
+        read_descriptor("views", "Human shortcut for view.list."),
+        read_descriptor(
+            "completion",
+            "Generate a completion script for Bash, Zsh, Fish, or PowerShell.",
+        ),
         registry_descriptor(
             "device.add",
             "Save a new device under an immutable machine-safe ID.",
@@ -356,6 +390,14 @@ fn profile_read_descriptor(name: &str, summary: &str) -> CommandDescriptor {
     command
 }
 
+fn quick_profile_descriptor(name: &str, summary: &str) -> CommandDescriptor {
+    let mut command = device_read_descriptor(name, summary);
+    command
+        .arguments
+        .push(optional("profile", "media profile token"));
+    command
+}
+
 fn descriptor(
     name: &str,
     summary: &str,
@@ -378,6 +420,10 @@ fn descriptor(
             || name.starts_with("media.")
             || name.starts_with("ptz.")
             || name == "health.check"
+            || matches!(
+                name,
+                "setup" | "info" | "test" | "health" | "profiles" | "stream" | "snapshot"
+            )
             || name == "discover.scan"
             || name == "discover.refresh",
         arguments,
@@ -444,8 +490,10 @@ mod tests {
             panic!("expected command list");
         };
 
-        assert_eq!(commands.len(), 47);
+        assert_eq!(commands.len(), 59);
         assert_eq!(commands[0].name, "agent.guide");
+        assert!(commands.iter().any(|command| command.name == "setup"));
+        assert!(commands.iter().any(|command| command.name == "stream"));
     }
 
     #[test]

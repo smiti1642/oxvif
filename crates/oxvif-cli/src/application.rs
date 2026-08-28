@@ -58,6 +58,19 @@ impl Application {
         &self.registry
     }
 
+    /// Validate setup inputs and secret-slot availability before a CLI prompts.
+    pub fn preflight_setup(&self, device: &crate::NewDevice) -> Result<(), AppError> {
+        self.registry.validate_new(device)?;
+        let reference = credential_reference(&device.id);
+        if self.credentials.get(&reference)?.is_some() {
+            return Err(AppError::resource_exists(
+                "native device credential",
+                &device.id,
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn execute(
         &self,
         request: CommandRequest,
@@ -73,6 +86,78 @@ impl Application {
                 prompt: crate::agent::prompt(),
             }),
             CommandRequest::Describe(request) => Outcome::data(describe::execute(request)?),
+            CommandRequest::DeviceSetup(request) => {
+                self.preflight_setup(&request.device)?;
+                let verified = request.verify;
+                let set_current = request.set_current;
+                let reference = credential_reference(&request.device.id);
+                let target = normalize_target(&request.device.target)?;
+                let information = if verified {
+                    Some(
+                        fetch_live_information(
+                            &target,
+                            Some(&request.username),
+                            Some(request.password.expose_secret()),
+                            options,
+                        )
+                        .await?,
+                    )
+                } else {
+                    None
+                };
+
+                self.credentials
+                    .set(&reference, request.password.expose_secret())?;
+                let id = request.device.id.clone();
+                if let Err(error) = self.registry.add(request.device) {
+                    return Err(self.rollback_setup(&id, &reference, false, error));
+                }
+                let mut device =
+                    match self
+                        .registry
+                        .set_credentials(&id, &request.username, &reference)
+                    {
+                        Ok(device) => device,
+                        Err(error) => {
+                            return Err(self.rollback_setup(&id, &reference, true, error));
+                        }
+                    };
+                if let Some(information) = information {
+                    device = match self.registry.update_metadata(
+                        &id,
+                        DeviceMetadata {
+                            manufacturer: information.manufacturer,
+                            model: information.model,
+                            firmware_version: information.firmware_version,
+                            serial_number: information.serial_number,
+                        },
+                    ) {
+                        Ok(device) => device,
+                        Err(error) => {
+                            return Err(self.rollback_setup(&id, &reference, true, error));
+                        }
+                    };
+                }
+                if set_current {
+                    device = match self.registry.set_current(&id) {
+                        Ok(device) => device,
+                        Err(error) => {
+                            return Err(self.rollback_setup(&id, &reference, true, error));
+                        }
+                    };
+                }
+                Outcome {
+                    data: CommandData::DeviceSetup {
+                        device: device.clone(),
+                        verified,
+                        current: set_current,
+                    },
+                    warnings: Vec::new(),
+                    device_id: Some(device.id),
+                    selected_by: None,
+                    target: Some(device.target),
+                }
+            }
             CommandRequest::DeviceAdd(request) => {
                 let device = self.registry.add(request.device)?;
                 Outcome::device("added", device)
@@ -316,10 +401,12 @@ impl Application {
                     })
                     .transpose()?
                     .map(snapshot_summary);
+                let registrations = self.discovery_registrations(&devices)?;
                 let mut outcome = Outcome::data(CommandData::DiscoveryScan {
                     devices,
                     saved_snapshot,
                     interfaces: selected_interfaces,
+                    registrations,
                 });
                 outcome.warnings = warnings;
                 outcome
@@ -332,10 +419,12 @@ impl Application {
                     devices.clone(),
                     selected_interfaces.clone(),
                 )?;
+                let registrations = self.discovery_registrations(&devices)?;
                 let mut outcome = Outcome::data(CommandData::DiscoveryScan {
                     devices,
                     saved_snapshot: Some(snapshot_summary(snapshot)),
                     interfaces: selected_interfaces,
+                    registrations,
                 });
                 outcome.warnings = warnings;
                 outcome
@@ -479,11 +568,14 @@ impl Application {
                 })
             }
             CommandRequest::DiscoverySnapshotShow(request) => {
+                let snapshot = self
+                    .registry
+                    .get_discovery_snapshot(&request.id, &request.filters)?;
+                let registrations = self.discovery_registrations(&snapshot.devices)?;
                 Outcome::data(CommandData::DiscoverySnapshotRecord {
                     action: "shown".to_owned(),
-                    snapshot: self
-                        .registry
-                        .get_discovery_snapshot(&request.id, &request.filters)?,
+                    snapshot,
+                    registrations,
                 })
             }
             CommandRequest::DiscoverySnapshotRemove(request) => {
@@ -664,6 +756,59 @@ impl Application {
             selected_by: None,
             target: Some(stored.target().to_owned()),
         })
+    }
+
+    fn rollback_setup(
+        &self,
+        id: &str,
+        reference: &str,
+        remove_device: bool,
+        mut original: AppError,
+    ) -> AppError {
+        let mut cleanup_failures = Vec::new();
+        if remove_device && let Err(error) = self.registry.remove(id) {
+            cleanup_failures.push(format!("registry cleanup failed: {}", error.message));
+        }
+        if let Err(error) = self.credentials.delete(reference) {
+            cleanup_failures.push(format!("credential cleanup failed: {}", error.message));
+        }
+        if cleanup_failures.is_empty() {
+            original.message.push_str(" Setup rollback completed.");
+        } else {
+            original.message.push_str(&format!(
+                " Setup rollback was incomplete: {}",
+                cleanup_failures.join("; ")
+            ));
+            original.suggested_action = Some(format!(
+                "Inspect `oxvif device show {id}` and remove any local device or native credential left by setup."
+            ));
+        }
+        original
+    }
+
+    fn discovery_registrations(
+        &self,
+        records: &[crate::DiscoveryRecord],
+    ) -> Result<BTreeMap<String, String>, AppError> {
+        let (devices, _) = self.registry.list()?;
+        let mut registrations = BTreeMap::new();
+        for record in records {
+            let matching = devices.iter().find(|device| {
+                device.device_uuid.as_deref().is_some_and(|uuid| {
+                    record.endpoint.eq_ignore_ascii_case(uuid)
+                        || record
+                            .endpoint
+                            .strip_prefix("urn:uuid:")
+                            .is_some_and(|endpoint| endpoint.eq_ignore_ascii_case(uuid))
+                }) || record.xaddrs.iter().any(|xaddr| {
+                    normalize_target(xaddr).is_ok_and(|target| target == device.target)
+                })
+            });
+            if let Some(device) = matching {
+                registrations.insert(record.endpoint.clone(), device.id.clone());
+            }
+        }
+        Ok(registrations)
     }
 
     fn resolve_target(&self, selector: crate::TargetSelector) -> Result<ResolvedTarget, AppError> {
@@ -1416,9 +1561,274 @@ fn elapsed_millis(started: Instant) -> u64 {
 mod tests {
     use super::*;
     use crate::{
-        DeviceAddRequest, DeviceCredentialSetRequest, DeviceIdRequest, MemoryCredentialStore,
-        NewDevice, SecretString,
+        DeviceAddRequest, DeviceCredentialSetRequest, DeviceIdRequest, DeviceSetupRequest,
+        MemoryCredentialStore, NewDevice, SecretString,
     };
+
+    struct RacingCredentialStore {
+        registry: RegistryStore,
+        secret: std::sync::Mutex<Option<String>>,
+        fail_delete: bool,
+    }
+
+    impl CredentialStore for RacingCredentialStore {
+        fn set(&self, _reference: &str, password: &str) -> Result<(), AppError> {
+            *self
+                .secret
+                .lock()
+                .map_err(|_| AppError::internal("fixture lock poisoned"))? =
+                Some(password.to_owned());
+            self.registry.add(NewDevice {
+                id: "race-camera".to_owned(),
+                name: Some("Concurrent device".to_owned()),
+                target: "192.0.2.99".to_owned(),
+                tags: Vec::new(),
+            })?;
+            Ok(())
+        }
+
+        fn get(&self, _reference: &str) -> Result<Option<String>, AppError> {
+            self.secret
+                .lock()
+                .map_err(|_| AppError::internal("fixture lock poisoned"))
+                .map(|secret| secret.clone())
+        }
+
+        fn delete(&self, _reference: &str) -> Result<(), AppError> {
+            if self.fail_delete {
+                return Err(AppError::credential_unavailable(
+                    "injected credential cleanup failure",
+                ));
+            }
+            *self
+                .secret
+                .lock()
+                .map_err(|_| AppError::internal("fixture lock poisoned"))? = None;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn setup_verifies_then_persists_credential_device_and_current_selection() {
+        let server = oxvif::mock::MockServer::start()
+            .await
+            .expect("mock server should start");
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        let credentials = Arc::new(MemoryCredentialStore::default());
+        let application = Application::with_stores(registry.clone(), credentials.clone());
+        let options = ExecutionOptions {
+            timeout: Duration::from_secs(20),
+            ..ExecutionOptions::default()
+        };
+
+        let result = application
+            .execute(
+                CommandRequest::DeviceSetup(DeviceSetupRequest {
+                    device: NewDevice {
+                        id: "front-door".to_owned(),
+                        name: Some("Front Door".to_owned()),
+                        target: server.device_url().to_owned(),
+                        tags: vec!["entrance".to_owned()],
+                    },
+                    username: "admin".to_owned(),
+                    password: SecretString::new("setup-secret").expect("secret"),
+                    verify: true,
+                    set_current: true,
+                }),
+                &options,
+            )
+            .await
+            .expect("setup should succeed");
+
+        assert_eq!(result.meta.command.as_deref(), Some("setup"));
+        let device = registry.get("front-door").expect("device should persist");
+        assert!(device.has_credentials);
+        assert!(device.manufacturer.is_some());
+        assert_eq!(
+            registry
+                .current()
+                .expect("current should load")
+                .map(|d| d.id),
+            Some("front-door".to_owned())
+        );
+        assert_eq!(
+            credentials
+                .get("device/front-door")
+                .expect("credential lookup")
+                .as_deref(),
+            Some("setup-secret")
+        );
+        let contents = std::fs::read_to_string(directory.path().join("devices.toml"))
+            .expect("registry should exist");
+        assert!(!contents.contains("setup-secret"));
+    }
+
+    #[tokio::test]
+    async fn setup_refuses_to_overwrite_a_preexisting_native_secret() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        let credentials = Arc::new(MemoryCredentialStore::default());
+        credentials
+            .set("device/front-door", "existing-secret")
+            .expect("fixture credential");
+        let application = Application::with_stores(registry.clone(), credentials.clone());
+
+        let error = application
+            .execute(
+                CommandRequest::DeviceSetup(DeviceSetupRequest {
+                    device: NewDevice {
+                        id: "front-door".to_owned(),
+                        name: None,
+                        target: "192.0.2.20".to_owned(),
+                        tags: Vec::new(),
+                    },
+                    username: "admin".to_owned(),
+                    password: SecretString::new("new-secret").expect("secret"),
+                    verify: false,
+                    set_current: false,
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect_err("existing secret must be preserved");
+
+        assert_eq!(error.code, crate::ErrorCode::ResourceAlreadyExists);
+        assert!(registry.get("front-door").is_err());
+        assert_eq!(
+            credentials
+                .get("device/front-door")
+                .expect("credential lookup")
+                .as_deref(),
+            Some("existing-secret")
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_setup_verification_leaves_no_local_state() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        let credentials = Arc::new(MemoryCredentialStore::default());
+        let application = Application::with_stores(registry.clone(), credentials.clone());
+        let options = ExecutionOptions {
+            timeout: Duration::from_millis(50),
+            ..ExecutionOptions::default()
+        };
+
+        let error = application
+            .execute(
+                CommandRequest::DeviceSetup(DeviceSetupRequest {
+                    device: NewDevice {
+                        id: "offline".to_owned(),
+                        name: None,
+                        target: "127.0.0.1:9".to_owned(),
+                        tags: Vec::new(),
+                    },
+                    username: "admin".to_owned(),
+                    password: SecretString::new("never-store").expect("secret"),
+                    verify: true,
+                    set_current: true,
+                }),
+                &options,
+            )
+            .await
+            .expect_err("verification should fail");
+
+        assert_eq!(error.code, crate::ErrorCode::DeviceConnectionFailed);
+        assert!(registry.get("offline").is_err());
+        assert_eq!(
+            credentials
+                .get("device/offline")
+                .expect("credential lookup"),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn setup_cleans_its_new_secret_if_registry_add_loses_a_race() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        let credentials = Arc::new(RacingCredentialStore {
+            registry: registry.clone(),
+            secret: std::sync::Mutex::new(None),
+            fail_delete: false,
+        });
+        let application = Application::with_stores(registry.clone(), credentials.clone());
+
+        let error = application
+            .execute(
+                CommandRequest::DeviceSetup(DeviceSetupRequest {
+                    device: NewDevice {
+                        id: "race-camera".to_owned(),
+                        name: Some("Setup device".to_owned()),
+                        target: "192.0.2.20".to_owned(),
+                        tags: Vec::new(),
+                    },
+                    username: "admin".to_owned(),
+                    password: SecretString::new("temporary-secret").expect("secret"),
+                    verify: false,
+                    set_current: false,
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect_err("concurrent add must win");
+
+        assert_eq!(error.code, crate::ErrorCode::DeviceAlreadyExists);
+        assert_eq!(
+            credentials
+                .get("device/race-camera")
+                .expect("secret lookup"),
+            None
+        );
+        assert_eq!(
+            registry
+                .get("race-camera")
+                .expect("concurrent device must remain")
+                .name,
+            "Concurrent device"
+        );
+    }
+
+    #[tokio::test]
+    async fn setup_reports_an_incomplete_rollback() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        let credentials = Arc::new(RacingCredentialStore {
+            registry: registry.clone(),
+            secret: std::sync::Mutex::new(None),
+            fail_delete: true,
+        });
+        let application = Application::with_stores(registry, credentials.clone());
+
+        let error = application
+            .execute(
+                CommandRequest::DeviceSetup(DeviceSetupRequest {
+                    device: NewDevice {
+                        id: "race-camera".to_owned(),
+                        name: None,
+                        target: "192.0.2.20".to_owned(),
+                        tags: Vec::new(),
+                    },
+                    username: "admin".to_owned(),
+                    password: SecretString::new("temporary-secret").expect("secret"),
+                    verify: false,
+                    set_current: false,
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect_err("incomplete rollback should be reported");
+
+        assert!(error.message.contains("rollback was incomplete"));
+        assert!(error.suggested_action.is_some());
+        assert_eq!(
+            credentials
+                .get("device/race-camera")
+                .expect("secret lookup"),
+            Some("temporary-secret".to_owned())
+        );
+    }
 
     #[tokio::test]
     async fn credential_is_stored_outside_registry_and_removed_with_device() {

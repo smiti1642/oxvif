@@ -107,7 +107,7 @@ impl AppError {
             code: ErrorCode::DeviceNotFound,
             message: format!("No saved device has ID `{id}`."),
             retryable: false,
-            suggested_action: Some("Run `oxvif device list` to list saved devices.".to_owned()),
+            suggested_action: Some("Run `oxvif devices` to list saved devices.".to_owned()),
         }
     }
 
@@ -238,7 +238,7 @@ impl AppError {
             message: message.into(),
             retryable: false,
             suggested_action: Some(
-                "Set the device credential again with `oxvif device credential set`.".to_owned(),
+                "Run `oxvif auth <DEVICE> --username <USERNAME>` to set it securely.".to_owned(),
             ),
         }
     }

@@ -21,6 +21,10 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
   inventory, Groups, Views, credential profiles, versioned discovery snapshots,
   fingerprinted import plan/apply, read-only ONVIF diagnostics, Agent guidance,
   and deterministic bounded fleet execution.
+- Human CLI facade with secure `setup` and `auth`, concise `info`/`test`/
+  `health`/media commands, positional saved-device selection, `--json` and
+  `--jsonl` shorthands, bare ephemeral discovery, interactive media-profile
+  selection, actionable ID suggestions, and generated shell completion.
 
 ### Changed
 

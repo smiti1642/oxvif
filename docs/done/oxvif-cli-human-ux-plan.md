@@ -1,11 +1,12 @@
 # oxvif CLI human UX plan
 
-**Status:** planned. Written 2026-08-28 after the `oxvif-cli 0.1` feature and
-Agent contracts were completed, but before the first crates.io publication.
+**Status:** completed 2026-08-28. Written after the `oxvif-cli 0.1` feature and
+Agent contracts were completed, then implemented before the first crates.io
+publication.
 
 **Target:** additive human-facing UX improvements for `oxvif-cli 0.1.0`.
 
-**Parent plan:** [oxvif CLI human and Agent operation surface](oxvif-cli-plan.md).
+**Parent plan:** [oxvif CLI human and Agent operation surface](../active/oxvif-cli-plan.md).
 
 ---
 
@@ -510,3 +511,46 @@ completion scripts pass shell-specific smoke checks where available.
    privacy, and shell portability cost.
 4. Whether an optional TTY pager should be introduced for very large table
    output.
+
+## 16. Implementation record
+
+All four implementation stages were completed on 2026-08-28:
+
+- **H1:** added top-level quick commands, exact positional device selection,
+  fleet-selector normalization, `--json`/`--jsonl`, help and descriptor
+  metadata, and bilingual documentation.
+- **H2:** added secure no-echo prompting, `setup`, `auth`, preflight conflict
+  checks, live verification, rollback, and deterministic non-interactive
+  behavior.
+- **H3:** made bare discovery ephemeral, added registration-aware human output,
+  current-device context, actionable credential and close-ID hints, and retained
+  the existing fleet summary contract.
+- **H4:** added unique-profile auto-selection, interactive ambiguous-profile
+  choice, deterministic non-interactive failure, and Bash, Zsh, Fish, and
+  PowerShell completion generation.
+
+Compatibility was preserved: quick commands resolve to the existing typed
+requests, canonical command paths remain available, structured schema version 3
+is unchanged, and discovery registration annotations are excluded from
+JSON/JSONL serialization.
+
+The root help presents quick commands prominently within Clap's command list
+rather than introducing cosmetic heading groups. Profile prompts display the
+token and name available from the current media-profile contract; encoder and
+resolution can be added when those fields become part of that result. Dynamic
+registry completion and a TTY pager remain deferred as described above.
+
+Verification evidence:
+
+- `cargo test -p oxvif-cli`: 78 passed.
+- `cargo test --workspace --all-features`: 1,023 passed, 3 ignored.
+- `cargo +1.88.0 check --workspace --all-features`: passed.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`:
+  passed.
+- rustdoc for the workspace with warnings denied: passed; Cargo emits its known
+  same-name lib/bin output-collision notice for `oxvif`.
+- `cargo package -p oxvif-cli --list --allow-dirty`: the intended 17 package
+  files were selected. Full package verification is correctly gated on
+  publishing the `oxvif 0.16.0` dependency first.
+- `cargo install --path crates/oxvif-cli --locked`: installed an `oxvif 0.1.0`
+  executable, which generated the PowerShell completion script successfully.

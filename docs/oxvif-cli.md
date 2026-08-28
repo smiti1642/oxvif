@@ -18,6 +18,7 @@ The CLI provides:
 - static Groups and dynamic Views for large camera fleets;
 - read-only device, media, PTZ, and health diagnostics;
 - native operating-system credential storage;
+- secure interactive setup and concise daily-operation commands;
 - deterministic JSON and JSONL contracts for Agents and automation; and
 - typed errors with stable process exit codes.
 
@@ -57,6 +58,10 @@ The primary command groups are:
 
 | Command | Purpose |
 | --- | --- |
+| `setup`, `auth` | Securely onboard a device or update its native credential. |
+| `info`, `test`, `health` | Run common diagnostics against a positional or current device. |
+| `profiles`, `stream`, `snapshot` | Use common media operations without the canonical namespace. |
+| `devices`, `groups`, `views` | List local inventory with concise plural commands. |
 | `agent` | Print version-matched guidance for AI Agents. |
 | `describe` | List commands or describe a command as human-readable text or structured data. |
 | `device` | Manage saved devices and run device-level diagnostics. |
@@ -68,6 +73,7 @@ The primary command groups are:
 | `ptz` | Inspect PTZ status and presets without moving the camera. |
 | `health` | Run read-only device health diagnostics. |
 | `use`, `current` | Manage the ambient device selection for interactive sessions. |
+| `completion` | Generate Bash, Zsh, Fish, or PowerShell completion. |
 
 Use `oxvif <command> --help` for the authoritative syntax of an installed
 version.
@@ -77,6 +83,7 @@ version.
 | Option | Description |
 | --- | --- |
 | `--output table\|json\|jsonl` | Select terminal, JSON, or newline-delimited JSON output. The default is `table`. |
+| `--json`, `--jsonl` | Human shorthands for `--output json` and `--output jsonl`. |
 | `--device <ID>` | Select one saved device by canonical ID or `group/local-alias`. |
 | `--group <ID>` | Select every explicit member of a static Group for fleet diagnostics. |
 | `--view <ID>` | Select every current match of a dynamic View for fleet diagnostics. |
@@ -98,29 +105,44 @@ oxvif device info --target 192.168.1.100 --output json
 
 ## Quick start
 
-Register a device under an immutable, Agent-safe ID:
+Securely register, authenticate, verify, and select a device in one command:
 
 ```sh
-oxvif device add front-door --target 192.168.1.100 --name "Front Door" --tag entrance
+oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance --username admin
 ```
 
-Store its password in the native credential store, then verify connectivity:
+`setup` prompts for a password without echo, verifies the ONVIF connection
+before writing local state, stores the secret in the native credential store,
+and makes the device current. Daily operations are then concise:
 
 ```sh
-oxvif device credential set front-door --username admin --password-stdin
-oxvif --device front-door device test
-oxvif --device front-door device info
+oxvif info
+oxvif test
+oxvif health
+oxvif profiles
+oxvif stream
 ```
 
 `front-door` remains the canonical ID even if its display name, target, tags,
 or cached metadata later change. Passwords are never written to `devices.toml`.
+Use `--no-verify` only when intentionally saving an unreachable device, and
+`--no-use` when setup must not change the current selection.
+
+The fully explicit canonical workflow remains available for scripts and
+advanced composition:
+
+```sh
+oxvif device add front-door --target 192.168.1.100 --name "Front Door" --tag entrance
+oxvif device credential set front-door --username admin --password-stdin
+oxvif --device front-door device test --output json --non-interactive
+```
 
 ## Device inventory
 
 List and inspect saved devices:
 
 ```sh
-oxvif device list
+oxvif devices
 oxvif device show front-door
 ```
 
@@ -144,8 +166,12 @@ registry's `snapshots` directory.
 Run an ephemeral WS-Discovery scan:
 
 ```sh
-oxvif --timeout 3s discover scan
+oxvif discover
 ```
+
+Bare `discover` is equivalent to an ephemeral `discover scan`; it never saves
+a snapshot or registers a device. Human output includes row numbers, identity
+metadata, current registration matches, and executable next-step examples.
 
 Retain a named snapshot for later inspection:
 
@@ -278,9 +304,14 @@ device or through a credential profile.
 Store a device credential without placing the password in command arguments:
 
 ```sh
+oxvif auth front-door --username admin
 oxvif device credential set front-door --username admin --password-stdin
 oxvif device credential delete front-door
 ```
+
+`auth` uses a no-echo prompt in an interactive terminal. Under
+`--non-interactive`, supply `--password-stdin` or inject `OXVIF_PASSWORD` from a
+trusted execution environment; the CLI never falls back to a prompt.
 
 Create one reusable native secret and explicitly assign it to devices:
 
@@ -303,6 +334,8 @@ or version-controlled configuration.
 ### Device
 
 ```sh
+oxvif info front-door
+oxvif test front-door
 oxvif --device front-door device test
 oxvif --device front-door device info --output json
 oxvif --device front-door device capabilities --output json
@@ -312,12 +345,21 @@ oxvif --device front-door device services --output json
 ### Media
 
 ```sh
+oxvif profiles front-door
+oxvif stream front-door
+oxvif snapshot front-door
 oxvif --device front-door media profiles --output json
 oxvif --device front-door media stream-uri --profile Profile_1 --output json
 oxvif --device front-door media snapshot-uri --profile Profile_1 --output json
 ```
 
 Returned stream and snapshot URIs have URI userinfo removed.
+
+If a quick `stream` or `snapshot` command omits `--profile`, the only available
+profile is selected automatically. Multiple profiles produce a terminal choice
+for an interactive human; `--non-interactive` fails and lists the accepted
+tokens instead of guessing. Canonical media commands continue to require an
+explicit profile.
 
 ### PTZ
 
@@ -331,6 +373,7 @@ These commands inspect PTZ state; they do not move the camera.
 ### Health
 
 ```sh
+oxvif health front-door
 oxvif --timeout 20s --device front-door health check --output json
 ```
 
@@ -352,6 +395,8 @@ oxvif media profiles --target 192.168.1.100 --output json --non-interactive
 Use a Group or View selector to execute a diagnostic across multiple devices:
 
 ```sh
+oxvif health --group taipei-f1 --jobs 16
+oxvif health --view outdoor-geovision
 oxvif --group taipei-f1 --jobs 16 health check --output jsonl --non-interactive
 oxvif --view outdoor-geovision media profiles --output json --non-interactive
 ```
@@ -409,6 +454,20 @@ oxvif agent prompt
 
 Machine-readable stdout remains valid JSON or JSONL. Automation must consume
 the structured fields rather than parse human-readable messages.
+
+## Shell completion
+
+Generate a completion script on stdout for installation by the user's shell or
+package manager:
+
+```sh
+oxvif completion bash
+oxvif completion zsh
+oxvif completion fish
+oxvif completion powershell
+```
+
+Completion generation performs no network or registry operation.
 
 ## Exit codes
 

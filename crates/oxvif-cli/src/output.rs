@@ -136,6 +136,24 @@ fn render_human(success: &CommandSuccess) -> String {
         CommandData::DeviceRecord { action, device } => {
             format!("Device {action}.\n{}", render_device(device))
         }
+        CommandData::DeviceSetup {
+            device,
+            verified,
+            current,
+        } => format!(
+            "Device setup complete.\n{}\nConnection: {}\nCurrent device: {}\n\nNext: oxvif info",
+            render_device(device),
+            if *verified {
+                "verified"
+            } else {
+                "not verified"
+            },
+            if *current {
+                device.id.as_str()
+            } else {
+                "unchanged"
+            }
+        ),
         CommandData::DeviceRemoved { id } => format!("Device `{id}` removed."),
         CommandData::DeviceImport {
             applied,
@@ -307,7 +325,11 @@ fn render_human(success: &CommandSuccess) -> String {
                 output
             }
         }
-        CommandData::DiscoverySnapshotRecord { action, snapshot } => {
+        CommandData::DiscoverySnapshotRecord {
+            action,
+            snapshot,
+            registrations,
+        } => {
             let mut output = format!(
                 "Discovery snapshot {action}.\nID: {}\nGeneration: {}\nInterfaces: {}\nDevices: {}\nSaved at (Unix ms): {}",
                 snapshot.id,
@@ -320,20 +342,14 @@ fn render_human(success: &CommandSuccess) -> String {
                 snapshot.devices.len(),
                 snapshot.saved_at_unix_ms
             );
-            for device in &snapshot.devices {
-                let _ = write!(
-                    output,
-                    "\n  {}  {}",
-                    device.endpoint,
-                    device.xaddrs.first().map_or("(no XAddr)", String::as_str)
-                );
-            }
+            append_discovery_table(&mut output, &snapshot.devices, registrations);
             output
         }
         CommandData::DiscoveryScan {
             devices,
             saved_snapshot,
             interfaces,
+            registrations,
         } => {
             let mut output = format!("Discovery found {} device(s).", devices.len());
             if !interfaces.is_empty() {
@@ -346,12 +362,16 @@ fn render_human(success: &CommandSuccess) -> String {
                     snapshot.id, snapshot.generation
                 );
             }
-            for device in devices {
+            append_discovery_table(&mut output, devices, registrations);
+            if let Some(snapshot) = saved_snapshot {
                 let _ = write!(
                     output,
-                    "\n  {}  {}",
-                    device.endpoint,
-                    device.xaddrs.first().map_or("(no XAddr)", String::as_str)
+                    "\n\nNext:\n  Filter: oxvif discover list {} --filter ip-cidr=<CIDR>\n  Enrich: oxvif discover enrich {} --credential-profile <PROFILE>",
+                    snapshot.id, snapshot.id
+                );
+            } else {
+                output.push_str(
+                    "\n\nNext:\n  Save a reusable scan: oxvif discover scan --save <SNAPSHOT>",
                 );
             }
             output
@@ -432,6 +452,41 @@ fn render_human(success: &CommandSuccess) -> String {
         rendered.pop();
     }
     rendered
+}
+
+fn append_discovery_table(
+    output: &mut String,
+    devices: &[crate::DiscoveryRecord],
+    registrations: &std::collections::BTreeMap<String, String>,
+) {
+    if devices.is_empty() {
+        return;
+    }
+    output.push_str("\n\n# | ADDRESS | MANUFACTURER | MODEL | REGISTERED | ENDPOINT");
+    for (index, device) in devices.iter().enumerate() {
+        let address = device
+            .xaddrs
+            .iter()
+            .find_map(|xaddr| {
+                url::Url::parse(xaddr)
+                    .ok()
+                    .and_then(|url| url.host_str().map(str::to_owned))
+            })
+            .unwrap_or_else(|| "(no address)".to_owned());
+        let registered = registrations
+            .get(&device.endpoint)
+            .map_or("—", String::as_str);
+        let _ = write!(
+            output,
+            "\n{} | {} | {} | {} | {} | {}",
+            index + 1,
+            address,
+            device.manufacturer.as_deref().unwrap_or("—"),
+            device.model.as_deref().unwrap_or("—"),
+            registered,
+            device.endpoint
+        );
+    }
 }
 
 fn render_json_lines(success: &CommandSuccess) -> Result<String, AppError> {
@@ -560,4 +615,43 @@ fn render_live_information(information: &crate::LiveDeviceInfo) -> String {
 
 const fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discovery_registration_is_human_context_not_structured_schema() {
+        let record = crate::DiscoveryRecord {
+            endpoint: "urn:uuid:camera".to_owned(),
+            types: Vec::new(),
+            scopes: Vec::new(),
+            xaddrs: vec!["http://192.168.1.20/onvif/device_service".to_owned()],
+            manufacturer: Some("Example".to_owned()),
+            model: Some("Cam".to_owned()),
+            firmware_version: None,
+            serial_number: None,
+        };
+        let success = CommandSuccess {
+            data: CommandData::DiscoveryScan {
+                devices: vec![record],
+                saved_snapshot: None,
+                interfaces: vec!["Ethernet".to_owned()],
+                registrations: std::collections::BTreeMap::from([(
+                    "urn:uuid:camera".to_owned(),
+                    "front-door".to_owned(),
+                )]),
+            },
+            warnings: Vec::new(),
+            meta: ResultMeta::default(),
+        };
+
+        let table = render_success(OutputFormat::Table, &success).expect("table output");
+        assert!(table.contains("front-door"));
+        assert!(table.contains("192.168.1.20"));
+        let json = render_success(OutputFormat::Json, &success).expect("json output");
+        assert!(!json.contains("front-door"));
+        assert!(!json.contains("registrations"));
+    }
 }

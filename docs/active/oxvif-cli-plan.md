@@ -11,7 +11,7 @@ is explicitly marked provisional may still change before the first release.
 
 **Package:** crates.io package `oxvif-cli`, installed binary `oxvif`.
 
-**Related active plan:** [human UX improvements](oxvif-cli-human-ux-plan.md).
+**Related completed plan:** [human UX improvements](../done/oxvif-cli-human-ux-plan.md).
 
 **Repository decision:** keep the CLI in this repository as a workspace member.
 `cargo install oxvif-cli` depends on the crates.io package name, not on the CLI

@@ -182,6 +182,18 @@ impl RegistryStore {
         })
     }
 
+    /// Validate a new device exactly as [`Self::add`] would, without writing it.
+    pub fn validate_new(&self, new_device: &NewDevice) -> Result<(), AppError> {
+        validate_device_id(&new_device.id)?;
+        normalize_target(&new_device.target)?;
+        normalized_name(new_device.name.as_deref(), &new_device.id)?;
+        normalize_tags(new_device.tags.clone())?;
+        if self.load_unlocked()?.devices.contains_key(&new_device.id) {
+            return Err(AppError::device_exists(&new_device.id));
+        }
+        Ok(())
+    }
+
     pub fn update(&self, id: &str, update: DeviceUpdate) -> Result<DeviceView, AppError> {
         validate_device_id(id)?;
         if update.name.is_none() && update.target.is_none() && update.tags.is_none() {
@@ -296,8 +308,30 @@ impl RegistryStore {
                 .ok_or_else(|| AppError::resource_not_found("Group-local alias", selector));
         }
         validate_device_id(selector)?;
-        self.get(selector)?;
-        Ok(selector.to_owned())
+        let registry = self.load_unlocked()?;
+        if registry.devices.contains_key(selector) {
+            return Ok(selector.to_owned());
+        }
+        let mut candidates = registry
+            .devices
+            .keys()
+            .map(|id| (edit_distance(selector, id), id))
+            .filter(|(distance, _)| *distance <= 3.max(selector.len() / 3))
+            .collect::<Vec<_>>();
+        candidates.sort();
+        let mut error = AppError::device_not_found(selector);
+        if !candidates.is_empty() {
+            error.suggested_action = Some(format!(
+                "Did you mean {}? Run `oxvif devices` to list every saved device.",
+                candidates
+                    .into_iter()
+                    .take(3)
+                    .map(|(_, id)| format!("`{id}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        Err(error)
     }
 
     pub fn list_groups(&self) -> Result<Vec<GroupView>, AppError> {
@@ -1982,9 +2016,54 @@ fn open_lock_file(path: &Path) -> Result<File, AppError> {
         })
 }
 
+fn edit_distance(left: &str, right: &str) -> usize {
+    let right = right.chars().collect::<Vec<_>>();
+    let mut previous = (0..=right.len()).collect::<Vec<_>>();
+    for (left_index, left_character) in left.chars().enumerate() {
+        let mut current = Vec::with_capacity(right.len() + 1);
+        current.push(left_index + 1);
+        for (right_index, right_character) in right.iter().enumerate() {
+            let substitution =
+                previous[right_index] + usize::from(left_character != *right_character);
+            current.push(
+                (previous[right_index + 1] + 1)
+                    .min(current[right_index] + 1)
+                    .min(substitution),
+            );
+        }
+        previous = current;
+    }
+    previous[right.len()]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_device_suggests_close_canonical_ids_without_selecting_them() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = RegistryStore::at(directory.path());
+        store
+            .add(NewDevice {
+                id: "front-door".to_owned(),
+                name: None,
+                target: "192.0.2.10".to_owned(),
+                tags: Vec::new(),
+            })
+            .expect("fixture device");
+
+        let error = store
+            .resolve_device_selector("frontdoor")
+            .expect_err("fuzzy IDs must never resolve automatically");
+        assert_eq!(error.code, crate::ErrorCode::DeviceNotFound);
+        assert!(
+            error
+                .suggested_action
+                .as_deref()
+                .is_some_and(|hint| hint.contains("front-door"))
+        );
+    }
 
     #[test]
     fn normalizes_host_and_preserves_explicit_url() {

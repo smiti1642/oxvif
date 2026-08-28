@@ -52,6 +52,61 @@ fn root_help_routes_agents_to_the_embedded_guide() {
     assert!(stdout(&output).contains("--group"));
     assert!(stdout(&output).contains("--view"));
     assert!(stdout(&output).contains("--jobs"));
+    assert!(stdout(&output).contains("setup"));
+    assert!(stdout(&output).contains("stream"));
+    assert!(stdout(&output).contains("completion"));
+}
+
+#[test]
+fn human_inventory_alias_and_json_shorthand_work_end_to_end() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    RegistryStore::at(directory.path())
+        .add(NewDevice {
+            id: "front-door".to_owned(),
+            name: Some("Front Door".to_owned()),
+            target: "192.0.2.10".to_owned(),
+            tags: Vec::new(),
+        })
+        .expect("device should add");
+
+    let output = run_isolated(&["devices", "--json"], directory.path());
+    assert!(output.status.success(), "{}", stderr(&output));
+    let document: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(document["schema_version"], "3");
+    assert_eq!(document["data"]["kind"], "device_list");
+    assert_eq!(document["data"]["devices"][0]["id"], "front-door");
+}
+
+#[test]
+fn non_interactive_quick_command_does_not_use_current_device() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let registry = RegistryStore::at(directory.path());
+    registry
+        .add(NewDevice {
+            id: "front-door".to_owned(),
+            name: None,
+            target: "192.0.2.10".to_owned(),
+            tags: Vec::new(),
+        })
+        .expect("device should add");
+    registry
+        .set_current("front-door")
+        .expect("current device should set");
+
+    let output = run_isolated(&["info", "--json", "--non-interactive"], directory.path());
+    assert_eq!(output.status.code(), Some(5));
+    let document: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(document["error"]["code"], "MISSING_TARGET");
+}
+
+#[test]
+fn completion_is_generated_without_application_output_envelopes() {
+    let output = run(&["completion", "powershell"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let script = stdout(&output);
+    assert!(script.contains("Register-ArgumentCompleter"));
+    assert!(!script.contains("schema_version"));
+    assert!(stderr(&output).is_empty());
 }
 
 #[test]

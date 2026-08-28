@@ -132,9 +132,10 @@ deterministic fleet diagnostics:
 cargo install oxvif-cli --locked
 oxvif --help
 oxvif agent guide --output json
-oxvif --timeout 3s discover scan --save factory-scan
-oxvif device add front-door --target 192.168.1.100 --name "Front Door"
-oxvif device credential set front-door --username admin --password-stdin
+oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance
+oxvif info
+oxvif health
+oxvif discover
 oxvif group create taipei-f1
 oxvif group member add taipei-f1 front-door --alias cam-023
 oxvif --device front-door device info --output json --non-interactive
@@ -142,7 +143,8 @@ oxvif --group taipei-f1 --jobs 16 health check --output jsonl --non-interactive
 ```
 
 Passwords are never stored in the registry; `--password-stdin` writes them to
-the native credential store. The standalone
+the native credential store, while interactive `setup` and `auth` use a
+no-echo password prompt. The standalone
 [`oxvif CLI documentation`](docs/oxvif-cli.md) covers installation, command
 conventions, Agent automation, discovery and import, Groups and Views,
 read-only diagnostics, fleet execution, output formats, and exit codes. A

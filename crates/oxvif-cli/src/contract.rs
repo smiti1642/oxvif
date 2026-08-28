@@ -36,6 +36,7 @@ pub enum CommandRequest {
     AgentPrompt,
     /// List commands or describe one command.
     Describe(DescribeRequest),
+    DeviceSetup(DeviceSetupRequest),
     DeviceAdd(DeviceAddRequest),
     DeviceList,
     DeviceShow(DeviceIdRequest),
@@ -89,6 +90,7 @@ impl CommandRequest {
             Self::AgentGuide => "agent.guide",
             Self::AgentPrompt => "agent.prompt",
             Self::Describe(_) => "describe",
+            Self::DeviceSetup(_) => "setup",
             Self::DeviceAdd(_) => "device.add",
             Self::DeviceList => "device.list",
             Self::DeviceShow(_) => "device.show",
@@ -147,6 +149,15 @@ pub struct DescribeRequest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeviceAddRequest {
     pub device: NewDevice,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct DeviceSetupRequest {
+    pub device: NewDevice,
+    pub username: String,
+    pub password: SecretString,
+    pub verify: bool,
+    pub set_current: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -406,6 +417,11 @@ pub enum CommandData {
         action: String,
         device: DeviceView,
     },
+    DeviceSetup {
+        device: DeviceView,
+        verified: bool,
+        current: bool,
+    },
     DeviceRemoved {
         id: String,
     },
@@ -454,11 +470,15 @@ pub enum CommandData {
     DiscoverySnapshotRecord {
         action: String,
         snapshot: DiscoverySnapshotView,
+        #[serde(skip)]
+        registrations: std::collections::BTreeMap<String, String>,
     },
     DiscoveryScan {
         devices: Vec<crate::DiscoveryRecord>,
         saved_snapshot: Option<DiscoverySnapshotSummary>,
         interfaces: Vec<String>,
+        #[serde(skip)]
+        registrations: std::collections::BTreeMap<String, String>,
     },
     DiscoveryEnrichment {
         snapshot: DiscoverySnapshotSummary,
