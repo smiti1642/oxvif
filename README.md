@@ -125,23 +125,28 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 The separately published `oxvif-cli` package installs an executable named
 `oxvif`. It provides stable human and JSON output, a named-device registry,
-and native OS credential storage:
+native OS credential storage, discovery snapshots, Groups, Views, and
+deterministic fleet diagnostics:
 
 ```sh
 cargo install oxvif-cli --locked
+oxvif --help
+oxvif agent guide --output json
+oxvif --timeout 3s discover scan --save factory-scan
 oxvif device add front-door --target 192.168.1.100 --name "Front Door"
 oxvif device credential set front-door --username admin --password-stdin
 oxvif group create taipei-f1
 oxvif group member add taipei-f1 front-door --alias cam-023
-oxvif view create outdoor --filter tag=outdoor
-oxvif discover scan --save factory-scan
-oxvif --device front-door device test
 oxvif --device front-door device info --output json --non-interactive
+oxvif --group taipei-f1 --jobs 16 health check --output jsonl --non-interactive
 ```
 
 Passwords are never stored in the registry; `--password-stdin` writes them to
-the native credential store. See the
-[`oxvif-cli` README](crates/oxvif-cli/README.md) for the current command surface.
+the native credential store. The standalone
+[`oxvif CLI usage guide`](docs/oxvif-cli.md) covers installation, Agent
+onboarding, discovery and import, Groups and Views, read-only diagnostics,
+fleet execution, output formats, and exit codes. Package-specific details are
+also available in the [`oxvif-cli` README](crates/oxvif-cli/README.md).
 
 ---
 
