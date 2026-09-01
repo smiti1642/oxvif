@@ -392,21 +392,21 @@ jobs:
           arm_sha=$(sha256sum "dist/$arm_archive" | cut -d' ' -f1)
           intel_sha=$(sha256sum "dist/$intel_archive" | cut -d' ' -f1)
           base_url="https://github.com/smiti1642/oxvif/releases/download/$RELEASE_TAG"
-          mkdir -p formula
+          mkdir -p Formula
           sed \
             -e "s|@CLI_VERSION@|$cli_version|g" \
             -e "s|@MACOS_ARM64_URL@|$base_url/$arm_archive|g" \
             -e "s|@MACOS_ARM64_SHA256@|$arm_sha|g" \
             -e "s|@MACOS_X86_64_URL@|$base_url/$intel_archive|g" \
             -e "s|@MACOS_X86_64_SHA256@|$intel_sha|g" \
-            packaging/homebrew/oxvif.rb.in > formula/oxvif.rb
-          ruby -c formula/oxvif.rb
-          ! grep -q '@[A-Z_]*@' formula/oxvif.rb
+            packaging/homebrew/oxvif.rb.in > Formula/oxvif.rb
+          ruby -c Formula/oxvif.rb
+          ! grep -q '@[A-Z_]*@' Formula/oxvif.rb
       - name: Upload formula staging artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: oxvif-homebrew-formula-${{ env.RELEASE_LABEL }}
-          path: formula/oxvif.rb
+          path: Formula/oxvif.rb
           if-no-files-found: error
           retention-days: 14
 
@@ -426,7 +426,7 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: oxvif-homebrew-formula-${{ env.RELEASE_LABEL }}
-          path: formula
+          path: Formula
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}
@@ -435,6 +435,7 @@ jobs:
         shell: bash
         env:
           ARCHIVE_NAME: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}.tar.gz
+          BOTTLE_ROOT_URL: https://github.com/smiti1642/oxvif/releases/download/${{ env.RELEASE_LABEL }}
           HOMEBREW_DEVELOPER: "1"
           HOMEBREW_NO_AUTO_UPDATE: "1"
         run: |
@@ -446,23 +447,37 @@ jobs:
           import pathlib
           import re
 
-          formula = pathlib.Path("formula/oxvif.rb")
+          archive_name = os.environ["ARCHIVE_NAME"]
+          formula = pathlib.Path("Formula/oxvif.rb")
           text = formula.read_text(encoding="utf-8")
-          text = re.sub(r'url "[^"]+"', f'url "{os.environ["LOCAL_URL"]}"', text)
+          text, replacements = re.subn(
+              rf'url "[^"]*{re.escape(archive_name)}"',
+              f'url "{os.environ["LOCAL_URL"]}"',
+              text,
+          )
+          if replacements != 1:
+              raise SystemExit(f"expected one archive URL replacement, got {replacements}")
           text = re.sub(r'sha256 "[0-9a-f]+"', f'sha256 "{os.environ["ARCHIVE_SHA"]}"', text)
           formula.write_text(text, encoding="utf-8")
           PY
-          ruby -c formula/oxvif.rb
-          brew style formula/oxvif.rb
+          ruby -c Formula/oxvif.rb
+          brew style Formula/oxvif.rb
+          brew audit --strict Formula/oxvif.rb
           python3 -m http.server 18080 --bind 127.0.0.1 --directory dist >brew-http.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           curl --fail --retry 20 --retry-connrefused --retry-delay 1 "$local_url" --output /dev/null
-          brew install --build-bottle --formula formula/oxvif.rb
+          brew install --build-bottle --formula Formula/oxvif.rb
           oxvif --version
           oxvif describe device.info --output json --non-interactive >/dev/null
           oxvif agent guide --output json --non-interactive >/dev/null
-          brew bottle --json oxvif > oxvif-bottle.json
+          {
+            brew --version
+            brew config
+            sw_vers
+            uname -m
+          } > oxvif-homebrew-build-tools.txt
+          brew bottle --json --root-url="$BOTTLE_ROOT_URL" oxvif > oxvif-bottle.json
           bottle=$(find . -maxdepth 1 -type f -name 'oxvif--*.bottle*.tar.gz' -print -quit)
           test -n "$bottle"
           brew uninstall oxvif
@@ -479,6 +494,7 @@ jobs:
           path: |
             oxvif--*.bottle*.tar.gz
             oxvif-bottle.json
+            oxvif-homebrew-build-tools.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -517,6 +533,13 @@ jobs:
           gpg --batch --export "$fingerprint" > "$repository/oxvif-archive-keyring.gpg"
           gpg --batch --armor --export "$fingerprint" > "$repository/oxvif-archive-key.asc"
           printf '%s\n' "$fingerprint" > "$repository/oxvif-archive-key.fingerprint"
+          mkdir -p "$repository/metadata"
+          {
+            dpkg-scanpackages --version
+            dpkg-deb --version | head -n 1
+            gpg --version | head -n 1
+            gzip --version | head -n 1
+          } > "$repository/metadata/build-tools.txt"
           gpgv --keyring "$repository/oxvif-archive-keyring.gpg" \
             "$repository/dists/stable/InRelease"
           cp "$repository/dists/stable/InRelease" "$RUNNER_TEMP/InRelease.tampered"
