@@ -301,9 +301,9 @@ no claim that depends on an unpublished artifact.
 ### 6.3 Release artifacts
 
 - [x] Add a release workflow that builds declared OS/architecture targets.
-- [ ] Build Windows x86_64, Linux x86_64/aarch64, and macOS
+- [x] Build Windows x86_64, Linux x86_64/aarch64, and macOS
   x86_64/aarch64 artifacts before the first public CLI release.
-- [x] Publish SHA-256 checksums next to every artifact.
+- [x] Produce SHA-256 checksums next to every staged artifact.
 - [x] Produce an SBOM for the release dependency graph.
 - [ ] Sign Windows artifacts before claiming commercial-pilot readiness.
 - [x] Attach version-matched shell completions and schema files when those
@@ -500,15 +500,24 @@ the Markdown manual or encountering a prompt.
 - [x] Produce versioned Debian packages for Linux x86_64 and aarch64.
 - [ ] Publish signed APT repository metadata so a configured host can run
   `apt update` followed by `apt install oxvif`.
-- [ ] Produce Homebrew bottles for macOS Intel and Apple Silicon.
+- [x] Produce staged Homebrew bottles for macOS Intel and Apple Silicon.
 - [ ] Maintain a versioned Homebrew formula so a configured host can run
   `brew install oxvif` through the selected tap.
-- [ ] Smoke-test the installed binary from APT and Homebrew rather than the
-  workspace or unpacked release artifact.
+- [x] Smoke-test the installed binary from staged APT and Homebrew channels,
+  including Homebrew formula tests before and after bottle reinstall, rather
+  than the workspace or unpacked release artifact.
 - [ ] Document repository/tap setup, upgrade, downgrade, uninstall, checksum,
   signing-key rotation, and supported-architecture behavior.
-- [ ] Keep project-owned APT repository and Homebrew tap publication behind the
+- [x] Keep project-owned APT repository and Homebrew tap publication behind the
   same explicit release approval as crates.io, tags, and GitHub Release.
+
+Non-publishing evidence: commit `f9790ec` passed
+[release staging run 33508813383](https://github.com/smiti1642/oxvif/actions/runs/33508813383)
+with all build, signed-APT, and Homebrew jobs successful; the publish job was
+intentionally skipped. Matching
+[general CI run 33508813343](https://github.com/smiti1642/oxvif/actions/runs/33508813343)
+passed all 21 jobs. Public install and lifecycle checks remain open until the
+mandatory approval cut line.
 
 ### 10.2a Official-channel graduation
 

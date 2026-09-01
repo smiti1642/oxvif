@@ -195,14 +195,19 @@ smoked, and removed on native amd64/arm64 Ubuntu 22.04 runners. A signed APT
 repository is assembled with an ephemeral CI-only key and tested through
 `apt update`, install, smoke, and purge on both architectures. A Homebrew
 formula is rendered from verified archive hashes, audited, installed, bottled,
-and reinstalled on macOS 15 Intel/Apple Silicon runners. The Windows archive is
-built with a static C runtime and its PE imports are checked. No tag, release,
-public signing key, package repository, tap, formula, bottle, or attestation has
-been published.
+and reinstalled on macOS 15 Intel/Apple Silicon runners. Formula tests verify
+the CLI, schemas, and Bash/Zsh/Fish completions both before and after the bottle
+reinstall. The Windows archive is built with a static C runtime and its PE
+imports are checked. The final non-publishing evidence is commit `f9790ec` in
+[release staging run 33508813383](https://github.com/smiti1642/oxvif/actions/runs/33508813383);
+the matching [general CI run 33508813343](https://github.com/smiti1642/oxvif/actions/runs/33508813343)
+passed all 21 jobs. No tag, release, public signing key, package repository,
+tap, formula, bottle, or attestation has been published.
 
 ### C2. Windows
 
-- [ ] Build/test x86_64 on Windows and publish a versioned portable archive.
+- [x] Build/test x86_64 on Windows and stage a versioned portable archive.
+- [ ] Publish the verified portable archive in the approved GitHub Release.
 - [ ] Record the signing path required before a commercial-pilot claim.
 - [ ] Keep MSI/WinGet as follow-ups unless promoted by a later decision.
 
@@ -217,10 +222,12 @@ been published.
 ### C4. Homebrew formula and bottles
 
 - [ ] Maintain a formula in the selected project tap.
-- [ ] Produce Intel/Apple Silicon bottles and record hashes.
-- [ ] Install completions using policy-compliant paths.
-- [ ] Test version, descriptors, Agent guide, schema, and completions.
-- [ ] Run current Homebrew audit/style/test-bot gates.
+- [x] Produce staged Intel/Apple Silicon bottles and record hashes.
+- [x] Install completions using policy-compliant paths.
+- [x] Test version, descriptors, Agent guide, schema, and completions before and
+  after bottle reinstall.
+- [x] Run current Homebrew audit and style gates against a named staging tap.
+- [ ] Run `brew test-bot` in the public tap repository before publication.
 
 Exit gate: every matrix artifact installs cleanly and reports matching CLI,
 library, Agent-guide, and schema versions.
@@ -264,8 +271,8 @@ and remove oxvif on every declared platform without building Rust.
 
 - [ ] Run format, Clippy, full tests/features, rustdoc, MSRV, audit, schema,
   package, and mock/human smoke gates from a clean worktree.
-- [ ] Verify all five architecture rows and credential backends.
-- [ ] Verify private CA and timeout cancellation fixtures.
+- [x] Verify all five architecture rows and credential backends.
+- [x] Verify private CA and timeout cancellation fixtures.
 - [ ] Verify clean installs from crates.io, APT, Homebrew, and Windows artifact.
 - [ ] Re-run the sanitized real-camera matrix from the parent plan.
 
