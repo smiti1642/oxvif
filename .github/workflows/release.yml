@@ -224,7 +224,11 @@ jobs:
           & $bin --help | Out-Null
           & $bin describe device.info --output json --non-interactive | Out-Null
           & $bin agent guide --output json --non-interactive | Out-Null
-          $llvmObjdump = rustup which --toolchain 1.88.0 llvm-objdump
+          $sysroot = & rustc --print sysroot
+          $llvmObjdump = Join-Path $sysroot 'lib/rustlib/x86_64-pc-windows-msvc/bin/llvm-objdump.exe'
+          if (-not (Test-Path -LiteralPath $llvmObjdump)) {
+            throw "llvm-objdump was not found at the expected Rust sysroot path: $llvmObjdump"
+          }
           $imports = & $llvmObjdump -p $bin
           if ($imports -match '(?i)(vcruntime|msvcp|ucrtbase|api-ms-win-crt)') {
             throw 'Windows release binary unexpectedly depends on a dynamic C/C++ runtime'
