@@ -508,6 +508,7 @@ jobs:
           bottle=$(find . -maxdepth 1 -type f -name 'oxvif--*.bottle*.tar.gz' -print -quit)
           test -n "$bottle"
           brew uninstall oxvif
+          brew trust --formula smiti1642/oxvif-staging/oxvif
           brew install "$bottle"
           oxvif --version
           oxvif describe device.info --output json --non-interactive >/dev/null
