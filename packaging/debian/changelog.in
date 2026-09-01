@@ -1,0 +1,5 @@
+oxvif (@CLI_VERSION@-1) stable; urgency=medium
+
+  * Initial project repository release of the oxvif diagnostic CLI.
+
+ -- oxvif maintainers <smiti1642@users.noreply.github.com>  @RELEASE_DATE@

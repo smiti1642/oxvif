@@ -96,7 +96,7 @@ jobs:
       - name: Security audit
         run: cargo audit
       - name: Upload versioned JSON schemas
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: oxvif-json-schema-v3
           path: crates/oxvif-cli/schema/*.json
@@ -295,6 +295,12 @@ jobs:
           install -Dm644 packaging/oxvif.1 "$package_root/usr/share/man/man1/oxvif.1"
           gzip -n -9 "$package_root/usr/share/man/man1/oxvif.1"
           gzip -n -9 -c CHANGELOG.md > "$package_root/usr/share/doc/oxvif/changelog.gz"
+          release_date=$(date -u -R -d "@$SOURCE_DATE_EPOCH")
+          sed \
+            -e "s/@CLI_VERSION@/$cli_version/g" \
+            -e "s/@RELEASE_DATE@/$release_date/g" \
+            packaging/debian/changelog.in \
+            | gzip -n -9 > "$package_root/usr/share/doc/oxvif/changelog.Debian.gz"
           mkdir -p "$package_root/usr/share/bash-completion/completions"
           mkdir -p "$package_root/usr/share/zsh/vendor-completions"
           mkdir -p "$package_root/usr/share/fish/vendor_completions.d"
@@ -304,6 +310,7 @@ jobs:
           "$package_root/usr/bin/oxvif" completion fish > "$package_root/usr/share/fish/vendor_completions.d/oxvif.fish"
           "$package_root/usr/bin/oxvif" completion powershell > "$package_root/usr/share/oxvif/completions/oxvif.ps1"
           cp crates/oxvif-cli/schema/*.json "$package_root/usr/share/oxvif/schema/"
+          strip --strip-unneeded "$package_root/usr/bin/oxvif"
           installed_size=$(du -sk "$package_root" | cut -f1)
           mkdir -p "$package_root/DEBIAN"
           sed \
@@ -318,6 +325,7 @@ jobs:
           {
             dpkg-deb --version | head -n 1
             lintian --version
+            strip --version | head -n 1
           } > "dist/oxvif_${cli_version}-1_${DEB_ARCH}.build-tools.txt"
           lintian --fail-on error "$deb"
           sudo apt-get install -y "./$deb"
@@ -347,7 +355,7 @@ jobs:
             dist/*.zip
             dist/*.deb
       - name: Upload prepared artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}
           path: |
@@ -368,7 +376,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_REF }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
           merge-multiple: true
@@ -395,17 +403,193 @@ jobs:
           ruby -c formula/oxvif.rb
           ! grep -q '@[A-Z_]*@' formula/oxvif.rb
       - name: Upload formula staging artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: oxvif-homebrew-formula-${{ env.RELEASE_LABEL }}
           path: formula/oxvif.rb
           if-no-files-found: error
           retention-days: 14
 
+  test-homebrew-formula:
+    name: Homebrew install and bottle (${{ matrix.runner }})
+    needs: prepare-homebrew-formula
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            archive: oxvif-macos-aarch64
+          - runner: macos-15-intel
+            archive: oxvif-macos-x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: oxvif-homebrew-formula-${{ env.RELEASE_LABEL }}
+          path: formula
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}
+          path: dist
+      - name: Install through Homebrew, create a bottle, and reinstall it
+        shell: bash
+        env:
+          ARCHIVE_NAME: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}.tar.gz
+          HOMEBREW_DEVELOPER: "1"
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          set -euo pipefail
+          archive_sha=$(shasum -a 256 "dist/$ARCHIVE_NAME" | cut -d' ' -f1)
+          local_url="http://127.0.0.1:18080/$ARCHIVE_NAME"
+          LOCAL_URL="$local_url" ARCHIVE_SHA="$archive_sha" python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          formula = pathlib.Path("formula/oxvif.rb")
+          text = formula.read_text(encoding="utf-8")
+          text = re.sub(r'url "[^"]+"', f'url "{os.environ["LOCAL_URL"]}"', text)
+          text = re.sub(r'sha256 "[0-9a-f]+"', f'sha256 "{os.environ["ARCHIVE_SHA"]}"', text)
+          formula.write_text(text, encoding="utf-8")
+          PY
+          ruby -c formula/oxvif.rb
+          brew style formula/oxvif.rb
+          python3 -m http.server 18080 --bind 127.0.0.1 --directory dist >brew-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          curl --fail --retry 20 --retry-connrefused --retry-delay 1 "$local_url" --output /dev/null
+          brew install --build-bottle --formula formula/oxvif.rb
+          oxvif --version
+          oxvif describe device.info --output json --non-interactive >/dev/null
+          oxvif agent guide --output json --non-interactive >/dev/null
+          brew bottle --json oxvif > oxvif-bottle.json
+          bottle=$(find . -maxdepth 1 -type f -name 'oxvif--*.bottle*.tar.gz' -print -quit)
+          test -n "$bottle"
+          brew uninstall oxvif
+          brew install "$bottle"
+          oxvif --version
+          oxvif describe device.info --output json --non-interactive >/dev/null
+          oxvif agent guide --output json --non-interactive >/dev/null
+          brew uninstall oxvif
+          ! command -v oxvif
+      - name: Upload staged Homebrew bottle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: oxvif-homebrew-bottle-${{ matrix.archive }}-${{ env.RELEASE_LABEL }}
+          path: |
+            oxvif--*.bottle*.tar.gz
+            oxvif-bottle.json
+          if-no-files-found: error
+          retention-days: 14
+
+  prepare-apt-repository:
+    name: Prepare signed APT repository
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: oxvif-linux-*-${{ env.RELEASE_LABEL }}
+          path: dist
+          merge-multiple: true
+      - name: Build and sign repository metadata with an ephemeral key
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev gnupg
+          repository="$RUNNER_TEMP/oxvif-apt-repository"
+          mkdir -p "$repository/pool/main/o/oxvif"
+          cp dist/*.deb "$repository/pool/main/o/oxvif/"
+          export GNUPGHOME
+          GNUPGHOME=$(mktemp -d)
+          trap 'rm -rf "$GNUPGHOME"' EXIT
+          chmod 700 "$GNUPGHOME"
+          gpg --batch --passphrase '' --quick-generate-key \
+            'oxvif CI repository <ci-only@oxvif.invalid>' ed25519 sign 1d
+          fingerprint=$(gpg --batch --with-colons --list-secret-keys \
+            | awk -F: '$1 == "fpr" { print $10; exit }')
+          test -n "$fingerprint"
+          bash packaging/debian/build-repository.sh "$repository" stable "$fingerprint"
+          gpg --batch --export "$fingerprint" > "$repository/oxvif-archive-keyring.gpg"
+          gpg --batch --armor --export "$fingerprint" > "$repository/oxvif-archive-key.asc"
+          printf '%s\n' "$fingerprint" > "$repository/oxvif-archive-key.fingerprint"
+          gpgv --keyring "$repository/oxvif-archive-keyring.gpg" \
+            "$repository/dists/stable/InRelease"
+          cp "$repository/dists/stable/InRelease" "$RUNNER_TEMP/InRelease.tampered"
+          sed -i 's/Origin: oxvif/Origin: tampered/' "$RUNNER_TEMP/InRelease.tampered"
+          if gpgv --keyring "$repository/oxvif-archive-keyring.gpg" \
+            "$RUNNER_TEMP/InRelease.tampered"; then
+            echo "tampered repository metadata unexpectedly verified" >&2
+            exit 1
+          fi
+          mv "$repository" repository
+      - name: Upload signed APT staging repository
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: oxvif-apt-repository-${{ env.RELEASE_LABEL }}
+          path: repository
+          if-no-files-found: error
+          retention-days: 14
+
+  test-apt-repository:
+    name: APT repository install (${{ matrix.architecture }})
+    needs: prepare-apt-repository
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: oxvif-apt-repository-${{ env.RELEASE_LABEL }}
+          path: repository
+      - name: Install and remove through the signed repository
+        shell: bash
+        env:
+          DEB_ARCH: ${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          test "$(dpkg --print-architecture)" = "$DEB_ARCH"
+          sudo install -Dm644 repository/oxvif-archive-keyring.gpg \
+            /usr/share/keyrings/oxvif-staging.gpg
+          printf 'deb [arch=%s signed-by=/usr/share/keyrings/oxvif-staging.gpg] http://127.0.0.1:18081 stable main\n' \
+            "$DEB_ARCH" | sudo tee /etc/apt/sources.list.d/oxvif-staging.list >/dev/null
+          python3 -m http.server 18081 --bind 127.0.0.1 --directory repository >apt-http.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; sudo rm -f /etc/apt/sources.list.d/oxvif-staging.list /usr/share/keyrings/oxvif-staging.gpg' EXIT
+          curl --fail --retry 20 --retry-connrefused --retry-delay 1 \
+            http://127.0.0.1:18081/dists/stable/InRelease --output /dev/null
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y oxvif
+          test "$(dpkg-query -W -f='${Architecture}' oxvif)" = "$DEB_ARCH"
+          /usr/bin/oxvif --version
+          /usr/bin/oxvif describe device.info --output json --non-interactive >/dev/null
+          /usr/bin/oxvif agent guide --output json --non-interactive >/dev/null
+          test -r /usr/share/bash-completion/completions/oxvif
+          test -r /usr/share/zsh/vendor-completions/_oxvif
+          test -r /usr/share/fish/vendor_completions.d/oxvif.fish
+          test -r /usr/share/man/man1/oxvif.1.gz
+          test -r /usr/share/oxvif/schema/oxvif-envelope.schema.json
+          test -r /usr/share/oxvif/schema/command-descriptor.schema.json
+          sudo apt-get purge -y oxvif
+          test ! -e /usr/bin/oxvif
+
   publish-github-release:
     name: Publish GitHub Release
     if: inputs.publish
-    needs: [build, prepare-homebrew-formula]
+    needs:
+      - build
+      - test-homebrew-formula
+      - test-apt-repository
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -413,10 +597,28 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_REF }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: dist
-          merge-multiple: true
+          path: downloads
+      - name: Select public release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          while IFS= read -r -d '' asset; do
+            cp "$asset" dist/
+          done < <(
+            find downloads -type f \( \
+              -name '*.tar.gz' -o \
+              -name '*.zip' -o \
+              -name '*.deb' -o \
+              -name '*.sha256' -o \
+              -name '*.spdx.json' -o \
+              -name '*.build-tools.txt' -o \
+              -name 'oxvif.rb' \
+            \) -print0
+          )
+          test -n "$(find dist -maxdepth 1 -type f -print -quit)"
       - name: Create public release
         shell: bash
         env:
