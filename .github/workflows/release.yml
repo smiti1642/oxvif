@@ -466,7 +466,10 @@ jobs:
           local_url="http://127.0.0.1:18080/$ARCHIVE_NAME"
           ruby -c Formula/oxvif.rb
           brew style Formula/oxvif.rb
-          brew audit --strict Formula/oxvif.rb
+          brew tap-new --no-git smiti1642/oxvif-staging
+          tap_repository=$(brew --repository smiti1642/oxvif-staging)
+          cp Formula/oxvif.rb "$tap_repository/Formula/oxvif.rb"
+          brew audit --strict smiti1642/oxvif-staging/oxvif
           LOCAL_URL="$local_url" ARCHIVE_SHA="$archive_sha" python3 - <<'PY'
           import os
           import pathlib
@@ -486,11 +489,12 @@ jobs:
           formula.write_text(text, encoding="utf-8")
           PY
           ruby -c Formula/oxvif.rb
+          cp Formula/oxvif.rb "$tap_repository/Formula/oxvif.rb"
           python3 -m http.server 18080 --bind 127.0.0.1 --directory dist >brew-http.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
           curl --fail --retry 20 --retry-connrefused --retry-delay 1 "$local_url" --output /dev/null
-          brew install --build-bottle --formula Formula/oxvif.rb
+          brew install --build-bottle smiti1642/oxvif-staging/oxvif
           oxvif --version
           oxvif describe device.info --output json --non-interactive >/dev/null
           oxvif agent guide --output json --non-interactive >/dev/null
