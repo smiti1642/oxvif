@@ -152,9 +152,12 @@ select Credential Manager, Keychain, and synchronous Secret Service adapters;
 the crate declares Rust 1.75, below oxvif's Rust 1.88 MSRV. The shared ignored
 contract covers no-entry, set, get, replace, delete, idempotent delete, and
 cleanup. It passed against Windows Credential Manager locally. Dedicated native
-CI jobs now run that contract on Windows, macOS, and an isolated GNOME Keyring
-session on Linux; Linux separately checks the no-D-Bus error path. Those remote
-jobs are not considered passed until CI actually reports success.
+CI jobs run that contract on Windows, macOS, and an isolated GNOME Keyring
+session on Linux; Linux separately checks the no-D-Bus error path. CI runs
+[`33496836237`](https://github.com/smiti1642/oxvif/actions/runs/33496836237)
+and
+[`33499987562`](https://github.com/smiti1642/oxvif/actions/runs/33499987562)
+passed all five native platform/architecture rows.
 
 Four Windows-hosted cross-target checks were attempted, but Linux checks lacked
 the GNU cross C compilers required by vendored native dependencies and macOS
@@ -188,10 +191,14 @@ five supported rows, uses Rust 1.88.0 with `Cargo.lock`, runs native credential
 contracts before builds, and stages versioned archives, Debian packages,
 checksums, SPDX SBOMs, GitHub provenance attestations, completion scripts,
 schemas, metadata, and a manual page. Debian packages are linted, installed,
-smoked, and removed on native amd64/arm64 Ubuntu 22.04 runners. A Homebrew
-formula is rendered from verified archive hashes. These paths remain unverified
-until the remote jobs run; no tag, release, package, formula, or attestation has
-been created publicly.
+smoked, and removed on native amd64/arm64 Ubuntu 22.04 runners. A signed APT
+repository is assembled with an ephemeral CI-only key and tested through
+`apt update`, install, smoke, and purge on both architectures. A Homebrew
+formula is rendered from verified archive hashes, audited, installed, bottled,
+and reinstalled on macOS 15 Intel/Apple Silicon runners. The Windows archive is
+built with a static C runtime and its PE imports are checked. No tag, release,
+public signing key, package repository, tap, formula, bottle, or attestation has
+been published.
 
 ### C2. Windows
 
@@ -201,11 +208,11 @@ been created publicly.
 
 ### C3. Debian packages
 
-- [ ] Produce `amd64` and `arm64` `.deb` packages with correct metadata.
-- [ ] Install binary, completions, man page, and schemas in standard locations.
-- [ ] Avoid maintainer scripts; if required, test every lifecycle transition.
-- [ ] Validate with current Debian packaging lint tools.
-- [ ] Install on clean supported Debian/Ubuntu hosts and run CLI smoke tests.
+- [x] Produce `amd64` and `arm64` `.deb` packages with correct metadata.
+- [x] Install binary, completions, man page, and schemas in standard locations.
+- [x] Avoid maintainer scripts; if required, test every lifecycle transition.
+- [x] Validate with current Debian packaging lint tools.
+- [x] Install on clean supported Debian/Ubuntu hosts and run CLI smoke tests.
 
 ### C4. Homebrew formula and bottles
 

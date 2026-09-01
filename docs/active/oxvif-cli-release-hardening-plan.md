@@ -497,7 +497,7 @@ the Markdown manual or encountering a prompt.
 
 ### 10.2 Three-platform distribution
 
-- [ ] Produce versioned Debian packages for Linux x86_64 and aarch64.
+- [x] Produce versioned Debian packages for Linux x86_64 and aarch64.
 - [ ] Publish signed APT repository metadata so a configured host can run
   `apt update` followed by `apt install oxvif`.
 - [ ] Produce Homebrew bottles for macOS Intel and Apple Silicon.

@@ -4,6 +4,7 @@ on:
   push:
     branches: [develop]
     paths:
+      - .github/workflows/release.yml
       - packaging/**
   workflow_dispatch:
     inputs:
@@ -114,7 +115,7 @@ jobs:
           - ubuntu-24.04-arm
           - windows-latest
           - macos-15-intel
-          - macos-latest
+          - macos-15
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -153,28 +154,35 @@ jobs:
             target: x86_64-unknown-linux-gnu
             archive: oxvif-linux-x86_64
             deb_arch: amd64
+            rustflags: ""
             shell: bash
           - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
             archive: oxvif-linux-aarch64
             deb_arch: arm64
+            rustflags: ""
             shell: bash
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive: oxvif-windows-x86_64
             deb_arch: none
+            rustflags: -C target-feature=+crt-static
             shell: pwsh
           - os: macos-15-intel
             target: x86_64-apple-darwin
             archive: oxvif-macos-x86_64
             deb_arch: none
+            rustflags: ""
             shell: bash
-          - os: macos-latest
+          - os: macos-15
             target: aarch64-apple-darwin
             archive: oxvif-macos-aarch64
             deb_arch: none
+            rustflags: ""
             shell: bash
     runs-on: ${{ matrix.os }}
+    env:
+      RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -186,6 +194,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: ${{ matrix.target }}
+      - name: Install PE inspection tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: rustup component add llvm-tools-preview --toolchain 1.88.0
       - name: Build release binary
         run: cargo build -p oxvif-cli --release --locked --target ${{ matrix.target }}
       - name: Smoke release binary (Unix)
@@ -212,6 +224,11 @@ jobs:
           & $bin --help | Out-Null
           & $bin describe device.info --output json --non-interactive | Out-Null
           & $bin agent guide --output json --non-interactive | Out-Null
+          $llvmObjdump = rustup which --toolchain 1.88.0 llvm-objdump
+          $imports = & $llvmObjdump -p $bin
+          if ($imports -match '(?i)(vcruntime|msvcp|ucrtbase|api-ms-win-crt)') {
+            throw 'Windows release binary unexpectedly depends on a dynamic C/C++ runtime'
+          }
       - name: Package archive and checksum (Unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -266,6 +283,7 @@ jobs:
           & rustc -Vv | Out-File -Encoding utf8 "$root/metadata/build-tools.txt"
           & cargo -V | Out-File -Encoding utf8 -Append "$root/metadata/build-tools.txt"
           & python --version 2>&1 | Out-File -Encoding utf8 -Append "$root/metadata/build-tools.txt"
+          "RUSTFLAGS=$env:RUSTFLAGS" | Out-File -Encoding utf8 -Append "$root/metadata/build-tools.txt"
           foreach ($shell in @('bash', 'zsh', 'fish', 'powershell')) {
             & $bin completion $shell | Out-File -Encoding utf8 "$root/completions/oxvif.$shell"
           }
@@ -417,7 +435,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-latest
+          - runner: macos-15
             archive: oxvif-macos-aarch64
           - runner: macos-15-intel
             archive: oxvif-macos-x86_64
@@ -442,6 +460,9 @@ jobs:
           set -euo pipefail
           archive_sha=$(shasum -a 256 "dist/$ARCHIVE_NAME" | cut -d' ' -f1)
           local_url="http://127.0.0.1:18080/$ARCHIVE_NAME"
+          ruby -c Formula/oxvif.rb
+          brew style Formula/oxvif.rb
+          brew audit --strict Formula/oxvif.rb
           LOCAL_URL="$local_url" ARCHIVE_SHA="$archive_sha" python3 - <<'PY'
           import os
           import pathlib
@@ -461,8 +482,6 @@ jobs:
           formula.write_text(text, encoding="utf-8")
           PY
           ruby -c Formula/oxvif.rb
-          brew style Formula/oxvif.rb
-          brew audit --strict Formula/oxvif.rb
           python3 -m http.server 18080 --bind 127.0.0.1 --directory dist >brew-http.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
