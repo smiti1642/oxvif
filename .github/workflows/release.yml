@@ -498,6 +498,7 @@ jobs:
           oxvif --version
           oxvif describe device.info --output json --non-interactive >/dev/null
           oxvif agent guide --output json --non-interactive >/dev/null
+          brew test smiti1642/oxvif-staging/oxvif
           {
             brew --version
             brew config
@@ -513,6 +514,7 @@ jobs:
           oxvif --version
           oxvif describe device.info --output json --non-interactive >/dev/null
           oxvif agent guide --output json --non-interactive >/dev/null
+          brew test smiti1642/oxvif-staging/oxvif
           brew uninstall oxvif
           hash -r
           ! command -v oxvif
