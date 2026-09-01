@@ -197,7 +197,7 @@ jobs:
       - name: Install PE inspection tools
         if: runner.os == 'Windows'
         shell: pwsh
-        run: rustup component add llvm-tools-preview --toolchain 1.88.0
+        run: rustup component add llvm-tools-preview
       - name: Build release binary
         run: cargo build -p oxvif-cli --release --locked --target ${{ matrix.target }}
       - name: Smoke release binary (Unix)
