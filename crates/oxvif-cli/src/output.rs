@@ -385,6 +385,37 @@ fn render_human(success: &CommandSuccess) -> String {
             "Discovery snapshot enriched.\nID: {}\nDevices: {}\nAttempted: {} | Enriched: {} | Failed: {}",
             snapshot.id, snapshot.device_count, attempted, enriched, failed
         ),
+        CommandData::ConfigStatus {
+            config_dir,
+            registry_file,
+            snapshots_dir,
+            validated,
+            device_count,
+            snapshot_count,
+            orphaned_snapshot_files,
+        } => {
+            let mut output = format!(
+                "Config directory: {config_dir}\nRegistry file: {registry_file}\nSnapshots directory: {snapshots_dir}"
+            );
+            if *validated {
+                let _ = write!(
+                    output,
+                    "\nValidation: valid\nDevices: {} | Snapshots: {}",
+                    device_count.unwrap_or(0),
+                    snapshot_count.unwrap_or(0)
+                );
+            } else {
+                output.push_str("\nValidation: not requested");
+            }
+            if !orphaned_snapshot_files.is_empty() {
+                let _ = write!(
+                    output,
+                    "\nOrphaned snapshot files (reported only):\n- {}",
+                    orphaned_snapshot_files.join("\n- ")
+                );
+            }
+            output
+        }
         CommandData::ResourceRemoved { resource, id } => {
             format!("{resource} `{id}` removed.")
         }
@@ -414,10 +445,9 @@ fn render_human(success: &CommandSuccess) -> String {
             target,
             result,
         } => format!(
-            "Operation: {operation}\nDevice ID: {}\nTarget: {target}\nResult:\n{}",
+            "Operation: {operation}\nDevice ID: {}\nTarget: {target}\n{}",
             device_id.as_deref().unwrap_or("(direct target)"),
-            serde_json::to_string_pretty(result)
-                .unwrap_or_else(|_| "(result serialization failed)".to_owned())
+            render_diagnostic_result(operation, result)
         ),
         CommandData::FleetDiagnostic {
             operation,
@@ -452,6 +482,253 @@ fn render_human(success: &CommandSuccess) -> String {
         rendered.pop();
     }
     rendered
+}
+
+fn render_diagnostic_result(operation: &str, result: &serde_json::Value) -> String {
+    match operation {
+        "media.profiles" => render_profiles(result),
+        "device.capabilities" => render_capabilities(result),
+        "device.services" => render_services(result),
+        "ptz.status" => render_ptz_status(result),
+        "ptz.presets" => render_ptz_presets(result),
+        "health.check" => render_health(result),
+        "media.stream-uri" | "media.snapshot-uri" => render_scalar_object(result),
+        _ => format!(
+            "Result:\n{}",
+            serde_json::to_string_pretty(result)
+                .unwrap_or_else(|_| "(result serialization failed)".to_owned())
+        ),
+    }
+}
+
+fn render_profiles(result: &serde_json::Value) -> String {
+    let Some(profiles) = result.as_array() else {
+        return render_shape_mismatch(result);
+    };
+    if profiles.is_empty() {
+        return "No media profiles reported.".to_owned();
+    }
+    let mut output = String::from("TOKEN | NAME | FIXED | VIDEO | AUDIO | PTZ");
+    for profile in profiles {
+        let _ = write!(
+            output,
+            "\n{} | {} | {} | {} | {} | {}",
+            string_field(profile, "token"),
+            string_field(profile, "name"),
+            yes_no(
+                profile
+                    .get("fixed")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+            ),
+            present_field(
+                profile,
+                &["video_source_config_token", "video_encoder_token"]
+            ),
+            present_field(profile, &["audio_source_token", "audio_encoder_token"]),
+            present_field(profile, &["ptz_config_token"]),
+        );
+    }
+    output
+}
+
+fn render_capabilities(result: &serde_json::Value) -> String {
+    let Some(capabilities) = result.as_object() else {
+        return render_shape_mismatch(result);
+    };
+    let mut services = capabilities.iter().collect::<Vec<_>>();
+    services.sort_by_key(|(name, _)| *name);
+    let mut output = String::from("SERVICE | AVAILABLE | URL");
+    for (name, capability) in services {
+        let url = capability
+            .get("url")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("-");
+        let available = url != "-";
+        let _ = write!(output, "\n{name} | {} | {url}", yes_no(available));
+    }
+    output
+}
+
+fn render_services(result: &serde_json::Value) -> String {
+    let Some(services) = result.as_array() else {
+        return render_shape_mismatch(result);
+    };
+    if services.is_empty() {
+        return "No ONVIF services reported.".to_owned();
+    }
+    let mut output = String::from("SERVICE | VERSION | URL");
+    for service in services {
+        let namespace = string_field(service, "namespace");
+        let name = namespace
+            .trim_end_matches('/')
+            .rsplit('/')
+            .nth(1)
+            .unwrap_or(namespace);
+        let major = service
+            .get("version_major")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        let minor = service
+            .get("version_minor")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        let _ = write!(
+            output,
+            "\n{name} | {major}.{minor} | {}",
+            string_field(service, "url")
+        );
+    }
+    output
+}
+
+fn render_ptz_status(result: &serde_json::Value) -> String {
+    let Some(status) = result.as_object() else {
+        return render_shape_mismatch(result);
+    };
+    format!(
+        "POSITION | PAN {} | TILT {} | ZOOM {}\nMOVEMENT | PAN/TILT {} | ZOOM {}\nUTC time: {}\nDevice error: {}",
+        number_or_dash(status.get("pan")),
+        number_or_dash(status.get("tilt")),
+        number_or_dash(status.get("zoom")),
+        value_or_dash(status.get("pan_tilt_status")),
+        value_or_dash(status.get("zoom_status")),
+        value_or_dash(status.get("utc_time")),
+        value_or_dash(status.get("error")),
+    )
+}
+
+fn render_ptz_presets(result: &serde_json::Value) -> String {
+    let Some(presets) = result.as_array() else {
+        return render_shape_mismatch(result);
+    };
+    if presets.is_empty() {
+        return "No PTZ presets reported.".to_owned();
+    }
+    let mut output = String::from("TOKEN | NAME | PAN | TILT | ZOOM");
+    for preset in presets {
+        let pan_tilt = preset.get("pan_tilt").and_then(serde_json::Value::as_array);
+        let pan = pan_tilt.and_then(|values| values.first());
+        let tilt = pan_tilt.and_then(|values| values.get(1));
+        let _ = write!(
+            output,
+            "\n{} | {} | {} | {} | {}",
+            string_field(preset, "token"),
+            string_field(preset, "name"),
+            number_or_dash(pan),
+            number_or_dash(tilt),
+            number_or_dash(preset.get("zoom")),
+        );
+    }
+    output
+}
+
+fn render_health(result: &serde_json::Value) -> String {
+    let Some(summary) = result.get("summary") else {
+        return render_shape_mismatch(result);
+    };
+    let mut output = format!(
+        "Health: {}\nPassed: {} | Warned: {} | Failed: {} | Skipped: {}",
+        if result
+            .get("healthy")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
+            "HEALTHY"
+        } else {
+            "UNHEALTHY"
+        },
+        integer_or_zero(summary.get("passed")),
+        integer_or_zero(summary.get("warned")),
+        integer_or_zero(summary.get("failed")),
+        integer_or_zero(summary.get("skipped")),
+    );
+    let issues = result
+        .pointer("/report/checks")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|check| {
+            matches!(
+                check
+                    .pointer("/status/kind")
+                    .and_then(serde_json::Value::as_str),
+                Some("warn" | "fail")
+            )
+        })
+        .collect::<Vec<_>>();
+    if !issues.is_empty() {
+        output.push_str("\n\nSTATUS | CATEGORY | CHECK | REASON");
+        for check in issues {
+            let kind = check
+                .pointer("/status/kind")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown")
+                .to_ascii_uppercase();
+            let _ = write!(
+                output,
+                "\n{} | {} | {} | {}",
+                kind,
+                value_or_dash(check.get("category")),
+                string_field(check, "id"),
+                value_or_dash(check.pointer("/status/reason")),
+            );
+        }
+    }
+    output
+}
+
+fn render_scalar_object(result: &serde_json::Value) -> String {
+    let Some(fields) = result.as_object() else {
+        return render_shape_mismatch(result);
+    };
+    fields
+        .iter()
+        .map(|(name, value)| format!("{}: {}", name.replace('_', " "), value_or_dash(Some(value))))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_shape_mismatch(result: &serde_json::Value) -> String {
+    format!(
+        "Result:\n{}",
+        serde_json::to_string_pretty(result)
+            .unwrap_or_else(|_| "(result serialization failed)".to_owned())
+    )
+}
+
+fn string_field<'a>(value: &'a serde_json::Value, field: &str) -> &'a str {
+    value
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("-")
+}
+
+fn present_field(value: &serde_json::Value, fields: &[&str]) -> &'static str {
+    yes_no(
+        fields
+            .iter()
+            .any(|field| value.get(*field).is_some_and(|value| !value.is_null())),
+    )
+}
+
+fn number_or_dash(value: Option<&serde_json::Value>) -> String {
+    value
+        .filter(|value| !value.is_null())
+        .map(ToString::to_string)
+        .unwrap_or_else(|| "-".to_owned())
+}
+
+fn value_or_dash(value: Option<&serde_json::Value>) -> String {
+    match value {
+        Some(serde_json::Value::String(value)) if !value.is_empty() => value.clone(),
+        Some(value) if !value.is_null() => value.to_string(),
+        _ => "-".to_owned(),
+    }
+}
+
+fn integer_or_zero(value: Option<&serde_json::Value>) -> u64 {
+    value.and_then(serde_json::Value::as_u64).unwrap_or(0)
 }
 
 fn append_discovery_table(
@@ -653,5 +930,50 @@ mod tests {
         let json = render_success(OutputFormat::Json, &success).expect("json output");
         assert!(!json.contains("front-door"));
         assert!(!json.contains("registrations"));
+    }
+
+    #[test]
+    fn diagnostic_profiles_have_a_purpose_built_table() {
+        let success = CommandSuccess {
+            data: CommandData::DeviceDiagnostic {
+                operation: "media.profiles".to_owned(),
+                device_id: Some("front-door".to_owned()),
+                target: "http://192.0.2.10/onvif/device_service".to_owned(),
+                result: serde_json::json!([{
+                    "token": "profile-1",
+                    "name": "Main stream",
+                    "fixed": true,
+                    "video_encoder_token": "video-1",
+                    "audio_encoder_token": null,
+                    "ptz_config_token": "ptz-1"
+                }]),
+            },
+            warnings: Vec::new(),
+            meta: ResultMeta::default(),
+        };
+
+        let table = render_success(OutputFormat::Table, &success).expect("table output");
+        assert!(table.contains("TOKEN | NAME | FIXED | VIDEO | AUDIO | PTZ"));
+        assert!(table.contains("profile-1 | Main stream | yes | yes | no | yes"));
+        assert!(!table.contains("\"video_encoder_token\""));
+    }
+
+    #[test]
+    fn diagnostic_health_summarizes_and_lists_only_issues() {
+        let result = serde_json::json!({
+            "healthy": false,
+            "summary": {"passed": 3, "warned": 1, "failed": 1, "skipped": 2},
+            "report": {"checks": [
+                {"id": "connect", "category": "Connectivity", "status": {"kind": "pass"}},
+                {"id": "clock", "category": "Time", "status": {"kind": "warn", "reason": "clock skew"}},
+                {"id": "profiles", "category": "Media", "status": {"kind": "fail", "reason": "SOAP fault"}}
+            ]}
+        });
+
+        let table = render_health(&result);
+        assert!(table.contains("Health: UNHEALTHY"));
+        assert!(table.contains("WARN | Time | clock | clock skew"));
+        assert!(table.contains("FAIL | Media | profiles | SOAP fault"));
+        assert!(!table.contains("connect"));
     }
 }

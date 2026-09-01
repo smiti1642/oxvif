@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.16.0] - 2026-08-27
+## [0.16.0] - Unreleased
 
 Headline: **oxvif now ships the library support required by the new fleet-ready
 `oxvif` CLI.** Discovery gains fallible, interface-aware APIs while the
@@ -25,6 +25,19 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
   `health`/media commands, positional saved-device selection, `--json` and
   `--jsonl` shorthands, bare ephemeral discovery, interactive media-profile
   selection, actionable ID suggestions, and generated shell completion.
+- Purpose-built terminal renderers for profiles, capabilities, services, PTZ,
+  health, and media URIs, while retaining full-fidelity JSON/JSONL output.
+- Cross-platform CI for Linux, Windows, and macOS, including Rust 1.88 MSRV,
+  security audit, binary smoke, package, and documentation gates; a manual
+  artifact workflow prepares checksums and SPDX SBOMs before release.
+- Community contribution/security/conduct guidance, issue and pull-request
+  templates, compatibility-report redaction rules, and Dependabot coverage.
+- Draft 2020-12 schemas for the schema-v3 success/error envelope and command
+  descriptors, with JSON and fleet-JSONL validation in the CLI test gate.
+- Native credential adapters for Windows Credential Manager, macOS Keychain,
+  and Linux Secret Service, with one black-box lifecycle contract and dedicated
+  native CI. Backend errors are sanitized, owned CLI password buffers zeroize
+  on drop, and plaintext fallback is forbidden.
 
 ### Changed
 
@@ -32,6 +45,40 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
   fallible implementation while preserving its empty-on-error behavior.
 - The workspace release order is `oxvif 0.16.0` first, followed by
   `oxvif-cli 0.1.0`, so the CLI tarball verifies against crates.io.
+- `Cargo.lock` is now tracked because the workspace ships the `oxvif` CLI;
+  release builds, MSRV checks, and dependency audits therefore resolve the same
+  dependency graph.
+- CLI retry behavior now classifies typed ONVIF errors: transient transport
+  failures use bounded exponential backoff and a per-attempt timeout, while
+  authentication rejection, deterministic SOAP faults, invalid input, and
+  serialization failures are not retried. Health and per-interface discovery
+  honor the same global retry count.
+- `-v` and `-vv` now emit sanitized command, retry-policy, outcome, and timing
+  diagnostics to stderr without altering structured stdout.
+- The CLI accepts repeatable `--ca-certificate <FILE>` PEM bundles through one
+  shared HTTP transport path used by diagnostics, health, setup/refresh,
+  enrichment, and fleet work. Invalid/empty bundles and private-key material
+  fail before connection; certificate-chain and hostname verification remain
+  enabled.
+- The public command surface now has an exhaustive `CommandId`/`CommandSpec`
+  catalogue. Canonical typed requests derive their names from it, descriptor
+  order/identity is drift-checked, and every descriptor example must parse back
+  to the declared canonical command in tests.
+- All 61 Agent command descriptors now expose a named output kind,
+  command-specific error set, semantic argument guidance, and a safe example
+  instead of generic `object` metadata.
+- `config path` reports resolved registry locations without writing them, and
+  `config validate` parses the registry plus every indexed discovery snapshot
+  for backup/restore and support diagnosis; unindexed snapshot files are
+  reported as warnings and never deleted automatically.
+
+### Security
+
+- Updated `h2` from 0.4.15 to 0.4.16 to address `RUSTSEC-2026-0258`, and
+  replaced the yanked `chacha20` 0.10.1 release with 0.10.2. The release CI now
+  blocks on a clean `cargo audit` result.
+- Added a private-HTTPS regression proving an untrusted test endpoint fails
+  without its CA and succeeds only when that CA is explicitly supplied.
 
 ---
 

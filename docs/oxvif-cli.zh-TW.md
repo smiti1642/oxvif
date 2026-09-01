@@ -56,18 +56,19 @@ oxvif completion powershell
 
 ## 安裝
 
-從 crates.io 安裝：
+0.1 目前尚未發布到 crates.io。開發或評估此 repository 時，請從目前的
+workspace 安裝：
 
 ```sh
-cargo install oxvif-cli --locked
+cargo install --path crates/oxvif-cli --locked
 oxvif --version
 oxvif --help
 ```
 
-在本 repository 測試尚未發布的版本：
+正式發布並完成獨立驗證後，crates.io 安裝命令會是：
 
 ```sh
-cargo install --path crates/oxvif-cli --locked
+cargo install oxvif-cli --locked
 ```
 
 套件與執行檔名稱不同是刻意的：Cargo 使用 `oxvif-cli` 避免和 library crate `oxvif` 衝突，
@@ -85,8 +86,44 @@ oxvif --device front-door device info --output json
 ```
 
 `front-door` 是不可變的 canonical device ID；顯示名稱、IP、tag 與快取的裝置資訊之後仍可更新。
-密碼不會寫入 `devices.toml`。Windows 使用 Windows Credential Manager，其他平台使用對應的原生
-credential store。不要把密碼放在 command argument、URL、版本控制檔案或 log 中。
+密碼不會寫入 `devices.toml`。原生儲存分別使用 Windows Credential Manager、macOS Keychain，
+以及目前 D-Bus session 中的 Linux Secret Service。後端不存在、鎖定或拒絕存取時會回傳
+`CREDENTIAL_UNAVAILABLE`，不會降級為明文 credential 檔案。headless Linux 或 container
+可由可信任環境注入 `OXVIF_USERNAME`、`OXVIF_PASSWORD` 做不持久化的暫時性操作。
+Windows 後端合約已在本機通過；第一次公開發布仍以 macOS 與 Linux 原生 CI 合約通過為必要條件。
+CLI 自己建立或從 credential store 讀出的密碼 buffer 會在 drop 時清零；但環境區塊、作業系統 API、
+allocator、crash dump 與底層 protocol library 仍可能保留副本，因此這不是「所有記憶體副本立即消失」
+的保證。應把執行中的 process 與 diagnostic dump 視為敏感資料，並使用短生命週期、最小權限帳號。
+不要把密碼放在 command argument、URL、版本控制檔案或 log 中。
+
+預設 registry 目錄在 Windows 是 `%APPDATA%\oxvif`，Linux 是
+`$XDG_CONFIG_HOME/oxvif`（未設定時為 `$HOME/.config/oxvif`），macOS 是
+`$HOME/Library/Application Support/oxvif`。備份或還原前必須先停止所有可能寫入的
+oxvif process，完整複製包含 `devices.toml`、`devices.lock` 與 `snapshots/` 的整個目錄，
+並保留舊目錄作 rollback。可先用 `oxvif config path` 確認路徑，再用
+`oxvif config validate --output json --non-interactive` 解析 registry 與每個 indexed
+snapshot。未被索引的 `snapshots/*.json` 只會產生 `ORPHANED_SNAPSHOT_FILE` warning，
+不會自動刪除；清理前必須先查核備份與 registry 歷史。
+
+## Retry 與診斷輸出
+
+`--timeout` 是每次網路嘗試的上限。`--retries` 只會以有上限的 backoff
+重試暫時性 transport failure；認證拒絕、無效輸入、確定性的 SOAP fault、parse
+或 schema failure 不會重試。Discovery 只會重試失敗的已選介面，不會重跑已成功的介面。
+
+`--clock-sync auto`（預設）會在有 credential 時先讀取攝影機時間，只調整 client
+端 WS-Security timestamp offset；`always` 對所有 session 執行，`never` 則停用。
+任何 policy 都不會修改攝影機的時鐘。
+
+使用 private CA 的 HTTPS 攝影機可重複傳入 `--ca-certificate <FILE>`，每個檔案可為
+單張 PEM certificate 或 bundle。CLI 會把它們加入平台 trust roots，並一致套用於
+setup/refresh、單機診斷、health、discovery enrichment 與 fleet。格式錯誤、空 bundle
+或包含 private key 的檔案會在連線前被拒絕；certificate chain 與 hostname verification
+仍維持啟用，CLI 不提供 insecure bypass。`-vv` 只顯示 bundle 數量，不輸出憑證內容。
+
+`-v` 會把 sanitized command、timeout、retry policy 與完成時間寫到 stderr；`-vv`
+會再顯示最大 attempt 數與 timeout scope。JSON/JSONL stdout 不會混入 log、prompt
+或 color，也不會輸出 password、authorization、WS-Security material 或 URI userinfo。
 
 ## 給 Agent 的入口
 

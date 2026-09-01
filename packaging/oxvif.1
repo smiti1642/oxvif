@@ -1,0 +1,94 @@
+.TH OXVIF 1 "September 2026" "oxvif-cli" "User Commands"
+.SH NAME
+oxvif \- human- and Agent-friendly ONVIF diagnostic CLI
+.SH SYNOPSIS
+.B oxvif
+.RI [ OPTIONS ]
+.I COMMAND
+.RI [ ARGS ]
+.SH DESCRIPTION
+.B oxvif
+discovers ONVIF devices, maintains a local secret-free inventory, and runs
+read-only diagnostics against one device or a bounded Group/View fleet.
+Structured JSON and JSONL output is versioned for automation.
+.SH COMMON COMMANDS
+.TP
+.B setup DEVICE TARGET
+Verify and save a device using a no-echo password prompt.
+.TP
+.B auth DEVICE
+Store or replace a device credential in the native operating-system backend.
+.TP
+.B info [DEVICE]
+Display device identity information.
+.TP
+.B test [DEVICE]
+Run a basic connectivity diagnostic.
+.TP
+.B health [DEVICE]
+Run the comprehensive read-only health suite.
+.TP
+.B discover
+Discover devices without modifying the registry unless an explicit save/import
+operation is selected.
+.TP
+.B describe [COMMAND]
+Print machine-readable command metadata.
+.TP
+.B agent guide
+Print the versioned Agent contract.
+.SH GLOBAL OPTIONS
+.TP
+.BR --device " " DEVICE
+Select an exact saved device ID.
+.TP
+.BR --group " " GROUP
+Run a supported diagnostic across a saved Group.
+.TP
+.BR --view " " VIEW
+Run a supported diagnostic across a saved View.
+.TP
+.BR --output " " FORMAT
+Select table, JSON, or JSONL output.
+.TP
+.B --non-interactive
+Disable prompts. Use standard input or a trusted process environment for
+ephemeral secrets.
+.TP
+.BR --timeout " " DURATION
+Set the per-attempt timeout.
+.TP
+.BR --retries " " COUNT
+Retry transient operations using bounded backoff.
+.TP
+.BR --ca-certificate " " FILE
+Add a PEM trust bundle while retaining certificate-chain and hostname
+verification. The option may be repeated.
+.TP
+.BR -v , " " -vv
+Write sanitized diagnostics to standard error. Structured standard output is
+unchanged.
+.SH CREDENTIALS
+Persistent passwords use Windows Credential Manager, macOS Keychain, or Linux
+Secret Service. The local registry stores references, never passwords. If a
+native backend is unavailable, oxvif returns CREDENTIAL_UNAVAILABLE and does
+not create a plaintext fallback. OXVIF_USERNAME and OXVIF_PASSWORD are intended
+only for trusted, process-scoped automation.
+.SH FILES
+The platform configuration directory contains devices.toml and discovery
+snapshots. Run
+.B oxvif config path
+to display resolved locations and
+.B oxvif config validate
+to validate recovery state.
+.SH EXIT STATUS
+Zero indicates success. Stable non-zero categories include invalid input,
+missing resources, registry/configuration failure, credential unavailability,
+device/network failure, and internal failure. Fleet partial success has its own
+documented exit status. Use JSON/JSONL output for the structured error code.
+.SH SECURITY
+Do not put passwords in command arguments, target URIs, logs, override files,
+or version-controlled configuration. There is no insecure TLS bypass.
+.SH SEE ALSO
+Full manuals and schemas are installed with the package and maintained at
+https://github.com/smiti1642/oxvif .

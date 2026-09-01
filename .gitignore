@@ -19,7 +19,8 @@ legacy/
 .env
 .claude/
 .DS_Store
-Cargo.lock
+# This workspace ships the `oxvif` CLI application, so keep Cargo.lock tracked
+# for reproducible release builds and dependency audits.
 
 # ONVIF schema set (onvif.xsd, common.xsd, the service WSDLs) — © ONVIF.
 # Never committed, in any form: not the files, not an index generated from them,

@@ -52,9 +52,47 @@ fn root_help_routes_agents_to_the_embedded_guide() {
     assert!(stdout(&output).contains("--group"));
     assert!(stdout(&output).contains("--view"));
     assert!(stdout(&output).contains("--jobs"));
+    assert!(stdout(&output).contains("--clock-sync"));
+    assert!(stdout(&output).contains("--ca-certificate"));
     assert!(stdout(&output).contains("setup"));
     assert!(stdout(&output).contains("stream"));
     assert!(stdout(&output).contains("completion"));
+}
+
+#[test]
+fn every_first_level_command_has_focused_help() {
+    for command in [
+        "setup",
+        "auth",
+        "info",
+        "test",
+        "health",
+        "profiles",
+        "stream",
+        "snapshot",
+        "devices",
+        "groups",
+        "views",
+        "agent",
+        "describe",
+        "device",
+        "media",
+        "ptz",
+        "group",
+        "view",
+        "credential",
+        "discover",
+        "config",
+        "completion",
+        "use",
+        "current",
+    ] {
+        let output = run(&[command, "--help"]);
+        assert!(output.status.success(), "{command}: {}", stderr(&output));
+        let help = stdout(&output);
+        assert!(help.contains("Usage:"), "{command}: {help}");
+        assert!(help.contains(command), "{command}: {help}");
+    }
 }
 
 #[test]
@@ -107,6 +145,106 @@ fn completion_is_generated_without_application_output_envelopes() {
     assert!(script.contains("Register-ArgumentCompleter"));
     assert!(!script.contains("schema_version"));
     assert!(stderr(&output).is_empty());
+}
+
+#[test]
+fn completion_rejects_structured_output_instead_of_ignoring_it() {
+    let output = run(&["completion", "bash", "--output", "json"]);
+    assert_eq!(output.status.code(), Some(2));
+    let document: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(document["error"]["code"], "INVALID_ARGUMENT");
+    assert!(
+        document["error"]["message"]
+            .as_str()
+            .expect("message")
+            .contains("raw shell script")
+    );
+}
+
+#[test]
+fn config_path_and_validate_are_structured_and_read_only() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let path = run_isolated(
+        &["config", "path", "--output", "json", "--non-interactive"],
+        directory.path(),
+    );
+    assert!(path.status.success(), "{}", stderr(&path));
+    let document: Value = serde_json::from_slice(&path.stdout).expect("path should be JSON");
+    assert_eq!(document["data"]["kind"], "config_status");
+    assert_eq!(document["data"]["validated"], false);
+    assert!(
+        document["data"]["registry_file"]
+            .as_str()
+            .expect("registry path")
+            .ends_with("devices.toml")
+    );
+
+    let validate = run_isolated(
+        &[
+            "config",
+            "validate",
+            "--output",
+            "json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert!(validate.status.success(), "{}", stderr(&validate));
+    let document: Value =
+        serde_json::from_slice(&validate.stdout).expect("validation should be JSON");
+    assert_eq!(document["data"]["validated"], true);
+    assert_eq!(document["data"]["device_count"], 0);
+    assert_eq!(document["data"]["snapshot_count"], 0);
+}
+
+#[test]
+fn config_validate_refuses_a_corrupt_registry() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    fs::write(directory.path().join("devices.toml"), "not = [valid toml")
+        .expect("corrupt fixture should write");
+    let output = run_isolated(
+        &[
+            "config",
+            "validate",
+            "--output",
+            "json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert_eq!(output.status.code(), Some(10));
+    let document: Value = serde_json::from_slice(&output.stdout).expect("error should be JSON");
+    assert_eq!(document["error"]["code"], "REGISTRY_CORRUPT");
+}
+
+#[test]
+fn config_validate_reports_orphaned_snapshots_without_deleting_them() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let snapshots = directory.path().join("snapshots");
+    fs::create_dir_all(&snapshots).expect("snapshot directory should create");
+    let orphan = snapshots.join("orphan.json");
+    fs::write(&orphan, "{}").expect("orphan fixture should write");
+
+    let output = run_isolated(
+        &[
+            "config",
+            "validate",
+            "--output",
+            "json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(orphan.exists(), "validation must not delete an orphan");
+    let document: Value = serde_json::from_slice(&output.stdout).expect("result should be JSON");
+    assert_eq!(document["warnings"][0]["code"], "ORPHANED_SNAPSHOT_FILE");
+    assert_eq!(
+        document["data"]["orphaned_snapshot_files"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
 }
 
 #[test]
@@ -188,12 +326,83 @@ async fn fleet_jsonl_is_deterministic_and_partial_exit_is_six() {
         .lines()
         .map(|line| serde_json::from_str::<Value>(line).expect("line should be JSON"))
         .collect::<Vec<_>>();
+    let schema: Value = serde_json::from_str(include_str!("../schema/oxvif-envelope.schema.json"))
+        .expect("envelope schema should be JSON");
+    let validator = jsonschema::validator_for(&schema).expect("schema should compile");
+    assert!(lines.iter().all(|line| validator.is_valid(line)));
     assert_eq!(lines.len(), 3);
     assert_eq!(lines[0]["data"]["item"]["device_id"], "camera-a");
     assert_eq!(lines[1]["data"]["item"]["device_id"], "camera-b");
     assert_eq!(lines[2]["data"]["kind"], "fleet_summary");
     assert_eq!(lines[2]["data"]["succeeded"], 1);
     assert_eq!(lines[2]["data"]["failed"], 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mock_human_diagnostics_use_purpose_built_renderers() {
+    let server = oxvif::mock::MockServer::start()
+        .await
+        .expect("mock server should start");
+    let target = server.device_url();
+    let cases: &[(&[&str], &[&str])] = &[
+        (
+            &["device", "capabilities", "--target", target],
+            &["SERVICE | AVAILABLE | URL"],
+        ),
+        (
+            &["device", "services", "--target", target],
+            &["SERVICE | VERSION | URL"],
+        ),
+        (
+            &["media", "profiles", "--target", target],
+            &["TOKEN | NAME | FIXED | VIDEO | AUDIO | PTZ"],
+        ),
+        (
+            &[
+                "ptz",
+                "status",
+                "--profile",
+                "Profile_1",
+                "--target",
+                target,
+            ],
+            &["POSITION | PAN", "MOVEMENT | PAN/TILT"],
+        ),
+        (
+            &[
+                "ptz",
+                "presets",
+                "--profile",
+                "Profile_1",
+                "--target",
+                target,
+            ],
+            &["TOKEN | NAME | PAN | TILT | ZOOM"],
+        ),
+        (
+            &["--timeout", "20s", "health", "check", "--target", target],
+            &["Health:", "Passed:"],
+        ),
+    ];
+
+    for (arguments, expected) in cases {
+        let output = run(arguments);
+        assert!(
+            output.status.success(),
+            "{:?}: {}",
+            arguments,
+            stderr(&output)
+        );
+        let rendered = stdout(&output);
+        for fragment in *expected {
+            assert!(rendered.contains(fragment), "{:?}: {rendered}", arguments);
+        }
+        assert!(
+            !rendered.contains("Result:\n{"),
+            "{:?}: {rendered}",
+            arguments
+        );
+    }
 }
 
 #[test]
@@ -242,6 +451,155 @@ fn describe_json_has_stable_envelope() {
     assert_eq!(document["data"]["commands"][0]["risk"], "read");
     assert_eq!(document["meta"]["command"], "describe");
     assert!(stderr(&output).is_empty());
+}
+
+#[test]
+fn published_schemas_validate_success_error_and_all_descriptors() {
+    let envelope_schema: Value =
+        serde_json::from_str(include_str!("../schema/oxvif-envelope.schema.json"))
+            .expect("envelope schema should be JSON");
+    let envelope = jsonschema::validator_for(&envelope_schema).expect("schema should compile");
+
+    let success = run(&["describe", "--output", "json", "--non-interactive"]);
+    assert!(success.status.success(), "{}", stderr(&success));
+    let success_document: Value =
+        serde_json::from_slice(&success.stdout).expect("success should be JSON");
+    assert!(envelope.is_valid(&success_document));
+
+    let failure = run(&[
+        "describe",
+        "not.a.command",
+        "--output",
+        "json",
+        "--non-interactive",
+    ]);
+    assert_eq!(failure.status.code(), Some(3));
+    let failure_document: Value =
+        serde_json::from_slice(&failure.stdout).expect("failure should be JSON");
+    assert!(envelope.is_valid(&failure_document));
+
+    let descriptor_schema: Value =
+        serde_json::from_str(include_str!("../schema/command-descriptor.schema.json"))
+            .expect("descriptor schema should be JSON");
+    let descriptor = jsonschema::validator_for(&descriptor_schema).expect("schema should compile");
+    for command in success_document["data"]["commands"]
+        .as_array()
+        .expect("commands")
+    {
+        assert!(
+            descriptor.is_valid(command),
+            "invalid descriptor: {command}"
+        );
+    }
+
+    let mut wrong_version = success_document;
+    wrong_version["schema_version"] = Value::String("999".to_owned());
+    assert!(!envelope.is_valid(&wrong_version));
+}
+
+#[test]
+fn verbose_diagnostics_use_stderr_without_corrupting_json_stdout() {
+    let output = run(&[
+        "-vv",
+        "--retries",
+        "2",
+        "--clock-sync",
+        "never",
+        "describe",
+        "describe",
+        "--output",
+        "json",
+        "--non-interactive",
+    ]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    let document: Value = serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+    assert_eq!(document["ok"], true);
+    let diagnostics = stderr(&output);
+    assert!(diagnostics.contains("command=describe"));
+    assert!(diagnostics.contains("output=json"));
+    assert!(diagnostics.contains("max_attempts=3"));
+    assert!(diagnostics.contains("clock_sync=never"));
+    assert!(diagnostics.contains("status=ok"));
+    assert!(!diagnostics.contains("password"));
+    assert!(!diagnostics.contains("authorization"));
+}
+
+#[test]
+fn verbose_diagnostics_reject_url_credentials_without_exposing_secrets() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    for verbosity in ["-v", "-vv"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_oxvif"))
+            .args([
+                verbosity,
+                "setup",
+                "leak-test",
+                "http://url-user:url-secret@127.0.0.1/onvif/device_service",
+                "--username",
+                "environment-user",
+                "--no-verify",
+                "--non-interactive",
+                "--output",
+                "json",
+            ])
+            .env("OXVIF_CONFIG_DIR", directory.path())
+            .env("OXVIF_PASSWORD", "environment-secret")
+            .output()
+            .expect("oxvif binary should run");
+
+        assert_eq!(output.status.code(), Some(2));
+        let combined = format!("{}\n{}", stdout(&output), stderr(&output));
+        for secret in [
+            "url-user",
+            "url-secret",
+            "environment-user",
+            "environment-secret",
+            "PasswordDigest",
+            "Authorization",
+        ] {
+            assert!(
+                !combined.contains(secret),
+                "{verbosity} diagnostics exposed {secret}: {combined}"
+            );
+        }
+        let document: Value =
+            serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+        assert_eq!(document["error"]["code"], "INVALID_ARGUMENT");
+    }
+}
+
+#[test]
+fn ca_certificate_inputs_fail_early_without_exposing_file_contents() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let malformed = directory.path().join("malformed-ca.pem");
+    fs::write(&malformed, "not a certificate").expect("fixture should write");
+    let private_key = directory.path().join("private-key.pem");
+    fs::write(
+        &private_key,
+        "-----BEGIN PRIVATE KEY-----\ndo-not-expose-this\n-----END PRIVATE KEY-----",
+    )
+    .expect("fixture should write");
+    let missing = directory.path().join("missing-ca.pem");
+
+    for path in [missing, malformed, private_key] {
+        let output = run_isolated(
+            &[
+                "--ca-certificate",
+                path.to_str().expect("fixture path should be UTF-8"),
+                "describe",
+                "--output",
+                "json",
+                "--non-interactive",
+            ],
+            directory.path(),
+        );
+        assert_eq!(output.status.code(), Some(2));
+        let document: Value =
+            serde_json::from_slice(&output.stdout).expect("stdout should be JSON");
+        assert_eq!(document["error"]["code"], "INVALID_ARGUMENT");
+        let combined = format!("{}\n{}", stdout(&output), stderr(&output));
+        assert!(!combined.contains("do-not-expose-this"));
+    }
 }
 
 #[test]
@@ -304,7 +662,7 @@ fn agent_guide_and_prompt_are_embedded_and_versioned() {
     let document: Value = serde_json::from_slice(&guide.stdout).expect("guide should be JSON");
     assert_eq!(document["schema_version"], "3");
     assert_eq!(document["data"]["kind"], "agent_guide");
-    assert_eq!(document["data"]["guide"]["guide_version"], "3");
+    assert_eq!(document["data"]["guide"]["guide_version"], "5");
     assert!(
         document["data"]["guide"]["security_requirements"]
             .as_array()

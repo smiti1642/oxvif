@@ -1,0 +1,13 @@
+Package: oxvif
+Version: @CLI_VERSION@-1
+Architecture: @DEB_ARCH@
+Maintainer: oxvif maintainers <smiti1642@users.noreply.github.com>
+Installed-Size: @INSTALLED_SIZE@
+Depends: libc6 (>= 2.35), libgcc-s1
+Section: utils
+Priority: optional
+Homepage: https://github.com/smiti1642/oxvif
+Description: Human- and Agent-friendly ONVIF diagnostic CLI
+ oxvif provides read-only device diagnostics, discovery, inventory, fleet
+ execution, schema-versioned JSON, private-CA support, and native credential
+ storage without a plaintext fallback.

@@ -94,6 +94,7 @@ use crate::OnvifSession;
 pub struct HealthCheck {
     device_url: String,
     credentials: Option<(String, String)>,
+    transport: Option<std::sync::Arc<dyn crate::transport::Transport>>,
     write_checks: bool,
     liveness_probes: bool,
     force_unsupported: bool,
@@ -107,6 +108,7 @@ impl HealthCheck {
         Self {
             device_url: device_url.into(),
             credentials: None,
+            transport: None,
             write_checks: false,
             liveness_probes: false,
             force_unsupported: false,
@@ -122,6 +124,20 @@ impl HealthCheck {
         password: impl Into<String>,
     ) -> Self {
         self.credentials = Some((username.into(), password.into()));
+        self
+    }
+
+    /// Replace the default HTTP transport for all SOAP checks.
+    ///
+    /// Callers that install a custom transport remain responsible for applying
+    /// HTTP-layer credentials such as Digest authentication to that transport.
+    /// WS-Security credentials continue to come from
+    /// [`with_credentials`](Self::with_credentials).
+    pub fn with_transport(
+        mut self,
+        transport: std::sync::Arc<dyn crate::transport::Transport>,
+    ) -> Self {
+        self.transport = Some(transport);
         self
     }
 
@@ -189,11 +205,17 @@ impl HealthCheck {
         // Wrap the HTTP transport in a coverage tap so the parse-coverage check
         // can compare parsed item counts against the raw responses. Credentials
         // go on the transport (HTTP Digest) AND the builder (WS-Security).
-        let mut http = crate::transport::HttpTransport::new();
-        if let Some((u, p)) = &self.credentials {
-            http = http.with_credentials(u.clone(), p.clone());
-        }
-        let tap = std::sync::Arc::new(coverage::CoverageTransport::new(std::sync::Arc::new(http)));
+        let base_transport: std::sync::Arc<dyn crate::transport::Transport> = match self.transport {
+            Some(transport) => transport,
+            None => {
+                let mut http = crate::transport::HttpTransport::new();
+                if let Some((u, p)) = &self.credentials {
+                    http = http.with_credentials(u.clone(), p.clone());
+                }
+                std::sync::Arc::new(http)
+            }
+        };
+        let tap = std::sync::Arc::new(coverage::CoverageTransport::new(base_transport));
         // When capture is on, insert a tap that records the failing exchanges.
         // It wraps the coverage tap, so both observe the same requests/responses
         // and `coverage()` still reads its own map. `None` when off — zero cost.

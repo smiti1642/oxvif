@@ -1,13 +1,29 @@
-use std::{collections::BTreeMap, env, net::Ipv4Addr, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, env, future::Future, net::Ipv4Addr, sync::Arc, time::Duration};
 
-use oxvif::{DeviceInfo, OnvifClient, OnvifSession, health::HealthCheck};
-use tokio::time::{Instant, timeout};
+use oxvif::{
+    DeviceInfo, OnvifClient, OnvifError, OnvifSession,
+    health::{ErrorClass, HealthCheck, HealthReport},
+    transport::{HttpTransport, Transport, TransportError},
+};
+use tokio::time::{Instant, sleep, timeout};
 
 use crate::{
     AppError, CommandData, CommandRequest, CommandSuccess, CredentialStore, DeviceMetadata,
-    LiveDeviceInfo, RegistryStore, ResultMeta, SystemCredentialStore, Warning,
+    LiveDeviceInfo, RegistryStore, ResultMeta, SecretString, SystemCredentialStore, Warning,
     credential_profile_reference, credential_reference, describe, normalize_target,
 };
+
+/// Client-side WS-Security timestamp synchronization policy.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ClockSyncPolicy {
+    /// Synchronize only when credentials are present.
+    #[default]
+    Auto,
+    /// Always read device time before the authenticated session handshake.
+    Always,
+    /// Never read device time as part of session setup.
+    Never,
+}
 
 /// Invocation policy shared by CLI and future non-CLI adapters.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -15,6 +31,8 @@ pub struct ExecutionOptions {
     pub non_interactive: bool,
     pub timeout: Duration,
     pub retries: u32,
+    pub clock_sync: ClockSyncPolicy,
+    pub ca_certificates: Vec<Vec<u8>>,
     pub verbosity: u8,
     pub quiet: bool,
     pub jobs: usize,
@@ -26,6 +44,8 @@ impl Default for ExecutionOptions {
             non_interactive: false,
             timeout: Duration::from_secs(10),
             retries: 0,
+            clock_sync: ClockSyncPolicy::Auto,
+            ca_certificates: Vec::new(),
             verbosity: 0,
             quiet: false,
             jobs: 16,
@@ -86,6 +106,47 @@ impl Application {
                 prompt: crate::agent::prompt(),
             }),
             CommandRequest::Describe(request) => Outcome::data(describe::execute(request)?),
+            CommandRequest::ConfigPath => Outcome::data(CommandData::ConfigStatus {
+                config_dir: self.registry.config_dir().display().to_string(),
+                registry_file: self.registry.registry_path().display().to_string(),
+                snapshots_dir: self.registry.snapshots_dir().display().to_string(),
+                validated: false,
+                device_count: None,
+                snapshot_count: None,
+                orphaned_snapshot_files: Vec::new(),
+            }),
+            CommandRequest::ConfigValidate => {
+                let (devices, _) = self.registry.list()?;
+                let snapshots = self.registry.list_discovery_snapshots()?;
+                for snapshot in &snapshots {
+                    self.registry.get_discovery_snapshot(&snapshot.id, &[])?;
+                }
+                let orphaned_snapshot_files = self
+                    .registry
+                    .orphaned_snapshot_files()?
+                    .into_iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>();
+                let mut outcome = Outcome::data(CommandData::ConfigStatus {
+                    config_dir: self.registry.config_dir().display().to_string(),
+                    registry_file: self.registry.registry_path().display().to_string(),
+                    snapshots_dir: self.registry.snapshots_dir().display().to_string(),
+                    validated: true,
+                    device_count: Some(devices.len()),
+                    snapshot_count: Some(snapshots.len()),
+                    orphaned_snapshot_files: orphaned_snapshot_files.clone(),
+                });
+                outcome.warnings = orphaned_snapshot_files
+                    .into_iter()
+                    .map(|path| Warning {
+                        code: "ORPHANED_SNAPSHOT_FILE".to_owned(),
+                        message: format!(
+                            "Snapshot file `{path}` is not indexed; it was reported but not deleted."
+                        ),
+                    })
+                    .collect();
+                outcome
+            }
             CommandRequest::DeviceSetup(request) => {
                 self.preflight_setup(&request.device)?;
                 let verified = request.verify;
@@ -295,7 +356,7 @@ impl Application {
                         Ok(profile) => profile,
                         Err(error) => {
                             if let Some(secret) = previous_secret {
-                                let _ = self.credentials.set(&reference, &secret);
+                                let _ = self.credentials.set(&reference, secret.expose_secret());
                             } else {
                                 let _ = self.credentials.delete(&reference);
                             }
@@ -387,8 +448,12 @@ impl Application {
                 view: self.registry.delete_view(&request.id)?,
             }),
             CommandRequest::DiscoverScan(request) => {
-                let (devices, selected_interfaces, warnings) =
-                    scan_discovery_interfaces(&request.interfaces, options.timeout).await?;
+                let (devices, selected_interfaces, warnings) = scan_discovery_interfaces(
+                    &request.interfaces,
+                    options.timeout,
+                    options.retries,
+                )
+                .await?;
                 let saved_snapshot = request
                     .snapshot_id
                     .as_deref()
@@ -412,8 +477,12 @@ impl Application {
                 outcome
             }
             CommandRequest::DiscoveryRefresh(request) => {
-                let (devices, selected_interfaces, warnings) =
-                    scan_discovery_interfaces(&request.interfaces, options.timeout).await?;
+                let (devices, selected_interfaces, warnings) = scan_discovery_interfaces(
+                    &request.interfaces,
+                    options.timeout,
+                    options.retries,
+                )
+                .await?;
                 let snapshot = self.registry.refresh_discovery_snapshot(
                     &request.id,
                     devices.clone(),
@@ -499,7 +568,7 @@ impl Application {
                         let result = fetch_live_information(
                             &target,
                             Some(&username),
-                            Some(&password),
+                            Some(password.expose_secret()),
                             &options,
                         )
                         .await;
@@ -535,7 +604,7 @@ impl Application {
                             let result = fetch_live_information(
                                 &target,
                                 Some(&username),
-                                Some(&password),
+                                Some(password.expose_secret()),
                                 &options,
                             )
                             .await;
@@ -851,23 +920,21 @@ impl Application {
             .map(|profile| profile.credential_ref())
             .or_else(|| stored.credential_ref());
         let password = match credential_ref {
-            Some(reference) => self.credentials.get(reference)?.ok_or_else(|| {
+            Some(reference) => Some(self.credentials.get(reference)?.ok_or_else(|| {
                 AppError::credential_unavailable(format!(
                     "Credential `{reference}` is referenced by `{canonical_id}` but does not exist."
                 ))
-            })?,
-            None => env::var("OXVIF_PASSWORD").unwrap_or_default(),
+            })?),
+            None => env::var("OXVIF_PASSWORD")
+                .ok()
+                .map(SecretString::new)
+                .transpose()?,
         };
         let username = profile
             .as_ref()
             .map(|profile| profile.username().to_owned())
             .or_else(|| stored.username().map(str::to_owned))
             .or_else(|| env::var("OXVIF_USERNAME").ok());
-        let password = if credential_ref.is_some() || env::var_os("OXVIF_PASSWORD").is_some() {
-            Some(password)
-        } else {
-            None
-        };
         if password.is_some() && username.is_none() {
             return Err(AppError::credential_unavailable(format!(
                 "Device `{canonical_id}` has a password but no username."
@@ -884,7 +951,10 @@ impl Application {
 
     fn resolve_direct(&self, target: &str) -> Result<ResolvedTarget, AppError> {
         let username = env::var("OXVIF_USERNAME").ok();
-        let password = env::var("OXVIF_PASSWORD").ok();
+        let password = env::var("OXVIF_PASSWORD")
+            .ok()
+            .map(SecretString::new)
+            .transpose()?;
         if password.is_some() && username.is_none() {
             return Err(AppError::credential_unavailable(
                 "OXVIF_PASSWORD is set but OXVIF_USERNAME is missing.",
@@ -907,7 +977,7 @@ impl Application {
         fetch_live_information(
             &resolved.target,
             resolved.username.as_deref(),
-            resolved.password.as_deref(),
+            resolved.password(),
             options,
         )
         .await
@@ -1094,6 +1164,63 @@ impl DiagnosticOperation {
     }
 }
 
+enum DiagnosticAttemptFailure {
+    Onvif(OnvifError),
+    Serialization(serde_json::Error),
+}
+
+impl DiagnosticAttemptFailure {
+    fn is_retryable(&self) -> bool {
+        match self {
+            Self::Onvif(error) => is_retryable_onvif_error(error),
+            Self::Serialization(_) => false,
+        }
+    }
+}
+
+impl std::fmt::Display for DiagnosticAttemptFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Onvif(error) => error.fmt(formatter),
+            Self::Serialization(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl From<OnvifError> for DiagnosticAttemptFailure {
+    fn from(value: OnvifError) -> Self {
+        Self::Onvif(value)
+    }
+}
+
+impl From<serde_json::Error> for DiagnosticAttemptFailure {
+    fn from(value: serde_json::Error) -> Self {
+        Self::Serialization(value)
+    }
+}
+
+fn is_retryable_onvif_error(error: &OnvifError) -> bool {
+    match error {
+        OnvifError::Transport(TransportError::Http(error)) => {
+            error.is_timeout() || error.is_connect() || error.is_body() || error.is_request()
+        }
+        OnvifError::Transport(TransportError::HttpStatus { status, .. }) => {
+            matches!(*status, 408 | 425 | 429 | 502 | 503 | 504)
+        }
+        OnvifError::Soap(_) | OnvifError::InvalidArgument(_) => false,
+    }
+}
+
+fn retry_delay(attempt: u32, discriminator: &str) -> Duration {
+    let exponent = attempt.min(4);
+    let base_ms = 100_u64.saturating_mul(1_u64 << exponent);
+    let hash = discriminator.bytes().fold(0_u64, |hash, byte| {
+        hash.wrapping_mul(31).wrapping_add(u64::from(byte))
+    });
+    let jitter_ms = hash.wrapping_add(u64::from(attempt)) % 51;
+    Duration::from_millis((base_ms + jitter_ms).min(2_000))
+}
+
 fn spawn_diagnostic_task(
     tasks: &mut tokio::task::JoinSet<crate::FleetDiagnosticItem>,
     selected_by: String,
@@ -1148,78 +1275,83 @@ async fn execute_diagnostic(
     if matches!(&operation, DiagnosticOperation::Health) {
         return execute_health_check(resolved, options).await;
     }
+    let transport =
+        build_http_transport(options, resolved.username.as_deref(), resolved.password())?;
     let attempts = options.retries.saturating_add(1);
     let mut last_error = None;
-    for _ in 0..attempts {
+    let mut last_retryable = true;
+    for attempt in 0..attempts {
         let future = async {
             let mut builder = OnvifSession::builder(&resolved.target);
             if let (Some(username), Some(password)) =
-                (resolved.username.as_deref(), resolved.password.as_deref())
+                (resolved.username.as_deref(), resolved.password())
             {
                 builder = builder.with_credentials(username, password);
             }
-            let session = builder.build().await.map_err(|error| error.to_string())?;
+            builder = builder.with_transport(transport.clone());
+            if should_sync_clock(options.clock_sync, resolved.password.is_some()) {
+                builder = builder.with_clock_sync();
+            }
+            let session = builder.build().await?;
             let mut value = match &operation {
                 DiagnosticOperation::DeviceTest => {
-                    let information = session.get_device_info().await.map_err(|e| e.to_string())?;
-                    serde_json::to_value(serde_json::json!({
+                    let information = session.get_device_info().await?;
+                    serde_json::json!({
                         "authenticated": resolved.password.is_some(),
                         "information": information,
-                    }))
+                    })
                 }
-                DiagnosticOperation::DeviceInformation => serde_json::to_value(
-                    session.get_device_info().await.map_err(|e| e.to_string())?,
-                ),
-                DiagnosticOperation::Capabilities => serde_json::to_value(session.capabilities()),
+                DiagnosticOperation::DeviceInformation => {
+                    serde_json::to_value(session.get_device_info().await?)?
+                }
+                DiagnosticOperation::Capabilities => serde_json::to_value(session.capabilities())?,
                 DiagnosticOperation::Services => {
-                    serde_json::to_value(session.get_services().await.map_err(|e| e.to_string())?)
+                    serde_json::to_value(session.get_services().await?)?
                 }
                 DiagnosticOperation::MediaProfiles => {
-                    serde_json::to_value(session.get_profiles().await.map_err(|e| e.to_string())?)
+                    serde_json::to_value(session.get_profiles().await?)?
                 }
-                DiagnosticOperation::MediaStreamUri(profile) => serde_json::to_value(
-                    session
-                        .get_stream_uri(profile)
-                        .await
-                        .map_err(|e| e.to_string())?,
-                ),
-                DiagnosticOperation::MediaSnapshotUri(profile) => serde_json::to_value(
-                    session
-                        .get_snapshot_uri(profile)
-                        .await
-                        .map_err(|e| e.to_string())?,
-                ),
-                DiagnosticOperation::PtzStatus(profile) => serde_json::to_value(
-                    session
-                        .ptz_get_status(profile)
-                        .await
-                        .map_err(|e| e.to_string())?,
-                ),
-                DiagnosticOperation::PtzPresets(profile) => serde_json::to_value(
-                    session
-                        .ptz_get_presets(profile)
-                        .await
-                        .map_err(|e| e.to_string())?,
-                ),
+                DiagnosticOperation::MediaStreamUri(profile) => {
+                    serde_json::to_value(session.get_stream_uri(profile).await?)?
+                }
+                DiagnosticOperation::MediaSnapshotUri(profile) => {
+                    serde_json::to_value(session.get_snapshot_uri(profile).await?)?
+                }
+                DiagnosticOperation::PtzStatus(profile) => {
+                    serde_json::to_value(session.ptz_get_status(profile).await?)?
+                }
+                DiagnosticOperation::PtzPresets(profile) => {
+                    serde_json::to_value(session.ptz_get_presets(profile).await?)?
+                }
                 DiagnosticOperation::Health => unreachable!("health is handled above"),
-            }
-            .map_err(|error| error.to_string())?;
+            };
             sanitize_uri_values(&mut value);
-            Ok::<_, String>(value)
+            Ok::<_, DiagnosticAttemptFailure>(value)
         };
         match timeout(options.timeout, future).await {
             Ok(Ok(value)) => return Ok(value),
-            Ok(Err(error)) => last_error = Some(error),
+            Ok(Err(error)) => {
+                last_retryable = error.is_retryable();
+                last_error = Some(error.to_string());
+            }
             Err(_) => {
+                last_retryable = true;
                 last_error = Some(format!(
                     "Diagnostic exceeded the {} ms timeout.",
                     options.timeout.as_millis()
                 ));
             }
         }
+        if !last_retryable {
+            break;
+        }
+        if attempt + 1 < attempts {
+            sleep(retry_delay(attempt, &resolved.target)).await;
+        }
     }
-    Err(AppError::device_connection_failed(
+    Err(AppError::device_operation_failed(
         last_error.unwrap_or_else(|| "Device diagnostic failed without an error.".to_owned()),
+        last_retryable,
     ))
 }
 
@@ -1227,18 +1359,59 @@ async fn execute_health_check(
     resolved: &ResolvedTarget,
     options: &ExecutionOptions,
 ) -> Result<serde_json::Value, AppError> {
-    let mut check = HealthCheck::new(&resolved.target);
-    if let (Some(username), Some(password)) =
-        (resolved.username.as_deref(), resolved.password.as_deref())
-    {
-        check = check.with_credentials(username, password);
+    let transport =
+        build_http_transport(options, resolved.username.as_deref(), resolved.password())?;
+    let attempts = options.retries.saturating_add(1);
+    for attempt in 0..attempts {
+        let mut check = HealthCheck::new(&resolved.target);
+        if let (Some(username), Some(password)) =
+            (resolved.username.as_deref(), resolved.password())
+        {
+            check = check.with_credentials(username, password);
+        }
+        check = check.with_transport(transport.clone());
+        check = check.with_clock_sync(should_sync_clock(
+            options.clock_sync,
+            resolved.password.is_some(),
+        ));
+        match timeout(options.timeout, check.run()).await {
+            Ok(report) if health_report_is_retryable(&report) && attempt + 1 < attempts => {
+                sleep(retry_delay(attempt, &resolved.target)).await;
+            }
+            Ok(report) => return health_report_value(report),
+            Err(_) if attempt + 1 < attempts => {
+                sleep(retry_delay(attempt, &resolved.target)).await;
+            }
+            Err(_) => {
+                return Err(AppError::device_connection_failed(format!(
+                    "Health check exceeded the {} ms per-attempt timeout after {} attempt(s).",
+                    options.timeout.as_millis(),
+                    attempts
+                )));
+            }
+        }
     }
-    let report = timeout(options.timeout, check.run()).await.map_err(|_| {
-        AppError::device_connection_failed(format!(
-            "Health check exceeded the {} ms timeout.",
-            options.timeout.as_millis()
-        ))
-    })?;
+    Err(AppError::internal(
+        "Health retry policy completed without a result.",
+    ))
+}
+
+fn health_report_is_retryable(report: &HealthReport) -> bool {
+    let failures = report
+        .checks
+        .iter()
+        .filter(|check| matches!(check.status, oxvif::health::CheckStatus::Fail(_)))
+        .collect::<Vec<_>>();
+    !failures.is_empty()
+        && failures.iter().all(|check| {
+            check
+                .error
+                .as_ref()
+                .is_some_and(|error| error.class == ErrorClass::Http && !error.is_auth())
+        })
+}
+
+fn health_report_value(report: HealthReport) -> Result<serde_json::Value, AppError> {
     let passed = report
         .checks
         .iter()
@@ -1300,43 +1473,116 @@ async fn fetch_live_information(
     password: Option<&str>,
     options: &ExecutionOptions,
 ) -> Result<LiveDeviceInfo, AppError> {
+    let transport = build_http_transport(options, username, password)?;
     let attempts = options.retries.saturating_add(1);
     let mut last_error = None;
-    for _ in 0..attempts {
+    let mut last_retryable = true;
+    for attempt in 0..attempts {
         let mut client = OnvifClient::new(target);
         if let (Some(username), Some(password)) = (username, password) {
             client = client.with_credentials(username, password);
         }
-        match timeout(options.timeout, client.get_device_info()).await {
+        client = client.with_transport(transport.clone());
+        let request = async {
+            if should_sync_clock(options.clock_sync, password.is_some()) {
+                let device_time = client.get_system_date_and_time().await?;
+                client = client.with_utc_offset(device_time.utc_offset_secs());
+            }
+            client.get_device_info().await
+        };
+        match timeout(options.timeout, request).await {
             Ok(Ok(information)) => return Ok(live_information(information)),
-            Ok(Err(error)) => last_error = Some(error.to_string()),
+            Ok(Err(error)) => {
+                last_retryable = is_retryable_onvif_error(&error);
+                last_error = Some(error.to_string());
+            }
             Err(_) => {
+                last_retryable = true;
                 last_error = Some(format!(
                     "Request exceeded the {} ms timeout.",
                     options.timeout.as_millis()
                 ));
             }
         }
+        if !last_retryable {
+            break;
+        }
+        if attempt + 1 < attempts {
+            sleep(retry_delay(attempt, target)).await;
+        }
     }
-    Err(AppError::device_connection_failed(
+    Err(AppError::device_operation_failed(
         last_error.unwrap_or_else(|| "Device request failed without an error.".to_owned()),
+        last_retryable,
     ))
+}
+
+fn build_http_transport(
+    options: &ExecutionOptions,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Result<Arc<dyn Transport>, AppError> {
+    let mut transport = HttpTransport::new();
+    if !options.ca_certificates.is_empty() {
+        transport = transport
+            .with_root_certificates_pem(&options.ca_certificates)
+            .map_err(|error| {
+                AppError::invalid_argument(format!("Invalid --ca-certificate input: {error}"))
+            })?;
+    }
+    if let (Some(username), Some(password)) = (username, password) {
+        transport = transport.with_credentials(username, password);
+    }
+    Ok(Arc::new(transport))
+}
+
+fn should_sync_clock(policy: ClockSyncPolicy, has_credentials: bool) -> bool {
+    match policy {
+        ClockSyncPolicy::Auto => has_credentials,
+        ClockSyncPolicy::Always => true,
+        ClockSyncPolicy::Never => false,
+    }
 }
 
 async fn scan_discovery_interfaces(
     selectors: &[String],
     timeout: Duration,
+    retries: u32,
 ) -> Result<(Vec<crate::DiscoveryRecord>, Vec<String>, Vec<Warning>), AppError> {
     let selected = resolve_discovery_interfaces(selectors)?;
+    scan_selected_discovery_interfaces(selected, timeout, retries, |timeout, address| async move {
+        oxvif::discovery::probe_result_on(timeout, &[address]).await
+    })
+    .await
+}
+
+async fn scan_selected_discovery_interfaces<F, Fut>(
+    selected: Vec<(Ipv4Addr, String)>,
+    timeout: Duration,
+    retries: u32,
+    probe: F,
+) -> Result<(Vec<crate::DiscoveryRecord>, Vec<String>, Vec<Warning>), AppError>
+where
+    F: Fn(Duration, Ipv4Addr) -> Fut + Clone + Send + Sync + 'static,
+    Fut: Future<Output = std::io::Result<Vec<oxvif::discovery::DiscoveredDevice>>> + Send + 'static,
+{
     let selected_interfaces = selected
         .iter()
         .map(|(_, label)| label.clone())
         .collect::<Vec<_>>();
     let mut tasks = tokio::task::JoinSet::new();
     for (address, label) in selected {
+        let probe = probe.clone();
         tasks.spawn(async move {
-            let result = oxvif::discovery::probe_result_on(timeout, &[address]).await;
-            (label, result)
+            let attempts = retries.saturating_add(1);
+            for attempt in 0..attempts {
+                let result = probe(timeout, address).await;
+                if result.is_ok() || attempt + 1 == attempts {
+                    return (label, result);
+                }
+                sleep(retry_delay(attempt, &label)).await;
+            }
+            unreachable!("discovery retry policy always executes at least once")
         });
     }
 
@@ -1480,13 +1726,18 @@ fn merge_unique(target: &mut Vec<String>, incoming: Vec<String>) {
     target.dedup();
 }
 
-#[derive(Clone)]
 struct ResolvedTarget {
     device_id: Option<String>,
     selected_by: Option<String>,
     target: String,
     username: Option<String>,
-    password: Option<String>,
+    password: Option<SecretString>,
+}
+
+impl ResolvedTarget {
+    fn password(&self) -> Option<&str> {
+        self.password.as_ref().map(SecretString::expose_secret)
+    }
 }
 
 struct Outcome {
@@ -1564,11 +1815,139 @@ mod tests {
         DeviceAddRequest, DeviceCredentialSetRequest, DeviceIdRequest, DeviceSetupRequest,
         MemoryCredentialStore, NewDevice, SecretString,
     };
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn status_server(
+        status: u16,
+        reason: &'static str,
+    ) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("status fixture should bind");
+        let address = listener.local_addr().expect("fixture address");
+        let requests = Arc::new(AtomicUsize::new(0));
+        let observed = requests.clone();
+        let task = tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                observed.fetch_add(1, Ordering::SeqCst);
+                let mut request = [0_u8; 4096];
+                let _ = stream.read(&mut request).await;
+                let response = format!(
+                    "HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+            }
+        });
+        (
+            format!("http://{address}/onvif/device_service"),
+            requests,
+            task,
+        )
+    }
+
+    async fn transient_then_proxy_server(
+        upstream_url: &str,
+    ) -> (String, Arc<AtomicUsize>, tokio::task::JoinHandle<()>) {
+        let upstream_url = url::Url::parse(upstream_url).expect("upstream URL should parse");
+        let upstream_host = upstream_url
+            .host_str()
+            .expect("upstream URL should have a host")
+            .to_owned();
+        let upstream_port = upstream_url
+            .port_or_known_default()
+            .expect("upstream URL should have a port");
+        let upstream_path = upstream_url.path().to_owned();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("proxy fixture should bind");
+        let address = listener.local_addr().expect("proxy fixture address");
+        let requests = Arc::new(AtomicUsize::new(0));
+        let observed = requests.clone();
+        let task = tokio::spawn(async move {
+            while let Ok((mut client, _)) = listener.accept().await {
+                let request_number = observed.fetch_add(1, Ordering::SeqCst) + 1;
+                if request_number == 1 {
+                    let mut request = [0_u8; 4096];
+                    let _ = client.read(&mut request).await;
+                    let _ = client
+                        .write_all(
+                            b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        )
+                        .await;
+                    continue;
+                }
+                let Ok(mut upstream) =
+                    tokio::net::TcpStream::connect((upstream_host.as_str(), upstream_port)).await
+                else {
+                    continue;
+                };
+                let _ = tokio::io::copy_bidirectional(&mut client, &mut upstream).await;
+            }
+        });
+        (format!("http://{address}{upstream_path}"), requests, task)
+    }
+
+    async fn hanging_server() -> (
+        String,
+        Arc<AtomicUsize>,
+        Arc<AtomicUsize>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("hanging fixture should bind");
+        let address = listener.local_addr().expect("hanging fixture address");
+        let requests = Arc::new(AtomicUsize::new(0));
+        let active = Arc::new(AtomicUsize::new(0));
+        let observed_requests = requests.clone();
+        let observed_active = active.clone();
+        let task = tokio::spawn(async move {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            observed_requests.fetch_add(1, Ordering::SeqCst);
+            observed_active.fetch_add(1, Ordering::SeqCst);
+            let mut request = [0_u8; 4096];
+            loop {
+                match stream.read(&mut request).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
+            }
+            observed_active.fetch_sub(1, Ordering::SeqCst);
+        });
+        (
+            format!("http://{address}/onvif/device_service"),
+            requests,
+            active,
+            task,
+        )
+    }
 
     struct RacingCredentialStore {
         registry: RegistryStore,
         secret: std::sync::Mutex<Option<String>>,
         fail_delete: bool,
+    }
+
+    struct FailingSetCredentialStore;
+
+    impl CredentialStore for FailingSetCredentialStore {
+        fn set(&self, _reference: &str, _password: &str) -> Result<(), AppError> {
+            Err(AppError::credential_backend_unavailable("store"))
+        }
+
+        fn get(&self, _reference: &str) -> Result<Option<SecretString>, AppError> {
+            Ok(None)
+        }
+
+        fn delete(&self, _reference: &str) -> Result<(), AppError> {
+            Ok(())
+        }
     }
 
     impl CredentialStore for RacingCredentialStore {
@@ -1587,11 +1966,13 @@ mod tests {
             Ok(())
         }
 
-        fn get(&self, _reference: &str) -> Result<Option<String>, AppError> {
-            self.secret
+        fn get(&self, _reference: &str) -> Result<Option<SecretString>, AppError> {
+            let secret = self
+                .secret
                 .lock()
                 .map_err(|_| AppError::internal("fixture lock poisoned"))
-                .map(|secret| secret.clone())
+                .map(|secret| secret.clone())?;
+            secret.map(SecretString::new).transpose()
         }
 
         fn delete(&self, _reference: &str) -> Result<(), AppError> {
@@ -1656,7 +2037,8 @@ mod tests {
             credentials
                 .get("device/front-door")
                 .expect("credential lookup")
-                .as_deref(),
+                .as_ref()
+                .map(SecretString::expose_secret),
             Some("setup-secret")
         );
         let contents = std::fs::read_to_string(directory.path().join("devices.toml"))
@@ -1699,9 +2081,210 @@ mod tests {
             credentials
                 .get("device/front-door")
                 .expect("credential lookup")
-                .as_deref(),
+                .as_ref()
+                .map(SecretString::expose_secret),
             Some("existing-secret")
         );
+    }
+
+    #[tokio::test]
+    async fn failed_native_secret_write_never_persists_a_credential_reference() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        registry
+            .add(NewDevice {
+                id: "camera".to_owned(),
+                name: None,
+                target: "192.0.2.20".to_owned(),
+                tags: Vec::new(),
+            })
+            .expect("fixture device");
+        let application =
+            Application::with_stores(registry.clone(), Arc::new(FailingSetCredentialStore));
+
+        let error = application
+            .execute(
+                CommandRequest::DeviceCredentialSet(DeviceCredentialSetRequest {
+                    id: "camera".to_owned(),
+                    username: "sensitive-account".to_owned(),
+                    password: SecretString::new("sensitive-secret").expect("secret"),
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect_err("native persistence failure must stop registry mutation");
+
+        assert_eq!(error.code, crate::ErrorCode::CredentialUnavailable);
+        assert!(!format!("{error:?}").contains("sensitive"));
+        assert!(!registry.get("camera").expect("device").has_credentials);
+        let contents = std::fs::read_to_string(directory.path().join("devices.toml"))
+            .expect("registry should exist");
+        assert!(!contents.contains("credential_ref"));
+        assert!(!contents.contains("sensitive"));
+    }
+
+    #[tokio::test]
+    async fn every_device_execution_path_applies_the_shared_custom_root_factory() {
+        let (target, requests, _, fixture) = hanging_server().await;
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        let credentials = Arc::new(MemoryCredentialStore::default());
+        let application = Application::with_stores(registry.clone(), credentials);
+        let invalid_roots = ExecutionOptions {
+            ca_certificates: vec![b"not a PEM certificate".to_vec()],
+            timeout: Duration::from_millis(50),
+            ..ExecutionOptions::default()
+        };
+
+        let setup_error = application
+            .execute(
+                CommandRequest::DeviceSetup(DeviceSetupRequest {
+                    device: NewDevice {
+                        id: "setup-camera".to_owned(),
+                        name: None,
+                        target: target.clone(),
+                        tags: Vec::new(),
+                    },
+                    username: "admin".to_owned(),
+                    password: SecretString::new("secret").expect("secret"),
+                    verify: true,
+                    set_current: false,
+                }),
+                &invalid_roots,
+            )
+            .await
+            .expect_err("setup must validate shared roots before connecting");
+        assert_eq!(setup_error.code, crate::ErrorCode::InvalidArgument);
+
+        application
+            .execute(
+                CommandRequest::DeviceAdd(DeviceAddRequest {
+                    device: NewDevice {
+                        id: "camera".to_owned(),
+                        name: None,
+                        target: target.clone(),
+                        tags: Vec::new(),
+                    },
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect("fixture device");
+        application
+            .execute(
+                CommandRequest::DeviceCredentialSet(DeviceCredentialSetRequest {
+                    id: "camera".to_owned(),
+                    username: "admin".to_owned(),
+                    password: SecretString::new("secret").expect("secret"),
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect("fixture credential");
+
+        for request in [
+            CommandRequest::DeviceInfo(crate::DeviceConnectRequest {
+                selector: crate::TargetSelector {
+                    device: Some("camera".to_owned()),
+                    ..crate::TargetSelector::default()
+                },
+            }),
+            CommandRequest::HealthCheck(crate::DeviceConnectRequest {
+                selector: crate::TargetSelector {
+                    device: Some("camera".to_owned()),
+                    ..crate::TargetSelector::default()
+                },
+            }),
+            CommandRequest::DeviceRefresh(DeviceIdRequest {
+                id: "camera".to_owned(),
+            }),
+        ] {
+            let error = application
+                .execute(request, &invalid_roots)
+                .await
+                .expect_err("device path must validate shared roots");
+            assert_eq!(error.code, crate::ErrorCode::InvalidArgument);
+        }
+
+        application
+            .execute(
+                CommandRequest::GroupCreate(crate::GroupCreateRequest {
+                    group: crate::NewGroup {
+                        id: "fleet".to_owned(),
+                        name: None,
+                    },
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect("fixture group");
+        application
+            .execute(
+                CommandRequest::GroupMemberAdd(crate::GroupMemberAddRequest {
+                    group_id: "fleet".to_owned(),
+                    device_id: "camera".to_owned(),
+                    alias: "camera".to_owned(),
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect("fixture group member");
+        let fleet_error = application
+            .execute(
+                CommandRequest::DeviceInfo(crate::DeviceConnectRequest {
+                    selector: crate::TargetSelector {
+                        group: Some("fleet".to_owned()),
+                        ..crate::TargetSelector::default()
+                    },
+                }),
+                &invalid_roots,
+            )
+            .await
+            .expect_err("fleet items must validate shared roots");
+        assert_eq!(fleet_error.code, crate::ErrorCode::FleetFailed);
+
+        application
+            .execute(
+                CommandRequest::CredentialProfileSet(crate::CredentialProfileSetRequest {
+                    id: "factory-admin".to_owned(),
+                    username: "admin".to_owned(),
+                    password: SecretString::new("secret").expect("secret"),
+                }),
+                &ExecutionOptions::default(),
+            )
+            .await
+            .expect("fixture profile");
+        registry
+            .save_discovery_snapshot(
+                "scan",
+                vec![crate::DiscoveryRecord {
+                    endpoint: "urn:uuid:test-camera".to_owned(),
+                    types: Vec::new(),
+                    scopes: Vec::new(),
+                    xaddrs: vec![target],
+                    manufacturer: None,
+                    model: None,
+                    firmware_version: None,
+                    serial_number: None,
+                }],
+            )
+            .expect("fixture snapshot");
+        let enrich_error = application
+            .execute(
+                CommandRequest::DiscoveryEnrich(crate::DiscoveryEnrichRequest {
+                    id: "scan".to_owned(),
+                    credential_profile: "factory-admin".to_owned(),
+                    filters: Vec::new(),
+                    jobs: 1,
+                }),
+                &invalid_roots,
+            )
+            .await
+            .expect_err("enrichment must validate shared roots");
+        assert_eq!(enrich_error.code, crate::ErrorCode::DiscoveryFailed);
+
+        assert_eq!(requests.load(Ordering::SeqCst), 0);
+        fixture.abort();
     }
 
     #[tokio::test]
@@ -1825,8 +2408,10 @@ mod tests {
         assert_eq!(
             credentials
                 .get("device/race-camera")
-                .expect("secret lookup"),
-            Some("temporary-secret".to_owned())
+                .expect("secret lookup")
+                .as_ref()
+                .map(SecretString::expose_secret),
+            Some("temporary-secret")
         );
     }
 
@@ -1868,7 +2453,8 @@ mod tests {
             credentials
                 .get("device/camera")
                 .expect("credential should load")
-                .as_deref(),
+                .as_ref()
+                .map(SecretString::expose_secret),
             Some("top-secret")
         );
         let registry_contents = std::fs::read_to_string(directory.path().join("devices.toml"))
@@ -1951,7 +2537,8 @@ mod tests {
             credentials
                 .get("profile/factory-admin")
                 .expect("credential should load")
-                .as_deref(),
+                .as_ref()
+                .map(SecretString::expose_secret),
             Some("shared-secret")
         );
         assert_eq!(
@@ -2368,6 +2955,286 @@ mod tests {
         assert_eq!(value["uri"], "rtsp://192.0.2.10/stream");
         assert_eq!(value["nested"][0], "http://example.test/snapshot.jpg");
         assert!(!value.to_string().contains("top-secret"));
+    }
+
+    #[test]
+    fn retry_policy_retries_only_transient_transport_statuses() {
+        let transient = OnvifError::Transport(TransportError::HttpStatus {
+            status: 503,
+            body: "Service Unavailable".to_owned(),
+        });
+        let authentication = OnvifError::Transport(TransportError::HttpStatus {
+            status: 401,
+            body: "Unauthorized".to_owned(),
+        });
+        let soap_fault = OnvifError::Soap(oxvif::soap::SoapError::Fault {
+            code: "s:Sender".to_owned(),
+            reason: "Invalid request".to_owned(),
+            subcode: None,
+            detail: None,
+        });
+
+        assert!(is_retryable_onvif_error(&transient));
+        assert!(!is_retryable_onvif_error(&authentication));
+        assert!(!is_retryable_onvif_error(&soap_fault));
+    }
+
+    #[tokio::test]
+    async fn diagnostic_retries_transient_status_but_not_deterministic_status() {
+        for (status, reason, retries, expected_requests, expected_retryable) in [
+            (503, "Service Unavailable", 2, 3, true),
+            (400, "Bad Request", 2, 1, false),
+        ] {
+            let (target, requests, server) = status_server(status, reason).await;
+            let resolved = ResolvedTarget {
+                device_id: None,
+                selected_by: Some("test fixture".to_owned()),
+                target,
+                username: None,
+                password: None,
+            };
+            let error = execute_diagnostic(
+                &resolved,
+                DiagnosticOperation::Capabilities,
+                &ExecutionOptions {
+                    timeout: Duration::from_secs(1),
+                    retries,
+                    ..ExecutionOptions::default()
+                },
+            )
+            .await
+            .expect_err("status fixture should fail");
+            server.abort();
+
+            assert_eq!(requests.load(Ordering::SeqCst), expected_requests);
+            assert_eq!(error.retryable, expected_retryable);
+        }
+    }
+
+    #[tokio::test]
+    async fn diagnostic_recovers_when_a_retryable_first_attempt_is_followed_by_success() {
+        let upstream = oxvif::mock::MockServer::start()
+            .await
+            .expect("mock server should start");
+        let (target, requests, proxy) = transient_then_proxy_server(upstream.device_url()).await;
+        let resolved = ResolvedTarget {
+            device_id: None,
+            selected_by: Some("transient proxy fixture".to_owned()),
+            target,
+            username: None,
+            password: None,
+        };
+
+        let result = execute_diagnostic(
+            &resolved,
+            DiagnosticOperation::Capabilities,
+            &ExecutionOptions {
+                timeout: Duration::from_secs(2),
+                retries: 1,
+                ..ExecutionOptions::default()
+            },
+        )
+        .await
+        .expect("second attempt should succeed");
+        proxy.abort();
+
+        assert!(result.is_object());
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn diagnostic_timeout_closes_the_connection_and_leaves_no_active_fixture_work() {
+        let (target, requests, active, server) = hanging_server().await;
+        let resolved = ResolvedTarget {
+            device_id: None,
+            selected_by: Some("hanging fixture".to_owned()),
+            target,
+            username: None,
+            password: None,
+        };
+
+        let error = execute_diagnostic(
+            &resolved,
+            DiagnosticOperation::Capabilities,
+            &ExecutionOptions {
+                timeout: Duration::from_millis(100),
+                ..ExecutionOptions::default()
+            },
+        )
+        .await
+        .expect_err("hanging request should time out");
+        tokio::time::timeout(Duration::from_secs(2), server)
+            .await
+            .expect("fixture should observe the cancelled connection")
+            .expect("fixture task should finish cleanly");
+
+        assert!(error.retryable);
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_command_during_retry_backoff_prevents_the_next_attempt() {
+        let (target, requests, server) = status_server(503, "Service Unavailable").await;
+        let resolved = ResolvedTarget {
+            device_id: None,
+            selected_by: Some("retry cancellation fixture".to_owned()),
+            target,
+            username: None,
+            password: None,
+        };
+        let options = ExecutionOptions {
+            timeout: Duration::from_secs(1),
+            retries: 2,
+            ..ExecutionOptions::default()
+        };
+        let future = execute_diagnostic(&resolved, DiagnosticOperation::Capabilities, &options);
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), future)
+                .await
+                .is_err(),
+            "parent timeout should cancel the retry backoff"
+        );
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        server.abort();
+
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn cancelling_cli_discovery_aborts_all_interface_workers() {
+        struct ActiveGuard(Arc<AtomicUsize>);
+        impl Drop for ActiveGuard {
+            fn drop(&mut self) {
+                self.0.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+
+        let started = Arc::new(AtomicUsize::new(0));
+        let active = Arc::new(AtomicUsize::new(0));
+        let observed_started = started.clone();
+        let observed_active = active.clone();
+        let probe = move |_timeout: Duration, _address: Ipv4Addr| {
+            let started = observed_started.clone();
+            let active = observed_active.clone();
+            async move {
+                started.fetch_add(1, Ordering::SeqCst);
+                active.fetch_add(1, Ordering::SeqCst);
+                let _guard = ActiveGuard(active);
+                std::future::pending::<std::io::Result<Vec<oxvif::discovery::DiscoveredDevice>>>()
+                    .await
+            }
+        };
+        let future = scan_selected_discovery_interfaces(
+            vec![(Ipv4Addr::LOCALHOST, "loopback-test".to_owned())],
+            Duration::from_secs(30),
+            2,
+            probe,
+        );
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), future)
+                .await
+                .is_err(),
+            "the parent timeout should cancel the CLI discovery wrapper"
+        );
+        tokio::task::yield_now().await;
+
+        assert_eq!(started.load(Ordering::SeqCst), 1);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn fleet_timeout_releases_the_bounded_worker_for_the_next_device() {
+        let (hanging_target, requests, active, hanging_server) = hanging_server().await;
+        let healthy_server = oxvif::mock::MockServer::start()
+            .await
+            .expect("healthy mock should start");
+        let directory = tempfile::tempdir().expect("temp directory");
+        let registry = RegistryStore::at(directory.path());
+        for (id, target) in [
+            ("camera-a-hanging", hanging_target.as_str()),
+            ("camera-b-healthy", healthy_server.device_url()),
+        ] {
+            registry
+                .add(NewDevice {
+                    id: id.to_owned(),
+                    name: None,
+                    target: target.to_owned(),
+                    tags: Vec::new(),
+                })
+                .expect("device should add");
+        }
+        registry
+            .create_group(crate::NewGroup {
+                id: "bounded".to_owned(),
+                name: None,
+            })
+            .expect("group should create");
+        for (id, alias) in [
+            ("camera-a-hanging", "cam-001"),
+            ("camera-b-healthy", "cam-002"),
+        ] {
+            registry
+                .add_group_member("bounded", id, alias)
+                .expect("member should add");
+        }
+        let application =
+            Application::with_stores(registry, Arc::new(MemoryCredentialStore::default()));
+
+        let outcome = application
+            .execute(
+                CommandRequest::DeviceCapabilities(crate::DeviceConnectRequest {
+                    selector: crate::TargetSelector {
+                        group: Some("bounded".to_owned()),
+                        ..crate::TargetSelector::default()
+                    },
+                }),
+                &ExecutionOptions {
+                    timeout: Duration::from_millis(100),
+                    jobs: 1,
+                    ..ExecutionOptions::default()
+                },
+            )
+            .await
+            .expect("healthy device should run after the timed-out worker");
+        tokio::time::timeout(Duration::from_secs(2), hanging_server)
+            .await
+            .expect("fixture should observe the cancelled connection")
+            .expect("fixture task should finish cleanly");
+
+        let CommandData::FleetDiagnostic {
+            succeeded,
+            failed,
+            items,
+            ..
+        } = outcome.data
+        else {
+            panic!("expected fleet diagnostic");
+        };
+        assert_eq!((succeeded, failed), (1, 1));
+        assert_eq!(items[0].device_id, "camera-a-hanging");
+        assert!(!items[0].ok);
+        assert_eq!(items[1].device_id, "camera-b-healthy");
+        assert!(items[1].ok);
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn retry_backoff_is_bounded_and_deterministic() {
+        assert_eq!(retry_delay(3, "camera-a"), retry_delay(3, "camera-a"));
+        assert!(retry_delay(1, "camera-a") > retry_delay(0, "camera-a"));
+        assert!(retry_delay(99, "camera-a") <= Duration::from_secs(2));
+    }
+
+    #[test]
+    fn automatic_clock_sync_is_credential_aware_and_never_mutates_device_time() {
+        assert!(should_sync_clock(ClockSyncPolicy::Auto, true));
+        assert!(!should_sync_clock(ClockSyncPolicy::Auto, false));
+        assert!(should_sync_clock(ClockSyncPolicy::Always, false));
+        assert!(!should_sync_clock(ClockSyncPolicy::Never, true));
     }
 
     #[test]

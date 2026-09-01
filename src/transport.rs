@@ -25,6 +25,8 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
+const DEFAULT_HTTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 // ── Error ─────────────────────────────────────────────────────────────────────
 
 /// Errors produced by the transport layer before SOAP parsing begins.
@@ -41,6 +43,31 @@ pub enum TransportError {
     /// layer can extract the `<s:Fault>` detail.
     #[error("HTTP {status}: {body}")]
     HttpStatus { status: u16, body: String },
+}
+
+/// Errors returned while constructing the production HTTP transport.
+#[derive(Debug, Error)]
+pub enum HttpTransportBuildError {
+    /// A supplied PEM bundle included private-key material. Trust stores must
+    /// contain public certificates only.
+    #[error("CA certificate bundle #{index} contains private-key material")]
+    PrivateKeyMaterial { index: usize },
+
+    /// A supplied PEM bundle was malformed.
+    #[error("CA certificate bundle #{index} is invalid: {source}")]
+    InvalidCertificate {
+        index: usize,
+        #[source]
+        source: reqwest::Error,
+    },
+
+    /// A supplied PEM bundle contained no certificates.
+    #[error("CA certificate bundle #{index} contains no certificates")]
+    EmptyCertificateBundle { index: usize },
+
+    /// The configured HTTP client could not be constructed.
+    #[error("HTTP client construction failed: {0}")]
+    Client(#[source] reqwest::Error),
 }
 
 // ── Trait ─────────────────────────────────────────────────────────────────────
@@ -84,11 +111,46 @@ impl HttpTransport {
     pub fn new() -> Self {
         Self {
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(10))
+                .timeout(DEFAULT_HTTP_TIMEOUT)
                 .build()
                 .expect("failed to build reqwest client"),
             digest_session: None,
         }
+    }
+
+    /// Merge one or more PEM certificate bundles into the platform trust
+    /// roots used by this transport.
+    ///
+    /// Normal certificate-chain and hostname verification remain enabled. A
+    /// bundle containing private-key material is rejected before construction.
+    pub fn with_root_certificates_pem<I, B>(
+        mut self,
+        bundles: I,
+    ) -> Result<Self, HttpTransportBuildError>
+    where
+        I: IntoIterator<Item = B>,
+        B: AsRef<[u8]>,
+    {
+        let mut certificates = Vec::new();
+        for (offset, bundle) in bundles.into_iter().enumerate() {
+            let index = offset + 1;
+            let pem = bundle.as_ref();
+            if contains_private_key_material(pem) {
+                return Err(HttpTransportBuildError::PrivateKeyMaterial { index });
+            }
+            let parsed = reqwest::Certificate::from_pem_bundle(pem)
+                .map_err(|source| HttpTransportBuildError::InvalidCertificate { index, source })?;
+            if parsed.is_empty() {
+                return Err(HttpTransportBuildError::EmptyCertificateBundle { index });
+            }
+            certificates.extend(parsed);
+        }
+        self.client = reqwest::Client::builder()
+            .timeout(DEFAULT_HTTP_TIMEOUT)
+            .tls_certs_merge(certificates)
+            .build()
+            .map_err(HttpTransportBuildError::Client)?;
+        Ok(self)
     }
 
     /// Enable HTTP Digest Authentication for all requests.
@@ -105,6 +167,11 @@ impl HttpTransport {
         self.digest_session = Some(diqwest::DigestAuthSession::new(username, password));
         self
     }
+}
+
+fn contains_private_key_material(pem: &[u8]) -> bool {
+    const MARKER: &[u8] = b"PRIVATE KEY-----";
+    pem.windows(MARKER.len()).any(|window| window == MARKER)
 }
 
 impl Default for HttpTransport {
@@ -173,12 +240,101 @@ impl Transport for HttpTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_rustls::{
+        TlsAcceptor,
+        rustls::{ServerConfig, pki_types::PrivatePkcs8KeyDer},
+    };
 
     const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetCapabilities";
     const SOAP_BODY: &str = r#"<s:Envelope><s:Body><tds:GetCapabilities/></s:Body></s:Envelope>"#;
 
     fn sample_response() -> &'static str {
         r#"<s:Envelope><s:Body><tds:GetCapabilitiesResponse/></s:Body></s:Envelope>"#
+    }
+
+    #[test]
+    fn custom_root_rejects_private_key_material() {
+        let error = match HttpTransport::new().with_root_certificates_pem([
+            b"-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----".as_slice(),
+        ]) {
+            Ok(_) => panic!("private keys must not enter a trust store"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            HttpTransportBuildError::PrivateKeyMaterial { index: 1 }
+        ));
+    }
+
+    #[test]
+    fn custom_root_rejects_malformed_pem() {
+        let error = match HttpTransport::new()
+            .with_root_certificates_pem([b"not a certificate".as_slice()])
+        {
+            Ok(_) => panic!("malformed PEM must fail"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            HttpTransportBuildError::InvalidCertificate { index: 1, .. }
+                | HttpTransportBuildError::EmptyCertificateBundle { index: 1 }
+        ));
+    }
+
+    #[tokio::test]
+    async fn custom_root_is_required_and_trusted_for_a_private_https_server() {
+        let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()])
+            .expect("test certificate should generate");
+        let certificate_pem = certified.cert.pem();
+        let private_key = PrivatePkcs8KeyDer::from(certified.signing_key.serialize_der());
+        let tls = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![certified.cert.der().clone()], private_key.into())
+            .expect("test TLS config should build");
+        let acceptor = TlsAcceptor::from(std::sync::Arc::new(tls));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("TLS fixture should bind");
+        let address = listener.local_addr().expect("TLS fixture address");
+        let server = tokio::spawn(async move {
+            loop {
+                let (stream, _) = listener.accept().await.expect("TLS client should connect");
+                let Ok(mut stream) = acceptor.accept(stream).await else {
+                    continue;
+                };
+                let mut request = [0_u8; 4096];
+                let _ = stream.read(&mut request).await;
+                let body = sample_response();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/soap+xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .await
+                    .expect("TLS response should write");
+                break;
+            }
+        });
+        let url = format!("https://localhost:{}/onvif/device_service", address.port());
+
+        let untrusted = HttpTransport::new()
+            .soap_post(&url, ACTION, SOAP_BODY.to_owned())
+            .await;
+        assert!(matches!(untrusted, Err(TransportError::Http(_))));
+
+        let trusted =
+            match HttpTransport::new().with_root_certificates_pem([certificate_pem.as_bytes()]) {
+                Ok(transport) => transport,
+                Err(error) => panic!("generated CA should be valid: {error}"),
+            };
+        let response = trusted
+            .soap_post(&url, ACTION, SOAP_BODY.to_owned())
+            .await
+            .expect("custom CA should establish HTTPS");
+        assert_eq!(response, sample_response());
+        server.await.expect("TLS fixture should finish");
     }
 
     #[tokio::test]

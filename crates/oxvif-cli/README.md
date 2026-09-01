@@ -3,10 +3,11 @@
 `oxvif-cli` is the human- and Agent-friendly command-line operation surface
 for the [`oxvif`](https://crates.io/crates/oxvif) ONVIF client library.
 
-The package installs an executable named `oxvif`:
+The package installs an executable named `oxvif`. Version 0.1 is not yet
+published on crates.io; install it from the current workspace while testing:
 
 ```sh
-cargo install oxvif-cli --locked
+cargo install --path crates/oxvif-cli --locked
 oxvif describe
 oxvif describe --output json --non-interactive
 oxvif agent guide --output json
@@ -19,8 +20,9 @@ The structured stdout contract is schema version 3 for the 0.1 release.
 
 ## Human quick start
 
-Onboard one camera with a no-echo password prompt, live verification, native
-credential storage, and current-device selection:
+On Windows, macOS, or a Linux desktop session with Secret Service, onboard one
+camera with a no-echo password prompt, live verification, native credential
+storage, and current-device selection:
 
 ```sh
 oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance --username admin
@@ -65,6 +67,14 @@ is atomically replaced. Discovery records live in separate atomic files under
 `snapshots/`, so ordinary inventory commands do not parse every scan. Its display
 name, target, tags, and cached device metadata may change; the device ID does
 not. Set `OXVIF_CONFIG_DIR` to isolate the registry for tests or containers.
+Default paths and the stop-writers/copy-whole-directory backup and restore
+procedure are documented in the
+[full CLI manual](../../docs/oxvif-cli.md#device-inventory).
+
+```sh
+oxvif config path
+oxvif config validate --output json --non-interactive
+```
 
 ## Fleet inventory
 
@@ -160,6 +170,24 @@ through root `--device` or an ephemeral endpoint through command-level
 `--target`; credentials are resolved from the saved device/profile or the
 `OXVIF_USERNAME` and `OXVIF_PASSWORD` environment variables.
 
+`--timeout` is a per-network-attempt bound. `--retries` repeats only transient
+transport failures with bounded backoff; authentication rejection, invalid
+input, deterministic SOAP faults, and parse/schema failures are not retried.
+Discovery retries a failed selected interface without repeating interfaces that
+already succeeded. `-v` and `-vv` write sanitized policy/timing diagnostics to
+stderr only, so JSON and JSONL stdout remain parseable.
+
+Authenticated sessions default to `--clock-sync auto`: the CLI reads device
+time and adjusts only its own WS-Security timestamp offset. `always` also does
+this for unauthenticated sessions; `never` disables it. No policy changes the
+camera clock.
+
+HTTPS cameras using a private CA can add one or more PEM certificates or bundles
+with repeatable `--ca-certificate <FILE>`. The CLI merges those certificates
+with platform trust roots for diagnostics, health, setup/refresh, enrichment,
+and fleet work. Malformed/empty bundles and private-key material are rejected
+before connecting; certificate-chain and hostname verification remain enabled.
+
 ```sh
 oxvif --device front-door device capabilities --output json
 oxvif --device front-door device services --output json
@@ -186,6 +214,11 @@ JSONL emits one `fleet_item` line per device followed by one `fleet_summary`
 line. Full success exits 0, partial success exits 6, and complete failure emits
 the typed `FLEET_FAILED` error. No fleet selection relies on the ambient current
 device.
+
+Versioned Draft 2020-12 schemas for the structured envelope and command
+descriptors ship under [`schema/`](schema/). Optional fields are additive;
+removal, rename, type/meaning changes, or tag/exit semantic changes require a
+new structured `schema_version`.
 
 ## Credentials
 
@@ -214,6 +247,14 @@ oxvif credential profile list
 `OXVIF_USERNAME` and `OXVIF_PASSWORD` support ephemeral automation and direct
 targets. Avoid passing a password as a command-line argument or placing it in a
 version-controlled file.
+
+Native credential persistence uses Windows Credential Manager, macOS Keychain,
+or Linux Secret Service over D-Bus. A missing, locked, or denied native backend
+returns `CREDENTIAL_UNAVAILABLE`; oxvif never creates a plaintext credential
+fallback. Headless/container automation can use trusted environment injection
+for ephemeral operations without persisting the secret. The Windows backend
+contract is locally verified; macOS and Linux support remain release-blocking
+until their native CI contracts pass.
 
 ## Read-only device operations
 

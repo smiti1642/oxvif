@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a reproducible library or CLI defect without secrets
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Never include passwords, authorization headers, WS-Security material, URI userinfo, private IPs, serials, or customer/site names.
+  - type: input
+    id: version
+    attributes:
+      label: oxvif version
+      placeholder: oxvif 0.15.0 or oxvif-cli 0.1.0 (source revision ...)
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: Windows 11 x86_64
+    validations:
+      required: true
+  - type: input
+    id: camera
+    attributes:
+      label: Camera vendor, model, firmware, and ONVIF profiles
+      description: Omit serial number, IP, UUID, and site/customer identifiers.
+    validations:
+      required: false
+  - type: textarea
+    id: command
+    attributes:
+      label: Sanitized command or API call
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: result
+    attributes:
+      label: Exit code and structured error code
+      placeholder: exit 20, DEVICE_CONNECTION_FAILED, retryable=true
+    validations:
+      required: false
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Prefer the built-in mock or a scrubbed fixture over a live endpoint.
+    validations:
+      required: true
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Redaction confirmation
+      options:
+        - label: I removed credentials, authorization material, URI userinfo, private endpoints, and device/customer identifiers.
+          required: true
+

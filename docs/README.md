@@ -15,6 +15,7 @@ Development-only documentation. **None of this is compiled into the crate** —
 | [`done/`](done/) | **Completed plans** — finished design/audit docs, kept as a record. |
 | [`mock-server.md`](mock-server.md) | **Reference for `oxvif::mock`** — the outward-facing one. Routing, envelope/namespace contract, the full state model, the seeded fixture, all 157 operations with which are state-backed and which are static, worked request/response examples, the fault catalogue, and an explicit list of what the mock does *not* model. Read this before driving the mock from anything, Rust or not. |
 | [`dependency-pitfalls.md`](dependency-pitfalls.md) | Standing engineering guide (feature-unification footguns). Not a plan and not ONVIF reference, so it sits at the root; referenced from the release SOP in `CLAUDE.md`. |
+| [`support.md`](support.md) | Versioned support boundaries for the Rust library and CLI beta, including OS, credential, schema, TLS, camera-evidence, and commercial-claim limits. |
 
 A plan graduates from `active/` to `done/` when its milestones are all shipped.
 
@@ -29,6 +30,8 @@ conventions, and attribution/licensing.
 
 | Doc | About |
 |-----|-------|
+| [`oxvif-cli-release-hardening-plan.md`](active/oxvif-cli-release-hardening-plan.md) | Release-hardening programme for the diagnostic CLI: dependency security, publishable packages, CI/platform gates, retry and observability contracts, human rendering, Agent schemas, community readiness, and the commercial-pilot cut line before controlled device writes. |
+| [`oxvif-cli-three-platform-distribution-plan.md`](active/oxvif-cli-three-platform-distribution-plan.md) | Executable plan for native Windows/macOS/Linux credentials, private CA and timeout gates, signed APT distribution, Homebrew tap/bottles, the approval-controlled release, and later Homebrew Core/Debian/Ubuntu graduation. |
 | [`metamorph.md`](active/metamorph.md) | The shape-shifting mock device (three personas). M0–M3, M5, M6 shipped; **M4** (control plane + Persona A) and **M7** (quirk diff) not yet started. |
 | [`metamorph-clone-in-oxdm.md`](active/metamorph-clone-in-oxdm.md) | Draft design for wiring Persona B (clone/replay) into oxdm so a user can clone their own IP camera and hunt its quirks. |
 | [`mock-audit-2026-07.md`](active/mock-audit-2026-07.md) | **Measured** audit of the mock's state/get/set architecture, after an external report found Media2's profile family ignoring `DeviceState`. Every finding is probe-backed. **Tiers 1 and 2 are closed** (16 defects, all fixed, each behind a standing property test). **Tier 3 and Tier 4 are being closed now** — 0.15.0 waits for them (decision 2026-07-31); Storage is done, Audio / PTZ configurations / Media2 metadata remain, each still pinned by a `Static` or `Blind` row. Read §8 before touching `src/mock/` — it names the one structural cause, and the two property tables are the answer to it. |

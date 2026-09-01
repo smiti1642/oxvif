@@ -1,0 +1,32 @@
+class Oxvif < Formula
+  desc "Human- and Agent-friendly ONVIF diagnostic CLI"
+  homepage "https://github.com/smiti1642/oxvif"
+  version "@CLI_VERSION@"
+  license "MIT"
+
+  on_macos do
+    if Hardware::CPU.arm?
+      url "@MACOS_ARM64_URL@"
+      sha256 "@MACOS_ARM64_SHA256@"
+    else
+      url "@MACOS_X86_64_URL@"
+      sha256 "@MACOS_X86_64_SHA256@"
+    end
+  end
+
+  def install
+    bin.install "oxvif"
+    bash_completion.install "completions/oxvif.bash" => "oxvif"
+    zsh_completion.install "completions/oxvif.zsh" => "_oxvif"
+    fish_completion.install "completions/oxvif.fish"
+    man1.install "oxvif.1"
+    (share/"oxvif/schema").install Dir["schema/*.json"]
+    doc.install "README.md", "CLI-README.md"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/oxvif --version")
+    assert_match '"ok": true', shell_output("#{bin}/oxvif describe device.info --output json --non-interactive")
+    assert_match '"guide_version":', shell_output("#{bin}/oxvif agent guide --output json --non-interactive")
+  end
+end

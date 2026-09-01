@@ -243,11 +243,29 @@ impl AppError {
         }
     }
 
+    /// Report a native secret-store failure without forwarding backend text.
+    ///
+    /// Platform APIs may include account identifiers or other sensitive context
+    /// in their errors, so callers intentionally provide only the attempted
+    /// operation here.
+    pub fn credential_backend_unavailable(operation: &str) -> Self {
+        Self {
+            code: ErrorCode::CredentialUnavailable,
+            message: format!("The native credential backend could not {operation} the secret."),
+            retryable: false,
+            suggested_action: Some(native_credential_suggested_action().to_owned()),
+        }
+    }
+
     pub fn device_connection_failed(message: impl Into<String>) -> Self {
+        Self::device_operation_failed(message, true)
+    }
+
+    pub fn device_operation_failed(message: impl Into<String>, retryable: bool) -> Self {
         Self {
             code: ErrorCode::DeviceConnectionFailed,
             message: message.into(),
-            retryable: true,
+            retryable,
             suggested_action: Some(
                 "Verify target reachability, credentials, and device clock synchronization."
                     .to_owned(),
@@ -288,6 +306,26 @@ impl AppError {
     pub const fn exit_code(&self) -> u8 {
         self.code.exit_code()
     }
+}
+
+#[cfg(windows)]
+const fn native_credential_suggested_action() -> &'static str {
+    "Check that Windows Credential Manager is available. For one-shot automation, use OXVIF_USERNAME and OXVIF_PASSWORD; oxvif never creates a plaintext fallback."
+}
+
+#[cfg(target_os = "macos")]
+const fn native_credential_suggested_action() -> &'static str {
+    "Unlock the login Keychain and allow this terminal session to use it. For one-shot automation, use OXVIF_USERNAME and OXVIF_PASSWORD; oxvif never creates a plaintext fallback."
+}
+
+#[cfg(target_os = "linux")]
+const fn native_credential_suggested_action() -> &'static str {
+    "Start and unlock a Secret Service provider in this D-Bus session. For one-shot automation, use OXVIF_USERNAME and OXVIF_PASSWORD; oxvif never creates a plaintext fallback."
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+const fn native_credential_suggested_action() -> &'static str {
+    "Use OXVIF_USERNAME and OXVIF_PASSWORD for one-shot automation; oxvif never creates a plaintext credential fallback."
 }
 
 impl std::fmt::Display for AppError {

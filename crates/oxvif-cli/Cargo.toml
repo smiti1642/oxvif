@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 description = "Human- and Agent-friendly CLI for ONVIF cameras"
 readme = "README.md"
+include = ["Cargo.toml", "README.md", "src/**", "tests/**", "schema/**"]
 keywords = ["onvif", "camera", "cli", "rtsp"]
 categories = ["command-line-utilities", "network-programming", "multimedia"]
 
@@ -29,10 +30,19 @@ rpassword = "7.5.4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 toml = "1.0"
 url = "2.5"
+zeroize = "1.8"
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3.6.3", default-features = false, features = ["windows-native"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6.3", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust", "vendored"] }
+
 [dev-dependencies]
+jsonschema = { version = "0.52.1", default-features = false }
 oxvif = { path = "../..", features = ["mock-server"] }
 tempfile = "3"
+shlex = "1.3"

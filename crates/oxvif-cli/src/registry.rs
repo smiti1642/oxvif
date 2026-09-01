@@ -124,6 +124,50 @@ impl RegistryStore {
         &self.config_dir
     }
 
+    pub fn registry_path(&self) -> &Path {
+        &self.registry_path
+    }
+
+    pub fn snapshots_dir(&self) -> &Path {
+        &self.snapshots_dir
+    }
+
+    pub fn orphaned_snapshot_files(&self) -> Result<Vec<PathBuf>, AppError> {
+        let indexed = self
+            .load_unlocked()?
+            .discovery_snapshots
+            .keys()
+            .map(|id| format!("{id}.json"))
+            .collect::<BTreeSet<_>>();
+        let entries = match fs::read_dir(&self.snapshots_dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => {
+                return Err(AppError::registry_io(format!(
+                    "Failed to read {}: {error}",
+                    self.snapshots_dir.display()
+                )));
+            }
+        };
+        let mut orphaned = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                AppError::registry_io(format!(
+                    "Failed to inspect {}: {error}",
+                    self.snapshots_dir.display()
+                ))
+            })?;
+            let path = entry.path();
+            if path.extension().and_then(|extension| extension.to_str()) == Some("json")
+                && !indexed.contains(&entry.file_name().to_string_lossy().into_owned())
+            {
+                orphaned.push(path);
+            }
+        }
+        orphaned.sort();
+        Ok(orphaned)
+    }
+
     pub fn list(&self) -> Result<(Vec<DeviceView>, Option<String>), AppError> {
         let registry = self.load_unlocked()?;
         let devices = registry

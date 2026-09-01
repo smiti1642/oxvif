@@ -28,17 +28,19 @@ snapshot commands modify local CLI state only.
 
 ## Installation
 
-Install the released package from crates.io:
-
-```sh
-cargo install oxvif-cli --locked
-oxvif --version
-```
-
-Install the current workspace version when developing this repository:
+Version 0.1 is not yet published on crates.io. Install the current workspace
+version when developing or evaluating this repository:
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
+oxvif --version
+```
+
+After the release is published and independently verified, the crates.io
+installation command will be:
+
+```sh
+cargo install oxvif-cli --locked
 ```
 
 Confirm the available command surface after installation:
@@ -89,8 +91,10 @@ version.
 | `--view <ID>` | Select every current match of a dynamic View for fleet diagnostics. |
 | `--jobs <N>` | Set fleet concurrency. The default is 16 and the maximum is 64. |
 | `--non-interactive` | Disable prompts and GUI interaction; fail if required input is unavailable. |
-| `--timeout <DURATION>` | Bound command execution. Supported units are `ms`, `s`, and `m`; the default is `10s`. |
-| `--retries <N>` | Retry retryable failures up to `N` times. The default is zero. |
+| `--timeout <DURATION>` | Bound each network attempt. Supported units are `ms`, `s`, and `m`; the default is `10s`. |
+| `--retries <N>` | Retry transient transport failures up to `N` times with bounded backoff. Authentication rejection, invalid input, deterministic SOAP faults, and parse/schema failures are not retried. The default is zero. Discovery retries each selected interface; it does not duplicate a successful full scan. |
+| `--clock-sync <POLICY>` | WS-Security timestamp policy: `auto` (default) reads device time when credentials are present, `always` reads it for every session, and `never` disables client-side synchronization. This never changes the device clock. |
+| `--ca-certificate <FILE>` | Add a PEM CA certificate or bundle to platform trust roots. Repeat for multiple bundles. Invalid/empty bundles and private keys are rejected; normal chain and hostname verification remain enabled. |
 | `-v`, `--verbose` | Increase diagnostic verbosity; repeat for additional detail. |
 | `-q`, `--quiet` | Suppress non-essential diagnostics. |
 
@@ -102,6 +106,11 @@ after the command:
 oxvif --device front-door device info --output json
 oxvif device info --target 192.168.1.100 --output json
 ```
+
+`--ca-certificate` applies consistently to setup/refresh, single-device
+diagnostics, health, discovery enrichment, and fleet items. `-vv` reports only
+the number of configured bundles; it does not print certificate contents. The
+CLI intentionally has no insecure-certificate or hostname-bypass option.
 
 ## Quick start
 
@@ -160,6 +169,26 @@ Set `OXVIF_CONFIG_DIR` to use an isolated registry, for example in tests,
 containers, or independent Agent sessions. Registry updates are process-locked
 and atomically replaced. Discovery records are stored separately under the
 registry's `snapshots` directory.
+
+Without an override, the configuration directory is:
+
+| Platform | Directory |
+| --- | --- |
+| Windows | `%APPDATA%\oxvif` |
+| Linux | `$XDG_CONFIG_HOME/oxvif`, or `$HOME/.config/oxvif` when `XDG_CONFIG_HOME` is unset |
+| macOS | `$HOME/Library/Application Support/oxvif` |
+
+The directory contains `devices.toml`, `devices.lock`, and retained records
+under `snapshots/`. To back it up, first stop every oxvif process that may write
+the registry, then copy the **entire directory** while preserving permissions.
+Restore only while no oxvif process is running, and keep the failed/current
+directory as a separately named rollback copy. `oxvif config path` reports the
+resolved paths without writing them. After restore, run `oxvif config validate
+--output json --non-interactive`; it parses the registry and every indexed
+snapshot, and returns their counts. oxvif refuses to overwrite a registry whose
+version or TOML structure it cannot validate. Unindexed `snapshots/*.json`
+files produce an `ORPHANED_SNAPSHOT_FILE` warning and are never deleted
+automatically; review backup and registry history before any manual cleanup.
 
 ## Network discovery
 
@@ -321,10 +350,27 @@ oxvif device credential use-profile front-door factory-admin
 oxvif credential profile list
 ```
 
-On Windows, secrets are stored in Windows Credential Manager. The registry
-contains only non-secret references. `OXVIF_USERNAME` and `OXVIF_PASSWORD` may
-be used for ephemeral automation and direct targets when a trusted execution
-environment injects them.
+Secrets are stored in Windows Credential Manager, macOS Keychain, or a Linux
+Secret Service provider in the current D-Bus session. The registry contains
+only non-secret references. Native-backend errors are mapped to
+`CREDENTIAL_UNAVAILABLE` without forwarding backend text that could contain an
+account identifier. A missing, locked, or denied backend never causes a
+plaintext fallback.
+
+`OXVIF_USERNAME` and `OXVIF_PASSWORD` may be used for ephemeral automation and
+direct targets when a trusted execution environment injects them. This is the
+recommended non-persistent path for headless Linux/container sessions that do
+not provide an unlocked Secret Service. The Windows backend contract is locally
+verified; the first public release remains blocked until the same contract
+passes native macOS and Linux CI.
+
+Owned password buffers created by the CLI and loaded from the credential store
+are zeroized when dropped. This reduces ordinary process-memory lifetime but is
+not a guarantee that every copy disappears immediately: environment blocks,
+operating-system APIs, allocator internals, crash dumps, and protocol-library
+copies can retain secret bytes. Treat the running process and diagnostic dumps
+as sensitive, disable unnecessary dumps, and prefer short-lived least-privilege
+camera accounts.
 
 Never place a password in a command argument, target URI, log, override file,
 or version-controlled configuration.
@@ -445,6 +491,14 @@ oxvif agent prompt
 ```
 
 ## Output formats
+
+Schema version 3 is published with the CLI crate under `schema/` and attached
+to release artifacts as `oxvif-envelope.schema.json` and
+`command-descriptor.schema.json`. CI validates representative JSON and every
+fleet JSONL line against the envelope schema, and validates all command
+descriptors against the descriptor schema. Adding optional fields is
+compatible; removing/renaming fields, changing their meaning/type, or changing
+tag/exit semantics requires a new `schema_version`.
 
 | Format | Intended use |
 | --- | --- |

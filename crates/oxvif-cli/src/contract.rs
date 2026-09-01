@@ -1,4 +1,5 @@
 use serde::Serialize;
+use zeroize::Zeroize;
 
 use crate::{
     AppError, CredentialProfileView, DeviceUpdate, DeviceView, DiscoveryFilter,
@@ -26,6 +27,115 @@ impl OutputFormat {
     pub const fn is_structured(self) -> bool {
         matches!(self, Self::Json | Self::JsonLines)
     }
+}
+
+macro_rules! command_ids {
+    ($($variant:ident => $name:literal),+ $(,)?) => {
+        /// Exhaustive identity for every public CLI command path, including
+        /// human-friendly aliases that map to canonical application requests.
+        #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+        pub enum CommandId {
+            $($variant),+
+        }
+
+        impl CommandId {
+            pub const ALL: &'static [Self] = &[$(Self::$variant),+];
+
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $name),+
+                }
+            }
+
+            pub fn from_name(name: &str) -> Option<Self> {
+                match name {
+                    $($name => Some(Self::$variant),)+
+                    _ => None,
+                }
+            }
+
+            /// Canonical typed application operation for a public command.
+            pub const fn canonical(self) -> Self {
+                match self {
+                    Self::Auth => Self::DeviceCredentialSet,
+                    Self::Info => Self::DeviceInfo,
+                    Self::Test => Self::DeviceTest,
+                    Self::Health => Self::HealthCheck,
+                    Self::Profiles => Self::MediaProfiles,
+                    Self::Stream => Self::MediaStreamUri,
+                    Self::Snapshot => Self::MediaSnapshotUri,
+                    Self::Devices => Self::DeviceList,
+                    Self::Groups => Self::GroupList,
+                    Self::Views => Self::ViewList,
+                    other => other,
+                }
+            }
+        }
+    };
+}
+
+command_ids! {
+    AgentGuide => "agent.guide",
+    AgentPrompt => "agent.prompt",
+    Describe => "describe",
+    ConfigPath => "config.path",
+    ConfigValidate => "config.validate",
+    Setup => "setup",
+    Auth => "auth",
+    Info => "info",
+    Test => "test",
+    Health => "health",
+    Profiles => "profiles",
+    Stream => "stream",
+    Snapshot => "snapshot",
+    Devices => "devices",
+    Groups => "groups",
+    Views => "views",
+    Completion => "completion",
+    DeviceAdd => "device.add",
+    DeviceList => "device.list",
+    DeviceShow => "device.show",
+    DeviceUpdate => "device.update",
+    DeviceRename => "device.rename",
+    DeviceRemove => "device.remove",
+    DeviceImport => "device.import",
+    DeviceCredentialSet => "device.credential.set",
+    DeviceCredentialDelete => "device.credential.delete",
+    DeviceCredentialUseProfile => "device.credential.use-profile",
+    CredentialProfileSet => "credential.profile.set",
+    CredentialProfileList => "credential.profile.list",
+    CredentialProfileShow => "credential.profile.show",
+    CredentialProfileDelete => "credential.profile.delete",
+    GroupCreate => "group.create",
+    GroupList => "group.list",
+    GroupShow => "group.show",
+    GroupDelete => "group.delete",
+    GroupMemberAdd => "group.member.add",
+    GroupMemberRemove => "group.member.remove",
+    ViewCreate => "view.create",
+    ViewList => "view.list",
+    ViewShow => "view.show",
+    ViewEvaluate => "view.evaluate",
+    ViewDelete => "view.delete",
+    DiscoverScan => "discover.scan",
+    DiscoverRefresh => "discover.refresh",
+    DiscoverEnrich => "discover.enrich",
+    DiscoverSnapshots => "discover.snapshots",
+    DiscoverList => "discover.list",
+    DiscoverRemove => "discover.remove",
+    Use => "use",
+    Current => "current",
+    DeviceTest => "device.test",
+    DeviceInfo => "device.info",
+    DeviceCapabilities => "device.capabilities",
+    DeviceServices => "device.services",
+    MediaProfiles => "media.profiles",
+    MediaStreamUri => "media.stream-uri",
+    MediaSnapshotUri => "media.snapshot-uri",
+    PtzStatus => "ptz.status",
+    PtzPresets => "ptz.presets",
+    HealthCheck => "health.check",
+    DeviceRefresh => "device.refresh",
 }
 
 /// A request understood by the application layer.
@@ -68,6 +178,8 @@ pub enum CommandRequest {
     DiscoverySnapshotList,
     DiscoverySnapshotShow(DiscoverySnapshotShowRequest),
     DiscoverySnapshotRemove(ResourceIdRequest),
+    ConfigPath,
+    ConfigValidate,
     Use(DeviceIdRequest),
     Current,
     DeviceTest(DeviceConnectRequest),
@@ -84,58 +196,65 @@ pub enum CommandRequest {
 }
 
 impl CommandRequest {
+    /// Canonical application identity for this typed request.
+    pub const fn command_id(&self) -> CommandId {
+        match self {
+            Self::AgentGuide => CommandId::AgentGuide,
+            Self::AgentPrompt => CommandId::AgentPrompt,
+            Self::Describe(_) => CommandId::Describe,
+            Self::DeviceSetup(_) => CommandId::Setup,
+            Self::DeviceAdd(_) => CommandId::DeviceAdd,
+            Self::DeviceList => CommandId::DeviceList,
+            Self::DeviceShow(_) => CommandId::DeviceShow,
+            Self::DeviceUpdate(_) => CommandId::DeviceUpdate,
+            Self::DeviceRename(_) => CommandId::DeviceRename,
+            Self::DeviceRemove(_) => CommandId::DeviceRemove,
+            Self::DeviceImport(_) => CommandId::DeviceImport,
+            Self::DeviceCredentialSet(_) => CommandId::DeviceCredentialSet,
+            Self::DeviceCredentialDelete(_) => CommandId::DeviceCredentialDelete,
+            Self::DeviceCredentialUseProfile(_) => CommandId::DeviceCredentialUseProfile,
+            Self::CredentialProfileSet(_) => CommandId::CredentialProfileSet,
+            Self::CredentialProfileList => CommandId::CredentialProfileList,
+            Self::CredentialProfileShow(_) => CommandId::CredentialProfileShow,
+            Self::CredentialProfileDelete(_) => CommandId::CredentialProfileDelete,
+            Self::GroupCreate(_) => CommandId::GroupCreate,
+            Self::GroupList => CommandId::GroupList,
+            Self::GroupShow(_) => CommandId::GroupShow,
+            Self::GroupDelete(_) => CommandId::GroupDelete,
+            Self::GroupMemberAdd(_) => CommandId::GroupMemberAdd,
+            Self::GroupMemberRemove(_) => CommandId::GroupMemberRemove,
+            Self::ViewCreate(_) => CommandId::ViewCreate,
+            Self::ViewList => CommandId::ViewList,
+            Self::ViewShow(_) => CommandId::ViewShow,
+            Self::ViewEvaluate(_) => CommandId::ViewEvaluate,
+            Self::ViewDelete(_) => CommandId::ViewDelete,
+            Self::DiscoverScan(_) => CommandId::DiscoverScan,
+            Self::DiscoveryRefresh(_) => CommandId::DiscoverRefresh,
+            Self::DiscoveryEnrich(_) => CommandId::DiscoverEnrich,
+            Self::DiscoverySnapshotList => CommandId::DiscoverSnapshots,
+            Self::DiscoverySnapshotShow(_) => CommandId::DiscoverList,
+            Self::DiscoverySnapshotRemove(_) => CommandId::DiscoverRemove,
+            Self::ConfigPath => CommandId::ConfigPath,
+            Self::ConfigValidate => CommandId::ConfigValidate,
+            Self::Use(_) => CommandId::Use,
+            Self::Current => CommandId::Current,
+            Self::DeviceTest(_) => CommandId::DeviceTest,
+            Self::DeviceInfo(_) => CommandId::DeviceInfo,
+            Self::DeviceCapabilities(_) => CommandId::DeviceCapabilities,
+            Self::DeviceServices(_) => CommandId::DeviceServices,
+            Self::MediaProfiles(_) => CommandId::MediaProfiles,
+            Self::MediaStreamUri(_) => CommandId::MediaStreamUri,
+            Self::MediaSnapshotUri(_) => CommandId::MediaSnapshotUri,
+            Self::PtzStatus(_) => CommandId::PtzStatus,
+            Self::PtzPresets(_) => CommandId::PtzPresets,
+            Self::HealthCheck(_) => CommandId::HealthCheck,
+            Self::DeviceRefresh(_) => CommandId::DeviceRefresh,
+        }
+    }
+
     /// Stable dotted name used in metadata and diagnostics.
     pub const fn name(&self) -> &'static str {
-        match self {
-            Self::AgentGuide => "agent.guide",
-            Self::AgentPrompt => "agent.prompt",
-            Self::Describe(_) => "describe",
-            Self::DeviceSetup(_) => "setup",
-            Self::DeviceAdd(_) => "device.add",
-            Self::DeviceList => "device.list",
-            Self::DeviceShow(_) => "device.show",
-            Self::DeviceUpdate(_) => "device.update",
-            Self::DeviceRename(_) => "device.rename",
-            Self::DeviceRemove(_) => "device.remove",
-            Self::DeviceImport(_) => "device.import",
-            Self::DeviceCredentialSet(_) => "device.credential.set",
-            Self::DeviceCredentialDelete(_) => "device.credential.delete",
-            Self::DeviceCredentialUseProfile(_) => "device.credential.use-profile",
-            Self::CredentialProfileSet(_) => "credential.profile.set",
-            Self::CredentialProfileList => "credential.profile.list",
-            Self::CredentialProfileShow(_) => "credential.profile.show",
-            Self::CredentialProfileDelete(_) => "credential.profile.delete",
-            Self::GroupCreate(_) => "group.create",
-            Self::GroupList => "group.list",
-            Self::GroupShow(_) => "group.show",
-            Self::GroupDelete(_) => "group.delete",
-            Self::GroupMemberAdd(_) => "group.member.add",
-            Self::GroupMemberRemove(_) => "group.member.remove",
-            Self::ViewCreate(_) => "view.create",
-            Self::ViewList => "view.list",
-            Self::ViewShow(_) => "view.show",
-            Self::ViewEvaluate(_) => "view.evaluate",
-            Self::ViewDelete(_) => "view.delete",
-            Self::DiscoverScan(_) => "discover.scan",
-            Self::DiscoveryRefresh(_) => "discover.refresh",
-            Self::DiscoveryEnrich(_) => "discover.enrich",
-            Self::DiscoverySnapshotList => "discover.snapshots",
-            Self::DiscoverySnapshotShow(_) => "discover.list",
-            Self::DiscoverySnapshotRemove(_) => "discover.remove",
-            Self::Use(_) => "use",
-            Self::Current => "current",
-            Self::DeviceTest(_) => "device.test",
-            Self::DeviceInfo(_) => "device.info",
-            Self::DeviceCapabilities(_) => "device.capabilities",
-            Self::DeviceServices(_) => "device.services",
-            Self::MediaProfiles(_) => "media.profiles",
-            Self::MediaStreamUri(_) => "media.stream-uri",
-            Self::MediaSnapshotUri(_) => "media.snapshot-uri",
-            Self::PtzStatus(_) => "ptz.status",
-            Self::PtzPresets(_) => "ptz.presets",
-            Self::HealthCheck(_) => "health.check",
-            Self::DeviceRefresh(_) => "device.refresh",
-        }
+        self.command_id().as_str()
     }
 }
 
@@ -200,7 +319,7 @@ pub struct DeviceImportRequest {
     pub expected_fingerprint: Option<String>,
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct SecretString(String);
 
 impl SecretString {
@@ -215,6 +334,12 @@ impl SecretString {
 
     pub fn expose_secret(&self) -> &str {
         &self.0
+    }
+}
+
+impl Drop for SecretString {
+    fn drop(&mut self) {
+        self.0.zeroize();
     }
 }
 
@@ -392,6 +517,13 @@ pub struct CommandDescriptor {
     pub examples: Vec<String>,
 }
 
+/// One exhaustive command identity paired with its complete public contract.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommandSpec {
+    pub id: CommandId,
+    pub descriptor: CommandDescriptor,
+}
+
 /// Typed result variants returned by application commands.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -485,6 +617,18 @@ pub enum CommandData {
         attempted: usize,
         enriched: usize,
         failed: usize,
+    },
+    ConfigStatus {
+        config_dir: String,
+        registry_file: String,
+        snapshots_dir: String,
+        validated: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        device_count: Option<usize>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        snapshot_count: Option<usize>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        orphaned_snapshot_files: Vec<String>,
     },
     ResourceRemoved {
         resource: String,

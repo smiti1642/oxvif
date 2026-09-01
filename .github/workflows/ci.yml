@@ -2,62 +2,210 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, develop]
   pull_request:
-    branches: [master]
+    branches: [master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ── fmt ──────────────────────────────────────────────────────────────────────
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-  # ── clippy ───────────────────────────────────────────────────────────────────
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-
-      - name: Cache
-        uses: Swatinem/rust-cache@v2
-
+      - uses: Swatinem/rust-cache@v2
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
-  # ── test ─────────────────────────────────────────────────────────────────────
-  # 只在 fmt 與 clippy 都通過後才執行
-  test:
-    name: Tests
+  audit:
+    name: Security audit
     runs-on: ubuntu-latest
-    needs: [fmt, clippy]
     steps:
       - uses: actions/checkout@v4
-
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+      - name: Audit Rust dependencies
+        run: cargo audit
 
-      - name: Cache
-        uses: Swatinem/rust-cache@v2
+  msrv:
+    name: MSRV (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust 1.88
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Check workspace at MSRV
+        run: cargo check --workspace --all-features --locked
 
+  test:
+    name: Tests (${{ matrix.os }})
+    needs: [fmt, clippy]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - windows-latest
+          - macos-15-intel
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Run tests
-        run: cargo test --all-features
+        run: cargo test --workspace --all-features --locked
+
+  cli-smoke:
+    name: CLI smoke (${{ matrix.os }})
+    needs: [fmt, clippy]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - windows-latest
+          - macos-15-intel
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release CLI
+        run: cargo build -p oxvif-cli --release --locked
+      - name: Smoke public surfaces (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin=target/release/oxvif
+          "$bin" --version
+          "$bin" --help >/dev/null
+          "$bin" describe device.info --output json >/dev/null
+          "$bin" agent guide --output json >/dev/null
+          set +e
+          parse_error=$("$bin" --output json definitely-not-a-command)
+          parse_status=$?
+          set -e
+          test "$parse_status" -eq 2
+          grep -q 'INVALID_ARGUMENT' <<<"$parse_error"
+          for shell in bash zsh fish powershell; do
+            "$bin" completion "$shell" >/dev/null
+          done
+      - name: Smoke public surfaces (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bin = 'target/release/oxvif.exe'
+          & $bin --version
+          & $bin --help | Out-Null
+          & $bin describe device.info --output json | Out-Null
+          & $bin agent guide --output json | Out-Null
+          $parseError = & $bin --output json definitely-not-a-command
+          if ($LASTEXITCODE -ne 2) { throw 'structured parse failure returned the wrong exit code' }
+          $document = $parseError | ConvertFrom-Json
+          if ($document.error.code -ne 'INVALID_ARGUMENT') { throw 'structured parse failure returned the wrong code' }
+          foreach ($shell in @('bash', 'zsh', 'fish', 'powershell')) {
+            & $bin completion $shell | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "completion generation failed for $shell" }
+          }
+
+  credential-contract:
+    name: Native credentials (${{ matrix.os }})
+    needs: [fmt, clippy]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - windows-latest
+          - macos-15-intel
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify unavailable Secret Service mapping (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: env -u DBUS_SESSION_BUS_ADDRESS cargo test -p oxvif-cli system_store_unavailable_contract --locked -- --ignored
+      - name: Start an isolated Secret Service (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y gnome-keyring
+          gnome-keyring-daemon --components=secrets --daemonize --unlock <<< 'oxvif-ci'
+      - name: Verify native credential lifecycle
+        run: cargo test -p oxvif-cli system_store_contract --locked -- --ignored
+
+  package:
+    name: Package and docs
+    needs: [audit, msrv, test, cli-smoke, credential-contract]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify library package
+        run: cargo package -p oxvif --locked
+      - name: Verify CLI package contents
+        run: cargo package -p oxvif-cli --locked --list
+      - name: Build library documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc -p oxvif --all-features --no-deps --locked
+      - name: Build CLI documentation
+        env:
+          CARGO_TARGET_DIR: target/doc-cli
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc -p oxvif-cli --all-features --no-deps --locked

@@ -10,17 +10,18 @@ use std::{
 
 use clap::{ArgAction, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use clap_complete::{Shell, generate};
+use oxvif::transport::HttpTransport;
 use oxvif_cli::{
-    AppError, Application, CommandData, CommandRequest, CredentialProfileSetRequest,
-    DescribeRequest, DeviceAddRequest, DeviceConnectRequest, DeviceCredentialProfileRequest,
-    DeviceCredentialSetRequest, DeviceFilter, DeviceIdRequest, DeviceImportRequest,
-    DeviceRenameRequest, DeviceSetupRequest, DeviceUpdate, DeviceUpdateRequest,
-    DiscoverScanRequest, DiscoveryEnrichRequest, DiscoveryFilter, DiscoveryImportOverride,
-    DiscoveryImportOverrides, DiscoveryRefreshRequest, DiscoverySnapshotShowRequest,
-    ExecutionOptions, GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest,
-    ImportMode, MatchMode, NewDevice, NewGroup, NewSavedView, OutputFormat, ProfileConnectRequest,
-    ResourceIdRequest, ResultMeta, SecretString, TargetSelector, ViewCreateRequest, render_error,
-    render_success,
+    AppError, Application, ClockSyncPolicy, CommandData, CommandId, CommandRequest,
+    CredentialProfileSetRequest, DescribeRequest, DeviceAddRequest, DeviceConnectRequest,
+    DeviceCredentialProfileRequest, DeviceCredentialSetRequest, DeviceFilter, DeviceIdRequest,
+    DeviceImportRequest, DeviceRenameRequest, DeviceSetupRequest, DeviceUpdate,
+    DeviceUpdateRequest, DiscoverScanRequest, DiscoveryEnrichRequest, DiscoveryFilter,
+    DiscoveryImportOverride, DiscoveryImportOverrides, DiscoveryRefreshRequest,
+    DiscoverySnapshotShowRequest, ExecutionOptions, GroupCreateRequest, GroupMemberAddRequest,
+    GroupMemberRemoveRequest, ImportMode, MatchMode, NewDevice, NewGroup, NewSavedView,
+    OutputFormat, ProfileConnectRequest, ResourceIdRequest, ResultMeta, SecretString,
+    TargetSelector, ViewCreateRequest, render_error, render_success,
 };
 use tokio::time::Instant;
 
@@ -131,7 +132,7 @@ struct Cli {
     #[arg(long, global = true)]
     non_interactive: bool,
 
-    /// Bound command execution (supported units: ms, s, m).
+    /// Bound each network attempt (supported units: ms, s, m).
     #[arg(
         long,
         default_value = "10s",
@@ -139,9 +140,17 @@ struct Cli {
     )]
     timeout: Duration,
 
-    /// Number of retries allowed for retryable failures.
+    /// Number of retries for transient transport failures.
     #[arg(long, default_value_t = 0)]
     retries: u32,
+
+    /// Device-clock synchronization policy for WS-Security timestamps.
+    #[arg(long, value_enum, default_value_t = CliClockSyncPolicy::Auto)]
+    clock_sync: CliClockSyncPolicy,
+
+    /// Add a PEM CA certificate or bundle to the platform trust roots; repeatable.
+    #[arg(long = "ca-certificate", value_name = "FILE")]
+    ca_certificates: Vec<PathBuf>,
 
     /// Increase diagnostic verbosity; repeat for more detail.
     #[arg(short, long, action = ArgAction::Count, global = true)]
@@ -280,6 +289,11 @@ enum Commands {
         #[command(subcommand)]
         command: Option<DiscoverCommands>,
     },
+    /// Inspect and validate the local oxvif registry location.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
+    },
     /// Generate a shell completion script on stdout.
     Completion {
         #[arg(value_enum)]
@@ -297,6 +311,14 @@ enum AgentCommands {
     Guide,
     /// Print a compact prompt suitable for an Agent's instructions.
     Prompt,
+}
+
+#[derive(Debug, Subcommand)]
+enum ConfigCommands {
+    /// Print the resolved config, registry, and snapshot paths.
+    Path,
+    /// Parse and validate the registry and every indexed discovery snapshot.
+    Validate,
 }
 
 #[derive(Debug, Subcommand)]
@@ -595,6 +617,101 @@ enum CredentialCommands {
     UseProfile { id: String, profile: String },
 }
 
+fn surface_command_id(command: &Commands) -> CommandId {
+    match command {
+        Commands::Setup { .. } => CommandId::Setup,
+        Commands::Auth { .. } => CommandId::Auth,
+        Commands::Info { .. } => CommandId::Info,
+        Commands::Test { .. } => CommandId::Test,
+        Commands::Profiles { .. } => CommandId::Profiles,
+        Commands::Stream { .. } => CommandId::Stream,
+        Commands::Snapshot { .. } => CommandId::Snapshot,
+        Commands::Devices => CommandId::Devices,
+        Commands::Groups => CommandId::Groups,
+        Commands::Views => CommandId::Views,
+        Commands::Agent { command } => match command {
+            AgentCommands::Guide => CommandId::AgentGuide,
+            AgentCommands::Prompt => CommandId::AgentPrompt,
+        },
+        Commands::Describe { .. } => CommandId::Describe,
+        Commands::Device { command } => match command {
+            DeviceCommands::Add { .. } => CommandId::DeviceAdd,
+            DeviceCommands::List => CommandId::DeviceList,
+            DeviceCommands::Show { .. } => CommandId::DeviceShow,
+            DeviceCommands::Update { .. } => CommandId::DeviceUpdate,
+            DeviceCommands::Rename { .. } => CommandId::DeviceRename,
+            DeviceCommands::Remove { .. } => CommandId::DeviceRemove,
+            DeviceCommands::Import { .. } => CommandId::DeviceImport,
+            DeviceCommands::Credential { command } => match command {
+                CredentialCommands::Set { .. } => CommandId::DeviceCredentialSet,
+                CredentialCommands::Delete { .. } => CommandId::DeviceCredentialDelete,
+                CredentialCommands::UseProfile { .. } => CommandId::DeviceCredentialUseProfile,
+            },
+            DeviceCommands::Test { .. } => CommandId::DeviceTest,
+            DeviceCommands::Info { .. } => CommandId::DeviceInfo,
+            DeviceCommands::Capabilities { .. } => CommandId::DeviceCapabilities,
+            DeviceCommands::Services { .. } => CommandId::DeviceServices,
+            DeviceCommands::Refresh { .. } => CommandId::DeviceRefresh,
+        },
+        Commands::Media { command } => match command {
+            MediaCommands::Profiles { .. } => CommandId::MediaProfiles,
+            MediaCommands::StreamUri { .. } => CommandId::MediaStreamUri,
+            MediaCommands::SnapshotUri { .. } => CommandId::MediaSnapshotUri,
+        },
+        Commands::Ptz { command } => match command {
+            PtzCommands::Status { .. } => CommandId::PtzStatus,
+            PtzCommands::Presets { .. } => CommandId::PtzPresets,
+        },
+        Commands::Health { command: None } => CommandId::Health,
+        Commands::Health {
+            command: Some(HealthCommands::Check { .. }),
+        } => CommandId::HealthCheck,
+        Commands::Group { command } => match command {
+            GroupCommands::Create { .. } => CommandId::GroupCreate,
+            GroupCommands::List => CommandId::GroupList,
+            GroupCommands::Show { .. } => CommandId::GroupShow,
+            GroupCommands::Delete { .. } => CommandId::GroupDelete,
+            GroupCommands::Member { command } => match command {
+                GroupMemberCommands::Add { .. } => CommandId::GroupMemberAdd,
+                GroupMemberCommands::Remove { .. } => CommandId::GroupMemberRemove,
+            },
+        },
+        Commands::View { command } => match command {
+            ViewCommands::Create { .. } => CommandId::ViewCreate,
+            ViewCommands::List => CommandId::ViewList,
+            ViewCommands::Show { .. } => CommandId::ViewShow,
+            ViewCommands::Evaluate { .. } => CommandId::ViewEvaluate,
+            ViewCommands::Delete { .. } => CommandId::ViewDelete,
+        },
+        Commands::Credential {
+            command: CredentialRootCommands::Profile { command },
+        } => match command {
+            CredentialProfileCommands::Set { .. } => CommandId::CredentialProfileSet,
+            CredentialProfileCommands::List => CommandId::CredentialProfileList,
+            CredentialProfileCommands::Show { .. } => CommandId::CredentialProfileShow,
+            CredentialProfileCommands::Delete { .. } => CommandId::CredentialProfileDelete,
+        },
+        Commands::Discover { command: None } => CommandId::DiscoverScan,
+        Commands::Discover {
+            command: Some(command),
+        } => match command {
+            DiscoverCommands::Scan { .. } => CommandId::DiscoverScan,
+            DiscoverCommands::Refresh { .. } => CommandId::DiscoverRefresh,
+            DiscoverCommands::Enrich { .. } => CommandId::DiscoverEnrich,
+            DiscoverCommands::List { .. } => CommandId::DiscoverList,
+            DiscoverCommands::Snapshots => CommandId::DiscoverSnapshots,
+            DiscoverCommands::Remove { .. } => CommandId::DiscoverRemove,
+        },
+        Commands::Config { command } => match command {
+            ConfigCommands::Path => CommandId::ConfigPath,
+            ConfigCommands::Validate => CommandId::ConfigValidate,
+        },
+        Commands::Completion { .. } => CommandId::Completion,
+        Commands::Use { .. } => CommandId::Use,
+        Commands::Current => CommandId::Current,
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
 enum CliOutputFormat {
     #[default]
@@ -602,6 +719,24 @@ enum CliOutputFormat {
     Json,
     #[value(name = "jsonl")]
     JsonLines,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+enum CliClockSyncPolicy {
+    #[default]
+    Auto,
+    Always,
+    Never,
+}
+
+impl From<CliClockSyncPolicy> for ClockSyncPolicy {
+    fn from(value: CliClockSyncPolicy) -> Self {
+        match value {
+            CliClockSyncPolicy::Auto => Self::Auto,
+            CliClockSyncPolicy::Always => Self::Always,
+            CliClockSyncPolicy::Never => Self::Never,
+        }
+    }
 }
 
 impl From<CliOutputFormat> for OutputFormat {
@@ -641,12 +776,20 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         }
     };
 
+    let format = selected_output(cli.output, cli.json, cli.jsonl);
+    let _invoked_command_id = surface_command_id(&cli.command);
     if let Commands::Completion { shell } = &cli.command {
+        if format.is_structured() {
+            let error = AppError::invalid_argument(
+                "completion writes a raw shell script and cannot be combined with --output, --json, or --jsonl.",
+            );
+            emit_error(format, &error, Some("completion"));
+            return error.exit_code();
+        }
         generate_completion(*shell);
         return 0;
     }
 
-    let format = selected_output(cli.output, cli.json, cli.jsonl);
     let set_selected = cli.group.is_some() || cli.view.is_some();
     if cli.jobs.is_some() && !set_selected {
         let error = AppError::invalid_argument("--jobs requires --group or --view.");
@@ -659,10 +802,19 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         emit_error(format, &error, None);
         return error.exit_code();
     }
+    let ca_certificates = match load_ca_certificates(&cli.ca_certificates) {
+        Ok(certificates) => certificates,
+        Err(error) => {
+            emit_error(format, &error, None);
+            return error.exit_code();
+        }
+    };
     let options = ExecutionOptions {
         non_interactive: cli.non_interactive,
         timeout: cli.timeout,
         retries: cli.retries,
+        clock_sync: cli.clock_sync.into(),
+        ca_certificates,
         verbosity: cli.verbose,
         quiet: cli.quiet,
         jobs,
@@ -701,10 +853,12 @@ async fn run(arguments: Vec<OsString>) -> u8 {
     };
     let command_name = request.name();
     let started = Instant::now();
+    emit_verbose_start(&options, format, command_name);
 
     let request = match choose_profile_if_needed(request, &application, &options, &prompt).await {
         Ok(request) => request,
         Err(error) => {
+            emit_verbose_error(&options, command_name, &error, started);
             emit_error(format, &error, Some(command_name));
             return error.exit_code();
         }
@@ -726,9 +880,11 @@ async fn run(arguments: Vec<OsString>) -> u8 {
                 } else {
                     println!("{rendered}");
                 }
+                emit_verbose_success(&options, command_name, &success, started);
                 success.exit_code()
             }
             Err(error) => {
+                emit_verbose_error(&options, command_name, &error, started);
                 emit_error(format, &error, Some(command_name));
                 error.exit_code()
             }
@@ -739,9 +895,78 @@ async fn run(arguments: Vec<OsString>) -> u8 {
                 elapsed_ms: elapsed_millis(started),
                 ..ResultMeta::default()
             };
+            emit_verbose_error(&options, command_name, &error, started);
             emit_error_with_meta(format, &error, &meta);
             error.exit_code()
         }
+    }
+}
+
+fn emit_verbose_start(options: &ExecutionOptions, format: OutputFormat, command: &str) {
+    if options.verbosity == 0 {
+        return;
+    }
+    eprintln!(
+        "debug: command={command} output={} timeout_ms={} retries={}",
+        output_name(format),
+        options.timeout.as_millis(),
+        options.retries
+    );
+    if options.verbosity > 1 {
+        eprintln!(
+            "debug: retry_policy=transient_transport max_attempts={} timeout_scope=per_attempt clock_sync={} custom_ca_bundles={}",
+            options.retries.saturating_add(1),
+            clock_sync_name(options.clock_sync),
+            options.ca_certificates.len()
+        );
+    }
+}
+
+fn emit_verbose_success(
+    options: &ExecutionOptions,
+    command: &str,
+    success: &oxvif_cli::CommandSuccess,
+    started: Instant,
+) {
+    if options.verbosity > 0 {
+        eprintln!(
+            "debug: command={command} status=ok exit_code={} elapsed_ms={} warnings={}",
+            success.exit_code(),
+            elapsed_millis(started),
+            success.warnings.len()
+        );
+    }
+}
+
+fn emit_verbose_error(
+    options: &ExecutionOptions,
+    command: &str,
+    error: &AppError,
+    started: Instant,
+) {
+    if options.verbosity > 0 {
+        eprintln!(
+            "debug: command={command} status=error code={} retryable={} elapsed_ms={}",
+            error.code.as_str(),
+            error.retryable,
+            elapsed_millis(started)
+        );
+    }
+}
+
+fn output_name(format: OutputFormat) -> &'static str {
+    match format {
+        OutputFormat::Table => "table",
+        OutputFormat::Json => "json",
+        OutputFormat::JsonLines => "jsonl",
+    }
+}
+
+fn clock_sync_name(policy: ClockSyncPolicy) -> &'static str {
+    match policy {
+        ClockSyncPolicy::Auto => "auto",
+        ClockSyncPolicy::Always => "always",
+        ClockSyncPolicy::Never => "never",
     }
 }
 
@@ -847,6 +1072,10 @@ fn build_request(
             AgentCommands::Prompt => CommandRequest::AgentPrompt,
         }),
         Commands::Describe { command } => Ok(CommandRequest::Describe(DescribeRequest { command })),
+        Commands::Config { command } => Ok(match command {
+            ConfigCommands::Path => CommandRequest::ConfigPath,
+            ConfigCommands::Validate => CommandRequest::ConfigValidate,
+        }),
         Commands::Use { id } => Ok(CommandRequest::Use(DeviceIdRequest { id })),
         Commands::Current => Ok(CommandRequest::Current),
         Commands::Group { command } => match command {
@@ -1403,7 +1632,15 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
         }
         if matches!(
             argument.as_ref(),
-            "--output" | "--device" | "--group" | "--view" | "--jobs" | "--timeout" | "--retries"
+            "--output"
+                | "--device"
+                | "--group"
+                | "--view"
+                | "--jobs"
+                | "--timeout"
+                | "--retries"
+                | "--clock-sync"
+                | "--ca-certificate"
         ) {
             index += 2;
             continue;
@@ -1433,7 +1670,14 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
                 let argument = arguments[scan].to_string_lossy();
                 let takes_value = matches!(
                     argument.as_ref(),
-                    "--device" | "--group" | "--view" | "--jobs" | "--timeout" | "--retries"
+                    "--device"
+                        | "--group"
+                        | "--view"
+                        | "--jobs"
+                        | "--timeout"
+                        | "--retries"
+                        | "--clock-sync"
+                        | "--ca-certificate"
                 );
                 let inline_value = [
                     "--device=",
@@ -1442,6 +1686,8 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
                     "--jobs=",
                     "--timeout=",
                     "--retries=",
+                    "--clock-sync=",
+                    "--ca-certificate=",
                 ]
                 .iter()
                 .any(|prefix| argument.starts_with(prefix));
@@ -1649,6 +1895,28 @@ fn parse_duration(value: &str) -> Result<Duration, String> {
     }
 }
 
+fn load_ca_certificates(paths: &[PathBuf]) -> Result<Vec<Vec<u8>>, AppError> {
+    let mut bundles = Vec::with_capacity(paths.len());
+    for (index, path) in paths.iter().enumerate() {
+        let bundle = fs::read(path).map_err(|error| {
+            AppError::invalid_argument(format!(
+                "CA certificate file #{} could not be read: {}.",
+                index + 1,
+                error.kind()
+            ))
+        })?;
+        bundles.push(bundle);
+    }
+    if !bundles.is_empty() {
+        HttpTransport::new()
+            .with_root_certificates_pem(&bundles)
+            .map_err(|error| {
+                AppError::invalid_argument(format!("Invalid --ca-certificate input: {error}"))
+            })?;
+    }
+    Ok(bundles)
+}
+
 fn elapsed_millis(started: Instant) -> u64 {
     u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
@@ -1684,6 +1952,27 @@ mod tests {
             cli.non_interactive,
             &FixedPrompt,
         )
+    }
+
+    #[test]
+    fn every_catalogue_example_parses_to_its_declared_command_id() {
+        for descriptor in oxvif_cli::command_descriptors() {
+            let example = descriptor.examples.first().expect("catalogue example");
+            let arguments = shlex::split(example).expect("example should have valid shell quoting");
+            let arguments =
+                normalize_human_arguments(arguments.into_iter().map(OsString::from).collect());
+            let cli = Cli::try_parse_from(arguments).unwrap_or_else(|error| {
+                panic!("example for {} did not parse: {error}", descriptor.name)
+            });
+            assert_eq!(
+                surface_command_id(&cli.command).canonical(),
+                CommandId::from_name(&descriptor.name)
+                    .expect("catalogue identity")
+                    .canonical(),
+                "example mapped to a different command for {}",
+                descriptor.name
+            );
+        }
     }
 
     #[test]

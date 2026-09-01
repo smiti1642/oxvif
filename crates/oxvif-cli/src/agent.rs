@@ -1,6 +1,6 @@
 use crate::{AgentGuide, SCHEMA_VERSION};
 
-pub const GUIDE_VERSION: &str = "3";
+pub const GUIDE_VERSION: &str = "5";
 
 pub fn guide() -> AgentGuide {
     AgentGuide {
@@ -18,6 +18,8 @@ pub fn guide() -> AgentGuide {
             "For device import, apply only the fingerprint returned by a freshly reviewed plan.",
             "For fleet work, use exactly one explicit --group or --view selector and keep --jobs at 64 or below.",
             "Treat fleet exit 6 as partial success: inspect every item and the final JSONL summary before retrying failures.",
+            "Use --clock-sync auto unless the operator explicitly requires always or never; clock sync reads device time and never changes it.",
+            "For HTTPS devices using a private trust anchor, pass operator-approved --ca-certificate PEM files; never disable certificate or hostname verification.",
         ],
         recommended_workflow: vec![
             "Run `oxvif agent guide --output json` and verify its schema version.",

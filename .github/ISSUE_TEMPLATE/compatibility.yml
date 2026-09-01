@@ -1,0 +1,51 @@
+name: Camera compatibility report
+description: Submit a sanitized successful or failed real-device observation
+title: "compat: "
+labels: [compatibility]
+body:
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: Linux x86_64
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: oxvif version or source revision
+    validations:
+      required: true
+  - type: input
+    id: camera
+    attributes:
+      label: Vendor, model, and firmware
+      description: Do not include serial number, UUID, IP, hostname, or site/customer name.
+    validations:
+      required: true
+  - type: input
+    id: profiles
+    attributes:
+      label: Declared ONVIF profiles
+      placeholder: S, T, G, M or unknown
+  - type: input
+    id: transport
+    attributes:
+      label: Transport and authentication path
+      placeholder: HTTP + WS-Security/HTTP Digest via Windows Credential Manager
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Sanitized commands and outcomes
+      description: Include exit code, ok, warnings, and structured error code where available.
+    validations:
+      required: true
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Redaction confirmation
+      options:
+        - label: This report contains no credentials, authorization material, URI userinfo, private endpoints, serials, UUIDs, or customer/site identifiers.
+          required: true
