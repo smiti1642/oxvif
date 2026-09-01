@@ -131,8 +131,9 @@ evidence:
   diagnostics, health, refresh, fleet items, and discovery enrichment, proving
   those execution paths use the shared transport factory;
 - target-specific `keyring 3.6.3` adapters implement Credential Manager,
-  Keychain, and synchronous Secret Service behind one contract; the Windows
-  lifecycle passes locally, native three-OS CI is defined but not yet run, and
+  Keychain, and synchronous Secret Service behind one contract; native
+  lifecycle tests pass on Windows x64, macOS Intel/Apple Silicon, and Ubuntu
+  x86_64/aarch64 CI, both Linux rows pass the missing-D-Bus negative path, and
   CLI-owned password buffers zeroize on drop;
 - `cargo audit` scans the tracked 399-package release lock graph with no
   vulnerability or yanked-package result;
@@ -144,9 +145,10 @@ evidence:
 - Windows local binary smoke passes version, descriptor, Agent guide v5, and
   Bash/Zsh/Fish/PowerShell completion generation; structured parse failure
   remains a schema-v3 `INVALID_ARGUMENT` envelope;
-- GitHub workflow and issue-template YAML parses locally. `actionlint` was not
-  available on this host, and the new Linux/macOS/Windows jobs have not yet run
-  on GitHub, so remote CI remains required evidence rather than assumed fact.
+- GitHub workflow and issue-template YAML parses locally. CI run
+  [`33496836237`](https://github.com/smiti1642/oxvif/actions/runs/33496836237)
+  passes the five architecture rows, native credential contracts, release
+  binary smoke, package-content checks, rustdoc, MSRV, Clippy, and audit gates.
 
 The CLI package cannot complete Cargo's independent package verification until
 `oxvif 0.16.0` is published. That and public artifact/install verification stay

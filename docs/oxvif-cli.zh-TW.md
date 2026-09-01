@@ -90,7 +90,9 @@ oxvif --device front-door device info --output json
 以及目前 D-Bus session 中的 Linux Secret Service。後端不存在、鎖定或拒絕存取時會回傳
 `CREDENTIAL_UNAVAILABLE`，不會降級為明文 credential 檔案。headless Linux 或 container
 可由可信任環境注入 `OXVIF_USERNAME`、`OXVIF_PASSWORD` 做不持久化的暫時性操作。
-Windows 後端合約已在本機通過；第一次公開發布仍以 macOS 與 Linux 原生 CI 合約通過為必要條件。
+原生憑證生命週期合約已在 Windows x64、macOS Intel／Apple Silicon，以及 Ubuntu
+x86_64／aarch64 CI 通過；Linux CI 也另外驗證缺少 D-Bus session 時會以
+`CREDENTIAL_UNAVAILABLE` 安全失敗。
 CLI 自己建立或從 credential store 讀出的密碼 buffer 會在 drop 時清零；但環境區塊、作業系統 API、
 allocator、crash dump 與底層 protocol library 仍可能保留副本，因此這不是「所有記憶體副本立即消失」
 的保證。應把執行中的 process 與 diagnostic dump 視為敏感資料，並使用短生命週期、最小權限帳號。

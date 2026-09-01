@@ -1,10 +1,14 @@
 name: Prepare release artifacts
 
 on:
+  push:
+    branches: [develop]
+    paths:
+      - packaging/**
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing signed or annotated release tag (for example v0.16.0)
+        description: Existing release tag when publishing; filename-safe branch/SHA allowed only for publish=false staging
         required: true
         type: string
       publish:
@@ -22,61 +26,77 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
+  RELEASE_LABEL: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   verify:
     name: Verify release contract
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
       - name: Install pinned release toolchain
-        uses: dtolnay/rust-toolchain@1.88.0
-      - uses: Swatinem/rust-cache@v2
+        uses: dtolnay/rust-toolchain@2eae45db285e407f22119950686d47e1101e071b # 1.88.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Verify tag and declared versions
         shell: bash
         env:
-          RELEASE_TAG: ${{ inputs.tag }}
+          PUBLISH: ${{ inputs.publish }}
+          RELEASE_TAG: ${{ env.RELEASE_LABEL }}
         run: |
           set -euo pipefail
-          git rev-parse --verify "refs/tags/$RELEASE_TAG"
+          if [[ ! "$RELEASE_TAG" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Release ref must be filename-safe (letters, digits, dot, underscore, or hyphen)." >&2
+            exit 1
+          fi
+          git rev-parse --verify HEAD
           library_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(p["version"] for p in d["packages"] if p["name"] == "oxvif"))')
           cli_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(p["version"] for p in d["packages"] if p["name"] == "oxvif-cli"))')
-          test "$RELEASE_TAG" = "v$library_version"
           grep -Fq "## [$library_version]" CHANGELOG.md
           grep -Fq "# oxvif $library_version" "docs/releases/$library_version.md"
           grep -Fq "version = \"$cli_version\"" crates/oxvif-cli/Cargo.toml
-          if grep -Fq "## [$library_version] - Unreleased" CHANGELOG.md; then
-            echo "CHANGELOG still marks $library_version as unreleased" >&2
-            exit 1
-          fi
-          if grep -Fq "Status: Unreleased" "docs/releases/$library_version.md"; then
-            echo "release note still marks $library_version as unreleased" >&2
-            exit 1
+          if [ "$PUBLISH" = "true" ]; then
+            git rev-parse --verify "refs/tags/$RELEASE_TAG"
+            test "$RELEASE_TAG" = "v$library_version"
+            if grep -Fq "## [$library_version] - Unreleased" CHANGELOG.md; then
+              echo "CHANGELOG still marks $library_version as unreleased" >&2
+              exit 1
+            fi
+            if grep -Fq "Status: Unreleased" "docs/releases/$library_version.md"; then
+              echo "release note still marks $library_version as unreleased" >&2
+              exit 1
+            fi
           fi
           cargo run -q -p oxvif-cli -- agent guide --output json --non-interactive |
             python3 -c 'import json,sys; d=json.load(sys.stdin); g=d["data"]["guide"]; assert g["cli_version"] == sys.argv[1]; assert g["schema_version"] == d["schema_version"]; assert g["guide_version"]' "$cli_version"
       - name: Run release gates
+        env:
+          PUBLISH: ${{ inputs.publish }}
         run: |
           cargo fmt --all -- --check
           cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
           cargo test --workspace --all-features --locked
           cargo package -p oxvif --locked
-          cargo package -p oxvif-cli --locked
+          if [ "$PUBLISH" = "true" ]; then
+            cargo package -p oxvif-cli --locked
+          else
+            cargo package -p oxvif-cli --locked --list
+          fi
       - name: Install cargo-audit
-        uses: taiki-e/install-action@cargo-audit
+        uses: taiki-e/install-action@55ed588c2f0e092949af25ad4c5873185e476b5c # cargo-audit
       - name: Security audit
         run: cargo audit
       - name: Upload versioned JSON schemas
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: oxvif-json-schema-v3
           path: crates/oxvif-cli/schema/*.json
@@ -97,12 +117,12 @@ jobs:
           - macos-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ env.RELEASE_REF }}
       - name: Install pinned release toolchain
-        uses: dtolnay/rust-toolchain@1.88.0
-      - uses: Swatinem/rust-cache@v2
+        uses: dtolnay/rust-toolchain@2eae45db285e407f22119950686d47e1101e071b # 1.88.0
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Verify unavailable Secret Service mapping (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -156,14 +176,14 @@ jobs:
             shell: bash
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ env.RELEASE_REF }}
       - name: Install pinned release toolchain
-        uses: dtolnay/rust-toolchain@1.88.0
+        uses: dtolnay/rust-toolchain@2eae45db285e407f22119950686d47e1101e071b # 1.88.0
         with:
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: ${{ matrix.target }}
       - name: Build release binary
@@ -196,7 +216,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         env:
-          ARCHIVE_NAME: ${{ matrix.archive }}-${{ inputs.tag }}
+          ARCHIVE_NAME: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
@@ -208,16 +228,26 @@ jobs:
           cp crates/oxvif-cli/schema/*.json "dist/$ARCHIVE_NAME/schema/"
           "target/$TARGET/release/oxvif" --version > "dist/$ARCHIVE_NAME/metadata/version.txt"
           "target/$TARGET/release/oxvif" agent guide --output json --non-interactive > "dist/$ARCHIVE_NAME/metadata/agent-guide.json"
+          {
+            rustc -Vv
+            cargo -V
+            python3 --version
+          } > "dist/$ARCHIVE_NAME/metadata/build-tools.txt" 2>&1
           for shell in bash zsh fish powershell; do
             "target/$TARGET/release/oxvif" completion "$shell" > "dist/$ARCHIVE_NAME/completions/oxvif.$shell"
           done
-          tar -C dist -czf "dist/$ARCHIVE_NAME.tar.gz" "$ARCHIVE_NAME"
+          source_date_epoch=$(git show -s --format=%ct HEAD)
+          python3 packaging/create_archive.py \
+            --format tar.gz \
+            --source "dist/$ARCHIVE_NAME" \
+            --output "dist/$ARCHIVE_NAME.tar.gz" \
+            --epoch "$source_date_epoch"
           (cd dist && shasum -a 256 "$ARCHIVE_NAME.tar.gz" > "$ARCHIVE_NAME.tar.gz.sha256")
       - name: Package archive and checksum (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          ARCHIVE_NAME: ${{ matrix.archive }}-${{ inputs.tag }}
+          ARCHIVE_NAME: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}
           TARGET: ${{ matrix.target }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -233,10 +263,18 @@ jobs:
           $bin = "target/$env:TARGET/release/oxvif.exe"
           & $bin --version | Out-File -Encoding utf8 "$root/metadata/version.txt"
           & $bin agent guide --output json --non-interactive | Out-File -Encoding utf8 "$root/metadata/agent-guide.json"
+          & rustc -Vv | Out-File -Encoding utf8 "$root/metadata/build-tools.txt"
+          & cargo -V | Out-File -Encoding utf8 -Append "$root/metadata/build-tools.txt"
+          & python --version 2>&1 | Out-File -Encoding utf8 -Append "$root/metadata/build-tools.txt"
           foreach ($shell in @('bash', 'zsh', 'fish', 'powershell')) {
             & $bin completion $shell | Out-File -Encoding utf8 "$root/completions/oxvif.$shell"
           }
-          Compress-Archive -Path "$root/*" -DestinationPath "dist/$env:ARCHIVE_NAME.zip"
+          $sourceDateEpoch = git show -s --format=%ct HEAD
+          python packaging/create_archive.py `
+            --format zip `
+            --source $root `
+            --output "dist/$env:ARCHIVE_NAME.zip" `
+            --epoch $sourceDateEpoch
           $hash = (Get-FileHash "dist/$env:ARCHIVE_NAME.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $env:ARCHIVE_NAME.zip" | Out-File -Encoding ascii "dist/$env:ARCHIVE_NAME.zip.sha256"
       - name: Build, lint, install, and remove Debian package
@@ -247,6 +285,7 @@ jobs:
           DEB_ARCH: ${{ matrix.deb_arch }}
         run: |
           set -euo pipefail
+          export SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)
           cli_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(p["version"] for p in d["packages"] if p["name"] == "oxvif-cli"))')
           package_root="dist/deb-root-$DEB_ARCH"
           install -Dm755 "target/$TARGET/release/oxvif" "$package_root/usr/bin/oxvif"
@@ -276,41 +315,48 @@ jobs:
           dpkg-deb --root-owner-group --build "$package_root" "$deb"
           sudo apt-get update
           sudo apt-get install -y lintian
+          {
+            dpkg-deb --version | head -n 1
+            lintian --version
+          } > "dist/oxvif_${cli_version}-1_${DEB_ARCH}.build-tools.txt"
           lintian --fail-on error "$deb"
           sudo apt-get install -y "./$deb"
           /usr/bin/oxvif --version
           /usr/bin/oxvif describe device.info --output json --non-interactive >/dev/null
           /usr/bin/oxvif agent guide --output json --non-interactive >/dev/null
           test -r /usr/share/man/man1/oxvif.1.gz
-          test -r /usr/share/oxvif/schema/envelope.schema.json
+          test -r /usr/share/oxvif/schema/oxvif-envelope.schema.json
+          test -r /usr/share/oxvif/schema/command-descriptor.schema.json
           sudo apt-get remove -y oxvif
           test ! -e /usr/bin/oxvif
           (cd dist && sha256sum "$(basename "$deb")" > "$(basename "$deb").sha256")
       - name: Generate SPDX SBOM
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: target/${{ matrix.target }}/release
-          artifact-name: ${{ matrix.archive }}-${{ inputs.tag }}-sbom.spdx.json
-          output-file: dist/${{ matrix.archive }}-${{ inputs.tag }}.spdx.json
+          artifact-name: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}-sbom.spdx.json
+          output-file: dist/${{ matrix.archive }}-${{ env.RELEASE_LABEL }}.spdx.json
           upload-artifact: false
           upload-release-assets: false
       - name: Generate build provenance
-        uses: actions/attest@v4
+        if: inputs.publish
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-path: |
             dist/*.tar.gz
             dist/*.zip
             dist/*.deb
       - name: Upload prepared artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ${{ matrix.archive }}-${{ inputs.tag }}
+          name: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}
           path: |
             dist/*.tar.gz
             dist/*.zip
             dist/*.deb
             dist/*.sha256
             dist/*.spdx.json
+            dist/*.build-tools.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -319,17 +365,17 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
-      - uses: actions/download-artifact@v4
+          ref: ${{ env.RELEASE_REF }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           merge-multiple: true
       - name: Render and syntax-check formula
         shell: bash
         env:
-          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ env.RELEASE_LABEL }}
         run: |
           set -euo pipefail
           cli_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(p["version"] for p in d["packages"] if p["name"] == "oxvif-cli"))')
@@ -349,9 +395,9 @@ jobs:
           ruby -c formula/oxvif.rb
           ! grep -q '@[A-Z_]*@' formula/oxvif.rb
       - name: Upload formula staging artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: oxvif-homebrew-formula-${{ inputs.tag }}
+          name: oxvif-homebrew-formula-${{ env.RELEASE_LABEL }}
           path: formula/oxvif.rb
           if-no-files-found: error
           retention-days: 14
@@ -364,10 +410,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
-      - uses: actions/download-artifact@v4
+          ref: ${{ env.RELEASE_REF }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           merge-multiple: true
@@ -375,7 +421,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ env.RELEASE_LABEL }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
           set -euo pipefail

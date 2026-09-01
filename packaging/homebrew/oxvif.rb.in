@@ -3,6 +3,7 @@ class Oxvif < Formula
   homepage "https://github.com/smiti1642/oxvif"
   version "@CLI_VERSION@"
   license "MIT"
+  depends_on :macos
 
   on_macos do
     if Hardware::CPU.arm?
@@ -28,5 +29,10 @@ class Oxvif < Formula
     assert_match version.to_s, shell_output("#{bin}/oxvif --version")
     assert_match '"ok": true', shell_output("#{bin}/oxvif describe device.info --output json --non-interactive")
     assert_match '"guide_version":', shell_output("#{bin}/oxvif agent guide --output json --non-interactive")
+    assert_predicate bash_completion/"oxvif", :exist?
+    assert_predicate zsh_completion/"_oxvif", :exist?
+    assert_predicate fish_completion/"oxvif.fish", :exist?
+    assert_predicate share/"oxvif/schema/oxvif-envelope.schema.json", :exist?
+    assert_predicate share/"oxvif/schema/command-descriptor.schema.json", :exist?
   end
 end

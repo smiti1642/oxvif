@@ -154,9 +154,10 @@ interactive `setup` and `auth` use a no-echo password prompt and automation can
 use `--password-stdin`. A headless Linux session without an available, unlocked
 Secret Service returns `CREDENTIAL_UNAVAILABLE` instead of creating a plaintext
 fallback. Trusted one-shot automation may inject `OXVIF_USERNAME` and
-`OXVIF_PASSWORD` without persisting them. The Windows backend contract has been
-verified locally; macOS and Linux remain release-blocking until their native CI
-contracts pass. HTTPS devices using private trust anchors can use repeatable
+`OXVIF_PASSWORD` without persisting them. The native credential lifecycle
+contract passes on Windows x64, macOS Intel/Apple Silicon, and Ubuntu
+x86_64/aarch64 CI; Linux CI also proves that a missing D-Bus session fails
+closed with `CREDENTIAL_UNAVAILABLE`. HTTPS devices using private trust anchors can use repeatable
 `--ca-certificate <FILE>` PEM bundles while retaining certificate-chain and
 hostname verification. The standalone
 [`oxvif CLI documentation`](docs/oxvif-cli.md) covers installation, command

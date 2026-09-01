@@ -252,9 +252,9 @@ Native credential persistence uses Windows Credential Manager, macOS Keychain,
 or Linux Secret Service over D-Bus. A missing, locked, or denied native backend
 returns `CREDENTIAL_UNAVAILABLE`; oxvif never creates a plaintext credential
 fallback. Headless/container automation can use trusted environment injection
-for ephemeral operations without persisting the secret. The Windows backend
-contract is locally verified; macOS and Linux support remain release-blocking
-until their native CI contracts pass.
+for ephemeral operations without persisting the secret. The native lifecycle
+contract passes on Windows x64, macOS Intel/Apple Silicon, and Ubuntu
+x86_64/aarch64 CI; Linux CI separately proves the unavailable D-Bus mapping.
 
 ## Read-only device operations
 

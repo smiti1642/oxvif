@@ -125,7 +125,7 @@ and the embedded Agent guide test locks its schema version.
 ### B2. Windows Credential Manager
 
 - [x] Preserve the current Windows-native implementation.
-- [ ] Run isolated set/get/replace/delete/no-entry tests on Windows CI.
+- [x] Run isolated set/get/replace/delete/no-entry tests on Windows CI.
 - [x] Prove test cleanup removes generated credential entries.
 - [x] Prove errors contain no account names or secret data.
 
@@ -133,17 +133,17 @@ and the embedded Agent guide test locks its schema version.
 
 - [x] Select and audit a backend compatible with Rust 1.88.
 - [x] Implement the same contract/error mapping as Windows.
-- [ ] Run isolated contract tests on Intel and Apple Silicon where runners
+- [x] Run isolated contract tests on Intel and Apple Silicon where runners
   permit; never silently skip the only backend test.
 - [x] Document session prompts and non-interactive failure behavior.
 
 ### B4. Linux Secret Service
 
 - [x] Select and audit a backend compatible with Rust 1.88.
-- [ ] Test inside an isolated D-Bus session with an ephemeral collection.
-- [ ] Test unavailable D-Bus, locked collection, denial, missing entry,
-  replacement, deletion, and cleanup.
-- [ ] Fail with `CREDENTIAL_UNAVAILABLE` in headless environments; never create
+- [x] Test inside an isolated D-Bus session with an ephemeral collection.
+- [x] Test unavailable D-Bus, missing entry, replacement, deletion, and cleanup.
+- [ ] Add integration coverage for a locked collection and explicit access denial.
+- [x] Fail with `CREDENTIAL_UNAVAILABLE` in headless environments; never create
   a plaintext substitute.
 - [x] Document environment/stdin workflows for containers and automation.
 
@@ -171,12 +171,16 @@ files, and packages.
 
 ### C1. Common contents
 
-- [ ] Pin Rust and packaging-tool versions.
+- [x] Pin the release Rust toolchain and every GitHub Action to immutable
+  revisions, with Dependabot tracking action updates.
+- [ ] Pin or digest-lock OS packaging tools where practical; record any tool
+  that must remain distribution-managed in artifact metadata.
 - [x] Build the verified tag with `Cargo.lock` and `--locked`.
 - [x] Include executable, license, README, schemas, completions, and man page in
   platform-appropriate locations.
 - [x] Generate SHA-256 checksums, SPDX SBOM, metadata, and provenance.
-- [ ] Make artifacts deterministic where tooling permits.
+- [x] Make archives and Debian payload timestamps deterministic from the tag
+  commit where tooling permits.
 - [x] Smoke-test artifact binaries and installed binaries.
 
 Implementation record (2026-09-01): the release workflow is defined for all
@@ -308,6 +312,14 @@ artifacts—not an invented external review date.
 Each completed workstream records commit/PR, tool versions, commands/results by
 OS and architecture, hashes/signing identity, credential negative-path evidence,
 limitations, rollback results, and only verified external URLs.
+
+On 2026-09-01, CI run
+[`33496836237`](https://github.com/smiti1642/oxvif/actions/runs/33496836237)
+passed the Windows x64, Ubuntu x86_64/aarch64, and macOS Intel/Apple Silicon
+test and release-binary smoke matrices. The same run passed Credential Manager,
+Keychain, and isolated Secret Service lifecycle contracts; both Linux rows also
+passed the no-D-Bus `CREDENTIAL_UNAVAILABLE` negative path. This is CI evidence,
+not evidence of a published package channel or release artifact.
 
 This plan moves to `docs/done/` only after the first three-platform release is
 fully published, verified, documented, and handed to downstream validation.
