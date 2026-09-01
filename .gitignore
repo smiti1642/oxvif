@@ -27,6 +27,8 @@ legacy/
 # not a fixture derived from them. The schema-shape check reads them at run time
 # from $OXVIF_ONVIF_SCHEMA. See docs/active/schema-shape-plan-2026-08.md §4 D2.
 schema/
+!crates/oxvif-cli/schema/
+!crates/oxvif-cli/schema/*.schema.json
 *.xsd
 *.wsdl
 

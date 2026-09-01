@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/smiti1642/oxvif/releases/schema/v3/oxvif-envelope.schema.json",
+  "title": "oxvif structured stdout envelope",
+  "description": "Schema version 3 base contract. Command-specific data is discriminated by data.kind and may add fields.",
+  "oneOf": [
+    { "$ref": "#/$defs/success" },
+    { "$ref": "#/$defs/error" }
+  ],
+  "$defs": {
+    "success": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "ok", "data", "warnings", "meta"],
+      "properties": {
+        "schema_version": { "const": "3" },
+        "ok": { "type": "boolean" },
+        "data": { "$ref": "#/$defs/commandData" },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/warning" }
+        },
+        "meta": { "$ref": "#/$defs/meta" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "ok", "error", "meta"],
+      "properties": {
+        "schema_version": { "const": "3" },
+        "ok": { "const": false },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message", "retryable"],
+          "properties": {
+            "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+            "message": { "type": "string", "minLength": 1 },
+            "retryable": { "type": "boolean" },
+            "suggested_action": { "type": "string", "minLength": 1 }
+          }
+        },
+        "meta": { "$ref": "#/$defs/meta" }
+      }
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["elapsed_ms"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "device_id": { "type": "string", "minLength": 1 },
+        "selected_by": { "type": "string", "minLength": 1 },
+        "target": { "type": "string", "minLength": 1 },
+        "elapsed_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "commandData": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+      }
+    }
+  }
+}
