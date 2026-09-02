@@ -1,5 +1,7 @@
 # oxvif library and feature guide
 
+**English** | [繁體中文](LIBRARY_GUIDE_zh.md)
+
 This is the detailed guide to the oxvif Rust library, its ONVIF service
 surface, health checks, mock device, and Metamorph tooling. For installation
 and the shortest path to a working client, start with the

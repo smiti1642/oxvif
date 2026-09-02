@@ -678,9 +678,12 @@ duplicate of the first.
    into an API manual:
    - `README.md` is the concise product page: positioning, installation,
      first-success examples, feature overview, support status, and links.
-   - Keep `README_zh.md` semantically synchronized with `README.md`. Every
-     English/Traditional Chinese pair uses the English filename plus `_zh`
-     before `.md`, and both files carry reciprocal language-switch links.
+   - Keep every public Traditional Chinese guide semantically synchronized with
+     its English source: `README`, `LIBRARY_GUIDE`, `OPERATIONS`, the CLI guide,
+     Mock reference, and support policy. Each pair uses the English filename
+     plus `_zh` before `.md` and carries reciprocal language-switch links.
+     Preserve commands, public API/schema identifiers, and error codes in
+     English; translate explanatory prose in formal technical-document style.
    - `LIBRARY_GUIDE.md` owns the architecture diagram, detailed
      `## <Service> methods` sections, method tables, examples, and test counts.
    - Keep the table-based quick-navigation block at the front of every long
@@ -771,7 +774,9 @@ duplicate of the first.
 - [ ] `Cargo.toml` version bumped
 - [ ] `README.md` concise overview and installation version updated
 - [ ] `LIBRARY_GUIDE.md` detailed API/examples and quick-navigation table updated
+- [ ] `LIBRARY_GUIDE_zh.md` synchronized with the English guide; language switch and quick navigation valid
 - [ ] `OPERATIONS.md` coverage tables updated if any operation was added
+- [ ] `OPERATIONS_zh.md`, `docs/mock-server_zh.md`, and `docs/support_zh.md` synchronized with their English counterparts
 - [ ] **`src/lib.rs` crate-level `//!` docs updated** — the docs.rs front page.
       Every feature in `Cargo.toml` has an `## Optional features` bullet; new
       capabilities have a prose section; version numbers in the example

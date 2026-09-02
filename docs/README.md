@@ -15,14 +15,19 @@ with the top-level [`README.md`](../README.md), the
 |------|---------------|
 | [`../README_zh.md`](../README_zh.md) | **專案首頁（繁體中文）** — the Traditional Chinese counterpart to the concise project README. |
 | [`../LIBRARY_GUIDE.md`](../LIBRARY_GUIDE.md) | **Complete library and feature guide** — detailed session/client usage, service APIs, health checks, testing, Mock, and Metamorph, moved out of the concise project README. |
+| [`../LIBRARY_GUIDE_zh.md`](../LIBRARY_GUIDE_zh.md) | **函式庫與功能指南（繁體中文）** — the Traditional Chinese counterpart to the complete library and feature guide. |
+| [`../OPERATIONS.md`](../OPERATIONS.md) | **Implemented operation coverage** — exact per-service ONVIF coverage tables. |
+| [`../OPERATIONS_zh.md`](../OPERATIONS_zh.md) | **已實作操作（繁體中文）** — the Traditional Chinese counterpart to the operation coverage tables. |
 | [`reference/`](reference/) | **ONVIF protocol reference** — the WSDL/XSD transcriptions used while implementing oxvif. Stable facts, not plans. |
 | [`active/`](active/) | **In-progress plans** — design docs / milestones for work that is under way or not yet finished. |
 | [`done/`](done/) | **Completed plans** — finished design/audit docs, kept as a record. |
 | [`mock-server.md`](mock-server.md) | **Reference for `oxvif::mock`** — the outward-facing one. Routing, envelope/namespace contract, the full state model, the seeded fixture, all 157 operations with which are state-backed and which are static, worked request/response examples, the fault catalogue, and an explicit list of what the mock does *not* model. Read this before driving the mock from anything, Rust or not. |
+| [`mock-server_zh.md`](mock-server_zh.md) | **Mock 裝置參考（繁體中文）** — the Traditional Chinese counterpart to the complete Mock behavior and fidelity contract. |
 | [`oxvif-cli.md`](oxvif-cli.md) | **Complete CLI guide** — installation, human and Agent workflows, inventory, discovery, fleet execution, credentials, TLS, structured output, typed errors, and exit codes. |
 | [`oxvif-cli_zh.md`](oxvif-cli_zh.md) | **CLI 使用指南（繁體中文）** — the Traditional Chinese companion to the complete CLI guide. |
 | [`dependency-pitfalls.md`](dependency-pitfalls.md) | Standing engineering guide (feature-unification footguns). Not a plan and not ONVIF reference, so it sits at the root; referenced from the release SOP in `CLAUDE.md`. |
 | [`support.md`](support.md) | Versioned support boundaries for the Rust library and CLI beta, including OS, credential, schema, TLS, camera-evidence, and commercial-claim limits. |
+| [`support_zh.md`](support_zh.md) | **支援與相容性政策（繁體中文）** — the Traditional Chinese counterpart to the support policy. |
 | [`releases/`](releases/) | Version-specific release notes and verification evidence. Entries marked unreleased describe staging, not public availability. |
 
 A plan graduates from `active/` to `done/` when its milestones are all shipped.

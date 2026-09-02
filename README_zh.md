@@ -93,7 +93,7 @@ async fn main() -> Result<(), OnvifError> {
 }
 ```
 
-[完整 Library 與功能指南（英文）](LIBRARY_GUIDE.md)涵蓋兩種介面、裝置探索、所有
+[完整 Library 與功能指南](LIBRARY_GUIDE_zh.md)涵蓋兩種介面、裝置探索、所有
 service family、錯誤處理與進階功能。產生的
 [Rust API 文件](https://docs.rs/oxvif)則是 method 與 type 的權威參考。
 
@@ -128,15 +128,15 @@ hostname 驗證。
 
 | 領域 | 重點 | 詳細參考 |
 | --- | --- | --- |
-| 探索與裝置 | WS-Discovery、capability、service、identity、時間、網路、使用者與 I/O。 | [指南（英文）](LIBRARY_GUIDE.md#ws-discovery) |
-| Media | Media1／Media2 profile、H.264／H.265、audio、stream／snapshot URI 與 video source mode。 | [指南（英文）](LIBRARY_GUIDE.md#media-service-media1-methods) |
-| PTZ 與影像 | Move／stop、preset、tour、home、status、exposure、focus、IR cut 與 OSD。 | [指南（英文）](LIBRARY_GUIDE.md#ptz-methods) |
-| 事件 | Pull-point subscription、renew／unsubscribe 與連續事件串流。 | [指南（英文）](LIBRARY_GUIDE.md#events-service-methods) |
-| 錄影 | Recording／job 管理、時間／scope 搜尋與 replay URI。 | [指南（英文）](LIBRARY_GUIDE.md#recording-service-methods) |
-| 診斷 | 選用的 health check、parse-coverage detection 與 conformance 工具。 | [指南（英文）](LIBRARY_GUIDE.md#health-check-health-feature) |
-| 測試工具 | Stateful in-process mock、HTTP mock server、fault injection、clone 與 replay。 | [Mock 參考（英文）](docs/mock-server.md) |
+| 探索與裝置 | WS-Discovery、capability、service、identity、時間、網路、使用者與 I/O。 | [指南](LIBRARY_GUIDE_zh.md#ws-discovery) |
+| Media | Media1／Media2 profile、H.264／H.265、audio、stream／snapshot URI 與 video source mode。 | [指南](LIBRARY_GUIDE_zh.md#media-servicemedia1方法) |
+| PTZ 與影像 | Move／stop、preset、tour、home、status、exposure、focus、IR cut 與 OSD。 | [指南](LIBRARY_GUIDE_zh.md#ptz-方法) |
+| 事件 | Pull-point subscription、renew／unsubscribe 與連續事件串流。 | [指南](LIBRARY_GUIDE_zh.md#events-service-方法) |
+| 錄影 | Recording／job 管理、時間／scope 搜尋與 replay URI。 | [指南](LIBRARY_GUIDE_zh.md#recording-service-方法) |
+| 診斷 | 選用的 health check、parse-coverage detection 與 conformance 工具。 | [指南](LIBRARY_GUIDE_zh.md#健康檢查health-feature) |
+| 測試工具 | Stateful in-process mock、HTTP mock server、fault injection、clone 與 replay。 | [Mock 參考](docs/mock-server_zh.md) |
 
-精確的實作範圍請參閱[各 service 的 operation 表格](OPERATIONS.md)。未列在表格中的
+精確的實作範圍請參閱[各 service 的 operation 表格](OPERATIONS_zh.md)。未列在表格中的
 operation，不會被宣稱為已實作。
 
 ## 不使用攝影機進行測試
@@ -165,18 +165,18 @@ async fn updates_a_mock_camera() {
 
 當其他 process 需要真正的 HTTP port 時，請啟用 `mock-server` feature。完整的路由、
 狀態、支援 operation、fault injection 與限制，請參閱
-[Mock 裝置參考（英文）](docs/mock-server.md)。
+[Mock 裝置參考](docs/mock-server_zh.md)。
 
 ## 文件
 
 | 文件 | 用途 |
 | --- | --- |
-| [Library 與功能指南（英文）](LIBRARY_GUIDE.md) | Library 詳細用法、service method、health check、Mock 與 Metamorph。 |
+| [Library 與功能指南](LIBRARY_GUIDE_zh.md) | Library 詳細用法、service method、health check、Mock 與 Metamorph。 |
 | [Rust API 文件](https://docs.rs/oxvif) | Public type 與 method signature 的權威參考。 |
 | [CLI 使用指南](docs/oxvif-cli_zh.md) | 安裝、命令、安全性、fleet workflow、structured output 與 exit code。 |
-| [已實作的 operation](OPERATIONS.md) | 各 service 精確的 ONVIF coverage。 |
-| [Mock 裝置參考（英文）](docs/mock-server.md) | Mock 的完整行為與 fidelity contract。 |
-| [支援範圍（英文）](docs/support.md) | 版本化的平台、安全、相容性與商用宣稱限制。 |
+| [已實作的 operation](OPERATIONS_zh.md) | 各 service 精確的 ONVIF coverage。 |
+| [Mock 裝置參考](docs/mock-server_zh.md) | Mock 的完整行為與 fidelity contract。 |
+| [支援範圍](docs/support_zh.md) | 版本化的平台、安全、相容性與商用宣稱限制。 |
 | [Changelog（英文）](CHANGELOG.md) | Release 歷史與尚未發布的變更。 |
 
 ## 專案狀態

@@ -1,5 +1,7 @@
 # oxvif support and compatibility policy
 
+**English** | [繁體中文](support_zh.md)
+
 This policy separates the Rust library from the `oxvif` command-line product.
 It describes the intended 0.16.0 / CLI 0.1.0 beta and becomes a release promise
 only after those packages and artifacts are public and verified.

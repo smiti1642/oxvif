@@ -1,5 +1,7 @@
 # oxvif mock ONVIF device — reference
 
+**English** | [繁體中文](mock-server_zh.md)
+
 A complete reference for `oxvif::mock`: the in-process [`MockTransport`] and the
 bound-port [`MockServer`]. It documents what the mock answers, what it stores,
 what you can change, and — explicitly — what it does **not** model.

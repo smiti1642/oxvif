@@ -58,6 +58,10 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
 - A complete Traditional Chinese project README at `README_zh.md`. English and
   Traditional Chinese document pairs use an `_zh` filename suffix and expose
   reciprocal language-switch links at the top of each file.
+- Professional Traditional Chinese counterparts for the public library guide,
+  operation coverage tables, Mock device reference, and support policy. Each
+  pair provides reciprocal language switching, and the Chinese README links to
+  the localized document rather than sending readers back to English.
 
 ### Changed
 
