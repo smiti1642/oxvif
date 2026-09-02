@@ -38,6 +38,8 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
   and Linux Secret Service, with one black-box lifecycle contract and dedicated
   native CI. Backend errors are sanitized, owned CLI password buffers zeroize
   on drop, and plaintext fallback is forbidden.
+- A dedicated top-level CLI overview in the project README, linked to the full
+  English and Traditional Chinese CLI guides and the package-level README.
 
 ### Changed
 
@@ -71,6 +73,11 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
   `config validate` parses the registry plus every indexed discovery snapshot
   for backup/restore and support diagnosis; unindexed snapshot files are
   reported as warnings and never deleted automatically.
+- Pre-release distribution documentation now records the green, non-publishing
+  five-artifact staging run: signed APT install/remove checks passed on
+  amd64/aarch64 and Homebrew formula/bottle checks passed on Intel and Apple
+  Silicon. No public package channel is claimed before release approval and
+  independent verification.
 
 ### Security
 

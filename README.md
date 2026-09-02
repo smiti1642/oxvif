@@ -125,52 +125,46 @@ The `develop` branch is preparing oxvif 0.16.0. Until that version is
 published and independently verified, use 0.15 for crates.io consumers or an
 explicit source revision for 0.16 evaluation.
 
-### Command-line tool
+---
+
+## Command-line interface
 
 The workspace contains the separately publishable `oxvif-cli` package, which
-installs an executable named `oxvif`. The 0.1 release is not yet published;
-install the current source checkout while testing it. It provides stable human
-and JSON output, a named-device registry, native OS credential storage,
-discovery snapshots, Groups, Views, and deterministic fleet diagnostics:
+installs an executable named `oxvif`. It is a read-only ONVIF diagnostics and
+fleet tool for both terminal users and Agents: named devices, discovery
+snapshots, Groups and Views, native OS credential storage, deterministic
+JSON/JSONL, typed errors, and stable exit codes all use the same command
+surface.
+
+Start with the **[complete CLI guide](docs/oxvif-cli.md)** for installation,
+commands, security behavior, automation contracts, and exit codes. A
+[Traditional Chinese guide](docs/oxvif-cli.zh-TW.md) and the
+[`oxvif-cli` package README](crates/oxvif-cli/README.md) are also available.
+
+The 0.1 release is not public yet. Install the current checkout for evaluation:
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
 oxvif --help
 oxvif agent guide --output json
 oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance
-oxvif info
-oxvif health
-oxvif discover
-oxvif config validate
-oxvif group create taipei-f1
-oxvif group member add taipei-f1 front-door --alias cam-023
 oxvif --device front-door device info --output json --non-interactive
 oxvif --group taipei-f1 --jobs 16 health check --output jsonl --non-interactive
 ```
 
 Passwords are never stored in the registry. Native persistence uses Windows
 Credential Manager, macOS Keychain, or Linux Secret Service over D-Bus;
-interactive `setup` and `auth` use a no-echo password prompt and automation can
-use `--password-stdin`. A headless Linux session without an available, unlocked
-Secret Service returns `CREDENTIAL_UNAVAILABLE` instead of creating a plaintext
-fallback. Trusted one-shot automation may inject `OXVIF_USERNAME` and
-`OXVIF_PASSWORD` without persisting them. The native credential lifecycle
-contract passes on Windows x64, macOS Intel/Apple Silicon, and Ubuntu
-x86_64/aarch64 CI; Linux CI also proves that a missing D-Bus session fails
-closed with `CREDENTIAL_UNAVAILABLE`. HTTPS devices using private trust anchors can use repeatable
-`--ca-certificate <FILE>` PEM bundles while retaining certificate-chain and
-hostname verification. The standalone
-[`oxvif CLI documentation`](docs/oxvif-cli.md) covers installation, command
-conventions, Agent automation, discovery and import, Groups and Views,
-read-only diagnostics, fleet execution, output formats, and exit codes. A
-[Traditional Chinese version](docs/oxvif-cli.zh-TW.md) is also available.
-Package-specific details remain in the
-[`oxvif-cli` README](crates/oxvif-cli/README.md).
+automation can use `--password-stdin` or trusted process-environment injection
+without persistence. Private HTTPS devices can add repeatable
+`--ca-certificate <FILE>` PEM bundles without disabling certificate-chain or
+hostname verification.
 
-APT and Homebrew packaging are under active release validation. Do not use or
-redistribute an installation command until this README names a verified public
-repository/tap; source checkout remains the only documented CLI installation
-path before the release gate passes.
+The signed APT and Homebrew packaging paths have passed non-publishing
+three-platform staging, including install/remove and bottle tests. This is not
+publication: no public APT repository or Homebrew tap is available yet. Until
+this README names verified public channels, the source checkout above remains
+the only documented pre-release installation path. See the
+[0.16.0 pre-release evidence](docs/releases/0.16.0.md#pre-release-verification).
 
 ---
 

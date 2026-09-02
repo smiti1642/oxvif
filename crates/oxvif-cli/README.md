@@ -3,6 +3,10 @@
 `oxvif-cli` is the human- and Agent-friendly command-line operation surface
 for the [`oxvif`](https://crates.io/crates/oxvif) ONVIF client library.
 
+For the complete operator and automation reference, read the
+[CLI guide](../../docs/oxvif-cli.md) or its
+[Traditional Chinese version](../../docs/oxvif-cli.zh-TW.md).
+
 The package installs an executable named `oxvif`. Version 0.1 is not yet
 published on crates.io; install it from the current workspace while testing:
 
@@ -12,6 +16,10 @@ oxvif describe
 oxvif describe --output json --non-interactive
 oxvif agent guide --output json
 ```
+
+Signed APT and Homebrew packaging has passed non-publishing three-platform
+staging, but no public repository or tap exists yet. Until the project README
+names verified public channels, use only the source installation above.
 
 Root help includes a short Agent onboarding hint. `agent guide` returns the
 version-matched operational and security rules embedded in the installed

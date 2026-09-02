@@ -71,6 +71,13 @@ oxvif --help
 cargo install oxvif-cli --locked
 ```
 
+「不公開發布」的 release staging 已建置五個預定的原生執行檔，並在 amd64／aarch64
+通過已簽署 APT 的安裝／移除測試、在 Intel／Apple Silicon 通過 Homebrew formula 與
+bottle 測試；但目前仍沒有公開 repository 或 tap。在專案
+[`README`](../README.md#command-line-interface) 列出已驗證的公開安裝來源前，
+請只使用上方的 source 安裝方式。完整 staging 證據記錄於
+[0.16.0 release notes](releases/0.16.0.md#pre-release-verification)。
+
 套件與執行檔名稱不同是刻意的：Cargo 使用 `oxvif-cli` 避免和 library crate `oxvif` 衝突，
 使用者則只需要記住 `oxvif <command>`。
 

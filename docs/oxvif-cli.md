@@ -43,6 +43,14 @@ installation command will be:
 cargo install oxvif-cli --locked
 ```
 
+Non-publishing release staging built all five declared native artifacts. It
+also passed signed APT install/remove tests on amd64/aarch64 and Homebrew
+formula/bottle tests on Intel and Apple Silicon. No public repository or tap
+exists yet. Until the project
+[`README`](../README.md#command-line-interface) names verified public channels,
+use only the source installation above. The exact staging evidence is recorded
+in the [0.16.0 release notes](releases/0.16.0.md#pre-release-verification).
+
 Confirm the available command surface after installation:
 
 ```sh
