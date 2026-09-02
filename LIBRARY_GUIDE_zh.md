@@ -10,7 +10,7 @@
 | --- | --- |
 | [架構概覽](#架構概覽) | Discovery、session、client 與各 service family 的關係 |
 | [快速開始](#快速開始) | 最小 `OnvifSession`、direct client 與 mock 範例 |
-| [安裝](#安裝) | Library dependency 與未發布版本指引 |
+| [安裝](#安裝) | Library dependency 與 feature 指引 |
 | [命令列介面](#命令列介面) | CLI 概覽與完整手冊連結 |
 | [Serde 支援](#serde-支援serde-feature) | Response 與 discovery type 的 JSON serialization |
 | [`OnvifSession`](#onvifsession) / [`OnvifClient`](#onvifclient) | Service URL cache、builder、constructor 與 accessor |
@@ -110,7 +110,7 @@ async fn main() -> Result<(), OnvifError> {
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.15", features = ["mock"] }
+oxvif = { version = "0.16", features = ["mock"] }
 ```
 
 ```rust
@@ -136,11 +136,9 @@ async fn talks_to_a_mock_camera() {
 
 ```toml
 [dependencies]
-oxvif = "0.15"
+oxvif = "0.16"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
-
-`develop` 分支正在準備 oxvif 0.16.0。在該版本公開並完成獨立驗證前，crates.io consumer 應使用 0.15，或以明確 source revision 評估 0.16。
 
 ---
 
@@ -148,7 +146,14 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 Workspace 內另有可獨立發布的 `oxvif-cli` package，安裝後的 executable 名稱為 `oxvif`。它為 terminal user 與 Agent 提供唯讀 ONVIF 診斷及 fleet 管理能力，包括 named device、discovery snapshot、Group、View、原生 OS credential storage、deterministic JSON/JSONL、typed error 與穩定 exit code。
 
-安裝、命令、安全行為、自動化契約與 exit code 請參閱[完整 CLI 指南](docs/oxvif-cli_zh.md)。0.1 尚未公開發布；目前可由 checkout 安裝評估版本：
+安裝、命令、安全行為、自動化契約與 exit code 請參閱[完整 CLI 指南](docs/oxvif-cli_zh.md)。從 crates.io 安裝 0.1 CLI：
+
+```sh
+cargo install oxvif-cli --locked
+oxvif --version
+```
+
+Repository contributor 可改為安裝目前的 checkout：
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
@@ -160,7 +165,7 @@ oxvif --device front-door device info --output json --non-interactive
 
 Registry 不儲存密碼。持久化憑證使用 Windows Credential Manager、macOS Keychain 或 Linux Secret Service；自動化可使用 `--password-stdin` 或受信任的 process environment。私有 HTTPS 裝置可重複指定 `--ca-certificate <FILE>` PEM bundle，且不會停用 certificate-chain 或 hostname verification。
 
-APT 與 Homebrew packaging path 已通過不發布的三平台 staging，但目前尚無公開 APT repository 或 Homebrew tap。正式安裝來源只會在公開並驗證後列入 README。
+APT 與 Homebrew package 只透過專案 README 明確列出、且已完成獨立安裝驗證的 channel 發布。原生 package channel 尚未列出時，請使用 crates.io 或對應 GitHub Release 所附且可核對 checksum 的 portable artifact。
 
 ---
 
@@ -170,7 +175,7 @@ APT 與 Homebrew packaging path 已通過不發布的三平台 staging，但目�
 
 ```toml
 [dependencies]
-oxvif = { version = "0.15", features = ["serde"] }
+oxvif = { version = "0.16", features = ["serde"] }
 ```
 
 ```rust
@@ -622,7 +627,7 @@ Metamorph 可將實機的 read surface 錄製為可離線重播的 clone，也�
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.15", features = ["metamorph"] }
+oxvif = { version = "0.16", features = ["metamorph"] }
 ```
 
 ```rust

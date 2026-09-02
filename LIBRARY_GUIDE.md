@@ -13,7 +13,7 @@ and the shortest path to a working client, start with the
 | --- | --- |
 | [Architecture](#architecture-at-a-glance) | How discovery, sessions, clients, and service families fit together. |
 | [Quick start](#quick-start) | Minimal `OnvifSession`, direct-client, and mock examples. |
-| [Installation](#installation) | Library dependency and unreleased-version guidance. |
+| [Installation](#installation) | Library dependency and feature guidance. |
 | [Command-line interface](#command-line-interface) | CLI overview and links to the complete CLI manuals. |
 | [Serde support](#serde-support-serde-feature) | JSON serialization for response and discovery types. |
 | [`OnvifSession`](#onvifsession) / [`OnvifClient`](#onvifclient) | Session caching, builders, constructors, and accessors. |
@@ -119,7 +119,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.15", features = ["mock"] }
+oxvif = { version = "0.16", features = ["mock"] }
 ```
 
 ```rust
@@ -146,13 +146,9 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.15"
+oxvif = "0.16"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
-
-The `develop` branch is preparing oxvif 0.16.0. Until that version is
-published and independently verified, use 0.15 for crates.io consumers or an
-explicit source revision for 0.16 evaluation.
 
 ---
 
@@ -168,7 +164,14 @@ surface.
 Start with the **[complete CLI guide](docs/oxvif-cli.md)** for installation,
 commands, security behavior, automation contracts, and exit codes.
 
-The 0.1 release is not public yet. Install the current checkout for evaluation:
+Install the 0.1 CLI from crates.io:
+
+```sh
+cargo install oxvif-cli --locked
+oxvif --version
+```
+
+Repository contributors can install the current checkout instead:
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
@@ -186,12 +189,11 @@ without persistence. Private HTTPS devices can add repeatable
 `--ca-certificate <FILE>` PEM bundles without disabling certificate-chain or
 hostname verification.
 
-The signed APT and Homebrew packaging paths have passed non-publishing
-three-platform staging, including install/remove and bottle tests. This is not
-publication: no public APT repository or Homebrew tap is available yet. Until
-the project README names verified public channels, the source checkout above remains
-the only documented pre-release installation path. See the
-[0.16.0 pre-release evidence](docs/releases/0.16.0.md#pre-release-verification).
+APT and Homebrew packages are distributed only through channels explicitly
+listed in the project README after independent installation verification. Use
+crates.io or the checksum-verified portable artifacts attached to the matching GitHub
+Release until a native package channel is listed. See the
+[0.16.0 release verification](docs/releases/0.16.0.md#pre-release-verification).
 
 ---
 
@@ -205,7 +207,7 @@ without hand-cloning parallel structs.
 
 ```toml
 [dependencies]
-oxvif = { version = "0.15", features = ["serde"] }
+oxvif = { version = "0.16", features = ["serde"] }
 ```
 
 ```rust
@@ -1175,7 +1177,7 @@ cargo run --example healthcheck --features health -- \
 
 ```toml
 [dependencies]
-oxvif = { version = "0.15", features = ["health"] }
+oxvif = { version = "0.16", features = ["health"] }
 ```
 
 ```rust
@@ -1400,7 +1402,7 @@ asserts none is missing). Two lenses, one behind the other.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.15", features = ["mock"] }
+oxvif = { version = "0.16", features = ["mock"] }
 ```
 
 ```rust
@@ -1710,8 +1712,8 @@ chain and `DeviceState`); everything here is opt-in and feature-gated, and
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.15", features = ["metamorph"] }         # record / replay in-process
-# oxvif = { version = "0.15", features = ["metamorph-server"] } # + serve the clone over real HTTP
+oxvif = { version = "0.16", features = ["metamorph"] }         # record / replay in-process
+# oxvif = { version = "0.16", features = ["metamorph-server"] } # + serve the clone over real HTTP
 ```
 
 ### The shortest useful thing

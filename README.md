@@ -33,17 +33,13 @@ health diagnostics, and camera-free testing.
 
 ## Installation
 
-The current crates.io release is 0.15:
+Add oxvif 0.16 to your application:
 
 ```toml
 [dependencies]
-oxvif = "0.15"
+oxvif = "0.16"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
-
-The `develop` branch is preparing oxvif 0.16.0 and oxvif-cli 0.1.0. Until
-those versions are publicly released and independently verified, use 0.15 for
-crates.io consumers or pin an explicit source revision for evaluation.
 
 ## Quick start
 
@@ -107,7 +103,14 @@ can discover devices, maintain local inventory, inspect device/media/PTZ state,
 and run deterministic health and fleet diagnostics without changing camera
 configuration.
 
-For pre-release evaluation, install from the current checkout:
+Install the CLI from crates.io:
+
+```sh
+cargo install oxvif-cli --locked
+oxvif --version
+```
+
+Repository contributors can install the current checkout instead:
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
@@ -123,10 +126,10 @@ be supplied without disabling certificate or hostname verification.
 Read the [complete CLI guide](docs/oxvif-cli.md) for installation, commands,
 security behavior, fleet workflows, structured output, and exit codes.
 
-Signed APT and Homebrew packaging has passed non-publishing three-platform
-staging, but no public APT repository or Homebrew tap exists yet. This README
-will publish verified installation commands only after the release approval
-and independent installation checks are complete.
+Native APT and Homebrew packages are published only through channels listed in
+this README after independent installation verification. Until such a channel
+is listed, use crates.io or the checksum-verified portable artifacts attached to the
+matching GitHub Release.
 
 ## Feature overview
 
@@ -150,7 +153,7 @@ Enable `mock` to run client tests against an in-process stateful ONVIF device:
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.15", features = ["mock"] }
+oxvif = { version = "0.16", features = ["mock"] }
 ```
 
 ```rust
@@ -182,7 +185,7 @@ operations, fault injection, and limitations.
 | [Implemented operations](OPERATIONS.md) | Exact per-service ONVIF coverage. |
 | [Mock device reference](docs/mock-server.md) | Complete behavior and fidelity contract for the mock. |
 | [Support boundaries](docs/support.md) | Versioned platform, security, compatibility, and commercial-claim limits. |
-| [Changelog](CHANGELOG.md) | Release history and unreleased changes. |
+| [Changelog](CHANGELOG.md) | Release history and current release changes. |
 
 ## Project status
 
@@ -192,8 +195,9 @@ firmware, so compatibility claims are evidence-based rather than inferred from
 the protocol profile alone. Sanitized reports from additional real cameras are
 welcome.
 
-The first public CLI release remains approval-gated. Pre-release verification
-is documented in the [0.16.0 release notes](https://github.com/smiti1642/oxvif/blob/master/docs/releases/0.16.0.md).
+The 0.1 CLI is a read-only diagnostic beta with a versioned structured-output
+contract. Release verification and platform evidence are documented in the
+[0.16.0 release notes](https://github.com/smiti1642/oxvif/blob/master/docs/releases/0.16.0.md).
 
 ## Contributing and security
 

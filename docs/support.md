@@ -3,15 +3,14 @@
 **English** | [繁體中文](support_zh.md)
 
 This policy separates the Rust library from the `oxvif` command-line product.
-It describes the intended 0.16.0 / CLI 0.1.0 beta and becomes a release promise
-only after those packages and artifacts are public and verified.
+It applies to the oxvif 0.16.x library and the oxvif-cli 0.1.x diagnostic beta.
 
 ## Rust library
 
 - Public crates.io releases follow semantic versioning within Rust's practical
   pre-1.0 compatibility conventions.
-- The current supported public line is listed in `SECURITY.md`; `develop` and
-  git revisions are evaluation builds.
+- The supported release lines are listed in `SECURITY.md`; development branches
+  and untagged git revisions are unsupported preview builds.
 - The declared MSRV is Rust 1.88. A release must pass workspace checks on that
   toolchain and stable Rust.
 - oxvif is an independent implementation, not ONVIF-certified, and does not
@@ -25,12 +24,12 @@ but it does not expose device-setting writes.
 
 | Surface | Beta support |
 | --- | --- |
-| Windows x86_64 | Tests, binary smoke, and locally verified Windows Credential Manager contract |
-| Linux x86_64/aarch64 | Secret Service implementation; native CI and package-install evidence required before release |
-| macOS x86_64/arm64 | Keychain implementation; native CI and bottle-install evidence required before release |
+| Windows x86_64 | Tests, binary smoke, and Windows Credential Manager lifecycle contract |
+| Linux x86_64/aarch64 | Tests, binary smoke, Secret Service lifecycle contract, and signed-package install/remove evidence |
+| macOS x86_64/arm64 | Tests, binary smoke, Keychain lifecycle contract, and formula/bottle install evidence |
 | Structured output | Schema version 3; additive fields allowed, breaking changes require a schema-version increment |
 | Agent guide | Versioned independently from the stdout schema |
-| Native credentials | Credential Manager, Keychain, and Secret Service; public release blocked until all native contracts pass; no plaintext fallback |
+| Native credentials | Credential Manager, Keychain, and Secret Service; native lifecycle contracts are verified on all supported targets; no plaintext fallback |
 | TLS | Platform trust roots plus repeatable explicit PEM `--ca-certificate` bundles; no insecure or hostname-verification bypass |
 
 `OXVIF_USERNAME` and `OXVIF_PASSWORD` are intended only for trusted,

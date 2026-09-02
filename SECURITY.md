@@ -4,9 +4,10 @@
 
 | Version | Security fixes |
 | --- | --- |
-| 0.15.x | Supported until 0.16.0 is publicly released |
-| 0.14.x and older | Not supported |
-| `develop` / unreleased CLI builds | Evaluation only; not a supported release |
+| 0.16.x | Supported |
+| oxvif-cli 0.1.x | Supported |
+| 0.15.x and older | Not supported |
+| Development branches / untagged builds | Preview only; not a supported release |
 
 This table is updated at each public release. Commercial support, if offered,
 is governed by its separate written support policy and does not expand the
@@ -29,9 +30,9 @@ guaranteed service-level agreement.
 
 - The CLI never accepts passwords in URL userinfo and never stores secrets in
   `devices.toml`.
-- `oxvif-cli 0.1` has a native credential backend only on Windows. Linux and
-  macOS do not fall back to plaintext storage.
+- `oxvif-cli 0.1` uses Windows Credential Manager, macOS Keychain, or Linux
+  Secret Service according to the host platform. No platform falls back to
+  plaintext storage.
 - Diagnostic output and verbose stderr must not contain passwords,
   authorization headers, WS-Security material, or URI userinfo.
 - Read-only diagnostics are not a guarantee that a device or network is safe.
-

@@ -10,7 +10,7 @@ interactive operators and automated Agents.
 | Section | Purpose |
 | --- | --- |
 | [Overview](#overview) | Scope, audience, and read-only boundary. |
-| [Installation](#installation) | Source installation and public-channel status. |
+| [Installation](#installation) | crates.io, source, and native-package installation guidance. |
 | [Synopsis and global options](#synopsis) | Command shape, selectors, timeouts, retries, TLS, and output flags. |
 | [Quick start](#quick-start) | Add a device, store credentials, and run the first diagnostic. |
 | [Device inventory](#device-inventory) | Registry paths, backup, restore, and validation. |
@@ -47,28 +47,26 @@ snapshot commands modify local CLI state only.
 
 ## Installation
 
-Version 0.1 is not yet published on crates.io. Install the current workspace
-version when developing or evaluating this repository:
+Install version 0.1 from crates.io:
+
+```sh
+cargo install oxvif-cli --locked
+oxvif --version
+```
+
+Repository contributors can install the current workspace version instead:
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
 oxvif --version
 ```
 
-After the release is published and independently verified, the crates.io
-installation command will be:
-
-```sh
-cargo install oxvif-cli --locked
-```
-
-Non-publishing release staging built all five declared native artifacts. It
-also passed signed APT install/remove tests on amd64/aarch64 and Homebrew
-formula/bottle tests on Intel and Apple Silicon. No public repository or tap
-exists yet. Until the project
-[`README`](../README.md#command-line-interface) names verified public channels,
-use only the source installation above. The exact staging evidence is recorded
-in the [0.16.0 release notes](releases/0.16.0.md#pre-release-verification).
+APT and Homebrew packages are distributed only through channels explicitly
+listed in the project [`README`](../README.md#command-line-interface) after
+independent install/remove verification. Until a native channel is listed, use
+crates.io or a checksum-verified portable artifact from the matching GitHub Release. The
+platform verification evidence is recorded in the
+[0.16.0 release notes](releases/0.16.0.md#pre-release-verification).
 
 Confirm the available command surface after installation:
 

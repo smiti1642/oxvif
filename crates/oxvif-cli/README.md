@@ -8,8 +8,15 @@ For the complete operator and automation reference, read the
 or its
 [Traditional Chinese version](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli_zh.md).
 
-The package installs an executable named `oxvif`. Version 0.1 is not yet
-published on crates.io; install it from the current workspace while testing:
+The package installs an executable named `oxvif`. Install version 0.1 from
+crates.io:
+
+```sh
+cargo install oxvif-cli --locked
+oxvif --version
+```
+
+Repository contributors can install the current workspace version instead:
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
@@ -18,9 +25,9 @@ oxvif describe --output json --non-interactive
 oxvif agent guide --output json
 ```
 
-Signed APT and Homebrew packaging has passed non-publishing three-platform
-staging, but no public repository or tap exists yet. Until the project README
-names verified public channels, use only the source installation above.
+APT and Homebrew packages are distributed only through independently verified
+channels listed in the project README. Until a native channel is listed, use
+crates.io or a checksum-verified portable artifact from the matching GitHub Release.
 
 Root help includes a short Agent onboarding hint. `agent guide` returns the
 version-matched operational and security rules embedded in the installed

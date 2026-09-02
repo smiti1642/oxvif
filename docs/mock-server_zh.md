@@ -7,7 +7,7 @@
 本文件所述行為均可對照具名的原始碼 symbol 驗證。若某項行為是刻意簡化，而非真實度聲明，文件會明確指出。未記錄的遺漏視為錯誤；已記錄的限制則屬設計決策。
 
 - **適用對象**：oxvif 測試、下游 Rust crate，或連線至實體連接埠的非 Rust ONVIF client，例如 Frigate、ODM、gSOAP 或 C++ conformance suite。
-- **版本**：0.15.0。
+- **版本**：0.16.0。
 - **Feature flag**：程序內 transport 使用 `mock`，HTTP server 使用 `mock-server`。本 crate 不啟用任何 default feature；若未選用其中一項，以下 API 不會編譯。
 
 ## 快速導覽

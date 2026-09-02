@@ -7,7 +7,7 @@
 | 章節 | 內容 |
 | --- | --- |
 | [人類使用者快捷操作](#人類使用者快捷操作) | 最短的互動式設定與日常操作。 |
-| [安裝](#安裝) | Source 安裝與公開套件來源狀態。 |
+| [安裝](#安裝) | crates.io、source 與原生 package 安裝指引。 |
 | [最短上手流程](#最短上手流程) | 建立裝置、儲存憑證與首次診斷。 |
 | [Retry 與診斷輸出](#retry-與診斷輸出) | Timeout、重試、TLS 與安全 log。 |
 | [給 Agent 的入口](#給-agent-的入口) | 內建指南、descriptor 與自動化規則。 |
@@ -73,8 +73,14 @@ oxvif completion powershell
 
 ## 安裝
 
-0.1 目前尚未發布到 crates.io。開發或評估此 repository 時，請從目前的
-workspace 安裝：
+從 crates.io 安裝 0.1：
+
+```sh
+cargo install oxvif-cli --locked
+oxvif --version
+```
+
+Repository contributor 可以改為安裝目前的 workspace 版本：
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
@@ -82,17 +88,10 @@ oxvif --version
 oxvif --help
 ```
 
-正式發布並完成獨立驗證後，crates.io 安裝命令會是：
-
-```sh
-cargo install oxvif-cli --locked
-```
-
-「不公開發布」的 release staging 已建置五個預定的原生執行檔，並在 amd64／aarch64
-通過已簽署 APT 的安裝／移除測試、在 Intel／Apple Silicon 通過 Homebrew formula 與
-bottle 測試；但目前仍沒有公開 repository 或 tap。在專案
-[`README`](../README.md#command-line-interface) 列出已驗證的公開安裝來源前，
-請只使用上方的 source 安裝方式。完整 staging 證據記錄於
+APT 與 Homebrew package 只透過專案
+[`README`](../README.md#command-line-interface) 明確列出、且已完成獨立安裝／移除驗證的
+channel 發布。原生 channel 尚未列出時，請使用 crates.io 或對應 GitHub Release 所附且可
+核對 checksum 的 portable artifact。平台驗證證據記錄於
 [0.16.0 release notes](releases/0.16.0.md#pre-release-verification)。
 
 套件與執行檔名稱不同是刻意的：Cargo 使用 `oxvif-cli` 避免和 library crate `oxvif` 衝突，

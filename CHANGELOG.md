@@ -65,6 +65,10 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
 
 ### Changed
 
+- Release-facing documentation and Rust API examples now consistently target
+  oxvif 0.16 and oxvif-cli 0.1. The README, library guide, CLI manuals, CLI
+  crate README, support policy, security policy, and Mock reference no longer
+  describe 0.16 as an evaluation build or direct users to 0.15.
 - The legacy `discovery::probe` remains available and delegates to the new
   fallible implementation while preserving its empty-on-error behavior.
 - The workspace release order is `oxvif 0.16.0` first, followed by

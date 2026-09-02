@@ -14,7 +14,7 @@ omission is a bug, a documented one is a design decision.**
 - **Audience** — anyone driving the mock: oxvif's own tests, a downstream Rust
   crate, or a non-Rust ONVIF client (Frigate, ODM, gSOAP, a C++ conformance
   suite) pointed at the bound port.
-- **Version** — 0.15.0.
+- **Version** — 0.16.0.
 - **Feature flags** — `mock` for the transport, `mock-server` for the HTTP
   server. This crate has **no default features**; nothing below compiles
   without one of those two.

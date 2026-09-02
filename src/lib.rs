@@ -201,7 +201,7 @@
 //! for cross-process / non-Rust clients. See the `mock` module for details.
 //!
 //! ```ignore
-//! // Cargo.toml:  oxvif = { version = "0.15", features = ["mock"] }
+//! // Cargo.toml:  oxvif = { version = "0.16", features = ["mock"] }
 //! use std::sync::Arc;
 //! use oxvif::{OnvifClient, mock::MockTransport};
 //!
