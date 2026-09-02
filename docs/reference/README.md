@@ -2,7 +2,8 @@
 
 A per-service catalogue of ONVIF operations, transcribed from the official ONVIF WSDLs,
 **for cross-reference while implementing oxvif** — it is not documentation of oxvif's own API
-(that lives in the top-level [`README.md`](../../README.md)) and is not compiled into the crate.
+(start with [`LIBRARY_GUIDE.md`](../../LIBRARY_GUIDE.md) and
+[docs.rs](https://docs.rs/oxvif)) and is not compiled into the crate.
 
 Each service file lists **every** operation the WSDL defines (including ones oxvif has not
 implemented yet), marks oxvif coverage, and — for **unimplemented** operations — gives the
@@ -15,7 +16,8 @@ request/response field structure so a new method can be written against the real
 - **Cardinality:** `[1]` required · `[0..1]` optional · `[0..*]` repeated · `[1..*]` one-or-more · `(attr)` attribute.
 - Every file cites its **source WSDL/schema URL**. Anything not verified against the schema is
   marked `(unverified)` rather than guessed.
-- oxvif coverage is taken from the top-level README status tables and `src/client/*.rs`.
+- oxvif coverage is taken from [`OPERATIONS.md`](../../OPERATIONS.md) and
+  `src/client/*.rs`.
 - **Already-implemented operations are not field-expanded** — the code in `src/client/*.rs` and
   `src/types/*.rs` is the source of truth (avoids doc drift). Field detail is given only for
   operations oxvif has **not** built yet.

@@ -1,16 +1,19 @@
 # oxvif `docs/`
 
-Project documentation that complements the crate API reference. **None of this
-is compiled into the crate** — `docs/` is excluded from the published library
-package (`exclude = ["docs/"]` in `Cargo.toml`). Start with the top-level
-[`README.md`](../README.md), the [complete CLI guide](oxvif-cli.md), the
-coverage tables in [`OPERATIONS.md`](../OPERATIONS.md), or the library API on
+Project documentation that complements the crate API reference. Public guides
+linked by the project README ship with the library package; development plans,
+protocol transcriptions, and release records remain repository-only. Start
+with the top-level [`README.md`](../README.md), the
+[complete library guide](../LIBRARY_GUIDE.md), the
+[complete CLI guide](oxvif-cli.md), the coverage tables in
+[`OPERATIONS.md`](../OPERATIONS.md), or the library API on
 [docs.rs](https://docs.rs/oxvif).
 
 ## Layout
 
 | Path | What it holds |
 |------|---------------|
+| [`../LIBRARY_GUIDE.md`](../LIBRARY_GUIDE.md) | **Complete library and feature guide** — detailed session/client usage, service APIs, health checks, testing, Mock, and Metamorph, moved out of the concise project README. |
 | [`reference/`](reference/) | **ONVIF protocol reference** — the WSDL/XSD transcriptions used while implementing oxvif. Stable facts, not plans. |
 | [`active/`](active/) | **In-progress plans** — design docs / milestones for work that is under way or not yet finished. |
 | [`done/`](done/) | **Completed plans** — finished design/audit docs, kept as a record. |

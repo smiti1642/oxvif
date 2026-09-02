@@ -4,8 +4,9 @@
 for the [`oxvif`](https://crates.io/crates/oxvif) ONVIF client library.
 
 For the complete operator and automation reference, read the
-[CLI guide](../../docs/oxvif-cli.md) or its
-[Traditional Chinese version](../../docs/oxvif-cli.zh-TW.md).
+[CLI guide](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli.md)
+or its
+[Traditional Chinese version](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli.zh-TW.md).
 
 The package installs an executable named `oxvif`. Version 0.1 is not yet
 published on crates.io; install it from the current workspace while testing:
@@ -77,7 +78,7 @@ name, target, tags, and cached device metadata may change; the device ID does
 not. Set `OXVIF_CONFIG_DIR` to isolate the registry for tests or containers.
 Default paths and the stop-writers/copy-whole-directory backup and restore
 procedure are documented in the
-[full CLI manual](../../docs/oxvif-cli.md#device-inventory).
+[full CLI manual](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli.md#device-inventory).
 
 ```sh
 oxvif config path

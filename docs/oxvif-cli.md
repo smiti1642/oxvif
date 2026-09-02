@@ -5,6 +5,25 @@ interactive operators and automated Agents.
 
 [Traditional Chinese (繁體中文)](oxvif-cli.zh-TW.md)
 
+## Quick navigation
+
+| Section | Purpose |
+| --- | --- |
+| [Overview](#overview) | Scope, audience, and read-only boundary. |
+| [Installation](#installation) | Source installation and public-channel status. |
+| [Synopsis and global options](#synopsis) | Command shape, selectors, timeouts, retries, TLS, and output flags. |
+| [Quick start](#quick-start) | Add a device, store credentials, and run the first diagnostic. |
+| [Device inventory](#device-inventory) | Registry paths, backup, restore, and validation. |
+| [Network discovery](#network-discovery) | Scans, interfaces, snapshots, filters, and enrichment. |
+| [Bulk import](#fingerprinted-bulk-import) | Reviewable plan/apply workflow and fingerprints. |
+| [Groups and Views](#groups-and-views) | Static and dynamic fleet selection. |
+| [Credentials](#credentials) | Native stores, headless use, and secret-handling rules. |
+| [Read-only diagnostics](#read-only-diagnostics) | Device, media, PTZ, health, and ephemeral targets. |
+| [Fleet diagnostics](#fleet-diagnostics) | Bounded concurrency and deterministic aggregation. |
+| [Agent contract](#agent-and-automation-contract) | Embedded guidance and command descriptors. |
+| [Output and exit codes](#output-formats) | JSON/JSONL schemas, completion, and process status. |
+| [Environment variables](#environment-variables) | Supported automation inputs and configuration paths. |
+
 ## Overview
 
 `oxvif-cli` is the command-line interface for the [`oxvif`](../README.md)

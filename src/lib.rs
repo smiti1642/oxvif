@@ -9,6 +9,20 @@
 //! replay — all over SOAP/HTTP(S) with WS-Security and HTTP Digest
 //! authentication.
 //!
+//! ## Quick navigation
+//!
+//! | Section | Purpose |
+//! | --- | --- |
+//! | [Profile coverage](#onvif-profile-coverage) | Supported ONVIF profiles and known gaps. |
+//! | [Supported services](#supported-services) | Device, media, PTZ, imaging, events, and recording scope. |
+//! | [Per-service capabilities](#per-service-capabilities) | Capability types and consistency checks. |
+//! | [Optional features](#optional-features) | Serde, Mock, health, and Metamorph feature flags. |
+//! | [Architecture](#architecture) | Relationship between sessions, clients, transport, and services. |
+//! | [Quick start](#quick-start) | Minimal session and direct-client examples. |
+//! | [Testing without a camera](#testing-without-a-real-camera) | In-process mock and custom transport examples. |
+//! | [Metamorph](#metamorph) | Clone/replay and adapter workflows. |
+//! | [Health checks](#health--conformance-checks) | Diagnostic and parser-conformance surfaces. |
+//!
 //! ## ONVIF Profile coverage
 //!
 //! | Profile | Description | Coverage | Notes |
@@ -275,7 +289,7 @@
 //! service's. Only `GetCapabilities` saying yes where the service says no is
 //! reported: the device-level type uses bare `bool` and cannot tell "said no"
 //! from "did not say", so the other direction is counted rather than warned
-//! about. See the `README` for the table.
+//! about. See `LIBRARY_GUIDE.md` for the detailed table.
 //!
 //! [ONVIF]: https://www.onvif.org
 

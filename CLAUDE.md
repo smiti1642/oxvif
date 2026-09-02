@@ -674,16 +674,20 @@ duplicate of the first.
 
 ### Documentation
 
-6. Update `README.md`:
-   - Architecture diagram (top of file) if a new service is added
-   - Add a new `## <Service> methods` section with method table and code example
-   - Update test count (`N unit tests`)
-   - Update installation version number
+6. Update the documentation surfaces without turning the project README back
+   into an API manual:
+   - `README.md` is the concise product page: positioning, installation,
+     first-success examples, feature overview, support status, and links.
+   - `LIBRARY_GUIDE.md` owns the architecture diagram, detailed
+     `## <Service> methods` sections, method tables, examples, and test counts.
+   - Keep the table-based quick-navigation block at the front of every long
+     guide synchronized when adding or renaming a top-level section.
+   - Update installation version numbers wherever they appear.
    - **The `Implemented ONVIF operations` coverage tables are not in this file.**
-     They moved to [`OPERATIONS.md`](OPERATIONS.md); `README.md` only links to
-     it. Add the new operation there (— → ✓). A method table updated in the
-     README but not in `OPERATIONS.md` leaves the crate's only coverage
-     statement wrong, and nothing fails.
+     They live in [`OPERATIONS.md`](OPERATIONS.md); both the README and library
+     guide only link to it. Add the new operation there (— → ✓). A method table
+     updated in `LIBRARY_GUIDE.md` but not in `OPERATIONS.md` leaves the crate's
+     only coverage statement wrong, and nothing fails.
 6a. **Update the crate-level docs in `src/lib.rs`** — the `//!` header. This is
     what docs.rs renders as the crate's front page, and it is the first thing
     most readers see; the README is the *second*. It does not follow the README
@@ -762,7 +766,8 @@ duplicate of the first.
 - [ ] If a direct dep was updated: re-audit for feature-unification footguns ([docs/dependency-pitfalls.md](docs/dependency-pitfalls.md))
 - [ ] `CHANGELOG.md` updated with new version entry
 - [ ] `Cargo.toml` version bumped
-- [ ] `README.md` installation version updated + content updated
+- [ ] `README.md` concise overview and installation version updated
+- [ ] `LIBRARY_GUIDE.md` detailed API/examples and quick-navigation table updated
 - [ ] `OPERATIONS.md` coverage tables updated if any operation was added
 - [ ] **`src/lib.rs` crate-level `//!` docs updated** — the docs.rs front page.
       Every feature in `Cargo.toml` has an `## Optional features` bullet; new

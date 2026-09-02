@@ -21,9 +21,19 @@ repository = "https://github.com/smiti1642/oxvif"
 homepage = "https://github.com/smiti1642/oxvif"
 documentation = "https://docs.rs/oxvif"
 readme = "README.md"
-# `docs/` is a development-only ONVIF WSDL reference — not needed to build or
-# use the crate, so keep it out of the published package.
-exclude = [".env", ".env.example", "docs/"]
+# Ship the public guides linked by README.md. Development plans, protocol
+# transcriptions, and release records stay in the repository without inflating
+# the registry package.
+exclude = [
+    ".env",
+    ".env.example",
+    "docs/active/",
+    "docs/done/",
+    "docs/reference/",
+    "docs/releases/",
+    "docs/dependency-pitfalls.md",
+    "docs/README.md",
+]
 
 # Build docs.rs with every feature on, so no module is missing from the rendered
 # docs. An explicit feature list was used until 0.14 and silently omitted

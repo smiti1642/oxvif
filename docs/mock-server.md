@@ -17,22 +17,24 @@ omission is a bug, a documented one is a design decision.**
   server. This crate has **no default features**; nothing below compiles
   without one of those two.
 
-**Contents**
+## Quick navigation
 
-1. [Quick start](#1-quick-start)
-2. [Request routing](#2-request-routing)
-3. [Envelope and namespace contract](#3-envelope-and-namespace-contract)
-4. [Authentication](#4-authentication)
-5. [State model](#5-state-model)
-6. [Seeded fixture](#6-seeded-fixture)
-7. [Operation reference](#7-operation-reference)
-8. [Worked examples](#8-worked-examples)
-9. [Error model](#9-error-model)
-10. [Fault injection and control endpoints](#10-fault-injection-and-control-endpoints)
-11. [Changing the device](#11-changing-the-device)
-12. [What is guaranteed, and by which test](#12-what-is-guaranteed-and-by-which-test)
-13. [Known limitations](#13-known-limitations)
-14. [Extending the mock](#14-extending-the-mock)
+| Section | What it answers |
+| --- | --- |
+| [1. Quick start](#1-quick-start) | How do I run the in-process or HTTP mock? |
+| [2. Request routing](#2-request-routing) | How are paths, service URLs, and namespaces dispatched? |
+| [3. Envelope and namespace contract](#3-envelope-and-namespace-contract) | What SOAP/XML shape does the mock guarantee? |
+| [4. Authentication](#4-authentication) | Which authentication behavior is modeled? |
+| [5. State model](#5-state-model) | Which services share mutable state? |
+| [6. Seeded fixture](#6-seeded-fixture) | What device, media, PTZ, audio, and recording data exists initially? |
+| [7. Operation reference](#7-operation-reference) | Which operations are stateful, static, or unsupported? |
+| [8. Worked examples](#8-worked-examples) | What do representative requests and responses look like? |
+| [9. Error model](#9-error-model) | Which SOAP fault shapes and codes are emitted? |
+| [10. Fault injection](#10-fault-injection-and-control-endpoints) | How can tests force transport and protocol failures? |
+| [11. Changing the device](#11-changing-the-device) | How can a test customize state and responders? |
+| [12. Guarantees](#12-what-is-guaranteed-and-by-which-test) | Which tests enforce each fidelity claim? |
+| [13. Known limitations](#13-known-limitations) | What is deliberately simplified or not implemented? |
+| [14. Extending the mock](#14-extending-the-mock) | How should contributors add behavior safely? |
 
 ---
 

@@ -927,7 +927,7 @@ mod tests {
              blocks again — or the two `Extension` levels inside Security, \
              which carry four of them: {:?}\n\
              If the drop is deliberate, update this expectation **and** every \
-             file that quotes the number: `README.md` (the sample health \
+             file that quotes the number: `LIBRARY_GUIDE.md` (the sample health \
              output and the `service_caps_self_consistent` prose), \
              `src/lib.rs`'s crate header, `src/health/checks.rs` \
              (`capability_cross_check`'s doc comment and the `checked` \

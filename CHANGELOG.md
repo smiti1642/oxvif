@@ -3,6 +3,18 @@
 All notable changes to oxvif are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Release index
+
+| Range | Releases |
+| --- | --- |
+| Next | [0.16.0](#0160---unreleased) |
+| Recent stable | [0.15.0](#0150---2026-08-03) · [0.14.0](#0140---2026-07-27) · [0.13.0](#0130---2026-07-24) · [0.12.0](#0120---2026-07-09) · [0.11.0](#0110---2026-07-03) · [0.10.0](#0100---2026-06-30) |
+| 0.9 series | [0.9.9](#099---2026-06-11) · [0.9.8](#098---2026-06-10) · [0.9.7](#097---2026-05-31) · [0.9.6](#096---2026-05-26) · [0.9.4](#094---2026-05-04) · [0.9.3](#093---2026-04-17) · [0.9.2](#092---2026-04-17) · [0.9.1](#091---2026-04-16) · [0.9.0](#090---2026-04-15) |
+| 0.8 series | [0.8.6](#086---2026-04-08) · [0.8.5](#085---2026-04-06) · [0.8.4](#084---2026-04-05) · [0.8.3](#083---2026-04-05) · [0.8.2](#082---2026-04-04) · [0.8.1](#081---2026-04-04) · [0.8.0](#080---2026-04-04) |
+| 0.7 series | [0.7.6](#076---2026-04-04) · [0.7.5](#075---2026-04-04) · [0.7.4](#074---2026-04-04) · [0.7.3](#073---2026-04-03) · [0.7.2](#072---2026-04-03) · [0.7.1](#071---2026-04-03) · [0.7.0](#070---2026-04-03) |
+| 0.6–0.4 | [0.6.0](#060---2026-04-03) · [0.5.0](#050---2026-04-03) · [0.4.2](#042---2026-04-02) · [0.4.1](#041---2026-04-02) · [0.4.0](#040---2026-04-02) |
+| 0.3–0.1 | [0.3.0](#030---2026-04-02) · [0.2.0](#020---2026-04-02) · [0.1.3](#013---2026-04-02) · [0.1.2](#012---2026-04-02) · [0.1.1](#011---2026-04-02) · [0.1.0](#010---2026-04-02) |
+
 ---
 
 ## [0.16.0] - Unreleased
@@ -38,8 +50,11 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
   and Linux Secret Service, with one black-box lifecycle contract and dedicated
   native CI. Backend errors are sanitized, owned CLI password buffers zeroize
   on drop, and plaintext fallback is forbidden.
-- A dedicated top-level CLI overview in the project README, linked to the full
-  English and Traditional Chinese CLI guides and the package-level README.
+- A concise project README focused on product positioning, installation, and
+  first success; the previous 2,200-line technical content now lives in the
+  package-shipped `LIBRARY_GUIDE.md` without losing examples or API guidance.
+- Table-based quick navigation for the library guide, English and Traditional
+  Chinese CLI manuals, Mock reference, operation coverage, and changelog.
 
 ### Changed
 

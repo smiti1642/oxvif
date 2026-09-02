@@ -2,6 +2,23 @@
 
 [English documentation](oxvif-cli.md)
 
+## 快速索引
+
+| 章節 | 內容 |
+| --- | --- |
+| [人類使用者快捷操作](#人類使用者快捷操作) | 最短的互動式設定與日常操作。 |
+| [安裝](#安裝) | Source 安裝與公開套件來源狀態。 |
+| [最短上手流程](#最短上手流程) | 建立裝置、儲存憑證與首次診斷。 |
+| [Retry 與診斷輸出](#retry-與診斷輸出) | Timeout、重試、TLS 與安全 log。 |
+| [給 Agent 的入口](#給-agent-的入口) | 內建指南、descriptor 與自動化規則。 |
+| [探索內網裝置](#探索內網裝置) | Interface、snapshot、filter 與 enrichment。 |
+| [批次匯入](#從-snapshot-批次匯入) | 可審查的 plan/apply 與 fingerprint。 |
+| [Group 與 View](#用-group-與-view-管理大量攝影機) | 靜態與動態 fleet 選擇。 |
+| [唯讀診斷](#唯讀診斷) | Device、Media、PTZ 與 health。 |
+| [Fleet 診斷](#fleet-診斷) | 有界並行、排序與彙總結果。 |
+| [輸出與 exit code](#輸出格式與-exit-code) | JSON/JSONL contract 與程序狀態。 |
+| [環境變數](#常用環境變數) | Credential 與設定路徑輸入。 |
+
 ## 人類使用者快捷操作
 
 第一次設定攝影機時，可以用一個指令完成安全密碼輸入、連線驗證、原生 credential storage

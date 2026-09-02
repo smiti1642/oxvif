@@ -1,8 +1,9 @@
 # Implemented ONVIF operations
 
 Per-service coverage tables for [oxvif](README.md) — which ONVIF operations the
-crate implements. Split out of `README.md` to keep the API guide readable; the
-method signatures and usage examples for each operation stay there.
+crate implements. The method signatures and usage examples live in the
+[library and feature guide](LIBRARY_GUIDE.md) and on
+[docs.rs](https://docs.rs/oxvif).
 
 Every row below is implemented (`✓`). These tables are **oxvif's coverage, not
 the full ONVIF surface** — an operation that does not appear here is not
@@ -11,6 +12,22 @@ defines, see
 [`docs/reference/`](https://github.com/smiti1642/oxvif/tree/master/docs/reference)
 — an absolute link because `docs/` is excluded from the published crate, so a
 relative one is dead for anyone reading this from the registry tarball.
+
+## Service index
+
+| Service | Coverage table |
+| --- | --- |
+| Device | [Device Service](#device-service) |
+| Device I/O | [DeviceIO Service](#deviceio-service) |
+| Media1 | [Media Service](#media-service-media1) |
+| Media2 | [Media2 Service](#media2-service) |
+| PTZ | [PTZ Service](#ptz-service) |
+| Imaging | [Imaging Service](#imaging-service) |
+| Events | [Events Service](#events-service) |
+| Recording | [Recording Service](#recording-service) |
+| Search | [Search Service](#search-service) |
+| Replay | [Replay Service](#replay-service) |
+| Discovery | [WS-Discovery](#ws-discovery) |
 
 ### Device Service
 
