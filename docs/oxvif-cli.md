@@ -3,7 +3,7 @@
 Professional command-line operations for ONVIF devices, designed for both
 interactive operators and automated Agents.
 
-[Traditional Chinese (繁體中文)](oxvif-cli.zh-TW.md)
+**English** | [繁體中文](oxvif-cli_zh.md)
 
 ## Quick navigation
 
@@ -591,5 +591,5 @@ oxvif agent guide --output json
 ```
 
 See the [`oxvif-cli` package README](../crates/oxvif-cli/README.md) for
-package-level details and the [Traditional Chinese guide](oxvif-cli.zh-TW.md)
+package-level details. Switch to the [Traditional Chinese guide](oxvif-cli_zh.md)
 for this document in Traditional Chinese.

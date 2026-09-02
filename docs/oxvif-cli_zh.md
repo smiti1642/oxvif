@@ -1,6 +1,6 @@
 # oxvif CLI 使用指南（繁體中文）
 
-[English documentation](oxvif-cli.md)
+[English](oxvif-cli.md) | **繁體中文**
 
 ## 快速索引
 

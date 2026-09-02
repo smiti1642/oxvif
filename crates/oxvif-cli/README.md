@@ -6,7 +6,7 @@ for the [`oxvif`](https://crates.io/crates/oxvif) ONVIF client library.
 For the complete operator and automation reference, read the
 [CLI guide](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli.md)
 or its
-[Traditional Chinese version](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli.zh-TW.md).
+[Traditional Chinese version](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli_zh.md).
 
 The package installs an executable named `oxvif`. Version 0.1 is not yet
 published on crates.io; install it from the current workspace while testing:

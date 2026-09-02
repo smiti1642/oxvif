@@ -1,5 +1,7 @@
 # oxvif
 
+**English** | [繁體中文](README_zh.md)
+
 [![crates.io](https://img.shields.io/crates/v/oxvif.svg)](https://crates.io/crates/oxvif)
 [![docs.rs](https://img.shields.io/docsrs/oxvif)](https://docs.rs/oxvif)
 [![downloads](https://img.shields.io/crates/d/oxvif.svg)](https://crates.io/crates/oxvif)

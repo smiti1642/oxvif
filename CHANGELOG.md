@@ -55,6 +55,9 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
   package-shipped `LIBRARY_GUIDE.md` without losing examples or API guidance.
 - Table-based quick navigation for the library guide, English and Traditional
   Chinese CLI manuals, Mock reference, operation coverage, and changelog.
+- A complete Traditional Chinese project README at `README_zh.md`. English and
+  Traditional Chinese document pairs use an `_zh` filename suffix and expose
+  reciprocal language-switch links at the top of each file.
 
 ### Changed
 

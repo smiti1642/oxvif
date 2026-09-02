@@ -678,6 +678,9 @@ duplicate of the first.
    into an API manual:
    - `README.md` is the concise product page: positioning, installation,
      first-success examples, feature overview, support status, and links.
+   - Keep `README_zh.md` semantically synchronized with `README.md`. Every
+     English/Traditional Chinese pair uses the English filename plus `_zh`
+     before `.md`, and both files carry reciprocal language-switch links.
    - `LIBRARY_GUIDE.md` owns the architecture diagram, detailed
      `## <Service> methods` sections, method tables, examples, and test counts.
    - Keep the table-based quick-navigation block at the front of every long
