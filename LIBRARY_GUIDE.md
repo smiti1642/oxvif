@@ -164,9 +164,7 @@ JSON/JSONL, typed errors, and stable exit codes all use the same command
 surface.
 
 Start with the **[complete CLI guide](docs/oxvif-cli.md)** for installation,
-commands, security behavior, automation contracts, and exit codes. A
-[Traditional Chinese guide](docs/oxvif-cli.zh-TW.md) and the
-[`oxvif-cli` package README](crates/oxvif-cli/README.md) are also available.
+commands, security behavior, automation contracts, and exit codes.
 
 The 0.1 release is not public yet. Install the current checkout for evaluation:
 

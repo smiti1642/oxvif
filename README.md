@@ -25,7 +25,7 @@ health diagnostics, and camera-free testing.
 
 | Interface | Best for | Start here |
 | --- | --- | --- |
-| Rust library | Applications that need typed ONVIF access and full routing control. | [Library quick start](#library-quick-start) |
+| Rust library | Applications that need typed ONVIF access and full routing control. | [Quick start](#quick-start) |
 | `oxvif` CLI | Operators, diagnostics, CI, Agents, and fleet inventory. | [CLI overview](#command-line-interface) |
 | Mock device | Tests that need ONVIF behavior without camera hardware. | [Testing without a camera](#testing-without-a-camera) |
 
@@ -43,7 +43,9 @@ The `develop` branch is preparing oxvif 0.16.0 and oxvif-cli 0.1.0. Until
 those versions are publicly released and independently verified, use 0.15 for
 crates.io consumers or pin an explicit source revision for evaluation.
 
-## Library quick start
+## Quick start
+
+### `OnvifSession` — service discovery and URL caching
 
 `OnvifSession` discovers and caches service URLs during construction:
 
@@ -67,8 +69,30 @@ async fn main() -> Result<(), OnvifError> {
 }
 ```
 
-Use `OnvifClient` instead when your application needs to supply every service
-URL directly. The [complete library and feature guide](LIBRARY_GUIDE.md) covers
+### `OnvifClient` — direct service routing
+
+Use `OnvifClient` when your application needs to supply every service URL:
+
+```rust
+use oxvif::{OnvifClient, OnvifError};
+
+#[tokio::main]
+async fn main() -> Result<(), OnvifError> {
+    let client = OnvifClient::new(
+        "http://192.168.1.100/onvif/device_service",
+    )
+    .with_credentials("admin", "password");
+
+    let capabilities = client.get_capabilities().await?;
+    let media_url = capabilities.media.url.unwrap();
+    let profiles = client.get_profiles(&media_url).await?;
+    let uri = client.get_stream_uri(&media_url, &profiles[0].token).await?;
+    println!("RTSP: {}", uri.uri);
+    Ok(())
+}
+```
+
+The [complete library and feature guide](LIBRARY_GUIDE.md) covers
 both interfaces, discovery, every service family, error handling, and advanced
 features. The generated [Rust API documentation](https://docs.rs/oxvif) is the
 authoritative method and type reference.
@@ -94,9 +118,8 @@ Passwords remain in Windows Credential Manager, macOS Keychain, or Linux
 Secret Service rather than the device registry. Private HTTPS trust anchors can
 be supplied without disabling certificate or hostname verification.
 
-Read the [complete CLI guide](docs/oxvif-cli.md), its
-[Traditional Chinese version](docs/oxvif-cli.zh-TW.md), or the
-[`oxvif-cli` package README](https://github.com/smiti1642/oxvif/blob/master/crates/oxvif-cli/README.md).
+Read the [complete CLI guide](docs/oxvif-cli.md) for installation, commands,
+security behavior, fleet workflows, structured output, and exit codes.
 
 Signed APT and Homebrew packaging has passed non-publishing three-platform
 staging, but no public APT repository or Homebrew tap exists yet. This README
@@ -154,7 +177,6 @@ operations, fault injection, and limitations.
 | [Library and feature guide](LIBRARY_GUIDE.md) | Detailed library usage, service methods, health checks, Mock, and Metamorph. |
 | [Rust API documentation](https://docs.rs/oxvif) | Authoritative public types and method signatures. |
 | [CLI guide](docs/oxvif-cli.md) | Installation, commands, security, fleet workflows, structured output, and exit codes. |
-| [CLI 使用指南](docs/oxvif-cli.zh-TW.md) | Traditional Chinese CLI guide. |
 | [Implemented operations](OPERATIONS.md) | Exact per-service ONVIF coverage. |
 | [Mock device reference](docs/mock-server.md) | Complete behavior and fidelity contract for the mock. |
 | [Support boundaries](docs/support.md) | Versioned platform, security, compatibility, and commercial-claim limits. |
