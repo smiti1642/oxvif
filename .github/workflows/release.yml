@@ -401,6 +401,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_REF }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: release-tooling
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
@@ -411,19 +415,17 @@ jobs:
           RELEASE_TAG: ${{ env.RELEASE_LABEL }}
         run: |
           set -euo pipefail
+          cli_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(p["version"] for p in d["packages"] if p["name"] == "oxvif-cli"))')
           arm_archive="oxvif-macos-aarch64-$RELEASE_TAG.tar.gz"
           intel_archive="oxvif-macos-x86_64-$RELEASE_TAG.tar.gz"
           arm_sha=$(sha256sum "dist/$arm_archive" | cut -d' ' -f1)
           intel_sha=$(sha256sum "dist/$intel_archive" | cut -d' ' -f1)
-          base_url="https://github.com/smiti1642/oxvif/releases/download/$RELEASE_TAG"
           mkdir -p Formula
           sed \
-            -e '/^[[:space:]]*version "@CLI_VERSION@"[[:space:]]*$/d' \
-            -e "s|@MACOS_ARM64_URL@|$base_url/$arm_archive|g" \
+            -e "s|@CLI_VERSION@|$cli_version|g" \
             -e "s|@MACOS_ARM64_SHA256@|$arm_sha|g" \
-            -e "s|@MACOS_X86_64_URL@|$base_url/$intel_archive|g" \
             -e "s|@MACOS_X86_64_SHA256@|$intel_sha|g" \
-            packaging/homebrew/oxvif.rb.in > Formula/oxvif.rb
+            release-tooling/packaging/homebrew/oxvif.rb.in > Formula/oxvif.rb
           ruby -c Formula/oxvif.rb
           ! grep -q '@[A-Z_]*@' Formula/oxvif.rb
       - name: Upload formula staging artifact
@@ -477,16 +479,15 @@ jobs:
           import pathlib
           import re
 
-          archive_name = os.environ["ARCHIVE_NAME"]
           formula = pathlib.Path("Formula/oxvif.rb")
           text = formula.read_text(encoding="utf-8")
           text, replacements = re.subn(
-              rf'url "[^"]*{re.escape(archive_name)}"',
+              r'url "[^"]+"',
               f'url "{os.environ["LOCAL_URL"]}"',
               text,
           )
-          if replacements != 1:
-              raise SystemExit(f"expected one archive URL replacement, got {replacements}")
+          if replacements != 2:
+              raise SystemExit(f"expected two architecture URL replacements, got {replacements}")
           text = re.sub(r'sha256 "[0-9a-f]+"', f'sha256 "{os.environ["ARCHIVE_SHA"]}"', text)
           formula.write_text(text, encoding="utf-8")
           PY
