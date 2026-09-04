@@ -38,7 +38,14 @@ oxvif health
 oxvif profiles
 oxvif stream
 oxvif snapshot
+oxvif list
 ```
+
+`oxvif list` 只讀取本機 registry，列出目前選取狀態、不可變 ID、顯示名稱、位址，以及快取的
+manufacturer／model、firmware 與 serial number；它不會逐台連線攝影機。缺少的 identity
+顯示為 `-`，可用 `oxvif device refresh <ID>` 從可連線攝影機更新快取。`oxvif devices` 保持
+相容；Agent 與 automation 使用 `oxvif device list --output json --non-interactive` 取得相同的
+完整 structured records。
 
 不切換 current device 時，可傳入精確的 canonical ID 或 `group/local-alias`：
 

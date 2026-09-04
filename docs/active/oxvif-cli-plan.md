@@ -694,6 +694,11 @@ Human/Agent parity follow-up 2026-09-03: interactive `/` search and Agent
 view exposes complete discovery metadata, XAddrs, and scopes with scrollable
 Vim navigation; structured records expose the same underlying fields.
 
+Saved-inventory follow-up 2026-09-04: top-level `list` maps to canonical
+`device.list` and renders current selection, address, and cached camera identity
+without network access. `devices` remains compatible and structured output is
+unchanged.
+
 Discovery-to-inventory closure status 2026-08-27: authenticated bounded
 `discover enrich`, deterministic per-record import proposals, filtered/existing/
 conflict classifications, SHA-256 plan fingerprints, stale-plan rejection,

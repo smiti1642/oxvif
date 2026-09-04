@@ -119,20 +119,28 @@ fn render_human(success: &CommandSuccess) -> String {
             if devices.is_empty() {
                 String::from("No saved devices.")
             } else {
-                let mut output = String::from("CURRENT | ID | NAME | TARGET\n");
-                for device in devices {
-                    let current = if current_device.as_deref() == Some(&device.id) {
-                        "*"
-                    } else {
-                        ""
-                    };
-                    let _ = writeln!(
-                        output,
-                        "{} | {} | {} | {}",
-                        current, device.id, device.name, device.target
-                    );
-                }
-                output
+                let headers = [
+                    "CURRENT", "ID", "NAME", "ADDRESS", "DEVICE", "FIRMWARE", "SERIAL",
+                ];
+                let rows = devices
+                    .iter()
+                    .map(|device| {
+                        [
+                            if current_device.as_deref() == Some(&device.id) {
+                                "*".to_owned()
+                            } else {
+                                String::new()
+                            },
+                            device.id.clone(),
+                            device.name.clone(),
+                            saved_device_address(&device.target),
+                            saved_device_label(device),
+                            device.firmware_version.as_deref().unwrap_or("-").to_owned(),
+                            device.serial_number.as_deref().unwrap_or("-").to_owned(),
+                        ]
+                    })
+                    .collect::<Vec<_>>();
+                render_columns(&headers, &rows)
             }
         }
         CommandData::DeviceRecord { action, device } => {
@@ -887,6 +895,32 @@ fn render_json_lines(success: &CommandSuccess) -> Result<String, AppError> {
     Ok(lines.join("\n"))
 }
 
+fn saved_device_address(target: &str) -> String {
+    let Ok(url) = url::Url::parse(target) else {
+        return target.to_owned();
+    };
+    let Some(host) = url.host_str() else {
+        return target.to_owned();
+    };
+    let host = if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host.to_owned()
+    };
+    url.port()
+        .map(|port| format!("{host}:{port}"))
+        .unwrap_or(host)
+}
+
+fn saved_device_label(device: &crate::DeviceView) -> String {
+    match (device.manufacturer.as_deref(), device.model.as_deref()) {
+        (Some(manufacturer), Some(model)) => format!("{manufacturer} {model}"),
+        (Some(manufacturer), None) => manufacturer.to_owned(),
+        (None, Some(model)) => model.to_owned(),
+        (None, None) => "-".to_owned(),
+    }
+}
+
 fn render_device(device: &crate::DeviceView) -> String {
     let mut output = format!(
         "ID: {}\nName: {}\nTarget: {}\nUsername: {}\nCredential source: {}\nCredential availability: {}",
@@ -955,6 +989,41 @@ const fn yes_no(value: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saved_device_list_renders_cached_ip_camera_identity() {
+        let success = CommandSuccess {
+            data: CommandData::DeviceList {
+                devices: vec![crate::DeviceView {
+                    id: "front-door".to_owned(),
+                    name: "前門".to_owned(),
+                    target: "http://192.0.2.20:8080/onvif/device_service".to_owned(),
+                    device_uuid: Some("camera-20".to_owned()),
+                    manufacturer: Some("GeoVision".to_owned()),
+                    model: Some("GV-TBL8810".to_owned()),
+                    firmware_version: Some("V111".to_owned()),
+                    serial_number: Some("SERIAL-20".to_owned()),
+                    username: Some("admin".to_owned()),
+                    credential_profile: None,
+                    credential_source: Some("device".to_owned()),
+                    credential_availability: "unverified".to_owned(),
+                    has_credentials: true,
+                    tags: vec!["entrance".to_owned()],
+                }],
+                current_device: Some("front-door".to_owned()),
+            },
+            warnings: Vec::new(),
+            meta: ResultMeta::default(),
+        };
+
+        let table = render_success(OutputFormat::Table, &success).expect("table output");
+        assert!(table.contains("CURRENT | ID"));
+        assert!(table.contains("192.0.2.20:8080"));
+        assert!(table.contains("GeoVision GV-TBL8810"));
+        assert!(table.contains("V111"));
+        assert!(table.contains("SERIAL-20"));
+        assert!(!table.contains("admin"));
+    }
 
     #[test]
     fn discovery_registration_is_shared_by_human_and_structured_output() {

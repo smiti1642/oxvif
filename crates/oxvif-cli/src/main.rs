@@ -238,6 +238,8 @@ enum Commands {
         #[arg(long)]
         profile: Option<String>,
     },
+    /// List saved IP cameras and their cached identity information.
+    List,
     /// List saved devices.
     Devices,
     /// List static Groups.
@@ -646,6 +648,7 @@ fn surface_command_id(command: &Commands) -> CommandId {
         Commands::Profiles { .. } => CommandId::Profiles,
         Commands::Stream { .. } => CommandId::Stream,
         Commands::Snapshot { .. } => CommandId::Snapshot,
+        Commands::List => CommandId::List,
         Commands::Devices => CommandId::Devices,
         Commands::Groups => CommandId::Groups,
         Commands::Views => CommandId::Views,
@@ -1253,6 +1256,7 @@ fn build_request(
                 profile: profile.unwrap_or_default(),
             }))
         }
+        Commands::List => Ok(CommandRequest::DeviceList),
         Commands::Devices => Ok(CommandRequest::DeviceList),
         Commands::Groups => Ok(CommandRequest::GroupList),
         Commands::Views => Ok(CommandRequest::ViewList),

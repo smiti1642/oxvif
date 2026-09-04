@@ -37,6 +37,10 @@ workspace adds the separately publishable `oxvif-cli 0.16.0` package.
   `health`/media commands, positional saved-device selection, `--json` and
   `--jsonl` shorthands, bare ephemeral discovery, interactive media-profile
   selection, actionable ID suggestions, and generated shell completion.
+- Top-level `list` provides a local, network-free inventory of saved IP cameras
+  with current selection, address, and cached manufacturer/model, firmware, and
+  serial identity. It shares the existing `device.list` structured contract;
+  `devices` remains compatible.
 - Target-first onboarding with `setup <TARGET>`, deterministic interactive ID
   suggestions, and zero-target discovery through the same secure setup flow.
 - A terminal-only discovery browser with bounded pages, live filtering,
@@ -116,7 +120,7 @@ workspace adds the separately publishable `oxvif-cli 0.16.0` package.
   catalogue. Canonical typed requests derive their names from it, descriptor
   order/identity is drift-checked, and every descriptor example must parse back
   to the declared canonical command in tests.
-- All 61 Agent command descriptors now expose a named output kind,
+- All 62 Agent command descriptors now expose a named output kind,
   command-specific error set, semantic argument guidance, and a safe example
   instead of generic `object` metadata.
 - `config path` reports resolved registry locations without writing them, and

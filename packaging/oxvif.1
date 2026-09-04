@@ -24,6 +24,12 @@ Store or replace a device credential in the native operating-system backend.
 .B info [DEVICE]
 Display device identity information.
 .TP
+.B list
+List saved IP cameras using local cached identity information. Displays the
+current selection, ID, name, address, manufacturer/model, firmware, and serial
+number without contacting cameras. The devices command remains compatible;
+automation may use device list with structured output.
+.TP
 .B test [DEVICE]
 Run a basic connectivity diagnostic.
 .TP

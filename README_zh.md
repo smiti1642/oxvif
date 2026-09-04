@@ -113,6 +113,7 @@ Repository contributor 也可以安裝目前的 checkout：
 cargo install --path crates/oxvif-cli --locked
 oxvif --help
 oxvif setup 192.168.1.100
+oxvif list
 oxvif info
 ```
 
@@ -126,6 +127,9 @@ hostname 驗證。
 Discovery 會將每筆結果標示為 `SAVED`、`NEW` 或 `INCOMPLETE`；終端使用者與 Agent
 都能依相同狀態篩選即時掃描及已保存的 snapshot。終端瀏覽器可按 `i` 開啟可捲動的
 完整資訊頁；`/` 與 Agent 使用的 `--query` 則共用相同的跨欄位搜尋語意。
+
+`oxvif list` 會用本機快取資料列出所有已保存攝影機，不會主動連線攝影機；Agent 與
+automation 可使用 canonical form：`oxvif device list --output json --non-interactive`。
 
 原生 APT 與 Homebrew package 只會在完成獨立安裝驗證後，透過本 README 明確列出的
 channel 發布。在這些 channel 列出前，請使用 crates.io，或使用對應 GitHub Release

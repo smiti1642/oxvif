@@ -42,6 +42,7 @@ storage, and current-device selection:
 
 ```sh
 oxvif setup 192.168.1.100 --name "Front Door"
+oxvif list
 oxvif info
 oxvif health
 oxvif stream
@@ -62,11 +63,17 @@ oxvif snapshot front-door --profile Profile_1
 oxvif health --group taipei-f1 --jobs 16
 ```
 
-`auth` securely updates a native credential, `devices`/`groups`/`views` list
-inventory, and `--json`/`--jsonl` abbreviate structured output selection.
+`auth` securely updates a native credential, `list` shows saved cameras with
+cached identity, `devices`/`groups`/`views` list inventory, and
+`--json`/`--jsonl` abbreviate structured output selection.
 These commands map to the same typed requests as the canonical namespaces.
 Agents should continue using explicit selectors, canonical command paths,
 structured output, and `--non-interactive`.
+
+`oxvif list` is local and deterministic: it displays current selection, ID,
+name, address, cached manufacturer/model, firmware, and serial number without
+contacting cameras. `oxvif devices` remains compatible. Automation uses `oxvif
+device list --output json --non-interactive` for the complete saved records.
 
 ## Named devices
 

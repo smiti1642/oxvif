@@ -70,6 +70,7 @@ fn every_first_level_command_has_focused_help() {
         "profiles",
         "stream",
         "snapshot",
+        "list",
         "devices",
         "groups",
         "views",
@@ -149,6 +150,13 @@ fn human_inventory_alias_and_json_shorthand_work_end_to_end() {
     assert_eq!(document["schema_version"], "3");
     assert_eq!(document["data"]["kind"], "device_list");
     assert_eq!(document["data"]["devices"][0]["id"], "front-door");
+
+    let list = run_isolated(&["list", "--json"], directory.path());
+    assert!(list.status.success(), "{}", stderr(&list));
+    let listed: Value = serde_json::from_slice(&list.stdout).expect("stdout should be JSON");
+    assert_eq!(listed["schema_version"], document["schema_version"]);
+    assert_eq!(listed["data"], document["data"]);
+    assert_eq!(listed["meta"]["command"], "device.list");
 }
 
 #[test]

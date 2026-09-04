@@ -68,6 +68,10 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         device_read_descriptor("profiles", "Human shortcut for media.profiles."),
         quick_profile_descriptor("stream", "Human shortcut for media.stream-uri."),
         quick_profile_descriptor("snapshot", "Human shortcut for media.snapshot-uri."),
+        read_descriptor(
+            "list",
+            "List saved IP cameras and their cached identity information.",
+        ),
         read_descriptor("devices", "Human shortcut for device.list."),
         read_descriptor("groups", "Human shortcut for group.list."),
         read_descriptor("views", "Human shortcut for view.list."),
@@ -606,7 +610,10 @@ fn output_descriptor(name: &str) -> OutputDescriptor {
             "device_diagnostic | fleet_diagnostic",
             "A tagged diagnostic result for one target or deterministic fleet items and summary.",
         ),
-        "devices" | "device.list" => ("device_list", "Saved devices and current selection."),
+        "list" | "devices" | "device.list" => (
+            "device_list",
+            "Saved devices, cached identity information, and current selection.",
+        ),
         "groups" | "group.list" => ("group_list", "Saved static Groups."),
         "views" | "view.list" => ("view_list", "Saved dynamic Views."),
         "device.add" | "device.show" | "device.update" | "device.rename" => (
@@ -812,6 +819,7 @@ fn command_example(name: &str) -> &'static str {
         "snapshot" => {
             "oxvif snapshot front-door --profile profile-1 --output json --non-interactive"
         }
+        "list" => "oxvif list --output json --non-interactive",
         "devices" => "oxvif devices --output json --non-interactive",
         "groups" => "oxvif groups --output json --non-interactive",
         "views" => "oxvif views --output json --non-interactive",
@@ -955,9 +963,10 @@ mod tests {
             panic!("expected command list");
         };
 
-        assert_eq!(commands.len(), 61);
+        assert_eq!(commands.len(), 62);
         assert_eq!(commands[0].name, "agent.guide");
         assert!(commands.iter().any(|command| command.name == "setup"));
+        assert!(commands.iter().any(|command| command.name == "list"));
         assert!(commands.iter().any(|command| command.name == "stream"));
         assert!(commands.iter().all(|command| !command.examples.is_empty()));
         assert!(

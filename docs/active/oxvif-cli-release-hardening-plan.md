@@ -422,6 +422,9 @@ behavior that is absent from execution.
   exposes the same status, saved ID, filters, and counts for Agents. Browser
   `/` and Agent `--query` share one cross-field matcher, and `i` provides a
   scrollable full-detail view of the same record fields.
+- [x] Provide a network-free `list` facade for saved cameras with cached
+  identity columns while preserving `devices`, canonical `device.list`, and its
+  structured output contract.
 - [x] Add help snapshots or focused assertions for root and every first-level
   command before 0.16 is tagged.
 

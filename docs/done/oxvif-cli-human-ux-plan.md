@@ -133,6 +133,7 @@ Add the following top-level commands as typed-request adapters:
 | `oxvif profiles [DEVICE]` | `media profiles` |
 | `oxvif stream [DEVICE]` | `media stream-uri` |
 | `oxvif snapshot [DEVICE]` | `media snapshot-uri` |
+| `oxvif list` | `device list` |
 | `oxvif devices` | `device list` |
 | `oxvif groups` | `group list` |
 | `oxvif views` | `view list` |
@@ -370,7 +371,7 @@ by the user's shell environment or package manager.
 ### Stage H1 — quick-command facade
 
 - Add typed request adapters for `info`, `test`, `health`, `profiles`,
-  `stream`, `snapshot`, `devices`, `groups`, and `views`.
+  `stream`, `snapshot`, `list`, `devices`, `groups`, and `views`.
 - Support an optional positional single-device selector on quick commands.
 - Allow `--group` and `--view` after `health` while preserving the existing
   global selector model.
@@ -520,7 +521,7 @@ All four implementation stages were completed on 2026-08-28:
 
 - **H1:** added top-level quick commands, exact positional device selection,
   fleet-selector normalization, `--json`/`--jsonl`, help and descriptor
-  metadata, and bilingual documentation.
+  metadata, a network-free cached-identity `list`, and bilingual documentation.
 - **H2:** added secure no-echo prompting, `setup`, `auth`, preflight conflict
   checks, live verification, rollback, and deterministic non-interactive
   behavior.

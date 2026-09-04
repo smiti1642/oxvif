@@ -116,6 +116,7 @@ Repository contributors can install the current checkout instead:
 cargo install --path crates/oxvif-cli --locked
 oxvif --help
 oxvif setup 192.168.1.100
+oxvif list
 oxvif info
 ```
 
@@ -131,6 +132,10 @@ Discovery marks every result as `SAVED`, `NEW`, or `INCOMPLETE`; both terminal
 users and Agents can filter current scans or saved snapshots by that status.
 The terminal browser provides a scrollable `i` detail view, while `/` and the
 Agent-facing `--query` option share the same cross-field search semantics.
+
+`oxvif list` shows every saved camera using cached local identity information;
+it does not contact cameras. The canonical automation form is `oxvif device
+list --output json --non-interactive`.
 
 Native APT and Homebrew packages are published only through channels listed in
 this README after independent installation verification. Until such a channel

@@ -88,6 +88,7 @@ The primary command groups are:
 | `setup`, `auth` | Securely onboard a device or update its native credential. |
 | `info`, `test`, `health` | Run common diagnostics against a positional or current device. |
 | `profiles`, `stream`, `snapshot` | Use common media operations without the canonical namespace. |
+| `list` | List saved IP cameras with cached identity; no camera connection is made. |
 | `devices`, `groups`, `views` | List local inventory with concise plural commands. |
 | `agent` | Print version-matched guidance for AI Agents. |
 | `describe` | List commands or describe a command as human-readable text or structured data. |
@@ -156,6 +157,7 @@ oxvif test
 oxvif health
 oxvif profiles
 oxvif stream
+oxvif list
 ```
 
 `front-door` remains the canonical ID even if its display name, target, tags,
@@ -190,8 +192,21 @@ oxvif --device front-door device test --output json --non-interactive
 List and inspect saved devices:
 
 ```sh
+oxvif list
 oxvif devices
 oxvif device show front-door
+```
+
+`list` is the concise human form of `device list`; `devices` remains a
+compatible alias. Its table includes the current marker, immutable ID, display
+name, address, cached manufacturer/model, firmware, and serial number. It reads
+only the local registry and never waits for camera connections. Missing
+identity fields are shown as `-`; run `oxvif device refresh <ID>` to update the
+cache from a reachable camera. Agents should use the same complete structured
+records through:
+
+```sh
+oxvif device list --output json --non-interactive
 ```
 
 Interactive operators may select an ambient current device:
