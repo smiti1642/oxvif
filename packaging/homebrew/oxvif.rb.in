@@ -6,13 +6,17 @@ class Oxvif < Formula
   depends_on :macos
 
   on_arm do
-    url "https://github.com/smiti1642/oxvif/releases/download/v#{version}/oxvif-macos-aarch64-v#{version}.tar.gz"
-    sha256 "@MACOS_ARM64_SHA256@"
+    on_macos do
+      url "https://github.com/smiti1642/oxvif/releases/download/v#{version}/oxvif-macos-aarch64-v#{version}.tar.gz"
+      sha256 "@MACOS_ARM64_SHA256@"
+    end
   end
 
   on_intel do
-    url "https://github.com/smiti1642/oxvif/releases/download/v#{version}/oxvif-macos-x86_64-v#{version}.tar.gz"
-    sha256 "@MACOS_X86_64_SHA256@"
+    on_macos do
+      url "https://github.com/smiti1642/oxvif/releases/download/v#{version}/oxvif-macos-x86_64-v#{version}.tar.gz"
+      sha256 "@MACOS_X86_64_SHA256@"
+    end
   end
 
   def install
