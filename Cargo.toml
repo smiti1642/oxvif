@@ -76,7 +76,7 @@ metamorph = ["mock", "serde", "dep:serde_json"]
 metamorph-server = ["metamorph", "mock-server"]
 
 [dependencies]
-quick-xml    = "0.41"
+quick-xml    = "0.42"
 sha1         = "0.11"
 # 0.23 added a default-on `simd-unsafe` feature (runtime-dispatched AVX2/NEON
 # engines). oxvif base64s a 16-byte nonce and a 20-byte SHA-1 digest, so SIMD
@@ -111,7 +111,7 @@ digest_auth  = { version = "0.3", optional = true }
 # downstream crate that enables `encoding` (e.g. via calamine) would. Any
 # future call into an `encoding`-gated quick-xml API fails the build here
 # instead of only in a user's workspace. See CHANGELOG 0.9.9.
-quick-xml = { version = "0.41", features = ["encoding"] }
+quick-xml = { version = "0.42", features = ["encoding"] }
 mockito = "1"
 dotenvy = "0.15"
 # Exercises the `serde` feature's derives with a real JSON roundtrip in tests.
