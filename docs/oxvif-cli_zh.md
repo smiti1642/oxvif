@@ -25,11 +25,11 @@
 與 current-device 選擇：
 
 ```sh
-oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance --username admin
+oxvif setup 192.168.1.100 --name "Front Door"
 ```
 
-密碼會透過不顯示輸入內容的 terminal prompt 讀取，不會出現在 command argument、registry
-或 log。設定完成後，日常操作可以直接使用：
+CLI 會建議不可變 ID `front-door`，再透過 terminal prompt 讀取 ONVIF username 與不回顯的
+密碼；秘密不會出現在 command argument、registry 或 log。設定完成後，日常操作可以直接使用：
 
 ```sh
 oxvif info
@@ -52,8 +52,9 @@ oxvif health --group taipei-f1 --jobs 16
 選單，`--non-interactive` 則會要求明確傳入 `--profile`。Agent 仍應使用完整 canonical
 command、明確 selector、structured output 與 `--non-interactive`。
 
-直接執行 `oxvif discover` 是安全的一次性掃描，不會儲存 snapshot 或註冊裝置。Shell
-completion 可用下列指令產生：
+直接執行 `oxvif discover` 是安全的一次性掃描；人類終端會開啟可分頁、搜尋並加入裝置的
+互動介面，但不會自動註冊任何裝置。直接執行 `oxvif setup` 也會先進入同一個探索介面。
+Shell completion 可用下列指令產生：
 
 ```sh
 oxvif completion bash
@@ -68,12 +69,12 @@ oxvif completion powershell
 - 人類使用者可以用名稱、Group、View 與表格輸出管理大量攝影機。
 - Agent 與自動化程式可以使用可描述的命令、JSON/JSONL、明確的 selector 與穩定的 exit code。
 
-0.1 的 ONVIF 操作面是唯讀診斷：可以探索、讀取裝置資訊、Media URI、PTZ 狀態與健康狀態，
+0.16 的 ONVIF 操作面是唯讀診斷：可以探索、讀取裝置資訊、Media URI、PTZ 狀態與健康狀態，
 但不會修改攝影機設定。新增裝置、Group、View 或 discovery snapshot 只會修改本機 registry。
 
 ## 安裝
 
-從 crates.io 安裝 0.1：
+從 crates.io 安裝 0.16：
 
 ```sh
 cargo install oxvif-cli --locked
@@ -98,6 +99,20 @@ channel 發布。原生 channel 尚未列出時，請使用 crates.io 或對應 
 使用者則只需要記住 `oxvif <command>`。
 
 ## 最短上手流程
+
+互動式終端的最短流程是：
+
+```sh
+oxvif setup 192.168.1.100
+```
+
+若未指定 `--id`，CLI 會依 display name 或 target 建議固定 ID。完全不知道 IP 時可直接執行
+`oxvif setup`，從探索介面選取裝置。Agent 與 unattended script 必須明確提供 target、ID、
+structured output 與 `--non-interactive`：
+
+```sh
+oxvif setup 192.168.1.100 --id front-door --username admin --password-stdin --output json --non-interactive
+```
 
 先用固定 ID 儲存一台攝影機，再把密碼送進作業系統的原生 credential store：
 
@@ -160,7 +175,7 @@ oxvif describe --output json --non-interactive
 oxvif describe media.stream-uri --output json --non-interactive
 ```
 
-0.1 的 structured output schema version 是 3。Agent 應遵守以下原則：
+0.16 的 structured output schema version 是 3。Agent 應遵守以下原則：
 
 1. 使用明確的 `--device`、`--group`、`--view` 或 command-level `--target`，不要依賴目前選取的裝置。
 2. 使用 `--output json` 或 `--output jsonl`，並加上 `--non-interactive`。
@@ -182,6 +197,44 @@ oxvif discover list factory-scan --filter ip-cidr=192.168.1.0/24
 oxvif --timeout 3s discover refresh factory-scan
 ```
 
+在互動式終端中，`discover` 會開啟最多每頁 12 筆的裝置瀏覽器；終端高度不足時會自動減少。
+`j`／`k` 或上下方向鍵移動，`h`／`l` 或 Page Up／Page Down 翻頁，`g`／`G` 跳到第一／最後
+一筆，`/` 進入即時搜尋，`c` 清除搜尋，`i` 開啟選取裝置的可捲動詳細資訊頁，Enter 或 `a`
+對選取且尚未註冊的裝置執行安全
+setup，`q`、Esc 或 Ctrl-C 離開。`r` 切換只看已記錄裝置，`n` 切換只看尚未記錄的裝置
+（包含 incomplete），`A` 恢復全部。詳細頁沿用 `j`／`k`、`h`／`l` 與 `g`／`G` 捲動，
+按 `i` 或 Esc 返回清單。
+
+選擇加入裝置後，Device ID、使用者名稱與遮蔽密碼會在同一個 terminal 畫面的內嵌表單輸入。
+Tab 或上下方向鍵切換欄位，Enter 前進或送出，Ctrl-U 清除目前欄位，Esc 則不儲存並返回探索清單。
+
+互動掃描進行時，oxvif 會每秒在同一行更新已耗費時間。瀏覽器採用同步 terminal frame 與
+逐行覆寫，降低移動及篩選時的畫面閃爍。
+
+JSON、JSONL、redirected output 與 `--non-interactive` 不會啟動互動介面，而是輸出固定排序且
+使用 Unicode 顯示寬度對齊的結果。每筆結果明確標示 `SAVED`、`NEW` 或 `INCOMPLETE`，
+並在已記錄時顯示 oxvif device ID。已註冊裝置與沒有可用 XAddr 的紀錄不能重複加入。
+oxvif 會直接解析 ONVIF scopes 已公開的 manufacturer、hardware/model、firmware 與 serial；
+未提供的值顯示為 `Not advertised`。需要經裝置確認的正式 identity 時，再使用下方的
+snapshot enrichment。
+
+Agent 會取得相同語意的 structured fields：每筆具有 `registration_status`，已保存裝置另有
+`registered_device_id`；`summary` 則包含 total、matched、saved、new 與 incomplete 數量。
+`discover scan`、`discover list` 與 `discover refresh` 都接受 `--query <TEXT>`，其大小寫不敏感
+的比對邏輯與互動瀏覽器的 `/` 完全相同，涵蓋 endpoint UUID、types、scopes、所有 XAddr、
+manufacturer、model、firmware、serial number、registration alias 與已保存 device ID：
+
+```sh
+oxvif --timeout 3s discover scan --filter registration=unregistered --output json --non-interactive
+oxvif discover list factory-scan --filter registration=saved --query loading-dock --output json --non-interactive
+```
+
+Registration filter 接受 `saved`／`registered`、`new`、`unregistered`（new 加 incomplete）及
+`incomplete`。Scan／refresh 的 filter 只限制當次回傳結果；搭配 `--save` 或 refresh 時，
+snapshot 仍保存完整掃描；`--query` 同樣只限制當次回傳內容，不會裁切保存的 snapshot。
+Registration 是查詢當下的 registry 狀態，不適用於 `device import`；
+import plan 本身已有 `already_present` disposition。
+
 `--interface` 可以重複使用，值可以是本機網路介面名稱或 IPv4 位址：
 
 ```sh
@@ -198,8 +251,9 @@ oxvif credential profile set factory-admin --username admin --password-stdin
 oxvif discover enrich factory-scan --credential-profile factory-admin --filter ip-cidr=192.168.1.0/24 --jobs 16
 ```
 
-Discovery filter 支援 `endpoint`、`uuid`、`type`、`scope`、`xaddr`、`ip-cidr`，以及 enrich 後的
-identity 欄位。Filter 格式是 `field[:operator]=value`；operator 包含 `eq`、`neq`、
+Discovery filter 支援 `registration`、`endpoint`、`uuid`、`type`、`scope`、`xaddr`、
+`ip-cidr`，以及 scopes 公開或 enrich 後的 identity 欄位。Filter 格式是
+`field[:operator]=value`；operator 包含 `eq`、`neq`、
 `contains`、`prefix` 與 `in`。
 
 ## 從 snapshot 批次匯入

@@ -2,7 +2,7 @@
 
 [English](support.md) | **繁體中文**
 
-本政策分別說明 Rust 函式庫與 `oxvif` 命令列產品的支援範圍，適用於 oxvif 0.16.x 函式庫與 oxvif-cli 0.1.x 診斷 beta。
+本政策分別說明 Rust 函式庫與 `oxvif` 命令列產品的支援範圍，適用於 oxvif 0.16.x 函式庫與 oxvif-cli 0.16.x 診斷 beta。
 
 ## Rust 函式庫
 

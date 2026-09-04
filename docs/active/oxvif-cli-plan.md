@@ -110,7 +110,7 @@ name = "oxvif"
 path = "src/main.rs"
 
 [dependencies]
-oxvif = { version = "0.15", path = "../.." }
+oxvif = { version = "0.16", path = "../.." }
 ```
 
 The `version` is required for publication; `path` is the local workspace
@@ -317,11 +317,12 @@ oxvif device import --from factory-scan --filter manufacturer=GeoVision \
   --group taipei-f1 --credential-profile factory-admin --apply
 ```
 
-Native discovery filters may use interface, endpoint/IP, UUID, ONVIF type, and
-scope because WS-Discovery supplies those fields. Manufacturer, model,
-firmware, serial number, capabilities, and health are enriched fields and must
-not appear available until authenticated follow-up calls populate them. Human
-flags and Agent requests compile to the same typed filter expression.
+Native discovery filters may use registration state, interface, endpoint/IP,
+UUID, ONVIF type, scope, and any identity values explicitly advertised in
+ONVIF scopes. Authenticated enrichment remains authoritative for manufacturer,
+model, firmware, and serial values that a device does not advertise;
+capabilities and health always require follow-up calls. Human flags and Agent
+requests compile to the same typed filter expression.
 
 A named credential profile stores one secret in the OS credential backend and
 can be referenced by many devices. The registry stores only the profile
@@ -682,6 +683,17 @@ interface selection, duplicate observation merge, typed View filters,
 `--match all|any`, `view evaluate --explain`, credential status, readable fleet
 output, and per-interface partial-failure warnings are implemented.
 
+Human discovery follow-up 2026-09-02: terminal scans now open a bounded,
+filterable browser with Vim/arrow navigation and explicit selected-device
+onboarding. Non-TTY, structured, and `--non-interactive` paths retain the
+deterministic table/schema contracts. `setup <TARGET>` suggests an immutable ID,
+while zero-target `setup` enters the discovery browser.
+
+Human/Agent parity follow-up 2026-09-03: interactive `/` search and Agent
+`--query` on scan/list/refresh now use one cross-field matcher. The TUI `i`
+view exposes complete discovery metadata, XAddrs, and scopes with scrollable
+Vim navigation; structured records expose the same underlying fields.
+
 Discovery-to-inventory closure status 2026-08-27: authenticated bounded
 `discover enrich`, deterministic per-record import proposals, filtered/existing/
 conflict classifications, SHA-256 plan fingerprints, stale-plan rejection,
@@ -790,9 +802,9 @@ The first crates.io release is ready only when all of the following are true:
    target, registry/configuration, credentials, network/device connection, and
    internal failures.
 
-## 11. 0.1 release gate (2026-08-27)
+## 11. 0.16 release gate (2026-08-27)
 
-- Versions are fixed at `oxvif 0.16.0` and `oxvif-cli 0.1.0`; publish the
+- Versions are aligned at `oxvif 0.16.0` and `oxvif-cli 0.16.0`; publish the
   library first and the CLI second.
 - `cargo test --workspace --all-features`: 1004 passed, 3 ignored, 0 failed
   across 14 suites.

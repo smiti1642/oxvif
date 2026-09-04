@@ -8,7 +8,7 @@ For the complete operator and automation reference, read the
 or its
 [Traditional Chinese version](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli_zh.md).
 
-The package installs an executable named `oxvif`. Install version 0.1 from
+The package installs an executable named `oxvif`. Install version 0.16 from
 crates.io:
 
 ```sh
@@ -32,7 +32,7 @@ crates.io or a checksum-verified portable artifact from the matching GitHub Rele
 Root help includes a short Agent onboarding hint. `agent guide` returns the
 version-matched operational and security rules embedded in the installed
 binary; `agent prompt` prints a compact prompt suitable for Agent instructions.
-The structured stdout contract is schema version 3 for the 0.1 release.
+The structured stdout contract is schema version 3 for the 0.16 release.
 
 ## Human quick start
 
@@ -41,11 +41,17 @@ camera with a no-echo password prompt, live verification, native credential
 storage, and current-device selection:
 
 ```sh
-oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance --username admin
+oxvif setup 192.168.1.100 --name "Front Door"
 oxvif info
 oxvif health
 oxvif stream
 ```
+
+`setup` suggests `front-door` as the immutable ID, then prompts for the ONVIF
+username and password. Run `oxvif setup` with no target to discover devices and
+choose one from the interactive browser. Automation uses the explicit form
+`oxvif setup 192.168.1.100 --id front-door --username admin --password-stdin
+--non-interactive`.
 
 One-shot human commands accept an exact canonical ID or `group/local-alias`:
 
@@ -127,15 +133,35 @@ oxvif --timeout 3s discover scan --interface Ethernet --save factory-scan
 oxvif --timeout 3s discover refresh factory-scan --interface Ethernet
 oxvif discover snapshots
 oxvif discover list factory-scan --filter ip-cidr=192.168.20.0/24
+oxvif discover list factory-scan --filter registration=saved
+oxvif discover scan --filter registration=unregistered --query GeoVision --output json --non-interactive
 oxvif discover enrich factory-scan --credential-profile factory-admin \
   --filter ip-cidr=192.168.20.0/24 --jobs 16
 oxvif discover remove factory-scan
 ```
 
+In an interactive terminal, `discover` opens a 12-row paged browser. Use
+`j`/`k` or the arrow keys to move, `h`/`l` or Page Up/Page Down to change page,
+`/` to search, `c` to clear the search, `i` to inspect full scrollable details,
+and Enter or `a` to onboard the selected
+unregistered device. A one-line elapsed-time status remains visible while the
+scan runs, and differential synchronized frames reduce navigation flicker.
+Selected-device setup stays inside the browser while collecting the device ID,
+username, and masked password; Esc returns to the discovery list without saving.
+The table labels every result as `SAVED`, `NEW`, or `INCOMPLETE`; press `r` for
+saved devices, `n` for all unregistered devices, and `A` to restore all results.
+Structured output, redirected output, and
+`--non-interactive` retain the deterministic non-interactive result.
+
 `--interface` may be repeated and accepts a local interface name or IPv4
 address. Scans are ephemeral unless `--save` is supplied. Discovery filters
-include `endpoint`, `uuid`, `type`, `scope`, `xaddr`, `ip-cidr`, and enriched
-identity fields. Enrichment uses bounded concurrency and writes only identity
+include `registration`, `endpoint`, `uuid`, `type`, `scope`, `xaddr`, `ip-cidr`,
+and advertised or enriched identity fields. Registration filters accept
+`saved`, `registered`, `new`, `unregistered`, and `incomplete`. Structured
+records expose `registration_status`, optional `registered_device_id`, and
+shared status counts. `discover scan`, `discover list`, and `discover refresh`
+accept `--query` and use the same cross-field matcher as the browser's `/`
+search. Enrichment uses bounded concurrency and writes only identity
 metadata back to the snapshot; `discover scan` and `discover enrich` never add
 registered devices.
 
@@ -181,7 +207,7 @@ override document and snapshot generation are included in the plan fingerprint.
 
 ## Read-only diagnostics
 
-The 0.1 device surface is diagnostic-only. Every command accepts a saved device
+The 0.16 device surface is diagnostic-only. Every command accepts a saved device
 through root `--device` or an ephemeral endpoint through command-level
 `--target`; credentials are resolved from the saved device/profile or the
 `OXVIF_USERNAME` and `OXVIF_PASSWORD` environment variables.

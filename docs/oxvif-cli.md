@@ -41,13 +41,13 @@ The CLI provides:
 - deterministic JSON and JSONL contracts for Agents and automation; and
 - typed errors with stable process exit codes.
 
-The 0.1 ONVIF command surface is diagnostic-only. It reads device state but
+The 0.16 ONVIF command surface is diagnostic-only. It reads device state but
 does not modify device configuration. Registry, Group, View, credential, and
 snapshot commands modify local CLI state only.
 
 ## Installation
 
-Install version 0.1 from crates.io:
+Install version 0.16 from crates.io:
 
 ```sh
 cargo install oxvif-cli --locked
@@ -142,12 +142,13 @@ CLI intentionally has no insecure-certificate or hostname-bypass option.
 Securely register, authenticate, verify, and select a device in one command:
 
 ```sh
-oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance --username admin
+oxvif setup 192.168.1.100 --name "Front Door"
 ```
 
-`setup` prompts for a password without echo, verifies the ONVIF connection
-before writing local state, stores the secret in the native credential store,
-and makes the device current. Daily operations are then concise:
+`setup` suggests `front-door` as the immutable ID, then prompts for the ONVIF
+username and a password without echo. It verifies the ONVIF connection before
+writing local state, stores the secret in the native credential store, and
+makes the device current. Daily operations are then concise:
 
 ```sh
 oxvif info
@@ -161,6 +162,19 @@ oxvif stream
 or cached metadata later change. Passwords are never written to `devices.toml`.
 Use `--no-verify` only when intentionally saving an unreachable device, and
 `--no-use` when setup must not change the current selection.
+
+With no target, setup discovers the local network and opens the interactive
+device browser:
+
+```sh
+oxvif setup
+```
+
+Agents and unattended scripts must provide both the target and immutable ID:
+
+```sh
+oxvif setup 192.168.1.100 --id front-door --username admin --password-stdin --output json --non-interactive
+```
 
 The fully explicit canonical workflow remains available for scripts and
 advanced composition:
@@ -224,8 +238,63 @@ oxvif discover
 ```
 
 Bare `discover` is equivalent to an ephemeral `discover scan`; it never saves
-a snapshot or registers a device. Human output includes row numbers, identity
-metadata, current registration matches, and executable next-step examples.
+a snapshot or registers a device automatically. In an interactive terminal it
+opens a paged browser; redirected output and `--non-interactive` print the
+deterministic Unicode-aligned table instead.
+
+While an interactive scan is running, oxvif updates one elapsed-time status
+line once per second. The browser uses synchronized terminal frames and
+line-level replacement to reduce flicker during navigation and filtering.
+
+The browser shows up to 12 devices per page, reducing that count only when the
+terminal is shorter. Its key bindings are:
+
+| Keys | Action |
+| --- | --- |
+| `j` / `k`, Down / Up | Move the selection. |
+| `h` / `l`, Page Up / Page Down | Move one page backward or forward. |
+| `g` / `G`, Home / End | Jump to the first or last match. |
+| `/` | Enter live search mode across identity, addressing, registration, types, and scopes. |
+| `c` | Clear the active filter. |
+| `r` | Toggle a saved-device-only view. |
+| `n` | Toggle an unregistered-device view, including incomplete records. |
+| `A` | Restore all registration states. |
+| `i` | Open the selected device's scrollable detail view; use the same navigation keys and press `i` or Esc to return. |
+| Enter / `a` | Onboard the selected unregistered device through secure setup. |
+| `q`, Esc, Ctrl-C | Leave the browser without changing the registry. |
+
+Onboarding opens an inline form in the same terminal screen for the device ID,
+username, and masked password. Use Tab or Up/Down to change fields, Enter to
+advance or submit, Ctrl-U to clear the active field, and Esc to return to the
+discovery list without saving.
+
+Registration is always explicit. Each row is `SAVED`, `NEW`, or `INCOMPLETE`
+and shows the saved device ID when present. Already registered records and
+records without a usable XAddr cannot be added from the browser. oxvif projects
+manufacturer, hardware/model, firmware, and serial values advertised in ONVIF
+scopes without authenticating. A missing value is shown as `Not advertised`;
+snapshot enrichment obtains authoritative identity through authorized ONVIF
+credentials.
+
+Agents receive the same information as explicit fields rather than terminal
+decoration: each record contains `registration_status` and, for saved devices,
+`registered_device_id`. The `summary` object reports total, matched, saved, new,
+and incomplete counts. `discover scan`, `discover list`, and `discover refresh`
+accept `--query <TEXT>` with the same case-insensitive matcher as the browser's
+`/` search. It covers endpoint UUID, types, scopes, all XAddrs, manufacturer,
+model, firmware, serial number, registration aliases, and saved device ID:
+
+```sh
+oxvif --timeout 3s discover scan --filter registration=unregistered --output json --non-interactive
+oxvif discover list factory-scan --filter registration=saved --query loading-dock --output json --non-interactive
+```
+
+Registration values accept `saved`/`registered`, `new`, `unregistered` (new plus
+incomplete), and `incomplete`. Scan and refresh filters affect returned records;
+a snapshot requested with `--save`, or replaced by refresh, still retains the
+complete scan. `--query` likewise affects only the returned view, not the saved
+snapshot. Registration is query-time registry state and is not accepted by
+`device import`; import plans already expose `already_present` dispositions.
 
 Retain a named snapshot for later inspection:
 
@@ -267,8 +336,8 @@ oxvif discover enrich factory-scan --credential-profile factory-admin --filter i
 Enrichment uses bounded concurrency and writes only identity metadata back to
 the snapshot. It does not register devices.
 
-Discovery filters support `endpoint`, `uuid`, `type`, `scope`, `xaddr`,
-`ip-cidr`, and enriched identity fields. The filter grammar is:
+Discovery filters support `registration`, `endpoint`, `uuid`, `type`, `scope`,
+`xaddr`, `ip-cidr`, and advertised or enriched identity fields. The filter grammar is:
 
 ```text
 field[:operator]=value
@@ -498,7 +567,7 @@ oxvif describe --output json --non-interactive
 oxvif describe media.stream-uri --output json --non-interactive
 ```
 
-The 0.1 structured output contract uses schema version 3. Automated callers
+The 0.16 structured output contract uses schema version 3. Automated callers
 should:
 
 1. discover the installed command surface with `describe`;

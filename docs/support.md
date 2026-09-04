@@ -3,7 +3,7 @@
 **English** | [繁體中文](support_zh.md)
 
 This policy separates the Rust library from the `oxvif` command-line product.
-It applies to the oxvif 0.16.x library and the oxvif-cli 0.1.x diagnostic beta.
+It applies to the oxvif 0.16.x library and the oxvif-cli 0.16.x diagnostic beta.
 
 ## Rust library
 

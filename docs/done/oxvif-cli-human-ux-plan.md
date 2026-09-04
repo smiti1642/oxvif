@@ -1,10 +1,12 @@
 # oxvif CLI human UX plan
 
-**Status:** completed 2026-08-28. Written after the `oxvif-cli 0.1` feature and
+**Status:** completed 2026-08-28. Written after the initial CLI feature and
 Agent contracts were completed, then implemented before the first crates.io
-publication.
+publication. The package was re-versioned from its internal 0.1.0 development
+number to 0.16.0 before publication so it shares the library release line.
 
-**Target:** additive human-facing UX improvements for `oxvif-cli 0.1.0`.
+**Target:** additive human-facing UX improvements for the first `oxvif-cli`
+release, now versioned 0.16.0.
 
 **Parent plan:** [oxvif CLI human and Agent operation surface](../active/oxvif-cli-plan.md).
 
@@ -29,7 +31,7 @@ That form remains the canonical automation interface. The human-facing layer
 should make the equivalent first-run and daily workflows feel closer to:
 
 ```sh
-oxvif setup front-door 192.168.1.100 --name "Front Door" --tag entrance
+oxvif setup 192.168.1.100 --id front-door --name "Front Door" --tag entrance
 oxvif info
 oxvif health
 ```
@@ -523,16 +525,16 @@ All four implementation stages were completed on 2026-08-28:
   checks, live verification, rollback, and deterministic non-interactive
   behavior.
 - **H3:** made bare discovery ephemeral, added registration-aware human output,
-  current-device context, actionable credential and close-ID hints, and retained
-  the existing fleet summary contract.
+  current-device context, actionable credential and close-ID hints, shared
+  human/Agent cross-field search, and a scrollable full-detail browser view.
 - **H4:** added unique-profile auto-selection, interactive ambiguous-profile
   choice, deterministic non-interactive failure, and Bash, Zsh, Fish, and
   PowerShell completion generation.
 
 Compatibility was preserved: quick commands resolve to the existing typed
 requests, canonical command paths remain available, structured schema version 3
-is unchanged, and discovery registration annotations are excluded from
-JSON/JSONL serialization.
+is unchanged, and additive discovery registration annotations are available in
+JSON/JSONL serialization for Agent parity.
 
 The root help presents quick commands prominently within Clap's command list
 rather than introducing cosmetic heading groups. Profile prompts display the
@@ -552,5 +554,6 @@ Verification evidence:
 - `cargo package -p oxvif-cli --list --allow-dirty`: the intended 17 package
   files were selected. Full package verification is correctly gated on
   publishing the `oxvif 0.16.0` dependency first.
-- `cargo install --path crates/oxvif-cli --locked`: installed an `oxvif 0.1.0`
-  executable, which generated the PowerShell completion script successfully.
+- At completion, `cargo install --path crates/oxvif-cli --locked` installed the
+  then-internal `oxvif 0.1.0` executable and generated the PowerShell completion
+  script successfully. The pre-publication package is now versioned 0.16.0.

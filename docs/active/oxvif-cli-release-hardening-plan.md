@@ -4,7 +4,7 @@
 repository, package, runtime UX, security, and public-release audit of `develop`
 at `421595b`.
 
-**Scope:** turn the existing diagnostic-first `oxvif-cli 0.1.0` implementation
+**Scope:** turn the existing diagnostic-first `oxvif-cli 0.16.0` implementation
 into an honestly publishable open-source beta, then establish the engineering
 gates required for a supported commercial pilot. This plan closes release and
 contract gaps before adding device-mutating ONVIF operations.
@@ -35,7 +35,7 @@ on CI, structured output, exit codes, retry policy, and release artifacts.
 Target release:
 
 - `oxvif 0.16.0` published first;
-- `oxvif-cli 0.1.0` published and installable with `--locked`;
+- `oxvif-cli 0.16.0` published and installable with `--locked`;
 - Windows, Linux, and macOS native-credential contracts all pass;
 - signed project-owned APT and Homebrew channels plus the Windows artifact are
   installed and verified before any three-platform support claim.
@@ -77,8 +77,8 @@ The plan starts from the following measured state on 2026-09-01.
 
 - `cargo package -p oxvif-cli` cannot verify until `oxvif ^0.16.0` exists on
   crates.io.
-- The public release list ends at 0.15.0 while local release documentation says
-  0.16.0/CLI 0.1.0 is already released.
+- The public release list ended at 0.15.0 while the audited local release
+  documentation incorrectly said 0.16.0/CLI 0.1.0 was already released.
 - `cargo audit` finds `RUSTSEC-2026-0258` through `h2 0.4.15`; `chacha20
   0.10.1` is also yanked.
 - CI is Ubuntu-only and its branch filters do not run on direct `develop`
@@ -135,7 +135,7 @@ evidence:
   lifecycle tests pass on Windows x64, macOS Intel/Apple Silicon, and Ubuntu
   x86_64/aarch64 CI, both Linux rows pass the missing-D-Bus negative path, and
   CLI-owned password buffers zeroize on drop;
-- `cargo audit` scans the tracked 399-package release lock graph with no
+- `cargo audit` scans the tracked 410-package release lock graph with no
   vulnerability or yanked-package result;
 - `cargo package -p oxvif --allow-dirty --locked` packages and rebuilds 128
   files (677.7 KiB compressed); `oxvif-cli --locked --list` contains only its
@@ -175,7 +175,7 @@ during this implementation pass.
    is not retryable.
 6. **Release truth wins over scheduled dates.** A document says `Released` only
    after crates.io packages, tags, and release artifacts exist and verify.
-7. **Do not block 0.1 on a broad source refactor.** Large files may be split
+7. **Do not block 0.16 on a broad source refactor.** Large files may be split
    incrementally only when a stage already changes that domain and standing
    tests protect behavior.
 8. **No insecure TLS default.** Private CA support lands before an opt-in
@@ -224,7 +224,7 @@ R3 human UX             R4 Agent schema
 
 R0-R2 are release blockers. R3, the minimum R4 descriptor corrections, the R5
 native-credential backends, and the three-platform distribution channels are
-required for a credible 0.1 beta. The remaining R5 compatibility and artifact
+required for a credible 0.16 beta. The remaining R5 compatibility and artifact
 controls establish the commercial-pilot cut.
 
 ---
@@ -244,11 +244,11 @@ controls establish the commercial-pilot cut.
 
 ### 5.2 Release-state correction
 
-- [x] Change unreleased 0.16.0/0.1.0 documents to `Unreleased` until publication
+- [x] Change unreleased 0.16.0 documents to `Unreleased` until publication
   is verified.
 - [x] Gate README installation claims so they distinguish crates.io install
   from source install.
-- [x] At the audit baseline, state that the then-current 0.1 backend was
+- [x] At the audit baseline, state that the then-current CLI backend was
   Windows-only; later implementation status is tracked in the three-platform
   plan and must not be presented as verified before native CI passes.
 - [x] Qualify native OS credential wording with the actual per-platform
@@ -358,7 +358,7 @@ Required tests:
   structured warnings.
 - [x] Prove that credentials, WS-Security material, HTTP authorization, and URI
   userinfo never appear at either verbosity level.
-- [ ] If this cannot be completed for 0.1, remove `-v/-q` rather than ship
+- [ ] If this cannot be completed for 0.16, remove `-v/-q` rather than ship
   no-op semantics.
 
 ### 7.3 Authentication and TLS compatibility
@@ -368,9 +368,9 @@ Required tests:
 - [ ] Test an authenticated mock with deliberate clock skew.
 - [x] Add private-CA input with an explicit file path and validation.
 - [x] Decide whether a TLS server-name override is required for IP-addressed
-  devices: it is not part of 0.1; certificates must contain the addressed DNS
+  devices: it is not part of 0.16; certificates must contain the addressed DNS
   name or IP SAN.
-- [x] Keep an insecure TLS escape hatch out of 0.1 and explicitly forbid
+- [x] Keep an insecure TLS escape hatch out of 0.16 and explicitly forbid
   disabling certificate or hostname verification in the default Agent guide.
 - [x] Add tests that target normalization continues to reject URL-embedded
   credentials.
@@ -411,14 +411,19 @@ behavior that is absent from execution.
 
 ### 8.2 Terminal behavior
 
-- [ ] Keep widths deterministic when stdout is redirected.
-- [ ] Define truncation and Unicode width behavior with tests.
+- [x] Keep widths deterministic when stdout is redirected.
+- [x] Define truncation and Unicode width behavior with tests.
 - [ ] Do not add color until `NO_COLOR`, non-TTY, and structured-output rules
   are specified.
-- [ ] Decide whether long health/discovery output gets an opt-in pager; never
-  start one under `--non-interactive` or redirected output.
+- [x] Use a built-in discovery browser rather than an external pager for human
+  terminals. It bounds page size, filters live, supports Vim/arrow navigation,
+  exposes saved/new/incomplete registration views, and never starts under
+  structured, `--non-interactive`, or redirected output. Structured discovery
+  exposes the same status, saved ID, filters, and counts for Agents. Browser
+  `/` and Agent `--query` share one cross-field matcher, and `i` provides a
+  scrollable full-detail view of the same record fields.
 - [x] Add help snapshots or focused assertions for root and every first-level
-  command before 0.1 is tagged.
+  command before 0.16 is tagged.
 
 ### 8.3 Completion contract
 
@@ -477,7 +482,7 @@ Avoid a pre-release rewrite, but stop descriptor drift incrementally:
 ### 9.4 R4 exit gate
 
 An Agent using only `agent guide`, `describe`, published schemas, process exit,
-and structured stdout must be able to execute every 0.1 command without reading
+and structured stdout must be able to execute every 0.16 command without reading
 the Markdown manual or encountering a prompt.
 
 ---
@@ -595,7 +600,7 @@ The public CLI beta requires all three native credential backends and verified
 Windows, APT, and Homebrew installs. The commercial diagnostic pilot additionally
 requires a versioned support matrix, signed artifacts, a recovery procedure, a
 clean security gate, and at least one successful upgrade rehearsal from the
-public 0.1 registry/schema.
+public 0.16 registry/schema.
 
 ---
 

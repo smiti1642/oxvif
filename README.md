@@ -98,7 +98,7 @@ authoritative method and type reference.
 ## Command-line interface
 
 The separately publishable `oxvif-cli` package installs an executable named
-`oxvif`. Its 0.1 ONVIF surface is intentionally read-only: operators and Agents
+`oxvif`. Its 0.16 ONVIF surface is intentionally read-only: operators and Agents
 can discover devices, maintain local inventory, inspect device/media/PTZ state,
 and run deterministic health and fleet diagnostics without changing camera
 configuration.
@@ -115,8 +115,8 @@ Repository contributors can install the current checkout instead:
 ```sh
 cargo install --path crates/oxvif-cli --locked
 oxvif --help
-oxvif setup front-door 192.168.1.100 --username admin
-oxvif --device front-door device info --output json --non-interactive
+oxvif setup 192.168.1.100
+oxvif info
 ```
 
 Passwords remain in Windows Credential Manager, macOS Keychain, or Linux
@@ -124,7 +124,13 @@ Secret Service rather than the device registry. Private HTTPS trust anchors can
 be supplied without disabling certificate or hostname verification.
 
 Read the [complete CLI guide](docs/oxvif-cli.md) for installation, commands,
-security behavior, fleet workflows, structured output, and exit codes.
+the interactive discovery browser, security behavior, fleet workflows,
+structured output, and exit codes.
+
+Discovery marks every result as `SAVED`, `NEW`, or `INCOMPLETE`; both terminal
+users and Agents can filter current scans or saved snapshots by that status.
+The terminal browser provides a scrollable `i` detail view, while `/` and the
+Agent-facing `--query` option share the same cross-field search semantics.
 
 Native APT and Homebrew packages are published only through channels listed in
 this README after independent installation verification. Until such a channel
@@ -195,7 +201,7 @@ firmware, so compatibility claims are evidence-based rather than inferred from
 the protocol profile alone. Sanitized reports from additional real cameras are
 welcome.
 
-The 0.1 CLI is a read-only diagnostic beta with a versioned structured-output
+The 0.16 CLI is a read-only diagnostic beta with a versioned structured-output
 contract. Release verification and platform evidence are documented in the
 [0.16.0 release notes](https://github.com/smiti1642/oxvif/blob/master/docs/releases/0.16.0.md).
 

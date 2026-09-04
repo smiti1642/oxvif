@@ -21,7 +21,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Headline: **oxvif now ships the library support required by the new fleet-ready
 `oxvif` CLI.** Discovery gains fallible, interface-aware APIs while the
-workspace adds the separately publishable `oxvif-cli 0.1.0` package.
+workspace adds the separately publishable `oxvif-cli 0.16.0` package.
 
 ### Added
 
@@ -29,7 +29,7 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
   failures instead of collapsing them into an empty device list.
 - `discovery::discovery_interfaces` reports eligible local IPv4 interfaces so
   callers can select and diagnose multicast paths explicitly.
-- Workspace package `oxvif-cli 0.1.0`, installed as `oxvif`, with named device
+- Workspace package `oxvif-cli 0.16.0`, installed as `oxvif`, with named device
   inventory, Groups, Views, credential profiles, versioned discovery snapshots,
   fingerprinted import plan/apply, read-only ONVIF diagnostics, Agent guidance,
   and deterministic bounded fleet execution.
@@ -37,8 +37,31 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
   `health`/media commands, positional saved-device selection, `--json` and
   `--jsonl` shorthands, bare ephemeral discovery, interactive media-profile
   selection, actionable ID suggestions, and generated shell completion.
+- Target-first onboarding with `setup <TARGET>`, deterministic interactive ID
+  suggestions, and zero-target discovery through the same secure setup flow.
+- A terminal-only discovery browser with bounded pages, live filtering,
+  Vim/arrow-key navigation, registration awareness, and explicit onboarding of
+  one selected device. Synchronized frame updates avoid full-screen flicker,
+  and a one-line elapsed-time status keeps interactive scans visible while they
+  run. Selected-device ID and credentials are collected in a masked in-browser
+  setup form instead of dropping back to line prompts. Structured and
+  non-interactive output never enter either UI path.
+- Human and Agent discovery now share one case-insensitive cross-field search:
+  `/` in the browser and `--query` on `discover scan`, `discover list`, and
+  `discover refresh` cover identity, addressing, registration, types, and
+  scopes. The browser's `i` view exposes the selected record's complete
+  metadata, all XAddrs, and scopes with Vim-style scrolling.
 - Purpose-built terminal renderers for profiles, capabilities, services, PTZ,
   health, and media URIs, while retaining full-fidelity JSON/JSONL output.
+- Discovery tables now compute Unicode display widths and pad real columns, so
+  CJK interface/device text and placeholder glyphs do not shift later fields.
+- Discovery results now expose shared `saved`/`new`/`incomplete` registration
+  status, optional saved device IDs, status counts, registration filters for
+  scans and snapshot lists, and matching TUI shortcuts. Advertised ONVIF scope
+  identity is projected without authentication; absent values are explicitly
+  labelled instead of appearing as unexplained blanks.
+- Endpoint-less observations are keyed by normalized XAddr instead of being
+  collapsed into one discovery record.
 - Cross-platform CI for Linux, Windows, and macOS, including Rust 1.88 MSRV,
   security audit, binary smoke, package, and documentation gates; a manual
   artifact workflow prepares checksums and SPDX SBOMs before release.
@@ -66,13 +89,14 @@ workspace adds the separately publishable `oxvif-cli 0.1.0` package.
 ### Changed
 
 - Release-facing documentation and Rust API examples now consistently target
-  oxvif 0.16 and oxvif-cli 0.1. The README, library guide, CLI manuals, CLI
+  oxvif 0.16 and oxvif-cli 0.16. The README, library guide, CLI manuals, CLI
   crate README, support policy, security policy, and Mock reference no longer
   describe 0.16 as an evaluation build or direct users to 0.15.
 - The legacy `discovery::probe` remains available and delegates to the new
   fallible implementation while preserving its empty-on-error behavior.
-- The workspace release order is `oxvif 0.16.0` first, followed by
-  `oxvif-cli 0.1.0`, so the CLI tarball verifies against crates.io.
+- The library and CLI now share one workspace version source at `0.16.0`, while
+  retaining the release order of `oxvif` first and `oxvif-cli` second so the
+  CLI tarball verifies against crates.io.
 - `Cargo.lock` is now tracked because the workspace ships the `oxvif` CLI;
   release builds, MSRV checks, and dependency audits therefore resolve the same
   dependency graph.

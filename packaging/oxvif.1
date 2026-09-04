@@ -13,8 +13,10 @@ read-only diagnostics against one device or a bounded Group/View fleet.
 Structured JSON and JSONL output is versioned for automation.
 .SH COMMON COMMANDS
 .TP
-.B setup DEVICE TARGET
-Verify and save a device using a no-echo password prompt.
+.B setup [TARGET]
+Discover interactively when TARGET is omitted, or verify and save TARGET using
+a suggested ID plus no-echo credential prompts. Automation supplies --id and
+--non-interactive explicitly.
 .TP
 .B auth DEVICE
 Store or replace a device credential in the native operating-system backend.
@@ -29,8 +31,18 @@ Run a basic connectivity diagnostic.
 Run the comprehensive read-only health suite.
 .TP
 .B discover
-Discover devices without modifying the registry unless an explicit save/import
-operation is selected.
+Open a paged, filterable device browser in a human terminal. JSON, redirected,
+and non-interactive operation remain deterministic. Interactive scans show
+elapsed time, and differential synchronized frames reduce browser flicker.
+Enter or the a key explicitly onboards the selected unregistered device using
+an inline form with masked password input; Escape returns without saving.
+Rows are marked SAVED, NEW, or INCOMPLETE. Use r for saved records, n for
+unregistered records, A for all records, and i for a scrollable full-detail
+view. The browser's / search and automation's --query option share one
+case-insensitive matcher across identity, addressing, registration, types, and
+scopes. Automation can pass
+--filter registration=saved or --filter registration=unregistered and receives
+the same status and saved device ID in structured output.
 .TP
 .B describe [COMMAND]
 Print machine-readable command metadata.
