@@ -64,7 +64,10 @@ jobs:
           cli_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(p["version"] for p in d["packages"] if p["name"] == "oxvif-cli"))')
           grep -Fq "## [$library_version]" CHANGELOG.md
           grep -Fq "# oxvif $library_version" "docs/releases/$library_version.md"
-          grep -Fq "version = \"$cli_version\"" crates/oxvif-cli/Cargo.toml
+          if [ "$cli_version" != "$library_version" ]; then
+            echo "oxvif and oxvif-cli must share one release version" >&2
+            exit 1
+          fi
           if [ "$PUBLISH" = "true" ]; then
             git rev-parse --verify "refs/tags/$RELEASE_TAG"
             test "$RELEASE_TAG" = "v$library_version"
