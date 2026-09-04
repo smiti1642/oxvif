@@ -96,6 +96,42 @@ fn every_first_level_command_has_focused_help() {
 }
 
 #[test]
+fn setup_help_uses_target_first_onboarding() {
+    let output = run(&["setup", "--help"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let help = stdout(&output);
+    assert!(help.contains("setup [OPTIONS] [TARGET]"));
+    assert!(help.contains("--id <ID>"));
+    assert!(!help.contains("<ID> <TARGET>"));
+}
+
+#[test]
+fn automated_setup_requires_target_and_explicit_id() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let without_id = Command::new(env!("CARGO_BIN_EXE_oxvif"))
+        .args([
+            "setup",
+            "192.0.2.10",
+            "--output",
+            "json",
+            "--non-interactive",
+        ])
+        .env("OXVIF_CONFIG_DIR", directory.path())
+        .output()
+        .expect("setup should run");
+    assert_eq!(without_id.status.code(), Some(2));
+    assert!(stdout(&without_id).contains("Provide --id"));
+
+    let without_target = Command::new(env!("CARGO_BIN_EXE_oxvif"))
+        .args(["setup", "--output", "json", "--non-interactive"])
+        .env("OXVIF_CONFIG_DIR", directory.path())
+        .output()
+        .expect("setup should run");
+    assert_eq!(without_target.status.code(), Some(2));
+    assert!(stdout(&without_target).contains("requires an interactive terminal"));
+}
+
+#[test]
 fn human_inventory_alias_and_json_shorthand_work_end_to_end() {
     let directory = tempfile::tempdir().expect("temp directory");
     RegistryStore::at(directory.path())
@@ -422,6 +458,8 @@ fn discovery_and_view_help_expose_fleet_controls() {
     let help = stdout(&discovery);
     assert!(help.contains("--interface"));
     assert!(help.contains("--save"));
+    assert!(help.contains("--filter"));
+    assert!(help.contains("--query"));
 
     let view = run(&["view", "evaluate", "--help"]);
     assert!(view.status.success(), "{}", stderr(&view));
@@ -436,6 +474,107 @@ fn discovery_and_view_help_expose_fleet_controls() {
     let enrich = run(&["discover", "enrich", "--help"]);
     assert!(enrich.status.success(), "{}", stderr(&enrich));
     assert!(stdout(&enrich).contains("--credential-profile"));
+}
+
+#[test]
+fn discovery_list_exposes_and_filters_registration_status_for_agents() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let store = RegistryStore::at(directory.path());
+    store
+        .add(NewDevice {
+            id: "saved-camera".to_owned(),
+            name: Some("Saved camera".to_owned()),
+            target: "http://192.0.2.120/onvif/device_service".to_owned(),
+            tags: Vec::new(),
+        })
+        .expect("device should save");
+    let record = |suffix: u8| DiscoveryRecord {
+        endpoint: format!("urn:uuid:camera-{suffix}"),
+        types: Vec::new(),
+        scopes: (suffix == 121)
+            .then(|| "onvif://www.onvif.org/location/loading-dock".to_owned())
+            .into_iter()
+            .collect(),
+        xaddrs: vec![format!("http://192.0.2.{suffix}/onvif/device_service")],
+        manufacturer: None,
+        model: None,
+        firmware_version: None,
+        serial_number: None,
+    };
+    store
+        .save_discovery_snapshot("scan", vec![record(120), record(121)])
+        .expect("snapshot should save");
+
+    let saved = run_isolated(
+        &[
+            "discover",
+            "list",
+            "scan",
+            "--filter",
+            "registration=saved",
+            "--output=json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert!(saved.status.success(), "{}", stderr(&saved));
+    let saved: Value = serde_json::from_slice(&saved.stdout).expect("saved list should be JSON");
+    assert_eq!(saved["data"]["snapshot"]["summary"]["total_count"], 2);
+    assert_eq!(saved["data"]["snapshot"]["summary"]["matched_count"], 1);
+    assert_eq!(
+        saved["data"]["snapshot"]["devices"][0]["registration_status"],
+        "saved"
+    );
+    assert_eq!(
+        saved["data"]["snapshot"]["devices"][0]["registered_device_id"],
+        "saved-camera"
+    );
+
+    let unregistered = run_isolated(
+        &[
+            "discover",
+            "list",
+            "scan",
+            "--filter",
+            "registration=unregistered",
+            "--output=json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert!(unregistered.status.success(), "{}", stderr(&unregistered));
+    let unregistered: Value =
+        serde_json::from_slice(&unregistered.stdout).expect("new list should be JSON");
+    assert_eq!(
+        unregistered["data"]["snapshot"]["devices"][0]["registration_status"],
+        "new"
+    );
+    assert!(
+        unregistered["data"]["snapshot"]["devices"][0]
+            .get("registered_device_id")
+            .is_none()
+    );
+
+    let queried = run_isolated(
+        &[
+            "discover",
+            "list",
+            "scan",
+            "--query",
+            "LOADING-DOCK",
+            "--output=json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert!(queried.status.success(), "{}", stderr(&queried));
+    let queried: Value =
+        serde_json::from_slice(&queried.stdout).expect("queried list should be JSON");
+    assert_eq!(queried["data"]["snapshot"]["summary"]["matched_count"], 1);
+    assert_eq!(
+        queried["data"]["snapshot"]["devices"][0]["endpoint"],
+        "urn:uuid:camera-121"
+    );
 }
 
 #[test]

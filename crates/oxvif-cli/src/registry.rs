@@ -17,9 +17,9 @@ use url::Url;
 
 use crate::{
     AppError, CredentialProfileView, DeviceFilter, DeviceImportRequest, DiscoveryFilter,
-    DiscoveryImportOverride, DiscoveryImportPlan, DiscoveryImportProposal, DiscoveryRecord,
-    DiscoverySnapshotSummary, DiscoverySnapshotView, GroupMemberView, GroupView, ImportDisposition,
-    NewGroup, NewSavedView, SavedView,
+    DiscoveryFilterField, DiscoveryImportOverride, DiscoveryImportPlan, DiscoveryImportProposal,
+    DiscoveryRecord, DiscoverySnapshotSummary, DiscoverySnapshotView, GroupMemberView, GroupView,
+    ImportDisposition, NewGroup, NewSavedView, SavedView,
     inventory::{device_matches, discovery_matches},
 };
 
@@ -842,6 +842,14 @@ impl RegistryStore {
         id: &str,
         filters: &[DiscoveryFilter],
     ) -> Result<DiscoverySnapshotView, AppError> {
+        if filters
+            .iter()
+            .any(|filter| filter.field == DiscoveryFilterField::Registration)
+        {
+            return Err(AppError::invalid_argument(
+                "Registration filters require the application query layer that can compare discovery records with current devices.",
+            ));
+        }
         validate_resource_id("discovery snapshot", id)?;
         let registry = self.load_unlocked()?;
         let snapshot = registry
@@ -1504,6 +1512,14 @@ fn build_discovery_import_plan(
     let mut filters = request.filters.clone();
     filters.sort();
     filters.dedup();
+    if filters
+        .iter()
+        .any(|filter| filter.field == DiscoveryFilterField::Registration)
+    {
+        return Err(AppError::invalid_argument(
+            "Registration filters are query-time registry state and cannot be used for discovery import plans.",
+        ));
+    }
     let overrides = normalize_import_overrides(records, request)?;
     let override_by_endpoint = overrides
         .iter()

@@ -43,8 +43,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             true,
             false,
             vec![
-                required("id", "string"),
                 required("target", "url | host"),
+                required("id", "string"),
                 optional("name", "string"),
                 optional("tag", "string[]"),
                 optional("username", "string"),
@@ -254,6 +254,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             vec![
                 optional("save", "string"),
                 optional("interface", "interface name | IPv4[]"),
+                optional("filter", "field=value[]"),
+                optional("query", "string"),
             ],
         ),
         descriptor(
@@ -265,13 +267,23 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             vec![
                 required("snapshot", "string"),
                 optional("interface", "interface name | IPv4[]"),
+                optional("filter", "field=value[]"),
+                optional("query", "string"),
             ],
         ),
         enrich_descriptor(),
         read_descriptor("discover.snapshots", "List named discovery snapshots."),
-        read_descriptor(
+        descriptor(
             "discover.list",
             "List and filter records in one discovery snapshot.",
+            RiskLevel::Read,
+            false,
+            false,
+            vec![
+                required("snapshot", "string"),
+                optional("filter", "field=value[]"),
+                optional("query", "string"),
+            ],
         ),
         registry_descriptor(
             "discover.remove",
@@ -632,7 +644,7 @@ fn output_descriptor(name: &str) -> OutputDescriptor {
         ),
         "discover.scan" | "discover.refresh" => (
             "discovery_scan",
-            "Deterministically merged discovery records, interfaces, and optional snapshot.",
+            "Registration-aware discovery records, status counts, interfaces, and optional snapshot.",
         ),
         "discover.enrich" => (
             "discovery_enrichment",
@@ -644,7 +656,7 @@ fn output_descriptor(name: &str) -> OutputDescriptor {
         ),
         "discover.list" => (
             "discovery_snapshot_record",
-            "One filtered discovery snapshot without secret material.",
+            "One filtered snapshot with registration status, saved device IDs, and no secret material.",
         ),
         "discover.remove" => ("resource_removed", "The removed discovery snapshot ID."),
         "use" | "current" => (
@@ -760,6 +772,9 @@ fn argument_description(name: &str, required: bool) -> &'static str {
         }
         "snapshot" => "Immutable discovery snapshot ID.",
         "filter" => "Repeatable field/operator/value filter documented by the command help.",
+        "query" => {
+            "Case-insensitive discovery search across identity, addressing, registration, types, and scopes."
+        }
         "mode" => "Import conflict-handling mode.",
         "apply" => {
             "Apply a previously reviewed local-state plan instead of returning a dry-run plan."
@@ -787,7 +802,7 @@ fn command_example(name: &str) -> &'static str {
         "agent.guide" => "oxvif agent guide --output json --non-interactive",
         "agent.prompt" => "oxvif agent prompt --output json --non-interactive",
         "describe" => "oxvif describe device.info --output json --non-interactive",
-        "setup" => "oxvif setup front-door 192.0.2.10 --username admin --no-verify",
+        "setup" => "oxvif setup 192.0.2.10 --id front-door --username admin --no-verify",
         "auth" => "oxvif auth front-door --username admin",
         "info" => "oxvif info front-door --output json --non-interactive",
         "test" => "oxvif test front-door --output json --non-interactive",
@@ -847,7 +862,7 @@ fn command_example(name: &str) -> &'static str {
         }
         "view.delete" => "oxvif view delete online-cameras --output json",
         "discover.scan" => {
-            "oxvif --timeout 3s discover scan --save factory-scan --output json --non-interactive"
+            "oxvif --timeout 3s discover scan --filter registration=unregistered --query GeoVision --output json --non-interactive"
         }
         "discover.refresh" => {
             "oxvif --timeout 3s discover refresh factory-scan --output json --non-interactive"
@@ -856,7 +871,9 @@ fn command_example(name: &str) -> &'static str {
             "oxvif discover enrich factory-scan --credential-profile factory-admin --output json --non-interactive"
         }
         "discover.snapshots" => "oxvif discover snapshots --output json --non-interactive",
-        "discover.list" => "oxvif discover list factory-scan --output json --non-interactive",
+        "discover.list" => {
+            "oxvif discover list factory-scan --filter registration=saved --query loading-dock --output json --non-interactive"
+        }
         "discover.remove" => "oxvif discover remove factory-scan --output json",
         "use" => "oxvif use front-door --output json",
         "current" => "oxvif current --output json --non-interactive",

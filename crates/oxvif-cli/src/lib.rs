@@ -33,11 +33,12 @@ pub use credential::{
 };
 pub use error::{AppError, ErrorCode};
 pub use inventory::{
-    CredentialProfileView, DeviceFilter, DeviceFilterField, DiscoveryFilter, DiscoveryFilterField,
-    DiscoveryImportOverride, DiscoveryImportOverrides, DiscoveryImportPlan,
-    DiscoveryImportProposal, DiscoveryRecord, DiscoverySnapshotSummary, DiscoverySnapshotView,
-    FilterExplanation, FilterOperator, GroupMemberView, GroupView, ImportDisposition, MatchMode,
-    NewGroup, NewSavedView, SavedView, ViewExplanation,
+    CredentialProfileView, DeviceFilter, DeviceFilterField, DiscoveryDeviceView, DiscoveryFilter,
+    DiscoveryFilterField, DiscoveryImportOverride, DiscoveryImportOverrides, DiscoveryImportPlan,
+    DiscoveryImportProposal, DiscoveryRecord, DiscoveryRegistrationStatus, DiscoveryResultSummary,
+    DiscoverySnapshotResult, DiscoverySnapshotSummary, DiscoverySnapshotView, FilterExplanation,
+    FilterOperator, GroupMemberView, GroupView, ImportDisposition, MatchMode, NewGroup,
+    NewSavedView, SavedView, ViewExplanation, discovery_query_matches,
 };
 pub use output::{render_error, render_success};
 pub use registry::{

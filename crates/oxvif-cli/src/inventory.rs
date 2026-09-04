@@ -197,10 +197,11 @@ pub struct ViewExplanation {
     pub filters: Vec<FilterExplanation>,
 }
 
-/// A WS-Discovery field accepted by snapshot filtering.
+/// A field accepted by live or retained discovery-result filtering.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiscoveryFilterField {
+    Registration,
     Endpoint,
     DeviceUuid,
     Type,
@@ -216,6 +217,7 @@ pub enum DiscoveryFilterField {
 impl DiscoveryFilterField {
     fn parse(value: &str) -> Result<Self, AppError> {
         match value {
+            "registration" | "registered" | "status" => Ok(Self::Registration),
             "endpoint" => Ok(Self::Endpoint),
             "device_uuid" | "uuid" => Ok(Self::DeviceUuid),
             "type" => Ok(Self::Type),
@@ -233,7 +235,7 @@ impl DiscoveryFilterField {
     }
 }
 
-/// One filter applied to a named discovery snapshot.
+/// One filter applied to a live discovery result or named snapshot query.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub struct DiscoveryFilter {
     pub field: DiscoveryFilterField,
@@ -250,6 +252,16 @@ impl FromStr for DiscoveryFilter {
             value.parse::<IpNet>().map_err(|error| {
                 AppError::invalid_argument(format!("Invalid IP CIDR `{value}`: {error}"))
             })?;
+        }
+        if field == DiscoveryFilterField::Registration
+            && !matches!(
+                value.to_ascii_lowercase().as_str(),
+                "saved" | "registered" | "new" | "unregistered" | "incomplete"
+            )
+        {
+            return Err(AppError::invalid_argument(
+                "Registration filters accept saved, registered, new, unregistered, or incomplete.",
+            ));
         }
         Ok(Self {
             field,
@@ -276,6 +288,119 @@ pub struct DiscoveryRecord {
     pub firmware_version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serial_number: Option<String>,
+}
+
+/// Registration state attached to a discovery record at query time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscoveryRegistrationStatus {
+    Saved,
+    New,
+    Incomplete,
+}
+
+impl DiscoveryRegistrationStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Saved => "saved",
+            Self::New => "new",
+            Self::Incomplete => "incomplete",
+        }
+    }
+
+    fn matches_filter(self, value: &str) -> bool {
+        match value.to_ascii_lowercase().as_str() {
+            "saved" | "registered" => self == Self::Saved,
+            "new" => self == Self::New,
+            "unregistered" => matches!(self, Self::New | Self::Incomplete),
+            "incomplete" => self == Self::Incomplete,
+            _ => false,
+        }
+    }
+}
+
+/// One discovery result annotated with its current registry state.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DiscoveryDeviceView {
+    #[serde(flatten)]
+    pub record: DiscoveryRecord,
+    pub registration_status: DiscoveryRegistrationStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registered_device_id: Option<String>,
+}
+
+impl DiscoveryDeviceView {
+    pub(crate) fn new(record: DiscoveryRecord, registered_device_id: Option<String>) -> Self {
+        let registration_status = if registered_device_id.is_some() {
+            DiscoveryRegistrationStatus::Saved
+        } else if record
+            .xaddrs
+            .iter()
+            .any(|target| crate::registry::normalize_target(target).is_ok())
+        {
+            DiscoveryRegistrationStatus::New
+        } else {
+            DiscoveryRegistrationStatus::Incomplete
+        };
+        Self {
+            record,
+            registration_status,
+            registered_device_id,
+        }
+    }
+}
+
+impl std::ops::Deref for DiscoveryDeviceView {
+    type Target = DiscoveryRecord;
+
+    fn deref(&self) -> &Self::Target {
+        &self.record
+    }
+}
+
+/// Counts shared by human discovery output and structured Agent output.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DiscoveryResultSummary {
+    pub total_count: usize,
+    pub matched_count: usize,
+    pub saved_count: usize,
+    pub new_count: usize,
+    pub incomplete_count: usize,
+}
+
+impl DiscoveryResultSummary {
+    pub(crate) fn new(total_count: usize, devices: &[DiscoveryDeviceView]) -> Self {
+        Self {
+            total_count,
+            matched_count: devices.len(),
+            saved_count: devices
+                .iter()
+                .filter(|device| device.registration_status == DiscoveryRegistrationStatus::Saved)
+                .count(),
+            new_count: devices
+                .iter()
+                .filter(|device| device.registration_status == DiscoveryRegistrationStatus::New)
+                .count(),
+            incomplete_count: devices
+                .iter()
+                .filter(|device| {
+                    device.registration_status == DiscoveryRegistrationStatus::Incomplete
+                })
+                .count(),
+        }
+    }
+}
+
+/// Safe, registration-aware contents of one named discovery snapshot.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DiscoverySnapshotResult {
+    pub id: String,
+    pub saved_at_unix_ms: u64,
+    pub generation: u64,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub interfaces: Vec<String>,
+    pub summary: DiscoveryResultSummary,
+    pub devices: Vec<DiscoveryDeviceView>,
 }
 
 /// Summary returned when named discovery snapshots are listed.
@@ -445,6 +570,7 @@ fn collection_compare(values: &[String], filter: &DeviceFilter) -> bool {
 
 pub(crate) fn discovery_matches(device: &DiscoveryRecord, filters: &[DiscoveryFilter]) -> bool {
     filters.iter().all(|filter| match filter.field {
+        DiscoveryFilterField::Registration => true,
         DiscoveryFilterField::Endpoint => equal(&device.endpoint, &filter.value),
         DiscoveryFilterField::DeviceUuid => equal(
             discovery_uuid_value(&device.endpoint),
@@ -470,6 +596,50 @@ pub(crate) fn discovery_matches(device: &DiscoveryRecord, filters: &[DiscoveryFi
         }
         DiscoveryFilterField::SerialNumber => optional_equal(&device.serial_number, &filter.value),
     })
+}
+
+pub(crate) fn discovery_view_matches(
+    device: &DiscoveryDeviceView,
+    filters: &[DiscoveryFilter],
+) -> bool {
+    discovery_matches(&device.record, filters)
+        && filters.iter().all(|filter| {
+            filter.field != DiscoveryFilterField::Registration
+                || device.registration_status.matches_filter(&filter.value)
+        })
+}
+
+/// Match the same case-insensitive free-text query used by interactive discovery.
+///
+/// The query covers every identity and addressing field visible in structured
+/// discovery output, plus registration aliases used by `registration=` filters.
+pub fn discovery_query_matches(device: &DiscoveryDeviceView, query: &str) -> bool {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return true;
+    }
+
+    let registration_terms = match device.registration_status {
+        DiscoveryRegistrationStatus::Saved => "saved registered",
+        DiscoveryRegistrationStatus::New => "new unregistered",
+        DiscoveryRegistrationStatus::Incomplete => "incomplete unregistered",
+    };
+    let scalar_fields = [
+        device.endpoint.as_str(),
+        device.manufacturer.as_deref().unwrap_or_default(),
+        device.model.as_deref().unwrap_or_default(),
+        device.firmware_version.as_deref().unwrap_or_default(),
+        device.serial_number.as_deref().unwrap_or_default(),
+        device.registered_device_id.as_deref().unwrap_or_default(),
+        registration_terms,
+    ];
+
+    scalar_fields
+        .into_iter()
+        .chain(device.types.iter().map(String::as_str))
+        .chain(device.scopes.iter().map(String::as_str))
+        .chain(device.xaddrs.iter().map(String::as_str))
+        .any(|value| value.to_lowercase().contains(&query))
 }
 
 fn split_filter(value: &str) -> Result<(&str, &str), AppError> {
@@ -547,6 +717,73 @@ mod tests {
                 .parse::<DeviceFilter>()
                 .is_err()
         );
+        assert!("registration=saved".parse::<DiscoveryFilter>().is_ok());
+        assert!("status=unregistered".parse::<DiscoveryFilter>().is_ok());
+        assert!("registration=unknown".parse::<DiscoveryFilter>().is_err());
+    }
+
+    #[test]
+    fn registration_filter_distinguishes_saved_new_and_incomplete() {
+        let record = DiscoveryRecord {
+            endpoint: "urn:uuid:camera".to_owned(),
+            types: Vec::new(),
+            scopes: Vec::new(),
+            xaddrs: vec!["http://192.0.2.10/onvif/device_service".to_owned()],
+            manufacturer: None,
+            model: None,
+            firmware_version: None,
+            serial_number: None,
+        };
+        let saved = DiscoveryDeviceView::new(record.clone(), Some("front-door".to_owned()));
+        let new = DiscoveryDeviceView::new(record.clone(), None);
+        let mut incomplete_record = record;
+        incomplete_record.xaddrs.clear();
+        let incomplete = DiscoveryDeviceView::new(incomplete_record, None);
+
+        let saved_filter = ["registration=saved".parse().expect("saved filter")];
+        let unregistered_filter = ["registration=unregistered"
+            .parse()
+            .expect("unregistered filter")];
+        assert!(discovery_view_matches(&saved, &saved_filter));
+        assert!(!discovery_view_matches(&new, &saved_filter));
+        assert!(discovery_view_matches(&new, &unregistered_filter));
+        assert!(discovery_view_matches(&incomplete, &unregistered_filter));
+    }
+
+    #[test]
+    fn discovery_query_searches_all_structured_fields_and_registration_aliases() {
+        let mut record = DiscoveryRecord {
+            endpoint: "urn:uuid:camera-42".to_owned(),
+            types: vec!["tds:Device".to_owned()],
+            scopes: vec!["onvif://www.onvif.org/location/loading-dock".to_owned()],
+            xaddrs: vec!["http://192.0.2.42/onvif/device_service".to_owned()],
+            manufacturer: Some("GeoVision".to_owned()),
+            model: Some("GV-TBL8810".to_owned()),
+            firmware_version: Some("V111".to_owned()),
+            serial_number: Some("SERIAL-42".to_owned()),
+        };
+        let saved = DiscoveryDeviceView::new(record.clone(), Some("front-door".to_owned()));
+
+        for query in [
+            "CAMERA-42",
+            "tds:device",
+            "loading-dock",
+            "192.0.2.42",
+            "geovision",
+            "tbl8810",
+            "v111",
+            "serial-42",
+            "front-door",
+            "registered",
+        ] {
+            assert!(discovery_query_matches(&saved, query), "query {query}");
+        }
+        assert!(!discovery_query_matches(&saved, "not-present"));
+
+        record.xaddrs.clear();
+        let incomplete = DiscoveryDeviceView::new(record, None);
+        assert!(discovery_query_matches(&incomplete, "unregistered"));
+        assert!(discovery_query_matches(&incomplete, "incomplete"));
     }
 
     #[test]

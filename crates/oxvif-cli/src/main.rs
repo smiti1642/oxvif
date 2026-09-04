@@ -21,9 +21,13 @@ use oxvif_cli::{
     DiscoverySnapshotShowRequest, ExecutionOptions, GroupCreateRequest, GroupMemberAddRequest,
     GroupMemberRemoveRequest, ImportMode, MatchMode, NewDevice, NewGroup, NewSavedView,
     OutputFormat, ProfileConnectRequest, ResourceIdRequest, ResultMeta, SecretString,
-    TargetSelector, ViewCreateRequest, render_error, render_success,
+    TargetSelector, ViewCreateRequest, normalize_target, render_error, render_success,
 };
 use tokio::time::Instant;
+
+mod interactive;
+
+use interactive::{BrowserAction, DiscoverySetup, await_discovery, browse_discovery};
 
 const AGENT_HELP: &str = "AI AGENTS:\n  Run `oxvif agent guide --output json` before operating devices.\n  Use structured output, --non-interactive, and an explicit device selector.\n  Never place passwords in command arguments, output, or logs.";
 
@@ -168,10 +172,11 @@ struct Cli {
 enum Commands {
     /// Securely register, authenticate, verify, and select a device.
     Setup {
-        /// Immutable ID used to select this saved device.
-        id: String,
         /// Device host, IP address, or ONVIF device-service URL.
-        target: String,
+        target: Option<String>,
+        /// Immutable ID used to select this saved device; suggested interactively when omitted.
+        #[arg(long)]
+        id: Option<String>,
         /// Human-readable display name.
         #[arg(long)]
         name: Option<String>,
@@ -284,7 +289,7 @@ enum Commands {
         #[command(subcommand)]
         command: CredentialRootCommands,
     },
-    /// Scan for ONVIF devices and manage named discovery snapshots.
+    /// Scan for ONVIF devices; human terminals open a paged, filterable browser.
     Discover {
         #[command(subcommand)]
         command: Option<DiscoverCommands>,
@@ -571,6 +576,12 @@ enum DiscoverCommands {
         /// Limit multicast discovery to an interface name or IPv4 address.
         #[arg(long = "interface")]
         interfaces: Vec<String>,
+        /// Filter returned records; repeat for AND semantics.
+        #[arg(long = "filter")]
+        filters: Vec<DiscoveryFilter>,
+        /// Case-insensitive search of identity, addressing, registration, type, and scope fields.
+        #[arg(long)]
+        query: Option<String>,
     },
     /// Re-run discovery and atomically replace an existing named snapshot.
     Refresh {
@@ -578,6 +589,12 @@ enum DiscoverCommands {
         /// Limit multicast discovery to an interface name or IPv4 address.
         #[arg(long = "interface")]
         interfaces: Vec<String>,
+        /// Filter returned records; the complete refreshed snapshot is still saved.
+        #[arg(long = "filter")]
+        filters: Vec<DiscoveryFilter>,
+        /// Case-insensitive search of identity, addressing, registration, type, and scope fields.
+        #[arg(long)]
+        query: Option<String>,
     },
     /// Authenticate discovered devices and cache their identity metadata.
     Enrich {
@@ -594,6 +611,9 @@ enum DiscoverCommands {
         snapshot: String,
         #[arg(long = "filter")]
         filters: Vec<DiscoveryFilter>,
+        /// Case-insensitive search of identity, addressing, registration, type, and scope fields.
+        #[arg(long)]
+        query: Option<String>,
     },
     /// List named discovery snapshots.
     Snapshots,
@@ -757,7 +777,7 @@ async fn main() -> ExitCode {
 async fn run(arguments: Vec<OsString>) -> u8 {
     let arguments = normalize_human_arguments(arguments);
     let requested_format = requested_output(&arguments);
-    let cli = match Cli::try_parse_from(&arguments) {
+    let mut cli = match Cli::try_parse_from(&arguments) {
         Ok(cli) => cli,
         Err(error)
             if matches!(
@@ -826,6 +846,37 @@ async fn run(arguments: Vec<OsString>) -> u8 {
             return error.exit_code();
         }
     };
+    let prompt = SystemPrompt;
+    if matches!(cli.command, Commands::Setup { target: None, .. }) {
+        if !interactive_terminal_available(format, &options) {
+            let error = AppError::invalid_argument(
+                "`oxvif setup` without a target requires an interactive terminal; provide a target and --id for automation.",
+            );
+            emit_error(format, &error, Some("setup"));
+            return error.exit_code();
+        }
+        return execute_and_emit(
+            &application,
+            CommandRequest::DiscoverScan(DiscoverScanRequest {
+                snapshot_id: None,
+                interfaces: Vec::new(),
+                filters: Vec::new(),
+                query: None,
+            }),
+            &options,
+            format,
+            false,
+            true,
+            &prompt,
+        )
+        .await;
+    }
+    if let Err(error) =
+        prepare_human_command(&mut cli.command, cli.non_interactive, format, &prompt)
+    {
+        emit_error(format, &error, None);
+        return error.exit_code();
+    }
     if let Err(error) = preflight_human_command(&cli.command, &application) {
         emit_error(format, &error, None);
         return error.exit_code();
@@ -836,7 +887,6 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         cli.group.as_deref(),
         cli.view.as_deref(),
     );
-    let prompt = SystemPrompt;
     let request = match build_request(
         cli.command,
         cli.device,
@@ -851,55 +901,184 @@ async fn run(arguments: Vec<OsString>) -> u8 {
             return error.exit_code();
         }
     };
+    let browse_after_discovery = interactive_terminal_available(format, &options)
+        && matches!(request, CommandRequest::DiscoverScan(_));
+    execute_and_emit(
+        &application,
+        request,
+        &options,
+        format,
+        implicit_human_context,
+        browse_after_discovery,
+        &prompt,
+    )
+    .await
+}
+
+async fn execute_and_emit(
+    application: &Application,
+    request: CommandRequest,
+    options: &ExecutionOptions,
+    format: OutputFormat,
+    implicit_human_context: bool,
+    browse_after_discovery: bool,
+    prompt: &dyn Prompt,
+) -> u8 {
     let command_name = request.name();
     let started = Instant::now();
-    emit_verbose_start(&options, format, command_name);
+    emit_verbose_start(options, format, command_name);
 
-    let request = match choose_profile_if_needed(request, &application, &options, &prompt).await {
+    let request = match choose_profile_if_needed(request, application, options, prompt).await {
         Ok(request) => request,
         Err(error) => {
-            emit_verbose_error(&options, command_name, &error, started);
+            emit_verbose_error(options, command_name, &error, started);
             emit_error(format, &error, Some(command_name));
             return error.exit_code();
         }
     };
     let command_name = request.name();
 
-    match application.execute(request, &options).await {
-        Ok(success) => match render_success(format, &success) {
-            Ok(rendered) => {
-                if format == OutputFormat::Table
-                    && implicit_human_context
-                    && !options.quiet
-                    && let (Some(device_id), Some(target)) = (
-                        success.meta.device_id.as_deref(),
-                        success.meta.target.as_deref(),
-                    )
-                {
-                    println!("Using device: {device_id} ({target})\n\n{rendered}");
-                } else {
-                    println!("{rendered}");
+    let show_discovery_progress = interactive_terminal_available(format, options)
+        && !options.quiet
+        && matches!(
+            &request,
+            CommandRequest::DiscoverScan(_) | CommandRequest::DiscoveryRefresh(_)
+        );
+    let execution = application.execute(request, options);
+    let result = if show_discovery_progress {
+        await_discovery(execution).await
+    } else {
+        execution.await
+    };
+
+    match result {
+        Ok(success) => {
+            if browse_after_discovery
+                && let CommandData::DiscoveryScan {
+                    devices, summary, ..
+                } = &success.data
+                && !devices.is_empty()
+            {
+                match browse_discovery(devices, summary) {
+                    Ok(BrowserAction::Quit) => {
+                        println!(
+                            "Discovery browser closed. Found {} device(s).",
+                            summary.total_count
+                        );
+                        emit_verbose_success(options, command_name, &success, started);
+                        return success.exit_code();
+                    }
+                    Ok(BrowserAction::Add(setup)) => {
+                        emit_verbose_success(options, command_name, &success, started);
+                        return setup_discovered_device(
+                            application,
+                            *setup,
+                            options,
+                            format,
+                            prompt,
+                        )
+                        .await;
+                    }
+                    Err(error) => {
+                        emit_verbose_error(options, command_name, &error, started);
+                        emit_error(format, &error, Some(command_name));
+                        return error.exit_code();
+                    }
                 }
-                emit_verbose_success(&options, command_name, &success, started);
-                success.exit_code()
             }
-            Err(error) => {
-                emit_verbose_error(&options, command_name, &error, started);
-                emit_error(format, &error, Some(command_name));
-                error.exit_code()
+
+            match render_success(format, &success) {
+                Ok(rendered) => {
+                    if format == OutputFormat::Table
+                        && implicit_human_context
+                        && !options.quiet
+                        && let (Some(device_id), Some(target)) = (
+                            success.meta.device_id.as_deref(),
+                            success.meta.target.as_deref(),
+                        )
+                    {
+                        println!("Using device: {device_id} ({target})\n\n{rendered}");
+                    } else {
+                        println!("{rendered}");
+                    }
+                    emit_verbose_success(options, command_name, &success, started);
+                    success.exit_code()
+                }
+                Err(error) => {
+                    emit_verbose_error(options, command_name, &error, started);
+                    emit_error(format, &error, Some(command_name));
+                    error.exit_code()
+                }
             }
-        },
+        }
         Err(error) => {
             let meta = ResultMeta {
                 command: Some(command_name.to_owned()),
                 elapsed_ms: elapsed_millis(started),
                 ..ResultMeta::default()
             };
-            emit_verbose_error(&options, command_name, &error, started);
+            emit_verbose_error(options, command_name, &error, started);
             emit_error_with_meta(format, &error, &meta);
             error.exit_code()
         }
     }
+}
+
+async fn setup_discovered_device(
+    application: &Application,
+    setup: DiscoverySetup,
+    options: &ExecutionOptions,
+    format: OutputFormat,
+    prompt: &dyn Prompt,
+) -> u8 {
+    let Some(target) = setup
+        .device
+        .xaddrs
+        .iter()
+        .find(|target| normalize_target(target).is_ok())
+        .cloned()
+    else {
+        let error = AppError::invalid_argument(
+            "The selected discovery record has no usable device-service address.",
+        );
+        emit_error(format, &error, Some("setup"));
+        return error.exit_code();
+    };
+    let device = NewDevice {
+        id: setup.id,
+        name: None,
+        target,
+        tags: Vec::new(),
+    };
+    if let Err(error) = application.preflight_setup(&device) {
+        emit_error(format, &error, Some("setup"));
+        return error.exit_code();
+    }
+    let request = CommandRequest::DeviceSetup(DeviceSetupRequest {
+        device,
+        username: setup.username,
+        password: setup.password,
+        verify: true,
+        set_current: true,
+    });
+    Box::pin(execute_and_emit(
+        application,
+        request,
+        options,
+        format,
+        false,
+        false,
+        prompt,
+    ))
+    .await
+}
+
+fn interactive_terminal_available(format: OutputFormat, options: &ExecutionOptions) -> bool {
+    format == OutputFormat::Table
+        && !options.non_interactive
+        && io::stdin().is_terminal()
+        && io::stdout().is_terminal()
+        && io::stderr().is_terminal()
 }
 
 fn emit_verbose_start(options: &ExecutionOptions, format: OutputFormat, command: &str) {
@@ -987,8 +1166,8 @@ fn build_request(
 
     let request = match command {
         Commands::Setup {
-            id,
             target,
+            id,
             name,
             tags,
             username,
@@ -1004,6 +1183,16 @@ fn build_request(
             )?;
             let (username, password) =
                 human_credential_input(username, password_stdin, non_interactive, prompt)?;
+            let target = target.ok_or_else(|| {
+                AppError::invalid_argument(
+                    "Interactive setup discovery requires a terminal; provide a target.",
+                )
+            })?;
+            let id = id.ok_or_else(|| {
+                AppError::invalid_argument(
+                    "Provide --id under --non-interactive or accept the interactive suggestion.",
+                )
+            })?;
             Ok(CommandRequest::DeviceSetup(DeviceSetupRequest {
                 device: NewDevice {
                     id,
@@ -1158,20 +1347,31 @@ fn build_request(
             None => Ok(CommandRequest::DiscoverScan(DiscoverScanRequest {
                 snapshot_id: None,
                 interfaces: Vec::new(),
+                filters: Vec::new(),
+                query: None,
             })),
             Some(command) => match command {
-                DiscoverCommands::Scan { save, interfaces } => {
-                    Ok(CommandRequest::DiscoverScan(DiscoverScanRequest {
-                        snapshot_id: save,
-                        interfaces,
-                    }))
-                }
+                DiscoverCommands::Scan {
+                    save,
+                    interfaces,
+                    filters,
+                    query,
+                } => Ok(CommandRequest::DiscoverScan(DiscoverScanRequest {
+                    snapshot_id: save,
+                    interfaces,
+                    filters,
+                    query,
+                })),
                 DiscoverCommands::Refresh {
                     snapshot,
                     interfaces,
+                    filters,
+                    query,
                 } => Ok(CommandRequest::DiscoveryRefresh(DiscoveryRefreshRequest {
                     id: snapshot,
                     interfaces,
+                    filters,
+                    query,
                 })),
                 DiscoverCommands::Enrich {
                     snapshot,
@@ -1191,12 +1391,17 @@ fn build_request(
                         jobs,
                     }))
                 }
-                DiscoverCommands::List { snapshot, filters } => Ok(
-                    CommandRequest::DiscoverySnapshotShow(DiscoverySnapshotShowRequest {
+                DiscoverCommands::List {
+                    snapshot,
+                    filters,
+                    query,
+                } => Ok(CommandRequest::DiscoverySnapshotShow(
+                    DiscoverySnapshotShowRequest {
                         id: snapshot,
                         filters,
-                    }),
-                ),
+                        query,
+                    },
+                )),
                 DiscoverCommands::Snapshots => Ok(CommandRequest::DiscoverySnapshotList),
                 DiscoverCommands::Remove { snapshot } => {
                     Ok(CommandRequest::DiscoverySnapshotRemove(ResourceIdRequest {
@@ -1424,18 +1629,86 @@ fn preflight_human_command(command: &Commands, application: &Application) -> Res
             name,
             tags,
             ..
-        } => application.preflight_setup(&NewDevice {
-            id: id.clone(),
-            name: name.clone(),
-            target: target.clone(),
-            tags: tags.clone(),
-        }),
+        } => match (id, target) {
+            (Some(id), Some(target)) => application.preflight_setup(&NewDevice {
+                id: id.clone(),
+                name: name.clone(),
+                target: target.clone(),
+                tags: tags.clone(),
+            }),
+            _ => Ok(()),
+        },
         Commands::Auth { id, .. } => {
             let canonical_id = application.registry().resolve_device_selector(id)?;
             application.registry().get(&canonical_id).map(|_| ())
         }
         _ => Ok(()),
     }
+}
+
+fn prepare_human_command(
+    command: &mut Commands,
+    non_interactive: bool,
+    format: OutputFormat,
+    prompt: &dyn Prompt,
+) -> Result<(), AppError> {
+    let Commands::Setup {
+        target: Some(target),
+        id,
+        name,
+        ..
+    } = command
+    else {
+        return Ok(());
+    };
+    if id.is_some() {
+        return Ok(());
+    }
+    if non_interactive || format.is_structured() {
+        return Err(AppError::invalid_argument(
+            "Provide --id for setup under --non-interactive or structured output.",
+        ));
+    }
+
+    let suggestion = suggested_device_id(target, name.as_deref())?;
+    let answer = prompt.text(&format!("Device ID [{suggestion}]: "))?;
+    *id = Some(if answer.trim().is_empty() {
+        suggestion
+    } else {
+        answer.trim().to_owned()
+    });
+    Ok(())
+}
+
+fn suggested_device_id(target: &str, name: Option<&str>) -> Result<String, AppError> {
+    let normalized = normalize_target(target)?;
+    let parsed = url::Url::parse(&normalized)
+        .map_err(|error| AppError::invalid_argument(format!("Invalid target: {error}")))?;
+    let preferred = name
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(slugify_device_id);
+    Ok(preferred.unwrap_or_else(|| {
+        slugify_device_id(&format!("camera-{}", parsed.host_str().unwrap_or("device")))
+            .unwrap_or_else(|| "camera".to_owned())
+    }))
+}
+
+fn slugify_device_id(source: &str) -> Option<String> {
+    let mut id = String::with_capacity(source.len());
+    let mut separator = false;
+    for character in source.chars().flat_map(char::to_lowercase) {
+        if character.is_ascii_alphanumeric() || character == '_' {
+            if separator && !id.is_empty() {
+                id.push('-');
+            }
+            id.push(character);
+            separator = false;
+        } else {
+            separator = true;
+        }
+    }
+    (!id.is_empty()).then_some(id)
 }
 
 fn reject_root_selector(
@@ -1650,6 +1923,23 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
             continue;
         }
         break;
+    }
+
+    // Preserve the pre-0.16 preview syntax (`setup <ID> <TARGET>`) while the
+    // public and help-facing form uses `setup <TARGET> --id <ID>`.
+    if arguments
+        .get(index)
+        .is_some_and(|argument| argument == "setup")
+        && arguments
+            .get(index + 1)
+            .is_some_and(|argument| !argument.to_string_lossy().starts_with('-'))
+        && arguments
+            .get(index + 2)
+            .is_some_and(|argument| !argument.to_string_lossy().starts_with('-'))
+    {
+        let legacy_id = arguments.remove(index + 1);
+        arguments.insert(index + 2, OsString::from("--id"));
+        arguments.insert(index + 3, legacy_id);
     }
 
     if arguments
@@ -1992,6 +2282,85 @@ mod tests {
     fn secret_debug_output_is_redacted() {
         let secret = SecretString::new("do-not-print").expect("secret should construct");
         assert_eq!(format!("{secret:?}"), "SecretString([REDACTED])");
+    }
+
+    #[test]
+    fn setup_uses_target_first_and_explicit_id_for_automation() {
+        let request = parsed_request(&[
+            "oxvif",
+            "setup",
+            "192.0.2.10",
+            "--id",
+            "front-door",
+            "--username",
+            "admin",
+            "--no-verify",
+        ])
+        .expect("setup should build");
+        let CommandRequest::DeviceSetup(request) = request else {
+            panic!("expected setup request");
+        };
+        assert_eq!(request.device.id, "front-door");
+        assert_eq!(request.device.target, "192.0.2.10");
+    }
+
+    #[test]
+    fn interactive_setup_suggests_a_human_device_id() {
+        assert_eq!(
+            suggested_device_id("192.168.1.100", None).expect("IP should normalize"),
+            "camera-192-168-1-100"
+        );
+        assert_eq!(
+            suggested_device_id("camera.example.test", Some("Front Door"))
+                .expect("host should normalize"),
+            "front-door"
+        );
+        assert_eq!(
+            suggested_device_id("192.168.1.100", Some("前門攝影機"))
+                .expect("non-ASCII name should fall back to the host"),
+            "camera-192-168-1-100"
+        );
+    }
+
+    #[test]
+    fn non_interactive_setup_requires_an_explicit_id() {
+        let mut command = Commands::Setup {
+            target: Some("192.0.2.10".to_owned()),
+            id: None,
+            name: None,
+            tags: Vec::new(),
+            username: Some("admin".to_owned()),
+            password_stdin: true,
+            no_verify: false,
+            no_use: false,
+        };
+        let error = prepare_human_command(&mut command, true, OutputFormat::Table, &FixedPrompt)
+            .expect_err("automation should require --id");
+        assert_eq!(error.code, oxvif_cli::ErrorCode::InvalidArgument);
+        assert!(error.message.contains("--id"));
+    }
+
+    #[test]
+    fn preview_setup_syntax_remains_compatible() {
+        let normalized = normalize_human_arguments(
+            [
+                "oxvif",
+                "setup",
+                "front-door",
+                "192.0.2.10",
+                "--username",
+                "admin",
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
+        );
+        let parsed = Cli::try_parse_from(normalized).expect("legacy syntax should normalize");
+        let Commands::Setup { target, id, .. } = parsed.command else {
+            panic!("expected setup command");
+        };
+        assert_eq!(target.as_deref(), Some("192.0.2.10"));
+        assert_eq!(id.as_deref(), Some("front-door"));
     }
 
     #[test]

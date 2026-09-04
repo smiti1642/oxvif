@@ -26,6 +26,7 @@ pub fn guide() -> AgentGuide {
             "Run `oxvif describe --output json` to discover implemented commands.",
             "Select the target explicitly and execute one typed command.",
             "Persist canonical device IDs returned in result metadata.",
+            "Use registration=saved or registration=unregistered filters to separate known and new discovery records; use --query for the same cross-field search as the human discovery browser; inspect each record's registration_status and registered_device_id.",
             "Enrich and filter a discovery snapshot, review its import plan, then apply that exact fingerprint.",
             "Run read-only inspection against a Group/View with JSONL and consume device lines followed by the aggregate summary.",
             "Retry only when the structured error says retryable=true.",

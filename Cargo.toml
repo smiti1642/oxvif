@@ -3,6 +3,7 @@ members = [".", "crates/oxvif-cli"]
 resolver = "3"
 
 [workspace.package]
+version = "0.16.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
@@ -10,7 +11,7 @@ repository = "https://github.com/smiti1642/oxvif"
 
 [package]
 name = "oxvif"
-version = "0.16.0"
+version.workspace = true
 edition = "2024"
 rust-version = "1.88"
 description = "Async Rust client library for the ONVIF IP camera protocol"

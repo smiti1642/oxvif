@@ -5,11 +5,14 @@ use oxvif::{
     health::{ErrorClass, HealthCheck, HealthReport},
     transport::{HttpTransport, Transport, TransportError},
 };
+use percent_encoding::percent_decode_str;
 use tokio::time::{Instant, sleep, timeout};
 
+use crate::inventory::discovery_view_matches;
 use crate::{
     AppError, CommandData, CommandRequest, CommandSuccess, CredentialStore, DeviceMetadata,
-    LiveDeviceInfo, RegistryStore, ResultMeta, SecretString, SystemCredentialStore, Warning,
+    DiscoveryDeviceView, DiscoveryResultSummary, DiscoverySnapshotResult, LiveDeviceInfo,
+    RegistryStore, ResultMeta, SecretString, SystemCredentialStore, Warning,
     credential_profile_reference, credential_reference, describe, normalize_target,
 };
 
@@ -466,12 +469,13 @@ impl Application {
                     })
                     .transpose()?
                     .map(snapshot_summary);
-                let registrations = self.discovery_registrations(&devices)?;
+                let (devices, summary) =
+                    self.discovery_devices(devices, &request.filters, request.query.as_deref())?;
                 let mut outcome = Outcome::data(CommandData::DiscoveryScan {
                     devices,
+                    summary,
                     saved_snapshot,
                     interfaces: selected_interfaces,
-                    registrations,
                 });
                 outcome.warnings = warnings;
                 outcome
@@ -488,12 +492,13 @@ impl Application {
                     devices.clone(),
                     selected_interfaces.clone(),
                 )?;
-                let registrations = self.discovery_registrations(&devices)?;
+                let (devices, summary) =
+                    self.discovery_devices(devices, &request.filters, request.query.as_deref())?;
                 let mut outcome = Outcome::data(CommandData::DiscoveryScan {
                     devices,
+                    summary,
                     saved_snapshot: Some(snapshot_summary(snapshot)),
                     interfaces: selected_interfaces,
-                    registrations,
                 });
                 outcome.warnings = warnings;
                 outcome
@@ -519,12 +524,11 @@ impl Application {
                     )));
                 }
                 let selected = self
-                    .registry
-                    .get_discovery_snapshot(&request.id, &request.filters)?
-                    .devices
+                    .discovery_devices(snapshot.devices.clone(), &request.filters, None)?
+                    .0
                     .into_iter()
-                    .map(|device| device.endpoint)
-                    .collect::<std::collections::BTreeSet<_>>();
+                    .map(|device| device.record)
+                    .collect::<Vec<_>>();
                 if selected.is_empty() {
                     return Err(AppError::invalid_argument(
                         "No discovery records match the enrichment filters.",
@@ -535,7 +539,7 @@ impl Application {
                 let mut candidates = Vec::new();
                 let mut warnings = Vec::new();
                 for (index, device) in devices.iter().enumerate() {
-                    if !selected.contains(&device.endpoint) {
+                    if !selected.contains(device) {
                         continue;
                     }
                     let target = device
@@ -637,14 +641,22 @@ impl Application {
                 })
             }
             CommandRequest::DiscoverySnapshotShow(request) => {
-                let snapshot = self
-                    .registry
-                    .get_discovery_snapshot(&request.id, &request.filters)?;
-                let registrations = self.discovery_registrations(&snapshot.devices)?;
+                let snapshot = self.registry.get_discovery_snapshot(&request.id, &[])?;
+                let (devices, summary) = self.discovery_devices(
+                    snapshot.devices,
+                    &request.filters,
+                    request.query.as_deref(),
+                )?;
                 Outcome::data(CommandData::DiscoverySnapshotRecord {
                     action: "shown".to_owned(),
-                    snapshot,
-                    registrations,
+                    snapshot: DiscoverySnapshotResult {
+                        id: snapshot.id,
+                        saved_at_unix_ms: snapshot.saved_at_unix_ms,
+                        generation: snapshot.generation,
+                        interfaces: snapshot.interfaces,
+                        summary,
+                        devices,
+                    },
                 })
             }
             CommandRequest::DiscoverySnapshotRemove(request) => {
@@ -855,12 +867,15 @@ impl Application {
         original
     }
 
-    fn discovery_registrations(
+    fn discovery_devices(
         &self,
-        records: &[crate::DiscoveryRecord],
-    ) -> Result<BTreeMap<String, String>, AppError> {
+        records: Vec<crate::DiscoveryRecord>,
+        filters: &[crate::DiscoveryFilter],
+        query: Option<&str>,
+    ) -> Result<(Vec<DiscoveryDeviceView>, DiscoveryResultSummary), AppError> {
         let (devices, _) = self.registry.list()?;
-        let mut registrations = BTreeMap::new();
+        let total_count = records.len();
+        let mut results = Vec::with_capacity(total_count);
         for record in records {
             let matching = devices.iter().find(|device| {
                 device.device_uuid.as_deref().is_some_and(|uuid| {
@@ -873,11 +888,15 @@ impl Application {
                     normalize_target(xaddr).is_ok_and(|target| target == device.target)
                 })
             });
-            if let Some(device) = matching {
-                registrations.insert(record.endpoint.clone(), device.id.clone());
+            let device = DiscoveryDeviceView::new(record, matching.map(|device| device.id.clone()));
+            if discovery_view_matches(&device, filters)
+                && query.is_none_or(|query| crate::discovery_query_matches(&device, query))
+            {
+                results.push(device);
             }
         }
-        Ok(registrations)
+        let summary = DiscoveryResultSummary::new(total_count, &results);
+        Ok((results, summary))
     }
 
     fn resolve_target(&self, selector: crate::TargetSelector) -> Result<ResolvedTarget, AppError> {
@@ -1701,8 +1720,9 @@ fn merge_discovery_observations(
 ) -> Vec<crate::DiscoveryRecord> {
     let mut devices = BTreeMap::<String, crate::DiscoveryRecord>::new();
     for observation in observations {
+        let key = discovery_observation_key(&observation);
         let record = devices
-            .entry(observation.endpoint.clone())
+            .entry(key)
             .or_insert_with(|| crate::DiscoveryRecord {
                 endpoint: observation.endpoint,
                 types: Vec::new(),
@@ -1717,7 +1737,78 @@ fn merge_discovery_observations(
         merge_unique(&mut record.scopes, observation.scopes);
         merge_unique(&mut record.xaddrs, observation.xaddrs);
     }
-    devices.into_values().collect()
+    let mut devices = devices.into_values().collect::<Vec<_>>();
+    for device in &mut devices {
+        hydrate_discovery_scope_metadata(device);
+    }
+    devices
+}
+
+fn discovery_observation_key(observation: &oxvif::DiscoveredDevice) -> String {
+    if !observation.endpoint.trim().is_empty() {
+        return format!("endpoint:{}", observation.endpoint.to_ascii_lowercase());
+    }
+    let mut targets = observation
+        .xaddrs
+        .iter()
+        .filter_map(|target| normalize_target(target).ok())
+        .collect::<Vec<_>>();
+    targets.sort();
+    if let Some(target) = targets.first() {
+        return format!("target:{target}");
+    }
+    let mut identity = observation.scopes.clone();
+    identity.extend(observation.types.clone());
+    identity.sort();
+    format!("anonymous:{}", identity.join("\u{1f}"))
+}
+
+fn hydrate_discovery_scope_metadata(record: &mut crate::DiscoveryRecord) {
+    if record.manufacturer.is_none() {
+        record.manufacturer = discovery_scope_value(&record.scopes, &["manufacturer", "company"]);
+    }
+    if record.model.is_none() {
+        record.model = discovery_scope_value(&record.scopes, &["hardware"]);
+    }
+    if record.firmware_version.is_none() {
+        record.firmware_version = discovery_scope_value(&record.scopes, &["firmware"]);
+    }
+    if record.serial_number.is_none() {
+        record.serial_number = discovery_scope_value(&record.scopes, &["serial"]);
+    }
+}
+
+fn discovery_scope_value(scopes: &[String], keys: &[&str]) -> Option<String> {
+    for key in keys {
+        for scope in scopes {
+            let Ok(url) = url::Url::parse(scope) else {
+                continue;
+            };
+            if url.scheme() != "onvif"
+                || !url
+                    .host_str()
+                    .is_some_and(|host| host.eq_ignore_ascii_case("www.onvif.org"))
+            {
+                continue;
+            }
+            let Some(mut segments) = url.path_segments() else {
+                continue;
+            };
+            let Some(field) = segments.next() else {
+                continue;
+            };
+            if !field.eq_ignore_ascii_case(key) {
+                continue;
+            }
+            let encoded = segments.collect::<Vec<_>>().join("/");
+            let decoded = percent_decode_str(&encoded).decode_utf8_lossy();
+            let value = decoded.trim();
+            if !value.is_empty() {
+                return Some(value.to_owned());
+            }
+        }
+    }
+    None
 }
 
 fn merge_unique(target: &mut Vec<String>, incoming: Vec<String>) {
@@ -3268,5 +3359,48 @@ mod tests {
         assert_eq!(devices[0].types.len(), 2);
         assert_eq!(devices[0].scopes.len(), 2);
         assert_eq!(devices[0].xaddrs.len(), 2);
+    }
+
+    #[test]
+    fn discovery_scopes_fill_advertised_identity_without_authentication() {
+        let devices = merge_discovery_observations(vec![oxvif::DiscoveredDevice {
+            endpoint: "urn:uuid:camera".to_owned(),
+            types: Vec::new(),
+            scopes: vec![
+                "onvif://www.onvif.org/manufacturer/GeoVision%202".to_owned(),
+                "onvif://www.onvif.org/hardware/GV-TBL8810".to_owned(),
+                "onvif://www.onvif.org/firmware/V111_2025_12_09".to_owned(),
+                "onvif://www.onvif.org/serial/ABC123".to_owned(),
+            ],
+            xaddrs: vec!["http://192.0.2.10/onvif/device_service".to_owned()],
+        }]);
+
+        assert_eq!(devices[0].manufacturer.as_deref(), Some("GeoVision 2"));
+        assert_eq!(devices[0].model.as_deref(), Some("GV-TBL8810"));
+        assert_eq!(
+            devices[0].firmware_version.as_deref(),
+            Some("V111_2025_12_09")
+        );
+        assert_eq!(devices[0].serial_number.as_deref(), Some("ABC123"));
+    }
+
+    #[test]
+    fn endpointless_discovery_records_remain_distinct_by_target() {
+        let devices = merge_discovery_observations(vec![
+            oxvif::DiscoveredDevice {
+                endpoint: String::new(),
+                types: Vec::new(),
+                scopes: Vec::new(),
+                xaddrs: vec!["http://192.0.2.10/onvif/device_service".to_owned()],
+            },
+            oxvif::DiscoveredDevice {
+                endpoint: String::new(),
+                types: Vec::new(),
+                scopes: Vec::new(),
+                xaddrs: vec!["http://192.0.2.11/onvif/device_service".to_owned()],
+            },
+        ]);
+
+        assert_eq!(devices.len(), 2);
     }
 }

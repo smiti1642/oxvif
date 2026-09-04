@@ -2,9 +2,9 @@ use serde::Serialize;
 use zeroize::Zeroize;
 
 use crate::{
-    AppError, CredentialProfileView, DeviceUpdate, DeviceView, DiscoveryFilter,
-    DiscoverySnapshotSummary, DiscoverySnapshotView, GroupView, NewDevice, NewGroup, NewSavedView,
-    SavedView,
+    AppError, CredentialProfileView, DeviceUpdate, DeviceView, DiscoveryDeviceView,
+    DiscoveryFilter, DiscoveryResultSummary, DiscoverySnapshotResult, DiscoverySnapshotSummary,
+    GroupView, NewDevice, NewGroup, NewSavedView, SavedView,
 };
 
 /// Version of the structured stdout contract.
@@ -402,12 +402,16 @@ pub struct ViewEvaluateRequest {
 pub struct DiscoverScanRequest {
     pub snapshot_id: Option<String>,
     pub interfaces: Vec<String>,
+    pub filters: Vec<DiscoveryFilter>,
+    pub query: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiscoveryRefreshRequest {
     pub id: String,
     pub interfaces: Vec<String>,
+    pub filters: Vec<DiscoveryFilter>,
+    pub query: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -422,6 +426,7 @@ pub struct DiscoveryEnrichRequest {
 pub struct DiscoverySnapshotShowRequest {
     pub id: String,
     pub filters: Vec<DiscoveryFilter>,
+    pub query: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -601,16 +606,13 @@ pub enum CommandData {
     },
     DiscoverySnapshotRecord {
         action: String,
-        snapshot: DiscoverySnapshotView,
-        #[serde(skip)]
-        registrations: std::collections::BTreeMap<String, String>,
+        snapshot: DiscoverySnapshotResult,
     },
     DiscoveryScan {
-        devices: Vec<crate::DiscoveryRecord>,
+        devices: Vec<DiscoveryDeviceView>,
+        summary: DiscoveryResultSummary,
         saved_snapshot: Option<DiscoverySnapshotSummary>,
         interfaces: Vec<String>,
-        #[serde(skip)]
-        registrations: std::collections::BTreeMap<String, String>,
     },
     DiscoveryEnrichment {
         snapshot: DiscoverySnapshotSummary,

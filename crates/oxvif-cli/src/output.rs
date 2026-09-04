@@ -1,5 +1,7 @@
 use std::fmt::Write;
 
+use unicode_width::UnicodeWidthStr;
+
 use crate::{
     AppError, CommandData, CommandSuccess, ErrorEnvelope, OutputFormat, ResultMeta, SuccessEnvelope,
 };
@@ -325,13 +327,9 @@ fn render_human(success: &CommandSuccess) -> String {
                 output
             }
         }
-        CommandData::DiscoverySnapshotRecord {
-            action,
-            snapshot,
-            registrations,
-        } => {
+        CommandData::DiscoverySnapshotRecord { action, snapshot } => {
             let mut output = format!(
-                "Discovery snapshot {action}.\nID: {}\nGeneration: {}\nInterfaces: {}\nDevices: {}\nSaved at (Unix ms): {}",
+                "Discovery snapshot {action}.\nID: {}\nGeneration: {}\nInterfaces: {}\nDevices: {}/{} matched | Saved: {} | New: {} | Incomplete: {}\nSaved at (Unix ms): {}",
                 snapshot.id,
                 snapshot.generation,
                 if snapshot.interfaces.is_empty() {
@@ -339,19 +337,30 @@ fn render_human(success: &CommandSuccess) -> String {
                 } else {
                     snapshot.interfaces.join(", ")
                 },
-                snapshot.devices.len(),
+                snapshot.summary.matched_count,
+                snapshot.summary.total_count,
+                snapshot.summary.saved_count,
+                snapshot.summary.new_count,
+                snapshot.summary.incomplete_count,
                 snapshot.saved_at_unix_ms
             );
-            append_discovery_table(&mut output, &snapshot.devices, registrations);
+            append_discovery_table(&mut output, &snapshot.devices);
             output
         }
         CommandData::DiscoveryScan {
             devices,
+            summary,
             saved_snapshot,
             interfaces,
-            registrations,
         } => {
-            let mut output = format!("Discovery found {} device(s).", devices.len());
+            let mut output = format!(
+                "Discovery found {} device(s); showing {}.\nSaved: {} | New: {} | Incomplete: {}",
+                summary.total_count,
+                summary.matched_count,
+                summary.saved_count,
+                summary.new_count,
+                summary.incomplete_count
+            );
             if !interfaces.is_empty() {
                 let _ = write!(output, "\nInterfaces: {}", interfaces.join(", "));
             }
@@ -362,7 +371,7 @@ fn render_human(success: &CommandSuccess) -> String {
                     snapshot.id, snapshot.generation
                 );
             }
-            append_discovery_table(&mut output, devices, registrations);
+            append_discovery_table(&mut output, devices);
             if let Some(snapshot) = saved_snapshot {
                 let _ = write!(
                     output,
@@ -731,15 +740,12 @@ fn integer_or_zero(value: Option<&serde_json::Value>) -> u64 {
     value.and_then(serde_json::Value::as_u64).unwrap_or(0)
 }
 
-fn append_discovery_table(
-    output: &mut String,
-    devices: &[crate::DiscoveryRecord],
-    registrations: &std::collections::BTreeMap<String, String>,
-) {
+fn append_discovery_table(output: &mut String, devices: &[crate::DiscoveryDeviceView]) {
     if devices.is_empty() {
         return;
     }
-    output.push_str("\n\n# | ADDRESS | MANUFACTURER | MODEL | REGISTERED | ENDPOINT");
+    let headers = ["#", "STATUS", "ADDRESS", "DEVICE", "SAVED AS", "ENDPOINT"];
+    let mut rows = Vec::with_capacity(devices.len());
     for (index, device) in devices.iter().enumerate() {
         let address = device
             .xaddrs
@@ -750,20 +756,72 @@ fn append_discovery_table(
                     .and_then(|url| url.host_str().map(str::to_owned))
             })
             .unwrap_or_else(|| "(no address)".to_owned());
-        let registered = registrations
-            .get(&device.endpoint)
-            .map_or("—", String::as_str);
-        let _ = write!(
-            output,
-            "\n{} | {} | {} | {} | {} | {}",
-            index + 1,
+        let device_name = match (device.manufacturer.as_deref(), device.model.as_deref()) {
+            (Some(manufacturer), Some(model)) => format!("{manufacturer} {model}"),
+            (Some(manufacturer), None) => manufacturer.to_owned(),
+            (None, Some(model)) => model.to_owned(),
+            (None, None) => "Not advertised".to_owned(),
+        };
+        rows.push([
+            (index + 1).to_string(),
+            device.registration_status.as_str().to_ascii_uppercase(),
             address,
-            device.manufacturer.as_deref().unwrap_or("—"),
-            device.model.as_deref().unwrap_or("—"),
-            registered,
-            device.endpoint
-        );
+            device_name,
+            device
+                .registered_device_id
+                .as_deref()
+                .unwrap_or("—")
+                .to_owned(),
+            if device.endpoint.trim().is_empty() {
+                "—".to_owned()
+            } else {
+                device.endpoint.clone()
+            },
+        ]);
     }
+    output.push_str("\n\n");
+    output.push_str(&render_columns(&headers, &rows));
+}
+
+fn render_columns<const N: usize>(headers: &[&str; N], rows: &[[String; N]]) -> String {
+    let mut widths: [usize; N] =
+        std::array::from_fn(|index| UnicodeWidthStr::width(headers[index]));
+    for row in rows {
+        for (index, value) in row.iter().enumerate() {
+            widths[index] = widths[index].max(UnicodeWidthStr::width(value.as_str()));
+        }
+    }
+
+    let mut output = String::new();
+    for (index, header) in headers.iter().enumerate() {
+        if index > 0 {
+            output.push_str(" | ");
+        }
+        if index + 1 == N {
+            output.push_str(header);
+        } else {
+            push_padded(&mut output, header, widths[index]);
+        }
+    }
+    for row in rows {
+        output.push('\n');
+        for (index, value) in row.iter().enumerate() {
+            if index > 0 {
+                output.push_str(" | ");
+            }
+            if index + 1 == N {
+                output.push_str(value);
+            } else {
+                push_padded(&mut output, value, widths[index]);
+            }
+        }
+    }
+    output
+}
+
+fn push_padded(output: &mut String, value: &str, width: usize) {
+    output.push_str(value);
+    output.push_str(&" ".repeat(width.saturating_sub(UnicodeWidthStr::width(value))));
 }
 
 fn render_json_lines(success: &CommandSuccess) -> Result<String, AppError> {
@@ -899,26 +957,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn discovery_registration_is_human_context_not_structured_schema() {
+    fn discovery_registration_is_shared_by_human_and_structured_output() {
         let record = crate::DiscoveryRecord {
             endpoint: "urn:uuid:camera".to_owned(),
             types: Vec::new(),
             scopes: Vec::new(),
             xaddrs: vec!["http://192.168.1.20/onvif/device_service".to_owned()],
-            manufacturer: Some("Example".to_owned()),
-            model: Some("Cam".to_owned()),
+            manufacturer: Some("範例廠商".to_owned()),
+            model: Some("攝影機".to_owned()),
             firmware_version: None,
             serial_number: None,
         };
+        let device = crate::DiscoveryDeviceView::new(record, Some("front-door".to_owned()));
+        let summary = crate::DiscoveryResultSummary::new(1, std::slice::from_ref(&device));
         let success = CommandSuccess {
             data: CommandData::DiscoveryScan {
-                devices: vec![record],
+                devices: vec![device],
+                summary,
                 saved_snapshot: None,
                 interfaces: vec!["Ethernet".to_owned()],
-                registrations: std::collections::BTreeMap::from([(
-                    "urn:uuid:camera".to_owned(),
-                    "front-door".to_owned(),
-                )]),
             },
             warnings: Vec::new(),
             meta: ResultMeta::default(),
@@ -927,8 +984,27 @@ mod tests {
         let table = render_success(OutputFormat::Table, &success).expect("table output");
         assert!(table.contains("front-door"));
         assert!(table.contains("192.168.1.20"));
+        let table_lines = table
+            .lines()
+            .skip_while(|line| !line.starts_with("# "))
+            .take(2)
+            .collect::<Vec<_>>();
+        assert_eq!(table_lines.len(), 2);
+        let header_widths = table_lines[0]
+            .split(" | ")
+            .take(5)
+            .map(UnicodeWidthStr::width)
+            .collect::<Vec<_>>();
+        let row_widths = table_lines[1]
+            .split(" | ")
+            .take(5)
+            .map(UnicodeWidthStr::width)
+            .collect::<Vec<_>>();
+        assert_eq!(header_widths, row_widths);
         let json = render_success(OutputFormat::Json, &success).expect("json output");
-        assert!(!json.contains("front-door"));
+        assert!(json.contains("front-door"));
+        assert!(json.contains("registration_status"));
+        assert!(json.contains("saved_count"));
         assert!(!json.contains("registrations"));
     }
 
