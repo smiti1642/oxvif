@@ -628,13 +628,14 @@ is skipped.
 
 ### 11.2 Documentation update
 
-- [ ] Update the root README, CLI package README, English CLI manual, and
+- [x] Update the root README, CLI package README, English CLI manual, and
   Traditional Chinese CLI manual for the shipped behavior.
-- [ ] Update `CHANGELOG.md` and the version-specific release note with verified
+- [x] Update `CHANGELOG.md` and the version-specific release note with verified
   commands, supported platforms, credential/TLS limitations, compatibility
   evidence, and known issues.
-- [ ] Change `Unreleased` to the actual release date only after publication
-  succeeds.
+- [x] Set the intended 2026-09-04 release date immediately before the final
+  exact-commit staging run, by explicit owner direction. Reconfirm the date if
+  publication moves to a later day.
 - [ ] Update every affected active plan's implementation status and stage
   verdict record.
 - [ ] Move a completed plan from `docs/active/` to `docs/done/`, update
