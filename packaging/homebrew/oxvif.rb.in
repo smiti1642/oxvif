@@ -1,7 +1,6 @@
 class Oxvif < Formula
   desc "Human- and Agent-friendly ONVIF diagnostic CLI"
   homepage "https://github.com/smiti1642/oxvif"
-  version "@CLI_VERSION@"
   license "MIT"
   depends_on :macos
 

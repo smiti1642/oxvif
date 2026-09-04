@@ -411,7 +411,6 @@ jobs:
           RELEASE_TAG: ${{ env.RELEASE_LABEL }}
         run: |
           set -euo pipefail
-          cli_version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(p["version"] for p in d["packages"] if p["name"] == "oxvif-cli"))')
           arm_archive="oxvif-macos-aarch64-$RELEASE_TAG.tar.gz"
           intel_archive="oxvif-macos-x86_64-$RELEASE_TAG.tar.gz"
           arm_sha=$(sha256sum "dist/$arm_archive" | cut -d' ' -f1)
@@ -419,7 +418,7 @@ jobs:
           base_url="https://github.com/smiti1642/oxvif/releases/download/$RELEASE_TAG"
           mkdir -p Formula
           sed \
-            -e "s|@CLI_VERSION@|$cli_version|g" \
+            -e '/^[[:space:]]*version "@CLI_VERSION@"[[:space:]]*$/d' \
             -e "s|@MACOS_ARM64_URL@|$base_url/$arm_archive|g" \
             -e "s|@MACOS_ARM64_SHA256@|$arm_sha|g" \
             -e "s|@MACOS_X86_64_URL@|$base_url/$intel_archive|g" \
