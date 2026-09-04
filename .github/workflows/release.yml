@@ -420,10 +420,12 @@ jobs:
           intel_archive="oxvif-macos-x86_64-$RELEASE_TAG.tar.gz"
           arm_sha=$(sha256sum "dist/$arm_archive" | cut -d' ' -f1)
           intel_sha=$(sha256sum "dist/$intel_archive" | cut -d' ' -f1)
+          formula_base_url="https://github.com/smiti1642/oxvif/releases/download/v$cli_version"
           mkdir -p Formula
           sed \
-            -e "s|@CLI_VERSION@|$cli_version|g" \
+            -e "s|@MACOS_ARM64_URL@|$formula_base_url/oxvif-macos-aarch64-v$cli_version.tar.gz|g" \
             -e "s|@MACOS_ARM64_SHA256@|$arm_sha|g" \
+            -e "s|@MACOS_X86_64_URL@|$formula_base_url/oxvif-macos-x86_64-v$cli_version.tar.gz|g" \
             -e "s|@MACOS_X86_64_SHA256@|$intel_sha|g" \
             release-tooling/packaging/homebrew/oxvif.rb.in > Formula/oxvif.rb
           ruby -c Formula/oxvif.rb
@@ -481,6 +483,17 @@ jobs:
 
           formula = pathlib.Path("Formula/oxvif.rb")
           text = formula.read_text(encoding="utf-8")
+          version_match = re.search(r'/download/v([0-9]+\.[0-9]+\.[0-9]+)/oxvif-', text)
+          if version_match is None:
+              raise SystemExit("could not derive the release version from the canonical formula URL")
+          license_line = '  license "MIT"\n'
+          if text.count(license_line) != 1:
+              raise SystemExit("expected one license declaration before staging version injection")
+          text = text.replace(
+              license_line,
+              f'  version "{version_match.group(1)}"\n{license_line}',
+              1,
+          )
           text, replacements = re.subn(
               r'url "[^"]+"',
               f'url "{os.environ["LOCAL_URL"]}"',
