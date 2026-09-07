@@ -2,7 +2,7 @@
 
 [English](dependency-maintenance-plan.md) | [繁體中文](dependency-maintenance-plan_zh.md)
 
-狀態：執行中；本機遷移已實作，遠端驗證與整合尚待完成。  
+狀態：實作與整合完成，首個集中 PR 已驗證；後續週期檢查待完成。
 日期：2026-09-07。審查基準：`master` 的 `ee0460f`。
 
 | 章節 | 用途 |
@@ -34,14 +34,15 @@ fingerprint 與 XML 行為相容性。保留人工審查；分組不會啟用自
 - 整合分支：`codex/dependency-maintenance`，基於 `ee0460f`。開始執行時六個
   已審查 PR 的提交均未變動；預設分支未設定 branch protection 或 repository ruleset。
 - 依序 cherry-pick #7、#8、#10、#11、#9、#6，保留機器人的原始作者資訊。
-  將以單一替代 PR 驗證整合結果；完成整合驗證前保留舊 PR。
+  已由替代 PR #12 驗證整合結果；完成整合驗證前均保留舊 PR。
 - sha2 遷移前已擷取 0.10.9 的固定結果。新編碼器通過相同的紀錄、計畫與開頭
   零位元組測試向量；既有套用計畫測試也使用該舊指紋。
 - 三項合成 XML 相容性測試先在 quick-xml 0.41 通過，再以獨立下游使用者
   在 0.42 的 encoding 關閉與開啟情境通過。選用 schema 測試中的解析器也需要
   遷移 API；未新增任何外部 ONVIF schema 檔案或衍生資料。
-- 本機 workspace 全 feature 測試：**1,076 項通過、4 項忽略**；全 feature
-  Clippy 通過。遠端原生平台關卡與 staging 尚未驗收。
+- 本機 workspace 全 feature 測試：**1,076 項通過、4 項忽略**；預設函式庫
+  測試：**548 項通過、1 項忽略**。兩種 Clippy 設定、六項個別 feature、格式
+  與 Rust 1.88 檢查通過。遠端驗收結果如下。
 - 2026-09-07 `cargo audit`：411 個相依套件，無已知漏洞。
   `cargo outdated --workspace --root-deps-only` 已完成；其餘更新（包含 keyring 4.2
   與更新的 ipnet）留待後續批次審查。
@@ -57,8 +58,40 @@ fingerprint 與 XML 行為相容性。保留人工審查；分組不會啟用自
   `34092981151` 發現 Ubuntu 22.04 發布 runner 使用 Python 3.10：來源 SBOM
   產生成功，但核對器無法匯入 `tomllib`。Workflow 已透過經審查並固定 SHA 的
   `actions/setup-python` v7.0.0 明確選擇 Python 3.12。中止的 staging 不視為通過。
-- 分組設定啟用、遠端 updater 日誌、第一個集中 PR 與後續無重複 PR 的行為仍待驗證。
-  此計畫尚不能移至 `done/`。
+- 驗收候選：`1fd35f1333252033520138e2af65077a5f2a439d`。
+  [CI 34094259257](https://github.com/smiti1642/oxvif/actions/runs/34094259257)
+  全部 **21 項工作通過**；[staging 34094279728](https://github.com/smiti1642/oxvif/actions/runs/34094279728)
+  **17 項通過**，`Publish GitHub Release` **跳過**。兩種架構的簽章 APT repository
+  安裝／清除，以及 Homebrew 安裝／bottle／重裝均通過。
+- 已下載五種原生產物：7 個封存檔／套件 checksum 通過；各來源 SPDX 包含
+  全部 411 組鎖定套件與版本及一個目錄項目，包含 `oxvif-cli 0.16.0`，掃描器為
+  Syft 1.51.1。執行檔套件涵蓋與五平台基準一致（Unix 僅目錄；Windows 另有
+  兩個版本未知的執行檔）。來源清單補充而非掩蓋此掃描限制。暫存 Windows 產物
+  smoke 回報 0.16.0，schema v3 JSON 命令成功。
+- [PR #12](https://github.com/smiti1642/oxvif/pull/12) 已以 `279bd00` 合併，
+  #6–#11 才逐一標示為被取代並結案。[PR #13](https://github.com/smiti1642/oxvif/pull/13)
+  隨後以 `03b8d30` 合併經 schema 驗證的集中設定；僅設定／文件變更，程式碼、
+  lockfile 與 release workflow 和驗收候選完全相同。
+- `master` 與 `develop` 已同步至 `03b8d30`。推送 develop 會再觸發一次自動的
+  非發布 staging；上列候選驗收證據不代表預先宣稱新執行已成功。
+- GitHub 的 Cargo updater [34095680778](https://github.com/smiti1642/oxvif/actions/runs/34095680778)
+  與 Actions updater [34095680772](https://github.com/smiti1642/oxvif/actions/runs/34095680772)
+  均針對 `03b8d30` 成功執行。兩者日誌都記錄 `multi-ecosystem-update: true`、
+  `maintenance` 群組、全部更新類型，以及沒有 ignore 條件。Cargo 建立了唯一的集中
+  [PR #14](https://github.com/smiti1642/oxvif/pull/14)，包含六項新相依更新；Actions
+  回報沒有可更新項目。這證明兩種 ecosystem 設定均被接受，但首批實際變更僅來自 Cargo。
+  #14 是尚未審查的新批次，本次不會將其合併。
+- Cargo updater 回報 `No update possible for keyring 3.6.3`（以及 workspace
+  路徑相依 `oxvif`）；未新增 ignore 規則。追蹤期限：下次維護審查、最遲
+  2026-09-14 評估 keyring 4.x feature 與原生儲存區遷移。群組工作成功不代表已包含
+  `cargo outdated` 列出的所有版本，也不代表新批次可直接合併。
+- 仍需在 #14 開啟期間觀察下一次完整版本更新週期。GitHub 拒絕
+  `gh run rerun 34095680778`，回報此 workflow 不可重試；目前可用瀏覽器尚未登入。
+  可在已登入擁有者帳號的 Dependabot 頁面使用 **Check for updates**，或等待下個
+  週一 Asia/Taipei 時區 09:00 的排程，確認更新現有群組 PR，而非新增重複例行 PR。
+  不將單一 PR 的 rebase 視為完整排程更新檢查；此項完成前計畫保留在 `active/`。
+- 已發布 v0.16.0 的 metadata 與 24 個 assets 仍保留 2026-09-04 時間戳；未更新
+  tag、crate、公開套件通路或本機安裝的 CLI。
 
 ## 審查證據
 
@@ -80,73 +113,73 @@ fingerprint 與 XML 行為相容性。保留人工審查；分組不會啟用自
 
 ### 1. 確立整合狀態
 
-- [ ] 取得最新預設分支及 PR 提交，記錄完整 SHA 與 CI 執行紀錄。
-- [ ] 測試 PR 時，必要時使用隔離 checkout，保留使用者其他變更。
-- [ ] 確認合併政策與必要檢查，依正常 PR 流程整合，不繞過失敗檢查或強制推送受保護分支。
-- [ ] 在變更已整合，或有明確替代 PR 包含變更且通過驗證前，保留現有個別 PR。
+- [x] 取得最新預設分支及 PR 提交，記錄完整 SHA 與 CI 執行紀錄。
+- [x] 測試 PR 時，必要時使用隔離 checkout，保留使用者其他變更。
+- [x] 確認合併政策與必要檢查，依正常 PR 流程整合，不繞過失敗檢查或強制推送受保護分支。
+- [x] 在變更已整合，或有明確替代 PR 包含變更且通過驗證前，保留現有個別 PR。
 
 ### 2. 整合已審查的修補更新
 
-- [ ] 依序處理 #7、#8、#10，保留原始提交的作者歸屬。
-- [ ] 基準前進後重新確認 lockfile 衝突與 CI；只調整必要項目，不混入完整
+- [x] 依序處理 #7、#8、#10，保留原始提交的作者歸屬。
+- [x] 基準前進後重新確認 lockfile 衝突與 CI；只調整必要項目，不混入完整
   `cargo update` 所產生的其他更新。
-- [ ] 驗證組合後的結果；三次歷史 CI 通過不能取代最終整合版本的驗證。
+- [x] 驗證組合後的結果；三次歷史 CI 通過不能取代最終整合版本的驗證。
 
 ### 3. 完成 sha2 遷移
 
-- [ ] 擴充 #11；若機器人重新生成分支可能覆蓋人工修改，改用明確連結的替代 PR。
-- [ ] 明確將 digest 每個 byte 編碼為兩位小寫十六進位，保留 `sha256:` 前綴及
+- [x] 擴充 #11；若機器人重新生成分支可能覆蓋人工修改，改用明確連結的替代 PR。
+- [x] 明確將 digest 每個 byte 編碼為兩位小寫十六進位，保留 `sha256:` 前綴及
   恰好 64 位十六進位字串。
-- [ ] 修改前先以舊實作產生固定 fingerprint 測試資料，要求新實作結果完全相同，
+- [x] 修改前先以舊實作產生固定 fingerprint 測試資料，要求新實作結果完全相同，
   並涵蓋摘要起始 byte 為零的情況。
-- [ ] 驗證舊的 discovery 記錄及已審查匯入計畫仍可使用；記錄或選項改變時，
+- [x] 驗證舊的 discovery 記錄及已審查匯入計畫仍可使用；記錄或選項改變時，
   舊計畫仍須在任何寫入前被拒絕。
-- [ ] CLI 測試、Clippy 與 Rust 1.88 檢查通過後整合。
+- [x] CLI 測試、Clippy 與 Rust 1.88 檢查通過後整合。
 
 ### 4. 完成 quick-xml 遷移
 
-- [ ] 同步更新一般與開發用的相依宣告。
-- [ ] 將 `Reader::decoder`、reference 解碼、文字／CDATA、local name、namespace
+- [x] 同步更新一般與開發用的相依宣告。
+- [x] 將 `Reader::decoder`、reference 解碼、文字／CDATA、local name、namespace
   判斷與 attribute normalization 遷移至 0.42 API。
-- [ ] 保留 entity 事件之間的空白、具名與數字 entity、未知 entity 處理、CDATA、
+- [x] 保留 entity 事件之間的空白、具名與數字 entity、未知 entity 處理、CDATA、
   Unicode、屬性正規化及 namespace 去除行為。維持既有 malformed-input 行為；
   若存在無法避免的變化，接受前必須記錄。
-- [ ] 分別驗證 `encoding` 開啟與關閉，避免重新使用開啟該 feature 後會消失的 API，
+- [x] 分別驗證 `encoding` 開啟與關閉，避免重新使用開啟該 feature 後會消失的 API，
   再次引入既有 feature-unification 問題。
-- [ ] 執行 library、discovery、SOAP fault、mock、health 與 CLI 測試資料，並納入
+- [x] 執行 library、discovery、SOAP fault、mock、health 與 CLI 測試資料，並納入
   解析器變更相關的既有 feature 組合檢查。
-- [ ] stable 與 Rust 1.88 檢查通過後整合。
+- [x] stable 與 Rust 1.88 檢查通過後整合。
 
 ### 5. 驗證 SBOM action 與發布流程
 
-- [ ] 確認 #6 仍固定到預期的上游提交，審查輸入參數、執行環境需求、內建掃描器
+- [x] 確認 #6 仍固定到預期的上游提交，審查輸入參數、執行環境需求、內建掃描器
   版本及下載行為。
-- [ ] 從候選 workflow ref 執行 `publish=false`；只在舊 workflow 傳入新的原始碼
+- [x] 從候選 workflow ref 執行 `publish=false`；只在舊 workflow 傳入新的原始碼
   SHA，不能驗證 workflow 本身的更新。
-- [ ] 驗證五個原生架構產物及 SPDX JSON 生成，核對 CLI 名稱／版本、掃描器資訊及
+- [x] 驗證五個原生架構產物及 SPDX JSON 生成，核對 CLI 名稱／版本、掃描器資訊及
   代表性相依套件清單。對照舊輸出調查遺漏或大幅變動，不能只確認檔案非空。
-- [ ] 維持 action 自動上傳 artifact／release asset 的既有停用設定，由 workflow
+- [x] 維持 action 自動上傳 artifact／release asset 的既有停用設定，由 workflow
   既有的受控步驟上傳 staging 產物。
-- [ ] 未來修改 release workflow 或 packaging 的 PR，必須有非發布驗證路徑，或
+- [x] 未來修改 release workflow 或 packaging 的 PR，必須有非發布驗證路徑，或
   明確要求並記錄人工觸發的 staging 檢查。不得以一般 Rust CI 宣稱 SBOM 已驗證。
   若自動化，使用無額外權限的 PR 執行方式，不以具高權限的 `pull_request_target`
   checkout 並執行 PR 程式碼。
 
 ### 6. 啟用 Dependabot 集中更新
 
-- [ ] 先完成現有 PR，再啟用下方設定。
-- [ ] 驗證 YAML 與當時的 Dependabot 設定 schema／選項，確認 GitHub 更新服務接受
+- [x] 先完成現有 PR，再啟用下方設定。
+- [x] 驗證 YAML 與當時的 Dependabot 設定 schema／選項，確認 GitHub 更新服務接受
   Cargo 與 GitHub Actions 的組合。
-- [ ] 將設定合併到預設分支，檢查實際 Dependabot job log 及產生的 PR；本地 YAML
+- [x] 將設定合併到預設分支，檢查實際 Dependabot job log 及產生的 PR；本地 YAML
   可以解析不等於服務已成功啟用。
 - [ ] 集中 PR 尚未關閉時，再確認一次更新工作的行為，檢查是否產生重複例行 PR，
   記錄實際結果與服務限制。
-- [ ] 確認變更已合併或由已驗證的替代 PR 承接後，才處理過時機器人 PR，避免批次
+- [x] 確認變更已合併或由已驗證的替代 PR 承接後，才處理過時機器人 PR，避免批次
   關閉或刪除尚未完成的項目。
 
 ## Dependabot 設定
 
-預定替換 `.github/dependabot.yml` 的內容如下；本計畫尚未套用此設定：
+PR #13 已啟用下列 `.github/dependabot.yml` 設定：
 
 ```yaml
 version: 2
@@ -196,23 +229,23 @@ cargo audit
 cargo outdated --workspace --root-deps-only
 ```
 
-- [ ] Windows x64、Linux x64／ARM64、macOS Intel／Apple Silicon CI 通過，涵蓋
+- [x] Windows x64、Linux x64／ARM64、macOS Intel／Apple Silicon CI 通過，涵蓋
   原生憑證生命週期、CLI smoke、套件與文件檢查。
-- [ ] fingerprint 與 XML 測試證明新舊相容，不能只比較兩個同樣使用新實作的函式。
-- [ ] 最終整合版本通過非發布模式的 release staging。
-- [ ] #6–#11 全部合併，或由已整合且具明確對應的變更取代。
-- [ ] 有更新可用時，實際觀察到一個跨 ecosystem 例行 PR，且服務紀錄證明兩個
+- [x] fingerprint 與 XML 測試證明新舊相容，不能只比較兩個同樣使用新實作的函式。
+- [x] 最終整合版本通過非發布模式的 release staging。
+- [x] #6–#11 全部合併，或由已整合且具明確對應的變更取代。
+- [x] 有更新可用時，實際觀察到一個跨 ecosystem 例行 PR，且服務紀錄證明兩個
   ecosystem 都已執行。若沒有可用更新，標示為待運作驗證，不建立虛構測試版本。
-- [ ] 在本計畫記錄 SHA、workflow URL、版本、結果及未解決例外。
+- [x] 在本計畫記錄 SHA、workflow URL、版本、結果及未解決例外。
 
 ## 文件與發布
 
-- [ ] 更新 `docs/dependency-pitfalls.md`，記錄 XML 與 digest 遷移注意事項。
-- [ ] 在 `CHANGELOG.md` 的 Unreleased 區段加入維護紀錄，更新貢獻指南中的集中
+- [x] 更新 `docs/dependency-pitfalls.md`，記錄 XML 與 digest 遷移注意事項。
+- [x] 在 `CHANGELOG.md` 的 Unreleased 區段加入維護紀錄，更新貢獻指南中的集中
   審查方式與 release workflow 驗證要求。
-- [ ] 修改公開文件時同步更新英文與 `_zh` 對應版本。
-- [ ] 依既有合併政策將整合後的 `master` 同步回 `develop`。
-- [ ] 保留已發布的 `v0.16.0`、crate 內容及 release assets。本計畫不發布新版本，
+- [x] 修改公開文件時同步更新英文與 `_zh` 對應版本。
+- [x] 依既有合併政策將整合後的 `master` 同步回 `develop`。
+- [x] 保留已發布的 `v0.16.0`、crate 內容及 release assets。本計畫不發布新版本，
   也不恢復 APT／Homebrew 的發布工作。
 - [ ] 整合完成後才準備 maintenance release 候選版本；依先前要求，在任何對外
   發布動作前先提醒專案擁有者。
