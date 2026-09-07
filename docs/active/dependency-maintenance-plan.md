@@ -53,6 +53,16 @@ Execution was authorized on 2026-09-07. Publishing remains outside this task.
   (including keyring 4.2 and newer ipnet) are deferred to later reviewed batches.
 - Future release-tooling changes have an explicit manual staging-before-merge
   gate in `CONTRIBUTING.md`, using the candidate workflow ref and source SHA.
+- Baseline staging run `33856099748` exposed a pre-existing SBOM coverage gap:
+  Linux binary output contained only the scan directory; Windows output added
+  two executable entries with unknown versions, but no Rust dependency inventory.
+  The candidate now retains binary SBOMs and adds separate `.source.spdx.json`
+  files checked against all 411 locked package/version pairs. Local Syft 1.51.1
+  passed this check; scanner archive checksum was verified against its upstream
+  release checksum. Four positive/negative checker tests passed. Source inventory
+  includes development and target-specific packages, not per-binary linkage.
+  Initial candidate staging `34092581258` was intentionally cancelled for this
+  coverage fix; it is not acceptance evidence.
 - Group configuration activation, hosted updater logs, first grouped PR, and
   subsequent no-duplicate behavior are pending. Do not move this plan to `done/` yet.
 

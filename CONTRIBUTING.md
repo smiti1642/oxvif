@@ -93,5 +93,12 @@ dependency coverage with the previous staging output; a nonempty SBOM file is
 not sufficient. If code or release tooling changes afterwards, rerun staging.
 Documentation-only changes may refer to the unchanged tested code/tooling tree.
 
+Release staging emits two inventories per target: `.spdx.json` is the binary
+scan; `.source.spdx.json` inventories Cargo.lock and the workspace manifests.
+Rust binary scans can omit dependencies and report an unknown application
+version. The source inventory is checked against every locked package/version,
+including the CLI, but includes development and other-platform packages; it
+must not be described as a precise per-binary linkage inventory.
+
 `publish=false` uploads temporary Actions artifacts only. It does not authorize
 creating a GitHub Release, publishing crates, or changing public package channels.

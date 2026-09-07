@@ -29,6 +29,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `anchore/sbom-action` to 0.24.2. Release staging remains a separate acceptance
   gate; ordinary Rust CI does not validate the SBOM generator.
 - Add downstream XML feature-on/off regression coverage to CI.
+- Add a separate source SPDX inventory checked against every locked Cargo
+  package/version. Binary-only scanning does not reliably recover Rust
+  dependencies; the source inventory includes development and platform-specific
+  packages and is not a per-binary linkage manifest.
 
 These changes are not part of the published 0.16.0 artifacts.
 

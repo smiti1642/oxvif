@@ -78,5 +78,10 @@ APT 安裝與移除，以及 Homebrew 安裝、bottle 建立與重新安裝均�
 應與前次 staging 比較掃描器版本及實際相依套件涵蓋範圍；SBOM 非空並不代表充分。
 程式碼或發布工具再次變更後必須重新執行；純文件變更可引用相同程式碼與工具樹的驗證結果。
 
+Release staging 會為每個目標產生兩份清單：`.spdx.json` 是執行檔掃描，
+`.source.spdx.json` 則盤點 Cargo.lock 與 workspace manifest。
+Rust 執行檔掃描可能遺漏相依套件，或將程式版本標為未知。來源清單會核對每個鎖定的
+套件與版本（包含 CLI），但也包含開發及其他平台的套件，不得宣稱是精確的單一執行檔連結清單。
+
 `publish=false` 僅上傳暫存 Actions 產物，不代表允許建立 GitHub Release、
 發布 crate 或修改公開套件通路。

@@ -48,6 +48,8 @@ jobs:
         run: |
           cargo fetch --locked
           python3 packaging/check_xml_features.py
+      - name: Test source SBOM acceptance checks
+        run: python3 -m unittest discover -s packaging -p 'test_*.py'
 
   audit:
     name: Security audit

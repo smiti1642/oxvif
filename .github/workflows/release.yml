@@ -363,7 +363,24 @@ jobs:
           sudo apt-get remove -y oxvif
           test ! -e /usr/bin/oxvif
           (cd dist && sha256sum "$(basename "$deb")" > "$(basename "$deb").sha256")
-      - name: Generate SPDX SBOM
+      - name: Prepare source inventory input
+        shell: bash
+        run: |
+          mkdir -p sbom-source/crates/oxvif-cli
+          cp Cargo.lock Cargo.toml sbom-source/
+          cp crates/oxvif-cli/Cargo.toml sbom-source/crates/oxvif-cli/
+      - name: Generate source SPDX SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: sbom-source
+          artifact-name: ${{ matrix.archive }}-${{ env.RELEASE_LABEL }}-source-sbom.spdx.json
+          output-file: dist/${{ matrix.archive }}-${{ env.RELEASE_LABEL }}.source.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Verify source inventory coverage
+        shell: bash
+        run: python packaging/check_source_sbom.py Cargo.lock dist/${{ matrix.archive }}-${{ env.RELEASE_LABEL }}.source.spdx.json
+      - name: Generate binary SPDX SBOM
         uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: target/${{ matrix.target }}/release
