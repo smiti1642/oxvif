@@ -1,0 +1,238 @@
+# Dependency maintenance and consolidated Dependabot updates
+
+[English](dependency-maintenance-plan.md) | [繁體中文](dependency-maintenance-plan_zh.md)
+
+Status: In progress; local migrations implemented, hosted validation and integration pending.  
+Date: 2026-09-07. Review baseline: `master` at `ee0460f`.
+
+| Section | Purpose |
+| --- | --- |
+| [Outcome](#outcome) | Scope and completion criteria |
+| [Execution record](#execution-record) | Current results and pending gates |
+| [Review evidence](#review-evidence) | Current six PRs |
+| [Execution](#execution) | Ordered implementation and integration |
+| [Dependabot configuration](#dependabot-configuration) | One routine cross-ecosystem PR |
+| [Verification](#verification) | Tests and operational evidence |
+| [Documentation and release](#documentation-and-release) | Handoff and release boundaries |
+| [References](#references) | GitHub configuration sources |
+
+## Outcome
+
+Complete PRs #6–#11, including the required source migrations, and consolidate
+future routine Cargo and GitHub Actions updates into one weekly Dependabot group.
+Keep Rust 1.88 support, CLI schema v3, existing fingerprints, and XML behavior.
+Retain human review; grouping does not enable automatic merging.
+
+“One PR” means one consolidated routine version-update PR per group/update cycle.
+Security updates use a separate GitHub mechanism and may create additional PRs.
+Do not disable security updates or suppress advisories to satisfy a numeric PR limit.
+GitHub updater errors or unsupported combinations must be reported, not silently
+replaced with a two-PR-per-ecosystem configuration.
+
+Execution was authorized on 2026-09-07. Publishing remains outside this task.
+
+## Execution record
+
+- Integration branch: `codex/dependency-maintenance`, based on `ee0460f`.
+  All six reviewed heads were unchanged when execution began; the default branch
+  has no configured branch protection or repository rulesets.
+- The bot commits were cherry-picked in order #7, #8, #10, #11, #9, #6,
+  preserving authorship. A single replacement PR will validate the combined tree;
+  old PRs remain open until integration is verified.
+- sha2 0.10.9 fixed outputs were captured before migration. The migrated encoder
+  passes the same record/plan constants and leading-zero vector. Existing plan
+  application checks cover the captured old fingerprint.
+- Three synthetic XML compatibility tests passed with quick-xml 0.41 before
+  migration, then with 0.42 through an isolated downstream consumer, encoding off
+  and on. The optional schema test's parser also required the 0.42 API migration;
+  no external ONVIF schema files or derived data were added.
+- Local workspace all-feature tests: **1,076 passed, 4 ignored**; all-feature
+  Clippy passed. Native hosted gates and staging are not yet accepted.
+- `cargo audit` on 2026-09-07: no known vulnerabilities, 411 dependencies.
+  `cargo outdated --workspace --root-deps-only` completed; remaining updates
+  (including keyring 4.2 and newer ipnet) are deferred to later reviewed batches.
+- Future release-tooling changes have an explicit manual staging-before-merge
+  gate in `CONTRIBUTING.md`, using the candidate workflow ref and source SHA.
+- Group configuration activation, hosted updater logs, first grouped PR, and
+  subsequent no-duplicate behavior are pending. Do not move this plan to `done/` yet.
+
+## Review evidence
+
+All six reviewed PRs target baseline `ee0460f`. Recheck their heads before execution.
+
+| PR | Reviewed head | Finding | Required disposition |
+| --- | --- | --- | --- |
+| [#7 base64](https://github.com/smiti1642/oxvif/pull/7) | `6b8f7e0` | Lockfile-only; upstream patch changes tests, not runtime codec logic; 21 CI checks passed. | Integrate after checking the current diff. |
+| [#8 ipnet](https://github.com/smiti1642/oxvif/pull/8) | `4f4208c` | Lockfile-only; subnet iterator boundary fix; CLI parsing/containment paths unchanged; 21 checks passed. | Integrate after checking the current diff. |
+| [#10 async-trait](https://github.com/smiti1642/oxvif/pull/10) | `062ec48` | Lockfile-only; removes redundant generated `must_use`; 21 checks passed. | Integrate after checking the current diff. |
+| [#11 sha2](https://github.com/smiti1642/oxvif/pull/11) | `25de4f7` | New digest output lacks `LowerHex`; `registry.rs:1735` and `:1824` fail to compile. | Add compatible fingerprint encoding and regression evidence. |
+| [#9 quick-xml](https://github.com/smiti1642/oxvif/pull/9) | `f0607a6` | Removed decoder APIs and bytes-to-string API changes break `src/soap/xml.rs`. | Migrate parser and verify semantic compatibility. |
+| [#6 SBOM action](https://github.com/smiti1642/oxvif/pull/6) | `9406771` | Action update also changes Syft 1.42.3 → 1.51.1 and installation behavior. Ordinary PR CI does not execute this step. | Run non-publishing release staging before accepting. |
+
+The failures in #9 and #11 are source compatibility failures on stable and MSRV
+jobs; they do not establish a need to raise the minimum supported Rust version.
+
+## Execution
+
+### 1. Establish integration state
+
+- [ ] Fetch the current default branch and PR heads; record their full SHAs and CI runs.
+- [ ] Use an isolated checkout when testing PRs; preserve unrelated user work.
+- [ ] Confirm merge policy and check requirements. Follow ordinary PR integration;
+  do not bypass failed checks or force-push protected branches.
+- [ ] Keep existing individual PRs until their changes are integrated or an explicit
+  replacement PR contains the changes and passes verification.
+
+### 2. Integrate reviewed patch updates
+
+- [ ] Process #7, #8, and #10 in order, preserving each change's attribution.
+- [ ] Re-evaluate lockfile conflicts and CI after the base advances. Regenerate only
+  the required lock entries; do not introduce the unrelated full `cargo update` set.
+- [ ] Verify the combined result, rather than treating three historical green runs
+  as proof that the final combined tree passes.
+
+### 3. Complete sha2 migration
+
+- [ ] Extend #11, or use a clearly linked replacement if editing the bot branch
+  would discard migration work during regeneration.
+- [ ] Encode digest bytes explicitly as two lowercase hexadecimal digits per byte.
+  Keep the `sha256:` prefix and exactly 64 hexadecimal digits.
+- [ ] Capture deterministic fingerprint fixtures on the old implementation before
+  changing it. Require identical output on the new implementation, including a
+  digest with leading zero bytes.
+- [ ] Verify old saved discovery records and reviewed import plans remain usable;
+  changed records or options still invalidate stale plans before any mutation.
+- [ ] Pass CLI tests, Clippy, and Rust 1.88 before integration.
+
+### 4. Complete quick-xml migration
+
+- [ ] Update both normal and development dependency declarations together.
+- [ ] Migrate `Reader::decoder`, reference decoding, text/CDATA access, local names,
+  namespace checks, and attribute normalization to 0.42 APIs.
+- [ ] Preserve whitespace around split entity events, named/numeric entities,
+  unknown entity handling, CDATA, Unicode, attribute normalization, and namespace
+  stripping. Preserve established malformed-input behavior; document any unavoidable
+  behavior change before acceptance.
+- [ ] Test with `encoding` enabled and disabled. Avoid reintroducing the documented
+  feature-unification failure through an API that disappears with `encoding`.
+- [ ] Exercise library, discovery, SOAP faults, mock, health, and CLI fixtures;
+  include the existing feature-combination checks for changed parser code.
+- [ ] Pass stable and Rust 1.88 gates before integration.
+
+### 5. Validate the SBOM action and release pipeline
+
+- [ ] Confirm #6 still pins the expected upstream commit and review action inputs,
+  runtime requirements, bundled scanner version, and downloader behavior.
+- [ ] Run the changed workflow with `publish=false` using the candidate workflow
+  ref itself. Setting a source SHA input on an old workflow is insufficient.
+- [ ] Validate all five native artifact rows and successful SPDX JSON generation;
+  check CLI identity/version, scanner metadata, and representative dependency
+  inventory against the prior output. Investigate missing coverage or large
+  inventory changes rather than accepting a nonempty file as sufficient evidence.
+- [ ] Keep automatic action artifact/release uploads disabled as currently configured;
+  retain the workflow's controlled staging artifact upload.
+- [ ] Ensure future PRs touching the release workflow or packaging execute a
+  non-publishing validation path (or a clearly required, recorded manual staging
+  gate). Do not claim ordinary Rust CI covers SBOM execution. If automated, use
+  unprivileged PR execution, not privileged `pull_request_target` checkout of PR code.
+
+### 6. Activate consolidated Dependabot updates
+
+- [ ] Finish existing PR integration first, then enable the configuration below.
+- [ ] Validate YAML and current Dependabot configuration schema/options; confirm
+  both Cargo and GitHub Actions are accepted by the hosted updater.
+- [ ] Merge the configuration into the default branch and inspect the actual
+  Dependabot job log and generated PR. Do not mark activation complete merely
+  because local YAML parsing succeeds.
+- [ ] Check a subsequent updater execution for duplicate routine PRs while the
+  grouped PR is open. Record actual behavior and any service limitations.
+- [ ] Reconcile obsolete bot PRs only after checking that their changes have landed
+  or are covered by the validated replacement. Avoid blanket closure or deletion.
+
+## Dependabot configuration
+
+Proposed replacement for `.github/dependabot.yml` (not applied by this plan):
+
+```yaml
+version: 2
+
+multi-ecosystem-groups:
+  maintenance:
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    labels: [dependencies]
+
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    patterns: ["*"]
+    multi-ecosystem-group: maintenance
+    labels: [rust]
+  - package-ecosystem: github-actions
+    directory: /
+    patterns: ["*"]
+    multi-ecosystem-group: maintenance
+    labels: [ci]
+```
+
+Use one group covering all routine update types, including breaking updates.
+A failing dependency blocks acceptance of that batch until repaired. Do not
+silently ignore major upgrades or split them into routine individual PRs.
+If an update cannot be completed, record the reason and a dated follow-up before
+proposing any temporary exclusion. Security remediation can proceed separately.
+
+Setting each ecosystem's `open-pull-requests-limit` to 1 alone would still permit
+separate ecosystem PRs; grouping is the mechanism that combines their changes.
+Existing PRs are not assumed to transform automatically when the configuration changes.
+
+## Verification
+
+Run these against the final combined candidate, respecting native OS requirements:
+
+```text
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo clippy -p oxvif --no-default-features --locked -- -D warnings
+cargo test --workspace --all-features --locked
+cargo test -p oxvif --no-default-features --locked
+cargo +1.88.0 check --workspace --all-features --locked
+cargo audit
+cargo outdated --workspace --root-deps-only
+```
+
+- [ ] Windows x64, Linux x64/ARM64, and macOS Intel/Apple Silicon CI passes,
+  including native credential lifecycle tests, CLI smoke, package checks, and docs.
+- [ ] Focused fingerprint and XML tests prove old/new compatibility, not merely
+  agreement between two functions using the same new implementation.
+- [ ] Non-publishing release staging passes on the final integrated state.
+- [ ] Each of #6–#11 is merged or explicitly superseded by an integrated equivalent.
+- [ ] One routine multi-ecosystem PR is observed when updates are available;
+  hosted logs confirm both ecosystems ran. If no updates exist, record activation
+  as awaiting operational verification rather than inventing a test release.
+- [ ] Record SHA, workflow URL, versions, results, and unresolved exceptions in this plan.
+
+## Documentation and release
+
+- [ ] Update `docs/dependency-pitfalls.md` with the XML and digest migration findings.
+- [ ] Add maintenance notes to `CHANGELOG.md` under Unreleased; update contribution
+  instructions for grouped review and release-workflow validation.
+- [ ] Keep English and `_zh` public counterparts synchronized when modified.
+- [ ] Synchronize `develop` with integrated `master` through the existing merge policy.
+- [ ] Preserve published `v0.16.0`, crate contents, and release assets. This plan
+  does not publish a new version or resume APT/Homebrew publication.
+- [ ] Prepare a maintenance-release candidate only after integration; remind the
+  owner before any external release action, as previously requested.
+- [ ] Move this plan and its translation to `docs/done/` and update links only when
+  integration and operational grouping verification are both complete.
+
+## References
+
+Checked 2026-09-07:
+
+- [Configure multi-ecosystem updates](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configuring-multi-ecosystem-updates)
+- [Multi-ecosystem grouping behavior](https://docs.github.com/en/code-security/concepts/supply-chain-security/multi-ecosystem-updates)
+- [Security update grouping](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-security-updates)
+- [Dependabot errors and separate update limits](https://docs.github.com/en/code-security/reference/supply-chain-security/troubleshoot-dependabot/dependabot-errors)
