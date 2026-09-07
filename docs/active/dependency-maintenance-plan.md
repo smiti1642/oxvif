@@ -63,6 +63,11 @@ Execution was authorized on 2026-09-07. Publishing remains outside this task.
   includes development and target-specific packages, not per-binary linkage.
   Initial candidate staging `34092581258` was intentionally cancelled for this
   coverage fix; it is not acceptance evidence.
+- Candidate `391880f` passed all 21 CI jobs (`34092932594`). Its staging run
+  `34092981151` exposed Python 3.10 on the Ubuntu 22.04 release runners: source
+  SBOM generation succeeded but the checker could not import `tomllib`.
+  The workflow now explicitly selects Python 3.12 via a reviewed, SHA-pinned
+  `actions/setup-python` v7.0.0. That interrupted staging run is not a pass.
 - Group configuration activation, hosted updater logs, first grouped PR, and
   subsequent no-duplicate behavior are pending. Do not move this plan to `done/` yet.
 

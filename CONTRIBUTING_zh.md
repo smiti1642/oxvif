@@ -55,7 +55,7 @@ Profile、清理後的命令、結束代碼、結構化錯誤代碼，以及預�
 
 逐項審查上游變更、feature 需求與 MSRV，再測試整合後的 lockfile。
 維持指紋、XML 與原生憑證契約。不得以完整 `cargo update` 解決單一更新 PR 的衝突。
-XML 相依套件更新另須執行：
+XML 相依套件更新另須執行（需要 Python 3.11 或更新版本）：
 
 ```text
 cargo fetch --locked

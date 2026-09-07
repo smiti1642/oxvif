@@ -363,6 +363,10 @@ jobs:
           sudo apt-get remove -y oxvif
           test ! -e /usr/bin/oxvif
           (cd dist && sha256sum "$(basename "$deb")" > "$(basename "$deb").sha256")
+      - name: Install Python for source inventory validation
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
       - name: Prepare source inventory input
         shell: bash
         run: |

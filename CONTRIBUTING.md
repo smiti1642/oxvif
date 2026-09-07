@@ -67,7 +67,7 @@ secret-safe, and unrelated formatting or generated-file churn is absent.
 Review each dependency's upstream changes, feature requirements, and MSRV;
 then test the combined lockfile. Preserve fingerprint, XML, and native credential
 contracts. Do not use a full `cargo update` to resolve a targeted PR conflict.
-For XML dependency updates also run:
+For XML dependency updates also run (Python 3.11 or newer is required):
 
 ```text
 cargo fetch --locked
