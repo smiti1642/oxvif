@@ -67,6 +67,15 @@ secret-safe, and unrelated formatting or generated-file churn is absent.
 Review each dependency's upstream changes, feature requirements, and MSRV;
 then test the combined lockfile. Preserve fingerprint, XML, and native credential
 contracts. Do not use a full `cargo update` to resolve a targeted PR conflict.
+
+Dependabot routine version updates use one `maintenance` multi-ecosystem group
+for Cargo and GitHub Actions, scheduled Mondays at 09:00 Asia/Taipei. All update
+types, including breaking versions, remain visible in the batch. Review each
+component and require the combined gates; grouping does not enable auto-merge.
+A failing update blocks the batch until repaired or an explicit, dated exception
+is reviewed. Do not silently ignore major upgrades. Security updates may create
+additional PRs and must not be disabled to enforce a global one-PR limit.
+
 For XML dependency updates also run (Python 3.11 or newer is required):
 
 ```text
