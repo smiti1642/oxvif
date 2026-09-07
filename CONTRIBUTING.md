@@ -1,7 +1,17 @@
 # Contributing to oxvif
 
+[English](CONTRIBUTING.md) | [繁體中文](CONTRIBUTING_zh.md)
+
 Thank you for helping improve oxvif. Bug reports, compatibility observations,
 documentation corrections, and focused pull requests are welcome.
+
+| Section | Purpose |
+| --- | --- |
+| [Before opening a change](#before-opening-a-change) | Scope and compatibility |
+| [Local verification](#local-verification) | Required checks |
+| [Fixtures and device reports](#fixtures-and-device-reports) | Sanitization |
+| [Pull requests](#pull-requests) | Acceptance criteria |
+| [Dependency and release-tooling changes](#dependency-and-release-tooling-changes) | Additional review gates |
 
 ## Before opening a change
 
@@ -52,3 +62,43 @@ Keep changes reviewable and explain the observable contract. A pull request is
 ready when its tests pass, documentation matches behavior, new diagnostics are
 secret-safe, and unrelated formatting or generated-file churn is absent.
 
+## Dependency and release-tooling changes
+
+Review each dependency's upstream changes, feature requirements, and MSRV;
+then test the combined lockfile. Preserve fingerprint, XML, and native credential
+contracts. Do not use a full `cargo update` to resolve a targeted PR conflict.
+For XML dependency updates also run (Python 3.11 or newer is required):
+
+```text
+cargo fetch --locked
+python packaging/check_xml_features.py
+```
+
+Changes to `.github/workflows/release.yml`, its pinned actions, or `packaging/`
+require a successful **manual, non-publishing release-staging run before merge**.
+Ordinary PR CI alone is insufficient. A maintainer must review the candidate
+workflow before dispatching it; never execute unreviewed PR code through
+`pull_request_target` or supply release credentials to a dependency PR.
+
+```text
+gh workflow run release.yml --ref <candidate-branch> -f tag=<full-candidate-commit-sha> -f publish=false
+```
+
+`--ref` selects the changed workflow, while `tag` selects its source checkout.
+Use the full commit SHA for `tag`: branch names containing `/` are not valid
+artifact labels. Record both SHAs and the run URL in the PR. Require all native
+artifact rows, credential tests, SPDX output, APT install/remove, and Homebrew
+install/bottle/reinstall checks to pass. Compare scanner version and meaningful
+dependency coverage with the previous staging output; a nonempty SBOM file is
+not sufficient. If code or release tooling changes afterwards, rerun staging.
+Documentation-only changes may refer to the unchanged tested code/tooling tree.
+
+Release staging emits two inventories per target: `.spdx.json` is the binary
+scan; `.source.spdx.json` inventories Cargo.lock and the workspace manifests.
+Rust binary scans can omit dependencies and report an unknown application
+version. The source inventory is checked against every locked package/version,
+including the CLI, but includes development and other-platform packages; it
+must not be described as a precise per-binary linkage inventory.
+
+`publish=false` uploads temporary Actions artifacts only. It does not authorize
+creating a GitHub Release, publishing crates, or changing public package channels.

@@ -43,6 +43,7 @@ conventions, and attribution/licensing.
 
 | Doc | About |
 |-----|-------|
+| [`dependency-maintenance-plan.md`](active/dependency-maintenance-plan.md) · [繁體中文](active/dependency-maintenance-plan_zh.md) | Plan to complete Dependabot PRs #6–#11, migrate XML and fingerprint APIs, validate SBOM staging, and consolidate routine Cargo/GitHub Actions updates into one weekly PR. |
 | [`oxvif-cli-release-hardening-plan.md`](active/oxvif-cli-release-hardening-plan.md) | Release-hardening programme for the diagnostic CLI: dependency security, publishable packages, CI/platform gates, retry and observability contracts, human rendering, Agent schemas, community readiness, and the commercial-pilot cut line before controlled device writes. |
 | [`oxvif-cli-three-platform-distribution-plan.md`](active/oxvif-cli-three-platform-distribution-plan.md) | Executable plan for native Windows/macOS/Linux credentials, private CA and timeout gates, signed APT distribution, Homebrew tap/bottles, the approval-controlled release, and later Homebrew Core/Debian/Ubuntu graduation. |
 | [`metamorph.md`](active/metamorph.md) | The shape-shifting mock device (three personas). M0–M3, M5, M6 shipped; **M4** (control plane + Persona A) and **M7** (quirk diff) not yet started. |

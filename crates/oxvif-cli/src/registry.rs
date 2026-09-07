@@ -1731,8 +1731,7 @@ fn import_plan_fingerprint(plan: &DiscoveryImportPlan) -> Result<String, AppErro
         &plan.proposals,
     ))
     .map_err(|error| AppError::serialization_failed(error.to_string()))?;
-    let digest = Sha256::digest(canonical);
-    Ok(format!("sha256:{digest:x}"))
+    Ok(sha256_fingerprint(&canonical))
 }
 
 fn normalize_import_overrides(
@@ -1820,8 +1819,18 @@ fn normalize_interfaces(mut interfaces: Vec<String>) -> Vec<String> {
 fn discovery_record_fingerprint(record: &DiscoveryRecord) -> Result<String, AppError> {
     let canonical = serde_json::to_vec(record)
         .map_err(|error| AppError::serialization_failed(error.to_string()))?;
-    let digest = Sha256::digest(canonical);
-    Ok(format!("sha256:{digest:x}"))
+    Ok(sha256_fingerprint(&canonical))
+}
+
+fn sha256_fingerprint(canonical: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut fingerprint = String::with_capacity(7 + 64);
+    fingerprint.push_str("sha256:");
+    for byte in Sha256::digest(canonical) {
+        fingerprint.push(HEX[usize::from(byte >> 4)] as char);
+        fingerprint.push(HEX[usize::from(byte & 0x0f)] as char);
+    }
+    fingerprint
 }
 
 fn discovery_uuid(record: &DiscoveryRecord) -> Option<String> {
@@ -2507,7 +2516,16 @@ xaddrs = ["http://192.0.2.50/onvif/device_service"]
         let plan = store
             .plan_discovery_import(&request)
             .expect("plan should build");
-        assert!(plan.fingerprint.starts_with("sha256:"));
+        // Fixed outputs captured with sha2 0.10.9 before the 0.11 migration.
+        // Applying this plan below also verifies an old reviewed fingerprint.
+        assert_eq!(
+            plan.fingerprint,
+            "sha256:897a10979c96f02e79b813c287b70b69335a58b228d540186f0ecb73af2e1fb3"
+        );
+        assert_eq!(
+            plan.proposals[0].source_fingerprint,
+            "sha256:3001dc4e6f880853a49f4320b63074327f2c716f7fc3c4b9f439fa90c1efc48e"
+        );
         assert_eq!(plan.create_count, 1);
         assert_eq!(plan.conflict_count, 0);
         assert_eq!(
@@ -2540,6 +2558,16 @@ xaddrs = ["http://192.0.2.50/onvif/device_service"]
             .expect("repeat plan should build");
         assert_eq!(repeated.create_count, 0);
         assert_eq!(repeated.already_present_count, 1);
+    }
+
+    #[test]
+    fn fingerprint_preserves_leading_zero_bytes() {
+        // sha2 0.10.9 output: zero padding is part of the persisted contract.
+        assert_eq!(
+            sha256_fingerprint(b"286"),
+            "sha256:00328ce57bbc14b33bd6695bc8eb32cdf2fb5f3a7d89ec14a42825e15d39df60"
+        );
+        assert_eq!(sha256_fingerprint(b"").len(), 71);
     }
 
     #[test]
