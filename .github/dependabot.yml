@@ -1,14 +1,22 @@
 version: 2
+
+multi-ecosystem-groups:
+  maintenance:
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Taipei
+    labels: [dependencies]
+
 updates:
   - package-ecosystem: cargo
     directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    labels: [dependencies, rust]
+    patterns: ["*"]
+    multi-ecosystem-group: maintenance
+    labels: [rust]
   - package-ecosystem: github-actions
     directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    labels: [dependencies, ci]
+    patterns: ["*"]
+    multi-ecosystem-group: maintenance
+    labels: [ci]
