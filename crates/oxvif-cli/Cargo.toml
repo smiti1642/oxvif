@@ -46,7 +46,7 @@ keyring = { version = "3.6.3", default-features = false, features = ["apple-nati
 keyring = { version = "3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust", "vendored"] }
 
 [dev-dependencies]
-jsonschema = { version = "0.52.1", default-features = false }
+jsonschema = { version = "0.53.0", default-features = false }
 oxvif = { path = "../..", features = ["mock-server"] }
 tempfile = "3"
-shlex = "1.3"
+shlex = "2.0"
