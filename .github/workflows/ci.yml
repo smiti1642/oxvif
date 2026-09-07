@@ -44,6 +44,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Run clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Check downstream XML feature compatibility
+        run: |
+          cargo fetch --locked
+          python3 packaging/check_xml_features.py
 
   audit:
     name: Security audit

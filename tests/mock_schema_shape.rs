@@ -562,25 +562,16 @@ fn parse(xml: &str) -> Result<(Raw, HashMap<String, String>), String> {
         }
     }
 
-    // `Attribute::unescape_value` is `#[cfg(not(feature = "encoding"))]`, and
-    // the dev-dependency turns `encoding` on precisely so the test build
-    // matches a downstream crate that does — see docs/dependency-pitfalls.md.
-    // The decoder-taking form is the one that exists in both builds.
-    let decoder = reader.decoder();
-
-    fn start(
-        e: &quick_xml::events::BytesStart,
-        px: &mut HashMap<String, String>,
-        decoder: quick_xml::encoding::Decoder,
-    ) -> Raw {
-        let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+    // quick-xml 0.42 stores UTF-8 strings; normalization is feature-independent.
+    fn start(e: &quick_xml::events::BytesStart, px: &mut HashMap<String, String>) -> Raw {
+        let name = e.name().as_ref().to_owned();
         let mut attrs = Vec::new();
         for a in e.attributes().flatten() {
-            let k = String::from_utf8_lossy(a.key.as_ref()).into_owned();
+            let k = a.key.as_ref().to_owned();
             let v = a
-                .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, decoder)
+                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                 .map(|v| v.into_owned())
-                .unwrap_or_else(|_| String::from_utf8_lossy(&a.value).into_owned());
+                .unwrap_or_else(|_| a.value.clone().into_owned());
             if k == "xmlns" {
                 px.insert(String::new(), v.clone());
             } else if let Some(p) = k.strip_prefix("xmlns:") {
@@ -597,9 +588,9 @@ fn parse(xml: &str) -> Result<(Raw, HashMap<String, String>), String> {
 
     loop {
         match reader.read_event().map_err(|e| e.to_string())? {
-            quick_xml::events::Event::Start(e) => stack.push(start(&e, &mut prefixes, decoder)),
+            quick_xml::events::Event::Start(e) => stack.push(start(&e, &mut prefixes)),
             quick_xml::events::Event::Empty(e) => {
-                let n = start(&e, &mut prefixes, decoder);
+                let n = start(&e, &mut prefixes);
                 place(&mut stack, &mut root, n);
             }
             quick_xml::events::Event::End(_) => {

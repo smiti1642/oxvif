@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 | Range | Releases |
 | --- | --- |
+| In development | [Unreleased](#unreleased) |
 | Latest | [0.16.0](#0160---2026-09-04) |
 | Recent stable | [0.15.0](#0150---2026-08-03) · [0.14.0](#0140---2026-07-27) · [0.13.0](#0130---2026-07-24) · [0.12.0](#0120---2026-07-09) · [0.11.0](#0110---2026-07-03) · [0.10.0](#0100---2026-06-30) |
 | 0.9 series | [0.9.9](#099---2026-06-11) · [0.9.8](#098---2026-06-10) · [0.9.7](#097---2026-05-31) · [0.9.6](#096---2026-05-26) · [0.9.4](#094---2026-05-04) · [0.9.3](#093---2026-04-17) · [0.9.2](#092---2026-04-17) · [0.9.1](#091---2026-04-16) · [0.9.0](#090---2026-04-15) |
@@ -16,6 +17,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 | 0.3–0.1 | [0.3.0](#030---2026-04-02) · [0.2.0](#020---2026-04-02) · [0.1.3](#013---2026-04-02) · [0.1.2](#012---2026-04-02) · [0.1.1](#011---2026-04-02) · [0.1.0](#010---2026-04-02) |
 
 ---
+
+## [Unreleased]
+
+### Changed
+
+- Update quick-xml to 0.42 and CLI sha2 to 0.11, with compatible string-based
+  XML parsing and explicit lowercase SHA-256 fingerprint encoding. Existing
+  registry data, reviewed import fingerprints, and CLI schema v3 are unchanged.
+- Refresh the locked base64, ipnet, and async-trait patch versions and pin
+  `anchore/sbom-action` to 0.24.2. Release staging remains a separate acceptance
+  gate; ordinary Rust CI does not validate the SBOM generator.
+- Add downstream XML feature-on/off regression coverage to CI.
+
+These changes are not part of the published 0.16.0 artifacts.
 
 ## [0.16.0] - 2026-09-04
 

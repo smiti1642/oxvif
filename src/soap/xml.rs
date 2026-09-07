@@ -93,26 +93,20 @@ impl XmlNode {
         // is still removed.
         reader.config_mut().trim_text(false);
 
-        // The input is always a `&str`, so the reader decodes as UTF-8. Capture
-        // the decoder once and hand it to `from_bytes_start`: we go through
-        // `Attribute::decoded_and_normalized_value(version, decoder)` — quick-xml's
-        // recommended path for untrusted input — rather than the decoder-less
-        // `normalized_value`, so attribute decoding is driven by the reader's
-        // decoder and stays correct regardless of whether a sibling crate flips
-        // on `quick-xml/encoding` (feature unification).
-        let decoder = reader.decoder();
+        // quick-xml 0.42 events contain UTF-8 strings. Attribute normalization
+        // is available with `encoding` enabled or disabled; no decoder is needed.
 
         let mut stack: Vec<XmlNode> = Vec::new();
 
         loop {
             match reader.read_event() {
                 Ok(Event::Start(ref e)) => {
-                    stack.push(Self::from_bytes_start(e, decoder));
+                    stack.push(Self::from_bytes_start(e));
                 }
 
                 Ok(Event::Empty(ref e)) => {
                     // Self-closing tag: <Foo/>
-                    let node = Self::from_bytes_start(e, decoder);
+                    let node = Self::from_bytes_start(e);
                     if let Some(parent) = stack.last_mut() {
                         parent.children.push(node);
                     } else {
@@ -149,7 +143,7 @@ impl XmlNode {
                         // references as separate `Event::GeneralRef`s, so a
                         // single element's content can arrive as several Text
                         // events interleaved with GeneralRefs.
-                        let cow = e.xml10_content().unwrap_or_default();
+                        let cow = e.xml10_content();
                         if !cow.is_empty() {
                             append_text(node, &cow);
                         }
@@ -167,8 +161,8 @@ impl XmlNode {
                         if let Ok(Some(ch)) = e.resolve_char_ref() {
                             let mut buf = [0u8; 4];
                             append_text(node, ch.encode_utf8(&mut buf));
-                        } else if let Ok(name) = e.decode() {
-                            let decoded = match name.as_ref() {
+                        } else {
+                            let decoded = match e.as_ref() {
                                 "amp" => "&",
                                 "lt" => "<",
                                 "gt" => ">",
@@ -187,10 +181,8 @@ impl XmlNode {
                 }
 
                 Ok(Event::CData(ref e)) => {
-                    if let Some(node) = stack.last_mut()
-                        && let Ok(s) = std::str::from_utf8(e.as_ref())
-                    {
-                        append_text(node, s);
+                    if let Some(node) = stack.last_mut() {
+                        append_text(node, e.as_ref());
                     }
                 }
 
@@ -208,26 +200,23 @@ impl XmlNode {
         }
     }
 
-    fn from_bytes_start(
-        e: &quick_xml::events::BytesStart<'_>,
-        decoder: quick_xml::Decoder,
-    ) -> Self {
-        let local_name = String::from_utf8_lossy(e.local_name().as_ref()).into_owned();
+    fn from_bytes_start(e: &quick_xml::events::BytesStart<'_>) -> Self {
+        let local_name = e.local_name().as_ref().to_owned();
 
         let mut attrs = HashMap::new();
         for attr_result in e.attributes() {
             let Ok(attr) = attr_result else { continue };
 
             // Drop namespace declarations (xmlns and xmlns:prefix)
-            let is_ns_decl = attr.key.as_ref() == b"xmlns"
-                || attr.key.prefix().is_some_and(|p| p.as_ref() == b"xmlns");
+            let is_ns_decl = attr.key.as_ref() == "xmlns"
+                || attr.key.prefix().is_some_and(|p| p.as_ref() == "xmlns");
             if is_ns_decl {
                 continue;
             }
 
-            let key = String::from_utf8_lossy(attr.key.local_name().as_ref()).into_owned();
+            let key = attr.key.local_name().as_ref().to_owned();
             let value = attr
-                .decoded_and_normalized_value(XmlVersion::Implicit1_0, decoder)
+                .normalized_value(XmlVersion::Implicit1_0)
                 .map(|v| v.into_owned())
                 .unwrap_or_default();
             attrs.insert(key, value);
@@ -363,9 +352,8 @@ mod tests {
 
     #[test]
     fn test_parse_attribute_unescapes_entities() {
-        // Exercises the `decode_and_unescape_value(reader.decoder())` path:
-        // attribute values must still be XML-unescaped, identically to the
-        // old `unescape_value()` call, with the `encoding` feature on or off.
+        // Normalization must still unescape entities with the `encoding`
+        // feature on or off; see tests/xml_compat.rs for additional fixtures.
         let xml = r#"<Node token="a&amp;b&lt;c&gt;d&quot;e&apos;f"/>"#;
         let node = XmlNode::parse(xml).unwrap();
         assert_eq!(node.attr("token"), Some(r#"a&b<c>d"e'f"#));

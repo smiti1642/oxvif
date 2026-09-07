@@ -11,6 +11,13 @@ feature on for us.** The dangerous shape is a **public API gated
 This file is dev-only (the `docs/` directory is excluded from the published
 crate). Linked from `CLAUDE.md` → checked before every publish.
 
+| Section | Purpose |
+| --- | --- |
+| [Historical encoding failure](#case-1--quick-xml-encoding-removes-attributeunescape_value) | Why downstream feature tests exist |
+| [Audit procedure](#how-to-audit-for-new-instances-run-before-each-publish) | Review steps |
+| [Audit log](#audit-log) | Version-specific findings |
+| [Current XML and digest migration](#unreleased--quick-xml-042-and-sha2-011) | Current APIs and compatibility gates |
+
 ---
 
 ## Case 1 — `quick-xml` `encoding` removes `Attribute::unescape_value`
@@ -40,6 +47,10 @@ cargo tree -e features -i quick-xml   # shows the `encoding` feature edge
 ```
 
 ### Fix
+
+This is the historical 0.39 fix. For 0.42, use the string-based API described
+in the [current migration](#unreleased--quick-xml-042-and-sha2-011); `Reader::decoder`
+no longer exists.
 
 Go through the always-available decoder variant instead:
 
@@ -150,3 +161,41 @@ error (`"Invalid nonce base64: {e}"`) and nothing matches on the variant or
 asserts the message, so nothing depends on it. MSRV moved to 1.71; ours is 1.85.
 
 `cargo audit`: zero vulnerabilities, 245 crate dependencies.
+
+### Unreleased — quick-xml 0.42 and sha2 0.11
+
+quick-xml 0.42 events now hold UTF-8 strings. `XmlNode` and the optional schema
+check use string local names, reference/CDATA access, and
+`Attribute::normalized_value(XmlVersion::Implicit1_0)`. Unlike the old API in
+Case 1, this method is unconditional in 0.42; `encoding` does not remove it.
+Text still uses XML 1.0 line-ending normalization, and CDATA remains raw.
+Namespace declarations are omitted, element text is trimmed only after joining
+split events, unknown text entities are preserved, and the existing permissive
+partial-document/invalid-attribute handling is unchanged. This migration does
+not turn the DOM into a validating XML parser.
+
+`tests/xml_compat.rs` was run against 0.41 before migration. It pins Unicode,
+entities, CDATA, line endings, attributes, namespace stripping, and representative
+malformed inputs. Normal test builds enable `encoding` through the dev-dependency.
+`python packaging/check_xml_features.py` additionally runs these fixtures from
+an isolated consumer with `encoding` off and on, verifies the actual feature
+graph, and rejects registry versions absent from the workspace lockfile. Run
+`cargo fetch --locked` first; the probe resolves offline and does not modify the
+workspace lockfile. CI runs the probe as part of the Clippy job.
+
+sha2 0.11 returns a digest array without the `LowerHex` implementation used by
+the CLI. The shared fingerprint encoder now writes two lowercase hex characters
+per byte, preserving `sha256:` plus exactly 64 characters. Regression constants
+were captured using sha2 0.10.9 for a synthetic discovery record, its reviewed
+import plan, and input `286` (whose digest starts with `00`). They are not values
+calculated by the replacement encoder inside the assertions. Existing stale-plan,
+atomicity, and idempotency tests remain in place. No registry or CLI schema
+migration is required. Transitive sha2 0.10 remains where credential dependencies
+require it; forcing a single version is outside this update.
+
+The accompanying base64 0.23.1, ipnet 2.12.1, and async-trait 0.1.92 changes are
+targeted lockfile updates. They do not change oxvif's base64 feature policy.
+The 2026-09-07 audit found no known vulnerabilities across 411 dependencies.
+`cargo outdated` still reports newer packages, including keyring 4.2; these are
+not silently included in the six reviewed updates. They belong to later reviewed
+maintenance batches, particularly the platform credential migration for keyring.
