@@ -50,12 +50,24 @@ impl SnapshotSaveRequest {
     }
 }
 
-/// Run bounded diagnostic stages; omitted profile is selected only if unique.
+/// Run bounded diagnostic stages; omitted profile is selected only if unique
+/// unless the caller explicitly supplies a human picker through `Application`.
 #[derive(Debug, Eq, PartialEq)]
 pub struct DiagnoseRequest {
     pub selector: TargetSelector,
     pub profile: Option<String>,
 }
+
+/// A profile candidate returned by the existing diagnostic session.
+#[derive(Clone, Debug, Serialize)]
+pub struct ProfileChoice {
+    pub token: String,
+    pub name: String,
+}
+
+/// Optional human adapter. `None` means cancellation, never automatic fallback.
+pub type ProfilePicker<'a> =
+    dyn Fn(&[ProfileChoice]) -> Result<Option<String>, AppError> + Sync + 'a;
 
 /// Save a versioned, read-only camera inventory, not a restorable backup.
 #[derive(Debug, Eq, PartialEq)]
@@ -126,6 +138,8 @@ struct Step {
     detail: String,
     next_step: String,
     data: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    not_tested_reason: Option<String>,
 }
 
 impl Step {
@@ -138,16 +152,19 @@ impl Step {
             detail: detail.into(),
             next_step: next_step.into(),
             data: None,
+            not_tested_reason: None,
         }
     }
 
     fn skipped(name: &str, why: &str) -> Self {
-        Self::new(
+        let mut step = Self::new(
             name,
             Status::NotTested,
             why,
             "Resolve prerequisites and run the diagnostic again.",
-        )
+        );
+        step.not_tested_reason = Some("prerequisite_failed".into());
+        step
     }
 }
 
@@ -280,6 +297,7 @@ pub(crate) async fn execute(
             connect,
             session.as_ref(),
             profile.as_deref(),
+            None,
         )
         .await;
     }
@@ -463,33 +481,93 @@ fn elapsed(start: Instant) -> u64 {
     start.elapsed().as_millis().try_into().unwrap_or(u64::MAX)
 }
 
+pub(crate) async fn diagnose_with_picker(
+    resolved: &ResolvedTarget,
+    options: &ExecutionOptions,
+    profile: Option<&str>,
+    picker: &ProfilePicker<'_>,
+) -> Result<Value, AppError> {
+    let (connect, session) = connect(resolved, options).await?;
+    diagnose(
+        resolved,
+        options,
+        connect,
+        session.as_ref(),
+        profile,
+        Some(picker),
+    )
+    .await
+}
+
 async fn diagnose(
     resolved: &ResolvedTarget,
     options: &ExecutionOptions,
     connect: Step,
     session: Option<&OnvifSession>,
     profile: Option<&str>,
+    picker: Option<&ProfilePicker<'_>>,
 ) -> Result<Value, AppError> {
     let mut stages = vec![connect];
+    let mut selected_profile = None;
     if let Some(session) = session {
         let (info, _) = onvif_step("device_info", options, || session.get_device_info()).await;
         stages.push(info);
         let (mut profiles_step, profiles) =
             onvif_step("media_profiles", options, || session.get_profiles()).await;
+        let candidates = profiles
+            .as_ref()
+            .map(|profiles| {
+                profiles
+                    .iter()
+                    .map(|p| ProfileChoice {
+                        token: p.token.clone(),
+                        name: p.name.clone(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         if let Some(profiles) = &profiles {
-            profiles_step.data =
-                Some(json!({"profiles": profiles.iter().map(|p| &p.token).collect::<Vec<_>>()}));
+            profiles_step.data = Some(
+                json!({"profiles": profiles.iter().map(|p| &p.token).collect::<Vec<_>>(), "candidates": candidates}),
+            );
         }
         stages.push(profiles_step);
-        let selected = profiles.as_ref().and_then(|profiles| match profile {
-            Some(token) => profiles
-                .iter()
-                .find(|p| p.token == token)
-                .map(|p| p.token.as_str()),
-            None if profiles.len() == 1 => Some(profiles[0].token.as_str()),
-            _ => None,
-        });
+        let mut reason = if profiles.is_none() {
+            "PROFILE_QUERY_FAILED"
+        } else if candidates.is_empty() {
+            "NO_PROFILES_AVAILABLE"
+        } else if profile.is_some() {
+            "PROFILE_NOT_FOUND"
+        } else {
+            "PROFILE_SELECTION_REQUIRED"
+        };
+        let mut picked = None;
+        if profile.is_none()
+            && candidates.len() > 1
+            && !options.non_interactive
+            && let Some(picker) = picker
+        {
+            match picker(&candidates) {
+                Ok(Some(token)) => {
+                    picked = Some(token);
+                    reason = "PROFILE_NOT_FOUND";
+                }
+                Ok(None) => reason = "PROFILE_SELECTION_CANCELLED",
+                Err(_) => reason = "PROFILE_INTERACTION_FAILED",
+            }
+        }
+        let selected = profiles
+            .as_ref()
+            .and_then(|profiles| match profile.or(picked.as_deref()) {
+                Some(token) => profiles
+                    .iter()
+                    .find(|p| p.token == token)
+                    .map(|p| p.token.as_str()),
+                None if profiles.len() == 1 => Some(profiles[0].token.as_str()),
+                _ => None,
+            });
         if let Some(token) = selected {
+            selected_profile = Some(token.to_owned());
             let (stream, _) =
                 onvif_step("stream_uri", options, || session.get_stream_uri(token)).await;
             stages.push(stream);
@@ -536,6 +614,22 @@ async fn diagnose(
                 "Run profiles and pass an explicit --profile token.",
             );
             selection.error_code = Some("PROFILE_SELECTION_REQUIRED".into());
+            selection.detail = match reason {
+                "PROFILE_QUERY_FAILED" => "Profile query failed; earlier results are retained.",
+                "NO_PROFILES_AVAILABLE" => "The camera returned no media profiles.",
+                "PROFILE_NOT_FOUND" => "The requested profile token does not exist.",
+                "PROFILE_SELECTION_CANCELLED" => {
+                    "Profile selection was cancelled; earlier results are retained."
+                }
+                "PROFILE_INTERACTION_FAILED" => {
+                    "Profile selection failed; earlier results are retained."
+                }
+                _ => "Multiple profiles are available; choose an explicit token.",
+            }
+            .into();
+            selection.data = Some(
+                json!({"reason_code": reason, "requested_profile": profile, "candidates": candidates}),
+            );
             stages.push(selection);
             for name in ["stream_uri", "snapshot_uri", "snapshot_fetch"] {
                 stages.push(Step::skipped(name, "A matching profile is required."));
@@ -556,19 +650,25 @@ async fn diagnose(
         .iter()
         .all(|stage| matches!(stage.status, Status::Pass | Status::Unsupported));
     for name in ["rtsp_transport", "video_decode"] {
-        stages.push(Step::new(
+        let mut step = Step::new(
             name,
             Status::NotTested,
             "Not implemented by this diagnostic; URI retrieval does not prove playback.",
             "Verify playback separately with a trusted RTSP client.",
-        ));
+        );
+        step.not_tested_reason = Some("not_implemented".into());
+        stages.push(step);
     }
     let failed = stages
         .iter()
         .filter(|s| matches!(s.status, Status::Fail))
         .count();
     Ok(
-        json!({"failed": failed, "complete": complete, "stages": stages, "playback_verified": false}),
+        json!({"failed": failed, "complete": complete, "stages": stages, "playback_verified": false,
+            "selected_profile": selected_profile,
+            "summary": {"passed": stages.iter().filter(|s| matches!(s.status, Status::Pass)).count(),
+                "failed": failed, "unsupported": stages.iter().filter(|s| matches!(s.status, Status::Unsupported)).count(),
+                "not_tested": stages.iter().filter(|s| matches!(s.status, Status::NotTested)).count()}}),
     )
 }
 
@@ -1256,6 +1356,174 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    #[tokio::test]
+    async fn diagnostic_picker_retains_evidence_and_never_falls_back() {
+        let server = oxvif::mock::MockServer::start().await.unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let app = Application::with_stores(
+            RegistryStore::at(directory.path()),
+            Arc::new(MemoryCredentialStore::default()),
+        );
+        let human = ExecutionOptions {
+            non_interactive: false,
+            ..options()
+        };
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        for (answer, expected) in [
+            (Ok(None), "PROFILE_SELECTION_CANCELLED"),
+            (
+                Err(AppError::invalid_argument("terminal unavailable")),
+                "PROFILE_INTERACTION_FAILED",
+            ),
+            (Ok(Some("invalid".into())), "PROFILE_NOT_FOUND"),
+        ] {
+            let picker = |choices: &[ProfileChoice]| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                assert!(choices.len() > 1);
+                assert!(!choices[0].name.is_empty());
+                answer.clone()
+            };
+            let report = app
+                .diagnose_with_profile_picker(
+                    DiagnoseRequest {
+                        selector: selector(server.device_url()),
+                        profile: None,
+                    },
+                    &human,
+                    &picker,
+                )
+                .await
+                .unwrap();
+            assert_eq!(report.exit_code(), 20);
+            let stages = result(&report)["stages"].as_array().unwrap();
+            assert!(
+                stages
+                    .iter()
+                    .any(|s| s["name"] == "device_info" && s["status"] == "pass")
+            );
+            assert!(stages.iter().any(|s| s["data"]["reason_code"] == expected));
+            assert!(
+                stages
+                    .iter()
+                    .any(|s| s["not_tested_reason"] == "prerequisite_failed")
+            );
+            assert!(
+                stages
+                    .iter()
+                    .any(|s| s["not_tested_reason"] == "not_implemented")
+            );
+        }
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
+        let no_picker =
+            |_: &[ProfileChoice]| -> Result<Option<String>, AppError> { panic!("must not prompt") };
+        for (profile, options, reason) in [
+            (None, options(), "PROFILE_SELECTION_REQUIRED"),
+            (Some("invalid".into()), human.clone(), "PROFILE_NOT_FOUND"),
+        ] {
+            let report = app
+                .diagnose_with_profile_picker(
+                    DiagnoseRequest {
+                        selector: selector(server.device_url()),
+                        profile,
+                    },
+                    &options,
+                    &no_picker,
+                )
+                .await
+                .unwrap();
+            assert!(
+                result(&report)["stages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|s| s["data"]["reason_code"] == reason)
+            );
+        }
+        server.inject_fault("GetProfiles", "s:Receiver", "withheld");
+        let report = app
+            .diagnose_with_profile_picker(
+                DiagnoseRequest {
+                    selector: selector(server.device_url()),
+                    profile: None,
+                },
+                &human,
+                &no_picker,
+            )
+            .await
+            .unwrap();
+        assert!(
+            result(&report)["stages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|s| s["data"]["reason_code"] == "PROFILE_QUERY_FAILED")
+        );
+        // Arm faults after selection data arrives. A second handshake or profile
+        // query would consume them; independently probe afterward to prove reuse.
+        let pick = |choices: &[ProfileChoice]| {
+            server.inject_fault("GetCapabilities", "s:Receiver", "repeat handshake");
+            server.inject_fault("GetProfiles", "s:Receiver", "repeat profile query");
+            Ok(Some(choices[0].token.clone()))
+        };
+        let report = app
+            .diagnose_with_profile_picker(
+                DiagnoseRequest {
+                    selector: selector(server.device_url()),
+                    profile: None,
+                },
+                &human,
+                &pick,
+            )
+            .await
+            .unwrap();
+        assert_eq!(report.exit_code(), 0);
+        let client = oxvif::OnvifClient::new(server.device_url());
+        assert!(client.get_capabilities().await.is_err());
+        assert!(
+            client
+                .get_profiles(&format!("{}/onvif/media_service", server.base_url()))
+                .await
+                .is_err()
+        );
+        server
+            .device()
+            .modify(|state| state.profiles.profiles.truncate(1));
+        let report = app
+            .diagnose_with_profile_picker(
+                DiagnoseRequest {
+                    selector: selector(server.device_url()),
+                    profile: None,
+                },
+                &human,
+                &no_picker,
+            )
+            .await
+            .unwrap();
+        assert_eq!(report.exit_code(), 0);
+        assert!(result(&report)["selected_profile"].is_string());
+        server
+            .device()
+            .modify(|state| state.profiles.profiles.clear());
+        let report = app
+            .diagnose_with_profile_picker(
+                DiagnoseRequest {
+                    selector: selector(server.device_url()),
+                    profile: None,
+                },
+                &human,
+                &no_picker,
+            )
+            .await
+            .unwrap();
+        assert!(
+            result(&report)["stages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|s| s["data"]["reason_code"] == "NO_PROFILES_AVAILABLE")
+        );
     }
 
     #[test]

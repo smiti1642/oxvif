@@ -70,6 +70,9 @@ replacement. Camera imagery and inventory are sensitive local artifacts.
 
 Local Windows x64 validation on 2026-09-08:
 
+The following records the initial implementation. Subsequent UX changes and
+updated verification counts are tracked in the [UX refinement plan](cli-maintenance-ux-plan.md).
+
 - `cargo test --workspace --all-features`: 1,095 passed, 4 existing conditional
   ignores. Includes 19 new workflow tests across library and executable coverage.
 - `cargo test --workspace`: 1,015 passed, 4 existing conditional ignores.

@@ -280,8 +280,56 @@ async fn maintenance_binary_workflow_and_envelopes() {
         directory.path(),
     );
     assert!(human.status.success());
-    assert!(stdout(&human).contains("STAGE | STATUS"));
+    assert!(stdout(&human).contains("Diagnostic complete: true"));
+    assert!(!stdout(&human).contains("STAGE | STATUS"));
     assert!(stdout(&human).contains("Video playback has NOT been verified"));
+    let detailed = run_isolated(
+        &["diagnose", "camera", "--profile", "Profile_1", "-v"],
+        directory.path(),
+    );
+    assert!(detailed.status.success());
+    assert!(stdout(&detailed).contains("STAGE | STATUS"));
+    for (profile, reason) in [
+        (None, "PROFILE_SELECTION_REQUIRED"),
+        (Some("unknown"), "PROFILE_NOT_FOUND"),
+    ] {
+        let mut args = vec!["diagnose", "--device=camera", "--timeout=2s", "--json"];
+        if let Some(token) = profile {
+            args.extend(["--profile", token]);
+        }
+        let output = run_isolated(&args, directory.path());
+        assert_eq!(output.status.code(), Some(20));
+        assert!(stderr(&output).is_empty());
+        let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(validator.is_valid(&document));
+        let selection = document["data"]["result"]["stages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["name"] == "profile_selection")
+            .unwrap();
+        assert_eq!(selection["error_code"], "PROFILE_SELECTION_REQUIRED");
+        assert_eq!(selection["data"]["reason_code"], reason);
+        assert!(selection["data"]["candidates"][0]["name"].is_string());
+    }
+    let diff = run_isolated(
+        &[
+            "config",
+            "diff",
+            "--device",
+            "camera",
+            "--against",
+            baseline.to_str().unwrap(),
+            "--timeout",
+            "2s",
+        ],
+        directory.path(),
+    );
+    assert!(diff.status.success(), "{}", stdout(&diff));
+    assert!(stdout(&diff).contains("No configuration changes."));
+    let snapshot = run_isolated(&["snapshot", "camera", "--json"], directory.path());
+    assert_eq!(snapshot.status.code(), Some(2));
+    assert!(stderr(&snapshot).is_empty());
 }
 
 #[test]
@@ -997,7 +1045,7 @@ fn agent_guide_and_prompt_are_embedded_and_versioned() {
     let document: Value = serde_json::from_slice(&guide.stdout).expect("guide should be JSON");
     assert_eq!(document["schema_version"], "3");
     assert_eq!(document["data"]["kind"], "agent_guide");
-    assert_eq!(document["data"]["guide"]["guide_version"], "6");
+    assert_eq!(document["data"]["guide"]["guide_version"], "7");
     assert!(
         document["data"]["guide"]["security_requirements"]
             .as_array()

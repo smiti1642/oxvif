@@ -553,6 +553,11 @@ The development checkout adds `snapshot --save` / `media snapshot-save`,
 in published 0.16.0 artifacts. They use the shared human/Agent application layer
 and do not modify camera configuration. See the [maintenance guide](cli-maintenance.md)
 for examples, download/authentication limits, baseline format and manual acceptance.
+Diagnosis offers a paginated name/token selector in interactive terminals and
+summary-first reports (`-v` expands stages). JSON/JSONL and redirected calls never
+prompt. The development Agent guide v7 describes additive selection reasons and
+untested-stage reasons without changing schema v3. Maintenance root selectors and
+execution options are accepted before or after the command.
 
 `diagnose` verifies ONVIF and snapshot delivery, not RTSP playback. Failed or
 incomplete workflows can return exit `20` with retained `data.result` and

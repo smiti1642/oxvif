@@ -112,8 +112,23 @@
         "error_code": { "type": ["string", "null"] },
         "detail": { "type": "string" },
         "next_step": { "type": "string" },
-        "data": {}
-      }
+        "data": {},
+        "not_tested_reason": { "enum": ["prerequisite_failed", "not_implemented"] }
+      },
+      "allOf": [{
+        "if": { "properties": { "name": { "enum": ["media_profiles", "profile_selection"] } } },
+        "then": { "properties": { "data": {
+          "type": ["object", "null"],
+          "properties": {
+            "reason_code": { "enum": ["PROFILE_SELECTION_REQUIRED", "PROFILE_NOT_FOUND", "PROFILE_QUERY_FAILED", "NO_PROFILES_AVAILABLE", "PROFILE_SELECTION_CANCELLED", "PROFILE_INTERACTION_FAILED"] },
+            "requested_profile": { "type": ["string", "null"] },
+            "candidates": { "type": "array", "items": {
+              "type": "object", "required": ["name", "token"],
+              "properties": { "name": { "type": "string" }, "token": { "type": "string" } }
+            } }
+          }
+        } } }
+      }]
     },
     "diagnoseReport": {
       "type": "object",
@@ -122,6 +137,17 @@
         "failed": { "type": "integer", "minimum": 0 },
         "complete": { "type": "boolean" },
         "playback_verified": { "const": false },
+        "selected_profile": { "type": ["string", "null"] },
+        "summary": {
+          "type": "object",
+          "required": ["passed", "failed", "unsupported", "not_tested"],
+          "properties": {
+            "passed": { "type": "integer", "minimum": 0 },
+            "failed": { "type": "integer", "minimum": 0 },
+            "unsupported": { "type": "integer", "minimum": 0 },
+            "not_tested": { "type": "integer", "minimum": 0 }
+          }
+        },
         "stages": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/workflowStage" } }
       }
     },

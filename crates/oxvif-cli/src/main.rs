@@ -21,7 +21,7 @@ use oxvif_cli::{
     DiscoverySnapshotShowRequest, ExecutionOptions, GroupCreateRequest, GroupMemberAddRequest,
     GroupMemberRemoveRequest, ImportMode, MatchMode, NewDevice, NewGroup, NewSavedView,
     OutputFormat, ProfileConnectRequest, ResourceIdRequest, ResultMeta, SecretString,
-    TargetSelector, ViewCreateRequest, normalize_target, render_error, render_success,
+    TargetSelector, ViewCreateRequest, normalize_target, render_error,
 };
 use tokio::time::Instant;
 
@@ -31,10 +31,13 @@ use interactive::{BrowserAction, DiscoverySetup, await_discovery, browse_discove
 
 const AGENT_HELP: &str = "AI AGENTS:\n  Run `oxvif agent guide --output json` before operating devices.\n  Use structured output, --non-interactive, and an explicit device selector.\n  Never place passwords in command arguments, output, or logs.";
 
-trait Prompt {
+trait Prompt: Sync {
     fn text(&self, label: &str) -> Result<String, AppError>;
     fn password(&self, label: &str) -> Result<String, AppError>;
     fn select(&self, label: &str, choices: &[String]) -> Result<usize, AppError>;
+    fn select_profile(&self, choices: &[String]) -> Result<Option<usize>, AppError> {
+        self.select("Select media profile", choices).map(Some)
+    }
 }
 
 struct SystemPrompt;
@@ -52,6 +55,10 @@ impl SystemPrompt {
 }
 
 impl Prompt for SystemPrompt {
+    fn select_profile(&self, choices: &[String]) -> Result<Option<usize>, AppError> {
+        Self::ensure_terminal()?;
+        interactive::select_profile(choices)
+    }
     fn text(&self, label: &str) -> Result<String, AppError> {
         Self::ensure_terminal()?;
         eprint!("{label}");
@@ -971,14 +978,19 @@ async fn execute_and_emit(
     let started = Instant::now();
     emit_verbose_start(options, format, command_name);
 
-    let request = match choose_profile_if_needed(request, application, options, prompt).await {
-        Ok(request) => request,
-        Err(error) => {
-            emit_verbose_error(options, command_name, &error, started);
-            emit_error(format, &error, Some(command_name));
-            return error.exit_code();
-        }
+    let selection_options = ExecutionOptions {
+        non_interactive: !interactive_terminal_available(format, options),
+        ..options.clone()
     };
+    let request =
+        match choose_profile_if_needed(request, application, &selection_options, prompt).await {
+            Ok(request) => request,
+            Err(error) => {
+                emit_verbose_error(options, command_name, &error, started);
+                emit_error(format, &error, Some(command_name));
+                return error.exit_code();
+            }
+        };
     let command_name = request.name();
 
     let show_discovery_progress = interactive_terminal_available(format, options)
@@ -987,9 +999,46 @@ async fn execute_and_emit(
             &request,
             CommandRequest::DiscoverScan(_) | CommandRequest::DiscoveryRefresh(_)
         );
-    let execution = application.execute(request, options);
+    let human_interactive = interactive_terminal_available(format, options);
+    let show_workflow_progress = human_interactive
+        && !options.quiet
+        && matches!(
+            &request,
+            CommandRequest::Diagnose(_)
+                | CommandRequest::MediaSnapshotSave(_)
+                | CommandRequest::ConfigExport(_)
+                | CommandRequest::ConfigDiff(_)
+        );
+    let picker = |profiles: &[oxvif_cli::ProfileChoice]| {
+        interactive::clear_workflow_progress();
+        let choices = profiles
+            .iter()
+            .map(|p| format!("{} ({})", p.name, p.token))
+            .collect::<Vec<_>>();
+        prompt
+            .select_profile(&choices)?
+            .map(|index| {
+                profiles
+                    .get(index)
+                    .map(|p| p.token.clone())
+                    .ok_or_else(|| AppError::invalid_argument("Invalid profile selection."))
+            })
+            .transpose()
+    };
+    let execution = async {
+        match request {
+            CommandRequest::Diagnose(request) if human_interactive => {
+                application
+                    .diagnose_with_profile_picker(request, options, &picker)
+                    .await
+            }
+            request => application.execute(request, options).await,
+        }
+    };
     let result = if show_discovery_progress {
         await_discovery(execution).await
+    } else if show_workflow_progress {
+        interactive::await_workflow(execution, command_name).await
     } else {
         execution.await
     };
@@ -1030,7 +1079,7 @@ async fn execute_and_emit(
                 }
             }
 
-            match render_success(format, &success) {
+            match oxvif_cli::render_success_with_details(format, &success, options.verbosity > 0) {
                 Ok(rendered) => {
                     if format == OutputFormat::Table
                         && implicit_human_context
@@ -2060,10 +2109,40 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
         if !has_explicit_subcommand {
             arguments.insert(index + 1, OsString::from("check"));
         }
+    }
 
+    let root = arguments.get(index).and_then(|s| s.to_str());
+    let leaf = arguments.get(index + 1).and_then(|s| s.to_str());
+    let supports_trailing_policy = matches!(
+        root,
+        Some(
+            "health"
+                | "diagnose"
+                | "snapshot"
+                | "stream"
+                | "profiles"
+                | "info"
+                | "test"
+                | "media"
+                | "ptz"
+        )
+    ) || (root == Some("config")
+        && matches!(leaf, Some("export" | "diff")));
+    if supports_trailing_policy {
         let mut moved = Vec::new();
-        let mut scan = index + 2;
+        let mut scan = index + 1;
         while scan < arguments.len() {
+            if arguments[scan] == "--" {
+                break;
+            }
+            // Never reinterpret an opaque local argument's value as a root flag.
+            if matches!(
+                arguments[scan].to_str(),
+                Some("--profile" | "--target" | "--save" | "--against" | "--output")
+            ) {
+                scan += 2;
+                continue;
+            }
             let (takes_value, inline_value) = {
                 let argument = arguments[scan].to_string_lossy();
                 let takes_value = matches!(
@@ -2374,10 +2453,103 @@ mod tests {
     }
 
     #[test]
+    fn maintenance_trailing_policy_matches_prefix_without_stealing_local_values() {
+        for suffix in [
+            vec![
+                "oxvif",
+                "diagnose",
+                "--group",
+                "fleet",
+                "--jobs",
+                "2",
+                "--timeout",
+                "3s",
+            ],
+            vec![
+                "oxvif",
+                "diagnose",
+                "--group=fleet",
+                "--jobs=2",
+                "--timeout=3s",
+            ],
+        ] {
+            let cli = Cli::try_parse_from(normalize_human_arguments(
+                suffix.into_iter().map(OsString::from).collect(),
+            ))
+            .unwrap();
+            assert_eq!(cli.group.as_deref(), Some("fleet"));
+            assert_eq!(cli.jobs, Some(2));
+            assert_eq!(cli.timeout, Duration::from_secs(3));
+        }
+        for args in [
+            vec!["oxvif", "diagnose", "--profile", "--timeout", "1s"],
+            vec!["oxvif", "diagnose", "--timeout"],
+            vec!["oxvif", "diagnose", "--group", "a", "--device", "b"],
+            vec!["oxvif", "diagnose", "--", "--group", "a"],
+        ] {
+            assert!(
+                Cli::try_parse_from(normalize_human_arguments(
+                    args.into_iter().map(OsString::from).collect()
+                ))
+                .is_err()
+            );
+        }
+        let args = [
+            "oxvif",
+            "discover",
+            "enrich",
+            "scan",
+            "--credential-profile",
+            "admin",
+            "--jobs",
+            "3",
+        ];
+        let cli = Cli::try_parse_from(normalize_human_arguments(
+            args.into_iter().map(OsString::from).collect(),
+        ))
+        .unwrap();
+        assert_eq!(cli.jobs, None);
+        let literal = parsed_request(&[
+            "oxvif",
+            "diagnose",
+            "--target",
+            "127.0.0.1",
+            "--profile=--timeout",
+        ])
+        .unwrap();
+        let CommandRequest::Diagnose(request) = literal else {
+            panic!("diagnose request")
+        };
+        assert_eq!(request.profile.as_deref(), Some("--timeout"));
+    }
+
+    #[test]
     fn parses_supported_durations() {
         assert_eq!(parse_duration("250ms"), Ok(Duration::from_millis(250)));
         assert_eq!(parse_duration("10s"), Ok(Duration::from_secs(10)));
         assert_eq!(parse_duration("2m"), Ok(Duration::from_secs(120)));
+    }
+
+    #[test]
+    fn documented_maintenance_examples_parse() {
+        // Repository documentation is deliberately excluded from published crates.
+        let docs = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs");
+        if !docs.exists() {
+            return;
+        }
+        for name in ["cli-maintenance.md", "cli-maintenance_zh.md"] {
+            let document = fs::read_to_string(docs.join(name)).expect("maintenance guide");
+            let mut count = 0;
+            for line in document.lines().filter(|line| line.starts_with("oxvif ")) {
+                let arguments = shlex::split(line).expect("valid example quoting");
+                Cli::try_parse_from(normalize_human_arguments(
+                    arguments.into_iter().map(OsString::from).collect(),
+                ))
+                .unwrap_or_else(|error| panic!("{line}: {error}"));
+                count += 1;
+            }
+            assert!(count >= 7, "maintenance examples disappeared");
+        }
     }
 
     #[test]

@@ -31,13 +31,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - CLI `config export` / `config diff` provide versioned read-only camera-setting
   inventories and JSON Pointer differences. Partial sections remain incomparable;
   exports are not restorable backups. File workflows are single-device.
-- Embedded Agent guide v6 documents retained failure reports and new workflow
+- Embedded Agent guide v7 documents retained failure reports, profile selection
+  reason codes/candidates, untested-stage reasons and new workflow
   exit semantics; stdout schema v3 and existing commands remain compatible.
   See the [maintenance guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md)
   for limits and manual acceptance.
 
 ### Changed
 
+- Maintenance commands accept root selectors and execution options before or
+  after the command, preserving command-local options. Diagnosis reuses its session
+  for an optional paginated human profile picker; cancellation retains prior checks.
+  Reports are summary-first (`-v` expands stages), setting differences use readable
+  rows, and slow operations show terminal-only progress. JSON/redirected calls
+  never prompt. These refinements do not change existing schema-v3 exit semantics.
 - Update quick-xml to 0.42 and CLI sha2 to 0.11, with compatible string-based
   XML parsing and explicit lowercase SHA-256 fingerprint encoding. Existing
   registry data, reviewed import fingerprints, and CLI schema v3 are unchanged.

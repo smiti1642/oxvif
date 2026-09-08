@@ -16,6 +16,40 @@ pub fn render_success(format: OutputFormat, success: &CommandSuccess) -> Result<
     }
 }
 
+/// Render optional human stage details without changing structured output.
+pub fn render_success_with_details(
+    format: OutputFormat,
+    success: &CommandSuccess,
+    details: bool,
+) -> Result<String, AppError> {
+    let mut output = render_success(format, success)?;
+    if details && format == OutputFormat::Table {
+        match &success.data {
+            CommandData::DeviceDiagnostic {
+                operation, result, ..
+            } if operation == "diagnose" => {
+                let _ = write!(output, "\n\n{}", render_workflow_stages(result));
+            }
+            CommandData::FleetDiagnostic {
+                operation, items, ..
+            } if operation == "diagnose" => {
+                for item in items {
+                    if let Some(result) = &item.result {
+                        let _ = write!(
+                            output,
+                            "\n\nDevice: {}\n{}",
+                            item.device_id,
+                            render_workflow_stages(result)
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(output)
+}
+
 /// Render an application or argument error with the same schema as all future
 /// command failures.
 pub fn render_error(
@@ -508,7 +542,7 @@ fn render_human(success: &CommandSuccess) -> String {
 
 fn render_diagnostic_result(operation: &str, result: &serde_json::Value) -> String {
     match operation {
-        "diagnose" => render_workflow_stages(result),
+        "diagnose" => render_workflow_summary(result),
         "media.snapshot-save" => format!(
             "Saved: {}\nBytes: {} | Format: {}\nValidation: signature only; not full image decoding.",
             string_field(result, "saved_to"),
@@ -528,13 +562,7 @@ fn render_diagnostic_result(operation: &str, result: &serde_json::Value) -> Stri
             }
             output
         }
-        "config.diff" => format!(
-            "Comparison complete: {}\nMatches: {}\nIncomparable sections: {}\nChanges:\n{}",
-            value_or_dash(result.get("complete")),
-            value_or_dash(result.get("matches")),
-            result["incomparable_sections"],
-            serde_json::to_string_pretty(&result["changes"]).unwrap_or_default()
-        ),
+        "config.diff" => render_config_diff(result),
         "media.profiles" => render_profiles(result),
         "device.capabilities" => render_capabilities(result),
         "device.services" => render_services(result),
@@ -548,6 +576,93 @@ fn render_diagnostic_result(operation: &str, result: &serde_json::Value) -> Stri
                 .unwrap_or_else(|_| "(result serialization failed)".to_owned())
         ),
     }
+}
+
+fn render_workflow_summary(result: &serde_json::Value) -> String {
+    let mut output = format!(
+        "Diagnostic complete: {} | Passed: {} | Failed: {} | Unsupported: {} | Not tested: {}",
+        value_or_dash(result.get("complete")),
+        value_or_dash(result["summary"].get("passed")),
+        value_or_dash(result.get("failed")),
+        value_or_dash(result["summary"].get("unsupported")),
+        value_or_dash(result["summary"].get("not_tested"))
+    );
+    if let Some(token) = result["selected_profile"].as_str() {
+        let _ = write!(output, "\nProfile: {token}");
+    }
+    if let Some(stages) = result["stages"].as_array() {
+        for stage in stages.iter().filter(|s| s["status"] == "fail") {
+            let reason = stage["data"]["reason_code"]
+                .as_str()
+                .or_else(|| stage["error_code"].as_str())
+                .unwrap_or("FAILED");
+            let _ = write!(
+                output,
+                "\n{} [{reason}]: {}\n  Next: {}",
+                string_field(stage, "name"),
+                string_field(stage, "detail"),
+                string_field(stage, "next_step")
+            );
+            if let Some(candidates) = stage["data"]["candidates"].as_array() {
+                for candidate in candidates {
+                    let _ = write!(
+                        output,
+                        "\n  {} ({})",
+                        string_field(candidate, "name"),
+                        string_field(candidate, "token")
+                    );
+                }
+            }
+        }
+    }
+    output.push_str("\nVideo playback has NOT been verified (RTSP transport and decoding are not implemented).\nUse -v for stage details and timings.");
+    output
+}
+
+fn render_config_diff(result: &serde_json::Value) -> String {
+    let mut output = format!(
+        "Comparison complete: {} | Matches: {}",
+        value_or_dash(result.get("complete")),
+        value_or_dash(result.get("matches"))
+    );
+    if let Some(sections) = result["incomparable_sections"]
+        .as_array()
+        .filter(|s| !s.is_empty())
+    {
+        let _ = write!(
+            output,
+            "\nIncomparable sections: {}",
+            serde_json::Value::Array(sections.clone())
+        );
+    }
+    if let Some(changes) = result["changes"].as_array() {
+        if changes.is_empty() {
+            output.push_str(if result["complete"] == true {
+                "\nNo configuration changes."
+            } else {
+                "\nNo changes in comparable sections; comparison is incomplete."
+            });
+        } else {
+            output.push_str("\nFIELD | BEFORE | AFTER");
+            for change in changes {
+                let display = |side: &str| {
+                    if change[format!("{side}_present")] == false {
+                        "<missing>".into()
+                    } else {
+                        change[side].to_string()
+                    }
+                };
+                let _ = write!(
+                    output,
+                    "\n{} | {} | {}",
+                    string_field(change, "path"),
+                    display("before"),
+                    display("after")
+                );
+            }
+        }
+    }
+    output
 }
 
 fn render_workflow_stages(result: &serde_json::Value) -> String {
@@ -1049,6 +1164,17 @@ const fn yes_no(value: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn config_diff_rows_distinguish_missing_null_and_incomplete() {
+        let report = serde_json::json!({"complete":true,"matches":false,"changes":[
+            {"path":"/dns/value","before_present":false,"before":null,"after_present":true,"after":null}
+        ],"incomparable_sections":[]});
+        assert!(render_config_diff(&report).contains("/dns/value | <missing> | null"));
+        let incomplete = serde_json::json!({"complete":false,"matches":null,"changes":[],"incomparable_sections":["dns"]});
+        assert!(render_config_diff(&incomplete).contains("comparison is incomplete"));
+        assert!(!render_config_diff(&incomplete).contains("No configuration changes."));
+    }
 
     #[test]
     fn saved_device_list_renders_cached_ip_camera_identity() {

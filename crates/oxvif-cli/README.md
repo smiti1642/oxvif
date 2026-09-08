@@ -42,6 +42,9 @@ They do not modify camera settings; diagnosis does not verify RTSP playback and
 configuration exports are not restorable backups. See the
 [maintenance guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md)
 for file safety, retained failure reports, JSON/exit semantics and acceptance tests.
+Diagnosis provides a paginated profile selector in human terminals, summary-first
+reports and `-v` details. JSON/JSONL never prompt; Agent guide v7 documents additive
+selection reasons/candidates while retaining schema v3 and existing exit meanings.
 
 On Windows, macOS, or a Linux desktop session with Secret Service, onboard one
 camera with a no-echo password prompt, live verification, native credential

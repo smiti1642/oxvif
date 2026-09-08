@@ -10,6 +10,9 @@
 //! diagnostic reports may retain data while `CommandSuccess::exit_code()` is 20.
 //! Snapshot signatures and URI lookups do not establish video playback, and
 //! configuration inventories are not restorable backups.
+//! Human adapters may supply a profile picker to diagnosis without repeating the
+//! session handshake. Structured reports retain legacy error categories alongside
+//! additive selection reasons, candidates, status counts and untested reasons.
 
 mod agent;
 mod application;
@@ -23,7 +26,8 @@ mod output;
 mod registry;
 
 pub use maintenance::{
-    ConfigDiffRequest, ConfigExportRequest, DiagnoseRequest, SnapshotSaveRequest,
+    ConfigDiffRequest, ConfigExportRequest, DiagnoseRequest, ProfileChoice, ProfilePicker,
+    SnapshotSaveRequest,
 };
 
 pub use application::{Application, ClockSyncPolicy, ExecutionOptions};
@@ -52,7 +56,7 @@ pub use inventory::{
     FilterOperator, GroupMemberView, GroupView, ImportDisposition, MatchMode, NewGroup,
     NewSavedView, SavedView, ViewExplanation, discovery_query_matches,
 };
-pub use output::{render_error, render_success};
+pub use output::{render_error, render_success, render_success_with_details};
 pub use registry::{
     DeviceMetadata, DeviceUpdate, DeviceView, NewDevice, REGISTRY_VERSION, RegistryStore,
     normalize_target, validate_device_id,

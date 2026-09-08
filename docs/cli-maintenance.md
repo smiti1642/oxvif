@@ -26,6 +26,15 @@ credential injection, private CA roots and global options, see the
 [CLI guide](oxvif-cli.md). File-producing workflows require one device; `diagnose`
 also accepts existing Group/View selectors.
 
+Maintenance selectors and execution options can precede or follow the command:
+`oxvif --timeout 3s diagnose front-door` and
+`oxvif diagnose front-door --timeout 3s` are equivalent. This also applies to
+`--device`, `--group`, `--view`, `--jobs`, `--retries`, `--clock-sync` and
+`--ca-certificate`. Command-local options remain local (notably discovery jobs).
+Slow snapshot-save, diagnosis, export and diff operations show elapsed-time text
+only on interactive stderr, unless `--quiet` is set. JSON/JSONL and redirected
+output never show progress or request interactive input.
+
 ## Snapshot download
 
 ```sh
@@ -64,6 +73,8 @@ require operator investigation; the CLI does not bypass these safety checks.
 
 ```sh
 oxvif diagnose front-door --profile Profile_1
+oxvif diagnose front-door
+oxvif diagnose front-door --profile Profile_1 -v
 oxvif diagnose --target 192.168.1.100 --profile Profile_1 --output json --non-interactive
 oxvif diagnose --group taipei-f1 --profile Profile_1 --jobs 8 --output jsonl --non-interactive
 ```
@@ -77,9 +88,17 @@ download URLs/bodies are withheld.
 
 Statuses are `pass`, `fail`, `unsupported` and `not_tested`. Explicit device
 unsupported-action faults are distinguished from malformed replies or transport
-failures. Only a unique profile is selected automatically. Multiple profiles
-require `--profile`; available tokens are retained in the report without guessing.
-Later failures preserve earlier results, and independent checks continue.
+failures. Only a unique profile is selected automatically. For a single device in
+an interactive terminal, omitted `--profile` opens a paginated name/token selector:
+arrows or `j`/`k`, Page Up/Down, Home/End, Enter to select, Esc/`q`/Ctrl-C to cancel.
+It reuses the existing session and profile query. Cancellation retains completed
+stages and exits `20`. An explicitly unknown token never opens a fallback menu.
+Agent, redirected and fleet calls require an explicit token when ambiguous;
+candidates remain in the report. Independent checks continue after later failures.
+
+Human output starts with completion and status counts, followed by actionable
+failures. Use `-v` for all stages and millisecond timings. Playback limitations are
+summarized once in the compact report; they are not successful checks.
 
 `rtsp_transport` and `video_decode` remain explicitly `not_tested` and
 `playback_verified` is always `false`. URI retrieval does not establish RTSP
@@ -116,6 +135,9 @@ It compares section data, not elapsed time. Keyed record collections are sorted;
 DNS/NTP preference ordering is preserved. Differences use JSON Pointer paths with
 `before`, `after`, `before_present` and `after_present`; an absent field differs
 from an explicit JSON `null`.
+Human comparisons display field/before/after rows (`<missing>` is distinct from
+`null`). Complete equal comparisons say `No configuration changes.`; incomplete
+comparisons never claim overall equality.
 
 Failed/unsupported sections appear in `incomparable_sections`; `matches` is `null`
 rather than falsely claiming equality. Complete comparisons return exit `0` even
@@ -125,10 +147,30 @@ when settings differ: inspect `matches` and `changes`.
 
 Both human and Agent calls use shared typed requests. Use explicit selectors,
 `--output json` or `jsonl`, and `--non-interactive`. Run `describe` against the
-installed executable; the embedded Agent guide is version 6 in this checkout.
+installed executable; the embedded Agent guide is version 7 in this checkout.
 The base stdout envelope remains schema version 3. New operations return
 `device_diagnostic`; fleet diagnosis uses `fleet_diagnostic` or JSONL
 `fleet_item` records followed by `fleet_summary`.
+
+Diagnosis adds `summary` counts (`passed`, `failed`, `unsupported`, `not_tested`)
+and nullable `selected_profile`. Profile query/selection data includes `candidates`
+with `name` and `token`; the original `profiles` token list remains available.
+Untested stages include `not_tested_reason`: `prerequisite_failed` for dependent
+checks, or `not_implemented` for deferred playback checks.
+
+For compatibility, the selection stage retains `error_code` =
+`PROFILE_SELECTION_REQUIRED`. Inspect its `data.reason_code` for precise handling:
+
+| Reason | Meaning |
+| --- | --- |
+| `PROFILE_SELECTION_REQUIRED` | Multiple candidates; supply a token |
+| `PROFILE_NOT_FOUND` | Requested or adapter-returned token was not found |
+| `PROFILE_QUERY_FAILED` | Profile query did not produce usable data |
+| `NO_PROFILES_AVAILABLE` | Successful query returned an empty list |
+| `PROFILE_SELECTION_CANCELLED` | Human cancelled; earlier checks retained |
+| `PROFILE_INTERACTION_FAILED` | Terminal adapter failed; earlier checks retained |
+
+These fields are additive; schema version 3 and existing exit meanings are unchanged.
 
 | Outcome | Exit | Result |
 | --- | ---: | --- |
@@ -160,6 +202,8 @@ camera images or unredacted inventory into public issues.
    invalid CA/hostname and unsafe download URLs fail without leaking credentials.
 3. Run diagnosis with correct/incorrect credentials and multiple profiles;
    verify retained stages match observed device behavior, not a playback claim.
+   Exercise menu selection/cancellation, terminal resizing, `-v`, a redirected
+   report and JSON without `--non-interactive`; automation must never prompt.
 4. Export twice without configuration changes and compare; then compare against
    an authorized, independently changed setting. Verify the expected path changes.
 5. Exercise unsupported settings and mixed online/offline groups; inspect exit

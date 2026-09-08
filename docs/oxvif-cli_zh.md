@@ -345,8 +345,8 @@ oxvif device info --target 192.168.1.100 --output json --non-interactive
 oxvif media profiles --target 192.168.1.100 --output json --non-interactive
 ```
 
-`--device`、`--group` 與 `--view` 是 root selector，放在 command 前；`--target` 屬於個別
-診斷 command，放在 command 後。
+`--device`、`--group` 與 `--view` 是 root selector，已發布版本應放在 command 前；
+開發版維運命令也接受後置寫法。`--target` 屬於個別診斷 command，放在 command 後。
 
 ## 維運工作流程（尚未發布）
 
@@ -354,6 +354,9 @@ oxvif media profiles --target 192.168.1.100 --output json --non-interactive
 `config export`／`config diff`，尚未包含於已發布的 0.16.0 成品。人類與 Agent
 共用應用層，所有操作均不修改攝影機設定。範例、下載／認證限制、基準檔格式與
 人工驗收請參閱[維運指南](cli-maintenance_zh.md)。
+診斷於互動終端提供名稱／token 分頁選單，報告先呈現摘要，以 `-v` 展開階段。
+JSON／JSONL 與重新導向呼叫不會要求互動。開發版 Agent guide v7 說明新增的選取
+原因與未測試原因，schema v3 維持不變。維運 root selector 及執行選項可放在指令前後。
 
 `diagnose` 驗證 ONVIF 與快照傳輸，不驗證 RTSP 播放。失敗或不完整的工作流程
 可能回傳退出碼 `20`、`ok=false`，並保留 `data.result`，而不含頂層 `error`。

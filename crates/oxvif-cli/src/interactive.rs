@@ -183,6 +183,113 @@ impl Drop for SetupForm {
     }
 }
 
+/// Delayed, single-line progress; the caller must enforce interactive table output.
+pub(crate) async fn await_workflow<F: Future>(future: F, label: &str) -> F::Output {
+    let started = Instant::now();
+    let mut ticker = interval(Duration::from_secs(1));
+    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    ticker.tick().await;
+    let mut progress = WorkflowProgress(false);
+    tokio::pin!(future);
+    loop {
+        tokio::select! {
+            output = &mut future => return output,
+            _ = ticker.tick() => {
+                progress.0 = true;
+                let width = terminal::size().map(|s| s.0.saturating_sub(1) as usize).unwrap_or(79);
+                let text = truncate_to_width(&format!("{label}... {}s elapsed", started.elapsed().as_secs()), width);
+                let _ = execute!(io::stderr(), MoveToColumn(0), Clear(ClearType::CurrentLine), Print(text));
+            }
+        }
+    }
+}
+
+struct WorkflowProgress(bool);
+impl Drop for WorkflowProgress {
+    fn drop(&mut self) {
+        if self.0 {
+            clear_workflow_progress();
+        }
+    }
+}
+
+pub(crate) fn clear_workflow_progress() {
+    let _ = execute!(io::stderr(), MoveToColumn(0), Clear(ClearType::CurrentLine));
+}
+
+/// Bounded profile selector using the same terminal lifecycle as discovery.
+pub(crate) fn select_profile(choices: &[String]) -> Result<Option<usize>, AppError> {
+    if choices.is_empty() {
+        return Err(AppError::invalid_argument("No profiles are available."));
+    }
+    let mut terminal = TerminalSession::enter()?;
+    let mut selected = 0;
+    loop {
+        let (width, height) = terminal::size().map_err(terminal_error)?;
+        let page_size = usize::from(height.saturating_sub(3)).max(1);
+        let lines = profile_lines(choices, selected, width, height);
+        draw_changed_lines(&mut terminal, lines)?;
+        match event::read().map_err(terminal_error)? {
+            Event::Key(key) if key.kind != KeyEventKind::Release => {
+                if let Some(result) = profile_key(&mut selected, choices.len(), page_size, key) {
+                    return Ok(result);
+                }
+            }
+            Event::Resize(_, _) => terminal.previous_lines.clear(),
+            _ => {}
+        }
+    }
+}
+
+fn profile_lines(choices: &[String], selected: usize, width: u16, height: u16) -> Vec<String> {
+    let page_size = usize::from(height.saturating_sub(3)).max(1);
+    let start = selected / page_size * page_size;
+    let mut lines = Vec::new();
+    if height > 1 {
+        lines.push(format!(
+            "Select media profile ({}/{})",
+            selected + 1,
+            choices.len()
+        ));
+    }
+    for (index, choice) in choices.iter().enumerate().skip(start).take(page_size) {
+        let safe: String = choice.chars().filter(|c| !c.is_control()).collect();
+        lines.push(format!(
+            "{} {safe}",
+            if index == selected { ">" } else { " " }
+        ));
+    }
+    lines.push("j/k or arrows: move | PgUp/PgDn | Enter: select | Esc/q: cancel".into());
+    lines
+        .into_iter()
+        .take(usize::from(height))
+        .map(|line| truncate_to_width(&line, usize::from(width.saturating_sub(1))))
+        .collect()
+}
+
+fn profile_key(
+    selected: &mut usize,
+    count: usize,
+    page: usize,
+    key: KeyEvent,
+) -> Option<Option<usize>> {
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+        return Some(None);
+    }
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') => return Some(None),
+        KeyCode::Enter => return Some(Some(*selected)),
+        KeyCode::Up | KeyCode::Char('k') => *selected = selected.saturating_sub(1),
+        KeyCode::Down | KeyCode::Char('j') => *selected = (*selected + 1).min(count - 1),
+        KeyCode::PageUp => *selected = selected.saturating_sub(page),
+        KeyCode::PageDown => *selected = (*selected + page).min(count - 1),
+        KeyCode::Home => *selected = 0,
+        KeyCode::End => *selected = count - 1,
+        _ => {}
+    }
+    None
+}
+
 pub(crate) async fn await_discovery<F, T>(future: F) -> T
 where
     F: Future<Output = T>,
@@ -981,6 +1088,65 @@ fn terminal_error(error: io::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_navigation_is_bounded_and_cancel_is_not_a_selection() {
+        let mut selected = 0;
+        for (key, expected) in [
+            (KeyCode::Char('k'), 0),
+            (KeyCode::Char('j'), 1),
+            (KeyCode::PageDown, 4),
+            (KeyCode::End, 19),
+            (KeyCode::Down, 19),
+            (KeyCode::PageUp, 16),
+            (KeyCode::Home, 0),
+        ] {
+            assert_eq!(
+                profile_key(&mut selected, 20, 3, KeyEvent::new(key, KeyModifiers::NONE)),
+                None
+            );
+            assert_eq!(selected, expected);
+        }
+        assert_eq!(
+            profile_key(
+                &mut selected,
+                20,
+                3,
+                KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)
+            ),
+            Some(Some(0))
+        );
+        for key in [
+            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+            KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+        ] {
+            assert_eq!(profile_key(&mut selected, 20, 3, key), Some(None));
+        }
+    }
+
+    #[test]
+    fn profile_pages_fit_resized_unicode_terminals() {
+        let choices = (0..40)
+            .map(|n| format!("攝影機 {n} (token-{n})\x1b\n"))
+            .collect::<Vec<_>>();
+        for (width, height) in [(80, 24), (32, 6), (12, 3), (8, 1), (0, 0)] {
+            let lines = profile_lines(&choices, 29, width, height);
+            assert!(lines.len() <= usize::from(height));
+            assert!(lines.iter().all(
+                |l| UnicodeWidthStr::width(l.as_str()) <= usize::from(width.saturating_sub(1))
+            ));
+            assert!(lines.iter().all(|l| !l.chars().any(char::is_control)));
+            if width > 1 && height > 0 {
+                assert!(lines.iter().any(|l| l.starts_with('>')));
+            }
+        }
+        assert!(
+            profile_lines(&choices, 29, 80, 6)
+                .iter()
+                .any(|l| l.starts_with("> 攝影機 29"))
+        );
+    }
 
     #[test]
     fn discovery_progress_reports_whole_elapsed_seconds() {

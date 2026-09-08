@@ -25,6 +25,13 @@ cargo build -p oxvif-cli --locked
 與全域選項請參閱 [CLI 使用指南](oxvif-cli_zh.md)。產生檔案的工作流程限單台設備；
 `diagnose` 也接受既有 Group／View 選擇器。
 
+維運選擇器及執行選項可放在指令前後，例如 `oxvif --timeout 3s diagnose front-door`
+與 `oxvif diagnose front-door --timeout 3s` 等效。此規則也適用於 `--device`、
+`--group`、`--view`、`--jobs`、`--retries`、`--clock-sync`、`--ca-certificate`；
+指令專屬選項仍維持原作用範圍，例如 discovery 的 jobs。快照保存、診斷、匯出及比較
+較慢時，僅在互動終端的 stderr 顯示經過時間；`--quiet` 可停用。JSON／JSONL 與
+重新導向輸出不顯示進度，也不要求互動輸入。
+
 ## 快照下載
 
 ```sh
@@ -56,6 +63,8 @@ HTTP 上的 Basic 不加密憑證，應使用 HTTPS 或適當受信任的網路�
 
 ```sh
 oxvif diagnose front-door --profile Profile_1
+oxvif diagnose front-door
+oxvif diagnose front-door --profile Profile_1 -v
 oxvif diagnose --target 192.168.1.100 --profile Profile_1 --output json --non-interactive
 oxvif diagnose --group taipei-f1 --profile Profile_1 --jobs 8 --output jsonl --non-interactive
 ```
@@ -66,9 +75,16 @@ DNS、TCP 與 TLS。各階段提供穩定名稱、狀態、毫秒耗時、錯誤
 不輸出原始 SOAP fault、下載 URL 或本文。
 
 狀態為 `pass`、`fail`、`unsupported`、`not_tested`。設備明確回報不支援操作的
-fault 會與格式錯誤回應及傳輸失敗區分。僅在唯一 profile 時自動選取；多個 profiles
-必須提供 `--profile`，否則在報告保留可用 token，不任意猜測。後續失敗保留先前
+fault 會與格式錯誤回應及傳輸失敗區分。僅在唯一 profile 時自動選取。單台設備的
+互動終端未提供 `--profile` 且有多個選項時，會顯示名稱與 token 的分頁選單：
+方向鍵或 `j`／`k` 移動，Page Up／Down 翻頁，Home／End 跳至首尾，Enter 選取，
+Esc／`q`／Ctrl-C 取消。沿用既有 session 與 profile 查詢；取消保留已完成階段，
+退出碼為 `20`。明確指定不存在的 token 不會改開選單或自動替代。Agent、重新導向
+與批次呼叫遇到多個選項時必須提供 token，報告保留候選資料。後續失敗不丟棄先前
 結果，獨立檢查仍會繼續。
+
+人類輸出先顯示完成狀態與計數，再列出可採取行動的失敗原因。使用 `-v` 展開所有
+階段及毫秒耗時。精簡報告統一說明播放驗證限制，不將尚未測試項目視為通過。
 
 `rtsp_transport` 與 `video_decode` 明確標示為 `not_tested`，`playback_verified`
 固定為 `false`。取得 URI 不表示 RTSP 連線／認證、封包傳輸、影格率或播放成功；
@@ -100,6 +116,8 @@ oxvif config diff front-door --against baseline.json --output json --non-interac
 區段資料，不比較耗時。具識別欄位的記錄清單會排序，DNS／NTP 偏好順序則保留。
 差異採 JSON Pointer 路徑與 `before`、`after`、`before_present`、`after_present`，
 不存在的欄位與明確 JSON `null` 會分別表示。
+人類輸出採欄位／前值／後值排列，以 `<missing>` 與 `null` 區分不存在與空值。
+完整且相同的比較顯示 `No configuration changes.`；不完整比較不宣稱整體一致。
 
 失敗／不支援區段列入 `incomparable_sections`，`matches` 為 `null`，不誤判相同。
 完整比較即使發現設定不同仍回傳退出碼 `0`，呼叫端應檢查 `matches` 與 `changes`。
@@ -108,9 +126,28 @@ oxvif config diff front-door --against baseline.json --output json --non-interac
 
 人類與 Agent 使用共用的型別化請求。自動化應指定明確目標、`--output json` 或
 `jsonl`，以及 `--non-interactive`。以實際執行檔的 `describe` 查詢能力；目前開發版
-內建 Agent guide 為版本 6。基礎 stdout envelope 維持 schema 版本 3。新增操作
+內建 Agent guide 為版本 7。基礎 stdout envelope 維持 schema 版本 3。新增操作
 回傳 `device_diagnostic`；批次診斷使用 `fleet_diagnostic` 或 JSONL `fleet_item`
 記錄，最後附上 `fleet_summary`。
+
+診斷新增 `summary` 計數（`passed`、`failed`、`unsupported`、`not_tested`）與可為
+null 的 `selected_profile`。Profile 查詢／選取資料提供含 `name`、`token` 的
+`candidates`，原有 `profiles` token 清單仍保留。未測試階段以 `not_tested_reason`
+區分 `prerequisite_failed`（先決條件失敗）與 `not_implemented`（尚未實作播放檢查）。
+
+為維持相容，選取階段的 `error_code` 仍為 `PROFILE_SELECTION_REQUIRED`；精確原因
+請讀取該階段的 `data.reason_code`：
+
+| 原因 | 意義 |
+| --- | --- |
+| `PROFILE_SELECTION_REQUIRED` | 多個候選項目，需提供 token |
+| `PROFILE_NOT_FOUND` | 指定或介面回傳的 token 不存在 |
+| `PROFILE_QUERY_FAILED` | Profile 查詢未取得可用資料 |
+| `NO_PROFILES_AVAILABLE` | 查詢成功，但清單為空 |
+| `PROFILE_SELECTION_CANCELLED` | 使用者取消，保留先前檢查 |
+| `PROFILE_INTERACTION_FAILED` | 終端介面失敗，保留先前檢查 |
+
+以上欄位均為增補；schema 版本 3 與既有退出碼意義維持不變。
 
 | 結果 | 退出碼 | 說明 |
 | --- | ---: | --- |
@@ -140,6 +177,8 @@ PTZ 與 health 執行行為不變。由於 `snapshot` 現在可以選擇保存�
    會被拒絕，且不洩漏憑證。
 3. 使用正確／錯誤憑證與多個 profiles 執行診斷，確認保留的階段結果符合實機行為，
    而非被誤讀為播放驗證。
+   測試選單選取／取消、終端縮放、`-v`、重新導向，以及未加 `--non-interactive`
+   的 JSON 呼叫；自動化不得出現互動提示。
 4. 設定不變時匯出並比較，再針對經授權且已獨立修改的設定比較，確認預期路徑有差異。
 5. 測試不支援設定及混合上線／離線群組，以 Agent 與人類輸出分別核對退出碼及報告。
 6. 發布前完成 Windows／macOS／Linux 原生 CI 與安裝檢查。

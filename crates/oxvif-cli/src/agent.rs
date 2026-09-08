@@ -1,6 +1,6 @@
 use crate::{AgentGuide, SCHEMA_VERSION};
 
-pub const GUIDE_VERSION: &str = "6";
+pub const GUIDE_VERSION: &str = "7";
 
 pub fn guide() -> AgentGuide {
     AgentGuide {
@@ -8,6 +8,8 @@ pub fn guide() -> AgentGuide {
         cli_version: env!("CARGO_PKG_VERSION"),
         schema_version: SCHEMA_VERSION,
         rules: vec![
+            "Diagnose profile_selection retains error_code PROFILE_SELECTION_REQUIRED for compatibility; inspect data.reason_code to distinguish missing selection, unknown token, query failure, no profiles, cancellation or interaction failure. data.candidates contains name/token pairs. Do not substitute an unknown explicit token automatically.",
+            "Diagnose stages may include not_tested_reason: prerequisite_failed or not_implemented. Inspect summary counts and selected_profile; complete=true still does not establish video playback.",
             "For diagnose/config.export/config.diff, exit 20 may retain a device_diagnostic report: inspect failed stages, complete and incomparable_sections, not only error.code.",
             "A diagnose report never verifies RTSP transport or video decoding. Snapshot downloads validate signatures only; config exports are not restorable backups.",
             "snapshot --save and config export write sensitive local files and never overwrite; use one explicit device and an approved destination. config.diff differences alone exit 0; inspect matches and changes.",

@@ -55,6 +55,9 @@
 
 2026-09-08 本機 Windows x64 驗證：
 
+以下記錄初始實作的驗證。後續 UX 修正及更新後的測試數量請參閱
+[UX 改善計畫](cli-maintenance-ux-plan_zh.md)。
+
 - `cargo test --workspace --all-features`：1,095 項通過、4 項既有條件式忽略，包含
   函式庫與執行檔共 19 項新增工作流程測試。
 - `cargo test --workspace`：1,015 項通過、4 項既有條件式忽略。

@@ -94,6 +94,50 @@ impl Application {
         Ok(())
     }
 
+    /// Diagnose one camera with an optional human picker, reusing the same session.
+    /// Explicit profiles, fleet requests and non-interactive execution never prompt.
+    pub async fn diagnose_with_profile_picker(
+        &self,
+        request: crate::DiagnoseRequest,
+        options: &ExecutionOptions,
+        picker: &crate::ProfilePicker<'_>,
+    ) -> Result<CommandSuccess, AppError> {
+        if options.non_interactive
+            || request.profile.is_some()
+            || request.selector.group.is_some()
+            || request.selector.view.is_some()
+        {
+            return self
+                .execute(CommandRequest::Diagnose(request), options)
+                .await;
+        }
+        let started = Instant::now();
+        let resolved = self.resolve_target(request.selector)?;
+        let result = crate::maintenance::diagnose_with_picker(
+            &resolved,
+            options,
+            request.profile.as_deref(),
+            picker,
+        )
+        .await?;
+        Ok(CommandSuccess {
+            data: CommandData::DeviceDiagnostic {
+                operation: "diagnose".into(),
+                device_id: resolved.device_id.clone(),
+                target: resolved.target.clone(),
+                result,
+            },
+            warnings: Vec::new(),
+            meta: ResultMeta {
+                command: Some("diagnose".into()),
+                device_id: resolved.device_id,
+                selected_by: resolved.selected_by,
+                target: Some(resolved.target),
+                elapsed_ms: elapsed_millis(started),
+            },
+        })
+    }
+
     pub async fn execute(
         &self,
         request: CommandRequest,
