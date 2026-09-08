@@ -3,6 +3,13 @@
 //! The binary is deliberately thin. Future adapters, including a possible MCP
 //! server, can construct the same typed requests and consume the same results
 //! without parsing command-line arguments or terminal output.
+//!
+//! Maintenance requests add bounded snapshot downloads, layered diagnostic
+//! reports and read-only configuration inventory/diff. These workflows do not
+//! mutate cameras. File-producing requests refuse existing destinations; failed
+//! diagnostic reports may retain data while `CommandSuccess::exit_code()` is 20.
+//! Snapshot signatures and URI lookups do not establish video playback, and
+//! configuration inventories are not restorable backups.
 
 mod agent;
 mod application;
@@ -11,8 +18,13 @@ mod credential;
 mod describe;
 mod error;
 mod inventory;
+mod maintenance;
 mod output;
 mod registry;
+
+pub use maintenance::{
+    ConfigDiffRequest, ConfigExportRequest, DiagnoseRequest, SnapshotSaveRequest,
+};
 
 pub use application::{Application, ClockSyncPolicy, ExecutionOptions};
 pub use contract::{

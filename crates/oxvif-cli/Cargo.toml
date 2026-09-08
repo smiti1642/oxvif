@@ -30,6 +30,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
 rpassword = "7.5.4"
+reqwest = { version = "0.13.2", default-features = false, features = ["rustls"] }
+digest_auth = "0.3"
+tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 toml = "1.0"
 url = "2.5"
@@ -46,6 +49,8 @@ keyring = { version = "3.6.3", default-features = false, features = ["apple-nati
 keyring = { version = "3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust", "vendored"] }
 
 [dev-dependencies]
+rcgen = "0.14"
+tokio-rustls = "0.26"
 jsonschema = { version = "0.52.1", default-features = false }
 oxvif = { path = "../..", features = ["mock-server"] }
 tempfile = "3"

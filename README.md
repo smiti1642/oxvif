@@ -128,6 +128,10 @@ Read the [complete CLI guide](docs/oxvif-cli.md) for installation, commands,
 the interactive discovery browser, security behavior, fleet workflows,
 structured output, and exit codes.
 
+The development checkout also includes snapshot downloads, layered diagnosis and
+camera-setting comparison; see [maintenance workflows](docs/cli-maintenance.md).
+These additions are not yet released and do not verify video playback or restore settings.
+
 Discovery marks every result as `SAVED`, `NEW`, or `INCOMPLETE`; both terminal
 users and Agents can filter current scans or saved snapshots by that status.
 The terminal browser provides a scrollable `i` detail view, while `/` and the

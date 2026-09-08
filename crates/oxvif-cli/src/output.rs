@@ -490,6 +490,11 @@ fn render_human(success: &CommandSuccess) -> String {
                 if let Some(error) = &item.error {
                     let _ = write!(output, " | {}: {}", error.code, error.message);
                 }
+                if operation == "diagnose"
+                    && let Some(result) = &item.result
+                {
+                    let _ = write!(output, "\n{}", render_diagnostic_result(operation, result));
+                }
             }
             output
         }
@@ -503,6 +508,33 @@ fn render_human(success: &CommandSuccess) -> String {
 
 fn render_diagnostic_result(operation: &str, result: &serde_json::Value) -> String {
     match operation {
+        "diagnose" => render_workflow_stages(result),
+        "media.snapshot-save" => format!(
+            "Saved: {}\nBytes: {} | Format: {}\nValidation: signature only; not full image decoding.",
+            string_field(result, "saved_to"),
+            value_or_dash(result.get("bytes")),
+            string_field(result, "image_type")
+        ),
+        "config.export" => {
+            let mut output = format!(
+                "Saved: {}\nComplete: {}\nRead-only inventory; not a restorable backup.\nSECTION | STATUS",
+                string_field(result, "saved_to"),
+                value_or_dash(result.get("complete"))
+            );
+            if let Some(sections) = result["inventory"]["sections"].as_object() {
+                for (name, section) in sections {
+                    let _ = write!(output, "\n{name} | {}", string_field(section, "status"));
+                }
+            }
+            output
+        }
+        "config.diff" => format!(
+            "Comparison complete: {}\nMatches: {}\nIncomparable sections: {}\nChanges:\n{}",
+            value_or_dash(result.get("complete")),
+            value_or_dash(result.get("matches")),
+            result["incomparable_sections"],
+            serde_json::to_string_pretty(&result["changes"]).unwrap_or_default()
+        ),
         "media.profiles" => render_profiles(result),
         "device.capabilities" => render_capabilities(result),
         "device.services" => render_services(result),
@@ -516,6 +548,34 @@ fn render_diagnostic_result(operation: &str, result: &serde_json::Value) -> Stri
                 .unwrap_or_else(|_| "(result serialization failed)".to_owned())
         ),
     }
+}
+
+fn render_workflow_stages(result: &serde_json::Value) -> String {
+    let mut output = String::from("STAGE | STATUS | MS | DETAIL");
+    if let Some(stages) = result["stages"].as_array() {
+        for stage in stages {
+            let _ = write!(
+                output,
+                "\n{} | {} | {} | {}",
+                string_field(stage, "name"),
+                string_field(stage, "status"),
+                value_or_dash(stage.get("elapsed_ms")),
+                string_field(stage, "detail")
+            );
+            if let Some(next) = stage["next_step"].as_str().filter(|s| !s.is_empty()) {
+                let _ = write!(output, "\n  Next: {next}");
+            }
+            if let Some(profiles) = stage.get("data").and_then(|d| d.get("profiles")) {
+                let _ = write!(output, "\n  Profiles: {profiles}");
+            }
+        }
+    }
+    let _ = write!(
+        output,
+        "\nFailed checks: {}\nVideo playback has NOT been verified.",
+        value_or_dash(result.get("failed"))
+    );
+    output
 }
 
 fn render_profiles(result: &serde_json::Value) -> String {

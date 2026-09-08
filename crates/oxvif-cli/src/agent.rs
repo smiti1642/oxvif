@@ -1,6 +1,6 @@
 use crate::{AgentGuide, SCHEMA_VERSION};
 
-pub const GUIDE_VERSION: &str = "5";
+pub const GUIDE_VERSION: &str = "6";
 
 pub fn guide() -> AgentGuide {
     AgentGuide {
@@ -8,6 +8,9 @@ pub fn guide() -> AgentGuide {
         cli_version: env!("CARGO_PKG_VERSION"),
         schema_version: SCHEMA_VERSION,
         rules: vec![
+            "For diagnose/config.export/config.diff, exit 20 may retain a device_diagnostic report: inspect failed stages, complete and incomparable_sections, not only error.code.",
+            "A diagnose report never verifies RTSP transport or video decoding. Snapshot downloads validate signatures only; config exports are not restorable backups.",
+            "snapshot --save and config export write sensitive local files and never overwrite; use one explicit device and an approved destination. config.diff differences alone exit 0; inspect matches and changes.",
             "Inspect a command with `oxvif describe <command> --output json` before invoking it.",
             "Use structured output and --non-interactive for automation.",
             "Select a device explicitly; never depend on the ambient current device.",

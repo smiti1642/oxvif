@@ -19,6 +19,7 @@ interactive operators and automated Agents.
 | [Groups and Views](#groups-and-views) | Static and dynamic fleet selection. |
 | [Credentials](#credentials) | Native stores, headless use, and secret-handling rules. |
 | [Read-only diagnostics](#read-only-diagnostics) | Device, media, PTZ, health, and ephemeral targets. |
+| [Maintenance workflows](#maintenance-workflows-unreleased) | Unreleased snapshot downloads, layered diagnosis and configuration comparison. |
 | [Fleet diagnostics](#fleet-diagnostics) | Bounded concurrency and deterministic aggregation. |
 | [Agent contract](#agent-and-automation-contract) | Embedded guidance and command descriptors. |
 | [Output and exit codes](#output-formats) | JSON/JSONL schemas, completion, and process status. |
@@ -545,6 +546,19 @@ oxvif device info --target 192.168.1.100 --output json --non-interactive
 oxvif media profiles --target 192.168.1.100 --output json --non-interactive
 ```
 
+## Maintenance workflows (unreleased)
+
+The development checkout adds `snapshot --save` / `media snapshot-save`,
+`diagnose`, and `config export` / `config diff`. These features are not included
+in published 0.16.0 artifacts. They use the shared human/Agent application layer
+and do not modify camera configuration. See the [maintenance guide](cli-maintenance.md)
+for examples, download/authentication limits, baseline format and manual acceptance.
+
+`diagnose` verifies ONVIF and snapshot delivery, not RTSP playback. Failed or
+incomplete workflows can return exit `20` with retained `data.result` and
+`ok=false`, without a top-level error. Complete configuration differences return
+exit `0`; inspect `matches` and `changes`. File workflows require one device.
+
 ## Fleet diagnostics
 
 Use a Group or View selector to execute a diagnostic across multiple devices:
@@ -569,6 +583,10 @@ Fleet completion is represented as follows:
 | All items failed | `20` | The CLI emits the typed `FLEET_FAILED` error. |
 
 Fleet selection never falls back to the ambient current device.
+
+The unreleased `diagnose` workflow retains per-device reports even if all items
+fail (exit `20`); the all-failed `FLEET_FAILED` rule above describes existing
+diagnostics. See the [maintenance automation contract](cli-maintenance.md#automation-contract).
 
 ## Agent and automation contract
 
@@ -644,7 +662,7 @@ Completion generation performs no network or registry operation.
 | `6` | Fleet partial success. |
 | `10` | Configuration or registry unavailable, corrupt, or unsupported. |
 | `11` | Credential unavailable. |
-| `20` | Device connection, discovery, or complete fleet failure. |
+| `20` | Device connection, discovery, complete fleet failure, or incomplete maintenance checks (development). |
 | `70` | Serialization or internal failure. |
 
 These numeric values are stable automation interfaces. Structured errors also

@@ -124,6 +124,10 @@ hostname 驗證。
 安裝方式、命令、安全行為、fleet workflow、structured output 與 exit code 請參閱
 [完整 CLI 使用指南](docs/oxvif-cli_zh.md)。
 
+開發中的原始碼另提供快照下載、分層診斷及攝影機設定比較，詳見
+[維運工作流程](docs/cli-maintenance_zh.md)。這些功能尚未發布，不包含影片播放驗證
+或設定還原。
+
 Discovery 會將每筆結果標示為 `SAVED`、`NEW` 或 `INCOMPLETE`；終端使用者與 Agent
 都能依相同狀態篩選即時掃描及已保存的 snapshot。終端瀏覽器可按 `i` 開啟可捲動的
 完整資訊頁；`/` 與 Agent 使用的 `--query` 則共用相同的跨欄位搜尋語意。

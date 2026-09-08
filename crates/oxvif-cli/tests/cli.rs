@@ -62,6 +62,7 @@ fn root_help_routes_agents_to_the_embedded_guide() {
 #[test]
 fn every_first_level_command_has_focused_help() {
     for command in [
+        "diagnose",
         "setup",
         "auth",
         "info",
@@ -94,6 +95,193 @@ fn every_first_level_command_has_focused_help() {
         assert!(help.contains("Usage:"), "{command}: {help}");
         assert!(help.contains(command), "{command}: {help}");
     }
+}
+
+#[test]
+fn maintenance_workflows_require_explicit_automation_targets() {
+    let directory = tempfile::tempdir().unwrap();
+    for args in [
+        vec!["diagnose", "--non-interactive", "--json"],
+        vec![
+            "config",
+            "export",
+            "--save",
+            "unused.json",
+            "--non-interactive",
+            "--json",
+        ],
+        vec![
+            "config",
+            "diff",
+            "--against",
+            "unused.json",
+            "--non-interactive",
+            "--json",
+        ],
+    ] {
+        let output = run_isolated(&args, directory.path());
+        assert_eq!(output.status.code(), Some(5), "{}", stdout(&output));
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout).unwrap()["error"]["code"],
+            "MISSING_TARGET"
+        );
+    }
+}
+
+#[test]
+fn file_workflows_reject_fleet_before_network_and_do_not_overwrite() {
+    let directory = tempfile::tempdir().unwrap();
+    for args in [
+        vec![
+            "--group",
+            "all",
+            "snapshot",
+            "--save",
+            "unused.jpg",
+            "--non-interactive",
+            "--json",
+        ],
+        vec![
+            "--group",
+            "all",
+            "config",
+            "export",
+            "--save",
+            "unused.json",
+            "--non-interactive",
+            "--json",
+        ],
+        vec![
+            "--view",
+            "all",
+            "config",
+            "diff",
+            "--against",
+            "unused.json",
+            "--non-interactive",
+            "--json",
+        ],
+    ] {
+        let output = run_isolated(&args, directory.path());
+        assert_eq!(output.status.code(), Some(2), "{}", stdout(&output));
+        assert!(
+            serde_json::from_slice::<Value>(&output.stdout).unwrap()["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("one device")
+        );
+    }
+    let file = directory.path().join("existing.json");
+    fs::write(&file, "preserve me").unwrap();
+    let output = run_isolated(
+        &[
+            "config",
+            "export",
+            "--target",
+            "127.0.0.1:1",
+            "--save",
+            file.to_str().unwrap(),
+            "--json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert_eq!(output.status.code(), Some(4));
+    assert_eq!(fs::read_to_string(file).unwrap(), "preserve me");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn maintenance_binary_workflow_and_envelopes() {
+    let server = oxvif::mock::MockServer::start().await.unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let registry = RegistryStore::at(directory.path());
+    registry
+        .add(NewDevice {
+            id: "camera".into(),
+            name: None,
+            target: server.device_url().into(),
+            tags: vec![],
+        })
+        .unwrap();
+    let baseline = directory.path().join("baseline.json");
+    let image = directory.path().join("image.bmp");
+    let envelope_schema: Value =
+        serde_json::from_str(include_str!("../schema/oxvif-envelope.schema.json")).unwrap();
+    let validator = jsonschema::validator_for(&envelope_schema).unwrap();
+    for args in [
+        vec![
+            "snapshot",
+            "camera",
+            "--profile",
+            "Profile_1",
+            "--save",
+            image.to_str().unwrap(),
+            "--json",
+            "--non-interactive",
+        ],
+        vec![
+            "diagnose",
+            "camera",
+            "--profile",
+            "Profile_1",
+            "--json",
+            "--non-interactive",
+        ],
+        vec![
+            "config",
+            "export",
+            "camera",
+            "--save",
+            baseline.to_str().unwrap(),
+            "--json",
+            "--non-interactive",
+        ],
+        vec![
+            "config",
+            "diff",
+            "camera",
+            "--against",
+            baseline.to_str().unwrap(),
+            "--json",
+            "--non-interactive",
+        ],
+    ] {
+        let output = run_isolated(&args, directory.path());
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            stdout(&output),
+            stderr(&output)
+        );
+        let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(validator.is_valid(&document), "{document}");
+        assert_eq!(document["ok"], true);
+        let mut invalid = document.clone();
+        invalid["data"]["result"] = serde_json::json!({});
+        assert!(
+            !validator.is_valid(&invalid),
+            "Workflow schema must reject missing report fields."
+        );
+        assert!(stderr(&output).is_empty());
+    }
+    assert!(fs::read(image).unwrap().starts_with(b"BM"));
+    let output = run_isolated(
+        &["diagnose", "camera", "--json", "--non-interactive"],
+        directory.path(),
+    );
+    assert_eq!(output.status.code(), Some(20));
+    let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(validator.is_valid(&document));
+    assert_eq!(document["ok"], false);
+    assert_eq!(document["data"]["kind"], "device_diagnostic");
+    assert_eq!(document["data"]["result"]["playback_verified"], false);
+    let human = run_isolated(
+        &["diagnose", "camera", "--profile", "Profile_1"],
+        directory.path(),
+    );
+    assert!(human.status.success());
+    assert!(stdout(&human).contains("STAGE | STATUS"));
+    assert!(stdout(&human).contains("Video playback has NOT been verified"));
 }
 
 #[test]
@@ -809,7 +997,7 @@ fn agent_guide_and_prompt_are_embedded_and_versioned() {
     let document: Value = serde_json::from_slice(&guide.stdout).expect("guide should be JSON");
     assert_eq!(document["schema_version"], "3");
     assert_eq!(document["data"]["kind"], "agent_guide");
-    assert_eq!(document["data"]["guide"]["guide_version"], "5");
+    assert_eq!(document["data"]["guide"]["guide_version"], "6");
     assert!(
         document["data"]["guide"]["security_requirements"]
             .as_array()

@@ -102,6 +102,55 @@ impl Application {
         let started = Instant::now();
         let command_name = request.name();
         let outcome = match request {
+            CommandRequest::MediaSnapshotSave(request) => {
+                request.preflight()?;
+                if request.profile.trim().is_empty() {
+                    return Err(AppError::invalid_argument(
+                        "An explicit profile token is required.",
+                    ));
+                }
+                self.device_diagnostic(
+                    request.selector,
+                    DiagnosticOperation::Workflow(crate::maintenance::Workflow::Snapshot {
+                        profile: request.profile,
+                        save: request.save,
+                    }),
+                    options,
+                )
+                .await?
+            }
+            CommandRequest::Diagnose(request) => {
+                self.device_diagnostic(
+                    request.selector,
+                    DiagnosticOperation::Workflow(crate::maintenance::Workflow::Diagnose {
+                        profile: request.profile,
+                    }),
+                    options,
+                )
+                .await?
+            }
+            CommandRequest::ConfigExport(request) => {
+                crate::maintenance::single_target(&request.selector)?;
+                crate::maintenance::validate_destination(&request.save)?;
+                self.device_diagnostic(
+                    request.selector,
+                    DiagnosticOperation::Workflow(crate::maintenance::Workflow::Export {
+                        save: request.save,
+                    }),
+                    options,
+                )
+                .await?
+            }
+            CommandRequest::ConfigDiff(request) => {
+                crate::maintenance::single_target(&request.selector)?;
+                let baseline = crate::maintenance::read_baseline(&request.against)?;
+                self.device_diagnostic(
+                    request.selector,
+                    DiagnosticOperation::Workflow(crate::maintenance::Workflow::Diff { baseline }),
+                    options,
+                )
+                .await?
+            }
             CommandRequest::AgentGuide => Outcome::data(CommandData::AgentGuide {
                 guide: crate::agent::guide(),
             }),
@@ -1135,7 +1184,7 @@ impl Application {
         });
         let succeeded = items.iter().filter(|item| item.ok).count();
         let failed = items.len() - succeeded;
-        if succeeded == 0 {
+        if succeeded == 0 && operation_name != "diagnose" {
             return Err(AppError::fleet_failed(format!(
                 "{operation_name} failed for all {failed} device(s) selected by {selection_kind} `{selection_id}`."
             )));
@@ -1154,6 +1203,7 @@ impl Application {
 
 #[derive(Clone)]
 enum DiagnosticOperation {
+    Workflow(crate::maintenance::Workflow),
     DeviceTest,
     DeviceInformation,
     Capabilities,
@@ -1169,6 +1219,7 @@ enum DiagnosticOperation {
 impl DiagnosticOperation {
     fn name(&self) -> &'static str {
         match self {
+            Self::Workflow(operation) => operation.name(),
             Self::DeviceTest => "device.test",
             Self::DeviceInformation => "device.info",
             Self::Capabilities => "device.capabilities",
@@ -1218,7 +1269,7 @@ impl From<serde_json::Error> for DiagnosticAttemptFailure {
     }
 }
 
-fn is_retryable_onvif_error(error: &OnvifError) -> bool {
+pub(crate) fn is_retryable_onvif_error(error: &OnvifError) -> bool {
     match error {
         OnvifError::Transport(TransportError::Http(error)) => {
             error.is_timeout() || error.is_connect() || error.is_body() || error.is_request()
@@ -1255,14 +1306,22 @@ fn spawn_diagnostic_task(
             .clone()
             .unwrap_or_else(|| "(unknown)".to_owned());
         let target = resolved.target.clone();
+        let operation_name = operation.name();
         match execute_diagnostic(&resolved, operation, &options).await {
             Ok(result) => crate::FleetDiagnosticItem {
                 device_id,
                 selected_by,
                 target,
-                ok: true,
+                ok: !crate::maintenance::report_failed(operation_name, &result),
+                error: crate::maintenance::report_failed(operation_name, &result).then(|| {
+                    crate::FleetItemError {
+                        code: "DIAGNOSTIC_INCOMPLETE".into(),
+                        message: "Inspect retained stage results for failed or incomplete checks."
+                            .into(),
+                        retryable: false,
+                    }
+                }),
                 result: Some(result),
-                error: None,
                 elapsed_ms: elapsed_millis(started),
             },
             Err(error) => crate::FleetDiagnosticItem {
@@ -1291,6 +1350,9 @@ async fn execute_diagnostic(
     operation: DiagnosticOperation,
     options: &ExecutionOptions,
 ) -> Result<serde_json::Value, AppError> {
+    if let DiagnosticOperation::Workflow(operation) = &operation {
+        return crate::maintenance::execute(resolved, operation, options).await;
+    }
     if matches!(&operation, DiagnosticOperation::Health) {
         return execute_health_check(resolved, options).await;
     }
@@ -1343,6 +1405,7 @@ async fn execute_diagnostic(
                     serde_json::to_value(session.ptz_get_presets(profile).await?)?
                 }
                 DiagnosticOperation::Health => unreachable!("health is handled above"),
+                DiagnosticOperation::Workflow(_) => unreachable!("workflows are handled above"),
             };
             sanitize_uri_values(&mut value);
             Ok::<_, DiagnosticAttemptFailure>(value)
@@ -1536,7 +1599,7 @@ async fn fetch_live_information(
     ))
 }
 
-fn build_http_transport(
+pub(crate) fn build_http_transport(
     options: &ExecutionOptions,
     username: Option<&str>,
     password: Option<&str>,
@@ -1817,16 +1880,16 @@ fn merge_unique(target: &mut Vec<String>, incoming: Vec<String>) {
     target.dedup();
 }
 
-struct ResolvedTarget {
-    device_id: Option<String>,
-    selected_by: Option<String>,
-    target: String,
-    username: Option<String>,
-    password: Option<SecretString>,
+pub(crate) struct ResolvedTarget {
+    pub(crate) device_id: Option<String>,
+    pub(crate) selected_by: Option<String>,
+    pub(crate) target: String,
+    pub(crate) username: Option<String>,
+    pub(crate) password: Option<SecretString>,
 }
 
 impl ResolvedTarget {
-    fn password(&self) -> Option<&str> {
+    pub(crate) fn password(&self) -> Option<&str> {
         self.password.as_ref().map(SecretString::expose_secret)
     }
 }

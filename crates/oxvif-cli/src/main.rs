@@ -237,6 +237,17 @@ enum Commands {
         /// Exact media profile token; prompted when omitted and multiple profiles exist.
         #[arg(long)]
         profile: Option<String>,
+        /// Download an image to a new file instead of returning its URI.
+        #[arg(long)]
+        save: Option<PathBuf>,
+    },
+    /// Diagnose ONVIF and snapshot delivery; does not verify video decoding.
+    Diagnose {
+        id: Option<String>,
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        profile: Option<String>,
     },
     /// List saved IP cameras and their cached identity information.
     List,
@@ -322,6 +333,22 @@ enum AgentCommands {
 
 #[derive(Debug, Subcommand)]
 enum ConfigCommands {
+    /// Export read-only camera settings (not a restorable backup).
+    Export {
+        id: Option<String>,
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        save: PathBuf,
+    },
+    /// Compare live camera settings with an exported inventory.
+    Diff {
+        id: Option<String>,
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        against: PathBuf,
+    },
     /// Print the resolved config, registry, and snapshot paths.
     Path,
     /// Parse and validate the registry and every indexed discovery snapshot.
@@ -431,6 +458,15 @@ enum DeviceCommands {
 
 #[derive(Debug, Subcommand)]
 enum MediaCommands {
+    /// Download one snapshot into a new file (no overwrite).
+    SnapshotSave {
+        #[arg(long)]
+        profile: String,
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        save: PathBuf,
+    },
     /// List Media1 profiles.
     Profiles {
         #[arg(long)]
@@ -648,6 +684,7 @@ fn surface_command_id(command: &Commands) -> CommandId {
         Commands::Profiles { .. } => CommandId::Profiles,
         Commands::Stream { .. } => CommandId::Stream,
         Commands::Snapshot { .. } => CommandId::Snapshot,
+        Commands::Diagnose { .. } => CommandId::Diagnose,
         Commands::List => CommandId::List,
         Commands::Devices => CommandId::Devices,
         Commands::Groups => CommandId::Groups,
@@ -680,6 +717,7 @@ fn surface_command_id(command: &Commands) -> CommandId {
             MediaCommands::Profiles { .. } => CommandId::MediaProfiles,
             MediaCommands::StreamUri { .. } => CommandId::MediaStreamUri,
             MediaCommands::SnapshotUri { .. } => CommandId::MediaSnapshotUri,
+            MediaCommands::SnapshotSave { .. } => CommandId::MediaSnapshotSave,
         },
         Commands::Ptz { command } => match command {
             PtzCommands::Status { .. } => CommandId::PtzStatus,
@@ -728,6 +766,8 @@ fn surface_command_id(command: &Commands) -> CommandId {
         Commands::Config { command } => match command {
             ConfigCommands::Path => CommandId::ConfigPath,
             ConfigCommands::Validate => CommandId::ConfigValidate,
+            ConfigCommands::Export { .. } => CommandId::ConfigExport,
+            ConfigCommands::Diff { .. } => CommandId::ConfigDiff,
         },
         Commands::Completion { .. } => CommandId::Completion,
         Commands::Use { .. } => CommandId::Use,
@@ -1249,12 +1289,34 @@ fn build_request(
                 profile: profile.unwrap_or_default(),
             }))
         }
-        Commands::Snapshot { id, profile } => {
-            let selector = quick_selector(selector(None), id, non_interactive)?;
-            Ok(CommandRequest::MediaSnapshotUri(ProfileConnectRequest {
+        Commands::Diagnose {
+            id,
+            target,
+            profile,
+        } => {
+            let selector = quick_selector(selector(target), id, non_interactive)?;
+            Ok(CommandRequest::Diagnose(oxvif_cli::DiagnoseRequest {
                 selector,
-                profile: profile.unwrap_or_default(),
+                profile,
             }))
+        }
+        Commands::Snapshot { id, profile, save } => {
+            let selector = quick_selector(selector(None), id, non_interactive)?;
+            if let Some(save) = save {
+                oxvif_cli::SnapshotSaveRequest::validate_selector(&selector)?;
+                Ok(CommandRequest::MediaSnapshotSave(
+                    oxvif_cli::SnapshotSaveRequest {
+                        selector,
+                        profile: profile.unwrap_or_default(),
+                        save,
+                    },
+                ))
+            } else {
+                Ok(CommandRequest::MediaSnapshotUri(ProfileConnectRequest {
+                    selector,
+                    profile: profile.unwrap_or_default(),
+                }))
+            }
         }
         Commands::List => Ok(CommandRequest::DeviceList),
         Commands::Devices => Ok(CommandRequest::DeviceList),
@@ -1268,6 +1330,20 @@ fn build_request(
         Commands::Config { command } => Ok(match command {
             ConfigCommands::Path => CommandRequest::ConfigPath,
             ConfigCommands::Validate => CommandRequest::ConfigValidate,
+            ConfigCommands::Export { id, target, save } => {
+                CommandRequest::ConfigExport(oxvif_cli::ConfigExportRequest {
+                    selector: quick_selector(selector(target), id, non_interactive)?,
+                    save,
+                })
+            }
+            ConfigCommands::Diff {
+                id,
+                target,
+                against,
+            } => CommandRequest::ConfigDiff(oxvif_cli::ConfigDiffRequest {
+                selector: quick_selector(selector(target), id, non_interactive)?,
+                against,
+            }),
         }),
         Commands::Use { id } => Ok(CommandRequest::Use(DeviceIdRequest { id })),
         Commands::Current => Ok(CommandRequest::Current),
@@ -1432,6 +1508,17 @@ fn build_request(
                     profile,
                 }))
             }
+            MediaCommands::SnapshotSave {
+                profile,
+                target,
+                save,
+            } => Ok(CommandRequest::MediaSnapshotSave(
+                oxvif_cli::SnapshotSaveRequest {
+                    selector: selector(target),
+                    profile,
+                    save,
+                },
+            )),
         },
         Commands::Ptz { command } => match command {
             PtzCommands::Status { profile, target } => {
@@ -1613,6 +1700,10 @@ fn build_request(
                 | CommandRequest::MediaProfiles(_)
                 | CommandRequest::MediaStreamUri(_)
                 | CommandRequest::MediaSnapshotUri(_)
+                | CommandRequest::MediaSnapshotSave(_)
+                | CommandRequest::Diagnose(_)
+                | CommandRequest::ConfigExport(_)
+                | CommandRequest::ConfigDiff(_)
                 | CommandRequest::PtzStatus(_)
                 | CommandRequest::PtzPresets(_)
                 | CommandRequest::HealthCheck(_)
@@ -1803,9 +1894,13 @@ async fn choose_profile_if_needed(
     options: &ExecutionOptions,
     prompt: &dyn Prompt,
 ) -> Result<CommandRequest, AppError> {
+    if let CommandRequest::MediaSnapshotSave(request) = &request {
+        request.preflight()?;
+    }
     enum Kind {
         Stream,
         Snapshot,
+        Save(PathBuf),
     }
 
     let (selector, kind) = match &request {
@@ -1814,6 +1909,10 @@ async fn choose_profile_if_needed(
         }
         CommandRequest::MediaSnapshotUri(request) if request.profile.is_empty() => {
             (request.selector.clone(), Kind::Snapshot)
+        }
+        CommandRequest::MediaSnapshotSave(request) if request.profile.is_empty() => {
+            oxvif_cli::SnapshotSaveRequest::validate_selector(&request.selector)?;
+            (request.selector.clone(), Kind::Save(request.save.clone()))
         }
         _ => return Ok(request),
     };
@@ -1882,6 +1981,11 @@ async fn choose_profile_if_needed(
         Kind::Snapshot => {
             CommandRequest::MediaSnapshotUri(ProfileConnectRequest { selector, profile })
         }
+        Kind::Save(save) => CommandRequest::MediaSnapshotSave(oxvif_cli::SnapshotSaveRequest {
+            selector,
+            profile,
+            save,
+        }),
     })
 }
 

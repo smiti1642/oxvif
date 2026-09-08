@@ -20,6 +20,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- CLI `snapshot --save` and `media snapshot-save` download size-limited images
+  into new files without overwriting, with private-CA support and challenged
+  HTTP authentication. Existing URI-only behavior remains available.
+- CLI `diagnose` reports bounded ONVIF and snapshot-delivery stages, retaining
+  failure evidence for single devices and Groups/Views. RTSP transport and video
+  decoding are explicitly not tested; this is not playback verification.
+- CLI `config export` / `config diff` provide versioned read-only camera-setting
+  inventories and JSON Pointer differences. Partial sections remain incomparable;
+  exports are not restorable backups. File workflows are single-device.
+- Embedded Agent guide v6 documents retained failure reports and new workflow
+  exit semantics; stdout schema v3 and existing commands remain compatible.
+  See the [maintenance guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md)
+  for limits and manual acceptance.
+
 ### Changed
 
 - Update quick-xml to 0.42 and CLI sha2 to 0.11, with compatible string-based

@@ -25,6 +25,7 @@ with the top-level [`README.md`](../README.md), the
 | [`mock-server_zh.md`](mock-server_zh.md) | **Mock 裝置參考（繁體中文）** — the Traditional Chinese counterpart to the complete Mock behavior and fidelity contract. |
 | [`oxvif-cli.md`](oxvif-cli.md) | **Complete CLI guide** — installation, human and Agent workflows, inventory, discovery, fleet execution, credentials, TLS, structured output, typed errors, and exit codes. |
 | [`oxvif-cli_zh.md`](oxvif-cli_zh.md) | **CLI 使用指南（繁體中文）** — the Traditional Chinese companion to the complete CLI guide. |
+| [`cli-maintenance.md`](cli-maintenance.md) · [繁體中文](cli-maintenance_zh.md) | Unreleased CLI image downloads, layered diagnosis, configuration inventory/diff, safety boundaries and manual acceptance. |
 | [`dependency-pitfalls.md`](dependency-pitfalls.md) | Standing engineering guide (feature-unification footguns). Not a plan and not ONVIF reference, so it sits at the root; referenced from the release SOP in `CLAUDE.md`. |
 | [`support.md`](support.md) | Versioned support boundaries for the Rust library and CLI beta, including OS, credential, schema, TLS, camera-evidence, and commercial-claim limits. |
 | [`support_zh.md`](support_zh.md) | **支援與相容性政策（繁體中文）** — the Traditional Chinese counterpart to the support policy. |
@@ -43,6 +44,7 @@ conventions, and attribution/licensing.
 
 | Doc | About |
 |-----|-------|
+| [`cli-maintenance-workflows-plan.md`](active/cli-maintenance-workflows-plan.md) · [繁體中文](active/cli-maintenance-workflows-plan_zh.md) | Snapshot downloads, layered diagnosis and read-only configuration inventory/diff; local implementation and acceptance gates. |
 | [`dependency-maintenance-plan.md`](active/dependency-maintenance-plan.md) · [繁體中文](active/dependency-maintenance-plan_zh.md) | PRs #6–#11 integrated; XML/fingerprint migrations and five-target SBOM staging accepted. Weekly Cargo/Actions grouping is active and has produced PR #14; subsequent-cycle duplicate checking remains pending. |
 | [`oxvif-cli-release-hardening-plan.md`](active/oxvif-cli-release-hardening-plan.md) | Release-hardening programme for the diagnostic CLI: dependency security, publishable packages, CI/platform gates, retry and observability contracts, human rendering, Agent schemas, community readiness, and the commercial-pilot cut line before controlled device writes. |
 | [`oxvif-cli-three-platform-distribution-plan.md`](active/oxvif-cli-three-platform-distribution-plan.md) | Executable plan for native Windows/macOS/Linux credentials, private CA and timeout gates, signed APT distribution, Homebrew tap/bottles, the approval-controlled release, and later Homebrew Core/Debian/Ubuntu graduation. |

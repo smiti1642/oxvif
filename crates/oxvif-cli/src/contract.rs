@@ -138,6 +138,10 @@ command_ids! {
     PtzPresets => "ptz.presets",
     HealthCheck => "health.check",
     DeviceRefresh => "device.refresh",
+    MediaSnapshotSave => "media.snapshot-save",
+    Diagnose => "diagnose",
+    ConfigExport => "config.export",
+    ConfigDiff => "config.diff",
 }
 
 /// A request understood by the application layer.
@@ -195,12 +199,20 @@ pub enum CommandRequest {
     PtzPresets(ProfileConnectRequest),
     HealthCheck(DeviceConnectRequest),
     DeviceRefresh(DeviceIdRequest),
+    MediaSnapshotSave(crate::SnapshotSaveRequest),
+    Diagnose(crate::DiagnoseRequest),
+    ConfigExport(crate::ConfigExportRequest),
+    ConfigDiff(crate::ConfigDiffRequest),
 }
 
 impl CommandRequest {
     /// Canonical application identity for this typed request.
     pub const fn command_id(&self) -> CommandId {
         match self {
+            Self::MediaSnapshotSave(_) => CommandId::MediaSnapshotSave,
+            Self::Diagnose(_) => CommandId::Diagnose,
+            Self::ConfigExport(_) => CommandId::ConfigExport,
+            Self::ConfigDiff(_) => CommandId::ConfigDiff,
             Self::AgentGuide => CommandId::AgentGuide,
             Self::AgentPrompt => CommandId::AgentPrompt,
             Self::Describe(_) => CommandId::Describe,
@@ -718,6 +730,14 @@ pub struct CommandSuccess {
 impl CommandSuccess {
     pub fn exit_code(&self) -> u8 {
         match &self.data {
+            CommandData::DeviceDiagnostic {
+                operation, result, ..
+            } if crate::maintenance::report_failed(operation, result) => 20,
+            CommandData::FleetDiagnostic {
+                succeeded: 0,
+                failed,
+                ..
+            } if *failed > 0 => 20,
             CommandData::FleetDiagnostic {
                 succeeded, failed, ..
             } if *succeeded > 0 && *failed > 0 => 6,

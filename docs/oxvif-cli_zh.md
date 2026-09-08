@@ -15,6 +15,7 @@
 | [批次匯入](#從-snapshot-批次匯入) | 可審查的 plan/apply 與 fingerprint。 |
 | [Group 與 View](#用-group-與-view-管理大量攝影機) | 靜態與動態 fleet 選擇。 |
 | [唯讀診斷](#唯讀診斷) | Device、Media、PTZ 與 health。 |
+| [維運工作流程](#維運工作流程尚未發布) | 尚未發布的快照下載、分層診斷與設定比較。 |
 | [Fleet 診斷](#fleet-診斷) | 有界並行、排序與彙總結果。 |
 | [輸出與 exit code](#輸出格式與-exit-code) | JSON/JSONL contract 與程序狀態。 |
 | [環境變數](#常用環境變數) | Credential 與設定路徑輸入。 |
@@ -347,7 +348,23 @@ oxvif media profiles --target 192.168.1.100 --output json --non-interactive
 `--device`、`--group` 與 `--view` 是 root selector，放在 command 前；`--target` 屬於個別
 診斷 command，放在 command 後。
 
+## 維運工作流程（尚未發布）
+
+開發中的原始碼新增 `snapshot --save`／`media snapshot-save`、`diagnose` 及
+`config export`／`config diff`，尚未包含於已發布的 0.16.0 成品。人類與 Agent
+共用應用層，所有操作均不修改攝影機設定。範例、下載／認證限制、基準檔格式與
+人工驗收請參閱[維運指南](cli-maintenance_zh.md)。
+
+`diagnose` 驗證 ONVIF 與快照傳輸，不驗證 RTSP 播放。失敗或不完整的工作流程
+可能回傳退出碼 `20`、`ok=false`，並保留 `data.result`，而不含頂層 `error`。
+完整的設定比較即使發現差異仍回傳 `0`，應檢查 `matches` 與 `changes`。
+檔案工作流程限單台設備。
+
 ## Fleet 診斷
+
+尚未發布的 `diagnose` 即使全部設備失敗（退出碼 `20`）仍保留逐台報告；既有
+診斷的全部失敗 `FLEET_FAILED` 規則不適用於此新指令，詳見
+[維運自動化契約](cli-maintenance_zh.md#自動化契約)。
 
 Group 或 View 可以直接成為診斷目標：
 
@@ -378,7 +395,7 @@ JSONL 每台裝置輸出一筆 `fleet_item`，最後再輸出一筆 `fleet_summa
 | `6` | Fleet 部分成功 |
 | `10` | Config 或 registry 無法使用 |
 | `11` | Credential 無法使用 |
-| `20` | 裝置連線、探索或 Fleet 全部失敗 |
+| `20` | 裝置連線、探索、Fleet 全部失敗，或開發版維運檢查不完整 |
 | `70` | Serialization 或內部錯誤 |
 
 程式應同時檢查 exit code 與 structured error 的 `code`，不要解析人類訊息文字。

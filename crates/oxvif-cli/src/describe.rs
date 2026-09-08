@@ -67,7 +67,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         device_read_descriptor("health", "Human shortcut for health.check."),
         device_read_descriptor("profiles", "Human shortcut for media.profiles."),
         quick_profile_descriptor("stream", "Human shortcut for media.stream-uri."),
-        quick_profile_descriptor("snapshot", "Human shortcut for media.snapshot-uri."),
+        snapshot_descriptor(),
         read_descriptor(
             "list",
             "List saved IP cameras and their cached identity information.",
@@ -336,6 +336,29 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             "Read live device information and update cached registry metadata.",
             vec![required("id", "string")],
         ),
+        workflow_descriptor(
+            "media.snapshot-save",
+            "Download a snapshot into a new file; signature validation only.",
+            vec![
+                required("profile", "media profile token"),
+                required("save", "new file path"),
+            ],
+        ),
+        workflow_descriptor(
+            "diagnose",
+            "Run layered ONVIF/snapshot checks; RTSP transport and decoding remain untested.",
+            vec![optional("profile", "media profile token")],
+        ),
+        workflow_descriptor(
+            "config.export",
+            "Export read-only camera settings, not a restorable backup.",
+            vec![required("save", "new file path")],
+        ),
+        workflow_descriptor(
+            "config.diff",
+            "Compare live settings with a same-camera inventory; differences are data, incomplete checks exit 20.",
+            vec![required("against", "inventory file path")],
+        ),
     ];
     assert_eq!(
         commands.len(),
@@ -385,6 +408,58 @@ fn describe_descriptor() -> CommandDescriptor {
         possible_errors: vec!["COMMAND_NOT_FOUND".to_owned()],
         examples: vec!["oxvif describe device.info --output json".to_owned()],
     }
+}
+
+fn snapshot_descriptor() -> CommandDescriptor {
+    let mut command = quick_profile_descriptor(
+        "snapshot",
+        "Return a snapshot URI, or download with --save (single device only).",
+    );
+    command.arguments.push(optional("save", "new file path"));
+    command.risk = RiskLevel::Write;
+    command.retryable = false;
+    command.output.value_type = "device_diagnostic | fleet_diagnostic".into();
+    command.output.description = "URI-only by default; --save returns media.snapshot-save file metadata and never overwrites.".into();
+    command
+        .possible_errors
+        .extend(["RESOURCE_ALREADY_EXISTS".into(), "REGISTRY_IO".into()]);
+    command
+}
+
+fn workflow_descriptor(
+    name: &str,
+    summary: &str,
+    arguments: Vec<ArgumentDescriptor>,
+) -> CommandDescriptor {
+    let mut command = device_read_descriptor(name, summary);
+    if name != "diagnose" {
+        command
+            .arguments
+            .retain(|arg| !matches!(arg.name.as_str(), "group" | "view" | "jobs"));
+    }
+    if matches!(name, "media.snapshot-save" | "config.export") {
+        command.risk = RiskLevel::Write;
+    }
+    command.arguments.extend(arguments);
+    command.retryable = false;
+    command.output = OutputDescriptor {
+        value_type: if name == "diagnose" { "device_diagnostic | fleet_diagnostic" } else { "device_diagnostic" }.into(),
+        description: "Workflow report; diagnose failures/incomplete inventory exit 20 with retained data. config.diff changes alone exit 0. SOAP stages honor retry/timeout; downloads have one bounded attempt.".into(),
+    };
+    command.possible_errors = [
+        "INVALID_ARGUMENT",
+        "MISSING_TARGET",
+        "DEVICE_NOT_FOUND",
+        "RESOURCE_NOT_FOUND",
+        "RESOURCE_ALREADY_EXISTS",
+        "REGISTRY_IO",
+        "CREDENTIAL_UNAVAILABLE",
+        "DEVICE_CONNECTION_FAILED",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    command
 }
 
 fn import_descriptor() -> CommandDescriptor {
@@ -806,6 +881,18 @@ fn argument_allowed_values(name: &str) -> Vec<String> {
 
 fn command_example(name: &str) -> &'static str {
     match name {
+        "media.snapshot-save" => {
+            "oxvif --device front-door media snapshot-save --profile profile-1 --save camera.jpg --output json --non-interactive"
+        }
+        "diagnose" => {
+            "oxvif diagnose front-door --profile profile-1 --output json --non-interactive"
+        }
+        "config.export" => {
+            "oxvif config export front-door --save baseline.json --output json --non-interactive"
+        }
+        "config.diff" => {
+            "oxvif config diff front-door --against baseline.json --output json --non-interactive"
+        }
         "agent.guide" => "oxvif agent guide --output json --non-interactive",
         "agent.prompt" => "oxvif agent prompt --output json --non-interactive",
         "describe" => "oxvif describe device.info --output json --non-interactive",
@@ -963,7 +1050,7 @@ mod tests {
             panic!("expected command list");
         };
 
-        assert_eq!(commands.len(), 62);
+        assert_eq!(commands.len(), CommandId::ALL.len());
         assert_eq!(commands[0].name, "agent.guide");
         assert!(commands.iter().any(|command| command.name == "setup"));
         assert!(commands.iter().any(|command| command.name == "list"));

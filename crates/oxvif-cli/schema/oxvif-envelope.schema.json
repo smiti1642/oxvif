@@ -68,8 +68,105 @@
     "commandData": {
       "type": "object",
       "required": ["kind"],
+      "allOf": [
+        {
+          "if": { "required": ["operation"], "properties": { "kind": { "const": "fleet_item" }, "operation": { "const": "diagnose" } } },
+          "then": { "properties": { "item": { "$ref": "#/$defs/diagnoseItem" } } }
+        },
+        {
+          "if": { "required": ["operation"], "properties": { "kind": { "const": "fleet_diagnostic" }, "operation": { "const": "diagnose" } } },
+          "then": { "properties": { "items": { "type": "array", "items": { "$ref": "#/$defs/diagnoseItem" } } } }
+        },
+        {
+          "if": { "required": ["operation", "result"], "properties": { "kind": { "const": "device_diagnostic" }, "operation": { "const": "diagnose" } } },
+          "then": { "properties": { "result": { "$ref": "#/$defs/diagnoseReport" } } }
+        },
+        {
+          "if": { "required": ["operation", "result"], "properties": { "kind": { "const": "device_diagnostic" }, "operation": { "const": "media.snapshot-save" } } },
+          "then": { "properties": { "result": { "$ref": "#/$defs/snapshotReport" } } }
+        },
+        {
+          "if": { "required": ["operation", "result"], "properties": { "kind": { "const": "device_diagnostic" }, "operation": { "const": "config.export" } } },
+          "then": { "properties": { "result": { "type": "object", "required": ["saved_to", "complete", "inventory"], "properties": { "saved_to": { "type": "string" }, "complete": { "type": "boolean" }, "inventory": { "$ref": "#/$defs/configInventory" } } } } }
+        },
+        {
+          "if": { "required": ["operation", "result"], "properties": { "kind": { "const": "device_diagnostic" }, "operation": { "const": "config.diff" } } },
+          "then": { "properties": { "result": { "$ref": "#/$defs/configDiffReport" } } }
+        }
+      ],
       "properties": {
         "kind": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+      }
+    },
+    "diagnoseItem": {
+      "type": "object",
+      "properties": { "result": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/diagnoseReport" }] } }
+    },
+    "workflowStage": {
+      "type": "object",
+      "required": ["name", "status", "elapsed_ms", "error_code", "detail", "next_step", "data"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["pass", "fail", "unsupported", "not_tested"] },
+        "elapsed_ms": { "type": "integer", "minimum": 0 },
+        "error_code": { "type": ["string", "null"] },
+        "detail": { "type": "string" },
+        "next_step": { "type": "string" },
+        "data": {}
+      }
+    },
+    "diagnoseReport": {
+      "type": "object",
+      "required": ["failed", "complete", "stages", "playback_verified"],
+      "properties": {
+        "failed": { "type": "integer", "minimum": 0 },
+        "complete": { "type": "boolean" },
+        "playback_verified": { "const": false },
+        "stages": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/workflowStage" } }
+      }
+    },
+    "snapshotReport": {
+      "type": "object",
+      "required": ["saved_to", "bytes", "image_type", "profile", "validation"],
+      "properties": {
+        "saved_to": { "type": "string", "minLength": 1 },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 16777216 },
+        "image_type": { "enum": ["jpeg", "png", "bmp"] },
+        "profile": { "type": "string", "minLength": 1 },
+        "validation": { "const": "signature_only_not_full_decode" }
+      }
+    },
+    "configInventory": {
+      "type": "object",
+      "required": ["inventory_version", "identity", "sections"],
+      "properties": {
+        "inventory_version": { "const": 1 },
+        "identity": {
+          "type": "object",
+          "required": ["manufacturer", "model", "serial_number", "hardware_id"],
+          "additionalProperties": { "type": "string" }
+        },
+        "sections": {
+          "type": "object",
+          "required": ["hostname", "ntp", "dns", "interfaces", "protocols", "gateway", "profiles", "video_encoders"],
+          "additionalProperties": { "$ref": "#/$defs/workflowStage" }
+        }
+      }
+    },
+    "configDiffReport": {
+      "type": "object",
+      "required": ["complete", "matches", "changes", "incomparable_sections"],
+      "properties": {
+        "complete": { "type": "boolean" },
+        "matches": { "type": ["boolean", "null"] },
+        "incomparable_sections": { "type": "array", "items": { "type": "string" } },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["path", "before", "after", "before_present", "after_present"],
+            "properties": { "path": { "type": "string" }, "before": {}, "after": {}, "before_present": { "type": "boolean" }, "after_present": { "type": "boolean" } }
+          }
+        }
       }
     }
   }

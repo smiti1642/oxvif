@@ -36,6 +36,13 @@ The structured stdout contract is schema version 3 for the 0.16 release.
 
 ## Human quick start
 
+Development-only additions: `snapshot --save`, `media snapshot-save`, `diagnose`,
+`config export`, and `config diff`. These are not in the published 0.16.0 package.
+They do not modify camera settings; diagnosis does not verify RTSP playback and
+configuration exports are not restorable backups. See the
+[maintenance guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md)
+for file safety, retained failure reports, JSON/exit semantics and acceptance tests.
+
 On Windows, macOS, or a Linux desktop session with Secret Service, onboard one
 camera with a no-echo password prompt, live verification, native credential
 storage, and current-device selection:
