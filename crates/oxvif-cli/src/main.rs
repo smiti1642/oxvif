@@ -27,6 +27,7 @@ use tokio::time::Instant;
 
 mod interactive;
 mod manage;
+mod navigation;
 
 use interactive::{BrowserAction, DiscoverySetup, await_discovery, browse_discovery};
 

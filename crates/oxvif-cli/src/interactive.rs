@@ -22,6 +22,8 @@ use tokio::time::{Instant, MissedTickBehavior, interval};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use zeroize::Zeroize;
 
+use crate::navigation::{self, Key as NavKey, Navigation, Outcome, Viewport};
+
 const DEFAULT_PAGE_SIZE: usize = 12;
 
 pub(crate) enum BrowserAction {
@@ -222,82 +224,140 @@ pub(crate) fn select_profile(choices: &[String]) -> Result<Option<usize>, AppErr
     if choices.is_empty() {
         return Err(AppError::invalid_argument("No profiles are available."));
     }
-    let mut terminal = TerminalSession::enter()?;
-    let mut selected = 0;
-    loop {
-        let (width, height) = terminal::size().map_err(terminal_error)?;
-        let page_size = panel_body_rows(height);
-        let lines = profile_lines(choices, selected, width, height);
-        draw_changed_lines(&mut terminal, lines)?;
-        match event::read().map_err(terminal_error)? {
-            Event::Key(key) if key.kind != KeyEventKind::Release => {
-                if let Some(result) = profile_key(&mut selected, choices.len(), page_size, key) {
-                    return Ok(result);
+    Panel::enter()?.menu("Select media profile", choices, &[])
+}
+
+fn navigation_key(nav: &mut Navigation, key: KeyEvent, discovery: bool) -> Outcome {
+    if key.kind == KeyEventKind::Release
+        || (key.kind == KeyEventKind::Repeat && matches!(key.code, KeyCode::Char('0'..='9' | 'g')))
+    {
+        return Outcome::Consumed;
+    }
+    let plain = key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT;
+    let mapped = if key.modifiers == KeyModifiers::CONTROL {
+        match key.code {
+            KeyCode::Char('c') => NavKey::Interrupt,
+            KeyCode::Char('d') => NavKey::HalfDown,
+            KeyCode::Char('u') => NavKey::HalfUp,
+            _ => NavKey::Other,
+        }
+    } else if plain {
+        match key.code {
+            KeyCode::Char('h' | 'l') | KeyCode::Left | KeyCode::Right if discovery => {
+                if nav.pending().is_empty() {
+                    if matches!(key.code, KeyCode::Char('h') | KeyCode::Left) {
+                        NavKey::PageUp
+                    } else {
+                        NavKey::PageDown
+                    }
+                } else {
+                    NavKey::Other
                 }
             }
-            Event::Resize(_, _) => terminal.previous_lines.clear(),
-            _ => {}
+            KeyCode::Char(c) => NavKey::Char(c),
+            KeyCode::Up => NavKey::Up,
+            KeyCode::Down => NavKey::Down,
+            KeyCode::PageUp => NavKey::PageUp,
+            KeyCode::PageDown => NavKey::PageDown,
+            KeyCode::Home => NavKey::Home,
+            KeyCode::End => NavKey::End,
+            KeyCode::Esc => NavKey::Escape,
+            _ => NavKey::Other,
         }
+    } else {
+        NavKey::Other
+    };
+    let result = nav.feed(mapped);
+    if result == Outcome::Unhandled && !plain && mapped != NavKey::Interrupt {
+        Outcome::Consumed
+    } else {
+        result
     }
 }
 
-fn profile_lines(choices: &[String], selected: usize, width: u16, height: u16) -> Vec<String> {
-    let page_size = panel_body_rows(height);
-    let start = selected / page_size * page_size;
-    let mut lines = Vec::new();
-    for (index, choice) in choices.iter().enumerate().skip(start).take(page_size) {
-        let safe: String = choice.chars().filter(|c| !c.is_control()).collect();
-        lines.push(format!(
-            "{} {safe}",
-            if index == selected { ">" } else { " " }
-        ));
-    }
-    panel_lines(
-        &format!("Select media profile ({}/{})", selected + 1, choices.len()),
-        &lines,
-        "j/k move | PgUp/Dn page | Ctrl+D/U half | Enter select | Esc/q cancel",
-        width,
-        height,
+fn nav_status(mode: &str, nav: &Navigation, index: usize, count: usize) -> String {
+    let pending = nav.pending();
+    format!(
+        "{} | keys:{} | {}{}/{}{}",
+        if mode.contains("TEXT") {
+            "NORMAL"
+        } else {
+            mode
+        },
+        if pending.is_empty() { "-" } else { &pending },
+        if mode.contains("TEXT") {
+            "line "
+        } else {
+            "item "
+        },
+        if count == 0 {
+            0
+        } else {
+            index.saturating_add(1)
+        },
+        count,
+        if nav.hint().is_empty() {
+            String::new()
+        } else {
+            format!(" | {}", nav.hint())
+        }
     )
 }
 
-fn profile_key(
-    selected: &mut usize,
-    count: usize,
-    page: usize,
-    key: KeyEvent,
-) -> Option<Option<usize>> {
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-        return Some(None);
+fn gutter_width(count: usize, width: usize) -> usize {
+    let gutter = count.max(1).to_string().len() + 3;
+    if width >= gutter + 12 {
+        gutter
+    } else {
+        2.min(width)
     }
-    if half_page_key(selected, count.saturating_sub(1), page, key) {
-        return None;
-    }
-    match key.code {
-        KeyCode::Esc | KeyCode::Char('q') => return Some(None),
-        KeyCode::Enter => return Some(Some(*selected)),
-        KeyCode::Up | KeyCode::Char('k') => *selected = selected.saturating_sub(1),
-        KeyCode::Down | KeyCode::Char('j') => *selected = (*selected + 1).min(count - 1),
-        KeyCode::PageUp => *selected = selected.saturating_sub(page),
-        KeyCode::PageDown => *selected = (*selected + page).min(count - 1),
-        KeyCode::Home => *selected = 0,
-        KeyCode::End => *selected = count - 1,
-        _ => {}
-    }
-    None
 }
 
-fn half_page_key(position: &mut usize, maximum: usize, page: usize, key: KeyEvent) -> bool {
-    if !key.modifiers.contains(KeyModifiers::CONTROL) {
-        return false;
+fn numbered_line(text: &str, index: usize, selected: usize, count: usize, width: usize) -> String {
+    let marker = if index == selected { '>' } else { ' ' };
+    let gutter = gutter_width(count, width);
+    if gutter > 2 {
+        format!(
+            "{marker} {:>digits$} {text}",
+            navigation::relative_number(index, selected),
+            digits = gutter - 3
+        )
+    } else {
+        format!("{marker} {text}")
     }
-    let step = (page / 2).max(1);
-    match key.code {
-        KeyCode::Char('d' | 'D') => *position = position.saturating_add(step).min(maximum),
-        KeyCode::Char('u' | 'U') => *position = position.saturating_sub(step),
-        _ => return false,
-    }
-    true
+}
+
+fn menu_frame(
+    title: &str,
+    choices: &[String],
+    view: Viewport,
+    nav: &Navigation,
+    width: u16,
+    height: u16,
+) -> Vec<String> {
+    let body = choices
+        .iter()
+        .enumerate()
+        .skip(view.top)
+        .take(panel_body_rows(height))
+        .map(|(i, s)| {
+            numbered_line(
+                s,
+                i,
+                view.selected,
+                choices.len(),
+                width.saturating_sub(1) as usize,
+            )
+        })
+        .collect::<Vec<_>>();
+    panel_lines(
+        title,
+        &body,
+        "j/k n-j/k | gg/G nG | PgUp/Dn ^D/^U | Enter select | i info | Esc/q back",
+        &nav_status("NORMAL", nav, view.selected, choices.len()),
+        width,
+        height,
+    )
 }
 
 pub(crate) async fn await_discovery<F, T>(future: F) -> T
@@ -367,11 +427,11 @@ pub(crate) fn browse_discovery(
 
     loop {
         let (_, height) = terminal::size().map_err(terminal_error)?;
-        state.set_page_size(
-            usize::from(height)
-                .saturating_sub(8)
-                .clamp(1, DEFAULT_PAGE_SIZE),
-        );
+        state.set_page_size(if state.showing_details {
+            panel_body_rows(height)
+        } else {
+            discovery_rows(height)
+        });
         if let Some(form) = &setup_form {
             render_setup(&mut terminal, form)?;
         } else {
@@ -405,7 +465,12 @@ pub(crate) fn browse_discovery(
                     }
                 }
             }
+            Event::Resize(_, _) => {
+                state.nav.reset();
+                terminal.invalidate()?;
+            }
             Event::Paste(value) => {
+                state.nav.reset();
                 if let Some(form) = setup_form.as_mut() {
                     form.paste(&value);
                 } else if state.filtering {
@@ -431,12 +496,19 @@ impl Panel {
         TerminalSession::enter().map(Self)
     }
 
-    fn draw(&mut self, title: &str, body: &[String], footer: &str) -> Result<usize, AppError> {
+    fn draw(
+        &mut self,
+        title: &str,
+        body: &[String],
+        footer: &str,
+        status: &str,
+    ) -> Result<usize, AppError> {
         let (width, height) = terminal::size().map_err(terminal_error)?;
-        let rows = panel_body_rows(height);
-        let lines = panel_lines(title, body, footer, width, height);
-        draw_changed_lines(&mut self.0, lines)?;
-        Ok(rows)
+        draw_changed_lines(
+            &mut self.0,
+            panel_lines(title, body, footer, status, width, height),
+        )?;
+        Ok(panel_body_rows(height))
     }
 
     pub(crate) fn menu(
@@ -449,82 +521,90 @@ impl Panel {
             self.show(title, "No items available.")?;
             return Ok(None);
         }
-        let mut selected = 0;
+        let mut view = Viewport::default();
+        let mut nav = Navigation::default();
         loop {
-            let (_, height) = terminal::size().map_err(terminal_error)?;
+            let (width, height) = terminal::size().map_err(terminal_error)?;
             let rows = panel_body_rows(height);
-            let start = selected / rows * rows;
-            let body = choices
-                .iter()
-                .enumerate()
-                .skip(start)
-                .take(rows)
-                .map(|(i, s)| format!("{} {s}", if i == selected { ">" } else { " " }))
-                .collect::<Vec<_>>();
-            self.draw(
-                &format!("{title} [{}/{}]", selected + 1, choices.len()),
-                &body,
-                "j/k move | PgUp/Dn page | Ctrl+D/U half | Enter select | i info | Esc/q back",
+            view.clamp(choices.len(), rows);
+            draw_changed_lines(
+                &mut self.0,
+                menu_frame(title, choices, view, &nav, width, height),
             )?;
             match event::read().map_err(terminal_error)? {
-                Event::Key(key) if key.kind != KeyEventKind::Release => {
-                    if key.code == KeyCode::Char('i') {
-                        self.show(
-                            "Details (reported data, not measured playback)",
-                            details.get(selected).unwrap_or(&choices[selected]),
-                        )?;
-                    } else if let Some(result) =
-                        profile_key(&mut selected, choices.len(), rows, key)
-                    {
-                        return Ok(result);
-                    }
+                Event::Key(key) => match navigation_key(&mut nav, key, false) {
+                    Outcome::Action(motion) => view.apply(motion, choices.len(), rows),
+                    Outcome::Unhandled => match key.code {
+                        KeyCode::Enter => return Ok(Some(view.selected)),
+                        KeyCode::Esc | KeyCode::Char('q') => return Ok(None),
+                        KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                            return Ok(None);
+                        }
+                        KeyCode::Char('i') => {
+                            nav.reset();
+                            self.show(
+                                "Details (reported data, not measured playback)",
+                                details
+                                    .get(view.selected)
+                                    .unwrap_or(&choices[view.selected]),
+                            )?;
+                        }
+                        _ => {}
+                    },
+                    _ => {}
+                },
+                Event::Resize(_, _) => {
+                    nav.reset();
+                    self.0.invalidate()?;
                 }
-                Event::Resize(_, _) => self.0.previous_lines.clear(),
+                Event::Paste(_) => nav.reset(),
                 _ => {}
             }
         }
     }
 
     pub(crate) fn show(&mut self, title: &str, text: &str) -> Result<(), AppError> {
-        let mut offset = 0usize;
+        let mut offset = 0;
+        let mut nav = Navigation::default();
         loop {
             let (width, height) = terminal::size().map_err(terminal_error)?;
             let rows = panel_body_rows(height);
-            let lines = wrap_panel_text(text, width.saturating_sub(1) as usize);
+            let lines = numbered_text(text, width.saturating_sub(1) as usize);
             offset = offset.min(lines.len().saturating_sub(rows));
+            let body = lines
+                .iter()
+                .enumerate()
+                .skip(offset)
+                .take(rows)
+                .map(|(i, s)| {
+                    numbered_line(s, i, offset, lines.len(), width.saturating_sub(1) as usize)
+                })
+                .collect::<Vec<_>>();
             self.draw(
                 title,
-                &lines
-                    .iter()
-                    .skip(offset)
-                    .take(rows)
-                    .cloned()
-                    .collect::<Vec<_>>(),
-                "j/k scroll | PgUp/Dn page | Ctrl+D/U half | Home/End | Enter/Esc/q back",
+                &body,
+                "j/k n-j/k | gg/G nG | PgUp/Dn ^D/^U | Enter/Esc/q back",
+                &nav_status("NORMAL (TEXT)", &nav, offset, lines.len()),
             )?;
             match event::read().map_err(terminal_error)? {
-                Event::Key(key)
-                    if key.kind != KeyEventKind::Release
-                        && half_page_key(
-                            &mut offset,
-                            lines.len().saturating_sub(rows),
-                            rows,
-                            key,
-                        ) => {}
-                Event::Key(key) if key.kind != KeyEventKind::Release => match key.code {
-                    KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        return Ok(());
+                Event::Key(key) => match navigation_key(&mut nav, key, false) {
+                    Outcome::Action(motion) => {
+                        offset = navigation::scroll(offset, motion, lines.len(), rows)
                     }
-                    KeyCode::Down | KeyCode::Char('j') => offset = offset.saturating_add(1),
-                    KeyCode::Up | KeyCode::Char('k') => offset = offset.saturating_sub(1),
-                    KeyCode::PageDown => offset = offset.saturating_add(rows),
-                    KeyCode::PageUp => offset = offset.saturating_sub(rows),
-                    KeyCode::Home => offset = 0,
-                    KeyCode::End => offset = lines.len(),
+                    Outcome::Unhandled => match key.code {
+                        KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
+                        KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
+                            return Ok(());
+                        }
+                        _ => {}
+                    },
                     _ => {}
                 },
-                Event::Resize(_, _) => self.0.previous_lines.clear(),
+                Event::Resize(_, _) => {
+                    nav.reset();
+                    self.0.invalidate()?;
+                }
+                Event::Paste(_) => nav.reset(),
                 _ => {}
             }
         }
@@ -562,21 +642,26 @@ impl Panel {
         let mut value = zeroize::Zeroizing::new(initial.to_owned());
         let mut cursor = value.len();
         loop {
+            let (width, height) = terminal::size().map_err(terminal_error)?;
+            let mut body = Vec::new();
+            if panel_body_rows(height) >= 2 {
+                body.push(label.to_owned());
+            }
+            body.push(input_view(
+                &value,
+                cursor,
+                width.saturating_sub(1) as usize,
+                secret,
+            ));
             self.draw(
                 title,
-                &[
-                    label.into(),
-                    input_view(
-                        &value,
-                        cursor,
-                        terminal::size()
-                            .map_err(terminal_error)?
-                            .0
-                            .saturating_sub(1) as usize,
-                        secret,
-                    ),
-                ],
+                &body,
                 "Enter: confirm | Esc: cancel | Left/Right/Home/End: edit | Ctrl-U: clear",
+                if secret {
+                    "INPUT | password masked | Esc cancel"
+                } else {
+                    "INPUT | literal text | Esc cancel"
+                },
             )?;
             match event::read().map_err(terminal_error)? {
                 Event::Key(key) if key.kind != KeyEventKind::Release => match key.code {
@@ -627,7 +712,7 @@ impl Panel {
                     cursor += clean.len();
                     text.zeroize();
                 }
-                Event::Resize(_, _) => self.0.previous_lines.clear(),
+                Event::Resize(_, _) => self.0.invalidate()?,
                 _ => {}
             }
         }
@@ -647,11 +732,11 @@ impl Panel {
                 biased;
                 result = &mut future => return Ok(Some(result)),
                 _ = ticker.tick() => {
-                    self.draw(title, &[format!("Working... {}s elapsed", start.elapsed().as_secs())], "Esc/Ctrl-C: cancel; completed results remain available")?;
+                    self.draw(title, &[format!("Working... {}s elapsed", start.elapsed().as_secs())], "Esc/Ctrl-C: cancel; completed results remain available", "BUSY | Esc/Ctrl-C cancel")?;
                     if event::poll(Duration::ZERO).map_err(terminal_error)? {
                         match event::read().map_err(terminal_error)? {
                             Event::Key(key) if key.kind != KeyEventKind::Release && (key.code == KeyCode::Esc || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))) => return Ok(None),
-                            Event::Resize(_, _) => self.0.previous_lines.clear(),
+                            Event::Resize(_, _) => self.0.invalidate()?,
                             _ => {}
                         }
                     }
@@ -664,7 +749,7 @@ impl Panel {
 // Prefer one content row to decoration in very short terminals. Keep pagination
 // and rendering on the same row budget so no selectable item is hidden.
 fn panel_body_rows(height: u16) -> usize {
-    usize::from(height.saturating_sub(4)).max(1)
+    usize::from(height.saturating_sub(5)).max(1)
 }
 
 fn separator(width: usize) -> String {
@@ -711,21 +796,33 @@ pub(crate) fn aligned_menu_rows<const N: usize>(rows: &[[String; N]]) -> Vec<Str
         .collect()
 }
 
-fn panel_lines(title: &str, body: &[String], footer: &str, width: u16, height: u16) -> Vec<String> {
+fn panel_lines(
+    title: &str,
+    body: &[String],
+    footer: &str,
+    status: &str,
+    width: u16,
+    height: u16,
+) -> Vec<String> {
     let width = usize::from(width.saturating_sub(1));
     let mut lines = Vec::new();
-    if height >= 4 {
+    if height >= 5 {
         lines.push(title.to_owned());
     }
-    if height >= 5 {
+    if height >= 6 {
         lines.push(separator(width));
     }
     lines.extend(body.iter().take(panel_body_rows(height)).cloned());
-    if height >= 3 {
+    let missing = panel_body_rows(height).saturating_sub(body.len());
+    lines.extend(std::iter::repeat_n(String::new(), missing));
+    if height >= 4 {
         lines.push(separator(width));
     }
-    if height >= 2 {
+    if height >= 3 {
         lines.push(footer.to_owned());
+    }
+    if height >= 2 {
+        lines.push(status.to_owned());
     }
     lines
         .into_iter()
@@ -735,6 +832,19 @@ fn panel_lines(title: &str, body: &[String], footer: &str, width: u16, height: u
             truncate_to_width(&safe, width)
         })
         .collect()
+}
+
+// Resolve gutter width after wrapping; digit growth can only reduce content width.
+fn numbered_text(text: &str, width: usize) -> Vec<String> {
+    let mut gutter = gutter_width(1, width);
+    loop {
+        let lines = wrap_panel_text(text, width.saturating_sub(gutter));
+        let next = gutter_width(lines.len(), width);
+        if next <= gutter {
+            return lines;
+        }
+        gutter = next;
+    }
 }
 
 fn previous_boundary(value: &str, cursor: usize) -> usize {
@@ -800,6 +910,11 @@ fn wrap_panel_text(text: &str, width: usize) -> Vec<String> {
 }
 
 impl TerminalSession {
+    fn invalidate(&mut self) -> Result<(), AppError> {
+        execute!(self.stdout, Clear(ClearType::All)).map_err(terminal_error)?;
+        self.previous_lines.clear();
+        Ok(())
+    }
     fn enter() -> Result<Self, AppError> {
         enable_raw_mode().map_err(terminal_error)?;
         let mut stdout = io::stdout();
@@ -831,6 +946,8 @@ struct BrowserState<'a> {
     total_count: usize,
     filtered: Vec<usize>,
     selected: usize,
+    top: usize,
+    nav: Navigation,
     page_size: usize,
     query: String,
     filtering: bool,
@@ -847,6 +964,8 @@ impl<'a> BrowserState<'a> {
             total_count,
             filtered: (0..devices.len()).collect(),
             selected: 0,
+            top: 0,
+            nav: Navigation::default(),
             page_size: page_size.max(1),
             query: String::new(),
             filtering: false,
@@ -863,6 +982,8 @@ impl<'a> BrowserState<'a> {
     }
 
     fn rebuild_filter(&mut self) {
+        self.nav.reset();
+        self.top = 0;
         self.filtered = self
             .devices
             .iter()
@@ -889,27 +1010,17 @@ impl<'a> BrowserState<'a> {
     }
 
     fn clamp_selection(&mut self) {
-        if self.filtered.is_empty() {
-            self.selected = 0;
-        } else {
-            self.selected = self.selected.min(self.filtered.len() - 1);
-        }
+        let mut view = Viewport {
+            selected: self.selected,
+            top: self.top,
+        };
+        view.clamp(self.filtered.len(), self.page_size);
+        self.selected = view.selected;
+        self.top = view.top;
     }
 
     fn page_start(&self) -> usize {
-        self.selected / self.page_size * self.page_size
-    }
-
-    fn page_count(&self) -> usize {
-        self.filtered.len().max(1).div_ceil(self.page_size)
-    }
-
-    fn current_page(&self) -> usize {
-        if self.filtered.is_empty() {
-            1
-        } else {
-            self.selected / self.page_size + 1
-        }
+        self.top
     }
 
     fn current(&self) -> Option<&'a DiscoveryDeviceView> {
@@ -918,77 +1029,13 @@ impl<'a> BrowserState<'a> {
             .and_then(|index| self.devices.get(*index))
     }
 
-    fn move_next(&mut self) {
-        if !self.filtered.is_empty() {
-            self.selected = (self.selected + 1).min(self.filtered.len() - 1);
-        }
-    }
-
-    fn move_previous(&mut self) {
-        self.selected = self.selected.saturating_sub(1);
-    }
-
-    fn next_page(&mut self) {
-        if !self.filtered.is_empty() {
-            self.selected = (self.page_start() + self.page_size).min(self.filtered.len() - 1);
-        }
-    }
-
-    fn previous_page(&mut self) {
-        self.selected = self.page_start().saturating_sub(self.page_size);
-    }
-
     fn handle_key(&mut self, key: KeyEvent) -> Option<BrowserIntent> {
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-            return Some(BrowserIntent::Quit);
-        }
-        if !self.filtering {
-            let handled = if self.showing_details {
-                half_page_key(
-                    &mut self.detail_scroll,
-                    self.detail_max_scroll,
-                    self.page_size,
-                    key,
-                )
-            } else {
-                half_page_key(
-                    &mut self.selected,
-                    self.filtered.len().saturating_sub(1),
-                    self.page_size,
-                    key,
-                )
-            };
-            if handled {
-                return None;
-            }
-        }
-        if self.showing_details {
-            match key.code {
-                KeyCode::Esc | KeyCode::Char('i') => {
-                    self.showing_details = false;
-                    self.detail_scroll = 0;
-                }
-                KeyCode::Char('q') => return Some(BrowserIntent::Quit),
-                KeyCode::Down | KeyCode::Char('j') => {
-                    self.detail_scroll = (self.detail_scroll + 1).min(self.detail_max_scroll);
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    self.detail_scroll = self.detail_scroll.saturating_sub(1);
-                }
-                KeyCode::Right | KeyCode::PageDown | KeyCode::Char('l') => {
-                    self.detail_scroll =
-                        (self.detail_scroll + self.page_size).min(self.detail_max_scroll);
-                }
-                KeyCode::Left | KeyCode::PageUp | KeyCode::Char('h') => {
-                    self.detail_scroll = self.detail_scroll.saturating_sub(self.page_size);
-                }
-                KeyCode::Home | KeyCode::Char('g') => self.detail_scroll = 0,
-                KeyCode::End | KeyCode::Char('G') => {
-                    self.detail_scroll = self.detail_max_scroll;
-                }
-                _ => {}
-            }
+        if key.kind == KeyEventKind::Release {
             return None;
+        }
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+            self.nav.reset();
+            return Some(BrowserIntent::Quit);
         }
         if self.filtering {
             match key.code {
@@ -1012,34 +1059,43 @@ impl<'a> BrowserState<'a> {
             return None;
         }
 
+        match navigation_key(&mut self.nav, key, true) {
+            Outcome::Action(motion) => {
+                if self.showing_details {
+                    self.detail_scroll = navigation::scroll(
+                        self.detail_scroll,
+                        motion,
+                        self.detail_max_scroll.saturating_add(self.page_size),
+                        self.page_size,
+                    );
+                } else {
+                    let mut view = Viewport {
+                        selected: self.selected,
+                        top: self.top,
+                    };
+                    view.apply(motion, self.filtered.len(), self.page_size);
+                    self.selected = view.selected;
+                    self.top = view.top;
+                }
+                return None;
+            }
+            Outcome::Unhandled => {}
+            _ => return None,
+        }
+        if self.showing_details {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('i') => {
+                    self.nav.reset();
+                    self.showing_details = false;
+                    self.detail_scroll = 0;
+                }
+                KeyCode::Char('q') => return Some(BrowserIntent::Quit),
+                _ => {}
+            }
+            return None;
+        }
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => Some(BrowserIntent::Quit),
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.move_next();
-                None
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.move_previous();
-                None
-            }
-            KeyCode::Right | KeyCode::PageDown | KeyCode::Char('l') => {
-                self.next_page();
-                None
-            }
-            KeyCode::Left | KeyCode::PageUp | KeyCode::Char('h') => {
-                self.previous_page();
-                None
-            }
-            KeyCode::Home | KeyCode::Char('g') => {
-                self.selected = 0;
-                None
-            }
-            KeyCode::End | KeyCode::Char('G') => {
-                if !self.filtered.is_empty() {
-                    self.selected = self.filtered.len() - 1;
-                }
-                None
-            }
             KeyCode::Char('/') => {
                 self.filtering = true;
                 None
@@ -1091,69 +1147,53 @@ impl<'a> BrowserState<'a> {
 }
 
 fn render_setup(terminal: &mut TerminalSession, form: &SetupForm) -> Result<(), AppError> {
-    let (width, _) = terminal::size().map_err(terminal_error)?;
-    let width = usize::from(width.saturating_sub(1));
-    let mut lines = Vec::with_capacity(13);
-    let target = primary_target(&form.device).unwrap_or("(no usable address)");
-
-    push_line(
-        &mut lines,
-        "oxvif discovery - onboard selected device",
-        width,
-    );
-    push_line(
-        &mut lines,
-        &format!("Device: {}", primary_address(&form.device)),
-        width,
-    );
-    push_line(&mut lines, &format!("Target: {target}"), width);
-    push_line(
-        &mut lines,
-        &format!("Endpoint: {}", display_endpoint(&form.device)),
-        width,
-    );
-    push_line(&mut lines, &separator(width), width);
-    push_line(
-        &mut lines,
-        &setup_field_line("Device ID", &form.id, form.field, SetupField::Id, false),
-        width,
-    );
-    push_line(
-        &mut lines,
-        &setup_field_line(
+    let (width, height) = terminal::size().map_err(terminal_error)?;
+    let rows = panel_body_rows(height);
+    let mut body = Vec::new();
+    if rows >= 7 {
+        body.push(format!("Device: {}", primary_address(&form.device)));
+        body.push(format!(
+            "Target: {}",
+            primary_target(&form.device).unwrap_or("(no usable address)")
+        ));
+        body.push(separator(width.saturating_sub(1) as usize));
+    }
+    for (label, value, field, secret) in [
+        ("Device ID", form.id.as_str(), SetupField::Id, false),
+        (
             "Username",
-            &form.username,
-            form.field,
+            form.username.as_str(),
             SetupField::Username,
             false,
         ),
-        width,
-    );
-    push_line(
-        &mut lines,
-        &setup_field_line(
+        (
             "Password",
-            &form.password,
-            form.field,
+            form.password.as_str(),
             SetupField::Password,
             true,
         ),
-        width,
-    );
-    push_line(&mut lines, &separator(width), width);
-    push_line(
-        &mut lines,
+    ] {
+        if rows >= 3 || field == form.field {
+            body.push(setup_field_line(label, value, form.field, field, secret));
+        }
+    }
+    body.push(
         form.error
             .as_deref()
-            .unwrap_or("Nothing is saved until the form is submitted and setup succeeds."),
-        width,
+            .unwrap_or("Nothing saved until setup succeeds.")
+            .to_owned(),
     );
-    push_line(
-        &mut lines,
-        "Tab or Up/Down: field | Enter: next/submit | Ctrl-U: clear field | Esc: back",
-        width,
-    );
-    draw_changed_lines(terminal, lines)
+    draw_changed_lines(
+        terminal,
+        panel_lines(
+            "oxvif discovery - onboard selected device",
+            &body,
+            "Tab/Up/Down field | Enter next/submit | Ctrl-U clear | Esc back",
+            "INPUT | credentials masked | Esc back",
+            width,
+            height,
+        ),
+    )
 }
 
 fn setup_field_line(
@@ -1175,162 +1215,164 @@ fn setup_field_line(
     format!("{marker} {label:<10} {display}")
 }
 
+fn discovery_rows(height: u16) -> usize {
+    let rows = panel_body_rows(height);
+    if rows >= 4 {
+        (rows - 3).clamp(1, DEFAULT_PAGE_SIZE)
+    } else {
+        rows
+    }
+}
+
 fn render(terminal: &mut TerminalSession, state: &mut BrowserState<'_>) -> Result<(), AppError> {
     if state.showing_details {
         return render_details(terminal, state);
     }
-    let (width, _) = terminal::size().map_err(terminal_error)?;
-    let width = usize::from(width.saturating_sub(1));
-    let mut lines = Vec::with_capacity(state.page_size + 7);
-    let saved_count = state
-        .devices
-        .iter()
-        .filter(|device| device.registration_status == DiscoveryRegistrationStatus::Saved)
-        .count();
-    let new_count = state
-        .devices
-        .iter()
-        .filter(|device| device.registration_status == DiscoveryRegistrationStatus::New)
-        .count();
-    let incomplete_count = state.devices.len() - saved_count - new_count;
+    let (width, height) = terminal::size().map_err(terminal_error)?;
+    state.set_page_size(discovery_rows(height));
+    draw_changed_lines(terminal, discovery_frame(state, width, height))
+}
 
-    push_line(
-        &mut lines,
-        &format!(
-            "oxvif discovery - {} found | {} saved | {} new | {} incomplete",
-            state.total_count, saved_count, new_count, incomplete_count
-        ),
-        width,
+fn discovery_frame(state: &BrowserState<'_>, width: u16, height: u16) -> Vec<String> {
+    let columns = width.saturating_sub(1) as usize;
+    let saved = state
+        .devices
+        .iter()
+        .filter(|d| d.registration_status == DiscoveryRegistrationStatus::Saved)
+        .count();
+    let title = format!(
+        "oxvif discovery | {} found | {} saved | {} shown",
+        state.total_count,
+        saved,
+        state.filtered.len()
     );
-    let filter = if state.query.is_empty() {
-        "(none)"
-    } else {
-        state.query.as_str()
-    };
-    push_line(
-        &mut lines,
-        &format!(
-            "View: {} | {} shown | page {}/{} | Search: {filter}{}",
+    let mut body = Vec::new();
+    if panel_body_rows(height) >= 4 {
+        body.push(format!(
+            "View: {} | Search: {}",
             registration_view_name(state.registration_view),
+            if state.query.is_empty() {
+                "(none)"
+            } else {
+                &state.query
+            }
+        ));
+        body.push(format!(
+            "{}RECORD STATUS     ADDRESS              DEVICE                  SAVED AS",
+            " ".repeat(gutter_width(state.filtered.len(), columns))
+        ));
+    }
+    if state.filtered.is_empty() {
+        body.push("No devices match the current filter.".into());
+    } else {
+        for (position, index) in state
+            .filtered
+            .iter()
+            .enumerate()
+            .skip(state.page_start())
+            .take(state.page_size)
+        {
+            let device = &state.devices[*index];
+            let text = format!(
+                "{:<6} {} {} {} {}",
+                index + 1,
+                fit_cell(
+                    &device.registration_status.as_str().to_ascii_uppercase(),
+                    10
+                ),
+                fit_cell(&primary_address(device), 20),
+                fit_cell(&discovery_device_label(device), 23),
+                device.registered_device_id.as_deref().unwrap_or("-")
+            );
+            body.push(numbered_line(
+                &text,
+                position,
+                state.selected,
+                state.filtered.len(),
+                columns,
+            ));
+        }
+    }
+    if panel_body_rows(height) >= 4 {
+        body.push(
+            state
+                .current()
+                .map(|d| {
+                    format!(
+                        "Saved as: {} | {}",
+                        d.registered_device_id.as_deref().unwrap_or("(not saved)"),
+                        display_endpoint(d)
+                    )
+                })
+                .unwrap_or_default(),
+        );
+    }
+    panel_lines(
+        &title,
+        &body,
+        if state.filtering {
+            "Type search | Enter/Esc back | Ctrl-U clear | Ctrl-C quit"
+        } else {
+            "j/k n-j/k gg/G | ^D/^U PgUp/Dn | / r n A filter | i info | Enter add | q quit"
+        },
+        &nav_status(
+            if state.filtering { "SEARCH" } else { "NORMAL" },
+            &state.nav,
+            state.selected,
             state.filtered.len(),
-            state.current_page(),
-            state.page_count(),
-            if state.filtering { "_" } else { "" }
         ),
         width,
-    );
-    push_line(&mut lines, &separator(width), width);
-    push_line(
-        &mut lines,
-        "  #    STATUS      ADDRESS              DEVICE                  SAVED AS",
-        width,
-    );
-
-    let start = state.page_start();
-    for position in start..(start + state.page_size) {
-        let Some(device_index) = state.filtered.get(position) else {
-            push_line(&mut lines, "", width);
-            continue;
-        };
-        let device = &state.devices[*device_index];
-        let marker = if position == state.selected { '>' } else { ' ' };
-        let line = format!(
-            "{marker} {:<4} {} {} {} {}",
-            device_index + 1,
-            fit_cell(
-                &device.registration_status.as_str().to_ascii_uppercase(),
-                10
-            ),
-            fit_cell(&primary_address(device), 20),
-            fit_cell(&discovery_device_label(device), 23),
-            fit_cell(device.registered_device_id.as_deref().unwrap_or("-"), 16),
-        );
-        push_line(&mut lines, &line, width);
-    }
-
-    push_line(&mut lines, &separator(width), width);
-    if let Some(device) = state.current() {
-        let detail = if let Some(id) = device.registered_device_id.as_deref() {
-            format!("Already registered as {id} | {}", display_endpoint(device))
-        } else if primary_target(device).is_none() {
-            format!(
-                "No usable address; add is unavailable | {}",
-                display_endpoint(device)
-            )
-        } else {
-            format!(
-                "Enter/a: add {} | {}",
-                primary_address(device),
-                display_endpoint(device)
-            )
-        };
-        push_line(&mut lines, &detail, width);
-    } else {
-        push_line(&mut lines, "No devices match the current filter.", width);
-    }
-    push_line(
-        &mut lines,
-        if state.filtering {
-            "Type to filter | Enter/Esc: return | Ctrl-U: clear | Ctrl-C: quit"
-        } else {
-            "j/k move | h/l/PgUp/Dn page | Ctrl+D/U half | i details | Enter/a add | q quit"
-        },
-        width,
-    );
-    if !state.filtering {
-        push_line(
-            &mut lines,
-            "/ search | r saved | n unregistered | A all",
-            width,
-        );
-    }
-    draw_changed_lines(terminal, lines)
+        height,
+    )
 }
 
 fn render_details(
     terminal: &mut TerminalSession,
     state: &mut BrowserState<'_>,
 ) -> Result<(), AppError> {
-    let (width, _) = terminal::size().map_err(terminal_error)?;
-    let width = usize::from(width.saturating_sub(1));
+    let (width, height) = terminal::size().map_err(terminal_error)?;
     let Some(device) = state.current() else {
         state.showing_details = false;
         return render(terminal, state);
     };
-    let content = discovery_detail_lines(device, width);
+    state.page_size = panel_body_rows(height);
+    let content = numbered_text(
+        &discovery_detail_lines(device, usize::MAX).join("\n"),
+        width.saturating_sub(1) as usize,
+    );
     state.detail_max_scroll = content.len().saturating_sub(state.page_size);
     state.detail_scroll = state.detail_scroll.min(state.detail_max_scroll);
-    let start = state.detail_scroll;
-    let end = (start + state.page_size).min(content.len());
-    let mut lines = Vec::with_capacity(state.page_size + 5);
-
-    push_line(&mut lines, "oxvif discovery - device details", width);
-    push_line(
-        &mut lines,
-        &format!(
-            "Record {} of {} | details {}-{} of {}",
-            state.selected.saturating_add(1),
-            state.filtered.len(),
-            if content.is_empty() { 0 } else { start + 1 },
-            end,
-            content.len()
+    let body = content
+        .iter()
+        .enumerate()
+        .skip(state.detail_scroll)
+        .take(state.page_size)
+        .map(|(i, line)| {
+            numbered_line(
+                line,
+                i,
+                state.detail_scroll,
+                content.len(),
+                width.saturating_sub(1) as usize,
+            )
+        })
+        .collect::<Vec<_>>();
+    draw_changed_lines(
+        terminal,
+        panel_lines(
+            "oxvif discovery - device details",
+            &body,
+            "j/k n-j/k gg/G nG | h/l PgUp/Dn ^D/^U | i/Esc back | q quit",
+            &nav_status(
+                "NORMAL (TEXT)",
+                &state.nav,
+                state.detail_scroll,
+                content.len(),
+            ),
+            width,
+            height,
         ),
-        width,
-    );
-    push_line(&mut lines, &separator(width), width);
-    for line in content.iter().skip(start).take(state.page_size) {
-        push_line(&mut lines, line, width);
-    }
-    for _ in end..(start + state.page_size) {
-        push_line(&mut lines, "", width);
-    }
-    push_line(&mut lines, &separator(width), width);
-    push_line(
-        &mut lines,
-        "j/k scroll | h/l/PgUp/Dn page | Ctrl+D/U half | g/G ends | i/Esc back | q quit",
-        width,
-    );
-    draw_changed_lines(terminal, lines)
+    )
 }
 
 fn discovery_detail_lines(device: &DiscoveryDeviceView, width: usize) -> Vec<String> {
@@ -1412,13 +1454,21 @@ fn discovery_device_label(device: &DiscoveryDeviceView) -> String {
     }
 }
 
-fn push_line(lines: &mut Vec<String>, value: &str, width: usize) {
-    lines.push(truncate_to_width(value, width));
-}
-
 fn draw_changed_lines(terminal: &mut TerminalSession, lines: Vec<String>) -> Result<(), AppError> {
+    let (width, height) = terminal::size().map_err(terminal_error)?;
+    let lines = lines
+        .into_iter()
+        .take(height as usize)
+        .map(|line| {
+            let safe: String = line.chars().filter(|c| !c.is_control()).collect();
+            truncate_to_width(&safe, width.saturating_sub(1) as usize)
+        })
+        .collect::<Vec<_>>();
     queue!(terminal.stdout, BeginSynchronizedUpdate).map_err(terminal_error)?;
-    let row_count = lines.len().max(terminal.previous_lines.len());
+    let row_count = lines
+        .len()
+        .max(terminal.previous_lines.len())
+        .min(height as usize);
     for row in 0..row_count {
         let current = lines.get(row).map_or("", String::as_str);
         let previous = terminal.previous_lines.get(row).map_or("", String::as_str);
@@ -1501,6 +1551,97 @@ fn terminal_error(error: io::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::navigation::Motion;
+
+    #[test]
+    fn discovery_vim_counts_status_and_compact_frames() {
+        let devices = (1..=40)
+            .map(|i| view(&format!("192.0.2.{i}"), "廠牌", "Camera", None))
+            .collect::<Vec<_>>();
+        let mut state = BrowserState::new(&devices, 10, 40);
+        for c in "21G".chars() {
+            state.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(state.selected, 20);
+        state.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
+        assert_eq!(state.selected, 20);
+        assert_eq!(state.nav.pending(), "g");
+        assert!(
+            discovery_frame(&state, 80, 24)
+                .last()
+                .unwrap()
+                .contains("keys:g")
+        );
+        state.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert_eq!(state.selected, 20);
+        assert_eq!(state.nav.pending(), "");
+        for c in "gg7j3k".chars() {
+            state.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(state.selected, 4);
+        state.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
+        state.query = "missing-model".into();
+        state.rebuild_filter();
+        assert_eq!(state.nav.pending(), "");
+        assert!(
+            discovery_frame(&state, 80, 24)
+                .last()
+                .unwrap()
+                .contains("item 0/0")
+        );
+        state.query.clear();
+        state.rebuild_filter();
+        for (width, height) in [(80, 24), (40, 8), (16, 4), (8, 1), (0, 0)] {
+            state.set_page_size(discovery_rows(height));
+            let lines = discovery_frame(&state, width, height);
+            assert_eq!(lines.len(), height as usize);
+            assert!(lines.iter().all(|s| UnicodeWidthStr::width(s.as_str()) <= width.saturating_sub(1) as usize));
+            if width > 2 && height > 0 {
+                assert!(lines.iter().any(|s| s.starts_with('>')));
+            }
+        }
+    }
+
+    #[test]
+    fn text_gutters_and_pending_status_preserve_width_and_input_modes() {
+        let text = "攝影機 profile data\n".repeat(100);
+        for width in [0, 1, 8, 16, 24, 80] {
+            let lines = numbered_text(&text, width);
+            for (index, line) in lines.iter().enumerate() {
+                let numbered =
+                    truncate_to_width(&numbered_line(line, index, 20, lines.len(), width), width);
+                assert!(UnicodeWidthStr::width(numbered.as_str()) <= width);
+            }
+        }
+        let mut nav = Navigation::default();
+        for c in "123456g".chars() {
+            nav.feed(NavKey::Char(c));
+        }
+        assert!(truncate_to_width(&nav_status("NORMAL", &nav, 0, 40), 24).contains("123456g"));
+        let mut form = SetupForm::new(record("192.0.2.1", "Example", "Camera"), String::new());
+        for c in "123ggjk".chars() {
+            form.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        assert_eq!(form.id, "123ggjk");
+        form.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        assert_eq!(form.id, "");
+    }
+
+    fn profile_lines(choices: &[String], selected: usize, width: u16, height: u16) -> Vec<String> {
+        let mut view = Viewport {
+            selected,
+            top: selected,
+        };
+        view.clamp(choices.len(), panel_body_rows(height));
+        menu_frame(
+            "Select media profile",
+            choices,
+            view,
+            &Navigation::default(),
+            width,
+            height,
+        )
+    }
 
     #[test]
     fn menu_columns_center_to_longest_cell_across_pages_using_display_width() {
@@ -1528,48 +1669,88 @@ mod tests {
         );
         let first = profile_lines(&rows, 0, 80, 5);
         let second = profile_lines(&rows, 1, 80, 5);
-        for line in [&first[2], &second[2]] {
+        for line in [
+            first.iter().find(|s| s.starts_with('>')).unwrap(),
+            second.iter().find(|s| s.starts_with('>')).unwrap(),
+        ] {
             let prefix = line.split("http://").next().unwrap();
-            assert_eq!(UnicodeWidthStr::width(prefix), 19);
+            assert_eq!(UnicodeWidthStr::width(prefix), 21);
         }
         assert!(aligned_menu_rows::<2>(&[]).is_empty());
     }
 
     #[test]
-    fn half_page_navigation_is_bounded_and_requires_control() {
-        let mut position = 0;
-        for (code, modifiers, expected) in [
-            ('d', KeyModifiers::NONE, 0),
-            ('d', KeyModifiers::CONTROL, 2),
-            ('d', KeyModifiers::CONTROL, 4),
-            ('d', KeyModifiers::CONTROL, 6),
-            ('d', KeyModifiers::CONTROL, 6),
-            ('u', KeyModifiers::CONTROL, 4),
-            ('u', KeyModifiers::CONTROL, 2),
-            ('u', KeyModifiers::CONTROL, 0),
-            ('u', KeyModifiers::CONTROL, 0),
-        ] {
+    fn adapter_sequences_modifiers_and_repeats() {
+        let mut nav = Navigation::default();
+        let mut view = Viewport::default();
+        for c in "12j".chars() {
+            match navigation_key(
+                &mut nav,
+                KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+                false,
+            ) {
+                Outcome::Action(motion) => view.apply(motion, 40, 10),
+                outcome => assert_eq!(outcome, Outcome::Pending),
+            }
+        }
+        assert_eq!(
+            view,
+            Viewport {
+                selected: 12,
+                top: 3
+            }
+        );
+        assert_eq!(
+            navigation_key(
+                &mut nav,
+                KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL),
+                false
+            ),
+            Outcome::Action(Motion::HalfDown(1))
+        );
+        assert_eq!(
+            navigation_key(
+                &mut nav,
+                KeyEvent::new(KeyCode::Char('j'), KeyModifiers::ALT),
+                false
+            ),
+            Outcome::Consumed
+        );
+        for kind in [KeyEventKind::Release, KeyEventKind::Repeat] {
             assert_eq!(
-                profile_key(
-                    &mut position,
-                    7,
-                    5,
-                    KeyEvent::new(KeyCode::Char(code), modifiers)
+                navigation_key(
+                    &mut nav,
+                    KeyEvent::new_with_kind(KeyCode::Char('g'), KeyModifiers::NONE, kind),
+                    false
                 ),
-                None
+                Outcome::Consumed
             );
-            assert_eq!(position, expected);
+            assert_eq!(nav.pending(), "");
         }
-        for page in [0, 1, 2] {
-            position = 0;
-            assert!(half_page_key(
-                &mut position,
-                10,
-                page,
-                KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL)
-            ));
-            assert_eq!(position, 1);
-        }
+        assert_eq!(
+            navigation_key(
+                &mut nav,
+                KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
+                false
+            ),
+            Outcome::Pending
+        );
+        assert_eq!(
+            navigation_key(
+                &mut nav,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+                false
+            ),
+            Outcome::Consumed
+        );
+        assert_eq!(
+            navigation_key(
+                &mut nav,
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+                false
+            ),
+            Outcome::Unhandled
+        );
     }
 
     #[test]
@@ -1611,29 +1792,36 @@ mod tests {
     }
 
     #[test]
-    fn panel_separates_title_content_and_controls_without_hiding_content() {
+    fn panel_separates_content_help_and_status_with_bounded_rows() {
         assert_eq!(
-            panel_lines("Title", &["Camera".into()], "Esc: back", 12, 8),
-            ["Title", "───────────", "Camera", "───────────", "Esc: back"]
+            panel_lines("Title", &["Camera".into()], "Esc back", "NORMAL", 12, 6),
+            [
+                "Title",
+                "───────────",
+                "Camera",
+                "───────────",
+                "Esc back",
+                "NORMAL"
+            ]
         );
         for width in [0, 1, 2, 12, 80, 120] {
             for height in 0..30 {
                 let body = vec!["> 攝影機\x1b".to_owned(); 40];
-                let lines = panel_lines("Title", &body, "Esc: back", width, height);
-                assert!(lines.len() <= usize::from(height));
-                assert!(lines.iter().all(|line| {
-                    UnicodeWidthStr::width(line.as_str()) <= usize::from(width.saturating_sub(1))
-                        && !line.chars().any(char::is_control)
-                }));
+                let lines = panel_lines("Title", &body, "Esc back", "NORMAL", width, height);
+                assert_eq!(lines.len(), height as usize);
+                assert!(lines.iter().all(|l| UnicodeWidthStr::width(l.as_str())
+                    <= width.saturating_sub(1) as usize
+                    && !l.chars().any(char::is_control)));
                 if width > 2 && height > 0 {
                     assert_eq!(
-                        lines.iter().filter(|line| line.starts_with('>')).count(),
+                        lines.iter().filter(|l| l.starts_with('>')).count(),
                         panel_body_rows(height)
                     );
                 }
-                if width >= 12 && height >= 3 {
-                    assert_eq!(lines.last().unwrap(), "Esc: back");
-                    assert_eq!(lines[lines.len() - 2], separator(usize::from(width - 1)));
+                if width >= 12 && height >= 4 {
+                    assert_eq!(lines[lines.len() - 3], separator(width as usize - 1));
+                    assert_eq!(lines[lines.len() - 2], "Esc back");
+                    assert_eq!(lines.last().unwrap(), "NORMAL");
                 }
             }
         }
@@ -1663,39 +1851,41 @@ mod tests {
     }
 
     #[test]
-    fn profile_navigation_is_bounded_and_cancel_is_not_a_selection() {
-        let mut selected = 0;
-        for (key, expected) in [
-            (KeyCode::Char('k'), 0),
-            (KeyCode::Char('j'), 1),
-            (KeyCode::PageDown, 4),
-            (KeyCode::End, 19),
-            (KeyCode::Down, 19),
-            (KeyCode::PageUp, 16),
-            (KeyCode::Home, 0),
+    fn pending_sequences_never_activate_application_actions() {
+        for action in [
+            KeyCode::Enter,
+            KeyCode::Char('i'),
+            KeyCode::Char('q'),
+            KeyCode::Char('/'),
         ] {
-            assert_eq!(
-                profile_key(&mut selected, 20, 3, KeyEvent::new(key, KeyModifiers::NONE)),
-                None
+            let mut nav = Navigation::default();
+            navigation_key(
+                &mut nav,
+                KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE),
+                false,
             );
-            assert_eq!(selected, expected);
+            assert_eq!(
+                navigation_key(&mut nav, KeyEvent::new(action, KeyModifiers::NONE), false),
+                Outcome::Consumed
+            );
+            assert_eq!(nav.hint(), "Unsupported sequence; cancelled");
+            assert_eq!(nav.pending(), "");
         }
+        let mut nav = Navigation::default();
+        nav.feed(NavKey::Char('g'));
         assert_eq!(
-            profile_key(
-                &mut selected,
-                20,
-                3,
-                KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)
+            navigation_key(
+                &mut nav,
+                KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+                false
             ),
-            Some(Some(0))
+            Outcome::Unhandled
         );
-        for key in [
-            KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
-            KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
-        ] {
-            assert_eq!(profile_key(&mut selected, 20, 3, key), Some(None));
-        }
+        assert_eq!(nav.pending(), "");
+        assert_eq!(
+            nav_status("NORMAL", &nav, 0, 0),
+            "NORMAL | keys:- | item 0/0"
+        );
     }
 
     #[test]
@@ -1717,7 +1907,7 @@ mod tests {
         assert!(
             profile_lines(&choices, 29, 80, 6)
                 .iter()
-                .any(|l| l.starts_with("> 攝影機 29"))
+                .any(|l| l.starts_with("> 30 攝影機 29"))
         );
     }
 

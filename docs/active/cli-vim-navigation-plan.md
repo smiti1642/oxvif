@@ -136,14 +136,14 @@ agree on package naming and publish order before such an extraction.
 1. [x] **M1 — Core and grammar.** Implement the pure parser, bounded calculations
    and relative-number helpers. Pin the contract above with table-driven tests and
    prove the backend-free harness compiles and passes. No camera/terminal access.
-2. [ ] **M2 — Adapter and mode boundaries.** Add one event adapter, pending-sequence
+2. [x] **M2 — Adapter and mode boundaries.** Add one event adapter, pending-sequence
    hints and reset rules. Replace duplicated navigation handling rather than placing
    another parser alongside it. Verify Esc, Ctrl+C, repeat/release and input isolation.
-3. [ ] **M3 — Selectable lists.** Integrate manage's saved/discovered device menus,
+3. [x] **M3 — Selectable lists.** Integrate manage's saved/discovered device menus,
    action menus, profile menus, standalone profile selection, and Discovery's list.
    Add the gutter and viewport policy while preserving aligned columns and stable
    selection. Confirm the saved/new status and existing actions are unchanged.
-4. [ ] **M4 — Text viewers and constrained screens.** Integrate manage results/item
+4. [x] **M4 — Text viewers and constrained screens.** Integrate manage results/item
    details and Discovery details. Account for wrapped-line numbering, scroll limits,
    status/footer height, resizing and compact terminals. Forms/progress-only screens
    must not acquire a navigation cursor or consume text as navigation.
