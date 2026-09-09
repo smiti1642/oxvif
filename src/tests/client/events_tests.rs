@@ -577,3 +577,54 @@ async fn events_service_capabilities_fault() {
         .unwrap_err();
     assert_fault(err, "s:Receiver", "EventCapsInternal-8043");
 }
+
+// ── notification_listener ─────────────────────────────────────────────────
+
+/// A free port, found the ordinary way: bind on `0`, read back what the OS
+/// picked, then drop the socket so `notification_listener` can bind it
+/// itself. A small window for another process to take it first, same as
+/// every other test in this codebase that needs a real port.
+async fn free_port() -> std::net::SocketAddr {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    listener.local_addr().unwrap()
+}
+
+#[tokio::test]
+async fn notification_listener_reports_which_peer_sent_the_notify() {
+    use tokio::io::AsyncWriteExt as _;
+
+    let bind = free_port().await;
+    let mut stream = crate::notification_listener(bind);
+
+    let body = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2">
+        <s:Body>
+          <wsnt:Notify>
+            <wsnt:NotificationMessage>
+              <wsnt:Topic>tns1:VideoSource/MotionAlarm</wsnt:Topic>
+              <wsnt:Message Message="">
+                <tt:Message UtcTime="2026-01-01T00:00:00Z" PropertyOperation="Initialized">
+                  <tt:Source/>
+                  <tt:Data/>
+                </tt:Message>
+              </wsnt:Message>
+            </wsnt:NotificationMessage>
+          </wsnt:Notify>
+        </s:Body>
+      </s:Envelope>"#;
+    let request = format!(
+        "POST /notify HTTP/1.1\r\nHost: example\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
+
+    let mut conn = tokio::net::TcpStream::connect(bind).await.unwrap();
+    let expected_peer = conn.local_addr().unwrap();
+    conn.write_all(request.as_bytes()).await.unwrap();
+
+    let msg = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+        .await
+        .expect("the listener should answer before the test times out")
+        .expect("the stream should yield a message");
+
+    assert_eq!(msg.peer, Some(expected_peer));
+}

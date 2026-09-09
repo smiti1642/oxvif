@@ -96,6 +96,17 @@ pub struct NotificationMessage {
     pub source: HashMap<String, String>,
     /// Data `SimpleItem` pairs (e.g. `IsMotion = "true"`).
     pub data: HashMap<String, String>,
+    /// The TCP peer address the notification arrived from, when this message
+    /// came from [`notification_listener`](crate::notification_listener).
+    /// `None` for a message read via `PullMessages`, which has no connection
+    /// of its own to report one from.
+    ///
+    /// This is the only thing that can tell two devices apart when several
+    /// share one listener: the XML body's own `Source` items are not reliable
+    /// for that (many devices always report the same generic token, e.g.
+    /// `VideoSource_1`, regardless of which device sent it).
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub peer: Option<std::net::SocketAddr>,
 }
 
 impl NotificationMessage {
@@ -140,6 +151,7 @@ impl NotificationMessage {
             property_operation,
             source,
             data,
+            peer: None,
         }
     }
 }

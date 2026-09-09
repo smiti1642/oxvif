@@ -324,6 +324,12 @@ impl OnvifClient {
 /// it, then call [`unsubscribe`](super::OnvifClient::unsubscribe) to cancel the
 /// device subscription.
 ///
+/// Each yielded [`NotificationMessage`] carries the TCP peer address it
+/// arrived from in [`peer`](NotificationMessage::peer), which is the way to
+/// tell devices apart when several are subscribed to the same listener,
+/// since the message body's own `Source` items are not reliably unique
+/// across devices.
+///
 /// # Example
 ///
 /// ```no_run
@@ -355,10 +361,11 @@ pub fn notification_listener(
         let Ok(listener) = tokio::net::TcpListener::bind(bind_addr).await else {
             return;
         };
-        while let Ok((mut conn, _)) = listener.accept().await {
+        while let Ok((mut conn, peer)) = listener.accept().await {
             let tx = tx.clone();
             tokio::spawn(async move {
-                for msg in handle_notify_connection(&mut conn).await {
+                for mut msg in handle_notify_connection(&mut conn).await {
+                    msg.peer = Some(peer);
                     if tx.send(msg).await.is_err() {
                         break; // receiver dropped — stream consumed
                     }

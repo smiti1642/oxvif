@@ -59,6 +59,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   exit semantics; stdout schema v3 and existing commands remain compatible.
   See the [maintenance guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md)
   for limits and manual acceptance.
+- `notification_listener`'s stream reports the TCP peer address a pushed
+  `Notify` arrived from, on the new `NotificationMessage.peer` field (`None`
+  for anything read via `PullMessages`, which has no live connection to take
+  an address from). This is the only reliable way to tell devices apart when
+  several share one listener, since the message body's own `Source` items
+  are frequently the same generic token across every device from one vendor.
 
 ### Changed
 
