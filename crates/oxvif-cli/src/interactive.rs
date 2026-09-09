@@ -255,7 +255,7 @@ fn profile_lines(choices: &[String], selected: usize, width: u16, height: u16) -
     panel_lines(
         &format!("Select media profile ({}/{})", selected + 1, choices.len()),
         &lines,
-        "j/k or arrows: move | PgUp/PgDn | Enter: select | Esc/q: cancel",
+        "j/k move | PgUp/Dn page | Ctrl+D/U half | Enter select | Esc/q cancel",
         width,
         height,
     )
@@ -270,6 +270,9 @@ fn profile_key(
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return Some(None);
     }
+    if half_page_key(selected, count.saturating_sub(1), page, key) {
+        return None;
+    }
     match key.code {
         KeyCode::Esc | KeyCode::Char('q') => return Some(None),
         KeyCode::Enter => return Some(Some(*selected)),
@@ -282,6 +285,19 @@ fn profile_key(
         _ => {}
     }
     None
+}
+
+fn half_page_key(position: &mut usize, maximum: usize, page: usize, key: KeyEvent) -> bool {
+    if !key.modifiers.contains(KeyModifiers::CONTROL) {
+        return false;
+    }
+    let step = (page / 2).max(1);
+    match key.code {
+        KeyCode::Char('d' | 'D') => *position = position.saturating_add(step).min(maximum),
+        KeyCode::Char('u' | 'U') => *position = position.saturating_sub(step),
+        _ => return false,
+    }
+    true
 }
 
 pub(crate) async fn await_discovery<F, T>(future: F) -> T
@@ -448,7 +464,7 @@ impl Panel {
             self.draw(
                 &format!("{title} [{}/{}]", selected + 1, choices.len()),
                 &body,
-                "j/k/arrows: move | PgUp/Dn | Enter: select | i: details | Esc/q: back",
+                "j/k move | PgUp/Dn page | Ctrl+D/U half | Enter select | i info | Esc/q back",
             )?;
             match event::read().map_err(terminal_error)? {
                 Event::Key(key) if key.kind != KeyEventKind::Release => {
@@ -484,9 +500,17 @@ impl Panel {
                     .take(rows)
                     .cloned()
                     .collect::<Vec<_>>(),
-                "j/k: scroll | PgUp/Dn | Home/End | Enter/Esc/q: back",
+                "j/k scroll | PgUp/Dn page | Ctrl+D/U half | Home/End | Enter/Esc/q back",
             )?;
             match event::read().map_err(terminal_error)? {
+                Event::Key(key)
+                    if key.kind != KeyEventKind::Release
+                        && half_page_key(
+                            &mut offset,
+                            lines.len().saturating_sub(rows),
+                            rows,
+                            key,
+                        ) => {}
                 Event::Key(key) if key.kind != KeyEventKind::Release => match key.code {
                     KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -645,6 +669,46 @@ fn panel_body_rows(height: u16) -> usize {
 
 fn separator(width: usize) -> String {
     "─".repeat(width)
+}
+
+/// Align structured menu cells across the entire list, not only the visible page.
+/// Center descriptive columns; keep the final address column left-aligned.
+pub(crate) fn aligned_menu_rows<const N: usize>(rows: &[[String; N]]) -> Vec<String> {
+    let safe_rows = rows
+        .iter()
+        .map(|row| {
+            row.each_ref()
+                .map(|cell| cell.chars().filter(|c| !c.is_control()).collect::<String>())
+        })
+        .collect::<Vec<_>>();
+    let widths: [usize; N] = std::array::from_fn(|column| {
+        safe_rows
+            .iter()
+            .map(|row| UnicodeWidthStr::width(row[column].as_str()))
+            .max()
+            .unwrap_or(0)
+    });
+    safe_rows
+        .iter()
+        .map(|row| {
+            row.iter()
+                .enumerate()
+                .map(|(column, cell)| {
+                    if column + 1 == N {
+                        return cell.clone();
+                    }
+                    let padding = widths[column] - UnicodeWidthStr::width(cell.as_str());
+                    format!(
+                        "{}{}{}",
+                        " ".repeat(padding / 2),
+                        cell,
+                        " ".repeat(padding - padding / 2)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" | ")
+        })
+        .collect()
 }
 
 fn panel_lines(title: &str, body: &[String], footer: &str, width: u16, height: u16) -> Vec<String> {
@@ -877,6 +941,26 @@ impl<'a> BrowserState<'a> {
     fn handle_key(&mut self, key: KeyEvent) -> Option<BrowserIntent> {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return Some(BrowserIntent::Quit);
+        }
+        if !self.filtering {
+            let handled = if self.showing_details {
+                half_page_key(
+                    &mut self.detail_scroll,
+                    self.detail_max_scroll,
+                    self.page_size,
+                    key,
+                )
+            } else {
+                half_page_key(
+                    &mut self.selected,
+                    self.filtered.len().saturating_sub(1),
+                    self.page_size,
+                    key,
+                )
+            };
+            if handled {
+                return None;
+            }
         }
         if self.showing_details {
             match key.code {
@@ -1189,10 +1273,17 @@ fn render(terminal: &mut TerminalSession, state: &mut BrowserState<'_>) -> Resul
         if state.filtering {
             "Type to filter | Enter/Esc: return | Ctrl-U: clear | Ctrl-C: quit"
         } else {
-            "j/k: move | h/l: page | i: details | /: search | r: saved | n: unregistered | A: all | q: quit"
+            "j/k move | h/l/PgUp/Dn page | Ctrl+D/U half | i details | Enter/a add | q quit"
         },
         width,
     );
+    if !state.filtering {
+        push_line(
+            &mut lines,
+            "/ search | r saved | n unregistered | A all",
+            width,
+        );
+    }
     draw_changed_lines(terminal, lines)
 }
 
@@ -1236,7 +1327,7 @@ fn render_details(
     push_line(&mut lines, &separator(width), width);
     push_line(
         &mut lines,
-        "j/k: scroll | h/l: page | g/G: first/last | i/Esc: back | q: quit",
+        "j/k scroll | h/l/PgUp/Dn page | Ctrl+D/U half | g/G ends | i/Esc back | q quit",
         width,
     );
     draw_changed_lines(terminal, lines)
@@ -1410,6 +1501,114 @@ fn terminal_error(error: io::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn menu_columns_center_to_longest_cell_across_pages_using_display_width() {
+        let rows = aligned_menu_rows(&[
+            ["new".into(), "http://192.0.2.1/onvif".into()],
+            ["saved".into(), "http://192.0.2.2/onvif".into()],
+        ]);
+        assert_eq!(
+            rows,
+            [
+                " new  | http://192.0.2.1/onvif",
+                "saved | http://192.0.2.2/onvif"
+            ]
+        );
+        let rows = aligned_menu_rows(&[
+            ["門\x1b".into(), "a".into(), "http://192.0.2.1".into()],
+            ["Camera".into(), "front".into(), "http://192.0.2.2".into()],
+        ]);
+        assert_eq!(
+            rows,
+            [
+                "  門   |   a   | http://192.0.2.1",
+                "Camera | front | http://192.0.2.2"
+            ]
+        );
+        let first = profile_lines(&rows, 0, 80, 5);
+        let second = profile_lines(&rows, 1, 80, 5);
+        for line in [&first[2], &second[2]] {
+            let prefix = line.split("http://").next().unwrap();
+            assert_eq!(UnicodeWidthStr::width(prefix), 19);
+        }
+        assert!(aligned_menu_rows::<2>(&[]).is_empty());
+    }
+
+    #[test]
+    fn half_page_navigation_is_bounded_and_requires_control() {
+        let mut position = 0;
+        for (code, modifiers, expected) in [
+            ('d', KeyModifiers::NONE, 0),
+            ('d', KeyModifiers::CONTROL, 2),
+            ('d', KeyModifiers::CONTROL, 4),
+            ('d', KeyModifiers::CONTROL, 6),
+            ('d', KeyModifiers::CONTROL, 6),
+            ('u', KeyModifiers::CONTROL, 4),
+            ('u', KeyModifiers::CONTROL, 2),
+            ('u', KeyModifiers::CONTROL, 0),
+            ('u', KeyModifiers::CONTROL, 0),
+        ] {
+            assert_eq!(
+                profile_key(
+                    &mut position,
+                    7,
+                    5,
+                    KeyEvent::new(KeyCode::Char(code), modifiers)
+                ),
+                None
+            );
+            assert_eq!(position, expected);
+        }
+        for page in [0, 1, 2] {
+            position = 0;
+            assert!(half_page_key(
+                &mut position,
+                10,
+                page,
+                KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL)
+            ));
+            assert_eq!(position, 1);
+        }
+    }
+
+    #[test]
+    fn discovery_half_pages_work_in_list_and_details_but_filter_control_u_clears() {
+        let devices = (1..=25)
+            .map(|i| view(&format!("192.0.2.{i}"), "Example", "Camera", None))
+            .collect::<Vec<_>>();
+        let mut state = BrowserState::new(&devices, 10, devices.len());
+        let down = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL);
+        let up = KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL);
+        state.handle_key(down);
+        assert_eq!(state.selected, 5);
+        state.handle_key(down);
+        assert_eq!(state.selected, 10);
+        state.handle_key(up);
+        assert_eq!(state.selected, 5);
+        state.showing_details = true;
+        state.detail_max_scroll = 8;
+        state.handle_key(down);
+        assert_eq!(state.detail_scroll, 5);
+        state.handle_key(down);
+        assert_eq!(state.detail_scroll, 8);
+        state.handle_key(up);
+        assert_eq!(state.detail_scroll, 3);
+        assert_eq!(state.selected, 5);
+        state.showing_details = false;
+        state.filtering = true;
+        state.query = "Example".into();
+        state.handle_key(down);
+        assert_eq!(state.query, "Example");
+        assert_eq!(state.selected, 5);
+        state.handle_key(up);
+        assert!(state.query.is_empty());
+        assert_eq!(state.filtered.len(), 25);
+        let mut empty = BrowserState::new(&[], 10, 0);
+        empty.handle_key(down);
+        empty.handle_key(up);
+        assert_eq!(empty.selected, 0);
+    }
 
     #[test]
     fn panel_separates_title_content_and_controls_without_hiding_content() {

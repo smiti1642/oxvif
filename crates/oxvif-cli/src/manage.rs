@@ -265,10 +265,18 @@ async fn choose_device(
 ) -> Result<Option<TargetSelector>, AppError> {
     loop {
         let (devices, _) = app.registry().list()?;
-        let mut choices = devices
-            .iter()
-            .map(|d| format!("{} | {} | {} (saved)", d.name, d.id, d.target))
-            .collect::<Vec<_>>();
+        let mut choices = super::interactive::aligned_menu_rows(
+            &devices
+                .iter()
+                .map(|d| {
+                    [
+                        d.name.clone(),
+                        d.id.clone(),
+                        format!("{} (saved)", d.target),
+                    ]
+                })
+                .collect::<Vec<_>>(),
+        );
         choices.extend([
             "Search network for cameras".into(),
             "Enter device address (session only)".into(),
@@ -321,20 +329,22 @@ async fn choose_device(
                 let CommandData::DiscoveryScan { devices, .. } = result.data else {
                     unreachable!()
                 };
-                let labels = devices
-                    .iter()
-                    .map(|d| {
-                        format!(
-                            "{} | {}",
-                            d.registration_status.as_str(),
-                            d.record
-                                .xaddrs
-                                .first()
-                                .map(String::as_str)
-                                .unwrap_or("No usable address")
-                        )
-                    })
-                    .collect::<Vec<_>>();
+                let labels = super::interactive::aligned_menu_rows(
+                    &devices
+                        .iter()
+                        .map(|d| {
+                            [
+                                d.registration_status.as_str().to_owned(),
+                                d.record
+                                    .xaddrs
+                                    .first()
+                                    .map(String::as_str)
+                                    .unwrap_or("No usable address")
+                                    .to_owned(),
+                            ]
+                        })
+                        .collect::<Vec<_>>(),
+                );
                 let details = devices
                     .iter()
                     .map(|d| serde_json::to_string_pretty(d).unwrap_or_default())

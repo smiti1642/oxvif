@@ -212,6 +212,8 @@ oxvif --timeout 3s discover refresh factory-scan
 setup，`q`、Esc 或 Ctrl-C 離開。`r` 切換只看已記錄裝置，`n` 切換只看尚未記錄的裝置
 （包含 incomplete），`A` 恢復全部。詳細頁沿用 `j`／`k`、`h`／`l` 與 `g`／`G` 捲動，
 按 `i` 或 Esc 返回清單。
+清單與詳細頁另支援 Ctrl+D／Ctrl+U 向下／向上移動半頁（向下取整，至少一筆或
+一行）；抵達邊界時停止。即時搜尋模式的 Ctrl+U 仍清除搜尋文字。
 
 選擇加入裝置後，Device ID、使用者名稱與遮蔽密碼會在同一個 terminal 畫面的內嵌表單輸入。
 Tab 或上下方向鍵切換欄位，Enter 前進或送出，Ctrl-U 清除目前欄位，Esc 則不儲存並返回探索清單。

@@ -272,6 +272,7 @@ terminal is shorter. Its key bindings are:
 | --- | --- |
 | `j` / `k`, Down / Up | Move the selection. |
 | `h` / `l`, Page Up / Page Down | Move one page backward or forward. |
+| Ctrl+D / Ctrl+U | Move down/up half a page in the list or details (rounded down, at least one item or line). In live search, Ctrl+U still clears the query. |
 | `g` / `G`, Home / End | Jump to the first or last match. |
 | `/` | Enter live search mode across identity, addressing, registration, types, and scopes. |
 | `c` | Clear the active filter. |

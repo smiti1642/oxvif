@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Interactive camera chooser columns are centered to their longest displayed
+  value across the full list, keeping separators and addresses aligned between
+  pages. Menus and scrollable views accept Ctrl+D / Ctrl+U for half-page movement;
+  input fields and discovery search retain Ctrl+U to clear text.
 - Interactive CLI screens separate headings, content and operation hints with
   terminal-width horizontal rules; compact maintenance/profile screens prioritize
   content when terminal height is limited. Machine output is unchanged.

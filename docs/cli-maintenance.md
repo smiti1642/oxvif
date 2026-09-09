@@ -52,6 +52,9 @@ Use a real terminal with stdin/stdout/stderr attached. `manage` rejects JSON,
 redirection, non-interactive and fleet execution before opening the interface.
 Select a saved device, explicitly search the network, or enter an address.
 Discovery marks saved/new records; direct/new devices remain session-only.
+Camera chooser status, name and ID columns use the longest value in the full list
+as their display width and center shorter values; addresses remain left-aligned.
+Column positions therefore remain consistent across pages, including Unicode text.
 Use **Session credentials (not saved)** if needed; passwords are masked and neither
 the registry nor saved credentials are changed. Restart the workspace to reload
 credentials modified outside it. Close the workspace before sharing your terminal.
@@ -61,6 +64,9 @@ profiles/device information, save snapshots, export or compare settings. Arrows 
 `j`/`k` move, Page Up/Down page, Enter selects, `i` opens item details, and Esc/`q`
 returns (at the device chooser it exits). Results scroll and remain available under
 **Last result details**. Failed actions do not replace the previous completed result.
+Menus, profile selection and scrollable results also accept Ctrl+D / Ctrl+U to move
+down/up half a page (rounded down, at least one item or line), stopping at either end.
+Input fields retain Ctrl+U to clear text; Page Up/Down still move a full page.
 Paths are entered within the same screen, without shell quotes or variable expansion;
 use a literal path and an existing parent directory. Existing destinations are refused.
 Long input scrolls to keep the caret visible; Left/Right/Home/End edit the path.
