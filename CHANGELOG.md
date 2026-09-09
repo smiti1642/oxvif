@@ -22,6 +22,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Human CLI navigation now shares a backend-free Vim-style core: `gg` / `G`,
+  counted `j` / `k`, absolute `nG` / `ngg`, hybrid relative numbers and compact
+  NORMAL / INPUT / SEARCH / BUSY status lines. Pending sequences are visible and
+  cancellable. Discovery's former single `g` becomes `gg`; Home remains available.
+  Input/search fields retain literal typing and Ctrl+U clearing. Recognized paste
+  events do not execute navigation; Windows/legacy paste-as-keystrokes remains a
+  terminal limitation. See the [navigation guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md#vim-style-navigation).
+- Bound centered camera description columns so an unusually long name does not
+  hide other camera identities. Cancelling a profile preflight now stops the entire
+  requested workflow instead of falling through into another diagnostic request.
 - Interactive camera chooser columns are centered to their longest displayed
   value across the full list, keeping separators and addresses aligned between
   pages. Menus and scrollable views accept Ctrl+D / Ctrl+U for half-page movement;

@@ -67,7 +67,7 @@ listed in the project [`README`](../README.md#command-line-interface) after
 independent install/remove verification. Until a native channel is listed, use
 crates.io or a checksum-verified portable artifact from the matching GitHub Release. The
 platform verification evidence is recorded in the
-[0.16.0 release notes](releases/0.16.0.md#pre-release-verification).
+[0.16.0 release notes](releases/0.16.0.md#release-verification).
 
 Confirm the available command surface after installation:
 
@@ -273,7 +273,8 @@ terminal is shorter. Its key bindings are:
 | `j` / `k`, Down / Up | Move the selection. |
 | `h` / `l`, Page Up / Page Down | Move one page backward or forward. |
 | Ctrl+D / Ctrl+U | Move down/up half a page in the list or details (rounded down, at least one item or line). In live search, Ctrl+U still clears the query. |
-| `g` / `G`, Home / End | Jump to the first or last match. |
+| `gg` / `G`, Home / End | Jump to the first or last match (development builds replace the old single `g`). |
+| `7j`, `3k`, `21G` / `21gg` | Counted movement or an absolute ordinal in the filtered list (development builds). |
 | `/` | Enter live search mode across identity, addressing, registration, types, and scopes. |
 | `c` | Clear the active filter. |
 | `r` | Toggle a saved-device-only view. |
@@ -282,6 +283,11 @@ terminal is shorter. Its key bindings are:
 | `i` | Open the selected device's scrollable detail view; use the same navigation keys and press `i` or Esc to return. |
 | Enter / `a` | Onboard the selected unregistered device through secure setup. |
 | `q`, Esc, Ctrl-C | Leave the browser without changing the registry. |
+
+Development builds share relative numbering, pending-sequence handling and a compact
+mode/status line with manage and profile selection. See [Vim-style navigation](cli-maintenance.md#vim-style-navigation)
+for the full contract, input-mode exceptions and Windows paste limitations; the new
+bindings are not part of published 0.16.0 packages.
 
 Onboarding opens an inline form in the same terminal screen for the device ID,
 username, and masked password. Use Tab or Up/Down to change fields, Enter to

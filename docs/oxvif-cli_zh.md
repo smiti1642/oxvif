@@ -101,7 +101,7 @@ APT 與 Homebrew package 只透過專案
 [`README`](../README.md#command-line-interface) 明確列出、且已完成獨立安裝／移除驗證的
 channel 發布。原生 channel 尚未列出時，請使用 crates.io 或對應 GitHub Release 所附且可
 核對 checksum 的 portable artifact。平台驗證證據記錄於
-[0.16.0 release notes](releases/0.16.0.md#pre-release-verification)。
+[0.16.0 release notes](releases/0.16.0.md#release-verification)。
 
 套件與執行檔名稱不同是刻意的：Cargo 使用 `oxvif-cli` 避免和 library crate `oxvif` 衝突，
 使用者則只需要記住 `oxvif <command>`。
@@ -206,14 +206,19 @@ oxvif --timeout 3s discover refresh factory-scan
 ```
 
 在互動式終端中，`discover` 會開啟最多每頁 12 筆的裝置瀏覽器；終端高度不足時會自動減少。
-`j`／`k` 或上下方向鍵移動，`h`／`l` 或 Page Up／Page Down 翻頁，`g`／`G` 跳到第一／最後
+`j`／`k` 或上下方向鍵移動，`h`／`l` 或 Page Up／Page Down 翻頁，`gg`／`G` 跳到第一／最後
 一筆，`/` 進入即時搜尋，`c` 清除搜尋，`i` 開啟選取裝置的可捲動詳細資訊頁，Enter 或 `a`
 對選取且尚未註冊的裝置執行安全
 setup，`q`、Esc 或 Ctrl-C 離開。`r` 切換只看已記錄裝置，`n` 切換只看尚未記錄的裝置
-（包含 incomplete），`A` 恢復全部。詳細頁沿用 `j`／`k`、`h`／`l` 與 `g`／`G` 捲動，
+（包含 incomplete），`A` 恢復全部。詳細頁沿用 `j`／`k`、`h`／`l` 與 `gg`／`G` 捲動，
 按 `i` 或 Esc 返回清單。
 清單與詳細頁另支援 Ctrl+D／Ctrl+U 向下／向上移動半頁（向下取整，至少一筆或
 一行）；抵達邊界時停止。即時搜尋模式的 Ctrl+U 仍清除搜尋文字。
+
+開發版另支援 `7j`、`3k` 及 `21G`／`21gg` 等數字操作，並與 manage、Profile 選擇
+共用相對行號、未完成序列處理與小型模式／狀態列。完整規則、輸入模式例外及 Windows
+貼上限制請見 [Vim 風格導航](cli-maintenance_zh.md#vim-風格導航)。上述新操作及單鍵
+`g` 改為 `gg` 的變更不包含在已發布的 0.16.0 套件中。
 
 選擇加入裝置後，Device ID、使用者名稱與遮蔽密碼會在同一個 terminal 畫面的內嵌表單輸入。
 Tab 或上下方向鍵切換欄位，Enter 前進或送出，Ctrl-U 清除目前欄位，Esc 則不儲存並返回探索清單。

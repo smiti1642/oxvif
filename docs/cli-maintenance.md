@@ -9,6 +9,7 @@ in published 0.16.0 packages. They do not modify camera configuration.
 | --- | --- |
 | [Build](#build) | Run without replacing an installed CLI |
 | [Guided workspace](#guided-workspace) | Continue maintenance in one terminal interface |
+| [Vim-style navigation](#vim-style-navigation) | Counts, relative numbers, modes and reusable core |
 | [Snapshot download](#snapshot-download) | Save an image safely |
 | [Layered diagnosis](#layered-diagnosis) | Inspect ONVIF and image delivery |
 | [Configuration inventory](#configuration-inventory) | Export and compare settings |
@@ -53,7 +54,8 @@ redirection, non-interactive and fleet execution before opening the interface.
 Select a saved device, explicitly search the network, or enter an address.
 Discovery marks saved/new records; direct/new devices remain session-only.
 Camera chooser status, name and ID columns use the longest value in the full list
-as their display width and center shorter values; addresses remain left-aligned.
+as their display width, capped at 24 terminal cells per descriptive column, and
+center shorter values; addresses remain left-aligned. Full values are available with `i`.
 Column positions therefore remain consistent across pages, including Unicode text.
 Use **Session credentials (not saved)** if needed; passwords are masked and neither
 the registry nor saved credentials are changed. Restart the workspace to reload
@@ -83,6 +85,61 @@ Missing values display `not provided`; `details_status=query_failed` identifies 
 failed optional metadata lookup. No main/substream roles or measured FPS are inferred.
 Metadata uses one additional bounded encoder-configuration operation, with the same
 SOAP retry policy. A metadata failure does not discard the usable profile list.
+
+## Vim-style navigation
+
+Manage menus, standalone profile selection, Discovery and read-only detail/result
+viewers share one navigation core. This is a Vim-inspired subset, not an editor.
+
+| Keys | Action in navigation mode |
+| --- | --- |
+| `j` / `k`, Down / Up | Move one item or display line. |
+| `7j`, `3k`, count + Down / Up | Move the specified number of items or lines. |
+| `gg`, Home | First entry. A single `g` waits for the second key. |
+| `G`, End | Last entry; in text viewers, show the final page. |
+| `21G`, `21gg` | Jump to ordinal 21 in the current list or wrapped text. |
+| PgUp / PgDown, Ctrl+U / Ctrl+D | Full/half-page movement; counts multiply the movement. |
+| Esc | Cancel a pending sequence first; otherwise return/cancel. |
+| Enter, `i`, `q` | Existing select/details/return actions when no prefix is pending. |
+
+The gutter uses **hybrid relative numbers**: the selected row (`>`) has its absolute
+one-based ordinal; other rows show distance from it. A `7` below the selection can
+be reached with `7j`. These are not immutable device IDs or original discovery record
+numbers (the separate `RECORD` column). Filtering restarts the ordinal space.
+Long text uses its first visible wrapped line as the anchor, not an editable cursor;
+`21G` positions line 21 at the top where possible. Resizing may reflow text and change
+its line numbers. Empty lists have no selectable row and show position `0/0`.
+
+The bottom status line displays `NORMAL`, `INPUT`, `SEARCH` or `BUSY`. Navigation
+status includes pending keys and current item/line position, for example
+`NORMAL | keys:12g | item 21/40`. `^D` / `^U` in the footer mean Ctrl+D / Ctrl+U.
+Counts are limited to six digits. No typing timeout is imposed. Unsupported sequences
+such as `3i`, `gq` or count+Enter are cancelled with a hint, without opening an item
+or leaving the screen. Ctrl+C remains immediate cancellation/exit.
+
+Search and text/password/path input do not interpret navigation keys: `123ggjk`
+remains text, and Ctrl+U clears it. Navigation prefixes reset on screen/mode/filter
+changes, resize or a recognized paste event. In navigation mode, recognized paste
+events are ignored rather than executed. Unix terminals supporting bracketed paste
+have that mode enabled/restored with the terminal session. **Windows' current native
+key-event backend and terminals that send paste as ordinary keystrokes cannot
+distinguish paste from typing. Do not paste commands into navigation screens.**
+This limitation does not change literal typing in input fields.
+
+Discovery preserves `h` / `l` page aliases and `/`, `r`, `n`, `A` filtering controls.
+In development builds, its old single `g` binding is replaced by `gg`; Home remains
+an immediate alternative. Published 0.16.0 packages have the older behavior.
+Small screens reduce decoration/gutter detail before losing the selected row; long
+camera names are truncated before column alignment so other identities remain visible.
+Cancelling a profile preflight returns to the action menu: dismissing its cancellation
+message does not start a second network operation. A genuine profile lookup failure
+may still allow diagnosis of other stages.
+
+The reusable implementation is `crates/oxvif-cli/src/navigation.rs`, independent of
+crossterm, ONVIF, async work and camera data. Its exact source can be tested without
+Cargo: `rustc --edition 2024 --test crates/oxvif-cli/src/navigation.rs -o navigation-tests`
+(use an `.exe` output on Windows), then run the resulting test binary. It currently
+ships inside the CLI, not as a separately published crate or stable public API.
 
 ## Snapshot download
 

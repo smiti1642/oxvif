@@ -2,7 +2,8 @@
 
 [English](cli-vim-navigation-plan.md) | [繁體中文](cli-vim-navigation-plan_zh.md)
 
-Status: implementation in progress; unreleased. Baseline: `e7c8250`, including centered camera columns and
+Status: M1–M5 implemented and locally validated, including independent Agent review; unreleased.
+Baseline: `e7c8250`, including centered camera columns and
 Ctrl+D / Ctrl+U half-page movement. Scope: human-facing terminal navigation only.
 
 | Section | Purpose |
@@ -13,6 +14,7 @@ Ctrl+D / Ctrl+U half-page movement. Scope: human-facing terminal navigation only
 | [Reusable architecture](#reusable-architecture) | Core, adapter and application responsibilities |
 | [Implementation milestones](#implementation-milestones) | Ordered work and exit criteria |
 | [Verification](#verification) | Automated tests and terminal acceptance |
+| [Acceptance record](#acceptance-record) | Observed results, fixes and remaining platform checks |
 | [Documentation and delivery](#documentation-and-delivery) | Documentation, packaging and release boundaries |
 
 ## Objectives and boundaries
@@ -147,7 +149,7 @@ agree on package naming and publish order before such an extraction.
    details and Discovery details. Account for wrapped-line numbering, scroll limits,
    status/footer height, resizing and compact terminals. Forms/progress-only screens
    must not acquire a navigation cursor or consume text as navigation.
-5. [ ] **M5 — Verification and documentation.** Run the gates below; synchronize
+5. [x] **M5 — Verification and documentation.** Run the gates below; synchronize
    bilingual user documentation and help. Record observed results and limitations,
    then make a scoped local commit. No release or system installation in this phase.
 6. [ ] **M6 — Future standalone crate (deferred).** Revisit only after oxvif acceptance
@@ -187,6 +189,45 @@ Native macOS/Linux terminal checks are required before claiming three-platform U
 acceptance; Windows plus pure-core tests alone do not establish that. If independent
 first-use critique is requested for implementation, perform it after main-agent
 testing and distinguish agent-simulated critique from a real human study.
+
+## Acceptance record
+
+Local validation on Windows x64, 2026-09-09, covers the initial implementation,
+not Release publication or three-platform terminal UX certification.
+
+| Check | Observed result |
+| --- | --- |
+| Workspace gates | Formatting and default/all-feature all-target Clippy with `-D warnings` passed; default tests: 1,041 passed, 4 existing conditional ignores; all-feature tests: 1,121 passed, 4 existing conditional ignores |
+| Compatibility and reuse | Rust 1.88 workspace all-target/all-feature check passed; the exact navigation source compiled with plain `rustc --test` and passed all 4 tests; package file listing includes the core and its Cargo test harness |
+| Main-agent terminal check | Isolated synthetic registry; `7j`, `3k`, `21G`, pending `g`, Esc cancellation, details scrolling/return, literal `123ggjk` input and Ctrl+U clearing behaved as expected; terminal restored and exit code was 0 |
+| Independent Agent review | Windows ConPTY, 41 synthetic devices, ASCII/Unicode and long names: counted/absolute navigation, full/half pages, invalid sequences, mode isolation, stable gutter and detail selection retention passed |
+| Wrapped-text recheck | A 59-display-line detail view accepted `3j`, `6G`, `gg`, `4gg`; `G` showed a full final page spanning lines 41–59; clean exit code 0 |
+| Cancellation recheck | BUSY → Esc → cancellation view → q returned to NORMAL without restarting diagnosis; the stalled loopback server recorded exactly one connection |
+| Regression strength | Perturbing the count expectation failed the core assertion. Reintroducing unbounded column width and cancellation fallthrough failed both dedicated regression assertions; restored code passed the full gates |
+
+The reviewer found two P2 defects: a very long centered name hid other camera
+identities, and cancellation of optional profile lookup could fall through into a
+new diagnosis request. Both were fixed in `3b5c720` and independently rechecked.
+The navigation core and initial UI integration are recorded in `88040d5` and
+`634ab33`. This is Agent-operated first-use critique, not a human usability study.
+
+Remaining limitations and follow-up:
+
+- Windows' native key-event backend can expose pasted text as ordinary keystrokes.
+  Paste only into INPUT/SEARCH fields; NORMAL mode cannot reliably identify paste.
+  Unix bracketed-paste events are handled separately, but native Unix terminal
+  behavior still requires platform acceptance.
+- Small-screen and resize layout calculations have automated coverage. Actual
+  host-driven terminal resize was not verified; an attempted console-buffer change
+  did not produce a valid host resize and is not counted as a pass.
+- Native macOS/Linux interactive checks and real-camera acceptance were not run.
+  No real credentials or LAN discovery were used for this acceptance.
+- Existing manage transitions can reset selection to the first action after
+  cancelling credentials, or to the first camera after leaving the action menu.
+  Preserving these positions is a low-priority follow-up; closing item details
+  already preserves the selected item.
+- M6 remains deferred: the reusable core is an internal, backend-free module,
+  not a separately published crate or stable public API.
 
 ## Documentation and delivery
 
