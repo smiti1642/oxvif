@@ -2,8 +2,7 @@
 
 [English](cli-vim-navigation-plan.md) | [繁體中文](cli-vim-navigation-plan_zh.md)
 
-Status: planned; implementation has not started. This document does not announce
-an available feature. Baseline: `e7c8250`, including centered camera columns and
+Status: implementation in progress; unreleased. Baseline: `e7c8250`, including centered camera columns and
 Ctrl+D / Ctrl+U half-page movement. Scope: human-facing terminal navigation only.
 
 | Section | Purpose |
@@ -134,7 +133,7 @@ agree on package naming and publish order before such an extraction.
 
 ## Implementation milestones
 
-1. [ ] **M1 — Core and grammar.** Implement the pure parser, bounded calculations
+1. [x] **M1 — Core and grammar.** Implement the pure parser, bounded calculations
    and relative-number helpers. Pin the contract above with table-driven tests and
    prove the backend-free harness compiles and passes. No camera/terminal access.
 2. [ ] **M2 — Adapter and mode boundaries.** Add one event adapter, pending-sequence
@@ -202,6 +201,8 @@ testing and distinguish agent-simulated critique from a real human study.
   does not require a schema/Agent guide version bump or new machine command.
 - Keep plan status and unchecked milestones accurate. Record test evidence and any
   remaining platform gates before declaring M1–M5 complete.
-- No crate publication, GitHub Release/tag, push, merge, package-manager submission,
-  system CLI replacement or new external dependency is authorized by this plan.
-  Release and installation remain separately controlled operations.
+- The subsequent implementation request authorizes staged commits, a compact mode/
+  pending-input/position status line, independent Agent testing, then merging and
+  synchronizing `develop` and `master` after acceptance. Preserve unrelated changes
+  and never force-push. Crate/Release publication, system installation and new external
+  dependencies remain outside scope.
