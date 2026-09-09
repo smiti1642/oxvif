@@ -22,6 +22,9 @@ use tokio::time::{Instant, MissedTickBehavior, interval};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 use zeroize::Zeroize;
 
+#[cfg(unix)]
+use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste};
+
 use crate::navigation::{self, Key as NavKey, Navigation, Outcome, Viewport};
 
 const DEFAULT_PAGE_SIZE: usize = 12;
@@ -353,7 +356,7 @@ fn menu_frame(
     panel_lines(
         title,
         &body,
-        "j/k n-j/k | gg/G nG | PgUp/Dn ^D/^U | Enter select | i info | Esc/q back",
+        "j/k 7j/3k | gg/G nG | PgUp/Dn ^D/^U | Enter select | i info | Esc/q back",
         &nav_status("NORMAL", nav, view.selected, choices.len()),
         width,
         height,
@@ -469,7 +472,7 @@ pub(crate) fn browse_discovery(
                 state.nav.reset();
                 terminal.invalidate()?;
             }
-            Event::Paste(value) => {
+            Event::Paste(mut value) => {
                 state.nav.reset();
                 if let Some(form) = setup_form.as_mut() {
                     form.paste(&value);
@@ -477,6 +480,7 @@ pub(crate) fn browse_discovery(
                     state.query.push_str(&value);
                     state.rebuild_filter();
                 }
+                value.zeroize();
             }
             _ => {}
         }
@@ -583,7 +587,7 @@ impl Panel {
             self.draw(
                 title,
                 &body,
-                "j/k n-j/k | gg/G nG | PgUp/Dn ^D/^U | Enter/Esc/q back",
+                "j/k 7j/3k | gg/G nG | PgUp/Dn ^D/^U | Enter/Esc/q back",
                 &nav_status("NORMAL (TEXT)", &nav, offset, lines.len()),
             )?;
             match event::read().map_err(terminal_error)? {
@@ -757,13 +761,24 @@ fn separator(width: usize) -> String {
 }
 
 /// Align structured menu cells across the entire list, not only the visible page.
-/// Center descriptive columns; keep the final address column left-aligned.
+/// Center descriptive columns, capped at 24 display cells so one long value
+/// cannot push every other row off-screen. Full values remain in item details.
+/// Keep the final address column left-aligned.
 pub(crate) fn aligned_menu_rows<const N: usize>(rows: &[[String; N]]) -> Vec<String> {
-    let safe_rows = rows
+    let safe_rows: Vec<[String; N]> = rows
         .iter()
         .map(|row| {
-            row.each_ref()
-                .map(|cell| cell.chars().filter(|c| !c.is_control()).collect::<String>())
+            std::array::from_fn(|column| {
+                let safe = row[column]
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .collect::<String>();
+                if column + 1 == N {
+                    safe
+                } else {
+                    truncate_to_width(&safe, 24)
+                }
+            })
         })
         .collect::<Vec<_>>();
     let widths: [usize; N] = std::array::from_fn(|column| {
@@ -917,20 +932,24 @@ impl TerminalSession {
     }
     fn enter() -> Result<Self, AppError> {
         enable_raw_mode().map_err(terminal_error)?;
-        let mut stdout = io::stdout();
-        if let Err(error) = execute!(stdout, EnterAlternateScreen, Hide) {
-            let _ = disable_raw_mode();
-            return Err(terminal_error(error));
-        }
-        Ok(Self {
-            stdout,
+        let mut session = Self {
+            stdout: io::stdout(),
             previous_lines: Vec::new(),
-        })
+        };
+        // The guard restores raw/alternate-screen state even if setup only partly succeeds.
+        execute!(session.stdout, EnterAlternateScreen, Hide).map_err(terminal_error)?;
+        // Windows' native key-event backend cannot distinguish paste from typing.
+        // Do not enable a paste protocol that this backend cannot decode.
+        #[cfg(unix)]
+        execute!(session.stdout, EnableBracketedPaste).map_err(terminal_error)?;
+        Ok(session)
     }
 }
 
 impl Drop for TerminalSession {
     fn drop(&mut self) {
+        #[cfg(unix)]
+        let _ = execute!(self.stdout, DisableBracketedPaste);
         let _ = execute!(
             self.stdout,
             EndSynchronizedUpdate,
@@ -1313,7 +1332,7 @@ fn discovery_frame(state: &BrowserState<'_>, width: u16, height: u16) -> Vec<Str
         if state.filtering {
             "Type search | Enter/Esc back | Ctrl-U clear | Ctrl-C quit"
         } else {
-            "j/k n-j/k gg/G | ^D/^U PgUp/Dn | / r n A filter | i info | Enter add | q quit"
+            "j/k 7j/3k gg/G | ^D/^U PgUp/Dn | / r n A filter | i info | Enter add | q quit"
         },
         &nav_status(
             if state.filtering { "SEARCH" } else { "NORMAL" },
@@ -1362,7 +1381,7 @@ fn render_details(
         panel_lines(
             "oxvif discovery - device details",
             &body,
-            "j/k n-j/k gg/G nG | h/l PgUp/Dn ^D/^U | i/Esc back | q quit",
+            "j/k 7j/3k gg/G nG | h/l PgUp/Dn ^D/^U | i/Esc back | q quit",
             &nav_status(
                 "NORMAL (TEXT)",
                 &state.nav,
@@ -1677,6 +1696,32 @@ mod tests {
             assert_eq!(UnicodeWidthStr::width(prefix), 21);
         }
         assert!(aligned_menu_rows::<2>(&[]).is_empty());
+    }
+
+    #[test]
+    fn long_name_does_not_hide_other_camera_identities() {
+        let rows = aligned_menu_rows(&[
+            [
+                "Cam 1".into(),
+                "nav-01".into(),
+                "http://127.0.0.1/onvif".into(),
+            ],
+            [
+                "攝影機長名稱".repeat(80),
+                "nav-wrap".into(),
+                "http://127.0.0.2/onvif".into(),
+            ],
+        ]);
+        for width in [48, 80, 120] {
+            let frame = profile_lines(&rows, 0, width, 24);
+            let selected = frame.iter().find(|s| s.starts_with('>')).unwrap();
+            assert!(selected.contains("Cam 1"), "{selected}");
+            assert!(selected.contains("nav-01"), "{selected}");
+            if width >= 80 {
+                assert!(selected.contains("http://127.0.0.1/onvif"));
+            }
+        }
+        assert!(rows[1].contains('…'));
     }
 
     #[test]

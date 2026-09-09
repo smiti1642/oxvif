@@ -9,6 +9,20 @@ use oxvif_cli::{
 
 use crate::interactive::Panel;
 
+enum WorkflowOutcome {
+    Completed(Box<CommandSuccess>),
+    Failed,
+    Cancelled,
+}
+
+fn proceed_after_profiles(choice: usize, outcome: &WorkflowOutcome) -> bool {
+    match outcome {
+        WorkflowOutcome::Completed(_) => true,
+        WorkflowOutcome::Failed => choice == 0,
+        WorkflowOutcome::Cancelled => false,
+    }
+}
+
 pub(crate) async fn run(
     app: &Application,
     initial: TargetSelector,
@@ -101,9 +115,13 @@ pub(crate) async fn run(
                 continue;
             }
             if choice == 1 || ((choice == 0 || choice == 2) && profile.is_none()) {
-                if let Some(result) =
-                    execute(&mut panel, &mut context, ManagedAction::Profiles).await?
-                {
+                let outcome = execute(&mut panel, &mut context, ManagedAction::Profiles).await?;
+                // A failed optional lookup may still yield useful diagnosis, but a
+                // user's cancellation must never fall through into another request.
+                if !proceed_after_profiles(choice, &outcome) {
+                    continue;
+                }
+                if let WorkflowOutcome::Completed(result) = outcome {
                     let CommandData::DeviceDiagnostic { result: data, .. } = &result.data else {
                         unreachable!()
                     };
@@ -134,10 +152,8 @@ pub(crate) async fn run(
                         }
                     }
                     if choice == 1 {
-                        last = Some(result);
+                        last = Some(*result);
                     }
-                } else if choice != 0 {
-                    continue;
                 }
                 if choice == 1 {
                     continue;
@@ -188,7 +204,9 @@ pub(crate) async fn run(
                 6 => ManagedAction::Info,
                 _ => continue,
             };
-            if let Some(result) = execute(&mut panel, &mut context, action).await? {
+            if let WorkflowOutcome::Completed(result) =
+                execute(&mut panel, &mut context, action).await?
+            {
                 let title = format!(
                     "Operation finished | exit {} | Enter: continue",
                     result.exit_code()
@@ -200,7 +218,7 @@ pub(crate) async fn run(
                         "Open Last result details for stage details and timings.",
                     ),
                 )?;
-                last = Some(result);
+                last = Some(*result);
             }
         }
     }
@@ -210,22 +228,22 @@ async fn execute(
     panel: &mut Panel,
     context: &mut ManagedDevice,
     action: ManagedAction,
-) -> Result<Option<CommandSuccess>, AppError> {
+) -> Result<WorkflowOutcome, AppError> {
     let status = if context.needs_connection() {
         "Connecting / reconnecting (new, expired or previous failure)"
     } else {
         "Reusing session; running live request"
     };
     match panel.wait(status, context.execute(action)).await? {
-        Some(Ok(result)) => Ok(Some(result)),
+        Some(Ok(result)) => Ok(WorkflowOutcome::Completed(Box::new(result))),
         Some(Err(error)) => {
             panel.show("Operation failed; earlier result retained", &format!("{}\n{}\nCheck the target, ONVIF permissions or session credentials. No automatic alternate profile or TLS bypass was used.", error.code.as_str(), error.message))?;
-            Ok(None)
+            Ok(WorkflowOutcome::Failed)
         }
         None => {
             context.disconnect();
             panel.show("Operation cancelled", "Earlier completed result retained. Next operation reconnects. If saving a file, inspect the destination before trying again; completed files are never overwritten.")?;
-            Ok(None)
+            Ok(WorkflowOutcome::Cancelled)
         }
     }
 }
@@ -378,5 +396,20 @@ async fn choose_device(
             Some(Err(error)) => panel.show("Discovery failed", &error.message)?,
             None => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancelled_profile_preflight_never_starts_diagnosis_or_snapshot() {
+        for choice in [0, 1, 2] {
+            assert!(!proceed_after_profiles(choice, &WorkflowOutcome::Cancelled));
+        }
+        assert!(proceed_after_profiles(0, &WorkflowOutcome::Failed));
+        assert!(!proceed_after_profiles(1, &WorkflowOutcome::Failed));
+        assert!(!proceed_after_profiles(2, &WorkflowOutcome::Failed));
     }
 }
