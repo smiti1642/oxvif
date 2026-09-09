@@ -362,6 +362,17 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             "Compare live settings with a same-camera inventory; differences are data, incomplete checks exit 20.",
             vec![required("against", "inventory file path")],
         ),
+        descriptor(
+            "manage",
+            "Human-only guided workspace; no camera writes. Agents use individual typed commands. Refuses JSON/non-interactive mode.",
+            RiskLevel::Write,
+            false,
+            false,
+            vec![
+                optional("id", "saved device ID"),
+                optional("target", "url | host"),
+            ],
+        ),
     ];
     assert_eq!(
         commands.len(),
@@ -884,6 +895,7 @@ fn argument_allowed_values(name: &str) -> Vec<String> {
 
 fn command_example(name: &str) -> &'static str {
     match name {
+        "manage" => "oxvif manage",
         "media.snapshot-save" => {
             "oxvif --device front-door media snapshot-save --profile profile-1 --save camera.jpg --output json --non-interactive"
         }

@@ -8,6 +8,7 @@
 | 章節 | 用途 |
 | --- | --- |
 | [建置](#建置) | 不替換已安裝 CLI 的執行方式 |
+| [引導式工作區](#引導式工作區) | 在同一終端介面連續執行維運 |
 | [快照下載](#快照下載) | 安全保存圖片 |
 | [分層診斷](#分層診斷) | 檢查 ONVIF 與圖片傳輸 |
 | [設定盤點](#設定盤點) | 匯出與比較設定 |
@@ -31,6 +32,39 @@ cargo build -p oxvif-cli --locked
 指令專屬選項仍維持原作用範圍，例如 discovery 的 jobs。快照保存、診斷、匯出及比較
 較慢時，僅在互動終端的 stderr 顯示經過時間；`--quiet` 可停用。JSON／JSONL 與
 重新導向輸出不顯示進度，也不要求互動輸入。
+
+## 引導式工作區
+
+```sh
+oxvif manage
+oxvif manage front-door
+oxvif manage --target 192.168.1.100 --timeout 3s
+```
+
+stdin／stdout／stderr 均須連接真實終端。`manage` 會拒絕 JSON、重新導向、非互動
+及批次呼叫，不開啟介面。可選擇已存設備、明確啟動網路搜尋或直接輸入位址。
+搜尋結果標示已存／新設備；直接連線及新設備僅限本次工作階段，不自動保存。
+需要認證時使用 **Session credentials (not saved)**；密碼遮蔽顯示，不修改設備
+清單或既有憑證。若在外部修改憑證，請重開工作區以重新載入。分享終端前應關閉工作區。
+
+工作區保留設備及已選 profile，可連續診斷、檢視 profiles／設備資訊、保存快照、
+匯出或比較設定。方向鍵或 `j`／`k` 移動，Page Up／Down 翻頁，Enter 選取，`i`
+檢視項目詳情，Esc／`q` 返回；在設備選擇頁則退出。結果可捲動，並可透過
+**Last result details** 再次檢視。失敗操作不取代先前完成的結果。
+路徑在同一畫面輸入，不加 shell 引號，也不展開變數；請輸入實際路徑並使用已存在
+的父目錄。已存在的目的檔會被拒絕。
+長輸入會水平捲動以保持游標可見，可用 Left／Right／Home／End 編輯。
+目的檔驗證失敗後保留原輸入供修正，不清空重填。
+
+Session 最長保留 60 秒，操作失敗或取消後失效；介面標示重用或重新連線，不將
+快取視為在線證明。網路等待時可按 Esc／Ctrl-C 取消；完成的輸出檔可能已存在，
+重試前請先確認目的檔。正常關閉 `manage` 回傳 0，各操作退出碼在結果頁獨立顯示。
+自動化應使用個別命令，而非此互動介面。
+
+Profile 詳情新增設備回報的編碼、解析度及設定 FPS 上限。缺值顯示 `not provided`，
+`details_status=query_failed` 表示選用的中繼資料查詢失敗。不推測主副串流角色，
+不將設定值視為實測 FPS。補充資料使用一次有界影像編碼設定操作，遵循 SOAP 重試
+政策；補充查詢失敗不丟棄已取得的 profile 清單。
 
 ## 快照下載
 
@@ -126,7 +160,7 @@ oxvif config diff front-door --against baseline.json --output json --non-interac
 
 人類與 Agent 使用共用的型別化請求。自動化應指定明確目標、`--output json` 或
 `jsonl`，以及 `--non-interactive`。以實際執行檔的 `describe` 查詢能力；目前開發版
-內建 Agent guide 為版本 7。基礎 stdout envelope 維持 schema 版本 3。新增操作
+內建 Agent guide 為版本 8。基礎 stdout envelope 維持 schema 版本 3。新增操作
 回傳 `device_diagnostic`；批次診斷使用 `fleet_diagnostic` 或 JSONL `fleet_item`
 記錄，最後附上 `fleet_summary`。
 
@@ -148,6 +182,14 @@ null 的 `selected_profile`。Profile 查詢／選取資料提供含 `name`、`t
 | `PROFILE_INTERACTION_FAILED` | 終端介面失敗，保留先前檢查 |
 
 以上欄位均為增補；schema 版本 3 與既有退出碼意義維持不變。
+
+`assessment` 新增 `primary_issue`、`additional_issues`、`blocked_checks` 及
+`limitations`。每項問題包含 `stage`、`code`、`observed`、`suggested_action`
+及 `certainty=observed_failure_not_root_cause`。主要問題是最先失敗的階段，不是
+已證實的根本原因；逾時不代表密碼錯誤。人類摘要使用同一份判讀資料。
+`media.profiles` 保留原陣列及欄位，各筆新增可為 null 的 `video` 與
+`details_status`；診斷候選資料提供相同中繼資料。`video.source` 明確標示
+`device_configuration_not_measured`，不表示實測播放品質。
 
 | 結果 | 退出碼 | 說明 |
 | --- | ---: | --- |

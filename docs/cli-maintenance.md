@@ -8,6 +8,7 @@ in published 0.16.0 packages. They do not modify camera configuration.
 | Section | Purpose |
 | --- | --- |
 | [Build](#build) | Run without replacing an installed CLI |
+| [Guided workspace](#guided-workspace) | Continue maintenance in one terminal interface |
 | [Snapshot download](#snapshot-download) | Save an image safely |
 | [Layered diagnosis](#layered-diagnosis) | Inspect ONVIF and image delivery |
 | [Configuration inventory](#configuration-inventory) | Export and compare settings |
@@ -34,6 +35,44 @@ Maintenance selectors and execution options can precede or follow the command:
 Slow snapshot-save, diagnosis, export and diff operations show elapsed-time text
 only on interactive stderr, unless `--quiet` is set. JSON/JSONL and redirected
 output never show progress or request interactive input.
+
+## Guided workspace
+
+```sh
+oxvif manage
+oxvif manage front-door
+oxvif manage --target 192.168.1.100 --timeout 3s
+```
+
+Use a real terminal with stdin/stdout/stderr attached. `manage` rejects JSON,
+redirection, non-interactive and fleet execution before opening the interface.
+Select a saved device, explicitly search the network, or enter an address.
+Discovery marks saved/new records; direct/new devices remain session-only.
+Use **Session credentials (not saved)** if needed; passwords are masked and neither
+the registry nor saved credentials are changed. Restart the workspace to reload
+credentials modified outside it. Close the workspace before sharing your terminal.
+
+The workspace retains the device and chosen profile while you diagnose, inspect
+profiles/device information, save snapshots, export or compare settings. Arrows or
+`j`/`k` move, Page Up/Down page, Enter selects, `i` opens item details, and Esc/`q`
+returns (at the device chooser it exits). Results scroll and remain available under
+**Last result details**. Failed actions do not replace the previous completed result.
+Paths are entered within the same screen, without shell quotes or variable expansion;
+use a literal path and an existing parent directory. Existing destinations are refused.
+Long input scrolls to keep the caret visible; Left/Right/Home/End edit the path.
+Destination validation retains the entered path for correction instead of clearing it.
+
+Sessions expire after 60 seconds; failures/cancellation invalidate them. The interface
+announces reuse or reconnect. A cached session is not a liveness claim. Esc/Ctrl-C
+can cancel pending network work; a completed output file may already exist, so inspect
+the destination before retrying. Closing `manage` normally returns 0; each operation
+displays its own exit status. Automation must use individual commands, not this UI.
+
+Profile details add camera-reported encoding, resolution and configured FPS limit.
+Missing values display `not provided`; `details_status=query_failed` identifies a
+failed optional metadata lookup. No main/substream roles or measured FPS are inferred.
+Metadata uses one additional bounded encoder-configuration operation, with the same
+SOAP retry policy. A metadata failure does not discard the usable profile list.
 
 ## Snapshot download
 
@@ -147,7 +186,7 @@ when settings differ: inspect `matches` and `changes`.
 
 Both human and Agent calls use shared typed requests. Use explicit selectors,
 `--output json` or `jsonl`, and `--non-interactive`. Run `describe` against the
-installed executable; the embedded Agent guide is version 7 in this checkout.
+installed executable; the embedded Agent guide is version 8 in this checkout.
 The base stdout envelope remains schema version 3. New operations return
 `device_diagnostic`; fleet diagnosis uses `fleet_diagnostic` or JSONL
 `fleet_item` records followed by `fleet_summary`.
@@ -171,6 +210,15 @@ For compatibility, the selection stage retains `error_code` =
 | `PROFILE_INTERACTION_FAILED` | Terminal adapter failed; earlier checks retained |
 
 These fields are additive; schema version 3 and existing exit meanings are unchanged.
+
+`assessment` adds `primary_issue`, `additional_issues`, `blocked_checks` and
+`limitations`. Each issue includes `stage`, `code`, `observed`, `suggested_action`
+and `certainty=observed_failure_not_root_cause`. The primary issue is the first
+failed stage, not a proven root cause; a timeout is not proof of bad credentials.
+Human summaries show the same assessment. `media.profiles` retains its array shape
+and existing fields, adding nullable `video` and `details_status` to each record;
+diagnosis candidates contain the same metadata. `video.source` explicitly labels
+the values as `device_configuration_not_measured`.
 
 | Outcome | Exit | Result |
 | --- | ---: | --- |

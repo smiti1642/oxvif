@@ -81,6 +81,19 @@ impl Application {
         &self.registry
     }
 
+    /// Resolve one target for a guided read-only maintenance context without connecting yet.
+    pub fn manage_device(
+        &self,
+        selector: crate::TargetSelector,
+        options: &ExecutionOptions,
+    ) -> Result<crate::ManagedDevice, AppError> {
+        crate::maintenance::single_target(&selector)?;
+        Ok(crate::ManagedDevice::new(
+            self.resolve_target(selector)?,
+            options.clone(),
+        ))
+    }
+
     /// Validate setup inputs and secret-slot availability before a CLI prompts.
     pub fn preflight_setup(&self, device: &crate::NewDevice) -> Result<(), AppError> {
         self.registry.validate_new(device)?;
@@ -1396,6 +1409,9 @@ async fn execute_diagnostic(
 ) -> Result<serde_json::Value, AppError> {
     if let DiagnosticOperation::Workflow(operation) = &operation {
         return crate::maintenance::execute(resolved, operation, options).await;
+    }
+    if matches!(&operation, DiagnosticOperation::MediaProfiles) {
+        return crate::maintenance::standalone_profiles(resolved, options).await;
     }
     if matches!(&operation, DiagnosticOperation::Health) {
         return execute_health_check(resolved, options).await;

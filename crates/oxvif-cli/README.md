@@ -43,8 +43,11 @@ configuration exports are not restorable backups. See the
 [maintenance guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md)
 for file safety, retained failure reports, JSON/exit semantics and acceptance tests.
 Diagnosis provides a paginated profile selector in human terminals, summary-first
-reports and `-v` details. JSON/JSONL never prompt; Agent guide v7 documents additive
+reports and `-v` details. JSON/JSONL never prompt; Agent guide v8 documents additive
 selection reasons/candidates while retaining schema v3 and existing exit meanings.
+Development `oxvif manage` provides a guided terminal workspace for these operations,
+with retained device/profile context, session-only credentials and bounded session reuse.
+Camera-reported profile settings and diagnostic assessments are also available to Agents.
 
 On Windows, macOS, or a Linux desktop session with Secret Service, onboard one
 camera with a no-echo password prompt, live verification, native credential

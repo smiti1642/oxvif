@@ -133,6 +133,8 @@ camera-setting comparison; see [maintenance workflows](docs/cli-maintenance.md).
 These additions are not yet released and do not verify video playback or restore settings.
 Diagnosis includes interactive profile selection, concise summaries and `-v` stage
 details; automation receives the same evidence as structured reports.
+`oxvif manage` connects these operations in one guided terminal workspace, retaining
+the chosen device/profile; see the [guided workflow](docs/cli-maintenance.md#guided-workspace).
 
 Discovery marks every result as `SAVED`, `NEW`, or `INCOMPLETE`; both terminal
 users and Agents can filter current scans or saved snapshots by that status.

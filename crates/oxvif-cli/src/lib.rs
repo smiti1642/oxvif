@@ -26,8 +26,8 @@ mod output;
 mod registry;
 
 pub use maintenance::{
-    ConfigDiffRequest, ConfigExportRequest, DiagnoseRequest, ProfileChoice, ProfilePicker,
-    SnapshotSaveRequest,
+    ConfigDiffRequest, ConfigExportRequest, DiagnoseRequest, ManagedAction, ManagedDevice,
+    ProfileChoice, ProfilePicker, SnapshotSaveRequest,
 };
 
 pub use application::{Application, ClockSyncPolicy, ExecutionOptions};
@@ -56,7 +56,7 @@ pub use inventory::{
     FilterOperator, GroupMemberView, GroupView, ImportDisposition, MatchMode, NewGroup,
     NewSavedView, SavedView, ViewExplanation, discovery_query_matches,
 };
-pub use output::{render_error, render_success, render_success_with_details};
+pub use output::{profile_label, render_error, render_success, render_success_with_details};
 pub use registry::{
     DeviceMetadata, DeviceUpdate, DeviceView, NewDevice, REGISTRY_VERSION, RegistryStore,
     normalize_target, validate_device_id,

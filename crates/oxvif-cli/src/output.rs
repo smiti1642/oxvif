@@ -24,6 +24,7 @@ pub fn render_success_with_details(
 ) -> Result<String, AppError> {
     let mut output = render_success(format, success)?;
     if details && format == OutputFormat::Table {
+        output = output.replace("\nUse -v for stage details and timings.", "");
         match &success.data {
             CommandData::DeviceDiagnostic {
                 operation, result, ..
@@ -590,6 +591,58 @@ fn render_workflow_summary(result: &serde_json::Value) -> String {
     if let Some(token) = result["selected_profile"].as_str() {
         let _ = write!(output, "\nProfile: {token}");
     }
+    if let Some(assessment) = result.get("assessment") {
+        if let Some(issue) = assessment.get("primary_issue").filter(|v| !v.is_null()) {
+            let _ = write!(
+                output,
+                "\nPrimary observed issue: {} [{}]\n{}\nNext: {}",
+                string_field(issue, "stage"),
+                string_field(issue, "code"),
+                string_field(issue, "observed"),
+                string_field(issue, "suggested_action")
+            );
+        }
+        for (field, label) in [
+            ("blocked_checks", "Not run because prerequisites failed"),
+            ("limitations", "Not implemented"),
+        ] {
+            if let Some(items) = assessment[field].as_array().filter(|a| !a.is_empty()) {
+                let _ = write!(
+                    output,
+                    "\n{label}: {}",
+                    items
+                        .iter()
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
+        if let Some(issues) = assessment["additional_issues"].as_array() {
+            for issue in issues {
+                let _ = write!(
+                    output,
+                    "\nAdditional issue: {} [{}]: {}",
+                    string_field(issue, "stage"),
+                    string_field(issue, "code"),
+                    string_field(issue, "observed")
+                );
+            }
+        }
+        if let Some(stages) = result["stages"].as_array() {
+            for stage in stages.iter().filter(|s| s["name"] == "profile_selection") {
+                if let Some(candidates) = stage["data"]["candidates"].as_array() {
+                    for candidate in candidates {
+                        let _ = write!(output, "\n  {}", profile_label(candidate));
+                    }
+                }
+            }
+        }
+        output.push_str(
+            "\nVideo playback has NOT been verified.\nUse -v for stage details and timings.",
+        );
+        return output;
+    }
     if let Some(stages) = result["stages"].as_array() {
         for stage in stages.iter().filter(|s| s["status"] == "fail") {
             let reason = stage["data"]["reason_code"]
@@ -720,8 +773,34 @@ fn render_profiles(result: &serde_json::Value) -> String {
             present_field(profile, &["audio_source_token", "audio_encoder_token"]),
             present_field(profile, &["ptz_config_token"]),
         );
+        let _ = write!(output, "\n  {}", profile_label(profile));
     }
     output
+}
+
+/// Compact device-reported profile settings; absent values are never inferred.
+pub fn profile_label(profile: &serde_json::Value) -> String {
+    let video = &profile["video"];
+    let display = |key: &str| {
+        video
+            .get(key)
+            .filter(|v| !v.is_null())
+            .map(|v| {
+                v.as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| v.to_string())
+            })
+            .unwrap_or_else(|| "not provided".into())
+    };
+    format!(
+        "{} ({}) | {} | {} x {} | FPS limit: {} (configured)",
+        string_field(profile, "name"),
+        string_field(profile, "token"),
+        display("encoding"),
+        display("width"),
+        display("height"),
+        display("fps_limit")
+    )
 }
 
 fn render_capabilities(result: &serde_json::Value) -> String {

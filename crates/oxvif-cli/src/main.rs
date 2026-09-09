@@ -26,6 +26,7 @@ use oxvif_cli::{
 use tokio::time::Instant;
 
 mod interactive;
+mod manage;
 
 use interactive::{BrowserAction, DiscoverySetup, await_discovery, browse_discovery};
 
@@ -177,6 +178,14 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// Guided human workspace: choose a camera and continue maintenance without retyping IDs.
+    Manage {
+        /// Optional saved-device ID; otherwise choose from saved devices or discovery.
+        id: Option<String>,
+        /// Device IP address, hostname or ONVIF URL; connect without saving a device.
+        #[arg(long, conflicts_with = "id")]
+        target: Option<String>,
+    },
     /// Securely register, authenticate, verify, and select a device.
     Setup {
         /// Device host, IP address, or ONVIF device-service URL.
@@ -684,6 +693,7 @@ enum CredentialCommands {
 
 fn surface_command_id(command: &Commands) -> CommandId {
     match command {
+        Commands::Manage { .. } => CommandId::Manage,
         Commands::Setup { .. } => CommandId::Setup,
         Commands::Auth { .. } => CommandId::Auth,
         Commands::Info { .. } => CommandId::Info,
@@ -897,6 +907,35 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         }
     };
     let prompt = SystemPrompt;
+    if let Commands::Manage { id, target } = &cli.command {
+        if !interactive_terminal_available(format, &options)
+            || cli.group.is_some()
+            || cli.view.is_some()
+        {
+            let error = AppError::invalid_argument(
+                "manage requires an interactive terminal and one device. Agents should use list, profiles, diagnose, snapshot --save and config export/diff with JSON and --non-interactive.",
+            );
+            emit_error(format, &error, Some("manage"));
+            return error.exit_code();
+        }
+        if cli.device.is_some() && (id.is_some() || target.is_some()) {
+            let error = AppError::invalid_argument("Use only one of ID, --device or --target.");
+            emit_error(format, &error, Some("manage"));
+            return error.exit_code();
+        }
+        let selector = TargetSelector {
+            device: id.clone().or(cli.device),
+            target: target.clone(),
+            ..Default::default()
+        };
+        return match Box::pin(manage::run(&application, selector, &options)).await {
+            Ok(()) => 0,
+            Err(error) => {
+                emit_error(format, &error, Some("manage"));
+                error.exit_code()
+            }
+        };
+    }
     if matches!(cli.command, Commands::Setup { target: None, .. }) {
         if !interactive_terminal_available(format, &options) {
             let error = AppError::invalid_argument(
@@ -1257,6 +1296,9 @@ fn build_request(
     };
 
     let request = match command {
+        Commands::Manage { .. } => Err(AppError::invalid_argument(
+            "manage is a terminal adapter; use individual typed operations for automation.",
+        )),
         Commands::Setup {
             target,
             id,
@@ -2117,6 +2159,7 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
         root,
         Some(
             "health"
+                | "manage"
                 | "diagnose"
                 | "snapshot"
                 | "stream"

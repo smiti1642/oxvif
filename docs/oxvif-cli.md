@@ -555,9 +555,13 @@ and do not modify camera configuration. See the [maintenance guide](cli-maintena
 for examples, download/authentication limits, baseline format and manual acceptance.
 Diagnosis offers a paginated name/token selector in interactive terminals and
 summary-first reports (`-v` expands stages). JSON/JSONL and redirected calls never
-prompt. The development Agent guide v7 describes additive selection reasons and
+prompt. The development Agent guide v8 describes additive selection reasons and
 untested-stage reasons without changing schema v3. Maintenance root selectors and
 execution options are accepted before or after the command.
+Use `oxvif manage` for a [guided workspace](cli-maintenance.md#guided-workspace)
+that retains device/profile context across operations. It requires a human terminal;
+Agents continue to use individual commands and receive the same diagnostic assessment
+and device-reported profile settings through structured output.
 
 `diagnose` verifies ONVIF and snapshot delivery, not RTSP playback. Failed or
 incomplete workflows can return exit `20` with retained `data.result` and

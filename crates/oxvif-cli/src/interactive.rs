@@ -413,6 +413,308 @@ struct TerminalSession {
     previous_lines: Vec<String>,
 }
 
+/// One alternate screen retained across the guided maintenance workflow.
+pub(crate) struct Panel(TerminalSession);
+
+impl Panel {
+    pub(crate) fn enter() -> Result<Self, AppError> {
+        TerminalSession::enter().map(Self)
+    }
+
+    fn draw(&mut self, title: &str, body: &[String], footer: &str) -> Result<usize, AppError> {
+        let (width, height) = terminal::size().map_err(terminal_error)?;
+        let rows = usize::from(height.saturating_sub(3)).max(1);
+        let mut lines = vec![title.to_owned(), String::new()];
+        lines.extend(body.iter().take(rows).cloned());
+        lines.push(footer.into());
+        let lines = lines
+            .into_iter()
+            .take(height as usize)
+            .map(|s| {
+                let safe: String = s.chars().filter(|c| !c.is_control()).collect();
+                truncate_to_width(&safe, width.saturating_sub(1) as usize)
+            })
+            .collect();
+        draw_changed_lines(&mut self.0, lines)?;
+        Ok(rows)
+    }
+
+    pub(crate) fn menu(
+        &mut self,
+        title: &str,
+        choices: &[String],
+        details: &[String],
+    ) -> Result<Option<usize>, AppError> {
+        if choices.is_empty() {
+            self.show(title, "No items available.")?;
+            return Ok(None);
+        }
+        let mut selected = 0;
+        loop {
+            let (_, height) = terminal::size().map_err(terminal_error)?;
+            let rows = usize::from(height.saturating_sub(3)).max(1);
+            let start = selected / rows * rows;
+            let body = choices
+                .iter()
+                .enumerate()
+                .skip(start)
+                .take(rows)
+                .map(|(i, s)| format!("{} {s}", if i == selected { ">" } else { " " }))
+                .collect::<Vec<_>>();
+            self.draw(
+                &format!("{title} [{}/{}]", selected + 1, choices.len()),
+                &body,
+                "j/k/arrows: move | PgUp/Dn | Enter: select | i: details | Esc/q: back",
+            )?;
+            match event::read().map_err(terminal_error)? {
+                Event::Key(key) if key.kind != KeyEventKind::Release => {
+                    if key.code == KeyCode::Char('i') {
+                        self.show(
+                            "Details (reported data, not measured playback)",
+                            details.get(selected).unwrap_or(&choices[selected]),
+                        )?;
+                    } else if let Some(result) =
+                        profile_key(&mut selected, choices.len(), rows, key)
+                    {
+                        return Ok(result);
+                    }
+                }
+                Event::Resize(_, _) => self.0.previous_lines.clear(),
+                _ => {}
+            }
+        }
+    }
+
+    pub(crate) fn show(&mut self, title: &str, text: &str) -> Result<(), AppError> {
+        let mut offset = 0usize;
+        loop {
+            let (width, height) = terminal::size().map_err(terminal_error)?;
+            let rows = usize::from(height.saturating_sub(3)).max(1);
+            let lines = wrap_panel_text(text, width.saturating_sub(1) as usize);
+            offset = offset.min(lines.len().saturating_sub(rows));
+            self.draw(
+                title,
+                &lines
+                    .iter()
+                    .skip(offset)
+                    .take(rows)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                "j/k: scroll | PgUp/Dn | Home/End | Enter/Esc/q: back",
+            )?;
+            match event::read().map_err(terminal_error)? {
+                Event::Key(key) if key.kind != KeyEventKind::Release => match key.code {
+                    KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(());
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => offset = offset.saturating_add(1),
+                    KeyCode::Up | KeyCode::Char('k') => offset = offset.saturating_sub(1),
+                    KeyCode::PageDown => offset = offset.saturating_add(rows),
+                    KeyCode::PageUp => offset = offset.saturating_sub(rows),
+                    KeyCode::Home => offset = 0,
+                    KeyCode::End => offset = lines.len(),
+                    _ => {}
+                },
+                Event::Resize(_, _) => self.0.previous_lines.clear(),
+                _ => {}
+            }
+        }
+    }
+
+    pub(crate) fn input(&mut self, title: &str, label: &str) -> Result<Option<String>, AppError> {
+        self.input_inner(title, label, false, "")
+    }
+
+    pub(crate) fn input_with_initial(
+        &mut self,
+        title: &str,
+        label: &str,
+        initial: &str,
+    ) -> Result<Option<String>, AppError> {
+        self.input_inner(title, label, false, initial)
+    }
+
+    pub(crate) fn password(&mut self) -> Result<Option<String>, AppError> {
+        self.input_inner(
+            "Session credentials (not saved)",
+            "ONVIF password:",
+            true,
+            "",
+        )
+    }
+
+    fn input_inner(
+        &mut self,
+        title: &str,
+        label: &str,
+        secret: bool,
+        initial: &str,
+    ) -> Result<Option<String>, AppError> {
+        let mut value = zeroize::Zeroizing::new(initial.to_owned());
+        let mut cursor = value.len();
+        loop {
+            self.draw(
+                title,
+                &[
+                    label.into(),
+                    input_view(
+                        &value,
+                        cursor,
+                        terminal::size()
+                            .map_err(terminal_error)?
+                            .0
+                            .saturating_sub(1) as usize,
+                        secret,
+                    ),
+                ],
+                "Enter: confirm | Esc: cancel | Left/Right/Home/End: edit | Ctrl-U: clear",
+            )?;
+            match event::read().map_err(terminal_error)? {
+                Event::Key(key) if key.kind != KeyEventKind::Release => match key.code {
+                    KeyCode::Esc => return Ok(None),
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(None);
+                    }
+                    KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        value.clear();
+                        cursor = 0;
+                    }
+                    KeyCode::Enter if !value.is_empty() => {
+                        return Ok(Some(std::mem::take(&mut *value)));
+                    }
+                    KeyCode::Backspace => {
+                        if cursor > 0 {
+                            let previous = previous_boundary(&value, cursor);
+                            value.drain(previous..cursor);
+                            cursor = previous;
+                        }
+                    }
+                    KeyCode::Delete if cursor < value.len() => {
+                        value.remove(cursor);
+                    }
+                    KeyCode::Left => cursor = previous_boundary(&value, cursor),
+                    KeyCode::Right if cursor < value.len() => {
+                        cursor += value[cursor..]
+                            .chars()
+                            .next()
+                            .expect("character")
+                            .len_utf8()
+                    }
+                    KeyCode::Home => cursor = 0,
+                    KeyCode::End => cursor = value.len(),
+                    KeyCode::Char(c)
+                        if !c.is_control() && !key.modifiers.contains(KeyModifiers::CONTROL) =>
+                    {
+                        value.insert(cursor, c);
+                        cursor += c.len_utf8();
+                    }
+                    _ => {}
+                },
+                Event::Paste(mut text) => {
+                    let clean = zeroize::Zeroizing::new(
+                        text.chars().filter(|c| !c.is_control()).collect::<String>(),
+                    );
+                    value.insert_str(cursor, &clean);
+                    cursor += clean.len();
+                    text.zeroize();
+                }
+                Event::Resize(_, _) => self.0.previous_lines.clear(),
+                _ => {}
+            }
+        }
+    }
+
+    pub(crate) async fn wait<F: Future>(
+        &mut self,
+        title: &str,
+        future: F,
+    ) -> Result<Option<F::Output>, AppError> {
+        let start = Instant::now();
+        let mut ticker = interval(Duration::from_millis(100));
+        ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        tokio::pin!(future);
+        loop {
+            tokio::select! {
+                biased;
+                result = &mut future => return Ok(Some(result)),
+                _ = ticker.tick() => {
+                    self.draw(title, &[format!("Working... {}s elapsed", start.elapsed().as_secs())], "Esc/Ctrl-C: cancel; completed results remain available")?;
+                    if event::poll(Duration::ZERO).map_err(terminal_error)? {
+                        match event::read().map_err(terminal_error)? {
+                            Event::Key(key) if key.kind != KeyEventKind::Release && (key.code == KeyCode::Esc || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))) => return Ok(None),
+                            Event::Resize(_, _) => self.0.previous_lines.clear(),
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn previous_boundary(value: &str, cursor: usize) -> usize {
+    value[..cursor]
+        .char_indices()
+        .next_back()
+        .map(|(i, _)| i)
+        .unwrap_or(0)
+}
+
+fn input_view(value: &str, cursor: usize, width: usize, secret: bool) -> String {
+    if width == 0 {
+        return String::new();
+    }
+    if width == 1 {
+        return "│".into();
+    }
+    let chars = |s: &str| {
+        s.chars()
+            .map(|c| if secret { '*' } else { c })
+            .collect::<String>()
+    };
+    let before = chars(&value[..cursor]);
+    let after = chars(&value[cursor..]);
+    let mut prefix = before.clone();
+    if UnicodeWidthStr::width(before.as_str()) >= width {
+        let mut tail = Vec::new();
+        let mut used = 0;
+        for c in before.chars().rev() {
+            let size = UnicodeWidthChar::width(c).unwrap_or(0);
+            if used + size > width.saturating_sub(2) {
+                break;
+            }
+            used += size;
+            tail.push(c);
+        }
+        prefix = format!("…{}", tail.into_iter().rev().collect::<String>());
+    }
+    let used = UnicodeWidthStr::width(prefix.as_str()) + 1;
+    format!(
+        "{prefix}│{}",
+        truncate_to_width(&after, width.saturating_sub(used))
+    )
+}
+
+fn wrap_panel_text(text: &str, width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    for line in text.lines() {
+        let mut row = String::new();
+        let mut used = 0;
+        for c in line.chars().filter(|c| !c.is_control()) {
+            let size = UnicodeWidthChar::width(c).unwrap_or(0);
+            if used + size > width.max(1) && !row.is_empty() {
+                lines.push(std::mem::take(&mut row));
+                used = 0;
+            }
+            row.push(c);
+            used += size;
+        }
+        lines.push(row);
+    }
+    lines
+}
+
 impl TerminalSession {
     fn enter() -> Result<Self, AppError> {
         enable_raw_mode().map_err(terminal_error)?;
@@ -1088,6 +1390,29 @@ fn terminal_error(error: io::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guided_input_scrolls_to_cursor_and_never_displays_secrets() {
+        let path = "C:/long-parent/攝影機/very-long-folder/snapshot.jpg";
+        let end = input_view(path, path.len(), 20, false);
+        assert!(end.ends_with("snapshot.jpg│"), "{end}");
+        assert!(end.starts_with('…'));
+        assert!(input_view(path, 0, 20, false).starts_with("│C:/"));
+        for width in [0, 1, 2, 8, 20, 80] {
+            assert!(
+                UnicodeWidthStr::width(input_view(path, path.len(), width, false).as_str())
+                    <= width
+            );
+            let masked = input_view("private密碼", "private密碼".len(), width, true);
+            assert!(!masked.contains("private") && !masked.contains('密'));
+        }
+        assert_eq!(previous_boundary("a密", "a密".len()), 1);
+        assert_eq!(previous_boundary("a密", 1), 0);
+        assert_eq!(
+            wrap_panel_text("AB攝影機\n\x1btext", 4),
+            vec!["AB攝", "影機", "text"]
+        );
+    }
 
     #[test]
     fn profile_navigation_is_bounded_and_cancel_is_not_a_selection() {

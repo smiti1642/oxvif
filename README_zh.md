@@ -129,6 +129,8 @@ hostname 驗證。
 或設定還原。
 診斷提供互動 profile 選取、精簡摘要及 `-v` 階段詳情；自動化可透過結構化報告
 取得相同檢查證據。
+`oxvif manage` 將這些操作整合為保留設備／profile 的終端工作區，詳見
+[引導式工作區](docs/cli-maintenance_zh.md#引導式工作區)。
 
 Discovery 會將每筆結果標示為 `SAVED`、`NEW` 或 `INCOMPLETE`；終端使用者與 Agent
 都能依相同狀態篩選即時掃描及已保存的 snapshot。終端瀏覽器可按 `i` 開啟可捲動的

@@ -31,7 +31,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - CLI `config export` / `config diff` provide versioned read-only camera-setting
   inventories and JSON Pointer differences. Partial sections remain incomparable;
   exports are not restorable backups. File workflows are single-device.
-- Embedded Agent guide v7 documents retained failure reports, profile selection
+- Embedded Agent guide v8 documents retained failure reports, profile selection
   reason codes/candidates, untested-stage reasons and new workflow
   exit semantics; stdout schema v3 and existing commands remain compatible.
   See the [maintenance guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md)
@@ -39,6 +39,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Add development-only `manage`, a terminal workspace retaining device/profile
+  context across diagnosis, snapshots and configuration inventory/comparison.
+  Reuse sessions for at most 60 seconds and invalidate after failures/cancellation;
+  session-only credentials never replace saved credentials. JSON/non-interactive
+  callers use existing commands instead. No camera settings are changed.
+- Profile reports add optional configured encoding/resolution/FPS and explicit
+  metadata availability. Diagnostic assessments distinguish observed failures,
+  dependent untested checks and unimplemented limitations for humans and Agents.
 - Maintenance commands accept root selectors and execution options before or
   after the command, preserving command-local options. Diagnosis reuses its session
   for an optional paginated human profile picker; cancellation retains prior checks.

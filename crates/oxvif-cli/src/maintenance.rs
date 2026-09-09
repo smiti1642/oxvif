@@ -63,6 +63,212 @@ pub struct DiagnoseRequest {
 pub struct ProfileChoice {
     pub token: String,
     pub name: String,
+    /// Device-reported configuration, not measured playback quality.
+    pub video: Option<Value>,
+    pub details_status: String,
+}
+
+/// Operations available in a retained single-device maintenance context.
+#[derive(Clone, Debug)]
+pub enum ManagedAction {
+    Info,
+    Profiles,
+    Diagnose { profile: Option<String> },
+    Snapshot { profile: String, save: PathBuf },
+    Export { save: PathBuf },
+    Diff { against: PathBuf },
+}
+
+/// Short-lived session context. Does not mutate the current-device registry.
+/// Cached sessions expire after 60 seconds and are invalidated after a failed operation.
+pub struct ManagedDevice {
+    resolved: ResolvedTarget,
+    options: ExecutionOptions,
+    session: Option<OnvifSession>,
+    connected_at: Option<Instant>,
+}
+
+impl ManagedDevice {
+    pub(crate) fn new(resolved: ResolvedTarget, options: ExecutionOptions) -> Self {
+        Self {
+            resolved,
+            options,
+            session: None,
+            connected_at: None,
+        }
+    }
+
+    pub fn target(&self) -> &str {
+        &self.resolved.target
+    }
+
+    /// Discard a session after cancellation or an explicit reconnect request.
+    pub fn disconnect(&mut self) {
+        self.session = None;
+        self.connected_at = None;
+    }
+
+    /// Replace credentials for this context only; never writes the credential store.
+    pub fn set_credentials(&mut self, username: String, password: crate::SecretString) {
+        self.resolved.username = Some(username);
+        self.resolved.password = Some(password);
+        self.disconnect();
+    }
+
+    /// Whether the next operation must establish a fresh ONVIF session.
+    pub fn needs_connection(&self) -> bool {
+        self.session.is_none()
+            || self
+                .connected_at
+                .is_none_or(|at| at.elapsed() >= Duration::from_secs(60))
+    }
+
+    /// Run the same bounded operations used by non-interactive commands.
+    /// Output-file validation happens before network access; writes never auto-retry.
+    pub async fn execute(
+        &mut self,
+        action: ManagedAction,
+    ) -> Result<crate::CommandSuccess, AppError> {
+        let workflow = match &action {
+            ManagedAction::Diagnose { profile } => Some(Workflow::Diagnose {
+                profile: profile.clone(),
+            }),
+            ManagedAction::Snapshot { profile, save } => {
+                validate_destination(save)?;
+                if profile.trim().is_empty() {
+                    return Err(AppError::invalid_argument("Select a profile first."));
+                }
+                Some(Workflow::Snapshot {
+                    profile: profile.clone(),
+                    save: save.clone(),
+                })
+            }
+            ManagedAction::Export { save } => {
+                validate_destination(save)?;
+                Some(Workflow::Export { save: save.clone() })
+            }
+            ManagedAction::Diff { against } => Some(Workflow::Diff {
+                baseline: read_baseline(against)?,
+            }),
+            _ => None,
+        };
+        let started = Instant::now();
+        let connected = if self.needs_connection() {
+            self.session = None;
+            let (step, session) = connect(&self.resolved, &self.options).await?;
+            self.session = session;
+            self.connected_at = self.session.as_ref().map(|_| Instant::now());
+            step
+        } else {
+            Step::new(
+                "onvif_session",
+                Status::Pass,
+                "Reused session; subsequent checks establish current behavior.",
+                "",
+            )
+        };
+        let name = match &action {
+            ManagedAction::Info => "device.info",
+            ManagedAction::Profiles => "media.profiles",
+            _ => workflow.as_ref().expect("workflow action").name(),
+        };
+        let value = if let Some(workflow) = workflow.as_ref() {
+            execute_connected(
+                &self.resolved,
+                workflow,
+                &self.options,
+                connected,
+                self.session.as_ref(),
+            )
+            .await
+        } else if let Some(session) = self.session.as_ref() {
+            match action {
+                ManagedAction::Profiles => profile_report(session, &self.options).await,
+                ManagedAction::Info => {
+                    let (step, info) =
+                        onvif_step("device_info", &self.options, || session.get_device_info())
+                            .await;
+                    info.map(|info| json!(info))
+                        .ok_or_else(|| AppError::device_operation_failed(step.detail, false))
+                }
+                _ => unreachable!(),
+            }
+        } else {
+            Err(AppError::device_operation_failed(connected.detail, false))
+        };
+        if value.as_ref().map_or(true, |v| {
+            v["complete"] == false || v["failed"].as_u64().unwrap_or(0) > 0
+        }) {
+            self.session = None;
+        }
+        Ok(crate::CommandSuccess {
+            data: crate::CommandData::DeviceDiagnostic {
+                operation: name.into(),
+                device_id: self.resolved.device_id.clone(),
+                target: self.resolved.target.clone(),
+                result: value?,
+            },
+            warnings: Vec::new(),
+            meta: crate::ResultMeta {
+                command: Some(name.into()),
+                device_id: self.resolved.device_id.clone(),
+                selected_by: self.resolved.selected_by.clone(),
+                target: Some(self.resolved.target.clone()),
+                elapsed_ms: elapsed(started),
+            },
+        })
+    }
+}
+
+async fn profile_choices(
+    session: &OnvifSession,
+    profiles: &[oxvif::MediaProfile],
+    options: &ExecutionOptions,
+) -> Vec<ProfileChoice> {
+    if profiles.is_empty() {
+        return Vec::new();
+    }
+    let (step, configs) = onvif_step("profile_details", options, || {
+        session.get_video_encoder_configurations()
+    })
+    .await;
+    profiles.iter().map(|p| {
+        let config = configs.as_ref().and_then(|configs| configs.iter().find(|c| Some(&c.token) == p.video_encoder_token.as_ref()));
+        ProfileChoice { token: p.token.clone(), name: p.name.clone(),
+            video: config.map(|c| json!({"encoding": c.encoding.to_string(), "width": c.resolution.width, "height": c.resolution.height, "fps_limit": c.rate_control.as_ref().map(|r| r.frame_rate_limit), "source": "device_configuration_not_measured"})),
+            details_status: if config.is_some() { "reported" } else if matches!(step.status, Status::Fail) { "query_failed" } else { "not_provided" }.into(),
+        }
+    }).collect()
+}
+
+pub(crate) async fn profile_report(
+    session: &OnvifSession,
+    options: &ExecutionOptions,
+) -> Result<Value, AppError> {
+    let (step, profiles) = onvif_step("media_profiles", options, || session.get_profiles()).await;
+    let profiles = profiles.ok_or_else(|| AppError::device_operation_failed(step.detail, false))?;
+    let choices = profile_choices(session, &profiles, options).await;
+    Ok(Value::Array(
+        profiles
+            .iter()
+            .zip(choices)
+            .map(|(p, c)| {
+                let mut value = json!(p);
+                value["video"] = json!(c.video);
+                value["details_status"] = json!(c.details_status);
+                value
+            })
+            .collect(),
+    ))
+}
+
+pub(crate) async fn standalone_profiles(
+    resolved: &ResolvedTarget,
+    options: &ExecutionOptions,
+) -> Result<Value, AppError> {
+    let (step, session) = connect(resolved, options).await?;
+    let session = session.ok_or_else(|| AppError::device_operation_failed(step.detail, false))?;
+    profile_report(&session, options).await
 }
 
 /// Optional human adapter. `None` means cancellation, never automatic fallback.
@@ -180,10 +386,15 @@ pub(crate) fn single_target(selector: &TargetSelector) -> Result<(), AppError> {
 pub(crate) fn validate_destination(path: &Path) -> Result<(), AppError> {
     match fs::symlink_metadata(path) {
         Ok(_) => {
-            return Err(AppError::resource_exists(
-                "output file",
-                &path.display().to_string(),
-            ));
+            return Err(AppError {
+                code: crate::ErrorCode::ResourceAlreadyExists,
+                message: format!(
+                    "Output file already exists: {}. Nothing was overwritten.",
+                    path.display()
+                ),
+                retryable: false,
+                suggested_action: Some("Choose another destination path.".into()),
+            });
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(_) => return Err(AppError::registry_io("Cannot inspect output destination.")),
@@ -290,12 +501,22 @@ pub(crate) async fn execute(
     options: &ExecutionOptions,
 ) -> Result<Value, AppError> {
     let (connect, session) = connect(resolved, options).await?;
+    execute_connected(resolved, operation, options, connect, session.as_ref()).await
+}
+
+async fn execute_connected(
+    resolved: &ResolvedTarget,
+    operation: &Workflow,
+    options: &ExecutionOptions,
+    connect: Step,
+    session: Option<&OnvifSession>,
+) -> Result<Value, AppError> {
     if let Workflow::Diagnose { profile } = operation {
         return diagnose(
             resolved,
             options,
             connect,
-            session.as_ref(),
+            session,
             profile.as_deref(),
             None,
         )
@@ -323,7 +544,7 @@ pub(crate) async fn execute(
             )
         }
         Workflow::Export { save } => {
-            let inventory = collect_inventory(&session, options).await?;
+            let inventory = collect_inventory(session, options).await?;
             let bytes = serde_json::to_vec_pretty(&inventory)
                 .map_err(|_| AppError::serialization_failed("Cannot serialize inventory."))?;
             if bytes.len() as u64 > MAX_INVENTORY_BYTES {
@@ -335,7 +556,7 @@ pub(crate) async fn execute(
             )
         }
         Workflow::Diff { baseline } => {
-            let live = collect_inventory(&session, options).await?;
+            let live = collect_inventory(session, options).await?;
             compare(baseline, &live)
         }
         Workflow::Diagnose { .. } => unreachable!("diagnose is handled above"),
@@ -514,18 +735,11 @@ async fn diagnose(
         stages.push(info);
         let (mut profiles_step, profiles) =
             onvif_step("media_profiles", options, || session.get_profiles()).await;
-        let candidates = profiles
-            .as_ref()
-            .map(|profiles| {
-                profiles
-                    .iter()
-                    .map(|p| ProfileChoice {
-                        token: p.token.clone(),
-                        name: p.name.clone(),
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        let candidates = if let Some(profiles) = profiles.as_ref() {
+            profile_choices(session, profiles, options).await
+        } else {
+            Vec::new()
+        };
         if let Some(profiles) = &profiles {
             profiles_step.data = Some(
                 json!({"profiles": profiles.iter().map(|p| &p.token).collect::<Vec<_>>(), "candidates": candidates}),
@@ -665,11 +879,27 @@ async fn diagnose(
         .count();
     Ok(
         json!({"failed": failed, "complete": complete, "stages": stages, "playback_verified": false,
-            "selected_profile": selected_profile,
+            "selected_profile": selected_profile, "assessment": assess(&stages),
             "summary": {"passed": stages.iter().filter(|s| matches!(s.status, Status::Pass)).count(),
                 "failed": failed, "unsupported": stages.iter().filter(|s| matches!(s.status, Status::Unsupported)).count(),
                 "not_tested": stages.iter().filter(|s| matches!(s.status, Status::NotTested)).count()}}),
     )
+}
+
+fn assess(stages: &[Step]) -> Value {
+    let issues = stages.iter().filter(|s| matches!(s.status, Status::Fail)).map(|s| {
+        let code = s.data.as_ref().and_then(|d| d["reason_code"].as_str()).or(s.error_code.as_deref());
+        json!({"stage": s.name, "code": code, "observed": s.detail, "suggested_action": s.next_step, "certainty": "observed_failure_not_root_cause"})
+    }).collect::<Vec<_>>();
+    let names = |reason: &str| {
+        stages
+            .iter()
+            .filter(|s| s.not_tested_reason.as_deref() == Some(reason))
+            .map(|s| &s.name)
+            .collect::<Vec<_>>()
+    };
+    json!({"primary_issue": issues.first(), "additional_issues": issues.iter().skip(1).collect::<Vec<_>>(),
+        "blocked_checks": names("prerequisite_failed"), "limitations": names("not_implemented")})
 }
 
 fn snapshot_url(uri: &str, device: &str) -> Result<url::Url, AppError> {
@@ -1356,6 +1586,125 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    #[tokio::test]
+    async fn managed_session_reuses_expires_and_preserves_no_clobber() {
+        let server = oxvif::mock::MockServer::start().await.unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let app = Application::with_stores(
+            RegistryStore::at(directory.path()),
+            Arc::new(MemoryCredentialStore::default()),
+        );
+        let mut managed = app
+            .manage_device(selector(server.device_url()), &options())
+            .unwrap();
+        assert!(managed.needs_connection());
+        let profiles = managed.execute(ManagedAction::Profiles).await.unwrap();
+        assert_eq!(result(&profiles)[0]["details_status"], "reported");
+        assert!(result(&profiles)[0]["video"]["width"].as_u64().unwrap() > 0);
+        assert!(!managed.needs_connection());
+        server.inject_fault(
+            "GetCapabilities",
+            "s:Receiver",
+            "must remain pending during reuse",
+        );
+        assert_eq!(
+            managed
+                .execute(ManagedAction::Info)
+                .await
+                .unwrap()
+                .exit_code(),
+            0
+        );
+        let client = oxvif::OnvifClient::new(server.device_url());
+        assert!(client.get_capabilities().await.is_err());
+        let image = directory.path().join("image.jpg");
+        managed
+            .execute(ManagedAction::Snapshot {
+                profile: "Profile_1".into(),
+                save: image.clone(),
+            })
+            .await
+            .unwrap();
+        let original = fs::read(&image).unwrap();
+        assert!(
+            managed
+                .execute(ManagedAction::Snapshot {
+                    profile: "Profile_1".into(),
+                    save: image.clone()
+                })
+                .await
+                .is_err()
+        );
+        assert_eq!(fs::read(&image).unwrap(), original);
+        let baseline = directory.path().join("baseline.json");
+        managed
+            .execute(ManagedAction::Export {
+                save: baseline.clone(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            result(
+                &managed
+                    .execute(ManagedAction::Diff { against: baseline })
+                    .await
+                    .unwrap()
+            )["matches"],
+            true
+        );
+        managed.connected_at = Some(Instant::now() - Duration::from_secs(61));
+        assert!(managed.needs_connection());
+        server.inject_fault(
+            "GetCapabilities",
+            "s:Receiver",
+            "expiry forces new handshake",
+        );
+        assert!(managed.execute(ManagedAction::Info).await.is_err());
+        assert!(managed.needs_connection());
+        assert_eq!(
+            managed
+                .execute(ManagedAction::Info)
+                .await
+                .unwrap()
+                .exit_code(),
+            0
+        );
+        server.inject_fault("GetDeviceInformation", "s:Receiver", "failure invalidates");
+        assert!(managed.execute(ManagedAction::Info).await.is_err());
+        assert!(managed.needs_connection());
+        assert_eq!(app.registry().list().unwrap().0.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn profile_metadata_failure_is_optional_and_assessment_is_observational() {
+        let server = oxvif::mock::MockServer::start().await.unwrap();
+        server.inject_fault(
+            "GetVideoEncoderConfigurations",
+            "s:Receiver",
+            "do not reveal this fault",
+        );
+        let report = standalone_profiles(&resolved(server.device_url()), &options())
+            .await
+            .unwrap();
+        assert!(report[0]["video"].is_null());
+        assert_eq!(report[0]["details_status"], "query_failed");
+        assert!(!report.to_string().contains("do not reveal"));
+        let failed = Step::new(
+            "onvif_session",
+            Status::Fail,
+            "Session timed out.",
+            "Check reachability; this does not prove invalid credentials.",
+        );
+        let skipped = Step::skipped("media_profiles", "Session unavailable.");
+        let assessment = assess(&[failed, skipped]);
+        assert_eq!(
+            assessment["primary_issue"]["certainty"],
+            "observed_failure_not_root_cause"
+        );
+        assert_eq!(assessment["blocked_checks"], json!(["media_profiles"]));
+        assert_eq!(assessment["limitations"], json!([]));
     }
 
     #[tokio::test]

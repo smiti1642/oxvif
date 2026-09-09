@@ -1,6 +1,6 @@
 use crate::{AgentGuide, SCHEMA_VERSION};
 
-pub const GUIDE_VERSION: &str = "7";
+pub const GUIDE_VERSION: &str = "8";
 
 pub fn guide() -> AgentGuide {
     AgentGuide {
@@ -8,6 +8,8 @@ pub fn guide() -> AgentGuide {
         cli_version: env!("CARGO_PKG_VERSION"),
         schema_version: SCHEMA_VERSION,
         rules: vec![
+            "manage is a terminal-only adapter, not an automation endpoint. Use the corresponding list, media.profiles, diagnose, media.snapshot-save and config export/diff commands with explicit selectors.",
+            "Diagnosis assessment.primary_issue describes the first observed failure, not a proven root cause; inspect additional_issues, blocked_checks and limitations. Profile video fields are device-reported configuration, not measured playback/FPS; null means unavailable and details_status explains missing metadata.",
             "Diagnose profile_selection retains error_code PROFILE_SELECTION_REQUIRED for compatibility; inspect data.reason_code to distinguish missing selection, unknown token, query failure, no profiles, cancellation or interaction failure. data.candidates contains name/token pairs. Do not substitute an unknown explicit token automatically.",
             "Diagnose stages may include not_tested_reason: prerequisite_failed or not_implemented. Inspect summary counts and selected_profile; complete=true still does not establish video playback.",
             "For diagnose/config.export/config.diff, exit 20 may retain a device_diagnostic report: inspect failed stages, complete and incomparable_sections, not only error.code.",

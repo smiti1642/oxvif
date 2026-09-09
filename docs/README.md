@@ -44,6 +44,7 @@ conventions, and attribution/licensing.
 
 | Doc | About |
 |-----|-------|
+| [`cli-manage-plan.md`](active/cli-manage-plan.md) · [繁體中文](active/cli-manage-plan_zh.md) | Guided human workspace, profile context, diagnostic assessment and independent first-time-user critique. |
 | [`cli-maintenance-workflows-plan.md`](active/cli-maintenance-workflows-plan.md) · [繁體中文](active/cli-maintenance-workflows-plan_zh.md) | Snapshot downloads, layered diagnosis and read-only configuration inventory/diff; local implementation and acceptance gates. |
 | [`cli-maintenance-ux-plan.md`](active/cli-maintenance-ux-plan.md) · [繁體中文](active/cli-maintenance-ux-plan_zh.md) | Maintenance parameter placement, interactive profile selection, concise reports and Agent contract refinements. |
 | [`dependency-maintenance-plan.md`](active/dependency-maintenance-plan.md) · [繁體中文](active/dependency-maintenance-plan_zh.md) | PRs #6–#11 integrated; XML/fingerprint migrations and five-target SBOM staging accepted. Weekly Cargo/Actions grouping is active and has produced PR #14; subsequent-cycle duplicate checking remains pending. |

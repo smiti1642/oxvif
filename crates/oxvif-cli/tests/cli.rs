@@ -129,6 +129,30 @@ fn maintenance_workflows_require_explicit_automation_targets() {
 }
 
 #[test]
+fn manage_refuses_machine_or_redirected_input_without_network() {
+    let directory = tempfile::tempdir().unwrap();
+    for args in [
+        vec!["manage", "--json"],
+        vec!["manage", "--non-interactive"],
+        vec!["manage"],
+        vec!["manage", "--target", "127.0.0.1:1", "--jsonl"],
+    ] {
+        let output = run_isolated(&args, directory.path());
+        assert_eq!(output.status.code(), Some(2));
+        assert!(format!("{}{}", stdout(&output), stderr(&output)).contains("interactive terminal"));
+        assert!(!stdout(&output).contains("\x1b"));
+        if args.contains(&"--json") || args.contains(&"--jsonl") {
+            let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(value["ok"], false);
+            assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+        }
+    }
+    assert!(run(&["manage", "--help"]).status.success());
+    let described = run(&["describe", "manage", "--json"]);
+    assert!(described.status.success());
+}
+
+#[test]
 fn file_workflows_reject_fleet_before_network_and_do_not_overwrite() {
     let directory = tempfile::tempdir().unwrap();
     for args in [
@@ -188,6 +212,17 @@ fn file_workflows_reject_fleet_before_network_and_do_not_overwrite() {
     );
     assert_eq!(output.status.code(), Some(4));
     assert_eq!(fs::read_to_string(file).unwrap(), "preserve me");
+    let error: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Output file already exists")
+    );
+    assert_eq!(
+        error["error"]["suggested_action"],
+        "Choose another destination path."
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -289,6 +324,7 @@ async fn maintenance_binary_workflow_and_envelopes() {
     );
     assert!(detailed.status.success());
     assert!(stdout(&detailed).contains("STAGE | STATUS"));
+    assert!(!stdout(&detailed).contains("Use -v"));
     for (profile, reason) in [
         (None, "PROFILE_SELECTION_REQUIRED"),
         (Some("unknown"), "PROFILE_NOT_FOUND"),
@@ -1045,7 +1081,7 @@ fn agent_guide_and_prompt_are_embedded_and_versioned() {
     let document: Value = serde_json::from_slice(&guide.stdout).expect("guide should be JSON");
     assert_eq!(document["schema_version"], "3");
     assert_eq!(document["data"]["kind"], "agent_guide");
-    assert_eq!(document["data"]["guide"]["guide_version"], "7");
+    assert_eq!(document["data"]["guide"]["guide_version"], "8");
     assert!(
         document["data"]["guide"]["security_requirements"]
             .as_array()

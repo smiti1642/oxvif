@@ -142,6 +142,7 @@ command_ids! {
     Diagnose => "diagnose",
     ConfigExport => "config.export",
     ConfigDiff => "config.diff",
+    Manage => "manage",
 }
 
 /// A request understood by the application layer.
