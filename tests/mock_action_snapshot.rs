@@ -158,6 +158,7 @@ const EXPECTED: &[(&str, &str)] = &[
     ("get_profiles", "ok"),
     ("get_stream_uri", "ok"),
     ("get_snapshot_uri", "ok"),
+    ("media_set_synchronization_point", "ok"),
     ("create_profile", "ok"),
     ("delete_profile", "ok"),
     ("get_profile", "ok"),
@@ -190,6 +191,7 @@ const EXPECTED: &[(&str, &str)] = &[
     ("get_profiles_media2", "ok"),
     ("get_stream_uri_media2", "ok"),
     ("get_snapshot_uri_media2", "ok"),
+    ("set_synchronization_point_media2", "ok"),
     ("get_video_source_configurations_media2", "ok"),
     ("set_video_source_configuration_media2", "ok"),
     ("get_video_source_configuration_options_media2", "ok"),
@@ -459,6 +461,11 @@ async fn observed() -> Vec<(&'static str, String)> {
     probe!(out, "get_snapshot_uri", get_snapshot_uri(MEDIA, PROFILE));
     probe!(
         out,
+        "media_set_synchronization_point",
+        media_set_synchronization_point(MEDIA, PROFILE)
+    );
+    probe!(
+        out,
         "create_profile",
         create_profile(MEDIA, "snapshot", None)
     );
@@ -613,6 +620,11 @@ async fn observed() -> Vec<(&'static str, String)> {
         out,
         "get_snapshot_uri_media2",
         get_snapshot_uri_media2(MEDIA2, PROFILE)
+    );
+    probe!(
+        out,
+        "set_synchronization_point_media2",
+        set_synchronization_point_media2(MEDIA2, PROFILE)
     );
     probe!(
         out,

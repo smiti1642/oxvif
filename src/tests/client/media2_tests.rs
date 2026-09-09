@@ -669,6 +669,35 @@ async fn test_get_snapshot_uri_media2_returns_string() {
     assert_eq!(uri, "http://192.168.1.1/snapshot/media2?Profile_B");
 }
 
+#[tokio::test]
+async fn set_synchronization_point_media2_sends_media2_action_and_escaped_token() {
+    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+                    xmlns:tr2="http://www.onvif.org/ver20/media/wsdl">
+          <s:Body><tr2:SetSynchronizationPointResponse/></s:Body>
+        </s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .set_synchronization_point_media2("http://192.168.1.1/onvif/media2", "Profile<&2")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver20/media/wsdl/SetSynchronizationPoint"
+    );
+    assert!(
+        c.body.contains(
+            "<tr2:SetSynchronizationPoint><tr2:ProfileToken>Profile&lt;&amp;2</tr2:ProfileToken></tr2:SetSynchronizationPoint>"
+        ),
+        "Media2 synchronization-point body drifted: {}",
+        c.body
+    );
+}
+
 fn video_source_configurations_media2_xml() -> &'static str {
     r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
                     xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"

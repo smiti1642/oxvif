@@ -101,6 +101,26 @@ impl OnvifClient {
             .ok_or_else(|| crate::soap::SoapError::missing("Uri").into())
     }
 
+    /// Request an intra frame from the video encoder bound to a Media2 profile.
+    pub async fn set_synchronization_point_media2(
+        &self,
+        media2_url: &str,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/SetSynchronizationPoint";
+        let profile_token = xml_escape(profile_token);
+        let body = format!(
+            "<tr2:SetSynchronizationPoint>\
+               <tr2:ProfileToken>{profile_token}</tr2:ProfileToken>\
+             </tr2:SetSynchronizationPoint>"
+        );
+
+        let xml = self.call(media2_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetSynchronizationPointResponse")?;
+        Ok(())
+    }
+
     /// List all video source configurations via the Media2 service.
     pub async fn get_video_source_configurations_media2(
         &self,

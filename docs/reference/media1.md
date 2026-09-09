@@ -6,7 +6,7 @@
 - **WSDL:** https://www.onvif.org/ver10/media/wsdl/media.wsdl
 - **Namespace:** `http://www.onvif.org/ver10/media/wsdl` (prefix `trt`)
 - **ONVIF Profile:** S
-- **oxvif status:** ◐ implemented in `src/client/media.rs` (~32 of ~78 operations)
+- **oxvif status:** ◐ implemented in `src/client/media.rs` (~33 of ~78 operations)
 
 oxvif covers profiles, stream/snapshot URIs, video source/encoder configs (get/set/options),
 the video-encoder binding pair, audio basics, and OSD. The unimplemented bulk is the **regular
@@ -29,7 +29,7 @@ streaming and the "compatible configurations" queries.
 | GetServiceCapabilities | media service capabilities | ✓ | `media_get_service_capabilities` |
 | StartMulticastStreaming | begin multicast | — | — |
 | StopMulticastStreaming | end multicast | — | — |
-| SetSynchronizationPoint | force I-frame / config refresh | — | — |
+| SetSynchronizationPoint | force I-frame / config refresh | ✓ | `media_set_synchronization_point` |
 | GetVideoSourceModes | sensor modes | — | — (see media2 `get_video_source_modes_media2`) |
 | SetVideoSourceMode | switch sensor mode | — | — (see media2) |
 | GetGuaranteedNumberOfVideoEncoderInstances | encoder capacity | — | — |

@@ -1353,7 +1353,7 @@ fn body_for(op: &str) -> &'static str {
             "<ConfigurationToken>MetaConf_1</ConfigurationToken>"
         }
         "GetProfile" => "<ProfileToken>Profile_1</ProfileToken>",
-        "GetStreamUri" | "GetSnapshotUri" => {
+        "GetStreamUri" | "GetSnapshotUri" | "SetSynchronizationPoint" => {
             "<ProfileToken>Profile_1</ProfileToken><Token>Profile_1</Token>"
         }
         "GetConfiguration" => "<PTZConfigurationToken>PTZConfig_1</PTZConfigurationToken>",

@@ -596,6 +596,9 @@ println!("RTSP: {}", rtsp.uri);
 
 let snap = client.get_snapshot_uri(&media_url, &profiles[0].token).await?;
 println!("Snapshot: {}", snap.uri);
+
+// Ask the encoder to emit an intra frame for this profile.
+client.media_set_synchronization_point(&media_url, &profiles[0].token).await?;
 ```
 
 ### Video source and encoder configurations
@@ -642,6 +645,7 @@ Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 suppor
 | `get_profiles_media2(url)` | `Vec<MediaProfile2>` | List profiles |
 | `get_stream_uri_media2(url, token)` | `String` | RTSP URI |
 | `get_snapshot_uri_media2(url, token)` | `String` | HTTP snapshot URI |
+| `set_synchronization_point_media2(url, token)` | `()` | Request an intra frame |
 | `get_video_source_configurations_media2(url)` | `Vec<VideoSourceConfiguration>` | |
 | `set_video_source_configuration_media2(url, config)` | `()` | |
 | `get_video_source_configuration_options_media2(url, token)` | `VideoSourceConfigurationOptions` | |

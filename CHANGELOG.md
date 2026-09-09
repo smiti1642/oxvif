@@ -22,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Media1 and Media2 `SetSynchronizationPoint` support requests an intra frame
+  for a profile through `media_set_synchronization_point` and
+  `set_synchronization_point_media2`, with matching session and mock support.
 - Human terminal line numbers are configurable as `absolute`, `relative`, `hybrid`
   (unchanged default), or `off`. Use `--line-numbers` for this invocation, or `?`
   in navigation screens to preview, apply for the session, or explicitly save a

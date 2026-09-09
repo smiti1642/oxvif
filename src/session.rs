@@ -596,6 +596,16 @@ impl OnvifSession {
             .await
     }
 
+    /// Request an intra frame from the video encoder bound to a Media1 profile.
+    pub async fn media_set_synchronization_point(
+        &self,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .media_set_synchronization_point(self.media_url()?, profile_token)
+            .await
+    }
+
     /// Bind a video encoder configuration to a media profile.
     pub async fn add_video_encoder_configuration(
         &self,
@@ -879,6 +889,16 @@ impl OnvifSession {
     pub async fn get_snapshot_uri_media2(&self, profile_token: &str) -> Result<String, OnvifError> {
         self.client
             .get_snapshot_uri_media2(self.media2_url()?, profile_token)
+            .await
+    }
+
+    /// Request an intra frame from the video encoder bound to a Media2 profile.
+    pub async fn set_synchronization_point_media2(
+        &self,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .set_synchronization_point_media2(self.media2_url()?, profile_token)
             .await
     }
 

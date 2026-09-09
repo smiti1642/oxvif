@@ -95,6 +95,34 @@ async fn test_get_stream_uri_embeds_profile_token_in_body() {
     );
 }
 
+// ── media_set_synchronization_point ──────────────────────────────────────
+
+#[tokio::test]
+async fn media_set_synchronization_point_sends_media1_action_and_escaped_token() {
+    let xml = empty_response_xml("SetSynchronizationPointResponse");
+    let (transport, captured) = RecordingTransport::new(&xml);
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
+
+    client
+        .media_set_synchronization_point("http://192.168.1.1/onvif/media_service", "Profile<&1")
+        .await
+        .unwrap();
+
+    let c = captured.lock().unwrap();
+    assert_eq!(
+        c.action,
+        "http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint"
+    );
+    assert!(
+        c.body.contains(
+            "<trt:SetSynchronizationPoint><trt:ProfileToken>Profile&lt;&amp;1</trt:ProfileToken></trt:SetSynchronizationPoint>"
+        ),
+        "Media1 synchronization-point body drifted: {}",
+        c.body
+    );
+}
+
 // ── video source / encoder fixtures ──────────────────────────────────────
 
 fn video_sources_xml() -> &'static str {

@@ -67,6 +67,32 @@ pub fn resp_snapshot_uri(base: &str) -> String {
     )
 }
 
+/// Validate the profile addressed by either Media service and acknowledge a
+/// synchronization-point request. The operation has no observable state beyond
+/// causing a real encoder to emit an intra frame.
+pub fn handle_set_synchronization_point(state: &SharedState, body: &str, prefix: &str) -> String {
+    let profile = extract_tag(body, "ProfileToken").unwrap_or_default();
+    if profile.is_empty() {
+        return resp_soap_fault(
+            "env:Sender",
+            "NoProfileToken-SYNC-5501: ProfileToken is required",
+        );
+    }
+    if !state
+        .read()
+        .profiles
+        .profiles
+        .iter()
+        .any(|p| p.token == profile)
+    {
+        return resp_soap_fault(
+            "ter:NoProfile",
+            &format!("NoSuchProfile-SYNC-5502: {profile}"),
+        );
+    }
+    resp_empty(prefix, "SetSynchronizationPointResponse")
+}
+
 pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
     match apply_video_encoder_write(
         state,

@@ -87,6 +87,7 @@ row in this file at all until 0.15.0, while the crate had implemented it since
 | `AddVideoSourceConfiguration` / `RemoveVideoSourceConfiguration` | ✓ |
 | `GetStreamUri` | ✓ |
 | `GetSnapshotUri` | ✓ |
+| `SetSynchronizationPoint` | ✓ |
 | `GetVideoSources` | ✓ |
 | `GetVideoSourceConfigurations` / `GetVideoSourceConfiguration` | ✓ |
 | `SetVideoSourceConfiguration` | ✓ |
@@ -111,6 +112,7 @@ row in this file at all until 0.15.0, while the crate had implemented it since
 | `GetProfiles` | ✓ |
 | `CreateProfile` / `DeleteProfile` | ✓ |
 | `GetStreamUri` / `GetSnapshotUri` | ✓ |
+| `SetSynchronizationPoint` | ✓ |
 | `GetVideoSourceConfigurations` / `SetVideoSourceConfiguration` | ✓ |
 | `GetVideoSourceConfigurationOptions` | ✓ |
 | `GetVideoEncoderConfigurations` / `GetVideoEncoderConfiguration` | ✓ |

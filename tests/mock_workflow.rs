@@ -84,6 +84,8 @@ async fn media_and_streaming() {
             .starts_with("rtsp://")
     );
     assert!(!s.get_snapshot_uri(token).await.unwrap().uri.is_empty());
+    s.media_set_synchronization_point(token).await.unwrap();
+    s.set_synchronization_point_media2(token).await.unwrap();
     assert!(
         !s.get_video_encoder_configurations()
             .await

@@ -333,6 +333,7 @@ Service capability 中的 flag 使用 `Option<bool>`：`None` 表示裝置未宣
 | `add_video_source_configuration(...)` / `remove_video_source_configuration(...)` | `()` | 綁定／解除 source configuration |
 | `get_stream_uri(media_url, profile_token)` | `StreamUri` | 取得 RTSP URI |
 | `get_snapshot_uri(media_url, profile_token)` | `SnapshotUri` | 取得 snapshot URI |
+| `media_set_synchronization_point(media_url, profile_token)` | `()` | 要求 encoder 產生 intra frame |
 
 ### Video configuration
 
@@ -372,6 +373,7 @@ Media2 是 Media1 的後繼介面，原生支援 H.265，且 encoder configurati
 | `get_profiles_media2(url)` | `Vec<MediaProfile2>` |
 | `create_profile_media2(url, name)` / `delete_profile_media2(url, token)` | 建立／刪除 profile |
 | `get_stream_uri_media2(url, token)` / `get_snapshot_uri_media2(url, token)` | Stream / snapshot URI |
+| `set_synchronization_point_media2(url, token)` | 要求 encoder 產生 intra frame |
 | `get_video_source_configurations_media2(url)` / `set_video_source_configuration_media2(url, config)` | Video source configuration |
 | `get_video_source_configuration_options_media2(url, token)` | Video source options |
 | `get_video_encoder_configurations_media2(url)` / `get_video_encoder_configuration_media2(url, token)` | H.265-capable encoder configuration |

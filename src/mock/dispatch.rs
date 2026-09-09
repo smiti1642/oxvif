@@ -109,6 +109,7 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
         "DeleteProfile" => media::handle_delete_profile(state, body),
         "GetStreamUri" => media::resp_stream_uri(),
         "GetSnapshotUri" => media::resp_snapshot_uri(base),
+        "SetSynchronizationPoint" => media::handle_set_synchronization_point(state, body, "trt"),
         "GetVideoSources" => media::resp_video_sources(state),
         "GetVideoSourceConfigurations" => media::resp_video_source_configurations(state),
         "GetVideoSourceConfiguration" => media::resp_video_source_configuration(state, body),
@@ -175,6 +176,7 @@ fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
         "RemoveConfiguration" => media2::handle_remove_configuration_media2(state, body),
         "GetStreamUri" => media2::resp_stream_uri_media2(),
         "GetSnapshotUri" => media2::resp_snapshot_uri_media2(base),
+        "SetSynchronizationPoint" => media::handle_set_synchronization_point(state, body, "tr2"),
         "GetVideoSourceConfigurations" => media2::resp_video_source_configurations_media2(state),
         "SetVideoSourceConfiguration" => {
             media2::handle_set_video_source_configuration_media2(state, body)
