@@ -44,6 +44,7 @@ conventions, and attribution/licensing.
 
 | Doc | About |
 |-----|-------|
+| [`cli-vim-navigation-plan.md`](active/cli-vim-navigation-plan.md) · [繁體中文](active/cli-vim-navigation-plan_zh.md) | Planned reusable navigation core, counted Vim-style movement, hybrid relative numbering, input-mode isolation and terminal acceptance. |
 | [`cli-manage-plan.md`](active/cli-manage-plan.md) · [繁體中文](active/cli-manage-plan_zh.md) | Guided human workspace, profile context, diagnostic assessment and independent first-time-user critique. |
 | [`cli-maintenance-workflows-plan.md`](active/cli-maintenance-workflows-plan.md) · [繁體中文](active/cli-maintenance-workflows-plan_zh.md) | Snapshot downloads, layered diagnosis and read-only configuration inventory/diff; local implementation and acceptance gates. |
 | [`cli-maintenance-ux-plan.md`](active/cli-maintenance-ux-plan.md) · [繁體中文](active/cli-maintenance-ux-plan_zh.md) | Maintenance parameter placement, interactive profile selection, concise reports and Agent contract refinements. |
