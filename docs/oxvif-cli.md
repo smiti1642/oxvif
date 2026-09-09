@@ -258,6 +258,9 @@ a snapshot or registers a device automatically. In an interactive terminal it
 opens a paged browser; redirected output and `--non-interactive` print the
 deterministic Unicode-aligned table instead.
 
+Discovery list, device details and onboarding screens use horizontal rules to
+separate context, content and operation hints. Rules fit the terminal width.
+
 While an interactive scan is running, oxvif updates one elapsed-time status
 line once per second. The browser uses synchronized terminal frames and
 line-level replacement to reduce flicker during navigation and filtering.

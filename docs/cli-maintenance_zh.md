@@ -35,6 +35,9 @@ cargo build -p oxvif-cli --locked
 
 ## 引導式工作區
 
+選單、結果、輸入表單及進度畫面使用水平分隔線，區分標題、內容與鍵盤操作提示。
+分隔線配合終端寬度；視窗高度不足時優先省略裝飾，保留可見內容。
+
 ```sh
 oxvif manage
 oxvif manage front-door

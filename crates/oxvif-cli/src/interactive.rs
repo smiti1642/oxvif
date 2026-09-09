@@ -226,7 +226,7 @@ pub(crate) fn select_profile(choices: &[String]) -> Result<Option<usize>, AppErr
     let mut selected = 0;
     loop {
         let (width, height) = terminal::size().map_err(terminal_error)?;
-        let page_size = usize::from(height.saturating_sub(3)).max(1);
+        let page_size = panel_body_rows(height);
         let lines = profile_lines(choices, selected, width, height);
         draw_changed_lines(&mut terminal, lines)?;
         match event::read().map_err(terminal_error)? {
@@ -242,16 +242,9 @@ pub(crate) fn select_profile(choices: &[String]) -> Result<Option<usize>, AppErr
 }
 
 fn profile_lines(choices: &[String], selected: usize, width: u16, height: u16) -> Vec<String> {
-    let page_size = usize::from(height.saturating_sub(3)).max(1);
+    let page_size = panel_body_rows(height);
     let start = selected / page_size * page_size;
     let mut lines = Vec::new();
-    if height > 1 {
-        lines.push(format!(
-            "Select media profile ({}/{})",
-            selected + 1,
-            choices.len()
-        ));
-    }
     for (index, choice) in choices.iter().enumerate().skip(start).take(page_size) {
         let safe: String = choice.chars().filter(|c| !c.is_control()).collect();
         lines.push(format!(
@@ -259,12 +252,13 @@ fn profile_lines(choices: &[String], selected: usize, width: u16, height: u16) -
             if index == selected { ">" } else { " " }
         ));
     }
-    lines.push("j/k or arrows: move | PgUp/PgDn | Enter: select | Esc/q: cancel".into());
-    lines
-        .into_iter()
-        .take(usize::from(height))
-        .map(|line| truncate_to_width(&line, usize::from(width.saturating_sub(1))))
-        .collect()
+    panel_lines(
+        &format!("Select media profile ({}/{})", selected + 1, choices.len()),
+        &lines,
+        "j/k or arrows: move | PgUp/PgDn | Enter: select | Esc/q: cancel",
+        width,
+        height,
+    )
 }
 
 fn profile_key(
@@ -423,18 +417,8 @@ impl Panel {
 
     fn draw(&mut self, title: &str, body: &[String], footer: &str) -> Result<usize, AppError> {
         let (width, height) = terminal::size().map_err(terminal_error)?;
-        let rows = usize::from(height.saturating_sub(3)).max(1);
-        let mut lines = vec![title.to_owned(), String::new()];
-        lines.extend(body.iter().take(rows).cloned());
-        lines.push(footer.into());
-        let lines = lines
-            .into_iter()
-            .take(height as usize)
-            .map(|s| {
-                let safe: String = s.chars().filter(|c| !c.is_control()).collect();
-                truncate_to_width(&safe, width.saturating_sub(1) as usize)
-            })
-            .collect();
+        let rows = panel_body_rows(height);
+        let lines = panel_lines(title, body, footer, width, height);
         draw_changed_lines(&mut self.0, lines)?;
         Ok(rows)
     }
@@ -452,7 +436,7 @@ impl Panel {
         let mut selected = 0;
         loop {
             let (_, height) = terminal::size().map_err(terminal_error)?;
-            let rows = usize::from(height.saturating_sub(3)).max(1);
+            let rows = panel_body_rows(height);
             let start = selected / rows * rows;
             let body = choices
                 .iter()
@@ -489,7 +473,7 @@ impl Panel {
         let mut offset = 0usize;
         loop {
             let (width, height) = terminal::size().map_err(terminal_error)?;
-            let rows = usize::from(height.saturating_sub(3)).max(1);
+            let rows = panel_body_rows(height);
             let lines = wrap_panel_text(text, width.saturating_sub(1) as usize);
             offset = offset.min(lines.len().saturating_sub(rows));
             self.draw(
@@ -651,6 +635,42 @@ impl Panel {
             }
         }
     }
+}
+
+// Prefer one content row to decoration in very short terminals. Keep pagination
+// and rendering on the same row budget so no selectable item is hidden.
+fn panel_body_rows(height: u16) -> usize {
+    usize::from(height.saturating_sub(4)).max(1)
+}
+
+fn separator(width: usize) -> String {
+    "─".repeat(width)
+}
+
+fn panel_lines(title: &str, body: &[String], footer: &str, width: u16, height: u16) -> Vec<String> {
+    let width = usize::from(width.saturating_sub(1));
+    let mut lines = Vec::new();
+    if height >= 4 {
+        lines.push(title.to_owned());
+    }
+    if height >= 5 {
+        lines.push(separator(width));
+    }
+    lines.extend(body.iter().take(panel_body_rows(height)).cloned());
+    if height >= 3 {
+        lines.push(separator(width));
+    }
+    if height >= 2 {
+        lines.push(footer.to_owned());
+    }
+    lines
+        .into_iter()
+        .take(usize::from(height))
+        .map(|line| {
+            let safe: String = line.chars().filter(|c| !c.is_control()).collect();
+            truncate_to_width(&safe, width)
+        })
+        .collect()
 }
 
 fn previous_boundary(value: &str, cursor: usize) -> usize {
@@ -988,7 +1008,7 @@ impl<'a> BrowserState<'a> {
 
 fn render_setup(terminal: &mut TerminalSession, form: &SetupForm) -> Result<(), AppError> {
     let (width, _) = terminal::size().map_err(terminal_error)?;
-    let width = usize::from(width).max(40);
+    let width = usize::from(width.saturating_sub(1));
     let mut lines = Vec::with_capacity(13);
     let target = primary_target(&form.device).unwrap_or("(no usable address)");
 
@@ -1008,7 +1028,7 @@ fn render_setup(terminal: &mut TerminalSession, form: &SetupForm) -> Result<(), 
         &format!("Endpoint: {}", display_endpoint(&form.device)),
         width,
     );
-    push_line(&mut lines, "", width);
+    push_line(&mut lines, &separator(width), width);
     push_line(
         &mut lines,
         &setup_field_line("Device ID", &form.id, form.field, SetupField::Id, false),
@@ -1036,7 +1056,7 @@ fn render_setup(terminal: &mut TerminalSession, form: &SetupForm) -> Result<(), 
         ),
         width,
     );
-    push_line(&mut lines, "", width);
+    push_line(&mut lines, &separator(width), width);
     push_line(
         &mut lines,
         form.error
@@ -1076,7 +1096,7 @@ fn render(terminal: &mut TerminalSession, state: &mut BrowserState<'_>) -> Resul
         return render_details(terminal, state);
     }
     let (width, _) = terminal::size().map_err(terminal_error)?;
-    let width = usize::from(width).max(40);
+    let width = usize::from(width.saturating_sub(1));
     let mut lines = Vec::with_capacity(state.page_size + 7);
     let saved_count = state
         .devices
@@ -1115,7 +1135,7 @@ fn render(terminal: &mut TerminalSession, state: &mut BrowserState<'_>) -> Resul
         ),
         width,
     );
-    push_line(&mut lines, "", width);
+    push_line(&mut lines, &separator(width), width);
     push_line(
         &mut lines,
         "  #    STATUS      ADDRESS              DEVICE                  SAVED AS",
@@ -1144,7 +1164,7 @@ fn render(terminal: &mut TerminalSession, state: &mut BrowserState<'_>) -> Resul
         push_line(&mut lines, &line, width);
     }
 
-    push_line(&mut lines, "", width);
+    push_line(&mut lines, &separator(width), width);
     if let Some(device) = state.current() {
         let detail = if let Some(id) = device.registered_device_id.as_deref() {
             format!("Already registered as {id} | {}", display_endpoint(device))
@@ -1181,7 +1201,7 @@ fn render_details(
     state: &mut BrowserState<'_>,
 ) -> Result<(), AppError> {
     let (width, _) = terminal::size().map_err(terminal_error)?;
-    let width = usize::from(width).max(40);
+    let width = usize::from(width.saturating_sub(1));
     let Some(device) = state.current() else {
         state.showing_details = false;
         return render(terminal, state);
@@ -1206,14 +1226,14 @@ fn render_details(
         ),
         width,
     );
-    push_line(&mut lines, "", width);
+    push_line(&mut lines, &separator(width), width);
     for line in content.iter().skip(start).take(state.page_size) {
         push_line(&mut lines, line, width);
     }
     for _ in end..(start + state.page_size) {
         push_line(&mut lines, "", width);
     }
-    push_line(&mut lines, "", width);
+    push_line(&mut lines, &separator(width), width);
     push_line(
         &mut lines,
         "j/k: scroll | h/l: page | g/G: first/last | i/Esc: back | q: quit",
@@ -1390,6 +1410,35 @@ fn terminal_error(error: io::Error) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn panel_separates_title_content_and_controls_without_hiding_content() {
+        assert_eq!(
+            panel_lines("Title", &["Camera".into()], "Esc: back", 12, 8),
+            ["Title", "───────────", "Camera", "───────────", "Esc: back"]
+        );
+        for width in [0, 1, 2, 12, 80, 120] {
+            for height in 0..30 {
+                let body = vec!["> 攝影機\x1b".to_owned(); 40];
+                let lines = panel_lines("Title", &body, "Esc: back", width, height);
+                assert!(lines.len() <= usize::from(height));
+                assert!(lines.iter().all(|line| {
+                    UnicodeWidthStr::width(line.as_str()) <= usize::from(width.saturating_sub(1))
+                        && !line.chars().any(char::is_control)
+                }));
+                if width > 2 && height > 0 {
+                    assert_eq!(
+                        lines.iter().filter(|line| line.starts_with('>')).count(),
+                        panel_body_rows(height)
+                    );
+                }
+                if width >= 12 && height >= 3 {
+                    assert_eq!(lines.last().unwrap(), "Esc: back");
+                    assert_eq!(lines[lines.len() - 2], separator(usize::from(width - 1)));
+                }
+            }
+        }
+    }
 
     #[test]
     fn guided_input_scrolls_to_cursor_and_never_displays_secrets() {

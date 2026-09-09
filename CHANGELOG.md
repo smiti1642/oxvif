@@ -22,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Interactive CLI screens separate headings, content and operation hints with
+  terminal-width horizontal rules; compact maintenance/profile screens prioritize
+  content when terminal height is limited. Machine output is unchanged.
 - CLI `snapshot --save` and `media snapshot-save` download size-limited images
   into new files without overwriting, with private-CA support and challenged
   HTTP authentication. Existing URI-only behavior remains available.

@@ -38,6 +38,10 @@ output never show progress or request interactive input.
 
 ## Guided workspace
 
+Horizontal rules separate the heading, content and keyboard hints in menus,
+results, input forms and progress screens. Rules fit the terminal width;
+very short terminals omit decoration before reducing the visible content.
+
 ```sh
 oxvif manage
 oxvif manage front-door
