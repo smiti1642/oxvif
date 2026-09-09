@@ -225,3 +225,9 @@ MIT — see [LICENSE](LICENSE).
 
 ONVIF is a trademark of ONVIF, Inc. This project is not affiliated with or
 endorsed by ONVIF, Inc.
+
+## Support
+
+If oxvif saves you time, consider supporting its development.
+
+[Buy me a coffee](https://buymeacoffee.com/smiti1642)
