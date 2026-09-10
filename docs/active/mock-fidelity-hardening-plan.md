@@ -19,6 +19,7 @@ at `dc69e9a`; that contribution is not assumed to be merged.
 | [Documentation and delivery](#documentation-and-delivery) | Public documentation and release boundaries |
 | [Decision record](#decision-record) | Maintainer approvals and execution status |
 | [First implementation slice](#first-implementation-slice) | Scope, regression evidence and remaining work |
+| [Execution documents](#execution-documents) | Source-indexed checklist, per-operation tracking and resume point |
 
 ## Objectives and boundaries
 
@@ -165,8 +166,10 @@ contain sanitized findings and source hashes, not schema contents.
 
 ## Milestones
 
-Every implementation checkbox remains open. Commit each independently verified
-slice, not all milestones at once. Suggested commit scopes are illustrative.
+No milestone is fully accepted yet; the first slice below contains completed
+subtasks. Commit each independently verified slice, not all milestones at once.
+Use the execution documents below for exact work IDs and operation-level status.
+Suggested commit scopes are illustrative.
 
 | Phase | Work and likely files | Exit criteria |
 | --- | --- | --- |
@@ -285,3 +288,32 @@ first slice, not acceptance of the full programme or PR #16.
 - Remaining: whole-operation inventory/classification, structured fault mapping,
   remaining request migration, opt-in stub policy, independent schema CI, full
   platform acceptance and next-minor release preparation.
+
+## Execution documents
+
+Planning revision on 2026-09-10, indexed against implementation commit `b134f73`:
+
+| Document | Role |
+| --- | --- |
+| [Execution checklist](mock-fidelity-execution-checklist.md) | W00–W26 dependencies, source/test map, C01–C12 review axes, operation-card readiness, risk register, commands and closure evidence |
+| [Operation ledger](mock-fidelity-operation-ledger.md) | All 157 literal route arms across 10 production sub-dispatchers, exact handler/arguments and separate contract/request/Fault/behavior/verification status |
+| [Read-only inventory checker](check-mock-fidelity-inventory.ps1) | Source/ledger equality and bilingual tracking; positive and ten rejection self-tests; not a schema validator or CI gate yet |
+
+The original milestone table alone is not sufficient for implementation handoff.
+Use these linked documents as its execution layer, not conversation memory.
+Route enumeration is complete at this baseline; full Action reconciliation,
+transitive caller mapping, per-field contracts, Fault mapping and behavior
+classification are not. Complete a batch's W01 cards before migrating its handlers.
+This preserves an explicit investigation step instead of inventing specifications.
+
+Resume with W00 full Action reconciliation and W02 caller mapping, then W01 for
+the W10 profile/binding batch. The documentation/tooling revision changes no Rust
+runtime code, CI, dependency, release version or installed binary. Main-plan
+milestone states remain in progress; PR #16 remains outside the baseline.
+
+Planning-revision verification on Windows: the inventory checker and its ten
+rejection controls passed; all 214 local links/anchors across the six planning
+documents resolved. Formatting and both workspace Clippy configurations passed.
+Workspace tests were rerun: all-features 1,141 passed / 4 ignored; default 1,061
+passed / 4 ignored. These are regression checks, not new schema or platform
+acceptance. No camera commands were run for this documentation revision.

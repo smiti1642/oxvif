@@ -18,6 +18,7 @@
 | [文件與交付](#文件與交付) | 公開文件及發布邊界 |
 | [決策紀錄](#決策紀錄) | 維護者核准與執行狀態 |
 | [第一批實作](#第一批實作) | 範圍、回歸證據及剩餘工作 |
+| [施工文件](#施工文件) | 原始碼對照檢查表、逐操作追蹤及接續起點 |
 
 ## 目標與邊界
 
@@ -149,8 +150,9 @@ fork-PR 執行。Log／artifact 只包含去識別化結果及來源雜湊，不
 
 ## 里程碑
 
-所有實作項目均尚未完成。每個可獨立驗證的單位分段 commit，不將所有里程碑
-合為一次提交。下列 commit scope 僅供規劃參考。
+目前沒有里程碑已完整驗收；下方第一批實作包含已完成的子項目。
+每個可獨立驗證的單位分段 commit，不將所有里程碑合為一次提交。
+確切工作編號及逐操作狀態以後方施工文件為準。下列 commit scope 僅供規劃參考。
 
 | 階段 | 工作與主要位置 | 驗收條件 |
 | --- | --- | --- |
@@ -257,3 +259,28 @@ M2、M3 按服務拆分遷移，不一次全面重寫。共用 helper 變更若�
   tests 不計為通過。
 - 剩餘工作：全部操作盤點／分類、結構化 Fault mapping、其他 request 遷移、
   opt-in stub 政策、獨立 schema CI、完整平台驗收及下一個 minor release 準備。
+
+## 施工文件
+
+2026-09-10 補強規劃，以實作 commit `b134f73` 建立索引：
+
+| 文件 | 職責 |
+| --- | --- |
+| [施工檢查表](mock-fidelity-execution-checklist_zh.md) | W00–W26 相依性、程式碼／測試對照、C01–C12 稽核面向、操作工作卡開工條件、風險清單、命令及結案證據 |
+| [逐操作清冊](mock-fidelity-operation-ledger_zh.md) | 10 個正式 sub-dispatcher 的全部 157 個字面值路由分支、確切 handler／arguments，以及分開的契約／request／Fault／行為／驗證狀態 |
+| [唯讀清冊檢查器](check-mock-fidelity-inventory.ps1) | 原始碼／清冊相等與雙語追蹤；正向及十項拒絕自我測試；尚非 schema validator 或 CI gate |
+
+原有里程碑表不足以單獨作為施工交接依據；以上文件是其執行層，不依賴對話記憶。
+此基準的路由列舉已完成，但完整 Action 核對、間接 caller、逐欄位契約、Fault
+映射及行為分類仍未完成。遷移 handler 前須完成該批次 W01 工作卡，保留明確的
+調查步驟，不以推測代替規格。
+
+接續 W00 完整 Action 核對與 W02 caller 盤點，再完成 W10 profile／binding
+批次的 W01。此次文件／工具補強未修改 Rust runtime、CI、dependency、release
+版本或已安裝 binary。主計畫里程碑仍為進行中；PR #16 不在此基準內。
+
+本次規劃補強的 Windows 驗證：清冊檢查器及十項拒絕控制通過；六份規劃文件的
+214 個本機連結／anchor 均可解析。Formatting 與兩種 workspace Clippy 通過。
+重新執行 workspace 測試：all-features 1,141 passed／4 ignored；default
+1,061 passed／4 ignored。這些是回歸檢查，不是新增 schema 或平台驗收。
+本次文件修改未執行任何攝影機命令。
