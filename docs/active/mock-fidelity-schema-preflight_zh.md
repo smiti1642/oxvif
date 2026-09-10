@@ -186,7 +186,9 @@ python packaging/verify_schemas_xerces.py compile --root /absolute/external/oxvi
 仍是 Python 後端診斷命令，預期會揭露 K21。
 
 Windows／Linux CI 現在先執行 generic 控制及獨立 Xerces 選型，再執行獨立的
-**Official schema compilation** job，使用固定來源雜湊、外部目錄且不上傳 artifact。
+**Official schemas and selected profile corpus** job，使用固定來源雜湊、外部目錄且不上傳 artifact。
+後者在編譯後明確匯出並驗證選定的 34 份 profile instance。每個 native 命令失敗均
+終止 job；驗證要求既有且非空的 corpus，因此缺少匯出不會視為通過。
 兩者均作為 package 前提，但不可回報為完整操作／corpus 驗收。前次 CI
 [34461384194](https://github.com/smiti1642/oxvif/actions/runs/34461384194)
 已通過 `4fdd9f2` 的全部 25 個 job；該 run 早於 Xerces adapter 及新增編譯 job。
@@ -239,8 +241,9 @@ Action 集合及目錄錯誤斷言也在完整全部功能 `--no-fail-fast` 擾�
 
 W20 仍為 PARTIAL：須核對未解析／wildcard 計數、Fault 的 QName 文字，以及擴充
 第一批 13 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
-payload、Fault 正負 instance 驗收實際 exchange。之後將 W22 的來源編譯 job
-擴充為缺少前提即失敗的完整 instance gate。此工具實驗不能取代
+payload、Fault 正負 instance 驗收更廣泛的實際 exchange。W22 已在 Windows／Linux
+加入選定的 34 份 profile corpus 驗證；缺少前提即失敗的完整 instance gate 仍須涵蓋
+其餘操作批次。此工具實驗不能取代
 P-B 的逐操作欄位、Fault 與語意審查。
 
 此診斷檢查點不需維護者新增決策。若選定的 gate 無法維持 D3 的散布或嚴格

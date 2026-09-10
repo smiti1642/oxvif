@@ -43,7 +43,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - External schema verification tooling now pins source hashes and verification
   dependencies, checks import closure and prevents network fallback during
   validation. Windows/Linux tooling controls and a separate pinned Xerces XSD 1.1
-  source-compilation job gate packaging. Full mock-corpus acceptance remains
+  source-compilation and selected profile-corpus job gate packaging. Full mock-corpus acceptance remains
   incomplete; this tooling
   does not establish ONVIF conformance or change installed runtime dependencies.
 - An opt-in, external-only profile exchange corpus now captures credential-free

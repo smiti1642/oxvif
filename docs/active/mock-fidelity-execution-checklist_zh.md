@@ -112,7 +112,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W19／M3、M6／TODO | W03／W09 設計 | `canon.rs`、`metamorph/{fixture,replay,record,parse,adapter,quirk,surface}.rs`、responder chain | 保留錄製偏差；核對正規化／key collision／參數辨識；失敗寫入不錯誤 invalidation；不新增錄製設備機密 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
 | W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及第一批 13 操作 client／mock corpus 匯出與明確 payload anchor | 選定 DeleteProfile Fault 遷移後，34 份 instance 通過，包含四個不存在／固定 profile 拒絕。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
-| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | 清冊與工具已通過前次託管 CI；新增 Windows／Linux Xerces 選型與獨立官方來源編譯，作為 package 前提 | 來源編譯 job 僅下載固定雜湊的外部資源，不上傳 artifact；完整 mock instance job 與 release 證據檢查仍待完成 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 13 操作的 34 份 instance；全程式 instance 覆蓋及 release 證據檢查仍待完成 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
 | W25／M6／TODO | W00–W24 驗收 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |

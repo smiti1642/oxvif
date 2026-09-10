@@ -209,8 +209,11 @@ does not validate any mock exchange. The earlier `verify_schemas.py compile`
 command remains a Python-backend diagnostic expected to expose K21.
 
 Windows/Linux CI now runs generic controls and independent Xerces qualification,
-followed by a separate **Official schema compilation** job with fixed source
+followed by a separate **Official schemas and selected profile corpus** job with fixed source
 hashes, external directories and no uploaded artifacts. Both gate packaging;
+the latter explicitly exports and validates the selected 34 profile instances
+after compilation. Each failed native command terminates the job; a missing
+export cannot pass because validation requires an existing, nonempty corpus.
 neither should be reported as full operation/corpus acceptance. Prior CI
 [34461384194](https://github.com/smiti1642/oxvif/actions/runs/34461384194) passed all
 25 jobs for `4fdd9f2`; it predates the Xerces adapter and new compilation jobs.
@@ -273,9 +276,9 @@ device write, public API or contributor PR was changed.
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
 and expand the corpus beyond the first 13-operation batch. W21 remains PARTIAL: complete the
 positive/negative envelope, payload and Fault instances from the mock corpus and
-qualify the selected path against actual emitted exchanges. Then extend W22's
-source-compilation job into the full fail-closed instance
-CI job. Do not substitute this tool
+qualify broader paths against actual emitted exchanges. W22 now checks the selected
+34-instance profile corpus on Windows/Linux, but the full fail-closed instance
+CI gate still needs the remaining operation batches. Do not substitute this tool
 experiment for P-B's per-operation field/Fault/semantic review.
 
 No maintainer decision is required for this diagnostic checkpoint. If the chosen
