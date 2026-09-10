@@ -17,8 +17,11 @@ W03 預設驗證及廣泛的 W06 服務錯誤遷移**尚未實作**；已完成�
 | [Parsed-node 實作](#parsed-node-實作) | P-A 已交付範圍及 W04 剩餘工作 |
 | [結構化 Fault 基礎](#結構化-fault-基礎) | P-C serializer 子批次及消費端邊界 |
 | [已提交的刪除效果](#已提交的刪除效果) | 選定 K17 修正及剩餘 replay 邊界 |
+| [完整 Action 路由](#完整-action-路由) | K06 路由子批次及 W03／W07 剩餘工作 |
 
 ## 入口與責任
+
+下表為歷史原始碼基準；目前路由修正記錄於[完整 Action 路由](#完整-action-路由)。
 
 | 原始碼符號 | 基準輸入／輸出及後續依賴 | 負責工作 |
 | --- | --- | --- |
@@ -253,3 +256,33 @@ Clippy、兩種 warnings-as-errors 文件建置及全部 24 項 packaging 控制
 還原後全功能 1,174 項與預設 1,090 項測試通過（各 5 ignored、20 suites）。
 新匯出的外部 corpus 共 34 份 XML，全部通過固定版本 Xerces 嚴格 XSD 1.1
 驗證；這不代表語意符合性或整體計畫驗收。
+
+## 完整 Action 路由
+
+K06 路由子批次，以 `4bcb024` 為基準：`respond_with_effect` 現在從最後一個
+分隔符切開，完整比對前段 service／port 身分。Events operation 另受所屬 port
+限制；共用 dispatcher 不代表接受其他 port 的 operation tail。公開 client／session
+Action 宣告及 157 項路由操作保持不變。
+
+身分集合來自既有原始碼 Action 清冊，固定 Events 與 WSN 資源已於外部核對。
+[Basic Profile 2.0 R2744 與 R2900](https://docs.oasis-open.org/ws-brsp/BasicProfile/v2.0/BasicProfile-v2.0.html)
+要求符合宣告的 Action。R2757 另允許省略 Content-Type action 參數，本次路由
+修正**尚未**實作該 HTTP fallback。SOAP 1.2 status、media type／encoding、
+WSA 一致性、body 身分、parse-once dispatch 及通用 fault 對應仍待完成。
+
+`action_aliases_never_reach_a_service_handler` 對從 client 來源取得的每個 Action
+施加五種變形，斷言完整既有拒絕回應、沒有 committed effect，且整份狀態不變。
+兩個 `*_action_identity_rejects_aliases_before_state_changes` 控制另涵蓋錯誤
+Events port，以及經 HTTP／in-process 入口的 hostname 寫入，確認僅正確 Action
+的寫入觸發通知。三項測試在舊路由的完整 all-feature、no-fail-fast 執行中均於
+payload assertion 失敗（本機 log `1789041634_cargo_test.log`）；hostname
+控制並證實非預期寫入。既有全來源正向路由與 chain 順序測試保留。格式、兩種
+workspace Clippy 及兩種 warnings-as-errors 文件建置通過。修正後全功能
+1,184 項及預設 1,100 項測試通過（各 5 ignored、21 suites）。清冊自我測試
+通過，159 Action site／157 route／260 reader 不變。新匯出的外部 corpus 07
+共 34 份選定 instance 全部通過 Xerces 嚴格 XSD 1.1 驗證；該 corpus 與 ignored
+測試均不代表整體計畫驗收。
+
+範圍僅限正常 synthetic 路由。公開 raw responder、suffix 型 fault injection
+及既有 replay invalidation 仍為獨立工作。未知 Action 保留原有 flat code／reason，
+不宣稱已符合最終規範 fault 契約。未變更公開 API 或已安裝 binary。

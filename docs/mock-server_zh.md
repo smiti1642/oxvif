@@ -114,6 +114,12 @@ Content-Type: application/soap+xml; charset=utf-8; action="http://www.onvif.org/
 
 `src/mock/dispatch.rs` 的 `dispatch()` 依 action namespace 選擇 dispatcher，而不是依 operation name；原因是九項服務都包含 `GetServiceCapabilities`。
 
+Synthetic dispatch 現在比對完整的受支援 Action URI，包含 Events 的 port
+segment。下表的縮寫 prefix 僅為概覽，不代表子字串匹配規則。錯誤主機、插入的
+path segment、不同 scheme 及跨 port 的別名都會遭拒；既有 client Action 不變。
+HTTP header 解析、operation 與 body 一致性及 replay invalidation 仍為獨立的
+強化項目；fault／auth／replay／custom responder 的優先順序維持不變。
+
 | Action prefix | Dispatcher | 操作數 |
 |---|---|---|
 | `…/ver10/device/wsdl/` | `dispatch_device` | 38 |
@@ -122,7 +128,7 @@ Content-Type: application/soap+xml; charset=utf-8; action="http://www.onvif.org/
 | `…/ver20/media/wsdl/` | `dispatch_media2` | 26 |
 | `…/ver20/ptz/wsdl/` | `dispatch_ptz` | 27 |
 | `…/ver20/imaging/wsdl/` | `dispatch_imaging` | 8 |
-| `…/events/wsdl/` 或 `docs.oasis-open.org/wsn/` | `dispatch_events` | 8 |
+| 完整 ONVIF Events／OASIS WSN port path | `dispatch_events` | 8 |
 | `…/ver10/recording/wsdl/` | `dispatch_recording` | 11 |
 | `…/ver10/search/wsdl/` | `dispatch_search` | 4 |
 | `…/ver10/replay/wsdl/` | `dispatch_replay` | 2 |

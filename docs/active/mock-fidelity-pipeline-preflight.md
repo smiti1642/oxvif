@@ -18,8 +18,12 @@ below. No new product decision is required here.
 | [Parsed-node implementation](#parsed-node-implementation) | P-A delivered scope and remaining W04 work |
 | [Structured fault foundation](#structured-fault-foundation) | P-C serializer slice and consumer boundaries |
 | [Committed deletion effects](#committed-deletion-effects) | Selected K17 repair and remaining replay boundaries |
+| [Exact Action routing](#exact-action-routing) | K06 routing slice and remaining W03/W07 work |
 
 ## Entry points and ownership
+
+The table is a historical source baseline. Current routing changes are recorded
+under [Exact Action routing](#exact-action-routing).
 
 | Source symbols | Baseline input/output and next dependency | Work owner |
 | --- | --- | --- |
@@ -282,3 +286,39 @@ controls passed. The restored suite passed 1,174 all-feature and 1,090 default
 tests (5 ignored, 20 suites each). A fresh external corpus contained 34 XML
 instances, all accepted by pinned strict Xerces XSD 1.1 validation; this is not
 semantic conformance or whole-programme acceptance.
+
+## Exact Action routing
+
+K06 routing sub-slice, based on `4bcb024`: `respond_with_effect` now splits the
+last separator and matches the whole preceding service/port identity. Events
+operations additionally belong to their particular port; the shared dispatcher
+is not permission to accept another port's operation tail. Public client/session
+Action declarations and the 157 routed operations are unchanged.
+
+The existing source Action inventory supplies the identity set; pinned Events
+and WSN resources were checked externally. [Basic Profile 2.0 R2744 and R2900](https://docs.oasis-open.org/ws-brsp/BasicProfile/v2.0/BasicProfile-v2.0.html)
+support equality of declared Actions. R2757 separately permits omission of the
+Content-Type action parameter: this routing repair does **not** implement that
+HTTP fallback. SOAP 1.2 status selection, media type/encoding, WSA consistency,
+body identity, parse-once dispatch and generic fault mappings remain open.
+
+The source-wide `action_aliases_never_reach_a_service_handler` control mutates
+every extracted client Action in five ways and asserts the exact existing
+unsupported response, absent committed effect and complete unchanged state.
+The two `*_action_identity_rejects_aliases_before_state_changes` controls add
+wrong Events ports and an actual hostname write through HTTP/in-process entry
+points, checking that only the canonical write notifies. All three failed at
+payload assertions against the old routing in the full all-feature no-fail-fast
+run (local log `1789041634_cargo_test.log`); the hostname probes exposed an actual
+unwanted write. Existing source-wide positive routing and chain-order tests are
+retained. Formatting, both workspace Clippy modes and both warnings-as-errors
+documentation builds passed. Restored workspace suites passed 1,184 all-feature
+and 1,100 default tests (5 ignored, 21 suites each). Inventory self-tests and
+159 Action sites / 157 routes / 260 readers remain unchanged. Fresh external
+corpus 07 passed strict Xerces XSD 1.1 validation for all 34 selected instances;
+neither the corpus nor ignored tests imply whole-programme acceptance.
+
+Scope: normal synthetic routing only. Public raw responders, suffix-based fault
+injection and legacy replay invalidation remain separate work. The unknown-Action
+fault retains its existing flat code/reason; it is not accepted as the final
+normative fault contract. No public API or installed binary changes.

@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Synthetic mock routing now matches complete Action identities, including the
+  Events port segment. Wrong hosts, inserted path segments and cross-port aliases
+  no longer reach handlers. Existing client Actions are unchanged; HTTP header
+  parsing, body identity validation and replay policy remain under review.
 - Mock Media configuration binding now validates and commits a complete request
   under one write lock. A late invalid Media2 configuration no longer leaves
   earlier slots changed; successful multi-entry requests notify once and refused

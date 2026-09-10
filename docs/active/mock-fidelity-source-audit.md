@@ -29,7 +29,9 @@ This is measured project-source indexing, not a schema catalogue.
   `required_text`, canonicalization, discovery and an intentionally unused
   helper touch; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
-  Runtime acceptance of noncanonical aliases remains K06/W07, not fixed here.
+  K06 synthetic alias routing is now repaired in the
+  [pipeline checkpoint](mock-fidelity-pipeline-preflight.md#exact-action-routing);
+  HTTP extraction, body agreement and replay remain separate work.
   W02 has a complete direct-call index for these five spellings, but is still
   PARTIAL: transitive call paths and per-field classifications are not all closed.
 - These scanners are deliberately source-shape tools, not Rust AST parsers.
@@ -364,6 +366,7 @@ while the complete dependency graph remains open.
 
 | ID | Evidence | Disposition |
 | --- | --- | --- |
+| K24 | Pinned output-type review finds Media2 audio renderers/options reuse Media1 codec labels, and shared writes store those labels without a service adapter. XSD string validity does not verify the different codec vocabulary. | W01/W10: review audio list/options, profile-inlined audio, shared writes and client cross-service expectations as one dependency set. Source-confirmed; discriminating wire/state reproduction pending. Do not fix rendering alone and break writes. |
 | K23 | Windows CI run 34471659927 (`2a488be`) failed `line_number_override_is_validated_but_never_changes_agent_or_plain_output`: bytewise JSON comparison included independently measured `meta.elapsed_ms` (0 versus 9). | W22 test-harness repair: require numeric timing, omit only that exact field from JSON equality, keep all other fields, stderr and plain-output checks; add deterministic timing/data/type controls. Do not alter CLI output or hide other metadata. |
 | K12 | Source comment at `media::bind_configuration` describes binding a fixed profile as a mock deviation. Official Media1/Media2 §4.1 distinguish deletion from configuration changes. | Correct the comment and preserve legal binding; do not “repair” it by making fixed profiles immutable. References below. |
 | K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; capacity and other CreateProfile semantics remain open. |

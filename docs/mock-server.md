@@ -137,6 +137,13 @@ Content-Type: application/soap+xml; charset=utf-8; action="http://www.onvif.org/
 namespace, **not** by the operation name — nine services share the operation
 name `GetServiceCapabilities`, which is the whole reason:
 
+Synthetic dispatch now matches the complete supported Action URI, including
+the Events port segment. The abbreviated prefixes below are an overview, not
+substring-matching rules. Wrong hosts, inserted path segments, changed schemes
+and cross-port aliases are rejected. Existing client Actions do not change.
+HTTP header parsing, operation/body agreement, and replay invalidation remain
+separate hardening tasks; fault/auth/replay/custom responders retain precedence.
+
 | Action prefix | Dispatcher | Operations |
 |---|---|---|
 | `…/ver10/device/wsdl/` | `dispatch_device` | 38 |
@@ -145,7 +152,7 @@ name `GetServiceCapabilities`, which is the whole reason:
 | `…/ver20/media/wsdl/` | `dispatch_media2` | 26 |
 | `…/ver20/ptz/wsdl/` | `dispatch_ptz` | 27 |
 | `…/ver20/imaging/wsdl/` | `dispatch_imaging` | 8 |
-| `…/events/wsdl/` or `docs.oasis-open.org/wsn/` | `dispatch_events` | 8 |
+| Exact ONVIF Events / OASIS WSN port paths | `dispatch_events` | 8 |
 | `…/ver10/recording/wsdl/` | `dispatch_recording` | 11 |
 | `…/ver10/search/wsdl/` | `dispatch_search` | 4 |
 | `…/ver10/replay/wsdl/` | `dispatch_replay` | 2 |

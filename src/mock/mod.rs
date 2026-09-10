@@ -42,6 +42,11 @@
 //!
 //! # Strictness
 //!
+//! Synthetic routing matches complete Action identities, including the Events
+//! port segment; wrong hosts and inserted path segments are not aliases. This
+//! does not make HTTP header parsing or every handler's body validation strict.
+//! Explicit fault/replay/custom responders retain their precedence.
+//!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A
 //! mock that answers everything is not a test harness — it is a way of proving
 //! your client compiles. Each rule below exists because its absence let a real

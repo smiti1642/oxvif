@@ -97,7 +97,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W04／M1、M3／PARTIAL | W02 | `request.rs`：P-A private owning request、scalar／scoped attribute／subtree／repeated 存取已實作；typed field rules 與 QName-valued content 待完成 | 七個 P-A 控制已擾動並還原；C02–C04／C09 仍須涵蓋已遷移 handler、合法 extension 及欄位限制 |
 | W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | `fault.rs` 已提供型別化 code、有序 subcode、安全 reason，供認證／空 chain 回應使用；服務 helper 與 structured Detail 仍待完成 | 一般 scope／depth 與認證回歸已通過；一般服務分支仍須具參考映射，不概括宣稱符合規格 |
 | W06／M2／PARTIAL | 預設切換前完成 W05 設計 | 已完成第一層 subcode 的 client／health 控制，以及認證 CLI JSON／table 子程序控制；公開錯誤欄位未改變 | 服務預設切換前仍須擴充 nested／flat／vendor、transport／session 與消費端覆蓋；維持診斷及 exit-code 意義 |
-| W07／M2、M3／TODO | W03／W05 設計、W06 | `helpers.rs::extract_action`、`server.rs::handle_soap`、`transport.rs`、dispatch routing | HTTP Action／content type／status／無效 UTF-8／缺少或衝突 header／服務路徑對照 binding；不假設所有 HTTP 200 Fault 一律正確或錯誤 |
+| W07／M2、M3／PARTIAL | W03／W05 設計、W06 | 完整 synthetic Action 路由拒絕主機／path／Events-port 別名；HTTP 擷取與 binding 仍未完成 | 全來源正反向路由及 HTTP／in-process 寫入控制通過；content type／status／無效 UTF-8／缺少或衝突 header、body 一致性及 endpoint 路由尚未驗收 |
 | W08／M3／TODO | W02／W04／W05 | `auth.rs::requires_auth/validate_ws_security/auth_fault`、responder auth gate、Device users | Scoped WSSE parsing、豁免匹配、digest／時間／nonce 限制；明示 authentication 與 authorization 邊界；錯誤去除機密，不附帶變更 auth 預設 |
 | W09／M2／TODO | W05／W06 | `fault_injection.rs`、`responder.rs`、server admin endpoint、公開 injection builder | 分離 literal／structured 與刻意 raw 異常輸出；自訂 QName、single-shot 匹配、順序、併發、clear／reset 及相容測試 |
 | W10／M2–M4／PARTIAL | 批次 W01、W03–W06 | `services/media.rs`、`media2.rs`、共用狀態與 renderer；按下方批次施工 | 每個 Media 列通過 C01–C12；兩種 view 狀態一致但不共用錯誤 wire shape；E1 不代表 DeleteProfile 列結案 |
@@ -163,7 +163,7 @@ W02 發現新相依性時須擴充本表。
 | K03／選定 DeleteProfile 分支已修正 | 兩個服務對不存在／固定 profile 使用巢狀 Sender Fault；選定 corpus 的獨立驗證通過 | W05／W06；其餘操作映射仍待完成。Client 仍回報第一層而非最深層 subcode；全程式驗收尚未完成 |
 | K04／已記錄風險 | 舊 escaped 輸入經 escaping Fault helper 回顯可能重複轉義 | W05／W23；追蹤每個含插值的 reason，重現受影響路徑 |
 | K05／程式碼確認 | Factory reset、Events unsubscribe／sync 存在空成功路由，意圖／效果待分類 | W13／W15／W16；逐操作分類，不將所有 `resp_empty` 視為缺陷 |
-| K06／行為確認、規範待查 | HTTP handler 回 200；Events 路由用 substring；HTTP body 使用 lossy UTF-8 conversion | W03／W07；獨立 protocol／transport 案例及適用參考資料 |
+| K06／路由子批次已修正、HTTP 未完成 | Synthetic Action 別名不再進入 handler；HTTP handler 仍回 200 並使用 lossy UTF-8 conversion | W03／W07；參閱管線路由證據；擷取、body 一致性、fault 對應及 replay 仍未完成 |
 | K07／程式碼確認 | Schema／namespace probe 有 scope／Fault 覆蓋缺口 | W20–W22；具失敗敏感性的獨立驗證 |
 | K08／未驗證 | 部分寫入、hook／lock、併發 queue、replay invalidation 可能隱藏次要效果 | W18／W19；狀態快照、有界併發案例、hook assertion |
 | K09／未驗證 | 必填欄位／範圍／extension／capability 宣告可能與契約不符 | W01／W10–W17；實作前完成批次工作卡 |

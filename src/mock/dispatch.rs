@@ -15,37 +15,46 @@ pub(crate) fn respond_with_effect(
     body: &str,
 ) -> (String, Option<Effect>) {
     let mut effect = None;
-    let op = action.rsplit('/').next().unwrap_or("");
-
-    // Events share one sub-dispatcher across the ONVIF and OASIS WSN namespaces.
-    let response =
-        if action.contains("/events/wsdl/") || action.contains("docs.oasis-open.org/wsn/") {
-            dispatch_events(op, base, state, body)
-        } else if let Some(tail) = action.strip_prefix("http://www.onvif.org/") {
-            if tail.starts_with("ver10/device/wsdl/") {
-                dispatch_device(op, base, state, body)
-            } else if tail.starts_with("ver10/deviceio/wsdl/") {
-                dispatch_device_io(op, state)
-            } else if tail.starts_with("ver20/media/wsdl/") {
-                dispatch_media2(op, base, state, body, &mut effect)
-            } else if tail.starts_with("ver10/media/wsdl/") {
-                dispatch_media(op, base, state, body, &mut effect)
-            } else if tail.starts_with("ver20/ptz/wsdl/") {
-                dispatch_ptz(op, state, body)
-            } else if tail.starts_with("ver20/imaging/wsdl/") {
-                dispatch_imaging(op, state, body)
-            } else if tail.starts_with("ver10/recording/wsdl/") {
-                dispatch_recording(op, state, body)
-            } else if tail.starts_with("ver10/search/wsdl/") {
-                dispatch_search(op, state)
-            } else if tail.starts_with("ver10/replay/wsdl/") {
-                dispatch_replay(op, state, body)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+    // Match the complete service/port path, not a substring or a prefix plus
+    // the last segment. Keep each Events port's accepted operations separate.
+    let response = match action.rsplit_once('/') {
+        Some(("http://www.onvif.org/ver10/device/wsdl", op)) => {
+            dispatch_device(op, base, state, body)
+        }
+        Some(("http://www.onvif.org/ver10/deviceio/wsdl", op)) => dispatch_device_io(op, state),
+        Some(("http://www.onvif.org/ver20/media/wsdl", op)) => {
+            dispatch_media2(op, base, state, body, &mut effect)
+        }
+        Some(("http://www.onvif.org/ver10/media/wsdl", op)) => {
+            dispatch_media(op, base, state, body, &mut effect)
+        }
+        Some(("http://www.onvif.org/ver20/ptz/wsdl", op)) => dispatch_ptz(op, state, body),
+        Some(("http://www.onvif.org/ver20/imaging/wsdl", op)) => dispatch_imaging(op, state, body),
+        Some(("http://www.onvif.org/ver10/recording/wsdl", op)) => {
+            dispatch_recording(op, state, body)
+        }
+        Some(("http://www.onvif.org/ver10/search/wsdl", op)) => dispatch_search(op, state),
+        Some(("http://www.onvif.org/ver10/replay/wsdl", op)) => dispatch_replay(op, state, body),
+        Some((
+            "http://www.onvif.org/ver10/events/wsdl/EventPortType",
+            op @ ("GetServiceCapabilitiesRequest"
+            | "GetEventPropertiesRequest"
+            | "CreatePullPointSubscriptionRequest"),
+        ))
+        | Some((
+            "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription",
+            op @ ("PullMessagesRequest" | "SetSynchronizationPointRequest"),
+        ))
+        | Some((
+            "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager",
+            op @ ("RenewRequest" | "UnsubscribeRequest"),
+        ))
+        | Some((
+            "http://docs.oasis-open.org/wsn/bw-2/NotificationProducer",
+            op @ "SubscribeRequest",
+        )) => dispatch_events(op, base, state, body),
+        _ => None,
+    };
 
     let xml = response.unwrap_or_else(|| {
         eprintln!("  [WARN] unhandled action: {action}");
@@ -495,6 +504,43 @@ mod tests {
             unhandled.len(),
             unhandled.join("\n  "),
         );
+    }
+
+    #[test]
+    fn action_aliases_never_reach_a_service_handler() {
+        use crate::soap::{SoapError, find_response, parse_soap_body};
+        let state = MockState::new();
+        let before = serde_json::to_value(&*state.read()).unwrap();
+        let actions: std::collections::BTreeSet<_> = CLIENT_SOURCES
+            .iter()
+            .flat_map(|(_, source)| action_uris(source))
+            .filter(|uri| is_action(uri))
+            .collect();
+        assert!(actions.len() >= 150, "source sweep must not become vacuous");
+        for action in actions {
+            let (path, op) = action.rsplit_once('/').unwrap();
+            for alias in [
+                format!("{path}/alias-941/{op}"),
+                format!("https://invalid.example/{action}"),
+                action.replacen("http://", "https://", 1),
+                format!("{action}?alias=941"),
+                format!("{action}/"),
+            ] {
+                let (xml, effect) = respond_with_effect(&alias, "http://mock", &state, "");
+                assert_eq!(
+                    find_response(&parse_soap_body(&xml).unwrap(), "unused").unwrap_err(),
+                    SoapError::Fault {
+                        code: "s:Receiver".into(),
+                        reason: format!("Not implemented: {alias}"),
+                        subcode: None,
+                        detail: None,
+                    },
+                    "alias must not reach the handler for {action}"
+                );
+                assert_eq!(effect, None);
+                assert_eq!(serde_json::to_value(&*state.read()).unwrap(), before);
+            }
+        }
     }
 
     /// Attribute names in the first start-tag of `xml`, in order.

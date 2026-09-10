@@ -15,6 +15,80 @@ fn device(token: &str) -> MockTransport {
     transport
 }
 
+async fn reject_action_aliases(transport: &dyn Transport, url: &str) {
+    let ns = "http://www.onvif.org/ver10/device/wsdl";
+    let body = format!(
+        "<d:SetHostname xmlns:d='{ns}'><d:Name>must-not-write-941</d:Name></d:SetHostname>"
+    );
+    for action in [
+        format!("{ns}/alias-941/SetHostname"),
+        "https://invalid.example/events/wsdl/EventPortType/GetEventPropertiesRequest".into(),
+        "http://www.onvif.org/ver10/events/wsdl/SubscriptionManager/RenewRequest".into(),
+        "http://docs.oasis-open.org/wsn/bw-2/NotificationProducer/UnsubscribeRequest".into(),
+    ] {
+        let xml = transport
+            .soap_post(url, &action, body.clone())
+            .await
+            .unwrap();
+        assert_eq!(
+            oxvif::soap::find_response(&oxvif::soap::parse_soap_body(&xml).unwrap(), "unused")
+                .unwrap_err(),
+            oxvif::soap::SoapError::Fault {
+                code: "s:Receiver".into(),
+                reason: format!("Not implemented: {action}"),
+                subcode: None,
+                detail: None,
+            }
+        );
+    }
+    let xml = transport
+        .soap_post(url, &format!("{ns}/SetHostname"), body)
+        .await
+        .unwrap();
+    assert_eq!(
+        oxvif::soap::find_response(
+            &oxvif::soap::parse_soap_body(&xml).unwrap(),
+            "SetHostnameResponse"
+        )
+        .unwrap()
+        .local_name,
+        "SetHostnameResponse"
+    );
+}
+
+#[tokio::test]
+async fn in_process_action_identity_rejects_aliases_before_state_changes() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let notifications = Arc::new(AtomicUsize::new(0));
+    let observed = notifications.clone();
+    let mut state = oxvif::mock::MockState::new();
+    state.set_on_change(Arc::new(move |_| {
+        observed.fetch_add(1, Ordering::SeqCst);
+    }));
+    let transport = MockTransport::with_state(state);
+    reject_action_aliases(&transport, "http://mock").await;
+    assert_eq!(transport.device().read().hostname, "must-not-write-941");
+    assert_eq!(notifications.load(Ordering::SeqCst), 1);
+}
+
+#[cfg(feature = "mock-server")]
+#[tokio::test]
+async fn http_action_identity_rejects_aliases_before_state_changes() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let notifications = Arc::new(AtomicUsize::new(0));
+    let observed = notifications.clone();
+    let server = oxvif::mock::MockServer::builder()
+        .on_change(Arc::new(move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+        }))
+        .start()
+        .await
+        .unwrap();
+    reject_action_aliases(&oxvif::transport::HttpTransport::new(), server.device_url()).await;
+    assert_eq!(server.device().read().hostname, "must-not-write-941");
+    assert_eq!(notifications.load(Ordering::SeqCst), 1);
+}
+
 // Fixed controls deletion, not binding. This control prevents the old incorrect
 // bind_configuration comment from becoming a behavior change during hardening.
 #[tokio::test]
