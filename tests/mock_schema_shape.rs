@@ -1552,6 +1552,29 @@ fn extra_body(op: &str) -> &'static str {
     }
 }
 
+/// Wrap this legacy probe's source-selected fragments in an identified operation.
+/// This preserves response coverage; it does not make these request arguments a
+/// normative request corpus. The separate client exchange corpus covers that.
+fn identified_probe_request(action: &str, fields: &str) -> String {
+    let (path, op) = action.rsplit_once('/').expect("source Action");
+    let (namespace, name) = if path.contains("/events/wsdl/") {
+        (
+            "http://www.onvif.org/ver10/events/wsdl",
+            op.strip_suffix("Request").unwrap(),
+        )
+    } else if path.starts_with("http://docs.oasis-open.org/wsn/") {
+        (
+            "http://docs.oasis-open.org/wsn/b-2",
+            op.strip_suffix("Request").unwrap(),
+        )
+    } else if path == "http://www.onvif.org/ver10/deviceio/wsdl" {
+        ("http://www.onvif.org/ver10/deviceIO/wsdl", op)
+    } else {
+        (path, op)
+    };
+    format!("<{name} xmlns='{namespace}'>{fields}</{name}>")
+}
+
 // ── The test ─────────────────────────────────────────────────────────────────
 
 fn schema_files(dir: &Path) -> Vec<PathBuf> {
@@ -1625,7 +1648,8 @@ async fn mock_output_matches_the_onvif_schema() {
                 continue;
             }
             let op = uri.rsplit('/').next().unwrap_or("");
-            let body = format!("{}{}", body_for(op), extra_body(op));
+            let body =
+                identified_probe_request(uri, &format!("{}{}", body_for(op), extra_body(op)));
             let xml = transport
                 .soap_post("http://mock", uri, body)
                 .await

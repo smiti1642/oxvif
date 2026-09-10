@@ -199,6 +199,8 @@
 //! drive an [`OnvifClient`] against it — no network, no real camera. The
 //! **`mock-server`** feature additionally provides a bound-port `mock::MockServer`
 //! for cross-process / non-Rust clients. See the `mock` module for details.
+//! Synthetic requests share bounded XML and operation-identity checks; full
+//! field fidelity and HTTP binding remain separate from that validation.
 //!
 //! ```ignore
 //! // Cargo.toml:  oxvif = { version = "0.16", features = ["mock"] }

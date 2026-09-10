@@ -184,28 +184,38 @@ async fn delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutatio
         let ns = format!("http://www.onvif.org/{version}/media/wsdl");
         let action = format!("{ns}/DeleteProfile");
         let good = format!("<m:{field}>target</m:{field}>");
-        for (body, reason) in [
+        for (body, code, subcode, reason) in [
             (
                 format!(
                     "<m:DeleteProfile xmlns:m='{ns}'><m:Extension>{good}</m:Extension></m:DeleteProfile>"
                 ),
-                "missing request field",
+                "env:Sender",
+                None,
+                "InvalidRequest-DELETEPROFILE: missing request field",
             ),
             (
                 format!("<m:DeleteProfile xmlns:m='{ns}'>{good}{good}</m:DeleteProfile>"),
-                "duplicate request field",
+                "env:Sender",
+                None,
+                "InvalidRequest-DELETEPROFILE: duplicate request field",
             ),
             (
                 format!("<m:WrongOperation xmlns:m='{ns}'>{good}</m:WrongOperation>"),
-                "unexpected operation or namespace",
+                "s:Sender",
+                Some("ter:TagMismatch"),
+                "Tag Mismatch",
             ),
             (
                 format!("<m:DeleteProfile xmlns:m='urn:wrong'>{good}</m:DeleteProfile>"),
-                "unexpected operation or namespace",
+                "s:Sender",
+                Some("ter:TagMismatch"),
+                "Tag Mismatch",
             ),
             (
                 format!("<m:DeleteProfile xmlns:m='{ns}'>{good}</m:DeleteProfile><Extra/>"),
-                "multiple document elements",
+                "s:Sender",
+                Some("ter:WellFormed"),
+                "Well-formed Error",
             ),
         ] {
             let transport = device("target");
@@ -214,11 +224,14 @@ async fn delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutatio
                 .await
                 .unwrap();
             let body = oxvif::soap::parse_soap_body(&xml).unwrap();
-            let fault = body.child("Fault").expect("invalid identity must fault");
-            assert_eq!(fault.path(&["Code", "Value"]).unwrap().text(), "env:Sender");
             assert_eq!(
-                fault.path(&["Reason", "Text"]).unwrap().text(),
-                format!("InvalidRequest-DELETEPROFILE: {reason}")
+                oxvif::soap::find_response(&body, "DeleteProfileResponse").unwrap_err(),
+                oxvif::soap::SoapError::Fault {
+                    code: code.into(),
+                    subcode: subcode.map(str::to_owned),
+                    reason: reason.into(),
+                    detail: None,
+                }
             );
             let state = transport.device().read();
             assert_eq!(state.profiles.profiles.len(), 1);

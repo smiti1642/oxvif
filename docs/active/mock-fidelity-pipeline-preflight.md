@@ -4,8 +4,8 @@
 
 W02/W03/W06/W19 engineering checkpoint, 2026-09-10. Source baseline `9978220`.
 This is a source-derived dependency map, not a normative protocol catalogue.
-W02 remains PARTIAL across the programme; W03 default validation and broad W06
-service-error migration are **not implemented**. Completed foundations are appended
+W02 and W03 remain PARTIAL across the programme; common synthetic validation is
+implemented, while broad W06 service-error migration is not. Completed foundations are appended
 below. No new product decision is required here.
 
 | Section | Purpose |
@@ -19,6 +19,7 @@ below. No new product decision is required here.
 | [Structured fault foundation](#structured-fault-foundation) | P-C serializer slice and consumer boundaries |
 | [Committed deletion effects](#committed-deletion-effects) | Selected K17 repair and remaining replay boundaries |
 | [Exact Action routing](#exact-action-routing) | K06 routing slice and remaining W03/W07 work |
+| [Parsed synthetic boundary](#parsed-synthetic-boundary) | P-D implemented checks, evidence and exclusions |
 
 ## Entry points and ownership
 
@@ -145,7 +146,7 @@ passed for the preceding authentication-Fault commit `e6145b3`, not this new sli
 These are sub-slices of existing work IDs, not replacement milestones. External
 schema CI remains W20–W22; the newly wired inventory job checks source drift only.
 
-P-D implementation contract (engineering target, not implemented yet):
+P-D implementation contract (original target; delivered subset recorded below):
 
 - Resolve one private route from the complete supplied Action and use that same
   route for operation QName validation and dispatch. Events Action suffixes and
@@ -341,7 +342,8 @@ and WSN resources were checked externally. [Basic Profile 2.0 R2744 and R2900](h
 support equality of declared Actions. R2757 separately permits omission of the
 Content-Type action parameter: this routing repair does **not** implement that
 HTTP fallback. SOAP 1.2 status selection, media type/encoding, WSA consistency,
-body identity, parse-once dispatch and generic fault mappings remain open.
+body identity, parse-once dispatch and generic fault mappings were open at this
+routing checkpoint; the later P-D section records their implemented subset.
 
 The source-wide `action_aliases_never_reach_a_service_handler` control mutates
 every extracted client Action in five ways and asserts the exact existing
@@ -363,3 +365,58 @@ Scope: normal synthetic routing only. Public raw responders, suffix-based fault
 injection and legacy replay invalidation remain separate work. The unknown-Action
 fault retains its existing flat code/reason; it is not accepted as the final
 normative fault contract. No public API or installed binary changes.
+
+## Parsed synthetic boundary
+
+P-D slice based on `4f04f3b`: a private source-derived `Route` owns service/port,
+operation and body identity. Both normal synthetic entry points parse once after
+fault/auth/custom/replay precedence, then check the identified operation before
+either static or stateful dispatch. DeleteProfile borrows that operation rather
+than reparsing; `required_text` is now test-only. Other handlers still use legacy
+field readers. The source index is now 159 Action sites, 157 routes and 258 direct
+reader occurrences (243 production, 15 test; 77 production enclosing symbols).
+
+Checks cover bounded XML parsing, one operation, namespace identity, SOAP 1.2
+Envelope with optional Header before Body, whitespace-only container text and
+qualified header blocks. Qualified standalone operations remain supported by the
+shared engine; this is not acceptance of standalone payloads as an HTTP SOAP
+binding. Thirty typed diagnostics select generic faults without string matching.
+Core generic faults are distinguished from the explicitly mock-specific
+`urn:oxvif:mock:error` resource/DTD policies. Limits remain 2 MiB of UTF-8 text,
+depth 64 and 16,384 nodes; these do not represent advertised hardware capacity.
+See the public [request boundary](../mock-server.md#synthetic-request-boundary)
+for the supported scope.
+
+`mock_request_boundary` exercises static reads and hostname writes through HTTP
+and in-process paths. It asserts full unchanged serialized state, no hook on
+rejection, exact fault payloads and independently resolved Code/Subcode QNames;
+valid prefix aliases and a committed write remain positive controls. The byte
+limit has a separate in-process control; HTTP byte-limit mapping is not accepted.
+The new quirk control proves malformed stored requests are not normalized and
+the recorded request/response remain unchanged when the stricter baseline faults.
+Normal source-routing and legacy shape probes now supply identified operation
+XML instead of empty strings or bare fragments, avoiding generic-fault-only runs.
+
+Evidence: both initial boundary controls failed against the old implementation
+(`1789042812_cargo_test.log`). Disabling envelope-version/operation identity checks
+failed five controls, including the quirk baseline and actual DeleteProfile
+identity protection (`1789043524_cargo_test.log`). Mutating the fault namespace
+and byte-limit classification failed four controls, including expanded QName and
+resource-policy assertions (`1789043659_cargo_test.log`). Both mutations were
+restored. The restored full workspace all-feature run passed 1,188 tests with
+5 ignored in 22 suites; the default run passed 1,103 tests with 5 ignored in
+22 suites. Formatting, both workspace Clippy modes, inventory self-tests and both
+warnings-as-errors documentation builds passed.
+Fresh external corpus 08 passed strict Xerces XSD 1.1 for its 34 selected
+instances; it does not include the new generic boundary faults. The legacy
+external shape probe passed all unchanged zero-finding pins: 158 responses,
+111 success payloads, 47 faults, 1,242 anchors, 1,431 skipped children and 398
+checked attributes. More payloads are reached after wrapping its previously bare
+fields; those legacy request fields are not a normative request corpus.
+
+Remaining W03/W07/W08/W19 work includes HTTP action fallback/consistency, media
+type/encoding/status/endpoint rules, SOAP mustUnderstand/encodingStyle and
+attribute policy, processing instructions/outside comments, scoped WSSE/auth,
+operation-specific field semantics, ordinary service faults and replay effects.
+Raw fault/custom/replay responses retain their earlier precedence and bytes.
+No public API, error type, CLI exit code or installed binary was changed.

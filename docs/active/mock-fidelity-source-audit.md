@@ -23,9 +23,9 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 260 direct occurrences of five reader spellings were indexed: 245 before
-  top-level test modules and 15 inside those modules. The former span 79
-  enclosing symbols, **not** 79 defective operations. This includes strict
+- 258 direct occurrences of five reader spellings are indexed: 243 before
+  top-level test modules and 15 inside those modules. The former span 77
+  enclosing symbols, **not** 77 defective operations. This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
   helper touch; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
@@ -259,7 +259,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
 | `src/mock/services/media.rs::resp_profile` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::handle_create_profile` | `extract_tag` | `production:3` |
-| `src/mock/services/media.rs::handle_delete_profile` | `required_text` | `production:1` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
@@ -288,7 +287,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:3` |
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_all_tags` | `production:1` |
 | `src/mock/services/media2.rs::handle_create_profile_media2` | `extract_tag` | `production:2` |
-| `src/mock/services/media2.rs::handle_delete_profile_media2` | `required_text` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |

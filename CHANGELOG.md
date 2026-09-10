@@ -22,6 +22,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Requests reaching the synthetic mock now share bounded namespace-aware XML
+  parsing and Action/body identity checks, including static reads. Malformed XML,
+  wrong operation identities and invalid SOAP container structure return generic
+  structured faults before handlers run. Direct harnesses must send an identified
+  operation rather than empty strings or bare field fragments. Raw responder and
+  replay precedence is preserved; full field validation and HTTP binding remain
+  under review.
 - Synthetic mock routing now matches complete Action identities, including the
   Events port segment. Wrong hosts, inserted path segments and cross-port aliases
   no longer reach handlers. Existing client Actions are unchanged; HTTP header

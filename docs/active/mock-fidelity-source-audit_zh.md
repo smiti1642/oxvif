@@ -23,9 +23,9 @@
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 260 個直接呼叫：245 個位於頂層 test module 之前，15 個
-  位於其中。前者分布於 79 個 enclosing symbol，**不是** 79 個有缺陷的操作。
-  其中包含嚴格 `required_text`、canonicalization、discovery 及刻意未使用的
+- 五種 reader 拼法共 258 個直接呼叫：243 個位於頂層 test module 之前，15 個
+  位於其中。前者分布於 77 個 enclosing symbol，**不是** 77 個有缺陷的操作。
+  其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
 - W00 已完成目前字面值形式的來源核對；K06 synthetic 別名路由已於
   [管線檢查點](mock-fidelity-pipeline-preflight_zh.md#完整-action-路由)修正；
@@ -253,7 +253,6 @@
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
 | `src/mock/services/media.rs::resp_profile` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::handle_create_profile` | `extract_tag` | `production:3` |
-| `src/mock/services/media.rs::handle_delete_profile` | `required_text` | `production:1` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
@@ -282,7 +281,6 @@
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:3` |
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_all_tags` | `production:1` |
 | `src/mock/services/media2.rs::handle_create_profile_media2` | `extract_tag` | `production:2` |
-| `src/mock/services/media2.rs::handle_delete_profile_media2` | `required_text` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |

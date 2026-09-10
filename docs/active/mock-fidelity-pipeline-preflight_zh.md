@@ -4,7 +4,7 @@
 
 W02／W03／W06／W19 工程檢查點，2026-09-10；原始碼基準 `9978220`。
 本文件是從程式碼整理的依賴圖，不是規範契約表。整體 W02 仍為 PARTIAL；
-W03 預設驗證及廣泛的 W06 服務錯誤遷移**尚未實作**；已完成的共用基礎補充於
+W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯誤遷移尚未完成；已完成的共用基礎補充於
 下方。本階段不需要新的產品決策。
 
 | 章節 | 用途 |
@@ -18,6 +18,7 @@ W03 預設驗證及廣泛的 W06 服務錯誤遷移**尚未實作**；已完成�
 | [結構化 Fault 基礎](#結構化-fault-基礎) | P-C serializer 子批次及消費端邊界 |
 | [已提交的刪除效果](#已提交的刪除效果) | 選定 K17 修正及剩餘 replay 邊界 |
 | [完整 Action 路由](#完整-action-路由) | K06 路由子批次及 W03／W07 剩餘工作 |
+| [Parsed synthetic 邊界](#parsed-synthetic-邊界) | P-D 已實作檢查、證據及排除範圍 |
 
 ## 入口與責任
 
@@ -135,7 +136,7 @@ CreateProfile 額外使 Profiles 失效後，兩項 baseline 在完整全部功�
 
 ## 證據與剩餘工作
 
-P-D 實作契約（工程目標，尚未實作）：
+P-D 實作契約（原始目標；已交付子集記錄於下方）：
 
 - 從完整 supplied Action 解析單一私有 route，同時供 operation QName 驗證及
   dispatch 使用。Events Action suffix 與 DeviceIO namespace 大小寫需對照既有
@@ -304,7 +305,8 @@ Action 宣告及 157 項路由操作保持不變。
 [Basic Profile 2.0 R2744 與 R2900](https://docs.oasis-open.org/ws-brsp/BasicProfile/v2.0/BasicProfile-v2.0.html)
 要求符合宣告的 Action。R2757 另允許省略 Content-Type action 參數，本次路由
 修正**尚未**實作該 HTTP fallback。SOAP 1.2 status、media type／encoding、
-WSA 一致性、body 身分、parse-once dispatch 及通用 fault 對應仍待完成。
+WSA 一致性、body 身分、parse-once dispatch 及通用 fault 對應在該路由檢查點
+仍待完成；後續 P-D 章節記錄其中已交付的子集。
 
 `action_aliases_never_reach_a_service_handler` 對從 client 來源取得的每個 Action
 施加五種變形，斷言完整既有拒絕回應、沒有 committed effect，且整份狀態不變。
@@ -322,3 +324,51 @@ workspace Clippy 及兩種 warnings-as-errors 文件建置通過。修正後全�
 範圍僅限正常 synthetic 路由。公開 raw responder、suffix 型 fault injection
 及既有 replay invalidation 仍為獨立工作。未知 Action 保留原有 flat code／reason，
 不宣稱已符合最終規範 fault 契約。未變更公開 API 或已安裝 binary。
+
+## Parsed synthetic 邊界
+
+以 `4f04f3b` 為基準的 P-D 子批次：私有且源自程式碼的 `Route` 統一持有
+service／port、operation 及 body 身分。兩個正常 synthetic 入口均在
+fault／auth／custom／replay 優先處理後解析一次，再於靜態或狀態型 dispatch
+之前檢查 operation。DeleteProfile 借用該 operation，不再重新解析；
+`required_text` 僅用於測試。其他 handler 仍使用舊欄位 reader。來源索引目前為
+159 個 Action site、157 個 route、258 個直接 reader occurrence（production
+243、test 15；77 個 production enclosing symbol）。
+
+檢查涵蓋有界 XML 解析、單一 operation、namespace 身分、SOAP 1.2 Envelope
+及可省略且須位於 Body 前的 Header、container 僅含空白文字，以及 namespace
+qualified header block。共用引擎仍接受 qualified standalone operation，
+不代表該 payload 已符合 HTTP SOAP binding。30 個 typed diagnostic 直接
+選擇 generic fault，不比對訊息字串。Core generic fault 與明確屬 mock 自訂的
+`urn:oxvif:mock:error` 資源／DTD 政策分開。限制維持 UTF-8 文字 2 MiB、
+depth 64、16,384 nodes；不代表宣告的硬體容量。公開
+[請求邊界](../mock-server_zh.md#synthetic-請求邊界)記錄適用範圍。
+
+`mock_request_boundary` 透過 HTTP 及 in-process 測試靜態讀取與 hostname
+寫入，斷言整份序列化 state 不變、拒絕時沒有 hook、完整 fault payload，並
+獨立解析 Code／Subcode 的 expanded QName；有效 prefix alias 及已提交寫入
+保留為正向控制。Byte limit 有獨立 in-process 控制，HTTP byte-limit 對應
+尚未驗收。新增 quirk 控制確認 malformed stored request 不會被正規化，且
+較嚴格 baseline 回 Fault 時，原始錄製 request／response 完全不變。
+正常來源路由及舊 shape probe 改送具身分的 operation XML，避免空字串或
+bare fragment 只走通用 Fault 路徑卻被計為成功涵蓋。
+
+證據：兩個初始邊界控制在舊實作失敗（`1789042812_cargo_test.log`）。停用
+Envelope version／operation identity 檢查使五項控制失敗，包含 quirk baseline
+及實際 DeleteProfile 身分保護（`1789043524_cargo_test.log`）。改錯 fault
+namespace 及 byte-limit 分類使四項控制失敗，包含 expanded QName 及資源
+政策斷言（`1789043659_cargo_test.log`）。兩次擾動均已還原；完整 workspace
+all-feature 測試通過 1,188 項、5 ignored、22 suites；預設測試通過 1,103 項、
+5 ignored、22 suites。格式、兩種 workspace Clippy、清冊自我測試及兩種
+warnings-as-errors 文件建置通過。新外部 corpus 08 的 34 份選定 instance 通過嚴格 Xerces
+XSD 1.1；該 corpus 未包含新增 generic boundary fault。舊外部 shape probe
+通過全部未更動的零 finding pin：158 responses、111 success payloads、
+47 faults、1,242 anchors、1,431 skipped children、398 checked attributes。
+先前 bare field 加入 operation 包裝後觸及更多 payload，但這些舊 request
+field 不構成規範請求 corpus。
+
+W03／W07／W08／W19 剩餘項目包括 HTTP action fallback／一致性、media type／
+encoding／status／endpoint、SOAP mustUnderstand／encodingStyle／attribute
+政策、processing instruction／root 外 comment、scoped WSSE／auth、逐操作
+欄位語意、其他服務 fault 及 replay effect。Raw fault／custom／replay 回應的
+原有優先序與 bytes 保留。未變更公開 API、error type、CLI exit code 或已安裝 binary。

@@ -148,18 +148,15 @@ pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
 
 pub fn handle_delete_profile(
     state: &SharedState,
-    body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
     use crate::mock::fault::{
         ACTION, Code, DELETION_OF_FIXED_PROFILE, Fault, INVALID_ARG_VAL, NO_PROFILE,
     };
-    let token = match crate::mock::request::required_text(
-        body,
-        "http://www.onvif.org/ver10/media/wsdl",
-        "DeleteProfile",
-        "ProfileToken",
-    ) {
+    let token = match operation
+        .required_child_text("http://www.onvif.org/ver10/media/wsdl", "ProfileToken")
+    {
         Ok(token) => token,
         Err(error) => {
             return resp_soap_fault(
@@ -169,7 +166,7 @@ pub fn handle_delete_profile(
         }
     };
 
-    match delete_profile_in_state(state, &token) {
+    match delete_profile_in_state(state, token) {
         DeleteOutcome::Deleted => {
             *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
             soap(

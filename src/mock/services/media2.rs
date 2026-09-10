@@ -534,7 +534,7 @@ pub fn handle_create_profile_media2(state: &SharedState, body: &str) -> String {
 /// exist or a fixed profile that cannot be removed.
 pub fn handle_delete_profile_media2(
     state: &SharedState,
-    body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
     use crate::mock::fault::{
@@ -545,22 +545,18 @@ pub fn handle_delete_profile_media2(
     // wholesale would have read the wrong element and faulted on every valid
     // request — the reason these are two handlers over one state rather than
     // one handler with a prefix argument.
-    let token = match crate::mock::request::required_text(
-        body,
-        "http://www.onvif.org/ver20/media/wsdl",
-        "DeleteProfile",
-        "Token",
-    ) {
-        Ok(token) => token,
-        Err(error) => {
-            return resp_soap_fault(
-                "env:Sender",
-                &format!("InvalidRequest-DELETEPROFILE: {}", error.message()),
-            );
-        }
-    };
+    let token =
+        match operation.required_child_text("http://www.onvif.org/ver20/media/wsdl", "Token") {
+            Ok(token) => token,
+            Err(error) => {
+                return resp_soap_fault(
+                    "env:Sender",
+                    &format!("InvalidRequest-DELETEPROFILE: {}", error.message()),
+                );
+            }
+        };
 
-    match media::delete_profile_in_state(state, &token) {
+    match media::delete_profile_in_state(state, token) {
         media::DeleteOutcome::Deleted => {
             *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
             resp_empty("tr2", "DeleteProfileResponse")

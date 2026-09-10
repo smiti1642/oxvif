@@ -117,8 +117,9 @@ Content-Type: application/soap+xml; charset=utf-8; action="http://www.onvif.org/
 Synthetic dispatch 現在比對完整的受支援 Action URI，包含 Events 的 port
 segment。下表的縮寫 prefix 僅為概覽，不代表子字串匹配規則。錯誤主機、插入的
 path segment、不同 scheme 及跨 port 的別名都會遭拒；既有 client Action 不變。
-HTTP header 解析、operation 與 body 一致性及 replay invalidation 仍為獨立的
-強化項目；fault／auth／replay／custom responder 的優先順序維持不變。
+HTTP header 解析及 replay invalidation 仍為獨立強化項目；fault／auth／replay／
+custom responder 的優先順序維持不變。Operation／body 身分已由下述共用
+synthetic 邊界檢查。
 
 | Action prefix | Dispatcher | 操作數 |
 |---|---|---|
@@ -149,6 +150,34 @@ HTTP header 解析、operation 與 body 一致性及 replay invalidation 仍為�
 ---
 
 ## 3. Envelope 與 namespace 契約
+
+### Synthetic 請求邊界
+
+到達 synthetic dispatch 的請求會解析一次，建立有資源上限且保留 namespace 的
+樹狀結構。Operation 的 namespace／local name 必須符合解析後的 Action，
+靜態讀取也適用。SOAP envelope 必須在可選 Header 之後包含單一 Body，Body
+內含單一 operation，container text 僅能為 XML 空白；Header 誘導內容不能取代
+Body operation。已遷移的 DeleteProfile handler 借用同一棵樹，不重新解析。
+
+直接呼叫測試工具須提供可辨識身分的 operation，不可再送空字串或單獨欄位
+fragment。例如 `<GetHostname xmlns="http://www.onvif.org/ver10/device/wsdl"/>`
+仍受共用引擎的 standalone operation 路徑支援；實際 client 應傳送 SOAP 1.2
+envelope。保留 standalone 支援不代表 HTTP SOAP binding 已驗收。
+
+Malformed XML、namespace 錯誤、operation 不符及 container shape 錯誤改以
+結構化 generic fault 回應；錯誤 SOAP Envelope 版本使用 `s:VersionMismatch`。
+既有 operation-specific fault 保留各自遷移狀態。Synthetic XML 上限為
+2 MiB UTF-8 text、深度 64、16,384 個 node；這些是 mock parser 限制，並非
+攝影機容量。資源拒絕使用 `mock:RequestLimit`，不支援的 DTD 使用
+`mock:RequestPolicy`，兩者均綁定 `urn:oxvif:mock:error`，reason 不包含請求
+文字。HTTP 可能在進入引擎之前拒絕請求；header／status／encoding 策略仍待審查。
+
+此功能不是 runtime XSD validation，也不是完整欄位驗證。Authentication、
+must-understand／encoding 策略、其他 handler reader 及 replay effect 仍需
+各自遷移。Fault／auth／raw／replay responder 保留優先順序。Metamorph 比較
+採用較嚴格的 synthetic baseline，但不改寫已儲存的 request／response bytes。
+
+### 回應 envelope
 
 所有回應都由 `helpers::soap` 建立為 SOAP 1.2 envelope：
 

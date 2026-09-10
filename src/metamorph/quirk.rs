@@ -570,9 +570,34 @@ mod tests {
     }
 
     #[test]
+    fn malformed_recorded_request_is_not_normalized_for_the_synthetic_baseline() {
+        let action = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+        let request = "<Envelope><Body><GetHostname/></Body></Envelope>";
+        let response = "<Envelope><Body><GetHostnameResponse><HostnameInformation><Name>recorded-612</Name></HostnameInformation></GetHostnameResponse></Body></Envelope>";
+        let mut store = FixtureStore::new("boundary-612");
+        store.record(action, request, response);
+        let details = store.diff_details();
+        assert_eq!(details.len(), 1);
+        assert!(details[0].differs);
+        assert_eq!(store.fixtures()[0].request_raw, request);
+        assert_eq!(store.fixtures()[0].response_raw, response);
+        let body = crate::soap::parse_soap_body(&details[0].baseline_xml).unwrap();
+        assert_eq!(
+            crate::soap::find_response(&body, "GetHostnameResponse").unwrap_err(),
+            crate::soap::SoapError::Fault {
+                code: "s:VersionMismatch".into(),
+                reason: "SOAP version mismatch".into(),
+                subcode: None,
+                detail: None
+            }
+        );
+        assert!(details[0].clone_xml.contains("recorded-612"));
+    }
+
+    #[test]
     fn diff_details_render_aligned_masked_header_stripped_bodies() {
         let action = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
-        let req = "<Envelope><Body><GetHostname/></Body></Envelope>";
+        let req = "<GetHostname xmlns='http://www.onvif.org/ver10/device/wsdl'/>";
         let state = MockState::new();
         let synthetic = dispatch(action, BASELINE_BASE, &state, req);
 
@@ -614,7 +639,7 @@ mod tests {
         // A real device echoes a WS-Addressing SOAP Header the synthetic mock
         // never emits; it must not register as a quirk on every operation.
         let action = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
-        let req = "<Envelope><Body><GetHostname/></Body></Envelope>";
+        let req = "<GetHostname xmlns='http://www.onvif.org/ver10/device/wsdl'/>";
         let state = MockState::new();
         let synthetic = dispatch(action, BASELINE_BASE, &state, req);
 
@@ -646,7 +671,7 @@ mod tests {
     #[test]
     fn matching_shape_is_clean_and_extra_element_is_flagged() {
         let action = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
-        let req = "<Envelope><Body><GetHostname/></Body></Envelope>";
+        let req = "<GetHostname xmlns='http://www.onvif.org/ver10/device/wsdl'/>";
         let state = MockState::new();
         let synthetic = dispatch(action, BASELINE_BASE, &state, req);
 
@@ -871,7 +896,7 @@ mod tests {
     /// only for the ones that end up in the report.
     fn two_fixture_store() -> FixtureStore {
         let action = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
-        let req = "<Envelope><Body><GetHostname/></Body></Envelope>";
+        let req = "<GetHostname xmlns='http://www.onvif.org/ver10/device/wsdl'/>";
         let state = MockState::new();
         let synthetic = dispatch(action, BASELINE_BASE, &state, req);
 

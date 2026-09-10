@@ -141,8 +141,9 @@ Synthetic dispatch now matches the complete supported Action URI, including
 the Events port segment. The abbreviated prefixes below are an overview, not
 substring-matching rules. Wrong hosts, inserted path segments, changed schemes
 and cross-port aliases are rejected. Existing client Actions do not change.
-HTTP header parsing, operation/body agreement, and replay invalidation remain
-separate hardening tasks; fault/auth/replay/custom responders retain precedence.
+HTTP header parsing and replay invalidation remain separate hardening tasks;
+fault/auth/replay/custom responders retain precedence. Operation/body identity is
+now checked at the common synthetic boundary described below.
 
 | Action prefix | Dispatcher | Operations |
 |---|---|---|
@@ -180,6 +181,38 @@ An action that matches no arm returns:
 ---
 
 ## 3. Envelope and namespace contract
+
+### Synthetic request boundary
+
+Requests that reach synthetic dispatch are parsed once into a bounded,
+namespace-aware tree. The operation namespace/local name must match the resolved
+Action, including on static reads. SOAP envelopes require one Body after an
+optional Header, one operation, and whitespace-only container text; Header decoys
+cannot substitute for a Body operation. The migrated DeleteProfile handlers borrow
+that tree rather than parsing it again.
+
+Direct harnesses must send an identified operation, not an empty string or bare
+field fragments. For example, `<GetHostname xmlns="http://www.onvif.org/ver10/device/wsdl"/>`
+remains accepted as a standalone operation by the shared engine; actual clients
+should send SOAP 1.2 envelopes. This retained standalone support is not acceptance
+of the HTTP SOAP binding.
+
+Malformed XML, namespace failures, operation mismatch and container shape failures
+now use structured generic faults. Wrong SOAP Envelope versions use
+`s:VersionMismatch`. Existing operation-specific faults retain their own migration
+status. Synthetic XML is limited to 2 MiB of UTF-8 text, depth 64 and 16,384 nodes;
+these are mock parser limits, not camera capacity. Resource refusals use
+`mock:RequestLimit`, and unsupported DTDs use `mock:RequestPolicy`, both bound to
+`urn:oxvif:mock:error`. These reasons contain no request text. HTTP may reject a
+request before this engine; header/status/encoding policy remains under review.
+
+This is not runtime XSD validation or complete field validation. Authentication,
+must-understand/encoding policy, remaining handler readers and replay effects still
+need their own migration. Explicit fault/auth/raw/replay responders retain their
+precedence. Metamorph comparisons use the stricter synthetic baseline without
+rewriting stored request/response bytes.
+
+### Response envelopes
 
 Every response is a SOAP 1.2 envelope built by `helpers::soap`:
 

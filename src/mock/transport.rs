@@ -35,8 +35,10 @@ const MOCK_BASE: &str = "http://mock";
 /// Cheap to clone (everything is behind `Arc`); clones share the same device
 /// state and fault queue.
 /// Synthetic routing requires the complete supported Action URI. A matching
-/// operation tail under another host or path is not an alias. This check does
-/// not validate every operation's XML body; injection still precedes dispatch.
+/// operation tail under another host or path is not an alias. Requests reaching
+/// dispatch must contain a namespace-identified operation, standalone or inside
+/// a SOAP 1.2 envelope. Common XML/container/identity validation does not validate
+/// every operation's fields; injection still precedes dispatch.
 #[derive(Clone)]
 pub struct MockTransport {
     state: Arc<MockState>,

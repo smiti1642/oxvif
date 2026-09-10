@@ -24,19 +24,24 @@ handler 位於 `src/mock/services/media.rs`／`media2.rs`，dispatch 位於
 Client service URL 由 session service discovery 取得；目前 MockTransport 忽略 URL，
 MockServer 採 catch-all POST 路由。
 
+全部列在 handler 之前均繼承共用 synthetic XML／container／Action-body 驗證。
+下表「輸入擷取」描述的是 handler 欄位，不代表繞過共用邊界。DeleteProfile
+借用 parsed operation；`required_text` 僅保留為 test helper。Generic boundary
+fault 優先於表列操作專屬分支；其他欄位層級解析尚未遷移。
+
 | 清冊 ID | Client → handler | 目前輸入擷取 | 狀態／renderer 路徑 | 目前一般 Fault code（未註明者為平面） |
 | --- | --- | --- | --- | --- |
 | `media.GetProfiles` | get_profiles → resp_profiles | 不接收 body | profiles + catalogues → render_profile | Handler 無操作專屬錯誤分支 |
 | `media.GetProfile` | get_profile → resp_profile | GetProfile fragment → ProfileToken；缺少時為空字串 | profiles + catalogues → render_profile | ter:NoProfile |
 | `media.CreateProfile` | create_profile → handle_create_profile | Name 預設 Profile；選填 Token；舊 fragment／text | create_profile_in_state → profiles, next_token_id → render_profile | ter:ProfileExists |
-| `media.DeleteProfile` | delete_profile → handle_delete_profile | required_text(ProfileToken)，嚴格 scalar identity | delete_profile_in_state → profiles → empty response | 解析：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
+| `media.DeleteProfile` | delete_profile → handle_delete_profile | parsed operation.required_child_text(ProfileToken)，嚴格 scalar identity | delete_profile_in_state → profiles → empty response | 欄位驗證：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
 | `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile |
 | `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile |
 | `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | 不接收 body（不讀 Token／Type） | profiles + media::catalogues → render_profile_media2 | Handler 無操作專屬錯誤分支 |
 | `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Name 預設 Profile；不讀 Configuration | media::create_profile_in_state(None) → profiles, counter → Token response | ter:ProfileExists 分支（目前傳 None 不會到達） |
-| `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | required_text(Token)，嚴格 scalar identity | media::delete_profile_in_state → profiles → empty response | 解析：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
+| `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | parsed operation.required_child_text(Token)，嚴格 scalar identity | media::delete_profile_in_state → profiles → empty response | 欄位驗證：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
 | `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken；重複 Configuration／Type／Token；不讀 Name | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
 | `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken；重複 Configuration／Type／Token | apply_media2_configuration → atomic media::apply_configuration_bindings(add=false) | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
 
@@ -49,10 +54,10 @@ MockServer 採 catch-all POST 路由。
 - Request：session wrapper（含 Media 版本偏好／fallback）→ client method →
   `OnvifClient::call` envelope／security → MockTransport／MockServer →
   FaultResponder → AuthResponder → 選用 replay → SyntheticResponder → dispatch。
-  13 個 client 方法會 escape 呼叫者字串；舊 mock 擷取不解碼。無 body handler
-  目前繞過輸入驗證。
+  13 個 client 方法會 escape 呼叫者字串；舊 mock 擷取不解碼。共用 identity／XML
+  驗證現在也涵蓋靜態 handler。
 - Scalar：`xml_parse::{extract_tag,extract_all_tags,extract_attr}` 依 local name
-  找位置並傳回裁切／raw fragment；Delete 改用 `request::required_text`。
+  找位置並傳回裁切／raw fragment；Delete 使用已解析 operation 的 scalar accessor。
   Binding 現在將擷取的值傳入共用原子 plan，不再合成及重複解析單筆 XML。
   有 scope 的輸入解碼仍待獨立 parser 遷移。
 - Create：explicit duplicate 檢查與新增現在使用同一 write lock；產生 token 時跳過已用身分。
@@ -169,7 +174,7 @@ workspace Clippy 及兩種 warnings-as-errors 文件建置通過。還原後全�
 
 | 面向 | 既有證據或確切下一項案例 | 狀態 |
 | --- | --- | --- |
-| C01 | 來源索引核對完整 Action；W03／W07 新增 runtime alias／body／service 不一致拒絕控制 | PARTIAL |
+| C01 | 來源索引及 runtime alias／body／service 不一致拒絕控制已實作；HTTP binding 政策仍屬 W03／W07 | PARTIAL |
 | C02 | `delete_profile_preserves_escaped_and_whitespace_identity`、K15 markup 基準；新增 create／get／bind 的 literal name／token round trip | PARTIAL |
 | C03 | `delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutation`；擴展至其他 11 列的 namespace／decoy 控制 | PARTIAL |
 | C04 | 外部欄位核對後新增 required／empty／duplicate／repeat／extension 案例，保留合法 repeat | TODO |
@@ -177,7 +182,7 @@ workspace Clippy 及兩種 warnings-as-errors 文件建置通過。還原後全�
 | C06 | K13 配置、K14 通知及 K16 部分 binding 已有正確回歸；更廣泛的 transaction、conflict 及 callback 尚待完成 | PARTIAL |
 | C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`；補完巢狀 renderer escaping、獨立 namespace／shape 檢查 | 已重現缺口 |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`；corpus 檢查不存在／固定 DeleteProfile 巢狀 Fault；其他 mapping／HTTP code 待 W05–W07 | PARTIAL |
-| C09 | Parser 限制目前僅在已遷移 DeleteProfile 有涵蓋；其他路徑 auth／resource-limit 待查 | TODO |
+| C09 | 兩種 transport 的共用靜態／狀態型 depth／node 限制已有控制；byte limit 涵蓋 in-process，scoped auth 及 HTTP byte 對應待查 | PARTIAL |
 | C10 | 模型限制及 K12 修正；`fixed_profile_configuration_remains_mutable_in_both_media_services` 證明 fixed profile 的 Add／Remove 實際改變 state | PARTIAL |
 | C11 | 已驗證選定 DeleteProfile client／health first-subcode 控制與 K22 請求選擇；其餘 consumer／CLI 審查待 W06 | PARTIAL |
 | C12 | 擾動四個 known-gap assertion 均於 payload／state assertion 失敗；反轉 fixed-binding attachment 預期亦失敗，還原後通過 | PARTIAL |

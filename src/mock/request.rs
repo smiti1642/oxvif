@@ -28,6 +28,8 @@ pub(super) enum RequestError {
     MissingBody,
     OperationCount,
     OperationIdentity,
+    EnvelopeShape,
+    VersionMismatch,
     InvalidNamespace,
     UnboundPrefix,
     InvalidCharacter,
@@ -61,6 +63,8 @@ impl RequestError {
             Self::MissingBody => "missing SOAP Body",
             Self::OperationCount => "expected one SOAP operation",
             Self::OperationIdentity => "unexpected operation or namespace",
+            Self::EnvelopeShape => "invalid SOAP container shape",
+            Self::VersionMismatch => "unsupported SOAP envelope version",
             Self::InvalidNamespace => "invalid namespace value",
             Self::UnboundPrefix => "unbound namespace prefix",
             Self::InvalidCharacter => "invalid XML character",
@@ -82,6 +86,64 @@ impl RequestError {
             Self::InvalidDeclaration => "invalid XML declaration",
             Self::UnclosedRoot => "unclosed document element",
             Self::MissingRoot => "missing document element",
+        }
+    }
+
+    /// Generic SOAP boundary policy. Match typed failures, never message text.
+    /// Core 26.06 section 5.8.2.2 supplies the generic names/reasons. Resource
+    /// and unsupported-construct policies remain explicitly mock-specific.
+    pub(super) fn to_fault(self) -> String {
+        use super::fault::{
+            Code, Fault, INVALID_ARGS, MOCK_REQUEST_LIMIT, MOCK_REQUEST_POLICY, NAMESPACE,
+            TAG_MISMATCH, WELL_FORMED,
+        };
+        match self {
+            Self::VersionMismatch => {
+                Fault::new(Code::VersionMismatch, &[], "SOAP version mismatch").to_xml()
+            }
+            Self::OperationIdentity => {
+                Fault::new(Code::Sender, &[TAG_MISMATCH], "Tag Mismatch").to_xml()
+            }
+            Self::InvalidNamespace | Self::UnboundPrefix | Self::DuplicateExpandedAttribute => {
+                Fault::new(Code::Sender, &[NAMESPACE], "Namespace Error").to_xml()
+            }
+            Self::DuplicateField
+            | Self::ExpectedScalar
+            | Self::MissingField
+            | Self::EmptyField
+            | Self::MissingBody
+            | Self::OperationCount
+            | Self::EnvelopeShape => {
+                Fault::new(Code::Sender, &[INVALID_ARGS], "Invalid Args").to_xml()
+            }
+            Self::ByteLimit | Self::NodeLimit | Self::DepthLimit => Fault::new(
+                Code::Sender,
+                &[MOCK_REQUEST_LIMIT],
+                "Mock request resource limit exceeded",
+            )
+            .to_xml(),
+            Self::DtdUnsupported => Fault::new(
+                Code::Sender,
+                &[MOCK_REQUEST_POLICY],
+                "Unsupported mock request construct",
+            )
+            .to_xml(),
+            Self::InvalidCharacter
+            | Self::InvalidAttribute
+            | Self::InvalidAttributeValue
+            | Self::TextOutsideRoot
+            | Self::MultipleRoots
+            | Self::MalformedXml
+            | Self::UnmatchedEnd
+            | Self::CdataOutsideRoot
+            | Self::EntityOutsideRoot
+            | Self::InvalidCharacterReference
+            | Self::UnknownEntity
+            | Self::InvalidDeclaration
+            | Self::UnclosedRoot
+            | Self::MissingRoot => {
+                Fault::new(Code::Sender, &[WELL_FORMED], "Well-formed Error").to_xml()
+            }
         }
     }
 }
@@ -166,11 +228,35 @@ impl Request {
     }
 
     pub(super) fn operation(&self, ns: &str, name: &str) -> Result<&Node, RequestError> {
+        if self.root.name == "Envelope" && self.root.ns != SOAP {
+            return Err(RequestError::VersionMismatch);
+        }
         let op = if self.root.ns == SOAP && self.root.name == "Envelope" {
             let body = self
                 .root
                 .child(SOAP, "Body")?
                 .ok_or(RequestError::MissingBody)?;
+            let header = self.root.child(SOAP, "Header")?;
+            let only_space = |node: &Node| {
+                node.text
+                    .chars()
+                    .all(|c| matches!(c, ' ' | '\t' | '\n' | '\r'))
+            };
+            if self.root.children.len() != 1 + usize::from(header.is_some())
+                || !self
+                    .root
+                    .children
+                    .last()
+                    .is_some_and(|node| node.ns == SOAP && node.name == "Body")
+                || !only_space(&self.root)
+                || !only_space(body)
+                || header.is_some_and(|node| !only_space(node))
+            {
+                return Err(RequestError::EnvelopeShape);
+            }
+            if header.is_some_and(|node| node.children.iter().any(|block| block.ns.is_empty())) {
+                return Err(RequestError::InvalidNamespace);
+            }
             if body.children.len() != 1 {
                 return Err(RequestError::OperationCount);
             }
@@ -345,6 +431,7 @@ fn parse(xml: &str) -> Result<Node, RequestError> {
 
 /// Read one required scalar child from an identified operation. The caller
 /// supplies its own service/operation contract; no schema catalogue is embedded.
+#[cfg(test)]
 pub(super) fn required_text(
     xml: &str,
     ns: &str,

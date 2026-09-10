@@ -8,6 +8,7 @@ use super::helpers::soap;
 pub(super) enum Code {
     Sender,
     Receiver,
+    VersionMismatch,
 }
 
 /// Trusted, compile-time fault names, not request-supplied names. The normal
@@ -61,6 +62,15 @@ pub(super) const ACTION: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "Actio
 pub(super) const NO_PROFILE: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "NoProfile");
 pub(super) const DELETION_OF_FIXED_PROFILE: FaultQName =
     FaultQName::new("ter", ONVIF_ERROR, "DeletionOfFixedProfile");
+pub(super) const WELL_FORMED: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "WellFormed");
+pub(super) const NAMESPACE: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "Namespace");
+pub(super) const TAG_MISMATCH: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "TagMismatch");
+pub(super) const INVALID_ARGS: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "InvalidArgs");
+// Project-specific limits/policy, not ONVIF hardware capacity claims.
+pub(super) const MOCK_REQUEST_LIMIT: FaultQName =
+    FaultQName::new("mock", "urn:oxvif:mock:error", "RequestLimit");
+pub(super) const MOCK_REQUEST_POLICY: FaultQName =
+    FaultQName::new("mock", "urn:oxvif:mock:error", "RequestPolicy");
 
 pub(super) struct Fault<'a> {
     code: Code,
@@ -81,6 +91,7 @@ impl<'a> Fault<'a> {
         let code = match self.code {
             Code::Sender => "s:Sender",
             Code::Receiver => "s:Receiver",
+            Code::VersionMismatch => "s:VersionMismatch",
         };
         let mut body = format!("<s:Fault><s:Code><s:Value>{code}</s:Value>");
         for name in self.subcodes {

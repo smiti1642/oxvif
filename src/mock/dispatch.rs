@@ -15,52 +15,134 @@ pub(crate) fn respond_with_effect(
     body: &str,
 ) -> (String, Option<Effect>) {
     let mut effect = None;
-    // Match the complete service/port path, not a substring or a prefix plus
-    // the last segment. Keep each Events port's accepted operations separate.
-    let response = match action.rsplit_once('/') {
-        Some(("http://www.onvif.org/ver10/device/wsdl", op)) => {
-            dispatch_device(op, base, state, body)
-        }
-        Some(("http://www.onvif.org/ver10/deviceio/wsdl", op)) => dispatch_device_io(op, state),
-        Some(("http://www.onvif.org/ver20/media/wsdl", op)) => {
-            dispatch_media2(op, base, state, body, &mut effect)
-        }
-        Some(("http://www.onvif.org/ver10/media/wsdl", op)) => {
-            dispatch_media(op, base, state, body, &mut effect)
-        }
-        Some(("http://www.onvif.org/ver20/ptz/wsdl", op)) => dispatch_ptz(op, state, body),
-        Some(("http://www.onvif.org/ver20/imaging/wsdl", op)) => dispatch_imaging(op, state, body),
-        Some(("http://www.onvif.org/ver10/recording/wsdl", op)) => {
-            dispatch_recording(op, state, body)
-        }
-        Some(("http://www.onvif.org/ver10/search/wsdl", op)) => dispatch_search(op, state),
-        Some(("http://www.onvif.org/ver10/replay/wsdl", op)) => dispatch_replay(op, state, body),
-        Some((
-            "http://www.onvif.org/ver10/events/wsdl/EventPortType",
-            op @ ("GetServiceCapabilitiesRequest"
-            | "GetEventPropertiesRequest"
-            | "CreatePullPointSubscriptionRequest"),
-        ))
-        | Some((
-            "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription",
-            op @ ("PullMessagesRequest" | "SetSynchronizationPointRequest"),
-        ))
-        | Some((
-            "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager",
-            op @ ("RenewRequest" | "UnsubscribeRequest"),
-        ))
-        | Some((
-            "http://docs.oasis-open.org/wsn/bw-2/NotificationProducer",
-            op @ "SubscribeRequest",
-        )) => dispatch_events(op, base, state, body),
-        _ => None,
+    let Some(route) = Route::resolve(action) else {
+        return (unhandled(action), None);
+    };
+    let request = match crate::mock::request::Request::parse(body) {
+        Ok(request) => request,
+        Err(error) => return (error.to_fault(), None),
+    };
+    let operation = match request.operation(route.namespace, route.body_name) {
+        Ok(operation) => operation,
+        Err(error) => return (error.to_fault(), None),
+    };
+    let op = route.operation;
+    let response = match route.service {
+        Service::Device => dispatch_device(op, base, state, body),
+        Service::DeviceIo => dispatch_device_io(op, state),
+        Service::Media => dispatch_media(op, base, state, body, operation, &mut effect),
+        Service::Media2 => dispatch_media2(op, base, state, body, operation, &mut effect),
+        Service::Ptz => dispatch_ptz(op, state, body),
+        Service::Imaging => dispatch_imaging(op, state, body),
+        Service::Events => dispatch_events(op, base, state, body),
+        Service::Recording => dispatch_recording(op, state, body),
+        Service::Search => dispatch_search(op, state),
+        Service::Replay => dispatch_replay(op, state, body),
     };
 
-    let xml = response.unwrap_or_else(|| {
-        eprintln!("  [WARN] unhandled action: {action}");
-        resp_soap_fault("s:Receiver", &format!("Not implemented: {action}"))
-    });
+    let xml = response.unwrap_or_else(|| unhandled(action));
     (xml, effect)
+}
+
+fn unhandled(action: &str) -> String {
+    eprintln!("  [WARN] unhandled action: {action}");
+    resp_soap_fault("s:Receiver", &format!("Not implemented: {action}"))
+}
+
+enum Service {
+    Device,
+    DeviceIo,
+    Media,
+    Media2,
+    Ptz,
+    Imaging,
+    Events,
+    Recording,
+    Search,
+    Replay,
+}
+
+/// One source-derived routing identity, shared by body checking and dispatch.
+struct Route<'a> {
+    service: Service,
+    namespace: &'a str,
+    operation: &'a str,
+    body_name: &'a str,
+}
+
+impl<'a> Route<'a> {
+    fn resolve(action: &'a str) -> Option<Self> {
+        let (path, operation) = action.rsplit_once('/')?;
+        if operation.is_empty() || !operation.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+            return None;
+        }
+        let (service, namespace, body_name) = match path {
+            "http://www.onvif.org/ver10/device/wsdl" => (Service::Device, path, operation),
+            "http://www.onvif.org/ver10/deviceio/wsdl" => (
+                Service::DeviceIo,
+                "http://www.onvif.org/ver10/deviceIO/wsdl",
+                operation,
+            ),
+            "http://www.onvif.org/ver10/media/wsdl" => (Service::Media, path, operation),
+            "http://www.onvif.org/ver20/media/wsdl" => (Service::Media2, path, operation),
+            "http://www.onvif.org/ver20/ptz/wsdl" => (Service::Ptz, path, operation),
+            "http://www.onvif.org/ver20/imaging/wsdl" => (Service::Imaging, path, operation),
+            "http://www.onvif.org/ver10/recording/wsdl" => (Service::Recording, path, operation),
+            "http://www.onvif.org/ver10/search/wsdl" => (Service::Search, path, operation),
+            "http://www.onvif.org/ver10/replay/wsdl" => (Service::Replay, path, operation),
+            "http://www.onvif.org/ver10/events/wsdl/EventPortType"
+                if matches!(
+                    operation,
+                    "GetServiceCapabilitiesRequest"
+                        | "GetEventPropertiesRequest"
+                        | "CreatePullPointSubscriptionRequest"
+                ) =>
+            {
+                (
+                    Service::Events,
+                    "http://www.onvif.org/ver10/events/wsdl",
+                    operation.strip_suffix("Request")?,
+                )
+            }
+            "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"
+                if matches!(
+                    operation,
+                    "PullMessagesRequest" | "SetSynchronizationPointRequest"
+                ) =>
+            {
+                (
+                    Service::Events,
+                    "http://www.onvif.org/ver10/events/wsdl",
+                    operation.strip_suffix("Request")?,
+                )
+            }
+            "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager"
+                if matches!(operation, "RenewRequest" | "UnsubscribeRequest") =>
+            {
+                (
+                    Service::Events,
+                    "http://docs.oasis-open.org/wsn/b-2",
+                    operation.strip_suffix("Request")?,
+                )
+            }
+            "http://docs.oasis-open.org/wsn/bw-2/NotificationProducer"
+                if operation == "SubscribeRequest" =>
+            {
+                (
+                    Service::Events,
+                    "http://docs.oasis-open.org/wsn/b-2",
+                    "Subscribe",
+                )
+            }
+            _ => return None,
+        };
+        Some(Self {
+            service,
+            namespace,
+            operation,
+            body_name,
+        })
+    }
 }
 
 fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
@@ -127,6 +209,7 @@ fn dispatch_media(
     base: &str,
     state: &SharedState,
     body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<Effect>,
 ) -> Option<String> {
     Some(match op {
@@ -134,7 +217,7 @@ fn dispatch_media(
         "GetProfiles" => media::resp_profiles(state),
         "GetProfile" => media::resp_profile(state, body),
         "CreateProfile" => media::handle_create_profile(state, body),
-        "DeleteProfile" => media::handle_delete_profile(state, body, effect),
+        "DeleteProfile" => media::handle_delete_profile(state, operation, effect),
         "GetStreamUri" => media::resp_stream_uri(),
         "GetSnapshotUri" => media::resp_snapshot_uri(base),
         "GetVideoSources" => media::resp_video_sources(state),
@@ -192,6 +275,7 @@ fn dispatch_media2(
     base: &str,
     state: &SharedState,
     body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<Effect>,
 ) -> Option<String> {
     Some(match op {
@@ -202,7 +286,7 @@ fn dispatch_media2(
         // one device and never converged.
         "GetProfiles" => media2::resp_profiles_media2(state),
         "CreateProfile" => media2::handle_create_profile_media2(state, body),
-        "DeleteProfile" => media2::handle_delete_profile_media2(state, body, effect),
+        "DeleteProfile" => media2::handle_delete_profile_media2(state, operation, effect),
         // Media2's single generic binding operation, over the same four
         // `ProfileEntry` slots the four Media1 arms above write. Audit §3 item 1.7.
         "AddConfiguration" => media2::handle_add_configuration_media2(state, body),
@@ -411,7 +495,14 @@ mod tests {
 
     fn call(action: &str) -> String {
         let state = MockState::new();
-        dispatch(action, "http://mock", &state, "")
+        dispatch(action, "http://mock", &state, &empty_operation(action))
+    }
+
+    // Source routing probes need an identified XML operation, not an empty
+    // string that only exercises the shared malformed-request fault.
+    fn empty_operation(action: &str) -> String {
+        let route = Route::resolve(action).expect("source Action route");
+        format!("<{} xmlns='{}'/>", route.body_name, route.namespace)
     }
 
     /// Every client service module, included at compile time. The test below
@@ -484,7 +575,9 @@ mod tests {
                     continue;
                 }
                 checked += 1;
-                if dispatch(uri, "http://mock", &state, "").contains("Not implemented") {
+                if dispatch(uri, "http://mock", &state, &empty_operation(uri))
+                    .contains("Not implemented")
+                {
                     unhandled.push(format!("{service}: {uri}"));
                 }
             }
@@ -589,7 +682,7 @@ mod tests {
                     continue;
                 }
                 checked += 1;
-                let out = dispatch(uri, "http://mock", &state, "");
+                let out = dispatch(uri, "http://mock", &state, &empty_operation(uri));
                 let attrs = envelope_attrs(&out);
                 for (i, a) in attrs.iter().enumerate() {
                     if attrs[..i].contains(a) {
@@ -638,7 +731,7 @@ mod tests {
                     continue;
                 }
                 checked += 1;
-                let out = dispatch(uri, "http://mock", &state, "");
+                let out = dispatch(uri, "http://mock", &state, &empty_operation(uri));
                 // Every `xmlns:` declaration **anywhere** in the document, not
                 // just on the envelope: a prefix may legally be declared on
                 // the element that uses it, and the event-properties response
@@ -813,12 +906,7 @@ mod tests {
              GetCapabilities. got {service}"
         );
 
-        let device_caps = dispatch(
-            "http://www.onvif.org/ver10/device/wsdl/GetCapabilities",
-            "http://mock",
-            &MockState::new(),
-            "",
-        );
+        let device_caps = call("http://www.onvif.org/ver10/device/wsdl/GetCapabilities");
         assert!(device_caps.contains("XAddr"), "got {device_caps}");
         assert!(!device_caps.contains("<tds:Misc "), "got {device_caps}");
     }

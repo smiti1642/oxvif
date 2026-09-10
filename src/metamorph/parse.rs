@@ -407,7 +407,7 @@ mod tests {
             HOSTNAME,
             "http://x",
             &state,
-            "<Envelope><Body><GetHostname/></Body></Envelope>",
+            "<GetHostname xmlns='http://www.onvif.org/ver10/device/wsdl'/>",
         )
     }
 

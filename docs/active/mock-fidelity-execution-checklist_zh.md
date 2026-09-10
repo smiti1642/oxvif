@@ -93,11 +93,11 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W00／M0／DONE | 無 | `dispatch.rs`、清冊、檢查器、來源稽核：含 session 的字面值 Action site 與全部路由對應；runtime 寬鬆別名另列 K06／W07 | 完整 Action／site 索引及精確 route 集合相等已驗證；正向／缺少／改接／重複控制通過；完成的是來源清冊，不是 runtime 拒絕或規範驗證 |
 | W01／M0／IN-PROGRESS | 所選批次的 W00 | 依上方模板建立逐操作工作卡，規範核對保留外部；逐操作盤點 field／Fault／effect | 全批次工作卡符合開工條件；C01–C12 均有安排；無未解釋預設或 response 分支；程式碼／規格衝突先記錄再修改 |
 | W02／M0／PARTIAL | W00 | `xml_parse.rs`、全部 service、`request.rs`、`auth.rs`、`canon.rs`：列出 caller 與間接 helper 相依性，分類文字／attribute／子樹／raw 用途 | 每個舊 caller 都有遷移負責項目或明確隔離理由，包含 test-only reader；新找到的 reader 加入來源對照 |
-| W03／M3／TODO | W02 | `responder.rs`、`dispatch.rs`、`transport.rs`、`server.rs`、`request.rs`：於正常 synthetic 邊界解析一次，定義 raw／parsed 所有權及 Action 檢查 | 兩個入口測試合法／異常輸入；未另審查不得改變 fault／auth／replay 優先序；靜態 responder 不得繞過約定驗證 |
+| W03／M3／PARTIAL | W02 | 單一 parsed synthetic request 與 private route 驗證共用 XML／container／operation identity；DeleteProfile 借用 parsed operation | HTTP／in-process 靜態及狀態型邊界控制、raw 優先序與 quirk baseline 控制；完整 HTTP／header 策略及逐操作欄位遷移仍待完成 |
 | W04／M1、M3／PARTIAL | W02 | `request.rs`：P-A private owning request、scalar／scoped attribute／subtree／repeated 存取已實作；typed field rules 與 QName-valued content 待完成 | 七個 P-A 控制已擾動並還原；C02–C04／C09 仍須涵蓋已遷移 handler、合法 extension 及欄位限制 |
-| W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | `fault.rs` 已提供型別化 code、有序 subcode、安全 reason，供認證／空 chain 回應使用；服務 helper 與 structured Detail 仍待完成 | 一般 scope／depth 與認證回歸已通過；一般服務分支仍須具參考映射，不概括宣稱符合規格 |
+| W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | 結構化 auth／空 chain／選定 DeleteProfile fault，另納入已審查的 generic synthetic-boundary fault；資源／DTD 名稱明確屬 mock 自訂策略 | Expanded fault QName、typed failure、消費端及 state 控制；其他一般服務分支與 structured Detail 待完成，不概括宣稱符合規格 |
 | W06／M2／PARTIAL | 預設切換前完成 W05 設計 | 已完成第一層 subcode 的 client／health 控制，以及認證 CLI JSON／table 子程序控制；公開錯誤欄位未改變 | 服務預設切換前仍須擴充 nested／flat／vendor、transport／session 與消費端覆蓋；維持診斷及 exit-code 意義 |
-| W07／M2、M3／PARTIAL | W03／W05 設計、W06 | 完整 synthetic Action 路由拒絕主機／path／Events-port 別名；HTTP 擷取與 binding 仍未完成 | 全來源正反向路由及 HTTP／in-process 寫入控制通過；content type／status／無效 UTF-8／缺少或衝突 header、body 一致性及 endpoint 路由尚未驗收 |
+| W07／M2、M3／PARTIAL | W03／W05 設計、W06 | 已實作完整 synthetic Action 路由及共用 body identity；HTTP 擷取與 binding 仍未完成 | 全來源路由及 HTTP／in-process 邊界控制；content type／status／無效 UTF-8／缺少或衝突 header 及 endpoint 策略尚未驗收 |
 | W08／M3／TODO | W02／W04／W05 | `auth.rs::requires_auth/validate_ws_security/auth_fault`、responder auth gate、Device users | Scoped WSSE parsing、豁免匹配、digest／時間／nonce 限制；明示 authentication 與 authorization 邊界；錯誤去除機密，不附帶變更 auth 預設 |
 | W09／M2／TODO | W05／W06 | `fault_injection.rs`、`responder.rs`、server admin endpoint、公開 injection builder | 分離 literal／structured 與刻意 raw 異常輸出；自訂 QName、single-shot 匹配、順序、併發、clear／reset 及相容測試 |
 | W10／M2–M4／PARTIAL | 批次 W01、W03–W06 | `services/media.rs`、`media2.rs`、共用狀態與 renderer；按下方批次施工 | 每個 Media 列通過 C01–C12；兩種 view 狀態一致但不共用錯誤 wire shape；E1 不代表 DeleteProfile 列結案 |
@@ -141,7 +141,7 @@ W02 發現新相依性時須擴充本表。
 | 面向 | 既有位置 | 負責工作／證據起點 |
 | --- | --- | --- |
 | 路由與 reader | [dispatch](../../src/mock/dispatch.rs)、[舊擷取](../../src/mock/xml_parse.rs)、[request parser](../../src/mock/request.rs)、[helpers](../../src/mock/helpers.rs) | W00–W07；`tests/mock_request_identity.rs`、dispatch tests |
-| Pipeline／transport | [responder](../../src/mock/responder.rs)、[mock transport](../../src/mock/transport.rs)、[server](../../src/mock/server.rs)、[HTTP client transport](../../src/transport.rs) | W03／W06–W09；HTTP 契約測試為提案，尚未存在 |
+| Pipeline／transport | [responder](../../src/mock/responder.rs)、[mock transport](../../src/mock/transport.rs)、[server](../../src/mock/server.rs)、[HTTP client transport](../../src/transport.rs) | W03／W06–W09；HTTP／in-process request boundary 測試已實作，HTTP binding 測試仍待完成 |
 | Auth／injection | [auth](../../src/mock/auth.rs)、[fault injection](../../src/mock/fault_injection.rs)、[SOAP security](../../src/soap/security.rs)、[envelope](../../src/soap/envelope.rs) | W08／W09；unit tests 加上無效 WSSE 的直接 HTTP 控制 |
 | Service 實作 | [services module](../../src/mock/services/mod.rs)、操作清冊所連結的各檔案 | W10–W15；對應 `src/client/*.rs`、`src/tests/client/*_tests.rs`、`src/types/*.rs` |
 | State／側路徑 | [state](../../src/mock/state.rs)、[discovery responder](../../src/mock/discovery_responder.rs)、[fleet](../../src/mock/fleet.rs)、[snapshot](../../src/mock/snapshot.rs)、[font](../../src/mock/font.rs) | W17／W18；既有 state tests、`tests/mock_multi_sensor.rs` |
@@ -163,7 +163,7 @@ W02 發現新相依性時須擴充本表。
 | K03／選定 DeleteProfile 分支已修正 | 兩個服務對不存在／固定 profile 使用巢狀 Sender Fault；選定 corpus 的獨立驗證通過 | W05／W06；其餘操作映射仍待完成。Client 仍回報第一層而非最深層 subcode；全程式驗收尚未完成 |
 | K04／已記錄風險 | 舊 escaped 輸入經 escaping Fault helper 回顯可能重複轉義 | W05／W23；追蹤每個含插值的 reason，重現受影響路徑 |
 | K05／程式碼確認 | Factory reset、Events unsubscribe／sync 存在空成功路由，意圖／效果待分類 | W13／W15／W16；逐操作分類，不將所有 `resp_empty` 視為缺陷 |
-| K06／路由子批次已修正、HTTP 未完成 | Synthetic Action 別名不再進入 handler；HTTP handler 仍回 200 並使用 lossy UTF-8 conversion | W03／W07；參閱管線路由證據；擷取、body 一致性、fault 對應及 replay 仍未完成 |
+| K06／路由子批次已修正、HTTP 未完成 | Synthetic Action 別名不再進入 handler；HTTP handler 仍回 200 並使用 lossy UTF-8 conversion | W03／W07；參閱管線路由證據；共用 body 一致性與 generic boundary fault 已實作；HTTP 擷取／status 及 replay 仍未完成 |
 | K07／程式碼確認 | Schema／namespace probe 有 scope／Fault 覆蓋缺口 | W20–W22；具失敗敏感性的獨立驗證 |
 | K08／未驗證 | 部分寫入、hook／lock、併發 queue、replay invalidation 可能隱藏次要效果 | W18／W19；狀態快照、有界併發案例、hook assertion |
 | K09／未驗證 | 必填欄位／範圍／extension／capability 宣告可能與契約不符 | W01／W10–W17；實作前完成批次工作卡 |
@@ -220,10 +220,11 @@ not-run 分開記錄；schema skip、既有 `Broken`／`Blind` 預期不算新�
 W02 直接 caller 索引完成但間接路徑仍待查；第一批 13 張
 [W01 工作卡](mock-fidelity-profile-preflight_zh.md) 已建立，尚未符合遷移條件。
 選定共用路徑已展開於[管線開工核對](mock-fidelity-pipeline-preflight_zh.md)，包含
-K17 提前 replay 失效及 raw extension 控制。P-A private parsed accessor 已實作。
-**下一項為 P-B 外部欄位／Fault 核對、P-C outcome／消費端設計，以及廣泛遷移
-handler 前剩餘的 W04 typed／QName 規則。**
-W04／W05 設計依共用路徑盤點接續；預設 Fault 輸出改變前先處理 W06。
+K17 提前 replay 失效及 raw extension 控制。P-A private parsed accessor、
+P-C typed generic fault 及 P-D 共用 synthetic 邊界均已實作。
+**下一項為完成 P-B 欄位／語意開工條件及剩餘 W04 typed／QName 規則，以進行
+P-E profile 遷移；W07 HTTP binding 及 W08 scoped auth 仍待完成。**
+預設 boundary fault 僅更動已審查子集，廣泛的 W06 一般服務錯誤遷移尚未驗收。
 W20／W21 可先準備，不必等待所有服務遷移結束。
 [Schema 前置檢查](mock-fidelity-schema-preflight_zh.md) 記錄 W20 scoped checker／
 Fault 子批次及 W21 工具實驗；兩個工作 ID 均未完成。

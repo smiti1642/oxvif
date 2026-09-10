@@ -3126,10 +3126,14 @@ mod tests {
 
     #[test]
     fn delete_profile_removes_non_fixed() {
-        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteProfile xmlns:trt="http://www.onvif.org/ver10/media/wsdl"><trt:ProfileToken>Profile_2</trt:ProfileToken></trt:DeleteProfile>"#;
-        let resp = media::handle_delete_profile(&s, body, &mut None);
+        let resp = crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver10/media/wsdl/DeleteProfile",
+            "http://mock",
+            &s,
+            body,
+        );
         assert!(resp.contains("DeleteProfileResponse"));
         assert_eq!(s.read().profiles.profiles.len(), 3);
         // Only Profile_2 went; the other three are untouched and in order.
@@ -3145,10 +3149,14 @@ mod tests {
 
     #[test]
     fn delete_profile_refuses_fixed() {
-        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteProfile xmlns:trt="http://www.onvif.org/ver10/media/wsdl"><trt:ProfileToken>Profile_1</trt:ProfileToken></trt:DeleteProfile>"#;
-        let resp = media::handle_delete_profile(&s, body, &mut None);
+        let resp = crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver10/media/wsdl/DeleteProfile",
+            "http://mock",
+            &s,
+            body,
+        );
         assert!(resp.contains("Fault"));
         assert!(resp.contains("DeletionOfFixedProfile"));
         // State untouched.
@@ -3157,10 +3165,14 @@ mod tests {
 
     #[test]
     fn delete_profile_unknown_token_returns_fault() {
-        use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteProfile xmlns:trt="http://www.onvif.org/ver10/media/wsdl"><trt:ProfileToken>NoSuch</trt:ProfileToken></trt:DeleteProfile>"#;
-        let resp = media::handle_delete_profile(&s, body, &mut None);
+        let resp = crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver10/media/wsdl/DeleteProfile",
+            "http://mock",
+            &s,
+            body,
+        );
         assert!(resp.contains("Fault"));
         assert!(resp.contains("NoProfile"));
         assert_eq!(s.read().profiles.profiles.len(), 4);

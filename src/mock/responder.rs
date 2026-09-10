@@ -306,7 +306,8 @@ mod tests {
     async fn synthetic_terminal_answers() {
         let state = MockState::new();
         let chain = Chain::default_mock(Arc::new(FaultInjector::new()), false);
-        let out = chain.respond(&ctx(GET_DEVICE_INFO, "", &state)).await;
+        let body = "<GetDeviceInformation xmlns='http://www.onvif.org/ver10/device/wsdl'/>";
+        let out = chain.respond(&ctx(GET_DEVICE_INFO, body, &state)).await;
         assert!(out.contains("oxvif-mock"), "expected synthetic device info");
     }
 
