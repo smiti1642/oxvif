@@ -215,6 +215,32 @@ Name commit `aa78a31` passed hosted CI 34485846940; that run predates this repla
 slice. Next engineering work is binding effects and first-batch token/field
 migration; the complete programme remains in progress.
 
+Implemented bounded binding-effect slice: four Media1 video binding handlers and the
+two Media2 generic binding handlers already receive an atomic `Result<(), String>`
+from the shared plan. Emit ProfilesChanged only on Ok; add exactly their six
+Actions to built-in commit tracking. A successful idempotent removal remains a
+committed plan and conservatively retires profile views, matching the existing
+hook policy. Preserve handler field/fault contracts in this effect-only slice.
+Use same-sensor source/encoder fixtures; compare complete expected state and all
+three profile reads, missing-profile/late-config refusal, unrelated service
+recordings sharing the old family spelling, and instance isolation through both
+transports. Separate configuration writes, full dependency closure, typed parsing,
+Type=All/conflicts and concurrent visibility remain open.
+
+Binding-effect verification: the old behavior failed both transport controls on
+the unrelated same-family recording after a refused AddVideoSourceConfiguration
+(`1789049462_cargo_test.log`). Removing only Media2 RemoveConfiguration effect
+delivery failed both controls at retained profile recording identity after earlier
+cases passed (`1789049709_cargo_test.log`); it was restored. The final controls
+include all six Actions and three already-empty removal cases, complete state,
+late-configuration refusal and separate instances. Final formatting, both Clippy
+modes, 1,200 all-feature and 1,111 default tests (5 ignored, 25 suites each), both
+strict workspace doc builds and unchanged 159/157/255 inventory self-tests passed.
+This slice does not change response formats or add schema-instance acceptance.
+Previous creation-effect commit `ba35567` passed hosted CI 34486980965. Next:
+complete the remaining first-batch request/field and output-text contracts; the
+replay dependency graph and concurrent visibility are still not fully accepted.
+
 Implemented bounded W18 read-snapshot slice: Media1 GetProfiles/GetProfile and
 Media2 GetProfiles capture profiles and catalogues under one shared read guard,
 preserving response shapes and selector behavior. `catalogues_from_state` takes

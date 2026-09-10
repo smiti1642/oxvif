@@ -182,6 +182,28 @@ Clippy、1,198 項 all-feature 及 1,111 項 default 測試（各 5 ignored、25
 CI 34485846940；該 run 不包含本次 replay 子批次。下一項工程工作為 binding effect
 及首批 token／field 遷移；整體計畫仍在進行中。
 
+已實作有界 binding-effect 子批次：四個 Media1 video binding handler
+及兩個 Media2 generic binding handler 已從共用 atomic plan 取得
+`Result<(), String>`。僅 Ok 產生 ProfilesChanged，並只將六個精確 Action 加入
+內建 commit tracking。成功的冪等 remove 仍是已提交 plan，依既有 hook 政策
+保守地淘汰 profile view。本批只改 effect，保留 handler field／fault 契約。
+使用同一 sensor 的 source／encoder fixture；兩種 transport 比較完整預期 state、
+三個 profile read、不存在 profile／後筆 config 拒絕、與舊 family 同名的其他服務
+錄製及 instance 隔離。Configuration 寫入、完整相依閉包、typed parsing、
+Type=All／conflict 及併發可見性仍未完成。
+
+Binding-effect 驗證：舊行為在 AddVideoSourceConfiguration 被拒絕後，兩個
+transport 控制都因其他服務的同 family 錄製失效而失敗
+（`1789049462_cargo_test.log`）。僅移除 Media2 RemoveConfiguration effect
+通知時，兩個控制在通過前面案例後，於仍使用錄製 profile 的身分斷言失敗
+（`1789049709_cargo_test.log`），擾動已還原。最終控制包含六個 Action、三個已空白
+remove、完整 state、後筆 configuration 拒絕及獨立 instance。最終通過格式、
+兩種 Clippy、1,200 項 all-feature 及 1,111 項 default 測試（各 5 ignored、25 suites）、
+兩種 strict workspace 文件建置及未變動的 159／157／255 inventory self-test。
+本批不改 response format，不增加 schema-instance 驗收。前一個建立效果 commit
+`ba35567` 通過託管 CI 34486980965。下一步：完成首批其餘 request／field 與輸出文字
+契約；replay 相依圖及併發可見性仍未全面驗收。
+
 已實作有界 W18 read-snapshot 子批次：Media1 GetProfiles／GetProfile 及
 Media2 GetProfiles 在同一 read guard 內取得 profile 與 catalogue，保留回應
 形狀及 selector 行為。`catalogues_from_state` 借用 DeviceState，不重新取得鎖。

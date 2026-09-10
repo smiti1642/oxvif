@@ -358,7 +358,7 @@ traces the K15 decode/render dependency; output-only escaping is not a complete
 fix while legacy input readers store raw entity spelling; profile Names now pair both fixes.
 K18 in that preflight also records missing profile read/write invalidation edges
 and service identity in replay family keys. The built-in create/list mismatch is repaired;
-selected creation/deletion/profile-read edges are tested across services and transports,
+selected creation/deletion/binding/profile-read edges are tested across services and transports,
 while the complete dependency graph remains open.
 
 | ID | Evidence | Disposition |

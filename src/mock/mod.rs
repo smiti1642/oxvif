@@ -135,7 +135,8 @@
 //! subcode is still the first level, not the deepest condition. Refused deletion
 //! does not invoke the change hook; successful deletion invokes it once. Built-in
 //! replay clones retire both services' profile views only after successful
-//! synthetic creation or deletion; refused creations also preserve recordings.
+//! synthetic creation, deletion, Media1 video binding or Media2 generic binding;
+//! refusals preserve recordings. Idempotent binding commits retire reads too.
 //! Other mutation/dependency and transaction/callback paths
 //! remain under review.
 //! Authentication faults use a structured serializer with a bound first

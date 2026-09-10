@@ -19,6 +19,7 @@ below. No new product decision is required here.
 | [Structured fault foundation](#structured-fault-foundation) | P-C serializer slice and consumer boundaries |
 | [Committed deletion effects](#committed-deletion-effects) | Selected K17 repair and remaining replay boundaries |
 | [Committed creation effects](#committed-creation-effects) | K18 create/read dependencies and refusal preservation |
+| [Committed binding effects](#committed-binding-effects) | Profile refresh and cross-service recording isolation |
 | [Exact Action routing](#exact-action-routing) | K06 routing slice and remaining W03/W07 work |
 | [Parsed synthetic boundary](#parsed-synthetic-boundary) | P-D implemented checks, evidence and exclusions |
 | [State hook snapshot work](#state-hook-snapshot-work) | W18 bounded lock and observation policy |
@@ -105,13 +106,13 @@ both paths using project-authored raw identity markers, not schema fixtures.
 K17 asserts the exact rejection, complete serialized device-state equality and
 the unwanted switch from recording to synthetic. K18 asserts successful stored
 creation, the stale list, retirement of the singular read, and independent-instance
-preservation. Binding/service dependency edges are still source-only findings.
+preservation. At that checkpoint, binding/service dependency edges were source-only findings.
 Temporarily suppressing DeleteProfile invalidation and additionally invalidating
 Profiles on CreateProfile made the two baselines fail at their intended replay
 assertions in a full all-feature `--no-fail-fast` run; both mutations were restored.
 Those baseline assertions exposed defects, not an accepted invalidation design.
 Both have since been converted to corrected invariants for built-in deletion and
-creation; binding and full dependency acceptance remain open.
+creation. Binding effects are now covered below; full dependency acceptance remains open.
 Restored local gate: formatting and both workspace Clippy modes passed; 1,169
 all-feature and 1,087 default tests passed, with four ignored in each mode.
 Inventory self-tests and source reconciliation passed unchanged. Hosted CI
@@ -290,6 +291,25 @@ check passed. Inventory remains 157 routes / 159 Action sites / 260 direct reade
 Prior checker commit `9469bb6` passed all 23 jobs in CI run 34456850826; that hosted
 run does not cover this subsequent Fault change.
 
+## Committed binding effects
+
+The four Media1 video source/encoder Add/Remove handlers and two Media2 generic
+binding handlers now emit ProfilesChanged only after their atomic binding plan
+returns Ok. Their exact Actions join built-in commit tracking; successful plans
+retire the same three complete profile-read Actions as creation/deletion.
+Idempotent removal remains a successful plan and conservatively retires reads.
+Field parsing, ordinary Fault mappings and configuration-conflict semantics are
+unchanged by this effect slice; it does not make every accepted binding conformant.
+
+The two transport controls cover all six routes, same-sensor configurations,
+missing-profile and late-missing-configuration refusal, complete expected state,
+all three profile views, already-empty removal, independent instances, and an
+unrelated service recording with the old binding-family spelling. The original
+family invalidation retired that unrelated recording even for a refused write.
+No host/device network or media effect is simulated. Standalone ReplayResponder,
+configuration writes, additional dependencies and concurrent/callback visibility
+remain open; invalidation still occurs after the caller's state hook.
+
 ## Committed creation effects
 
 Both CreateProfile route arms now pass the same private effect slot used by
@@ -308,7 +328,8 @@ chain's existing fault/auth/raw-response ordering is unchanged; its deletion
 observer test remains the generic short-circuit control, not a new CreateProfile
 authentication acceptance test. The observer still runs after the state hook;
 callback/concurrent visibility is not made transactional. Standalone public
-ReplayResponder, bindings and additional read dependencies remain W19 work.
+ReplayResponder and additional read dependencies remain W19 work. Binding effects
+have since migrated in the slice above.
 
 ## Committed deletion effects
 
@@ -333,7 +354,7 @@ The public standalone ReplayResponder constructor retains its existing policy:
 it cannot observe a caller-owned downstream responder. Built-in clones enable the
 private commit-aware path only where the terminal is owned. This is a staged
 migration, not a public configuration switch or whole W19 acceptance. Other
-mutations other than the creation slice above still use the old family invalidation.
+mutations other than the creation and binding slices above still use the old family invalidation.
 Additional profile-dependent reads, malformed Action handling, callback
 ordering and concurrent linearizability remain open. The effect observer runs
 after the existing state-change callback; this slice does not make that callback

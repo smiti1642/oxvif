@@ -349,7 +349,7 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 亦追蹤 K15 的 decode／render 依賴；舊 input reader 仍儲存 raw entity 拼寫時，
 只修改輸出 escaping 不是完整修正；profile Name 現已成對修正。
 同文件 K18 另記錄 replay family key 缺少 profile 讀寫失效依賴與 service identity；
-內建 create／list 不一致已修正，選定建立／刪除／profile-read 依賴已有跨服務及 transport 測試；
+內建 create／list 不一致已修正，選定建立／刪除／binding／profile-read 依賴已有跨服務及 transport 測試；
 完整相依圖仍待完成。
 
 | ID | 證據 | 處置 |

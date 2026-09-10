@@ -2769,7 +2769,7 @@ mod tests {
                <tr2:Token>PTZConfig_9</tr2:Token>
              </tr2:Configuration>
            </tr2:AddConfiguration>"#;
-        let xml = media2::handle_add_configuration_media2(&s, body);
+        let xml = media2::handle_add_configuration_media2(&s, body, &mut None);
         assert!(xml.contains("NoSuchConfig-ADDCFG2-5543"), "got {xml}");
         assert!(xml.contains("PTZConfig_9"), "got {xml}");
         let s = s.read();
@@ -2815,7 +2815,7 @@ mod tests {
             ("AudioEncoder", "AEC_9", "AEC_2"),
         ] {
             let s = new_state();
-            let xml = media2::handle_add_configuration_media2(&s, &req(kind, bogus));
+            let xml = media2::handle_add_configuration_media2(&s, &req(kind, bogus), &mut None);
             assert!(
                 xml.contains("NoSuchConfig-ADDCFG2-5543") && xml.contains(bogus),
                 "{kind}: binding {bogus} must fault naming the token, got {xml}"
@@ -2840,7 +2840,7 @@ mod tests {
                 "{kind}: refused bind must leave the slot empty"
             );
 
-            let ok = media2::handle_add_configuration_media2(&s, &req(kind, real));
+            let ok = media2::handle_add_configuration_media2(&s, &req(kind, real), &mut None);
             assert!(
                 !ok.contains("NoSuchConfig"),
                 "{kind}: {real} is seeded and must bind, got {ok}"

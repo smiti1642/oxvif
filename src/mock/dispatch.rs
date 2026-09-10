@@ -241,14 +241,16 @@ fn dispatch_media(
         // assembled on the mock at all — create one, add an encoder, read it
         // back, still empty. Audit §3 items 1.4–1.6.
         "AddVideoEncoderConfiguration" => {
-            media::handle_add_video_encoder_configuration(state, body)
+            media::handle_add_video_encoder_configuration(state, body, effect)
         }
         "RemoveVideoEncoderConfiguration" => {
-            media::handle_remove_video_encoder_configuration(state, body)
+            media::handle_remove_video_encoder_configuration(state, body, effect)
         }
-        "AddVideoSourceConfiguration" => media::handle_add_video_source_configuration(state, body),
+        "AddVideoSourceConfiguration" => {
+            media::handle_add_video_source_configuration(state, body, effect)
+        }
         "RemoveVideoSourceConfiguration" => {
-            media::handle_remove_video_source_configuration(state, body)
+            media::handle_remove_video_source_configuration(state, body, effect)
         }
         "GetAudioSources" => media::resp_audio_sources(state),
         "GetAudioSourceConfigurations" => media::resp_audio_source_configurations(state),
@@ -287,10 +289,10 @@ fn dispatch_media2(
         "GetProfiles" => media2::resp_profiles_media2(state, operation),
         "CreateProfile" => media2::handle_create_profile_media2(state, operation, effect),
         "DeleteProfile" => media2::handle_delete_profile_media2(state, operation, effect),
-        // Media2's single generic binding operation, over the same four
-        // `ProfileEntry` slots the four Media1 arms above write. Audit §3 item 1.7.
-        "AddConfiguration" => media2::handle_add_configuration_media2(state, body),
-        "RemoveConfiguration" => media2::handle_remove_configuration_media2(state, body),
+        // Media2's generic binding covers all five modeled profile slots;
+        // Media1 exposes video source/encoder through four separate Actions.
+        "AddConfiguration" => media2::handle_add_configuration_media2(state, body, effect),
+        "RemoveConfiguration" => media2::handle_remove_configuration_media2(state, body, effect),
         "GetStreamUri" => media2::resp_stream_uri_media2(),
         "GetSnapshotUri" => media2::resp_snapshot_uri_media2(base),
         "GetVideoSourceConfigurations" => media2::resp_video_source_configurations_media2(state),

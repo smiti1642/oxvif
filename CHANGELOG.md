@@ -22,6 +22,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Built-in replay now refreshes profile views after committed Media1 video
+  source/encoder binding and Media2 generic binding. Refused bindings no longer
+  retire unrelated services' recordings merely because their operation-family
+  names match. Successful idempotent removals conservatively refresh profile
+  views too; configuration writes and complete dependency tracking remain open.
 - Built-in replay devices now retain recordings when Media1/Media2 profile
   creation is refused, and retire both services' profile views only after a
   successful creation. Recorded profile lists no longer hide a newly created

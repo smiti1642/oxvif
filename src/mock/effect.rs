@@ -20,5 +20,11 @@ pub(crate) fn tracks_commit(action: &str) -> bool {
             | "http://www.onvif.org/ver20/media/wsdl/DeleteProfile"
             | "http://www.onvif.org/ver10/media/wsdl/CreateProfile"
             | "http://www.onvif.org/ver20/media/wsdl/CreateProfile"
+            | "http://www.onvif.org/ver10/media/wsdl/AddVideoSourceConfiguration"
+            | "http://www.onvif.org/ver10/media/wsdl/RemoveVideoSourceConfiguration"
+            | "http://www.onvif.org/ver10/media/wsdl/AddVideoEncoderConfiguration"
+            | "http://www.onvif.org/ver10/media/wsdl/RemoveVideoEncoderConfiguration"
+            | "http://www.onvif.org/ver20/media/wsdl/AddConfiguration"
+            | "http://www.onvif.org/ver20/media/wsdl/RemoveConfiguration"
     )
 }

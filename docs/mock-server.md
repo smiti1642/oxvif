@@ -969,7 +969,11 @@ predicate is not rollback; public `modify`/`modify_returning` semantics are
 unchanged. Built-in replay clones now preserve profile recordings on creation or deletion
 refusal and retire Media1 GetProfile/GetProfiles and Media2 GetProfiles after
 successful synthetic creation or deletion. Creation therefore refreshes recorded
-profile lists as well as the singular profile view. Other mutations, standalone ReplayResponder
+profile lists as well as the singular profile view. Committed Media1 video
+source/encoder Add/Remove and Media2 Add/RemoveConfiguration also retire these
+three read Actions, including successful idempotent removals. Refused bindings
+preserve recordings, including other-service reads with matching family names.
+Configuration writes and other mutations, standalone ReplayResponder
 construction, additional dependencies and concurrent visibility remain under review.
 
 ### 9.2 Reason strings are tagged and unique

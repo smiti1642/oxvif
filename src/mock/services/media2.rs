@@ -408,16 +408,30 @@ pub fn handle_set_video_source_configuration_media2(state: &SharedState, body: &
 /// now a slot to write and two getters that show it. A fault whose stated reason
 /// has quietly become false is worse than no fault, so `ConfigKind::Ptz` binds
 /// like the other four.
-pub fn handle_add_configuration_media2(state: &SharedState, body: &str) -> String {
+pub fn handle_add_configuration_media2(
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     match apply_media2_configuration(state, body, true) {
-        Ok(()) => resp_empty("tr2", "AddConfigurationResponse"),
+        Ok(()) => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            resp_empty("tr2", "AddConfigurationResponse")
+        }
         Err(fault) => fault,
     }
 }
 
-pub fn handle_remove_configuration_media2(state: &SharedState, body: &str) -> String {
+pub fn handle_remove_configuration_media2(
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     match apply_media2_configuration(state, body, false) {
-        Ok(()) => resp_empty("tr2", "RemoveConfigurationResponse"),
+        Ok(()) => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            resp_empty("tr2", "RemoveConfigurationResponse")
+        }
         Err(fault) => fault,
     }
 }

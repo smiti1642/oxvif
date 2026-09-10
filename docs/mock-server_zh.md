@@ -544,7 +544,10 @@ Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多�
 `modify`／`modify_returning` 語意不變。內建 replay clone 現在於拒絕建立或刪除時保留
 profile 錄製結果，成功 synthetic 建立或刪除後才淘汰 Media1 GetProfile／GetProfiles
 與 Media2 GetProfiles。因此建立會刷新錄製的 profile 清單及單筆 profile 檢視。
-其他 mutation、單獨建構 ReplayResponder、更多相依關係及併發可見性
+已提交的 Media1 video source／encoder Add／Remove 與 Media2 Add／RemoveConfiguration
+亦淘汰上述三個讀取 Action，包含成功的冪等 remove。被拒絕的 binding 保留錄製結果，
+也不會使其他服務中同 family 名稱的讀取失效。Configuration 寫入與其他 mutation、
+單獨建構 ReplayResponder、更多相依關係及併發可見性
 仍待審查。
 
 許多 token-error reason 帶有 operation tag 與 numeric id，例如：

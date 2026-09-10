@@ -18,6 +18,7 @@ W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯�
 | [結構化 Fault 基礎](#結構化-fault-基礎) | P-C serializer 子批次及消費端邊界 |
 | [已提交的刪除效果](#已提交的刪除效果) | 選定 K17 修正及剩餘 replay 邊界 |
 | [已提交的建立效果](#已提交的建立效果) | K18 建立／讀取依賴及拒絕時保留錄製 |
+| [已提交的綁定效果](#已提交的綁定效果) | Profile 刷新及跨服務錄製隔離 |
 | [完整 Action 路由](#完整-action-路由) | K06 路由子批次及 W03／W07 剩餘工作 |
 | [Parsed synthetic 邊界](#parsed-synthetic-邊界) | P-D 已實作檢查、證據及排除範圍 |
 | [State hook 快照工作](#state-hook-快照工作) | W18 有界鎖定及觀察策略 |
@@ -95,11 +96,11 @@ GetProfiles 應反映新 state；無關 service／instance 的錄製結果仍可
 專案自製的 raw identity marker 重現兩條路徑；這些 marker 不是 schema fixture。
 K17 精確斷言拒絕內容、完整序列化 device state 相等，以及錯誤切換至 synthetic。
 K18 斷言新增資料確實儲存、清單仍過時、單筆讀取失效，以及獨立 instance 不受影響。
-Binding／service 依賴仍僅完成原始碼確認。暫時停用 DeleteProfile invalidation，並讓
+在該檢查點，Binding／service 依賴僅完成原始碼確認。暫時停用 DeleteProfile invalidation，並讓
 CreateProfile 額外使 Profiles 失效後，兩項 baseline 在完整全部功能
 `--no-fail-fast` 執行中，皆於預期 replay 斷言失敗；兩項變動均已還原。
 當時的 baseline assertion 揭露缺陷，不代表已驗收 invalidation 設計。兩者現已
-分別改為內建刪除及建立的正確不變量；binding 及完整依賴驗收仍未完成。
+分別改為內建刪除及建立的正確不變量。Binding effect 現亦涵蓋於下方；完整依賴驗收仍未完成。
 還原後本機 gate：格式與兩種 workspace Clippy 通過；全部功能 1,169、預設
 1,087 測試通過，兩種模式各四項 ignored。清冊自我測試與原始碼核對通過，數量未變。
 遠端 CI [34458754641](https://github.com/smiti1642/oxvif/actions/runs/34458754641)
@@ -260,6 +261,22 @@ outcome，以及更廣泛的巢狀錯誤消費端覆蓋仍待完成。未新增�
 commit `9469bb6` 已通過 CI run 34456850826 全部 23 個 job；該託管執行不包含
 本次後續的 Fault 修正。
 
+## 已提交的綁定效果
+
+四個 Media1 video source／encoder Add／Remove handler 及兩個 Media2 generic
+binding handler，現僅在 atomic binding plan 回傳 Ok 後產生 ProfilesChanged。
+精確 Action 加入內建 commit tracking；成功 plan 淘汰與建立／刪除相同的三個完整
+profile-read Action。冪等 remove 仍是成功 plan，保守地淘汰讀取。此 effect 子批次
+不改 field parsing、一般 Fault mapping 或 configuration-conflict 語意，也不代表
+所有被接受的 binding 均符合規格。
+
+兩種 transport 控制涵蓋六個 route、同 sensor configuration、不存在 profile 及後筆
+configuration 拒絕、完整預期 state、三個 profile view、已空白 remove、獨立 instance，
+以及使用舊 binding-family 拼法的其他服務錄製。原本的 family invalidation 即使寫入
+被拒絕仍會淘汰該無關錄製。不模擬主機／設備網路或媒體效果。Standalone ReplayResponder、
+configuration 寫入、其他相依關係及併發／callback 可見性仍未完成；invalidation
+仍在呼叫者的 state hook 之後發生。
+
 ## 已提交的建立效果
 
 兩個 CreateProfile route arm 現傳入與刪除相同的 private effect slot。僅
@@ -275,7 +292,7 @@ K18 成功建立／過期清單 baseline 現為正確 state／list 回歸。共�
 fault／auth／raw-response 順序不變；原本的 deletion observer 測試仍是通用提前
 回應控制，不是新增 CreateProfile 認證驗收。Observer 仍在 state hook 之後執行，
 不使 callback／併發可見性成為 transaction。公開 standalone ReplayResponder、
-binding 及其餘讀取依賴仍屬 W19。
+及其餘讀取依賴仍屬 W19。Binding effect 已在上方後續子批次遷移。
 
 ## 已提交的刪除效果
 
@@ -297,7 +314,7 @@ service 同尾名操作及獨立 instance 不受影響。K17 舊 known-gap 測�
 公開的單獨 ReplayResponder constructor 保留既有政策，因為它無法觀察由呼叫者
 擁有的下游 responder。內建 clone 僅在自行掌管 terminal 時啟用私有 commit-aware
 路徑。這是分階段遷移，不是公開設定切換，也不是整體 W19 驗收。其他 mutation 仍
-除上方建立子批次以外仍使用舊 family invalidation。更多 profile 相依讀取、
+除上方建立與綁定子批次以外仍使用舊 family invalidation。更多 profile 相依讀取、
 malformed Action、callback 順序及併發 linearizability 仍待處理。Effect observer
 在既有 state-change callback 之後執行；本批次未使 callback 與 replay invalidation
 成為原子操作，也未新增 rollback。

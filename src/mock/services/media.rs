@@ -89,30 +89,58 @@ pub fn handle_set_video_source_configuration(state: &SharedState, body: &str) ->
     }
 }
 
-pub fn handle_add_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+pub fn handle_add_video_encoder_configuration(
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     match bind_configuration(state, body, ConfigKind::VideoEncoder, "ADDVEC-5531") {
-        Ok(()) => resp_empty("trt", "AddVideoEncoderConfigurationResponse"),
+        Ok(()) => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            resp_empty("trt", "AddVideoEncoderConfigurationResponse")
+        }
         Err(fault) => fault,
     }
 }
 
-pub fn handle_remove_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+pub fn handle_remove_video_encoder_configuration(
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     match unbind_configuration(state, body, ConfigKind::VideoEncoder, "RMVEC-5532") {
-        Ok(()) => resp_empty("trt", "RemoveVideoEncoderConfigurationResponse"),
+        Ok(()) => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            resp_empty("trt", "RemoveVideoEncoderConfigurationResponse")
+        }
         Err(fault) => fault,
     }
 }
 
-pub fn handle_add_video_source_configuration(state: &SharedState, body: &str) -> String {
+pub fn handle_add_video_source_configuration(
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     match bind_configuration(state, body, ConfigKind::VideoSource, "ADDVSC-5533") {
-        Ok(()) => resp_empty("trt", "AddVideoSourceConfigurationResponse"),
+        Ok(()) => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            resp_empty("trt", "AddVideoSourceConfigurationResponse")
+        }
         Err(fault) => fault,
     }
 }
 
-pub fn handle_remove_video_source_configuration(state: &SharedState, body: &str) -> String {
+pub fn handle_remove_video_source_configuration(
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     match unbind_configuration(state, body, ConfigKind::VideoSource, "RMVSC-5534") {
-        Ok(()) => resp_empty("trt", "RemoveVideoSourceConfigurationResponse"),
+        Ok(()) => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            resp_empty("trt", "RemoveVideoSourceConfigurationResponse")
+        }
         Err(fault) => fault,
     }
 }
