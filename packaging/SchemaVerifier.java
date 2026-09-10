@@ -96,7 +96,7 @@ class SchemaVerifier {
         int count = 0;
         for (String line : Files.readAllLines(working.resolve("cases.tsv"))) {
             String[] fields = line.split("\t", -1);
-            if (fields.length != 2) throw new IllegalArgumentException("invalid instance row");
+            if (fields.length < 2 || fields.length > 10) throw new IllegalArgumentException("invalid instance row");
             var builder = documents.newDocumentBuilder();
             builder.setErrorHandler(STRICT_ERRORS);
             builder.setEntityResolver((publicId, systemId) -> { throw new SAXException("external entity refused"); });
@@ -109,6 +109,27 @@ class SchemaVerifier {
             validator.setErrorHandler(STRICT_ERRORS);
             validator.setResourceResolver(resolver);
             validator.validate(new DOMSource(document));
+            if (fields.length > 2) {
+                org.w3c.dom.Element payload = element;
+                for (int step = 2; step < fields.length; step++) {
+                    org.w3c.dom.Element selected = null;
+                    int matches = 0, children = 0;
+                    for (var child = payload.getFirstChild(); child != null; child = child.getNextSibling()) {
+                        if (!(child instanceof org.w3c.dom.Element)) continue;
+                        children++;
+                        String childNs = child.getNamespaceURI();
+                        String childName = (childNs == null || childNs.isEmpty() ? "" : "{" + childNs + "}") + child.getLocalName();
+                        if (childName.equals(fields[step])) { matches++; selected = (org.w3c.dom.Element) child; }
+                    }
+                    if (matches != 1 || (step == fields.length - 1 && children != 1)) {
+                        throw new IllegalArgumentException("missing or ambiguous payload path");
+                    }
+                    payload = selected;
+                }
+                // A separate root validation prevents a lax wrapper wildcard
+                // from hiding an undeclared operation payload.
+                validator.validate(new DOMSource(payload));
+            }
             count++;
         }
         if (count == 0) throw new IllegalArgumentException("no instances");

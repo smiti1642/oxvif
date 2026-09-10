@@ -39,6 +39,38 @@ class Qualification(unittest.TestCase):
     def test_valid_relative_import_and_instance(self):
         self.assertEqual(self.check(), "PASS: Xerces strict XSD 1.1 instances=1; not semantic conformance")
 
+    def test_payload_anchor_uses_inherited_namespace_scope(self):
+        index = self.corpus / 'cases.json'
+        value = {'format': 1, 'cases': [{'file': 'one.xml', 'root': EXPECTED, 'payload_path': ['{urn:verify}Packet']}]}
+        index.write_text(json.dumps(value), encoding='utf-8')
+        self.assertEqual(self.check(), "PASS: Xerces strict XSD 1.1 instances=1; not semantic conformance")
+        value['cases'][0]['payload_path'] = ['{urn:verify}Other']
+        index.write_text(json.dumps(value), encoding='utf-8')
+        with self.assertRaises(common.VerificationError) as error:
+            self.check()
+        self.assertEqual(str(error.exception), 'Xerces compilation/validation failed: IllegalArgumentException')
+
+    def test_lax_wrapper_does_not_hide_unknown_or_multiple_payloads(self):
+        url, _, path = self.catalogue.entries[1]
+        modified = WRAPPER.replace(b'<xs:element ref="v:Packet"/>', b'<xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>')
+        path.write_bytes(modified)
+        self.manifest['sources'][1]['sha256'] = hashlib.sha256(modified).hexdigest()
+        self.catalogue = common.Catalogue(self.root, self.manifest)
+        self.instance.write_bytes(b'<w:Wrapper xmlns:w="urn:wrapper"><u:Unknown xmlns:u="urn:unlisted"/></w:Wrapper>')
+        self.assertEqual(self.check(), "PASS: Xerces strict XSD 1.1 instances=1; not semantic conformance")
+        index = self.corpus / 'cases.json'
+        value = {'format': 1, 'cases': [{'file': 'one.xml', 'root': EXPECTED, 'payload_path': ['{urn:unlisted}Unknown']}]}
+        index.write_text(json.dumps(value), encoding='utf-8')
+        with self.assertRaises(common.VerificationError) as error:
+            self.check()
+        self.assertEqual(str(error.exception), 'Xerces compilation/validation failed: SAXParseException:cvc-elt.1.a')
+        self.instance.write_bytes(VALID.replace(b'</w:Wrapper>', b'<u:Other xmlns:u="urn:unlisted"/></w:Wrapper>'))
+        value['cases'][0]['payload_path'] = ['{urn:verify}Packet']
+        index.write_text(json.dumps(value), encoding='utf-8')
+        with self.assertRaises(common.VerificationError) as error:
+            self.check()
+        self.assertEqual(str(error.exception), 'Xerces compilation/validation failed: IllegalArgumentException')
+
     def test_invalid_value_qname_cardinality_order_attribute_namespace_and_root(self):
         mutations = [VALID.replace(b">9<", b">-2<"), VALID.replace(b"c:Known", b"missing:Known"),
                      VALID.replace(b'<v:Count>9</v:Count>', b''),

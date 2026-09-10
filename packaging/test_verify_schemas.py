@@ -127,6 +127,27 @@ class CatalogueTests(unittest.TestCase):
             v.validate_instance(schema, hinted, EXPECTED)
             network.assert_not_called()
 
+    def test_payload_anchor_retains_scope_and_rejects_missing_paths(self):
+        schema, _, _ = v.compile_catalogue(self.catalogue)
+        v.validate_instance(schema, VALID, EXPECTED, ["{urn:verify}Packet"])
+        with self.assertRaisesRegex(v.VerificationError, "missing or ambiguous corpus payload path"):
+            v.validate_instance(schema, VALID, EXPECTED, ["{urn:verify}Other"])
+
+    def test_lax_wrapper_cannot_hide_undeclared_or_multiple_payloads(self):
+        url, _, path = self.catalogue.entries[1]
+        modified = WRAPPER.replace(b'<xs:element ref="v:Packet"/>', b'<xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>')
+        path.write_bytes(modified)
+        self.manifest['sources'][1]['sha256'] = hashlib.sha256(modified).hexdigest()
+        schema, _, _ = v.compile_catalogue(v.Catalogue(self.root, self.manifest))
+        unknown = b'<w:Wrapper xmlns:w="urn:wrapper"><u:Unknown xmlns:u="urn:unlisted"/></w:Wrapper>'
+        v.validate_instance(schema, unknown, EXPECTED)  # Deliberate lax-wrapper control.
+        with self.assertRaisesRegex(v.VerificationError, "payload has no schema declaration"):
+            v.validate_instance(schema, unknown, EXPECTED, ['{urn:unlisted}Unknown'])
+        extra = VALID.replace(b'</w:Wrapper>', b'<u:Other xmlns:u="urn:unlisted"/></w:Wrapper>')
+        v.validate_instance(schema, extra, EXPECTED)
+        with self.assertRaisesRegex(v.VerificationError, "missing or ambiguous corpus payload path"):
+            v.validate_instance(schema, extra, EXPECTED, ['{urn:verify}Packet'])
+
     def test_unlisted_import_and_dtd_fail_closed(self):
         for data in [WRAPPER.replace(b'../types/shared.xsd', b'https://unlisted.invalid/types.xsd'),
                      b'<!DOCTYPE x [<!ENTITY e "value">]>' + WRAPPER]:

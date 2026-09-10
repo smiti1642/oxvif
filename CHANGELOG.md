@@ -46,6 +46,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   source-compilation job gate packaging. Full mock-corpus acceptance remains
   incomplete; this tooling
   does not establish ONVIF conformance or change installed runtime dependencies.
+- An opt-in, external-only profile exchange corpus now captures credential-free
+  client requests and mock responses for the first 13 profile operations. Both
+  validator backends enforce explicit payload anchors beyond envelope wildcards;
+  remaining ordinary Fault failures are reported, not treated as accepted output.
 - Mock authentication faults now bind the existing `wsse:FailedAuthentication`
   subcode and escape literal reason text through a private structured serializer.
   XML-invalid reason characters become replacement characters. The existing

@@ -128,9 +128,9 @@ def run(catalogue: common.Catalogue, tool_root: Path, java: str, corpus: Path | 
         prepare(catalogue, working)
         if corpus is not None:
             cases = []
-            for path, expected in common.corpus_cases(corpus):
+            for path, expected, payload_path in common.corpus_cases(corpus):
                 common.check_xml_bytes(path.read_bytes())
-                cases.append(row(expected, str(path)))
+                cases.append(row(expected, str(path), *payload_path))
             (working / "cases.tsv").write_text("\n".join(cases), encoding="utf-8")
         result = subprocess.run(
             [java, "--class-path", os.pathsep.join(str(path) for path in jars), str(JAVA_SOURCE),

@@ -11,6 +11,7 @@ W20／W21 檢查點，2026-09-10。完整計畫仍在執行中。
 | [外部驗證器評估](#外部驗證器評估) | 工具選擇與 K19 |
 | [可重跑的驗證工具](#可重跑的驗證工具) | 固定來源、離線解析與 generic 控制 |
 | [獨立 Xerces 後端](#獨立-xerces-後端) | 全服務編譯與工具驗收 |
+| [Profile exchange corpus](#profile-exchange-corpus) | Client 產生的 instance 與已知失敗 |
 | [後續工作](#後續工作) | 尚待驗收事項，而非完成宣告 |
 
 ## 結構檢查器
@@ -135,7 +136,11 @@ gate。下方的獨立 Xerces 後端已提供可用的編譯路徑，不必弱�
 `validate` 額外要求 `--corpus` 指向外部目錄，其中 `cases.json` 使用 format 1，
 非空的 `cases` 每筆提供不重複的簡單 `file` 名稱與明確預期 `root` expanded name。
 工具先確認 root 相符且有 schema 宣告，再嚴格驗證；缺檔、重複、路徑逸出及無效
-instance 均失敗。Corpus 產生與操作覆蓋率核對仍待實作；這不驗證請求語意、效果、
+instance 均失敗。可選的 `payload_path` 是有長度限制的 expanded name 清單，每一步
+選取唯一直接 child，最後一層的 parent 必須僅有一個 element。選中的 payload 亦須
+以有宣告的 root 獨立通過驗證，防止 lax envelope wildcard 隱藏未宣告操作或多個
+payload，並保留 namespace scope。下方已開始產生 corpus，但全程式覆蓋率仍未完成；
+這不驗證請求語意、效果、
 WSDL binding 或實機行為。
 
 最初的工具檢查點加入 Windows／Linux generic 控制；下節說明後續擴充及獨立的
@@ -176,7 +181,7 @@ python packaging/qualify_xerces.py --tool-root /absolute/external/oxvif-xerces -
 python packaging/verify_schemas_xerces.py compile --root /absolute/external/oxvif-schema-check --tool-root /absolute/external/oxvif-xerces --java /absolute/jdk/bin/java
 ```
 
-`validate` 使用前述外部 `--corpus` 格式。Corpus 產生及操作覆蓋率仍待完成；
+`validate` 使用前述外部 `--corpus` 格式。全程式的 corpus 產生及操作覆蓋率仍待完成；
 編譯官方 schema 並不驗證任何 mock exchange。較早的 `verify_schemas.py compile`
 仍是 Python 後端診斷命令，預期會揭露 K21。
 
@@ -186,10 +191,48 @@ Windows／Linux CI 現在先執行 generic 控制及獨立 Xerces 選型，再�
 [34461384194](https://github.com/smiti1642/oxvif/actions/runs/34461384194)
 已通過 `4fdd9f2` 的全部 25 個 job；該 run 早於 Xerces adapter 及新增編譯 job。
 
+## Profile exchange corpus
+
+`tests/mock_schema_corpus.rs` 現在透過未設定憑證的 `OnvifClient` 呼叫 in-process
+mock，擷取完整 request／response 字串；不讀取官方 schema，也不連線至攝影機或
+網路。測試精確比對第一批 13 張 profile 工作卡的來源 Action 集合。15 組 exchange
+涵蓋 13 個操作及兩個明確的不存在 profile 拒絕；綁定、建立與刪除皆有 state 斷言，
+並非只確認呼叫成功。Fault 預期由測試流程指定，不以搜尋回應字串猜測。
+
+Ignored 匯出測試要求 `OXVIF_MOCK_CORPUS` 指向**尚未存在的外部絕對目錄，且其
+parent 已存在**。工具拒絕空資料、含認證欄位的 request、相對／既有目錄及
+checkout／其上層位置。匯出保留 XML bytes，產生 30 個檔案及 `cases.json`，並為
+request、成功與 Fault response 記錄明確的 Envelope／Body／operation 預期。
+不讀取環境憑證或覆寫檔案；這是診斷 corpus，不是完整逐操作驗收。
+
+```powershell
+$env:OXVIF_MOCK_CORPUS = 'C:/Temp/oxvif-profile-corpus-new'
+cargo test --all-features --test mock_schema_corpus export_first_profile_batch -- --ignored --nocapture
+Remove-Item Env:OXVIF_MOCK_CORPUS
+```
+
+將匯出目錄傳給 Xerces 的 `validate --corpus`，並使用編譯時相同的固定 `--root`、
+`--tool-root` 與 `--java`。完整 corpus 目前應當**失敗**：獨立逐 instance 診斷得到
+**28 份有效／2 份無效**。兩個失敗皆為 Media1／Media2 DeleteProfile 對不存在
+profile 的回應，constraint 為 `SAXParseException:cvc-enumeration-valid`：舊 helper
+將 `ter:NoProfile` 放在 SOAP Code。K03 因此提升為已重現的 wire 證據，但尚未修正
+逐操作 Fault mapping。此次產生的全部 request 與 13 份成功 response 均通過選定
+corpus 的檢查；不代表省略欄位、其他輸入、state 語意或剩餘 route 已驗收。
+
+兩個驗證後端均新增 namespace-scope 正向控制及缺少、未宣告、多 payload 的負向
+控制。停用 payload 檢查後，每個後端新增的兩項測試均失敗，之後已還原。Rust 的
+Action 集合及目錄錯誤斷言也在完整全部功能 `--no-fail-fast` 擾動執行中失敗，再予
+還原。Ignored exporter 是普通測試之外的明確操作，不代表已通過 schema 驗證。
+
+託管 CI [34463097025](https://github.com/smiti1642/oxvif/actions/runs/34463097025)
+已通過 `cdfeaec` 的全部 27 個 job，包含 Windows／Linux 官方 schema 編譯；
+該 run 早於此次 corpus 新增。未變更 Release、安裝版本、實機設定、公開 API 或
+貢獻者 PR。
+
 ## 後續工作
 
 W20 仍為 PARTIAL：須核對未解析／wildcard 計數、Fault 的 QName 文字，以及擴充
-fragment probe 以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
+第一批 13 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
 payload、Fault 正負 instance 驗收實際 exchange。之後將 W22 的來源編譯 job
 擴充為缺少前提即失敗的完整 instance gate。此工具實驗不能取代
 P-B 的逐操作欄位、Fault 與語意審查。

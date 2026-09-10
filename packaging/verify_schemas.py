@@ -222,7 +222,7 @@ def compile_catalogue(catalogue: Catalogue):
     return schema, len(inputs), dependencies
 
 
-def validate_instance(schema, data: bytes, expected_root: str) -> None:
+def validate_instance(schema, data: bytes, expected_root: str, payload_path: list[str] | None = None) -> None:
     """Validate a complete explicitly anchored instance, ignoring location hints."""
     xmlschema = runtime()
     check_xml_bytes(data)
@@ -234,9 +234,19 @@ def validate_instance(schema, data: bytes, expected_root: str) -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         schema.validate(resource, use_defaults=False, use_location_hints=False)
+        if payload_path:
+            element = resource.root
+            for index, name in enumerate(payload_path):
+                matches = [child for child in element if child.tag == name]
+                if len(matches) != 1 or (index == len(payload_path) - 1 and len(element) != 1):
+                    raise VerificationError("missing or ambiguous corpus payload path")
+                element = matches[0]
+            if element.tag not in schema.maps.elements:
+                raise VerificationError("corpus payload has no schema declaration")
+            schema.validate(resource.subresource(element), use_defaults=False, use_location_hints=False)
 
 
-def corpus_cases(directory: Path) -> list[tuple[Path, str]]:
+def corpus_cases(directory: Path) -> list[tuple[Path, str, list[str]]]:
     directory = external_root(directory)
     index = directory / "cases.json"
     if not index.is_file() or index.stat().st_size > MAX_BYTES:
@@ -249,21 +259,25 @@ def corpus_cases(directory: Path) -> list[tuple[Path, str]]:
     result = []
     for case in cases:
         filename, expected = case.get("file", ""), case.get("root", "")
+        payload_path = case.get("payload_path", [])
         if (not isinstance(filename, str) or not re.fullmatch(r"[A-Za-z0-9_-]+\.xml", filename)
                 or filename in seen or not isinstance(expected, str) or not expected):
             raise VerificationError("invalid or duplicate corpus case")
+        if (not isinstance(payload_path, list) or len(payload_path) > 8
+                or any(not isinstance(name, str) or not name or len(name) > 1024 for name in payload_path)):
+            raise VerificationError("invalid corpus payload path")
         seen.add(filename)
         path = directory / filename
         if not path.resolve().is_relative_to(directory) or not path.is_file() or path.stat().st_size > MAX_BYTES:
             raise VerificationError("missing, escaping or oversized corpus file")
-        result.append((path, expected))
+        result.append((path, expected, payload_path))
     return result
 
 
 def validate_corpus(schema, directory: Path) -> int:
     cases = corpus_cases(directory)
-    for path, expected in cases:
-        validate_instance(schema, path.read_bytes(), expected)
+    for path, expected, payload_path in cases:
+        validate_instance(schema, path.read_bytes(), expected, payload_path)
     return len(cases)
 
 

@@ -11,6 +11,7 @@ W20/W21 checkpoint, 2026-09-10. The full programme remains in progress.
 | [External validator evaluation](#external-validator-evaluation) | Tool selection and K19 |
 | [Reproducible tooling](#reproducible-tooling) | Pinned retrieval, offline resolution and generic controls |
 | [Independent Xerces backend](#independent-xerces-backend) | All-service compilation and qualification |
+| [Profile exchange corpus](#profile-exchange-corpus) | Client-generated instances and known failures |
 | [Next work](#next-work) | Remaining acceptance, not a completion claim |
 
 ## Structural checker
@@ -149,8 +150,12 @@ The `validate` command additionally requires `--corpus` pointing to an external
 directory with `cases.json`: format 1 and a nonempty `cases` list, each containing
 a unique simple `file` name and an explicit expected `root` expanded name. It
 requires both a matching root and a schema declaration, then validates strictly;
-missing files, duplicates, path escapes and invalid instances fail. Corpus
-generation and operation coverage reconciliation remain to be implemented.
+missing files, duplicates, path escapes and invalid instances fail. The optional
+`payload_path` is a bounded list of expanded names: each selects one direct child,
+and the final parent must contain exactly one element. The selected payload must
+also validate as a declared root. This prevents a lax envelope wildcard from
+hiding an undeclared operation or multiple payloads. Namespace scope is retained.
+Corpus generation has started below; whole-program coverage remains incomplete.
 It does not certify request semantics, effects, WSDL bindings or device behavior.
 
 The initial tooling checkpoint added Windows/Linux generic controls. Their current
@@ -198,8 +203,8 @@ python packaging/qualify_xerces.py --tool-root /absolute/external/oxvif-xerces -
 python packaging/verify_schemas_xerces.py compile --root /absolute/external/oxvif-schema-check --tool-root /absolute/external/oxvif-xerces --java /absolute/jdk/bin/java
 ```
 
-`validate` uses the same external `--corpus` format described above. Corpus
-generation and operation coverage remain open; compiling official schema files
+`validate` uses the same external `--corpus` format described above. Whole-program
+corpus generation and operation coverage remain open; compiling official schema files
 does not validate any mock exchange. The earlier `verify_schemas.py compile`
 command remains a Python-backend diagnostic expected to expose K21.
 
@@ -210,10 +215,57 @@ neither should be reported as full operation/corpus acceptance. Prior CI
 [34461384194](https://github.com/smiti1642/oxvif/actions/runs/34461384194) passed all
 25 jobs for `4fdd9f2`; it predates the Xerces adapter and new compilation jobs.
 
+## Profile exchange corpus
+
+`tests/mock_schema_corpus.rs` now captures complete request/response strings from
+actual credential-free `OnvifClient` calls through an in-process mock, without
+reading official schemas or accessing a camera/network. The source-action set is
+asserted against the first 13 profile cards. Fifteen exchanges cover those 13
+operations plus two explicit missing-profile rejections; binding effects and
+creation/deletion are asserted, not merely unwrapped. Fault expectations come
+from the driver, not a string search of the response.
+
+The ignored export requires `OXVIF_MOCK_CORPUS` naming a **new absolute external
+directory whose parent exists**. It refuses empty data, credential-bearing
+requests, relative/existing destinations and checkout/ancestor destinations.
+The exporter preserves XML bytes, emits 30 files plus `cases.json`, and records
+explicit Envelope/Body/operation expectations for requests and success/Fault
+responses. It never reads environment credentials or overwrites existing files.
+This is a diagnostic corpus, not comprehensive per-operation acceptance.
+
+```powershell
+$env:OXVIF_MOCK_CORPUS = 'C:/Temp/oxvif-profile-corpus-new'
+cargo test --all-features --test mock_schema_corpus export_first_profile_batch -- --ignored --nocapture
+Remove-Item Env:OXVIF_MOCK_CORPUS
+```
+
+Pass the exported directory to the Xerces command with `validate --corpus` and
+the same pinned `--root`, `--tool-root` and `--java` settings used for compilation.
+The complete corpus currently **fails**, as it should. Independent per-instance
+diagnostics found **28 valid / 2 invalid** XML instances. Both failures are the
+Media1/Media2 missing-profile DeleteProfile responses, with
+`SAXParseException:cvc-enumeration-valid`: the old helper puts `ter:NoProfile`
+in the SOAP Code position. This upgrades K03 to reproduced wire evidence; it
+does not yet fix the operation-specific Fault mapping. Every generated request
+and the 13 success responses passed this selected corpus check. That does not
+validate omitted fields, alternate inputs, state semantics or the other routes.
+
+Both validator backends now have positive namespace-scope and negative missing,
+unknown and multiple-payload controls. Disabling payload checks made the two new
+tests in each backend fail; the changes were restored. Rust capture/action-set
+and destination-error assertions also failed under targeted perturbations in a
+full all-feature `--no-fail-fast` run, then were restored. The ignored exporter
+is additional to ordinary test runs, not an implicit schema-validation pass.
+
+Hosted CI [34463097025](https://github.com/smiti1642/oxvif/actions/runs/34463097025)
+passed all 27 jobs for `cdfeaec`, including Windows/Linux official schema
+compilation. It predates this corpus addition. No release, installation, live
+device write, public API or contributor PR was changed.
+
 ## Next work
 
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
-and expand the corpus beyond fragment probes. W21 remains PARTIAL: complete the
+and expand the corpus beyond the first 13-operation batch. W21 remains PARTIAL: complete the
 positive/negative envelope, payload and Fault instances from the mock corpus and
 qualify the selected path against actual emitted exchanges. Then extend W22's
 source-compilation job into the full fail-closed instance
