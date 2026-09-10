@@ -181,6 +181,25 @@ Content-Type: application/soap+xml; charset=utf-8; action="http://www.onvif.org/
 
 ---
 
+### 3.1 尚未發布的 request 強化
+
+Media1、Media2 `DeleteProfile` 現在從已識別 operation 的直接 child 讀取必要
+token，並比對正確的 service namespace。XML 文字僅解碼一次，不修剪 token。
+巢狀誤導欄位、重複欄位、錯誤 operation／namespace、未 binding prefix、DTD
+及 malformed document 均在修改狀態前拒絕。接受完整 SOAP 1.2 envelope 或
+具有 namespace 宣告的 operation document；不接受 prefix 未宣告的測試片段。
+
+遷移後的 parser 限制為最多 2 MiB UTF-8 輸入、64 層 element、16,384 個
+element，包含 envelope。這些是 mock 資源限制，不是 ONVIF 協定限制。
+失敗時回傳 `env:Sender`，reason 帶有 `InvalidRequest-DELETEPROFILE`。
+缺少／空 token 也改用此錯誤，不再回傳舊的 `ter:InvalidArgs`。
+
+目前僅上述兩個操作完成遷移。其他 handler 仍使用舊 extractor；authentication、
+client response parsing 與錄製 replay 均未變更。這不是完整 XSD 驗證或整體
+mock conformance。詳見[強化計畫](active/mock-fidelity-hardening-plan_zh.md)。
+
+---
+
 ## 4. 驗證
 
 驗證預設關閉，因此無憑證的 client 可直接連線。可使用 `MockTransport::with_auth()` 或 `MockServerBuilder::enforce_auth(true)` 啟用。
@@ -475,7 +494,15 @@ NoSuchRecording-DELREC-5701: Rec_999
 | `ter:ActionNotSupported` | action 已路由，但刻意未建模 | `NotModelled-VSMODE-5813` |
 | `s:Receiver` | action 未路由 | `Not implemented: {action}` |
 
-已知偏差：`Code/Value` 內的 `ter:` 與 `env:` 是 QName，但 fault envelope 未宣告這兩個 prefix。Element prefix 均已正確 binding；只有會自行解析 fault-code QName 的 client 會受到影響。此項目前記錄為設計議題，因為許多實機也會輸出相同形式。
+**尚未發布的修正：** 共用 Fault helper 現在宣告 `ter:`、`env:` 及既有的 `s:`，
+並轉義 code／reason 文字，包含明確注入的 Fault。Injection API 應傳入原始文字，
+不要預先轉義 XML。Helper 不會自動解析自訂、未知的 QName prefix。
+
+**仍有偏差：** 既有 Fault 仍採平面的 `Code/Value` 表示。Namespace binding
+修正並未完成各操作的 code／subcode 階層，也未驗證 HTTP status 行為；這些
+遷移仍待完成，不得因此宣稱完整 SOAP／ONVIF Fault conformance。尚未遷移的
+request extractor 也可能將已轉義文字放入 reason，因此目前只有已遷移路徑
+具備 token 原始文字回傳正確性的驗證。
 
 ---
 

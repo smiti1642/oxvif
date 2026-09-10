@@ -544,16 +544,25 @@ pub fn handle_create_profile_media2(state: &SharedState, body: &str) -> String {
 /// success that removed nothing and reported nothing about a token that did not
 /// exist or a fixed profile that cannot be removed.
 pub fn handle_delete_profile_media2(state: &SharedState, body: &str) -> String {
-    let inner = extract_tag(body, "DeleteProfile").unwrap_or_default();
     // **`Token`, not `ProfileToken`.** `tr2:DeleteProfile` names it `Token`
     // where `trt:DeleteProfile` says `ProfileToken`. Reusing Media1's handler
     // wholesale would have read the wrong element and faulted on every valid
     // request — the reason these are two handlers over one state rather than
     // one handler with a prefix argument.
-    let token = extract_tag(&inner, "Token").unwrap_or_default();
-    if token.is_empty() {
-        return resp_soap_fault("ter:InvalidArgs", "Token missing");
-    }
+    let token = match crate::mock::request::required_text(
+        body,
+        "http://www.onvif.org/ver20/media/wsdl",
+        "DeleteProfile",
+        "Token",
+    ) {
+        Ok(token) => token,
+        Err(error) => {
+            return resp_soap_fault(
+                "env:Sender",
+                &format!("InvalidRequest-DELETEPROFILE: {}", error.0),
+            );
+        }
+    };
 
     match media::delete_profile_in_state(state, &token) {
         media::DeleteOutcome::Deleted => resp_empty("tr2", "DeleteProfileResponse"),

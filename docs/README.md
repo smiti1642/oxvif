@@ -44,6 +44,7 @@ conventions, and attribution/licensing.
 
 | Doc | About |
 |-----|-------|
+| [`mock-fidelity-hardening-plan.md`](active/mock-fidelity-hardening-plan.md) · [繁體中文](active/mock-fidelity-hardening-plan_zh.md) | Approved hardening programme: first request-identity and fault-text safety slice locally verified; full fault hierarchies, remaining service migration, fidelity policy and external-schema CI are not yet complete. |
 | [`cli-vim-navigation-plan.md`](active/cli-vim-navigation-plan.md) · [繁體中文](active/cli-vim-navigation-plan_zh.md) | Implemented reusable navigation core, counted Vim-style movement, relative numbering, compact status line and local acceptance evidence; standalone crate deferred. |
 | [`cli-manage-plan.md`](active/cli-manage-plan.md) · [繁體中文](active/cli-manage-plan_zh.md) | Guided human workspace, profile context, diagnostic assessment and independent first-time-user critique. |
 | [`cli-maintenance-workflows-plan.md`](active/cli-maintenance-workflows-plan.md) · [繁體中文](active/cli-maintenance-workflows-plan_zh.md) | Snapshot downloads, layered diagnosis and read-only configuration inventory/diff; local implementation and acceptance gates. |

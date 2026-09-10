@@ -58,10 +58,15 @@ pub fn resp_empty(prefix: &str, tag: &str) -> String {
     soap(&ns, &format!("<{prefix}:{tag}/>"))
 }
 
-/// Return a SOAP 1.2 Fault.
+/// Return a legacy flat SOAP 1.2 Fault with escaped text and bound known QNames.
+///
+/// This compatibility helper does not manufacture an ONVIF subcode hierarchy.
+/// Operation-specific structured-fault migration is tracked separately.
 pub fn resp_soap_fault(code: &str, reason: &str) -> String {
+    let code = crate::types::xml_escape(code);
+    let reason = crate::types::xml_escape(reason);
     soap(
-        "",
+        r#"xmlns:env="http://www.w3.org/2003/05/soap-envelope" xmlns:ter="http://www.onvif.org/ver10/error""#,
         &format!(
             r#"<s:Fault><s:Code><s:Value>{code}</s:Value></s:Code><s:Reason><s:Text xml:lang="en">{reason}</s:Text></s:Reason></s:Fault>"#
         ),
@@ -78,4 +83,70 @@ pub fn extract_action(headers: &HeaderMap) -> Option<String> {
     let action_part = ct.split(';').find(|s| s.trim().starts_with("action="))?;
     let raw = action_part.trim().strip_prefix("action=")?;
     Some(raw.trim_matches('"').to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quick_xml::{
+        NsReader,
+        events::Event,
+        name::{QName, ResolveResult},
+    };
+
+    #[test]
+    fn fault_text_is_literal_not_markup() {
+        let reason = "sensor <& \"北門\"> </s:Text><injected/>";
+        let xml = resp_soap_fault("env:Sender", reason);
+        let body = crate::soap::parse_soap_body(&xml).unwrap();
+        let fault = body.child("Fault").unwrap();
+        let text = fault.path(&["Reason", "Text"]).unwrap();
+        assert_eq!(text.text(), reason);
+        assert!(text.children.is_empty());
+        assert_eq!(fault.child("Reason").unwrap().children.len(), 1);
+        assert!(!xml.contains("<injected/>"));
+    }
+
+    #[test]
+    fn fault_code_text_cannot_insert_elements() {
+        let xml = resp_soap_fault("s:Receiver</s:Value><injected/>", "literal code");
+        assert!(!xml.contains("<injected/>"));
+        let body = crate::soap::parse_soap_body(&xml).unwrap();
+        assert_eq!(
+            body.child("Fault")
+                .unwrap()
+                .path(&["Code", "Value"])
+                .unwrap()
+                .text(),
+            "s:Receiver</s:Value><injected/>"
+        );
+    }
+
+    #[test]
+    fn fault_qnames_have_bindings_in_value_scope() {
+        for (code, namespace) in [
+            ("env:Sender", "http://www.w3.org/2003/05/soap-envelope"),
+            ("s:Receiver", "http://www.w3.org/2003/05/soap-envelope"),
+            ("ter:NoProfile", "http://www.onvif.org/ver10/error"),
+        ] {
+            let xml = resp_soap_fault(code, "binding probe");
+            let mut reader = NsReader::from_str(&xml);
+            let mut checked = false;
+            loop {
+                match reader.read_event().unwrap() {
+                    Event::Text(text) if text.as_ref() == code => {
+                        let (resolved, _) = reader.resolver().resolve_element(QName(code));
+                        match resolved {
+                            ResolveResult::Bound(ns) => assert_eq!(ns.as_ref(), namespace),
+                            other => panic!("unbound fault code {code}: {other:?}"),
+                        }
+                        checked = true;
+                    }
+                    Event::Eof => break,
+                    _ => {}
+                }
+            }
+            assert!(checked, "fault code was not inspected: {code}");
+        }
+    }
 }

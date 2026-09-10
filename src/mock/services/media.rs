@@ -147,11 +147,20 @@ pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
 }
 
 pub fn handle_delete_profile(state: &SharedState, body: &str) -> String {
-    let inner = extract_tag(body, "DeleteProfile").unwrap_or_default();
-    let token = extract_tag(&inner, "ProfileToken").unwrap_or_default();
-    if token.is_empty() {
-        return resp_soap_fault("ter:InvalidArgs", "ProfileToken missing");
-    }
+    let token = match crate::mock::request::required_text(
+        body,
+        "http://www.onvif.org/ver10/media/wsdl",
+        "DeleteProfile",
+        "ProfileToken",
+    ) {
+        Ok(token) => token,
+        Err(error) => {
+            return resp_soap_fault(
+                "env:Sender",
+                &format!("InvalidRequest-DELETEPROFILE: {}", error.0),
+            );
+        }
+    };
 
     match delete_profile_in_state(state, &token) {
         DeleteOutcome::Deleted => soap(

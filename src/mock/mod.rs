@@ -107,12 +107,22 @@
 //! `docs/mock-server.md` §13 lists every declared stub, fidelity gap and
 //! deliberate simplification. If an operation is not on that list and does not
 //! behave, it is a bug worth reporting.
+//!
+//! # Unreleased request hardening
+//!
+//! Media1/Media2 `DeleteProfile` now select a namespace-qualified direct token
+//! child, decode XML text once and preserve token whitespace. Invalid requests
+//! are rejected before mutation. This parser is bounded to 2 MiB, 64 element
+//! levels and 16,384 elements; other operations still use legacy extraction.
+//! Shared fault output escapes text and binds known prefixes, but still uses
+//! the legacy flat code hierarchy. Neither change claims full XSD conformance.
 
 mod auth;
 pub(crate) mod canon;
 pub(crate) mod dispatch;
 pub(crate) mod fault_injection;
 pub(crate) mod helpers;
+mod request;
 pub(crate) mod responder;
 mod services;
 mod transport;

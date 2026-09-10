@@ -220,6 +220,28 @@ Namespace prefixes the mock emits, and their bindings (`helpers::namespace_for`)
 
 ---
 
+### 3.1 Unreleased request hardening
+
+Media1 and Media2 `DeleteProfile` now read the required token from the identified
+operation's direct child in the correct service namespace. XML text is decoded
+once without trimming the token. Nested decoys, duplicate fields, incorrect
+operation/namespace, unbound prefixes, DTDs and malformed documents are refused
+before state changes. Both a complete SOAP 1.2 envelope and a namespace-qualified
+operation document are accepted; unbound-prefix test fragments are not.
+
+This migrated parser accepts at most 2 MiB of UTF-8 input, 64 element levels and
+16,384 elements, including the envelope. These are mock resource limits, not
+ONVIF protocol limits. Failures return `env:Sender` with an
+`InvalidRequest-DELETEPROFILE` reason. Missing/empty tokens now use this error
+rather than the old `ter:InvalidArgs` response.
+
+Only these two operations have migrated so far. Other handlers still use the
+legacy extractors; authentication, client response parsing and recorded replay
+are unchanged. This is not full XSD validation or complete mock conformance.
+See the [hardening plan](active/mock-fidelity-hardening-plan.md).
+
+---
+
 ## 4. Authentication
 
 Off by default, so a credential-less client works immediately. Enable with
@@ -891,12 +913,17 @@ oxvif's own testing rules ban that.
 | `ter:ActionNotSupported` | Routed, but deliberately not modelled — see §13.1 | `NotModelled-VSMODE-5813` |
 | `s:Receiver` | Unrouted action | `Not implemented: {action}` |
 
-**Known deviation.** The `ter:` and `env:` prefixes in `Code/Value` are QNames
-but the mock does not declare those prefixes on the fault envelope. Element
-prefixes are all bound (§3); these two live in *text content*, which no parser
-resolves automatically, but a client that resolves fault-code QNames itself
-will not be able to. Recorded rather than changed, because the correct
-expansion is a design question — many real devices emit exactly these strings.
+**Unreleased correction.** The shared fault helper now declares `ter:` and
+`env:` (in addition to `s:`) and escapes code/reason text, including explicit
+fault injections. Pass literal text to injection APIs, not pre-escaped XML.
+Custom, unknown QName prefixes are not automatically resolved by this helper.
+
+**Remaining deviation.** Existing faults still use the legacy flat `Code/Value`
+representation. Namespace binding does not fix operation-specific code/subcode
+hierarchies or validate HTTP status behavior. That migration is still pending;
+do not interpret this correction as full SOAP/ONVIF fault conformance. Older
+unmigrated request extractors may also supply already-escaped values to a reason,
+so literal token echo correctness is only covered for the migrated paths.
 
 ---
 

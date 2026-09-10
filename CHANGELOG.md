@@ -62,6 +62,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Mock Media1/Media2 `DeleteProfile` now preserves escaped/whitespace token
+  identity and rejects ambiguous, mislocated or malformed inputs before changing
+  state. Hand-written request fragments need valid namespace declarations;
+  missing/empty tokens now return `env:Sender` with an
+  `InvalidRequest-DELETEPROFILE` reason. Shared mock faults bind known prefixes
+  and escape code/reason text; injection callers should pass literal text.
+  Full fault hierarchies and other request handlers are not yet migrated.
+  See [mock request hardening](https://github.com/smiti1642/oxvif/blob/master/docs/mock-server.md#31-unreleased-request-hardening).
 - Add development-only `manage`, a terminal workspace retaining device/profile
   context across diagnosis, snapshots and configuration inventory/comparison.
   Reuse sessions for at most 60 seconds and invalidate after failures/cancellation;
