@@ -32,6 +32,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   known-gap probe means reproduced, not fixed or ONVIF-conformant.
 - Mock responder regression tests now guard fault/auth precedence and preserve
   raw custom-responder input/output during the planned parser migration.
+- The private mock request representation now retains scoped attributes and
+  ordered subtrees alongside decoded scalar text, with normalization and resource
+  boundary controls. Broad handler and structured-fault migration remain pending.
 - Human terminal line numbers are configurable as `absolute`, `relative`, `hybrid`
   (unchanged default), or `off`. Use `--line-numbers` for this invocation, or `?`
   in navigation screens to preview, apply for the session, or explicitly save a

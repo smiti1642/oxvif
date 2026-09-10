@@ -4,7 +4,7 @@
 //! It is not an XSD validator. Legacy fragment extractors remain in use by
 //! handlers that have not yet migrated; replay and authentication are unchanged.
 
-use std::{borrow::Cow, collections::HashSet};
+use std::{borrow::Cow, collections::HashMap};
 
 use quick_xml::{
     NsReader, XmlVersion,
@@ -21,24 +21,101 @@ const MAX_NODES: usize = 16_384;
 pub(super) struct RequestError(pub &'static str);
 
 #[derive(Debug)]
-struct Node {
+pub(super) struct Node {
     ns: String,
     name: String,
     text: String,
+    attributes: HashMap<(String, String), String>,
     children: Vec<Node>,
 }
 
 impl Node {
-    fn child(&self, ns: &str, name: &str) -> Result<Option<&Self>, RequestError> {
-        let mut matches = self
-            .children
+    /// Direct children only, in document order; extension subtrees retain scope.
+    pub(super) fn children_named<'a, 'q>(
+        &'a self,
+        ns: &'q str,
+        name: &'q str,
+    ) -> impl Iterator<Item = &'a Self> + 'q
+    where
+        'a: 'q,
+    {
+        self.children
             .iter()
-            .filter(|n| n.ns == ns && n.name == name);
+            .filter(move |n| n.ns == ns && n.name == name)
+    }
+
+    pub(super) fn child<'a>(
+        &'a self,
+        ns: &str,
+        name: &str,
+    ) -> Result<Option<&'a Self>, RequestError> {
+        let mut matches = self.children_named(ns, name);
         let result = matches.next();
         if matches.next().is_some() {
             return Err(RequestError("duplicate request field"));
         }
         Ok(result)
+    }
+
+    /// Decoded scalar text; an empty element is distinct from an absent child.
+    pub(super) fn scalar_text(&self) -> Result<&str, RequestError> {
+        if !self.children.is_empty() {
+            return Err(RequestError("expected scalar request field"));
+        }
+        Ok(&self.text)
+    }
+
+    pub(super) fn required_child_text(&self, ns: &str, name: &str) -> Result<&str, RequestError> {
+        let value = self
+            .child(ns, name)?
+            .ok_or(RequestError("missing request field"))?
+            .scalar_text()?;
+        if value.is_empty() {
+            return Err(RequestError("empty request field"));
+        }
+        Ok(value)
+    }
+
+    /// Attributes use expanded names. The default namespace does not qualify
+    /// an unprefixed attribute. Values are XML-normalized and decoded once.
+    // Staged W04 API: retained for attribute/subtree handler migration; tested
+    // here without broadening the existing DeleteProfile scalar contract.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(super) fn attribute(&self, ns: &str, name: &str) -> Option<&str> {
+        self.attributes.iter().find_map(|((uri, local), value)| {
+            (uri == ns && local == name).then_some(value.as_str())
+        })
+    }
+}
+
+/// Own one decoded tree; borrowed views never reconstruct XML fragments.
+#[derive(Debug)]
+pub(super) struct Request {
+    root: Node,
+}
+
+impl Request {
+    pub(super) fn parse(xml: &str) -> Result<Self, RequestError> {
+        Ok(Self { root: parse(xml)? })
+    }
+
+    pub(super) fn operation(&self, ns: &str, name: &str) -> Result<&Node, RequestError> {
+        let op = if self.root.ns == SOAP && self.root.name == "Envelope" {
+            let body = self
+                .root
+                .child(SOAP, "Body")?
+                .ok_or(RequestError("missing SOAP Body"))?;
+            if body.children.len() != 1 {
+                return Err(RequestError("expected one SOAP operation"));
+            }
+            &body.children[0]
+        } else {
+            &self.root
+        };
+        if op.ns != ns || op.name != name {
+            return Err(RequestError("unexpected operation or namespace"));
+        }
+        Ok(op)
     }
 }
 
@@ -70,7 +147,7 @@ fn xml_text(value: &str) -> Result<(), RequestError> {
 fn start(reader: &NsReader<&[u8]>, event: &BytesStart<'_>) -> Result<Node, RequestError> {
     let (ns, local) = reader.resolver().resolve_element(event.name());
     let ns = namespace(ns)?;
-    let mut seen = HashSet::new();
+    let mut attributes = HashMap::new();
     for attribute in event.attributes() {
         let attribute = attribute.map_err(|_| RequestError("invalid or duplicate attribute"))?;
         let value = attribute
@@ -82,7 +159,7 @@ fn start(reader: &NsReader<&[u8]>, event: &BytesStart<'_>) -> Result<Node, Reque
         }
         let (ns, name) = reader.resolver().resolve_attribute(attribute.key);
         let key = (namespace(ns)?, name.as_ref().to_string());
-        if !seen.insert(key) {
+        if attributes.insert(key, value.into_owned()).is_some() {
             return Err(RequestError("duplicate expanded attribute name"));
         }
     }
@@ -90,6 +167,7 @@ fn start(reader: &NsReader<&[u8]>, event: &BytesStart<'_>) -> Result<Node, Reque
         ns,
         name: local.as_ref().to_string(),
         text: String::new(),
+        attributes,
         children: Vec::new(),
     })
 }
@@ -207,31 +285,11 @@ pub(super) fn required_text(
     operation: &str,
     field: &str,
 ) -> Result<String, RequestError> {
-    let root = parse(xml)?;
-    let op = if root.ns == SOAP && root.name == "Envelope" {
-        let body = root
-            .child(SOAP, "Body")?
-            .ok_or(RequestError("missing SOAP Body"))?;
-        if body.children.len() != 1 {
-            return Err(RequestError("expected one SOAP operation"));
-        }
-        &body.children[0]
-    } else {
-        &root
-    };
-    if op.ns != ns || op.name != operation {
-        return Err(RequestError("unexpected operation or namespace"));
-    }
-    let value = op
-        .child(ns, field)?
-        .ok_or(RequestError("missing request field"))?;
-    if !value.children.is_empty() {
-        return Err(RequestError("expected scalar request field"));
-    }
-    if value.text.is_empty() {
-        return Err(RequestError("empty request field"));
-    }
-    Ok(value.text.clone())
+    let request = Request::parse(xml)?;
+    Ok(request
+        .operation(ns, operation)?
+        .required_child_text(ns, field)?
+        .to_owned())
 }
 
 #[cfg(test)]
@@ -245,6 +303,164 @@ mod tests {
     #[test]
     fn text_decodes_once_and_preserves_whitespace() {
         assert_eq!(read("<Command xmlns='urn:mock:test'><Key> 北&amp; &lt;&#x9580;<![CDATA[> ]]>&amp;amp; </Key></Command>").unwrap(), " 北& <門> &amp; ");
+    }
+
+    #[test]
+    fn attributes_keep_expanded_names_and_do_not_inherit_default_namespace() {
+        let request = Request::parse(
+            "<Command xmlns='urn:mock:test' xmlns:a='urn:attrs' key='bare' a:key='qualified'/>",
+        )
+        .unwrap();
+        let op = request.operation("urn:mock:test", "Command").unwrap();
+        assert_eq!(op.attribute("", "key"), Some("bare"));
+        assert_eq!(op.attribute("urn:attrs", "key"), Some("qualified"));
+        assert_eq!(op.attribute("urn:mock:test", "key"), None);
+        assert_eq!(op.attribute("", "xmlns"), None);
+        assert_eq!(op.attribute("http://www.w3.org/2000/xmlns/", "a"), None);
+    }
+
+    #[test]
+    fn attributes_normalize_literal_whitespace_but_preserve_character_references() {
+        let request = Request::parse(
+            "<Command xmlns='urn:mock:test' key='A\r\nB\tC&#x9;&#xD;&#xA;&amp;amp;'/>",
+        )
+        .unwrap();
+        assert_eq!(
+            request
+                .operation("urn:mock:test", "Command")
+                .unwrap()
+                .attribute("", "key"),
+            Some("A B C\t\r\n&amp;")
+        );
+    }
+
+    #[test]
+    fn repeated_children_preserve_order_subtrees_and_namespace_scope() {
+        let request = Request::parse(
+            "<Command xmlns='urn:mock:test' xmlns:a='urn:outer'>\
+             <Entry a:key='first'><Key>one&amp;two</Key></Entry>\
+             <Extension xmlns:a='urn:inner'><Entry a:key='nested'/></Extension>\
+             <Entry xmlns='urn:other' a:key='foreign'/>\
+             <Entry a:key='last'><Key>three</Key></Entry></Command>",
+        )
+        .unwrap();
+        let op = request.operation("urn:mock:test", "Command").unwrap();
+        let entries: Vec<_> = op.children_named("urn:mock:test", "Entry").collect();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].attribute("urn:outer", "key"), Some("first"));
+        assert_eq!(entries[1].attribute("urn:outer", "key"), Some("last"));
+        assert_eq!(
+            entries[0]
+                .required_child_text("urn:mock:test", "Key")
+                .unwrap(),
+            "one&two"
+        );
+        assert_eq!(
+            entries[1]
+                .required_child_text("urn:mock:test", "Key")
+                .unwrap(),
+            "three"
+        );
+        assert_eq!(
+            op.child("urn:mock:test", "Entry").unwrap_err(),
+            RequestError("duplicate request field")
+        );
+        let nested = op
+            .child("urn:mock:test", "Extension")
+            .unwrap()
+            .unwrap()
+            .child("urn:mock:test", "Entry")
+            .unwrap()
+            .unwrap();
+        assert_eq!(nested.attribute("urn:inner", "key"), Some("nested"));
+        assert_eq!(nested.attribute("urn:outer", "key"), None);
+    }
+
+    #[test]
+    fn absent_empty_scalar_and_subtree_are_distinct() {
+        let request = Request::parse(
+            "<Command xmlns='urn:mock:test'><Empty/><Tree><Key>nested</Key></Tree></Command>",
+        )
+        .unwrap();
+        let op = request.operation("urn:mock:test", "Command").unwrap();
+        assert!(op.child("urn:mock:test", "Absent").unwrap().is_none());
+        assert_eq!(
+            op.child("urn:mock:test", "Empty")
+                .unwrap()
+                .unwrap()
+                .scalar_text(),
+            Ok("")
+        );
+        assert_eq!(
+            op.required_child_text("urn:mock:test", "Empty"),
+            Err(RequestError("empty request field"))
+        );
+        assert_eq!(
+            op.required_child_text("urn:mock:test", "Absent"),
+            Err(RequestError("missing request field"))
+        );
+        assert_eq!(
+            op.child("urn:mock:test", "Tree")
+                .unwrap()
+                .unwrap()
+                .scalar_text(),
+            Err(RequestError("expected scalar request field"))
+        );
+    }
+
+    #[test]
+    fn decoded_tree_is_reusable_without_reparsing_or_renormalizing_text() {
+        let request = Request::parse(
+            "<Command xmlns='urn:mock:test'><Key>A\r\nB\rC&#xD;D<![CDATA[\r\nE]]></Key></Command>",
+        )
+        .unwrap();
+        let first = request.operation("urn:mock:test", "Command").unwrap();
+        let second = request.operation("urn:mock:test", "Command").unwrap();
+        assert!(std::ptr::eq(first, second));
+        assert_eq!(
+            first.required_child_text("urn:mock:test", "Key").unwrap(),
+            "A\nB\nC\rD\nE"
+        );
+        assert_eq!(
+            second.required_child_text("urn:mock:test", "Key").unwrap(),
+            "A\nB\nC\rD\nE"
+        );
+        assert_eq!(
+            request.operation("urn:other", "Command").unwrap_err(),
+            RequestError("unexpected operation or namespace")
+        );
+    }
+
+    #[test]
+    fn normalized_namespace_aliases_cannot_duplicate_an_attribute() {
+        assert_eq!(
+            Request::parse("<Command xmlns:a='urn:a' xmlns:b='urn:&#97;' a:key='1' b:key='2'/>")
+                .unwrap_err(),
+            RequestError("duplicate expanded attribute name")
+        );
+    }
+
+    #[test]
+    fn resource_limits_accept_the_boundary_not_only_reject_large_inputs() {
+        let xml = format!("{}{}", "<n>".repeat(MAX_DEPTH), "</n>".repeat(MAX_DEPTH));
+        assert_eq!(
+            Request::parse(&xml)
+                .unwrap()
+                .operation("", "n")
+                .unwrap()
+                .name,
+            "n"
+        );
+        let xml = format!("<root>{}</root>", "<n/>".repeat(MAX_NODES - 1));
+        let request = Request::parse(&xml).unwrap();
+        assert_eq!(
+            request
+                .operation("", "root")
+                .unwrap()
+                .children_named("", "n")
+                .count(),
+            MAX_NODES - 1
+        );
     }
 
     #[test]

@@ -13,6 +13,7 @@ W03 預設驗證及 W06 錯誤遷移**尚未實作**。本階段不需要新的�
 | [相容性約束](#相容性約束) | 保留刻意的原始資料行為 |
 | [實作順序](#實作順序) | 前置條件與具體子項 |
 | [證據與剩餘工作](#證據與剩餘工作) | 測試及尚未驗證的發現 |
+| [Parsed-node 實作](#parsed-node-實作) | P-A 已交付範圍及 W04 剩餘工作 |
 
 ## 入口與責任
 
@@ -137,3 +138,27 @@ captured request text，確認各自在預期斷言失敗，之後均已還原�
 新章節 anchor 均通過。本檢查點未變更 runtime 實作、公開 API、安裝、Release
 或實機行為。接續從 P-A 開始；P-B／P-C 仍是廣泛遷移 handler 的前置條件，
 不必重做已完成的 W00 盤點。
+
+## Parsed-node 實作
+
+P-A 已在 `src/mock/request.rs` 實作私有 owning Request 與借用式 Node accessor：
+唯一直接 child、有序 repeated children、scalar text、必要且非空的 child text，
+以及 expanded-name attribute。required_text 改用此表示法，兩種 DeleteProfile
+契約不變。前面的來源表描述 `9978220` 基準；目前 attribute 已保留，不再丟棄。
+尚未遷移 handler 使用的 attribute accessor 僅暫時允許非測試編譯的 dead code，
+首個 handler 採用時須移除此標註。
+
+Generic 控制涵蓋 attribute identity／default namespace、XML 空白與字元參照
+正規化、repeated／subtree scope、缺少／空值／結構化值的區別、同一 tree 重用、
+正規化 namespace alias，以及 depth／node 邊界的合法輸入。七個新測試在同一輪
+各自擾動，均於預期斷言失敗，之後已還原。
+參考：[XML 1.0 §2.11／§3.3.3](https://www.w3.org/TR/REC-xml/) 與
+[Namespaces §6.2](https://www.w3.org/TR/xml-names/#defaulting)。
+
+這不代表完整 W04 或全域 parse-once dispatch 完成：schema-specific 型別、範圍、
+QName-valued content、extension policy 與 P-B／P-C 仍待完成。沿用既有 resource
+bound，不將它解釋為裝置容量限制；未增加依賴、公開 API、schema table 或操作。
+
+P-A 本機 gate：格式、兩種 workspace Clippy、全部功能 1,155 與預設 1,075 tests
+通過（各 4 ignored）；清冊仍為 159 個宣告位置／157 routes／260 個直接 reader。
+上述數字包含既有 known-gap assertion，不代表 K13–K18 已結案。

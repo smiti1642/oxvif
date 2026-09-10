@@ -102,7 +102,7 @@ include operation-sized Fault migration after W05, not just request parsing.
 | W01 / M0 / IN-PROGRESS | W00 for selected batch | Per-operation cards using the template above; normative review external; field/fault/effect coverage per operation | All batch cards pass readiness, C01–C12 assigned, no unexplained defaults or response branches; source/spec disagreement is logged before edits |
 | W02 / M0 / PARTIAL | W00 | `xml_parse.rs`, all service files, `request.rs`, `auth.rs`, `canon.rs`: enumerate callers and transitive helper dependencies; classify text/attribute/subtree/raw uses | Each legacy caller has a migration owner or explicit isolation rationale, including test-only readers; newly found readers added to source map |
 | W03 / M3 / TODO | W02 | `responder.rs`, `dispatch.rs`, `transport.rs`, `server.rs`, `request.rs`: parse once at the normal synthetic boundary; define raw/parsed ownership and Action check | Valid/malformed input tested through both entry points; fault/auth/replay precedence unchanged unless separately reviewed; static responders cannot bypass agreed validation |
-| W04 / M1,M3 / PARTIAL | W02 | `request.rs`: extend current scalar parser with scoped attributes, typed access and subtree/repeated-member access; document limits | C02–C04/C09 controls and mutations; legal extension/repeat controls; malformed inputs never panic; escaped namespace normalization, CR/LF/attribute normalization audited |
+| W04 / M1,M3 / PARTIAL | W02 | `request.rs`: P-A private owning request, scalar/scoped-attribute/subtree/repeated access implemented; typed field rules and QName-valued content remain open | Seven P-A controls perturbed and restored; C02–C04/C09 controls must also cover migrated handlers, legal extensions and field-specific constraints |
 | W05 / M2 / PARTIAL | W01 for mapping; W02 for callers | `helpers.rs`, proposed private fault module, every `resp_soap_fault` caller: structured QNames/subcodes/reason/detail; current text escaping is only first slice | Independent QName-scope and nested Fault checks; all ordinary branches mapped with references, no double escape or uncontrolled raw code interpolation |
 | W06 / M2 / TODO | W05 design before default switch | `soap/xml.rs`, `soap/error.rs`, `error.rs`, `transport.rs`, `session.rs`, CLI error/output consumers | Nested/flat/vendor errors classified deliberately; preserve or explicitly migrate public fields; human and Agent diagnostics/exit codes tested; no silent enum/field break |
 | W07 / M2,M3 / TODO | W03/W05 designs, W06 | `helpers.rs::extract_action`, `server.rs::handle_soap`, `transport.rs`, dispatch routing | HTTP Action/content type/status/invalid UTF-8/missing/conflicting headers and service path cases checked against binding references; no assumption that all HTTP 200 faults are correct or incorrect |
@@ -230,8 +230,9 @@ literal source reconciliation; W02 direct callers are indexed but transitive pat
 remain open. The first 13 [W01 cards](mock-fidelity-profile-preflight.md) exist but
 are not migration-ready. The selected shared paths are expanded in the
 [pipeline preflight](mock-fidelity-pipeline-preflight.md), including K17's early
-replay invalidation and raw-extension controls. **Next: P-A private parsed
-accessors, P-B external field/Fault review and P-C outcome/consumer design.**
+replay invalidation and raw-extension controls. P-A private parsed accessors are
+implemented. **Next: P-B external field/Fault review, P-C outcome/consumer design,
+and the remaining W04 typed/QName rules before broad handler migration.**
 W04/W05 design can follow the shared-path map; settle W06 before changing default
 Fault output. W20/W21 can be prepared without waiting for every service migration.
 

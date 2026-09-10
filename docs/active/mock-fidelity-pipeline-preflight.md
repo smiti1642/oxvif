@@ -14,6 +14,7 @@ migration are **not implemented**. No new product decision is required here.
 | [Compatibility constraints](#compatibility-constraints) | Preserve intentional raw behavior |
 | [Implementation order](#implementation-order) | Prerequisites and concrete next slices |
 | [Evidence and remaining work](#evidence-and-remaining-work) | Tests versus unverified findings |
+| [Parsed-node implementation](#parsed-node-implementation) | P-A delivered scope and remaining W04 work |
 
 ## Entry points and ownership
 
@@ -145,3 +146,31 @@ self-tests/reconciliation, 192 local file links and 10 new section anchors passe
 No runtime implementation, public API, installation, release or real-device
 behavior changed in this checkpoint. Resume with P-A; P-B/P-C remain prerequisites
 for broad handler migration. Do not repeat completed W00 inventory work.
+
+## Parsed-node implementation
+
+P-A now has a private owning `Request` and borrowed `Node` accessors in
+`src/mock/request.rs`: unique direct child, ordered repeated children, scalar
+text, required nonempty child text, and expanded-name attributes. `required_text`
+uses this representation without changing the two DeleteProfile contracts.
+The earlier source table describes baseline `9978220`; attributes are now retained
+instead of discarded. The staged attribute accessor has a narrow non-test
+dead-code allowance until handler migration; remove it when first used there.
+
+Generic controls cover attribute identity/default namespace, XML whitespace and
+character-reference normalization, repeated/subtree scope, absent versus empty
+versus structured values, reuse of the same tree, normalized namespace aliases,
+and accepted depth/node boundaries. Seven new tests were perturbed individually
+within one run and each failed at its intended assertion, then restored.
+References: [XML 1.0 §2.11/§3.3.3](https://www.w3.org/TR/REC-xml/) and
+[Namespaces §6.2](https://www.w3.org/TR/xml-names/#defaulting).
+
+This is not complete W04 or global parse-once dispatch: schema-specific types,
+ranges, QName-valued content, extension policy and P-B/P-C remain open. Existing
+resource bounds are retained, not newly justified as device capacity limits.
+No new dependency, public API, schema table or service operation is introduced.
+
+P-A local gate: formatting, both workspace Clippy modes, 1,155 all-feature and
+1,075 default tests passed (4 ignored each); inventory remains 159 declaration
+sites / 157 routes / 260 direct reader occurrences. These counts include the
+existing known-gap assertions and do not close K13–K18.

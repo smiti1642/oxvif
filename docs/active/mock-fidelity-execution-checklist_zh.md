@@ -94,7 +94,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W01／M0／IN-PROGRESS | 所選批次的 W00 | 依上方模板建立逐操作工作卡，規範核對保留外部；逐操作盤點 field／Fault／effect | 全批次工作卡符合開工條件；C01–C12 均有安排；無未解釋預設或 response 分支；程式碼／規格衝突先記錄再修改 |
 | W02／M0／PARTIAL | W00 | `xml_parse.rs`、全部 service、`request.rs`、`auth.rs`、`canon.rs`：列出 caller 與間接 helper 相依性，分類文字／attribute／子樹／raw 用途 | 每個舊 caller 都有遷移負責項目或明確隔離理由，包含 test-only reader；新找到的 reader 加入來源對照 |
 | W03／M3／TODO | W02 | `responder.rs`、`dispatch.rs`、`transport.rs`、`server.rs`、`request.rs`：於正常 synthetic 邊界解析一次，定義 raw／parsed 所有權及 Action 檢查 | 兩個入口測試合法／異常輸入；未另審查不得改變 fault／auth／replay 優先序；靜態 responder 不得繞過約定驗證 |
-| W04／M1、M3／PARTIAL | W02 | `request.rs`：擴充現有 scalar parser，加入 scoped attribute、typed access、子樹／重複成員存取及限制文件 | C02–C04／C09 控制與擾動、合法 extension／重複成員控制、異常輸入不 panic；核對 namespace、CR／LF／attribute 正規化 |
+| W04／M1、M3／PARTIAL | W02 | `request.rs`：P-A private owning request、scalar／scoped attribute／subtree／repeated 存取已實作；typed field rules 與 QName-valued content 待完成 | 七個 P-A 控制已擾動並還原；C02–C04／C09 仍須涵蓋已遷移 handler、合法 extension 及欄位限制 |
 | W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | `helpers.rs`、提案中的 private Fault module、全部 `resp_soap_fault` caller：結構化 QName／subcode／reason／detail；目前文字 escaping 只是第一批 | 獨立 QName scope／巢狀 Fault 檢查；所有一般錯誤分支具參考映射；無 double escape 或未控制的 raw code 插入 |
 | W06／M2／TODO | 預設切換前完成 W05 設計 | `soap/xml.rs`、`soap/error.rs`、`error.rs`、`transport.rs`、`session.rs`、CLI error／output 消費端 | 巢狀／平面／vendor 錯誤有明確分類；保留或明示遷移公開欄位；人類／Agent 診斷及 exit code 測試；不默默破壞 enum／field |
 | W07／M2、M3／TODO | W03／W05 設計、W06 | `helpers.rs::extract_action`、`server.rs::handle_soap`、`transport.rs`、dispatch routing | HTTP Action／content type／status／無效 UTF-8／缺少或衝突 header／服務路徑對照 binding；不假設所有 HTTP 200 Fault 一律正確或錯誤 |
@@ -216,8 +216,9 @@ not-run 分開記錄；schema skip、既有 `Broken`／`Blind` 預期不算新�
 W02 直接 caller 索引完成但間接路徑仍待查；第一批 13 張
 [W01 工作卡](mock-fidelity-profile-preflight_zh.md) 已建立，尚未符合遷移條件。
 選定共用路徑已展開於[管線開工核對](mock-fidelity-pipeline-preflight_zh.md)，包含
-K17 提前 replay 失效及 raw extension 控制。**下一項為 P-A private parsed
-accessor、P-B 外部欄位／Fault 核對及 P-C outcome／消費端設計。**
+K17 提前 replay 失效及 raw extension 控制。P-A private parsed accessor 已實作。
+**下一項為 P-B 外部欄位／Fault 核對、P-C outcome／消費端設計，以及廣泛遷移
+handler 前剩餘的 W04 typed／QName 規則。**
 W04／W05 設計依共用路徑盤點接續；預設 Fault 輸出改變前先處理 W06。
 W20／W21 可先準備，不必等待所有服務遷移結束。
 
