@@ -17,10 +17,11 @@ below. No new product decision is required here.
 | [Evidence and remaining work](#evidence-and-remaining-work) | Tests versus unverified findings |
 | [Parsed-node implementation](#parsed-node-implementation) | P-A delivered scope and remaining W04 work |
 | [Structured fault foundation](#structured-fault-foundation) | P-C serializer slice and consumer boundaries |
+| [Committed deletion effects](#committed-deletion-effects) | Selected K17 repair and remaining replay boundaries |
 
 ## Entry points and ownership
 
-| Source symbols | Current input/output and next dependency | Work owner |
+| Source symbols | Baseline input/output and next dependency | Work owner |
 | --- | --- | --- |
 | `mock/transport.rs::soap_post` | Already a Rust String; URL ignored; builds `RequestCtx`, then `Chain::default_mock` | W03/W07 |
 | `mock/server.rs::handle_soap` | `helpers::extract_action` reads only Content-Type; missing becomes empty; bytes become lossy UTF-8; constructs default or replay chain; every result returned as HTTP 200 | W03/W07; HTTP binding review remains required |
@@ -65,7 +66,7 @@ complete per-field audit of other services.
    Collection equality, callback counts, and replay visibility are separate
    assertions. Changing this generic helper globally would affect other services.
 
-**K17 — reproduced, not fixed:** ReplayResponder inserts
+**Initial K17 finding — built-in DeleteProfile repair below:** ReplayResponder inserts
 the operation family into `invalidated` before SyntheticResponder can accept or
 reject a write. A later fault therefore does not undo the invalidation. A new
 strict synthetic rejection alone cannot guarantee unchanged replay visibility.
@@ -89,7 +90,7 @@ tests: successful create/delete/bind → recorded GetProfiles must reflect the
 changed profile state; unrelated service/instance recordings remain available.
 Do not test only a naturally matching pair such as GetHostname/SetHostname.
 
-The `metamorph`-gated K17/K18 tests in `mock_fidelity_known_gaps.rs` now reproduce
+The initial `metamorph`-gated K17/K18 tests in `mock_fidelity_known_gaps.rs` reproduced
 both paths using project-authored raw identity markers, not schema fixtures.
 K17 asserts the exact rejection, complete serialized device-state equality and
 the unwanted switch from recording to synthetic. K18 asserts successful stored
@@ -133,7 +134,7 @@ passed for the preceding authentication-Fault commit `e6145b3`, not this new sli
 | --- | --- | --- |
 | P-A | Private parsed-node accessors for decoded text, scoped attrs and ordered repeated children; generic namespace/normalization/resource controls; keep standalone operation test entry | W04 selected dependencies above; no whole-program W02 completion claim |
 | P-B | Review official per-field/Fault references externally; pin source closure/hash record; resolve the 13 cards' defaults, repeats, capacity/conflicts and state effects | W01; do not substitute this source table for WSDL/XSD evidence |
-| P-C | Define structured internal Fault/outcome and verify client/health/CLI compatibility before switching defaults; decide the private hook for post-success replay invalidation | W05/W06/W19; no implicit public trait redesign |
+| P-C | Structured Fault foundation and selected DeleteProfile commit observer implemented; finish other mappings, effects and consumer review before broad defaults change | W05/W06/W19; no implicit public trait redesign |
 | P-D | Route both synthetic entry points through one parsed request; reject Action/body mismatch and malformed input, including static reads, while retaining chain controls | P-A/P-C plus W07 binding review and K17 handling |
 | P-E | Migrate profile read/create/delete/binding in bounded commits; decode on input and escape once on output; atomic validation and no rejected-write notifications | P-B/P-D; K13–K16 tests become corrected invariants |
 
@@ -154,7 +155,7 @@ Two `mock::responder::tests` controls guard the existing extension seam:
 These are in-process ordering tests, not HTTP, real replay-store, schema or
 conformance acceptance. Other services' transitive readers, field contracts,
 and external validation remain open. K17/K18 runtime evidence is recorded below;
-their fixes remain open.
+remaining mutation fixes remain open; the selected deletion repair is recorded below.
 
 Local evidence: Windows, rustc 1.97.0, PowerShell 7.5.4, isolated
 `target/mock-fidelity-build`. Both new tests passed, then failed at the intended
@@ -226,7 +227,7 @@ filter hid the CLI target from this mutation run.
 
 SOAP design reference: [SOAP 1.2 Part 1 §5.4](https://www.w3.org/TR/soap12-part1/#soapfault).
 Optional structured Detail, complete ordinary code mappings, HTTP status,
-post-success replay outcomes and broad nested-consumer coverage are still open.
+remaining post-success replay outcomes and broad nested-consumer coverage are still open.
 No public `SoapError` field is added or redefined; its docs now state the existing
 first-level/prefix-preserving subcode and extracted-text Detail limitations.
 
@@ -235,3 +236,49 @@ all-feature and 1,087 default tests passed (4 ignored each); Rust 1.88 workspace
 check passed. Inventory remains 157 routes / 159 Action sites / 260 direct readers.
 Prior checker commit `9469bb6` passed all 23 jobs in CI run 34456850826; that hosted
 run does not cover this subsequent Fault change.
+
+## Committed deletion effects
+
+P-C/W19 now carries an optional private `Effect` alongside synthetic XML.
+The existing two DeleteProfile route arms pass a per-request effect slot; only
+their `Deleted` branch sets `ProfilesChanged`. The terminal invokes its private
+observer after the handler completes, not by scanning XML or subscribing to a
+generic persistence hook. `RequestCtx` fields and `Responder::respond` are unchanged.
+The ordinary `dispatch` wrapper still returns only XML for internal analysis users.
+
+Built-in MetamorphTransport and HTTP replay clones defer invalidation for the two
+exact DeleteProfile Actions. A committed deletion retires Media1 GetProfile and
+GetProfiles plus Media2 GetProfiles by complete Action identity. Missing/fixed
+refusals retain recordings; other-service lookalikes and independent instances
+remain untouched. K17's old known-gap test is now a preservation regression.
+`tests/mock_replay_effects.rs` exercises both service writes, both transport paths,
+all three selected read views, full state equality and unrelated/instance controls.
+`committed_effect_observer_is_not_a_request_or_fault_hook` checks injected Fault,
+auth, raw custom response, invalid input, successful deletion and repeated refusal.
+
+The public standalone ReplayResponder constructor retains its existing policy:
+it cannot observe a caller-owned downstream responder. Built-in clones enable the
+private commit-aware path only where the terminal is owned. This is a staged
+migration, not a public configuration switch or whole W19 acceptance. Other
+mutations still use the old family invalidation (including reproduced K18 create
+behavior). Additional profile-dependent reads, malformed Action handling, callback
+ordering and concurrent linearizability remain open. The effect observer runs
+after the existing state-change callback; this slice does not make that callback
+and replay invalidation atomic or add rollback.
+
+The inventory extractor now accepts multiline dispatcher parameter lists,
+with an additional positive self-test and all prior rejection checks retained.
+The two ledger argument lists include the effect slot; the route/Action/reader
+counts remain unchanged. No schema-derived metadata or new runtime dependency
+is introduced.
+
+Deletion-effect verification: restoring early invalidation made K17 and both
+transport regressions fail; suppressing committed-effect delivery made the
+observer control and both transport regressions fail. Both full-workspace,
+all-feature no-fail-fast mutation runs exited unsuccessfully at assertions; all
+mutations were restored. Formatting, both workspace Clippy modes, narrow mock
+Clippy, both warnings-as-errors documentation builds and all 24 packaging
+controls passed. The restored suite passed 1,174 all-feature and 1,090 default
+tests (5 ignored, 20 suites each). A fresh external corpus contained 34 XML
+instances, all accepted by pinned strict Xerces XSD 1.1 validation; this is not
+semantic conformance or whole-programme acceptance.

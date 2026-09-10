@@ -146,7 +146,11 @@ pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
     )
 }
 
-pub fn handle_delete_profile(state: &SharedState, body: &str) -> String {
+pub fn handle_delete_profile(
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     use crate::mock::fault::{
         ACTION, Code, DELETION_OF_FIXED_PROFILE, Fault, INVALID_ARG_VAL, NO_PROFILE,
     };
@@ -166,10 +170,13 @@ pub fn handle_delete_profile(state: &SharedState, body: &str) -> String {
     };
 
     match delete_profile_in_state(state, &token) {
-        DeleteOutcome::Deleted => soap(
-            r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-            "<trt:DeleteProfileResponse/>",
-        ),
+        DeleteOutcome::Deleted => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            soap(
+                r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+                "<trt:DeleteProfileResponse/>",
+            )
+        }
         // Media service 24.12 §5.2.22: both refusals are Sender faults.
         DeleteOutcome::NotFound => Fault::new(
             Code::Sender,

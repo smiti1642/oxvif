@@ -16,10 +16,11 @@ W03 預設驗證及廣泛的 W06 服務錯誤遷移**尚未實作**；已完成�
 | [證據與剩餘工作](#證據與剩餘工作) | 測試及尚未驗證的發現 |
 | [Parsed-node 實作](#parsed-node-實作) | P-A 已交付範圍及 W04 剩餘工作 |
 | [結構化 Fault 基礎](#結構化-fault-基礎) | P-C serializer 子批次及消費端邊界 |
+| [已提交的刪除效果](#已提交的刪除效果) | 選定 K17 修正及剩餘 replay 邊界 |
 
 ## 入口與責任
 
-| 原始碼符號 | 目前輸入／輸出及後續依賴 | 負責工作 |
+| 原始碼符號 | 基準輸入／輸出及後續依賴 | 負責工作 |
 | --- | --- | --- |
 | `mock/transport.rs::soap_post` | 輸入已為 Rust String；忽略 URL；建立 RequestCtx 後交給 Chain::default_mock | W03／W07 |
 | `mock/server.rs::handle_soap` | helpers::extract_action 只讀 Content-Type，缺少時成為空字串；bytes 經 lossy UTF-8 轉換；建立預設或 replay chain；所有結果皆回 HTTP 200 | W03／W07；仍需 HTTP binding 核對 |
@@ -63,7 +64,7 @@ String 不等於能保留無效 HTTP encoding 的原始 bytes。
    集合相等、callback 次數及 replay 可見結果必須分別斷言；直接全域修改此
    generic helper 會影響其他服務。
 
-**K17 — 已重現，尚未修正：** ReplayResponder 在 SyntheticResponder
+**初始 K17 發現 — 內建 DeleteProfile 修正見下方：** ReplayResponder 在 SyntheticResponder
 接受或拒絕寫入之前，就把 operation family 加入 invalidated；後續 Fault 不會
 復原該失效狀態。因此只增加嚴格 synthetic rejection，仍無法保證 replay 的
 可見結果不變。負責 W19／W03／W18；受影響工作卡包括兩服務的
@@ -84,7 +85,7 @@ lookup 則包含完整 Action）。由 W19／W10 負責；設計 outcome-based i
 GetProfiles 應反映新 state；無關 service／instance 的錄製結果仍可使用。
 不可只測 GetHostname／SetHostname 這類名稱恰好相符的組合。
 
-`mock_fidelity_known_gaps.rs` 中以 `metamorph` 功能控制的 K17／K18 測試，已使用
+`mock_fidelity_known_gaps.rs` 中最初以 `metamorph` 功能控制的 K17／K18 測試，使用
 專案自製的 raw identity marker 重現兩條路徑；這些 marker 不是 schema fixture。
 K17 精確斷言拒絕內容、完整序列化 device state 相等，以及錯誤切換至 synthetic。
 K18 斷言新增資料確實儲存、清單仍過時、單筆讀取失效，以及獨立 instance 不受影響。
@@ -123,7 +124,7 @@ CreateProfile 額外使 Profiles 失效後，兩項 baseline 在完整全部功�
 | --- | --- | --- |
 | P-A | Private parsed-node accessor：decoded text、scoped attribute、有序 repeated children；generic namespace／normalization／resource 控制；保留獨立 operation 測試入口 | 上述 W04 選定依賴；不宣稱整體 W02 完成 |
 | P-B | 在外部核對官方逐欄位／Fault 參考，固定 source closure／hash 紀錄；解決 13 張卡的 defaults、repeats、capacity／conflicts 與 state effects | W01；不可用本 source table 取代 WSDL／XSD 證據 |
-| P-C | 定義 structured internal Fault／outcome；預設切換前驗證 client／health／CLI 相容性；決定成功後 replay invalidation 的 private hook | W05／W06／W19；不可隱含重新設計公開 trait |
+| P-C | Structured Fault 基礎及選定 DeleteProfile commit observer 已實作；廣泛切換預設前完成其餘 mapping、effect 與消費端審查 | W05／W06／W19；不可隱含重新設計公開 trait |
 | P-D | 兩個 synthetic 入口使用同一 parsed request；拒絕 Action／body mismatch 與 malformed input，包含 static read，並保留 chain 控制 | P-A／P-C，加上 W07 binding 核對與 K17 處理 |
 | P-E | 分批遷移 profile read／create／delete／binding；輸入解碼、輸出只 escaping 一次；原子驗證且拒絕寫入不通知 | P-B／P-D；K13–K16 測試改為正確不變量 |
 
@@ -143,7 +144,7 @@ CreateProfile 額外使 Profiles 失效後，兩項 baseline 在完整全部功�
 
 這是 in-process 順序測試，不是 HTTP、實際 replay store、schema 或符合性驗收。
 其他服務的間接 reader、欄位契約與外部驗證仍待完成。K17／K18 的執行證據
-記錄於下方，兩項修正仍未完成。
+記錄於下方；選定刪除路徑已修正，其餘 mutation 修正仍未完成。
 
 本機證據：Windows、rustc 1.97.0、PowerShell 7.5.4，使用獨立
 `target/mock-fidelity-build`。兩個新測試先通過，再修改注入 code 及 trim
@@ -205,7 +206,7 @@ W08 安全性驗收。
 沒有使用狹窄 filter 而漏跑 CLI target。
 
 SOAP 設計參考：[SOAP 1.2 Part 1 §5.4](https://www.w3.org/TR/soap12-part1/#soapfault)。
-Optional structured Detail、完整一般錯誤映射、HTTP status、成功後 replay
+Optional structured Detail、完整一般錯誤映射、HTTP status、其餘成功後 replay
 outcome，以及更廣泛的巢狀錯誤消費端覆蓋仍待完成。未新增或重新定義公開
 `SoapError` 欄位；文件現明示既有 subcode 只保留第一層與 prefix 拼法，Detail
 則為擷取的文字，而非原始 XML。
@@ -215,3 +216,41 @@ outcome，以及更廣泛的巢狀錯誤消費端覆蓋仍待完成。未新增�
 清冊仍為 157 routes／159 Action 位置／260 個直接 reader。前一個 checker
 commit `9469bb6` 已通過 CI run 34456850826 全部 23 個 job；該託管執行不包含
 本次後續的 Fault 修正。
+
+## 已提交的刪除效果
+
+P-C／W19 現在隨 synthetic XML 攜帶 optional 私有 `Effect`。既有兩個 DeleteProfile
+route arm 傳入 per-request effect slot，僅 `Deleted` 分支設定 `ProfilesChanged`。
+Terminal 在 handler 完成後呼叫私有 observer，不搜尋 XML，也不訂閱一般 persistence
+hook。`RequestCtx` 欄位與 `Responder::respond` 不變；內部分析使用的既有
+`dispatch` wrapper 仍只回傳 XML。
+
+內建 MetamorphTransport 及 HTTP replay clone 對兩個精確 DeleteProfile Action
+延後處理 invalidation。成功刪除後，依完整 Action 身分淘汰 Media1 GetProfile／
+GetProfiles 及 Media2 GetProfiles。不存在／固定 profile 的拒絕保留錄製結果；其他
+service 同尾名操作及獨立 instance 不受影響。K17 舊 known-gap 測試已改為保留結果
+的回歸。`tests/mock_replay_effects.rs` 涵蓋兩服務寫入、兩種 transport、三個選定
+讀取 view、完整 state 相等及無關 service／instance 控制。
+`committed_effect_observer_is_not_a_request_or_fault_hook` 檢查注入 Fault、認證、
+原始自訂回應、無效輸入、成功刪除及重複拒絕。
+
+公開的單獨 ReplayResponder constructor 保留既有政策，因為它無法觀察由呼叫者
+擁有的下游 responder。內建 clone 僅在自行掌管 terminal 時啟用私有 commit-aware
+路徑。這是分階段遷移，不是公開設定切換，也不是整體 W19 驗收。其他 mutation 仍
+使用舊 family invalidation，包含已重現的 K18 create 行為。更多 profile 相依讀取、
+malformed Action、callback 順序及併發 linearizability 仍待處理。Effect observer
+在既有 state-change callback 之後執行；本批次未使 callback 與 replay invalidation
+成為原子操作，也未新增 rollback。
+
+清冊擷取器現可接受多行 dispatcher 參數列表，新增一項正向自我測試，並保留全部
+既有拒絕控制。兩個清冊的參數列納入 effect slot，route／Action／reader 數量不變。
+未新增 schema 衍生 metadata 或 runtime dependency。
+
+刪除效果驗證：恢復提前 invalidation 時，K17 與兩種 transport 回歸均失敗；
+抑制 committed effect 傳遞時，observer 控制與兩種 transport 回歸均失敗。
+兩輪完整 workspace、all-feature、no-fail-fast 擾動執行均於 assertion 失敗並
+回傳非零狀態，所有擾動皆已還原。格式、兩種 workspace Clippy、單獨 mock
+Clippy、兩種 warnings-as-errors 文件建置及全部 24 項 packaging 控制通過。
+還原後全功能 1,174 項與預設 1,090 項測試通過（各 5 ignored、20 suites）。
+新匯出的外部 corpus 共 34 份 XML，全部通過固定版本 Xerces 嚴格 XSD 1.1
+驗證；這不代表語意符合性或整體計畫驗收。

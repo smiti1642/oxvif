@@ -3128,7 +3128,7 @@ mod tests {
         use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteProfile xmlns:trt="http://www.onvif.org/ver10/media/wsdl"><trt:ProfileToken>Profile_2</trt:ProfileToken></trt:DeleteProfile>"#;
-        let resp = media::handle_delete_profile(&s, body);
+        let resp = media::handle_delete_profile(&s, body, &mut None);
         assert!(resp.contains("DeleteProfileResponse"));
         assert_eq!(s.read().profiles.profiles.len(), 3);
         // Only Profile_2 went; the other three are untouched and in order.
@@ -3147,7 +3147,7 @@ mod tests {
         use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteProfile xmlns:trt="http://www.onvif.org/ver10/media/wsdl"><trt:ProfileToken>Profile_1</trt:ProfileToken></trt:DeleteProfile>"#;
-        let resp = media::handle_delete_profile(&s, body);
+        let resp = media::handle_delete_profile(&s, body, &mut None);
         assert!(resp.contains("Fault"));
         assert!(resp.contains("DeletionOfFixedProfile"));
         // State untouched.
@@ -3159,7 +3159,7 @@ mod tests {
         use crate::mock::services::media;
         let s = new_state();
         let body = r#"<trt:DeleteProfile xmlns:trt="http://www.onvif.org/ver10/media/wsdl"><trt:ProfileToken>NoSuch</trt:ProfileToken></trt:DeleteProfile>"#;
-        let resp = media::handle_delete_profile(&s, body);
+        let resp = media::handle_delete_profile(&s, body, &mut None);
         assert!(resp.contains("Fault"));
         assert!(resp.contains("NoProfile"));
         assert_eq!(s.read().profiles.profiles.len(), 4);

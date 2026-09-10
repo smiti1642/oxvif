@@ -43,7 +43,7 @@ fn profile_replay() -> (MetamorphTransport, String, String, String) {
 
 #[cfg(feature = "metamorph")]
 #[tokio::test]
-async fn known_gap_k17_rejected_write_retires_unchanged_profile_recording() {
+async fn rejected_delete_preserves_unchanged_profile_recording() {
     let (transport, ns, one, _) = profile_replay();
     let before = serde_json::to_value(&*transport.device().read()).unwrap();
     assert_eq!(
@@ -70,18 +70,9 @@ async fn known_gap_k17_rejected_write_retires_unchanged_profile_recording() {
         .soap_post("http://mock", &format!("{ns}/GetProfile"), one)
         .await
         .unwrap();
-    assert_ne!(
-        after, "<recorded-one/>",
-        "K17 baseline changed: recording survived rejection"
-    );
     assert_eq!(
-        parse_soap_body(&after)
-            .unwrap()
-            .path(&["GetProfileResponse", "Profile", "Name"])
-            .unwrap()
-            .text(),
-        "synthetic-K17-K18",
-        "K17 changed: replace the baseline with preservation of the recorded response"
+        after, "<recorded-one/>",
+        "rejected deletion must preserve the recorded response"
     );
 }
 

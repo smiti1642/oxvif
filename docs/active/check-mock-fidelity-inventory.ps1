@@ -8,7 +8,7 @@ Set-StrictMode -Version Latest
 
 function Get-Routes([string]$Source) {
     $production = ($Source -split '#\[cfg\(test\)\]', 2)[0]
-    $functions = [regex]::Matches($production, '(?ms)^fn dispatch_(\w+)\([^\n]*\)[^{]*\{(.*?)^\}')
+    $functions = [regex]::Matches($production, '(?ms)^fn dispatch_(\w+)\([^)]*\)[^{]*\{(.*?)^\}')
     if ($functions.Count -eq 0) { throw 'No dispatch functions extracted; audit extractor.' }
     $routes = @()
     foreach ($function in $functions) {
@@ -100,6 +100,8 @@ fn dispatch_demo(op: &str) -> Option<String> {
     $actual = @(Get-Ledger $document)
     if ($expected.Count -ne 2) { throw 'Self-test route count mismatch.' }
     Assert-RoutesMatch $expected $actual
+    $multiline = $source.Replace('fn dispatch_demo(op: &str)', "fn dispatch_demo(`n    op: &str,`n)")
+    Assert-RoutesMatch $expected @(Get-Routes $multiline)
     Assert-Rejected { Assert-RoutesMatch $expected @($actual[0]) } 'Missing ledger route'
     Assert-Rejected { Assert-RoutesMatch @($expected[0]) $actual } 'Stale ledger route'
     Assert-Rejected { Assert-RoutesMatch $expected @($actual + $actual[0]) } 'Duplicate ledger route'

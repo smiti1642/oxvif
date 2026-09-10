@@ -131,7 +131,9 @@ and Sender → Action → DeletionOfFixedProfile for a fixed one. These four bra
 now use the private serializer. The client keeps first-subcode semantics; reason
 text and error types remain unchanged. The corpus checks both nested levels and
 client/health classification; fixed refusals preserve serialized state.
-K14 notifications are now fixed separately; K17 replay remains open. Invalid-request fault paths
+K14 notifications are fixed separately; built-in replay now uses committed
+DeleteProfile effects for selected profile reads (see pipeline preflight).
+Remaining mutation/dependency paths stay open. Invalid-request fault paths
 and virtual-profile behavior are not part of this bounded migration.
 
 Pinned external compilation and 34 selected instance checks now pass; see the

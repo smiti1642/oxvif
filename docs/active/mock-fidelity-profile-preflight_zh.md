@@ -114,7 +114,8 @@ checkout 外的來源根目錄（`profile-contract-review-20260910.md`）。這�
 Sender → Action → DeletionOfFixedProfile。這四個分支已改用私有 serializer；client
 維持第一層 subcode 語意，reason 文字及錯誤型別不變。Corpus 檢查兩層 subcode、
 client／health 分類，以及固定 profile 拒絕前後的序列化 state。K14 通知已另行修正，
-K17 replay 仍待處理；無效請求 Fault 與 virtual-profile 行為不屬於此次局部遷移。
+內建 replay 現依已提交的 DeleteProfile effect 處理選定 profile read（見管線開工核對）。
+其餘 mutation／相依路徑仍待完成；無效請求 Fault 與 virtual-profile 行為不屬於此次局部遷移。
 
 固定來源的外部編譯及 34 份選定 instance 已通過，見
 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)。尚需完整 WSDL／XSD 欄位

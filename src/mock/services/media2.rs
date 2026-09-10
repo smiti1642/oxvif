@@ -543,7 +543,11 @@ pub fn handle_create_profile_media2(state: &SharedState, body: &str) -> String {
 /// The dispatcher used to answer this with `resp_empty`, an unconditional
 /// success that removed nothing and reported nothing about a token that did not
 /// exist or a fixed profile that cannot be removed.
-pub fn handle_delete_profile_media2(state: &SharedState, body: &str) -> String {
+pub fn handle_delete_profile_media2(
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     use crate::mock::fault::{
         ACTION, Code, DELETION_OF_FIXED_PROFILE, Fault, INVALID_ARG_VAL, NO_PROFILE,
     };
@@ -568,7 +572,10 @@ pub fn handle_delete_profile_media2(state: &SharedState, body: &str) -> String {
     };
 
     match media::delete_profile_in_state(state, &token) {
-        media::DeleteOutcome::Deleted => resp_empty("tr2", "DeleteProfileResponse"),
+        media::DeleteOutcome::Deleted => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            resp_empty("tr2", "DeleteProfileResponse")
+        }
         // Media2 service 26.06 §5.1.5: both refusals are Sender faults.
         media::DeleteOutcome::NotFound => Fault::new(
             Code::Sender,

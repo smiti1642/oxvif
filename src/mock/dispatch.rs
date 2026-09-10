@@ -1,8 +1,20 @@
+use crate::mock::effect::Effect;
 use crate::mock::helpers::{resp_empty, resp_soap_fault};
 use crate::mock::services::{device, events, imaging, media, media2, ptz, recording};
 use crate::mock::state::SharedState;
 
+#[cfg(any(feature = "metamorph", test))]
 pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> String {
+    respond_with_effect(action, base, state, body).0
+}
+
+pub(crate) fn respond_with_effect(
+    action: &str,
+    base: &str,
+    state: &SharedState,
+    body: &str,
+) -> (String, Option<Effect>) {
+    let mut effect = None;
     let op = action.rsplit('/').next().unwrap_or("");
 
     // Events share one sub-dispatcher across the ONVIF and OASIS WSN namespaces.
@@ -15,9 +27,9 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             } else if tail.starts_with("ver10/deviceio/wsdl/") {
                 dispatch_device_io(op, state)
             } else if tail.starts_with("ver20/media/wsdl/") {
-                dispatch_media2(op, base, state, body)
+                dispatch_media2(op, base, state, body, &mut effect)
             } else if tail.starts_with("ver10/media/wsdl/") {
-                dispatch_media(op, base, state, body)
+                dispatch_media(op, base, state, body, &mut effect)
             } else if tail.starts_with("ver20/ptz/wsdl/") {
                 dispatch_ptz(op, state, body)
             } else if tail.starts_with("ver20/imaging/wsdl/") {
@@ -35,10 +47,11 @@ pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> St
             None
         };
 
-    response.unwrap_or_else(|| {
+    let xml = response.unwrap_or_else(|| {
         eprintln!("  [WARN] unhandled action: {action}");
         resp_soap_fault("s:Receiver", &format!("Not implemented: {action}"))
-    })
+    });
+    (xml, effect)
 }
 
 fn dispatch_device(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
@@ -100,13 +113,19 @@ fn dispatch_device_io(op: &str, state: &SharedState) -> Option<String> {
     })
 }
 
-fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
+fn dispatch_media(
+    op: &str,
+    base: &str,
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<Effect>,
+) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => media::resp_service_capabilities(),
         "GetProfiles" => media::resp_profiles(state),
         "GetProfile" => media::resp_profile(state, body),
         "CreateProfile" => media::handle_create_profile(state, body),
-        "DeleteProfile" => media::handle_delete_profile(state, body),
+        "DeleteProfile" => media::handle_delete_profile(state, body, effect),
         "GetStreamUri" => media::resp_stream_uri(),
         "GetSnapshotUri" => media::resp_snapshot_uri(base),
         "GetVideoSources" => media::resp_video_sources(state),
@@ -159,7 +178,13 @@ fn dispatch_media(op: &str, base: &str, state: &SharedState, body: &str) -> Opti
     })
 }
 
-fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
+fn dispatch_media2(
+    op: &str,
+    base: &str,
+    state: &SharedState,
+    body: &str,
+    effect: &mut Option<Effect>,
+) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => media2::resp_service_capabilities_media2(),
         // All three read and write the *shared* profile list. Until 0.15 they
@@ -168,7 +193,7 @@ fn dispatch_media2(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
         // one device and never converged.
         "GetProfiles" => media2::resp_profiles_media2(state),
         "CreateProfile" => media2::handle_create_profile_media2(state, body),
-        "DeleteProfile" => media2::handle_delete_profile_media2(state, body),
+        "DeleteProfile" => media2::handle_delete_profile_media2(state, body, effect),
         // Media2's single generic binding operation, over the same four
         // `ProfileEntry` slots the four Media1 arms above write. Audit §3 item 1.7.
         "AddConfiguration" => media2::handle_add_configuration_media2(state, body),

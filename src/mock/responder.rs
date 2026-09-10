@@ -4,7 +4,7 @@
 //! A [`Chain`] holds an ordered list of [`Responder`]s. Each is offered the
 //! request and may answer (`Some`) or pass (`None`) to the next. The default
 //! pipeline ([`Chain::default_mock`]) is
-//! `[FaultResponder, AuthResponder, SyntheticResponder]` — a byte-for-byte
+//! `[FaultResponder, AuthResponder, SyntheticResponder]` — originally a byte-for-byte
 //! reproduction of the inline flow `MockTransport` / `MockServer` used before
 //! the chain existed. Later personas (fixture replay, device adapter) slot new
 //! responders in ahead of the terminal [`SyntheticResponder`] without touching
@@ -19,7 +19,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::mock::dispatch::dispatch;
+use crate::mock::dispatch::respond_with_effect;
+use crate::mock::effect::EffectObserver;
 use crate::mock::fault_injection::FaultInjector;
 use crate::mock::state::MockState;
 use crate::mock::{auth, helpers};
@@ -63,7 +64,7 @@ impl Chain {
     }
 
     /// The default mock pipeline: armed fault → auth gate → synthetic dispatch.
-    /// Reproduces the pre-chain inline flow exactly.
+    /// Preserves fault/auth precedence and the synthetic terminal.
     pub(crate) fn default_mock(faults: Arc<FaultInjector>, enforce_auth: bool) -> Self {
         Self::mock_with_extra(faults, enforce_auth, Vec::new())
     }
@@ -77,11 +78,20 @@ impl Chain {
         enforce_auth: bool,
         extra: Vec<Box<dyn Responder>>,
     ) -> Self {
+        Self::mock_with_observer(faults, enforce_auth, extra, None)
+    }
+
+    pub(crate) fn mock_with_observer(
+        faults: Arc<FaultInjector>,
+        enforce_auth: bool,
+        extra: Vec<Box<dyn Responder>>,
+        observer: Option<EffectObserver>,
+    ) -> Self {
         let mut responders: Vec<Box<dyn Responder>> = Vec::with_capacity(extra.len() + 3);
         responders.push(Box::new(FaultResponder { faults }));
         responders.push(Box::new(AuthResponder { enforce_auth }));
         responders.extend(extra);
-        responders.push(Box::new(SyntheticResponder));
+        responders.push(Box::new(SyntheticResponder { observer }));
         Self::new(responders)
     }
 
@@ -137,18 +147,25 @@ impl Responder for AuthResponder {
 
 /// Terminal responder: synthesises a stateful response from `DeviceState`.
 /// Always answers, so it must be last in the chain.
-pub(crate) struct SyntheticResponder;
+pub(crate) struct SyntheticResponder {
+    observer: Option<EffectObserver>,
+}
 
 #[async_trait]
 impl Responder for SyntheticResponder {
     async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
-        Some(dispatch(ctx.action, ctx.base, ctx.state, ctx.body))
+        let (xml, effect) = respond_with_effect(ctx.action, ctx.base, ctx.state, ctx.body);
+        if let (Some(observer), Some(effect)) = (&self.observer, effect) {
+            observer(effect);
+        }
+        Some(xml)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mock::effect::Effect;
     use crate::mock::fault_injection::PendingFault;
     use crate::soap::{SoapError, find_response, parse_soap_body};
     use std::sync::Mutex;
@@ -192,6 +209,97 @@ mod tests {
             body,
             state,
         }
+    }
+
+    #[tokio::test]
+    async fn committed_effect_observer_is_not_a_request_or_fault_hook() {
+        let state = MockState::new();
+        state.modify(|s| s.profiles.profiles[1].fixed = false);
+        let before = serde_json::to_value(&*state.read()).unwrap();
+        let token = state.read().profiles.profiles[1].token.clone();
+        let action = "http://www.onvif.org/ver10/media/wsdl/DeleteProfile";
+        let body = format!(
+            "<m:DeleteProfile xmlns:m='http://www.onvif.org/ver10/media/wsdl'><m:ProfileToken>{token}</m:ProfileToken></m:DeleteProfile>"
+        );
+        let effects = Arc::new(Mutex::new(Vec::new()));
+        let seen = effects.clone();
+        let observer: EffectObserver = Arc::new(move |effect| seen.lock().unwrap().push(effect));
+
+        for (inject, auth) in [(true, true), (false, true), (false, false)] {
+            let faults = Arc::new(FaultInjector::new());
+            if inject {
+                faults.inject(PendingFault {
+                    action_suffix: "DeleteProfile".into(),
+                    code: "env:Receiver".into(),
+                    reason: "effect-gate-832".into(),
+                });
+            }
+            let chain = Chain::mock_with_observer(
+                faults,
+                auth,
+                vec![Box::new(ProbeResponder {
+                    label: "raw",
+                    seen: Arc::default(),
+                    answer: Some("<raw-effect-832/>"),
+                })],
+                Some(observer.clone()),
+            );
+            let xml = chain.respond(&ctx(action, &body, &state)).await;
+            if inject {
+                assert_fault(&xml, "env:Receiver", "effect-gate-832", None);
+            } else if auth {
+                assert_fault(
+                    &xml,
+                    "s:Sender",
+                    "Missing Username",
+                    Some("wsse:FailedAuthentication"),
+                );
+            } else {
+                assert_eq!(xml, "<raw-effect-832/>");
+            }
+            assert!(effects.lock().unwrap().is_empty());
+            assert_eq!(serde_json::to_value(&*state.read()).unwrap(), before);
+        }
+        let chain = Chain::mock_with_observer(
+            Arc::new(FaultInjector::new()),
+            false,
+            Vec::new(),
+            Some(observer),
+        );
+        let duplicate = body.replace(
+            "</m:DeleteProfile>",
+            "<m:ProfileToken>decoy</m:ProfileToken></m:DeleteProfile>",
+        );
+        assert_fault(
+            &chain.respond(&ctx(action, &duplicate, &state)).await,
+            "env:Sender",
+            "InvalidRequest-DELETEPROFILE: duplicate request field",
+            None,
+        );
+        assert!(effects.lock().unwrap().is_empty());
+        let xml = chain.respond(&ctx(action, &body, &state)).await;
+        assert!(
+            parse_soap_body(&xml)
+                .unwrap()
+                .child("DeleteProfileResponse")
+                .is_some()
+        );
+        assert!(
+            !state
+                .read()
+                .profiles
+                .profiles
+                .iter()
+                .any(|p| p.token == token)
+        );
+        assert_eq!(*effects.lock().unwrap(), [Effect::ProfilesChanged]);
+        assert_fault(
+            &chain.respond(&ctx(action, &body, &state)).await,
+            "s:Sender",
+            &format!("Profile not found: {token}"),
+            Some("ter:InvalidArgVal"),
+        );
+        assert_eq!(*effects.lock().unwrap(), [Effect::ProfilesChanged]);
     }
 
     #[tokio::test]

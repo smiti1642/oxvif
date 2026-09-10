@@ -1,5 +1,7 @@
 //! Persona B replay: answer reads from a recorded [`FixtureStore`], with coarse
 //! copy-on-write so writes still round-trip through synthetic `DeviceState`.
+//! Built-in devices use explicit committed effects for DeleteProfile; remaining
+//! mutations and standalone responder construction retain the legacy policy.
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -7,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 
 use crate::mock::canon::{Masking, canonicalize};
+use crate::mock::effect::{Effect, EffectObserver, tracks_commit};
 use crate::mock::fault_injection::FaultInjector;
 use crate::mock::responder::{Chain, RequestCtx, Responder};
 use crate::mock::state::MockState;
@@ -28,16 +31,57 @@ const METAMORPH_BASE: &str = "http://metamorph";
 ///   applies it to `DeviceState`, and invalidates that family's replay — the
 ///   coarse copy-on-write of `docs/active/metamorph.md` D5, so `Set → Get` reflects the
 ///   new value.
+///
+/// The public constructor retains this standalone policy because it cannot
+/// observe a caller's later responders. Built-in replay devices additionally
+/// observe successful synthetic DeleteProfile effects: refusals retain recorded
+/// reads, and success retires profile reads across both Media services. Other
+/// mutations still require migration; this is not full dependency tracking.
 pub struct ReplayResponder {
     store: Arc<FixtureStore>,
     invalidated: Arc<Mutex<HashSet<String>>>,
+    track_commits: bool,
 }
 
 impl ReplayResponder {
     /// A responder over `store`, sharing the `invalidated` family set with the
-    /// device so copy-on-write state persists across requests.
+    /// device so copy-on-write state persists across requests. This standalone
+    /// constructor retains legacy pre-write invalidation; it does not observe
+    /// whether a subsequent caller-owned responder commits a change.
     pub fn new(store: Arc<FixtureStore>, invalidated: Arc<Mutex<HashSet<String>>>) -> Self {
-        Self { store, invalidated }
+        Self {
+            store,
+            invalidated,
+            track_commits: false,
+        }
+    }
+
+    /// Built-in devices own the terminal and can observe committed effects.
+    /// A standalone public responder has no access to a caller's later handlers.
+    pub(crate) fn with_commit_tracking(mut self) -> Self {
+        self.track_commits = true;
+        self
+    }
+
+    pub(crate) fn effect_observer(&self) -> EffectObserver {
+        let invalidated = self.invalidated.clone();
+        Arc::new(move |effect| {
+            match effect {
+                Effect::ProfilesChanged => {
+                    let mut retired = invalidated
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    // Both service views depend on the same profile collection.
+                    for action in [
+                        "http://www.onvif.org/ver10/media/wsdl/GetProfile",
+                        "http://www.onvif.org/ver10/media/wsdl/GetProfiles",
+                        "http://www.onvif.org/ver20/media/wsdl/GetProfiles",
+                    ] {
+                        retired.insert(action.to_owned());
+                    }
+                }
+            }
+        })
     }
 }
 
@@ -47,15 +91,20 @@ impl Responder for ReplayResponder {
         let op = operation(ctx.action);
         let fam = family(op);
         if is_write(op) {
+            if self.track_commits && tracks_commit(ctx.action) {
+                return None;
+            }
             // Let synthetic apply the write to DeviceState; retire this family's
             // fixtures so subsequent reads see the mutated state.
             self.invalidated.lock().unwrap().insert(fam.to_string());
             return None;
         }
-        if self.invalidated.lock().unwrap().contains(fam) {
+        let retired = self.invalidated.lock().unwrap();
+        if retired.contains(fam) || retired.contains(ctx.action) {
             // A prior write moved this family to live DeviceState.
             return None;
         }
+        drop(retired);
         let key = canonicalize(ctx.body, Masking::Key);
         self.store
             .lookup(ctx.action, &key)
@@ -150,11 +199,14 @@ impl Transport for MetamorphTransport {
         body: String,
     ) -> Result<String, TransportError> {
         // Replay sits between the auth gate and the synthetic terminal.
-        let replay = ReplayResponder::new(self.store.clone(), self.invalidated.clone());
-        let chain = Chain::mock_with_extra(
+        let replay = ReplayResponder::new(self.store.clone(), self.invalidated.clone())
+            .with_commit_tracking();
+        let observer = replay.effect_observer();
+        let chain = Chain::mock_with_observer(
             self.faults.clone(),
             self.enforce_auth,
             vec![Box::new(replay)],
+            Some(observer),
         );
         let ctx = RequestCtx {
             action,

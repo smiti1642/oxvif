@@ -106,6 +106,9 @@ impl MockServerBuilder {
     /// unrecorded operations fall to synthetic `DeviceState` with coarse
     /// copy-on-write, so `Set → Get` still round-trips. Any HTTP ONVIF client
     /// (oxdm, Frigate, ODM) can then drive the clone at [`device_url`].
+    /// Media1/Media2 DeleteProfile instead retires profile reads only after a
+    /// successful synthetic deletion; rejected deletions preserve recordings.
+    /// Other write/dependency families retain the legacy policy during migration.
     ///
     /// Requires the `metamorph` feature (this method exists under
     /// `metamorph-server` = `metamorph` + `mock-server`).
@@ -299,8 +302,15 @@ async fn handle_soap(
     let chain = match &ctx.replay {
         Some(rp) => {
             let replay =
-                crate::metamorph::ReplayResponder::new(rp.store.clone(), rp.invalidated.clone());
-            Chain::mock_with_extra(ctx.faults.clone(), ctx.enforce_auth, vec![Box::new(replay)])
+                crate::metamorph::ReplayResponder::new(rp.store.clone(), rp.invalidated.clone())
+                    .with_commit_tracking();
+            let observer = replay.effect_observer();
+            Chain::mock_with_observer(
+                ctx.faults.clone(),
+                ctx.enforce_auth,
+                vec![Box::new(replay)],
+                Some(observer),
+            )
         }
         None => Chain::default_mock(ctx.faults.clone(), ctx.enforce_auth),
     };

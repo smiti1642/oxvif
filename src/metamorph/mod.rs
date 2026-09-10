@@ -102,6 +102,10 @@
 //!   a recorded [`FixtureStore`]; writes fall through to synthetic `DeviceState`
 //!   and invalidate that operation family (coarse copy-on-write, so
 //!   `Set → Get` round-trips). Driven by [`MetamorphTransport`].
+//!   Built-in clones use committed effects for Media1/Media2 DeleteProfile:
+//!   refused deletions preserve recordings, while successful deletions retire
+//!   both services' profile views. Other mutations and standalone responder
+//!   construction retain the legacy policy during migration.
 //! - **Persona C — adapter / skin (M5)**: [`AdapterResponder`] answers from a
 //!   [`DeviceAdapter`] you implement for a non-ONVIF device; unimplemented
 //!   operations fall through to synthetic. Driven by [`AdapterTransport`].

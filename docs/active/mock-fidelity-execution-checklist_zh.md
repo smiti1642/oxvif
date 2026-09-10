@@ -109,7 +109,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W16／M4／TODO | W01 分類、W05／W06 | 提案中的 operation policy registry、mock transport／server builder、responder | 精確 service＋operation opt-in；未建模效果預設拒絕且不改狀態；區分 unsupported 與已啟用 ack；僅必要時加入有上限追蹤，排除憑證／raw envelope |
 | W17／M4／TODO | W10–W16 分類 | 全部 capability renderer、`discovery_responder.rs`、`fleet.rs`、`snapshot.rs`、`font.rs`、公開 mock 文件 | Services／XAddrs／feature／limit 與建模行為一致；核對 discovery／snapshot 側路徑；靜態 URI／圖片不證明 codec／串流輸出 |
 | W18／M4／PARTIAL | W10–W16 候選行為 | 條件式通知修正 K14 DeleteProfile 拒絕；公開 state helper 語意不變 | 併發寫入、instance 隔離、完整 rollback、其他操作 hook、reentrancy／lock 及 replay 仍待完成；條件式通知不是 transaction rollback |
-| W19／M3、M6／TODO | W03／W09 設計 | `canon.rs`、`metamorph/{fixture,replay,record,parse,adapter,quirk,surface}.rs`、responder chain | 保留錄製偏差；核對正規化／key collision／參數辨識；失敗寫入不錯誤 invalidation；不新增錄製設備機密 |
+| W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 DeleteProfile 使用私有 committed effect；加入選定跨服務讀取、HTTP、instance 及 chain 控制 | 其他 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
 | W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及第一批 13 操作 client／mock corpus 匯出與明確 payload anchor | 選定 DeleteProfile Fault 遷移後，34 份 instance 通過，包含四個不存在／固定 profile 拒絕。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
 | W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 13 操作的 34 份 instance；全程式 instance 覆蓋及 release 證據檢查仍待完成 |
@@ -169,7 +169,7 @@ W02 發現新相依性時須擴充本表。
 | K09／未驗證 | 必填欄位／範圍／extension／capability 宣告可能與契約不符 | W01／W10–W17；實作前完成批次工作卡 |
 | K10／未執行 | E1 沒有完整外部 schema、Linux／macOS 原生、多廠牌驗證 | W21／W24；實機證據分開記錄，未另授權只做唯讀 |
 | K11／待整合 | PR #16 不在來源基準內 | W26；另行重審，不默默納入 |
-| K17／已重現、未修正 | DeleteProfile 被拒絕且完整 state 相等，錄製的 GetProfile 仍失效 | W19／W03／W18；完成 outcome-based invalidation 後，將 known-gap assertion 改為錄製結果保留；見管線開工核對 |
+| K17／內建 DeleteProfile 路徑已修正 | 內建 in-process／HTTP clone 於拒絕刪除時保留錄製結果，commit 後才淘汰選定的跨服務 profile read | W19／W03／W18 部分完成；其他 mutation、單獨 responder 政策、完整相依圖及併發／callback 可見性仍待完成；見管線開工核對 |
 | K18／create／list 不一致已重現、未修正 | 成功 CreateProfile 使 GetProfile 失效，GetProfiles 卻仍過時；binding 與 service 依賴僅完成原始碼確認 | W19／W10；核對 affected-read graph 與無關 service 控制；獨立 instance 控制通過；見管線開工核對 |
 | K19／已重現的外部相容性發現 | 目前 Media 來源相依集合在獨立 XSD 1.0 驗證器中無法編譯，但可通過 strict XSD 1.1 編譯 | W21；見 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)；不修改 schema 或停用檢查，須驗收候選工具並明示 schema 語言 |
 | K20／已重現並修正 formatter | `auth::auth_fault` 原先輸出未宣告的 wsse subcode 及原始 reason 文字 | W05 serializer 遷移維持 code／subcode，修正 scoped binding／text，並加入 client／health／CLI 控制；認證解析與政策仍屬 W08 待辦 |

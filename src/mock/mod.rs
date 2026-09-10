@@ -116,8 +116,10 @@
 //! levels and 16,384 elements; other operations still use legacy extraction.
 //! Missing/fixed-profile refusals use nested Sender faults; the public error's
 //! subcode is still the first level, not the deepest condition. Refused deletion
-//! does not invoke the change hook; successful deletion invokes it once. Replay
-//! invalidation and broader transaction/callback behavior remain under review.
+//! does not invoke the change hook; successful deletion invokes it once. Built-in
+//! replay clones retire both services' profile views only after successful
+//! synthetic deletion. Other mutation/dependency and transaction/callback paths
+//! remain under review.
 //! Authentication faults use a structured serializer with a bound first
 //! `wsse:FailedAuthentication` subcode and escaped reason text; XML-invalid reason
 //! characters become U+FFFD. Credential policy and HTTP status are unchanged.
@@ -127,6 +129,7 @@
 mod auth;
 pub(crate) mod canon;
 pub(crate) mod dispatch;
+pub(crate) mod effect;
 mod fault;
 pub(crate) mod fault_injection;
 pub(crate) mod helpers;

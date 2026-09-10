@@ -24,8 +24,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Mock Media1/Media2 rejected profile deletion no longer invokes the persistence
   change hook. Successful deletion still notifies once; public state helpers
-  retain their existing notification behavior. Replay invalidation is separate
-  pending work, not fixed by this notification change.
+  retain their existing notification behavior.
+- Built-in replay devices now preserve profile recordings when Media1/Media2
+  deletion is rejected, and retire both services' profile views only after a
+  successful synthetic deletion. Fault/auth/custom-responder short circuits do
+  not report committed effects. Other mutations and standalone `ReplayResponder`
+  construction retain their legacy policy pending their own migration; the full
+  dependency graph and concurrent visibility remain under review.
 - Media2 profile enumeration now explicitly requests `Type=All`, so conforming
   cameras return associated configuration/source information to the existing
   `get_profiles_media2` client and session methods. Previously the request omitted

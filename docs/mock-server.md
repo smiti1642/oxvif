@@ -894,7 +894,10 @@ This scoped migration does not correct other operations. DeleteProfile now also
 suppresses change-hook notifications for missing/fixed-profile refusals and
 notifies exactly once after a successful deletion. The internal notification
 predicate is not rollback; public `modify`/`modify_returning` semantics are
-unchanged. Rejected-write replay invalidation remains under separate review.
+unchanged. Built-in replay clones now preserve profile recordings on deletion
+refusal and retire Media1 GetProfile/GetProfiles and Media2 GetProfiles after
+successful synthetic deletion. Other mutations, standalone ReplayResponder
+construction, additional dependencies and concurrent visibility remain under review.
 
 ### 9.2 Reason strings are tagged and unique
 
