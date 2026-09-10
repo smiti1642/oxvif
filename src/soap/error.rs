@@ -28,10 +28,11 @@ pub enum SoapError {
 
     /// The device returned a `<s:Fault>` with a structured code and reason.
     ///
-    /// `subcode` is the ONVIF-specific `Code/Subcode/Value` (e.g.
-    /// `ter:NotAuthorized`) when the device includes it — the stable key for
-    /// grouping the same fault across brands whose `reason` text differs.
-    /// `detail` is the verbatim `<Detail>` text when present.
+    /// `subcode` is the first `Code/Subcode/Value` (e.g. `ter:NotAuthorized`)
+    /// when included. Deeper nested subcodes are not exposed by this variant;
+    /// the field is not redefined as the most-specific code. Prefix spelling
+    /// is retained, not namespace-normalized. `detail` is extracted readable
+    /// `<Detail>` text, not the raw XML fragment.
     #[error("SOAP fault [{code}]: {reason}")]
     Fault {
         code: String,

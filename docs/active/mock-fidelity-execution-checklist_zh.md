@@ -95,8 +95,8 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W02／M0／PARTIAL | W00 | `xml_parse.rs`、全部 service、`request.rs`、`auth.rs`、`canon.rs`：列出 caller 與間接 helper 相依性，分類文字／attribute／子樹／raw 用途 | 每個舊 caller 都有遷移負責項目或明確隔離理由，包含 test-only reader；新找到的 reader 加入來源對照 |
 | W03／M3／TODO | W02 | `responder.rs`、`dispatch.rs`、`transport.rs`、`server.rs`、`request.rs`：於正常 synthetic 邊界解析一次，定義 raw／parsed 所有權及 Action 檢查 | 兩個入口測試合法／異常輸入；未另審查不得改變 fault／auth／replay 優先序；靜態 responder 不得繞過約定驗證 |
 | W04／M1、M3／PARTIAL | W02 | `request.rs`：P-A private owning request、scalar／scoped attribute／subtree／repeated 存取已實作；typed field rules 與 QName-valued content 待完成 | 七個 P-A 控制已擾動並還原；C02–C04／C09 仍須涵蓋已遷移 handler、合法 extension 及欄位限制 |
-| W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | `helpers.rs`、提案中的 private Fault module、全部 `resp_soap_fault` caller：結構化 QName／subcode／reason／detail；目前文字 escaping 只是第一批 | 獨立 QName scope／巢狀 Fault 檢查；所有一般錯誤分支具參考映射；無 double escape 或未控制的 raw code 插入 |
-| W06／M2／TODO | 預設切換前完成 W05 設計 | `soap/xml.rs`、`soap/error.rs`、`error.rs`、`transport.rs`、`session.rs`、CLI error／output 消費端 | 巢狀／平面／vendor 錯誤有明確分類；保留或明示遷移公開欄位；人類／Agent 診斷及 exit code 測試；不默默破壞 enum／field |
+| W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | `fault.rs` 已提供型別化 code、有序 subcode、安全 reason，供認證／空 chain 回應使用；服務 helper 與 structured Detail 仍待完成 | 一般 scope／depth 與認證回歸已通過；一般服務分支仍須具參考映射，不概括宣稱符合規格 |
+| W06／M2／PARTIAL | 預設切換前完成 W05 設計 | 已完成第一層 subcode 的 client／health 控制，以及認證 CLI JSON／table 子程序控制；公開錯誤欄位未改變 | 服務預設切換前仍須擴充 nested／flat／vendor、transport／session 與消費端覆蓋；維持診斷及 exit-code 意義 |
 | W07／M2、M3／TODO | W03／W05 設計、W06 | `helpers.rs::extract_action`、`server.rs::handle_soap`、`transport.rs`、dispatch routing | HTTP Action／content type／status／無效 UTF-8／缺少或衝突 header／服務路徑對照 binding；不假設所有 HTTP 200 Fault 一律正確或錯誤 |
 | W08／M3／TODO | W02／W04／W05 | `auth.rs::requires_auth/validate_ws_security/auth_fault`、responder auth gate、Device users | Scoped WSSE parsing、豁免匹配、digest／時間／nonce 限制；明示 authentication 與 authorization 邊界；錯誤去除機密，不附帶變更 auth 預設 |
 | W09／M2／TODO | W05／W06 | `fault_injection.rs`、`responder.rs`、server admin endpoint、公開 injection builder | 分離 literal／structured 與刻意 raw 異常輸出；自訂 QName、single-shot 匹配、順序、併發、clear／reset 及相容測試 |
@@ -172,6 +172,7 @@ W02 發現新相依性時須擴充本表。
 | K17／原始碼確認，重現待辦 | ReplayResponder 在尚未確認 synthetic 寫入成功前就使 operation family 失效 | W19／W03／W18；record → rejected write → read 應保留 replay 結果，另有成功寫入控制；見管線開工核對 |
 | K18／原始碼確認，重現待辦 | 去除動詞的 replay family key 漏掉 profile list／binding 依賴，亦不含 service identity | W19／W10；核對 affected-read graph、成功 mutation → GetProfiles，以及無關 service／instance 控制；見管線開工核對 |
 | K19／已重現的外部相容性發現 | 目前 Media 來源相依集合在獨立 XSD 1.0 驗證器中無法編譯，但可通過 strict XSD 1.1 編譯 | W21；見 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)；不修改 schema 或停用檢查，須驗收候選工具並明示 schema 語言 |
+| K20／已重現並修正 formatter | `auth::auth_fault` 原先輸出未宣告的 wsse subcode 及原始 reason 文字 | W05 serializer 遷移維持 code／subcode，修正 scoped binding／text，並加入 client／health／CLI 控制；認證解析與政策仍屬 W08 待辦 |
 
 ## 驗證命令
 

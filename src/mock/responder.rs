@@ -93,7 +93,12 @@ impl Chain {
             }
         }
         // Unreachable while a terminal responder is present; defensive fallback.
-        helpers::resp_soap_fault("s:Receiver", "no responder handled the request")
+        super::fault::Fault::new(
+            super::fault::Code::Receiver,
+            &[],
+            "no responder handled the request",
+        )
+        .to_xml()
     }
 }
 

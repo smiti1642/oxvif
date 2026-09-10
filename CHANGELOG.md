@@ -39,6 +39,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   includes SOAP Envelope/Fault structure. Explicit runs fail on missing resources;
   provide the SOAP 1.2 envelope schema as well as the service schemas. This remains
   a structural check, not full XSD or semantic conformance acceptance.
+- Mock authentication faults now bind the existing `wsse:FailedAuthentication`
+  subcode and escape literal reason text through a private structured serializer.
+  XML-invalid reason characters become replacement characters. The existing
+  client first-subcode field and CLI error/exit-code contracts remain unchanged;
+  this does not strengthen the mock's authentication policy.
 - Human terminal line numbers are configurable as `absolute`, `relative`, `hybrid`
   (unchanged default), or `off`. Use `--line-numbers` for this invocation, or `?`
   in navigation screens to preview, apply for the session, or explicitly save a

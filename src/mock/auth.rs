@@ -60,17 +60,8 @@ pub fn validate_ws_security(body: &str, state: &SharedState) -> Result<(), Strin
 
 /// Generate a SOAP Fault for authentication failure.
 pub fn auth_fault(reason: &str) -> String {
-    crate::mock::helpers::soap(
-        "",
-        &format!(
-            r#"<s:Fault>
-              <s:Code><s:Value>s:Sender</s:Value>
-                <s:Subcode><s:Value>wsse:FailedAuthentication</s:Value></s:Subcode>
-              </s:Code>
-              <s:Reason><s:Text xml:lang="en">{reason}</s:Text></s:Reason>
-            </s:Fault>"#
-        ),
-    )
+    use super::fault::{Code, FAILED_AUTHENTICATION, Fault};
+    Fault::new(Code::Sender, &[FAILED_AUTHENTICATION], reason).to_xml()
 }
 
 #[cfg(test)]
@@ -80,6 +71,65 @@ mod tests {
 
     fn new_state() -> MockState {
         MockState::for_tests()
+    }
+
+    #[test]
+    fn auth_fault_preserves_literal_reason_without_inserting_children() {
+        let reason = "auth-952 <marker/> &amp; 北";
+        let xml = auth_fault(reason);
+        let body = crate::soap::parse_soap_body(&xml).unwrap();
+        let text = body.path(&["Fault", "Reason", "Text"]).unwrap();
+        assert_eq!(text.text(), reason);
+        assert!(text.children.is_empty());
+        assert_eq!(
+            crate::soap::find_response(&body, "unused").unwrap_err(),
+            crate::soap::SoapError::Fault {
+                code: "s:Sender".into(),
+                reason: reason.into(),
+                subcode: Some("wsse:FailedAuthentication".into()),
+                detail: None,
+            }
+        );
+        #[cfg(feature = "health")]
+        {
+            let error =
+                crate::OnvifError::Soap(crate::soap::find_response(&body, "unused").unwrap_err());
+            let check = crate::health::CheckError::from(&error);
+            assert_eq!(check.class, crate::health::ErrorClass::SoapFault);
+            assert_eq!(check.fault_code.as_deref(), Some("s:Sender"));
+            assert_eq!(check.subcode.as_deref(), Some("wsse:FailedAuthentication"));
+            assert_eq!(check.reason, reason);
+            assert!(check.is_auth());
+        }
+    }
+
+    #[test]
+    fn auth_fault_binds_the_existing_subcode_in_its_value_scope() {
+        use quick_xml::{
+            NsReader,
+            events::Event,
+            name::{QName, ResolveResult},
+        };
+        let xml = auth_fault("binding-429");
+        let mut reader = NsReader::from_str(&xml);
+        let mut checked = false;
+        loop {
+            match reader.read_event().unwrap() {
+                Event::Text(text) if text.as_ref() == "wsse:FailedAuthentication" => {
+                    let (resolved, local) = reader.resolver().resolve_element(QName(text.as_ref()));
+                    assert_eq!(local.as_ref(), "FailedAuthentication");
+                    assert!(
+                        matches!(resolved, ResolveResult::Bound(ns) if ns.as_ref() ==
+                        "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"),
+                        "authentication subcode has no correct binding: {resolved:?}"
+                    );
+                    checked = true;
+                }
+                Event::Eof => break,
+                _ => {}
+            }
+        }
+        assert!(checked, "authentication subcode was not inspected");
     }
 
     fn build_digest_body(

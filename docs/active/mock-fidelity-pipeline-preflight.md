@@ -4,8 +4,9 @@
 
 W02/W03/W06/W19 engineering checkpoint, 2026-09-10. Source baseline `9978220`.
 This is a source-derived dependency map, not a normative protocol catalogue.
-W02 remains PARTIAL across the programme; W03 default validation and W06 error
-migration are **not implemented**. No new product decision is required here.
+W02 remains PARTIAL across the programme; W03 default validation and broad W06
+service-error migration are **not implemented**. Completed foundations are appended
+below. No new product decision is required here.
 
 | Section | Purpose |
 | --- | --- |
@@ -15,6 +16,7 @@ migration are **not implemented**. No new product decision is required here.
 | [Implementation order](#implementation-order) | Prerequisites and concrete next slices |
 | [Evidence and remaining work](#evidence-and-remaining-work) | Tests versus unverified findings |
 | [Parsed-node implementation](#parsed-node-implementation) | P-A delivered scope and remaining W04 work |
+| [Structured fault foundation](#structured-fault-foundation) | P-C serializer slice and consumer boundaries |
 
 ## Entry points and ownership
 
@@ -174,3 +176,45 @@ P-A local gate: formatting, both workspace Clippy modes, 1,155 all-feature and
 1,075 default tests passed (4 ignored each); inventory remains 159 declaration
 sites / 157 routes / 260 direct reader occurrences. These counts include the
 existing known-gap assertions and do not close K13–K18.
+
+## Structured fault foundation
+
+P-C has a private `Fault` representation with typed Sender/Receiver code,
+ordered subcodes and reason. Trusted QName definitions are compile-time ASCII
+NCNames; each Value carries its own namespace binding, so repeated prefixes with
+different namespaces cannot contaminate one another. This is not an arbitrary
+vendor/injection QName API. Literal reason text is escaped once, XML-invalid
+characters become U+FFFD, and CR is serialized as a character reference.
+
+Only `auth::auth_fault` and the empty-chain defensive Receiver response migrate
+in this slice. K20 was reproduced before the fix: the auth QName was unbound,
+and an XML-shaped reason inserted a child and changed text. Both tests failed at
+their intended assertions. The fix keeps `s:Sender`, `wsse:FailedAuthentication`
+and the existing credential-policy decisions. Fault injection and ordinary service
+fault mapping remain on the legacy path. Authentication request parsing remains
+the old local-name reader; this is not W08 security acceptance.
+
+Nested generic Fault controls independently inspect QName scope/depth and assert
+that the client and health consumers retain the FIRST subcode, not the deepest
+one. Authentication remains classified as an auth failure; the generic nested
+error does not. The CLI subprocess control uses a loopback auth-enforced mock,
+JSON and plain-table modes: exit 20, DEVICE_CONNECTION_FAILED, exact reason and
+non-retryable classification are preserved. No real camera or credentials are used.
+
+The two auth controls failed before implementation. A subsequent full-workspace
+mutation run changed the auth code and the two generic fixtures: the auth payload,
+both generic Fault tests, existing chain-order control and CLI JSON control all
+failed at the intended assertions. All mutations were restored. No narrowed test
+filter hid the CLI target from this mutation run.
+
+SOAP design reference: [SOAP 1.2 Part 1 §5.4](https://www.w3.org/TR/soap12-part1/#soapfault).
+Optional structured Detail, complete ordinary code mappings, HTTP status,
+post-success replay outcomes and broad nested-consumer coverage are still open.
+No public `SoapError` field is added or redefined; its docs now state the existing
+first-level/prefix-preserving subcode and extracted-text Detail limitations.
+
+Local acceptance: formatting, default/all-feature workspace Clippy, 1,167
+all-feature and 1,087 default tests passed (4 ignored each); Rust 1.88 workspace
+check passed. Inventory remains 157 routes / 159 Action sites / 260 direct readers.
+Prior checker commit `9469bb6` passed all 23 jobs in CI run 34456850826; that hosted
+run does not cover this subsequent Fault change.

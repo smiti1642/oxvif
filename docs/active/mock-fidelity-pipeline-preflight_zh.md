@@ -4,7 +4,8 @@
 
 W02／W03／W06／W19 工程檢查點，2026-09-10；原始碼基準 `9978220`。
 本文件是從程式碼整理的依賴圖，不是規範契約表。整體 W02 仍為 PARTIAL；
-W03 預設驗證及 W06 錯誤遷移**尚未實作**。本階段不需要新的產品決策。
+W03 預設驗證及廣泛的 W06 服務錯誤遷移**尚未實作**；已完成的共用基礎補充於
+下方。本階段不需要新的產品決策。
 
 | 章節 | 用途 |
 | --- | --- |
@@ -14,6 +15,7 @@ W03 預設驗證及 W06 錯誤遷移**尚未實作**。本階段不需要新的�
 | [實作順序](#實作順序) | 前置條件與具體子項 |
 | [證據與剩餘工作](#證據與剩餘工作) | 測試及尚未驗證的發現 |
 | [Parsed-node 實作](#parsed-node-實作) | P-A 已交付範圍及 W04 剩餘工作 |
+| [結構化 Fault 基礎](#結構化-fault-基礎) | P-C serializer 子批次及消費端邊界 |
 
 ## 入口與責任
 
@@ -162,3 +164,41 @@ bound，不將它解釋為裝置容量限制；未增加依賴、公開 API、sc
 P-A 本機 gate：格式、兩種 workspace Clippy、全部功能 1,155 與預設 1,075 tests
 通過（各 4 ignored）；清冊仍為 159 個宣告位置／157 routes／260 個直接 reader。
 上述數字包含既有 known-gap assertion，不代表 K13–K18 已結案。
+
+## 結構化 Fault 基礎
+
+P-C 已具有私有 `Fault` 表示，包含型別化 Sender／Receiver code、有序 subcode
+及 reason。可信 QName 定義使用編譯期 ASCII NCName；每個 Value 各自宣告
+namespace，因此相同 prefix 對應不同 namespace 時不會互相污染。這不是任意
+vendor／injection QName API。Reason 原始文字轉義一次；XML 不允許的字元改為
+U+FFFD，CR 使用 character reference 表示。
+
+本批僅遷移 `auth::auth_fault` 與空 chain 的防禦性 Receiver 回應。K20 已於修正
+前重現：認證 QName 未宣告，XML 形式的 reason 可插入 child 並改變文字。
+兩個測試皆在預期 assertion 失敗。修正保留 `s:Sender`、
+`wsse:FailedAuthentication` 及既有憑證政策。Fault injection 與一般服務 Fault
+映射仍採舊路徑。認證 request parsing 仍使用舊式 local-name reader；這不是
+W08 安全性驗收。
+
+一般巢狀 Fault 控制獨立檢查 QName scope／depth，並確認 client 與 health
+消費端維持第一層 subcode，而非最深層。認證錯誤仍判定為認證失敗；一般巢狀
+錯誤則不會。CLI 子程序控制使用 loopback 上啟用認證的 mock，測試 JSON 與
+純表格模式：維持 exit 20、DEVICE_CONNECTION_FAILED、確切 reason 及不可重試
+判定。未使用實機或憑證。
+
+兩個認證控制於實作前失敗。之後以完整 workspace 擾動測試改變認證 code 與
+兩個一般 fixture：認證 payload、兩個一般 Fault 測試、既有 chain-order
+控制及 CLI JSON 控制均於預期 assertion 失敗。所有擾動均已還原；該次執行
+沒有使用狹窄 filter 而漏跑 CLI target。
+
+SOAP 設計參考：[SOAP 1.2 Part 1 §5.4](https://www.w3.org/TR/soap12-part1/#soapfault)。
+Optional structured Detail、完整一般錯誤映射、HTTP status、成功後 replay
+outcome，以及更廣泛的巢狀錯誤消費端覆蓋仍待完成。未新增或重新定義公開
+`SoapError` 欄位；文件現明示既有 subcode 只保留第一層與 prefix 拼法，Detail
+則為擷取的文字，而非原始 XML。
+
+本機驗收：格式、default／all-feature workspace Clippy、全功能 1,167 項與
+預設 1,087 項測試通過（各 4 ignored）；Rust 1.88 workspace check 通過。
+清冊仍為 157 routes／159 Action 位置／260 個直接 reader。前一個 checker
+commit `9469bb6` 已通過 CI run 34456850826 全部 23 個 job；該託管執行不包含
+本次後續的 Fault 修正。

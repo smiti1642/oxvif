@@ -114,12 +114,16 @@
 //! child, decode XML text once and preserve token whitespace. Invalid requests
 //! are rejected before mutation. This parser is bounded to 2 MiB, 64 element
 //! levels and 16,384 elements; other operations still use legacy extraction.
-//! Shared fault output escapes text and binds known prefixes, but still uses
+//! Authentication faults use a structured serializer with a bound first
+//! `wsse:FailedAuthentication` subcode and escaped reason text; XML-invalid reason
+//! characters become U+FFFD. Credential policy and HTTP status are unchanged.
+//! Other shared fault output escapes text and binds known prefixes, but still uses
 //! the legacy flat code hierarchy. Neither change claims full XSD conformance.
 
 mod auth;
 pub(crate) mod canon;
 pub(crate) mod dispatch;
+mod fault;
 pub(crate) mod fault_injection;
 pub(crate) mod helpers;
 mod request;

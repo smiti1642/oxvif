@@ -881,12 +881,13 @@ mock sends `0` for a configuration with no group.)
 ### 9.1 Shape
 
 SOAP 1.2 `<s:Fault>` with `Code/Value` and `Reason/Text`
-(`helpers::resp_soap_fault`). HTTP status is **200** — faults are transported
-in the body, as ONVIF devices do.
+(most service handlers still use `helpers::resp_soap_fault`). HTTP status is
+currently **200**; the SOAP HTTP binding audit remains pending. Do not infer
+correct HTTP behavior from a well-formed Fault body.
 
 ### 9.2 Reason strings are tagged and unique
 
-Every fault reason carries an operation tag and a numeric id:
+Many token-error reasons carry an operation tag and a numeric id:
 
 ```
 NoSuchRecording-DELREC-5701: Rec_999
@@ -921,7 +922,15 @@ oxvif's own testing rules ban that.
 fault injections. Pass literal text to injection APIs, not pre-escaped XML.
 Custom, unknown QName prefixes are not automatically resolved by this helper.
 
-**Remaining deviation.** Existing faults still use the legacy flat `Code/Value`
+Authentication faults and the empty-chain defensive Receiver fault now use a
+private structured serializer. Authentication retains `s:Sender` and first
+subcode `wsse:FailedAuthentication`; the subcode is now bound at its Value
+element. Literal reason text is escaped once, invalid XML characters become
+U+FFFD, and a literal CR is represented by a character reference. This does not
+change credential validation, exemptions, authentication defaults or HTTP status.
+The client still exposes the first subcode, not the deepest nested subcode.
+
+**Remaining deviation.** Other service faults still use the legacy flat `Code/Value`
 representation. Namespace binding does not fix operation-specific code/subcode
 hierarchies or validate HTTP status behavior. That migration is still pending;
 do not interpret this correction as full SOAP/ONVIF fault conformance. Older

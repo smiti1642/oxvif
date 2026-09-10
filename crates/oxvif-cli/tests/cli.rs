@@ -33,6 +33,55 @@ fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr should be UTF-8")
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn ordinary_mock_auth_fault_preserves_human_and_agent_error_contracts() {
+    let server = oxvif::mock::MockServer::builder()
+        .enforce_auth(true)
+        .start()
+        .await
+        .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    for format in ["json", "table"] {
+        let output = run_isolated(
+            &[
+                "--timeout",
+                "2s",
+                "--retries",
+                "0",
+                "device",
+                "info",
+                "--target",
+                server.device_url(),
+                "--output",
+                format,
+                "--non-interactive",
+            ],
+            directory.path(),
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(20),
+            "{} {}",
+            stdout(&output),
+            stderr(&output)
+        );
+        let message = "SOAP fault [s:Sender]: Missing Username";
+        if format == "json" {
+            let doc: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(doc["ok"], false);
+            assert_eq!(doc["error"]["code"], "DEVICE_CONNECTION_FAILED");
+            assert_eq!(doc["error"]["message"], message);
+            assert_eq!(doc["error"]["retryable"], false);
+            assert!(stderr(&output).is_empty());
+        } else {
+            assert!(stdout(&output).is_empty());
+            assert!(
+                stderr(&output).contains(&format!("error[DEVICE_CONNECTION_FAILED]: {message}"))
+            );
+        }
+    }
+}
+
 #[test]
 fn line_number_override_is_validated_but_never_changes_agent_or_plain_output() {
     let directory = tempfile::tempdir().unwrap();

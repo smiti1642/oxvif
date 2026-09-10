@@ -471,9 +471,9 @@ Parser 應優先使用最深層節點，並逐層向外 fallback。不存在的�
 
 ## 9. 錯誤模型
 
-Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（`helpers::resp_soap_fault`）。HTTP status 維持 **200**；fault 由 response body 傳輸，符合 ONVIF 裝置的常見行為。
+Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多數服務 handler 仍使用 `helpers::resp_soap_fault`）。目前 HTTP status 維持 **200**；SOAP HTTP binding 稽核尚未完成。XML 結構正確不能證明 HTTP 行為正確。
 
-每個 reason 都帶有 operation tag 與唯一 numeric id，例如：
+許多 token-error reason 帶有 operation tag 與 numeric id，例如：
 
 ```text
 NoSuchRecording-DELREC-5701: Rec_999
@@ -501,7 +501,13 @@ NoSuchRecording-DELREC-5701: Rec_999
 並轉義 code／reason 文字，包含明確注入的 Fault。Injection API 應傳入原始文字，
 不要預先轉義 XML。Helper 不會自動解析自訂、未知的 QName prefix。
 
-**仍有偏差：** 既有 Fault 仍採平面的 `Code/Value` 表示。Namespace binding
+認證 Fault 及空 responder chain 的防禦性 Receiver Fault 已使用私有結構化
+serializer。認證錯誤維持 `s:Sender` 與第一層 subcode `wsse:FailedAuthentication`，
+並於其 Value element 宣告 namespace。Reason 原始文字只轉義一次；XML 不允許
+的字元改為 U+FFFD，原始 CR 使用 character reference 表示。這不改變憑證驗證、
+豁免項目、認證預設值或 HTTP status。Client 仍只公開第一層 subcode，而非最深層。
+
+**仍有偏差：** 其他服務 Fault 仍採平面的 `Code/Value` 表示。Namespace binding
 修正並未完成各操作的 code／subcode 階層，也未驗證 HTTP status 行為；這些
 遷移仍待完成，不得因此宣稱完整 SOAP／ONVIF Fault conformance。尚未遷移的
 request extractor 也可能將已轉義文字放入 reason，因此目前只有已遷移路徑
