@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock Media1/Media2 rejected profile deletion no longer invokes the persistence
+  change hook. Successful deletion still notifies once; public state helpers
+  retain their existing notification behavior. Replay invalidation is separate
+  pending work, not fixed by this notification change.
 - Media2 profile enumeration now explicitly requests `Type=All`, so conforming
   cameras return associated configuration/source information to the existing
   `get_profiles_media2` client and session methods. Previously the request omitted
@@ -37,7 +41,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Mock fidelity auditing now indexes complete client/session Action declarations
   and request-reader call sites. Regression controls preserve configuration
   changes on fixed profiles; separate known-gap probes expose unresolved profile
-  allocation, notification, XML escaping, partial-binding and replay invalidation
+  allocation, XML escaping, partial-binding and replay invalidation
   defects. A passing
   known-gap probe means reproduced, not fixed or ONVIF-conformant.
 - Mock responder regression tests now guard fault/auth precedence and preserve

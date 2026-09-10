@@ -1922,11 +1922,24 @@ impl MockState {
     /// Like [`modify`](Self::modify) but the closure returns a value
     /// (e.g. a freshly-generated token).
     pub fn modify_returning<R>(&self, f: impl FnOnce(&mut DeviceState) -> R) -> R {
+        self.modify_returning_if(f, |_| true)
+    }
+
+    /// Notify only for an explicitly committed outcome. The caller must perform
+    /// all rejection checks before mutation under the same write lock. This is
+    /// a notification boundary, NOT rollback or an inference from state equality.
+    pub(crate) fn modify_returning_if<R>(
+        &self,
+        f: impl FnOnce(&mut DeviceState) -> R,
+        committed: impl FnOnce(&R) -> bool,
+    ) -> R {
         let result = {
             let mut guard = self.state.write().unwrap();
             f(&mut guard)
         };
-        self.notify();
+        if committed(&result) {
+            self.notify();
+        }
         result
     }
 

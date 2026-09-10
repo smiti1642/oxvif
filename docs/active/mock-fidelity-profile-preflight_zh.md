@@ -60,7 +60,9 @@ MockServer 採 catch-all POST 路由。
   capacity 檢查。Media2 忽略初始 Configuration。K13 已在兩服務重現；
   併發競爭仍為來源推論，未重現。
 - Delete：`delete_profile_in_state` 於 write lock 下找 token，拒絕 fixed／missing，
-  否則移除一個 profile。`modify_returning` 在拒絕時仍 notify（K14）。
+  否則移除一個 profile。K14 已使用明確的 committed-outcome 通知 predicate 修正：
+  拒絕時保留 state 且不呼叫 hook，成功刪除則通知一次。這不是 rollback，也不改變
+  公開 state helper 的語意。
   Profile-change event／reference cascade 尚未完成稽核，不宣稱缺少它們符合規格。
 - Binding：`ConfigKind::{from_media2_type,known_token,slot}` 選五種已建模類型。
   `bind_configuration` 在分開的 read lock 下檢查 profile／config，再修改一個 slot；
@@ -111,8 +113,8 @@ checkout 外的來源根目錄（`profile-contract-review-20260910.md`）。這�
 對不存在 profile 均使用 Sender → InvalidArgVal → NoProfile，對固定 profile 均使用
 Sender → Action → DeletionOfFixedProfile。這四個分支已改用私有 serializer；client
 維持第一層 subcode 語意，reason 文字及錯誤型別不變。Corpus 檢查兩層 subcode、
-client／health 分類，以及固定 profile 拒絕前後的序列化 state。通知及 replay 缺陷
-K14／K17 仍明確待處理；無效請求 Fault 與 virtual-profile 行為不屬於此次局部遷移。
+client／health 分類，以及固定 profile 拒絕前後的序列化 state。K14 通知已另行修正，
+K17 replay 仍待處理；無效請求 Fault 與 virtual-profile 行為不屬於此次局部遷移。
 
 固定來源的外部編譯及 34 份選定 instance 已通過，見
 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)。尚需完整 WSDL／XSD 欄位
@@ -128,19 +130,20 @@ K14／K17 仍明確待處理；無效請求 Fault 與 virtual-profile 行為不�
 | C03 | `delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutation`；擴展至其他 11 列的 namespace／decoy 控制 | PARTIAL |
 | C04 | 外部欄位核對後新增 required／empty／duplicate／repeat／extension 案例，保留合法 repeat | TODO |
 | C05 | 既有 `mock_token_discrimination`／`mock_media1_media2_agree`；全部 binding 增加 escaped／wrong-family token | PARTIAL |
-| C06 | `known_gap_k13_generated_profile_token_collides_with_seeded_token`、`known_gap_k14_rejected_delete_notifies_change_hook`、`known_gap_k16_late_invalid_binding_leaves_first_write_applied` | 已重現缺口 |
+| C06 | K13／K16 仍為已重現缺陷；`rejected_delete_preserves_state_and_hook_but_success_notifies` 保護已修正 K14 的拒絕、成功及公開 helper 相容性 | PARTIAL |
 | C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`；補完巢狀 renderer escaping、獨立 namespace／shape 檢查 | 已重現缺口 |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`；corpus 檢查不存在／固定 DeleteProfile 巢狀 Fault；其他 mapping／HTTP code 待 W05–W07 | PARTIAL |
 | C09 | Parser 限制目前僅在已遷移 DeleteProfile 有涵蓋；其他路徑 auth／resource-limit 待查 | TODO |
 | C10 | 模型限制及 K12 修正；`fixed_profile_configuration_remains_mutable_in_both_media_services` 證明 fixed profile 的 Add／Remove 實際改變 state | PARTIAL |
-| C11 | 已列 client／session Action site；巢狀 Fault 相容性及 CLI 影響待 W06 | TODO |
+| C11 | 已驗證選定 DeleteProfile client／health first-subcode 控制與 K22 請求選擇；其餘 consumer／CLI 審查待 W06 | PARTIAL |
 | C12 | 擾動四個 known-gap assertion 均於 payload／state assertion 失敗；反轉 fixed-binding attachment 預期亦失敗，還原後通過 | PARTIAL |
 
-`tests/mock_fidelity_known_gaps.rs` 的 K13–K16 刻意斷言目前缺陷，用途與既有
+`tests/mock_fidelity_known_gaps.rs` 的 K13／K15／K16 刻意斷言目前缺陷，用途與既有
 Broken／Blind property table 相同。**通過表示已重現，不表示已修復。**
 修正時須改成正確 invariant 並更新 finding；不得為恢復綠燈而保留缺陷。
 
 開工條件仍受工程工作限制：W02 間接呼叫閉包、W03／W04 parsed-input 邊界、
 W05／W06 Fault 設計、外部逐欄位核對，以及明確原子性／capacity 行為。
 目前未發現需要維護者新增產品決策的事項。下一範圍是完成上述設計，再將 profile
-read／create／delete 與 binding 遷移拆成獨立驗證 commit。本次稽核未改變 handler 行為。
+read／create／delete 與 binding 遷移拆成獨立驗證 commit。初始來源稽核未改變 handler；
+後續選定 Fault 與 K14 通知修正已記錄於上方，不代表廣泛遷移的前置條件已完成。

@@ -356,7 +356,7 @@ K17：成功前就使 replay family 失效（原始碼確認、尚待執行重�
 | --- | --- | --- |
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
 | K13 | `create_profile_in_state` 在 write lock 前檢查 explicit duplicate，產生 `Profile_<counter>` 時未查既有 token。 | W10／W18；修改 state 前須重現確定性的 counter collision，並檢查併發配置。 |
-| K14 | `delete_profile_in_state` 使用 `modify_returning`，即使 NotFound／Fixed 也通知 hook。 | W18；只比 state 相等不夠，新增失敗操作的 hook assertion。 |
+| K14 — 基準後已修正 | DeleteProfile 使用明確的 committed-outcome predicate；NotFound／Fixed 不通知，Deleted 通知一次。 | W18 部分完成；回歸檢查完整 state、兩服務、hook 次數及公開 helper 相容性。Replay 另由 K17 追蹤。 |
 | K15 | `render_profile` 直接插入儲存的 name／token，未 escaping；getter 不只輸出新建資料，也輸出 seed state。 | W10；新增 escaped-state 直接 wire 回歸，不由 DeleteProfile parser 測試推論安全。 |
 | K16 | Media2 profile list handler 不接收 body；create 只讀 Name；binding 解析後逐筆呼叫共用 helper。 | W01／W10；selector／configuration／部分寫入契約須完整審查，尚未逐路徑重現。 |
 
@@ -371,6 +371,12 @@ K12 已於 2026-09-10 核對
 後筆 configuration token 無效時留下前筆 binding。K13 併發競爭與 K16 其他
 selector／create／name 語意仍未驗證。擾動四項 gap assertion，均在目標
 payload／state assertion 失敗，還原後通過。通過的基準是缺陷紀錄，不是四項修復。
+
+後續 K14 修正已將該缺陷預期替換為
+`rejected_delete_preserves_state_and_hook_but_success_notifies`。原實作在拒絕控制
+失敗；停用全部通知後，完整全部功能 no-fail-fast 執行則在成功刪除次數斷言失敗。
+還原後保留公開 `modify_returning` 的通知契約。此條件式通知 helper 不提供 rollback，
+也不改變既有 callback lock／reentrancy policy；這些仍屬 W18 待辦。
 
 ## 重現與交接
 

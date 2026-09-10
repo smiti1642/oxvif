@@ -477,7 +477,9 @@ Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多�
 巢狀 Sender Fault。`SoapError::Fault.code` 為 `s:Sender`，`subcode` 維持**第一層**：
 不存在 profile 為 `ter:InvalidArgVal`，固定 profile 為 `ter:Action`。Wire 最深層條件
 分別為 `ter:NoProfile` 與 `ter:DeletionOfFixedProfile`；reason 文字不變。
-此局部遷移不代表其他操作或拒絕寫入時的 hook 已修正。
+此局部遷移不代表其他操作已修正。DeleteProfile 現在對不存在／固定 profile 的拒絕
+不通知 change hook，成功刪除則通知一次。內部通知 predicate 並非 rollback；公開
+`modify`／`modify_returning` 語意不變。拒絕寫入時的 replay 失效仍另行審查。
 
 許多 token-error reason 帶有 operation tag 與 numeric id，例如：
 

@@ -363,7 +363,7 @@ and service identity in replay family keys; source-confirmed, runtime tests pend
 | --- | --- | --- |
 | K12 | Source comment at `media::bind_configuration` describes binding a fixed profile as a mock deviation. Official Media1/Media2 §4.1 distinguish deletion from configuration changes. | Correct the comment and preserve legal binding; do not “repair” it by making fixed profiles immutable. References below. |
 | K13 | `create_profile_in_state` checks explicit duplicates before the write lock and generates `Profile_<counter>` without checking existing tokens. | W10/W18; deterministic counter-collision reproduction and concurrent allocation review required before changing state code. |
-| K14 | `delete_profile_in_state` uses `modify_returning`, which notifies hooks even for NotFound/Fixed outcomes. | W18; state equality alone is insufficient; add failed-operation hook assertions. |
+| K14 — fixed after baseline | DeleteProfile now uses an explicit committed-outcome predicate; NotFound/Fixed do not notify, Deleted notifies once. | W18 partial; regression checks full state, both services, hook count and public-helper compatibility. Replay remains separate K17. |
 | K15 | `render_profile` interpolates stored profile name/token without escaping; normal getters render seeded state as well as caller-created state. | W10; direct escaped-state wire regression required. Do not infer safety from DeleteProfile's parser tests. |
 | K16 | Media2 profile-list handler takes no body; create reads Name only; binding parses entries and invokes shared helpers separately. | W01/W10; selector/configuration/partial-write contracts need full review; not all paths individually reproduced yet. |
 
@@ -381,6 +381,14 @@ a late invalid configuration token. K13's concurrent race and K16's other
 selector/create/name semantics remain unverified. All four gap assertions were
 perturbed and failed at the intended payload/state assertions, then restored.
 The passing baseline is deliberately a record of defects, not four fixes.
+
+Subsequent K14 repair replaces that known-gap expectation with
+`rejected_delete_preserves_state_and_hook_but_success_notifies`. The original
+implementation failed the refusal control; suppressing all notifications then
+failed the successful-delete count in a full all-feature no-fail-fast run.
+Restored behavior keeps the public `modify_returning` notification contract.
+This conditional notification helper does not implement rollback or change the
+existing callback lock/reentrancy policy; these remain W18 work.
 
 ## Reproduction and handoff
 

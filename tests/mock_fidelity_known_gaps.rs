@@ -1,4 +1,4 @@
-//! Executable audit of known gaps, NOT conformance acceptance.
+//! Executable audit of known gaps and repaired invariants, NOT conformance acceptance.
 //! When a fix changes a result, replace that expectation with the corrected
 //! invariant and update K13-K18 in the audit/preflight and operation cards. Never
 //! restore a defect merely to make this baseline green. No hardware is used.
@@ -201,35 +201,78 @@ async fn known_gap_k13_generated_profile_token_collides_with_seeded_token() {
 }
 
 #[tokio::test]
-async fn known_gap_k14_rejected_delete_notifies_change_hook() {
+async fn rejected_delete_preserves_state_and_hook_but_success_notifies() {
     for media2 in [false, true] {
         let mut state = MockState::new();
-        let before = state.read().profiles.profiles.len();
+        state.modify(|s| s.profiles.profiles[1].fixed = false);
+        let before = state.read().clone();
+        let fixed = before.profiles.profiles[0].token.clone();
+        let removable = before.profiles.profiles[1].token.clone();
         let notifications = Arc::new(AtomicUsize::new(0));
         let capture = Arc::clone(&notifications);
-        state.set_on_change(Arc::new(move |_| {
+        let removed = removable.clone();
+        state.set_on_change(Arc::new(move |s| {
+            assert!(!s.profiles.profiles.iter().any(|p| p.token == removed));
             capture.fetch_add(1, Ordering::SeqCst);
         }));
         let transport = MockTransport::with_state(state);
         let client = OnvifClient::new("http://mock").with_transport(Arc::new(transport.clone()));
-        let error = if media2 {
+        for (token, reason) in [
+            ("K14-absent", "Profile not found: K14-absent".to_owned()),
+            (
+                fixed.as_str(),
+                format!("Cannot delete fixed profile: {fixed}"),
+            ),
+        ] {
+            let error = if media2 {
+                client
+                    .delete_profile_media2("http://mock", token)
+                    .await
+                    .unwrap_err()
+            } else {
+                client
+                    .delete_profile("http://mock", token)
+                    .await
+                    .unwrap_err()
+            };
+            assert_fault(error, "s:Sender", &reason);
+            assert_eq!(
+                serde_json::to_value(&*transport.device().read()).unwrap(),
+                serde_json::to_value(&before).unwrap()
+            );
+            assert_eq!(
+                notifications.load(Ordering::SeqCst),
+                0,
+                "rejection must not notify"
+            );
+        }
+        if media2 {
             client
-                .delete_profile_media2("http://mock", "K14-absent")
+                .delete_profile_media2("http://mock", &removable)
                 .await
-                .unwrap_err()
+                .unwrap();
         } else {
             client
-                .delete_profile("http://mock", "K14-absent")
+                .delete_profile("http://mock", &removable)
                 .await
-                .unwrap_err()
-        };
-        assert_fault(error, "s:Sender", "Profile not found: K14-absent");
-        assert_eq!(transport.device().read().profiles.profiles.len(), before);
+                .unwrap();
+        }
+        let mut expected = before;
+        expected.profiles.profiles.remove(1);
+        assert_eq!(
+            serde_json::to_value(&*transport.device().read()).unwrap(),
+            serde_json::to_value(&expected).unwrap()
+        );
         assert_eq!(
             notifications.load(Ordering::SeqCst),
             1,
-            "K14 changed: replace the known-gap baseline with a no-notification regression"
+            "successful deletion must notify exactly once"
         );
+        // Preserve the public helper's existing unconditional notification
+        // contract; only reviewed internal operations use the conditional path.
+        let returned = transport.device().modify_returning(|_| "K14-public-helper");
+        assert_eq!(returned, "K14-public-helper");
+        assert_eq!(notifications.load(Ordering::SeqCst), 2);
     }
 }
 

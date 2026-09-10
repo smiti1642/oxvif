@@ -114,11 +114,15 @@
 //! child, decode XML text once and preserve token whitespace. Invalid requests
 //! are rejected before mutation. This parser is bounded to 2 MiB, 64 element
 //! levels and 16,384 elements; other operations still use legacy extraction.
+//! Missing/fixed-profile refusals use nested Sender faults; the public error's
+//! subcode is still the first level, not the deepest condition. Refused deletion
+//! does not invoke the change hook; successful deletion invokes it once. Replay
+//! invalidation and broader transaction/callback behavior remain under review.
 //! Authentication faults use a structured serializer with a bound first
 //! `wsse:FailedAuthentication` subcode and escaped reason text; XML-invalid reason
 //! characters become U+FFFD. Credential policy and HTTP status are unchanged.
-//! Other shared fault output escapes text and binds known prefixes, but still uses
-//! the legacy flat code hierarchy. Neither change claims full XSD conformance.
+//! Remaining shared fault output escapes text and binds known prefixes, but still
+//! uses the legacy flat code hierarchy. These changes do not claim full conformance.
 
 mod auth;
 pub(crate) mod canon;

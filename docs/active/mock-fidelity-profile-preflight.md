@@ -63,8 +63,10 @@ K17 tracks pre-success replay invalidation separately from K14's state hook.
   Media2 ignores initial Configuration entries. K13 is reproduced for both
   services; the concurrency race remains source-derived/unreproduced.
 - Deletion: `delete_profile_in_state` locates token under write lock, refuses
-  fixed/missing, otherwise removes one profile. `modify_returning` then notifies
-  even on refusals (K14). No profile-change event or reference-cascade audit has
+  fixed/missing, otherwise removes one profile. K14 is fixed through an explicit
+  committed-outcome notification predicate; refusals preserve state and skip the
+  hook, while successful deletion notifies once. This is not rollback or a change
+  to public state-helper semantics. No profile-change event or reference-cascade audit has
   been completed; do not claim absence of those effects is conformant.
 - Binding: `ConfigKind::{from_media2_type,known_token,slot}` select five modeled
   kinds. `bind_configuration` checks profile/config under separate read locks,
@@ -128,8 +130,8 @@ both services require Sender → InvalidArgVal → NoProfile for an unknown prof
 and Sender → Action → DeletionOfFixedProfile for a fixed one. These four branches
 now use the private serializer. The client keeps first-subcode semantics; reason
 text and error types remain unchanged. The corpus checks both nested levels and
-client/health classification; fixed refusals preserve serialized state. Notification
-and replay defects K14/K17 remain explicitly open. Invalid-request fault paths
+client/health classification; fixed refusals preserve serialized state.
+K14 notifications are now fixed separately; K17 replay remains open. Invalid-request fault paths
 and virtual-profile behavior are not part of this bounded migration.
 
 Pinned external compilation and 34 selected instance checks now pass; see the
@@ -146,15 +148,15 @@ capacity/conflict/extension rules. Do not mark C done from selected instance res
 | C03 | `delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutation`; extend namespace/decoy controls to other 11 rows | PARTIAL |
 | C04 | Add required/empty/duplicate/repeated/extension cases per field after external field review; preserve legal repeats | TODO |
 | C05 | Existing `mock_token_discrimination` and `mock_media1_media2_agree`; add escaped tokens and wrong-family targets for all bindings | PARTIAL |
-| C06 | `known_gap_k13_generated_profile_token_collides_with_seeded_token`, `known_gap_k14_rejected_delete_notifies_change_hook`, `known_gap_k16_late_invalid_binding_leaves_first_write_applied` | GAPS REPRODUCED |
+| C06 | K13/K16 remain reproduced; `rejected_delete_preserves_state_and_hook_but_success_notifies` now guards repaired K14 refusals, success and public-helper compatibility | PARTIAL |
 | C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`; complete nested renderer escaping and independent namespace/shape checks | GAP REPRODUCED |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`; corpus checks missing/fixed DeleteProfile nested faults; other mappings/HTTP codes pending W05–W07 | PARTIAL |
 | C09 | Generic parser limits covered only on migrated DeleteProfile; auth boundary/resource-limit coverage for other paths pending | TODO |
 | C10 | Model limits and K12 corrected; `fixed_profile_configuration_remains_mutable_in_both_media_services` proves Add/Remove changes actual state on fixed profiles | PARTIAL |
-| C11 | Client/session Action sites enumerated; nested fault compatibility and CLI impact review pending W06 | TODO |
+| C11 | Selected DeleteProfile client/health first-subcode controls and K22 request selection verified; remaining consumer/CLI review pending W06 | PARTIAL |
 | C12 | Audit assertions perturbed: all four known-gap tests failed at payload/state assertions; fixed-binding control also failed when expected attachment was inverted, then restored green | PARTIAL |
 
-K13–K16 tests in `tests/mock_fidelity_known_gaps.rs` deliberately assert current
+K13/K15/K16 tests in `tests/mock_fidelity_known_gaps.rs` deliberately assert current
 defects like the existing Broken/Blind property tables. **Passing means reproduced,
 not fixed.** Convert each to the corrected invariant and update its finding when
 implementing the fix; never preserve a defect merely to restore green.
@@ -163,5 +165,6 @@ Readiness remains blocked by engineering work W02 transitive closure, W03/W04
 parsed-input boundary, W05/W06 fault design, external per-field review and explicit
 atomicity/capacity behavior. No new maintainer product decision has been identified.
 Next scope is to finish these designs and split profile read/create/delete and
-binding migration into separately verified commits. No handler behavior was
-changed by the current audit.
+binding migration into separately verified commits. The initial source audit did
+not change handlers; subsequent selected Fault and K14 notification repairs are
+recorded above and do not close the broader migration prerequisites.

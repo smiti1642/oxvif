@@ -552,17 +552,20 @@ pub(crate) fn unbind_configuration(
 
 /// Remove a profile from the shared list, refusing a fixed one.
 pub(crate) fn delete_profile_in_state(state: &SharedState, token: &str) -> DeleteOutcome {
-    state.modify_returning(|s| {
-        let Some(idx) = s.profiles.profiles.iter().position(|p| p.token == token) else {
-            return DeleteOutcome::NotFound;
-        };
-        if s.profiles.profiles[idx].fixed {
-            return DeleteOutcome::Fixed;
-        }
-        s.profiles.profiles.remove(idx);
-        eprintln!("    [STATE] profile deleted: {token}");
-        DeleteOutcome::Deleted
-    })
+    state.modify_returning_if(
+        |s| {
+            let Some(idx) = s.profiles.profiles.iter().position(|p| p.token == token) else {
+                return DeleteOutcome::NotFound;
+            };
+            if s.profiles.profiles[idx].fixed {
+                return DeleteOutcome::Fixed;
+            }
+            s.profiles.profiles.remove(idx);
+            eprintln!("    [STATE] profile deleted: {token}");
+            DeleteOutcome::Deleted
+        },
+        |outcome| matches!(outcome, DeleteOutcome::Deleted),
+    )
 }
 
 // ── Profile render helpers ──────────────────────────────────────────────────

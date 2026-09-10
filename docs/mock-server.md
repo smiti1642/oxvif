@@ -890,7 +890,11 @@ refusals use nested Sender faults. `SoapError::Fault.code` is `s:Sender`, and
 `subcode` retains the **first** level: `ter:InvalidArgVal` for a missing profile,
 `ter:Action` for a fixed one. The deepest wire conditions are `ter:NoProfile`
 and `ter:DeletionOfFixedProfile`, respectively. Reason text is unchanged.
-This scoped migration does not correct other operations or rejected-write hooks.
+This scoped migration does not correct other operations. DeleteProfile now also
+suppresses change-hook notifications for missing/fixed-profile refusals and
+notifies exactly once after a successful deletion. The internal notification
+predicate is not rollback; public `modify`/`modify_returning` semantics are
+unchanged. Rejected-write replay invalidation remains under separate review.
 
 ### 9.2 Reason strings are tagged and unique
 
