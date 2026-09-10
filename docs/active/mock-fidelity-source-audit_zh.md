@@ -356,6 +356,8 @@ create／list 不一致已重現，選定刪除／profile-read 依賴亦已有�
 | ID | 證據 | 處置 |
 | --- | --- | --- |
 | K24 | 固定來源的輸出型別審查發現 Media2 audio renderer／options 沿用 Media1 codec 名稱，共用 writer 也未經 service adapter 就直接儲存。XSD 字串合法性無法驗證兩者不同的 codec 詞彙。 | W01／W10：將 audio list／options、profile 內嵌 audio、共用寫入及 client 跨服務預期視為同一相依範圍審查。已由來源確認，具辨識力的 wire／state 重現待補。不可只改輸出而破壞寫入。 |
+| K25 | Audio encoder writer 儲存請求的 Multicast AutoStart；Media2 metadata 依 address 存在與否推導該值，但 mock 不實作 persistent streaming。外部輸出型別筆記指出該欄位的唯讀效果意義。 | W01／W10／W17：重現 read／write／capability 差異，修改預設前核對唯讀處理及 multicast 省略／提供行為。來源已確認，未驗證任何實際 RTP 效果。 |
+| K26 | `apply_video_encoder_write` 直接儲存 Encoding，兩個 video renderer 均輸出共用名稱；Media2 專屬 codec 可能未經可表示性政策就進入 Media1 view。 | W01／W10／W17：重現 H265 write／profile／list／options 組合，核對兩種服務契約並明示共用狀態 view／拒絕策略；不可靜默轉換 codec 身分或放寬 schema。來源風險已確認，wire 重現待補。 |
 | K23 | Windows CI run 34471659927（`2a488be`）的 `line_number_override_is_validated_but_never_changes_agent_or_plain_output` 失敗：逐位元 JSON 比較包含各自量測的 `meta.elapsed_ms`（0 與 9）。 | W22 測試框架修正：要求耗時為數字，JSON 相等比較只排除該確切欄位；保留其他全部欄位、stderr 及純文字輸出檢查，加入確定性的耗時／資料／型別控制。不改 CLI 輸出，不遮蔽其他 metadata。 |
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
 | K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |

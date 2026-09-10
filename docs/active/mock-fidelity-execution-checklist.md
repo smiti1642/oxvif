@@ -185,6 +185,13 @@ These are planning seeds, not a claim of an exhaustive defect audit.
 | K21 / Python limitation; independent compilation available | Python reports a Device type-table warning; pinned Xerces compiles the same complete closure with full checking and warnings-as-errors | W21; independent generic qualification passes without schema edits or warning suppression. Does not prove the Python warning false or mock instances valid |
 | K22 / client and selected mock selectors fixed | Full Media2 profile query omitted Type, while the mock returned configurations regardless; client now explicitly requests All | W06/W10; captured request regression fails on the old body. Scoped mock Token/Type selection now has two-transport and token-table controls; broader field/rendering rules remain P-E; XSD validity alone cannot catch the original request intent |
 
+Additional output-closure findings are tracked in the source audit: K24 audio
+codec vocabulary (W01/W10), K25 multicast read-only/effect meaning and K26 video
+codec representability across shared service views (W01/W10/W17). All require
+discriminating wire/state reproduction and explicit disposition before the
+associated profile/configuration cards can close; source review is not runtime
+verification.
+
 ## Verification commands
 
 Run from repository root; build into an isolated directory, not the installed CLI.

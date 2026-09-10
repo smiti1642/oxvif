@@ -176,6 +176,11 @@ W02 發現新相依性時須擴充本表。
 | K21／Python 限制；已有獨立編譯路徑 | Python 回報 Device type-table warning；固定版本 Xerces 以 full checking 及 warnings-as-errors 編譯同一完整閉包通過 | W21；獨立 generic 選型通過，未修改 schema 或停用警告；不代表 Python 警告錯誤或 mock instance 有效 |
 | K22／client 與選定 mock selector 已修正 | 完整 Media2 profile 查詢原先省略 Type，而 mock 一律回傳 configuration；client 現在明確要求 All | W06／W10；擷取請求回歸在舊 body 上失敗。Scoped mock Token／Type 選擇現有兩種 transport 及 token-table 控制；廣泛欄位／輸出仍屬 P-E；僅驗證 XSD 無法發現原始查詢意圖差異 |
 
+來源稽核另追蹤輸出型別相關發現：K24 audio codec 詞彙（W01／W10）、
+K25 multicast 唯讀／效果意義，以及 K26 共用服務 view 的 video codec 可表示性
+（W01／W10／W17）。相關 profile／configuration 工作卡結案前，均須補上
+具辨識力的 wire／state 重現及明確處置；來源審查不等於 runtime 驗證。
+
 ## 驗證命令
 
 在 repository 根目錄執行，使用隔離建置目錄，不覆寫已安裝 CLI。
