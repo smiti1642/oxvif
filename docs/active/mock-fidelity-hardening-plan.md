@@ -338,3 +338,10 @@ These probes pass by reproducing the defects, not by fixing them.
 Next: finish the preflight's external field/Fault review and shared parsed-input,
 atomicity and compatibility designs (W02–W06), then migrate bounded handler
 batches. Runtime routing, schema CI, releases and installed binaries are unchanged.
+
+Subsequent implementation status is maintained in the execution checklist and
+preflights: K13 allocation and K14 deletion notification now have corrected
+regressions; selected DeleteProfile fault/effect paths, K22 client selection and
+external schema/corpus CI have also changed. The preceding paragraphs describe
+the initial checkpoint, not current acceptance. Broad parsing, semantic migration
+and PR #16 integration remain open; releases and installed binaries are untouched.

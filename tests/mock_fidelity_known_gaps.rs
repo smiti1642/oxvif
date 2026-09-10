@@ -155,12 +155,13 @@ fn assert_fault(error: OnvifError, expected_code: &str, expected_reason: &str) {
 }
 
 #[tokio::test]
-async fn known_gap_k13_generated_profile_token_collides_with_seeded_token() {
+async fn generated_profile_token_skips_seeded_collisions() {
     for media2 in [false, true] {
         let transport = MockTransport::new();
         transport.device().modify(|state| {
             state.profiles.next_token_id = 42;
             state.profiles.profiles[0].token = "Profile_42".to_owned();
+            state.profiles.profiles[1].token = "Profile_43".to_owned();
         });
         let client = OnvifClient::new("http://mock").with_transport(Arc::new(transport.clone()));
         let token = if media2 {
@@ -175,7 +176,7 @@ async fn known_gap_k13_generated_profile_token_collides_with_seeded_token() {
                 .unwrap()
                 .token
         };
-        assert_eq!(token, "Profile_42");
+        assert_eq!(token, "Profile_44");
         let state = transport.device().read();
         assert_eq!(
             state
@@ -184,10 +185,12 @@ async fn known_gap_k13_generated_profile_token_collides_with_seeded_token() {
                 .iter()
                 .filter(|p| p.token == token)
                 .count(),
-            2,
-            "K13 changed: replace the known-gap baseline with a uniqueness regression"
+            1,
+            "generated profile identity must be unique"
         );
-        assert_eq!(state.profiles.next_token_id, 43);
+        assert_eq!(state.profiles.next_token_id, 45);
+        assert_eq!(state.profiles.profiles[0].token, "Profile_42");
+        assert_eq!(state.profiles.profiles[1].token, "Profile_43");
     }
 }
 

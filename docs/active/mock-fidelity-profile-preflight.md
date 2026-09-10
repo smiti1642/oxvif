@@ -57,11 +57,12 @@ K17 tracks pre-success replay invalidation separately from K14's state hook.
   `request::required_text` instead. Binding's synthesized per-entry fragment is
   not a standalone XML document; the future shared helper must take parsed
   identity/value objects instead of repeatedly parsing that fragment.
-- Creation: explicit duplicate check precedes the write lock; generated counter
-  values are not checked for collision. `ProfileEntry` is appended with all
+- Creation: explicit duplicate check and insertion now share the write lock;
+  generated identities skip occupied tokens. `ProfileEntry` is appended with all
   configuration slots None and fixed false. There is no modeled capacity check.
-  Media2 ignores initial Configuration entries. K13 is reproduced for both
-  services; the concurrency race remains source-derived/unreproduced.
+  Media2 ignores initial Configuration entries. K13's collision is now a corrected
+  regression for both services; shared-helper controls cover concurrent allocation,
+  duplicate full-state preservation, notification counts and counter boundaries.
 - Deletion: `delete_profile_in_state` locates token under write lock, refuses
   fixed/missing, otherwise removes one profile. K14 is fixed through an explicit
   committed-outcome notification predicate; refusals preserve state and skip the
@@ -143,6 +144,30 @@ capacity/conflict/extension rules. Do not mark C done from selected instance res
 
 ## Cases and readiness
 
+Bounded K13 state slice: the externally reviewed token-uniqueness requirement
+and existing duplicate refusal are sufficient to repair allocation without
+migrating request parsing or fault contracts. Move the explicit duplicate check
+into the same write lock as insertion, search past seeded generated-token
+collisions, and notify only for a committed creation. Treat the persisted u32
+counter as a search hint, not a promise that every generated token fits u32;
+use a wider temporary candidate to avoid arithmetic overflow at its boundary.
+Retain the serialized field type and ordinary token spelling when no collision
+occurs. Verify both service entry points, seeded collisions, counter boundary,
+duplicate full-state preservation and concurrent explicit/generated requests.
+Capacity, name decoding/escaping, initial bindings and replay remain separate
+work; this slice does not close the CreateProfile operation cards.
+
+K13 verification: the original implementation failed the corrected collision
+assertion. Disabling duplicate rejection and perturbing the counter start caused
+all three new helper controls to fail on their intended payload/invariant checks
+in a full-workspace all-feature no-fail-fast run; changes were restored. Formatting,
+both workspace Clippy modes and both warnings-as-errors documentation builds
+passed. The restored suite passed 1,177 all-feature and 1,093 default tests (5
+ignored, 20 suites each); inventory remains 157 routes / 159 Action sites / 260
+direct reader occurrences. These results do not close capacity or HTTP/parser
+acceptance. Prior deletion-effect commit `340fc89` passed hosted CI run
+34470506265; that hosted result does not cover this subsequent allocation change.
+
 | Axis | Existing evidence or exact next case | State |
 | --- | --- | --- |
 | C01 | Source index reconciles full Actions; add runtime alias/body/service mismatch rejection controls under W03/W07 | PARTIAL |
@@ -150,7 +175,7 @@ capacity/conflict/extension rules. Do not mark C done from selected instance res
 | C03 | `delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutation`; extend namespace/decoy controls to other 11 rows | PARTIAL |
 | C04 | Add required/empty/duplicate/repeated/extension cases per field after external field review; preserve legal repeats | TODO |
 | C05 | Existing `mock_token_discrimination` and `mock_media1_media2_agree`; add escaped tokens and wrong-family targets for all bindings | PARTIAL |
-| C06 | K13/K16 remain reproduced; `rejected_delete_preserves_state_and_hook_but_success_notifies` now guards repaired K14 refusals, success and public-helper compatibility | PARTIAL |
+| C06 | K13 allocation and K14 notification have corrected regressions; K16 partial binding remains reproduced; broader transactions and callbacks remain open | PARTIAL |
 | C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`; complete nested renderer escaping and independent namespace/shape checks | GAP REPRODUCED |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`; corpus checks missing/fixed DeleteProfile nested faults; other mappings/HTTP codes pending W05–W07 | PARTIAL |
 | C09 | Generic parser limits covered only on migrated DeleteProfile; auth boundary/resource-limit coverage for other paths pending | TODO |
@@ -158,7 +183,7 @@ capacity/conflict/extension rules. Do not mark C done from selected instance res
 | C11 | Selected DeleteProfile client/health first-subcode controls and K22 request selection verified; remaining consumer/CLI review pending W06 | PARTIAL |
 | C12 | Audit assertions perturbed: all four known-gap tests failed at payload/state assertions; fixed-binding control also failed when expected attachment was inverted, then restored green | PARTIAL |
 
-K13/K15/K16 tests in `tests/mock_fidelity_known_gaps.rs` deliberately assert current
+K15/K16 tests in `tests/mock_fidelity_known_gaps.rs` deliberately assert current
 defects like the existing Broken/Blind property tables. **Passing means reproduced,
 not fixed.** Convert each to the corrected invariant and update its finding when
 implementing the fix; never preserve a defect merely to restore green.

@@ -289,6 +289,11 @@ Factory device 是一台**雙感測器攝影機**。單 channel fixture 無法�
 
 ### 6.3 Profile
 
+自動配置的 profile 身分會跳過已用 token；明確 token 的重複檢查與新增共用
+同一 write lock。重複拒絕會保留 state 且不呼叫 change hook。持久化 counter
+是可環回的搜尋起點，不保證永不重用歷史上已刪除的 token。Profile 容量限制
+及其他建立語意仍在 fidelity audit 範圍內。
+
 | Token | Name | Fixed | Source cfg | Encoder cfg | PTZ cfg | Audio cfg |
 |---|---|---|---|---|---|---|
 | `Profile_1` | `mainStream` | 是 | `VSC_1` | `VEC_1` | `PTZConfig_1` | `ASC_1` + `AEC_1` |

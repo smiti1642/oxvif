@@ -55,10 +55,10 @@ MockServer 採 catch-all POST 路由。
   找位置並傳回裁切／raw fragment；Delete 改用 `request::required_text`。
   Binding 合成的單筆 fragment 不是獨立 XML 文件；未來共用 helper 應接收解析後
   身分／值物件，不重複解析該 fragment。
-- Create：explicit duplicate 檢查先於 write lock；產生 counter token 未檢查碰撞。
+- Create：explicit duplicate 檢查與新增現在使用同一 write lock；產生 token 時跳過已用身分。
   新增 `ProfileEntry` 的 configuration slot 全為 None，fixed 為 false；未建模
-  capacity 檢查。Media2 忽略初始 Configuration。K13 已在兩服務重現；
-  併發競爭仍為來源推論，未重現。
+  capacity 檢查。Media2 忽略初始 Configuration。K13 碰撞在兩服務已有正確回歸；
+  共用 helper 控制涵蓋併發配置、重複請求完整 state 保留、通知次數及 counter 邊界。
 - Delete：`delete_profile_in_state` 於 write lock 下找 token，拒絕 fixed／missing，
   否則移除一個 profile。K14 已使用明確的 committed-outcome 通知 predicate 修正：
   拒絕時保留 state 且不呼叫 hook，成功刪除則通知一次。這不是 rollback，也不改變
@@ -124,6 +124,25 @@ client／health 分類，以及固定 profile 拒絕前後的序列化 state。K
 
 ## 案例與開工條件
 
+限定的 K13 state 批次：外部已查核的 token 唯一性要求及既有重複拒絕行為，
+足以修正配置，無須同時遷移 request parsing 或 Fault 契約。將明確 token 的
+重複檢查移入與新增相同的 write lock，自動配置時跳過預載 token 碰撞，僅在
+成功建立後通知。持久化的 u32 counter 視為搜尋起點，不保證所有產生 token
+的數字皆落在 u32；使用較寬的暫存候選值避免邊界算術溢位。保留序列化欄位
+型別，無碰撞時沿用原有 token 拼法。驗證兩服務入口、預載碰撞、counter
+邊界、重複請求完整 state 保留，以及明確／自動 token 的併發請求。容量、
+名稱解碼／轉義、初始 binding 與 replay 另行處理；本批不關閉 CreateProfile
+工作卡。
+
+K13 驗證：原實作在修正後的碰撞 assertion 失敗。停用重複拒絕及擾動 counter
+起點後，完整 workspace、all-feature、no-fail-fast 執行中的三項新 helper
+控制，均在預期 payload／invariant 檢查失敗；所有擾動已還原。格式、兩種
+workspace Clippy 及兩種 warnings-as-errors 文件建置通過。還原後全功能
+1,177 項與預設 1,093 項測試通過（各 5 ignored、20 suites）；清冊維持
+157 routes／159 Action 位置／260 個直接 reader。這不代表容量或 HTTP／parser
+驗收完成。前一個刪除效果 commit `340fc89` 已通過託管 CI run 34470506265；
+該託管結果不包含本次後續配置修正。
+
 | 面向 | 既有證據或確切下一項案例 | 狀態 |
 | --- | --- | --- |
 | C01 | 來源索引核對完整 Action；W03／W07 新增 runtime alias／body／service 不一致拒絕控制 | PARTIAL |
@@ -131,7 +150,7 @@ client／health 分類，以及固定 profile 拒絕前後的序列化 state。K
 | C03 | `delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutation`；擴展至其他 11 列的 namespace／decoy 控制 | PARTIAL |
 | C04 | 外部欄位核對後新增 required／empty／duplicate／repeat／extension 案例，保留合法 repeat | TODO |
 | C05 | 既有 `mock_token_discrimination`／`mock_media1_media2_agree`；全部 binding 增加 escaped／wrong-family token | PARTIAL |
-| C06 | K13／K16 仍為已重現缺陷；`rejected_delete_preserves_state_and_hook_but_success_notifies` 保護已修正 K14 的拒絕、成功及公開 helper 相容性 | PARTIAL |
+| C06 | K13 配置及 K14 通知已有正確回歸；K16 部分 binding 仍為已重現缺陷；更廣泛的 transaction 及 callback 尚待完成 | PARTIAL |
 | C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`；補完巢狀 renderer escaping、獨立 namespace／shape 檢查 | 已重現缺口 |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`；corpus 檢查不存在／固定 DeleteProfile 巢狀 Fault；其他 mapping／HTTP code 待 W05–W07 | PARTIAL |
 | C09 | Parser 限制目前僅在已遷移 DeleteProfile 有涵蓋；其他路徑 auth／resource-limit 待查 | TODO |
@@ -139,7 +158,7 @@ client／health 分類，以及固定 profile 拒絕前後的序列化 state。K
 | C11 | 已驗證選定 DeleteProfile client／health first-subcode 控制與 K22 請求選擇；其餘 consumer／CLI 審查待 W06 | PARTIAL |
 | C12 | 擾動四個 known-gap assertion 均於 payload／state assertion 失敗；反轉 fixed-binding attachment 預期亦失敗，還原後通過 | PARTIAL |
 
-`tests/mock_fidelity_known_gaps.rs` 的 K13／K15／K16 刻意斷言目前缺陷，用途與既有
+`tests/mock_fidelity_known_gaps.rs` 的 K15／K16 刻意斷言目前缺陷，用途與既有
 Broken／Blind property table 相同。**通過表示已重現，不表示已修復。**
 修正時須改成正確 invariant 並更新 finding；不得為恢復綠燈而保留缺陷。
 

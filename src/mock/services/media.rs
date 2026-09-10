@@ -222,39 +222,51 @@ pub(crate) enum CreateOutcome {
 
 /// Create a profile in the shared list. `supplied_token` is honoured verbatim
 /// when the caller gives one (rare — most cameras assign); otherwise a token is
-/// generated from `next_token_id`.
+/// generated from `next_token_id`, skipping occupied identities. Validation and
+/// insertion share one write lock; a refusal does not notify the state hook.
 pub(crate) fn create_profile_in_state(
     state: &SharedState,
     name: &str,
     supplied_token: Option<String>,
 ) -> CreateOutcome {
-    if let Some(t) = supplied_token.as_ref()
-        && state.read().profiles.profiles.iter().any(|p| &p.token == t)
-    {
-        return CreateOutcome::Duplicate(t.clone());
-    }
-
-    let entry = state.modify_returning(|s| {
-        let token = supplied_token.unwrap_or_else(|| {
-            let id = s.profiles.next_token_id;
-            s.profiles.next_token_id += 1;
-            format!("Profile_{id}")
-        });
-        let entry = ProfileEntry {
-            token: token.clone(),
-            name: name.to_string(),
-            fixed: false,
-            video_source_config_token: None,
-            video_encoder_config_token: None,
-            audio_source_config_token: None,
-            audio_encoder_config_token: None,
-            ptz_config_token: None,
-        };
-        eprintln!("    [STATE] profile created: {token} ({name})");
-        s.profiles.profiles.push(entry.clone());
-        entry
-    });
-    CreateOutcome::Created(entry)
+    state.modify_returning_if(
+        |s| {
+            let token = if let Some(token) = supplied_token {
+                if s.profiles.profiles.iter().any(|p| p.token == token) {
+                    return CreateOutcome::Duplicate(token);
+                }
+                token
+            } else {
+                // There are at most profiles.len() occupied candidates. The wider
+                // temporary cannot overflow while probing that many Vec entries,
+                // even when a persisted u32 hint starts at its maximum value.
+                let mut id = u128::from(s.profiles.next_token_id);
+                let token = loop {
+                    let candidate = format!("Profile_{id}");
+                    if !s.profiles.profiles.iter().any(|p| p.token == candidate) {
+                        break candidate;
+                    }
+                    id += 1;
+                };
+                s.profiles.next_token_id = (id as u32).wrapping_add(1);
+                token
+            };
+            let entry = ProfileEntry {
+                token: token.clone(),
+                name: name.to_string(),
+                fixed: false,
+                video_source_config_token: None,
+                video_encoder_config_token: None,
+                audio_source_config_token: None,
+                audio_encoder_config_token: None,
+                ptz_config_token: None,
+            };
+            eprintln!("    [STATE] profile created: {token} ({name})");
+            s.profiles.profiles.push(entry.clone());
+            CreateOutcome::Created(entry)
+        },
+        |outcome| matches!(outcome, CreateOutcome::Created(_)),
+    )
 }
 
 /// Apply a `SetVideoEncoderConfiguration` body to the addressed channel.
@@ -1709,4 +1721,126 @@ pub fn resp_service_capabilities() -> String {
           </trt:Capabilities>
         </trt:GetServiceCapabilitiesResponse>"#,
     )
+}
+
+#[cfg(test)]
+mod profile_allocation_tests {
+    use super::*;
+    use crate::mock::state::MockState;
+    use std::sync::{
+        Arc, Barrier,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    #[test]
+    fn allocation_crosses_counter_boundary_without_collision_or_panic() {
+        let state = MockState::new();
+        state.modify(|s| {
+            s.profiles.next_token_id = u32::MAX;
+            s.profiles.profiles[0].token = "Profile_4294967295".into();
+            s.profiles.profiles[1].token = "Profile_4294967296".into();
+        });
+        let before = state.read().clone();
+        let CreateOutcome::Created(entry) = create_profile_in_state(&state, "boundary-821", None)
+        else {
+            panic!("a free generated identity must be allocated");
+        };
+        assert_eq!(entry.token, "Profile_4294967297");
+        assert_eq!(entry.name, "boundary-821");
+        let mut expected = before;
+        expected.profiles.next_token_id = 2;
+        expected.profiles.profiles.push(entry);
+        assert_eq!(
+            serde_json::to_value(&*state.read()).unwrap(),
+            serde_json::to_value(expected).unwrap()
+        );
+    }
+
+    #[test]
+    fn duplicate_creation_preserves_every_state_field_and_skips_notification() {
+        let mut state = MockState::new();
+        let notifications = Arc::new(AtomicUsize::new(0));
+        let capture = notifications.clone();
+        state.set_on_change(Arc::new(move |_| {
+            capture.fetch_add(1, Ordering::SeqCst);
+        }));
+        let before = serde_json::to_value(&*state.read()).unwrap();
+        let token = state.read().profiles.profiles[0].token.clone();
+        match create_profile_in_state(&state, "must-not-overwrite-822", Some(token.clone())) {
+            CreateOutcome::Duplicate(actual) => assert_eq!(actual, token),
+            CreateOutcome::Created(entry) => panic!("duplicate created: {}", entry.token),
+        }
+        assert_eq!(serde_json::to_value(&*state.read()).unwrap(), before);
+        assert_eq!(notifications.load(Ordering::SeqCst), 0);
+        let CreateOutcome::Created(entry) =
+            create_profile_in_state(&state, "new-823", Some("free-823".into()))
+        else {
+            panic!("fresh explicit token was refused");
+        };
+        assert_eq!(entry.token, "free-823");
+        assert_eq!(entry.name, "new-823");
+        assert_eq!(notifications.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn concurrent_creation_serializes_explicit_and_generated_identity_checks() {
+        for supplied in [None, Some("shared-824".to_owned())] {
+            let mut state = MockState::new();
+            let notifications = Arc::new(AtomicUsize::new(0));
+            let capture = notifications.clone();
+            state.set_on_change(Arc::new(move |_| {
+                capture.fetch_add(1, Ordering::SeqCst);
+            }));
+            let initial = state.read().profiles.profiles.len();
+            let barrier = Arc::new(Barrier::new(8));
+            let results = std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..8)
+                    .map(|_| {
+                        let state = &state;
+                        let barrier = barrier.clone();
+                        let supplied = supplied.clone();
+                        scope.spawn(move || {
+                            barrier.wait();
+                            create_profile_in_state(state, "concurrent-824", supplied)
+                        })
+                    })
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|h| h.join().unwrap())
+                    .collect::<Vec<_>>()
+            });
+            let mut created = std::collections::BTreeSet::new();
+            let mut duplicates = 0;
+            for result in results {
+                match result {
+                    CreateOutcome::Created(entry) => {
+                        assert_eq!(entry.name, "concurrent-824");
+                        assert!(created.insert(entry.token), "duplicate success identity");
+                    }
+                    CreateOutcome::Duplicate(token) => {
+                        assert_eq!(Some(token), supplied);
+                        duplicates += 1;
+                    }
+                }
+            }
+            let expected = if supplied.is_some() { 1 } else { 8 };
+            assert_eq!(created.len(), expected);
+            assert_eq!(duplicates, 8 - expected);
+            assert_eq!(notifications.load(Ordering::SeqCst), expected);
+            let snapshot = state.read();
+            assert_eq!(snapshot.profiles.profiles.len(), initial + expected);
+            for token in created {
+                assert_eq!(
+                    snapshot
+                        .profiles
+                        .profiles
+                        .iter()
+                        .filter(|p| p.token == token)
+                        .count(),
+                    1
+                );
+            }
+        }
+    }
 }

@@ -302,3 +302,8 @@ name 成為 markup、後筆 binding 失敗卻保留前筆寫入。這些 probe �
 下一步完成開工盤點中的外部欄位／Fault 核對、共用 parsed-input、原子性及相容性
 設計（W02–W06），再按範圍遷移 handler。Runtime routing、schema CI、Release
 及已安裝 binary 均未改變。
+
+後續實作狀態以 execution checklist 與各 preflight 為準：K13 配置及 K14 刪除
+通知已有正確回歸；選定 DeleteProfile Fault／effect 路徑、K22 client 選擇及
+外部 schema／corpus CI 亦已修改。前文描述初始檢查點，不代表目前驗收狀態。
+廣泛 parsing、語意遷移及 PR #16 整合仍待完成；Release 及已安裝 binary 未變動。

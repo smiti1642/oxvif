@@ -365,7 +365,7 @@ while the complete dependency graph remains open.
 | ID | Evidence | Disposition |
 | --- | --- | --- |
 | K12 | Source comment at `media::bind_configuration` describes binding a fixed profile as a mock deviation. Official Media1/Media2 §4.1 distinguish deletion from configuration changes. | Correct the comment and preserve legal binding; do not “repair” it by making fixed profiles immutable. References below. |
-| K13 | `create_profile_in_state` checks explicit duplicates before the write lock and generates `Profile_<counter>` without checking existing tokens. | W10/W18; deterministic counter-collision reproduction and concurrent allocation review required before changing state code. |
+| K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; capacity and other CreateProfile semantics remain open. |
 | K14 — fixed after baseline | DeleteProfile now uses an explicit committed-outcome predicate; NotFound/Fixed do not notify, Deleted notifies once. | W18 partial; regression checks full state, both services, hook count and public-helper compatibility. Replay remains separate K17. |
 | K15 | `render_profile` interpolates stored profile name/token without escaping; normal getters render seeded state as well as caller-created state. | W10; direct escaped-state wire regression required. Do not infer safety from DeleteProfile's parser tests. |
 | K16 | Media2 profile-list handler takes no body; create reads Name only; binding parses entries and invokes shared helpers separately. | W01/W10; selector/configuration/partial-write contracts need full review; not all paths individually reproduced yet. |
@@ -376,14 +376,21 @@ and [Media2 v26.06 §4.1](https://www.onvif.org/specs/2606/ONVIF-Media2-Service-
 on 2026-09-10. No schema tables or copies are included here. These references do
 not constitute an external hash-pinned schema acceptance run.
 
-Checkpoint results: K12's comment is corrected; the fixed-profile Add/Remove
+Initial checkpoint results: K12's comment is corrected; the fixed-profile Add/Remove
 control passes in both services. `tests/mock_fidelity_known_gaps.rs` reproduces
 K13 collision in both services, K14 failed-delete notification in both services,
 K15 Name-as-markup in both profile renderers, and K16 partial Media2 binding after
-a late invalid configuration token. K13's concurrent race and K16's other
-selector/create/name semantics remain unverified. All four gap assertions were
+a late invalid configuration token. At that checkpoint K13's concurrent race and
+K16's other selector/create/name semantics were unverified. All four gap assertions were
 perturbed and failed at the intended payload/state assertions, then restored.
 The passing baseline is deliberately a record of defects, not four fixes.
+
+K13 now has a corrected both-service collision regression and private helper
+controls for the counter boundary, duplicate full-state/hook preservation and
+concurrent generated/explicit allocations. The duplicate check and insertion
+share the write lock; only a Created outcome notifies. The persisted u32 field
+remains compatible as a wrapping search hint. This does not enforce the advertised
+profile capacity or repair parsing, rendering, initial bindings or replay.
 
 Subsequent K14 repair replaces that known-gap expectation with
 `rejected_delete_preserves_state_and_hook_but_success_notifies`. The original

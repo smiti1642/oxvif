@@ -747,8 +747,9 @@ pub const OSD_QUOTA_DATE_AND_TIME: u32 = 1;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfilesState {
     pub profiles: Vec<ProfileEntry>,
-    /// Counter for generated tokens. Persists so deleted profile
-    /// tokens don't get reused.
+    /// Persisted search hint for generated tokens. Allocation skips occupied
+    /// identities under the write lock. The hint wraps at the u32 boundary;
+    /// uniqueness is guaranteed among current profiles, not historical deletions.
     #[serde(default)]
     pub next_token_id: u32,
 }

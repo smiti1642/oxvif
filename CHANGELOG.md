@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock profile creation now skips occupied generated tokens and checks explicit
+  duplicates under the same write lock as insertion. Rejected duplicates preserve
+  state and do not notify the change hook; allocation no longer panics at the
+  persisted counter boundary. This does not add profile-capacity enforcement.
 - Mock Media1/Media2 rejected profile deletion no longer invokes the persistence
   change hook. Successful deletion still notifies once; public state helpers
   retain their existing notification behavior.
@@ -46,7 +50,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Mock fidelity auditing now indexes complete client/session Action declarations
   and request-reader call sites. Regression controls preserve configuration
   changes on fixed profiles; separate known-gap probes expose unresolved profile
-  allocation, XML escaping, partial-binding and replay invalidation
+  XML escaping, partial-binding and replay invalidation
   defects. A passing
   known-gap probe means reproduced, not fixed or ONVIF-conformant.
 - Mock responder regression tests now guard fault/auth precedence and preserve

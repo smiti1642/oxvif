@@ -108,7 +108,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W15／M2–M4／TODO | W01、W03–W06 | `services/events.rs`、IO event queue、subscription state | 核對 filter namespace／dialect、lifetime／renew／unsubscribe／pull 限制、queue 隔離／順序／終止；既有 Events sync 不是 PR #16 Media sync |
 | W16／M4／TODO | W01 分類、W05／W06 | 提案中的 operation policy registry、mock transport／server builder、responder | 精確 service＋operation opt-in；未建模效果預設拒絕且不改狀態；區分 unsupported 與已啟用 ack；僅必要時加入有上限追蹤，排除憑證／raw envelope |
 | W17／M4／TODO | W10–W16 分類 | 全部 capability renderer、`discovery_responder.rs`、`fleet.rs`、`snapshot.rs`、`font.rs`、公開 mock 文件 | Services／XAddrs／feature／limit 與建模行為一致；核對 discovery／snapshot 側路徑；靜態 URI／圖片不證明 codec／串流輸出 |
-| W18／M4／PARTIAL | W10–W16 候選行為 | 條件式通知修正 K14 DeleteProfile 拒絕；公開 state helper 語意不變 | 併發寫入、instance 隔離、完整 rollback、其他操作 hook、reentrancy／lock 及 replay 仍待完成；條件式通知不是 transaction rollback |
+| W18／M4／PARTIAL | W10–W16 候選行為 | K13 配置已序列化並避免碰撞；條件式通知涵蓋重複建立及 K14 DeleteProfile 拒絕；公開 state helper 語意不變 | 已測試選定配置併發；更廣泛併發寫入、instance 隔離、完整 rollback、其他操作 hook、reentrancy／lock 及 replay 仍待完成 |
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 DeleteProfile 使用私有 committed effect；加入選定跨服務讀取、HTTP、instance 及 chain 控制 | 其他 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
 | W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及第一批 13 操作 client／mock corpus 匯出與明確 payload anchor | 選定 DeleteProfile Fault 遷移後，34 份 instance 通過，包含四個不存在／固定 profile 拒絕。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |

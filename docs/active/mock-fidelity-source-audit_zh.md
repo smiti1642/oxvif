@@ -357,7 +357,7 @@ create／list 不一致已重現，選定刪除／profile-read 依賴亦已有�
 | ID | 證據 | 處置 |
 | --- | --- | --- |
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
-| K13 | `create_profile_in_state` 在 write lock 前檢查 explicit duplicate，產生 `Profile_<counter>` 時未查既有 token。 | W10／W18；修改 state 前須重現確定性的 counter collision，並檢查併發配置。 |
+| K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |
 | K14 — 基準後已修正 | DeleteProfile 使用明確的 committed-outcome predicate；NotFound／Fixed 不通知，Deleted 通知一次。 | W18 部分完成；回歸檢查完整 state、兩服務、hook 次數及公開 helper 相容性。Replay 另由 K17 追蹤。 |
 | K15 | `render_profile` 直接插入儲存的 name／token，未 escaping；getter 不只輸出新建資料，也輸出 seed state。 | W10；新增 escaped-state 直接 wire 回歸，不由 DeleteProfile parser 測試推論安全。 |
 | K16 | Media2 profile list handler 不接收 body；create 只讀 Name；binding 解析後逐筆呼叫共用 helper。 | W01／W10；selector／configuration／部分寫入契約須完整審查，尚未逐路徑重現。 |
@@ -367,12 +367,17 @@ K12 已於 2026-09-10 核對
 [Media2 v26.06 §4.1](https://www.onvif.org/specs/2606/ONVIF-Media2-Service-Spec-v2606.pdf)。
 不納入 schema 表或副本；這些參考資料不代表已執行外部固定 hash 的 schema 驗收。
 
-本檢查點結果：K12 註解已修正，兩種服務的 fixed profile Add／Remove 控制通過。
+初始檢查點結果：K12 註解已修正，兩種服務的 fixed profile Add／Remove 控制通過。
 `tests/mock_fidelity_known_gaps.rs` 重現兩服務的 K13 token 碰撞、K14 拒絕刪除
 仍 notify、兩種 profile renderer 的 K15 Name-as-markup，以及 K16 Media2
-後筆 configuration token 無效時留下前筆 binding。K13 併發競爭與 K16 其他
-selector／create／name 語意仍未驗證。擾動四項 gap assertion，均在目標
+後筆 configuration token 無效時留下前筆 binding。當時 K13 併發競爭與 K16 其他
+selector／create／name 語意尚未驗證。擾動四項 gap assertion，均在目標
 payload／state assertion 失敗，還原後通過。通過的基準是缺陷紀錄，不是四項修復。
+
+K13 現已有兩服務的正確碰撞回歸，以及 counter 邊界、重複請求完整 state／hook
+保留、明確／自動 token 併發配置的私有 helper 控制。重複檢查及新增共用 write
+lock；僅 Created 結果通知。持久化 u32 欄位維持相容，作為可環回的搜尋起點。
+這不代表已強制公告的 profile 容量，亦未修正解析、輸出、初始 binding 或 replay。
 
 後續 K14 修正已將該缺陷預期替換為
 `rejected_delete_preserves_state_and_hook_but_success_notifies`。原實作在拒絕控制

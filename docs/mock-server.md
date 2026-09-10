@@ -356,6 +356,12 @@ the wrong channel.
 
 ### 6.3 Profiles
 
+Generated profile identities skip occupied tokens; explicit duplicate checks and
+insertion share one write lock. Rejected duplicates preserve state and skip the
+change hook. The persisted counter is a wrapping search hint, not a guarantee
+against reusing historically deleted tokens. Profile-capacity enforcement and
+other creation semantics remain under the fidelity audit.
+
 | Token | Name | Fixed | Source cfg | Encoder cfg | PTZ cfg | Audio cfg |
 |---|---|---|---|---|---|---|
 | `Profile_1` | `mainStream` | yes | `VSC_1` | `VEC_1` | `PTZConfig_1` | `ASC_1` + `AEC_1` |
