@@ -28,7 +28,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Mock fidelity auditing now indexes complete client/session Action declarations
   and request-reader call sites. Regression controls preserve configuration
   changes on fixed profiles; separate known-gap probes expose unresolved profile
-  allocation, notification, XML escaping and partial-binding defects. A passing
+  allocation, notification, XML escaping, partial-binding and replay invalidation
+  defects. A passing
   known-gap probe means reproduced, not fixed or ONVIF-conformant.
 - Mock responder regression tests now guard fault/auth precedence and preserve
   raw custom-responder input/output during the planned parser migration.

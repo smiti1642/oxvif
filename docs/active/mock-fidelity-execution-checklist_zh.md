@@ -169,8 +169,8 @@ W02 發現新相依性時須擴充本表。
 | K09／未驗證 | 必填欄位／範圍／extension／capability 宣告可能與契約不符 | W01／W10–W17；實作前完成批次工作卡 |
 | K10／未執行 | E1 沒有完整外部 schema、Linux／macOS 原生、多廠牌驗證 | W21／W24；實機證據分開記錄，未另授權只做唯讀 |
 | K11／待整合 | PR #16 不在來源基準內 | W26；另行重審，不默默納入 |
-| K17／原始碼確認，重現待辦 | ReplayResponder 在尚未確認 synthetic 寫入成功前就使 operation family 失效 | W19／W03／W18；record → rejected write → read 應保留 replay 結果，另有成功寫入控制；見管線開工核對 |
-| K18／原始碼確認，重現待辦 | 去除動詞的 replay family key 漏掉 profile list／binding 依賴，亦不含 service identity | W19／W10；核對 affected-read graph、成功 mutation → GetProfiles，以及無關 service／instance 控制；見管線開工核對 |
+| K17／已重現、未修正 | DeleteProfile 被拒絕且完整 state 相等，錄製的 GetProfile 仍失效 | W19／W03／W18；完成 outcome-based invalidation 後，將 known-gap assertion 改為錄製結果保留；見管線開工核對 |
+| K18／create／list 不一致已重現、未修正 | 成功 CreateProfile 使 GetProfile 失效，GetProfiles 卻仍過時；binding 與 service 依賴僅完成原始碼確認 | W19／W10；核對 affected-read graph 與無關 service 控制；獨立 instance 控制通過；見管線開工核對 |
 | K19／已重現的外部相容性發現 | 目前 Media 來源相依集合在獨立 XSD 1.0 驗證器中無法編譯，但可通過 strict XSD 1.1 編譯 | W21；見 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)；不修改 schema 或停用檢查，須驗收候選工具並明示 schema 語言 |
 | K20／已重現並修正 formatter | `auth::auth_fault` 原先輸出未宣告的 wsse subcode 及原始 reason 文字 | W05 serializer 遷移維持 code／subcode，修正 scoped binding／text，並加入 client／health／CLI 控制；認證解析與政策仍屬 W08 待辦 |
 

@@ -65,7 +65,7 @@ complete per-field audit of other services.
    Collection equality, callback counts, and replay visibility are separate
    assertions. Changing this generic helper globally would affect other services.
 
-**K17 — source-confirmed, runtime reproduction pending:** ReplayResponder inserts
+**K17 — reproduced, not fixed:** ReplayResponder inserts
 the operation family into `invalidated` before SyntheticResponder can accept or
 reject a write. A later fault therefore does not undo the invalidation. A new
 strict synthetic rejection alone cannot guarantee unchanged replay visibility.
@@ -77,7 +77,7 @@ DeleteProfile without state changes, read again and assert the recording still
 wins; include a valid write control that retires it. No K17 fix is claimed by
 the chain-order tests.
 
-**K18 — source-confirmed, runtime reproduction pending:** `replay::family` strips
+**K18 — create/list mismatch reproduced, not fixed:** `replay::family` strips
 only the leading verb; it does not model read/write dependencies. GetProfiles
 maps to `Profiles`, but CreateProfile/DeleteProfile map to `Profile`. Binding
 maps to `VideoSourceConfiguration`, `VideoEncoderConfiguration` or `Configuration`,
@@ -88,6 +88,22 @@ time (store lookup does include the full Action). Owner W19/W10; audit the same
 tests: successful create/delete/bind → recorded GetProfiles must reflect the
 changed profile state; unrelated service/instance recordings remain available.
 Do not test only a naturally matching pair such as GetHostname/SetHostname.
+
+The `metamorph`-gated K17/K18 tests in `mock_fidelity_known_gaps.rs` now reproduce
+both paths using project-authored raw identity markers, not schema fixtures.
+K17 asserts the exact rejection, complete serialized device-state equality and
+the unwanted switch from recording to synthetic. K18 asserts successful stored
+creation, the stale list, retirement of the singular read, and independent-instance
+preservation. Binding/service dependency edges are still source-only findings.
+Temporarily suppressing DeleteProfile invalidation and additionally invalidating
+Profiles on CreateProfile made the two baselines fail at their intended replay
+assertions in a full all-feature `--no-fail-fast` run; both mutations were restored.
+These tests expose defects and do not implement or accept an invalidation design.
+Restored local gate: formatting and both workspace Clippy modes passed; 1,169
+all-feature and 1,087 default tests passed, with four ignored in each mode.
+Inventory self-tests and source reconciliation passed unchanged. Hosted CI
+[34458754641](https://github.com/smiti1642/oxvif/actions/runs/34458754641)
+passed for the preceding authentication-Fault commit `e6145b3`, not this new slice.
 
 ## Compatibility constraints
 
@@ -137,7 +153,8 @@ Two `mock::responder::tests` controls guard the existing extension seam:
 
 These are in-process ordering tests, not HTTP, real replay-store, schema or
 conformance acceptance. Other services' transitive readers, field contracts,
-native Linux/macOS, external validation and K17/K18 reproduction remain open.
+and external validation remain open. K17/K18 runtime evidence is recorded below;
+their fixes remain open.
 
 Local evidence: Windows, rustc 1.97.0, PowerShell 7.5.4, isolated
 `target/mock-fidelity-build`. Both new tests passed, then failed at the intended

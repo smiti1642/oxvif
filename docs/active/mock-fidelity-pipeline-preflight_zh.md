@@ -63,7 +63,7 @@ String 不等於能保留無效 HTTP encoding 的原始 bytes。
    集合相等、callback 次數及 replay 可見結果必須分別斷言；直接全域修改此
    generic helper 會影響其他服務。
 
-**K17 — 原始碼確認，尚未執行重現：** ReplayResponder 在 SyntheticResponder
+**K17 — 已重現，尚未修正：** ReplayResponder 在 SyntheticResponder
 接受或拒絕寫入之前，就把 operation family 加入 invalidated；後續 Fault 不會
 復原該失效狀態。因此只增加嚴格 synthetic rejection，仍無法保證 replay 的
 可見結果不變。負責 W19／W03／W18；受影響工作卡包括兩服務的
@@ -74,7 +74,7 @@ Add／RemoveVideoEncoderConfiguration，以及 Media2 Add／RemoveConfiguration�
 state 不變，再讀取時確認仍使用錄製結果；另以成功寫入使錄製結果失效作正向
 控制。Chain 順序測試不代表 K17 已修復。
 
-**K18 — 原始碼確認，尚未執行重現：** replay::family 只移除開頭動詞，沒有
+**K18 — create／list 不一致已重現，尚未修正：** replay::family 只移除開頭動詞，沒有
 建立讀寫依賴。GetProfiles 成為 Profiles，CreateProfile／DeleteProfile 卻
 成為 Profile；binding 成為 VideoSourceConfiguration、VideoEncoderConfiguration
 或 Configuration，也不是 profile read 的 key。因此即使 mutation 成功，仍可能
@@ -83,6 +83,19 @@ lookup 則包含完整 Action）。由 W19／W10 負責；設計 outcome-based i
 前須核對同一批 13 張卡的讀寫依賴。目標測試：成功 create／delete／bind 後的
 GetProfiles 應反映新 state；無關 service／instance 的錄製結果仍可使用。
 不可只測 GetHostname／SetHostname 這類名稱恰好相符的組合。
+
+`mock_fidelity_known_gaps.rs` 中以 `metamorph` 功能控制的 K17／K18 測試，已使用
+專案自製的 raw identity marker 重現兩條路徑；這些 marker 不是 schema fixture。
+K17 精確斷言拒絕內容、完整序列化 device state 相等，以及錯誤切換至 synthetic。
+K18 斷言新增資料確實儲存、清單仍過時、單筆讀取失效，以及獨立 instance 不受影響。
+Binding／service 依賴仍僅完成原始碼確認。暫時停用 DeleteProfile invalidation，並讓
+CreateProfile 額外使 Profiles 失效後，兩項 baseline 在完整全部功能
+`--no-fail-fast` 執行中，皆於預期 replay 斷言失敗；兩項變動均已還原。
+這些測試揭露缺陷，不代表已實作或驗收 invalidation 設計。
+還原後本機 gate：格式與兩種 workspace Clippy 通過；全部功能 1,169、預設
+1,087 測試通過，兩種模式各四項 ignored。清冊自我測試與原始碼核對通過，數量未變。
+遠端 CI [34458754641](https://github.com/smiti1642/oxvif/actions/runs/34458754641)
+已通過前一個認證 Fault commit `e6145b3`，不代表本次新增測試的遠端驗收。
 
 ## 相容性約束
 
@@ -129,8 +142,8 @@ GetProfiles 應反映新 state；無關 service／instance 的錄製結果仍可
   entity、空白與刻意錯誤。
 
 這是 in-process 順序測試，不是 HTTP、實際 replay store、schema 或符合性驗收。
-其他服務的間接 reader、欄位契約、原生 Linux／macOS、外部驗證及 K17／K18 重現
-仍待完成。
+其他服務的間接 reader、欄位契約與外部驗證仍待完成。K17／K18 的執行證據
+記錄於下方，兩項修正仍未完成。
 
 本機證據：Windows、rustc 1.97.0、PowerShell 7.5.4，使用獨立
 `target/mock-fidelity-build`。兩個新測試先通過，再修改注入 code 及 trim

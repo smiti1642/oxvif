@@ -1,6 +1,6 @@
 //! Executable audit of known gaps, NOT conformance acceptance.
 //! When a fix changes a result, replace that expectation with the corrected
-//! invariant and update K13-K16 in the source audit and operation cards. Never
+//! invariant and update K13-K18 in the audit/preflight and operation cards. Never
 //! restore a defect merely to make this baseline green. No hardware is used.
 #![cfg(feature = "mock")]
 
@@ -15,6 +15,143 @@ use oxvif::{
     soap::{SoapError, parse_soap_body},
     transport::Transport,
 };
+
+#[cfg(feature = "metamorph")]
+use oxvif::metamorph::{FixtureStore, MetamorphTransport};
+
+// Raw markers deliberately test replay identity, not a normative SOAP fixture.
+#[cfg(feature = "metamorph")]
+fn profile_replay() -> (MetamorphTransport, String, String, String) {
+    let state = MockState::new();
+    state.modify(|s| s.profiles.profiles[0].name = "synthetic-K17-K18".to_owned());
+    let token = state.read().profiles.profiles[0].token.clone();
+    let ns = "http://www.onvif.org/ver10/media/wsdl";
+    let one = format!(
+        "<m:GetProfile xmlns:m='{ns}'><m:ProfileToken>{token}</m:ProfileToken></m:GetProfile>"
+    );
+    let all = format!("<m:GetProfiles xmlns:m='{ns}'/>");
+    let mut store = FixtureStore::new("synthetic-gap-controls");
+    store.record(&format!("{ns}/GetProfile"), &one, "<recorded-one/>");
+    store.record(&format!("{ns}/GetProfiles"), &all, "<recorded-all/>");
+    (
+        MetamorphTransport::new(store).with_state(state),
+        ns.to_owned(),
+        one,
+        all,
+    )
+}
+
+#[cfg(feature = "metamorph")]
+#[tokio::test]
+async fn known_gap_k17_rejected_write_retires_unchanged_profile_recording() {
+    let (transport, ns, one, _) = profile_replay();
+    let before = serde_json::to_value(&*transport.device().read()).unwrap();
+    assert_eq!(
+        transport
+            .soap_post("http://mock", &format!("{ns}/GetProfile"), one.clone())
+            .await
+            .unwrap(),
+        "<recorded-one/>"
+    );
+    let client = OnvifClient::new("http://mock").with_transport(Arc::new(transport.clone()));
+    assert_fault(
+        client
+            .delete_profile("http://mock", "K17-absent")
+            .await
+            .unwrap_err(),
+        "ter:NoProfile",
+        "Profile not found: K17-absent",
+    );
+    assert_eq!(
+        serde_json::to_value(&*transport.device().read()).unwrap(),
+        before
+    );
+    let after = transport
+        .soap_post("http://mock", &format!("{ns}/GetProfile"), one)
+        .await
+        .unwrap();
+    assert_ne!(
+        after, "<recorded-one/>",
+        "K17 baseline changed: recording survived rejection"
+    );
+    assert_eq!(
+        parse_soap_body(&after)
+            .unwrap()
+            .path(&["GetProfileResponse", "Profile", "Name"])
+            .unwrap()
+            .text(),
+        "synthetic-K17-K18",
+        "K17 changed: replace the baseline with preservation of the recorded response"
+    );
+}
+
+#[cfg(feature = "metamorph")]
+#[tokio::test]
+async fn known_gap_k18_successful_create_leaves_recorded_profile_list_stale() {
+    let (transport, ns, one, all) = profile_replay();
+    let before = transport.device().read().profiles.profiles.len();
+    assert_eq!(
+        transport
+            .soap_post("http://mock", &format!("{ns}/GetProfiles"), all.clone())
+            .await
+            .unwrap(),
+        "<recorded-all/>"
+    );
+    let client = OnvifClient::new("http://mock").with_transport(Arc::new(transport.clone()));
+    let created = client
+        .create_profile("http://mock", "K18-created", Some("K18-token"))
+        .await
+        .unwrap();
+    assert_eq!(created.token, "K18-token");
+    {
+        let state = transport.device().read();
+        assert_eq!(state.profiles.profiles.len(), before + 1);
+        assert_eq!(
+            state
+                .profiles
+                .profiles
+                .iter()
+                .find(|p| p.token == created.token)
+                .unwrap()
+                .name,
+            "K18-created"
+        );
+    }
+    assert_eq!(
+        transport
+            .soap_post("http://mock", &format!("{ns}/GetProfiles"), all)
+            .await
+            .unwrap(),
+        "<recorded-all/>",
+        "K18 changed: replace the baseline with a list reflecting the committed create"
+    );
+    // The singular family was retired: this is a dependency mismatch, not a
+    // write that failed to run or a replay responder that was never reached.
+    let singular = transport
+        .soap_post("http://mock", &format!("{ns}/GetProfile"), one)
+        .await
+        .unwrap();
+    assert_eq!(
+        parse_soap_body(&singular)
+            .unwrap()
+            .path(&["GetProfileResponse", "Profile", "Name"])
+            .unwrap()
+            .text(),
+        "synthetic-K17-K18"
+    );
+    let (independent, independent_ns, independent_one, _) = profile_replay();
+    assert_eq!(
+        independent
+            .soap_post(
+                "http://mock",
+                &format!("{independent_ns}/GetProfile"),
+                independent_one
+            )
+            .await
+            .unwrap(),
+        "<recorded-one/>"
+    );
+}
 
 fn assert_fault(error: OnvifError, expected_code: &str, expected_reason: &str) {
     match error {
