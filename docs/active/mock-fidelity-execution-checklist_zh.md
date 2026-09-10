@@ -169,6 +169,8 @@ W02 發現新相依性時須擴充本表。
 | K09／未驗證 | 必填欄位／範圍／extension／capability 宣告可能與契約不符 | W01／W10–W17；實作前完成批次工作卡 |
 | K10／未執行 | E1 沒有完整外部 schema、Linux／macOS 原生、多廠牌驗證 | W21／W24；實機證據分開記錄，未另授權只做唯讀 |
 | K11／待整合 | PR #16 不在來源基準內 | W26；另行重審，不默默納入 |
+| K17／原始碼確認，重現待辦 | ReplayResponder 在尚未確認 synthetic 寫入成功前就使 operation family 失效 | W19／W03／W18；record → rejected write → read 應保留 replay 結果，另有成功寫入控制；見管線開工核對 |
+| K18／原始碼確認，重現待辦 | 去除動詞的 replay family key 漏掉 profile list／binding 依賴，亦不含 service identity | W19／W10；核對 affected-read graph、成功 mutation → GetProfiles，以及無關 service／instance 控制；見管線開工核對 |
 
 ## 驗證命令
 
@@ -213,7 +215,9 @@ not-run 分開記錄；schema skip、既有 `Broken`／`Blind` 預期不算新�
 目前進度：[來源稽核](mock-fidelity-source-audit_zh.md) 已完成 W00 字面值來源核對，
 W02 直接 caller 索引完成但間接路徑仍待查；第一批 13 張
 [W01 工作卡](mock-fidelity-profile-preflight_zh.md) 已建立，尚未符合遷移條件。
-**下一項為 W02 間接路徑、W01 外部欄位／Fault 核對及 W03–W06 設計。**
+選定共用路徑已展開於[管線開工核對](mock-fidelity-pipeline-preflight_zh.md)，包含
+K17 提前 replay 失效及 raw extension 控制。**下一項為 P-A private parsed
+accessor、P-B 外部欄位／Fault 核對及 P-C outcome／消費端設計。**
 W04／W05 設計依共用路徑盤點接續；預設 Fault 輸出改變前先處理 W06。
 W20／W21 可先準備，不必等待所有服務遷移結束。
 

@@ -345,6 +345,13 @@
 
 ## 新發現
 
+後續[管線開工核對](mock-fidelity-pipeline-preflight_zh.md) 記錄選定的間接路徑及
+K17：成功前就使 replay family 失效（原始碼確認、尚待執行重現），由 W19／W03／W18
+負責。亦追蹤 K15 的 decode／render 依賴；CreateProfile 仍儲存 raw entity
+拼寫時，只修改輸出 escaping 不是完整修正。
+同文件 K18 另記錄 replay family key 缺少 profile 讀寫失效依賴與 service identity；
+原始碼已確認，執行測試仍待完成。
+
 | ID | 證據 | 處置 |
 | --- | --- | --- |
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |

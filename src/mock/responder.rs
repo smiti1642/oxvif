@@ -145,6 +145,38 @@ impl Responder for SyntheticResponder {
 mod tests {
     use super::*;
     use crate::mock::fault_injection::PendingFault;
+    use crate::soap::{SoapError, find_response, parse_soap_body};
+    use std::sync::Mutex;
+
+    struct ProbeResponder {
+        label: &'static str,
+        seen: Arc<Mutex<Vec<(&'static str, String)>>>,
+        answer: Option<&'static str>,
+    }
+
+    #[async_trait]
+    impl Responder for ProbeResponder {
+        async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
+            self.seen
+                .lock()
+                .unwrap()
+                .push((self.label, ctx.body.into()));
+            self.answer.map(str::to_owned)
+        }
+    }
+
+    fn assert_fault(xml: &str, code: &str, reason: &str, subcode: Option<&str>) {
+        let body = parse_soap_body(xml).unwrap();
+        assert_eq!(
+            find_response(&body, "GetDeviceInformationResponse").unwrap_err(),
+            SoapError::Fault {
+                code: code.into(),
+                reason: reason.into(),
+                subcode: subcode.map(str::to_owned),
+                detail: None,
+            }
+        );
+    }
 
     const GET_DEVICE_INFO: &str = "http://www.onvif.org/ver10/device/wsdl/GetDeviceInformation";
 
@@ -195,6 +227,75 @@ mod tests {
         assert!(
             !out.contains("oxvif-mock"),
             "auth gate must block synthetic when credentials are missing"
+        );
+    }
+
+    #[tokio::test]
+    async fn fault_precedes_auth_and_extras_even_for_malformed_input() {
+        let state = MockState::new();
+        let faults = Arc::new(FaultInjector::new());
+        faults.inject(PendingFault {
+            action_suffix: "GetDeviceInformation".into(),
+            code: "env:Receiver".into(),
+            reason: "pipeline-order-731 <&>".into(),
+        });
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let chain = Chain::mock_with_extra(
+            faults,
+            true,
+            vec![Box::new(ProbeResponder {
+                label: "must-not-run",
+                seen: seen.clone(),
+                answer: Some("unexpected extra response"),
+            })],
+        );
+        let request = ctx(GET_DEVICE_INFO, "not <valid XML &unknown;", &state);
+        assert_fault(
+            &chain.respond(&request).await,
+            "env:Receiver",
+            "pipeline-order-731 <&>",
+            None,
+        );
+        // The injected fault is consumed once; the same request now reaches auth.
+        assert_fault(
+            &chain.respond(&request).await,
+            "s:Sender",
+            "Missing Username",
+            Some("wsse:FailedAuthentication"),
+        );
+        assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn extras_preserve_raw_input_order_and_short_circuit_output() {
+        let state = MockState::new();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        // Intentionally malformed: the extension seam is not the normal
+        // synthetic parser. A replay/custom responder may test raw deviations.
+        let raw = "  <r:Command> &amp;amp;\r\n</r:Command><second/>  ";
+        let answer = " <unbound:Recorded> &unknown; </unbound:Recorded>\r\n";
+        let extras: Vec<Box<dyn Responder>> = [
+            ("pass", None),
+            ("answer", Some(answer)),
+            ("unreachable", Some("wrong")),
+        ]
+        .into_iter()
+        .map(|(label, answer)| {
+            Box::new(ProbeResponder {
+                label,
+                seen: seen.clone(),
+                answer,
+            }) as Box<dyn Responder>
+        })
+        .collect();
+        let chain = Chain::mock_with_extra(Arc::new(FaultInjector::new()), false, extras);
+        assert_eq!(
+            chain.respond(&ctx(GET_DEVICE_INFO, raw, &state)).await,
+            answer
+        );
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![("pass", raw.to_owned()), ("answer", raw.to_owned())]
         );
     }
 }

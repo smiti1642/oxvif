@@ -42,6 +42,10 @@ MockServer 採 catch-all POST 路由。
 
 ## 共用路徑與目前行為
 
+選定的間接依賴、消費端清單及 P-A–P-E 實作順序見
+[管線開工核對](mock-fidelity-pipeline-preflight_zh.md)。K17 將成功前的 replay
+失效行為獨立追蹤，不與 K14 的 state hook 問題混為一談。
+
 - Request：session wrapper（含 Media 版本偏好／fallback）→ client method →
   `OnvifClient::call` envelope／security → MockTransport／MockServer →
   FaultResponder → AuthResponder → 選用 replay → SyntheticResponder → dispatch。

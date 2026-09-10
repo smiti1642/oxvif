@@ -30,6 +30,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   changes on fixed profiles; separate known-gap probes expose unresolved profile
   allocation, notification, XML escaping and partial-binding defects. A passing
   known-gap probe means reproduced, not fixed or ONVIF-conformant.
+- Mock responder regression tests now guard fault/auth precedence and preserve
+  raw custom-responder input/output during the planned parser migration.
 - Human terminal line numbers are configurable as `absolute`, `relative`, `hybrid`
   (unchanged default), or `off`. Use `--line-numbers` for this invocation, or `?`
   in navigation screens to preview, apply for the session, or explicitly save a

@@ -351,6 +351,14 @@ W01/W02 work; the index must not be marked as a finished migration.
 
 ## New findings
 
+The follow-up [pipeline preflight](mock-fidelity-pipeline-preflight.md) records
+selected transitive paths and K17, source-confirmed pre-success replay family
+invalidation (runtime reproduction pending), owned by W19/W03/W18. It also
+traces the K15 decode/render dependency; output-only escaping is not a complete
+fix while CreateProfile still stores raw entity spelling.
+K18 in that preflight also records missing profile read/write invalidation edges
+and service identity in replay family keys; source-confirmed, runtime tests pending.
+
 | ID | Evidence | Disposition |
 | --- | --- | --- |
 | K12 | Source comment at `media::bind_configuration` describes binding a fixed profile as a mock deviation. Official Media1/Media2 §4.1 distinguish deletion from configuration changes. | Correct the comment and preserve legal binding; do not “repair” it by making fixed profiles immutable. References below. |

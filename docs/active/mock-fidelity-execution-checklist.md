@@ -178,6 +178,8 @@ These are planning seeds, not a claim of an exhaustive defect audit.
 | K09 / unverified | Required fields/ranges/extensions/capability claims may differ from contract | W01/W10–W17; complete batch readiness cards before implementation |
 | K10 / not run | Full external schema, Linux/macOS native and multi-vendor validation absent from E1 | W21/W24; real-device evidence remains separate and read-only unless authorized |
 | K11 / integration pending | PR #16 is not part of the source baseline | W26; re-review separately, no silent inclusion |
+| K17 / source-confirmed, reproduction pending | ReplayResponder invalidates the operation family before synthetic write success is known | W19/W03/W18; record → rejected write → read must preserve replay visibility, with a successful-write control; see pipeline preflight |
+| K18 / source-confirmed, reproduction pending | Verb-stripped replay family keys miss profile list/binding dependencies and omit service identity | W19/W10; audit affected-read graph, successful mutation → GetProfiles, and unrelated-service/instance controls; see pipeline preflight |
 
 ## Verification commands
 
@@ -226,8 +228,10 @@ with an ID and owner work package. Resume from those records without chat histor
 Current progress: [source audit](mock-fidelity-source-audit.md) completes W00
 literal source reconciliation; W02 direct callers are indexed but transitive paths
 remain open. The first 13 [W01 cards](mock-fidelity-profile-preflight.md) exist but
-are not migration-ready. **Next: W02 transitive paths, W01 external field/Fault
-review, and W03–W06 design.**
+are not migration-ready. The selected shared paths are expanded in the
+[pipeline preflight](mock-fidelity-pipeline-preflight.md), including K17's early
+replay invalidation and raw-extension controls. **Next: P-A private parsed
+accessors, P-B external field/Fault review and P-C outcome/consumer design.**
 W04/W05 design can follow the shared-path map; settle W06 before changing default
 Fault output. W20/W21 can be prepared without waiting for every service migration.
 

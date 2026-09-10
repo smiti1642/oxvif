@@ -43,6 +43,10 @@ currently ignores URL and MockServer uses its catch-all POST route.
 
 ## Shared paths and current behavior
 
+See the [pipeline preflight](mock-fidelity-pipeline-preflight.md) for the
+selected transitive closure, consumer map and P-A–P-E implementation order.
+K17 tracks pre-success replay invalidation separately from K14's state hook.
+
 - Request: session wrappers (and media-version preference/fallback) → client
   methods → `OnvifClient::call` envelope/security → MockTransport/MockServer →
   FaultResponder → AuthResponder → optional replay → SyntheticResponder →
