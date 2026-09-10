@@ -34,6 +34,65 @@ fn stderr(output: &Output) -> String {
 }
 
 #[test]
+fn line_number_override_is_validated_but_never_changes_agent_or_plain_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let preferences = directory.path().join("ui-preferences.json");
+    fs::write(&preferences, "invalid UI configuration").unwrap();
+    for format in ["json", "table"] {
+        let baseline = run_isolated(
+            &["list", "--output", format, "--non-interactive"],
+            directory.path(),
+        );
+        assert!(baseline.status.success(), "{}", stderr(&baseline));
+        for mode in ["absolute", "relative", "hybrid", "off"] {
+            let output = run_isolated(
+                &[
+                    "list",
+                    "--line-numbers",
+                    mode,
+                    "--output",
+                    format,
+                    "--non-interactive",
+                ],
+                directory.path(),
+            );
+            assert!(output.status.success(), "{}", stderr(&output));
+            assert_eq!(output.stdout, baseline.stdout);
+            assert_eq!(output.stderr, baseline.stderr);
+            assert_eq!(
+                fs::read_to_string(&preferences).unwrap(),
+                "invalid UI configuration"
+            );
+        }
+    }
+    let invalid = run_isolated(
+        &["list", "--line-numbers", "both", "--json"],
+        directory.path(),
+    );
+    assert_eq!(invalid.status.code(), Some(2));
+    let value: Value = serde_json::from_str(&stdout(&invalid)).unwrap();
+    assert_eq!(value["error"]["code"], "INVALID_ARGUMENT");
+    assert!(value["error"]["message"].as_str().unwrap().contains("both"));
+    let help = run(&["manage", "--help"]);
+    assert!(stdout(&help).contains("--line-numbers"));
+    for mode in ["absolute", "relative", "hybrid", "off"] {
+        assert!(stdout(&help).contains(mode));
+    }
+    // The global option must not prevent legacy human shorthand normalization.
+    let health = run_isolated(
+        &[
+            "--line-numbers",
+            "off",
+            "health",
+            "--json",
+            "--non-interactive",
+        ],
+        directory.path(),
+    );
+    assert_eq!(health.status.code(), Some(5), "{}", stderr(&health));
+}
+
+#[test]
 fn describe_has_readable_terminal_output() {
     let output = run(&["describe"]);
 

@@ -220,6 +220,10 @@ setup，`q`、Esc 或 Ctrl-C 離開。`r` 切換只看已記錄裝置，`n` 切�
 貼上限制請見 [Vim 風格導航](cli-maintenance_zh.md#vim-風格導航)。上述新操作及單鍵
 `g` 改為 `gg` 的變更不包含在已發布的 0.16.0 套件中。
 
+開發版可用全域選項 `--line-numbers absolute|relative|hybrid|off` 覆寫本次導航行號，
+或在導航畫面按 `?` 預覽、套用或儲存預設值；未設定時維持 `hybrid`。不影響一般表格
+或 JSON，詳見[行號設定](cli-maintenance_zh.md#行號設定)。
+
 選擇加入裝置後，Device ID、使用者名稱與遮蔽密碼會在同一個 terminal 畫面的內嵌表單輸入。
 Tab 或上下方向鍵切換欄位，Enter 前進或送出，Ctrl-U 清除目前欄位，Esc 則不儲存並返回探索清單。
 

@@ -28,6 +28,7 @@ use tokio::time::Instant;
 mod interactive;
 mod manage;
 mod navigation;
+mod ui_settings;
 
 use interactive::{BrowserAction, DiscoverySetup, await_discovery, browse_discovery};
 
@@ -113,6 +114,10 @@ impl Prompt for SystemPrompt {
     after_help = AGENT_HELP
 )]
 struct Cli {
+    /// Override human-terminal line numbers for this process; does not affect JSON or plain tables.
+    #[arg(long, value_enum, global = true)]
+    line_numbers: Option<ui_settings::LineNumbers>,
+
     /// Select terminal, JSON, or newline-delimited JSON output.
     #[arg(long, value_enum, global = true, conflicts_with_all = ["json", "jsonl"])]
     output: Option<CliOutputFormat>,
@@ -832,7 +837,8 @@ impl From<CliOutputFormat> for OutputFormat {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    ExitCode::from(run(env::args_os().collect()).await)
+    // Keep the command-dispatch future off Windows' small main-thread stack.
+    ExitCode::from(Box::pin(run(env::args_os().collect())).await)
 }
 
 async fn run(arguments: Vec<OsString>) -> u8 {
@@ -907,6 +913,12 @@ async fn run(arguments: Vec<OsString>) -> u8 {
             return error.exit_code();
         }
     };
+    if let Err(error) =
+        ui_settings::configure(application.registry().config_dir(), cli.line_numbers)
+    {
+        emit_error(format, &error, None);
+        return error.exit_code();
+    }
     let prompt = SystemPrompt;
     if let Commands::Manage { id, target } = &cli.command {
         if !interactive_terminal_available(format, &options)
@@ -2106,6 +2118,7 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
         if matches!(
             argument.as_ref(),
             "--output"
+                | "--line-numbers"
                 | "--device"
                 | "--group"
                 | "--view"

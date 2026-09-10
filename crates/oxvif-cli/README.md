@@ -48,7 +48,8 @@ selection reasons/candidates while retaining schema v3 and existing exit meaning
 Development `oxvif manage` provides a guided terminal workspace for these operations,
 with retained device/profile context, session-only credentials and bounded session reuse.
 Camera-reported profile settings and diagnostic assessments are also available to Agents.
-Human screens share counted Vim-style navigation, relative numbering and a compact
+Human screens share counted Vim-style navigation, configurable line numbers (`?` settings
+or `--line-numbers absolute|relative|hybrid|off`) and a compact
 mode/status line; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md#vim-style-navigation).
 
 On Windows, macOS, or a Linux desktop session with Secret Service, onboard one

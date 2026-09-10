@@ -27,6 +27,8 @@ use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste};
 
 use crate::navigation::{self, Key as NavKey, Navigation, Outcome, Viewport};
 
+use crate::ui_settings::{self, LineNumbers};
+
 const DEFAULT_PAGE_SIZE: usize = 12;
 
 pub(crate) enum BrowserAction {
@@ -43,6 +45,7 @@ pub(crate) struct DiscoverySetup {
 
 enum BrowserIntent {
     Quit,
+    Settings,
     BeginSetup(Box<DiscoveryRecord>),
 }
 
@@ -278,10 +281,16 @@ fn navigation_key(nav: &mut Navigation, key: KeyEvent, discovery: bool) -> Outco
     }
 }
 
-fn nav_status(mode: &str, nav: &Navigation, index: usize, count: usize) -> String {
+fn nav_status(
+    mode: &str,
+    nav: &Navigation,
+    index: usize,
+    count: usize,
+    numbers: LineNumbers,
+) -> String {
     let pending = nav.pending();
     format!(
-        "{} | keys:{} | {}{}/{}{}",
+        "{} | keys:{} | {}{}/{} | numbers:{}{}",
         if mode.contains("TEXT") {
             "NORMAL"
         } else {
@@ -299,6 +308,7 @@ fn nav_status(mode: &str, nav: &Navigation, index: usize, count: usize) -> Strin
             index.saturating_add(1)
         },
         count,
+        numbers.name(),
         if nav.hint().is_empty() {
             String::new()
         } else {
@@ -307,7 +317,10 @@ fn nav_status(mode: &str, nav: &Navigation, index: usize, count: usize) -> Strin
     )
 }
 
-fn gutter_width(count: usize, width: usize) -> usize {
+fn gutter_width(count: usize, width: usize, mode: LineNumbers) -> usize {
+    if mode == LineNumbers::Off {
+        return 2.min(width);
+    }
     let gutter = count.max(1).to_string().len() + 3;
     if width >= gutter + 12 {
         gutter
@@ -316,13 +329,20 @@ fn gutter_width(count: usize, width: usize) -> usize {
     }
 }
 
-fn numbered_line(text: &str, index: usize, selected: usize, count: usize, width: usize) -> String {
+fn numbered_line(
+    text: &str,
+    index: usize,
+    selected: usize,
+    count: usize,
+    width: usize,
+    mode: LineNumbers,
+) -> String {
     let marker = if index == selected { '>' } else { ' ' };
-    let gutter = gutter_width(count, width);
+    let gutter = gutter_width(count, width, mode);
     if gutter > 2 {
         format!(
             "{marker} {:>digits$} {text}",
-            navigation::relative_number(index, selected),
+            mode.number(index, selected).unwrap_or(0),
             digits = gutter - 3
         )
     } else {
@@ -337,6 +357,7 @@ fn menu_frame(
     nav: &Navigation,
     width: u16,
     height: u16,
+    mode: LineNumbers,
 ) -> Vec<String> {
     let body = choices
         .iter()
@@ -350,14 +371,15 @@ fn menu_frame(
                 view.selected,
                 choices.len(),
                 width.saturating_sub(1) as usize,
+                mode,
             )
         })
         .collect::<Vec<_>>();
     panel_lines(
         title,
         &body,
-        "j/k 7j/3k | gg/G nG | PgUp/Dn ^D/^U | Enter select | i info | Esc/q back",
-        &nav_status("NORMAL", nav, view.selected, choices.len()),
+        "? settings | j/k 7j/3k gg/G nG | PgUp/Dn ^D/^U | Enter select | i info | q back",
+        &nav_status("NORMAL", nav, view.selected, choices.len(), mode),
         width,
         height,
     )
@@ -456,6 +478,7 @@ pub(crate) fn browse_discovery(
                 } else if let Some(action) = state.handle_key(key) {
                     match action {
                         BrowserIntent::Quit => return Ok(BrowserAction::Quit),
+                        BrowserIntent::Settings => number_settings(&mut terminal)?,
                         BrowserIntent::BeginSetup(device) => {
                             let target = primary_target(&device).ok_or_else(|| {
                                 AppError::invalid_argument(
@@ -485,6 +508,105 @@ pub(crate) fn browse_discovery(
             _ => {}
         }
     }
+}
+
+fn number_settings(terminal: &mut TerminalSession) -> Result<(), AppError> {
+    let initial = ui_settings::current()?;
+    let mut view = Viewport {
+        selected: LineNumbers::ALL
+            .iter()
+            .position(|mode| *mode == initial)
+            .unwrap_or(2),
+        top: 0,
+    };
+    let mut nav = Navigation::default();
+    let mut error = String::new();
+    loop {
+        let (width, height) = terminal::size().map_err(terminal_error)?;
+        view.clamp(4, panel_body_rows(height));
+        let preview = LineNumbers::ALL[view.selected];
+        draw_changed_lines(
+            terminal,
+            settings_frame(view, preview, &nav, &error, width, height),
+        )?;
+        match event::read().map_err(terminal_error)? {
+            Event::Key(key) => match navigation_key(&mut nav, key, false) {
+                Outcome::Action(motion) => view.apply(motion, 4, panel_body_rows(height)),
+                Outcome::Unhandled => match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => return Ok(()),
+                    KeyCode::Enter | KeyCode::Char('s') => {
+                        match ui_settings::apply(preview, key.code == KeyCode::Char('s')) {
+                            Ok(()) => return Ok(()),
+                            Err(failure) => error = failure.message,
+                        }
+                    }
+                    _ => {}
+                },
+                _ => {}
+            },
+            Event::Resize(_, _) => {
+                nav.reset();
+                terminal.invalidate()?;
+            }
+            Event::Paste(_) => nav.reset(),
+            _ => {}
+        }
+    }
+}
+
+fn settings_frame(
+    view: Viewport,
+    preview: LineNumbers,
+    nav: &Navigation,
+    error: &str,
+    width: u16,
+    height: u16,
+) -> Vec<String> {
+    let descriptions = [
+        "absolute - every row shows its ordinal",
+        "relative - selected row is 0; others show distance",
+        "hybrid - selected ordinal; others show distance (default)",
+        "off - selection marker only",
+    ];
+    let rows = panel_body_rows(height);
+    let mut body = descriptions
+        .iter()
+        .enumerate()
+        .skip(view.top)
+        .take(rows)
+        .map(|(i, text)| format!("{} {text}", if i == view.selected { '>' } else { ' ' }))
+        .collect::<Vec<_>>();
+    if rows >= 8 {
+        body.push("Preview: selected item 12 (numbers are not device IDs)".into());
+        for index in 10..13 {
+            body.push(numbered_line(
+                "Camera",
+                index,
+                11,
+                40,
+                width.saturating_sub(1) as usize,
+                preview,
+            ));
+        }
+    }
+    panel_lines(
+        "Line numbers | preview only until applied",
+        &body,
+        "Enter apply | s save default | Esc cancel | j/k move",
+        &if error.is_empty() {
+            format!(
+                "SETTINGS | {} | keys:{} | {}",
+                preview.name(),
+                nav.pending(),
+                nav.hint()
+            )
+        } else {
+            format!("SAVE FAILED | {error}")
+        },
+        width,
+        height,
+    )
 }
 
 struct TerminalSession {
@@ -528,17 +650,22 @@ impl Panel {
         let mut view = Viewport::default();
         let mut nav = Navigation::default();
         loop {
+            let mode = ui_settings::current()?;
             let (width, height) = terminal::size().map_err(terminal_error)?;
             let rows = panel_body_rows(height);
             view.clamp(choices.len(), rows);
             draw_changed_lines(
                 &mut self.0,
-                menu_frame(title, choices, view, &nav, width, height),
+                menu_frame(title, choices, view, &nav, width, height, mode),
             )?;
             match event::read().map_err(terminal_error)? {
                 Event::Key(key) => match navigation_key(&mut nav, key, false) {
                     Outcome::Action(motion) => view.apply(motion, choices.len(), rows),
                     Outcome::Unhandled => match key.code {
+                        KeyCode::Char('?') => {
+                            nav.reset();
+                            number_settings(&mut self.0)?;
+                        }
                         KeyCode::Enter => return Ok(Some(view.selected)),
                         KeyCode::Esc | KeyCode::Char('q') => return Ok(None),
                         KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
@@ -571,9 +698,10 @@ impl Panel {
         let mut offset = 0;
         let mut nav = Navigation::default();
         loop {
+            let mode = ui_settings::current()?;
             let (width, height) = terminal::size().map_err(terminal_error)?;
             let rows = panel_body_rows(height);
-            let lines = numbered_text(text, width.saturating_sub(1) as usize);
+            let lines = numbered_text(text, width.saturating_sub(1) as usize, mode);
             offset = offset.min(lines.len().saturating_sub(rows));
             let body = lines
                 .iter()
@@ -581,14 +709,21 @@ impl Panel {
                 .skip(offset)
                 .take(rows)
                 .map(|(i, s)| {
-                    numbered_line(s, i, offset, lines.len(), width.saturating_sub(1) as usize)
+                    numbered_line(
+                        s,
+                        i,
+                        offset,
+                        lines.len(),
+                        width.saturating_sub(1) as usize,
+                        mode,
+                    )
                 })
                 .collect::<Vec<_>>();
             self.draw(
                 title,
                 &body,
-                "j/k 7j/3k | gg/G nG | PgUp/Dn ^D/^U | Enter/Esc/q back",
-                &nav_status("NORMAL (TEXT)", &nav, offset, lines.len()),
+                "? settings | j/k 7j/3k gg/G nG | PgUp/Dn ^D/^U | Enter/Esc/q back",
+                &nav_status("NORMAL (TEXT)", &nav, offset, lines.len(), mode),
             )?;
             match event::read().map_err(terminal_error)? {
                 Event::Key(key) => match navigation_key(&mut nav, key, false) {
@@ -596,6 +731,10 @@ impl Panel {
                         offset = navigation::scroll(offset, motion, lines.len(), rows)
                     }
                     Outcome::Unhandled => match key.code {
+                        KeyCode::Char('?') => {
+                            nav.reset();
+                            number_settings(&mut self.0)?;
+                        }
                         KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
                         KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
                             return Ok(());
@@ -850,11 +989,11 @@ fn panel_lines(
 }
 
 // Resolve gutter width after wrapping; digit growth can only reduce content width.
-fn numbered_text(text: &str, width: usize) -> Vec<String> {
-    let mut gutter = gutter_width(1, width);
+fn numbered_text(text: &str, width: usize, mode: LineNumbers) -> Vec<String> {
+    let mut gutter = gutter_width(1, width, mode);
     loop {
         let lines = wrap_panel_text(text, width.saturating_sub(gutter));
-        let next = gutter_width(lines.len(), width);
+        let next = gutter_width(lines.len(), width, mode);
         if next <= gutter {
             return lines;
         }
@@ -931,6 +1070,7 @@ impl TerminalSession {
         Ok(())
     }
     fn enter() -> Result<Self, AppError> {
+        ui_settings::current()?;
         enable_raw_mode().map_err(terminal_error)?;
         let mut session = Self {
             stdout: io::stdout(),
@@ -1101,6 +1241,10 @@ impl<'a> BrowserState<'a> {
             Outcome::Unhandled => {}
             _ => return None,
         }
+        if key.code == KeyCode::Char('?') {
+            self.nav.reset();
+            return Some(BrowserIntent::Settings);
+        }
         if self.showing_details {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('i') => {
@@ -1248,11 +1392,17 @@ fn render(terminal: &mut TerminalSession, state: &mut BrowserState<'_>) -> Resul
         return render_details(terminal, state);
     }
     let (width, height) = terminal::size().map_err(terminal_error)?;
+    let mode = ui_settings::current()?;
     state.set_page_size(discovery_rows(height));
-    draw_changed_lines(terminal, discovery_frame(state, width, height))
+    draw_changed_lines(terminal, discovery_frame(state, width, height, mode))
 }
 
-fn discovery_frame(state: &BrowserState<'_>, width: u16, height: u16) -> Vec<String> {
+fn discovery_frame(
+    state: &BrowserState<'_>,
+    width: u16,
+    height: u16,
+    mode: LineNumbers,
+) -> Vec<String> {
     let columns = width.saturating_sub(1) as usize;
     let saved = state
         .devices
@@ -1278,7 +1428,7 @@ fn discovery_frame(state: &BrowserState<'_>, width: u16, height: u16) -> Vec<Str
         ));
         body.push(format!(
             "{}RECORD STATUS     ADDRESS              DEVICE                  SAVED AS",
-            " ".repeat(gutter_width(state.filtered.len(), columns))
+            " ".repeat(gutter_width(state.filtered.len(), columns, mode))
         ));
     }
     if state.filtered.is_empty() {
@@ -1309,6 +1459,7 @@ fn discovery_frame(state: &BrowserState<'_>, width: u16, height: u16) -> Vec<Str
                 state.selected,
                 state.filtered.len(),
                 columns,
+                mode,
             ));
         }
     }
@@ -1332,13 +1483,14 @@ fn discovery_frame(state: &BrowserState<'_>, width: u16, height: u16) -> Vec<Str
         if state.filtering {
             "Type search | Enter/Esc back | Ctrl-U clear | Ctrl-C quit"
         } else {
-            "j/k 7j/3k gg/G | ^D/^U PgUp/Dn | / r n A filter | i info | Enter add | q quit"
+            "? settings | j/k gg/G ^D/^U | / r n A filter | i info | Enter add | q quit"
         },
         &nav_status(
             if state.filtering { "SEARCH" } else { "NORMAL" },
             &state.nav,
             state.selected,
             state.filtered.len(),
+            mode,
         ),
         width,
         height,
@@ -1354,10 +1506,12 @@ fn render_details(
         state.showing_details = false;
         return render(terminal, state);
     };
+    let mode = ui_settings::current()?;
     state.page_size = panel_body_rows(height);
     let content = numbered_text(
         &discovery_detail_lines(device, usize::MAX).join("\n"),
         width.saturating_sub(1) as usize,
+        mode,
     );
     state.detail_max_scroll = content.len().saturating_sub(state.page_size);
     state.detail_scroll = state.detail_scroll.min(state.detail_max_scroll);
@@ -1373,6 +1527,7 @@ fn render_details(
                 state.detail_scroll,
                 content.len(),
                 width.saturating_sub(1) as usize,
+                mode,
             )
         })
         .collect::<Vec<_>>();
@@ -1381,12 +1536,13 @@ fn render_details(
         panel_lines(
             "oxvif discovery - device details",
             &body,
-            "j/k 7j/3k gg/G nG | h/l PgUp/Dn ^D/^U | i/Esc back | q quit",
+            "? settings | j/k gg/G nG | h/l PgUp/Dn ^D/^U | i/Esc back | q quit",
             &nav_status(
                 "NORMAL (TEXT)",
                 &state.nav,
                 state.detail_scroll,
                 content.len(),
+                mode,
             ),
             width,
             height,
@@ -1586,7 +1742,7 @@ mod tests {
         assert_eq!(state.selected, 20);
         assert_eq!(state.nav.pending(), "g");
         assert!(
-            discovery_frame(&state, 80, 24)
+            discovery_frame(&state, 80, 24, LineNumbers::Hybrid)
                 .last()
                 .unwrap()
                 .contains("keys:g")
@@ -1603,7 +1759,7 @@ mod tests {
         state.rebuild_filter();
         assert_eq!(state.nav.pending(), "");
         assert!(
-            discovery_frame(&state, 80, 24)
+            discovery_frame(&state, 80, 24, LineNumbers::Hybrid)
                 .last()
                 .unwrap()
                 .contains("item 0/0")
@@ -1612,7 +1768,7 @@ mod tests {
         state.rebuild_filter();
         for (width, height) in [(80, 24), (40, 8), (16, 4), (8, 1), (0, 0)] {
             state.set_page_size(discovery_rows(height));
-            let lines = discovery_frame(&state, width, height);
+            let lines = discovery_frame(&state, width, height, LineNumbers::Hybrid);
             assert_eq!(lines.len(), height as usize);
             assert!(lines.iter().all(|s| UnicodeWidthStr::width(s.as_str()) <= width.saturating_sub(1) as usize));
             if width > 2 && height > 0 {
@@ -1622,13 +1778,81 @@ mod tests {
     }
 
     #[test]
+    fn line_number_rendering_and_settings_respect_modes_and_input_boundaries() {
+        for (mode, selected, next) in [
+            (LineNumbers::Absolute, "> 21 Camera", "  22 Camera"),
+            (LineNumbers::Relative, ">  0 Camera", "   1 Camera"),
+            (LineNumbers::Hybrid, "> 21 Camera", "   1 Camera"),
+            (LineNumbers::Off, "> Camera", "  Camera"),
+        ] {
+            assert_eq!(numbered_line("Camera", 20, 20, 40, 80, mode), selected);
+            assert_eq!(numbered_line("Camera", 21, 20, 40, 80, mode), next);
+            for width in [0, 1, 8, 24, 80] {
+                let lines = numbered_text(&"Unicode 攝影機 ".repeat(40), width, mode);
+                for (i, line) in lines.iter().enumerate() {
+                    let rendered = truncate_to_width(
+                        &numbered_line(line, i, 20, lines.len(), width, mode),
+                        width,
+                    );
+                    assert!(UnicodeWidthStr::width(rendered.as_str()) <= width);
+                }
+            }
+            let frame = settings_frame(
+                Viewport::default(),
+                mode,
+                &Navigation::default(),
+                "",
+                80,
+                24,
+            )
+            .join("\n");
+            assert!(frame.contains(&format!("SETTINGS | {}", mode.name())));
+            assert!(frame.contains("s save default"));
+        }
+        let mut browser = BrowserState::new(&[], 10, 0);
+        let settings = KeyEvent::new(KeyCode::Char('?'), KeyModifiers::SHIFT);
+        assert!(matches!(
+            browser.handle_key(settings),
+            Some(BrowserIntent::Settings)
+        ));
+        browser.handle_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+        assert!(browser.handle_key(settings).is_none());
+        assert_eq!(browser.nav.pending(), "");
+        browser.filtering = true;
+        assert!(browser.handle_key(settings).is_none());
+        assert_eq!(browser.query, "?");
+        for (width, height) in [(0, 0), (8, 1), (24, 6), (80, 24)] {
+            let mut view = Viewport {
+                selected: 3,
+                top: 0,
+            };
+            view.clamp(4, panel_body_rows(height));
+            let frame = settings_frame(
+                view,
+                LineNumbers::Off,
+                &Navigation::default(),
+                "",
+                width,
+                height,
+            );
+            assert_eq!(frame.len(), height as usize);
+            assert!(frame.iter().all(|s| UnicodeWidthStr::width(s.as_str()) <= width.saturating_sub(1) as usize));
+            if width > 1 && height > 0 {
+                assert!(frame.iter().any(|s| s.starts_with("> off")));
+            }
+        }
+    }
+
+    #[test]
     fn text_gutters_and_pending_status_preserve_width_and_input_modes() {
         let text = "攝影機 profile data\n".repeat(100);
         for width in [0, 1, 8, 16, 24, 80] {
-            let lines = numbered_text(&text, width);
+            let lines = numbered_text(&text, width, LineNumbers::Hybrid);
             for (index, line) in lines.iter().enumerate() {
-                let numbered =
-                    truncate_to_width(&numbered_line(line, index, 20, lines.len(), width), width);
+                let numbered = truncate_to_width(
+                    &numbered_line(line, index, 20, lines.len(), width, LineNumbers::Hybrid),
+                    width,
+                );
                 assert!(UnicodeWidthStr::width(numbered.as_str()) <= width);
             }
         }
@@ -1636,7 +1860,10 @@ mod tests {
         for c in "123456g".chars() {
             nav.feed(NavKey::Char(c));
         }
-        assert!(truncate_to_width(&nav_status("NORMAL", &nav, 0, 40), 24).contains("123456g"));
+        assert!(
+            truncate_to_width(&nav_status("NORMAL", &nav, 0, 40, LineNumbers::Hybrid), 24)
+                .contains("123456g")
+        );
         let mut form = SetupForm::new(record("192.0.2.1", "Example", "Camera"), String::new());
         for c in "123ggjk".chars() {
             form.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
@@ -1659,6 +1886,7 @@ mod tests {
             &Navigation::default(),
             width,
             height,
+            LineNumbers::Hybrid,
         )
     }
 
@@ -1928,8 +2156,8 @@ mod tests {
         );
         assert_eq!(nav.pending(), "");
         assert_eq!(
-            nav_status("NORMAL", &nav, 0, 0),
-            "NORMAL | keys:- | item 0/0"
+            nav_status("NORMAL", &nav, 0, 0, LineNumbers::Hybrid),
+            "NORMAL | keys:- | item 0/0 | numbers:hybrid"
         );
     }
 

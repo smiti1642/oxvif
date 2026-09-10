@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Human terminal line numbers are configurable as `absolute`, `relative`, `hybrid`
+  (unchanged default), or `off`. Use `--line-numbers` for this invocation, or `?`
+  in navigation screens to preview, apply for the session, or explicitly save a
+  default in `ui-preferences.json`. Navigation keys, device identities and Agent
+  output remain unchanged. See [line-number settings](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md#line-number-settings).
+- Reduce main-thread stack use to prevent Windows debug CLI startup stack overflow.
 - Human CLI navigation now shares a backend-free Vim-style core: `gg` / `G`,
   counted `j` / `k`, absolute `nG` / `ngg`, hybrid relative numbers and compact
   NORMAL / INPUT / SEARCH / BUSY status lines. Pending sequences are visible and

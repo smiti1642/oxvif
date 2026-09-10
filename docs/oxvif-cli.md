@@ -113,6 +113,7 @@ version.
 | --- | --- |
 | `--output table\|json\|jsonl` | Select terminal, JSON, or newline-delimited JSON output. The default is `table`. |
 | `--json`, `--jsonl` | Human shorthands for `--output json` and `--output jsonl`. |
+| `--line-numbers absolute\|relative\|hybrid\|off` | Development builds: override interactive navigation numbers for this process; default `hybrid` unless saved. No effect on plain tables or JSON. See [line-number settings](cli-maintenance.md#line-number-settings). |
 | `--device <ID>` | Select one saved device by canonical ID or `group/local-alias`. |
 | `--group <ID>` | Select every explicit member of a static Group for fleet diagnostics. |
 | `--view <ID>` | Select every current match of a dynamic View for fleet diagnostics. |

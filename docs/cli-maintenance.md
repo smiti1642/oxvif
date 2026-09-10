@@ -10,6 +10,7 @@ in published 0.16.0 packages. They do not modify camera configuration.
 | [Build](#build) | Run without replacing an installed CLI |
 | [Guided workspace](#guided-workspace) | Continue maintenance in one terminal interface |
 | [Vim-style navigation](#vim-style-navigation) | Counts, relative numbers, modes and reusable core |
+| [Line-number settings](#line-number-settings) | Preview, temporary overrides and saved defaults |
 | [Snapshot download](#snapshot-download) | Save an image safely |
 | [Layered diagnosis](#layered-diagnosis) | Inspect ONVIF and image delivery |
 | [Configuration inventory](#configuration-inventory) | Export and compare settings |
@@ -101,8 +102,9 @@ viewers share one navigation core. This is a Vim-inspired subset, not an editor.
 | PgUp / PgDown, Ctrl+U / Ctrl+D | Full/half-page movement; counts multiply the movement. |
 | Esc | Cancel a pending sequence first; otherwise return/cancel. |
 | Enter, `i`, `q` | Existing select/details/return actions when no prefix is pending. |
+| `?` | Open line-number settings when no prefix is pending. |
 
-The gutter uses **hybrid relative numbers**: the selected row (`>`) has its absolute
+By default, the gutter uses **hybrid relative numbers**: the selected row (`>`) has its absolute
 one-based ordinal; other rows show distance from it. A `7` below the selection can
 be reached with `7j`. These are not immutable device IDs or original discovery record
 numbers (the separate `RECORD` column). Filtering restarts the ordinal space.
@@ -110,9 +112,9 @@ Long text uses its first visible wrapped line as the anchor, not an editable cur
 `21G` positions line 21 at the top where possible. Resizing may reflow text and change
 its line numbers. Empty lists have no selectable row and show position `0/0`.
 
-The bottom status line displays `NORMAL`, `INPUT`, `SEARCH` or `BUSY`. Navigation
+The bottom status line displays `NORMAL`, `INPUT`, `SEARCH`, `BUSY` or `SETTINGS`. Navigation
 status includes pending keys and current item/line position, for example
-`NORMAL | keys:12g | item 21/40`. `^D` / `^U` in the footer mean Ctrl+D / Ctrl+U.
+`NORMAL | keys:12g | item 21/40 | numbers:hybrid`. `^D` / `^U` in the footer mean Ctrl+D / Ctrl+U.
 Counts are limited to six digits. No typing timeout is imposed. Unsupported sequences
 such as `3i`, `gq` or count+Enter are cancelled with a hint, without opening an item
 or leaving the screen. Ctrl+C remains immediate cancellation/exit.
@@ -140,6 +142,54 @@ crossterm, ONVIF, async work and camera data. Its exact source can be tested wit
 Cargo: `rustc --edition 2024 --test crates/oxvif-cli/src/navigation.rs -o navigation-tests`
 (use an `.exe` output on Windows), then run the resulting test binary. It currently
 ships inside the CLI, not as a separately published crate or stable public API.
+
+## Line-number settings
+
+This development-build feature applies to manage menus, standalone profile selection,
+Discovery lists/details and text results. It does not affect plain tables or JSON/JSONL.
+
+| Mode | Selected row or first visible text line | Other rows |
+| --- | --- | --- |
+| `absolute` | One-based ordinal | One-based ordinal |
+| `relative` | `0` | Distance from the selection/anchor |
+| `hybrid` (default) | One-based ordinal | Distance from the selection/anchor |
+| `off` | `>` marker only | No navigation numbers |
+
+```sh
+oxvif manage --line-numbers absolute
+oxvif --line-numbers off discover
+```
+
+In a navigation screen, press `?`. Use `j`/`k` or arrows to preview a mode; the
+sample below the choices appears when there is enough terminal height. Enter applies
+it for the current process, `s` saves and applies it as the default, and Esc/`q`
+cancels without changing anything. A pending number/`g` prefix must be cancelled
+first. In SEARCH and input fields, `?` remains literal text; BUSY has no settings
+shortcut. The status line shows `numbers:<mode>` when space permits.
+
+Initial precedence is `--line-numbers` → saved preference → `hybrid`. Interactive
+Apply can subsequently change this process's mode; it does not write a preference.
+Save explicitly replaces the default for future invocations, including when the
+current process started with an override. Reopening a menu in the same process
+retains the applied mode. External preference edits are loaded by a new process.
+
+The separate `ui-preferences.json` file is in the directory reported by
+`oxvif config path` (`OXVIF_CONFIG_DIR` also applies):
+
+```json
+{"line_numbers": "absolute"}
+```
+
+Saving uses a separate lock and atomic replacement, preserving unknown JSON fields.
+A failed save leaves the active mode unchanged and shows an error. Malformed files
+are not silently replaced; use `--line-numbers hybrid` to enter a temporary session
+and repair the file before saving. Non-interactive/structured commands never read
+UI preferences, so even a damaged UI file does not block Agent commands.
+
+Changing this display setting does not alter `7j`, `21G`, filtering, device IDs,
+Discovery's original `RECORD` column, or machine output. `off` retains the selection
+marker and status position. Text may reflow when its gutter changes; the display-line
+anchor is clamped, not preserved as a logical-text bookmark.
 
 ## Snapshot download
 

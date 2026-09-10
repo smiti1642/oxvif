@@ -15,6 +15,7 @@ Ctrl+D / Ctrl+U half-page movement. Scope: human-facing terminal navigation only
 | [Implementation milestones](#implementation-milestones) | Ordered work and exit criteria |
 | [Verification](#verification) | Automated tests and terminal acceptance |
 | [Acceptance record](#acceptance-record) | Observed results, fixes and remaining platform checks |
+| [Line-number follow-up](#line-number-follow-up) | Configurable display and preference acceptance |
 | [Documentation and delivery](#documentation-and-delivery) | Documentation, packaging and release boundaries |
 
 ## Objectives and boundaries
@@ -228,6 +229,42 @@ Remaining limitations and follow-up:
   already preserves the selected item.
 - M6 remains deferred: the reusable core is an internal, backend-free module,
   not a separately published crate or stable public API.
+
+## Line-number follow-up
+
+The 2026-09-10 follow-up request extends the fixed hybrid display with `absolute`,
+`relative`, `hybrid` and `off`, preserving hybrid as the default. `?` opens a shared
+preview/settings panel; Enter applies for this process, `s` saves a future default,
+and Esc cancels. `--line-numbers` overrides the saved value for an invocation.
+See [line-number settings](../cli-maintenance.md#line-number-settings).
+
+Preferences are lazy-loaded from a separate `ui-preferences.json` in the registry
+directory. They do not modify the registry or machine output. Saving uses a separate
+nonblocking lock and atomic replacement, preserves unknown JSON fields, and leaves
+the active mode unchanged on failure. Navigation grammar and the backend-free core
+remain unchanged; hiding numbers does not disable counted movement.
+
+Windows ConPTY acceptance used 30 synthetic loopback devices without network access:
+applying absolute numbering retained camera 8 and created no preference file;
+saving relative numbering persisted it; previewing off and cancelling retained
+relative numbering. Details inherited the mode, switching to off retained `>` and
+`21G` reached camera 21. A new process honored an absolute CLI override without
+changing the saved relative default; a subsequent process loaded relative again.
+All three sessions restored the terminal and exited with code 0.
+
+Regression checks cover all four numeric contracts, narrow/Unicode rendering,
+settings/input boundaries, save/override precedence, failed saves, unknown-field
+preservation and byte-identical Agent/plain output even with corrupted UI settings.
+Changing relative mode to return absolute ordinals caused both numeric and rendering
+assertions to fail; restoring the implementation passed. The isolated Windows debug
+build also exposed main-thread stack overflow during black-box invocations; boxing
+the command-dispatch future resolved it, with the 39-test CLI black-box suite and
+40 consecutive help invocations passing afterward. Final local gates passed:
+1,127 all-feature and 1,047 default workspace tests, with 4 existing conditional
+ignores in each run; default/all-feature all-target Clippy with warnings denied,
+formatting, Rust 1.88 workspace compatibility, and 210 local documentation links.
+Native macOS/Linux interactive
+acceptance and actual host-driven resize remain outside this local evidence.
 
 ## Documentation and delivery
 
