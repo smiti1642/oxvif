@@ -10,6 +10,7 @@ W20/W21 checkpoint, 2026-09-10. The full programme remains in progress.
 | [Verification evidence](#verification-evidence) | Positive and rejection controls |
 | [External validator evaluation](#external-validator-evaluation) | Tool selection and K19 |
 | [Reproducible tooling](#reproducible-tooling) | Pinned retrieval, offline resolution and generic controls |
+| [Independent Xerces backend](#independent-xerces-backend) | All-service compilation and qualification |
 | [Next work](#next-work) | Remaining acceptance, not a completion claim |
 
 ## Structural checker
@@ -133,14 +134,16 @@ Removing the digest and instance checks made the digest control and all seven
 invalid-instance controls fail; both mutations were restored. All 19 packaging
 tests then passed. These generic fixtures are project-authored, not ONVIF-derived.
 
-**K21 — full compilation remains blocked:** strict compilation with warnings
+**K21 — Python backend limitation:** strict compilation with warnings
 treated as errors reports `XMLSchemaTypeTableWarning` in the Device source.
 Separate compilation reproduced it for Device; the other nine ONVIF service
 roots and the two supporting WSDL roots compiled without warnings. This is an
 external validator/schema qualification issue, not a demonstrated mock defect.
 Do not suppress the warning, edit the schema or count the failing full command
 as a pass. The earlier SOAP/Media experiment does not establish all-service support.
-The combined full-catalogue instance gate has consequently not run.
+The Python full-catalogue instance gate has consequently not run. The independent
+Xerces backend below resolves the compiler-selection blocker without weakening
+this Python diagnostic or modifying the sources.
 
 The `validate` command additionally requires `--corpus` pointing to an external
 directory with `cases.json`: format 1 and a nonempty `cases` list, each containing
@@ -150,16 +153,70 @@ missing files, duplicates, path escapes and invalid instances fail. Corpus
 generation and operation coverage reconciliation remain to be implemented.
 It does not certify request semantics, effects, WSDL bindings or device behavior.
 
-CI now includes Windows/Linux **generic tooling controls**, and packaging depends
-on them. They download only pinned Python wheels, not official schema documents,
-and publish no schema artifacts. This is not W22's full external-instance gate.
+The initial tooling checkpoint added Windows/Linux generic controls. Their current
+extension and the separate source-compilation job are described below; neither is
+W22's full mock-instance gate.
+
+## Independent Xerces backend
+
+`packaging/verify_schemas_xerces.py` and `SchemaVerifier.java` provide an independent
+XSD 1.1 backend using [Apache Xerces-J 2.12.2's XSD 1.1 distribution](https://xerces.apache.org/xerces2-j/).
+The downloaded archive SHA-512 and the four required JAR SHA-256 values are pinned
+in `packaging/xerces-validator.json`. Only those verified members are extracted;
+official schemas and the validator distribution are not packaged in oxvif.
+A JDK 17+ executable runs the adapter as source; no system installation or PATH
+modification is required. The local comparison used an external portable Temurin
+17.0.20.1+1 JDK, with its archive SHA-256 independently checked against Adoptium
+metadata (`e53a79c3c3d86865bd7e787903884331068e71321714ffd44f145785affc7cb0`).
+
+The adapter retains strict schema full-checking and treats warnings/errors as
+failure. An exact catalogue resolver never returns null to request a default
+lookup. WSDL extraction preserves inherited namespace bindings and descendant
+rebindings, retaining the original owner's directory for relative imports;
+temporary derived files are external and removed after the run. Source files are
+not rewritten. Instance parsing disables DTDs, external entities and XInclude;
+expected roots are checked before validation. Error reports contain only stable
+exception/constraint identifiers, never schema excerpts or input values.
+
+Local result: the same 23-file closure compiled as one schema set with 12 explicit
+roots and no warnings. This establishes an available independent compilation path
+for K21, **not** proof that Python's warning is false or that the mock is conformant.
+No Python warning was suppressed. The five explicit qualification tests include
+a valid imported-schema instance, eight invalid value/QName/shape/root variants,
+an invalid schema, DTD/import rejection and a location-hint control. Rejections
+assert sanitized constraint identifiers. Removing the Java instance-validator
+call made all seven schema-invalid instance controls fail; it was then restored.
+Three additional schema-free controls check extraction scope, metadata injection
+and dependency tampering. All 22 packaging tests passed before this checkpoint's
+final gates; required backend qualification never silently skips missing tools.
+
+After the source `fetch`/`check` commands above, use the qualified compiler:
+
+```text
+python packaging/verify_schemas_xerces.py fetch-tool --tool-root /absolute/external/oxvif-xerces
+python packaging/qualify_xerces.py --tool-root /absolute/external/oxvif-xerces --java /absolute/jdk/bin/java
+python packaging/verify_schemas_xerces.py compile --root /absolute/external/oxvif-schema-check --tool-root /absolute/external/oxvif-xerces --java /absolute/jdk/bin/java
+```
+
+`validate` uses the same external `--corpus` format described above. Corpus
+generation and operation coverage remain open; compiling official schema files
+does not validate any mock exchange. The earlier `verify_schemas.py compile`
+command remains a Python-backend diagnostic expected to expose K21.
+
+Windows/Linux CI now runs generic controls and independent Xerces qualification,
+followed by a separate **Official schema compilation** job with fixed source
+hashes, external directories and no uploaded artifacts. Both gate packaging;
+neither should be reported as full operation/corpus acceptance. Prior CI
+[34461384194](https://github.com/smiti1642/oxvif/actions/runs/34461384194) passed all
+25 jobs for `4fdd9f2`; it predates the Xerces adapter and new compilation jobs.
 
 ## Next work
 
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
 and expand the corpus beyond fragment probes. W21 remains PARTIAL: complete the
-candidate qualification for K21 and complete positive/negative envelope, payload
-and Fault instances from the mock corpus. Then add W22's full fail-closed schema
+positive/negative envelope, payload and Fault instances from the mock corpus and
+qualify the selected path against actual emitted exchanges. Then extend W22's
+source-compilation job into the full fail-closed instance
 CI job. Do not substitute this tool
 experiment for P-B's per-operation field/Fault/semantic review.
 

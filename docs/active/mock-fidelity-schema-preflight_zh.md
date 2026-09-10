@@ -10,6 +10,7 @@ W20／W21 檢查點，2026-09-10。完整計畫仍在執行中。
 | [驗證證據](#驗證證據) | 正向與拒絕控制 |
 | [外部驗證器評估](#外部驗證器評估) | 工具選擇與 K19 |
 | [可重跑的驗證工具](#可重跑的驗證工具) | 固定來源、離線解析與 generic 控制 |
+| [獨立 Xerces 後端](#獨立-xerces-後端) | 全服務編譯與工具驗收 |
 | [後續工作](#後續工作) | 尚待驗收事項，而非完成宣告 |
 
 ## 結構檢查器
@@ -124,11 +125,12 @@ python packaging/verify_schemas.py compile --root /absolute/external/oxvif-schem
 還原後全部 19 項 packaging 測試通過。這些 generic
 fixture 為專案自行設計，不是 ONVIF 衍生資料。
 
-**K21 — 完整編譯仍受阻：** 將 warning 視為錯誤的 strict 編譯，在 Device 來源回報
+**K21 — Python 後端限制：** 將 warning 視為錯誤的 strict 編譯，在 Device 來源回報
 `XMLSchemaTypeTableWarning`。分開編譯亦於 Device 重現；其餘九個 ONVIF service
 root 與兩個支援 WSDL root 均無警告通過。這是外部驗證器／schema 選型問題，
 不是已證實的 mock 缺陷。不可停用警告、改寫 schema，或把失敗的完整命令計為通過。
-較早的 SOAP／Media 實驗不代表全服務支援，因此尚未執行完整清單的 instance gate。
+較早的 SOAP／Media 實驗不代表全服務支援，因此未執行 Python 完整清單的 instance
+gate。下方的獨立 Xerces 後端已提供可用的編譯路徑，不必弱化 Python 診斷或修改來源。
 
 `validate` 額外要求 `--corpus` 指向外部目錄，其中 `cases.json` 使用 format 1，
 非空的 `cases` 每筆提供不重複的簡單 `file` 名稱與明確預期 `root` expanded name。
@@ -136,16 +138,60 @@ root 與兩個支援 WSDL root 均無警告通過。這是外部驗證器／sche
 instance 均失敗。Corpus 產生與操作覆蓋率核對仍待實作；這不驗證請求語意、效果、
 WSDL binding 或實機行為。
 
-CI 已加入 Windows／Linux 的 **generic 工具控制測試**，package job 依賴其結果。
-這些 job 僅下載固定 Python wheel，不下載官方 schema，也不發布 schema artifact；
-尚非 W22 的完整外部 instance gate。
+最初的工具檢查點加入 Windows／Linux generic 控制；下節說明後續擴充及獨立的
+來源編譯 job。兩者均非 W22 的完整 mock instance gate。
+
+## 獨立 Xerces 後端
+
+`packaging/verify_schemas_xerces.py` 與 `SchemaVerifier.java` 使用
+[Apache Xerces-J 2.12.2 XSD 1.1 distribution](https://xerces.apache.org/xerces2-j/)
+提供獨立後端。下載封存的 SHA-512 及四個必要 JAR 的 SHA-256 固定於
+`packaging/xerces-validator.json`；只解開這些已核對的成員。官方 schema 與驗證器
+distribution 均不隨 oxvif 打包。JDK 17+ 可直接執行 Java source，不需系統安裝或
+修改 PATH。本機比對使用外部可攜式 Temurin 17.0.20.1+1，封存 SHA-256 已對照
+Adoptium metadata 核對：`e53a79c3c3d86865bd7e787903884331068e71321714ffd44f145785affc7cb0`。
+
+Adapter 保留完整 schema checking，將 warning／error 視為失敗。精確清單 resolver
+不會回傳 null 以請求預設查找。WSDL 擷取保留繼承的 namespace binding 及後代的
+重新宣告，並以原始 owner 目錄解析相對 import。暫存衍生檔位於 checkout 外，
+執行後自動清除；不改寫來源。Instance 解析停用 DTD、外部 entity 與 XInclude，
+驗證前先核對預期 root。錯誤只輸出穩定的例外／constraint identifier，不含 schema
+片段或輸入值。
+
+本機結果：相同 23 檔閉包，以 12 個明確 root 合併成一個 schema set，無警告編譯
+通過。這證實 K21 有可用的獨立編譯路徑，**不代表** Python 警告已被證明錯誤，
+也不代表 mock 符合規格；未停用 Python 的警告。五項必要選型測試涵蓋有效的
+imported-schema instance、八種無效值／QName／shape／root、無效 schema、
+DTD／import 拒絕及 location-hint 控制；拒絕結果精確比對已清理的 constraint
+identifier。移除 Java instance-validator 呼叫後，七種 schema-invalid 控制均失敗，
+之後已還原。另外三項不依賴官方 schema 的測試檢查擷取 scope、metadata injection
+及相依檔竄改。全部 22 項 packaging 測試已在本檢查點最終 gate 前通過；必要的
+後端選型不會因缺少工具而靜默跳過。
+
+執行前述來源 `fetch`／`check` 後，使用已驗收的編譯器：
+
+```text
+python packaging/verify_schemas_xerces.py fetch-tool --tool-root /absolute/external/oxvif-xerces
+python packaging/qualify_xerces.py --tool-root /absolute/external/oxvif-xerces --java /absolute/jdk/bin/java
+python packaging/verify_schemas_xerces.py compile --root /absolute/external/oxvif-schema-check --tool-root /absolute/external/oxvif-xerces --java /absolute/jdk/bin/java
+```
+
+`validate` 使用前述外部 `--corpus` 格式。Corpus 產生及操作覆蓋率仍待完成；
+編譯官方 schema 並不驗證任何 mock exchange。較早的 `verify_schemas.py compile`
+仍是 Python 後端診斷命令，預期會揭露 K21。
+
+Windows／Linux CI 現在先執行 generic 控制及獨立 Xerces 選型，再執行獨立的
+**Official schema compilation** job，使用固定來源雜湊、外部目錄且不上傳 artifact。
+兩者均作為 package 前提，但不可回報為完整操作／corpus 驗收。前次 CI
+[34461384194](https://github.com/smiti1642/oxvif/actions/runs/34461384194)
+已通過 `4fdd9f2` 的全部 25 個 job；該 run 早於 Xerces adapter 及新增編譯 job。
 
 ## 後續工作
 
 W20 仍為 PARTIAL：須核對未解析／wildcard 計數、Fault 的 QName 文字，以及擴充
-fragment probe 以外的 corpus。W21 仍為 PARTIAL：須完成 K21 候選工具評估，並以
-mock corpus 的 envelope、payload、Fault 正負 instance 驗證候選工具。
-之後加入 W22 缺少前提即失敗的完整 schema CI job。此工具實驗不能取代
+fragment probe 以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
+payload、Fault 正負 instance 驗收實際 exchange。之後將 W22 的來源編譯 job
+擴充為缺少前提即失敗的完整 instance gate。此工具實驗不能取代
 P-B 的逐操作欄位、Fault 與語意審查。
 
 此診斷檢查點不需維護者新增決策。若選定的 gate 無法維持 D3 的散布或嚴格

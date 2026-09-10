@@ -42,8 +42,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a structural check, not full XSD or semantic conformance acceptance.
 - External schema verification tooling now pins source hashes and verification
   dependencies, checks import closure and prevents network fallback during
-  validation. Generic Windows/Linux tooling controls gate packaging. Full official
-  schema compilation and mock-corpus acceptance remain incomplete; this tooling
+  validation. Windows/Linux tooling controls and a separate pinned Xerces XSD 1.1
+  source-compilation job gate packaging. Full mock-corpus acceptance remains
+  incomplete; this tooling
   does not establish ONVIF conformance or change installed runtime dependencies.
 - Mock authentication faults now bind the existing `wsse:FailedAuthentication`
   subcode and escape literal reason text through a private structured serializer.

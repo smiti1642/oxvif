@@ -53,7 +53,45 @@ jobs:
           $verificationPython = if ($IsWindows) { Join-Path $verificationEnv 'Scripts/python.exe' } else { Join-Path $verificationEnv 'bin/python' }
           & $verificationPython -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: -r packaging/schema-requirements.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $verificationPython -m unittest discover -s packaging -p 'test_verify_schemas.py' -v
+          & $verificationPython -m unittest discover -s packaging -p 'test_*.py' -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $verificationTool = Join-Path $env:RUNNER_TEMP 'oxvif-xerces-tool'
+          & $verificationPython packaging/verify_schemas_xerces.py fetch-tool --tool-root $verificationTool
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          java --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $verificationPython packaging/qualify_xerces.py --tool-root $verificationTool
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  schema-source-compilation:
+    name: Official schema compilation (${{ matrix.os }})
+    needs: [schema-tooling]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Compile pinned external schema closure (no artifacts)
+        shell: pwsh
+        run: |
+          $verificationEnv = Join-Path $env:RUNNER_TEMP 'oxvif-schema-env'
+          $verificationSources = Join-Path $env:RUNNER_TEMP 'oxvif-schema-sources'
+          $verificationTool = Join-Path $env:RUNNER_TEMP 'oxvif-xerces-tool'
+          python -m venv $verificationEnv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $verificationPython = if ($IsWindows) { Join-Path $verificationEnv 'Scripts/python.exe' } else { Join-Path $verificationEnv 'bin/python' }
+          & $verificationPython -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: -r packaging/schema-requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $verificationPython packaging/verify_schemas.py fetch --root $verificationSources
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $verificationPython packaging/verify_schemas_xerces.py fetch-tool --tool-root $verificationTool
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          java --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $verificationPython packaging/verify_schemas_xerces.py compile --root $verificationSources --tool-root $verificationTool
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   fmt:
@@ -234,7 +272,7 @@ jobs:
 
   package:
     name: Package and docs
-    needs: [mock-inventory, schema-tooling, audit, msrv, test, cli-smoke, credential-contract]
+    needs: [mock-inventory, schema-tooling, schema-source-compilation, audit, msrv, test, cli-smoke, credential-contract]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

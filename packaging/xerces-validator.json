@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "version": "Xerces-J 2.12.2 XML Schema 1.1",
+  "archive_url": "https://downloads.apache.org/xerces/j/binaries/Xerces-J-bin.2.12.2-xml-schema-1.1.zip",
+  "archive_sha512": "9ace1f85151b15fe51e17d0d2509fb8ef647f86bcd1b5f8654a9bdd8c7131357335ddbfe95049aaceffedbf0c831644eb6ba5285f5afaae1b65a5e58e7637004",
+  "archive_prefix": "xerces-2_12_2-xml-schema-1.1/",
+  "jars": {
+    "xercesImpl.jar": "f28628b6f1957e1f9ef47d3014a4e0279cbf6448c09851a67b1534b50568b94e",
+    "icu4j.jar": "3618761021574f317f714bf3dff2019e38a9bb49c5060b11c03b2df30680f353",
+    "cupv10k-runtime.jar": "cfe70c68d7bb52e062b5c76343200dea33083c6555af6974596282cf6101cf4d",
+    "org.eclipse.wst.xml.xpath2.processor_1.2.1.jar": "712794bcee90ac3d23f7981b6ece233ebad0e9b635c96a1755721d45235d7c2b"
+  }
+}

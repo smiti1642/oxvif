@@ -236,7 +236,7 @@ def validate_instance(schema, data: bytes, expected_root: str) -> None:
         schema.validate(resource, use_defaults=False, use_location_hints=False)
 
 
-def validate_corpus(schema, directory: Path) -> int:
+def corpus_cases(directory: Path) -> list[tuple[Path, str]]:
     directory = external_root(directory)
     index = directory / "cases.json"
     if not index.is_file() or index.stat().st_size > MAX_BYTES:
@@ -246,6 +246,7 @@ def validate_corpus(schema, directory: Path) -> int:
     if manifest.get("format") != 1 or not isinstance(cases, list) or not 0 < len(cases) <= 10000:
         raise VerificationError("unsupported or empty corpus")
     seen = set()
+    result = []
     for case in cases:
         filename, expected = case.get("file", ""), case.get("root", "")
         if (not isinstance(filename, str) or not re.fullmatch(r"[A-Za-z0-9_-]+\.xml", filename)
@@ -255,6 +256,13 @@ def validate_corpus(schema, directory: Path) -> int:
         path = directory / filename
         if not path.resolve().is_relative_to(directory) or not path.is_file() or path.stat().st_size > MAX_BYTES:
             raise VerificationError("missing, escaping or oversized corpus file")
+        result.append((path, expected))
+    return result
+
+
+def validate_corpus(schema, directory: Path) -> int:
+    cases = corpus_cases(directory)
+    for path, expected in cases:
         validate_instance(schema, path.read_bytes(), expected)
     return len(cases)
 
