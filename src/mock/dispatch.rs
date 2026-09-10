@@ -284,7 +284,7 @@ fn dispatch_media2(
         // were a string literal, a literal token, and an unconditional empty
         // success respectively — so Media1 and Media2 answered differently for
         // one device and never converged.
-        "GetProfiles" => media2::resp_profiles_media2(state),
+        "GetProfiles" => media2::resp_profiles_media2(state, operation),
         "CreateProfile" => media2::handle_create_profile_media2(state, body),
         "DeleteProfile" => media2::handle_delete_profile_media2(state, operation, effect),
         // Media2's single generic binding operation, over the same four

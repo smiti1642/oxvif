@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock Media2 `GetProfiles` now honors decoded `Token` and `Type` selectors.
+  Omitting `Type` returns profile identities without configuration details;
+  existing full-profile client calls still request `Type=All`. Invalid scalar,
+  duplicate-token and field-order inputs are rejected without changing state.
 - Requests reaching the synthetic mock now share bounded namespace-aware XML
   parsing and Action/body identity checks, including static reads. Malformed XML,
   wrong operation identities and invalid SOAP container structure return generic
@@ -32,7 +36,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Synthetic mock routing now matches complete Action identities, including the
   Events port segment. Wrong hosts, inserted path segments and cross-port aliases
   no longer reach handlers. Existing client Actions are unchanged; HTTP header
-  parsing, body identity validation and replay policy remain under review.
+  parsing and replay policy remain under review; common body identity validation
+  is covered by the boundary change above.
 - Mock Media configuration binding now validates and commits a complete request
   under one write lock. A late invalid Media2 configuration no longer leaves
   earlier slots changed; successful multi-entry requests notify once and refused

@@ -154,7 +154,7 @@ Do not change a route before opening its row and the corresponding work package.
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `media2.GetServiceCapabilities` | `media2::resp_service_capabilities_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetProfiles` | `media2::resp_profiles_media2` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media2.GetProfiles` | `media2::resp_profiles_media2` | `state, operation` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1 |
 | `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |

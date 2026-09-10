@@ -41,7 +41,7 @@ listed operation-specific branches; other field-level parsing is not migrated.
 | `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | ProfileToken; legacy scalar | unbind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile |
 | `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | ProfileToken; legacy scalar | unbind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile |
-| `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | No body consumed (Token/Type not read) | profiles + media::catalogues → render_profile_media2 | No operation-specific branch in handler |
+| `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | Parsed Token/Type, scoped scalar and direct sequence checks | cloned profile projection + media::catalogues → render_profile_media2 | Generic field faults; nested s:Sender / InvalidArgVal / NoProfile |
 | `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Name defaults to Profile; Configuration not read | media::create_profile_in_state(None) → profiles, counter → Token response | ter:ProfileExists branch (currently unreachable with None) |
 | `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | parsed operation.required_child_text(Token), strict scalar identity | media::delete_profile_in_state → profiles → empty response | Field validation: env:Sender; missing/fixed: nested s:Sender (review below) |
 | `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken; repeated Configuration/Type/Token; Name not read | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
@@ -117,12 +117,13 @@ authorization to silently broaden public client methods.
 
 K22: §5.1.2 and the pinned Media2 request declaration were checked directly.
 The existing full-profile client method omitted `Type`, asking a conforming
-device to omit configuration data. The mock ignores selectors and masked this.
+device to omit configuration data. The mock previously ignored selectors and masked this.
 The client now explicitly sends `Type=All`, without adding parameters or changing
 return types; the session delegates to that method. Its existing field test now
 records and asserts endpoint, complete Action and request selection. The old
 request failed this assertion during a full all-feature no-fail-fast run.
-Mock selector semantics and broader negative inputs remain W10/P-E work; XSD
+The bounded mock-selector slice below is now implemented; broader W10/P-E field
+and output validation remains open. XSD
 validity alone cannot detect this valid-but-inappropriate request choice.
 
 Direct input sequences for all 13 operations were also inspected in the pinned
@@ -149,6 +150,32 @@ WSDL/XSD field validation, Core/common and other operation Fault mappings, and
 capacity/conflict/extension rules. Do not mark C done from selected instance results.
 
 ## Cases and readiness
+
+Bounded P-E read slice implemented: `media2.GetProfiles` selection only, after
+re-reading Media2 §5.1.2 and the pinned request declaration. The shared parsed
+operation preserves decoded scalar values and distinguishes omitted selectors
+from supplied values. Configuration projection changes only cloned profiles.
+Duplicate/scalar/sequence inputs are checked before lookup. Both transports cover
+empty/default/selected profile sets, repeated and combined configuration lists,
+aliases and misplaced decoys, exact nested missing-profile faults, full unchanged
+state and no hooks. The full-profile client still requests all configurations.
+The token-discrimination table adds an explicit two-profile raw-selector row.
+This does not accept profile rendering/escaping, capacity, configuration conflicts,
+unmodeled catalogue storage, field-length/attribute policy or all 13 cards.
+
+Selector evidence: both new transport controls failed against `65cd053` before
+implementation (`1789044668_cargo_test.log`). Disabling sequence-order rejection
+failed both controls (`1789044986_cargo_test.log`); ignoring the profile token
+failed both plus the new token-table row (`1789045103_cargo_test.log`). Restored
+gates passed: formatting, both workspace Clippy modes, 1,190 all-feature and
+1,105 default tests (5 ignored, 23 suites each), both warnings-as-errors docs
+and unchanged 159/157/258 inventory with self-tests. Strict external Xerces
+corpus 09 passed its 34 selected client instances. The legacy shape probe now
+explicitly requests full Media2 configurations, preserving 158 responses,
+111 success payloads, 47 faults, 1,242 anchors and all unchanged zero-finding pins.
+These corpora do not cover every new raw selector or all semantic rules.
+Prior boundary commit `65cd053` passed hosted CI run 34478736427; this is not
+hosted acceptance of the later selector slice or a release.
 
 Bounded K16 atomicity slice: preserve existing request extraction, supported
 kinds and ordinary fault payloads while replacing per-entry writes with a shared

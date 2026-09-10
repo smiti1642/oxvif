@@ -421,6 +421,12 @@ Profile、video source/configuration、video encoder、OSD 與 audio catalog/con
 
 ### 7.3 Media2（26 項操作）
 
+`GetProfiles` 的可省略 `Token` 使用解碼後完整值，選出單一 profile 或回傳 Fault。
+省略 `Type` 時不回傳 configuration；單一 `All` 回傳全部 binding，其他 list
+僅投影符合的已建模 configuration kind，不影響 profile 數量或共享 state。
+既有完整 profile client 方法明確傳送 `Type=All`。重複 Token、巢狀 scalar 及
+不合法欄位順序會被拒絕；完整欄位長度／attribute 政策仍屬未完成的驗證範圍。
+
 Media2 與 Media1 共用 profile、video、audio 狀態，並另提供 metadata。`GetMetadataConfigurations` 的 `ConfigurationToken` 是 filter；無結果時回傳空 list，而 `GetMetadataConfigurationOptions` 的未知 token 會 fault。`GetVideoSourceModes` 為已宣告 stub；`SetVideoSourceMode` 一律回傳 `ter:ActionNotSupported`，不會宣稱已儲存未建模的 sensor mode。
 
 ### 7.4 PTZ（27 項操作）
@@ -661,7 +667,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 
 `tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。專用外部驗證 CI job 尚未完成；現有清冊 job 不執行此檢查。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
 
-目前 49 組 round-trip 全數為 working，無 static 或 known-broken；34 組 token row 中 28 組可區分、6 組明確標記為 blind。測試表的每個 row 都宣告意圖，避免已知限制演變成未追蹤的永久盲點。
+目前 49 組 round-trip 全數為 working，無 static 或 known-broken；35 組 token row 中 29 組可區分、6 組明確標記為 blind。測試表的每個 row 都宣告意圖，避免已知限制演變成未追蹤的永久盲點。
 
 ---
 

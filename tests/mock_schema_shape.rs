@@ -1556,6 +1556,13 @@ fn extra_body(op: &str) -> &'static str {
 /// This preserves response coverage; it does not make these request arguments a
 /// normative request corpus. The separate client exchange corpus covers that.
 fn identified_probe_request(action: &str, fields: &str) -> String {
+    // Match the project's full-profile client intent so this response-shape
+    // corpus continues to reach nested configuration renderers after filtering.
+    let fields = if action == "http://www.onvif.org/ver20/media/wsdl/GetProfiles" {
+        "<Type>All</Type>"
+    } else {
+        fields
+    };
     let (path, op) = action.rsplit_once('/').expect("source Action");
     let (namespace, name) = if path.contains("/events/wsdl/") {
         (

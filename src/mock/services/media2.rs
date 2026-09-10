@@ -112,12 +112,63 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str, cat: &media::Catalogues) -
 /// no error, no overlap in the token sets. Reported by a C++ ONVIF test suite
 /// whose harness seeded 20 profiles and whose DLL, negotiating Media2, received
 /// 4.
-pub fn resp_profiles_media2(state: &SharedState) -> String {
+///
+/// The parsed request selects profile identities and projects requested modeled
+/// configuration kinds on clones. It never removes bindings from shared state.
+/// This is not yet complete field/attribute or nested-renderer validation.
+pub fn resp_profiles_media2(state: &SharedState, operation: &crate::mock::request::Node) -> String {
+    use crate::mock::fault::{Code, Fault, INVALID_ARG_VAL, NO_PROFILE};
+    use crate::mock::request::RequestError;
+    let namespace = "http://www.onvif.org/ver20/media/wsdl";
+    let selectors = || -> Result<_, RequestError> {
+        operation.check_child_sequence(namespace, &["Token", "Type"])?;
+        let token = operation
+            .child(namespace, "Token")?
+            .map(|node| node.scalar_text())
+            .transpose()?;
+        let types = operation
+            .children_named(namespace, "Type")
+            .map(|node| node.scalar_text())
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((token, types))
+    };
+    let (token, types) = match selectors() {
+        Ok(selectors) => selectors,
+        Err(error) => return error.to_fault(),
+    };
     let snapshot = state.read().profiles.profiles.clone();
+    if let Some(token) = token
+        && !snapshot.iter().any(|profile| profile.token == token)
+    {
+        return Fault::new(
+            Code::Sender,
+            &[INVALID_ARG_VAL, NO_PROFILE],
+            &format!("Profile not found: {token}"),
+        )
+        .to_xml();
+    }
     let cat = media::catalogues(state);
+    // Type selects configuration content, never the profile set. Only a single
+    // All expands to every associated configuration; other lists match literally.
+    // Project onto clones so reads cannot unbind shared profiles.
+    let selected = |kind: &str| types.as_slice() == ["All"] || types.contains(&kind);
     let items: String = snapshot
-        .iter()
-        .map(|p| render_profile_media2(p, "Profiles", &cat))
+        .into_iter()
+        .filter(|profile| token.is_none_or(|token| profile.token == token))
+        .map(|mut profile| {
+            for (kind, slot) in [
+                ("VideoSource", &mut profile.video_source_config_token),
+                ("VideoEncoder", &mut profile.video_encoder_config_token),
+                ("AudioSource", &mut profile.audio_source_config_token),
+                ("AudioEncoder", &mut profile.audio_encoder_config_token),
+                ("PTZ", &mut profile.ptz_config_token),
+            ] {
+                if !selected(kind) {
+                    *slot = None;
+                }
+            }
+            render_profile_media2(&profile, "Profiles", &cat)
+        })
         .collect();
     soap(
         NS,

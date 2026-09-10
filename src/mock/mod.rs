@@ -48,6 +48,9 @@
 //! identity checks and SOAP container checks, including static reads. Full field
 //! validation and HTTP binding are not complete. Explicit fault/replay/custom
 //! responders retain their precedence.
+//! Media2 `GetProfiles` honors its decoded `Token` and `Type` selectors without
+//! changing stored bindings. Omitting `Type` returns no configuration details;
+//! the full-profile client method explicitly requests `Type=All`.
 //!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A
 //! mock that answers everything is not a test harness — it is a way of proving

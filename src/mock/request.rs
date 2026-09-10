@@ -29,6 +29,7 @@ pub(super) enum RequestError {
     OperationCount,
     OperationIdentity,
     EnvelopeShape,
+    FieldSequence,
     VersionMismatch,
     InvalidNamespace,
     UnboundPrefix,
@@ -64,6 +65,7 @@ impl RequestError {
             Self::OperationCount => "expected one SOAP operation",
             Self::OperationIdentity => "unexpected operation or namespace",
             Self::EnvelopeShape => "invalid SOAP container shape",
+            Self::FieldSequence => "invalid operation field sequence",
             Self::VersionMismatch => "unsupported SOAP envelope version",
             Self::InvalidNamespace => "invalid namespace value",
             Self::UnboundPrefix => "unbound namespace prefix",
@@ -113,7 +115,8 @@ impl RequestError {
             | Self::EmptyField
             | Self::MissingBody
             | Self::OperationCount
-            | Self::EnvelopeShape => {
+            | Self::EnvelopeShape
+            | Self::FieldSequence => {
                 Fault::new(Code::Sender, &[INVALID_ARGS], "Invalid Args").to_xml()
             }
             Self::ByteLimit | Self::NodeLimit | Self::DepthLimit => Fault::new(
@@ -158,6 +161,34 @@ pub(super) struct Node {
 }
 
 impl Node {
+    /// Check direct element identity and order for an operation's source-selected
+    /// fields. Callers still own multiplicity, required fields and scalar rules.
+    pub(super) fn check_child_sequence(
+        &self,
+        ns: &str,
+        names: &[&str],
+    ) -> Result<(), RequestError> {
+        if !self
+            .text
+            .chars()
+            .all(|c| matches!(c, ' ' | '\t' | '\n' | '\r'))
+        {
+            return Err(RequestError::FieldSequence);
+        }
+        let mut previous = 0;
+        for child in &self.children {
+            let rank = names
+                .iter()
+                .position(|name| child.ns == ns && child.name == *name)
+                .ok_or(RequestError::OperationIdentity)?;
+            if rank < previous {
+                return Err(RequestError::FieldSequence);
+            }
+            previous = rank;
+        }
+        Ok(())
+    }
+
     /// Direct children only, in document order; extension subtrees retain scope.
     pub(super) fn children_named<'a, 'q>(
         &'a self,

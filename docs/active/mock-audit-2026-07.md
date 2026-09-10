@@ -23,7 +23,7 @@ actually wrong. Each section says what was done underneath.
 |---|---|
 | **Defects found** | 16 — 8 Tier 1, 2 Tier 2 families, plus item 1.8 which the property test added |
 | **Defects fixed** | all of them |
-| **Standing guards** | `mock_roundtrip.rs` (49 pairs), `mock_token_discrimination.rs` (34 rows), `mock_media1_media2_agree.rs` (11 tests), `dispatch.rs`'s routing test (157 actions) |
+| **Standing guards** | `mock_roundtrip.rs` (49 pairs), `mock_token_discrimination.rs` (35 rows), `mock_media1_media2_agree.rs` (11 tests), `dispatch.rs`'s routing test (157 actions) |
 | **`Expect::Broken` rows** | **0** |
 | **Still open** | **Nothing.** Tiers 1–4 are all closed; the audio catalogue was the last Tier 3 family. What remains are the read-side stubs in `docs/mock-server.md` §13.1, each with a `Blind` row. |
 
@@ -85,7 +85,10 @@ are the "before" picture the rest of this document reasons about.
   discriminating.** **After the PTZ work: 49 pairs, 47 round-trip, 2 declared
   stubs; the token table is 31 rows, 25 discriminating.** **After the audio
   catalogue: 49 pairs, 49 round-trip, 0 declared stubs; the token table is 34
-  rows, 28 discriminating.**
+  rows, 28 discriminating.** After the unreleased Media2 profile-selector repair:
+  **35 token rows, 29 discriminating and 6 blind**; the additional raw-selector
+  probe checks two distinct profile identities while the public client retains
+  its existing all-profile API.
 
   *Correction.* This line read "40 round-trip … 5 declared stubs" until the
   Storage work, which does not sum to 47 and was simply wrong; the figure was

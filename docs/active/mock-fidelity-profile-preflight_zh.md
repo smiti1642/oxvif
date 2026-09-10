@@ -39,7 +39,7 @@ fault 優先於表列操作專屬分支；其他欄位層級解析尚未遷移�
 | `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile |
 | `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile |
-| `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | 不接收 body（不讀 Token／Type） | profiles + media::catalogues → render_profile_media2 | Handler 無操作專屬錯誤分支 |
+| `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | Parsed Token／Type、scoped scalar 及直接 sequence 檢查 | cloned profile projection + media::catalogues → render_profile_media2 | Generic field fault；巢狀 s:Sender／InvalidArgVal／NoProfile |
 | `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Name 預設 Profile；不讀 Configuration | media::create_profile_in_state(None) → profiles, counter → Token response | ter:ProfileExists 分支（目前傳 None 不會到達） |
 | `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | parsed operation.required_child_text(Token)，嚴格 scalar identity | media::delete_profile_in_state → profiles → empty response | 欄位驗證：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
 | `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken；重複 Configuration／Type／Token；不讀 Name | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
@@ -106,8 +106,8 @@ K22：已直接核對 §5.1.2 及固定來源的 Media2 請求宣告。既有完
 省略 `Type`，因此符合規格的裝置會省略 configuration 資料；mock 忽略 selector 而
 掩蓋此差異。Client 現在明確傳送 `Type=All`，未新增參數或修改回傳型別；session
 轉呼叫同一方法。既有欄位測試現會記錄並斷言 endpoint、完整 Action 與請求選擇，
-舊請求在完整全部功能 no-fail-fast 執行中確實觸發該斷言失敗。Mock selector 語意
-及更多負向輸入仍屬 W10／P-E；僅驗證 XSD 無法攔截此合法但不符合查詢目的的請求。
+舊請求在完整全部功能 no-fail-fast 執行中確實觸發該斷言失敗。Mock selector 的有界子批次已實作，
+其餘 W10／P-E 欄位及輸出驗證仍待完成；僅驗證 XSD 無法攔截此合法但不符合查詢目的的請求。
 
 亦已直接檢查固定 WSDL 閉包中全部 13 操作的直接輸入序列；詳細欄位筆記保留於
 checkout 外的來源根目錄（`profile-contract-review-20260910.md`）。這不代表完整
@@ -129,6 +129,28 @@ client／health 分類，以及固定 profile 拒絕前後的序列化 state。K
 不可僅憑選定 instance 的結果將 C 標記完成。
 
 ## 案例與開工條件
+
+已實作有界 P-E 讀取子批次 `media2.GetProfiles` 選擇行為，實作前重新核對
+Media2 §5.1.2 及固定 request 宣告。使用共用 parsed operation，保留解碼後
+scalar，區分省略及明確提供的 selector；僅投影 cloned profile slot，不改 state。
+查詢前檢查重複、scalar 及 sequence。兩種 transport 涵蓋空集合、預設及指定
+profile、重複及組合 configuration list、alias、錯置 decoy、完整巢狀
+missing-profile fault、整份 state 不變及沒有 hook。既有完整 profile client
+仍要求全部 configuration；token-discrimination table 增加兩個 profile 的
+raw-selector row。本批次不驗收 profile 輸出／escaping、容量、configuration
+conflict、未建模 catalogue storage、欄位長度／attribute 政策或全部 13 張工作卡。
+
+Selector 證據：兩個新 transport 控制在實作前的 `65cd053` 均失敗
+（`1789044668_cargo_test.log`）。停用 sequence 順序拒絕使兩者失敗
+（`1789044986_cargo_test.log`）；忽略 profile token 則使兩者及新增 token-table
+row 失敗（`1789045103_cargo_test.log`）。還原後格式、兩種 workspace Clippy、
+all-feature 1,190 項及預設 1,105 項測試（各 5 ignored、23 suites）、兩種
+warnings-as-errors 文件及未改變的 159／157／258 清冊與自我測試均通過。
+嚴格外部 Xerces corpus 09 的 34 份選定 client instance 通過。舊 shape probe
+明確要求 Media2 完整 configuration，保留 158 responses、111 success payloads、
+47 faults、1,242 anchors 及全部未改動的零 finding pin。這些 corpus 不涵蓋
+全部新增 raw selector 或語意規則。前一 boundary commit `65cd053` 已通過
+遠端 CI 34478736427，不代表後續 selector 子批次或 Release 已驗收。
 
 限定的 K16 原子性批次：保留既有 request 擷取、支援 kind 及一般 Fault payload，
 將逐筆寫入改為共用、以值表示的 binding plan。在同一 write lock 中檢查 profile

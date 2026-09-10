@@ -624,9 +624,13 @@ lowercase `deviceio`; the elements are in `…/ver10/deviceIO/wsdl`. Shares one
 
 ### 7.3 Media2 — 26 operations
 
+Selector duplicate/scalar/order checks are implemented; full field-length and
+attribute policy remain part of the unfinished validation programme.
+
 | Operation | | Notes |
 |---|---|---|
-| `GetProfiles`, `CreateProfile`, `DeleteProfile` | ● | `tr2:DeleteProfile` names its token element `Token`, not `ProfileToken`. |
+| `GetProfiles` | ● **T** | Optional decoded `Token` selects one profile or faults. Omitted `Type` returns no configurations; one `All` returns all bindings; other lists project matching modeled configuration kinds without changing profile count or state. |
+| `CreateProfile`, `DeleteProfile` | ● | `tr2:DeleteProfile` names its token element `Token`, not `ProfileToken`. |
 | `AddConfiguration`, `RemoveConfiguration` | ● | Resolves every kind and validates all required tokens before committing the complete plan; one notification per successful request. |
 | `GetVideoSourceConfigurations`, `SetVideoSourceConfiguration`, `GetVideoSourceConfigurationOptions` | ● **T** | |
 | `GetVideoEncoderConfigurations`, `SetVideoEncoderConfiguration`, `GetVideoEncoderConfigurationOptions` | ● **T** | |
@@ -774,7 +778,8 @@ unbound and the document was not namespace-well-formed (§3).
 </trt:Profiles>
 ```
 
-`tr2:GetProfiles` groups the same profile's configurations under one wrapper:
+`tr2:GetProfiles` with `Type=All` (as sent by the full-profile client) groups the
+same profile's configurations under one wrapper:
 
 ```xml
 <tr2:Profiles token="Profile_1" fixed="true">
@@ -1104,7 +1109,7 @@ check whether it is pinned or incidental.
 | No response repeats an attribute | `no_response_declares_an_attribute_twice` |
 | No response uses an undeclared prefix | `every_response_binds_the_prefixes_it_uses` |
 | Every `Set` either round-trips or is declared static (49 pairs) | `tests/mock_roundtrip.rs` |
-| Every token-taking operation either discriminates or is declared blind (34 rows) | `tests/mock_token_discrimination.rs` |
+| Every token-taking operation either discriminates or is declared blind (35 rows) | `tests/mock_token_discrimination.rs` |
 | Media1 and Media2 never disagree about shared state | `tests/mock_media1_media2_agree.rs` |
 | Per-sensor answers really differ | `tests/mock_multi_sensor.rs` |
 | End-to-end flows | `tests/mock_workflow.rs` |
@@ -1143,7 +1148,7 @@ The two tables are the important ones. Each row **declares its intent** —
 and **all arms are asserted**. Wire a declared stub up and the test goes red
 telling you to move the row, so the list cannot rot into a permanent blind
 spot. Current state: 49 round-trip pairs (**49** working, **0** static, 0
-known-broken) and 34 token rows (28 discriminating, 6 blind).
+known-broken) and 35 token rows (29 discriminating, 6 blind).
 
 **Every `Set` on this mock now round-trips.** The last two static rows were the
 audio encoder configurations, and wiring them emptied the audit's Tier 3. Both

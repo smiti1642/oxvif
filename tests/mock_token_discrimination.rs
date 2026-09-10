@@ -130,6 +130,7 @@ const ROWS: &[Row] = rows![
     "media1/osd-options"          => Expect::Blind("audit §5 — static"), ("VSC_1", "VSC_2"), m1_osd_options;
 
     // ── Media2 ──────────────────────────────────────────────────────────────
+    "media2/profile-selection"    => Expect::Discriminates, ("Profile_1", "Profile_3"), m2_profile_selection;
     "media2/encoder-options"      => Expect::Discriminates, ("VEC_1", "VEC_3"), m2_encoder_options;
     "media2/encoder-config"       => Expect::Discriminates, ("VEC_1", "VEC_3"), m2_encoder_config;
     "media2/source-options"       => Expect::Discriminates, ("VSC_1", "VSC_2"), m2_source_options;
@@ -173,6 +174,28 @@ const ROWS: &[Row] = rows![
     "recording/replay-uri"        => Expect::Discriminates, ("Rec_001", "Rec_002"), rec_replay_uri;
     "recording/job-state"         => Expect::Discriminates, ("Job_001", "Job_002"), rec_job_state;
 ];
+
+// ── Raw Media2 selector probe ─────────────────────────────────────────────────
+
+// The public full-profile client intentionally always requests all profiles.
+// These source-selected fixture tokens exercise the mock's optional raw selector.
+async fn m2_profile_selection(d: &Dev, t: &str) -> String {
+    use oxvif::transport::{HttpTransport, Transport};
+    let ns = "http://www.onvif.org/ver20/media/wsdl";
+    let body = format!(
+        "<s:Envelope xmlns:s='http://www.w3.org/2003/05/soap-envelope' xmlns:m='{ns}'><s:Body><m:GetProfiles><m:Token>{t}</m:Token><m:Type>All</m:Type></m:GetProfiles></s:Body></s:Envelope>"
+    );
+    let xml = HttpTransport::new()
+        .soap_post(&d.url("media2"), &format!("{ns}/GetProfiles"), body)
+        .await
+        .unwrap();
+    let body = oxvif::soap::parse_soap_body(&xml).unwrap();
+    let response = oxvif::soap::find_response(&body, "GetProfilesResponse").unwrap();
+    let profiles: Vec<_> = response.children_named("Profiles").collect();
+    assert_eq!(profiles.len(), 1);
+    assert_eq!(profiles[0].attr("token"), Some(t));
+    format!("{profiles:?}")
+}
 
 // ── Media1 probes ────────────────────────────────────────────────────────────
 
@@ -425,10 +448,11 @@ async fn every_token_taking_operation_matches_its_declared_expectation() {
         .count();
     assert_eq!(
         (ROWS.len(), declared_discriminating),
-        (34, 28),
+        (35, 29),
         "the table's shape changed (rows, declared-Discriminates). If that was \
          deliberate, update this expectation **and** the counts in \
-         docs/mock-server.md §12 and docs/active/mock-audit-2026-07.md §2 in the \
+         docs/mock-server.md §12, docs/mock-server_zh.md §12 and \
+         docs/active/mock-audit-2026-07.md §2 in the \
          same commit.",
     );
 
