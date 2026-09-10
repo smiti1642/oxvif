@@ -54,11 +54,10 @@ String 不等於能保留無效 HTTP encoding 的原始 bytes。
    audio、PTZ renderer。Media1 建立回應亦使用 render_profile；Media2 則回傳
    產生的 token。K15 必須同時測 seeded literal state 及 client 建立時包含
    entity-looking 文字的資料，不可只測一個 getter。
-4. `apply_media2_configuration` 擷取 entries、解析 kind、合成
-   ProfileToken／ConfigurationToken fragment，再逐筆呼叫 bind／unbind。
-   未來共用 mutation helper 應接收值或借用 parsed node，不可把解碼後的值再
-   插回 XML 字串。K16 必須在 mutation 前完成全部驗證；逐筆多解析一次無法
-   提供原子性。
+4. 基準的 `apply_media2_configuration` 合成單筆 XML 並重複呼叫 bind／unbind。
+   K16 state 修正後，會將擷取的值組成 plan，交給 `apply_configuration_bindings`，
+   在 write lock 中驗證完整 plan 後才變更 slot。有 scope 的解碼仍屬 parser 工作；
+   共用 writer 已不再把值插回 XML，也不重新解析 fragment。
 5. `create_profile_in_state/delete_profile_in_state/bind_configuration` 呼叫
    `MockState::modify[_returning]` → `notify` → 持有 read guard 時執行 callback。
    集合相等、callback 次數及 replay 可見結果必須分別斷言；直接全域修改此
@@ -109,7 +108,7 @@ CreateProfile 額外使 Profiles 失效後，兩項 baseline 在完整全部功�
 - K17 必須使用明確的成功效果資訊處理，才可宣稱拒絕寫入沒有副作用；不可搜尋
   XML 字串猜測成功，也不可收到任何 generic state hook 就使所有 fixture 失效。
   K18 需要明確的 affected-read 依賴，不能只延後使用去除動詞後的 family key。
-  K16 的部分寫入也須處理；僅延後 invalidation 不等於 transaction rollback。
+  K16 選定 binding 的原子性已另行修正；僅延後 invalidation 不等於 transaction rollback。
 - 保留 SoapError::Fault 的 code／subcode／detail 語意。soap::find_response
   只暴露第一層 Subcode；health::CheckError::from 複製它，CheckError::is_auth、
   health assessment／JUnit、CLI application diagnostics，以及

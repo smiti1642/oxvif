@@ -368,7 +368,7 @@ while the complete dependency graph remains open.
 | K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; capacity and other CreateProfile semantics remain open. |
 | K14 — fixed after baseline | DeleteProfile now uses an explicit committed-outcome predicate; NotFound/Fixed do not notify, Deleted notifies once. | W18 partial; regression checks full state, both services, hook count and public-helper compatibility. Replay remains separate K17. |
 | K15 | `render_profile` interpolates stored profile name/token without escaping; normal getters render seeded state as well as caller-created state. | W10; direct escaped-state wire regression required. Do not infer safety from DeleteProfile's parser tests. |
-| K16 | Media2 profile-list handler takes no body; create reads Name only; binding parses entries and invokes shared helpers separately. | W01/W10; selector/configuration/partial-write contracts need full review; not all paths individually reproduced yet. |
+| K16 — partial repair | Media2 profile-list handler still ignores selectors and create reads Name only; binding now validates and commits one complete value-based plan. | The reproduced late-invalid-token partial write is fixed with state/hook/HTTP controls. Selector/create/name/Type=All/conflict semantics remain W01/W10 work. |
 
 K12 reference conclusions were checked against
 [Media1 v24.12 §4.1](https://www.onvif.org/specs/2412/ONVIF-Media-Service-Spec-v2412.pdf)
@@ -384,6 +384,15 @@ a late invalid configuration token. At that checkpoint K13's concurrent race and
 K16's other selector/create/name semantics were unverified. All four gap assertions were
 perturbed and failed at the intended payload/state assertions, then restored.
 The passing baseline is deliberately a record of defects, not four fixes.
+
+K16's binding subcase now uses one locked validation/commit across all requested
+slots; the old synthesized XML path has been removed. The original implementation
+failed the replacement full-state regression. New in-process/HTTP controls cover
+late unknown, wrong-family and empty tokens, complete success visible in both
+Media views, fixed-profile changes, repeated removals and one callback observing
+both committed slots. Missing mandatory values are checked before state lookup;
+this changes error precedence for requests containing multiple distinct errors.
+Other K16 semantics remain open; this is not full binding conformance acceptance.
 
 K13 now has a corrected both-service collision regression and private helper
 controls for the counter boundary, duplicate full-state/hook preservation and

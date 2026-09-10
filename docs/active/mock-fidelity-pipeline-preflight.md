@@ -56,11 +56,11 @@ complete per-field audit of other services.
    call VSC/video/audio/PTZ renderers. Creation also reaches render_profile on
    Media1; Media2 returns the generated token. K15 fixes need both seeded literal
    state and client-created entity-looking text controls, not just one getter.
-4. `apply_media2_configuration` extracts entries, resolves kinds, synthesizes
-   ProfileToken/ConfigurationToken fragments, then calls bind/unbind per entry.
-   Future shared mutation helpers must receive values or borrowed parsed nodes,
-   never a decoded value reinserted into an XML string. K16 atomic validation must
-   complete before mutation; extra per-entry parsing cannot provide that guarantee.
+4. At baseline `apply_media2_configuration` synthesized per-entry XML and called
+   bind/unbind repeatedly. The K16 state repair now passes an extracted-value
+   plan into `apply_configuration_bindings`, validating the full plan under the
+   write lock before changing slots. Scoped decoding remains a parser task; the
+   shared writer no longer reinserts values into XML or reparses fragments.
 5. `create_profile_in_state/delete_profile_in_state/bind_configuration` reach
    `MockState::modify[_returning]` → `notify` → caller callback under a read guard.
    Collection equality, callback counts, and replay visibility are separate
@@ -117,8 +117,8 @@ passed for the preceding authentication-Fault commit `e6145b3`, not this new sli
 - Resolve K17 with explicit successful-effect information before claiming failed
   writes are side-effect free. Do not guess success from XML text searches or
   retire all fixtures on any generic state hook. K18 needs explicit affected-read
-  dependencies, not just a delayed verb-stripped family key. Partial K16 writes also need
-  resolution; deferring invalidation by itself is not transaction rollback.
+  dependencies, not just a delayed verb-stripped family key. K16's selected
+  binding atomicity is repaired separately; deferring invalidation is not rollback.
 - Preserve `SoapError::Fault` code/subcode/detail meanings. `soap::find_response`
   exposes only the first Subcode. `health::CheckError::from` copies it;
   `CheckError::is_auth`, health assessment/JUnit, CLI application diagnostics,

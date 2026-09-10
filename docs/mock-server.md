@@ -356,6 +356,11 @@ the wrong channel.
 
 ### 6.3 Profiles
 
+Supported configuration bindings validate the complete request before writing
+any slot under a shared lock. A refused request preserves state and does not
+notify; a successful multi-entry Media2 request notifies once, including an
+idempotent removal. This does not imply complete configuration-conflict modeling.
+
 Generated profile identities skip occupied tokens; explicit duplicate checks and
 insertion share one write lock. Rejected duplicates preserve state and skip the
 change hook. The persisted counter is a wrapping search hint, not a guarantee
@@ -582,7 +587,7 @@ lowercase `deviceio`; the elements are in `…/ver10/deviceIO/wsdl`. Shares one
 | Operation | | Notes |
 |---|---|---|
 | `GetProfiles`, `CreateProfile`, `DeleteProfile` | ● | `tr2:DeleteProfile` names its token element `Token`, not `ProfileToken`. |
-| `AddConfiguration`, `RemoveConfiguration` | ● | Resolves **every** child's kind before writing any, so an unmodelled type cannot half-apply. |
+| `AddConfiguration`, `RemoveConfiguration` | ● | Resolves every kind and validates all required tokens before committing the complete plan; one notification per successful request. |
 | `GetVideoSourceConfigurations`, `SetVideoSourceConfiguration`, `GetVideoSourceConfigurationOptions` | ● **T** | |
 | `GetVideoEncoderConfigurations`, `SetVideoEncoderConfiguration`, `GetVideoEncoderConfigurationOptions` | ● **T** | |
 | `GetMetadataConfigurations` | ● **T** | `ConfigurationToken` is a **filter** — no match yields an empty list, not a fault. |

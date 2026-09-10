@@ -289,6 +289,10 @@ Factory device 是一台**雙感測器攝影機**。單 channel fixture 無法�
 
 ### 6.3 Profile
 
+支援的 configuration binding 會在同一 write lock 中，先驗證完整請求再寫入
+slot。拒絕時保留 state 且不通知；成功的多筆 Media2 請求僅通知一次，包含
+冪等移除。這不表示已完整建模 configuration conflict。
+
 自動配置的 profile 身分會跳過已用 token；明確 token 的重複檢查與新增共用
 同一 write lock。重複拒絕會保留 state 且不呼叫 change hook。持久化 counter
 是可環回的搜尋起點，不保證永不重用歷史上已刪除的 token。Profile 容量限制

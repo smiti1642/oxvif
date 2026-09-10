@@ -360,7 +360,7 @@ create／list 不一致已重現，選定刪除／profile-read 依賴亦已有�
 | K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |
 | K14 — 基準後已修正 | DeleteProfile 使用明確的 committed-outcome predicate；NotFound／Fixed 不通知，Deleted 通知一次。 | W18 部分完成；回歸檢查完整 state、兩服務、hook 次數及公開 helper 相容性。Replay 另由 K17 追蹤。 |
 | K15 | `render_profile` 直接插入儲存的 name／token，未 escaping；getter 不只輸出新建資料，也輸出 seed state。 | W10；新增 escaped-state 直接 wire 回歸，不由 DeleteProfile parser 測試推論安全。 |
-| K16 | Media2 profile list handler 不接收 body；create 只讀 Name；binding 解析後逐筆呼叫共用 helper。 | W01／W10；selector／configuration／部分寫入契約須完整審查，尚未逐路徑重現。 |
+| K16 — 部分修正 | Media2 profile list 仍忽略 selector，create 只讀 Name；binding 現驗證並提交完整、以值表示的 plan。 | 已重現的後筆無效 token 部分寫入已修正，具 state／hook／HTTP 控制；selector／create／name／Type=All／conflict 語意仍屬 W01／W10。 |
 
 K12 已於 2026-09-10 核對
 [Media1 v24.12 §4.1](https://www.onvif.org/specs/2412/ONVIF-Media-Service-Spec-v2412.pdf) 與
@@ -373,6 +373,13 @@ K12 已於 2026-09-10 核對
 後筆 configuration token 無效時留下前筆 binding。當時 K13 併發競爭與 K16 其他
 selector／create／name 語意尚未驗證。擾動四項 gap assertion，均在目標
 payload／state assertion 失敗，還原後通過。通過的基準是缺陷紀錄，不是四項修復。
+
+K16 binding 子案例現以單一 lock 驗證並提交全部請求 slot；原本合成 XML 的
+路徑已移除。原實作在替換後的完整 state 回歸失敗。新增 in-process／HTTP
+控制涵蓋後筆未知、錯誤 family 及空 token、兩 Media view 可見的完整成功結果、
+fixed profile 變更、重複移除，以及單次 callback 觀察到兩個已提交 slot。
+必要值缺漏會先於 state lookup 檢查，因此同時具有多種錯誤的請求，其錯誤優先
+順序會改變。其他 K16 語意仍待處理；這不是完整 binding 符合性驗收。
 
 K13 現已有兩服務的正確碰撞回歸，以及 counter 邊界、重複請求完整 state／hook
 保留、明確／自動 token 併發配置的私有 helper 控制。重複檢查及新增共用 write

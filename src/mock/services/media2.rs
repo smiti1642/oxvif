@@ -375,8 +375,8 @@ pub fn handle_remove_configuration_media2(state: &SharedState, body: &str) -> St
 /// Both directions of the Media2 configuration binding.
 ///
 /// The request may carry several `<tr2:Configuration>` children; every one is
-/// applied, and the first unmodelled `Type` aborts before anything is written so
-/// a partial application cannot be mistaken for a whole one.
+/// planned, and all supported kinds and required tokens are checked before any
+/// slot is written. The shared value-based plan commits under one write lock.
 fn apply_media2_configuration(state: &SharedState, body: &str, add: bool) -> Result<(), String> {
     let profile = extract_tag(body, "ProfileToken").unwrap_or_default();
     let entries = extract_all_tags(body, "Configuration");
@@ -404,19 +404,8 @@ fn apply_media2_configuration(state: &SharedState, body: &str, add: bool) -> Res
         planned.push((kind, extract_tag(entry, "Token").unwrap_or_default()));
     }
 
-    for (kind, token) in planned {
-        // The state operations read `ProfileToken` out of the body themselves,
-        // so hand each one a minimal body naming this single binding.
-        let one = format!(
-            "<ProfileToken>{profile}</ProfileToken><ConfigurationToken>{token}</ConfigurationToken>"
-        );
-        if add {
-            media::bind_configuration(state, &one, kind, "ADDCFG2-5543")?;
-        } else {
-            media::unbind_configuration(state, &one, kind, "RMCFG2-5544")?;
-        }
-    }
-    Ok(())
+    let tag = if add { "ADDCFG2-5543" } else { "RMCFG2-5544" };
+    media::apply_configuration_bindings(state, &profile, &planned, add, tag)
 }
 
 pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {

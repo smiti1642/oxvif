@@ -465,8 +465,7 @@ impl ConfigKind {
     /// faulted — the profile then rendered no audio at all, with nothing to say
     /// why. A stale justification outliving its premise, which is the class the
     /// 0.15.0 audit was looking for.
-    fn known_token(self, state: &SharedState, token: &str) -> bool {
-        let s = state.read();
+    fn known_token(self, s: &crate::mock::state::DeviceState, token: &str) -> bool {
         match self {
             Self::VideoSource => s.video_source_configs.iter().any(|c| c.token == token),
             Self::VideoEncoder => s.video_encoders.iter().any(|c| c.token == token),
@@ -498,37 +497,7 @@ pub(crate) fn bind_configuration(
     let config = extract_tag(body, "ConfigurationToken")
         .or_else(|| extract_tag(body, "Token"))
         .unwrap_or_default();
-    if profile.is_empty() || config.is_empty() {
-        return Err(resp_soap_fault(
-            "env:Sender",
-            &format!("NoToken-{tag}: ProfileToken and ConfigurationToken are both required"),
-        ));
-    }
-    if !state
-        .read()
-        .profiles
-        .profiles
-        .iter()
-        .any(|p| p.token == profile)
-    {
-        return Err(resp_soap_fault(
-            "ter:NoProfile",
-            &format!("NoSuchProfile-{tag}: {profile}"),
-        ));
-    }
-    if !kind.known_token(state, &config) {
-        return Err(resp_soap_fault(
-            "ter:NoConfig",
-            &format!("NoSuchConfig-{tag}: {config}"),
-        ));
-    }
-    state.modify(|s| {
-        if let Some(p) = s.profiles.profiles.iter_mut().find(|p| p.token == profile) {
-            *kind.slot(p) = Some(config.clone());
-            eprintln!("    [STATE] profile {profile}: bound {config}");
-        }
-    });
-    Ok(())
+    apply_configuration_bindings(state, &profile, &[(kind, config)], true, tag)
 }
 
 /// Clear a configuration slot on a profile. Audit §3 items 1.5, 1.6 and 1.7.
@@ -542,31 +511,57 @@ pub(crate) fn unbind_configuration(
     tag: &str,
 ) -> Result<(), String> {
     let profile = extract_tag(body, "ProfileToken").unwrap_or_default();
-    if profile.is_empty() {
+    apply_configuration_bindings(state, &profile, &[(kind, String::new())], false, tag)
+}
+
+/// Validate a complete value-based plan and commit its slots under one lock.
+/// All refusals precede mutation. Successful plans notify once, including a
+/// successful idempotent removal; this is not a generic rollback mechanism.
+pub(crate) fn apply_configuration_bindings(
+    state: &SharedState,
+    profile: &str,
+    planned: &[(ConfigKind, String)],
+    add: bool,
+    tag: &str,
+) -> Result<(), String> {
+    if profile.is_empty() || (add && planned.iter().any(|(_, token)| token.is_empty())) {
+        let required = if add {
+            "ProfileToken and ConfigurationToken are both required"
+        } else {
+            "ProfileToken is required"
+        };
         return Err(resp_soap_fault(
             "env:Sender",
-            &format!("NoToken-{tag}: ProfileToken is required"),
+            &format!("NoToken-{tag}: {required}"),
         ));
     }
-    if !state
-        .read()
-        .profiles
-        .profiles
-        .iter()
-        .any(|p| p.token == profile)
-    {
-        return Err(resp_soap_fault(
-            "ter:NoProfile",
-            &format!("NoSuchProfile-{tag}: {profile}"),
-        ));
-    }
-    state.modify(|s| {
-        if let Some(p) = s.profiles.profiles.iter_mut().find(|p| p.token == profile) {
-            *kind.slot(p) = None;
-            eprintln!("    [STATE] profile {profile}: unbound");
-        }
-    });
-    Ok(())
+    state.modify_returning_if(
+        |s| {
+            let Some(index) = s.profiles.profiles.iter().position(|p| p.token == profile) else {
+                return Err(resp_soap_fault(
+                    "ter:NoProfile",
+                    &format!("NoSuchProfile-{tag}: {profile}"),
+                ));
+            };
+            if add {
+                for (kind, token) in planned {
+                    if !kind.known_token(s, token) {
+                        return Err(resp_soap_fault(
+                            "ter:NoConfig",
+                            &format!("NoSuchConfig-{tag}: {token}"),
+                        ));
+                    }
+                }
+            }
+            let p = &mut s.profiles.profiles[index];
+            for (kind, token) in planned {
+                *kind.slot(p) = add.then(|| token.clone());
+            }
+            eprintln!("    [STATE] profile {profile}: configuration plan committed");
+            Ok(())
+        },
+        Result::is_ok,
+    )
 }
 
 /// Remove a profile from the shared list, refusing a fixed one.

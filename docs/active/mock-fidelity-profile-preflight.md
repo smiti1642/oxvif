@@ -38,8 +38,8 @@ currently ignores URL and MockServer uses its catch-all POST route.
 | `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | No body consumed (Token/Type not read) | profiles + media::catalogues → render_profile_media2 | No operation-specific branch in handler |
 | `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Name defaults to Profile; Configuration not read | media::create_profile_in_state(None) → profiles, counter → Token response | ter:ProfileExists branch (currently unreachable with None) |
 | `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | required_text(Token), strict scalar identity | media::delete_profile_in_state → profiles → empty response | Parse: env:Sender; missing/fixed: nested s:Sender (review below) |
-| `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken; repeated Configuration/Type/Token; Name not read | apply_media2_configuration(add=true) → per-entry media::bind_configuration | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
-| `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken; repeated Configuration/Type/Token | apply_media2_configuration(add=false) → per-entry media::unbind_configuration | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
+| `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken; repeated Configuration/Type/Token; Name not read | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
+| `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken; repeated Configuration/Type/Token | apply_media2_configuration → atomic media::apply_configuration_bindings(add=false) | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
 
 ## Shared paths and current behavior
 
@@ -54,9 +54,9 @@ K17 tracks pre-success replay invalidation separately from K14's state hook.
   does not decode them. Empty-body handlers bypass validation today.
 - Scalar extraction: `xml_parse::{extract_tag,extract_all_tags,extract_attr}`
   locate local names and return trimmed/raw fragments. Delete uses
-  `request::required_text` instead. Binding's synthesized per-entry fragment is
-  not a standalone XML document; the future shared helper must take parsed
-  identity/value objects instead of repeatedly parsing that fragment.
+  `request::required_text` instead. Binding now passes extracted values into a
+  shared atomic plan; it no longer synthesizes and reparses per-entry XML.
+  Scoped input decoding remains a separate parser migration.
 - Creation: explicit duplicate check and insertion now share the write lock;
   generated identities skip occupied tokens. `ProfileEntry` is appended with all
   configuration slots None and fixed false. There is no modeled capacity check.
@@ -70,11 +70,11 @@ K17 tracks pre-success replay invalidation separately from K14's state hook.
   to public state-helper semantics. No profile-change event or reference-cascade audit has
   been completed; do not claim absence of those effects is conformant.
 - Binding: `ConfigKind::{from_media2_type,known_token,slot}` select five modeled
-  kinds. `bind_configuration` checks profile/config under separate read locks,
-  then modifies one slot. `unbind_configuration` clears the slot after existence
-  checks. Fixed does not prevent either. Media2 prechecks kinds but validates
-  tokens while applying entries: K16 proves a later fault leaves an earlier
-  binding. Unsupported kinds, Type=All, name-only updates and configuration
+  kinds. Both wrappers use `apply_configuration_bindings`: profile/config checks
+  and all slot writes share one write lock. Media2 pre-resolves kinds and submits
+  the complete list. Fixed does not prevent binding changes. The reproduced K16
+  partial write is repaired, with full-state and one-notification controls through
+  both transports. Unsupported kinds, Type=All, name-only updates and configuration
   conflicts need reviewed target behavior, not accidental fallbacks.
 - Rendering: `catalogues` snapshots configurations separately from profile
   snapshot; `render_profile` / `render_profile_media2` inline VSC, encoder,
@@ -144,6 +144,34 @@ capacity/conflict/extension rules. Do not mark C done from selected instance res
 
 ## Cases and readiness
 
+Bounded K16 atomicity slice: preserve existing request extraction, supported
+kinds and ordinary fault payloads while replacing per-entry writes with a shared
+value-based binding plan. Under one write lock, check the profile and every
+required configuration token before changing any slot. Media1 passes one entry;
+Media2 passes its complete pre-resolved list without constructing XML fragments.
+On refusal preserve the entire state and emit no notification; successful plans
+notify once, including successful idempotent removals as in the existing helper
+contract. Repeated kinds retain their existing ordered last-write behavior.
+This state-only slice does not settle normative repeated-kind conflicts, name-only
+updates, Type=All, unsupported kinds, strict parsing, fault hierarchy or replay.
+Controls must cover late unknown/empty/wrong-family tokens, valid multi-slot
+write/read, fixed profiles, removal and one notification per request.
+
+K16 verification: the original implementation failed the corrected full-state
+assertion. Suppressing successful plan notifications made both new transport
+controls fail at their exact committed-slot observation in a full-workspace
+all-feature no-fail-fast run; the mutation was restored. Formatting, both
+workspace Clippy modes, 1,179 all-feature and 1,095 default tests (5 ignored,
+21 suites each), both warnings-as-errors documentation builds and unchanged
+157/159/260 inventory passed. A fresh external 34-instance corpus passed strict
+pinned Xerces XSD 1.1 validation; full operation semantics remain unaccepted.
+
+Hosted run 34471659927 for prior allocation commit `2a488be` failed only the
+Windows CLI line-number output comparison because `meta.elapsed_ms` differed
+between subprocesses (0 versus 9); packaging was therefore skipped. It is not a
+green hosted acceptance. This independent test-harness finding will be corrected
+in a separate commit without changing the CLI timing contract.
+
 Bounded K13 state slice: the externally reviewed token-uniqueness requirement
 and existing duplicate refusal are sufficient to repair allocation without
 migrating request parsing or fault contracts. Move the explicit duplicate check
@@ -175,7 +203,7 @@ acceptance. Prior deletion-effect commit `340fc89` passed hosted CI run
 | C03 | `delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutation`; extend namespace/decoy controls to other 11 rows | PARTIAL |
 | C04 | Add required/empty/duplicate/repeated/extension cases per field after external field review; preserve legal repeats | TODO |
 | C05 | Existing `mock_token_discrimination` and `mock_media1_media2_agree`; add escaped tokens and wrong-family targets for all bindings | PARTIAL |
-| C06 | K13 allocation and K14 notification have corrected regressions; K16 partial binding remains reproduced; broader transactions and callbacks remain open | PARTIAL |
+| C06 | K13 allocation, K14 notification and K16 partial binding have corrected regressions; broader transactions, conflicts and callbacks remain open | PARTIAL |
 | C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`; complete nested renderer escaping and independent namespace/shape checks | GAP REPRODUCED |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`; corpus checks missing/fixed DeleteProfile nested faults; other mappings/HTTP codes pending W05–W07 | PARTIAL |
 | C09 | Generic parser limits covered only on migrated DeleteProfile; auth boundary/resource-limit coverage for other paths pending | TODO |
@@ -183,8 +211,8 @@ acceptance. Prior deletion-effect commit `340fc89` passed hosted CI run
 | C11 | Selected DeleteProfile client/health first-subcode controls and K22 request selection verified; remaining consumer/CLI review pending W06 | PARTIAL |
 | C12 | Audit assertions perturbed: all four known-gap tests failed at payload/state assertions; fixed-binding control also failed when expected attachment was inverted, then restored green | PARTIAL |
 
-K15/K16 tests in `tests/mock_fidelity_known_gaps.rs` deliberately assert current
-defects like the existing Broken/Blind property tables. **Passing means reproduced,
+The K15 test in `tests/mock_fidelity_known_gaps.rs` deliberately asserts its current
+defect like the existing Broken/Blind property tables. **Passing means reproduced,
 not fixed.** Convert each to the corrected invariant and update its finding when
 implementing the fix; never preserve a defect merely to restore green.
 

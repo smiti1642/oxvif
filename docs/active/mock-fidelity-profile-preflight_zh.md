@@ -37,8 +37,8 @@ MockServer 採 catch-all POST 路由。
 | `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | 不接收 body（不讀 Token／Type） | profiles + media::catalogues → render_profile_media2 | Handler 無操作專屬錯誤分支 |
 | `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Name 預設 Profile；不讀 Configuration | media::create_profile_in_state(None) → profiles, counter → Token response | ter:ProfileExists 分支（目前傳 None 不會到達） |
 | `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | required_text(Token)，嚴格 scalar identity | media::delete_profile_in_state → profiles → empty response | 解析：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
-| `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken；重複 Configuration／Type／Token；不讀 Name | apply_media2_configuration(add=true) → per-entry media::bind_configuration | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
-| `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken；重複 Configuration／Type／Token | apply_media2_configuration(add=false) → per-entry media::unbind_configuration | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
+| `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken；重複 Configuration／Type／Token；不讀 Name | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
+| `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken；重複 Configuration／Type／Token | apply_media2_configuration → atomic media::apply_configuration_bindings(add=false) | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
 
 ## 共用路徑與目前行為
 
@@ -53,8 +53,8 @@ MockServer 採 catch-all POST 路由。
   目前繞過輸入驗證。
 - Scalar：`xml_parse::{extract_tag,extract_all_tags,extract_attr}` 依 local name
   找位置並傳回裁切／raw fragment；Delete 改用 `request::required_text`。
-  Binding 合成的單筆 fragment 不是獨立 XML 文件；未來共用 helper 應接收解析後
-  身分／值物件，不重複解析該 fragment。
+  Binding 現在將擷取的值傳入共用原子 plan，不再合成及重複解析單筆 XML。
+  有 scope 的輸入解碼仍待獨立 parser 遷移。
 - Create：explicit duplicate 檢查與新增現在使用同一 write lock；產生 token 時跳過已用身分。
   新增 `ProfileEntry` 的 configuration slot 全為 None，fixed 為 false；未建模
   capacity 檢查。Media2 忽略初始 Configuration。K13 碰撞在兩服務已有正確回歸；
@@ -65,9 +65,10 @@ MockServer 採 catch-all POST 路由。
   公開 state helper 的語意。
   Profile-change event／reference cascade 尚未完成稽核，不宣稱缺少它們符合規格。
 - Binding：`ConfigKind::{from_media2_type,known_token,slot}` 選五種已建模類型。
-  `bind_configuration` 在分開的 read lock 下檢查 profile／config，再修改一個 slot；
-  `unbind_configuration` 檢查後清空 slot。Fixed 不阻止兩者。
-  Media2 先驗 type，套用時才驗 token；K16 證明後筆 fault 留下前筆寫入。
+  兩個 wrapper 都使用 `apply_configuration_bindings`，在同一 write lock 中
+  檢查 profile／config 並寫入全部 slot。Media2 先解析 kind 再提交完整列表。
+  Fixed 不阻止 binding 變更。已重現的 K16 部分寫入已修正，兩種 transport
+  皆有完整 state 及單次通知控制。
   未建模類型、Type=All、只更新 name、configuration conflict 須明確審查目標行為。
 - Rendering：configuration `catalogues` 與 profile 分開快照。
   `render_profile`／`render_profile_media2` 內嵌 VSC、encoder、audio source／encoder、
@@ -124,6 +125,29 @@ client／health 分類，以及固定 profile 拒絕前後的序列化 state。K
 
 ## 案例與開工條件
 
+限定的 K16 原子性批次：保留既有 request 擷取、支援 kind 及一般 Fault payload，
+將逐筆寫入改為共用、以值表示的 binding plan。在同一 write lock 中檢查 profile
+及全部必要 configuration token，通過後才變更 slot。Media1 傳入單筆，Media2
+傳入完整且已解析 kind 的列表，不再合成 XML fragment。拒絕時保留完整 state
+且不通知；成功的 plan 通知一次，依既有 helper 契約也包含成功的冪等移除。
+Repeated kind 暫保留既有依序、最後一筆生效的行為。本 state 批次不裁定規範上
+的 repeated-kind conflict、name-only update、Type=All、不支援 kind、嚴格
+解析、Fault 階層或 replay。控制須涵蓋後筆未知／空值／錯誤 family token、
+有效多 slot 寫入／讀取、fixed profile、移除及每個請求僅通知一次。
+
+K16 驗證：原實作在修正後的完整 state assertion 失敗。抑制成功 plan 通知後，
+完整 workspace、all-feature、no-fail-fast 執行中的兩種 transport 控制，均在
+確切的 committed-slot observation 失敗；擾動已還原。格式、兩種 workspace
+Clippy、全功能 1,179 項及預設 1,095 項測試（各 5 ignored、21 suites）、兩種
+warnings-as-errors 文件建置，以及未變動的 157／159／260 清冊均通過。
+新外部 corpus 的 34 份 XML 通過固定版本 Xerces 嚴格 XSD 1.1 驗證；完整操作
+語意尚未驗收。
+
+前一筆配置 commit `2a488be` 的託管 run 34471659927，僅 Windows CLI 行號
+輸出比較失敗，原因是兩個子程序的 `meta.elapsed_ms` 分別為 0 與 9；因此
+packaging 被跳過。這不是託管驗收通過。此獨立測試框架問題將另行 commit
+修正，不改變 CLI 的耗時契約。
+
 限定的 K13 state 批次：外部已查核的 token 唯一性要求及既有重複拒絕行為，
 足以修正配置，無須同時遷移 request parsing 或 Fault 契約。將明確 token 的
 重複檢查移入與新增相同的 write lock，自動配置時跳過預載 token 碰撞，僅在
@@ -150,7 +174,7 @@ workspace Clippy 及兩種 warnings-as-errors 文件建置通過。還原後全�
 | C03 | `delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutation`；擴展至其他 11 列的 namespace／decoy 控制 | PARTIAL |
 | C04 | 外部欄位核對後新增 required／empty／duplicate／repeat／extension 案例，保留合法 repeat | TODO |
 | C05 | 既有 `mock_token_discrimination`／`mock_media1_media2_agree`；全部 binding 增加 escaped／wrong-family token | PARTIAL |
-| C06 | K13 配置及 K14 通知已有正確回歸；K16 部分 binding 仍為已重現缺陷；更廣泛的 transaction 及 callback 尚待完成 | PARTIAL |
+| C06 | K13 配置、K14 通知及 K16 部分 binding 已有正確回歸；更廣泛的 transaction、conflict 及 callback 尚待完成 | PARTIAL |
 | C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`；補完巢狀 renderer escaping、獨立 namespace／shape 檢查 | 已重現缺口 |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`；corpus 檢查不存在／固定 DeleteProfile 巢狀 Fault；其他 mapping／HTTP code 待 W05–W07 | PARTIAL |
 | C09 | Parser 限制目前僅在已遷移 DeleteProfile 有涵蓋；其他路徑 auth／resource-limit 待查 | TODO |
@@ -158,7 +182,7 @@ workspace Clippy 及兩種 warnings-as-errors 文件建置通過。還原後全�
 | C11 | 已驗證選定 DeleteProfile client／health first-subcode 控制與 K22 請求選擇；其餘 consumer／CLI 審查待 W06 | PARTIAL |
 | C12 | 擾動四個 known-gap assertion 均於 payload／state assertion 失敗；反轉 fixed-binding attachment 預期亦失敗，還原後通過 | PARTIAL |
 
-`tests/mock_fidelity_known_gaps.rs` 的 K15／K16 刻意斷言目前缺陷，用途與既有
+`tests/mock_fidelity_known_gaps.rs` 的 K15 刻意斷言目前缺陷，用途與既有
 Broken／Blind property table 相同。**通過表示已重現，不表示已修復。**
 修正時須改成正確 invariant 並更新 finding；不得為恢復綠燈而保留缺陷。
 

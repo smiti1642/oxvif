@@ -301,7 +301,7 @@ async fn known_gap_k15_profile_name_is_interpreted_as_markup() {
 }
 
 #[tokio::test]
-async fn known_gap_k16_late_invalid_binding_leaves_first_write_applied() {
+async fn rejected_late_binding_preserves_the_entire_state() {
     let transport = MockTransport::new();
     let (profile, config) = {
         let state = transport.device().read();
@@ -313,6 +313,7 @@ async fn known_gap_k16_late_invalid_binding_leaves_first_write_applied() {
     transport.device().modify(|state| {
         state.profiles.profiles[0].video_source_config_token = None;
     });
+    let before = serde_json::to_value(&*transport.device().read()).unwrap();
     let ns = "http://www.onvif.org/ver20/media/wsdl";
     let xml = transport.soap_post("http://mock", &format!("{ns}/AddConfiguration"), format!(
         "<m:AddConfiguration xmlns:m='{ns}'><m:ProfileToken>{profile}</m:ProfileToken>\
@@ -331,10 +332,8 @@ async fn known_gap_k16_late_invalid_binding_leaves_first_write_applied() {
         "NoSuchConfig-ADDCFG2-5543: K16-absent"
     );
     assert_eq!(
-        transport.device().read().profiles.profiles[0]
-            .video_source_config_token
-            .as_deref(),
-        Some(config.as_str()),
-        "K16 changed: replace the known-gap baseline with an atomicity regression"
+        serde_json::to_value(&*transport.device().read()).unwrap(),
+        before,
+        "a rejected multi-binding request must preserve every state field"
     );
 }
