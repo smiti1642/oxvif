@@ -53,6 +53,8 @@
 //! Media2 `GetProfiles` honors its decoded `Token` and `Type` selectors without
 //! changing stored bindings. Omitting `Type` returns no configuration details;
 //! the full-profile client method explicitly requests `Type=All`.
+//! Media profile reads capture the profile list and all associated catalogues
+//! under one read lock; separate requests remain independent snapshots.
 //!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A
 //! mock that answers everything is not a test harness — it is a way of proving

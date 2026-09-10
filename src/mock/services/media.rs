@@ -8,8 +8,7 @@ use crate::mock::state::{
 use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 pub fn resp_profiles(state: &SharedState) -> String {
-    let snapshot = state.read().profiles.profiles.clone();
-    let cat = catalogues(state);
+    let (snapshot, cat) = profile_snapshot(state);
     let items: String = snapshot
         .iter()
         .map(|p| render_profile(p, "Profiles", &cat))
@@ -23,8 +22,7 @@ pub fn resp_profiles(state: &SharedState) -> String {
 pub fn resp_profile(state: &SharedState, body: &str) -> String {
     let inner = extract_tag(body, "GetProfile").unwrap_or_default();
     let want = extract_tag(&inner, "ProfileToken").unwrap_or_default();
-    let snapshot = state.read().profiles.profiles.clone();
-    let cat = catalogues(state);
+    let (snapshot, cat) = profile_snapshot(state);
     match snapshot.iter().find(|p| p.token == want) {
         Some(p) => soap(
             r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
@@ -614,7 +612,7 @@ fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
         .unwrap_or_default();
     // `MediaProfile::ptz_config_token` reads `Profile/PTZConfiguration@token`
     // and nothing ever fed it. Media1 inlines the whole configuration, as it
-    // does for every other kind; Media2 emits a token reference. The body comes
+    // does for every other kind; Media2 also inlines it. The body comes
     // from `ptz::render_config` so the two services cannot drift.
     let ptz = p
         .ptz_config_token
@@ -655,6 +653,20 @@ pub(crate) struct Catalogues {
 
 pub(crate) fn catalogues(state: &SharedState) -> Catalogues {
     let s = state.read();
+    catalogues_from_state(&s)
+}
+
+/// Capture profile identities and every catalogue they can inline under one
+/// read guard. Separate snapshots could join two different committed states.
+pub(crate) fn profile_snapshot(state: &SharedState) -> (Vec<ProfileEntry>, Catalogues) {
+    let state = state.read();
+    (
+        state.profiles.profiles.clone(),
+        catalogues_from_state(&state),
+    )
+}
+
+fn catalogues_from_state(s: &crate::mock::state::DeviceState) -> Catalogues {
     Catalogues {
         vscs: s.video_source_configs.clone(),
         vecs: s.video_encoders.clone(),

@@ -352,6 +352,11 @@ The last three are `#[serde(skip)]` — per-instance, never persisted.
 
 ### 5.1 Media1 and Media2 share one state
 
+Media1 `GetProfiles`/`GetProfile` and Media2 `GetProfiles` capture profiles and all
+configuration catalogues under one read lock before rendering. A response cannot
+join profile bindings from one revision with catalogues from another. Independent
+requests can still observe different revisions; this is not a multi-call transaction.
+
 They are two views of one device. Any operation present in both dispatchers
 reads and writes the same `DeviceState`; only the rendering differs (both
 inline whole configurations, but Media1 lists them as siblings of `Name` where

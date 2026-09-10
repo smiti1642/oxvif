@@ -57,8 +57,9 @@ complete per-field audit of other services.
    to `create_profile_in_state`, which stores it unchanged. Media1 also supplies
    a raw Token. Therefore adding output escaping alone can double-escape ordinary
    client input; decoding every legacy helper would corrupt subtree callers.
-3. `resp_profiles/resp_profile` and `resp_profiles_media2` collect profiles and
-   catalogues in separate snapshots. Both renderers read stored identity/text and
+3. `resp_profiles/resp_profile` and `resp_profiles_media2` now collect profiles and
+   catalogues in one `profile_snapshot` read guard; the former separate snapshots
+   were reproduced as mixed revisions under concurrent writes. Both renderers read stored identity/text and
    call VSC/video/audio/PTZ renderers. Creation also reaches render_profile on
    Media1; Media2 returns the generated token. K15 fixes need both seeded literal
    state and client-created entity-looking text controls, not just one getter.

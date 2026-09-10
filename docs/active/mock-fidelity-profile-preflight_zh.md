@@ -75,10 +75,10 @@ fault 優先於表列操作專屬分支；其他欄位層級解析尚未遷移�
   Fixed 不阻止 binding 變更。已重現的 K16 部分寫入已修正，兩種 transport
   皆有完整 state 及單次通知控制。
   未建模類型、Type=All、只更新 name、configuration conflict 須明確審查目標行為。
-- Rendering：configuration `catalogues` 與 profile 分開快照。
+- Rendering：`profile_snapshot` 在同一 read guard 內取得 profile 及所有 configuration catalogue。
   `render_profile`／`render_profile_media2` 內嵌 VSC、encoder、audio source／encoder、
   PTZ renderer。Profile name／token 目前直接插入；K15 證明兩服務 Name 會形成 XML child。
-  其他巢狀 renderer escaping 與快照原子性仍屬 W10／W18。
+  其他巢狀 renderer escaping 與其他快照路徑仍屬 W10／W18。
 - State hook：`MockState::{modify,modify_returning,notify}` 在 write lock 內取得
   mutation 快照，釋放鎖後才呼叫 callback，支援有界重入寫入。Callback 序列化與失敗寫入的 replay invalidation
   屬 W18／W19；mock 本身不實作外部持久化。
@@ -129,6 +129,24 @@ client／health 分類，以及固定 profile 拒絕前後的序列化 state。K
 不可僅憑選定 instance 的結果將 C 標記完成。
 
 ## 案例與開工條件
+
+已實作有界 W18 read-snapshot 子批次：Media1 GetProfiles／GetProfile 及
+Media2 GetProfiles 在同一 read guard 內取得 profile 與 catalogue，保留回應
+形狀及 selector 行為。`catalogues_from_state` 借用 DeviceState，不重新取得鎖。
+世代標記控制涵蓋三條讀取路徑、有界 writer burst 及 writer 實際前進。此項
+修正共用狀態一致性，不代表 schema 驗收或多次獨立請求之間的原子性。
+
+初始單次寫入交接未揭露競爭，故改為每次交接包含 256 次有界寫入及 ready
+訊號。加強後的控制在原本分開快照上失敗（`1789046635_cargo_test.log`）。
+在共用 helper 重新拆開快照後，三條讀取路徑均偵測到混合世代
+（`1789046899_cargo_test.log`：每條 400 次中依序為 295／314／274 次）。
+擾動已還原。此為受排程影響的壓力驗證，不是固定重現次數或一般 linearizability
+證明。測試會 join writer 並斷言最後的已提交世代，未使用實機。
+
+還原後通過 formatting、兩種 workspace Clippy、1,193 項 all-feature 及
+1,108 項 default 測試（各 5 項 ignored、24 suites）、兩種 warnings-as-errors
+文件建置及未變動的 inventory self-test（157 routes／159 Action sites／258
+直接 reader occurrences）。此純狀態修正不宣稱新增 XML instance 驗收。
 
 已實作有界 P-E 讀取子批次 `media2.GetProfiles` 選擇行為，實作前重新核對
 Media2 §5.1.2 及固定 request 宣告。使用共用 parsed operation，保留解碼後

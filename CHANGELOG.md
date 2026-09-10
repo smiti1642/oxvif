@@ -22,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock Media profile reads now capture profiles and their associated configuration
+  catalogues under one read lock, preventing responses assembled from different
+  concurrent state revisions. This does not make separate requests transactional.
 - Mock state-change hooks now receive a snapshot captured with their mutation
   and execute without holding the state lock. A bounded reentrant write no longer
   deadlocks, and intervening writes no longer replace the notified snapshot.

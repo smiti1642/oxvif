@@ -82,11 +82,11 @@ K17 tracks pre-success replay invalidation separately from K14's state hook.
   partial write is repaired, with full-state and one-notification controls through
   both transports. Unsupported kinds, Type=All, name-only updates and configuration
   conflicts need reviewed target behavior, not accidental fallbacks.
-- Rendering: `catalogues` snapshots configurations separately from profile
-  snapshot; `render_profile` / `render_profile_media2` inline VSC, encoder,
+- Rendering: `profile_snapshot` captures profiles and all configuration catalogues
+  under one read guard; `render_profile` / `render_profile_media2` inline VSC, encoder,
   audio source/encoder and PTZ render helpers. Profile name/token interpolation
   is currently raw; K15 proves Name becomes an XML child in both services.
-  Further nested renderers' escaping and snapshot atomicity remain W10/W18.
+  Further nested renderers' escaping and other snapshot paths remain W10/W18.
 - State hooks: `MockState::{modify,modify_returning,notify}` capture the mutation
   snapshot under the write lock and invoke callbacks after releasing it. Bounded
   reentrant writes are supported; callback serialization and failed-write replay
@@ -150,6 +150,30 @@ WSDL/XSD field validation, Core/common and other operation Fault mappings, and
 capacity/conflict/extension rules. Do not mark C done from selected instance results.
 
 ## Cases and readiness
+
+Implemented bounded W18 read-snapshot slice: Media1 GetProfiles/GetProfile and
+Media2 GetProfiles capture profiles and catalogues under one shared read guard,
+preserving response shapes and selector behavior. `catalogues_from_state` takes
+a borrowed DeviceState rather than reacquiring a lock. The generation-tagged
+control covers all three read paths, bounded writer bursts and actual writer
+progress. This repairs shared-state consistency, not schema acceptance or
+atomicity across separate requests.
+
+The initial single-write handoff did not expose the race and was strengthened to
+256 bounded writes per handoff with a readiness signal. That control failed
+against the old split snapshots (`1789046635_cargo_test.log`). Reintroducing the
+split in the shared helper then detected mixed generations on all three read
+paths (`1789046899_cargo_test.log`: 295/314/274 mixed samples respectively out of
+400 per path). The mutation was restored. This is scheduling-dependent stress
+evidence of the unsafe split, not a deterministic reproduction count or a general
+linearizability proof. The writer is joined and its final committed generation
+is asserted; no real camera is involved.
+
+Restored verification passed formatting, both workspace Clippy modes, 1,193
+all-feature and 1,108 default tests (5 ignored, 24 suites each), both
+warnings-as-errors documentation builds and the unchanged inventory self-tests
+(157 routes / 159 Action sites / 258 direct reader occurrences). No new XML
+instance acceptance is claimed for this state-only change.
 
 Bounded P-E read slice implemented: `media2.GetProfiles` selection only, after
 re-reading Media2 §5.1.2 and the pinned request declaration. The shared parsed

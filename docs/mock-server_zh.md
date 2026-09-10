@@ -295,6 +295,10 @@ mock conformance。詳見[強化計畫](active/mock-fidelity-hardening-plan_zh.m
 
 ### 5.1 Media1 與 Media2 共用狀態
 
+Media1 `GetProfiles`／`GetProfile` 與 Media2 `GetProfiles` 在同一 read lock
+內取得 profile 及全部 configuration catalogue，再產生回應，避免將不同版本
+的 binding 與 catalogue 拼接。不同請求仍可觀察不同版本，這不是跨呼叫 transaction。
+
 兩者是同一台裝置的不同檢視。兩個 dispatcher 共有的操作會讀寫同一份 `DeviceState`，只有 XML rendering 不同。Media1 將完整 configuration 列為 `Name` 的 sibling；Media2 則放在 `<tr2:Configurations>` 下，且其中兩種 type 不同。`tests/mock_media1_media2_agree.rs` 會持續驗證兩個介面的一致性。
 
 ---

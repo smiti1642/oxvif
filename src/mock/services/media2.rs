@@ -136,7 +136,7 @@ pub fn resp_profiles_media2(state: &SharedState, operation: &crate::mock::reques
         Ok(selectors) => selectors,
         Err(error) => return error.to_fault(),
     };
-    let snapshot = state.read().profiles.profiles.clone();
+    let (snapshot, cat) = media::profile_snapshot(state);
     if let Some(token) = token
         && !snapshot.iter().any(|profile| profile.token == token)
     {
@@ -147,7 +147,6 @@ pub fn resp_profiles_media2(state: &SharedState, operation: &crate::mock::reques
         )
         .to_xml();
     }
-    let cat = media::catalogues(state);
     // Type selects configuration content, never the profile set. Only a single
     // All expands to every associated configuration; other lists match literally.
     // Project onto clones so reads cannot unbind shared profiles.

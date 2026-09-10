@@ -54,8 +54,9 @@ String 不等於能保留無效 HTTP encoding 的原始 bytes。
    `create_profile_in_state`，原樣存入 state；Media1 的 Token 亦然。因此只改
    輸出 escaping 可能讓一般 client 輸入被雙重轉義；直接讓所有舊 helper 解碼
    則可能破壞仍將回傳值當作 subtree 的呼叫端。
-3. `resp_profiles/resp_profile` 與 `resp_profiles_media2` 分開取得 profile 與
-   catalogue snapshot；renderer 讀取儲存的 identity／text，呼叫 VSC、video、
+3. `resp_profiles/resp_profile` 與 `resp_profiles_media2` 現於單一 `profile_snapshot`
+   read guard 取得 profile 與 catalogue；原本分開快照已在併發寫入時重現混合版本。
+   Renderer 讀取儲存的 identity／text，呼叫 VSC、video、
    audio、PTZ renderer。Media1 建立回應亦使用 render_profile；Media2 則回傳
    產生的 token。K15 必須同時測 seeded literal state 及 client 建立時包含
    entity-looking 文字的資料，不可只測一個 getter。
