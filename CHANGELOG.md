@@ -40,6 +40,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   includes SOAP Envelope/Fault structure. Explicit runs fail on missing resources;
   provide the SOAP 1.2 envelope schema as well as the service schemas. This remains
   a structural check, not full XSD or semantic conformance acceptance.
+- External schema verification tooling now pins source hashes and verification
+  dependencies, checks import closure and prevents network fallback during
+  validation. Generic Windows/Linux tooling controls gate packaging. Full official
+  schema compilation and mock-corpus acceptance remain incomplete; this tooling
+  does not establish ONVIF conformance or change installed runtime dependencies.
 - Mock authentication faults now bind the existing `wsse:FailedAuthentication`
   subcode and escape literal reason text through a private structured serializer.
   XML-invalid reason characters become replacement characters. The existing

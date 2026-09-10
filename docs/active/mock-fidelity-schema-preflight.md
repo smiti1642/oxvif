@@ -9,6 +9,7 @@ W20/W21 checkpoint, 2026-09-10. The full programme remains in progress.
 | [Structural checker](#structural-checker) | Delivered W20 scope |
 | [Verification evidence](#verification-evidence) | Positive and rejection controls |
 | [External validator evaluation](#external-validator-evaluation) | Tool selection and K19 |
+| [Reproducible tooling](#reproducible-tooling) | Pinned retrieval, offline resolution and generic controls |
 | [Next work](#next-work) | Remaining acceptance, not a completion claim |
 
 ## Structural checker
@@ -87,18 +88,79 @@ Representative retrieved SHA-256 identifiers:
 | [Common schema](https://www.onvif.org/ver10/schema/common.xsd) | `d945394fe823febcd873ed8444ccfd73f3b5234d6dfbf0e151a33f5e611b5077` |
 | [SOAP envelope](https://www.w3.org/2003/05/soap-envelope) | `3ae8caa9a74e83528cc0e1a59fc12784435e8e0086e890d0e1b04d881c079bec` |
 
-These identifiers are not yet the complete reproducible closure manifest.
+The complete URL/hash manifest is now `packaging/schema-sources.json`; the table
+above retains the original selection experiment's representative identifiers.
 Tool references: [xmlschema API](https://xmlschema.readthedocs.io/en/stable/api.html),
 [XSD 1.1 support](https://xmlschema.readthedocs.io/en/stable/features.html),
 [lxml validation](https://lxml.de/validation.html).
+
+## Reproducible tooling
+
+`packaging/verify_schemas.py` separates `fetch`, `check`, `compile` and `validate`.
+The 23-source manifest contains URL/hash metadata only. The retrieved documents,
+venv, instance corpus and any derived data must remain outside the checkout and
+packages. Resource directories inside or above the checkout are refused. Fetch
+uses HTTPS, size limits, exact hashes and exclusive creation; existing mismatched
+files are not overwritten. Sources are never rewritten to satisfy a validator.
+
+Verification checks all hashes and declared XSD/WSDL dependency locations before
+compilation. A directory layout mirroring source URL paths preserves relative
+imports. The URI mapper and file-only opener jointly require an exact pinned
+absolute destination; there is no network handler or schema fallback. XML DTDs,
+including UTF-16 declarations, are rejected. Versioned `xmlschema`/`elementpath`
+wheels are hash-pinned in `packaging/schema-requirements.txt`; these are verification
+dependencies only. Instance location hints cannot load additional schemas.
+
+Use a dedicated external virtual environment; substitute its interpreter for
+`python` below. Replace the resource path with an absolute external directory
+(`C:/Temp/oxvif-schema-check` on Windows is also valid).
+
+```text
+python -m pip install --require-hashes --only-binary=:all: -r packaging/schema-requirements.txt
+python -m unittest discover -s packaging -p test_verify_schemas.py -v
+python packaging/verify_schemas.py fetch --root /absolute/external/oxvif-schema-check
+python packaging/verify_schemas.py check --root /absolute/external/oxvif-schema-check
+python packaging/verify_schemas.py compile --root /absolute/external/oxvif-schema-check
+```
+
+Local evidence: fresh hash-verified wheel installation succeeded; retrieval and
+offline closure checks passed for 23 files, 12 independent schema roots and 30
+declared dependency edges. Fifteen generic tests cover path/hash/closure/DTD
+rejection, no-network compilation, scoped QName and scalar values, cardinality,
+ordering, required attributes, inherited WSDL namespace bindings, dependency
+versions, explicit root anchors and sanitized failures.
+Removing the digest and instance checks made the digest control and all seven
+invalid-instance controls fail; both mutations were restored. All 19 packaging
+tests then passed. These generic fixtures are project-authored, not ONVIF-derived.
+
+**K21 — full compilation remains blocked:** strict compilation with warnings
+treated as errors reports `XMLSchemaTypeTableWarning` in the Device source.
+Separate compilation reproduced it for Device; the other nine ONVIF service
+roots and the two supporting WSDL roots compiled without warnings. This is an
+external validator/schema qualification issue, not a demonstrated mock defect.
+Do not suppress the warning, edit the schema or count the failing full command
+as a pass. The earlier SOAP/Media experiment does not establish all-service support.
+The combined full-catalogue instance gate has consequently not run.
+
+The `validate` command additionally requires `--corpus` pointing to an external
+directory with `cases.json`: format 1 and a nonempty `cases` list, each containing
+a unique simple `file` name and an explicit expected `root` expanded name. It
+requires both a matching root and a schema declaration, then validates strictly;
+missing files, duplicates, path escapes and invalid instances fail. Corpus
+generation and operation coverage reconciliation remain to be implemented.
+It does not certify request semantics, effects, WSDL bindings or device behavior.
+
+CI now includes Windows/Linux **generic tooling controls**, and packaging depends
+on them. They download only pinned Python wheels, not official schema documents,
+and publish no schema artifacts. This is not W22's full external-instance gate.
 
 ## Next work
 
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
 and expand the corpus beyond fragment probes. W21 remains PARTIAL: complete the
-source/import catalogue, pin verification dependencies, enforce offline resolution
-and qualify the candidate validator with positive/negative envelope, payload and
-Fault instances. Then add W22's fail-closed CI job. Do not substitute this tool
+candidate qualification for K21 and complete positive/negative envelope, payload
+and Fault instances from the mock corpus. Then add W22's full fail-closed schema
+CI job. Do not substitute this tool
 experiment for P-B's per-operation field/Fault/semantic review.
 
 No maintainer decision is required for this diagnostic checkpoint. If the chosen

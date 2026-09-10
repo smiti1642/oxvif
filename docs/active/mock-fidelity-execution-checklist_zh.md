@@ -111,8 +111,8 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W18／M4／TODO | W10–W16 候選行為 | `state.rs::modify/modify_returning/notify`、共用 collection、event queue、replay invalidation | 同時合法／無效寫入、instance 隔離、完整 rollback、hook 通知次數／順序及 reentrancy／lock 行為；記錄 persistence hook 邊界 |
 | W19／M3、M6／TODO | W03／W09 設計 | `canon.rs`、`metamorph/{fixture,replay,record,parse,adapter,quirk,surface}.rs`、responder chain | 保留錄製偏差；核對正規化／key collision／參數辨識；失敗寫入不錯誤 invalidation；不新增錄製設備機密 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
-| W21／M5／PARTIAL | W20、D3 | 完成 SOAP／Media 外部驗證器選擇實驗；K19 記錄 XSD 1.0 拒絕與 XSD 1.1 編譯結果 | 須完成固定來源閉包、離線 resolver、驗證腳本及正負 instance 驗收；schema 編譯本身不是驗收 |
-| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊已於 e8fda59 的託管 run 34454688822 通過，package 依賴其成功；專用 schema job 與 release 證據檢查仍待完成 | 清冊與自我測試須通過；schema job 缺工具／檔案、hash／下載／import 錯誤須失敗；最小權限、不散布 schema／機密 artifact；缺少／跳過必要 job 阻擋發布驗收 |
+| W21／M5／PARTIAL | W20、D3 | 已交付 23 檔 URL／hash 清單、固定 wheel 雜湊、離線閉包／編譯／instance 工具與 15 項 generic 控制 | 閉包核對通過；K21 阻擋完整編譯。Mock corpus／匯出與完整 SOAP／payload／Fault 驗收仍待完成；generic 測試與編譯不代表符合性 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | 清冊已通過託管 CI；新增 Windows／Linux generic schema 工具控制作為 package 前提。完整外部 instance job 與 release 證據檢查仍待完成 | 工具控制只使用專案自製 schema，不是官方來源 gate；完整 gate 須在缺工具／檔案、hash／下載／import 錯誤時失敗，且不得散布 schema／機密 artifact |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
 | W25／M6／TODO | W00–W24 驗收 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |
@@ -173,6 +173,7 @@ W02 發現新相依性時須擴充本表。
 | K18／create／list 不一致已重現、未修正 | 成功 CreateProfile 使 GetProfile 失效，GetProfiles 卻仍過時；binding 與 service 依賴僅完成原始碼確認 | W19／W10；核對 affected-read graph 與無關 service 控制；獨立 instance 控制通過；見管線開工核對 |
 | K19／已重現的外部相容性發現 | 目前 Media 來源相依集合在獨立 XSD 1.0 驗證器中無法編譯，但可通過 strict XSD 1.1 編譯 | W21；見 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)；不修改 schema 或停用檢查，須驗收候選工具並明示 schema 語言 |
 | K20／已重現並修正 formatter | `auth::auth_fault` 原先輸出未宣告的 wsse subcode 及原始 reason 文字 | W05 serializer 遷移維持 code／subcode，修正 scoped binding／text，並加入 client／health／CLI 控制；認證解析與政策仍屬 W08 待辦 |
+| K21／已重現的外部選型阻礙 | 完整 XSD 1.1 編譯回報 Device schema type-table warning，獨立服務編譯亦重現 | W21；保留 warnings-as-errors 並獨立調查，不改寫官方資源或宣稱完整 instance 通過 |
 
 ## 驗證命令
 
