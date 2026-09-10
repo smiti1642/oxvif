@@ -863,7 +863,7 @@ impl OnvifSession {
             .await
     }
 
-    /// List all media profiles via the Media2 service.
+    /// List all Media2 profiles and associated configurations (`Type=All`).
     pub async fn get_profiles_media2(&self) -> Result<Vec<MediaProfile2>, OnvifError> {
         self.client.get_profiles_media2(self.media2_url()?).await
     }

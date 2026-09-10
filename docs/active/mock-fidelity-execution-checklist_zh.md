@@ -174,6 +174,7 @@ W02 發現新相依性時須擴充本表。
 | K19／已重現的外部相容性發現 | 目前 Media 來源相依集合在獨立 XSD 1.0 驗證器中無法編譯，但可通過 strict XSD 1.1 編譯 | W21；見 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)；不修改 schema 或停用檢查，須驗收候選工具並明示 schema 語言 |
 | K20／已重現並修正 formatter | `auth::auth_fault` 原先輸出未宣告的 wsse subcode 及原始 reason 文字 | W05 serializer 遷移維持 code／subcode，修正 scoped binding／text，並加入 client／health／CLI 控制；認證解析與政策仍屬 W08 待辦 |
 | K21／Python 限制；已有獨立編譯路徑 | Python 回報 Device type-table warning；固定版本 Xerces 以 full checking 及 warnings-as-errors 編譯同一完整閉包通過 | W21；獨立 generic 選型通過，未修改 schema 或停用警告；不代表 Python 警告錯誤或 mock instance 有效 |
+| K22／client 請求已修正；mock selector 待完成 | 完整 Media2 profile 查詢原先省略 Type，而 mock 一律回傳 configuration；client 現在明確要求 All | W06／W10；擷取請求回歸在舊 body 上失敗。Mock Token／Type selector 語意仍屬 P-E；僅驗證 schema 合法性無法發現此問題 |
 
 ## 驗證命令
 

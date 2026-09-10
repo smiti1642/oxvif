@@ -369,7 +369,7 @@ Media2 是 Media1 的後繼介面，原生支援 H.265，且 encoder configurati
 
 | 方法 | 回傳／用途 |
 |---|---|
-| `get_profiles_media2(url)` | `Vec<MediaProfile2>` |
+| `get_profiles_media2(url)` | `Vec<MediaProfile2>`；列出 profile 與關聯 configuration（`Type=All`） |
 | `create_profile_media2(url, name)` / `delete_profile_media2(url, token)` | 建立／刪除 profile |
 | `get_stream_uri_media2(url, token)` / `get_snapshot_uri_media2(url, token)` | Stream / snapshot URI |
 | `get_video_source_configurations_media2(url)` / `set_video_source_configuration_media2(url, config)` | Video source configuration |

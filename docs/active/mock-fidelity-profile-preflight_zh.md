@@ -94,6 +94,19 @@ binding 變更。已修正相反的舊註解，並新增直接 state assertion�
 Media2 參考資料揭露現有 reader 未處理的 selector／初始 configuration／name／list
 語意；這些是審查目標，不代表可默默擴充公開 client 方法。
 
+K22：已直接核對 §5.1.2 及固定來源的 Media2 請求宣告。既有完整 profile 查詢方法
+省略 `Type`，因此符合規格的裝置會省略 configuration 資料；mock 忽略 selector 而
+掩蓋此差異。Client 現在明確傳送 `Type=All`，未新增參數或修改回傳型別；session
+轉呼叫同一方法。既有欄位測試現會記錄並斷言 endpoint、完整 Action 與請求選擇，
+舊請求在完整全部功能 no-fail-fast 執行中確實觸發該斷言失敗。Mock selector 語意
+及更多負向輸入仍屬 W10／P-E；僅驗證 XSD 無法攔截此合法但不符合查詢目的的請求。
+
+亦已直接檢查固定 WSDL 閉包中全部 13 操作的直接輸入序列；詳細欄位筆記保留於
+checkout 外的來源根目錄（`profile-contract-review-20260910.md`）。這不代表完整
+輸出型別或 Core／共用錯誤審查完成。來源中的容量及 capability 不一致仍待處理：
+建立 profile 未遵守公告上限，Media2 公告的 configuration 種類也與現有 binding
+實作不一致。
+
 此次局部 DeleteProfile Fault 審查依據 Media1 §5.2.22 與 Media2 §5.1.5：兩個服務
 對不存在 profile 均使用 Sender → InvalidArgVal → NoProfile，對固定 profile 均使用
 Sender → Action → DeletionOfFixedProfile。這四個分支已改用私有 serializer；client

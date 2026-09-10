@@ -20,6 +20,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Media2 profile enumeration now explicitly requests `Type=All`, so conforming
+  cameras return associated configuration/source information to the existing
+  `get_profiles_media2` client and session methods. Previously the request omitted
+  `Type` while the mock returned configurations anyway, masking incomplete results
+  on real devices. Public signatures are unchanged; mock selector handling remains
+  under the separate fidelity audit.
+
 ### Added
 
 - CI now checks the mock's Action/handler/reader inventory and bilingual tracking

@@ -639,7 +639,7 @@ Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 suppor
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `get_profiles_media2(url)` | `Vec<MediaProfile2>` | List profiles |
+| `get_profiles_media2(url)` | `Vec<MediaProfile2>` | List profiles with associated configurations (`Type=All`) |
 | `get_stream_uri_media2(url, token)` | `String` | RTSP URI |
 | `get_snapshot_uri_media2(url, token)` | `String` | HTTP snapshot URI |
 | `get_video_source_configurations_media2(url)` | `Vec<VideoSourceConfiguration>` | |

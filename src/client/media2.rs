@@ -35,7 +35,11 @@ impl OnvifClient {
         Media2ServiceCapabilities::from_xml(resp)
     }
 
-    /// List all media profiles from the Media2 service.
+    /// List all media profiles and their associated configurations from Media2.
+    ///
+    /// Explicitly requests `Type=All`. Omitting `Type` requests profiles without
+    /// configuration information, which cannot supply the binding/source fields
+    /// exposed by `MediaProfile2` even when the device has configured them.
     ///
     /// `media2_url` is obtained from `caps.media2.url` via
     /// [`get_capabilities`](Self::get_capabilities).
@@ -44,7 +48,7 @@ impl OnvifClient {
         media2_url: &str,
     ) -> Result<Vec<MediaProfile2>, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/GetProfiles";
-        const BODY: &str = "<tr2:GetProfiles/>";
+        const BODY: &str = "<tr2:GetProfiles><tr2:Type>All</tr2:Type></tr2:GetProfiles>";
 
         let xml = self.call(media2_url, ACTION, BODY).await?;
         let body_node = parse_soap_body(&xml)?;

@@ -21,7 +21,7 @@ multicast/EQ/decoder audio, analytics config, and OSD-via-Media2 (oxvif does OSD
 | Operation | Purpose | oxvif | method |
 |-----------|---------|:----:|--------|
 | CreateProfile | create profile | ✓ | `create_profile_media2` |
-| GetProfiles | list profiles | ✓ | `get_profiles_media2` |
+| GetProfiles | list profiles and configurations (`Type=All`) | ✓ | `get_profiles_media2` |
 | DeleteProfile | delete profile | ✓ | `delete_profile_media2` |
 | AddConfiguration | bind config(s) to profile | ✓ | `add_configuration_media2` |
 | RemoveConfiguration | unbind config(s) | ✓ | `remove_configuration_media2` |

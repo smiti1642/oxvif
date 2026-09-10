@@ -183,6 +183,7 @@ These are planning seeds, not a claim of an exhaustive defect audit.
 | K19 / reproduced external compatibility finding | Current Media source closures reject XSD 1.0 compilation in independent validators but compile under strict XSD 1.1 | W21; [schema preflight](mock-fidelity-schema-preflight.md), no schema edits or disabled checks; qualify the candidate tool and report the schema language explicitly |
 | K20 / reproduced and formatter fixed | `auth::auth_fault` formerly emitted an unbound wsse subcode and raw reason text | W05 serializer migration preserves code/subcode, fixes scoped binding/text, and adds client/health/CLI controls; authentication parsing/policy remains W08 work |
 | K21 / Python limitation; independent compilation available | Python reports a Device type-table warning; pinned Xerces compiles the same complete closure with full checking and warnings-as-errors | W21; independent generic qualification passes without schema edits or warning suppression. Does not prove the Python warning false or mock instances valid |
+| K22 / client request fixed; mock selectors open | Full Media2 profile query omitted Type, while the mock returned configurations regardless; client now explicitly requests All | W06/W10; captured request regression fails on the old body. Mock Token/Type selector semantics remain P-E; this is not caught by schema validity alone |
 
 ## Verification commands
 

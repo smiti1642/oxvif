@@ -142,13 +142,27 @@ fn video_encoder_instances_xml() -> &'static str {
 
 #[tokio::test]
 async fn test_get_profiles_media2_returns_correct_fields() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(profiles_media2_xml()));
+    let (transport, captured) = RecordingTransport::new(profiles_media2_xml());
+    let client =
+        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(transport);
 
     let profiles = client
         .get_profiles_media2("http://192.168.1.1/onvif/media2_service")
         .await
         .unwrap();
+
+    let request = captured.lock().unwrap();
+    assert_eq!(request.url, "http://192.168.1.1/onvif/media2_service");
+    assert_eq!(
+        request.action,
+        "http://www.onvif.org/ver20/media/wsdl/GetProfiles"
+    );
+    assert!(
+        request
+            .body
+            .contains("<tr2:GetProfiles><tr2:Type>All</tr2:Type></tr2:GetProfiles>"),
+        "the full-profile API must explicitly request configurations"
+    );
 
     assert_eq!(profiles.len(), 2);
     assert_eq!(profiles[0].token, "Profile_A");

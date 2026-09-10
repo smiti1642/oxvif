@@ -106,6 +106,23 @@ The Media2 reference exposes additional selector/initial-configuration/name/list
 semantics beyond the fields currently read. Those are review targets, not
 authorization to silently broaden public client methods.
 
+K22: §5.1.2 and the pinned Media2 request declaration were checked directly.
+The existing full-profile client method omitted `Type`, asking a conforming
+device to omit configuration data. The mock ignores selectors and masked this.
+The client now explicitly sends `Type=All`, without adding parameters or changing
+return types; the session delegates to that method. Its existing field test now
+records and asserts endpoint, complete Action and request selection. The old
+request failed this assertion during a full all-feature no-fail-fast run.
+Mock selector semantics and broader negative inputs remain W10/P-E work; XSD
+validity alone cannot detect this valid-but-inappropriate request choice.
+
+Direct input sequences for all 13 operations were also inspected in the pinned
+WSDL closure; detailed field notes remain outside the checkout under the external
+source root (`profile-contract-review-20260910.md`). This is not full output-type
+or Core/common error review. Source capacity and capability inconsistencies also
+remain open: creation does not enforce the advertised profile limit; Media2's
+advertised configuration kinds disagree with the current binding implementation.
+
 The bounded DeleteProfile fault review uses Media1 §5.2.22 and Media2 §5.1.5:
 both services require Sender → InvalidArgVal → NoProfile for an unknown profile,
 and Sender → Action → DeletionOfFixedProfile for a fixed one. These four branches
