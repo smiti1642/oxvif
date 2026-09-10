@@ -192,6 +192,12 @@ discriminating wire/state reproduction and explicit disposition before the
 associated profile/configuration cards can close; source review is not runtime
 verification.
 
+K15 now has a bounded Name repair: both CreateProfile operations read scoped,
+decoded scalar names and both profile renderers escape them once. Seeded-state
+and HTTP/in-process create/read/refusal controls are implemented. Caller-supplied
+profile tokens, configuration text and other field rules remain W01/W10 work;
+this does not close the profile batch or bypass its remaining readiness checks.
+
 ## Verification commands
 
 Run from repository root; build into an isolated directory, not the installed CLI.

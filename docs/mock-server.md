@@ -352,6 +352,17 @@ The last three are `#[serde(skip)]` — per-instance, never persisted.
 
 ### 5.1 Media1 and Media2 share one state
 
+Both profile-creation operations require one direct scalar `Name`. Names are
+stored as decoded text and escaped once in profile responses, including names
+seeded through `MockState`; do not pre-escape them. Empty names and significant
+whitespace survive in state and raw XML (the public client DOM still trims text).
+Missing, duplicate or nested names are refused before allocation without a state
+notification. This does not complete profile-token, nested-configuration,
+attribute, length, capacity or whole-operation validation.
+Existing persisted snapshots are not automatically decoded: an entity-looking
+name may be intentional literal text. Review names created by older mock versions
+and correct their fixture values explicitly if they contain accidental XML spelling.
+
 Media1 `GetProfiles`/`GetProfile` and Media2 `GetProfiles` capture profiles and all
 configuration catalogues under one read lock before rendering. A response cannot
 join profile bindings from one revision with catalogues from another. Independent

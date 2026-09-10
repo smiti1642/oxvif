@@ -55,6 +55,9 @@
 //! the full-profile client method explicitly requests `Type=All`.
 //! Media profile reads capture the profile list and all associated catalogues
 //! under one read lock; separate requests remain independent snapshots.
+//! Profile creation requires one direct scalar Name, stores decoded text and
+//! escapes it once in profile responses; empty names and whitespace are retained.
+//! Profile-token and nested-configuration text handling remains under review.
 //!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A
 //! mock that answers everything is not a test harness — it is a way of proving

@@ -23,8 +23,8 @@
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 258 個直接呼叫：243 個位於頂層 test module 之前，15 個
-  位於其中。前者分布於 77 個 enclosing symbol，**不是** 77 個有缺陷的操作。
+- 五種 reader 拼法共 255 個直接呼叫：240 個位於頂層 test module 之前，15 個
+  位於其中。前者分布於 76 個 enclosing symbol，**不是** 76 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
 - W00 已完成目前字面值形式的來源核對；K06 synthetic 別名路由已於
@@ -252,7 +252,7 @@
 | `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
 | `src/mock/services/media.rs::resp_profile` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::handle_create_profile` | `extract_tag` | `production:3` |
+| `src/mock/services/media.rs::handle_create_profile` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
@@ -280,7 +280,6 @@
 | `src/mock/services/media2.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:3` |
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_all_tags` | `production:1` |
-| `src/mock/services/media2.rs::handle_create_profile_media2` | `extract_tag` | `production:2` |
 | `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |
@@ -362,7 +361,7 @@ create／list 不一致已重現，選定刪除／profile-read 依賴亦已有�
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
 | K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |
 | K14 — 基準後已修正 | DeleteProfile 使用明確的 committed-outcome predicate；NotFound／Fixed 不通知，Deleted 通知一次。 | W18 部分完成；回歸檢查完整 state、兩服務、hook 次數及公開 helper 相容性。Replay 另由 K17 追蹤。 |
-| K15 | `render_profile` 直接插入儲存的 name／token，未 escaping；getter 不只輸出新建資料，也輸出 seed state。 | W10；新增 escaped-state 直接 wire 回歸，不由 DeleteProfile parser 測試推論安全。 |
+| K15 — Name 已修正 | 兩個 CreateProfile Name reader 現解碼 scoped scalar 文字；兩個 profile renderer 將 Name 轉義一次，包含 seed state。Profile-token attribute 及巢狀 configuration 文字仍待處理。 | W10；seeded-markup 正確不變量及兩種 transport 的 create／read／state／refusal 測試。不代表 token 或巢狀 renderer 審查完成。 |
 | K16 — 部分修正 | Media2 profile-list 選擇已於 `c6af85b` 修正；create 只讀 Name；binding 驗證並提交完整、以值表示的 plan。 | 後筆無效 token 部分寫入及選定讀取語意具 state／hook／HTTP 控制；create／name／binding Type=All／conflict 及廣泛欄位／輸出驗證仍屬 W01／W10。 |
 
 K23 現僅修正測試框架。確定性控制可區分純耗時變動與資料／command 變動，

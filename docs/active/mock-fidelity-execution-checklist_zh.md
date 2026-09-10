@@ -183,6 +183,11 @@ K25 multicast 唯讀／效果意義，以及 K26 共用服務 view 的 video cod
 
 ## 驗證命令
 
+K15 已有有界 Name 修正：兩個 CreateProfile 操作讀取 scoped、解碼後 scalar
+名稱，兩個 profile renderer 轉義一次。已實作 seeded-state 及 HTTP／in-process
+create／read／refusal 控制。呼叫者提供的 profile token、configuration 文字及
+其他欄位規則仍屬 W01／W10；不代表 profile 批次完成，也不繞過其餘開工條件。
+
 在 repository 根目錄執行，使用隔離建置目錄，不覆寫已安裝 CLI。
 `rtk` 是此 workspace 的命令代理。必須檢查 native exit code，不以摘要文字
 單獨作為成功證據；紀錄包含 commit／toolchain／OS 的去識別化結果。

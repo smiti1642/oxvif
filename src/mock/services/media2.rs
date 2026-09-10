@@ -100,7 +100,7 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str, cat: &media::Catalogues) -
         </tr2:{tag}>"#,
         token = p.token,
         fixed = p.fixed,
-        name = p.name,
+        name = crate::types::xml_escape(&p.name),
     )
 }
 
@@ -556,13 +556,18 @@ pub fn resp_video_encoder_instances() -> String {
 /// goes through [`media::create_profile_in_state`], the same call Media1 makes;
 /// only the response envelope differs (Media2 returns the bare token, Media1 the
 /// whole profile).
-pub fn handle_create_profile_media2(state: &SharedState, body: &str) -> String {
-    let inner = extract_tag(body, "CreateProfile").unwrap_or_default();
-    let name = extract_tag(&inner, "Name").unwrap_or_else(|| "Profile".to_string());
+pub fn handle_create_profile_media2(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    let name = match media::profile_name(operation, "http://www.onvif.org/ver20/media/wsdl") {
+        Ok(name) => name,
+        Err(error) => return error.to_fault(),
+    };
     // `tr2:CreateProfile` carries `Name` and an optional `Configuration` list —
     // and, unlike `trt:CreateProfile`, **no caller-supplied token**. The device
     // always assigns.
-    match media::create_profile_in_state(state, &name, None) {
+    match media::create_profile_in_state(state, name, None) {
         media::CreateOutcome::Created(entry) => soap(
             NS,
             &format!(

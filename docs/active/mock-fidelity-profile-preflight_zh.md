@@ -27,20 +27,21 @@ MockServer 採 catch-all POST 路由。
 全部列在 handler 之前均繼承共用 synthetic XML／container／Action-body 驗證。
 下表「輸入擷取」描述的是 handler 欄位，不代表繞過共用邊界。DeleteProfile
 借用 parsed operation；`required_text` 僅保留為 test helper。Generic boundary
-fault 優先於表列操作專屬分支；其他欄位層級解析尚未遷移。
+fault 優先於表列操作專屬分支。CreateProfile Name 與 Media2 GetProfiles selector
+亦借用 parsed field；其餘欄位遷移仍未完成。
 
 | 清冊 ID | Client → handler | 目前輸入擷取 | 狀態／renderer 路徑 | 目前一般 Fault code（未註明者為平面） |
 | --- | --- | --- | --- | --- |
 | `media.GetProfiles` | get_profiles → resp_profiles | 不接收 body | profiles + catalogues → render_profile | Handler 無操作專屬錯誤分支 |
 | `media.GetProfile` | get_profile → resp_profile | GetProfile fragment → ProfileToken；缺少時為空字串 | profiles + catalogues → render_profile | ter:NoProfile |
-| `media.CreateProfile` | create_profile → handle_create_profile | Name 預設 Profile；選填 Token；舊 fragment／text | create_profile_in_state → profiles, next_token_id → render_profile | ter:ProfileExists |
+| `media.CreateProfile` | create_profile → handle_create_profile | Parsed 直接 scalar Name；選填 Token 仍使用舊 fragment／text | create_profile_in_state → profiles, next_token_id → render_profile | Generic field fault；ter:ProfileExists |
 | `media.DeleteProfile` | delete_profile → handle_delete_profile | parsed operation.required_child_text(ProfileToken)，嚴格 scalar identity | delete_profile_in_state → profiles → empty response | 欄位驗證：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
 | `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile |
 | `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile |
 | `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | Parsed Token／Type、scoped scalar 及直接 sequence 檢查 | cloned profile projection + media::catalogues → render_profile_media2 | Generic field fault；巢狀 s:Sender／InvalidArgVal／NoProfile |
-| `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Name 預設 Profile；不讀 Configuration | media::create_profile_in_state(None) → profiles, counter → Token response | ter:ProfileExists 分支（目前傳 None 不會到達） |
+| `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Parsed 直接 scalar Name；不讀 Configuration | media::create_profile_in_state(None) → profiles, counter → Token response | Generic field fault；ter:ProfileExists 分支（目前傳 None 不會到達） |
 | `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | parsed operation.required_child_text(Token)，嚴格 scalar identity | media::delete_profile_in_state → profiles → empty response | 欄位驗證：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
 | `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken；重複 Configuration／Type／Token；不讀 Name | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
 | `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken；重複 Configuration／Type／Token | apply_media2_configuration → atomic media::apply_configuration_bindings(add=false) | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
@@ -77,7 +78,7 @@ fault 優先於表列操作專屬分支；其他欄位層級解析尚未遷移�
   未建模類型、Type=All、只更新 name、configuration conflict 須明確審查目標行為。
 - Rendering：`profile_snapshot` 在同一 read guard 內取得 profile 及所有 configuration catalogue。
   `render_profile`／`render_profile_media2` 內嵌 VSC、encoder、audio source／encoder、
-  PTZ renderer。Profile name／token 目前直接插入；K15 證明兩服務 Name 會形成 XML child。
+  PTZ renderer。Profile Name 現將解碼後 state 文字轉義一次；profile-token 與巢狀 configuration 文字仍屬 K15 未結項目。
   其他巢狀 renderer escaping 與其他快照路徑仍屬 W10／W18。
 - State hook：`MockState::{modify,modify_returning,notify}` 在 write lock 內取得
   mutation 快照，釋放鎖後才呼叫 callback，支援有界重入寫入。Callback 序列化與失敗寫入的 replay invalidation
@@ -129,6 +130,38 @@ client／health 分類，以及固定 profile 拒絕前後的序列化 state。K
 不可僅憑選定 instance 的結果將 C 標記完成。
 
 ## 案例與開工條件
+
+已實作有界 K15 Name 子批次：同時遷移兩個 CreateProfile Name reader 及兩個
+profile Name renderer。從既有 parsed operation 取得必要且唯一的直接 scalar
+Name，保留解碼後的空值與有效空白；配置 token 前拒絕缺少、重複或巢狀 Name。
+Media1 5.2.1、Media2 5.1.1 及外部直接輸入審查支持此有限契約。本批不遷移
+呼叫者提供的 profile token、binding reader、configuration name、容量、attribute、
+欄位長度或完整操作順序。這些仍是明確的 W01／W10 工作，不代表輸入已驗收。
+兩種服務及 transport 驗證預設狀態的 literal markup、client 建立時的 entity 拼法、
+數字參照、CDATA 與空白；建立失敗須保留整份狀態及 notification 計數。僅將 K15
+Name 缺陷探針改為正確不變量；K15 token／巢狀 renderer 風險仍未關閉。
+
+K15 Name 驗證：舊實作在 seeded scalar 檢查及兩種 transport 的 literal
+stored-name assertion 失敗（`1789047728_cargo_test.log`）。繞過重複 Name
+拒絕後，兩個 transport 測試因建立意外成功而失敗
+（`1789047974_cargo_test.log`），擾動已還原。三個 state unit probe 現透過
+dispatch 傳送具身分的 operation，不再繞過解析。
+
+舊外部 shape probe 的兩個 CreateProfile 請求缺少 Name，使成功 payload
+從 111 降到 109；未將該綠燈當作等量覆蓋。兩個探針現加入專案自編的
+literal-name 輸入。新增 schema-free 控制要求實際建立成功及 literal stored
+文字；移除此輸入後，完整 no-fail-fast 執行在預期的 response assertion 失敗
+（`1789048420_cargo_test.log`），之後還原。重跑恢復 158 responses／111
+successes／47 Faults／1,242 anchors／1,431 skipped children／398 attributes，
+十項 finding pin 均為零。
+
+最終本機 gate 通過 formatting、兩種 workspace Clippy、1,196 項 all-feature
+及 1,111 項 default 測試（各 5 ignored、25 suites）、兩種 strict workspace
+文件建置及更新後的 inventory self-test（159 Action sites／157 routes／255
+直接 readers）。新外部 corpus `-10` 的既有 34 instances 通過 strict Xerces
+XSD 1.1，不代表擴充 Name variant 的驗收。前一個快照 commit `418eacc` 通過
+託管 CI 34483819340；該結果不包含本次 Name 修正。下一步：內建 replay 的
+CreateProfile committed effect，包含嚴格名稱拒絕及過期 list 讀取。
 
 已實作有界 W18 read-snapshot 子批次：Media1 GetProfiles／GetProfile 及
 Media2 GetProfiles 在同一 read guard 內取得 profile 與 catalogue，保留回應
@@ -220,16 +253,17 @@ workspace Clippy 及兩種 warnings-as-errors 文件建置通過。還原後全�
 | C04 | 外部欄位核對後新增 required／empty／duplicate／repeat／extension 案例，保留合法 repeat | TODO |
 | C05 | 既有 `mock_token_discrimination`／`mock_media1_media2_agree`；全部 binding 增加 escaped／wrong-family token | PARTIAL |
 | C06 | K13 配置、K14 通知及 K16 部分 binding 已有正確回歸；更廣泛的 transaction、conflict 及 callback 尚待完成 | PARTIAL |
-| C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`；補完巢狀 renderer escaping、獨立 namespace／shape 檢查 | 已重現缺口 |
+| C07 | `profile_name_remains_literal_text_in_both_services` 及兩種 transport 的 Name 控制；補完 token／巢狀 renderer escaping、獨立 namespace／shape 檢查 | PARTIAL |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`；corpus 檢查不存在／固定 DeleteProfile 巢狀 Fault；其他 mapping／HTTP code 待 W05–W07 | PARTIAL |
 | C09 | 兩種 transport 的共用靜態／狀態型 depth／node 限制已有控制；byte limit 涵蓋 in-process，scoped auth 及 HTTP byte 對應待查 | PARTIAL |
 | C10 | 模型限制及 K12 修正；`fixed_profile_configuration_remains_mutable_in_both_media_services` 證明 fixed profile 的 Add／Remove 實際改變 state | PARTIAL |
 | C11 | 已驗證選定 DeleteProfile client／health first-subcode 控制與 K22 請求選擇；其餘 consumer／CLI 審查待 W06 | PARTIAL |
 | C12 | 擾動四個 known-gap assertion 均於 payload／state assertion 失敗；反轉 fixed-binding attachment 預期亦失敗，還原後通過 | PARTIAL |
 
-`tests/mock_fidelity_known_gaps.rs` 的 K15 刻意斷言目前缺陷，用途與既有
-Broken／Blind property table 相同。**通過表示已重現，不表示已修復。**
-修正時須改成正確 invariant 並更新 finding；不得為恢復綠燈而保留缺陷。
+`tests/mock_fidelity_known_gaps.rs` 的 K15 Name 已斷言正確 literal-text invariant；
+token 及巢狀 renderer 風險仍未結案。其他 `known_gap_` 測試仍刻意斷言目前缺陷：
+**通過表示已重現，不表示已修復。** 修正時須改成正確 invariant 並更新 finding，
+不得為恢復綠燈而保留缺陷。
 
 開工條件仍受工程工作限制：W02 間接呼叫閉包、W03／W04 parsed-input 邊界、
 W05／W06 Fault 設計、外部逐欄位核對，以及明確原子性／capacity 行為。

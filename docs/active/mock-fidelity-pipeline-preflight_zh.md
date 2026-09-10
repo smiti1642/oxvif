@@ -50,10 +50,10 @@ String 不等於能保留無效 HTTP encoding 的原始 bytes。
 1. `extract_tag` → `find_open_tag/find_close_tag`：掃描 local name，回傳 trim
    後的 raw inner fragment，不解碼 entity。`extract_all_tags` 重複此流程；
    `extract_attr` 掃描第一個符合 tag 的 header，保留原始拼寫。
-2. `handle_create_profile` 與 `handle_create_profile_media2` 將 raw Name 傳給
-   `create_profile_in_state`，原樣存入 state；Media1 的 Token 亦然。因此只改
-   輸出 escaping 可能讓一般 client 輸入被雙重轉義；直接讓所有舊 helper 解碼
-   則可能破壞仍將回傳值當作 subtree 的呼叫端。
+2. `handle_create_profile` 與 `handle_create_profile_media2` 現將解碼後的直接
+   scalar Name 傳給 `create_profile_in_state`；兩個 profile renderer 將儲存文字
+   轉義一次。Media1 Token 仍使用 raw 值。其餘 token 及 configuration 文字遷移
+   必須成對處理解碼及輸出轉義；直接讓所有舊 helper 解碼仍可能破壞 subtree 呼叫端。
 3. `resp_profiles/resp_profile` 與 `resp_profiles_media2` 現於單一 `profile_snapshot`
    read guard 取得 profile 與 catalogue；原本分開快照已在併發寫入時重現混合版本。
    Renderer 讀取儲存的 identity／text，呼叫 VSC、video、
@@ -65,9 +65,9 @@ String 不等於能保留無效 HTTP encoding 的原始 bytes。
    在 write lock 中驗證完整 plan 後才變更 slot。有 scope 的解碼仍屬 parser 工作；
    共用 writer 已不再把值插回 XML，也不重新解析 fragment。
 5. `create_profile_in_state/delete_profile_in_state/bind_configuration` 呼叫
-   `MockState::modify[_returning]` → `notify` → 持有 read guard 時執行 callback。
-   集合相等、callback 次數及 replay 可見結果必須分別斷言；直接全域修改此
-   generic helper 會影響其他服務。
+   `MockState::modify[_returning]` → committed snapshot → `notify` → 釋放 state
+   lock 後執行 callback。集合相等、callback 次數、callback 順序及 replay 可見結果
+   必須分別斷言；有界保證見下方已實作的 hook 子批次。
 
 **初始 K17 發現 — 內建 DeleteProfile 修正見下方：** ReplayResponder 在 SyntheticResponder
 接受或拒絕寫入之前，就把 operation family 加入 invalidated；後續 Fault 不會

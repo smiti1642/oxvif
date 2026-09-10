@@ -29,20 +29,21 @@ All rows now inherit common synthetic XML/container/Action-body validation befor
 their handler. The table's "input extraction" column describes handler fields,
 not a bypass of this boundary. DeleteProfile borrows the parsed operation;
 `required_text` remains only a test helper. Generic boundary faults precede the
-listed operation-specific branches; other field-level parsing is not migrated.
+listed operation-specific branches. CreateProfile Name and Media2 GetProfiles
+selectors also borrow parsed fields; remaining field migrations stay open.
 
 | Ledger ID | Client → handler | Current input extraction | State/renderer path | Current ordinary Fault codes (flat unless noted) |
 | --- | --- | --- | --- | --- |
 | `media.GetProfiles` | get_profiles → resp_profiles | No body consumed | profiles + catalogues → render_profile | No operation-specific branch in handler |
 | `media.GetProfile` | get_profile → resp_profile | GetProfile fragment → ProfileToken; absent becomes empty | profiles + catalogues → render_profile | ter:NoProfile |
-| `media.CreateProfile` | create_profile → handle_create_profile | Name defaults to Profile; optional Token; legacy fragment/text | create_profile_in_state → profiles, next_token_id → render_profile | ter:ProfileExists |
+| `media.CreateProfile` | create_profile → handle_create_profile | Parsed direct scalar Name; optional Token still uses legacy fragment/text | create_profile_in_state → profiles, next_token_id → render_profile | Generic field faults; ter:ProfileExists |
 | `media.DeleteProfile` | delete_profile → handle_delete_profile | parsed operation.required_child_text(ProfileToken), strict scalar identity | delete_profile_in_state → profiles → empty response | Field validation: env:Sender; missing/fixed: nested s:Sender (review below) |
 | `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | ProfileToken; legacy scalar | unbind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile |
 | `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | ProfileToken; legacy scalar | unbind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile |
 | `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | Parsed Token/Type, scoped scalar and direct sequence checks | cloned profile projection + media::catalogues → render_profile_media2 | Generic field faults; nested s:Sender / InvalidArgVal / NoProfile |
-| `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Name defaults to Profile; Configuration not read | media::create_profile_in_state(None) → profiles, counter → Token response | ter:ProfileExists branch (currently unreachable with None) |
+| `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Parsed direct scalar Name; Configuration not read | media::create_profile_in_state(None) → profiles, counter → Token response | Generic field faults; ter:ProfileExists branch (currently unreachable with None) |
 | `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | parsed operation.required_child_text(Token), strict scalar identity | media::delete_profile_in_state → profiles → empty response | Field validation: env:Sender; missing/fixed: nested s:Sender (review below) |
 | `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken; repeated Configuration/Type/Token; Name not read | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
 | `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken; repeated Configuration/Type/Token | apply_media2_configuration → atomic media::apply_configuration_bindings(add=false) | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
@@ -84,8 +85,8 @@ K17 tracks pre-success replay invalidation separately from K14's state hook.
   conflicts need reviewed target behavior, not accidental fallbacks.
 - Rendering: `profile_snapshot` captures profiles and all configuration catalogues
   under one read guard; `render_profile` / `render_profile_media2` inline VSC, encoder,
-  audio source/encoder and PTZ render helpers. Profile name/token interpolation
-  is currently raw; K15 proves Name becomes an XML child in both services.
+  audio source/encoder and PTZ render helpers. Profile Name now escapes decoded
+  state text once; profile-token and nested-configuration text remain open under K15.
   Further nested renderers' escaping and other snapshot paths remain W10/W18.
 - State hooks: `MockState::{modify,modify_returning,notify}` capture the mutation
   snapshot under the write lock and invoke callbacks after releasing it. Bounded
@@ -150,6 +151,45 @@ WSDL/XSD field validation, Core/common and other operation Fault mappings, and
 capacity/conflict/extension rules. Do not mark C done from selected instance results.
 
 ## Cases and readiness
+
+Implemented bounded K15 Name slice: both CreateProfile Name readers and both
+profile Name renderers migrated together. They use the existing parsed operation for one
+required direct scalar Name, preserving decoded empty and significant-whitespace
+values; reject missing, duplicate or nested Name before allocation. Media1
+5.2.1 and Media2 5.1.1 plus the external direct-input review support this narrow
+contract. Do not migrate caller-supplied profile tokens, binding readers,
+configuration names, capacity, attributes, field lengths or complete operation
+ordering in this slice. Those remain explicit W01/W10 work, not accepted inputs.
+The corrected seeded literal-markup probe and `mock_profile_names` exercise
+client-created entity spellings, numeric references, CDATA and whitespace across
+both services. HTTP/in-process creation refusals preserve complete state and hook
+counts. Only the K15 Name gap probe is converted to the corrected invariant;
+K15 token/nested-renderer risks stay open.
+
+K15 Name verification: the old implementation failed the seeded scalar check
+and both transport tests at the literal stored-name assertion
+(`1789047728_cargo_test.log`). Bypassing duplicate-Name rejection made both
+transport tests fail on an unexpected successful creation
+(`1789047974_cargo_test.log`); the mutation was restored. Three state unit probes
+now use identified operations through dispatch rather than bypassing parsing.
+
+The legacy external shape probe initially fell from 111 to 109 successful
+payloads because its two CreateProfile requests omitted Name; its green result
+was not retained as equivalent coverage. Both probes now carry a project-authored
+literal-name input. A new schema-free control requires successful creation and
+literal stored text; removing that input failed the intended response assertion
+in the full no-fail-fast run (`1789048420_cargo_test.log`), then was restored.
+The rerun restores 158 responses / 111 successes / 47 Faults / 1,242 anchors /
+1,431 skipped children / 398 attributes, with all ten finding pins zero.
+
+Final local gates passed formatting, both workspace Clippy modes, 1,196
+all-feature and 1,111 default tests (5 ignored, 25 suites each), both strict
+workspace documentation builds and the updated inventory self-tests (159 Action
+sites / 157 routes / 255 direct readers). Fresh external corpus `-10` passes
+strict Xerces XSD 1.1 for the existing 34 instances; it is not expanded Name
+variant acceptance. Previous snapshot commit `418eacc` passed hosted CI
+34483819340; that result predates this Name change. Next: committed CreateProfile
+effects for built-in replay, including strict-name refusals and stale list reads.
 
 Implemented bounded W18 read-snapshot slice: Media1 GetProfiles/GetProfile and
 Media2 GetProfiles capture profiles and catalogues under one shared read guard,
@@ -261,17 +301,17 @@ acceptance. Prior deletion-effect commit `340fc89` passed hosted CI run
 | C04 | Add required/empty/duplicate/repeated/extension cases per field after external field review; preserve legal repeats | TODO |
 | C05 | Existing `mock_token_discrimination` and `mock_media1_media2_agree`; add escaped tokens and wrong-family targets for all bindings | PARTIAL |
 | C06 | K13 allocation, K14 notification and K16 partial binding have corrected regressions; broader transactions, conflicts and callbacks remain open | PARTIAL |
-| C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`; complete nested renderer escaping and independent namespace/shape checks | GAP REPRODUCED |
+| C07 | `profile_name_remains_literal_text_in_both_services` and both-transport Name controls; complete token/nested renderer escaping and independent namespace/shape checks | PARTIAL |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`; corpus checks missing/fixed DeleteProfile nested faults; other mappings/HTTP codes pending W05–W07 | PARTIAL |
 | C09 | Common static/stateful depth/node limits covered in both transports; byte limit in-process; scoped auth and HTTP byte mapping pending | PARTIAL |
 | C10 | Model limits and K12 corrected; `fixed_profile_configuration_remains_mutable_in_both_media_services` proves Add/Remove changes actual state on fixed profiles | PARTIAL |
 | C11 | Selected DeleteProfile client/health first-subcode controls and K22 request selection verified; remaining consumer/CLI review pending W06 | PARTIAL |
 | C12 | Audit assertions perturbed: all four known-gap tests failed at payload/state assertions; fixed-binding control also failed when expected attachment was inverted, then restored green | PARTIAL |
 
-The K15 test in `tests/mock_fidelity_known_gaps.rs` deliberately asserts its current
-defect like the existing Broken/Blind property tables. **Passing means reproduced,
-not fixed.** Convert each to the corrected invariant and update its finding when
-implementing the fix; never preserve a defect merely to restore green.
+The K15 Name test in `tests/mock_fidelity_known_gaps.rs` now asserts the corrected
+literal-text invariant. Token and nested-renderer risks remain open. Other
+`known_gap_` tests still deliberately assert current defects: **passing means
+reproduced, not fixed.** Convert each when repaired; never restore a defect for green.
 
 Readiness remains blocked by engineering work W02 transitive closure, W03/W04
 parsed-input boundary, W05/W06 fault design, external per-field review and explicit

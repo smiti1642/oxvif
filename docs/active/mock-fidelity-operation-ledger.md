@@ -117,7 +117,7 @@ Do not change a route before opening its row and the corresponding work package.
 | `media.GetServiceCapabilities` | `media::resp_service_capabilities` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetProfiles` | `media::resp_profiles` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media.GetProfile` | `media::resp_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.CreateProfile` | `media::handle_create_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.CreateProfile` | `media::handle_create_profile` | `state, body, operation` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media.DeleteProfile` | `media::handle_delete_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -155,7 +155,7 @@ Do not change a route before opening its row and the corresponding work package.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `media2.GetServiceCapabilities` | `media2::resp_service_capabilities_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetProfiles` | `media2::resp_profiles_media2` | `state, operation` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, operation` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1 |
 | `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |

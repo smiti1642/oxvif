@@ -23,9 +23,9 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 258 direct occurrences of five reader spellings are indexed: 243 before
-  top-level test modules and 15 inside those modules. The former span 77
-  enclosing symbols, **not** 77 defective operations. This includes test-only
+- 255 direct occurrences of five reader spellings are indexed: 240 before
+  top-level test modules and 15 inside those modules. The former span 76
+  enclosing symbols, **not** 76 defective operations. This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
   helper touch; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
@@ -258,7 +258,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
 | `src/mock/services/media.rs::resp_profile` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::handle_create_profile` | `extract_tag` | `production:3` |
+| `src/mock/services/media.rs::handle_create_profile` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
@@ -286,7 +286,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/media2.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:3` |
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_all_tags` | `production:1` |
-| `src/mock/services/media2.rs::handle_create_profile_media2` | `extract_tag` | `production:2` |
 | `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |
@@ -371,7 +370,7 @@ while the complete dependency graph remains open.
 | K12 | Source comment at `media::bind_configuration` describes binding a fixed profile as a mock deviation. Official Media1/Media2 §4.1 distinguish deletion from configuration changes. | Correct the comment and preserve legal binding; do not “repair” it by making fixed profiles immutable. References below. |
 | K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; capacity and other CreateProfile semantics remain open. |
 | K14 — fixed after baseline | DeleteProfile now uses an explicit committed-outcome predicate; NotFound/Fixed do not notify, Deleted notifies once. | W18 partial; regression checks full state, both services, hook count and public-helper compatibility. Replay remains separate K17. |
-| K15 | `render_profile` interpolates stored profile name/token without escaping; normal getters render seeded state as well as caller-created state. | W10; direct escaped-state wire regression required. Do not infer safety from DeleteProfile's parser tests. |
+| K15 — Name repaired | Both CreateProfile Name readers now decode scoped scalar text; both profile renderers escape Name once, including seeded state. Profile-token attributes and nested configuration text remain open. | W10; corrected seeded-markup control and both-transport create/read/state/refusal tests. This does not close the token or nested-renderer audit. |
 | K16 — partial repair | Media2 profile-list selection is repaired in `c6af85b`; create reads Name only; binding validates and commits one complete value-based plan. | Late-invalid-token partial writes and selected read semantics have state/hook/HTTP controls. Create/name/binding Type=All/conflicts and broader field/output validation remain W01/W10 work. |
 
 K23 is now repaired in the test harness only. Deterministic controls distinguish

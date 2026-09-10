@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock Media1/Media2 profile creation now stores decoded literal names, and
+  profile responses escape those names once. Seeded markup remains text;
+  significant whitespace is preserved in state and raw responses. A missing,
+  duplicate or nested `Name` is rejected before creation instead of using a
+  default or fragment. Profile-token and nested-configuration text handling
+  remain under the separate fidelity audit.
 - Mock Media profile reads now capture profiles and their associated configuration
   catalogues under one read lock, preventing responses assembled from different
   concurrent state revisions. This does not make separate requests transactional.

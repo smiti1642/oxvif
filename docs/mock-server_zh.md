@@ -295,6 +295,14 @@ mock conformance。詳見[強化計畫](active/mock-fidelity-hardening-plan_zh.m
 
 ### 5.1 Media1 與 Media2 共用狀態
 
+兩個 profile 建立操作都要求唯一的直接 scalar `Name`。名稱以解碼後文字存入
+狀態，並在 profile 回應轉義一次；透過 `MockState` 設定的名稱亦然，請勿預先
+轉義。空名稱及有效空白會保留於狀態與原始 XML（公開 client DOM 仍修剪文字）。
+缺少、重複或巢狀名稱會在配置 token 前被拒絕，不通知狀態 hook。這不代表
+profile token、巢狀 configuration、attribute、長度、容量或整個操作已完成驗證。
+既有持久化 snapshot 不會自動解碼，因為類似 entity 的名稱也可能是刻意使用的
+literal 文字。請檢查舊 mock 版本建立的名稱；若誤存 XML 拼法，須明確修正 fixture 值。
+
 Media1 `GetProfiles`／`GetProfile` 與 Media2 `GetProfiles` 在同一 read lock
 內取得 profile 及全部 configuration catalogue，再產生回應，避免將不同版本
 的 binding 與 catalogue 拼接。不同請求仍可觀察不同版本，這不是跨呼叫 transaction。

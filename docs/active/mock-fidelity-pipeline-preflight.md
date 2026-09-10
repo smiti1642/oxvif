@@ -53,10 +53,11 @@ complete per-field audit of other services.
 1. `extract_tag` → `find_open_tag/find_close_tag`: local-name scans, trimmed raw
    inner fragment, no entity decoding. `extract_all_tags` repeats this approach;
    `extract_attr` scans the first matching tag header and returns raw spelling.
-2. `handle_create_profile` and `handle_create_profile_media2` pass that raw Name
-   to `create_profile_in_state`, which stores it unchanged. Media1 also supplies
-   a raw Token. Therefore adding output escaping alone can double-escape ordinary
-   client input; decoding every legacy helper would corrupt subtree callers.
+2. `handle_create_profile` and `handle_create_profile_media2` now pass a decoded
+   direct scalar Name to `create_profile_in_state`; both profile renderers escape
+   this stored text once. Media1 still supplies a raw Token. The remaining token
+   and configuration text migration must pair decoding with output escaping;
+   decoding every legacy helper would corrupt subtree callers.
 3. `resp_profiles/resp_profile` and `resp_profiles_media2` now collect profiles and
    catalogues in one `profile_snapshot` read guard; the former separate snapshots
    were reproduced as mixed revisions under concurrent writes. Both renderers read stored identity/text and
@@ -69,9 +70,10 @@ complete per-field audit of other services.
    write lock before changing slots. Scoped decoding remains a parser task; the
    shared writer no longer reinserts values into XML or reparses fragments.
 5. `create_profile_in_state/delete_profile_in_state/bind_configuration` reach
-   `MockState::modify[_returning]` → `notify` → caller callback under a read guard.
-   Collection equality, callback counts, and replay visibility are separate
-   assertions. Changing this generic helper globally would affect other services.
+   `MockState::modify[_returning]` → committed snapshot → `notify` → caller
+   callback after releasing the state lock. Collection equality, callback counts,
+   callback ordering and replay visibility are separate assertions; see the
+   implemented hook slice below for its bounded guarantees.
 
 **Initial K17 finding — built-in DeleteProfile repair below:** ReplayResponder inserts
 the operation family into `invalidated` before SyntheticResponder can accept or

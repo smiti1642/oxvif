@@ -117,13 +117,20 @@ pub fn handle_remove_video_source_configuration(state: &SharedState, body: &str)
     }
 }
 
-pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
+pub fn handle_create_profile(
+    state: &SharedState,
+    body: &str,
+    operation: &crate::mock::request::Node,
+) -> String {
+    let name = match profile_name(operation, "http://www.onvif.org/ver10/media/wsdl") {
+        Ok(name) => name,
+        Err(error) => return error.to_fault(),
+    };
     let inner = extract_tag(body, "CreateProfile").unwrap_or_default();
-    let name = extract_tag(&inner, "Name").unwrap_or_else(|| "Profile".to_string());
     // Caller may supply an explicit token (rare — most cameras assign).
     let supplied_token = extract_tag(&inner, "Token");
 
-    let entry = match create_profile_in_state(state, &name, supplied_token) {
+    let entry = match create_profile_in_state(state, name, supplied_token) {
         CreateOutcome::Created(e) => e,
         CreateOutcome::Duplicate(t) => {
             return resp_soap_fault(
@@ -142,6 +149,18 @@ pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
             render_profile(&entry, "Profile", &catalogues(state))
         ),
     )
+}
+
+/// Profile names are decoded state text, not serialized XML. An explicit empty
+/// name is distinct from omission; token/attribute/length migration is separate.
+pub(crate) fn profile_name<'a>(
+    operation: &'a crate::mock::request::Node,
+    namespace: &str,
+) -> Result<&'a str, crate::mock::request::RequestError> {
+    operation
+        .child(namespace, "Name")?
+        .ok_or(crate::mock::request::RequestError::MissingField)?
+        .scalar_text()
 }
 
 pub fn handle_delete_profile(
@@ -634,7 +653,7 @@ fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
         </trt:{tag}>"#,
         token = p.token,
         fixed = p.fixed,
-        name = p.name,
+        name = crate::types::xml_escape(&p.name),
     )
 }
 

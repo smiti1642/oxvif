@@ -1560,6 +1560,12 @@ fn identified_probe_request(action: &str, fields: &str) -> String {
     // corpus continues to reach nested configuration renderers after filtering.
     let fields = if action == "http://www.onvif.org/ver20/media/wsdl/GetProfiles" {
         "<Type>All</Type>"
+    } else if matches!(
+        action,
+        "http://www.onvif.org/ver10/media/wsdl/CreateProfile"
+            | "http://www.onvif.org/ver20/media/wsdl/CreateProfile"
+    ) {
+        "<Name>Shape &amp;amp; &lt;marker&gt;</Name>"
     } else {
         fields
     };
@@ -1583,6 +1589,34 @@ fn identified_probe_request(action: &str, fields: &str) -> String {
 }
 
 // ── The test ─────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn profile_creation_shape_probes_reach_literal_name_success() {
+    for namespace in [
+        "http://www.onvif.org/ver10/media/wsdl",
+        "http://www.onvif.org/ver20/media/wsdl",
+    ] {
+        let transport = MockTransport::new();
+        let action = format!("{namespace}/CreateProfile");
+        let xml = transport
+            .soap_post(
+                "http://mock",
+                &action,
+                identified_probe_request(&action, ""),
+            )
+            .await
+            .unwrap();
+        let root = parse(&xml).unwrap();
+        let response = soap_payload(&root).unwrap();
+        assert_eq!(response.local, "CreateProfileResponse");
+        let state = transport.device().read();
+        assert_eq!(state.profiles.profiles.len(), 5);
+        assert_eq!(
+            state.profiles.profiles.last().unwrap().name,
+            "Shape &amp; <marker>"
+        );
+    }
+}
 
 fn schema_files(dir: &Path) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = std::fs::read_dir(dir)

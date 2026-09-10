@@ -3185,8 +3185,13 @@ mod tests {
     fn create_profile_then_appears_in_get_profiles() {
         use crate::mock::services::media;
         let s = new_state();
-        let body = r#"<trt:CreateProfile><trt:Name>customStream</trt:Name></trt:CreateProfile>"#;
-        let resp = media::handle_create_profile(&s, body);
+        let body = r#"<trt:CreateProfile xmlns:trt="http://www.onvif.org/ver10/media/wsdl"><trt:Name>customStream</trt:Name></trt:CreateProfile>"#;
+        let resp = crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver10/media/wsdl/CreateProfile",
+            "http://mock",
+            &s,
+            body,
+        );
         assert!(resp.contains("CreateProfileResponse"));
         // Four default profiles, so the counter starts at 5.
         assert!(resp.contains("Profile_5"));
@@ -3211,13 +3216,17 @@ mod tests {
 
     #[test]
     fn create_profile_with_explicit_token_honoured() {
-        use crate::mock::services::media;
         let s = new_state();
-        let body = r#"<trt:CreateProfile>
+        let body = r#"<trt:CreateProfile xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
             <trt:Name>specialName</trt:Name>
             <trt:Token>MyProfile</trt:Token>
           </trt:CreateProfile>"#;
-        let resp = media::handle_create_profile(&s, body);
+        let resp = crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver10/media/wsdl/CreateProfile",
+            "http://mock",
+            &s,
+            body,
+        );
         assert!(resp.contains("MyProfile"));
         // Counter should NOT have been bumped — explicit token, no generation.
         assert_eq!(s.read().profiles.next_token_id, 5);
@@ -3225,13 +3234,17 @@ mod tests {
 
     #[test]
     fn create_profile_rejects_duplicate_token() {
-        use crate::mock::services::media;
         let s = new_state();
-        let body = r#"<trt:CreateProfile>
+        let body = r#"<trt:CreateProfile xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
             <trt:Name>dup</trt:Name>
             <trt:Token>Profile_1</trt:Token>
           </trt:CreateProfile>"#;
-        let resp = media::handle_create_profile(&s, body);
+        let resp = crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver10/media/wsdl/CreateProfile",
+            "http://mock",
+            &s,
+            body,
+        );
         assert!(resp.contains("Fault"));
         assert!(resp.contains("ProfileExists"));
         // No new entry, no counter change.

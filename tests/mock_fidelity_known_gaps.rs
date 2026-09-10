@@ -271,7 +271,7 @@ async fn rejected_delete_preserves_state_and_hook_but_success_notifies() {
 }
 
 #[tokio::test]
-async fn known_gap_k15_profile_name_is_interpreted_as_markup() {
+async fn profile_name_remains_literal_text_in_both_services() {
     for (version, prefix) in [("ver10", "trt"), ("ver20", "tr2")] {
         let transport = MockTransport::new();
         transport.device().modify(|state| {
@@ -291,11 +291,10 @@ async fn known_gap_k15_profile_name_is_interpreted_as_markup() {
         let name = body
             .path(&["GetProfilesResponse", "Profiles", "Name"])
             .unwrap();
+        assert!(name.children.is_empty(), "profile Name must remain scalar");
         assert_eq!(
-            name.child("AuditMarker")
-                .expect("K15 changed: assert literal escaped text after the fix")
-                .text(),
-            "injected"
+            name.text(),
+            "before<AuditMarker>injected</AuditMarker>after"
         );
     }
 }
