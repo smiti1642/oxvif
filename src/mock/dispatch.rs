@@ -216,7 +216,7 @@ fn dispatch_media(
         "GetServiceCapabilities" => media::resp_service_capabilities(),
         "GetProfiles" => media::resp_profiles(state),
         "GetProfile" => media::resp_profile(state, body),
-        "CreateProfile" => media::handle_create_profile(state, body, operation),
+        "CreateProfile" => media::handle_create_profile(state, body, operation, effect),
         "DeleteProfile" => media::handle_delete_profile(state, operation, effect),
         "GetStreamUri" => media::resp_stream_uri(),
         "GetSnapshotUri" => media::resp_snapshot_uri(base),
@@ -285,7 +285,7 @@ fn dispatch_media2(
         // success respectively — so Media1 and Media2 answered differently for
         // one device and never converged.
         "GetProfiles" => media2::resp_profiles_media2(state, operation),
-        "CreateProfile" => media2::handle_create_profile_media2(state, operation),
+        "CreateProfile" => media2::handle_create_profile_media2(state, operation, effect),
         "DeleteProfile" => media2::handle_delete_profile_media2(state, operation, effect),
         // Media2's single generic binding operation, over the same four
         // `ProfileEntry` slots the four Media1 arms above write. Audit §3 item 1.7.

@@ -18,6 +18,7 @@ below. No new product decision is required here.
 | [Parsed-node implementation](#parsed-node-implementation) | P-A delivered scope and remaining W04 work |
 | [Structured fault foundation](#structured-fault-foundation) | P-C serializer slice and consumer boundaries |
 | [Committed deletion effects](#committed-deletion-effects) | Selected K17 repair and remaining replay boundaries |
+| [Committed creation effects](#committed-creation-effects) | K18 create/read dependencies and refusal preservation |
 | [Exact Action routing](#exact-action-routing) | K06 routing slice and remaining W03/W07 work |
 | [Parsed synthetic boundary](#parsed-synthetic-boundary) | P-D implemented checks, evidence and exclusions |
 | [State hook snapshot work](#state-hook-snapshot-work) | W18 bounded lock and observation policy |
@@ -87,7 +88,7 @@ DeleteProfile without state changes, read again and assert the recording still
 wins; include a valid write control that retires it. No K17 fix is claimed by
 the chain-order tests.
 
-**K18 — create/list mismatch reproduced, not fixed:** `replay::family` strips
+**K18 — initial create/list mismatch, now repaired for built-in creation below:** `replay::family` strips
 only the leading verb; it does not model read/write dependencies. GetProfiles
 maps to `Profiles`, but CreateProfile/DeleteProfile map to `Profile`. Binding
 maps to `VideoSourceConfiguration`, `VideoEncoderConfiguration` or `Configuration`,
@@ -108,7 +109,9 @@ preservation. Binding/service dependency edges are still source-only findings.
 Temporarily suppressing DeleteProfile invalidation and additionally invalidating
 Profiles on CreateProfile made the two baselines fail at their intended replay
 assertions in a full all-feature `--no-fail-fast` run; both mutations were restored.
-These tests expose defects and do not implement or accept an invalidation design.
+Those baseline assertions exposed defects, not an accepted invalidation design.
+Both have since been converted to corrected invariants for built-in deletion and
+creation; binding and full dependency acceptance remain open.
 Restored local gate: formatting and both workspace Clippy modes passed; 1,169
 all-feature and 1,087 default tests passed, with four ignored in each mode.
 Inventory self-tests and source reconciliation passed unchanged. Hosted CI
@@ -287,9 +290,29 @@ check passed. Inventory remains 157 routes / 159 Action sites / 260 direct reade
 Prior checker commit `9469bb6` passed all 23 jobs in CI run 34456850826; that hosted
 run does not cover this subsequent Fault change.
 
+## Committed creation effects
+
+Both CreateProfile route arms now pass the same private effect slot used by
+deletion. Only `CreateOutcome::Created` sets `ProfilesChanged`; typed Name
+refusals and duplicate-token refusals do not. Built-in replay defers legacy
+invalidation for exactly those two additional Actions. Committed creation retires
+Media1 GetProfile/GetProfiles and Media2 GetProfiles using complete Action
+identities, rather than the singular `Profile` family. This conservatively retires
+all recorded singular profile reads; it is not token-specific invalidation.
+
+`tests/mock_replay_effects.rs` adds HTTP/in-process controls for both service
+creations, Name and duplicate-token refusals, full state equality, all three read
+views, unrelated service recordings and independent instances. K18's successful
+creation/stale-list baseline is now a corrected state/list regression. The shared
+chain's existing fault/auth/raw-response ordering is unchanged; its deletion
+observer test remains the generic short-circuit control, not a new CreateProfile
+authentication acceptance test. The observer still runs after the state hook;
+callback/concurrent visibility is not made transactional. Standalone public
+ReplayResponder, bindings and additional read dependencies remain W19 work.
+
 ## Committed deletion effects
 
-P-C/W19 now carries an optional private `Effect` alongside synthetic XML.
+Initial deletion-effect slice: P-C/W19 carries an optional private `Effect` alongside synthetic XML.
 The existing two DeleteProfile route arms pass a per-request effect slot; only
 their `Deleted` branch sets `ProfilesChanged`. The terminal invokes its private
 observer after the handler completes, not by scanning XML or subscribing to a
@@ -310,8 +333,8 @@ The public standalone ReplayResponder constructor retains its existing policy:
 it cannot observe a caller-owned downstream responder. Built-in clones enable the
 private commit-aware path only where the terminal is owned. This is a staged
 migration, not a public configuration switch or whole W19 acceptance. Other
-mutations still use the old family invalidation (including reproduced K18 create
-behavior). Additional profile-dependent reads, malformed Action handling, callback
+mutations other than the creation slice above still use the old family invalidation.
+Additional profile-dependent reads, malformed Action handling, callback
 ordering and concurrent linearizability remain open. The effect observer runs
 after the existing state-change callback; this slice does not make that callback
 and replay invalidation atomic or add rollback.

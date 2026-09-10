@@ -163,6 +163,25 @@ XSD 1.1，不代表擴充 Name variant 的驗收。前一個快照 commit `418ea
 託管 CI 34483819340；該結果不包含本次 Name 修正。下一步：內建 replay 的
 CreateProfile committed effect，包含嚴格名稱拒絕及過期 list 讀取。
 
+已實作有界 K18 effect 子批次：兩個 CreateProfile handler 從既有
+`CreateOutcome::Created` 判定成功，不改輸入或配置契約。僅在此結果產生既有
+private ProfilesChanged effect，並只把兩個精確 Action 加入內建 commit tracking。
+沿用已審查的三個讀取依賴（Media1 GetProfile／GetProfiles、Media2 GetProfiles），
+包含保守地使 singular profile recording 失效。兩種內建 transport 測試缺少 Name、
+Media1 重複 token 拒絕、成功建立在兩個 list 可見、不相關服務錄製及 instance 隔離。
+Raw／auth／fault 提前回應仍不回報已提交 effect。Standalone responder、binding、
+完整依賴閉包及併發 callback 可見性仍屬 W19；不需新增 public observer API 或實機寫入。
+
+K18 驗證：修正斷言後的舊行為執行，在過期清單身分及兩種 transport 的建立拒絕
+錄製保留 assertion 失敗（`1789048799_cargo_test.log`）。僅抑制 Media2 建立 effect
+時，兩個 transport 測試在通過 Media1 流程後，於不應保留的錄製身分 assertion
+失敗（`1789048940_cargo_test.log`），擾動已還原。最終通過格式、兩種 workspace
+Clippy、1,198 項 all-feature 及 1,111 項 default 測試（各 5 ignored、25 suites）、
+兩種 strict workspace 文件建置與未變動的 159／157／255 inventory self-test。
+未改 response format，不宣稱新增 XSD 驗收。Name commit `aa78a31` 通過託管
+CI 34485846940；該 run 不包含本次 replay 子批次。下一項工程工作為 binding effect
+及首批 token／field 遷移；整體計畫仍在進行中。
+
 已實作有界 W18 read-snapshot 子批次：Media1 GetProfiles／GetProfile 及
 Media2 GetProfiles 在同一 read guard 內取得 profile 與 catalogue，保留回應
 形狀及 selector 行為。`catalogues_from_state` 借用 DeviceState，不重新取得鎖。

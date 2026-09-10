@@ -352,13 +352,13 @@ W01/W02 work; the index must not be marked as a finished migration.
 
 The follow-up [pipeline preflight](mock-fidelity-pipeline-preflight.md) records
 selected transitive paths and K17's pre-success replay family invalidation,
-owned by W19/W03/W18. It was reproduced and the built-in DeleteProfile paths
+owned by W19/W03/W18. It was reproduced and the built-in CreateProfile/DeleteProfile paths
 now use explicit committed effects; other mutation/dependency paths remain open. It also
 traces the K15 decode/render dependency; output-only escaping is not a complete
-fix while CreateProfile still stores raw entity spelling.
+fix while legacy input readers store raw entity spelling; profile Names now pair both fixes.
 K18 in that preflight also records missing profile read/write invalidation edges
-and service identity in replay family keys. The create/list mismatch is reproduced;
-selected deletion/profile-read edges are now tested across services and transports,
+and service identity in replay family keys. The built-in create/list mismatch is repaired;
+selected creation/deletion/profile-read edges are tested across services and transports,
 while the complete dependency graph remains open.
 
 | ID | Evidence | Disposition |

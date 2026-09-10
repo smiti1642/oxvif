@@ -191,6 +191,30 @@ variant acceptance. Previous snapshot commit `418eacc` passed hosted CI
 34483819340; that result predates this Name change. Next: committed CreateProfile
 effects for built-in replay, including strict-name refusals and stale list reads.
 
+Implemented bounded K18 effect slice: both CreateProfile handlers identify their
+existing `CreateOutcome::Created` result without changing input or allocation
+contracts. Emit the existing private ProfilesChanged effect only for that outcome,
+and add only their exact Actions to built-in commit tracking. Reuse the reviewed
+three-read dependency set (Media1 GetProfile/GetProfiles, Media2 GetProfiles),
+including conservative retirement of singular profile recordings. Test missing
+Name and Media1 duplicate-token refusals, successful creation visible in both
+lists, unrelated service recordings and instance isolation through both built-in
+transports. Raw/auth/fault short circuits still do not report a committed effect.
+Standalone responders, bindings, full dependency closure and concurrent callback
+visibility remain W19; no new public observer API or real-camera write is needed.
+
+K18 verification: the corrected old-behavior run failed at stale-list identity
+and both transports' refused-creation recording assertions
+(`1789048799_cargo_test.log`). Suppressing only the Media2 creation effect caused
+both transport tests to fail at retained-recording identity after the Media1
+sequence passed (`1789048940_cargo_test.log`); it was restored. Final formatting,
+both workspace Clippy modes, 1,198 all-feature and 1,111 default tests (5 ignored,
+25 suites each), both strict workspace doc builds and unchanged 159/157/255
+inventory self-tests passed. No response format or new XSD acceptance is claimed.
+Name commit `aa78a31` passed hosted CI 34485846940; that run predates this replay
+slice. Next engineering work is binding effects and first-batch token/field
+migration; the complete programme remains in progress.
+
 Implemented bounded W18 read-snapshot slice: Media1 GetProfiles/GetProfile and
 Media2 GetProfiles capture profiles and catalogues under one shared read guard,
 preserving response shapes and selector behavior. `catalogues_from_state` takes

@@ -541,9 +541,10 @@ Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多�
 分別為 `ter:NoProfile` 與 `ter:DeletionOfFixedProfile`；reason 文字不變。
 此局部遷移不代表其他操作已修正。DeleteProfile 現在對不存在／固定 profile 的拒絕
 不通知 change hook，成功刪除則通知一次。內部通知 predicate 並非 rollback；公開
-`modify`／`modify_returning` 語意不變。內建 replay clone 現在於拒絕刪除時保留 profile
-錄製結果，成功 synthetic 刪除後才淘汰 Media1 GetProfile／GetProfiles 與 Media2
-GetProfiles。其他 mutation、單獨建構 ReplayResponder、更多相依關係及併發可見性
+`modify`／`modify_returning` 語意不變。內建 replay clone 現在於拒絕建立或刪除時保留
+profile 錄製結果，成功 synthetic 建立或刪除後才淘汰 Media1 GetProfile／GetProfiles
+與 Media2 GetProfiles。因此建立會刷新錄製的 profile 清單及單筆 profile 檢視。
+其他 mutation、單獨建構 ReplayResponder、更多相依關係及併發可見性
 仍待審查。
 
 許多 token-error reason 帶有 operation tag 與 numeric id，例如：

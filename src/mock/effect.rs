@@ -18,5 +18,7 @@ pub(crate) fn tracks_commit(action: &str) -> bool {
         action,
         "http://www.onvif.org/ver10/media/wsdl/DeleteProfile"
             | "http://www.onvif.org/ver20/media/wsdl/DeleteProfile"
+            | "http://www.onvif.org/ver10/media/wsdl/CreateProfile"
+            | "http://www.onvif.org/ver20/media/wsdl/CreateProfile"
     )
 }

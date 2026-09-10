@@ -559,6 +559,7 @@ pub fn resp_video_encoder_instances() -> String {
 pub fn handle_create_profile_media2(
     state: &SharedState,
     operation: &crate::mock::request::Node,
+    effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
     let name = match media::profile_name(operation, "http://www.onvif.org/ver20/media/wsdl") {
         Ok(name) => name,
@@ -568,13 +569,16 @@ pub fn handle_create_profile_media2(
     // and, unlike `trt:CreateProfile`, **no caller-supplied token**. The device
     // always assigns.
     match media::create_profile_in_state(state, name, None) {
-        media::CreateOutcome::Created(entry) => soap(
-            NS,
-            &format!(
-                "<tr2:CreateProfileResponse><tr2:Token>{}</tr2:Token></tr2:CreateProfileResponse>",
-                entry.token
-            ),
-        ),
+        media::CreateOutcome::Created(entry) => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            soap(
+                NS,
+                &format!(
+                    "<tr2:CreateProfileResponse><tr2:Token>{}</tr2:Token></tr2:CreateProfileResponse>",
+                    entry.token
+                ),
+            )
+        }
         media::CreateOutcome::Duplicate(t) => resp_soap_fault(
             "ter:ProfileExists",
             &format!("Profile token already in use: {t}"),

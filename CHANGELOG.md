@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Built-in replay devices now retain recordings when Media1/Media2 profile
+  creation is refused, and retire both services' profile views only after a
+  successful creation. Recorded profile lists no longer hide a newly created
+  profile. Standalone responder and other mutation policies remain under review.
 - Mock Media1/Media2 profile creation now stores decoded literal names, and
   profile responses escape those names once. Seeded markup remains text;
   significant whitespace is preserved in state and raw responses. A missing,
@@ -66,7 +70,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Built-in replay devices now preserve profile recordings when Media1/Media2
   deletion is rejected, and retire both services' profile views only after a
   successful synthetic deletion. Fault/auth/custom-responder short circuits do
-  not report committed effects. Other mutations and standalone `ReplayResponder`
+  not report committed effects. Creation has also migrated as noted above;
+  remaining mutations and standalone `ReplayResponder`
   construction retain their legacy policy pending their own migration; the full
   dependency graph and concurrent visibility remain under review.
 - Media2 profile enumeration now explicitly requests `Type=All`, so conforming

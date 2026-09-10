@@ -1,6 +1,6 @@
 //! Persona B replay: answer reads from a recorded [`FixtureStore`], with coarse
 //! copy-on-write so writes still round-trip through synthetic `DeviceState`.
-//! Built-in devices use explicit committed effects for DeleteProfile; remaining
+//! Built-in devices use committed effects for CreateProfile/DeleteProfile; remaining
 //! mutations and standalone responder construction retain the legacy policy.
 
 use std::collections::HashSet;
@@ -34,7 +34,7 @@ const METAMORPH_BASE: &str = "http://metamorph";
 ///
 /// The public constructor retains this standalone policy because it cannot
 /// observe a caller's later responders. Built-in replay devices additionally
-/// observe successful synthetic DeleteProfile effects: refusals retain recorded
+/// observe successful synthetic CreateProfile/DeleteProfile effects: refusals retain recorded
 /// reads, and success retires profile reads across both Media services. Other
 /// mutations still require migration; this is not full dependency tracking.
 pub struct ReplayResponder {

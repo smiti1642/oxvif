@@ -215,3 +215,185 @@ async fn http_deletion_retires_both_views_only_after_commit() {
         .await;
     }
 }
+
+async fn verify_creation(
+    transport: Arc<dyn Transport>,
+    base: &str,
+    state: &MockState,
+    reads: &[RecordedRead],
+    media2: bool,
+) {
+    let before = state.read().clone();
+    let namespace = if media2 { M2 } else { M1 };
+    let client = OnvifClient::new(base).with_transport(transport.clone());
+    let mut refusals = vec![
+        (
+            format!("<m:CreateProfile xmlns:m='{namespace}'/>"),
+            "s:Sender",
+            Some("ter:InvalidArgs"),
+            "Invalid Args",
+        ),
+        (
+            format!(
+                "<m:CreateProfile xmlns:m='{namespace}'><m:Name>one</m:Name><m:Name>two</m:Name></m:CreateProfile>"
+            ),
+            "s:Sender",
+            Some("ter:InvalidArgs"),
+            "Invalid Args",
+        ),
+    ];
+    if !media2 {
+        // This branch retains its staged legacy fault contract; check its exact
+        // payload rather than changing it as a side effect of replay migration.
+        refusals.push((format!("<m:CreateProfile xmlns:m='{M1}'><m:Name>duplicate</m:Name><m:Token>Profile_1</m:Token></m:CreateProfile>"), "ter:ProfileExists", None, "Profile token already in use: Profile_1"));
+    }
+    for (request, code, subcode, reason) in refusals {
+        let response = transport
+            .soap_post(base, &format!("{namespace}/CreateProfile"), request)
+            .await
+            .unwrap();
+        let body = parse_soap_body(&response).unwrap();
+        assert_eq!(
+            oxvif::soap::find_response(&body, "CreateProfileResponse").unwrap_err(),
+            SoapError::Fault {
+                code: code.into(),
+                subcode: subcode.map(str::to_owned),
+                reason: reason.into(),
+                detail: None,
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(&*state.read()).unwrap(),
+            serde_json::to_value(&before).unwrap()
+        );
+        for read in reads {
+            assert_eq!(
+                transport
+                    .soap_post(base, &read.action, read.request.clone())
+                    .await
+                    .unwrap(),
+                read.response,
+                "refused creation must retain recorded reads: {}",
+                read.action
+            );
+        }
+    }
+    let name = "created-effect-922";
+    let token = if media2 {
+        client.create_profile_media2(base, name).await.unwrap()
+    } else {
+        client.create_profile(base, name, None).await.unwrap().token
+    };
+    assert_eq!(token, "Profile_5");
+    let mut expected = before;
+    expected.profiles.next_token_id = 6;
+    expected
+        .profiles
+        .profiles
+        .push(oxvif::mock::state::ProfileEntry {
+            token: token.clone(),
+            name: name.into(),
+            fixed: false,
+            video_source_config_token: None,
+            video_encoder_config_token: None,
+            audio_source_config_token: None,
+            audio_encoder_config_token: None,
+            ptz_config_token: None,
+        });
+    assert_eq!(
+        serde_json::to_value(&*state.read()).unwrap(),
+        serde_json::to_value(&expected).unwrap()
+    );
+    for (index, read) in reads.iter().enumerate() {
+        let response = transport
+            .soap_post(base, &read.action, read.request.clone())
+            .await
+            .unwrap();
+        if index == 3 {
+            assert_eq!(
+                response, read.response,
+                "unrelated service recording must survive"
+            );
+            continue;
+        }
+        assert_ne!(
+            response, read.response,
+            "committed creation must retire this profile view"
+        );
+        let body = parse_soap_body(&response).unwrap();
+        if index == 0 {
+            assert_eq!(
+                body.path(&["GetProfileResponse", "Profile", "Name"])
+                    .unwrap()
+                    .text(),
+                "survivor-effect-831"
+            );
+        } else {
+            let profiles: Vec<_> = body
+                .child("GetProfilesResponse")
+                .unwrap()
+                .children_named("Profiles")
+                .collect();
+            assert_eq!(profiles.len(), 5);
+            assert_eq!(
+                profiles
+                    .iter()
+                    .find(|p| p.attr("token") == Some(token.as_str()))
+                    .unwrap()
+                    .child("Name")
+                    .unwrap()
+                    .text(),
+                name
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn in_process_creation_retires_both_views_only_after_commit() {
+    for media2 in [false, true] {
+        let (state, store, reads) = fixture();
+        let transport = MetamorphTransport::new(store.clone()).with_state(state);
+        verify_creation(
+            Arc::new(transport.clone()),
+            "http://mock",
+            transport.device(),
+            &reads,
+            media2,
+        )
+        .await;
+        let independent = MetamorphTransport::new(store);
+        for read in reads {
+            assert_eq!(
+                independent
+                    .soap_post("http://mock", &read.action, read.request)
+                    .await
+                    .unwrap(),
+                read.response
+            );
+        }
+    }
+}
+
+#[cfg(feature = "mock-server")]
+#[tokio::test]
+async fn http_creation_retires_both_views_only_after_commit() {
+    for media2 in [false, true] {
+        let (state, store, reads) = fixture();
+        let initial_state = state.read().clone();
+        let server = oxvif::mock::MockServer::builder()
+            .initial_state(initial_state)
+            .replay(store)
+            .start()
+            .await
+            .unwrap();
+        verify_creation(
+            Arc::new(oxvif::transport::HttpTransport::new()),
+            server.device_url(),
+            server.device(),
+            &reads,
+            media2,
+        )
+        .await;
+    }
+}

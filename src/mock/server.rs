@@ -108,8 +108,8 @@ impl MockServerBuilder {
     /// unrecorded operations fall to synthetic `DeviceState` with coarse
     /// copy-on-write, so `Set → Get` still round-trips. Any HTTP ONVIF client
     /// (oxdm, Frigate, ODM) can then drive the clone at [`device_url`].
-    /// Media1/Media2 DeleteProfile instead retires profile reads only after a
-    /// successful synthetic deletion; rejected deletions preserve recordings.
+    /// Media1/Media2 CreateProfile and DeleteProfile instead retire profile reads
+    /// only after a successful synthetic commit; refusals preserve recordings.
     /// Other write/dependency families retain the legacy policy during migration.
     ///
     /// Requires the `metamorph` feature (this method exists under

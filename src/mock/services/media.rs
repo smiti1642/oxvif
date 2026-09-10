@@ -121,6 +121,7 @@ pub fn handle_create_profile(
     state: &SharedState,
     body: &str,
     operation: &crate::mock::request::Node,
+    effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
     let name = match profile_name(operation, "http://www.onvif.org/ver10/media/wsdl") {
         Ok(name) => name,
@@ -131,7 +132,10 @@ pub fn handle_create_profile(
     let supplied_token = extract_tag(&inner, "Token");
 
     let entry = match create_profile_in_state(state, name, supplied_token) {
-        CreateOutcome::Created(e) => e,
+        CreateOutcome::Created(e) => {
+            *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
+            e
+        }
         CreateOutcome::Duplicate(t) => {
             return resp_soap_fault(
                 "ter:ProfileExists",

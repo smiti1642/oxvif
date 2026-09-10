@@ -78,7 +78,7 @@ async fn rejected_delete_preserves_unchanged_profile_recording() {
 
 #[cfg(feature = "metamorph")]
 #[tokio::test]
-async fn known_gap_k18_successful_create_leaves_recorded_profile_list_stale() {
+async fn successful_create_retires_stale_recorded_profile_list() {
     let (transport, ns, one, all) = profile_replay();
     let before = transport.device().read().profiles.profiles.len();
     assert_eq!(
@@ -108,16 +108,32 @@ async fn known_gap_k18_successful_create_leaves_recorded_profile_list_stale() {
             "K18-created"
         );
     }
-    assert_eq!(
-        transport
-            .soap_post("http://mock", &format!("{ns}/GetProfiles"), all)
-            .await
-            .unwrap(),
-        "<recorded-all/>",
-        "K18 changed: replace the baseline with a list reflecting the committed create"
+    let list = transport
+        .soap_post("http://mock", &format!("{ns}/GetProfiles"), all)
+        .await
+        .unwrap();
+    assert_ne!(
+        list, "<recorded-all/>",
+        "committed creation must retire the recorded list"
     );
-    // The singular family was retired: this is a dependency mismatch, not a
-    // write that failed to run or a replay responder that was never reached.
+    let body = parse_soap_body(&list).unwrap();
+    let profiles: Vec<_> = body
+        .child("GetProfilesResponse")
+        .unwrap()
+        .children_named("Profiles")
+        .collect();
+    assert_eq!(profiles.len(), before + 1);
+    assert_eq!(
+        profiles
+            .iter()
+            .find(|p| p.attr("token") == Some("K18-token"))
+            .unwrap()
+            .child("Name")
+            .unwrap()
+            .text(),
+        "K18-created"
+    );
+    // Both list and singular profile reads now use the committed synthetic state.
     let singular = transport
         .soap_post("http://mock", &format!("{ns}/GetProfile"), one)
         .await
