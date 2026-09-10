@@ -473,6 +473,12 @@ Parser 應優先使用最深層節點，並逐層向外 fallback。不存在的�
 
 Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多數服務 handler 仍使用 `helpers::resp_soap_fault`）。目前 HTTP status 維持 **200**；SOAP HTTP binding 稽核尚未完成。XML 結構正確不能證明 HTTP 行為正確。
 
+在強化分支中，Media1／Media2 `DeleteProfile` 對不存在或固定 profile 的拒絕使用
+巢狀 Sender Fault。`SoapError::Fault.code` 為 `s:Sender`，`subcode` 維持**第一層**：
+不存在 profile 為 `ter:InvalidArgVal`，固定 profile 為 `ter:Action`。Wire 最深層條件
+分別為 `ter:NoProfile` 與 `ter:DeletionOfFixedProfile`；reason 文字不變。
+此局部遷移不代表其他操作或拒絕寫入時的 hook 已修正。
+
 許多 token-error reason 帶有 operation tag 與 numeric id，例如：
 
 ```text

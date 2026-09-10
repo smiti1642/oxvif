@@ -24,19 +24,19 @@ handler 位於 `src/mock/services/media.rs`／`media2.rs`，dispatch 位於
 Client service URL 由 session service discovery 取得；目前 MockTransport 忽略 URL，
 MockServer 採 catch-all POST 路由。
 
-| 清冊 ID | Client → handler | 目前輸入擷取 | 狀態／renderer 路徑 | 目前一般 Fault code（平面） |
+| 清冊 ID | Client → handler | 目前輸入擷取 | 狀態／renderer 路徑 | 目前一般 Fault code（未註明者為平面） |
 | --- | --- | --- | --- | --- |
 | `media.GetProfiles` | get_profiles → resp_profiles | 不接收 body | profiles + catalogues → render_profile | Handler 無操作專屬錯誤分支 |
 | `media.GetProfile` | get_profile → resp_profile | GetProfile fragment → ProfileToken；缺少時為空字串 | profiles + catalogues → render_profile | ter:NoProfile |
 | `media.CreateProfile` | create_profile → handle_create_profile | Name 預設 Profile；選填 Token；舊 fragment／text | create_profile_in_state → profiles, next_token_id → render_profile | ter:ProfileExists |
-| `media.DeleteProfile` | delete_profile → handle_delete_profile | required_text(ProfileToken)，嚴格 scalar identity | delete_profile_in_state → profiles → empty response | env:Sender / ter:NoProfile / ter:DeletionOfFixedProfile |
+| `media.DeleteProfile` | delete_profile → handle_delete_profile | required_text(ProfileToken)，嚴格 scalar identity | delete_profile_in_state → profiles → empty response | 解析：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
 | `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile |
 | `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile |
 | `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | 不接收 body（不讀 Token／Type） | profiles + media::catalogues → render_profile_media2 | Handler 無操作專屬錯誤分支 |
 | `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Name 預設 Profile；不讀 Configuration | media::create_profile_in_state(None) → profiles, counter → Token response | ter:ProfileExists 分支（目前傳 None 不會到達） |
-| `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | required_text(Token)，嚴格 scalar identity | media::delete_profile_in_state → profiles → empty response | env:Sender / ter:NoProfile / ter:DeletionOfFixedProfile |
+| `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | required_text(Token)，嚴格 scalar identity | media::delete_profile_in_state → profiles → empty response | 解析：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
 | `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken；重複 Configuration／Type／Token；不讀 Name | apply_media2_configuration(add=true) → per-entry media::bind_configuration | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
 | `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken；重複 Configuration／Type／Token | apply_media2_configuration(add=false) → per-entry media::unbind_configuration | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
 
@@ -94,9 +94,17 @@ binding 變更。已修正相反的舊註解，並新增直接 state assertion�
 Media2 參考資料揭露現有 reader 未處理的 selector／初始 configuration／name／list
 語意；這些是審查目標，不代表可默默擴充公開 client 方法。
 
-尚需完整 WSDL／XSD 欄位驗證、Core／共用 Fault 映射、外部資源 manifest／版本 hash、
-全部錯誤條件與 capacity／conflict／extension 規則。未執行 hash-pinned schema 驗證，
-不得僅憑文件連結將 C 標記完成。
+此次局部 DeleteProfile Fault 審查依據 Media1 §5.2.22 與 Media2 §5.1.5：兩個服務
+對不存在 profile 均使用 Sender → InvalidArgVal → NoProfile，對固定 profile 均使用
+Sender → Action → DeletionOfFixedProfile。這四個分支已改用私有 serializer；client
+維持第一層 subcode 語意，reason 文字及錯誤型別不變。Corpus 檢查兩層 subcode、
+client／health 分類，以及固定 profile 拒絕前後的序列化 state。通知及 replay 缺陷
+K14／K17 仍明確待處理；無效請求 Fault 與 virtual-profile 行為不屬於此次局部遷移。
+
+固定來源的外部編譯及 34 份選定 instance 已通過，見
+[schema 前置檢查](mock-fidelity-schema-preflight_zh.md)。尚需完整 WSDL／XSD 欄位
+驗證、Core／共用及其他操作 Fault 映射，以及 capacity／conflict／extension 規則。
+不可僅憑選定 instance 的結果將 C 標記完成。
 
 ## 案例與開工條件
 
@@ -109,7 +117,7 @@ Media2 參考資料揭露現有 reader 未處理的 selector／初始 configurat
 | C05 | 既有 `mock_token_discrimination`／`mock_media1_media2_agree`；全部 binding 增加 escaped／wrong-family token | PARTIAL |
 | C06 | `known_gap_k13_generated_profile_token_collides_with_seeded_token`、`known_gap_k14_rejected_delete_notifies_change_hook`、`known_gap_k16_late_invalid_binding_leaves_first_write_applied` | 已重現缺口 |
 | C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`；補完巢狀 renderer escaping、獨立 namespace／shape 檢查 | 已重現缺口 |
-| C08 | `unknown_token_fault_preserves_literal_text_and_state`；結構化 mapping／HTTP code 待 W05–W07 | PARTIAL |
+| C08 | `unknown_token_fault_preserves_literal_text_and_state`；corpus 檢查不存在／固定 DeleteProfile 巢狀 Fault；其他 mapping／HTTP code 待 W05–W07 | PARTIAL |
 | C09 | Parser 限制目前僅在已遷移 DeleteProfile 有涵蓋；其他路徑 auth／resource-limit 待查 | TODO |
 | C10 | 模型限制及 K12 修正；`fixed_profile_configuration_remains_mutable_in_both_media_services` 證明 fixed profile 的 Add／Remove 實際改變 state | PARTIAL |
 | C11 | 已列 client／session Action site；巢狀 Fault 相容性及 CLI 影響待 W06 | TODO |

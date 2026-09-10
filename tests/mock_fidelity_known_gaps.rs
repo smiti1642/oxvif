@@ -59,7 +59,7 @@ async fn known_gap_k17_rejected_write_retires_unchanged_profile_recording() {
             .delete_profile("http://mock", "K17-absent")
             .await
             .unwrap_err(),
-        "ter:NoProfile",
+        "s:Sender",
         "Profile not found: K17-absent",
     );
     assert_eq!(
@@ -223,7 +223,7 @@ async fn known_gap_k14_rejected_delete_notifies_change_hook() {
                 .await
                 .unwrap_err()
         };
-        assert_fault(error, "ter:NoProfile", "Profile not found: K14-absent");
+        assert_fault(error, "s:Sender", "Profile not found: K14-absent");
         assert_eq!(transport.device().read().profiles.profiles.len(), before);
         assert_eq!(
             notifications.load(Ordering::SeqCst),

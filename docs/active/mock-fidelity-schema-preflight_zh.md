@@ -195,13 +195,13 @@ Windows／Linux CI 現在先執行 generic 控制及獨立 Xerces 選型，再�
 
 `tests/mock_schema_corpus.rs` 現在透過未設定憑證的 `OnvifClient` 呼叫 in-process
 mock，擷取完整 request／response 字串；不讀取官方 schema，也不連線至攝影機或
-網路。測試精確比對第一批 13 張 profile 工作卡的來源 Action 集合。15 組 exchange
-涵蓋 13 個操作及兩個明確的不存在 profile 拒絕；綁定、建立與刪除皆有 state 斷言，
+網路。測試精確比對第一批 13 張 profile 工作卡的來源 Action 集合。17 組 exchange
+涵蓋 13 個操作及四個明確的不存在／固定 profile 拒絕；綁定、建立與刪除皆有 state 斷言，
 並非只確認呼叫成功。Fault 預期由測試流程指定，不以搜尋回應字串猜測。
 
 Ignored 匯出測試要求 `OXVIF_MOCK_CORPUS` 指向**尚未存在的外部絕對目錄，且其
 parent 已存在**。工具拒絕空資料、含認證欄位的 request、相對／既有目錄及
-checkout／其上層位置。匯出保留 XML bytes，產生 30 個檔案及 `cases.json`，並為
+checkout／其上層位置。匯出保留 XML bytes，產生 34 個檔案及 `cases.json`，並為
 request、成功與 Fault response 記錄明確的 Envelope／Body／operation 預期。
 不讀取環境憑證或覆寫檔案；這是診斷 corpus，不是完整逐操作驗收。
 
@@ -212,12 +212,18 @@ Remove-Item Env:OXVIF_MOCK_CORPUS
 ```
 
 將匯出目錄傳給 Xerces 的 `validate --corpus`，並使用編譯時相同的固定 `--root`、
-`--tool-root` 與 `--java`。完整 corpus 目前應當**失敗**：獨立逐 instance 診斷得到
-**28 份有效／2 份無效**。兩個失敗皆為 Media1／Media2 DeleteProfile 對不存在
-profile 的回應，constraint 為 `SAXParseException:cvc-enumeration-valid`：舊 helper
-將 `ter:NoProfile` 放在 SOAP Code。K03 因此提升為已重現的 wire 證據，但尚未修正
-逐操作 Fault mapping。此次產生的全部 request 與 13 份成功 response 均通過選定
-corpus 的檢查；不代表省略欄位、其他輸入、state 語意或剩餘 route 已驗收。
+`--tool-root` 與 `--java`。`1a0ac1c` 的初始 corpus 為 **28 份有效／2 份無效**：
+兩個不存在 profile 的 DeleteProfile 回應因舊 helper 將 `ter:NoProfile` 放在
+SOAP Code 而觸發 `cvc-enumeration-valid`。完成經審查的 DeleteProfile Fault 遷移
+後，新外部匯出為 **34 份有效／0 份無效**（17 份 request、13 份成功回應、四份
+不存在／固定 profile Fault）。含明確 payload anchor 的獨立 Xerces 嚴格驗證回傳
+exit 0。這修正選定的 K03 分支，不包含其餘一般 Fault mapping；也不代表省略欄位、
+其他輸入、state 語意或剩餘 route 已驗收。
+
+敏感度控制分別將固定 profile 的頂層 code 改為 Receiver，以及將不存在 profile 的
+最深層改為 `WrongProfile`。完整全部功能 `--no-fail-fast` 執行分別在精確的 client
+code 與擷取回應 leaf 斷言失敗，兩項擾動均已還原。Exporter 改從擷取資料計算數量，
+不再輸出過時常數。官方 schema 內容未進入 checkout。
 
 兩個驗證後端均新增 namespace-scope 正向控制及缺少、未宣告、多 payload 的負向
 控制。停用 payload 檢查後，每個後端新增的兩項測試均失敗，之後已還原。Rust 的

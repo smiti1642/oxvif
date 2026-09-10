@@ -147,6 +147,9 @@ pub fn handle_create_profile(state: &SharedState, body: &str) -> String {
 }
 
 pub fn handle_delete_profile(state: &SharedState, body: &str) -> String {
+    use crate::mock::fault::{
+        ACTION, Code, DELETION_OF_FIXED_PROFILE, Fault, INVALID_ARG_VAL, NO_PROFILE,
+    };
     let token = match crate::mock::request::required_text(
         body,
         "http://www.onvif.org/ver10/media/wsdl",
@@ -167,13 +170,19 @@ pub fn handle_delete_profile(state: &SharedState, body: &str) -> String {
             r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
             "<trt:DeleteProfileResponse/>",
         ),
-        DeleteOutcome::NotFound => {
-            resp_soap_fault("ter:NoProfile", &format!("Profile not found: {token}"))
-        }
-        DeleteOutcome::Fixed => resp_soap_fault(
-            "ter:DeletionOfFixedProfile",
+        // Media service 24.12 §5.2.22: both refusals are Sender faults.
+        DeleteOutcome::NotFound => Fault::new(
+            Code::Sender,
+            &[INVALID_ARG_VAL, NO_PROFILE],
+            &format!("Profile not found: {token}"),
+        )
+        .to_xml(),
+        DeleteOutcome::Fixed => Fault::new(
+            Code::Sender,
+            &[ACTION, DELETION_OF_FIXED_PROFILE],
             &format!("Cannot delete fixed profile: {token}"),
-        ),
+        )
+        .to_xml(),
     }
 }
 

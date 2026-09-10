@@ -885,6 +885,13 @@ SOAP 1.2 `<s:Fault>` with `Code/Value` and `Reason/Text`
 currently **200**; the SOAP HTTP binding audit remains pending. Do not infer
 correct HTTP behavior from a well-formed Fault body.
 
+On the hardening branch, Media1/Media2 `DeleteProfile` missing/fixed-profile
+refusals use nested Sender faults. `SoapError::Fault.code` is `s:Sender`, and
+`subcode` retains the **first** level: `ter:InvalidArgVal` for a missing profile,
+`ter:Action` for a fixed one. The deepest wire conditions are `ter:NoProfile`
+and `ter:DeletionOfFixedProfile`, respectively. Reason text is unchanged.
+This scoped migration does not correct other operations or rejected-write hooks.
+
 ### 9.2 Reason strings are tagged and unique
 
 Many token-error reasons carry an operation tag and a numeric id:

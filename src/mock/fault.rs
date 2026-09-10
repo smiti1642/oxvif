@@ -55,6 +55,13 @@ pub(super) const FAILED_AUTHENTICATION: FaultQName = FaultQName::new(
     "FailedAuthentication",
 );
 
+const ONVIF_ERROR: &str = "http://www.onvif.org/ver10/error";
+pub(super) const INVALID_ARG_VAL: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "InvalidArgVal");
+pub(super) const ACTION: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "Action");
+pub(super) const NO_PROFILE: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "NoProfile");
+pub(super) const DELETION_OF_FIXED_PROFILE: FaultQName =
+    FaultQName::new("ter", ONVIF_ERROR, "DeletionOfFixedProfile");
+
 pub(super) struct Fault<'a> {
     code: Code,
     subcodes: &'a [FaultQName],

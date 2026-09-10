@@ -25,19 +25,19 @@ index; handlers are in `src/mock/services/media.rs` or `media2.rs`, dispatch in
 Both client service URLs come from session service discovery; MockTransport
 currently ignores URL and MockServer uses its catch-all POST route.
 
-| Ledger ID | Client → handler | Current input extraction | State/renderer path | Current ordinary Fault codes (flat) |
+| Ledger ID | Client → handler | Current input extraction | State/renderer path | Current ordinary Fault codes (flat unless noted) |
 | --- | --- | --- | --- | --- |
 | `media.GetProfiles` | get_profiles → resp_profiles | No body consumed | profiles + catalogues → render_profile | No operation-specific branch in handler |
 | `media.GetProfile` | get_profile → resp_profile | GetProfile fragment → ProfileToken; absent becomes empty | profiles + catalogues → render_profile | ter:NoProfile |
 | `media.CreateProfile` | create_profile → handle_create_profile | Name defaults to Profile; optional Token; legacy fragment/text | create_profile_in_state → profiles, next_token_id → render_profile | ter:ProfileExists |
-| `media.DeleteProfile` | delete_profile → handle_delete_profile | required_text(ProfileToken), strict scalar identity | delete_profile_in_state → profiles → empty response | env:Sender / ter:NoProfile / ter:DeletionOfFixedProfile |
+| `media.DeleteProfile` | delete_profile → handle_delete_profile | required_text(ProfileToken), strict scalar identity | delete_profile_in_state → profiles → empty response | Parse: env:Sender; missing/fixed: nested s:Sender (review below) |
 | `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | ProfileToken; legacy scalar | unbind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile |
 | `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | ProfileToken; legacy scalar | unbind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile |
 | `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | No body consumed (Token/Type not read) | profiles + media::catalogues → render_profile_media2 | No operation-specific branch in handler |
 | `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Name defaults to Profile; Configuration not read | media::create_profile_in_state(None) → profiles, counter → Token response | ter:ProfileExists branch (currently unreachable with None) |
-| `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | required_text(Token), strict scalar identity | media::delete_profile_in_state → profiles → empty response | env:Sender / ter:NoProfile / ter:DeletionOfFixedProfile |
+| `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | required_text(Token), strict scalar identity | media::delete_profile_in_state → profiles → empty response | Parse: env:Sender; missing/fixed: nested s:Sender (review below) |
 | `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken; repeated Configuration/Type/Token; Name not read | apply_media2_configuration(add=true) → per-entry media::bind_configuration | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
 | `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken; repeated Configuration/Type/Token | apply_media2_configuration(add=false) → per-entry media::unbind_configuration | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
 
@@ -106,10 +106,19 @@ The Media2 reference exposes additional selector/initial-configuration/name/list
 semantics beyond the fields currently read. Those are review targets, not
 authorization to silently broaden public client methods.
 
-Outstanding: full WSDL/XSD field validation and Core/common Fault mapping,
-external resource manifest/version hashes, all error-condition mappings and
-capacity/conflict/extension rules. No hash-pinned schema run has occurred.
-Do not mark C done on the strength of these document links.
+The bounded DeleteProfile fault review uses Media1 §5.2.22 and Media2 §5.1.5:
+both services require Sender → InvalidArgVal → NoProfile for an unknown profile,
+and Sender → Action → DeletionOfFixedProfile for a fixed one. These four branches
+now use the private serializer. The client keeps first-subcode semantics; reason
+text and error types remain unchanged. The corpus checks both nested levels and
+client/health classification; fixed refusals preserve serialized state. Notification
+and replay defects K14/K17 remain explicitly open. Invalid-request fault paths
+and virtual-profile behavior are not part of this bounded migration.
+
+Pinned external compilation and 34 selected instance checks now pass; see the
+[schema preflight](mock-fidelity-schema-preflight.md). Outstanding: complete
+WSDL/XSD field validation, Core/common and other operation Fault mappings, and
+capacity/conflict/extension rules. Do not mark C done from selected instance results.
 
 ## Cases and readiness
 
@@ -122,7 +131,7 @@ Do not mark C done on the strength of these document links.
 | C05 | Existing `mock_token_discrimination` and `mock_media1_media2_agree`; add escaped tokens and wrong-family targets for all bindings | PARTIAL |
 | C06 | `known_gap_k13_generated_profile_token_collides_with_seeded_token`, `known_gap_k14_rejected_delete_notifies_change_hook`, `known_gap_k16_late_invalid_binding_leaves_first_write_applied` | GAPS REPRODUCED |
 | C07 | `known_gap_k15_profile_name_is_interpreted_as_markup`; complete nested renderer escaping and independent namespace/shape checks | GAP REPRODUCED |
-| C08 | `unknown_token_fault_preserves_literal_text_and_state`; structured mappings/HTTP codes pending W05–W07 | PARTIAL |
+| C08 | `unknown_token_fault_preserves_literal_text_and_state`; corpus checks missing/fixed DeleteProfile nested faults; other mappings/HTTP codes pending W05–W07 | PARTIAL |
 | C09 | Generic parser limits covered only on migrated DeleteProfile; auth boundary/resource-limit coverage for other paths pending | TODO |
 | C10 | Model limits and K12 corrected; `fixed_profile_configuration_remains_mutable_in_both_media_services` proves Add/Remove changes actual state on fixed profiles | PARTIAL |
 | C11 | Client/session Action sites enumerated; nested fault compatibility and CLI impact review pending W06 | TODO |

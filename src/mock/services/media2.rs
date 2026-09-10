@@ -544,6 +544,9 @@ pub fn handle_create_profile_media2(state: &SharedState, body: &str) -> String {
 /// success that removed nothing and reported nothing about a token that did not
 /// exist or a fixed profile that cannot be removed.
 pub fn handle_delete_profile_media2(state: &SharedState, body: &str) -> String {
+    use crate::mock::fault::{
+        ACTION, Code, DELETION_OF_FIXED_PROFILE, Fault, INVALID_ARG_VAL, NO_PROFILE,
+    };
     // **`Token`, not `ProfileToken`.** `tr2:DeleteProfile` names it `Token`
     // where `trt:DeleteProfile` says `ProfileToken`. Reusing Media1's handler
     // wholesale would have read the wrong element and faulted on every valid
@@ -566,13 +569,19 @@ pub fn handle_delete_profile_media2(state: &SharedState, body: &str) -> String {
 
     match media::delete_profile_in_state(state, &token) {
         media::DeleteOutcome::Deleted => resp_empty("tr2", "DeleteProfileResponse"),
-        media::DeleteOutcome::NotFound => {
-            resp_soap_fault("ter:NoProfile", &format!("Profile not found: {token}"))
-        }
-        media::DeleteOutcome::Fixed => resp_soap_fault(
-            "ter:DeletionOfFixedProfile",
+        // Media2 service 26.06 §5.1.5: both refusals are Sender faults.
+        media::DeleteOutcome::NotFound => Fault::new(
+            Code::Sender,
+            &[INVALID_ARG_VAL, NO_PROFILE],
+            &format!("Profile not found: {token}"),
+        )
+        .to_xml(),
+        media::DeleteOutcome::Fixed => Fault::new(
+            Code::Sender,
+            &[ACTION, DELETION_OF_FIXED_PROFILE],
             &format!("Cannot delete fixed profile: {token}"),
-        ),
+        )
+        .to_xml(),
     }
 }
 

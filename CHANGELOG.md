@@ -49,7 +49,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - An opt-in, external-only profile exchange corpus now captures credential-free
   client requests and mock responses for the first 13 profile operations. Both
   validator backends enforce explicit payload anchors beyond envelope wildcards;
-  remaining ordinary Fault failures are reported, not treated as accepted output.
+  selected instances are validated independently, without claiming complete
+  operation or semantic coverage.
+- Mock Media1/Media2 `DeleteProfile` now reports missing/fixed profiles through
+  nested SOAP Sender faults instead of flat ONVIF codes. Client `code` is now
+  `s:Sender`; `subcode` remains the first level (`ter:InvalidArgVal` or
+  `ter:Action`), not the deepest ONVIF condition. Reason strings are preserved.
+  Other operation Fault mappings and rejected-write side effects remain under audit.
 - Mock authentication faults now bind the existing `wsse:FailedAuthentication`
   subcode and escape literal reason text through a private structured serializer.
   XML-invalid reason characters become replacement characters. The existing

@@ -111,7 +111,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W18／M4／TODO | W10–W16 候選行為 | `state.rs::modify/modify_returning/notify`、共用 collection、event queue、replay invalidation | 同時合法／無效寫入、instance 隔離、完整 rollback、hook 通知次數／順序及 reentrancy／lock 行為；記錄 persistence hook 邊界 |
 | W19／M3、M6／TODO | W03／W09 設計 | `canon.rs`、`metamorph/{fixture,replay,record,parse,adapter,quirk,surface}.rs`、responder chain | 保留錄製偏差；核對正規化／key collision／參數辨識；失敗寫入不錯誤 invalidation；不新增錄製設備機密 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
-| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及第一批 13 操作 client／mock corpus 匯出與明確 payload anchor | 30 份 instance：28 通過、兩個不存在 profile 的 Fault 失敗（K03）。全來源編譯通過，其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
+| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及第一批 13 操作 client／mock corpus 匯出與明確 payload anchor | 選定 DeleteProfile Fault 遷移後，34 份 instance 通過，包含四個不存在／固定 profile 拒絕。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
 | W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | 清冊與工具已通過前次託管 CI；新增 Windows／Linux Xerces 選型與獨立官方來源編譯，作為 package 前提 | 來源編譯 job 僅下載固定雜湊的外部資源，不上傳 artifact；完整 mock instance job 與 release 證據檢查仍待完成 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
@@ -160,7 +160,7 @@ W02 發現新相依性時須擴充本表。
 | --- | --- | --- |
 | K01／已重現、部分修正 | DeleteProfile escaped／decoy token 缺陷已由 E1 修正，其他操作未系統性重現 | W04／W10；保留 E1 並新增工作卡 |
 | K02／程式碼確認 | Service 與 auth 仍使用舊 fragment reader | W02–W15；M3 結案時不得有未交代的一般 caller |
-| K03／兩個 DeleteProfile 失敗均已重現 | 獨立驗證拒絕 SOAP Code 中的平面 `ter:NoProfile`；client 維持 first-subcode 契約 | W05／W06；逐操作結構化映射仍待完成，不可將 client 成功解析錯誤視為 wire 合法 |
+| K03／選定 DeleteProfile 分支已修正 | 兩個服務對不存在／固定 profile 使用巢狀 Sender Fault；選定 corpus 的獨立驗證通過 | W05／W06；其餘操作映射仍待完成。Client 仍回報第一層而非最深層 subcode；全程式驗收尚未完成 |
 | K04／已記錄風險 | 舊 escaped 輸入經 escaping Fault helper 回顯可能重複轉義 | W05／W23；追蹤每個含插值的 reason，重現受影響路徑 |
 | K05／程式碼確認 | Factory reset、Events unsubscribe／sync 存在空成功路由，意圖／效果待分類 | W13／W15／W16；逐操作分類，不將所有 `resp_empty` 視為缺陷 |
 | K06／行為確認、規範待查 | HTTP handler 回 200；Events 路由用 substring；HTTP body 使用 lossy UTF-8 conversion | W03／W07；獨立 protocol／transport 案例及適用參考資料 |

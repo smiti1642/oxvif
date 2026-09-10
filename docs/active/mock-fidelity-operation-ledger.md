@@ -41,8 +41,9 @@ Do not change a route before opening its row and the corresponding work package.
   exist. `PARTIAL` means only a named slice is proved. `DONE` requires an evidence
   record with commit and exact test names. `NA:<record>` requires an explicit
   justification; unsupported operations still need rejection tests.
-- The two DeleteProfile rows deliberately remain partial: their scalar identity
-  fixes do not settle full routing, normative Faults or whole-operation acceptance.
+- The two DeleteProfile rows deliberately remain partial: scalar identity and
+  missing/fixed-profile Fault fixes do not settle full routing, all Fault paths
+  or whole-operation acceptance. P1 records the selected nested Fault evidence.
   Evidence E1 is the main plan's first implementation slice at `b134f73`,
   `tests/mock_request_identity.rs` and `src/mock/request.rs` tests.
 - Every row inherits **all** review axes C01–C12 and the readiness/closure
@@ -117,7 +118,7 @@ Do not change a route before opening its row and the corresponding work package.
 | `media.GetProfiles` | `media::resp_profiles` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media.GetProfile` | `media::resp_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media.CreateProfile` | `media::handle_create_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.DeleteProfile` | `media::handle_delete_profile` | `state, body` | W10 | PARTIAL | PARTIAL | TODO | TODO | PARTIAL | E1,P1 |
+| `media.DeleteProfile` | `media::handle_delete_profile` | `state, body` | W10 | PARTIAL | PARTIAL | PARTIAL | TODO | PARTIAL | E1,P1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetVideoSources` | `media::resp_video_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -155,7 +156,7 @@ Do not change a route before opening its row and the corresponding work package.
 | `media2.GetServiceCapabilities` | `media2::resp_service_capabilities_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetProfiles` | `media2::resp_profiles_media2` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, body` | W10 | PARTIAL | PARTIAL | TODO | TODO | PARTIAL | E1,P1 |
+| `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, body` | W10 | PARTIAL | PARTIAL | PARTIAL | TODO | PARTIAL | E1,P1 |
 | `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.GetStreamUri` | `media2::resp_stream_uri_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |

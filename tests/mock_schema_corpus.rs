@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use oxvif::{
     OnvifClient, OnvifError,
     mock::MockTransport,
-    soap::SoapError,
+    soap::{SoapError, parse_soap_body},
     transport::{Transport, TransportError},
 };
 
@@ -53,10 +53,34 @@ impl Transport for Capture {
 }
 
 fn rejected_absent_profile(error: OnvifError) {
-    let OnvifError::Soap(SoapError::Fault { reason, .. }) = error else {
+    assert_delete_fault(
+        error,
+        "ter:InvalidArgVal",
+        "Profile not found: Corpus-absent",
+    );
+}
+
+fn assert_delete_fault(error: OnvifError, subcode: &str, reason: &str) {
+    let OnvifError::Soap(fault) = &error else {
         panic!("expected a SOAP rejection, not a transport/parser failure");
     };
-    assert_eq!(reason, "Profile not found: Corpus-absent");
+    assert_eq!(
+        fault,
+        &SoapError::Fault {
+            code: "s:Sender".into(),
+            reason: reason.into(),
+            subcode: Some(subcode.into()),
+            detail: None,
+        }
+    );
+    #[cfg(feature = "health")]
+    {
+        let check = oxvif::health::CheckError::from(&error);
+        assert_eq!(check.class, oxvif::health::ErrorClass::SoapFault);
+        assert_eq!(check.subcode.as_deref(), Some(subcode));
+        assert_eq!(check.reason, reason);
+        assert!(!check.is_auth());
+    }
 }
 
 async fn profile_exchanges() -> Vec<Exchange> {
@@ -240,6 +264,35 @@ async fn profile_exchanges() -> Vec<Exchange> {
         .last_mut()
         .unwrap()
         .expected_fault = true;
+    let fixed = profiles[0].token.clone();
+    assert!(capture.mock.device().read().profiles.profiles[0].fixed);
+    let before_refusal = serde_json::to_value(&*capture.mock.device().read()).unwrap();
+    for media2 in [false, true] {
+        let error = if media2 {
+            client
+                .delete_profile_media2(TARGET, &fixed)
+                .await
+                .unwrap_err()
+        } else {
+            client.delete_profile(TARGET, &fixed).await.unwrap_err()
+        };
+        assert_delete_fault(
+            error,
+            "ter:Action",
+            &format!("Cannot delete fixed profile: {fixed}"),
+        );
+        capture
+            .exchanges
+            .lock()
+            .unwrap()
+            .last_mut()
+            .unwrap()
+            .expected_fault = true;
+        assert_eq!(
+            serde_json::to_value(&*capture.mock.device().read()).unwrap(),
+            before_refusal
+        );
+    }
     drop(client);
     Arc::try_unwrap(capture.exchanges)
         .unwrap_or_else(|_| panic!("capture still shared"))
@@ -317,7 +370,7 @@ fn export_external(
 #[tokio::test]
 async fn captures_first_profile_batch_from_real_client_calls_without_network() {
     let exchanges = profile_exchanges().await;
-    assert_eq!(exchanges.len(), 15);
+    assert_eq!(exchanges.len(), 17);
     let actions: BTreeSet<_> = exchanges
         .iter()
         .map(|exchange| exchange.action.clone())
@@ -349,7 +402,7 @@ async fn captures_first_profile_batch_from_real_client_calls_without_network() {
             .iter()
             .filter(|exchange| exchange.expected_fault)
             .count(),
-        2
+        4
     );
     for exchange in exchanges {
         assert!(exchange.request.contains("Envelope"));
@@ -358,6 +411,21 @@ async fn captures_first_profile_batch_from_real_client_calls_without_network() {
             !exchange.request.contains("UsernameToken"),
             "the fixture must not capture credentials"
         );
+        if exchange.expected_fault {
+            let body = parse_soap_body(&exchange.response).unwrap();
+            let code = body.path(&["Fault", "Code"]).unwrap();
+            assert_eq!(code.child("Value").unwrap().text(), "s:Sender");
+            let category = code.child("Subcode").unwrap();
+            let leaf = category.child("Subcode").unwrap();
+            let expected = if exchange.request.contains("Corpus-absent") {
+                ("ter:InvalidArgVal", "ter:NoProfile")
+            } else {
+                ("ter:Action", "ter:DeletionOfFixedProfile")
+            };
+            assert_eq!(category.child("Value").unwrap().text(), expected.0);
+            assert_eq!(leaf.child("Value").unwrap().text(), expected.1);
+            assert!(leaf.child("Subcode").is_none());
+        }
     }
 }
 
@@ -410,6 +478,8 @@ async fn export_first_profile_batch_for_independent_validation() {
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
     eprintln!(
-        "Exported 15 synthetic-only client exchanges / 30 XML instances; not a conformance pass"
+        "Exported {} synthetic-only client exchanges / {} XML instances; not a conformance pass",
+        exchanges.len(),
+        exchanges.len() * 2
     );
 }

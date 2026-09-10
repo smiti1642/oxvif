@@ -38,8 +38,9 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 - `TODO` 表示尚未依本計畫驗收，不表示沒有既有測試。`PARTIAL` 表示僅有具名
   子範圍的證據。`DONE` 必須附 commit 與確切測試名稱的證據紀錄。
   `NA:<record>` 必須有不適用理由；未支援操作仍需拒絕測試。
-- 兩個 DeleteProfile 列刻意保留部分完成狀態：scalar identity 修正不等於完整
-  路由、規範 Fault 或整個操作已驗收。E1 指主計畫第一批實作
+- 兩個 DeleteProfile 列刻意保留部分完成狀態：scalar identity 與不存在／固定 profile
+  Fault 修正不等於完整路由、全部 Fault 路徑或整個操作已驗收。P1 記錄選定巢狀
+  Fault 證據。E1 指主計畫第一批實作
   `b134f73`、`tests/mock_request_identity.rs` 與 `src/mock/request.rs` 的測試。
 - 每列均繼承施工檢查表的 **C01–C12 全部稽核面向**及開工／結案條件。
   施工前填妥操作工作卡；不得將空白欄位解讀為不需要處理。依 D3，規範欄位表與
@@ -111,7 +112,7 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | `media.GetProfiles` | `media::resp_profiles` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media.GetProfile` | `media::resp_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media.CreateProfile` | `media::handle_create_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.DeleteProfile` | `media::handle_delete_profile` | `state, body` | W10 | PARTIAL | PARTIAL | TODO | TODO | PARTIAL | E1,P1 |
+| `media.DeleteProfile` | `media::handle_delete_profile` | `state, body` | W10 | PARTIAL | PARTIAL | PARTIAL | TODO | PARTIAL | E1,P1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetVideoSources` | `media::resp_video_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -149,7 +150,7 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | `media2.GetServiceCapabilities` | `media2::resp_service_capabilities_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetProfiles` | `media2::resp_profiles_media2` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, body` | W10 | PARTIAL | PARTIAL | TODO | TODO | PARTIAL | E1,P1 |
+| `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, body` | W10 | PARTIAL | PARTIAL | PARTIAL | TODO | PARTIAL | E1,P1 |
 | `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.GetStreamUri` | `media2::resp_stream_uri_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |

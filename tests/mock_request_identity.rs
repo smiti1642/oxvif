@@ -171,8 +171,15 @@ async fn unknown_token_fault_preserves_literal_text_and_state() {
                 .unwrap_err()
         };
         match error {
-            oxvif::OnvifError::Soap(oxvif::soap::SoapError::Fault { code, reason, .. }) => {
-                assert_eq!(code, "ter:NoProfile"); // Flat fault hierarchy is not migrated in this slice.
+            oxvif::OnvifError::Soap(oxvif::soap::SoapError::Fault {
+                code,
+                reason,
+                subcode,
+                detail,
+            }) => {
+                assert_eq!(code, "s:Sender");
+                assert_eq!(subcode.as_deref(), Some("ter:InvalidArgVal"));
+                assert_eq!(detail, None);
                 assert_eq!(reason, format!("Profile not found: {token}"));
             }
             other => panic!("wrong error for missing token: {other:?}"),

@@ -220,15 +220,15 @@ neither should be reported as full operation/corpus acceptance. Prior CI
 `tests/mock_schema_corpus.rs` now captures complete request/response strings from
 actual credential-free `OnvifClient` calls through an in-process mock, without
 reading official schemas or accessing a camera/network. The source-action set is
-asserted against the first 13 profile cards. Fifteen exchanges cover those 13
-operations plus two explicit missing-profile rejections; binding effects and
+asserted against the first 13 profile cards. Seventeen exchanges cover those 13
+operations plus four explicit missing/fixed-profile rejections; binding effects and
 creation/deletion are asserted, not merely unwrapped. Fault expectations come
 from the driver, not a string search of the response.
 
 The ignored export requires `OXVIF_MOCK_CORPUS` naming a **new absolute external
 directory whose parent exists**. It refuses empty data, credential-bearing
 requests, relative/existing destinations and checkout/ancestor destinations.
-The exporter preserves XML bytes, emits 30 files plus `cases.json`, and records
+The exporter preserves XML bytes, emits 34 files plus `cases.json`, and records
 explicit Envelope/Body/operation expectations for requests and success/Fault
 responses. It never reads environment credentials or overwrites existing files.
 This is a diagnostic corpus, not comprehensive per-operation acceptance.
@@ -241,14 +241,20 @@ Remove-Item Env:OXVIF_MOCK_CORPUS
 
 Pass the exported directory to the Xerces command with `validate --corpus` and
 the same pinned `--root`, `--tool-root` and `--java` settings used for compilation.
-The complete corpus currently **fails**, as it should. Independent per-instance
-diagnostics found **28 valid / 2 invalid** XML instances. Both failures are the
-Media1/Media2 missing-profile DeleteProfile responses, with
-`SAXParseException:cvc-enumeration-valid`: the old helper puts `ter:NoProfile`
-in the SOAP Code position. This upgrades K03 to reproduced wire evidence; it
-does not yet fix the operation-specific Fault mapping. Every generated request
-and the 13 success responses passed this selected corpus check. That does not
-validate omitted fields, alternate inputs, state semantics or the other routes.
+The initial corpus at `1a0ac1c` had **28 valid / 2 invalid** instances: both
+missing-profile DeleteProfile responses failed `cvc-enumeration-valid` because
+the old helper put `ter:NoProfile` in SOAP Code. After the reviewed DeleteProfile
+Fault migration, a fresh external export contains **34 valid / 0 invalid**
+instances (17 requests, 13 successes, four missing/fixed-profile Faults). The
+strict independent Xerces invocation returned exit 0 with explicit payload anchors.
+This fixes the selected K03 branches, not the other ordinary Fault mappings.
+It does not validate omitted fields, alternate inputs, state semantics or other routes.
+
+Sensitivity controls separately changed the fixed-profile top code to Receiver
+and the missing-profile leaf to `WrongProfile`. Full all-feature `--no-fail-fast`
+runs failed at the exact client-code and captured-leaf assertions, respectively;
+both mutations were restored. The exporter now reports counts from the captured
+data instead of a stale literal. No official schema content enters the checkout.
 
 Both validator backends now have positive namespace-scope and negative missing,
 unknown and multiple-payload controls. Disabling payload checks made the two new
