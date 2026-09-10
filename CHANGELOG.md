@@ -49,6 +49,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- CLI regression checks now compare functional JSON output independently of
+  per-execution timing, while still validating the timing field and all remaining
+  metadata. This removes a Windows CI false failure without changing CLI output.
 - CI now checks the mock's Action/handler/reader inventory and bilingual tracking
   on Windows and Linux before the package job can run. This source-consistency
   check does not replace external schema or behavioral acceptance.

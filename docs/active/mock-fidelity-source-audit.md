@@ -364,11 +364,20 @@ while the complete dependency graph remains open.
 
 | ID | Evidence | Disposition |
 | --- | --- | --- |
+| K23 | Windows CI run 34471659927 (`2a488be`) failed `line_number_override_is_validated_but_never_changes_agent_or_plain_output`: bytewise JSON comparison included independently measured `meta.elapsed_ms` (0 versus 9). | W22 test-harness repair: require numeric timing, omit only that exact field from JSON equality, keep all other fields, stderr and plain-output checks; add deterministic timing/data/type controls. Do not alter CLI output or hide other metadata. |
 | K12 | Source comment at `media::bind_configuration` describes binding a fixed profile as a mock deviation. Official Media1/Media2 §4.1 distinguish deletion from configuration changes. | Correct the comment and preserve legal binding; do not “repair” it by making fixed profiles immutable. References below. |
 | K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; capacity and other CreateProfile semantics remain open. |
 | K14 — fixed after baseline | DeleteProfile now uses an explicit committed-outcome predicate; NotFound/Fixed do not notify, Deleted notifies once. | W18 partial; regression checks full state, both services, hook count and public-helper compatibility. Replay remains separate K17. |
 | K15 | `render_profile` interpolates stored profile name/token without escaping; normal getters render seeded state as well as caller-created state. | W10; direct escaped-state wire regression required. Do not infer safety from DeleteProfile's parser tests. |
 | K16 — partial repair | Media2 profile-list handler still ignores selectors and create reads Name only; binding now validates and commits one complete value-based plan. | The reproduced late-invalid-token partial write is fixed with state/hook/HTTP controls. Selector/create/name/Type=All/conflict semantics remain W01/W10 work. |
+
+K23 is now repaired in the test harness only. Deterministic controls distinguish
+timing-only changes from data/command changes and reject invalid timing types.
+Broadening the comparison mask and bypassing type validation made both new
+controls fail in a full-workspace all-feature no-fail-fast mutation run; restored
+formatting, both Clippy modes, 1,181 all-feature and 1,097 default tests passed
+(5 ignored, 21 suites each). No CLI production output or public schema changed;
+the next hosted run must still confirm the repaired gate.
 
 K12 reference conclusions were checked against
 [Media1 v24.12 §4.1](https://www.onvif.org/specs/2412/ONVIF-Media-Service-Spec-v2412.pdf)

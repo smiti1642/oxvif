@@ -33,6 +33,47 @@ fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr should be UTF-8")
 }
 
+// Only execution timing is nondeterministic between independent subprocesses.
+// Keep the entire remaining envelope so UI options cannot silently change it.
+fn without_elapsed_ms(mut value: Value) -> Value {
+    let elapsed = value["meta"]
+        .as_object_mut()
+        .expect("output metadata must be an object")
+        .remove("elapsed_ms")
+        .expect("output metadata must contain elapsed_ms");
+    assert!(
+        elapsed.as_u64().is_some(),
+        "elapsed_ms must be a nonnegative integer"
+    );
+    value
+}
+
+#[test]
+fn output_comparison_excludes_only_numeric_execution_time() {
+    let first = serde_json::json!({"ok": true, "data": {"kind": "device_list"}, "meta": {"elapsed_ms": 0, "command": "device.list"}});
+    let mut later = first.clone();
+    later["meta"]["elapsed_ms"] = 9.into();
+    assert_ne!(first, later);
+    assert_eq!(
+        without_elapsed_ms(first.clone()),
+        without_elapsed_ms(later.clone())
+    );
+    later["data"]["kind"] = "unexpected_kind".into();
+    assert_ne!(without_elapsed_ms(first.clone()), without_elapsed_ms(later));
+    let mut changed_command = first.clone();
+    changed_command["meta"]["command"] = "unexpected.command".into();
+    assert_ne!(
+        without_elapsed_ms(first),
+        without_elapsed_ms(changed_command)
+    );
+}
+
+#[test]
+#[should_panic(expected = "elapsed_ms must be a nonnegative integer")]
+fn output_comparison_rejects_invalid_execution_time() {
+    without_elapsed_ms(serde_json::json!({"meta": {"elapsed_ms": "9"}}));
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ordinary_mock_auth_fault_preserves_human_and_agent_error_contracts() {
     let server = oxvif::mock::MockServer::builder()
@@ -106,7 +147,14 @@ fn line_number_override_is_validated_but_never_changes_agent_or_plain_output() {
                 directory.path(),
             );
             assert!(output.status.success(), "{}", stderr(&output));
-            assert_eq!(output.stdout, baseline.stdout);
+            if format == "json" {
+                assert_eq!(
+                    without_elapsed_ms(serde_json::from_slice(&output.stdout).unwrap()),
+                    without_elapsed_ms(serde_json::from_slice(&baseline.stdout).unwrap()),
+                );
+            } else {
+                assert_eq!(output.stdout, baseline.stdout);
+            }
             assert_eq!(output.stderr, baseline.stderr);
             assert_eq!(
                 fs::read_to_string(&preferences).unwrap(),

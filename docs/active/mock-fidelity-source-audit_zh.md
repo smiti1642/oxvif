@@ -356,11 +356,19 @@ create／list 不一致已重現，選定刪除／profile-read 依賴亦已有�
 
 | ID | 證據 | 處置 |
 | --- | --- | --- |
+| K23 | Windows CI run 34471659927（`2a488be`）的 `line_number_override_is_validated_but_never_changes_agent_or_plain_output` 失敗：逐位元 JSON 比較包含各自量測的 `meta.elapsed_ms`（0 與 9）。 | W22 測試框架修正：要求耗時為數字，JSON 相等比較只排除該確切欄位；保留其他全部欄位、stderr 及純文字輸出檢查，加入確定性的耗時／資料／型別控制。不改 CLI 輸出，不遮蔽其他 metadata。 |
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
 | K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |
 | K14 — 基準後已修正 | DeleteProfile 使用明確的 committed-outcome predicate；NotFound／Fixed 不通知，Deleted 通知一次。 | W18 部分完成；回歸檢查完整 state、兩服務、hook 次數及公開 helper 相容性。Replay 另由 K17 追蹤。 |
 | K15 | `render_profile` 直接插入儲存的 name／token，未 escaping；getter 不只輸出新建資料，也輸出 seed state。 | W10；新增 escaped-state 直接 wire 回歸，不由 DeleteProfile parser 測試推論安全。 |
 | K16 — 部分修正 | Media2 profile list 仍忽略 selector，create 只讀 Name；binding 現驗證並提交完整、以值表示的 plan。 | 已重現的後筆無效 token 部分寫入已修正，具 state／hook／HTTP 控制；selector／create／name／Type=All／conflict 語意仍屬 W01／W10。 |
+
+K23 現僅修正測試框架。確定性控制可區分純耗時變動與資料／command 變動，
+並拒絕錯誤耗時型別。擴大比較遮罩及繞過型別驗證後，完整 workspace、
+all-feature、no-fail-fast 擾動執行中的兩項新控制均失敗；還原後格式、
+兩種 Clippy、全功能 1,181 項與預設 1,097 項測試通過（各 5 ignored、
+21 suites）。CLI production 輸出及公開 schema 均未變更；仍須由下一輪
+託管 CI 確認 gate 已恢復。
 
 K12 已於 2026-09-10 核對
 [Media1 v24.12 §4.1](https://www.onvif.org/specs/2412/ONVIF-Media-Service-Spec-v2412.pdf) 與
