@@ -229,9 +229,10 @@ mock and asserts a value, which is why `tests/mock_workflow.rs` gained
 
 Two ways to read the result:
 
-- **It printed `SKIPPED`.** Then nothing was checked. That is the failure mode
-  this whole arrangement has, and the message says so rather than passing
-  quietly.
+- **Resources are missing.** An explicitly selected run now fails instead of
+  returning after `SKIPPED`. Include the SOAP 1.2 envelope schema along with
+  the service set. Ordinary schema-free runs still ignore this external test;
+  an ignored test is not evidence of validation.
 - **A pin moved.** `PINS` holds the distinct finding count *per kind*, not a
   total — measured: putting the Media2 defect back leaves the total at 63 while
   moving two kinds, so a single total would have let it through. Lower is a
@@ -762,8 +763,8 @@ duplicate of the first.
       --test mock_schema_shape -- --ignored --nocapture`; see
       [The schema-shape check](#the-schema-shape-check). It is `#[ignore]`d and
       reads the schema from outside the tree, so **this line is the only thing
-      that runs it**. If it printed `SKIPPED`, nothing was checked — that is not
-      a pass.
+      that runs it**. Missing resources fail an explicit run; an ignored test
+      is not a pass. Include the external SOAP 1.2 envelope schema.
 - [ ] `cargo doc --no-deps --all-features` — what docs.rs builds; no warnings
 - [ ] `cargo doc --no-deps` — the default-feature build; no warnings either
 - [ ] `cargo publish --dry-run` — no errors

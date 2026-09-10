@@ -35,6 +35,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The private mock request representation now retains scoped attributes and
   ordered subtrees alongside decoded scalar text, with normalization and resource
   boundary controls. Broad handler and structured-fault migration remain pending.
+- The external structural audit now resolves namespace bindings per node and
+  includes SOAP Envelope/Fault structure. Explicit runs fail on missing resources;
+  provide the SOAP 1.2 envelope schema as well as the service schemas. This remains
+  a structural check, not full XSD or semantic conformance acceptance.
 - Human terminal line numbers are configurable as `absolute`, `relative`, `hybrid`
   (unchanged default), or `off`. Use `--line-numbers` for this invocation, or `?`
   in navigation screens to preview, apply for the session, or explicitly save a

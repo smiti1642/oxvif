@@ -110,9 +110,9 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W17／M4／TODO | W10–W16 分類 | 全部 capability renderer、`discovery_responder.rs`、`fleet.rs`、`snapshot.rs`、`font.rs`、公開 mock 文件 | Services／XAddrs／feature／limit 與建模行為一致；核對 discovery／snapshot 側路徑；靜態 URI／圖片不證明 codec／串流輸出 |
 | W18／M4／TODO | W10–W16 候選行為 | `state.rs::modify/modify_returning/notify`、共用 collection、event queue、replay invalidation | 同時合法／無效寫入、instance 隔離、完整 rollback、hook 通知次數／順序及 reentrancy／lock 行為；記錄 persistence hook 邊界 |
 | W19／M3、M6／TODO | W03／W09 設計 | `canon.rs`、`metamorph/{fixture,replay,record,parse,adapter,quirk,surface}.rs`、responder chain | 保留錄製偏差；核對正規化／key collision／參數辨識；失敗寫入不錯誤 invalidation；不新增錄製設備機密 |
-| W20／M5／TODO | W04／W05 corpus | `tests/mock_schema_shape.rs`、dispatch namespace tests：正確 scope resolution、納入 Fault、覆蓋計算 | 獨立一般 prefix shadowing 控制；qualified attribute／QName 文字；unanchored／opaque／wildcard／unresolved 明示，不只放寬 pin |
-| W21／M5／TODO | W20、D3 | 提案中的外部 manifest／catalogue／fetch／validator scripts，不加入 runtime crate | 評估具代表性 import 後選定並記錄 validator 版本；來源閉包／hash 固定、離線解析、envelope＋payload／Fault 驗證；錯誤 corpus 必須失敗 |
-| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | `.github/workflows/ci.yml` 已接入 Windows／Linux 清冊 job，package 依賴其成功；託管執行未驗證。專用 schema job 與 release 證據檢查仍待完成 | 清冊與自我測試須通過；schema job 缺工具／檔案、hash／下載／import 錯誤須失敗；最小權限、不散布 schema／機密 artifact；缺少／跳過必要 job 阻擋發布驗收 |
+| W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
+| W21／M5／PARTIAL | W20、D3 | 完成 SOAP／Media 外部驗證器選擇實驗；K19 記錄 XSD 1.0 拒絕與 XSD 1.1 編譯結果 | 須完成固定來源閉包、離線 resolver、驗證腳本及正負 instance 驗收；schema 編譯本身不是驗收 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊已於 e8fda59 的託管 run 34454688822 通過，package 依賴其成功；專用 schema job 與 release 證據檢查仍待完成 | 清冊與自我測試須通過；schema job 缺工具／檔案、hash／下載／import 錯誤須失敗；最小權限、不散布 schema／機密 artifact；缺少／跳過必要 job 阻擋發布驗收 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
 | W25／M6／TODO | W00–W24 驗收 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |
@@ -171,6 +171,7 @@ W02 發現新相依性時須擴充本表。
 | K11／待整合 | PR #16 不在來源基準內 | W26；另行重審，不默默納入 |
 | K17／原始碼確認，重現待辦 | ReplayResponder 在尚未確認 synthetic 寫入成功前就使 operation family 失效 | W19／W03／W18；record → rejected write → read 應保留 replay 結果，另有成功寫入控制；見管線開工核對 |
 | K18／原始碼確認，重現待辦 | 去除動詞的 replay family key 漏掉 profile list／binding 依賴，亦不含 service identity | W19／W10；核對 affected-read graph、成功 mutation → GetProfiles，以及無關 service／instance 控制；見管線開工核對 |
+| K19／已重現的外部相容性發現 | 目前 Media 來源相依集合在獨立 XSD 1.0 驗證器中無法編譯，但可通過 strict XSD 1.1 編譯 | W21；見 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)；不修改 schema 或停用檢查，須驗收候選工具並明示 schema 語言 |
 
 ## 驗證命令
 
@@ -221,6 +222,8 @@ K17 提前 replay 失效及 raw extension 控制。P-A private parsed accessor �
 handler 前剩餘的 W04 typed／QName 規則。**
 W04／W05 設計依共用路徑盤點接續；預設 Fault 輸出改變前先處理 W06。
 W20／W21 可先準備，不必等待所有服務遷移結束。
+[Schema 前置檢查](mock-fidelity-schema-preflight_zh.md) 記錄 W20 scoped checker／
+Fault 子批次及 W21 工具實驗；兩個工作 ID 均未完成。
 
 本次規劃不選定版本、不合併 PR #16、不 publish／push／安裝 binary。
 最終發布驗收須有記錄候選 commit 上的 M0–M6 證據及適用維護者授權，並保留

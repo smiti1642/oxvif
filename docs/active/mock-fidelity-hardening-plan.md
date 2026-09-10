@@ -51,7 +51,7 @@ compatibility review, not an incidental mock refactor.
 | String extraction is shared technical debt | `src/mock/xml_parse.rs` extracts fragments by local name and trims text; it is not an operation-scoped XML parser. Inventory callers before replacing it. Some callers need a subtree rather than decoded text. |
 | Fault construction accepts unstructured strings | `src/mock/helpers.rs` interpolates code/reason; the mock guide already records a QName-binding deviation. Correct new behavior and enumerate downstream assertion changes together. |
 | Client parsing is not an independent validator | `src/soap/xml.rs` discards namespace information, trims text, and exposes one subcode level. Do not reuse it as the strict mock parser or alter its public error contract silently. |
-| The existing schema check has blind spots | `tests/mock_schema_shape.rs` excludes Faults and uses a shared prefix map. Namespace shadowing, full XSD validation and SOAP HTTP behavior require separate checks. These are audit targets, not claims that every operation is broken. |
+| The existing schema check has blind spots | At the baseline, `tests/mock_schema_shape.rs` excluded Faults and used a shared prefix map. The [W20 checkpoint](mock-fidelity-schema-preflight.md) repairs scoped resolution and includes Fault structure; full XSD validation and SOAP HTTP behavior remain separate work. |
 | Prior review tests passed despite the token defect | PR head: 830 library tests, 28 workflow/action-snapshot tests, formatting passed. This was not full workspace, schema, three-platform or real-stream acceptance. Rerun at the implementation baseline. |
 
 Primary references for implementation verification:

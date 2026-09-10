@@ -48,7 +48,7 @@
 | 字串擷取是共用技術債 | `src/mock/xml_parse.rs` 依 local name 擷取片段並修剪文字，並非以操作為範圍的 XML parser。替換前盤點所有 caller；部分 caller 需要子樹而非解碼文字。 |
 | Fault 建構採非結構化字串 | `src/mock/helpers.rs` 直接插入 code／reason；mock 指南已記錄 QName binding 偏差。修正行為時一併列出下游 assertion 的變更。 |
 | Client parser 不能作為獨立驗證器 | `src/soap/xml.rs` 移除 namespace、修剪文字，且只公開一層 subcode。不得直接作為嚴格 mock parser，也不得默默改變公開錯誤契約。 |
-| 既有 schema check 存在檢查缺口 | `tests/mock_schema_shape.rs` 排除 Fault，且使用共用 prefix map。Namespace 遮蔽、完整 XSD 驗證及 SOAP HTTP 行為須分別檢查。這些是稽核目標，不代表每個操作皆有缺陷。 |
+| 既有 schema check 存在檢查缺口 | 基線的 `tests/mock_schema_shape.rs` 排除 Fault，且使用共用 prefix map。[W20 檢查點](mock-fidelity-schema-preflight_zh.md) 已修正 scope resolution 並納入 Fault 結構；完整 XSD 驗證及 SOAP HTTP 行為仍是獨立工作。 |
 | 先前測試未攔截 token 缺陷 | PR head 的 830 個 library tests、28 個 workflow／action-snapshot tests 及 formatting 通過；並非完整 workspace、schema、三平台或實際串流驗收。實作時重新量測。 |
 
 實作驗證的一手參考來源：

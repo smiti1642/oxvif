@@ -1039,12 +1039,13 @@ check whether it is pinned or incidental.
 The last row is weaker than the others and is listed so nobody mistakes it for a
 gate. It is `#[ignore]`d and reads the ONVIF schema set at run time from
 `$OXVIF_ONVIF_SCHEMA`, a directory outside the tree, because nothing derived
-from that schema may enter this repository. A `CLAUDE.md` publishing-checklist
-line is the only thing that runs it, and if it printed `SKIPPED` then nothing
-was checked. It is nonetheless the only thing here that can see a wrong
-namespace or a wrong sequence order at all: the client parser is
-namespace-blind and order-independent, so every other row above passes just as
-happily against XML no conformant device would emit.
+from that schema may enter this repository. Explicitly selecting the test now
+fails if resources are missing; the external SOAP 1.2 envelope schema is also
+required. Node-scoped namespace resolution and separate Envelope/payload checks
+include Fault structure, but do not validate all XSD values or error semantics.
+The planned external-validator CI job is not yet delivered; the existing inventory
+job does not run this check. See the
+[verification checkpoint](active/mock-fidelity-schema-preflight.md).
 
 **As of 0.15.0 all ten of its counts are 0.** That is not the same as "the
 mock is conformant". A type carrying an `xs:any` suppresses its unknown-child

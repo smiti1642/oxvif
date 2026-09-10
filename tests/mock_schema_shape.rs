@@ -86,18 +86,15 @@
 //!   cargo test --features mock --test mock_schema_shape -- --ignored --nocapture
 //! ```
 //!
-//! The directory needs the service WSDLs plus `onvif.xsd` and `common.xsd`;
+//! The directory needs the service WSDLs, `onvif.xsd`, `common.xsd`, and the
+//! SOAP 1.2 envelope schema;
 //! `onvif.xsd` alone anchors 19% of the output and is not the schema. Fetching
 //! `b-2.xsd` as well is what made the three events findings visible at all.
 //!
-//! **The cost, stated plainly: this check can silently stop being run.** Not in
-//! CI, not for a contributor, not for the maintainer on a machine where the
-//! directory moved. Two things make that survivable, and both are load-bearing:
-//!
-//! - the skip path **prints why**, so a run that checked nothing never looks
-//!   like a run that passed;
-//! - `CLAUDE.md`'s publishing checklist is the only thing that makes it happen.
-//!   That is weaker than a gate line, and is written down as weaker.
+//! This remains ignored in schema-free developer runs. When explicitly selected,
+//! missing resources now fail instead of returning successfully after a SKIPPED
+//! message. A dedicated external CI gate is planned under the approved D3 policy;
+//! the source-inventory CI job is not that gate.
 //!
 //! ## What it cannot see
 //!
@@ -117,8 +114,8 @@
 //!   this well-formed*, never *does it mean anything*.
 //! - **Whatever the corpus does not reach.** A third of the responses are SOAP
 //!   faults, because the operation needs a body this file does not supply. Those
-//!   contribute no shape evidence, and [`PAYLOAD_FLOOR`] is what stops that
-//!   third quietly becoming two thirds.
+//!   now contribute Fault-shape evidence, not successful-operation evidence.
+//!   [`PAYLOAD_FLOOR`] stops successful-payload coverage shrinking silently.
 //! - **Requests.** Nothing here reads what the *client* sends, which is how
 //!   `set_storage_configuration` shipped five elements in `tt:`.
 //!
@@ -499,7 +496,7 @@ const ATTR_FLOOR: usize = 250;
 // `oxvif::soap::XmlNode` cannot be used here: it strips namespaces, which is
 // precisely the property under test. quick-xml resolves element names against
 // in-scope declarations, but not QName *values* like `type="tt:IntRange"`, so
-// the prefix map is collected per file and applied by hand.
+// each node retains its own in-scope prefix map for QName-valued attributes.
 
 type Qn = (String, String);
 
@@ -518,6 +515,7 @@ struct Node {
     local: String,
     attrs: Vec<Attrib>,
     kids: Vec<Node>,
+    prefixes: Px,
 }
 
 impl Node {
@@ -538,104 +536,290 @@ impl Node {
     }
 }
 
-struct Raw {
-    name: String,
-    attrs: Vec<(String, String)>,
-    kids: Vec<Raw>,
-}
-
-/// Parse to a raw tree plus the file's flat prefix map.
-///
-/// Flat rather than scoped because these documents declare every prefix on the
-/// root element; a scoped map would be more code for no measured difference.
-fn parse(xml: &str) -> Result<(Raw, HashMap<String, String>), String> {
+/// Independent structural-checker tree, not the mock or client request parser.
+/// Namespace declarations apply to their own element and descendants only.
+fn parse(xml: &str) -> Result<Node, String> {
     let mut reader = quick_xml::Reader::from_str(xml);
-    reader.config_mut().trim_text(true);
-    let mut prefixes: HashMap<String, String> = HashMap::new();
-    let mut stack: Vec<Raw> = Vec::new();
-    let mut root: Option<Raw> = None;
+    let prefixes = HashMap::from([(
+        "xml".to_string(),
+        "http://www.w3.org/XML/1998/namespace".to_string(),
+    )]);
+    let mut stack: Vec<Node> = Vec::new();
+    let mut root: Option<Node> = None;
 
-    fn place(stack: &mut [Raw], root: &mut Option<Raw>, n: Raw) {
+    fn place(stack: &mut [Node], root: &mut Option<Node>, n: Node) -> Result<(), String> {
         match stack.last_mut() {
             Some(p) => p.kids.push(n),
-            None => *root = Some(n),
+            None if root.is_none() => *root = Some(n),
+            None => return Err("multiple root elements".into()),
         }
+        Ok(())
     }
 
-    // quick-xml 0.42 stores UTF-8 strings; normalization is feature-independent.
-    fn start(e: &quick_xml::events::BytesStart, px: &mut HashMap<String, String>) -> Raw {
-        let name = e.name().as_ref().to_owned();
+    fn start(e: &quick_xml::events::BytesStart, inherited: &Px) -> Result<Node, String> {
+        let mut px = inherited.clone();
         let mut attrs = Vec::new();
-        for a in e.attributes().flatten() {
+        for a in e.attributes() {
+            let a = a.map_err(|error| error.to_string())?;
             let k = a.key.as_ref().to_owned();
             let v = a
                 .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                 .map(|v| v.into_owned())
-                .unwrap_or_else(|_| a.value.clone().into_owned());
-            if k == "xmlns" {
-                px.insert(String::new(), v.clone());
-            } else if let Some(p) = k.strip_prefix("xmlns:") {
-                px.insert(p.to_string(), v.clone());
+                .map_err(|error| error.to_string())?;
+            if let Some(p) = if k == "xmlns" {
+                Some("")
+            } else {
+                k.strip_prefix("xmlns:")
+            } {
+                const XML: &str = "http://www.w3.org/XML/1998/namespace";
+                if p == "xmlns"
+                    || (p == "xml") != (v == XML)
+                    || v == "http://www.w3.org/2000/xmlns/"
+                    || (!p.is_empty() && v.is_empty())
+                {
+                    return Err("invalid namespace declaration".into());
+                }
+                px.insert(p.to_string(), v);
+            } else {
+                attrs.push((k, v));
             }
-            attrs.push((k, v));
         }
-        Raw {
-            name,
+        let (ns, local) = qname(e.name().as_ref(), &px).ok_or("unbound element prefix")?;
+        let mut expanded = HashSet::new();
+        let attrs = attrs
+            .into_iter()
+            .map(|(key, value)| {
+                let (ns, local) = if key.contains(':') {
+                    qname(&key, &px).ok_or("unbound attribute prefix")?
+                } else {
+                    (String::new(), key)
+                };
+                if !expanded.insert((ns.clone(), local.clone())) {
+                    return Err("duplicate expanded attribute".to_string());
+                }
+                Ok(Attrib { ns, local, value })
+            })
+            .collect::<Result<_, String>>()?;
+        Ok(Node {
+            ns,
+            local,
             attrs,
             kids: Vec::new(),
-        }
+            prefixes: px,
+        })
     }
 
     loop {
         match reader.read_event().map_err(|e| e.to_string())? {
-            quick_xml::events::Event::Start(e) => stack.push(start(&e, &mut prefixes)),
+            quick_xml::events::Event::Start(e) => {
+                let n = start(&e, stack.last().map_or(&prefixes, |n| &n.prefixes))?;
+                stack.push(n);
+            }
             quick_xml::events::Event::Empty(e) => {
-                let n = start(&e, &mut prefixes);
-                place(&mut stack, &mut root, n);
+                let n = start(&e, stack.last().map_or(&prefixes, |n| &n.prefixes))?;
+                place(&mut stack, &mut root, n)?;
             }
             quick_xml::events::Event::End(_) => {
                 let n = stack.pop().ok_or("unbalanced end tag")?;
-                place(&mut stack, &mut root, n);
+                place(&mut stack, &mut root, n)?;
+            }
+            quick_xml::events::Event::DocType(_) => return Err("DTD is not allowed".into()),
+            quick_xml::events::Event::Text(text) if stack.is_empty() => {
+                if !text
+                    .as_ref()
+                    .trim_matches([' ', '\t', '\r', '\n'])
+                    .is_empty()
+                {
+                    return Err("text outside root element".into());
+                }
             }
             quick_xml::events::Event::Eof => break,
             _ => {}
         }
     }
-    root.map(|r| (r, prefixes)).ok_or("no root element".into())
-}
-
-fn resolve_tree(r: Raw, px: &HashMap<String, String>) -> Node {
-    let (prefix, local) = match r.name.split_once(':') {
-        Some((p, l)) => (p, l),
-        None => ("", r.name.as_str()),
-    };
-    Node {
-        ns: px.get(prefix).cloned().unwrap_or_default(),
-        local: local.to_string(),
-        attrs: r
-            .attrs
-            .into_iter()
-            .filter_map(|(k, value)| {
-                let (ns, local) = split_attr(&k, px)?;
-                Some(Attrib {
-                    ns,
-                    local: local.to_string(),
-                    value,
-                })
-            })
-            .collect(),
-        kids: r.kids.into_iter().map(|k| resolve_tree(k, px)).collect(),
+    if !stack.is_empty() {
+        return Err("unclosed element".into());
     }
+    root.ok_or("no root element".into())
 }
 
-fn qname(raw: &str, px: &HashMap<String, String>, default_ns: &str) -> Option<Qn> {
+fn qname(raw: &str, px: &Px) -> Option<Qn> {
+    let raw = raw.trim_matches([' ', '\t', '\r', '\n']);
     if raw.is_empty() {
         return None;
     }
     Some(match raw.split_once(':') {
-        Some((p, l)) => (px.get(p).cloned().unwrap_or_default(), l.to_string()),
-        None => (default_ns.to_string(), raw.to_string()),
+        Some((p, l)) if !p.is_empty() && !l.is_empty() && !l.contains(':') => {
+            (px.get(p)?.clone(), l.to_string())
+        }
+        Some(_) => return None,
+        None => (px.get("").cloned().unwrap_or_default(), raw.to_string()),
     })
+}
+
+fn soap_payload(root: &Node) -> Result<&Node, &'static str> {
+    if root.ns != SOAP_ENV || root.local != "Envelope" {
+        return Err("expected SOAP 1.2 Envelope");
+    }
+    let mut bodies = root
+        .kids
+        .iter()
+        .filter(|n| n.ns == SOAP_ENV && n.local == "Body");
+    let body = bodies.next().ok_or("missing SOAP Body")?;
+    if bodies.next().is_some() {
+        return Err("multiple SOAP Bodies");
+    }
+    if body.kids.len() != 1 {
+        return Err("expected one SOAP payload");
+    }
+    Ok(&body.kids[0])
+}
+
+#[test]
+fn checker_payload_selection_rejects_wrong_envelopes_and_ambiguous_bodies() {
+    let doc = |inner: &str| format!(r#"<s:Envelope xmlns:s="{SOAP_ENV}">{inner}</s:Envelope>"#);
+    let valid = parse(&doc("<s:Body><sample xmlns='urn:sample'/></s:Body>")).unwrap();
+    let payload = soap_payload(&valid).unwrap();
+    assert_eq!((&*payload.ns, &*payload.local), ("urn:sample", "sample"));
+    for (xml, expected) in [
+        ("<Envelope/>".into(), "expected SOAP 1.2 Envelope"),
+        (doc("<Body/>"), "missing SOAP Body"),
+        (doc("<s:Body/><s:Body/>"), "multiple SOAP Bodies"),
+        (doc("<s:Body/>"), "expected one SOAP payload"),
+        (
+            doc("<s:Body><a/><b/></s:Body>"),
+            "expected one SOAP payload",
+        ),
+    ] {
+        assert_eq!(soap_payload(&parse(&xml).unwrap()).unwrap_err(), expected);
+    }
+}
+
+#[test]
+fn checker_restores_namespace_scope_after_children_and_empty_elements() {
+    let root = parse(
+        r#"<r xmlns="urn:outer" xmlns:p="urn:parent">
+          <p:a xmlns:p="urn:child"><p:b/></p:a>
+          <p:c xmlns:p="urn:empty"/><p:d/>
+          <plain xmlns=""><leaf/></plain><tail/>
+        </r>"#,
+    )
+    .unwrap();
+    assert_eq!(root.ns, "urn:outer");
+    assert_eq!(
+        root.kids.iter().map(|n| n.ns.as_str()).collect::<Vec<_>>(),
+        ["urn:child", "urn:empty", "urn:parent", "", "urn:outer"]
+    );
+    assert_eq!(root.kids[0].kids[0].ns, "urn:child");
+    assert_eq!(root.kids[3].kids[0].ns, "");
+}
+
+#[test]
+fn checker_attributes_are_scoped_normalized_and_not_default_qualified() {
+    let root = parse(
+        "<r xmlns='urn:r' xmlns:p='urn:a'><n xmlns:p='urn:b' p:key='A&amp;B' key=' A\tB&#x9;C ' xml:lang='en'/><n p:key='second'/></r>"
+    ).unwrap();
+    let attrs = &root.kids[0].attrs;
+    assert_eq!(attrs.len(), 3);
+    assert_eq!(
+        (&attrs[0].ns, &attrs[0].local, &attrs[0].value),
+        (&"urn:b".into(), &"key".into(), &"A&B".into())
+    );
+    assert_eq!(root.kids[0].attr("key"), Some(" A B\tC "));
+    assert_eq!(attrs[2].ns, "http://www.w3.org/XML/1998/namespace");
+    assert_eq!(root.kids[1].attrs[0].ns, "urn:a");
+}
+
+#[test]
+fn checker_qname_values_use_owner_scope_not_the_final_file_map() {
+    let root = parse(r#"<r xmlns:p="urn:a"><n type="p:T"/><n xmlns:p="urn:b" type="p:T"/><n xmlns="urn:default" type="T"/><n type="T"/></r>"#).unwrap();
+    let types = root
+        .kids
+        .iter()
+        .map(|n| qname(n.attr("type").unwrap(), &n.prefixes).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        types,
+        [
+            ("urn:a".into(), "T".into()),
+            ("urn:b".into(), "T".into()),
+            ("urn:default".into(), "T".into()),
+            ("".into(), "T".into())
+        ]
+    );
+    assert_eq!(qname("missing:T", &root.prefixes), None);
+    assert_eq!(qname("p:T:extra", &root.prefixes), None);
+    assert_eq!(
+        qname(" p:T\n", &root.prefixes),
+        Some(("urn:a".into(), "T".into()))
+    );
+}
+
+#[test]
+fn checker_schema_index_keeps_local_type_base_and_ref_bindings() {
+    // Project-authored generic schema, not copied or generated from ONVIF.
+    let root = parse(r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:p="urn:outer" targetNamespace="urn:test">
+      <xs:element name="Root" xmlns:p="urn:root" type="p:R"/>
+      <xs:element name="Bare" type="NoDefault"/>
+      <xs:complexType name="Config"><xs:complexContent>
+        <xs:extension xmlns:p="urn:base" base="p:Base"><xs:sequence>
+          <xs:element name="Item" xmlns:p="urn:item" type="p:ItemType"/>
+          <xs:element xmlns:p="urn:ref" ref="p:Other"/>
+        </xs:sequence><xs:attribute xmlns:p="urn:attr" ref="p:key" use="required"/>
+        </xs:extension>
+      </xs:complexContent></xs:complexType>
+    </xs:schema>"#).unwrap();
+    let mut ix = Index::default();
+    ix.load_schema_node(&root);
+    assert_eq!(
+        ix.globals[&("urn:test".into(), "Root".into())],
+        Some(("urn:root".into(), "R".into()))
+    );
+    assert_eq!(
+        ix.globals[&("urn:test".into(), "Bare".into())],
+        Some(("".into(), "NoDefault".into()))
+    );
+    let ty = &ix.types[&("urn:test".into(), "Config".into())];
+    assert_eq!(ty.base, Some(("urn:base".into(), "Base".into())));
+    assert_eq!(ty.kids[0].ty, Some(("urn:item".into(), "ItemType".into())));
+    assert_eq!(ty.kids[1].ns, "urn:ref");
+    assert_eq!(ty.attrs[0].ns, "urn:attr");
+    assert!(ty.attrs[0].required);
+}
+
+#[test]
+fn checker_rejects_unbound_or_duplicate_expanded_attributes() {
+    for (xml, expected) in [
+        ("<p:r/>", "unbound element prefix"),
+        ("<r p:key='v'/>", "unbound attribute prefix"),
+        (
+            "<r xmlns:a='urn:s' xmlns:b='urn:s' a:key='1' b:key='2'/>",
+            "duplicate expanded attribute",
+        ),
+        (
+            "<r xmlns:a='urn:&#x73;' xmlns:b='urn:s' a:key='1' b:key='2'/>",
+            "duplicate expanded attribute",
+        ),
+        (
+            "<r xmlns:xml='urn:wrong'/>",
+            "invalid namespace declaration",
+        ),
+    ] {
+        assert_eq!(parse(xml).unwrap_err(), expected, "{xml}");
+    }
+}
+
+#[test]
+fn checker_does_not_silently_replace_roots_or_accept_incomplete_documents() {
+    for (xml, expected) in [
+        ("<a/><b/>", "multiple root elements"),
+        ("<a>", "unclosed element"),
+        (" ", "no root element"),
+        ("<a/>unexpected", "text outside root element"),
+        ("<!DOCTYPE r><r/>", "DTD is not allowed"),
+    ] {
+        assert_eq!(parse(xml).unwrap_err(), expected, "{xml}");
+    }
 }
 
 // ── The index ────────────────────────────────────────────────────────────────
@@ -718,13 +902,12 @@ fn anon_name(owner: &str, local: &str) -> String {
 
 type Px = HashMap<String, String>;
 
-/// One `xs:schema`'s resolution context: prefix map, target namespace and the
+/// One `xs:schema`'s resolution context: target namespace and the
 /// two `*FormDefault`s that decide whether a locally-declared name is qualified.
 ///
 /// Bundled rather than threaded because the element and attribute walks need
 /// different halves of it and both are already recursive.
 struct Sch<'a> {
-    px: &'a Px,
     tns: &'a str,
     efd: &'a str,
     afd: &'a str,
@@ -753,7 +936,7 @@ impl Sch<'_> {
 }
 
 impl Index {
-    fn load_schema_node(&mut self, node: &Node, px: &Px) {
+    fn load_schema_node(&mut self, node: &Node) {
         let tns = node.attr("targetNamespace").unwrap_or("").to_string();
         let efd = node
             .attr("elementFormDefault")
@@ -764,7 +947,6 @@ impl Index {
             .unwrap_or("unqualified")
             .to_string();
         let sch = Sch {
-            px,
             tns: &tns,
             efd: &efd,
             afd: &afd,
@@ -775,7 +957,7 @@ impl Index {
         for el in node.xs_kids("element") {
             let Some(nm) = el.attr("name") else { continue };
             let nm = nm.to_string();
-            let mut ty = el.attr("type").and_then(|v| qname(v, px, &tns));
+            let mut ty = el.attr("type").and_then(|v| qname(v, &el.prefixes));
             if ty.is_none()
                 && let Some(inline) = el.xs_kids("complexType").next()
             {
@@ -827,7 +1009,7 @@ impl Index {
                 // parent.
                 "complexType" | "annotation" => {}
                 "extension" => {
-                    t.base = c.attr("base").and_then(|v| qname(v, sch.px, sch.tns));
+                    t.base = c.attr("base").and_then(|v| qname(v, &c.prefixes));
                     self.walk_type(c, sch, owner, group, t);
                 }
                 "any" => t.wild = true,
@@ -850,9 +1032,9 @@ impl Index {
     }
 
     fn add_element(&mut self, c: &Node, sch: &Sch, owner: &str, group: Option<u32>, t: &mut Ty) {
-        let (px, tns) = (sch.px, sch.tns);
+        let (px, tns) = (&c.prefixes, sch.tns);
         if let Some(r) = c.attr("ref") {
-            let Some((ns, local)) = qname(r, px, tns) else {
+            let Some((ns, local)) = qname(r, px) else {
                 return;
             };
             let ty = self
@@ -872,7 +1054,7 @@ impl Index {
         }
         let local = c.attr("name").unwrap_or("").to_string();
         let ns = sch.el_ns(c.attr("form"));
-        let mut ty = c.attr("type").and_then(|v| qname(v, px, tns));
+        let mut ty = c.attr("type").and_then(|v| qname(v, px));
         if ty.is_none()
             && let Some(inline) = c.xs_kids("complexType").next()
         {
@@ -894,10 +1076,9 @@ impl Index {
 
     fn load_file(&mut self, path: &Path) -> Result<(), String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let (raw, px) = parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-        let root = resolve_tree(raw, &px);
+        let root = parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
         if root.ns == XS && root.local == "schema" {
-            self.load_schema_node(&root, &px);
+            self.load_schema_node(&root);
         } else {
             // wsdl:definitions — the response wrapper elements live in each
             // service WSDL's inline schema, not in onvif.xsd.
@@ -907,7 +1088,7 @@ impl Index {
                 .filter(|k| k.ns == WSDL && k.local == "types")
             {
                 for sch in tnode.xs_kids("schema") {
-                    self.load_schema_node(sch, &px);
+                    self.load_schema_node(sch);
                 }
             }
         }
@@ -964,7 +1145,7 @@ struct Resolved {
 fn add_attribute(c: &Node, sch: &Sch, t: &mut Ty) {
     let required = c.attr("use") == Some("required");
     let (ns, name) = match c.attr("ref") {
-        Some(r) => match qname(r, sch.px, sch.tns) {
+        Some(r) => match qname(r, &c.prefixes) {
             Some(q) => q,
             None => return,
         },
@@ -974,22 +1155,6 @@ fn add_attribute(c: &Node, sch: &Sch, t: &mut Ty) {
         },
     };
     t.attrs.push(Attr { ns, name, required });
-}
-
-/// Split an emitted attribute key into (namespace, local name).
-///
-/// Namespace declarations are not attributes for this purpose, and an
-/// unprefixed attribute is in **no** namespace — it does not inherit the
-/// default `xmlns` the way an element does.
-fn split_attr<'a>(key: &'a str, px: &Px) -> Option<(String, &'a str)> {
-    if key == "xmlns" {
-        return None;
-    }
-    match key.split_once(':') {
-        Some(("xmlns", _)) => None,
-        Some((p, local)) => Some((px.get(p).cloned().unwrap_or_default(), local)),
-        None => Some((String::new(), key)),
-    }
 }
 
 // ── Findings ─────────────────────────────────────────────────────────────────
@@ -1009,8 +1174,7 @@ struct Run {
     /// with the attribute checks in place would mean the walk indexes nothing
     /// and all four attribute kinds pass vacuously — see [`ATTR_FLOOR`].
     attrs_checked: usize,
-    /// Roots with no global element declaration. SOAP faults belong here and
-    /// are not defects; anything else needs explaining before it is dismissed.
+    /// Payload roots with no global element declaration, including SOAP Faults.
     unanchored_roots: Vec<(String, String, String)>,
     /// Elements a `WRONG-NS` or `ATTR-AS-ELEMENT` row already explains, so the
     /// name check does not bill the same defect twice.
@@ -1195,7 +1359,7 @@ impl Run {
 
         // ── Attributes ───────────────────────────────────────────────────────
         // `xsi:` is instance machinery, legal on any element and declared by no
-        // type. Namespace declarations were dropped in `resolve_tree`.
+        // type. Namespace declarations are excluded from `Node::attrs`.
         let mut seen_attr: HashSet<Qn> = HashSet::new();
         for a in &node.attrs {
             if a.ns == XSI {
@@ -1410,18 +1574,10 @@ fn schema_files(dir: &Path) -> Vec<PathBuf> {
 #[tokio::test]
 #[ignore = "needs the ONVIF schema set; see the module docs and CLAUDE.md's publishing checklist"]
 async fn mock_output_matches_the_onvif_schema() {
-    let Ok(dir) = std::env::var("OXVIF_ONVIF_SCHEMA") else {
-        // Loud on purpose: a run that checked nothing must not read like a pass.
-        eprintln!(
-            "SKIPPED — OXVIF_ONVIF_SCHEMA is unset, so no schema was read and \
-             NOTHING was checked.\n\
-             Point it at a directory holding the ONVIF service WSDLs plus \
-             onvif.xsd and common.xsd.\n\
-             Nothing schema-derived is committed to this repository \
-             (docs/active/schema-shape-plan-2026-08.md §4, D2)."
-        );
-        return;
-    };
+    let dir = std::env::var("OXVIF_ONVIF_SCHEMA").expect(
+        "OXVIF_ONVIF_SCHEMA is required for an explicitly selected schema check; \
+         missing resources are not a validation pass",
+    );
     let dir = PathBuf::from(&dir);
     let files = schema_files(&dir);
     // Set but wrong is a failure, not a skip: the run was asked for.
@@ -1449,6 +1605,16 @@ async fn mock_output_matches_the_onvif_schema() {
          vacuously.",
         ix.types.len()
     );
+    for local in ["Envelope", "Fault"] {
+        let ty = ix
+            .globals
+            .get(&(SOAP_ENV.into(), local.into()))
+            .and_then(Option::as_ref);
+        assert!(
+            ty.is_some_and(|ty| ix.types.contains_key(ty)),
+            "SOAP 1.2 {local} must be anchored; include the external envelope schema"
+        );
+    }
 
     // Corpus: one response per action the client can send.
     let transport = MockTransport::new();
@@ -1470,39 +1636,37 @@ async fn mock_output_matches_the_onvif_schema() {
 
     let mut run = Run::default();
     let mut payloads = 0;
+    let mut faults = 0;
     for (name, xml) in &docs {
-        let (raw, px) = parse(xml).unwrap_or_else(|e| panic!("{name}: {e}"));
-        let root = resolve_tree(raw, &px);
-        let Some(body) = root
-            .kids
-            .iter()
-            .find(|k| k.ns == SOAP_ENV && k.local == "Body")
-        else {
-            continue;
-        };
-        for resp in &body.kids {
-            if resp.local != "Fault" {
-                payloads += 1;
-            }
-            let key = (resp.ns.clone(), resp.local.clone());
-            // Anchored first: it fills `explained`, which the name check reads.
-            match ix.globals.get(&key).cloned().flatten() {
-                Some(ty) if ix.types.contains_key(&ty) => {
-                    run.check_anchored(&ix, name, resp, &ty, &resp.local)
-                }
-                _ => run
-                    .unanchored_roots
-                    .push((name.clone(), resp.ns.clone(), resp.local.clone())),
-            }
-            run.check_names(&ix, name, resp, &resp.local);
+        let root = parse(xml).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let resp = soap_payload(&root).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let envelope_type = ix.globals[&(SOAP_ENV.into(), "Envelope".into())]
+            .as_ref()
+            .unwrap();
+        run.check_anchored(&ix, name, &root, envelope_type, "Envelope");
+        if resp.ns == SOAP_ENV && resp.local == "Fault" {
+            faults += 1;
+        } else {
+            payloads += 1;
         }
+        let key = (resp.ns.clone(), resp.local.clone());
+        // Anchored first: it fills `explained`, which the name check reads.
+        match ix.globals.get(&key).cloned().flatten() {
+            Some(ty) if ix.types.contains_key(&ty) => {
+                run.check_anchored(&ix, name, resp, &ty, &resp.local)
+            }
+            _ => run
+                .unanchored_roots
+                .push((name.clone(), resp.ns.clone(), resp.local.clone())),
+        }
+        run.check_names(&ix, name, resp, &resp.local);
     }
 
     // ── Coverage floors, before any finding is believed ──────────────────────
     assert!(
         payloads >= PAYLOAD_FLOOR,
         "only {payloads} of {} responses carried a payload rather than a SOAP \
-         fault (floor {PAYLOAD_FLOOR}). A fault contributes no shape evidence, \
+         fault (floor {PAYLOAD_FLOOR}). A fault contributes no success-shape evidence, \
          so this check silently shrinks as operations start refusing the bodies \
          in `body_for`.",
         docs.len()
@@ -1538,15 +1702,9 @@ async fn mock_output_matches_the_onvif_schema() {
         *counts.entry(kind).or_default() += 1;
     }
 
-    let faults: Vec<_> = run
-        .unanchored_roots
-        .iter()
-        .filter(|r| r.2 == "Fault")
-        .collect();
     let other: BTreeSet<String> = run
         .unanchored_roots
         .iter()
-        .filter(|r| r.2 != "Fault")
         .map(|r| format!("{} ({})", r.2, r.1))
         .collect();
 
@@ -1561,18 +1719,18 @@ async fn mock_output_matches_the_onvif_schema() {
         ix.known_ns.len()
     );
     println!(
-        "corpus: {} responses, {} with a payload, {} roots anchored, {} faults, \
+        "corpus: {} responses, {} success payloads, {} anchored nodes, {} faults, \
          {} children skipped, {} attributes checked",
         docs.len(),
         payloads,
         run.anchored,
-        faults.len(),
+        faults,
         run.unanchored_children,
         run.attrs_checked
     );
     if !other.is_empty() {
         println!(
-            "  unanchored non-fault roots: {}",
+            "  unanchored payload roots (including Faults): {}",
             other.iter().cloned().collect::<Vec<_>>().join(", ")
         );
     }
@@ -1591,7 +1749,7 @@ async fn mock_output_matches_the_onvif_schema() {
         println!("  {kind:<16} [{at}] {msg}");
     }
 
-    // ── Every non-fault root must anchor ─────────────────────────────────────
+    // ── Every payload root must anchor ───────────────────────────────────────
     //
     // A root that anchors to no global element is a response the schema set
     // does not declare *in the namespace the mock put it in*. Once the schema
@@ -1606,8 +1764,7 @@ async fn mock_output_matches_the_onvif_schema() {
     // `UNKNOWN-NAME` row, so the pins alone would have made it look like the
     // smallest finding in the set rather than the only client-facing one.
     //
-    // Faults are excluded: there is no soap-envelope schema in the set, so all
-    // 50 of them are unanchored by construction.
+    // Faults are no longer exempt: the envelope schema is now a prerequisite.
     assert!(
         other.is_empty(),
         "\n{} response root(s) anchor to no declared element: {}\n\
