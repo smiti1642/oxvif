@@ -22,6 +22,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Mock fidelity auditing now indexes complete client/session Action declarations
+  and request-reader call sites. Regression controls preserve configuration
+  changes on fixed profiles; separate known-gap probes expose unresolved profile
+  allocation, notification, XML escaping and partial-binding defects. A passing
+  known-gap probe means reproduced, not fixed or ONVIF-conformant.
 - Human terminal line numbers are configurable as `absolute`, `relative`, `hybrid`
   (unchanged default), or `off`. Use `--line-numbers` for this invocation, or `?`
   in navigation screens to preview, apply for the session, or explicitly save a

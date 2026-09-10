@@ -4,6 +4,7 @@ param([switch]$SelfTest)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'mock-fidelity-source-index.ps1')
 
 function Get-Routes([string]$Source) {
     $production = ($Source -split '#\[cfg\(test\)\]', 2)[0]
@@ -110,6 +111,20 @@ fn dispatch_demo(op: &str) -> Option<String> {
     Assert-Rejected { Get-Ledger '' } 'No ledger rows'
     Assert-Rejected { Get-Routes ($source.Replace('demo::read(state)', 'if yes { demo::read(state) } else { demo::other(state) }')) } 'Unrecognized route syntax'
     Write-Output 'PASS: inventory self-tests (positive plus 10 rejection cases); no files modified.'
+    $actionSource = 'fn sample() { const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetProfiles"; }'
+    $actionSites = @(Get-ActionSites $actionSource 'src/demo.rs')
+    if ($actionSites.Count -ne 1 -or $actionSites[0].Site -cne 'src/demo.rs::sample' -or
+        (Get-ActionRoute $actionSites[0].Action) -cne 'media.GetProfiles') { throw 'Action extraction control failed.' }
+    Assert-Rejected { Get-ActionSites 'fn sample() { const ACTION: &str = concat!("a", "b"); }' 'src/demo.rs' } 'Unsupported ACTION declaration'
+    Assert-Rejected { Get-ActionRoute 'urn:audit/events/wsdl/GetProfiles' } 'Unmapped source Action'
+    Assert-Rejected { Get-ActionRoute 'http://www.onvif.org/ver10/media/wsdl/extra/GetProfiles' } 'Unmapped source Action'
+    Assert-Rejected { Assert-IndexEqual @('A|uri|route') @('A|other|route') 'Action' } 'Action unexpected entry'
+    Assert-Rejected { Assert-IndexEqual @('A', 'B') @('A') 'Index' } 'Index missing entry'
+    Assert-Rejected { Assert-IndexEqual @('A') @('A', 'A') 'Index' } 'Index unexpected entry'
+    $readerSource = "fn sample() {`n extract_tag(body, name);`n extract_tag(body, name);`n}`n#[cfg(test)]`nmod tests {`nfn check() {`n extract_attr(body, name, attr);`n}`n}"
+    $readerSites = @(Get-ReaderSites $readerSource 'src/demo.rs')
+    Assert-IndexEqual @('src/demo.rs::sample|extract_tag|production', 'src/demo.rs::sample|extract_tag|production', 'src/demo.rs::check|extract_attr|test') @($readerSites | ForEach-Object { "$($_.Site)|$($_.Helper)|$($_.Kind)" }) 'Reader control'
+    Write-Output 'PASS: Action/reader positive controls and 6 rejection controls; no files modified.'
 }
 
 $repository = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '../..')).Path
@@ -133,4 +148,26 @@ foreach ($row in $sourceRows) {
     }
 }
 Write-Output "PASS: $($sourceRows.Count) source routes equal both ledgers; handlers and tracking checked."
-Write-Output 'NOT CHECKED: normative contracts, handler internals, full Action URI validation, fidelity, or CI execution.'
+$actions = @()
+foreach ($file in @((Get-ChildItem -LiteralPath (Join-Path $repository 'src/client') -Filter '*.rs')) + @((Get-Item -LiteralPath (Join-Path $repository 'src/session.rs')))) {
+    $path = $file.FullName.Substring($repository.Length + 1).Replace('\', '/')
+    $actions += @(Get-ActionSites (Get-Content -LiteralPath $file.FullName -Encoding UTF8 -Raw) $path)
+}
+if ($actions.Count -eq 0) { throw 'Empty client Action inventory.' }
+$actionRows = @($actions | ForEach-Object { "$($_.Site)|$($_.Action)|$(Get-ActionRoute $_.Action)" })
+$keys = @($actions | ForEach-Object { Get-ActionRoute $_.Action } | Sort-Object -Unique)
+Assert-IndexEqual @($sourceRows | ForEach-Object { $_.Key }) $keys 'Action route coverage'
+$readers = @()
+foreach ($file in Get-ChildItem -LiteralPath (Join-Path $repository 'src/mock') -Recurse -Filter '*.rs') {
+    $path = $file.FullName.Substring($repository.Length + 1).Replace('\', '/')
+    $readers += @(Get-ReaderSites (Get-Content -LiteralPath $file.FullName -Encoding UTF8 -Raw) $path)
+}
+if ($readers.Count -eq 0) { throw 'Empty reader inventory.' }
+$readerRows = @($readers | ForEach-Object { "$($_.Site)|$($_.Helper)|$($_.Kind)" })
+foreach ($name in @('mock-fidelity-source-audit.md', 'mock-fidelity-source-audit_zh.md')) {
+    $audit = Get-Content -LiteralPath (Join-Path $PSScriptRoot $name) -Encoding UTF8 -Raw
+    Assert-IndexEqual $actionRows @(Get-AuditRows $audit 'action') 'Action source index'
+    Assert-IndexEqual $readerRows @(Get-AuditRows $audit 'reader') 'Reader source index'
+}
+Write-Output "PASS: $($actions.Count) Action declaration sites cover $($keys.Count) routes; $($readers.Count) reader occurrences match both source audits."
+Write-Output 'NOT CHECKED: normative contracts, arbitrary Rust syntax/aliases, transitive call graphs, runtime Action rejection, fidelity, or CI execution.'

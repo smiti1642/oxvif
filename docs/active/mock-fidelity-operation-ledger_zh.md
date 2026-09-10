@@ -44,6 +44,8 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 - 每列均繼承施工檢查表的 **C01–C12 全部稽核面向**及開工／結案條件。
   施工前填妥操作工作卡；不得將空白欄位解讀為不需要處理。依 D3，規範欄位表與
   schema 衍生 corpus 保留於外部，只連結去識別化結論。
+- P1 指[第一批 13 張工作卡](mock-fidelity-profile-preflight_zh.md)；部分契約審閱及
+  known-gap 重現不代表驗收通過。
 - 下列服務實作路徑可直接開啟；以 Handler 欄的確切 symbol 搜尋定位，不固定易失效的行號。
 
 ## device
@@ -106,10 +108,10 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `media.GetServiceCapabilities` | `media::resp_service_capabilities` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetProfiles` | `media::resp_profiles` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetProfile` | `media::resp_profile` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.CreateProfile` | `media::handle_create_profile` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.DeleteProfile` | `media::handle_delete_profile` | `state, body` | W10 | TODO | PARTIAL | TODO | TODO | PARTIAL | E1 |
+| `media.GetProfiles` | `media::resp_profiles` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.GetProfile` | `media::resp_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.CreateProfile` | `media::handle_create_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.DeleteProfile` | `media::handle_delete_profile` | `state, body` | W10 | PARTIAL | PARTIAL | TODO | TODO | PARTIAL | E1,P1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetVideoSources` | `media::resp_video_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -121,10 +123,10 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | `media.GetVideoEncoderConfiguration` | `media::resp_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.SetVideoEncoderConfiguration` | `media::handle_set_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetVideoEncoderConfigurationOptions` | `media::resp_video_encoder_configuration_options` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.AddVideoEncoderConfiguration` | `media::handle_add_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.RemoveVideoSourceConfiguration` | `media::handle_remove_video_source_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.AddVideoEncoderConfiguration` | `media::handle_add_video_encoder_configuration` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.RemoveVideoSourceConfiguration` | `media::handle_remove_video_source_configuration` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media.GetAudioSources` | `media::resp_audio_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetAudioSourceConfigurations` | `media::resp_audio_source_configurations` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetAudioEncoderConfiguration` | `media::resp_audio_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -145,11 +147,11 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `media2.GetServiceCapabilities` | `media2::resp_service_capabilities_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetProfiles` | `media2::resp_profiles_media2` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, body` | W10 | TODO | PARTIAL | TODO | TODO | PARTIAL | E1 |
-| `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media2.GetProfiles` | `media2::resp_profiles_media2` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, body` | W10 | PARTIAL | PARTIAL | TODO | TODO | PARTIAL | E1,P1 |
+| `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.GetStreamUri` | `media2::resp_stream_uri_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetSnapshotUri` | `media2::resp_snapshot_uri_media2` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetVideoSourceConfigurations` | `media2::resp_video_source_configurations_media2` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |

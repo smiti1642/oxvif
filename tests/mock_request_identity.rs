@@ -15,6 +15,69 @@ fn device(token: &str) -> MockTransport {
     transport
 }
 
+// Fixed controls deletion, not binding. This control prevents the old incorrect
+// bind_configuration comment from becoming a behavior change during hardening.
+#[tokio::test]
+async fn fixed_profile_configuration_remains_mutable_in_both_media_services() {
+    for media2 in [false, true] {
+        let transport = device("fixed-binding-control");
+        let config = {
+            let mut token = String::new();
+            transport.device().modify(|state| {
+                state.profiles.profiles[0].fixed = true;
+                state.profiles.profiles[0].video_encoder_config_token = None;
+                token = state.video_encoders[0].token.clone();
+            });
+            token
+        };
+        let ns = if media2 {
+            "http://www.onvif.org/ver20/media/wsdl"
+        } else {
+            "http://www.onvif.org/ver10/media/wsdl"
+        };
+        let (add, remove, binding) = if media2 {
+            (
+                "AddConfiguration",
+                "RemoveConfiguration",
+                format!(
+                    "<m:Configuration><m:Type>VideoEncoder</m:Type><m:Token>{config}</m:Token></m:Configuration>"
+                ),
+            )
+        } else {
+            (
+                "AddVideoEncoderConfiguration",
+                "RemoveVideoEncoderConfiguration",
+                format!("<m:ConfigurationToken>{config}</m:ConfigurationToken>"),
+            )
+        };
+        for (operation, attached) in [(add, true), (remove, false)] {
+            let binding = if attached || media2 {
+                binding.as_str()
+            } else {
+                ""
+            };
+            let body = format!(
+                "<m:{operation} xmlns:m='{ns}'><m:ProfileToken>fixed-binding-control</m:ProfileToken>{binding}</m:{operation}>"
+            );
+            let xml = transport
+                .soap_post("http://mock", &format!("{ns}/{operation}"), body)
+                .await
+                .unwrap();
+            let response = oxvif::soap::parse_soap_body(&xml).unwrap();
+            oxvif::soap::find_response(&response, &format!("{operation}Response")).unwrap();
+            let state = transport.device().read();
+            let entry = &state.profiles.profiles[0];
+            assert_eq!(entry.token, "fixed-binding-control");
+            assert!(entry.fixed);
+            assert_eq!(
+                entry.video_encoder_config_token.as_deref(),
+                attached.then_some(config.as_str()),
+                "configuration state must reflect {operation}; fixed does not mean immutable"
+            );
+        }
+    }
+}
+
 #[tokio::test]
 async fn delete_profile_preserves_escaped_and_whitespace_identity() {
     for token in ["Profile<&北門", "  Profile spaced  ", "literal&amp;value"] {

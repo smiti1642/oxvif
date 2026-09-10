@@ -298,6 +298,9 @@ Factory device 是一台**雙感測器攝影機**。單 channel fixture 無法�
 
 `fixed="true"` 的 profile 不允許刪除，會回傳 `ter:DeletionOfFixedProfile`。`Profile_4` 刻意不繫結 PTZ configuration，用於測試不具 PTZ 能力的 profile；任何以該 profile 執行的 PTZ 操作都會產生 fault。
 
+此旗標不代表 configuration binding 不可修改：已支援的 Add／Remove configuration
+操作仍可變更其繫結。這是既有預期行為，不是 acknowledgment-only stub，也不是 mock 專屬例外。
+
 ### 6.4 PTZ：每個鏡頭一個 head
 
 Profile 不直接擁有 head，而是透過 PTZ configuration 取得：

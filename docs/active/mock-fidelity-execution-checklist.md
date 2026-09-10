@@ -98,9 +98,9 @@ include operation-sized Fault migration after W05, not just request parsing.
 
 | ID / milestone / status | Prerequisites | Locations and deliverable | Acceptance evidence |
 | --- | --- | --- | --- |
-| W00 / M0 / PARTIAL | None | `dispatch.rs`, operation ledger and checker: all literal arms located; next reconcile full client Action URIs and source changes, including aliases/unknown actions | Exact set equality, duplicate/missing/changed route controls; new helper/Action paths reviewed separately; no lower-bound count used as completeness proof |
-| W01 / M0 / TODO | W00 for selected batch | Per-operation cards using the template above; normative review external; field/fault/effect coverage per operation | All batch cards pass readiness, C01–C12 assigned, no unexplained defaults or response branches; source/spec disagreement is logged before edits |
-| W02 / M0 / TODO | W00 | `xml_parse.rs`, all service files, `request.rs`, `auth.rs`, `canon.rs`: enumerate callers and transitive helper dependencies; classify text/attribute/subtree/raw uses | Each legacy caller has a migration owner or explicit isolation rationale, including test-only readers; newly found readers added to source map |
+| W00 / M0 / DONE | None | `dispatch.rs`, ledger, checker and source audit: literal Action sites including session reconcile with every route; permissive runtime aliases remain separately tracked as K06/W07 | Full Action/site index and exact route-set equality checked; positive/missing/changed/duplicate controls passed; completion is source inventory, not runtime rejection or normative validation |
+| W01 / M0 / IN-PROGRESS | W00 for selected batch | Per-operation cards using the template above; normative review external; field/fault/effect coverage per operation | All batch cards pass readiness, C01–C12 assigned, no unexplained defaults or response branches; source/spec disagreement is logged before edits |
+| W02 / M0 / PARTIAL | W00 | `xml_parse.rs`, all service files, `request.rs`, `auth.rs`, `canon.rs`: enumerate callers and transitive helper dependencies; classify text/attribute/subtree/raw uses | Each legacy caller has a migration owner or explicit isolation rationale, including test-only readers; newly found readers added to source map |
 | W03 / M3 / TODO | W02 | `responder.rs`, `dispatch.rs`, `transport.rs`, `server.rs`, `request.rs`: parse once at the normal synthetic boundary; define raw/parsed ownership and Action check | Valid/malformed input tested through both entry points; fault/auth/replay precedence unchanged unless separately reviewed; static responders cannot bypass agreed validation |
 | W04 / M1,M3 / PARTIAL | W02 | `request.rs`: extend current scalar parser with scoped attributes, typed access and subtree/repeated-member access; document limits | C02–C04/C09 controls and mutations; legal extension/repeat controls; malformed inputs never panic; escaped namespace normalization, CR/LF/attribute normalization audited |
 | W05 / M2 / PARTIAL | W01 for mapping; W02 for callers | `helpers.rs`, proposed private fault module, every `resp_soap_fault` caller: structured QNames/subcodes/reason/detail; current text escaping is only first slice | Independent QName-scope and nested Fault checks; all ordinary branches mapped with references, no double escape or uncontrolled raw code interpolation |
@@ -223,8 +223,11 @@ dirty files; open findings; next unblocked work ID; tests still required; any
 user decision or external prerequisite. Findings can be carried forward only
 with an ID and owner work package. Resume from those records without chat history.
 
-Current next task: **W00 full Action reconciliation and W02 call-site map, then
-W01 cards for W10 profile/binding operations before another handler migration.**
+Current progress: [source audit](mock-fidelity-source-audit.md) completes W00
+literal source reconciliation; W02 direct callers are indexed but transitive paths
+remain open. The first 13 [W01 cards](mock-fidelity-profile-preflight.md) exist but
+are not migration-ready. **Next: W02 transitive paths, W01 external field/Fault
+review, and W03–W06 design.**
 W04/W05 design can follow the shared-path map; settle W06 before changing default
 Fault output. W20/W21 can be prepared without waiting for every service migration.
 

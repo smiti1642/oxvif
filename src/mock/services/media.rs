@@ -456,11 +456,10 @@ impl ConfigKind {
 /// mock at all** — create one, add an encoder, read it back, still empty. Any
 /// test of profile-assembly logic passed without exercising anything.
 ///
-/// A *fixed* profile is deliberately still bindable. Real devices refuse, but
-/// the mock's four seeded profiles are all fixed, so refusing would leave only
-/// freshly created profiles reachable and would flip
-/// `tests/mock_action_snapshot.rs` from `ok` to `fault` on two operations.
-/// Enforcing it belongs with the rest of the fidelity work, not here.
+/// A *fixed* profile remains bindable: fixed controls deletion, not configuration
+/// immutability (Media1 v24.12 and Media2 v26.06, section 4.1). This is not a mock
+/// exception. Preserve it when tightening request validation; compatibility and
+/// configuration-conflict checks are separate from the profile's fixed flag.
 pub(crate) fn bind_configuration(
     state: &SharedState,
     body: &str,

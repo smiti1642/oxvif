@@ -90,9 +90,9 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 
 | ID／里程碑／狀態 | 前置條件 | 位置及交付物 | 驗收證據 |
 | --- | --- | --- | --- |
-| W00／M0／PARTIAL | 無 | `dispatch.rs`、逐操作清冊與檢查器：已定位全部字面值路由；接續核對完整 client Action URI、別名／未知操作及來源差異 | 集合精確相等；重複／缺少／改接路由控制；新增 helper／Action 路徑另行審查，不以最低計數證明完整 |
-| W01／M0／TODO | 所選批次的 W00 | 依上方模板建立逐操作工作卡，規範核對保留外部；逐操作盤點 field／Fault／effect | 全批次工作卡符合開工條件；C01–C12 均有安排；無未解釋預設或 response 分支；程式碼／規格衝突先記錄再修改 |
-| W02／M0／TODO | W00 | `xml_parse.rs`、全部 service、`request.rs`、`auth.rs`、`canon.rs`：列出 caller 與間接 helper 相依性，分類文字／attribute／子樹／raw 用途 | 每個舊 caller 都有遷移負責項目或明確隔離理由，包含 test-only reader；新找到的 reader 加入來源對照 |
+| W00／M0／DONE | 無 | `dispatch.rs`、清冊、檢查器、來源稽核：含 session 的字面值 Action site 與全部路由對應；runtime 寬鬆別名另列 K06／W07 | 完整 Action／site 索引及精確 route 集合相等已驗證；正向／缺少／改接／重複控制通過；完成的是來源清冊，不是 runtime 拒絕或規範驗證 |
+| W01／M0／IN-PROGRESS | 所選批次的 W00 | 依上方模板建立逐操作工作卡，規範核對保留外部；逐操作盤點 field／Fault／effect | 全批次工作卡符合開工條件；C01–C12 均有安排；無未解釋預設或 response 分支；程式碼／規格衝突先記錄再修改 |
+| W02／M0／PARTIAL | W00 | `xml_parse.rs`、全部 service、`request.rs`、`auth.rs`、`canon.rs`：列出 caller 與間接 helper 相依性，分類文字／attribute／子樹／raw 用途 | 每個舊 caller 都有遷移負責項目或明確隔離理由，包含 test-only reader；新找到的 reader 加入來源對照 |
 | W03／M3／TODO | W02 | `responder.rs`、`dispatch.rs`、`transport.rs`、`server.rs`、`request.rs`：於正常 synthetic 邊界解析一次，定義 raw／parsed 所有權及 Action 檢查 | 兩個入口測試合法／異常輸入；未另審查不得改變 fault／auth／replay 優先序；靜態 responder 不得繞過約定驗證 |
 | W04／M1、M3／PARTIAL | W02 | `request.rs`：擴充現有 scalar parser，加入 scoped attribute、typed access、子樹／重複成員存取及限制文件 | C02–C04／C09 控制與擾動、合法 extension／重複成員控制、異常輸入不 panic；核對 namespace、CR／LF／attribute 正規化 |
 | W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | `helpers.rs`、提案中的 private Fault module、全部 `resp_soap_fault` caller：結構化 QName／subcode／reason／detail；目前文字 escaping 只是第一批 | 獨立 QName scope／巢狀 Fault 檢查；所有一般錯誤分支具參考映射；無 double escape 或未控制的 raw code 插入 |
@@ -210,8 +210,10 @@ not-run 分開記錄；schema skip、既有 `Broken`／`Blind` 預期不算新�
 下一個可開工 ID、尚需測試、使用者決策或外部前置條件。待辦發現必須有 ID 及
 負責工作項目才能移交；接續施工以這些紀錄為準，不依賴對話歷史。
 
-目前下一項：**W00 完整 Action 核對及 W02 caller 對照，接著完成 W10
-profile／binding 操作的 W01 工作卡，再進行下一批 handler 遷移。**
+目前進度：[來源稽核](mock-fidelity-source-audit_zh.md) 已完成 W00 字面值來源核對，
+W02 直接 caller 索引完成但間接路徑仍待查；第一批 13 張
+[W01 工作卡](mock-fidelity-profile-preflight_zh.md) 已建立，尚未符合遷移條件。
+**下一項為 W02 間接路徑、W01 外部欄位／Fault 核對及 W03–W06 設計。**
 W04／W05 設計依共用路徑盤點接續；預設 Fault 輸出改變前先處理 W06。
 W20／W21 可先準備，不必等待所有服務遷移結束。
 

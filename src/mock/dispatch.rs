@@ -385,8 +385,9 @@ mod tests {
     /// list cannot drift: a client method added without a mock handler fails
     /// here without anyone remembering to update anything.
     ///
-    /// `src/session.rs` is not listed — it delegates to `OnvifClient` and
-    /// declares no action URI of its own (verified: zero unique to it).
+    /// Include `src/session.rs` as well: its `get_osd_options` wrapper constructs
+    /// a request directly. It currently repeats a client URI, but a future new
+    /// Action at that seam must not be invisible to this sweep.
     const CLIENT_SOURCES: &[(&str, &str)] = &[
         ("device", include_str!("../client/device.rs")),
         ("events", include_str!("../client/events.rs")),
@@ -395,6 +396,7 @@ mod tests {
         ("media2", include_str!("../client/media2.rs")),
         ("ptz", include_str!("../client/ptz.rs")),
         ("recording", include_str!("../client/recording.rs")),
+        ("session", include_str!("../session.rs")),
     ];
 
     /// Extract every quoted ONVIF / OASIS URI from a Rust source.

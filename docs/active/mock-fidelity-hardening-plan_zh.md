@@ -19,6 +19,7 @@
 | [決策紀錄](#決策紀錄) | 維護者核准與執行狀態 |
 | [第一批實作](#第一批實作) | 範圍、回歸證據及剩餘工作 |
 | [施工文件](#施工文件) | 原始碼對照檢查表、逐操作追蹤及接續起點 |
+| [來源稽核檢查點](#來源稽核檢查點) | W00 來源核對、W01／W02 進度與已重現缺口 |
 
 ## 目標與邊界
 
@@ -284,3 +285,19 @@ M2、M3 按服務拆分遷移，不一次全面重寫。共用 helper 變更若�
 重新執行 workspace 測試：all-features 1,141 passed／4 ignored；default
 1,061 passed／4 ignored。這些是回歸檢查，不是新增 schema 或平台驗收。
 本次文件修改未執行任何攝影機命令。
+
+## 來源稽核檢查點
+
+2026-09-10 從 `892aa94` 開始。[來源稽核](mock-fidelity-source-audit_zh.md)
+記錄完整字面值 Action／方法對應及直接 reader 索引；
+[profile／binding 開工盤點](mock-fidelity-profile-preflight_zh.md) 涵蓋第一批 13 個
+操作工作卡。W00 已完成目前來源形式的核對；W01／W02 仍部分完成，不代表完整契約驗收。
+
+Dispatch sweep 已納入 session 直接 request 路徑。修正 fixed-profile binding
+的錯誤註解但不改 runtime，並新增兩種 Media 服務 Add／Remove 的 state 控制。
+K13–K16 已有可執行 known-gap probe：產生 token 碰撞、拒絕刪除仍 notify、profile
+name 成為 markup、後筆 binding 失敗卻保留前筆寫入。這些 probe 的通過表示重現缺陷，不是修復。
+
+下一步完成開工盤點中的外部欄位／Fault 核對、共用 parsed-input、原子性及相容性
+設計（W02–W06），再按範圍遷移 handler。Runtime routing、schema CI、Release
+及已安裝 binary 均未改變。

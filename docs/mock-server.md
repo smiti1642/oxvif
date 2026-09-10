@@ -364,6 +364,9 @@ the wrong channel.
 | `Profile_4` | `subStream2` | no | `VSC_2` | `VEC_4` | *(none)* | *(none)* |
 
 `fixed="true"` profiles refuse deletion (`ter:DeletionOfFixedProfile`).
+The flag does not make their configuration bindings immutable: supported
+Add/Remove configuration operations may still change them. This existing behavior
+is intentional, not an acknowledgment-only stub or a mock-only exception.
 
 `Profile_4` binds no PTZ configuration on purpose: it is the fixture for a
 profile that is **not PTZ-capable**, and every PTZ operation on it faults.

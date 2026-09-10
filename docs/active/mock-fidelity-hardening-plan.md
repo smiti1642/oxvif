@@ -20,6 +20,7 @@ at `dc69e9a`; that contribution is not assumed to be merged.
 | [Decision record](#decision-record) | Maintainer approvals and execution status |
 | [First implementation slice](#first-implementation-slice) | Scope, regression evidence and remaining work |
 | [Execution documents](#execution-documents) | Source-indexed checklist, per-operation tracking and resume point |
+| [Source audit checkpoint](#source-audit-checkpoint) | W00 source reconciliation, W01/W02 progress and reproduced gaps |
 
 ## Objectives and boundaries
 
@@ -317,3 +318,22 @@ documents resolved. Formatting and both workspace Clippy configurations passed.
 Workspace tests were rerun: all-features 1,141 passed / 4 ignored; default 1,061
 passed / 4 ignored. These are regression checks, not new schema or platform
 acceptance. No camera commands were run for this documentation revision.
+
+## Source audit checkpoint
+
+Started from `892aa94` on 2026-09-10. [Source audit](mock-fidelity-source-audit.md)
+records the complete literal Action/method correspondence and direct reader
+index; [profile/binding preflight](mock-fidelity-profile-preflight.md) covers the
+first 13 operation cards. W00 source reconciliation is complete for the current
+source forms; W01 and W02 remain partial, not whole-contract acceptance.
+
+The dispatch sweep now includes the session's direct request path. The incorrect
+fixed-profile binding comment is corrected without changing runtime behavior,
+with an Add/Remove state control for both Media services. K13–K16 are executable
+known-gap probes: generated-token collision, refused-delete notification, raw
+profile-name markup, and a late binding failure leaving an earlier write applied.
+These probes pass by reproducing the defects, not by fixing them.
+
+Next: finish the preflight's external field/Fault review and shared parsed-input,
+atomicity and compatibility designs (W02–W06), then migrate bounded handler
+batches. Runtime routing, schema CI, releases and installed binaries are unchanged.
