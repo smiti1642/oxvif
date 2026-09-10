@@ -135,6 +135,27 @@ CreateProfile 額外使 Profiles 失效後，兩項 baseline 在完整全部功�
 
 ## 證據與剩餘工作
 
+P-D 實作契約（工程目標，尚未實作）：
+
+- 從完整 supplied Action 解析單一私有 route，同時供 operation QName 驗證及
+  dispatch 使用。Events Action suffix 與 DeviceIO namespace 大小寫需對照既有
+  client request 建構；全來源 client round trip 必須區分路由與 payload 驗收。
+- 在 fault／auth／raw／replay responder 之後的 synthetic 邊界建立單一 owning
+  request。自 DeleteProfile 起，將 borrowed operation 傳給已遷移 handler，
+  不重新解析；公開 RequestCtx／Responder 不變。
+- 靜態與狀態型 handler 均拒絕 malformed XML 及 Action／body 不一致。
+  明確測試 SOAP container 數量、文字與順序、prefix alias 及 Header 誘導內容。
+  私有 parser 的 standalone operation 支援，與待完成的 HTTP envelope 策略分開。
+- 依 typed error 對應已審查的 generic fault。資源／策略限制須明確記錄為 mock
+  邊界，不得杜撰 ONVIF 硬體上限或依診斷字串分類；公開 client error 意義不變。
+- 涵蓋正常 HTTP／in-process 路徑、完整 fault payload、整份 state 與通知；
+  保留 malformed raw responder 與 committed-effect 控制。既有 replay 提前寫入
+  副作用仍屬 W19，不得宣稱於本批修正。
+- 解讀 response coverage 前，先處理 test-only bare fragment producer：
+  dispatch 來源掃描、舊 structural corpus 及 Metamorph quirk baseline 均須明確
+  記錄處置方式。不得把全部回應改成通用 fault 後，宣稱成功 payload 的 namespace／
+  schema 掃描通過。
+
 新增兩個 mock::responder::tests 控制既有 extension seam：
 
 - `fault_precedes_auth_and_extras_even_for_malformed_input`：第一個回應精確
@@ -182,6 +203,21 @@ P-A 本機 gate：格式、兩種 workspace Clippy、全部功能 1,155 與預�
 上述數字包含既有 known-gap assertion，不代表 K13–K18 已結案。
 
 ## 結構化 Fault 基礎
+
+後續 P-D 前置工作將僅含字串的私有 `RequestError` 改為 28 個明確 variant。
+解析器與 scoped accessor 在錯誤發生處選取 variant；`message()` 保留兩個
+DeleteProfile handler 既有的靜態診斷文字。錯誤不保存 request payload。
+此變更僅調整內部表示法，尚未啟用全域驗證或新增 SOAP fault 對應；後續邊界
+策略必須依 variant 判斷，不得依診斷字串的子字串猜測。
+
+敏感度驗證：暫時將 structured scalar 的錯誤改回 `MissingField` 後，
+`absent_empty_scalar_and_subtree_are_distinct` 與
+`misleading_nested_fields_are_not_selected` 在完整 workspace、all-feature、
+no-fail-fast 執行中均於 enum payload assertion 失敗（log
+`1789042352_cargo_test.log`）。擾動已還原；保留既有 malformed-input 診斷及
+DeleteProfile wire 回歸測試。格式及兩種 workspace Clippy 通過；還原後全功能
+1,184 項及預設 1,100 項測試通過（各 5 ignored），清冊自我測試及來源核對通過，
+數量不變。本批僅調整內部表示法，未擴充外部驗證的 instance corpus。
 
 P-C 已具有私有 `Fault` 表示，包含型別化 Sender／Receiver code、有序 subcode
 及 reason。可信 QName 定義使用編譯期 ASCII NCName；每個 Value 各自宣告

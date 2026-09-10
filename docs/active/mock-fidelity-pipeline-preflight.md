@@ -145,6 +145,30 @@ passed for the preceding authentication-Fault commit `e6145b3`, not this new sli
 These are sub-slices of existing work IDs, not replacement milestones. External
 schema CI remains W20–W22; the newly wired inventory job checks source drift only.
 
+P-D implementation contract (engineering target, not implemented yet):
+
+- Resolve one private route from the complete supplied Action and use that same
+  route for operation QName validation and dispatch. Events Action suffixes and
+  DeviceIO namespace casing must follow existing client request construction;
+  source-wide client round trips must distinguish routing from payload acceptance.
+- Build one owning request at the synthetic boundary, after fault/auth/raw/replay
+  responders. Pass its borrowed operation to migrated handlers, starting with
+  DeleteProfile, without reparsing. Keep public RequestCtx/Responder unchanged.
+- Reject malformed XML and Action/body disagreement for static and stateful
+  handlers alike. Explicitly test SOAP container multiplicity/text/order, prefix
+  aliases and Header decoys. Standalone operation support in the private parser
+  remains distinct from the pending HTTP envelope policy.
+- Match typed errors to reviewed generic faults. Resource/policy limits need an
+  explicitly documented mock-specific boundary, not a fabricated ONVIF hardware
+  limit or a diagnostic-string classifier. Preserve public client error meanings.
+- Exercise normal HTTP and in-process paths, exact fault payloads, complete state
+  and notifications; keep malformed raw responder and committed-effect controls.
+  Legacy replay's pre-write effects remain W19 and cannot be claimed fixed here.
+- Repair test-only bare fragment producers before interpreting response coverage:
+  dispatch source sweeps, the legacy structural corpus, and Metamorph quirk
+  baselines need named disposition. Do not make all responses generic faults and
+  count that as a passing success-payload namespace/schema sweep.
+
 ## Evidence and remaining work
 
 Two `mock::responder::tests` controls guard the existing extension seam:
@@ -200,6 +224,23 @@ sites / 157 routes / 260 direct reader occurrences. These counts include the
 existing known-gap assertions and do not close K13–K18.
 
 ## Structured fault foundation
+
+The later P-D prerequisite replaces the private string-only `RequestError` with
+28 explicit variants. Parsing and scoped accessors select variants at the point
+of failure; `message()` preserves the existing static diagnostics used by the
+two DeleteProfile handlers. No request payload is stored in an error. This is an
+internal representation change, not global validation or a new SOAP fault mapping.
+Future boundary policy must match variants rather than diagnostic substrings.
+
+Sensitivity: temporarily returning `MissingField` for a structured scalar made
+`absent_empty_scalar_and_subtree_are_distinct` and
+`misleading_nested_fields_are_not_selected` fail at enum payload assertions in
+the full workspace all-feature no-fail-fast run (log `1789042352_cargo_test.log`).
+The mutation was restored. Existing malformed-input diagnostic and DeleteProfile
+wire regressions remain in place. Formatting and both workspace Clippy modes
+passed; restored suites passed 1,184 all-feature and 1,100 default tests (5
+ignored each), and inventory self-tests/reconciliation passed unchanged. This
+internal-only slice does not expand the externally validated instance corpus.
 
 P-C has a private `Fault` representation with typed Sender/Receiver code,
 ordered subcodes and reason. Trusted QName definitions are compile-time ASCII

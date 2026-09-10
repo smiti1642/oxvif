@@ -17,8 +17,74 @@ const MAX_BYTES: usize = 2 * 1024 * 1024;
 const MAX_DEPTH: usize = 64;
 const MAX_NODES: usize = 16_384;
 
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct RequestError(pub &'static str);
+/// Typed private diagnostics: routing/fault policy must match variants, never
+/// guess a category from a human-readable message. No request text is retained.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RequestError {
+    DuplicateField,
+    ExpectedScalar,
+    MissingField,
+    EmptyField,
+    MissingBody,
+    OperationCount,
+    OperationIdentity,
+    InvalidNamespace,
+    UnboundPrefix,
+    InvalidCharacter,
+    InvalidAttribute,
+    InvalidAttributeValue,
+    DuplicateExpandedAttribute,
+    TextOutsideRoot,
+    MultipleRoots,
+    ByteLimit,
+    MalformedXml,
+    NodeLimit,
+    DepthLimit,
+    UnmatchedEnd,
+    CdataOutsideRoot,
+    EntityOutsideRoot,
+    InvalidCharacterReference,
+    UnknownEntity,
+    DtdUnsupported,
+    InvalidDeclaration,
+    UnclosedRoot,
+    MissingRoot,
+}
+
+impl RequestError {
+    pub(super) const fn message(self) -> &'static str {
+        match self {
+            Self::DuplicateField => "duplicate request field",
+            Self::ExpectedScalar => "expected scalar request field",
+            Self::MissingField => "missing request field",
+            Self::EmptyField => "empty request field",
+            Self::MissingBody => "missing SOAP Body",
+            Self::OperationCount => "expected one SOAP operation",
+            Self::OperationIdentity => "unexpected operation or namespace",
+            Self::InvalidNamespace => "invalid namespace value",
+            Self::UnboundPrefix => "unbound namespace prefix",
+            Self::InvalidCharacter => "invalid XML character",
+            Self::InvalidAttribute => "invalid or duplicate attribute",
+            Self::InvalidAttributeValue => "invalid attribute value",
+            Self::DuplicateExpandedAttribute => "duplicate expanded attribute name",
+            Self::TextOutsideRoot => "text outside document element",
+            Self::MultipleRoots => "multiple document elements",
+            Self::ByteLimit => "request byte limit exceeded",
+            Self::MalformedXml => "malformed XML",
+            Self::NodeLimit => "request node limit exceeded",
+            Self::DepthLimit => "request depth limit exceeded",
+            Self::UnmatchedEnd => "unmatched end tag",
+            Self::CdataOutsideRoot => "CDATA outside document element",
+            Self::EntityOutsideRoot => "entity outside document element",
+            Self::InvalidCharacterReference => "invalid character reference",
+            Self::UnknownEntity => "unknown entity reference",
+            Self::DtdUnsupported => "DTD is not supported",
+            Self::InvalidDeclaration => "invalid XML declaration",
+            Self::UnclosedRoot => "unclosed document element",
+            Self::MissingRoot => "missing document element",
+        }
+    }
+}
 
 #[derive(Debug)]
 pub(super) struct Node {
@@ -52,7 +118,7 @@ impl Node {
         let mut matches = self.children_named(ns, name);
         let result = matches.next();
         if matches.next().is_some() {
-            return Err(RequestError("duplicate request field"));
+            return Err(RequestError::DuplicateField);
         }
         Ok(result)
     }
@@ -60,7 +126,7 @@ impl Node {
     /// Decoded scalar text; an empty element is distinct from an absent child.
     pub(super) fn scalar_text(&self) -> Result<&str, RequestError> {
         if !self.children.is_empty() {
-            return Err(RequestError("expected scalar request field"));
+            return Err(RequestError::ExpectedScalar);
         }
         Ok(&self.text)
     }
@@ -68,10 +134,10 @@ impl Node {
     pub(super) fn required_child_text(&self, ns: &str, name: &str) -> Result<&str, RequestError> {
         let value = self
             .child(ns, name)?
-            .ok_or(RequestError("missing request field"))?
+            .ok_or(RequestError::MissingField)?
             .scalar_text()?;
         if value.is_empty() {
-            return Err(RequestError("empty request field"));
+            return Err(RequestError::EmptyField);
         }
         Ok(value)
     }
@@ -104,16 +170,16 @@ impl Request {
             let body = self
                 .root
                 .child(SOAP, "Body")?
-                .ok_or(RequestError("missing SOAP Body"))?;
+                .ok_or(RequestError::MissingBody)?;
             if body.children.len() != 1 {
-                return Err(RequestError("expected one SOAP operation"));
+                return Err(RequestError::OperationCount);
             }
             &body.children[0]
         } else {
             &self.root
         };
         if op.ns != ns || op.name != name {
-            return Err(RequestError("unexpected operation or namespace"));
+            return Err(RequestError::OperationIdentity);
         }
         Ok(op)
     }
@@ -130,9 +196,9 @@ fn namespace(value: ResolveResult<'_>) -> Result<String, RequestError> {
         }
         .normalized_value(XmlVersion::Implicit1_0)
         .map(|value| value.into_owned())
-        .map_err(|_| RequestError("invalid namespace value")),
+        .map_err(|_| RequestError::InvalidNamespace),
         ResolveResult::Unbound => Ok(String::new()),
-        ResolveResult::Unknown(_) => Err(RequestError("unbound namespace prefix")),
+        ResolveResult::Unknown(_) => Err(RequestError::UnboundPrefix),
     }
 }
 
@@ -140,7 +206,7 @@ fn xml_text(value: &str) -> Result<(), RequestError> {
     if value.chars().all(|c| matches!(c, '\t' | '\n' | '\r' | '\u{20}'..='\u{d7ff}' | '\u{e000}'..='\u{fffd}' | '\u{10000}'..='\u{10ffff}')) {
         Ok(())
     } else {
-        Err(RequestError("invalid XML character"))
+        Err(RequestError::InvalidCharacter)
     }
 }
 
@@ -149,10 +215,10 @@ fn start(reader: &NsReader<&[u8]>, event: &BytesStart<'_>) -> Result<Node, Reque
     let ns = namespace(ns)?;
     let mut attributes = HashMap::new();
     for attribute in event.attributes() {
-        let attribute = attribute.map_err(|_| RequestError("invalid or duplicate attribute"))?;
+        let attribute = attribute.map_err(|_| RequestError::InvalidAttribute)?;
         let value = attribute
             .normalized_value(XmlVersion::Implicit1_0)
-            .map_err(|_| RequestError("invalid attribute value"))?;
+            .map_err(|_| RequestError::InvalidAttributeValue)?;
         xml_text(&value)?;
         if attribute.key.as_ref() == "xmlns" || attribute.key.as_ref().starts_with("xmlns:") {
             continue;
@@ -160,7 +226,7 @@ fn start(reader: &NsReader<&[u8]>, event: &BytesStart<'_>) -> Result<Node, Reque
         let (ns, name) = reader.resolver().resolve_attribute(attribute.key);
         let key = (namespace(ns)?, name.as_ref().to_string());
         if attributes.insert(key, value.into_owned()).is_some() {
-            return Err(RequestError("duplicate expanded attribute name"));
+            return Err(RequestError::DuplicateExpandedAttribute);
         }
     }
     Ok(Node {
@@ -177,7 +243,7 @@ fn append(stack: &mut [Node], value: &str) -> Result<(), RequestError> {
     if let Some(node) = stack.last_mut() {
         node.text.push_str(value);
     } else if !value.chars().all(|c| matches!(c, ' ' | '\t' | '\n' | '\r')) {
-        return Err(RequestError("text outside document element"));
+        return Err(RequestError::TextOutsideRoot);
     }
     Ok(())
 }
@@ -186,14 +252,14 @@ fn place(stack: &mut [Node], root: &mut Option<Node>, node: Node) -> Result<(), 
     if let Some(parent) = stack.last_mut() {
         parent.children.push(node);
     } else if root.replace(node).is_some() {
-        return Err(RequestError("multiple document elements"));
+        return Err(RequestError::MultipleRoots);
     }
     Ok(())
 }
 
 fn parse(xml: &str) -> Result<Node, RequestError> {
     if xml.len() > MAX_BYTES {
-        return Err(RequestError("request byte limit exceeded"));
+        return Err(RequestError::ByteLimit);
     }
     let mut reader = NsReader::from_str(xml);
     reader.config_mut().trim_text(false);
@@ -206,43 +272,43 @@ fn parse(xml: &str) -> Result<Node, RequestError> {
         events += 1;
         match reader
             .read_event()
-            .map_err(|_| RequestError("malformed XML"))?
+            .map_err(|_| RequestError::MalformedXml)?
         {
             Event::Start(event) => {
                 nodes += 1;
                 if nodes > MAX_NODES {
-                    return Err(RequestError("request node limit exceeded"));
+                    return Err(RequestError::NodeLimit);
                 }
                 if stack.len() >= MAX_DEPTH {
-                    return Err(RequestError("request depth limit exceeded"));
+                    return Err(RequestError::DepthLimit);
                 }
                 stack.push(start(&reader, &event)?);
             }
             Event::Empty(event) => {
                 nodes += 1;
                 if nodes > MAX_NODES {
-                    return Err(RequestError("request node limit exceeded"));
+                    return Err(RequestError::NodeLimit);
                 }
                 if stack.len() >= MAX_DEPTH {
-                    return Err(RequestError("request depth limit exceeded"));
+                    return Err(RequestError::DepthLimit);
                 }
                 let node = start(&reader, &event)?;
                 place(&mut stack, &mut root, node)?;
             }
             Event::End(_) => {
-                let node = stack.pop().ok_or(RequestError("unmatched end tag"))?;
+                let node = stack.pop().ok_or(RequestError::UnmatchedEnd)?;
                 place(&mut stack, &mut root, node)?;
             }
             Event::Text(event) => append(&mut stack, &event.xml10_content())?,
             Event::CData(event) => {
                 if stack.is_empty() {
-                    return Err(RequestError("CDATA outside document element"));
+                    return Err(RequestError::CdataOutsideRoot);
                 }
                 append(&mut stack, &event.xml10_content())?;
             }
             Event::GeneralRef(event) => {
                 if stack.is_empty() {
-                    return Err(RequestError("entity outside document element"));
+                    return Err(RequestError::EntityOutsideRoot);
                 }
                 let decoded = match event.as_ref() {
                     "amp" => '&',
@@ -252,19 +318,19 @@ fn parse(xml: &str) -> Result<Node, RequestError> {
                     "apos" => '\'',
                     _ => event
                         .resolve_char_ref()
-                        .map_err(|_| RequestError("invalid character reference"))?
-                        .ok_or(RequestError("unknown entity reference"))?,
+                        .map_err(|_| RequestError::InvalidCharacterReference)?
+                        .ok_or(RequestError::UnknownEntity)?,
                 };
                 append(&mut stack, decoded.encode_utf8(&mut [0; 4]))?;
             }
-            Event::DocType(_) => return Err(RequestError("DTD is not supported")),
+            Event::DocType(_) => return Err(RequestError::DtdUnsupported),
             Event::Decl(event) => {
                 if events != 1
                     || root.is_some()
                     || !stack.is_empty()
                     || !matches!(event.version().as_deref(), Ok("1.0"))
                 {
-                    return Err(RequestError("invalid XML declaration"));
+                    return Err(RequestError::InvalidDeclaration);
                 }
             }
             Event::Eof => break,
@@ -272,9 +338,9 @@ fn parse(xml: &str) -> Result<Node, RequestError> {
         }
     }
     if !stack.is_empty() {
-        return Err(RequestError("unclosed document element"));
+        return Err(RequestError::UnclosedRoot);
     }
-    root.ok_or(RequestError("missing document element"))
+    root.ok_or(RequestError::MissingRoot)
 }
 
 /// Read one required scalar child from an identified operation. The caller
@@ -363,7 +429,7 @@ mod tests {
         );
         assert_eq!(
             op.child("urn:mock:test", "Entry").unwrap_err(),
-            RequestError("duplicate request field")
+            RequestError::DuplicateField
         );
         let nested = op
             .child("urn:mock:test", "Extension")
@@ -393,18 +459,18 @@ mod tests {
         );
         assert_eq!(
             op.required_child_text("urn:mock:test", "Empty"),
-            Err(RequestError("empty request field"))
+            Err(RequestError::EmptyField)
         );
         assert_eq!(
             op.required_child_text("urn:mock:test", "Absent"),
-            Err(RequestError("missing request field"))
+            Err(RequestError::MissingField)
         );
         assert_eq!(
             op.child("urn:mock:test", "Tree")
                 .unwrap()
                 .unwrap()
                 .scalar_text(),
-            Err(RequestError("expected scalar request field"))
+            Err(RequestError::ExpectedScalar)
         );
     }
 
@@ -427,7 +493,7 @@ mod tests {
         );
         assert_eq!(
             request.operation("urn:other", "Command").unwrap_err(),
-            RequestError("unexpected operation or namespace")
+            RequestError::OperationIdentity
         );
     }
 
@@ -436,7 +502,7 @@ mod tests {
         assert_eq!(
             Request::parse("<Command xmlns:a='urn:a' xmlns:b='urn:&#97;' a:key='1' b:key='2'/>")
                 .unwrap_err(),
-            RequestError("duplicate expanded attribute name")
+            RequestError::DuplicateExpandedAttribute
         );
     }
 
@@ -469,7 +535,7 @@ mod tests {
         assert_eq!(read(xml).unwrap(), "right");
         assert_eq!(
             read("<Command xmlns='urn:mock:test'><Key xmlns='urn:other'>wrong</Key></Command>"),
-            Err(RequestError("missing request field"))
+            Err(RequestError::MissingField)
         );
     }
 
@@ -497,15 +563,15 @@ mod tests {
             read(
                 "<Command xmlns='urn:mock:test'><Extension><Key>wrong</Key></Extension></Command>"
             ),
-            Err(RequestError("missing request field"))
+            Err(RequestError::MissingField)
         );
         assert_eq!(
             read("<Command xmlns='urn:mock:test'><Key>a</Key><Key>b</Key></Command>"),
-            Err(RequestError("duplicate request field"))
+            Err(RequestError::DuplicateField)
         );
         assert_eq!(
             read("<Command xmlns='urn:mock:test'><Key><Nested>x</Nested></Key></Command>"),
-            Err(RequestError("expected scalar request field"))
+            Err(RequestError::ExpectedScalar)
         );
     }
 
@@ -517,11 +583,11 @@ mod tests {
         assert_eq!(read(&xml).unwrap(), "actual");
         assert_eq!(
             read(&xml.replace("<m:Key>actual</m:Key>", "")),
-            Err(RequestError("missing request field"))
+            Err(RequestError::MissingField)
         );
         assert_eq!(
             read(&xml.replace("</s:Body>", "<m:Command/></s:Body>")),
-            Err(RequestError("expected one SOAP operation"))
+            Err(RequestError::OperationCount)
         );
     }
 
@@ -553,7 +619,11 @@ mod tests {
                 "invalid XML declaration",
             ),
         ] {
-            assert_eq!(read(xml), Err(RequestError(error)), "case: {xml}");
+            assert_eq!(
+                read(xml).map_err(RequestError::message),
+                Err(error),
+                "case: {xml}"
+            );
         }
     }
 
@@ -561,7 +631,7 @@ mod tests {
     fn resource_limits_are_enforced() {
         assert_eq!(
             parse(&" ".repeat(MAX_BYTES + 1)).unwrap_err(),
-            RequestError("request byte limit exceeded")
+            RequestError::ByteLimit
         );
         assert_eq!(
             parse(&format!(
@@ -570,11 +640,11 @@ mod tests {
                 "</n>".repeat(MAX_DEPTH + 1)
             ))
             .unwrap_err(),
-            RequestError("request depth limit exceeded")
+            RequestError::DepthLimit
         );
         assert_eq!(
             parse(&format!("<root>{}</root>", "<n/>".repeat(MAX_NODES))).unwrap_err(),
-            RequestError("request node limit exceeded")
+            RequestError::NodeLimit
         );
     }
 }

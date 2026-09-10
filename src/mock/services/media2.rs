@@ -555,7 +555,7 @@ pub fn handle_delete_profile_media2(
         Err(error) => {
             return resp_soap_fault(
                 "env:Sender",
-                &format!("InvalidRequest-DELETEPROFILE: {}", error.0),
+                &format!("InvalidRequest-DELETEPROFILE: {}", error.message()),
             );
         }
     };
