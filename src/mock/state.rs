@@ -1871,6 +1871,11 @@ impl Default for DeviceState {
 
 /// Callback fired after each state mutation — the seam for caller-owned
 /// persistence without the library doing any file I/O.
+///
+/// Receives an owned mutation snapshot by reference, with no state lock held.
+/// Reentrant writes are permitted, but the callback must bound its own recursion.
+/// Concurrent callbacks are not serialized or guaranteed to follow commit order;
+/// persistence owners must coordinate mutations or version their stored snapshots.
 pub type ChangeHook = std::sync::Arc<dyn Fn(&DeviceState) + Send + Sync>;
 
 /// Thread-safe in-memory device state shared by `MockTransport` / `MockServer`.
@@ -1902,6 +1907,10 @@ impl MockState {
     /// Register a hook invoked after every mutation with a snapshot of the new
     /// state. This is how opt-in persistence is wired — the library performs no
     /// file I/O itself.
+    ///
+    /// The snapshot is captured under the mutation's write lock, then the hook
+    /// runs after that lock is released. See [`ChangeHook`] for concurrency and
+    /// reentrancy constraints.
     pub fn set_on_change(&mut self, hook: ChangeHook) {
         self.on_change = Some(hook);
     }
@@ -1913,11 +1922,7 @@ impl MockState {
 
     /// Mutate the state, then fire the change hook (if any).
     pub fn modify(&self, f: impl FnOnce(&mut DeviceState)) {
-        {
-            let mut guard = self.state.write().unwrap();
-            f(&mut guard);
-        }
-        self.notify();
+        self.modify_returning(f);
     }
 
     /// Like [`modify`](Self::modify) but the closure returns a value
@@ -1934,19 +1939,24 @@ impl MockState {
         f: impl FnOnce(&mut DeviceState) -> R,
         committed: impl FnOnce(&R) -> bool,
     ) -> R {
-        let result = {
+        let (result, snapshot) = {
             let mut guard = self.state.write().unwrap();
-            f(&mut guard)
+            let result = f(&mut guard);
+            // Capture this mutation, not a later writer's state. No cloning is
+            // needed when persistence is disabled. The predicate remains outside
+            // the lock; a rejected result discards the snapshot without notifying.
+            let snapshot = self.on_change.as_ref().map(|_| guard.clone());
+            (result, snapshot)
         };
         if committed(&result) {
-            self.notify();
+            self.notify(snapshot.as_ref());
         }
         result
     }
 
-    fn notify(&self) {
-        if let Some(hook) = &self.on_change {
-            hook(&self.state.read().unwrap());
+    fn notify(&self, snapshot: Option<&DeviceState>) {
+        if let (Some(hook), Some(snapshot)) = (&self.on_change, snapshot) {
+            hook(snapshot);
         }
     }
 
@@ -1969,6 +1979,110 @@ impl Default for MockState {
 mod tests {
     use super::*;
     use crate::mock::services::device;
+
+    #[test]
+    fn change_hooks_release_state_lock_before_bounded_reentrant_writes() {
+        use std::sync::{
+            Arc, Weak,
+            atomic::{AtomicUsize, Ordering},
+        };
+        for entry in ["modify", "returning", "conditional"] {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let observed = calls.clone();
+            let state = Arc::new_cyclic(|weak: &Weak<super::MockState>| {
+                let weak = weak.clone();
+                let mut state = super::MockState::new();
+                state.set_on_change(Arc::new(move |snapshot| {
+                    let state = weak.upgrade().unwrap();
+                    // Fail promptly on the old locked callback instead of
+                    // hanging the test process on an actual reentrant write.
+                    drop(
+                        state
+                            .state
+                            .try_write()
+                            .expect("hook must run without a state lock"),
+                    );
+                    match observed.fetch_add(1, Ordering::SeqCst) {
+                        0 => {
+                            assert_eq!(snapshot.hostname, "outer-847");
+                            state.modify(|device| device.hostname = "nested-847".into());
+                            assert_eq!(snapshot.hostname, "outer-847");
+                        }
+                        1 => assert_eq!(snapshot.hostname, "nested-847"),
+                        _ => panic!("unexpected recursive notification"),
+                    }
+                }));
+                state
+            });
+            match entry {
+                "modify" => state.modify(|device| device.hostname = "outer-847".into()),
+                "returning" => {
+                    let result = state.modify_returning(|device| {
+                        device.hostname = "outer-847".into();
+                        847
+                    });
+                    assert_eq!(result, 847);
+                }
+                "conditional" => {
+                    let result = state.modify_returning_if(
+                        |device| {
+                            device.hostname = "outer-847".into();
+                            true
+                        },
+                        |committed| *committed,
+                    );
+                    assert!(result);
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(state.read().hostname, "nested-847");
+            assert_eq!(calls.load(Ordering::SeqCst), 2);
+            let result = state.modify_returning_if(|_| false, |committed| *committed);
+            assert!(!result);
+            assert_eq!(calls.load(Ordering::SeqCst), 2);
+        }
+    }
+
+    #[test]
+    fn conditional_change_hook_retains_its_commit_snapshot_after_an_intervening_write() {
+        use std::sync::{Arc, Mutex};
+        let observations = Arc::new(Mutex::new(Vec::new()));
+        let observed = observations.clone();
+        let mut state = super::MockState::new();
+        state.set_on_change(Arc::new(move |snapshot| {
+            observed
+                .lock()
+                .unwrap()
+                .push((snapshot.hostname.clone(), snapshot.event_seq));
+        }));
+        let result = state.modify_returning_if(
+            |device| {
+                device.hostname = "first-849".into();
+                device.event_seq = 849;
+                849
+            },
+            |result| {
+                assert_eq!(*result, 849);
+                // The predicate remains outside the lock, just as before. This
+                // deterministic interleaving needs no scheduling or sleeps.
+                state.modify(|device| {
+                    device.hostname = "intervening-850".into();
+                    device.event_seq = 850;
+                });
+                true
+            },
+        );
+        assert_eq!(result, 849);
+        assert_eq!(
+            *observations.lock().unwrap(),
+            vec![
+                ("intervening-850".to_owned(), 850),
+                ("first-849".to_owned(), 849)
+            ]
+        );
+        assert_eq!(state.read().hostname, "intervening-850");
+        assert_eq!(state.read().event_seq, 850);
+    }
 
     fn new_state() -> MockState {
         MockState::new()

@@ -20,6 +20,7 @@ below. No new product decision is required here.
 | [Committed deletion effects](#committed-deletion-effects) | Selected K17 repair and remaining replay boundaries |
 | [Exact Action routing](#exact-action-routing) | K06 routing slice and remaining W03/W07 work |
 | [Parsed synthetic boundary](#parsed-synthetic-boundary) | P-D implemented checks, evidence and exclusions |
+| [State hook snapshot work](#state-hook-snapshot-work) | W18 bounded lock and observation policy |
 
 ## Entry points and ownership
 
@@ -420,3 +421,36 @@ attribute policy, processing instructions/outside comments, scoped WSSE/auth,
 operation-specific field semantics, ordinary service faults and replay effects.
 Raw fault/custom/replay responses retain their earlier precedence and bytes.
 No public API, error type, CLI exit code or installed binary was changed.
+
+## State hook snapshot work
+
+Implemented W18 slice, baseline `c6af85b`: `MockState::notify` formerly invoked
+hooks under a read lock acquired after releasing the mutation's write lock. Both
+the blocked reentrant write and wrong-snapshot observation were reproduced by
+new controls against that implementation (`1789045613_cargo_test.log`).
+
+The shared mutation helper now captures an owned `DeviceState` snapshot within
+the original write lock only when a hook is registered, then invokes callbacks
+after releasing the lock. Conditional commit predicates retain outside-lock
+evaluation and refused outcomes do not notify. Public signatures are unchanged.
+`change_hooks_release_state_lock_before_bounded_reentrant_writes` probes lock
+availability before attempting a bounded nested mutation, so regressions fail
+promptly rather than hanging. It covers modify, returning and conditional entry
+points, exact outer/nested snapshots, return values and rejected outcomes.
+`conditional_change_hook_retains_its_commit_snapshot_after_an_intervening_write`
+deterministically interposes another mutation via the outside-lock predicate;
+the delayed notification must carry the first mutation, including non-persisted
+event state, not a fresh read of the second. No scheduling or sleep is required.
+
+Callbacks are not serialized across threads and may run out of commit order.
+Persistence owners must coordinate mutations or version their stored snapshots;
+callback owners must prevent their own infinite recursion. This fixes the
+selected K08 lock/snapshot defects, not every W18 queue/read snapshot or W19
+replay visibility boundary. No protocol response or official corpus was changed.
+
+Restored verification: 1,192 all-feature and 1,107 default workspace tests passed
+(5 ignored, 23 suites each), both Clippy modes, formatting, both warnings-as-errors
+documentation builds and unchanged 159/157/258 inventory self-tests passed.
+Existing HTTP/in-process committed-effect and state-hook controls stayed green.
+No new external schema acceptance is claimed for this state-only slice. Prior
+selector commit `c6af85b` passed hosted CI run 34480290494.

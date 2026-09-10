@@ -76,6 +76,8 @@ impl MockServerBuilder {
 
     /// Persistence hook fired after every mutation — the seam for the caller to
     /// write state to disk. The server itself never touches the filesystem.
+    /// Hooks receive the mutation snapshot without a state lock held; see
+    /// [`ChangeHook`] for reentrancy and concurrent-ordering constraints.
     pub fn on_change(mut self, hook: ChangeHook) -> Self {
         self.on_change = Some(hook);
         self

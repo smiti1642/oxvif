@@ -361,7 +361,7 @@ create／list 不一致已重現，選定刪除／profile-read 依賴亦已有�
 | K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |
 | K14 — 基準後已修正 | DeleteProfile 使用明確的 committed-outcome predicate；NotFound／Fixed 不通知，Deleted 通知一次。 | W18 部分完成；回歸檢查完整 state、兩服務、hook 次數及公開 helper 相容性。Replay 另由 K17 追蹤。 |
 | K15 | `render_profile` 直接插入儲存的 name／token，未 escaping；getter 不只輸出新建資料，也輸出 seed state。 | W10；新增 escaped-state 直接 wire 回歸，不由 DeleteProfile parser 測試推論安全。 |
-| K16 — 部分修正 | Media2 profile list 仍忽略 selector，create 只讀 Name；binding 現驗證並提交完整、以值表示的 plan。 | 已重現的後筆無效 token 部分寫入已修正，具 state／hook／HTTP 控制；selector／create／name／Type=All／conflict 語意仍屬 W01／W10。 |
+| K16 — 部分修正 | Media2 profile-list 選擇已於 `c6af85b` 修正；create 只讀 Name；binding 驗證並提交完整、以值表示的 plan。 | 後筆無效 token 部分寫入及選定讀取語意具 state／hook／HTTP 控制；create／name／binding Type=All／conflict 及廣泛欄位／輸出驗證仍屬 W01／W10。 |
 
 K23 現僅修正測試框架。確定性控制可區分純耗時變動與資料／command 變動，
 並拒絕錯誤耗時型別。擴大比較遮罩及繞過型別驗證後，完整 workspace、
@@ -398,7 +398,9 @@ lock；僅 Created 結果通知。持久化 u32 欄位維持相容，作為可�
 `rejected_delete_preserves_state_and_hook_but_success_notifies`。原實作在拒絕控制
 失敗；停用全部通知後，完整全部功能 no-fail-fast 執行則在成功刪除次數斷言失敗。
 還原後保留公開 `modify_returning` 的通知契約。此條件式通知 helper 不提供 rollback，
-也不改變既有 callback lock／reentrancy policy；這些仍屬 W18 待辦。
+在該檢查點亦未更動 callback lock／reentrancy policy。後續
+[state hook 快照工作](mock-fidelity-pipeline-preflight_zh.md#state-hook-快照工作)
+修正選定鎖定／快照缺陷，其他 W18／W19 邊界仍待完成。
 
 ## 重現與交接
 

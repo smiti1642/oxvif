@@ -79,8 +79,8 @@ fault 優先於表列操作專屬分支；其他欄位層級解析尚未遷移�
   `render_profile`／`render_profile_media2` 內嵌 VSC、encoder、audio source／encoder、
   PTZ renderer。Profile name／token 目前直接插入；K15 證明兩服務 Name 會形成 XML child。
   其他巢狀 renderer escaping 與快照原子性仍屬 W10／W18。
-- State hook：`MockState::{modify,modify_returning,notify}` 寫入後 notify；
-  callback 收到 read guard。Reentrancy／lock 政策與失敗寫入的 replay invalidation
+- State hook：`MockState::{modify,modify_returning,notify}` 在 write lock 內取得
+  mutation 快照，釋放鎖後才呼叫 callback，支援有界重入寫入。Callback 序列化與失敗寫入的 replay invalidation
   屬 W18／W19；mock 本身不實作外部持久化。
 - 消費端：`src/types/media.rs` 的 `MediaProfile`／`MediaProfile2` 與巢狀
   configuration parser；`parse_soap_body/find_response` 處理 SOAP error；

@@ -108,7 +108,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W15／M2–M4／TODO | W01、W03–W06 | `services/events.rs`、IO event queue、subscription state | 核對 filter namespace／dialect、lifetime／renew／unsubscribe／pull 限制、queue 隔離／順序／終止；既有 Events sync 不是 PR #16 Media sync |
 | W16／M4／TODO | W01 分類、W05／W06 | 提案中的 operation policy registry、mock transport／server builder、responder | 精確 service＋operation opt-in；未建模效果預設拒絕且不改狀態；區分 unsupported 與已啟用 ack；僅必要時加入有上限追蹤，排除憑證／raw envelope |
 | W17／M4／TODO | W10–W16 分類 | 全部 capability renderer、`discovery_responder.rs`、`fleet.rs`、`snapshot.rs`、`font.rs`、公開 mock 文件 | Services／XAddrs／feature／limit 與建模行為一致；核對 discovery／snapshot 側路徑；靜態 URI／圖片不證明 codec／串流輸出 |
-| W18／M4／PARTIAL | W10–W16 候選行為 | K13 配置已序列化並避免碰撞；K16 binding 驗證並提交完整 plan；條件式通知涵蓋選定建立／刪除／binding 結果 | 選定配置併發及 binding HTTP／state／hook 控制通過；更廣泛併發寫入、instance、rollback、reentrancy／lock 及 replay 仍待完成；公開 state helper 不變 |
+| W18／M4／PARTIAL | W10–W16 候選行為 | K13 無碰撞配置、K16 原子 binding plan、條件式通知；K08 hook 在 state 鎖外接收 commit 快照 | 選定配置、binding 及 reentrant／snapshot 控制；更廣泛併發寫入、instance、rollback、queue／read snapshot 及 replay 待完成；公開 signature 不變，callback 排序由使用者管理 |
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 DeleteProfile 使用私有 committed effect；加入選定跨服務讀取、HTTP、instance 及 chain 控制 | 其他 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
 | W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及第一批 13 操作 client／mock corpus 匯出與明確 payload anchor | 選定 DeleteProfile Fault 遷移後，34 份 instance 通過，包含四個不存在／固定 profile 拒絕。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
@@ -165,7 +165,7 @@ W02 發現新相依性時須擴充本表。
 | K05／程式碼確認 | Factory reset、Events unsubscribe／sync 存在空成功路由，意圖／效果待分類 | W13／W15／W16；逐操作分類，不將所有 `resp_empty` 視為缺陷 |
 | K06／路由子批次已修正、HTTP 未完成 | Synthetic Action 別名不再進入 handler；HTTP handler 仍回 200 並使用 lossy UTF-8 conversion | W03／W07；參閱管線路由證據；共用 body 一致性與 generic boundary fault 已實作；HTTP 擷取／status 及 replay 仍未完成 |
 | K07／程式碼確認 | Schema／namespace probe 有 scope／Fault 覆蓋缺口 | W20–W22；具失敗敏感性的獨立驗證 |
-| K08／未驗證 | 部分寫入、hook／lock、併發 queue、replay invalidation 可能隱藏次要效果 | W18／W19；狀態快照、有界併發案例、hook assertion |
+| K08／選定 hook 缺陷已重現並修正 | Hook 原本持有 read lock，且可能觀察介入寫入而非原 mutation；現以 owned commit 快照在鎖外執行 | W18／W19 部分完成；管線開工核對有確定性 reentrant／snapshot 控制；queue、read snapshot、廣泛寫入及 replay 可見性仍待完成 |
 | K09／未驗證 | 必填欄位／範圍／extension／capability 宣告可能與契約不符 | W01／W10–W17；實作前完成批次工作卡 |
 | K10／未執行 | E1 沒有完整外部 schema、Linux／macOS 原生、多廠牌驗證 | W21／W24；實機證據分開記錄，未另授權只做唯讀 |
 | K11／待整合 | PR #16 不在來源基準內 | W26；另行重審，不默默納入 |

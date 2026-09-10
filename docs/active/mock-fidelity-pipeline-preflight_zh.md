@@ -19,6 +19,7 @@ W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯�
 | [已提交的刪除效果](#已提交的刪除效果) | 選定 K17 修正及剩餘 replay 邊界 |
 | [完整 Action 路由](#完整-action-路由) | K06 路由子批次及 W03／W07 剩餘工作 |
 | [Parsed synthetic 邊界](#parsed-synthetic-邊界) | P-D 已實作檢查、證據及排除範圍 |
+| [State hook 快照工作](#state-hook-快照工作) | W18 有界鎖定及觀察策略 |
 
 ## 入口與責任
 
@@ -372,3 +373,30 @@ encoding／status／endpoint、SOAP mustUnderstand／encodingStyle／attribute
 政策、processing instruction／root 外 comment、scoped WSSE／auth、逐操作
 欄位語意、其他服務 fault 及 replay effect。Raw fault／custom／replay 回應的
 原有優先序與 bytes 保留。未變更公開 API、error type、CLI exit code 或已安裝 binary。
+
+## State hook 快照工作
+
+已實作以 `c6af85b` 為基準的 W18 子批次：原 `MockState::notify` 在 mutation
+write lock 釋放後才取得 read lock，並持鎖呼叫 hook。新增控制已在原實作重現
+重入寫入被鎖阻擋及錯誤快照（`1789045613_cargo_test.log`）。
+
+共用 mutation helper 現在僅於註冊 hook 時，在原 write lock 內取得 owned
+`DeviceState` 快照，釋放鎖後才呼叫 callback。Conditional commit predicate
+仍於鎖外評估，拒絕結果不通知；公開 signature 不變。
+`change_hooks_release_state_lock_before_bounded_reentrant_writes` 先檢查鎖
+可取得性，再執行有界巢狀 mutation，使回歸立即失敗而非掛住測試；涵蓋 modify、
+returning、conditional 入口、精確外層／巢狀快照、回傳值及拒絕結果。
+`conditional_change_hook_retains_its_commit_snapshot_after_an_intervening_write`
+透過鎖外 predicate 確定性地插入另一筆 mutation；延後通知必須保留第一筆
+mutation（含不持久化的 event state），不能重新讀取第二筆結果，不依賴排程或 sleep。
+
+Callback 不跨執行緒序列化，可能不按 commit 順序執行。持久化擁有者須協調
+mutation 或使用具版本的快照儲存；callback 擁有者須自行防止無限遞迴。本批次
+修正選定 K08 鎖定／快照缺陷，不涵蓋全部 W18 queue／read snapshot 或 W19
+replay 可見性邊界；未更動協定回應或官方 corpus。
+
+還原後驗證：workspace all-feature 1,192 項、預設 1,107 項測試通過（各
+5 ignored、23 suites），兩種 Clippy、格式、兩種 warnings-as-errors 文件建置，
+以及未改變的 159／157／258 清冊自我測試均通過。既有 HTTP／in-process
+committed-effect 與 state-hook 控制維持成功。此純狀態子批次不宣稱新的外部
+schema 驗收；前一 selector commit `c6af85b` 已通過遠端 CI 34480290494。

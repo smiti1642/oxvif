@@ -87,10 +87,10 @@ K17 tracks pre-success replay invalidation separately from K14's state hook.
   audio source/encoder and PTZ render helpers. Profile name/token interpolation
   is currently raw; K15 proves Name becomes an XML child in both services.
   Further nested renderers' escaping and snapshot atomicity remain W10/W18.
-- State hooks: `MockState::{modify,modify_returning,notify}` execute notify after
-  writing, while the callback receives a read guard. Reentrancy/lock policy and
-  failed-write replay invalidation require W18/W19; no external persistence is
-  implemented by the mock itself.
+- State hooks: `MockState::{modify,modify_returning,notify}` capture the mutation
+  snapshot under the write lock and invoke callbacks after releasing it. Bounded
+  reentrant writes are supported; callback serialization and failed-write replay
+  invalidation remain W18/W19. The mock does not implement external persistence.
 - Consumers: `MediaProfile` / `MediaProfile2` and nested configuration parsers
   in `src/types/media.rs`; SOAP errors via `parse_soap_body/find_response`;
   session profile selection and CLI profile views/errors. Review `SoapError`

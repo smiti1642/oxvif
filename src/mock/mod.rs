@@ -39,6 +39,8 @@
 //!
 //! State is in-memory; the library never writes to disk. Opt into persistence
 //! via [`MockState::set_on_change`].
+//! Hooks receive mutation snapshots after the state lock is released. Reentrant
+//! writes must be bounded by the callback; concurrent callback order is not guaranteed.
 //!
 //! # Strictness
 //!

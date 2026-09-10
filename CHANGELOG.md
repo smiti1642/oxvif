@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock state-change hooks now receive a snapshot captured with their mutation
+  and execute without holding the state lock. A bounded reentrant write no longer
+  deadlocks, and intervening writes no longer replace the notified snapshot.
+  Concurrent callback order remains caller-managed; public signatures are unchanged.
 - Mock Media2 `GetProfiles` now honors decoded `Token` and `Type` selectors.
   Omitting `Type` returns profile identities without configuration details;
   existing full-profile client calls still request `Type=All`. Invalid scalar,

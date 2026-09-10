@@ -1074,6 +1074,13 @@ let server = MockServer::builder()
 ```
 
 The library never touches the filesystem itself. This hook is the only seam.
+The snapshot is captured within the mutation's write lock; the hook runs after
+that lock is released. It can perform a bounded reentrant write, but must prevent
+its own infinite recursion. Concurrent callbacks may run out of commit order:
+coordinate mutations or use versioned storage when persistence ordering matters.
+The snapshot may therefore differ from a fresh `read()` inside the hook. No
+snapshot clone is made when no hook is registered. Explicitly rejected conditional
+outcomes still do not notify; this mechanism does not roll back partial writes.
 
 ### 11.4 Interpose a responder
 

@@ -370,7 +370,7 @@ while the complete dependency graph remains open.
 | K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; capacity and other CreateProfile semantics remain open. |
 | K14 — fixed after baseline | DeleteProfile now uses an explicit committed-outcome predicate; NotFound/Fixed do not notify, Deleted notifies once. | W18 partial; regression checks full state, both services, hook count and public-helper compatibility. Replay remains separate K17. |
 | K15 | `render_profile` interpolates stored profile name/token without escaping; normal getters render seeded state as well as caller-created state. | W10; direct escaped-state wire regression required. Do not infer safety from DeleteProfile's parser tests. |
-| K16 — partial repair | Media2 profile-list handler still ignores selectors and create reads Name only; binding now validates and commits one complete value-based plan. | The reproduced late-invalid-token partial write is fixed with state/hook/HTTP controls. Selector/create/name/Type=All/conflict semantics remain W01/W10 work. |
+| K16 — partial repair | Media2 profile-list selection is repaired in `c6af85b`; create reads Name only; binding validates and commits one complete value-based plan. | Late-invalid-token partial writes and selected read semantics have state/hook/HTTP controls. Create/name/binding Type=All/conflicts and broader field/output validation remain W01/W10 work. |
 
 K23 is now repaired in the test harness only. Deterministic controls distinguish
 timing-only changes from data/command changes and reject invalid timing types.
@@ -417,7 +417,9 @@ implementation failed the refusal control; suppressing all notifications then
 failed the successful-delete count in a full all-feature no-fail-fast run.
 Restored behavior keeps the public `modify_returning` notification contract.
 This conditional notification helper does not implement rollback or change the
-existing callback lock/reentrancy policy; these remain W18 work.
+callback lock/reentrancy policy at that checkpoint. The subsequent
+[state hook snapshot work](mock-fidelity-pipeline-preflight.md#state-hook-snapshot-work)
+repairs the selected lock/snapshot defects; other W18/W19 boundaries remain open.
 
 ## Reproduction and handoff
 

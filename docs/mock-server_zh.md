@@ -633,6 +633,11 @@ let server = MockServer::builder()
 ```
 
 Library 本身不存取檔案系統；此 hook 是唯一的持久化接點。
+快照在 mutation 的 write lock 內擷取，釋放鎖後才執行 hook。Hook 可以進行
+有界重入寫入，但必須自行避免無限遞迴。併發 callback 不保證按 commit 順序
+執行；持久化需要順序時，請協調 mutation 或使用具版本的儲存機制。因此快照
+可能不同於 hook 內重新 `read()` 的結果。未註冊 hook 時不複製快照。明確拒絕的
+conditional outcome 仍不通知；此機制不提供部分寫入的 rollback。
 
 ### 11.4 插入 responder
 
