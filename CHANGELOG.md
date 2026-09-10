@@ -22,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- CI now checks the mock's Action/handler/reader inventory and bilingual tracking
+  on Windows and Linux before the package job can run. This source-consistency
+  check does not replace external schema or behavioral acceptance.
 - Mock fidelity auditing now indexes complete client/session Action declarations
   and request-reader call sites. Regression controls preserve configuration
   changes on fixed profiles; separate known-gap probes expose unresolved profile

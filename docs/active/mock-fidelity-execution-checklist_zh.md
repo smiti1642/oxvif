@@ -112,7 +112,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W19／M3、M6／TODO | W03／W09 設計 | `canon.rs`、`metamorph/{fixture,replay,record,parse,adapter,quirk,surface}.rs`、responder chain | 保留錄製偏差；核對正規化／key collision／參數辨識；失敗寫入不錯誤 invalidation；不新增錄製設備機密 |
 | W20／M5／TODO | W04／W05 corpus | `tests/mock_schema_shape.rs`、dispatch namespace tests：正確 scope resolution、納入 Fault、覆蓋計算 | 獨立一般 prefix shadowing 控制；qualified attribute／QName 文字；unanchored／opaque／wildcard／unresolved 明示，不只放寬 pin |
 | W21／M5／TODO | W20、D3 | 提案中的外部 manifest／catalogue／fetch／validator scripts，不加入 runtime crate | 評估具代表性 import 後選定並記錄 validator 版本；來源閉包／hash 固定、離線解析、envelope＋payload／Fault 驗證；錯誤 corpus 必須失敗 |
-| W22／M5／TODO | W00 檢查器、W21 | `.github/workflows/ci.yml`、提案中的專用 schema job 與 release 證據檢查 | 自動執行清冊檢查；缺工具／檔案、hash／下載／import 錯誤須失敗；最小權限、不散布 schema／機密 artifact；缺少／跳過必要 job 阻擋發布驗收 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | `.github/workflows/ci.yml` 已接入 Windows／Linux 清冊 job，package 依賴其成功；託管執行未驗證。專用 schema job 與 release 證據檢查仍待完成 | 清冊與自我測試須通過；schema job 缺工具／檔案、hash／下載／import 錯誤須失敗；最小權限、不散布 schema／機密 artifact；缺少／跳過必要 job 阻擋發布驗收 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
 | W25／M6／TODO | W00–W24 驗收 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |

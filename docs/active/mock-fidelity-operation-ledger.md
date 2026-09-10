@@ -294,7 +294,18 @@ bilingual tracking, rejects duplicates/empty inventories and detects unsupported
 dispatch syntax. Its in-memory self-tests do not edit source or use a camera.
 It is a source-shape check, not a Rust AST, call-graph or normative validator.
 It does not inspect handler internals or prove Action URI/body agreement.
-W00/W02/W07 cover those separate checks. CI wiring is still W22, not completed.
+W00/W02/W07 cover those separate checks. The W22 source-inventory sub-slice is
+wired in `.github/workflows/ci.yml` for Windows and Linux, using PowerShell 7
+and `-SelfTest`; `package` depends on its success. Hosted execution has not yet
+been observed. External-schema CI and repository required-check settings remain
+separate, unfinished acceptance work.
+
+Local W22 evidence (2026-09-10): PowerShell 7 executed the exact CI command;
+all 16 rejection controls and real-source reconciliation passed. Temporarily
+changing the `media.GetProfiles` ledger handler caused exit 1 with the precise
+route-target diagnostic; restoring it returned exit 0. YAML parsing and the
+package dependency were checked locally. This is not a hosted Linux run or a
+branch-protection change.
 
 A route addition/removal/retargeting must update both tables and the relevant
 operation card in the same change. A newly discovered helper/field/error path

@@ -287,7 +287,16 @@ rtk powershell -NoProfile -File docs/active/check-mock-fidelity-inventory.ps1 -S
 拒絕重複／空清冊並偵測不支援的 dispatch 語法。記憶體內自我測試不修改原始碼，
 也不使用攝影機。這是原始碼形狀檢查，不是 Rust AST、call graph 或規範驗證器。
 它不檢查 handler 內部，也不證明 Action URI 與 body 一致；
-相關工作分別列於 W00／W02／W07。CI 整合仍屬 W22，尚未完成。
+相關工作分別列於 W00／W02／W07。W22 的原始碼清冊子項已接入
+`.github/workflows/ci.yml`，在 Windows 與 Linux 使用 PowerShell 7 執行
+`-SelfTest`；`package` 依賴此檢查成功。目前尚未觀察託管 runner 的執行結果。
+外部 schema CI 與儲存庫必要狀態檢查設定仍是獨立且未完成的驗收工作。
+
+W22 本機證據（2026-09-10）：PowerShell 7 執行與 CI 相同的命令，16 個拒絕
+控制案例及實際原始碼核對均通過。暫時修改 `media.GetProfiles` 清冊的 handler
+後，程序以 exit 1 結束並指出對應 route target 錯誤；還原後回到 exit 0。
+另已在本機檢查 YAML 解析及 package 依賴。這不是託管 Linux 執行證據，也沒有
+變更分支保護設定。
 
 新增、移除或改接路由時，必須在同一變更更新兩份表格及對應操作工作卡。
 發現新的 helper、欄位或錯誤路徑時，即使此檢查通過，也須擴充工作卡及 W02
