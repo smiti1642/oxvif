@@ -207,6 +207,9 @@
 //! Empty synthetic profile identities are refused with `mock:RequestPolicy`;
 //! omit the Create token for allocation and explicitly repair empty snapshot
 //! tokens. The mock does not silently rename persisted entries.
+//! Profile creation enforces the advertised capacity. Media2 profile assembly
+//! applies initial bindings, rename and All selection atomically, updating touched
+//! reference counts; full physical configuration compatibility remains unmodeled.
 //! Opt-in mock authentication uses scoped Header/UsernameToken fields and explicit
 //! PasswordDigest Type; it does not enforce freshness, nonce reuse or user permissions.
 //! Classified reset, auxiliary, reboot/maintenance, subscription and search-ending

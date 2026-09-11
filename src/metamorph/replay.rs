@@ -81,11 +81,27 @@ impl ReplayResponder {
                     let mut retired = invalidated
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    // Both service views depend on the same profile collection.
+                    // Profile views and configuration reference counts share the
+                    // committed profile collection. Conservatively retire each
+                    // affected operation, never an unrelated service's suffix.
                     for action in [
                         "http://www.onvif.org/ver10/media/wsdl/GetProfile",
                         "http://www.onvif.org/ver10/media/wsdl/GetProfiles",
                         "http://www.onvif.org/ver20/media/wsdl/GetProfiles",
+                        "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurations",
+                        "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfiguration",
+                        "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurations",
+                        "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfiguration",
+                        "http://www.onvif.org/ver10/media/wsdl/GetAudioSourceConfigurations",
+                        "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurations",
+                        "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfiguration",
+                        "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurations",
+                        "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurations",
+                        "http://www.onvif.org/ver20/media/wsdl/GetAudioSourceConfigurations",
+                        "http://www.onvif.org/ver20/media/wsdl/GetAudioEncoderConfigurations",
+                        "http://www.onvif.org/ver20/ptz/wsdl/GetConfigurations",
+                        "http://www.onvif.org/ver20/ptz/wsdl/GetConfiguration",
+                        "http://www.onvif.org/ver20/ptz/wsdl/GetCompatibleConfigurations",
                     ] {
                         retired.insert(action.to_owned());
                     }

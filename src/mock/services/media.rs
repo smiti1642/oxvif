@@ -7,6 +7,9 @@ use crate::mock::state::{
 };
 use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
+/// Existing advertised synthetic capacity; imported fixtures are never truncated.
+pub(crate) const PROFILE_LIMIT: usize = 8;
+
 pub fn resp_profiles(state: &SharedState) -> String {
     let (snapshot, cat) = profile_snapshot(state);
     if snapshot.iter().any(|profile| profile.token.is_empty()) {
@@ -192,14 +195,18 @@ pub fn handle_create_profile(
             e
         }
         CreateOutcome::Duplicate(t) => {
-            return resp_soap_fault(
-                "ter:ProfileExists",
+            use crate::mock::fault::{Code, Fault, INVALID_ARG_VAL, PROFILE_EXISTS};
+            return Fault::new(
+                Code::Sender,
+                &[INVALID_ARG_VAL, PROFILE_EXISTS],
                 &format!("Profile token already in use: {t}"),
-            );
+            )
+            .to_xml();
         }
         CreateOutcome::EmptyToken => {
             return empty_profile_token_fault(crate::mock::fault::Code::Sender);
         }
+        CreateOutcome::Rejected(fault) => return fault,
     };
 
     soap(
@@ -282,6 +289,8 @@ pub(crate) enum CreateOutcome {
     Duplicate(String),
     /// The synthetic model cannot expose a usable typed profile with this identity.
     EmptyToken,
+    /// Capacity or initial binding validation refused before any mutation.
+    Rejected(String),
 }
 
 /// Explicit model limitation, not a claim about the ONVIF xs:string lexical space.
@@ -319,11 +328,41 @@ pub(crate) fn create_profile_in_state(
     name: &str,
     supplied_token: Option<String>,
 ) -> CreateOutcome {
+    create_profile_with_bindings(state, name, supplied_token, &[])
+}
+
+pub(crate) fn create_profile_with_bindings(
+    state: &SharedState,
+    name: &str,
+    supplied_token: Option<String>,
+    planned: &[(ConfigKind, String)],
+) -> CreateOutcome {
     if supplied_token.as_deref() == Some("") {
         return CreateOutcome::EmptyToken;
     }
     state.modify_returning_if(
         |s| {
+            // Duplicate identity has precedence over capacity and does not advance
+            // the allocation hint. Initial bindings are checked in this same lock.
+            if let Some(token) = supplied_token.as_ref()
+                && s.profiles.profiles.iter().any(|p| p.token == *token)
+            {
+                return CreateOutcome::Duplicate(token.clone());
+            }
+            if s.profiles.profiles.len() >= PROFILE_LIMIT {
+                use crate::mock::fault::{ACTION, Code, Fault, MAX_PROFILES};
+                return CreateOutcome::Rejected(
+                    Fault::new(
+                        Code::Receiver,
+                        &[ACTION, MAX_PROFILES],
+                        "Mock profile capacity reached",
+                    )
+                    .to_xml(),
+                );
+            }
+            if let Err(fault) = validate_configuration_plan(s, planned, "CREATECFG2") {
+                return CreateOutcome::Rejected(fault);
+            }
             let token = if let Some(token) = supplied_token {
                 if s.profiles.profiles.iter().any(|p| p.token == token) {
                     return CreateOutcome::Duplicate(token);
@@ -344,7 +383,7 @@ pub(crate) fn create_profile_in_state(
                 s.profiles.next_token_id = (id as u32).wrapping_add(1);
                 token
             };
-            let entry = ProfileEntry {
+            let mut entry = ProfileEntry {
                 token: token.clone(),
                 name: name.to_string(),
                 fixed: false,
@@ -354,8 +393,15 @@ pub(crate) fn create_profile_in_state(
                 audio_encoder_config_token: None,
                 ptz_config_token: None,
             };
+            for (kind, token) in planned {
+                *kind.slot(&mut entry) = Some(token.clone());
+            }
             eprintln!("    [STATE] profile created: {token} ({name})");
             s.profiles.profiles.push(entry.clone());
+            refresh_reference_counts(
+                s,
+                planned.iter().map(|(kind, token)| (*kind, token.clone())),
+            );
             CreateOutcome::Created(entry)
         },
         |outcome| matches!(outcome, CreateOutcome::Created(_)),
@@ -526,6 +572,23 @@ pub(crate) enum ConfigKind {
 }
 
 impl ConfigKind {
+    pub(crate) const ALL: [Self; 5] = [
+        Self::VideoSource,
+        Self::VideoEncoder,
+        Self::AudioSource,
+        Self::AudioEncoder,
+        Self::Ptz,
+    ];
+
+    fn token(self, p: &ProfileEntry) -> Option<&str> {
+        match self {
+            Self::VideoSource => p.video_source_config_token.as_deref(),
+            Self::VideoEncoder => p.video_encoder_config_token.as_deref(),
+            Self::AudioSource => p.audio_source_config_token.as_deref(),
+            Self::AudioEncoder => p.audio_encoder_config_token.as_deref(),
+            Self::Ptz => p.ptz_config_token.as_deref(),
+        }
+    }
     /// Media2's `<tr2:Type>` spelling. `None` for a type the mock does not model
     /// — see `media2::handle_add_configuration_media2` for why that faults.
     pub(crate) fn from_media2_type(t: &str) -> Option<Self> {
@@ -582,7 +645,7 @@ impl ConfigKind {
 /// configuration-conflict checks are separate from the profile's fixed flag.
 pub(crate) fn bind_configuration(
     state: &SharedState,
-    body: &str,
+    _body: &str,
     operation: &crate::mock::request::Node,
     kind: ConfigKind,
     tag: &str,
@@ -591,10 +654,21 @@ pub(crate) fn bind_configuration(
         .optional_child_text("http://www.onvif.org/ver10/media/wsdl", "ProfileToken")
         .map_err(|error| error.to_fault())?
         .unwrap_or_default();
-    let config = extract_tag(body, "ConfigurationToken")
-        .or_else(|| extract_tag(body, "Token"))
+    let config = operation
+        .optional_child_text(
+            "http://www.onvif.org/ver10/media/wsdl",
+            "ConfigurationToken",
+        )
+        .map_err(|error| error.to_fault())?
         .unwrap_or_default();
-    apply_configuration_bindings(state, profile, &[(kind, config)], true, tag)
+    apply_configuration_bindings(
+        state,
+        profile,
+        &[(kind, config.to_owned())],
+        true,
+        None,
+        tag,
+    )
 }
 
 /// Clear a configuration slot on a profile. Audit §3 items 1.5, 1.6 and 1.7.
@@ -611,7 +685,7 @@ pub(crate) fn unbind_configuration(
         .optional_child_text("http://www.onvif.org/ver10/media/wsdl", "ProfileToken")
         .map_err(|error| error.to_fault())?
         .unwrap_or_default();
-    apply_configuration_bindings(state, profile, &[(kind, String::new())], false, tag)
+    apply_configuration_bindings(state, profile, &[(kind, String::new())], false, None, tag)
 }
 
 /// Validate a complete value-based plan and commit its slots under one lock.
@@ -622,6 +696,7 @@ pub(crate) fn apply_configuration_bindings(
     profile: &str,
     planned: &[(ConfigKind, String)],
     add: bool,
+    name: Option<&str>,
     tag: &str,
 ) -> Result<(), String> {
     if profile.is_empty() || (add && planned.iter().any(|(_, token)| token.is_empty())) {
@@ -638,30 +713,106 @@ pub(crate) fn apply_configuration_bindings(
     state.modify_returning_if(
         |s| {
             let Some(index) = s.profiles.profiles.iter().position(|p| p.token == profile) else {
-                return Err(resp_soap_fault(
-                    "ter:NoProfile",
+                use crate::mock::fault::{Code, Fault, INVALID_ARG_VAL, NO_PROFILE};
+                return Err(Fault::new(
+                    Code::Sender,
+                    &[INVALID_ARG_VAL, NO_PROFILE],
                     &format!("NoSuchProfile-{tag}: {profile}"),
-                ));
+                )
+                .to_xml());
             };
             if add {
-                for (kind, token) in planned {
-                    if !kind.known_token(s, token) {
-                        return Err(resp_soap_fault(
-                            "ter:NoConfig",
-                            &format!("NoSuchConfig-{tag}: {token}"),
-                        ));
-                    }
-                }
+                validate_configuration_plan(s, planned, tag)?;
+            }
+            let mut affected: Vec<_> = planned
+                .iter()
+                .filter_map(|(kind, _)| {
+                    kind.token(&s.profiles.profiles[index])
+                        .map(|token| (*kind, token.to_owned()))
+                })
+                .collect();
+            if add {
+                affected.extend_from_slice(planned);
             }
             let p = &mut s.profiles.profiles[index];
+            if let Some(name) = name {
+                p.name = name.to_owned();
+            }
             for (kind, token) in planned {
                 *kind.slot(p) = add.then(|| token.clone());
             }
+            refresh_reference_counts(s, affected);
             eprintln!("    [STATE] profile {profile}: configuration plan committed");
             Ok(())
         },
         Result::is_ok,
     )
+}
+
+/// Validate every reference, including overwritten/repeated entries, before commit.
+fn validate_configuration_plan(
+    state: &crate::mock::state::DeviceState,
+    planned: &[(ConfigKind, String)],
+    tag: &str,
+) -> Result<(), String> {
+    use crate::mock::fault::{
+        ACTION, CONFIGURATION_CONFLICT, Code, Fault, INVALID_ARG_VAL, NO_CONFIG,
+    };
+    for (index, (kind, token)) in planned.iter().enumerate() {
+        if !kind.known_token(state, token) {
+            return Err(Fault::new(
+                Code::Sender,
+                &[INVALID_ARG_VAL, NO_CONFIG],
+                &format!("NoSuchConfig-{tag}: {token}"),
+            )
+            .to_xml());
+        }
+        if planned[..index]
+            .iter()
+            .any(|(previous_kind, previous_token)| previous_kind == kind && previous_token != token)
+        {
+            return Err(Fault::new(
+                Code::Receiver,
+                &[ACTION, CONFIGURATION_CONFLICT],
+                "Conflicting configurations for one mock profile slot",
+            )
+            .to_xml());
+        }
+    }
+    Ok(())
+}
+
+/// Recount only touched references, preserving unrelated caller-authored fixture
+/// fields. Count in the mutation lock so hooks and all catalogue readers agree.
+fn refresh_reference_counts(
+    state: &mut crate::mock::state::DeviceState,
+    affected: impl IntoIterator<Item = (ConfigKind, String)>,
+) {
+    for (kind, token) in affected {
+        let count = state
+            .profiles
+            .profiles
+            .iter()
+            .filter(|p| kind.token(p) == Some(token.as_str()))
+            .count();
+        // The public snapshot field is u32; arbitrary oversized caller state is
+        // not normalized. Saturation avoids wrapping its diagnostic count.
+        let count = u32::try_from(count).unwrap_or(u32::MAX);
+        macro_rules! update {
+            ($catalogue:expr) => {
+                for entry in $catalogue.iter_mut().filter(|entry| entry.token == token) {
+                    entry.use_count = count;
+                }
+            };
+        }
+        match kind {
+            ConfigKind::VideoSource => update!(state.video_source_configs),
+            ConfigKind::VideoEncoder => update!(state.video_encoders),
+            ConfigKind::AudioSource => update!(state.audio_source_configs),
+            ConfigKind::AudioEncoder => update!(state.audio_encoders),
+            ConfigKind::Ptz => update!(state.ptz_configs),
+        }
+    }
 }
 
 /// Remove a profile from the shared list, refusing a fixed one.
@@ -674,7 +825,12 @@ pub(crate) fn delete_profile_in_state(state: &SharedState, token: &str) -> Delet
             if s.profiles.profiles[idx].fixed {
                 return DeleteOutcome::Fixed;
             }
-            s.profiles.profiles.remove(idx);
+            let removed = s.profiles.profiles.remove(idx);
+            let affected = ConfigKind::ALL
+                .into_iter()
+                .filter_map(|kind| kind.token(&removed).map(|token| (kind, token.to_owned())))
+                .collect::<Vec<_>>();
+            refresh_reference_counts(s, affected);
             eprintln!("    [STATE] profile deleted: {token}");
             DeleteOutcome::Deleted
         },
@@ -1814,21 +1970,23 @@ pub(crate) fn apply_audio_encoder_write(
 pub fn resp_service_capabilities() -> String {
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        r#"<trt:GetServiceCapabilitiesResponse>
+        &format!(
+            r#"<trt:GetServiceCapabilitiesResponse>
           <trt:Capabilities SnapshotUri="true"
                             Rotation="false"
                             VideoSourceMode="false"
                             OSD="true"
                             TemporaryOSDText="false"
                             EXICompression="false">
-            <trt:ProfileCapabilities MaximumNumberOfProfiles="8"/>
+            <trt:ProfileCapabilities MaximumNumberOfProfiles="{PROFILE_LIMIT}"/>
             <trt:StreamingCapabilities RTPMulticast="false"
                                        RTP_TCP="true"
                                        RTP_RTSP_TCP="true"
                                        NonAggregateControl="false"
                                        NoRTSPStreaming="false"/>
           </trt:Capabilities>
-        </trt:GetServiceCapabilitiesResponse>"#,
+        </trt:GetServiceCapabilitiesResponse>"#
+        ),
     )
 }
 
@@ -1879,6 +2037,7 @@ mod profile_allocation_tests {
             CreateOutcome::Duplicate(actual) => assert_eq!(actual, token),
             CreateOutcome::Created(entry) => panic!("duplicate created: {}", entry.token),
             CreateOutcome::EmptyToken => panic!("nonempty duplicate rejected as empty"),
+            CreateOutcome::Rejected(fault) => panic!("unexpected refusal: {fault}"),
         }
         assert_eq!(serde_json::to_value(&*state.read()).unwrap(), before);
         assert_eq!(notifications.load(Ordering::SeqCst), 0);
@@ -1922,6 +2081,7 @@ mod profile_allocation_tests {
             });
             let mut created = std::collections::BTreeSet::new();
             let mut duplicates = 0;
+            let mut full = 0;
             for result in results {
                 match result {
                     CreateOutcome::Created(entry) => {
@@ -1935,11 +2095,20 @@ mod profile_allocation_tests {
                     CreateOutcome::EmptyToken => {
                         panic!("nonempty/generated token rejected as empty")
                     }
+                    CreateOutcome::Rejected(fault) => {
+                        assert!(fault.contains("ter:MaxNVTProfiles"), "{fault}");
+                        full += 1;
+                    }
                 }
             }
-            let expected = if supplied.is_some() { 1 } else { 8 };
+            let expected = if supplied.is_some() {
+                1
+            } else {
+                PROFILE_LIMIT - initial
+            };
             assert_eq!(created.len(), expected);
-            assert_eq!(duplicates, 8 - expected);
+            assert_eq!(duplicates, if supplied.is_some() { 7 } else { 0 });
+            assert_eq!(full, if supplied.is_some() { 0 } else { 8 - expected });
             assert_eq!(notifications.load(Ordering::SeqCst), expected);
             let snapshot = state.read();
             assert_eq!(snapshot.profiles.profiles.len(), initial + expected);

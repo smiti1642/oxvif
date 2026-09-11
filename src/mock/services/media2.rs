@@ -1,7 +1,7 @@
 use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
 use crate::mock::services::media;
 use crate::mock::state::{AudioEncoderEntry, ProfileEntry, SharedState, VideoEncoderState};
-use crate::mock::xml_parse::{extract_all_tags, extract_tag};
+use crate::mock::xml_parse::extract_tag;
 
 const NS: &str = r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#;
 
@@ -451,7 +451,7 @@ pub fn handle_remove_configuration_media2(
 /// slot is written. The shared value-based plan commits under one write lock.
 fn apply_media2_configuration(
     state: &SharedState,
-    body: &str,
+    _body: &str,
     operation: &crate::mock::request::Node,
     add: bool,
 ) -> Result<(), String> {
@@ -459,19 +459,61 @@ fn apply_media2_configuration(
         .optional_child_text("http://www.onvif.org/ver20/media/wsdl", "ProfileToken")
         .map_err(|error| error.to_fault())?
         .unwrap_or_default();
-    let entries = extract_all_tags(body, "Configuration");
-    if entries.is_empty() {
+    let ns = "http://www.onvif.org/ver20/media/wsdl";
+    let name = if add {
+        operation
+            .optional_child_text(ns, "Name")
+            .map_err(|error| error.to_fault())?
+    } else {
+        None
+    };
+    let planned = configuration_plan(operation, add)?;
+    if !add
+        && operation
+            .children_named(ns, "Configuration")
+            .next()
+            .is_none()
+    {
         return Err(resp_soap_fault(
             "env:Sender",
             "NoConfiguration-CFG2-5541: at least one tr2:Configuration is required",
         ));
     }
 
-    // Resolve every kind first — see the doc comment above.
+    let tag = if add { "ADDCFG2-5543" } else { "RMCFG2-5544" };
+    media::apply_configuration_bindings(state, profile, &planned, add, name, tag)
+}
+
+/// Project all direct references without fragment extraction. All is a no-op
+/// during add/create; on remove it clears every modeled slot. Token values are
+/// ignored on remove, but malformed scalar/duplicate fields are still refused.
+fn configuration_plan(
+    operation: &crate::mock::request::Node,
+    add: bool,
+) -> Result<Vec<(media::ConfigKind, String)>, String> {
+    let ns = "http://www.onvif.org/ver20/media/wsdl";
     let mut planned = Vec::new();
-    for entry in &entries {
-        let type_ = extract_tag(entry, "Type").unwrap_or_default();
-        let Some(kind) = media::ConfigKind::from_media2_type(&type_) else {
+    for entry in operation.children_named(ns, "Configuration") {
+        entry
+            .check_child_sequence(ns, &["Type", "Token"])
+            .map_err(|error| error.to_fault())?;
+        let type_ = entry
+            .required_child_text(ns, "Type")
+            .map_err(|error| error.to_fault())?;
+        let token = entry
+            .optional_child_text(ns, "Token")
+            .map_err(|error| error.to_fault())?;
+        if type_ == "All" {
+            if !add {
+                planned.extend(
+                    media::ConfigKind::ALL
+                        .into_iter()
+                        .map(|kind| (kind, String::new())),
+                );
+            }
+            continue;
+        }
+        let Some(kind) = media::ConfigKind::from_media2_type(type_) else {
             return Err(resp_soap_fault(
                 "ter:ConfigurationConflict",
                 &format!(
@@ -481,11 +523,16 @@ fn apply_media2_configuration(
                 ),
             ));
         };
-        planned.push((kind, extract_tag(entry, "Token").unwrap_or_default()));
+        planned.push((
+            kind,
+            if add {
+                token.unwrap_or_default().to_owned()
+            } else {
+                String::new()
+            },
+        ));
     }
-
-    let tag = if add { "ADDCFG2-5543" } else { "RMCFG2-5544" };
-    media::apply_configuration_bindings(state, profile, &planned, add, tag)
+    Ok(planned)
 }
 
 pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
@@ -583,9 +630,8 @@ pub fn resp_video_encoder_instances() -> String {
 /// It used to answer with a hardcoded `Profile_New_M2` and take no `state`, so
 /// it reported a success the caller could not then act on: the token it named
 /// appeared in no subsequent `GetProfiles`, from either service. The write now
-/// goes through [`media::create_profile_in_state`], the same call Media1 makes;
-/// only the response envelope differs (Media2 returns the bare token, Media1 the
-/// whole profile).
+/// uses the shared allocator with initial configuration bindings committed
+/// atomically. Media2 returns the bare token; Media1 returns the whole profile.
 pub fn handle_create_profile_media2(
     state: &SharedState,
     operation: &crate::mock::request::Node,
@@ -598,7 +644,11 @@ pub fn handle_create_profile_media2(
     // `tr2:CreateProfile` carries `Name` and an optional `Configuration` list —
     // and, unlike `trt:CreateProfile`, **no caller-supplied token**. The device
     // always assigns.
-    match media::create_profile_in_state(state, name, None) {
+    let planned = match configuration_plan(operation, true) {
+        Ok(planned) => planned,
+        Err(fault) => return fault,
+    };
+    match media::create_profile_with_bindings(state, name, None, &planned) {
         media::CreateOutcome::Created(entry) => {
             *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
             soap(
@@ -616,6 +666,7 @@ pub fn handle_create_profile_media2(
         media::CreateOutcome::EmptyToken => {
             media::empty_profile_token_fault(crate::mock::fault::Code::Sender)
         }
+        media::CreateOutcome::Rejected(fault) => fault,
     }
 }
 
@@ -1091,7 +1142,8 @@ pub fn resp_set_video_source_mode() -> String {
 pub fn resp_service_capabilities_media2() -> String {
     soap(
         r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetServiceCapabilitiesResponse>
+        &format!(
+            r#"<tr2:GetServiceCapabilitiesResponse>
           <tr2:Capabilities SnapshotUri="true"
                             Rotation="false"
                             VideoSourceMode="true"
@@ -1099,8 +1151,8 @@ pub fn resp_service_capabilities_media2() -> String {
                             Mask="false"
                             SourceMask="false"
                             WebRTC="0">
-            <tr2:ProfileCapabilities MaximumNumberOfProfiles="8"
-                                     ConfigurationsSupported="VideoSource VideoEncoder AudioSource AudioEncoder Metadata"/>
+            <tr2:ProfileCapabilities MaximumNumberOfProfiles="{limit}"
+                                     ConfigurationsSupported="VideoSource VideoEncoder AudioSource AudioEncoder PTZ"/>
             <tr2:StreamingCapabilities RTSPStreaming="true"
                                        RTPMulticast="false"
                                        RTP_RTSP_TCP="true"
@@ -1108,5 +1160,7 @@ pub fn resp_service_capabilities_media2() -> String {
                                        AutoStartMulticast="false"/>
           </tr2:Capabilities>
         </tr2:GetServiceCapabilitiesResponse>"#,
+            limit = media::PROFILE_LIMIT
+        ),
     )
 }

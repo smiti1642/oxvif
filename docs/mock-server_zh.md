@@ -372,8 +372,17 @@ slot。拒絕時保留 state 且不通知；成功的多筆 Media2 請求僅通�
 
 自動配置的 profile 身分會跳過已用 token；明確 token 的重複檢查與新增共用
 同一 write lock。重複拒絕會保留 state 且不呼叫 change hook。持久化 counter
-是可環回的搜尋起點，不保證永不重用歷史上已刪除的 token。Profile 容量限制
-及其他建立語意仍在 fidelity audit 範圍內。
+是可環回的搜尋起點，不保證永不重用歷史上已刪除的 token。建立時遵守公告的八個
+profile 上限；較大的匯入 fixture 仍可讀取及刪除，但數量低於上限前拒絕新增，
+不會默默刪除匯入的 profile。
+
+Media2 建立會原子套用初始 configuration。AddConfiguration 可僅更新 Name，不提供
+時保留原名；create／add 忽略 All，remove-All 清空已建模 slot。相同 reference 重複
+為冪等，同一 slot 的不同 reference 則拒絕。支援 VideoSource、VideoEncoder、
+AudioSource、AudioEncoder 及 PTZ，其他種類仍明確拒絕。拒絕不改名、不配置 token、
+不變更計數。受影響的 configuration `UseCount` 在同一鎖中依已提交的 reference 重算，
+包含刪除；不改動無關 seed 的任意計數。完整實體 configuration 相容性及欄位驗證仍待
+完成，詳見 [組裝批次](active/mock-fidelity-profile-assembly_zh.md)。
 
 | Token | Name | Fixed | Source cfg | Encoder cfg | PTZ cfg | Audio cfg |
 |---|---|---|---|---|---|---|
@@ -583,10 +592,25 @@ Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多�
 profile 錄製結果，成功 synthetic 建立或刪除後才淘汰 Media1 GetProfile／GetProfiles
 與 Media2 GetProfiles。因此建立會刷新錄製的 profile 清單及單筆 profile 檢視。
 已提交的 Media1 video source／encoder Add／Remove 與 Media2 Add／RemoveConfiguration
-亦淘汰上述三個讀取 Action，包含成功的冪等 remove。被拒絕的 binding 保留錄製結果，
+亦淘汰上述 profile 讀取，包含成功的冪等 remove。這些已提交 effect 亦淘汰依賴 binding／
+引用計數的已建模 configuration read 及 PTZ compatible configuration；靜態 encoder instance
+fixture 不受影響，因此不淘汰。
+被拒絕的 binding 保留錄製結果，
 也不會使其他服務中同 family 名稱的讀取失效。Configuration 寫入與其他 mutation、
 單獨建構 ReplayResponder、更多相依關係及併發可見性
 仍待審查。
+
+Profile 組裝亦遷移重複 token 及 binding reference 的拒絕。公開 `subcode` 仍保留
+第一層，不改成最深層條件：
+
+| 拒絕原因 | SOAP code | 依序巢狀 subcode |
+| --- | --- | --- |
+| 明確 profile token 重複 | Sender | InvalidArgVal → ProfileExists |
+| Binding 的 profile／configuration 不存在 | Sender | InvalidArgVal → NoProfile／NoConfig |
+| 建立 profile 達容量上限 | Receiver | Action → MaxNVTProfiles |
+| 同一已建模 slot 指派不同 configuration | Receiver | Action → ConfigurationConflict |
+
+其他 legacy service Fault 與完整實體相容性仍屬後續工作。
 
 Replay key 現在於投影後清除 URL `user:pass@`，包含 XML entity decoding 後的帳密。
 舊檔載入僅清理記憶體中的 key，不自動覆寫磁碟；需明確保存，分享前亦須檢查舊副本。

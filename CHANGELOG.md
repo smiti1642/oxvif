@@ -22,6 +22,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock Media2 profile creation now applies initial modeled configurations; binding
+  supports rename-only updates, add/create `All` no-ops and remove `All` clearing.
+  Binding tokens are decoded from scoped fields; conflicting assignments to one
+  slot and invalid later references refuse before mutation. Both Media services
+  enforce the advertised eight-profile creation limit without truncating imported
+  fixtures. Touched configuration reference counts update with profile mutations,
+  and built-in replay retires their dependent reads. Profile capacity, duplicate
+  and binding-reference faults use structured SOAP hierarchies. Media2 capability
+  now advertises the modeled PTZ slot instead of unsupported Metadata binding.
+  See the [assembly migration](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/active/mock-fidelity-profile-assembly.md)
+  for limits; full configuration compatibility and field validation remain open.
 - Mock Factory Reset, Device/PTZ auxiliary commands, reboot, firmware upgrade,
   system restore, Events subscribe/renew/unsubscribe/synchronization and EndSearch
   now refuse by default with Receiver / `mock:UnmodeledEffect`. Workflow tests
@@ -127,7 +138,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Mock profile creation now skips occupied generated tokens and checks explicit
   duplicates under the same write lock as insertion. Rejected duplicates preserve
   state and do not notify the change hook; allocation no longer panics at the
-  persisted counter boundary. This does not add profile-capacity enforcement.
+  persisted counter boundary. Capacity enforcement is described above.
 - Mock Media1/Media2 rejected profile deletion no longer invokes the persistence
   change hook. Successful deletion still notifies once; public state helpers
   retain their existing notification behavior.

@@ -269,6 +269,9 @@ async fn rejected_delete_preserves_state_and_hook_but_success_notifies() {
         }
         let mut expected = before;
         expected.profiles.profiles.remove(1);
+        expected.video_source_configs[0].use_count = 1;
+        expected.video_encoders[1].use_count = 0;
+        expected.ptz_configs[0].use_count = 1;
         assert_eq!(
             serde_json::to_value(&*transport.device().read()).unwrap(),
             serde_json::to_value(&expected).unwrap()
@@ -338,8 +341,16 @@ async fn rejected_late_binding_preserves_the_entire_state() {
     )).await.unwrap();
     let body = parse_soap_body(&xml).unwrap();
     let fault = body.child("Fault").unwrap();
+    assert_eq!(fault.path(&["Code", "Value"]).unwrap().text(), "s:Sender");
     assert_eq!(
-        fault.path(&["Code", "Value"]).unwrap().text(),
+        fault.path(&["Code", "Subcode", "Value"]).unwrap().text(),
+        "ter:InvalidArgVal"
+    );
+    assert_eq!(
+        fault
+            .path(&["Code", "Subcode", "Subcode", "Value"])
+            .unwrap()
+            .text(),
         "ter:NoConfig"
     );
     assert_eq!(

@@ -23,7 +23,7 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 243 direct occurrences of five reader spellings are indexed: 228 before
+- 238 direct occurrences of five reader spellings are indexed: 223 before
   top-level test modules and 15 inside those modules. The former span 71
   enclosing symbols, **not** 71 defective operations. This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
@@ -260,7 +260,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::bind_configuration` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::require_config_token` | `extract_tag` | `production:1` |
@@ -280,8 +279,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/media.rs::apply_audio_encoder_write` | `extract_tag` | `production:11` |
 | `src/mock/services/media2.rs::require_config_token` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
-| `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:2` |
-| `src/mock/services/media2.rs::apply_media2_configuration` | `extract_all_tags` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |
@@ -331,7 +328,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | W17 | `discovery_responder::probe_reply`: DOM | UDP Probe matching, QName scope and input bounds; not the SOAP synthetic entry point |
 | W10 | Media profile scalar selectors and create fields; DeleteProfile strict reader; `bind_configuration`/`unbind_configuration`; encoder/source/audio write helpers | Media2 wrappers reuse Media1 helpers; replace fragment contracts with parsed values/subtrees, not decode-and-reinsert strings |
 | W10 | Media OSD helpers, colour/position attributes and nested TextString; configuration option selectors | Rendering and typed parsers, list filtering, quota/state; `_force_use_extract_all` is not a routed behavior |
-| W10 | `media2::apply_media2_configuration`: repeated subtrees, Type/Token scalars, then synthesized fragment | Calls Media1 binding helpers per entry; inspect all validation before any writes and hook/invalidation behavior |
+| W10 | `media2::configuration_plan`: scoped repeated Type/Token references shared by create/add/remove | Complete value plan, optional rename and reference counts commit atomically; see [assembly batch](mock-fidelity-profile-assembly.md). Nested configuration writers remain separate work. |
 | W11 | PTZ selector scalars, nested operation/config/tour/space fragments and coordinate attributes | Profile-to-node resolution; `min_max`, range/vector readers, per-head slots and repeated tour spots |
 | W12 | Imaging source selector and scalar setting reads | Source resolution and nested settings; current parse-failure/default behavior is not the target contract |
 | W13 | Device scalar fields, repeated scopes/users/IP entries, storage/network/relay attributes/subtrees | Multi-entry validation, auth state, IO queue, change hooks; audit every field rather than replacing the helper mechanically |

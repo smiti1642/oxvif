@@ -160,11 +160,17 @@
 //! Missing/fixed-profile refusals use nested Sender faults; the public error's
 //! subcode is still the first level, not the deepest condition. Refused deletion
 //! does not invoke the change hook; successful deletion invokes it once. Built-in
-//! replay clones retire both services' profile views only after successful
+//! replay clones retire both services' profile views and dependent configuration
+//! reads (including reference counts) only after successful
 //! synthetic creation, deletion, Media1 video binding or Media2 generic binding;
 //! refusals preserve recordings. Idempotent binding commits retire reads too.
 //! Other mutation/dependency and transaction/callback paths
 //! remain under review.
+//! Profile creation enforces the advertised limit of eight without truncating
+//! larger imported fixtures. Media2 initial bindings, optional rename and All
+//! selection are applied atomically; touched reference counts track committed
+//! profiles. Conflicting assignments to one slot are refused. This is not full
+//! physical configuration compatibility or arbitrary seed normalization.
 //! Authentication faults use a structured serializer with a bound first
 //! `wsse:FailedAuthentication` subcode and escaped reason text; XML-invalid reason
 //! characters become U+FFFD. Credential parsing now requires unique qualified

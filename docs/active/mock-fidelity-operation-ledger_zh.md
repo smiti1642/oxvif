@@ -53,6 +53,8 @@ A2：首批收件政策及 effect 邊界，詳見 [政策檢查點](mock-fidelit
 
 A3：額外八項 effect stub 的政策遷移，詳見 [批次紀錄](mock-fidelity-ack-policy-preflight_zh.md#剩餘-effect-stub-批次)。
 
+PA1：profile 組裝、容量及引用計數子群，詳見 [批次紀錄](mock-fidelity-profile-assembly_zh.md)。完整欄位／實體相容性仍分開驗收。
+
 ## device
 
 [dispatch_device](../../src/mock/dispatch.rs) · [services/device.rs](../../src/mock/services/device.rs)
@@ -119,8 +121,8 @@ P1 與 P2 合計仍只構成部分 operation 驗收。
 | `media.GetServiceCapabilities` | `media::resp_service_capabilities` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetProfiles` | `media::resp_profiles` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media.GetProfile` | `media::resp_profile` | `state, operation` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
-| `media.CreateProfile` | `media::handle_create_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
-| `media.DeleteProfile` | `media::handle_delete_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1 |
+| `media.CreateProfile` | `media::handle_create_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
+| `media.DeleteProfile` | `media::handle_delete_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1/PA1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetVideoSources` | `media::resp_video_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -132,10 +134,10 @@ P1 與 P2 合計仍只構成部分 operation 驗收。
 | `media.GetVideoEncoderConfiguration` | `media::resp_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.SetVideoEncoderConfiguration` | `media::handle_set_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetVideoEncoderConfigurationOptions` | `media::resp_video_encoder_configuration_options` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.AddVideoEncoderConfiguration` | `media::handle_add_video_encoder_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
-| `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
-| `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
-| `media.RemoveVideoSourceConfiguration` | `media::handle_remove_video_source_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media.AddVideoEncoderConfiguration` | `media::handle_add_video_encoder_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
+| `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
+| `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
+| `media.RemoveVideoSourceConfiguration` | `media::handle_remove_video_source_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
 | `media.GetAudioSources` | `media::resp_audio_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetAudioSourceConfigurations` | `media::resp_audio_source_configurations` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetAudioEncoderConfiguration` | `media::resp_audio_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -157,10 +159,10 @@ P1 與 P2 合計仍只構成部分 operation 驗收。
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `media2.GetServiceCapabilities` | `media2::resp_service_capabilities_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetProfiles` | `media2::resp_profiles_media2` | `state, operation` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, operation, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1 |
-| `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
-| `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, operation, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1/PA1 |
+| `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1/PA1 |
+| `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
+| `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
 | `media2.GetStreamUri` | `media2::resp_stream_uri_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetSnapshotUri` | `media2::resp_snapshot_uri_media2` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetVideoSourceConfigurations` | `media2::resp_video_source_configurations_media2` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |

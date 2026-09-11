@@ -55,10 +55,10 @@ async fn exercise(
     for (token, code, reason) in [
         (
             "absent-835",
-            "ter:NoConfig",
+            "s:Sender",
             "NoSuchConfig-ADDCFG2-5543: absent-835",
         ),
-        ("VSC_2", "ter:NoConfig", "NoSuchConfig-ADDCFG2-5543: VSC_2"),
+        ("VSC_2", "s:Sender", "NoSuchConfig-ADDCFG2-5543: VSC_2"),
         (
             "",
             "env:Sender",
@@ -76,6 +76,19 @@ async fn exercise(
         let body = parse_soap_body(&xml).unwrap();
         let fault = body.child("Fault").expect("exact rejection response");
         assert_eq!(fault.path(&["Code", "Value"]).unwrap().text(), code);
+        if code == "s:Sender" {
+            assert_eq!(
+                fault.path(&["Code", "Subcode", "Value"]).unwrap().text(),
+                "ter:InvalidArgVal"
+            );
+            assert_eq!(
+                fault
+                    .path(&["Code", "Subcode", "Subcode", "Value"])
+                    .unwrap()
+                    .text(),
+                "ter:NoConfig"
+            );
+        }
         assert_eq!(fault.path(&["Reason", "Text"]).unwrap().text(), reason);
         assert_eq!(
             serde_json::to_value(&*state.read()).unwrap(),
@@ -99,6 +112,10 @@ async fn exercise(
     let mut expected = before.clone();
     expected.profiles.profiles[0].video_source_config_token = Some("VSC_2".into());
     expected.profiles.profiles[0].video_encoder_config_token = Some("VEC_3".into());
+    expected.video_source_configs[0].use_count = 1;
+    expected.video_source_configs[1].use_count = 3;
+    expected.video_encoders[0].use_count = 0;
+    expected.video_encoders[2].use_count = 2;
     assert_eq!(
         serde_json::to_value(&*state.read()).unwrap(),
         serde_json::to_value(&expected).unwrap()
@@ -131,6 +148,8 @@ async fn exercise(
         );
         expected.profiles.profiles[0].video_source_config_token = None;
         expected.profiles.profiles[0].video_encoder_config_token = None;
+        expected.video_source_configs[1].use_count = 2;
+        expected.video_encoders[2].use_count = 1;
         assert_eq!(
             serde_json::to_value(&*state.read()).unwrap(),
             serde_json::to_value(&expected).unwrap()

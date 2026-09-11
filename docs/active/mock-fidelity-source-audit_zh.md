@@ -23,7 +23,7 @@
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 243 個直接呼叫：228 個位於頂層 test module 之前，15 個
+- 五種 reader 拼法共 238 個直接呼叫：223 個位於頂層 test module 之前，15 個
   位於其中。前者分布於 71 個 enclosing symbol，**不是** 71 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
@@ -254,7 +254,6 @@
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::bind_configuration` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::require_config_token` | `extract_tag` | `production:1` |
@@ -274,8 +273,6 @@
 | `src/mock/services/media.rs::apply_audio_encoder_write` | `extract_tag` | `production:11` |
 | `src/mock/services/media2.rs::require_config_token` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
-| `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:2` |
-| `src/mock/services/media2.rs::apply_media2_configuration` | `extract_all_tags` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |
@@ -325,7 +322,7 @@
 | W17 | `discovery_responder::probe_reply`：DOM | UDP Probe matching、QName scope、輸入限制；不是 SOAP synthetic 入口 |
 | W10 | Media profile scalar selector／create、DeleteProfile strict reader、`bind_configuration`／`unbind_configuration`、encoder／source／audio write helper | Media2 wrapper 共用 Media1 helper；以 parsed value／subtree 取代 fragment 契約，不做解碼再插回 XML |
 | W10 | Media OSD helper、color／position attribute、巢狀 TextString、configuration options selector | Rendering／typed parser、list filter、quota／state；`_force_use_extract_all` 不是 routed behavior |
-| W10 | `media2::apply_media2_configuration`：重複子樹、Type／Token scalar，再合成 fragment | 逐筆呼叫 Media1 binding helper；檢查所有驗證是否先於任何寫入，以及 hook／invalidation |
+| W10 | `media2::configuration_plan`：create／add／remove 共用 scoped 重複 Type／Token reference | 完整 value plan、選填改名與引用計數原子提交；見 [組裝批次](mock-fidelity-profile-assembly_zh.md)。巢狀 configuration writer 仍屬後續工作。 |
 | W11 | PTZ selector scalar、巢狀 operation／config／tour／space fragment、座標 attribute | Profile-to-node、`min_max`、range／vector reader、per-head slot、重複 tour spot |
 | W12 | Imaging source selector、scalar settings | Source resolution、巢狀 settings；目前 parse failure／default 行為不是目標契約 |
 | W13 | Device scalar、重複 scope／user／IP entry、storage／network／relay attribute／子樹 | 多筆驗證、auth state、IO queue、change hook；逐欄位稽核，不機械式更換 helper |

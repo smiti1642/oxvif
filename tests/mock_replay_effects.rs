@@ -123,6 +123,9 @@ async fn verify_deletion(
     }
     let mut expected = before;
     expected.profiles.profiles.remove(1);
+    expected.video_source_configs[0].use_count = 1;
+    expected.video_encoders[1].use_count = 0;
+    expected.ptz_configs[0].use_count = 1;
     assert_eq!(
         serde_json::to_value(&*state.read()).unwrap(),
         serde_json::to_value(&expected).unwrap()
@@ -243,9 +246,9 @@ async fn verify_creation(
         ),
     ];
     if !media2 {
-        // This branch retains its staged legacy fault contract; check its exact
-        // payload rather than changing it as a side effect of replay migration.
-        refusals.push((format!("<m:CreateProfile xmlns:m='{M1}'><m:Name>duplicate</m:Name><m:Token>Profile_1</m:Token></m:CreateProfile>"), "ter:ProfileExists", None, "Profile token already in use: Profile_1"));
+        // Profile assembly migrates the reviewed duplicate hierarchy; replay
+        // must still preserve all recordings after this exact refusal.
+        refusals.push((format!("<m:CreateProfile xmlns:m='{M1}'><m:Name>duplicate</m:Name><m:Token>Profile_1</m:Token></m:CreateProfile>"), "s:Sender", Some("ter:InvalidArgVal"), "Profile token already in use: Profile_1"));
         refusals.push((format!("<m:CreateProfile xmlns:m='{M1}'><m:Name>empty-policy</m:Name><m:Token/></m:CreateProfile>"), "s:Sender", Some("mock:RequestPolicy"), "The mock does not support empty profile tokens"));
     }
     for (request, code, subcode, reason) in refusals {
@@ -546,7 +549,7 @@ async fn verify_binding(
             format!("NoSuchConfig-{}: absent-config-923", case.tag),
         ));
     }
-    for (profile, bad_last, code, reason) in refusals {
+    for (profile, bad_last, leaf, reason) in refusals {
         let xml = transport
             .soap_post(base, &action, binding_request(case, profile, bad_last))
             .await
@@ -555,11 +558,17 @@ async fn verify_binding(
         assert_eq!(
             oxvif::soap::find_response(&body, &format!("{}Response", case.operation)).unwrap_err(),
             SoapError::Fault {
-                code: code.into(),
-                subcode: None,
+                code: "s:Sender".into(),
+                subcode: Some("ter:InvalidArgVal".into()),
                 reason,
                 detail: None,
             }
+        );
+        assert_eq!(
+            body.path(&["Fault", "Code", "Subcode", "Subcode", "Value"])
+                .unwrap()
+                .text(),
+            leaf
         );
         assert_eq!(
             serde_json::to_value(&*state.read()).unwrap(),
@@ -586,8 +595,48 @@ async fn verify_binding(
     let response =
         oxvif::soap::find_response(&body, &format!("{}Response", case.operation)).unwrap();
     assert!(response.children.is_empty());
-    let mut expected = before;
+    let mut expected = before.clone();
     set_test_bindings(&mut expected.profiles.profiles[0], case, case.add);
+    for (kind, _) in case.kinds {
+        let field = match *kind {
+            "VideoSource" => "video_source_config_token",
+            "VideoEncoder" => "video_encoder_config_token",
+            _ => panic!("unreviewed binding fixture kind"),
+        };
+        let old = serde_json::to_value(&before.profiles.profiles[0]).unwrap();
+        let new = serde_json::to_value(&expected.profiles.profiles[0]).unwrap();
+        for token in [old[field].as_str(), new[field].as_str()]
+            .into_iter()
+            .flatten()
+        {
+            let profiles = serde_json::to_value(&expected.profiles.profiles).unwrap();
+            let count = profiles
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|p| p[field].as_str() == Some(token))
+                .count() as u32;
+            match *kind {
+                "VideoSource" => {
+                    expected
+                        .video_source_configs
+                        .iter_mut()
+                        .find(|c| c.token == token)
+                        .unwrap()
+                        .use_count = count
+                }
+                "VideoEncoder" => {
+                    expected
+                        .video_encoders
+                        .iter_mut()
+                        .find(|c| c.token == token)
+                        .unwrap()
+                        .use_count = count
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
     assert_eq!(
         serde_json::to_value(&*state.read()).unwrap(),
         serde_json::to_value(&expected).unwrap()

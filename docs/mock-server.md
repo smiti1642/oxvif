@@ -457,8 +457,20 @@ idempotent removal. This does not imply complete configuration-conflict modeling
 Generated profile identities skip occupied tokens; explicit duplicate checks and
 insertion share one write lock. Rejected duplicates preserve state and skip the
 change hook. The persisted counter is a wrapping search hint, not a guarantee
-against reusing historically deleted tokens. Profile-capacity enforcement and
-other creation semantics remain under the fidelity audit.
+against reusing historically deleted tokens. Creation now enforces the advertised
+limit of eight profiles. Larger imported fixtures remain readable/deletable, but
+creation refuses until below the limit; no imported profile is silently removed.
+
+Media2 creation applies initial configurations atomically. AddConfiguration can
+update Name without bindings; omission preserves the name. `All` is ignored on
+create/add and clears all modeled slots on remove. Identical repeated references
+are idempotent; different references for one slot are refused. Supported kinds are
+VideoSource, VideoEncoder, AudioSource, AudioEncoder and PTZ; unsupported kinds
+remain explicit refusals. A rejected plan does not rename, allocate or change counts.
+Touched configuration `UseCount` fields are recomputed from committed references
+in the same lock, including deletion. Unrelated arbitrary seed counts are preserved.
+Full physical configuration compatibility and field validation remain under review;
+see the [assembly batch](active/mock-fidelity-profile-assembly.md).
 
 | Token | Name | Fixed | Source cfg | Encoder cfg | PTZ cfg | Audio cfg |
 |---|---|---|---|---|---|---|
@@ -1024,10 +1036,25 @@ refusal and retire Media1 GetProfile/GetProfiles and Media2 GetProfiles after
 successful synthetic creation or deletion. Creation therefore refreshes recorded
 profile lists as well as the singular profile view. Committed Media1 video
 source/encoder Add/Remove and Media2 Add/RemoveConfiguration also retire these
-three read Actions, including successful idempotent removals. Refused bindings
+profile reads, including successful idempotent removals. These committed effects
+also retire modeled configuration reads and PTZ compatible configurations,
+which depend on bindings/reference counts. The static encoder-instance fixture
+is unchanged and is not retired. Refused bindings
 preserve recordings, including other-service reads with matching family names.
 Configuration writes and other mutations, standalone ReplayResponder
 construction, additional dependencies and concurrent visibility remain under review.
+
+Profile assembly also migrates duplicate-token and binding-reference refusals.
+The public `subcode` remains the first level, not the deepest condition:
+
+| Refusal | SOAP code | Ordered subcodes |
+| --- | --- | --- |
+| Duplicate explicit profile token | Sender | InvalidArgVal → ProfileExists |
+| Unknown binding profile/configuration | Sender | InvalidArgVal → NoProfile/NoConfig |
+| Profile creation capacity reached | Receiver | Action → MaxNVTProfiles |
+| Different configurations assigned to one modeled slot | Receiver | Action → ConfigurationConflict |
+
+Other legacy service Faults and complete physical compatibility remain separate work.
 
 Replay keys now strip URL `user:pass@` pairs after projection, including decoded
 XML entities. Legacy loaded keys are cleaned in memory, not automatically on disk;

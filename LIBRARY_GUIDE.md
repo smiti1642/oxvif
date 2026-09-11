@@ -1409,6 +1409,11 @@ subscription/synchronization and search-ending stubs require individual
 acknowledgment-only opt-ins for receipt-only workflows; see
 [mock fidelity policy](docs/mock-server.md#135-explicit-acknowledgment-only-policy).
 
+Profile creation obeys the advertised capacity. Media2 initial bindings, rename
+and All selection commit atomically; touched reference counts and dependent replay
+reads follow the commit. Imported fixtures are not truncated. See
+[profile assembly and limits](docs/mock-server.md#63-profiles).
+
 ### Try it now — a test that needs nothing
 
 ```toml
