@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock PTZ profile/head lookup now preserves decoded token identity, including
+  significant whitespace, across its 19 existing consumers. Header, nested and
+  foreign fields no longer select a head; duplicate/nested scalar tokens are
+  rejected before mutation. Ordinary missing/empty/unknown fault payloads remain
+  unchanged. Other PTZ fields, Media token paths and replay effects remain under
+  the [hardening programme](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/active/mock-fidelity-profile-preflight.md).
 - Shared XML string escaping now emits character references for CR, LF and tab,
   preserving literal data across XML text/attribute normalization. This also
   preserves carriage returns through client profile creation and mock Name reads.

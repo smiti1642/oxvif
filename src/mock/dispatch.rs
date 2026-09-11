@@ -32,7 +32,7 @@ pub(crate) fn respond_with_effect(
         Service::DeviceIo => dispatch_device_io(op, state),
         Service::Media => dispatch_media(op, base, state, body, operation, &mut effect),
         Service::Media2 => dispatch_media2(op, base, state, body, operation, &mut effect),
-        Service::Ptz => dispatch_ptz(op, state, body),
+        Service::Ptz => dispatch_ptz(op, state, body, operation),
         Service::Imaging => dispatch_imaging(op, state, body),
         Service::Events => dispatch_events(op, base, state, body),
         Service::Recording => dispatch_recording(op, state, body),
@@ -331,39 +331,42 @@ fn dispatch_media2(
     })
 }
 
-fn dispatch_ptz(op: &str, state: &SharedState, body: &str) -> Option<String> {
+fn dispatch_ptz(
+    op: &str,
+    state: &SharedState,
+    body: &str,
+    operation: &crate::mock::request::Node,
+) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => ptz::resp_ptz_service_capabilities(),
-        // Every arm below is per-profile and takes `body`. Until 0.15 sixteen of
-        // them did not receive it at all, and none of the eleven that did looked
-        // at the `ProfileToken` — so the mock had one position and one preset
-        // list for the whole device and could not tell one head from another.
-        // Audit §4.1.
-        "GetStatus" => ptz::resp_ptz_status(state, body),
-        "GetPresets" => ptz::resp_ptz_presets(state, body),
-        "SetPreset" => ptz::handle_ptz_set_preset(state, body),
-        "RemovePreset" => ptz::handle_ptz_remove_preset(state, body),
-        "GotoPreset" => ptz::handle_ptz_goto_preset(state, body),
-        "AbsoluteMove" => ptz::handle_ptz_absolute_move(state, body),
-        "RelativeMove" => ptz::handle_ptz_relative_move(state, body),
-        "ContinuousMove" => ptz::handle_ptz_continuous_move(state, body),
-        "Stop" => ptz::handle_ptz_stop(state, body),
-        "GotoHomePosition" => ptz::handle_ptz_goto_home_position(state, body),
-        "SetHomePosition" => ptz::handle_ptz_set_home_position(state, body),
+        // Profile-addressed handlers use the already parsed operation for
+        // identity. Other fields retain their separately tracked legacy readers.
+        // Before 0.15 these handlers could not distinguish heads (audit §4.1).
+        "GetStatus" => ptz::resp_ptz_status(state, operation),
+        "GetPresets" => ptz::resp_ptz_presets(state, operation),
+        "SetPreset" => ptz::handle_ptz_set_preset(state, body, operation),
+        "RemovePreset" => ptz::handle_ptz_remove_preset(state, body, operation),
+        "GotoPreset" => ptz::handle_ptz_goto_preset(state, body, operation),
+        "AbsoluteMove" => ptz::handle_ptz_absolute_move(state, body, operation),
+        "RelativeMove" => ptz::handle_ptz_relative_move(state, body, operation),
+        "ContinuousMove" => ptz::handle_ptz_continuous_move(state, body, operation),
+        "Stop" => ptz::handle_ptz_stop(state, operation),
+        "GotoHomePosition" => ptz::handle_ptz_goto_home_position(state, operation),
+        "SetHomePosition" => ptz::handle_ptz_set_home_position(state, operation),
         "GetNodes" => ptz::resp_ptz_nodes(state),
         "GetNode" => ptz::resp_ptz_node(state, body),
         "GetConfigurations" => ptz::resp_ptz_configurations(state),
-        "GetCompatibleConfigurations" => ptz::resp_ptz_compatible_configurations(state, body),
+        "GetCompatibleConfigurations" => ptz::resp_ptz_compatible_configurations(state, operation),
         "GetConfiguration" => ptz::resp_ptz_configuration(state, body),
         "SetConfiguration" => ptz::handle_ptz_set_configuration(state, body),
         "GetConfigurationOptions" => ptz::resp_ptz_configuration_options(state, body),
-        "GetPresetTours" => ptz::resp_ptz_preset_tours(state, body),
-        "GetPresetTour" => ptz::resp_ptz_preset_tour(state, body),
-        "GetPresetTourOptions" => ptz::resp_ptz_preset_tour_options(state, body),
-        "CreatePresetTour" => ptz::handle_ptz_create_preset_tour(state, body),
-        "ModifyPresetTour" => ptz::handle_ptz_modify_preset_tour(state, body),
-        "OperatePresetTour" => ptz::handle_ptz_operate_preset_tour(state, body),
-        "RemovePresetTour" => ptz::handle_ptz_remove_preset_tour(state, body),
+        "GetPresetTours" => ptz::resp_ptz_preset_tours(state, operation),
+        "GetPresetTour" => ptz::resp_ptz_preset_tour(state, body, operation),
+        "GetPresetTourOptions" => ptz::resp_ptz_preset_tour_options(state, operation),
+        "CreatePresetTour" => ptz::handle_ptz_create_preset_tour(state, operation),
+        "ModifyPresetTour" => ptz::handle_ptz_modify_preset_tour(state, body, operation),
+        "OperatePresetTour" => ptz::handle_ptz_operate_preset_tour(state, body, operation),
+        "RemovePresetTour" => ptz::handle_ptz_remove_preset_tour(state, body, operation),
         "SendAuxiliaryCommand" => ptz::handle_ptz_send_auxiliary_command(body),
         _ => return None,
     })

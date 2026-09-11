@@ -446,6 +446,13 @@ Media2 與 Media1 共用 profile、video、audio 狀態，並另提供 metadata�
 
 ### 7.4 PTZ（27 項操作）
 
+使用 profile／head resolution 的 19 個 handler，從共用 parsed operation 讀取
+直接、namespace-qualified `ProfileToken`。XML 文字只 decode 一次，空白具有意義。
+重複或內含子節點的 scalar 在 state 變更前回傳通用 `InvalidArgs`；foreign、nested
+與 Header 欄位不能提供 token。保留缺失／空值及未知 token 的既有普通 Fault payload。
+Configuration／preset／tour token、座標解析、完整 Fault policy、replay invalidation
+與時間行為保證仍為獨立工作。
+
 所有 per-profile 操作都要求 `ProfileToken`。缺少 token 時回傳 `env:Sender`；不存在的 profile 回傳 `ter:NoProfile`；未繫結 PTZ configuration 的 profile 回傳 `ter:NoConfig`。Move 為立即完成，不模擬移動時間。以 node 或 configuration token 定址的 getter/setter 對未知 token 會 fault；`GetCompatibleConfigurations` 對不具 PTZ 能力的 profile 回傳空 list。
 
 ### 7.5 Imaging、Events、Recording、Search 與 Replay

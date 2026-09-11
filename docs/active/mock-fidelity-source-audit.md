@@ -23,9 +23,9 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 255 direct occurrences of five reader spellings are indexed: 240 before
-  top-level test modules and 15 inside those modules. The former span 76
-  enclosing symbols, **not** 76 defective operations. This includes test-only
+- 254 direct occurrences of five reader spellings are indexed: 239 before
+  top-level test modules and 15 inside those modules. The former span 75
+  enclosing symbols, **not** 75 defective operations. This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
   helper touch; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
@@ -291,7 +291,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_tag` | `production:5` |
 | `src/mock/services/media2.rs::resp_audio_encoder_configuration_options_media2` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::require_profile` | `extract_tag` | `production:1` |
 | `src/mock/services/ptz.rs::handle_ptz_set_preset` | `extract_tag` | `production:3` |
 | `src/mock/services/ptz.rs::handle_ptz_remove_preset` | `extract_tag` | `production:2` |
 | `src/mock/services/ptz.rs::handle_ptz_goto_preset` | `extract_tag` | `production:2` |

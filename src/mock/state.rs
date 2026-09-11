@@ -2328,7 +2328,18 @@ mod tests {
     /// Every PTZ request names a profile. Wrapping it here keeps each test
     /// below reading like the operation it exercises rather than like XML.
     fn ptz_req(profile: &str, op: &str, inner: &str) -> String {
-        format!("<tptz:{op}><tptz:ProfileToken>{profile}</tptz:ProfileToken>{inner}</tptz:{op}>")
+        format!(
+            "<tptz:{op} xmlns:tptz='http://www.onvif.org/ver20/ptz/wsdl' xmlns:tt='http://www.onvif.org/ver10/schema'><tptz:ProfileToken>{profile}</tptz:ProfileToken>{inner}</tptz:{op}>"
+        )
+    }
+
+    fn ptz_call(state: &SharedState, op: &str, body: &str) -> String {
+        crate::mock::dispatch::dispatch(
+            &format!("http://www.onvif.org/ver20/ptz/wsdl/{op}"),
+            "http://mock",
+            state,
+            body,
+        )
     }
 
     fn ptz_ask(profile: &str, op: &str) -> String {
@@ -2352,10 +2363,13 @@ mod tests {
 
     #[test]
     fn ptz_absolute_move_updates_position() {
-        use crate::mock::services::ptz;
         let s = new_state();
-        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.5", "-0.3", "0.7"));
-        let xml = ptz::resp_ptz_status(&s, &ptz_ask("Profile_1", "GetStatus"));
+        ptz_call(
+            &s,
+            "AbsoluteMove",
+            &move_to("Profile_1", "0.5", "-0.3", "0.7"),
+        );
+        let xml = ptz_call(&s, "GetStatus", &ptz_ask("Profile_1", "GetStatus"));
         assert!(xml.contains(r#"x="0.5""#));
         assert!(xml.contains(r#"y="-0.3""#));
         assert!(xml.contains(r#"x="0.7""#));
@@ -2373,15 +2387,18 @@ mod tests {
     /// pan to seed.
     #[test]
     fn ptz_move_on_one_profile_does_not_move_another() {
-        use crate::mock::services::ptz;
         let s = new_state();
-        let before = ptz::resp_ptz_status(&s, &ptz_ask("Profile_3", "GetStatus"));
+        let before = ptz_call(&s, "GetStatus", &ptz_ask("Profile_3", "GetStatus"));
         // PTZNode_2's seeded position, deliberately not PTZNode_1's.
         assert!(before.contains(r#"x="0.8""#), "got {before}");
 
-        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.5", "-0.3", "0.7"));
+        ptz_call(
+            &s,
+            "AbsoluteMove",
+            &move_to("Profile_1", "0.5", "-0.3", "0.7"),
+        );
 
-        let after = ptz::resp_ptz_status(&s, &ptz_ask("Profile_3", "GetStatus"));
+        let after = ptz_call(&s, "GetStatus", &ptz_ask("Profile_3", "GetStatus"));
         assert_eq!(
             before, after,
             "moving Profile_1 must not move Profile_3 — they are separate heads"
@@ -2392,10 +2409,9 @@ mod tests {
     /// that used to be global.
     #[test]
     fn ptz_presets_are_per_head() {
-        use crate::mock::services::ptz;
         let s = new_state();
-        let p1 = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_1", "GetPresets"));
-        let p3 = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_3", "GetPresets"));
+        let p1 = ptz_call(&s, "GetPresets", &ptz_ask("Profile_1", "GetPresets"));
+        let p3 = ptz_call(&s, "GetPresets", &ptz_ask("Profile_3", "GetPresets"));
 
         // Counts differ, so a handler that ignores the token cannot be right.
         assert_eq!(p1.matches("<tptz:Preset ").count(), 2, "got {p1}");
@@ -2415,11 +2431,14 @@ mod tests {
     /// that got `Profile_2` right only by accident. This asserts the sharing.
     #[test]
     fn ptz_main_and_sub_stream_of_one_lens_are_one_head() {
-        use crate::mock::services::ptz;
         let s = new_state();
-        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.42", "-0.17", "0.63"));
+        ptz_call(
+            &s,
+            "AbsoluteMove",
+            &move_to("Profile_1", "0.42", "-0.17", "0.63"),
+        );
 
-        let sub = ptz::resp_ptz_status(&s, &ptz_ask("Profile_2", "GetStatus"));
+        let sub = ptz_call(&s, "GetStatus", &ptz_ask("Profile_2", "GetStatus"));
         assert!(
             sub.contains(r#"x="0.42""#) && sub.contains(r#"y="-0.17""#),
             "Profile_1 and Profile_2 are the main and sub stream of one lens and \
@@ -2428,7 +2447,7 @@ mod tests {
 
         // …and the other lens must not have moved, or "one head" would be
         // satisfied by a single global position, which is the bug this replaced.
-        let other = ptz::resp_ptz_status(&s, &ptz_ask("Profile_3", "GetStatus"));
+        let other = ptz_call(&s, "GetStatus", &ptz_ask("Profile_3", "GetStatus"));
         assert!(!other.contains(r#"x="0.42""#), "got {other}");
     }
 
@@ -2875,9 +2894,8 @@ mod tests {
     /// the token returns, so the assertion could not fail for its own reason.
     #[test]
     fn ptz_on_a_profile_with_no_configuration_faults() {
-        use crate::mock::services::ptz;
         let s = new_state();
-        let xml = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_4", "GetPresets"));
+        let xml = ptz_call(&s, "GetPresets", &ptz_ask("Profile_4", "GetPresets"));
         assert!(xml.contains("NoPTZConfig-PRESETS-5602-5619"), "got {xml}");
         assert!(xml.contains("Profile_4"), "got {xml}");
         assert_eq!(xml.matches("<tptz:Preset ").count(), 0, "got {xml}");
@@ -2888,12 +2906,15 @@ mod tests {
     /// handler indistinguishable from a correct one.
     #[test]
     fn ptz_without_a_profile_token_faults() {
-        use crate::mock::services::ptz;
         let s = new_state();
-        let xml = ptz::resp_ptz_status(&s, "<tptz:GetStatus/>");
+        let xml = ptz_call(
+            &s,
+            "GetStatus",
+            "<tptz:GetStatus xmlns:tptz='http://www.onvif.org/ver20/ptz/wsdl'/>",
+        );
         assert!(xml.contains("NoProfileToken-STATUS-5601"), "got {xml}");
 
-        let unknown = ptz::resp_ptz_status(&s, &ptz_ask("Profile_nope", "GetStatus"));
+        let unknown = ptz_call(&s, "GetStatus", &ptz_ask("Profile_nope", "GetStatus"));
         assert!(
             unknown.contains("NoSuchProfile-STATUS-5601"),
             "got {unknown}"
@@ -2902,7 +2923,7 @@ mod tests {
 
         // …and a profile that exists but binds no PTZ configuration is its own
         // failure with its own code: `ter:NoConfig`, not `ter:NoProfile`.
-        let unbound = ptz::resp_ptz_status(&s, &ptz_ask("Profile_4", "GetStatus"));
+        let unbound = ptz_call(&s, "GetStatus", &ptz_ask("Profile_4", "GetStatus"));
         assert!(
             unbound.contains("NoPTZConfig-STATUS-5601-5619"),
             "got {unbound}"
@@ -2913,21 +2934,24 @@ mod tests {
 
     #[test]
     fn ptz_set_preset_uses_current_position_and_returns_token() {
-        use crate::mock::services::ptz;
         let s = new_state();
         // Move first so SetPreset captures a non-zero position.
-        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.4", "0.1", "0.2"));
+        ptz_call(
+            &s,
+            "AbsoluteMove",
+            &move_to("Profile_1", "0.4", "0.1", "0.2"),
+        );
 
         let body = ptz_req(
             "Profile_1",
             "SetPreset",
             "<tptz:PresetName>Garden</tptz:PresetName>",
         );
-        let resp = ptz::handle_ptz_set_preset(&s, &body);
+        let resp = ptz_call(&s, "SetPreset", &body);
         // Profile_1 already has Preset_1 and Preset_2, so the new one is Preset_3.
         assert!(resp.contains("Preset_3"), "got {resp}");
 
-        let presets = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_1", "GetPresets"));
+        let presets = ptz_call(&s, "GetPresets", &ptz_ask("Profile_1", "GetPresets"));
         assert!(presets.contains("Garden"));
         assert!(presets.contains(r#"x="0.4""#));
 
@@ -2935,32 +2959,30 @@ mod tests {
         // not Profile_2: that is the sub stream of the same lens, so it shares
         // this head and **does** see the new preset — see
         // `ptz_main_and_sub_stream_of_one_lens_are_one_head`.
-        let other = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_3", "GetPresets"));
+        let other = ptz_call(&s, "GetPresets", &ptz_ask("Profile_3", "GetPresets"));
         assert!(!other.contains("Garden"), "got {other}");
     }
 
     #[test]
     fn ptz_remove_preset_then_get() {
-        use crate::mock::services::ptz;
         let s = new_state();
         let body = ptz_req(
             "Profile_1",
             "RemovePreset",
             "<tptz:PresetToken>Preset_2</tptz:PresetToken>",
         );
-        ptz::handle_ptz_remove_preset(&s, &body);
-        let xml = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_1", "GetPresets"));
+        ptz_call(&s, "RemovePreset", &body);
+        let xml = ptz_call(&s, "GetPresets", &ptz_ask("Profile_1", "GetPresets"));
         assert!(xml.contains("Preset_1"));
         assert!(!xml.contains(r#"token="Preset_2""#));
 
         // Profile_3 also has a Preset_2 — removing Profile_1's must not take it.
-        let other = ptz::resp_ptz_presets(&s, &ptz_ask("Profile_3", "GetPresets"));
+        let other = ptz_call(&s, "GetPresets", &ptz_ask("Profile_3", "GetPresets"));
         assert!(other.contains(r#"token="Preset_2""#), "got {other}");
     }
 
     #[test]
     fn ptz_goto_preset_jumps_position() {
-        use crate::mock::services::ptz;
         let s = new_state();
         // Profile_1's Preset_2 ("Door"): pan=0.5 tilt=0.2 zoom=0.0
         let body = ptz_req(
@@ -2968,24 +2990,39 @@ mod tests {
             "GotoPreset",
             "<tptz:PresetToken>Preset_2</tptz:PresetToken>",
         );
-        ptz::handle_ptz_goto_preset(&s, &body);
-        let xml = ptz::resp_ptz_status(&s, &ptz_ask("Profile_1", "GetStatus"));
+        ptz_call(&s, "GotoPreset", &body);
+        let xml = ptz_call(&s, "GetStatus", &ptz_ask("Profile_1", "GetStatus"));
         assert!(xml.contains(r#"x="0.5""#));
         assert!(xml.contains(r#"y="0.2""#));
     }
 
     #[test]
     fn ptz_set_home_then_goto_home() {
-        use crate::mock::services::ptz;
         let s = new_state();
         // Move, set home, move away, goto home → position should reset to setpoint.
-        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "0.8", "-0.4", "0.3"));
-        ptz::handle_ptz_set_home_position(&s, &ptz_ask("Profile_1", "SetHomePosition"));
+        ptz_call(
+            &s,
+            "AbsoluteMove",
+            &move_to("Profile_1", "0.8", "-0.4", "0.3"),
+        );
+        ptz_call(
+            &s,
+            "SetHomePosition",
+            &ptz_ask("Profile_1", "SetHomePosition"),
+        );
 
-        ptz::handle_ptz_absolute_move(&s, &move_to("Profile_1", "-0.5", "0.5", "0.0"));
-        ptz::handle_ptz_goto_home_position(&s, &ptz_ask("Profile_1", "GotoHomePosition"));
+        ptz_call(
+            &s,
+            "AbsoluteMove",
+            &move_to("Profile_1", "-0.5", "0.5", "0.0"),
+        );
+        ptz_call(
+            &s,
+            "GotoHomePosition",
+            &ptz_ask("Profile_1", "GotoHomePosition"),
+        );
 
-        let xml = ptz::resp_ptz_status(&s, &ptz_ask("Profile_1", "GetStatus"));
+        let xml = ptz_call(&s, "GetStatus", &ptz_ask("Profile_1", "GetStatus"));
         assert!(xml.contains(r#"x="0.8""#));
         assert!(xml.contains(r#"y="-0.4""#));
     }
@@ -2997,21 +3034,35 @@ mod tests {
     /// 1's head and therefore lens 1's tours, which is what a camera does.
     #[test]
     fn ptz_preset_tours_are_per_head() {
-        use crate::mock::services::ptz;
         let s = new_state();
-        let p1 = ptz::resp_ptz_preset_tours(&s, &ptz_ask("Profile_1", "GetPresetTours"));
-        let p3 = ptz::resp_ptz_preset_tours(&s, &ptz_ask("Profile_3", "GetPresetTours"));
+        let p1 = ptz_call(
+            &s,
+            "GetPresetTours",
+            &ptz_ask("Profile_1", "GetPresetTours"),
+        );
+        let p3 = ptz_call(
+            &s,
+            "GetPresetTours",
+            &ptz_ask("Profile_3", "GetPresetTours"),
+        );
         assert!(p1.contains("Tour_1"), "got {p1}");
         assert!(!p3.contains("Tour_1"), "got {p3}");
 
         // A tour created on lens 2 is lens 2's alone.
-        let created =
-            ptz::handle_ptz_create_preset_tour(&s, &ptz_ask("Profile_3", "CreatePresetTour"));
+        let created = ptz_call(
+            &s,
+            "CreatePresetTour",
+            &ptz_ask("Profile_3", "CreatePresetTour"),
+        );
         assert!(
             created.contains("Tour_1"),
             "first tour on this head: {created}"
         );
-        let p1_after = ptz::resp_ptz_preset_tours(&s, &ptz_ask("Profile_1", "GetPresetTours"));
+        let p1_after = ptz_call(
+            &s,
+            "GetPresetTours",
+            &ptz_ask("Profile_1", "GetPresetTours"),
+        );
         assert_eq!(
             p1_after.matches("<tptz:PresetTour ").count(),
             1,

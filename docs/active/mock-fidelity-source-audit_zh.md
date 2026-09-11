@@ -23,8 +23,8 @@
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 255 個直接呼叫：240 個位於頂層 test module 之前，15 個
-  位於其中。前者分布於 76 個 enclosing symbol，**不是** 76 個有缺陷的操作。
+- 五種 reader 拼法共 254 個直接呼叫：239 個位於頂層 test module 之前，15 個
+  位於其中。前者分布於 75 個 enclosing symbol，**不是** 75 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
 - W00 已完成目前字面值形式的來源核對；K06 synthetic 別名路由已於
@@ -285,7 +285,6 @@
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_tag` | `production:5` |
 | `src/mock/services/media2.rs::resp_audio_encoder_configuration_options_media2` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::require_profile` | `extract_tag` | `production:1` |
 | `src/mock/services/ptz.rs::handle_ptz_set_preset` | `extract_tag` | `production:3` |
 | `src/mock/services/ptz.rs::handle_ptz_remove_preset` | `extract_tag` | `production:2` |
 | `src/mock/services/ptz.rs::handle_ptz_goto_preset` | `extract_tag` | `production:2` |

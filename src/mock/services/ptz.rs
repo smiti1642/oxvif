@@ -1,4 +1,5 @@
 use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
+use crate::mock::request::{Node, RequestError};
 use crate::mock::state::{
     PtzConfigEntry, PtzNodeEntry, PtzPreset, PtzTour, PtzTourSpot, SharedState, SpaceEntry,
     SpaceKind,
@@ -28,12 +29,22 @@ fn clamp(v: f32, min: f32, max: f32) -> f32 {
 /// profile, for the reason `CLAUDE.md` gives about token-less per-channel
 /// queries: an answer for *some* head is indistinguishable from the right one on
 /// a single-head device, and wrong on every other.
-fn require_profile(state: &SharedState, body: &str, tag: &str) -> Result<String, String> {
-    let Some(token) = extract_tag(body, "ProfileToken").filter(|t| !t.is_empty()) else {
-        return Err(resp_soap_fault(
-            "env:Sender",
-            &format!("NoProfileToken-{tag}: every PTZ operation is per-profile"),
-        ));
+/// The shared parsed operation supplies one direct, qualified scalar; decoded
+/// whitespace is significant. Duplicate/nested scalar fields use the generic
+/// request fault. Existing missing/empty/unknown ordinary fault payloads remain
+/// pending the separately tracked PTZ fault-policy migration.
+fn require_profile(state: &SharedState, operation: &Node, tag: &str) -> Result<String, String> {
+    let token = match operation
+        .required_child_text("http://www.onvif.org/ver20/ptz/wsdl", "ProfileToken")
+    {
+        Ok(token) => token,
+        Err(RequestError::MissingField | RequestError::EmptyField) => {
+            return Err(resp_soap_fault(
+                "env:Sender",
+                &format!("NoProfileToken-{tag}: every PTZ operation is per-profile"),
+            ));
+        }
+        Err(error) => return Err(error.to_fault()),
     };
     if !state
         .read()
@@ -47,7 +58,7 @@ fn require_profile(state: &SharedState, body: &str, tag: &str) -> Result<String,
             &format!("NoSuchProfile-{tag}: {token}"),
         ));
     }
-    Ok(token)
+    Ok(token.to_owned())
 }
 
 /// The **PTZ node** a request's `ProfileToken` addresses, or a rendered fault.
@@ -75,8 +86,8 @@ fn require_profile(state: &SharedState, body: &str, tag: &str) -> Result<String,
 /// PTZ-capable at all, so there is no head to answer for; the previous
 /// behaviour — answering for an empty channel invented on the spot — told a
 /// caller their profile supports PTZ when it does not.
-fn require_head(state: &SharedState, body: &str, tag: &str) -> Result<String, String> {
-    let token = require_profile(state, body, tag)?;
+fn require_head(state: &SharedState, operation: &Node, tag: &str) -> Result<String, String> {
+    let token = require_profile(state, operation, tag)?;
     let s = state.read();
     let Some(profile) = s.profiles.profiles.iter().find(|p| p.token == token) else {
         // `require_profile` just checked this; unreachable unless the state
@@ -109,8 +120,8 @@ fn require_head(state: &SharedState, body: &str, tag: &str) -> Result<String, St
 
 /// `require_head`, but returning early from the handler with the fault.
 macro_rules! head {
-    ($state:expr, $body:expr, $tag:literal) => {
-        match require_head($state, $body, $tag) {
+    ($state:expr, $operation:expr, $tag:literal) => {
+        match require_head($state, $operation, $tag) {
             Ok(t) => t,
             Err(fault) => return fault,
         }
@@ -138,8 +149,8 @@ fn now_iso8601() -> String {
     crate::soap::security::unix_secs_to_iso8601(now as i64)
 }
 
-pub fn resp_ptz_status(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "STATUS-5601");
+pub fn resp_ptz_status(state: &SharedState, operation: &Node) -> String {
+    let head = head!(state, operation, "STATUS-5601");
     let snapshot = state.read().ptz.channel(&head).cloned().unwrap_or_default();
     let p = &snapshot;
     let utc = now_iso8601();
@@ -166,8 +177,8 @@ pub fn resp_ptz_status(state: &SharedState, body: &str) -> String {
     )
 }
 
-pub fn resp_ptz_presets(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "PRESETS-5602");
+pub fn resp_ptz_presets(state: &SharedState, operation: &Node) -> String {
+    let head = head!(state, operation, "PRESETS-5602");
     let presets = state
         .read()
         .ptz
@@ -211,8 +222,8 @@ fn next_preset_token(presets: &[PtzPreset]) -> String {
         .unwrap()
 }
 
-pub fn handle_ptz_set_preset(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "SETPRESET-5603");
+pub fn handle_ptz_set_preset(state: &SharedState, body: &str, operation: &Node) -> String {
+    let head = head!(state, operation, "SETPRESET-5603");
     let inner = extract_tag(body, "SetPreset").unwrap_or_default();
     let name = extract_tag(&inner, "PresetName");
     let token_in = extract_tag(&inner, "PresetToken");
@@ -264,8 +275,8 @@ pub fn handle_ptz_set_preset(state: &SharedState, body: &str) -> String {
     )
 }
 
-pub fn handle_ptz_remove_preset(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "RMPRESET-5604");
+pub fn handle_ptz_remove_preset(state: &SharedState, body: &str, operation: &Node) -> String {
+    let head = head!(state, operation, "RMPRESET-5604");
     let inner = extract_tag(body, "RemovePreset").unwrap_or_default();
     if let Some(token) = extract_tag(&inner, "PresetToken") {
         state.modify(|s| {
@@ -279,8 +290,8 @@ pub fn handle_ptz_remove_preset(state: &SharedState, body: &str) -> String {
     resp_empty("tptz", "RemovePresetResponse")
 }
 
-pub fn handle_ptz_goto_preset(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "GOTOPRESET-5605");
+pub fn handle_ptz_goto_preset(state: &SharedState, body: &str, operation: &Node) -> String {
+    let head = head!(state, operation, "GOTOPRESET-5605");
     let inner = extract_tag(body, "GotoPreset").unwrap_or_default();
     if let Some(token) = extract_tag(&inner, "PresetToken") {
         state.modify(|s| {
@@ -334,9 +345,9 @@ fn has_pan_tilt(inner: &str) -> bool {
     extract_attr(inner, "PanTilt", "x").is_some() || extract_attr(inner, "PanTilt", "y").is_some()
 }
 
-pub fn handle_ptz_absolute_move(state: &SharedState, body: &str) -> String {
+pub fn handle_ptz_absolute_move(state: &SharedState, body: &str, operation: &Node) -> String {
     // <tptz:AbsoluteMove><tptz:Position><tt:PanTilt x=.. y=../><tt:Zoom x=../></tptz:Position>...
-    let head = head!(state, body, "ABSMOVE-5606");
+    let head = head!(state, operation, "ABSMOVE-5606");
     let inner = extract_tag(body, "Position").unwrap_or_default();
     if has_pan_tilt(&inner)
         && let Some(fault) = reject_pan_tilt(
@@ -370,8 +381,8 @@ pub fn handle_ptz_absolute_move(state: &SharedState, body: &str) -> String {
     resp_empty("tptz", "AbsoluteMoveResponse")
 }
 
-pub fn handle_ptz_relative_move(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "RELMOVE-5607");
+pub fn handle_ptz_relative_move(state: &SharedState, body: &str, operation: &Node) -> String {
+    let head = head!(state, operation, "RELMOVE-5607");
     let inner = extract_tag(body, "Translation").unwrap_or_default();
     if has_pan_tilt(&inner)
         && let Some(fault) = reject_pan_tilt(
@@ -408,8 +419,8 @@ pub fn handle_ptz_relative_move(state: &SharedState, body: &str) -> String {
 /// ContinuousMove updates state by a small step in the velocity direction
 /// — enough that GetStatus right after Move shows movement, without
 /// requiring the mock to actually run a timer.
-pub fn handle_ptz_continuous_move(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "CONTMOVE-5608");
+pub fn handle_ptz_continuous_move(state: &SharedState, body: &str, operation: &Node) -> String {
+    let head = head!(state, operation, "CONTMOVE-5608");
     let inner = extract_tag(body, "Velocity").unwrap_or_default();
     if has_pan_tilt(&inner)
         && let Some(fault) = reject_pan_tilt(
@@ -444,13 +455,13 @@ pub fn handle_ptz_continuous_move(state: &SharedState, body: &str) -> String {
 /// write. The profile token is still validated: `Stop` names a head like every
 /// other PTZ operation, and a mock that accepts a token it does not have lets a
 /// caller ship code that only works here.
-pub fn handle_ptz_stop(state: &SharedState, body: &str) -> String {
-    let _head = head!(state, body, "STOP-5609");
+pub fn handle_ptz_stop(state: &SharedState, operation: &Node) -> String {
+    let _head = head!(state, operation, "STOP-5609");
     resp_empty("tptz", "StopResponse")
 }
 
-pub fn handle_ptz_goto_home_position(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "GOTOHOME-5610");
+pub fn handle_ptz_goto_home_position(state: &SharedState, operation: &Node) -> String {
+    let head = head!(state, operation, "GOTOHOME-5610");
     state.modify(|s| {
         let ch = s.ptz.channel_mut(&head);
         ch.pan = ch.home_pan;
@@ -461,8 +472,8 @@ pub fn handle_ptz_goto_home_position(state: &SharedState, body: &str) -> String 
     resp_empty("tptz", "GotoHomePositionResponse")
 }
 
-pub fn handle_ptz_set_home_position(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "SETHOME-5611");
+pub fn handle_ptz_set_home_position(state: &SharedState, operation: &Node) -> String {
+    let head = head!(state, operation, "SETHOME-5611");
     state.modify(|s| {
         let ch = s.ptz.channel_mut(&head);
         ch.home_pan = ch.pan;
@@ -718,8 +729,8 @@ pub fn resp_ptz_configuration(state: &SharedState, body: &str) -> String {
 /// distinction `docs/mock-server.md` §7.3 draws between a token that *filters*
 /// a list and a token that *addresses* an entity. An absent or unknown
 /// `ProfileToken` still faults — that is a malformed request either way.
-pub fn resp_ptz_compatible_configurations(state: &SharedState, body: &str) -> String {
-    let profile = match require_profile(state, body, "COMPATCFG-5614") {
+pub fn resp_ptz_compatible_configurations(state: &SharedState, operation: &Node) -> String {
+    let profile = match require_profile(state, operation, "COMPATCFG-5614") {
         Ok(t) => t,
         Err(fault) => return fault,
     };
@@ -1028,8 +1039,8 @@ fn tour_xml(t: &PtzTour) -> String {
     )
 }
 
-pub fn resp_ptz_preset_tours(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "TOURS-5612");
+pub fn resp_ptz_preset_tours(state: &SharedState, operation: &Node) -> String {
+    let head = head!(state, operation, "TOURS-5612");
     let snapshot = state
         .read()
         .ptz
@@ -1043,8 +1054,8 @@ pub fn resp_ptz_preset_tours(state: &SharedState, body: &str) -> String {
     )
 }
 
-pub fn resp_ptz_preset_tour(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "TOUR-5613");
+pub fn resp_ptz_preset_tour(state: &SharedState, body: &str, operation: &Node) -> String {
+    let head = head!(state, operation, "TOUR-5613");
     let inner = extract_tag(body, "GetPresetTour").unwrap_or_default();
     let token = extract_tag(&inner, "PresetTourToken").unwrap_or_default();
     let found = state
@@ -1072,8 +1083,8 @@ pub fn resp_ptz_preset_tour(state: &SharedState, body: &str) -> String {
 /// device supports — where the same element name inside a concrete
 /// `StartingCondition` is a single value. A one-element list here would let a
 /// parser that reads only the first child pass.
-pub fn resp_ptz_preset_tour_options(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "TOUROPT-5614");
+pub fn resp_ptz_preset_tour_options(state: &SharedState, operation: &Node) -> String {
+    let head = head!(state, operation, "TOUROPT-5614");
     let tokens: String = state
         .read()
         .ptz
@@ -1129,8 +1140,8 @@ fn next_tour_token(tours: &[PtzTour]) -> String {
         .unwrap_or_else(|| "Tour_1".to_string())
 }
 
-pub fn handle_ptz_create_preset_tour(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "CREATETOUR-5615");
+pub fn handle_ptz_create_preset_tour(state: &SharedState, operation: &Node) -> String {
+    let head = head!(state, operation, "CREATETOUR-5615");
     let token = state.modify_returning(|s| {
         let ch = s.ptz.channel_mut(&head);
         let token = next_tour_token(&ch.tours);
@@ -1157,8 +1168,8 @@ pub fn handle_ptz_create_preset_tour(state: &SharedState, body: &str) -> String 
     )
 }
 
-pub fn handle_ptz_modify_preset_tour(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "MODIFYTOUR-5616");
+pub fn handle_ptz_modify_preset_tour(state: &SharedState, body: &str, operation: &Node) -> String {
+    let head = head!(state, operation, "MODIFYTOUR-5616");
     let inner = extract_tag(body, "ModifyPresetTour").unwrap_or_default();
     let tour_xml = extract_tag(&inner, "PresetTour").unwrap_or_default();
     let token = extract_attr(&inner, "PresetTour", "token").unwrap_or_default();
@@ -1203,8 +1214,8 @@ pub fn handle_ptz_modify_preset_tour(state: &SharedState, body: &str) -> String 
 /// `Start` / `Stop` / `Pause` move the stored `state` string, mirroring the
 /// existing `SetRecordingJobMode` handler. There is no clock here, so nothing
 /// actually tours — but a client can observe that its operation took effect.
-pub fn handle_ptz_operate_preset_tour(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "OPERATETOUR-5617");
+pub fn handle_ptz_operate_preset_tour(state: &SharedState, body: &str, operation: &Node) -> String {
+    let head = head!(state, operation, "OPERATETOUR-5617");
     let inner = extract_tag(body, "OperatePresetTour").unwrap_or_default();
     let token = extract_tag(&inner, "PresetTourToken").unwrap_or_default();
     let op = extract_tag(&inner, "Operation").unwrap_or_default();
@@ -1234,8 +1245,8 @@ pub fn handle_ptz_operate_preset_tour(state: &SharedState, body: &str) -> String
     }
 }
 
-pub fn handle_ptz_remove_preset_tour(state: &SharedState, body: &str) -> String {
-    let head = head!(state, body, "RMTOUR-5618");
+pub fn handle_ptz_remove_preset_tour(state: &SharedState, body: &str, operation: &Node) -> String {
+    let head = head!(state, operation, "RMTOUR-5618");
     let inner = extract_tag(body, "RemovePresetTour").unwrap_or_default();
     if let Some(token) = extract_tag(&inner, "PresetTourToken") {
         state.modify(|s| {

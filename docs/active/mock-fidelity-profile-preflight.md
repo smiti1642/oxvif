@@ -15,6 +15,7 @@ Owner: current hardening branch. [Execution checklist](mock-fidelity-execution-c
 | [Cases and readiness](#cases-and-readiness) | Required regression and remaining design |
 | [Profile-token dependency closure](#profile-token-dependency-closure) | Paired migration paths and test boundaries |
 | [Shared whitespace serialization](#shared-whitespace-serialization) | K29 data preservation before token migration |
+| [PTZ profile identity](#ptz-profile-identity) | PTZ1 prerequisite before Media token migration |
 
 ## Shared whitespace serialization
 
@@ -56,6 +57,53 @@ Remaining: full profile-token/input/output closure, raw nested renderers, invali
 XML character handling outside Faults, field-specific whitespace/length constraints
 and real-device compatibility. Existing snapshots are not decoded or rewritten.
 
+## PTZ profile identity
+
+PTZ1, 2026-09-11, baseline `2bdf4c2`: migrate the existing 19 users of
+`require_profile`/`require_head` before changing Media Create token storage.
+They now borrow the already parsed operation from dispatch and select one
+direct, qualified scalar without trimming or decoding persisted values again.
+Non-profile fields retain their current readers. No public signature changes.
+The pinned external PTZ WSDL and common token type were reviewed for this
+identity slice; the normative notes remain outside the repository. No full PTZ
+operation/fault/field-length or schema-instance acceptance is implied.
+
+Preserve ordinary missing/empty/unknown/unbound-profile Fault payloads. Duplicate
+and nested scalar fields use generic InvalidArgs before lookup or mutation.
+Foreign, Header and extension descendants cannot supply a missing direct field;
+extra decoys do not replace a valid direct field. Field-specific sequence,
+attribute and extension policies are still open. The state test helper now
+constructs qualified requests and exercises dispatch; it does not bypass parsing.
+
+`tests/mock_ptz_profile_identity.rs` compares each selected operation for two
+different heads under ordinary and renamed literal tokens. It checks response
+payloads (excluding only the dynamic UtcTime value), complete resulting state,
+the untouched other head, mutation notifications and an explicit zoom target.
+Additional controls cover reference/CDATA identity, namespace aliases, foreign,
+nested and Header decoys, missing/empty/unknown faults and refused state/hooks.
+Both transports failed against the old reader on the intended token lookup
+assertion (RTK 1789098260; the earlier 1789098216 run used a subsequently improved
+order-independent test comparison). These are authored behavioral probes, not
+official schema fixtures or real-device movement tests.
+
+Verification: disabling duplicate-field rejection failed both new transport
+controls in the full workspace/all-feature/no-fail-fast mutation run
+(`1789098685_cargo_test.log`); the mutation was restored. Final formatting,
+both workspace Clippy modes, 1,210 all-feature and 1,115 default tests (5 ignored,
+28 suites each), both strict documentation builds and inventory self-tests
+passed. Inventory is now 159 Action sites / 157 routes / 254 direct readers;
+both ledgers track the changed arguments. Legacy shape coverage retained
+158 responses, 111 successes, 47 faults, 1,242 anchors, 1,431 skipped children,
+398 checked attributes and all zero finding pins. No new PTZ XSD-instance
+acceptance is claimed. Prior whitespace commit `2bdf4c2` passed hosted
+CI 34559338436; this local PTZ slice is a later change.
+
+Remaining closure: Media Create/read/render/bind token paths, typed adapter and
+recorded-key migration. PTZ node/config/preset/tour tokens and nested values,
+complete fault mapping, capability/effect policy, concurrent validation/mutation
+and replay dependencies remain W11/W16/W19 work. Existing state strings are
+never automatically unescaped or rewritten.
+
 ## Profile-token dependency closure
 
 Source checkpoint `4220ec2`, 2026-09-11; W02/W10/W11/W19. This inventories the
@@ -67,7 +115,7 @@ declare all configuration tokens or PTZ operations audited.
 | Media1 creation and reads | `handle_create_profile` optional Token and `resp_profile` ProfileToken use fragments; `render_profile` writes the profile token attribute verbatim | Decode scoped optional/required scalar fields and escape the attribute together; preserve meaningful whitespace and distinguish character references from literal attribute whitespace |
 | Media2 reads/deletion | `resp_profiles_media2` Token and both DeleteProfile readers already use Node; `render_profile_media2` writes the token attribute verbatim | Preserve decoded identity across both views; do not decode persisted literal strings again |
 | Profile bindings | `media::{bind_configuration,unbind_configuration}` and `media2::apply_media2_configuration` read ProfileToken via legacy extraction | Migrate profile identity on all six wrappers; configuration-token and Type/Name validation remain separately scoped, not silently certified |
-| PTZ head resolution | `ptz::require_profile` → `require_head` → ProfileEntry PTZ config → node; 18 `head!` callers plus `resp_ptz_compatible_configurations` | Pass parsed identity through all selected handlers; migrate the unqualified `state.rs::ptz_body` test inputs rather than weakening namespace validation; check both deliberately different heads |
+| PTZ head resolution | `ptz::require_profile` → `require_head` → ProfileEntry PTZ config → node; 18 `head!` callers plus `resp_ptz_compatible_configurations` | Pass parsed identity through all selected handlers; migrate the unqualified `state.rs::ptz_req` test inputs rather than weakening namespace validation; check both deliberately different heads (completed for this identity slice in PTZ1 above) |
 | Typed adapter | `adapter::{profile_token,ctx_profile}` parse a trimmed local-name DOM for GetStreamUri/ContinuousMove | Preserve public DeviceAdapter signatures and raw fallback; review exact Action dispatch separately; do not substitute strict synthetic handling for user-owned raw adapters |
 | Recorded replay | `canon::canonicalize` → fixture index → ReplayResponder, ahead of synthetic | K27 reproduces six key collisions; design persisted-key compatibility and exact input identity before claiming the complete token workflow works in replay |
 

@@ -666,6 +666,14 @@ attribute policy remain part of the unfinished validation programme.
 
 ### 7.4 PTZ — 27 operations
 
+The 19 handlers using profile/head resolution read one direct, namespace-qualified
+`ProfileToken` from the shared parsed operation. XML text is decoded once and
+whitespace is significant. Duplicate or nested scalar fields return generic
+`InvalidArgs` before state changes; foreign, nested and Header fields cannot
+supply the token. Missing/empty and unknown-token ordinary Fault payloads are
+retained. Configuration/preset/tour tokens, coordinate parsing, full Fault policy,
+replay invalidation and timing guarantees remain separate work.
+
 **Every per-profile operation requires `ProfileToken`.** A missing token faults
 (`env:Sender` / `NoProfileToken-…`); a token naming no profile faults
 (`ter:NoProfile` / `NoSuchProfile-…`); and a profile that binds no PTZ

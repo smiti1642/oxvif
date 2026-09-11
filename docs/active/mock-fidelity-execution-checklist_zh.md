@@ -101,7 +101,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W08／M3／TODO | W02／W04／W05 | `auth.rs::requires_auth/validate_ws_security/auth_fault`、responder auth gate、Device users | Scoped WSSE parsing、豁免匹配、digest／時間／nonce 限制；明示 authentication 與 authorization 邊界；錯誤去除機密，不附帶變更 auth 預設 |
 | W09／M2／TODO | W05／W06 | `fault_injection.rs`、`responder.rs`、server admin endpoint、公開 injection builder | 分離 literal／structured 與刻意 raw 異常輸出；自訂 QName、single-shot 匹配、順序、併發、clear／reset 及相容測試 |
 | W10／M2–M4／PARTIAL | 批次 W01、W03–W06 | `services/media.rs`、`media2.rs`、共用狀態與 renderer；按下方批次施工 | 每個 Media 列通過 C01–C12；兩種 view 狀態一致但不共用錯誤 wire shape；E1 不代表 DeleteProfile 列結案 |
-| W11／M2–M4／TODO | W01、W03–W06 | `services/ptz.rs`：selector、座標 attribute／space、configuration 子樹、preset／tour、auxiliary command | 兩個 head 具不同 space／capability；所有欄位效果、無效輸入 rollback；不虛構移動／時間保證 |
+| W11／M2–M4／PARTIAL | W01、W03–W06 | PTZ1 已涵蓋 19 個既有 profile／head 使用端的 scoped ProfileToken 身分；其他 selector、座標 attribute／space、configuration 子樹、preset／tour 與 auxiliary command 仍待完成 | 兩種 transport 與兩個不同 head；完整欄位效果／fault policy／併發仍未驗收，不虛構移動／時間保證 |
 | W12／M2–M4／TODO | W01、W03–W06 | `services/imaging.rs`：逐 source 的 settings／options／status／move／stop | 固定／可移動鏡頭、巢狀設定及型別範圍；無全域同名欄位 fallback 或靜默部分套用 |
 | W13／M2–M4／TODO | W01、W03–W06、W08 設計 | `services/device.rs`、DeviceIO dispatch、device state | 重複 users／network entries／scopes、storage 子樹、relay token；失敗不改 state／auth／events／hooks；維護效果依 D2 分類 |
 | W14／M2–M4／TODO | W01、W03–W06 | `services/recording.rs`：分開的 Recording／Search／Replay dispatch 與狀態生命週期 | Recording／track／job 辨識及連鎖處理；search token／終止／timeout、replay 選擇；有限模擬不代表實際錄影或媒體傳送 |

@@ -61,6 +61,10 @@
 //! normalization does not replace them; the compatibility client DOM still trims
 //! leading/trailing text. Structured Fault output uses the same escaping helper.
 //! Profile-token and nested-configuration text handling remains under review.
+//! The 19 PTZ handlers using profile/head resolution now read one direct,
+//! namespace-qualified ProfileToken from the shared parsed operation, preserving
+//! decoded whitespace and rejecting duplicate or nested scalar values. Other PTZ
+//! fields, fault policies and Media/adapter token paths are not fully migrated.
 //!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A
 //! mock that answers everything is not a test harness — it is a way of proving

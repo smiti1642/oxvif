@@ -15,6 +15,7 @@
 | [案例與開工條件](#案例與開工條件) | 必要回歸與剩餘設計 |
 | [Profile-token 依賴追蹤](#profile-token-依賴追蹤) | 成對遷移路徑及測試邊界 |
 | [共用空白序列化](#共用空白序列化) | Token 遷移前的 K29 資料保留 |
+| [PTZ profile 身分](#ptz-profile-身分) | Media token 遷移前的 PTZ1 前置工作 |
 
 ## 共用空白序列化
 
@@ -50,6 +51,46 @@ CI 34558092566；該次執行不涵蓋本次後續序列化變更。
 尚待完成：完整 profile-token input／output 閉合、raw nested renderer、Fault 以外的
 invalid XML character 處理、欄位特定空白／長度限制與實機相容性；不解碼或覆寫舊 snapshot。
 
+## PTZ profile 身分
+
+PTZ1，2026-09-11，基準 `2bdf4c2`：先遷移既有 `require_profile`／`require_head`
+的 19 個使用端，再變更 Media Create token 儲存。各 handler 從 dispatch 借用
+已解析 operation，選取直接、qualified scalar，不 trim 或再次 decode 持久化值。
+非 profile 欄位保留既有 reader，不變更公開 signature。已針對此身分範圍審閱
+pinned 外部 PTZ WSDL 與共用 token type，規範筆記留在 repository 之外；不表示
+完整 PTZ operation／fault／欄位長度或 schema instance 已驗收。
+
+保留 missing／empty／unknown／unbound profile 的既有普通 Fault payload；重複
+或內含子節點的 scalar 在 lookup 或 mutation 前使用通用 InvalidArgs。Foreign、
+Header 與 extension descendant 不能提供缺失的直接欄位；額外 decoy 不取代有效
+直接欄位。欄位特定 sequence、attribute 與 extension policy 仍未結案。State
+測試 helper 現在建立 qualified request 並通過 dispatch，不繞過解析。
+
+`tests/mock_ptz_profile_identity.rs` 對兩個不同 head 的每個選定 operation，比較
+一般 token 與重新命名 literal token。檢查 response payload（只排除動態 UtcTime
+值）、完整結果 state、未變動的另一個 head、mutation notification 與明確 zoom
+目標。另涵蓋 reference／CDATA 身分、namespace alias、foreign／nested／Header
+decoy、missing／empty／unknown fault，以及拒絕後的 state／hook。兩種 transport
+均在舊 reader 的預期 token lookup assertion 失敗（RTK 1789098260；較早的
+1789098216 執行使用後來改良為不受 attribute map 順序影響的測試比較）。這些是
+自訂行為探針，不是官方 schema fixture，也不是實機移動測試。
+
+驗證：停用 duplicate-field rejection 後，完整 workspace／all-features／
+no-fail-fast mutation 執行中的兩個新 transport 控制均失敗
+（`1789098685_cargo_test.log`），mutation 已還原。最終格式檢查、兩種 workspace
+Clippy、1,210 項 all-features 與 1,115 項 default 測試（各 5 ignored、28 suites）、
+兩種嚴格文件建置及 inventory self-test 均通過。Inventory 現為 159 個 Action
+site／157 個 route／254 個 direct reader，兩份 ledger 已更新參數。舊版 shape
+coverage 維持 158 份 response、111 個 success、47 個 fault、1,242 個 anchor、
+1,431 個 skipped child、398 個 checked attribute，finding pin 均為零。不宣稱
+新增 PTZ XSD instance 驗收。前一筆空白修正 `2bdf4c2` 通過 hosted CI 34559338436；
+本次本機 PTZ 變更晚於該提交。
+
+尚待閉合：Media Create／read／render／bind token 路徑、typed adapter 及 recorded
+key 遷移。PTZ node／config／preset／tour token 與 nested value、完整 fault mapping、
+capability／effect policy、併發 validation／mutation 與 replay dependency 仍屬
+W11／W16／W19 工作；不自動 unescape 或改寫既有 state 字串。
+
 ## Profile-token 依賴追蹤
 
 來源檢查點 `4220ec2`，2026-09-11；W02／W10／W11／W19。本節在變更儲存表示前
@@ -60,7 +101,7 @@ invalid XML character 處理、欄位特定空白／長度限制與實機相容�
 | Media1 建立與讀取 | `handle_create_profile` 的 optional Token 與 `resp_profile` 的 ProfileToken 仍用 fragment；`render_profile` 原樣輸出 profile token attribute | Scoped optional／required scalar decoding 與 attribute escaping 同步遷移；保留顯著空白，區分 character reference 與 literal attribute whitespace |
 | Media2 讀取／刪除 | `resp_profiles_media2` Token 與兩個 DeleteProfile reader 已用 Node；`render_profile_media2` 原樣輸出 token attribute | 兩種 view 保留 decoded 身分；不再次 decode 已保存的 literal string |
 | Profile binding | `media::{bind_configuration,unbind_configuration}` 及 `media2::apply_media2_configuration` 用 legacy reader 讀 ProfileToken | 六個 wrapper 全部遷移 profile 身分；configuration-token 與 Type／Name 驗證另列範圍，不默認完成 |
-| PTZ head 解析 | `ptz::require_profile` → `require_head` → ProfileEntry PTZ config → node；18 個 `head!` caller 及 `resp_ptz_compatible_configurations` | 所選 handler 傳遞 parsed 身分；更新未宣告 namespace 的 `state.rs::ptz_body` 測試，不放寬驗證；使用刻意不同的兩個 head |
+| PTZ head 解析 | `ptz::require_profile` → `require_head` → ProfileEntry PTZ config → node；18 個 `head!` caller 及 `resp_ptz_compatible_configurations` | 所選 handler 傳遞 parsed 身分；更新未宣告 namespace 的 `state.rs::ptz_req` 測試，不放寬驗證；使用刻意不同的兩個 head（此身分範圍已於上方 PTZ1 完成） |
 | Typed adapter | `adapter::{profile_token,ctx_profile}` 對 GetStreamUri／ContinuousMove 使用會 trim 的 local-name DOM | 保留公開 DeviceAdapter signature 與 raw fallback；另審 exact Action dispatch，不以嚴格 synthetic 處理取代使用者 raw adapter |
 | Recorded replay | `canon::canonicalize` → fixture index → ReplayResponder，先於 synthetic | K27 已重現六種 key collision；宣稱完整 token workflow 適用 replay 前，先設計持久化 key 相容性與精確 input identity |
 

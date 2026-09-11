@@ -178,34 +178,37 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 
 [dispatch_ptz](../../src/mock/dispatch.rs) · [services/ptz.rs](../../src/mock/services/ptz.rs)
 
+PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-profile-身分)，
+不表示完整 operation 已驗收；其他欄位與完整 Fault policy 仍待完成.
+
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ptz.GetServiceCapabilities` | `ptz::resp_ptz_service_capabilities` | `` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GetStatus` | `ptz::resp_ptz_status` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GetPresets` | `ptz::resp_ptz_presets` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.SetPreset` | `ptz::handle_ptz_set_preset` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.RemovePreset` | `ptz::handle_ptz_remove_preset` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GotoPreset` | `ptz::handle_ptz_goto_preset` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.AbsoluteMove` | `ptz::handle_ptz_absolute_move` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.RelativeMove` | `ptz::handle_ptz_relative_move` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.ContinuousMove` | `ptz::handle_ptz_continuous_move` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.Stop` | `ptz::handle_ptz_stop` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GotoHomePosition` | `ptz::handle_ptz_goto_home_position` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.SetHomePosition` | `ptz::handle_ptz_set_home_position` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
+| `ptz.GetStatus` | `ptz::resp_ptz_status` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.GetPresets` | `ptz::resp_ptz_presets` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.SetPreset` | `ptz::handle_ptz_set_preset` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.RemovePreset` | `ptz::handle_ptz_remove_preset` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.GotoPreset` | `ptz::handle_ptz_goto_preset` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.AbsoluteMove` | `ptz::handle_ptz_absolute_move` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.RelativeMove` | `ptz::handle_ptz_relative_move` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.ContinuousMove` | `ptz::handle_ptz_continuous_move` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.Stop` | `ptz::handle_ptz_stop` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.GotoHomePosition` | `ptz::handle_ptz_goto_home_position` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.SetHomePosition` | `ptz::handle_ptz_set_home_position` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
 | `ptz.GetNodes` | `ptz::resp_ptz_nodes` | `state` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.GetNode` | `ptz::resp_ptz_node` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.GetConfigurations` | `ptz::resp_ptz_configurations` | `state` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GetCompatibleConfigurations` | `ptz::resp_ptz_compatible_configurations` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
+| `ptz.GetCompatibleConfigurations` | `ptz::resp_ptz_compatible_configurations` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
 | `ptz.GetConfiguration` | `ptz::resp_ptz_configuration` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.SetConfiguration` | `ptz::handle_ptz_set_configuration` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.GetConfigurationOptions` | `ptz::resp_ptz_configuration_options` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GetPresetTours` | `ptz::resp_ptz_preset_tours` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GetPresetTour` | `ptz::resp_ptz_preset_tour` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GetPresetTourOptions` | `ptz::resp_ptz_preset_tour_options` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.CreatePresetTour` | `ptz::handle_ptz_create_preset_tour` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.ModifyPresetTour` | `ptz::handle_ptz_modify_preset_tour` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.OperatePresetTour` | `ptz::handle_ptz_operate_preset_tour` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.RemovePresetTour` | `ptz::handle_ptz_remove_preset_tour` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
+| `ptz.GetPresetTours` | `ptz::resp_ptz_preset_tours` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.GetPresetTour` | `ptz::resp_ptz_preset_tour` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.GetPresetTourOptions` | `ptz::resp_ptz_preset_tour_options` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.CreatePresetTour` | `ptz::handle_ptz_create_preset_tour` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.ModifyPresetTour` | `ptz::handle_ptz_modify_preset_tour` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.OperatePresetTour` | `ptz::handle_ptz_operate_preset_tour` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
+| `ptz.RemovePresetTour` | `ptz::handle_ptz_remove_preset_tour` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
 | `ptz.SendAuxiliaryCommand` | `ptz::handle_ptz_send_auxiliary_command` | `body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 
 ## imaging
