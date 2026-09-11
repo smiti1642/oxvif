@@ -23,9 +23,9 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 247 direct occurrences of five reader spellings are indexed: 232 before
-  top-level test modules and 15 inside those modules. The former span 72
-  enclosing symbols, **not** 72 defective operations. This includes test-only
+- 243 direct occurrences of five reader spellings are indexed: 228 before
+  top-level test modules and 15 inside those modules. The former span 71
+  enclosing symbols, **not** 71 defective operations. This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
   helper touch; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
@@ -219,7 +219,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 
 | Site | Reader | Scope:occurrences |
 | --- | --- | --- |
-| `src/mock/auth.rs::validate_ws_security` | `extract_tag` | `production:4` |
 | `src/mock/canon.rs::canonicalize` | `XmlNode::parse` | `production:1` |
 | `src/mock/discovery_responder.rs::probe_response` | `XmlNode::parse` | `production:1` |
 | `src/mock/discovery_responder.rs::build_probe_match_round_trips_through_the_client_parser` | `XmlNode::parse` | `test:1` |

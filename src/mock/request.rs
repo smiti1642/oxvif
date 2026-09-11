@@ -4,7 +4,8 @@
 //! It is not an XSD validator. Legacy fragment extractors remain in use by
 //! handlers that have not yet migrated. Replay uses a bounded secondary identity
 //! check over this tree without applying synthetic routing/fault policy;
-//! authentication is unchanged.
+//! authentication uses the same bounded tree with a separate scoped Header
+//! projection, preserving the auth gate's precedence over raw/replay responses.
 
 use std::{borrow::Cow, collections::HashMap};
 
@@ -347,6 +348,18 @@ pub(super) struct Request {
 impl Request {
     pub(super) fn parse(xml: &str) -> Result<Self, RequestError> {
         Ok(Self { root: parse(xml)? })
+    }
+
+    /// Authentication selects a direct SOAP Header only, independently of the
+    /// synthetic Action policy. Raw responders may still own the operation body.
+    pub(super) fn header(&self) -> Result<Option<&Node>, RequestError> {
+        if self.root.name == "Envelope" && self.root.ns != SOAP {
+            return Err(RequestError::VersionMismatch);
+        }
+        if self.root.name != "Envelope" || self.root.ns != SOAP {
+            return Ok(None);
+        }
+        self.root.child(SOAP, "Header")
     }
 
     pub(super) fn operation(&self, ns: &str, name: &str) -> Result<&Node, RequestError> {

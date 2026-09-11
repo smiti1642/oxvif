@@ -98,7 +98,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | 結構化 auth／空 chain／選定 DeleteProfile fault，另納入已審查的 generic synthetic-boundary fault；資源／DTD 名稱明確屬 mock 自訂策略 | Expanded fault QName、typed failure、消費端及 state 控制；其他一般服務分支與 structured Detail 待完成，不概括宣稱符合規格 |
 | W06／M2／PARTIAL | 預設切換前完成 W05 設計 | 已完成第一層 subcode 的 client／health 控制，以及認證 CLI JSON／table 子程序控制；公開錯誤欄位未改變 | 服務預設切換前仍須擴充 nested／flat／vendor、transport／session 與消費端覆蓋；維持診斷及 exit-code 意義 |
 | W07／M2、M3／PARTIAL | W03／W05 設計、W06 | 已實作完整 synthetic Action 路由及共用 body identity；HTTP 擷取與 binding 仍未完成 | 全來源路由及 HTTP／in-process 邊界控制；content type／status／無效 UTF-8／缺少或衝突 header 及 endpoint 策略尚未驗收 |
-| W08／M3／TODO | W02／W04／W05 | `auth.rs::requires_auth/validate_ws_security/auth_fault`、responder auth gate、Device users | Scoped WSSE parsing、豁免匹配、digest／時間／nonce 限制；明示 authentication 與 authorization 邊界；錯誤去除機密，不附帶變更 auth 預設 |
+| W08／M3／PARTIAL | W02／W04／W05 | Scoped Header／UsernameToken 解析、明確 digest／encoding／role 政策、不反射輸入的固定錯誤及精確豁免；見[認證盤點](mock-fidelity-auth-preflight_zh.md) | 兩種 transport 的身分、拒絕、state／hook 及即時 user table 控制；保留 auth 預設／順序與普通 CLI 分類。未驗收 freshness／nonce-reuse、角色授權或完整 WSSE／HTTP 安全 |
 | W09／M2／TODO | W05／W06 | `fault_injection.rs`、`responder.rs`、server admin endpoint、公開 injection builder | 分離 literal／structured 與刻意 raw 異常輸出；自訂 QName、single-shot 匹配、順序、併發、clear／reset 及相容測試 |
 | W10／M2–M4／PARTIAL | 批次 W01、W03–W06 | `services/media.rs`、`media2.rs`、共用狀態與 renderer；按下方批次施工 | 每個 Media 列通過 C01–C12；兩種 view 狀態一致但不共用錯誤 wire shape；E1 不代表 DeleteProfile 列結案 |
 | W11／M2–M4／PARTIAL | W01、W03–W06 | PTZ1 已涵蓋 19 個既有 profile／head 使用端的 scoped ProfileToken 身分；其他 selector、座標 attribute／space、configuration 子樹、preset／tour 與 auxiliary command 仍待完成 | 兩種 transport 與兩個不同 head；完整欄位效果／fault policy／併發仍未驗收，不虛構移動／時間保證 |

@@ -291,6 +291,23 @@ When on, the mock validates WS-Security **`PasswordDigest`**
 (`src/mock/auth.rs`) — the same `Base64(SHA1(nonce + created + password))`
 construction a real device uses.
 
+Credential lookup is scoped to one qualified SOAP 1.2 Header/Security/UsernameToken
+path. Required credential fields are unique direct scalars, decoded once; username
+and Created whitespace is preserved. Password must declare the full PasswordDigest
+Type. Nonce EncodingType may be omitted or declare Base64Binary, and its decoded
+bytes must be nonempty. Base64 lexical whitespace is ignored only for decoding.
+Duplicate/nested fields, foreign or Body credentials, unsupported recipient roles
+and malformed/bounded XML cannot authenticate. Only the absent or explicit SOAP
+ultimateReceiver role is supported. Plain missing-credential diagnostics retain
+`Missing Username`; other diagnostic reasons are static and do not echo credentials.
+
+This is an authentication test double, not production access control. It does not
+check Created freshness or nonce reuse, enforce user-level authorization, implement
+PasswordText, or process all WS-Security features. Repeated/stale correctly hashed
+tokens can pass. Raw/replay responses do not bypass an enabled auth gate; fault
+injection still precedes it. The existing HTTP body limit may return `413` before
+SOAP authentication runs. Public Fault classification and auth-off defaults are unchanged.
+
 - **Seeded credentials**: `admin` / `admin` (Administrator) and
   `operator` / `operator` (Operator).
 - **One action is exempt**: `GetSystemDateAndTime`. The ONVIF spec requires it
@@ -1058,8 +1075,9 @@ Authentication faults and the empty-chain defensive Receiver fault now use a
 private structured serializer. Authentication retains `s:Sender` and first
 subcode `wsse:FailedAuthentication`; the subcode is now bound at its Value
 element. Literal reason text is escaped once, invalid XML characters become
-U+FFFD, and a literal CR is represented by a character reference. This does not
-change credential validation, exemptions, authentication defaults or HTTP status.
+U+FFFD, and a literal CR is represented by a character reference. Credential
+parsing has separately changed as described in §4; exemptions, authentication
+defaults and HTTP status are unchanged.
 The client still exposes the first subcode, not the deepest nested subcode.
 
 **Remaining deviation.** Other service faults still use the legacy flat `Code/Value`
@@ -1191,8 +1209,10 @@ from that schema may enter this repository. Explicitly selecting the test now
 fails if resources are missing; the external SOAP 1.2 envelope schema is also
 required. Node-scoped namespace resolution and separate Envelope/payload checks
 include Fault structure, but do not validate all XSD values or error semantics.
-The planned external-validator CI job is not yet delivered; the existing inventory
-job does not run this check. See the
+Separate Windows/Linux CI now validates the selected 40 profile request/response
+instances with independently pinned Xerces and external schemas. That limited
+corpus does not cover all operations or authentication; the inventory job alone
+does not validate XML. See the
 [verification checkpoint](active/mock-fidelity-schema-preflight.md).
 
 **As of 0.15.0 all ten of its counts are 0.** That is not the same as "the

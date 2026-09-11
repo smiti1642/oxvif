@@ -85,6 +85,10 @@ impl MockServerBuilder {
 
     /// Enforce WS-Security `PasswordDigest` (default `false`). With it off, a
     /// credential-less client works out of the box.
+    /// Credentials must be unique direct fields in the qualified SOAP Header
+    /// UsernameToken, with explicit PasswordDigest Type and a nonempty base64
+    /// nonce. Timestamp freshness, nonce reuse and user-level permissions are
+    /// not enforced; this is a test harness, not production access control.
     pub fn enforce_auth(mut self, yes: bool) -> Self {
         self.enforce_auth = yes;
         self

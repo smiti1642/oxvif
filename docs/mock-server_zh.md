@@ -241,6 +241,20 @@ mock conformance。詳見[強化計畫](active/mock-fidelity-hardening-plan_zh.m
 
 啟用後會驗證 WS-Security **`PasswordDigest`**（`src/mock/auth.rs`），計算方式與實機相同：`Base64(SHA1(nonce + created + password))`。
 
+憑證僅從唯一 qualified SOAP 1.2 Header／Security／UsernameToken 路徑讀取。
+必要欄位須為唯一直接 scalar，僅解碼一次；username 與 Created 空白保留。
+Password 必須宣告完整 PasswordDigest Type。Nonce EncodingType 可省略或宣告
+Base64Binary，解碼後須為非空 bytes；只有 base64 解碼會忽略 lexical whitespace。
+重複／巢狀欄位、foreign 或 Body 憑證、不支援的 recipient role、malformed／超界
+XML 不得通過認證。Role 僅支援省略或明確 SOAP ultimateReceiver。一般缺少憑證
+仍回報 `Missing Username`；其餘診斷 reason 為固定文字，不反射憑證。
+
+這是認證測試替身，不是正式環境存取控制。尚未檢查 Created freshness 或 nonce
+重用、實施 user-level authorization、支援 PasswordText 或全部 WS-Security 功能。
+重複／過期但 hash 正確的 token 仍可通過。Raw／replay 回應不繞過啟用的 auth gate；
+fault injection 仍優先處理。既有 HTTP body 上限可能在 SOAP 認證前回傳 `413`。
+公開 Fault 分類與 auth-off 預設值不變。
+
 - 預載帳號為 `admin` / `admin`（Administrator）與 `operator` / `operator`（Operator）。
 - `GetSystemDateAndTime` 不需要驗證。ONVIF 規範要求此操作允許未驗證存取，因為 client 必須先取得裝置時間才能產生有效 digest。
 - 未實作 HTTP Digest。只設定 HTTP Digest 的 client 即使憑證正確也無法通過 mock 驗證。
@@ -613,8 +627,9 @@ NoSuchRecording-DELREC-5701: Rec_999
 認證 Fault 及空 responder chain 的防禦性 Receiver Fault 已使用私有結構化
 serializer。認證錯誤維持 `s:Sender` 與第一層 subcode `wsse:FailedAuthentication`，
 並於其 Value element 宣告 namespace。Reason 原始文字只轉義一次；XML 不允許
-的字元改為 U+FFFD，原始 CR 使用 character reference 表示。這不改變憑證驗證、
-豁免項目、認證預設值或 HTTP status。Client 仍只公開第一層 subcode，而非最深層。
+的字元改為 U+FFFD，原始 CR 使用 character reference 表示。憑證解析另依 §4
+更新；豁免項目、認證預設值及 HTTP status 不變。Client 仍只公開第一層 subcode，
+而非最深層。
 
 **仍有偏差：** 其他服務 Fault 仍採平面的 `Code/Value` 表示。Namespace binding
 修正並未完成各操作的 code／subcode 階層，也未驗證 HTTP status 行為；這些
@@ -718,7 +733,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 | End-to-end flow | `tests/mock_workflow.rs` |
 | XML namespace、name、cardinality 與 sequence order 符合 ONVIF schema | `tests/mock_schema_shape.rs`；限制如下 |
 
-`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。專用外部驗證 CI job 尚未完成；現有清冊 job 不執行此檢查。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
+`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 現已使用固定版本的 Xerces 與外部 schema，驗證選定的 40 份 profile request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
 
 目前 49 組 round-trip 全數為 working，無 static 或 known-broken；35 組 token row 中 29 組可區分、6 組明確標記為 blind。測試表的每個 row 都宣告意圖，避免已知限制演變成未追蹤的永久盲點。
 

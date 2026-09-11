@@ -207,6 +207,8 @@
 //! Empty synthetic profile identities are refused with `mock:RequestPolicy`;
 //! omit the Create token for allocation and explicitly repair empty snapshot
 //! tokens. The mock does not silently rename persisted entries.
+//! Opt-in mock authentication uses scoped Header/UsernameToken fields and explicit
+//! PasswordDigest Type; it does not enforce freshness, nonce reuse or user permissions.
 //!
 //! ```ignore
 //! // Cargo.toml:  oxvif = { version = "0.16", features = ["mock"] }

@@ -157,7 +157,11 @@
 //! remain under review.
 //! Authentication faults use a structured serializer with a bound first
 //! `wsse:FailedAuthentication` subcode and escaped reason text; XML-invalid reason
-//! characters become U+FFFD. Credential policy and HTTP status are unchanged.
+//! characters become U+FFFD. Credential parsing now requires unique qualified
+//! Header/UsernameToken fields, explicit PasswordDigest Type and a nonempty
+//! base64 nonce; input identities are decoded without trimming and errors do not
+//! echo credentials. Auth defaults and HTTP status are unchanged. Freshness,
+//! nonce reuse prevention and user-level authorization are not implemented.
 //! Remaining shared fault output escapes text and binds known prefixes, but still
 //! uses the legacy flat code hierarchy. These changes do not claim full conformance.
 

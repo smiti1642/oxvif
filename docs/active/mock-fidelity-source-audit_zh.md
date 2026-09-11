@@ -23,8 +23,8 @@
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 247 個直接呼叫：232 個位於頂層 test module 之前，15 個
-  位於其中。前者分布於 72 個 enclosing symbol，**不是** 72 個有缺陷的操作。
+- 五種 reader 拼法共 243 個直接呼叫：228 個位於頂層 test module 之前，15 個
+  位於其中。前者分布於 71 個 enclosing symbol，**不是** 71 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
 - W00 已完成目前字面值形式的來源核對；K06 synthetic 別名路由已於
@@ -213,7 +213,6 @@
 
 | Site | Reader | Scope:occurrences |
 | --- | --- | --- |
-| `src/mock/auth.rs::validate_ws_security` | `extract_tag` | `production:4` |
 | `src/mock/canon.rs::canonicalize` | `XmlNode::parse` | `production:1` |
 | `src/mock/discovery_responder.rs::probe_response` | `XmlNode::parse` | `production:1` |
 | `src/mock/discovery_responder.rs::build_probe_match_round_trips_through_the_client_parser` | `XmlNode::parse` | `test:1` |

@@ -1,14 +1,24 @@
 //! WS-Security PasswordDigest authentication for the mock server.
 //!
 //! Validates the `<wsse:Security>` header in incoming SOAP requests.
+//! Scoped PasswordDigest checking only: no freshness, nonce reuse prevention,
+//! user-level authorization or full WS-Security processing is implemented.
 //! Only `GetSystemDateAndTime` is exempt (ONVIF spec requires it to be
 //! unauthenticated so clients can sync their clock before authenticating).
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha1::{Digest, Sha1};
 
+use crate::mock::request::{Node, Request};
 use crate::mock::state::SharedState;
-use crate::mock::xml_parse::extract_tag;
+
+const WSSE: &str =
+    "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd";
+const WSU: &str =
+    "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd";
+const DIGEST_TYPE: &str = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest";
+const BASE64_TYPE: &str = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary";
+const INVALID_HEADER: &str = "Invalid WS-Security header";
 
 /// SOAP actions that do NOT require authentication.
 const AUTH_EXEMPT: &[&str] = &["http://www.onvif.org/ver10/device/wsdl/GetSystemDateAndTime"];
@@ -18,22 +28,58 @@ pub fn requires_auth(action: &str) -> bool {
     !AUTH_EXEMPT.contains(&action)
 }
 
-/// Validate WS-Security credentials in the SOAP body against the live
+/// Validate scoped WS-Security credentials in the SOAP Header against the live
 /// user table. Each user has their own password; any configured user
 /// that produces a matching digest passes.
 ///
 /// Returns `Ok(())` if valid, `Err(reason)` if invalid.
 pub fn validate_ws_security(body: &str, state: &SharedState) -> Result<(), String> {
-    let username = extract_tag(body, "Username").ok_or_else(|| "Missing Username".to_string())?;
-    let digest_b64 =
-        extract_tag(body, "Password").ok_or_else(|| "Missing Password digest".to_string())?;
-    let nonce_b64 = extract_tag(body, "Nonce").ok_or_else(|| "Missing Nonce".to_string())?;
-    let created =
-        extract_tag(body, "Created").ok_or_else(|| "Missing Created timestamp".to_string())?;
+    let request = Request::parse(body).map_err(|_| INVALID_HEADER)?;
+    let header = request
+        .header()
+        .map_err(|_| INVALID_HEADER)?
+        .ok_or("Missing Username")?;
+    let security = header
+        .child(WSSE, "Security")
+        .map_err(|_| INVALID_HEADER)?
+        .ok_or("Missing Username")?;
+    if let Some(role) = security.attribute("http://www.w3.org/2003/05/soap-envelope", "role")
+        && role != "http://www.w3.org/2003/05/soap-envelope/role/ultimateReceiver"
+    {
+        return Err("Unsupported WS-Security role".into());
+    }
+    let token = security
+        .child(WSSE, "UsernameToken")
+        .map_err(|_| INVALID_HEADER)?
+        .ok_or("Missing Username")?;
+    let username = field(token, WSSE, "Username", "Missing Username")?;
+    let digest_b64 = field(token, WSSE, "Password", "Missing Password digest")?;
+    let password_node = token
+        .child(WSSE, "Password")
+        .map_err(|_| INVALID_HEADER)?
+        .ok_or("Missing Password digest")?;
+    if password_node.attribute("", "Type") != Some(DIGEST_TYPE) {
+        return Err("Unsupported WS-Security password type".into());
+    }
+    let nonce_b64 = field(token, WSSE, "Nonce", "Missing Nonce")?;
+    let nonce_node = token
+        .child(WSSE, "Nonce")
+        .map_err(|_| INVALID_HEADER)?
+        .ok_or("Missing Nonce")?;
+    if nonce_node
+        .attribute("", "EncodingType")
+        .is_some_and(|kind| kind != BASE64_TYPE)
+    {
+        return Err("Unsupported nonce encoding".into());
+    }
+    let created = field(token, WSU, "Created", "Missing Created timestamp")?;
 
     let nonce_raw = STANDARD
-        .decode(&nonce_b64)
-        .map_err(|e| format!("Invalid nonce base64: {e}"))?;
+        .decode(base64_text(nonce_b64))
+        .map_err(|_| "Invalid nonce base64")?;
+    if nonce_raw.is_empty() {
+        return Err("Invalid nonce base64".into());
+    }
 
     let password = {
         let s = state.read();
@@ -41,7 +87,7 @@ pub fn validate_ws_security(body: &str, state: &SharedState) -> Result<(), Strin
             .iter()
             .find(|u| u.username == username)
             .map(|u| u.password.clone())
-            .ok_or_else(|| format!("Unknown user: {username}"))?
+            .ok_or("Unknown user")?
     };
 
     // Recompute: SHA-1(nonce_raw || created || password)
@@ -49,13 +95,41 @@ pub fn validate_ws_security(body: &str, state: &SharedState) -> Result<(), Strin
     h.update(&nonce_raw);
     h.update(created.as_bytes());
     h.update(password.as_bytes());
-    let expected = STANDARD.encode(h.finalize());
+    let expected = h.finalize();
+    let supplied = STANDARD
+        .decode(base64_text(digest_b64))
+        .map_err(|_| "Invalid password digest base64")?;
 
-    if digest_b64 == expected {
+    if supplied.as_slice() == expected.as_slice() {
         Ok(())
     } else {
-        Err(format!("Password digest mismatch for user {username}"))
+        Err("Password digest mismatch".into())
     }
+}
+
+fn field<'a>(
+    token: &'a Node,
+    ns: &str,
+    name: &str,
+    missing: &'static str,
+) -> Result<&'a str, String> {
+    let value = token
+        .child(ns, name)
+        .map_err(|_| INVALID_HEADER)?
+        .ok_or(missing)?
+        .scalar_text()
+        .map_err(|_| INVALID_HEADER)?;
+    if value.is_empty() {
+        return Err(missing.into());
+    }
+    Ok(value)
+}
+
+fn base64_text(value: &str) -> String {
+    value
+        .chars()
+        .filter(|c| !matches!(c, ' ' | '\t' | '\n' | '\r'))
+        .collect()
 }
 
 /// Generate a SOAP Fault for authentication failure.
@@ -144,16 +218,14 @@ mod tests {
         h.update(created.as_bytes());
         h.update(password.as_bytes());
         let digest_b64 = STANDARD.encode(h.finalize());
-        format!(
-            r#"<wsse:Security>
-                <wsse:UsernameToken>
-                  <wsse:Username>{username}</wsse:Username>
-                  <wsse:Password>{digest_b64}</wsse:Password>
-                  <wsse:Nonce>{nonce_b64}</wsse:Nonce>
-                  <wsu:Created>{created}</wsu:Created>
-                </wsse:UsernameToken>
-              </wsse:Security>"#
-        )
+        crate::soap::SoapEnvelope::new("<tds:GetDeviceInformation/>".into())
+            .with_security(crate::soap::WsSecurityToken::from_parts(
+                username,
+                &digest_b64,
+                &nonce_b64,
+                created,
+            ))
+            .build()
     }
 
     #[test]
@@ -179,7 +251,7 @@ mod tests {
             "2026-04-15T00:00:00Z",
             b"nonce_admin_20bytes!",
         );
-        assert!(validate_ws_security(&body, &s).is_ok());
+        assert_eq!(validate_ws_security(&body, &s), Ok(()));
     }
 
     #[test]
@@ -192,7 +264,7 @@ mod tests {
             "2026-04-15T00:00:00Z",
             b"nonce_op_20bytes_x!!",
         );
-        assert!(validate_ws_security(&body, &s).is_ok());
+        assert_eq!(validate_ws_security(&body, &s), Ok(()));
     }
 
     #[test]
@@ -205,7 +277,10 @@ mod tests {
             "2026-04-15T00:00:00Z",
             b"nonce_cross_20byts!!",
         );
-        assert!(validate_ws_security(&body, &s).is_err());
+        assert_eq!(
+            validate_ws_security(&body, &s).unwrap_err(),
+            "Password digest mismatch"
+        );
     }
 
     #[test]
@@ -217,25 +292,32 @@ mod tests {
             "2026-04-15T00:00:00Z",
             b"test_nonce_20_bytes!",
         );
-        assert!(validate_ws_security(&body, &s).is_err());
+        assert_eq!(
+            validate_ws_security(&body, &s).unwrap_err(),
+            "Password digest mismatch"
+        );
     }
 
     #[test]
     fn unknown_user_fails() {
         let s = new_state();
-        let body = r#"<wsse:Username>hacker</wsse:Username>
-                      <wsse:Password>x</wsse:Password>
-                      <wsse:Nonce>eA==</wsse:Nonce>
-                      <wsu:Created>x</wsu:Created>"#;
-        let err = validate_ws_security(body, &s).unwrap_err();
-        assert!(err.contains("Unknown user"), "got: {err}");
+        let body = build_digest_body(
+            "hacker",
+            "unused",
+            "2026-04-15T00:00:00Z",
+            b"unknown-user-nonce",
+        );
+        assert_eq!(validate_ws_security(&body, &s).unwrap_err(), "Unknown user");
     }
 
     #[test]
     fn missing_credentials_fails() {
         let s = new_state();
-        let body = "<s:Body>no auth here</s:Body>";
-        assert!(validate_ws_security(body, &s).is_err());
+        let body = crate::soap::SoapEnvelope::new("<tds:GetDeviceInformation/>".into()).build();
+        assert_eq!(
+            validate_ws_security(&body, &s).unwrap_err(),
+            "Missing Username"
+        );
     }
 
     #[test]
@@ -255,6 +337,6 @@ mod tests {
             "2026-04-15T00:00:00Z",
             b"viewer_nonce_20bytes",
         );
-        assert!(validate_ws_security(&body, &s).is_ok());
+        assert_eq!(validate_ws_security(&body, &s), Ok(()));
     }
 }

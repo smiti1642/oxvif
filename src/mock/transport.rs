@@ -71,9 +71,12 @@ impl MockTransport {
         }
     }
 
-    /// Enforce WS-Security `PasswordDigest` on non-exempt actions, matching a
-    /// real device. The client must then supply matching credentials
+    /// Enforce scoped WS-Security `PasswordDigest` on non-exempt actions.
+    /// The client must supply a qualified Header/UsernameToken and matching credentials
     /// (default users: `admin`/`admin`, `operator`/`operator`).
+    /// Requires explicit PasswordDigest Type and a nonempty base64 nonce.
+    /// Does not enforce timestamp freshness, nonce reuse or user-level permissions;
+    /// this is a test harness, not production access control.
     pub fn with_auth(mut self) -> Self {
         self.enforce_auth = true;
         self

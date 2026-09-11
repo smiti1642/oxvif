@@ -374,7 +374,7 @@ mod tests {
         assert_fault(
             &chain.respond(&request).await,
             "s:Sender",
-            "Missing Username",
+            "Invalid WS-Security header",
             Some("wsse:FailedAuthentication"),
         );
         assert!(seen.lock().unwrap().is_empty());

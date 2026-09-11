@@ -25,6 +25,7 @@ below. No new product decision is required here.
 | [State hook snapshot work](#state-hook-snapshot-work) | W18 bounded lock and observation policy |
 | [Replay key credential boundary](#replay-key-credential-boundary) | K28 cleanup, migration and exclusions |
 | [Replay key collision reproduction](#replay-key-collision-reproduction) | K27 six-case known-gap evidence |
+| [Authentication preflight](mock-fidelity-auth-preflight.md) | W08 scoped credentials, limits and verification |
 
 ## Replay key collision reproduction
 

@@ -22,6 +22,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Opt-in mock authentication now reads unique qualified Header/UsernameToken
+  fields, preserving decoded username/Created text and rejecting misplaced or
+  ambiguous credentials. Password requires explicit PasswordDigest Type; nonce
+  encoding must be supported and decode to nonempty bytes. Authentication errors
+  no longer echo credentials. Update bare/unqualified test fixtures to proper
+  SOAP headers. Auth defaults, ordinary missing-credential CLI diagnostics and
+  Fault classification are unchanged; freshness, nonce reuse prevention and
+  user-level authorization remain unimplemented.
 - Typed Metamorph adapters now require exact supported Action/operation identity
   and preserve decoded profile-token whitespace. Malformed or ambiguous requests
   no longer call typed hooks with invented empty tokens. ContinuousMove requires
