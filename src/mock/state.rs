@@ -831,7 +831,8 @@ pub struct ProfileEntry {
     /// Literal profile identifier. Migrated Media and PTZ identity paths decode
     /// request XML once and compare this value without trimming. Profile views
     /// escape it on output; loading a snapshot never unescapes it automatically.
-    /// Empty-token policy and other mock consumer paths remain separately scoped.
+    /// Use a nonempty value: unfiltered profile reads refuse empty seeded tokens
+    /// with Receiver / `mock:RequestPolicy`, without rewriting stored entries.
     pub token: String,
     pub name: String,
     /// `true` for factory-baked profiles that can't be deleted.

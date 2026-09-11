@@ -17,6 +17,7 @@
 | [共用空白序列化](#共用空白序列化) | Token 遷移前的 K29 資料保留 |
 | [PTZ profile 身分](#ptz-profile-身分) | Media token 遷移前的 PTZ1 前置工作 |
 | [Media profile 身分](#media-profile-身分) | P2 建立／讀取／render／binding 成對遷移 |
+| [空 profile 政策](#空-profile-政策) | K30 明確 mock 限制與錯誤後 state 控制 |
 
 ## 共用空白序列化
 
@@ -101,7 +102,7 @@ Media binding ProfileToken reader，現在借用唯一、直接 qualified scalar
 值仍使用舊 reader。
 
 Optional scalar accessor 區分 omission 與明確空值，不加入欄位特定 trim。
-保留既有 missing／empty policy：Create 仍可儲存明確空 token，GetProfile 保留
+在 P2 階段、下方 K30 結案之前，曾保留既有 missing／empty policy：Create 可儲存明確空 token，GetProfile 保留
 空值 lookup fallback，而 binding plan 拒絕空身分。Typed client 無法消費空 profile
 token。這是已記錄的剩餘政策缺陷，不表示空 token 流程已驗收，也不是新增規範上的
 空 token 規則。長度／容量、重複 configuration／Type／Name／initial binding 規則
@@ -131,6 +132,45 @@ response、111 個 success、47 個 fault、1,242 個 anchor、1,431 個 skipped
 398 個 checked attribute，finding pin 均為零。PTZ1 `0053eef` 通過 hosted
 CI 34560282523。K30 已明確追蹤保留的空 token 不一致；先重現 client 錯誤後的
 state，再實作有界政策修正，之後繼續 adapter 與 replay 閉合。
+
+## 空 profile 政策
+
+K30 設計，2026-09-11，基準 `3f0c326`，實作前記錄：公開 MediaProfile parser
+要求非空識別值；允許建立空 token，會把成功的 state mutation 變成 client parse
+error。已審閱的 Media1 v24.12 §5.2.1 及外部共用 token declaration，不能據以
+宣稱 schema 一律禁止空 xs:string，因此採既有專案特定 `mock:RequestPolicy` QName。
+
+- 共用 allocator 在 insertion／counter／hook／effect 前拒絕明確空 Create token，
+  回傳 Sender／mock:RequestPolicy。Omission 仍配置 token；非空 whitespace 保留
+  literal 值，保留有效／duplicate 路徑。
+- 明確空 read selector 採相同 Sender policy。缺少 Media1 GetProfile selector
+  保留普通 not-found fault，但不能藉空值 fallback 選到空 entry。All-list response
+  若包含空 seed token，回傳 Receiver／mock:RequestPolicy；仍可選取有效 profile。
+- 完整保留舊 snapshot，不刪除、重新命名或 decode entry；空 seed token 由 caller
+  明確修復。Raw／replay injection 不受此 synthetic policy 影響，不引入全域 legacy mode。
+- 控制：兩種 transport、raw／client 精確 fault、完整 state 與 notification 保留、
+  omission 配置、非空對照、舊空 seed 讀取、有效 selector 隔離，以及拒絕建立時的
+  effect／recording。無實機寫入，不新增公開 error／type signature。驗證後更新 P2
+  歷史政策註記與兩份公開指南，不靜默重新定義舊紀錄。
+
+K30 驗證：兩種新 transport 控制均在舊程式碼失敗，client parse error 後已留下
+空 profile（`1789100073_cargo_test.log`）；兩個建立 replay 控制亦失敗
+（`1789100090_cargo_test.log`）。停用 Media2 空 seed 保護後，完整 workspace／
+all-feature／no-fail-fast 執行中的兩種 transport 測試及 corpus 斷言失敗
+（`1789100652_cargo_test.log`）；擾動已還原。修正後精確 Fault／state／hook
+控制與原有非空 selector 案例均通過。
+
+新外部 corpus `oxvif-profile-corpus-20260911-03` 包含相同 13 操作的 20 組
+exchange／40 份 XML instance，全部通過固定版本 strict Xerces XSD 1.1；新增
+一個空 Create Sender 及兩個無效 seed Receiver Fault。這僅驗證其 XML，不代表
+全部 token 限制或 state 語意。舊 shape 覆蓋維持 158 份回應、111 個成功 payload、
+47 個 Fault、1,242 個 anchor、1,431 個略過 child、398 個受檢 attribute，十類
+零值 pin 均未變更。Inventory／self-test 維持 159 個 Action site／157 route／
+247 個直接 reader。K30 最終本機 gate：workspace all-feature 1,214 項、default
+1,119 項測試通過，30 個 suite 中五項忽略；兩種 workspace／all-target Clippy、
+formatting、strict default／all-feature rustdoc 及 diff 檢查通過。
+P2 `3f0c326` 通過託管 CI 34561233409，該 run 早於 K30。下一步為 typed adapter
+身分及其餘欄位／effect 工作，不是 Release 驗收。
 
 ## Profile-token 依賴追蹤
 
@@ -175,8 +215,8 @@ fault 優先於表列操作專屬分支。CreateProfile Name 與 Media2 GetProfi
 | 清冊 ID | Client → handler | 目前輸入擷取 | 狀態／renderer 路徑 | 目前一般 Fault code（未註明者為平面） |
 | --- | --- | --- | --- | --- |
 | `media.GetProfiles` | get_profiles → resp_profiles | 不接收 body | profiles + catalogues → render_profile | Handler 無操作專屬錯誤分支 |
-| `media.GetProfile` | get_profile → resp_profile | Parsed 唯一直接 ProfileToken；保留既有 missing／empty fallback | profiles + catalogues → render_profile | 通用身分欄位 fault； ter:NoProfile |
-| `media.CreateProfile` | create_profile → handle_create_profile | Parsed 直接 scalar Name 與唯一 optional Token；保留空值政策 | create_profile_in_state → profiles, next_token_id → render_profile | Generic field fault；ter:ProfileExists |
+| `media.GetProfile` | get_profile → resp_profile | Parsed 唯一直接 ProfileToken；明確空值採 Sender policy，omission 不可選到空 seed | profiles + catalogues → render_profile | 通用身分欄位 fault； ter:NoProfile |
+| `media.CreateProfile` | create_profile → handle_create_profile | Parsed 直接 scalar Name 與唯一 optional Token；空值在配置前拒絕 | create_profile_in_state → profiles, next_token_id → render_profile | Generic field fault；ter:ProfileExists |
 | `media.DeleteProfile` | delete_profile → handle_delete_profile | parsed operation.required_child_text(ProfileToken)，嚴格 scalar identity | delete_profile_in_state → profiles → empty response | 欄位驗證：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
 | `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | Parsed 唯一直接 ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoSource) → profile slot | 通用身分欄位 fault； env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | Parsed 唯一直接 ProfileToken；decoded scalar | unbind_configuration(VideoSource) → profile slot | 通用身分欄位 fault； env:Sender / ter:NoProfile |
@@ -266,7 +306,7 @@ client／health 分類，以及固定 profile 拒絕前後的序列化 state。K
 內建 replay 現依已提交的 DeleteProfile effect 處理選定 profile read（見管線開工核對）。
 其餘 mutation／相依路徑仍待完成；無效請求 Fault 與 virtual-profile 行為不屬於此次局部遷移。
 
-固定來源的外部編譯及 34 份選定 instance 已通過，見
+固定來源的外部編譯及選定 instance 已通過，見
 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)。尚需完整 WSDL／XSD 欄位
 驗證、Core／共用及其他操作 Fault 映射，以及 capacity／conflict／extension 規則。
 不可僅憑選定 instance 的結果將 C 標記完成。

@@ -17,6 +17,7 @@ Owner: current hardening branch. [Execution checklist](mock-fidelity-execution-c
 | [Shared whitespace serialization](#shared-whitespace-serialization) | K29 data preservation before token migration |
 | [PTZ profile identity](#ptz-profile-identity) | PTZ1 prerequisite before Media token migration |
 | [Media profile identity](#media-profile-identity) | P2 paired creation/read/render/binding migration |
+| [Empty profile policy](#empty-profile-policy) | K30 explicit mock limits and state-after-error controls |
 
 ## Shared whitespace serialization
 
@@ -114,7 +115,8 @@ generated Create token output also uses shared escaping. No public signatures or
 persisted data are rewritten. Nested configuration values remain legacy readers.
 
 The optional scalar accessor distinguishes omission from explicit empty input,
-without adding a field-specific trim. Existing missing/empty policy is retained:
+without adding a field-specific trim. At P2, before the K30 closure below,
+existing missing/empty policy was retained:
 Create can still store an explicitly empty token; GetProfile retains its empty
 lookup fallback, while binding plans refuse empty identity. The typed client
 cannot consume empty profile tokens. This is a recorded remaining policy defect,
@@ -152,6 +154,52 @@ Legacy breadth coverage retained 158 responses, 111 successes, 47 faults,
 pins. PTZ1 `0053eef` passed hosted CI 34560282523. K30 now explicitly tracks the
 retained empty-token inconsistency; reproduce state after the client error before
 implementing its bounded policy correction. Adapter and replay closure follows.
+
+## Empty profile policy
+
+K30 design, 2026-09-11, baseline `3f0c326`, before implementation: the public
+MediaProfile parser requires a nonempty identifier; permitting creation of an
+empty one makes a successful state mutation surface as a client parse error.
+The reviewed Media1 v24.12 §5.2.1 and external common token declaration do not
+justify pretending that the schema universally prohibits empty xs:string.
+Use the existing project-specific `mock:RequestPolicy` QName instead.
+
+- Refuse an explicitly empty Create token in the shared allocator before any
+  insertion/counter/hook/effect, with Sender / mock:RequestPolicy. Omission still
+  allocates; nonempty whitespace remains literal. Preserve valid/duplicate paths.
+- Explicit empty read selectors use the same Sender policy. A missing Media1
+  GetProfile selector retains its ordinary not-found fault but cannot select an
+  empty entry by fallback. All-list responses containing an empty seeded token
+  use Receiver / mock:RequestPolicy; selecting a valid profile still works.
+- Preserve old snapshots exactly; do not drop, rename or decode entries. The
+  caller must repair an empty seeded token explicitly. Raw/replay injections
+  remain outside this synthetic policy; no global legacy mode is introduced.
+- Controls: both transports, raw/client exact faults, full state and notification
+  preservation, omission allocation, nonempty controls, legacy empty seed reads,
+  valid selector isolation and effects/recordings on refused creation. No camera
+  writes and no new public error/type signature. Update P2's historical policy
+  note and both public guides after verification, never silently redefine it.
+
+K30 verification: both new transport controls failed on old code after a client
+parse error left an empty profile committed (`1789100073_cargo_test.log`);
+both creation-replay controls also failed (`1789100090_cargo_test.log`). Disabling
+the Media2 empty-seed guard made both transport tests and the corpus assertion
+fail in an unfiltered workspace/all-feature/no-fail-fast run
+(`1789100652_cargo_test.log`); the mutation was restored. Exact fault/state/hook
+controls and the original nonempty selector cases pass after correction.
+
+Fresh external corpus `oxvif-profile-corpus-20260911-03` contains 20 exchanges /
+40 XML instances over the same 13 operations. All pass pinned strict Xerces XSD
+1.1, including one new empty-Create Sender and two invalid-seed Receiver Faults.
+This validates their XML, not every token constraint or state semantics. Legacy
+shape coverage remains 158 responses, 111 successes, 47 Faults, 1,242 anchors,
+1,431 skipped children and 398 checked attributes, with all ten zero pins unchanged.
+Inventory/self-tests remain 159 Action sites / 157 routes / 247 direct readers.
+K30 final local gates: 1,214 all-feature and 1,119 default workspace tests pass,
+five ignored across 30 suites; both workspace/all-target Clippy builds, formatting,
+strict default/all-feature rustdoc and diff checks pass. P2 `3f0c326` passed
+hosted CI 34561233409; that run predates K30. Next: typed adapter identity and
+remaining field/effect work, not release acceptance.
 
 ## Profile-token dependency closure
 
@@ -201,8 +249,8 @@ selectors also borrow parsed fields; remaining field migrations stay open.
 | Ledger ID | Client → handler | Current input extraction | State/renderer path | Current ordinary Fault codes (flat unless noted) |
 | --- | --- | --- | --- | --- |
 | `media.GetProfiles` | get_profiles → resp_profiles | No body consumed | profiles + catalogues → render_profile | No operation-specific branch in handler |
-| `media.GetProfile` | get_profile → resp_profile | Parsed unique direct ProfileToken; existing missing/empty fallback retained | profiles + catalogues → render_profile | Generic identity-field faults; ter:NoProfile |
-| `media.CreateProfile` | create_profile → handle_create_profile | Parsed direct scalar Name and unique optional Token; empty policy retained | create_profile_in_state → profiles, next_token_id → render_profile | Generic field faults; ter:ProfileExists |
+| `media.GetProfile` | get_profile → resp_profile | Parsed unique direct ProfileToken; explicit empty Sender policy, omission cannot select an empty seed | profiles + catalogues → render_profile | Generic identity-field faults; ter:NoProfile |
+| `media.CreateProfile` | create_profile → handle_create_profile | Parsed direct scalar Name and unique optional Token; empty refused before allocation | create_profile_in_state → profiles, next_token_id → render_profile | Generic field faults; ter:ProfileExists |
 | `media.DeleteProfile` | delete_profile → handle_delete_profile | parsed operation.required_child_text(ProfileToken), strict scalar identity | delete_profile_in_state → profiles → empty response | Field validation: env:Sender; missing/fixed: nested s:Sender (review below) |
 | `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | Parsed unique direct ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoSource) → profile slot | Generic identity-field faults; env:Sender / ter:NoProfile / ter:NoConfig |
 | `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | Parsed unique direct ProfileToken; decoded scalar | unbind_configuration(VideoSource) → profile slot | Generic identity-field faults; env:Sender / ter:NoProfile |
@@ -311,7 +359,7 @@ DeleteProfile effects for selected profile reads (see pipeline preflight).
 Remaining mutation/dependency paths stay open. Invalid-request fault paths
 and virtual-profile behavior are not part of this bounded migration.
 
-Pinned external compilation and 34 selected instance checks now pass; see the
+Pinned external compilation and selected instance checks pass; see the
 [schema preflight](mock-fidelity-schema-preflight.md). Outstanding: complete
 WSDL/XSD field validation, Core/common and other operation Fault mappings, and
 capacity/conflict/extension rules. Do not mark C done from selected instance results.

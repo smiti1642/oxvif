@@ -310,9 +310,13 @@ Media1 CreateProfile 的 optional Token、GetProfile 的 ProfileToken，以及�
 Media binding 入口，現在讀取唯一、直接 qualified scalar 身分。兩種 profile view
 都將 token attribute 轉義一次，保留有效空白；重複或巢狀身分欄位在 mutation 前
 回傳 fault。Seed 與持久化的 profile token 應為 literal 字串，而非預先轉義 XML；
-不自動重新命名或解碼舊 snapshot。本次有界遷移刻意保留既有 missing／empty policy：
-明確空值的 Create token 仍可能建立 typed client 無法使用的 state。請避免空 token；
-完整欄位政策、configuration-token 解析、adapter 與 replay-key 遷移仍待完成。
+不自動重新命名或解碼舊 snapshot。明確空值的 Create token 或 read selector 在
+mutation 前回傳 `s:Sender`／`mock:RequestPolicy`；若要自動配置 token，請省略
+Create token。非空字串的空白仍有意義。未篩選的 profile 讀取若包含空 seed token，
+回傳 `s:Receiver`／`mock:RequestPolicy`；仍可個別選取有效 profile。此類 snapshot
+entry 須明確修正。這是 mock 限制，不表示 ONVIF 一律禁止空字串。Raw／replay
+override 保留原有優先順序。完整欄位政策、configuration-token 解析、adapter 與
+replay-key 遷移仍待完成。
 
 Media1 `GetProfiles`／`GetProfile` 與 Media2 `GetProfiles` 在同一 read lock
 內取得 profile 及全部 configuration catalogue，再產生回應，避免將不同版本

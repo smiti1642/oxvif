@@ -136,7 +136,13 @@ pub fn resp_profiles_media2(state: &SharedState, operation: &crate::mock::reques
         Ok(selectors) => selectors,
         Err(error) => return error.to_fault(),
     };
+    if token == Some("") {
+        return media::empty_profile_token_fault(Code::Sender);
+    }
     let (snapshot, cat) = media::profile_snapshot(state);
+    if token.is_none() && snapshot.iter().any(|profile| profile.token.is_empty()) {
+        return media::empty_profile_token_fault(Code::Receiver);
+    }
     if let Some(token) = token
         && !snapshot.iter().any(|profile| profile.token == token)
     {
@@ -607,6 +613,9 @@ pub fn handle_create_profile_media2(
             "ter:ProfileExists",
             &format!("Profile token already in use: {t}"),
         ),
+        media::CreateOutcome::EmptyToken => {
+            media::empty_profile_token_fault(crate::mock::fault::Code::Sender)
+        }
     }
 }
 

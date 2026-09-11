@@ -9,6 +9,9 @@ use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 pub fn resp_profiles(state: &SharedState) -> String {
     let (snapshot, cat) = profile_snapshot(state);
+    if snapshot.iter().any(|profile| profile.token.is_empty()) {
+        return empty_profile_token_fault(crate::mock::fault::Code::Receiver);
+    }
     let items: String = snapshot
         .iter()
         .map(|p| render_profile(p, "Profiles", &cat))
@@ -23,11 +26,15 @@ pub fn resp_profile(state: &SharedState, operation: &crate::mock::request::Node)
     let want = match operation
         .optional_child_text("http://www.onvif.org/ver10/media/wsdl", "ProfileToken")
     {
+        Ok(Some("")) => return empty_profile_token_fault(crate::mock::fault::Code::Sender),
         Ok(token) => token.unwrap_or_default(),
         Err(error) => return error.to_fault(),
     };
     let (snapshot, cat) = profile_snapshot(state);
-    match snapshot.iter().find(|p| p.token == want) {
+    match snapshot
+        .iter()
+        .find(|p| !want.is_empty() && p.token == want)
+    {
         Some(p) => soap(
             r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
             &format!(
@@ -190,6 +197,9 @@ pub fn handle_create_profile(
                 &format!("Profile token already in use: {t}"),
             );
         }
+        CreateOutcome::EmptyToken => {
+            return empty_profile_token_fault(crate::mock::fault::Code::Sender);
+        }
     };
 
     soap(
@@ -270,6 +280,19 @@ pub(crate) enum CreateOutcome {
     Created(ProfileEntry),
     /// The caller supplied a token that is already in use.
     Duplicate(String),
+    /// The synthetic model cannot expose a usable typed profile with this identity.
+    EmptyToken,
+}
+
+/// Explicit model limitation, not a claim about the ONVIF xs:string lexical space.
+pub(crate) fn empty_profile_token_fault(code: crate::mock::fault::Code) -> String {
+    use crate::mock::fault::{Fault, MOCK_REQUEST_POLICY};
+    Fault::new(
+        code,
+        &[MOCK_REQUEST_POLICY],
+        "The mock does not support empty profile tokens",
+    )
+    .to_xml()
 }
 
 // ── Shared profile-list operations ──────────────────────────────────────────
@@ -287,7 +310,8 @@ pub(crate) enum CreateOutcome {
 // shape that cannot drift back.
 
 /// Create a profile in the shared list. `supplied_token` is honoured verbatim
-/// when the caller gives one (rare — most cameras assign); otherwise a token is
+/// when the caller gives a nonempty one; an empty one is refused by mock policy.
+/// Otherwise a token is
 /// generated from `next_token_id`, skipping occupied identities. Validation and
 /// insertion share one write lock; a refusal does not notify the state hook.
 pub(crate) fn create_profile_in_state(
@@ -295,6 +319,9 @@ pub(crate) fn create_profile_in_state(
     name: &str,
     supplied_token: Option<String>,
 ) -> CreateOutcome {
+    if supplied_token.as_deref() == Some("") {
+        return CreateOutcome::EmptyToken;
+    }
     state.modify_returning_if(
         |s| {
             let token = if let Some(token) = supplied_token {
@@ -1851,6 +1878,7 @@ mod profile_allocation_tests {
         match create_profile_in_state(&state, "must-not-overwrite-822", Some(token.clone())) {
             CreateOutcome::Duplicate(actual) => assert_eq!(actual, token),
             CreateOutcome::Created(entry) => panic!("duplicate created: {}", entry.token),
+            CreateOutcome::EmptyToken => panic!("nonempty duplicate rejected as empty"),
         }
         assert_eq!(serde_json::to_value(&*state.read()).unwrap(), before);
         assert_eq!(notifications.load(Ordering::SeqCst), 0);
@@ -1903,6 +1931,9 @@ mod profile_allocation_tests {
                     CreateOutcome::Duplicate(token) => {
                         assert_eq!(Some(token), supplied);
                         duplicates += 1;
+                    }
+                    CreateOutcome::EmptyToken => {
+                        panic!("nonempty/generated token rejected as empty")
                     }
                 }
             }

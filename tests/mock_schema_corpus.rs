@@ -297,11 +297,68 @@ async fn profile_exchanges() -> Vec<Exchange> {
             before_refusal
         );
     }
+    let error = client
+        .create_profile(TARGET, "empty-policy-corpus", Some(""))
+        .await
+        .unwrap_err();
+    assert_empty_policy(error, "s:Sender");
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    assert_eq!(
+        serde_json::to_value(&*capture.mock.device().read()).unwrap(),
+        before_refusal
+    );
+    capture.mock.device().modify(|state| {
+        let mut invalid = state.profiles.profiles[0].clone();
+        invalid.token.clear();
+        invalid.name = "legacy-empty-corpus".into();
+        state.profiles.profiles.push(invalid);
+    });
+    let before_reads = serde_json::to_value(&*capture.mock.device().read()).unwrap();
+    for media2 in [false, true] {
+        let error = if media2 {
+            client.get_profiles_media2(TARGET).await.unwrap_err()
+        } else {
+            client.get_profiles(TARGET).await.unwrap_err()
+        };
+        assert_empty_policy(error, "s:Receiver");
+        capture
+            .exchanges
+            .lock()
+            .unwrap()
+            .last_mut()
+            .unwrap()
+            .expected_fault = true;
+        assert_eq!(
+            serde_json::to_value(&*capture.mock.device().read()).unwrap(),
+            before_reads
+        );
+    }
     drop(client);
     Arc::try_unwrap(capture.exchanges)
         .unwrap_or_else(|_| panic!("capture still shared"))
         .into_inner()
         .unwrap()
+}
+
+fn assert_empty_policy(error: OnvifError, code: &str) {
+    let OnvifError::Soap(fault) = error else {
+        panic!("expected an explicit mock policy Fault");
+    };
+    assert_eq!(
+        fault,
+        SoapError::Fault {
+            code: code.into(),
+            reason: "The mock does not support empty profile tokens".into(),
+            subcode: Some("mock:RequestPolicy".into()),
+            detail: None,
+        }
+    );
 }
 
 fn export_external(
@@ -374,7 +431,7 @@ fn export_external(
 #[tokio::test]
 async fn captures_first_profile_batch_from_real_client_calls_without_network() {
     let exchanges = profile_exchanges().await;
-    assert_eq!(exchanges.len(), 17);
+    assert_eq!(exchanges.len(), 20);
     let actions: BTreeSet<_> = exchanges
         .iter()
         .map(|exchange| exchange.action.clone())
@@ -406,7 +463,7 @@ async fn captures_first_profile_batch_from_real_client_calls_without_network() {
             .iter()
             .filter(|exchange| exchange.expected_fault)
             .count(),
-        4
+        7
     );
     for exchange in exchanges {
         assert!(exchange.request.contains("Envelope"));
@@ -418,6 +475,31 @@ async fn captures_first_profile_batch_from_real_client_calls_without_network() {
         if exchange.expected_fault {
             let body = parse_soap_body(&exchange.response).unwrap();
             let code = body.path(&["Fault", "Code"]).unwrap();
+            if !exchange.action.ends_with("/DeleteProfile") {
+                let expected_code = if exchange.action.ends_with("/CreateProfile") {
+                    "s:Sender"
+                } else {
+                    assert!(exchange.action.ends_with("/GetProfiles"));
+                    "s:Receiver"
+                };
+                assert_eq!(code.child("Value").unwrap().text(), expected_code);
+                let category = code.child("Subcode").unwrap();
+                assert_eq!(
+                    category.child("Value").unwrap().text(),
+                    "mock:RequestPolicy"
+                );
+                assert!(category.child("Subcode").is_none());
+                assert_eq!(
+                    body.path(&["Fault", "Reason", "Text"]).unwrap().text(),
+                    "The mock does not support empty profile tokens"
+                );
+                assert!(
+                    exchange
+                        .response
+                        .contains("xmlns:mock=\"urn:oxvif:mock:error\"")
+                );
+                continue;
+            }
             assert_eq!(code.child("Value").unwrap().text(), "s:Sender");
             let category = code.child("Subcode").unwrap();
             let leaf = category.child("Subcode").unwrap();

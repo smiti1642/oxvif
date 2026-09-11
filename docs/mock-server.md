@@ -372,10 +372,15 @@ Media binding entry points now read unique, direct qualified scalar identities.
 Both profile views escape the token attribute once, preserving meaningful
 whitespace. Duplicate or nested identity fields fault before mutation. Seed and
 persist profile tokens as literal strings, not pre-escaped XML; older snapshots
-are not automatically renamed or decoded. Missing/empty policy is deliberately
-unchanged in this bounded migration: an explicitly empty Create token can still
-produce state the typed client cannot use. Avoid empty tokens; full field policy,
-configuration-token parsing, adapters and replay-key migration remain open.
+are not automatically renamed or decoded. An explicitly empty Create token or
+read selector returns `s:Sender` / `mock:RequestPolicy` before mutation; omit the
+Create token to allocate one. Nonempty whitespace remains significant. An
+unfiltered profile read containing an empty seeded token returns `s:Receiver` /
+`mock:RequestPolicy`; valid profiles can still be selected individually. Repair
+such snapshot entries explicitly. These are mock limits, not a claim that ONVIF
+prohibits every empty string. Raw/replay overrides retain their precedence.
+Full field policy, configuration-token parsing, adapters and replay-key migration
+remain open.
 
 Media1 `GetProfiles`/`GetProfile` and Media2 `GetProfiles` capture profiles and all
 configuration catalogues under one read lock before rendering. A response cannot

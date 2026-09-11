@@ -27,8 +27,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Profile token attributes are escaped once, including whitespace references;
   duplicate/nested identity fields are refused before mutation. Review older
   snapshots explicitly: stored entity-looking tokens are not automatically
-  decoded or renamed. Empty-token policy, other configuration fields, adapters
-  and recorded-key migration remain part of the ongoing hardening work.
+  decoded or renamed. Explicitly empty Create tokens/read selectors now return
+  Sender / `mock:RequestPolicy` before state changes; omit the Create token for
+  allocation. Lists containing an empty seeded profile return Receiver with the
+  same mock-specific policy code; repair those snapshot entries explicitly.
+  Nonempty whitespace and valid individual reads remain supported. Other
+  configuration fields, adapters and recorded-key migration remain ongoing work.
 - Mock PTZ profile/head lookup now preserves decoded token identity, including
   significant whitespace, across its 19 existing consumers. Header, nested and
   foreign fields no longer select a head; duplicate/nested scalar tokens are

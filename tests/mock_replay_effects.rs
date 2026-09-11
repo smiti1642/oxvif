@@ -246,6 +246,7 @@ async fn verify_creation(
         // This branch retains its staged legacy fault contract; check its exact
         // payload rather than changing it as a side effect of replay migration.
         refusals.push((format!("<m:CreateProfile xmlns:m='{M1}'><m:Name>duplicate</m:Name><m:Token>Profile_1</m:Token></m:CreateProfile>"), "ter:ProfileExists", None, "Profile token already in use: Profile_1"));
+        refusals.push((format!("<m:CreateProfile xmlns:m='{M1}'><m:Name>empty-policy</m:Name><m:Token/></m:CreateProfile>"), "s:Sender", Some("mock:RequestPolicy"), "The mock does not support empty profile tokens"));
     }
     for (request, code, subcode, reason) in refusals {
         let response = transport

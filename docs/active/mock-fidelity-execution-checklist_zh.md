@@ -111,8 +111,8 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W18／M4／PARTIAL | W10–W16 候選行為 | K13 無碰撞配置、K16 原子 binding plan、條件式通知；K08 hook 在鎖外接收 commit 快照，profile／catalogue 讀取共用一次快照 | 選定配置、binding、reentrant 及三路徑 profile snapshot 控制；更廣泛併發寫入、instance、rollback、其他 queue／read snapshot 及 replay 待完成；公開 signature 不變，callback 排序由使用者管理 |
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | Configuration 寫入與其他 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
-| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及第一批 13 操作 client／mock corpus 匯出與明確 payload anchor | 選定 DeleteProfile Fault 遷移後，34 份 instance 通過，包含四個不存在／固定 profile 拒絕。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
-| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 13 操作的 34 份 instance；全程式 instance 覆蓋及 release 證據檢查仍待完成 |
+| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及第一批 13 操作 client／mock corpus 匯出與明確 payload anchor | 選定 DeleteProfile 與 K30 policy Fault 遷移後，40 份 instance 通過，包含七個拒絕。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 13 操作的 40 份 instance；全程式 instance 覆蓋及 release 證據檢查仍待完成 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
 | W25／M6／TODO | W00–W24 驗收 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |
@@ -174,8 +174,8 @@ W02 發現新相依性時須擴充本表。
 | K27／選定 replay 回覆替換已限制 | 九組碰撞於無法確認 scoped identity 時轉入 synthetic；exact raw recording 與 qualified-header ephemera 仍可 replay | W19 部分完成；兩種 transport 已測試；index 仍碰撞、被覆蓋錄製無法恢復，完整 key／QName／protocol 遷移仍待完成 |
 | K28／key 中的 URL 憑證已修正 | Canonical projection 與舊檔／caller key 清除 URL 帳密；載入唯讀，明確保存才持久化清理 | W19 部分完成；虛構資料的隱私／lookup／磁碟控制，JSON 格式不變；raw envelope 僅針對指定格式去憑證，K27 index 碰撞仍待修正；見管線開工核對 |
 | K29／共用 XML 空白保留已修正 | 共用 escaping 在 text／attribute 以 numeric reference 保留 CR／LF／tab，Fault 使用相同 helper | W03／W06／W10 部分完成；已檢查兩種 transport、共用 helper 與 34 份外部 instance；raw token／nested renderer 與欄位限制仍待完成，詳見 profile preflight |
-| K30／來源確認的空 token 不一致 | 明確空 Create token 可進入 typed profile parser 拒絕的 state；missing／empty lookup 與 mutation policy 不一致 | W01／W10／W06；P2 記錄保留行為，raw／client 錯誤後 state 重現與明確政策仍待完成 |
-| P2／選定 profile 身分成對遷移 | Create／read／render／六個 binding 路徑在 Media／PTZ 流程保留 decoded 非空 token | W10 部分完成；其他 configuration 欄位、K30、adapter／replay key、容量及完整語意仍待完成，詳見 profile preflight |
+| K30／有界政策已修正 | 明確空 Create／read selector 在 effect 前拒絕；含無效 seed 的 list 回傳 Receiver，不修復 snapshot | W01／W10／W06；兩種 transport 的錯誤後 state 重現、raw／client payload、hook、replay 及外部政策 Fault 控制記於 profile preflight |
+| P2／選定 profile 身分成對遷移 | Create／read／render／六個 binding 路徑在 Media／PTZ 流程保留 decoded 非空 token | W10 部分完成；其他 configuration 欄位、adapter／replay key、容量及完整語意仍待完成，詳見 profile preflight |
 | K19／已重現的外部相容性發現 | 目前 Media 來源相依集合在獨立 XSD 1.0 驗證器中無法編譯，但可通過 strict XSD 1.1 編譯 | W21；見 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)；不修改 schema 或停用檢查，須驗收候選工具並明示 schema 語言 |
 | K20／已重現並修正 formatter | `auth::auth_fault` 原先輸出未宣告的 wsse subcode 及原始 reason 文字 | W05 serializer 遷移維持 code／subcode，修正 scoped binding／text，並加入 client／health／CLI 控制；認證解析與政策仍屬 W08 待辦 |
 | K21／Python 限制；已有獨立編譯路徑 | Python 回報 Device type-table warning；固定版本 Xerces 以 full checking 及 warnings-as-errors 編譯同一完整閉包通過 | W21；獨立 generic 選型通過，未修改 schema 或停用警告；不代表 Python 警告錯誤或 mock instance 有效 |

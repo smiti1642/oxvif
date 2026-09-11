@@ -63,8 +63,13 @@
 //! Media1 CreateProfile/GetProfile and all six existing Media binding entry
 //! points use scoped decoded profile tokens; both profile views escape the
 //! token attribute once. Persisted tokens remain literal strings, never
-//! automatically decoded again. Empty-token policy, other configuration text,
-//! typed adapters and recorded-key migration remain under review.
+//! automatically decoded again. Explicit empty Create tokens/read selectors
+//! return Sender / `mock:RequestPolicy` before mutation; omit a Create token to
+//! allocate one. Unfiltered profile reads containing an empty seeded token return
+//! Receiver / `mock:RequestPolicy`, without repairing the snapshot. Valid profiles
+//! remain individually readable. This is a mock limit, not a universal ONVIF
+//! string restriction. Other configuration text, typed adapters and recorded-key
+//! migration remain under review.
 //! The 19 PTZ handlers using profile/head resolution now read one direct,
 //! namespace-qualified ProfileToken from the shared parsed operation, preserving
 //! decoded whitespace and rejecting duplicate or nested scalar values. Other PTZ

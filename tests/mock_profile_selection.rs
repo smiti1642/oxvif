@@ -120,7 +120,7 @@ async fn exercise(transport: &dyn Transport, url: &str, state: &MockState, hooks
             .unwrap(),
     );
     assert_eq!(selected, vec![("Profile_3".into(), vec![])]);
-    for token in ["missing-733", "", " Profile_3 "] {
+    for token in ["missing-733", " Profile_3 "] {
         assert_eq!(
             query(transport, url, &format!("<m:Token>{token}</m:Token>"))
                 .await
@@ -133,6 +133,15 @@ async fn exercise(transport: &dyn Transport, url: &str, state: &MockState, hooks
             }
         );
     }
+    assert_eq!(
+        query(transport, url, "<m:Token/>").await.unwrap_err(),
+        SoapError::Fault {
+            code: "s:Sender".into(),
+            subcode: Some("mock:RequestPolicy".into()),
+            reason: "The mock does not support empty profile tokens".into(),
+            detail: None,
+        }
+    );
     for fields in [
         "<m:Token>Profile_1</m:Token><m:Token>Profile_3</m:Token>",
         "<m:Type>VideoSource</m:Type><m:Token>Profile_3</m:Token>",

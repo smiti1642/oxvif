@@ -211,7 +211,7 @@ command remains a Python-backend diagnostic expected to expose K21.
 Windows/Linux CI now runs generic controls and independent Xerces qualification,
 followed by a separate **Official schemas and selected profile corpus** job with fixed source
 hashes, external directories and no uploaded artifacts. Both gate packaging;
-the latter explicitly exports and validates the selected 34 profile instances
+the latter explicitly exports and validates the selected 40 profile instances
 after compilation. Each failed native command terminates the job; a missing
 export cannot pass because validation requires an existing, nonempty corpus.
 neither should be reported as full operation/corpus acceptance. Prior CI
@@ -223,15 +223,16 @@ neither should be reported as full operation/corpus acceptance. Prior CI
 `tests/mock_schema_corpus.rs` now captures complete request/response strings from
 actual credential-free `OnvifClient` calls through an in-process mock, without
 reading official schemas or accessing a camera/network. The source-action set is
-asserted against the first 13 profile cards. Seventeen exchanges cover those 13
-operations plus four explicit missing/fixed-profile rejections; binding effects and
+asserted against the first 13 profile cards. Twenty exchanges cover those 13
+operations plus four missing/fixed-profile rejections and three empty-identity
+policy refusals (Create Sender and both list Receiver responses); binding effects and
 creation/deletion are asserted, not merely unwrapped. Fault expectations come
 from the driver, not a string search of the response.
 
 The ignored export requires `OXVIF_MOCK_CORPUS` naming a **new absolute external
 directory whose parent exists**. It refuses empty data, credential-bearing
 requests, relative/existing destinations and checkout/ancestor destinations.
-The exporter preserves XML bytes, emits 34 files plus `cases.json`, and records
+The exporter preserves XML bytes, emits 40 files plus `cases.json`, and records
 explicit Envelope/Body/operation expectations for requests and success/Fault
 responses. It never reads environment credentials or overwrites existing files.
 This is a diagnostic corpus, not comprehensive per-operation acceptance.
@@ -277,7 +278,7 @@ W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault te
 and expand the corpus beyond the first 13-operation batch. W21 remains PARTIAL: complete the
 positive/negative envelope, payload and Fault instances from the mock corpus and
 qualify broader paths against actual emitted exchanges. W22 now checks the selected
-34-instance profile corpus on Windows/Linux, but the full fail-closed instance
+40-instance profile corpus on Windows/Linux, but the full fail-closed instance
 CI gate still needs the remaining operation batches. Do not substitute this tool
 experiment for P-B's per-operation field/Fault/semantic review.
 

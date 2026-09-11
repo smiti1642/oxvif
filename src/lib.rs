@@ -204,6 +204,9 @@
 //! for cross-process / non-Rust clients. See the `mock` module for details.
 //! Synthetic requests share bounded XML and operation-identity checks; full
 //! field fidelity and HTTP binding remain separate from that validation.
+//! Empty synthetic profile identities are refused with `mock:RequestPolicy`;
+//! omit the Create token for allocation and explicitly repair empty snapshot
+//! tokens. The mock does not silently rename persisted entries.
 //!
 //! ```ignore
 //! // Cargo.toml:  oxvif = { version = "0.16", features = ["mock"] }
