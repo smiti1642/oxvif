@@ -21,7 +21,7 @@ is promised. [Release blockers](release-0.17-cut.md#blocking-acceptance) stay in
 | F03 | Full Device/DeviceIO/network/user/relay contracts and Recording/Search/Replay lifetimes | W13/W14; no host-network changes; separate authorization for physical effects |
 | F04 | Events filters, subscriptions, queue isolation, renew/expiry/termination and delivery modeling | W15; Media sync is not Events sync; existing receipt-only refusal remains |
 | F05 | Broader HTTP binding, WSSE freshness/replay protection, roles and fault injection redesign | W07–W09; only after current-release security/integrity triage; raw hooks remain explicit escape hatches |
-| F06 | Whole-program capability consistency, concurrency/rollback, replay dependencies and key-format redesign beyond the mandatory K27 data-integrity fix | W16–W19; K27 storage loss is NOT deferred |
+| F06 | Whole-program capability consistency, concurrency/rollback, replay dependencies and key-format redesign beyond the K27 collision-retention repair | W16–W19; K27 storage retention is fixed in the candidate, not deferred; see [migration](../replay-storage.md) |
 | F07 | Remaining schema/QName/wildcard controls, wider corpus and fuzz/property coverage | W20–W23; retain selected independent corpus gates, no all-operation coverage claim |
 | F08 | RTSP decoder/playback, batch file exports, camera-write CLI commands and standalone reusable navigation crate | Existing CLI maintenance/navigation plans; new threat model and permission UX before writes |
 | F09 | Official Homebrew Core, Debian/Ubuntu and Windows community-channel submissions | Distribution plan; current native packaging checks remain a release gate, submission is not implied by generated artifacts |

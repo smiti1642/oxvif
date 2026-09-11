@@ -1819,17 +1819,20 @@ for v in report.failures() {
 Recordings scrub the supported WS-Security `Password`/`Nonce` fields and literal
 URL `user:pass@` pairs. Canonical keys also strip URL pairs after entity decoding;
 replay uses the same credential-free key. Loading legacy keys cleans them only
-in memory; explicitly save to persist the cleanup. Credential-only duplicate keys
-use the last stored entry. Review captures and older copies before sharing:
+in memory; explicitly save to persist the cleanup. Only equivalent requests in
+the same key bucket use the last stored entry. Review captures and older copies before sharing:
 these targeted transforms do not detect arbitrary secrets in custom fields.
 
-Replay verifies scoped XML identity after a legacy key hit. Different scalar,
-namespace or structure values fall through to synthetic. Exact raw recordings
+The store retains distinct requests even when their legacy keys collide. Replay
+selects a unique scoped XML identity from the bucket; absent matches fall through
+to synthetic. Exact raw recordings
 remain replayable; nonidentical malformed XML, mixed content and unresolved
 `xsi:type` are not treated as equivalent. Normal namespace aliases, decoded scalar
-text and selected qualified SOAP-header ephemera are supported. This containment
-is not full protocol validation and cannot recover recordings already overwritten
-by a stored-key collision; the index/file format is unchanged.
+text and selected qualified SOAP-header ephemera are supported. This is not full
+protocol validation and cannot recover recordings overwritten by older versions.
+The JSON shape is unchanged, but older readers can collapse entries on downgrade.
+Key-only `lookup` returns `None` for ambiguous buckets; use `lookup_request`.
+See [recording storage and report migration](docs/replay-storage.md).
 
 Or from the command line, no code at all:
 
@@ -2011,8 +2014,10 @@ for v in report.failures() {
 The two diffs are **complementary, not either/or**. Parse verification is
 oxvif-opinionated (the verdict: does it work?); the structural SOAP diff is
 oxvif-independent wire truth (the evidence: what does the device actually send?).
-Both are keyed by `(action, key_canon)`, so a UI can join them per operation — the
-parse verdict as the status badge, the side-by-side SOAP diff as the drill-down.
+Both carry the nonunique grouping key `(action, key_canon)`. Full reports from
+the same unchanged store can be joined by insertion ordinal, not that pair alone;
+filtered reports require separate correspondence. The parse verdict can be the
+status badge and the side-by-side SOAP diff the drill-down.
 
 Both reports serialise: `to_json()` / `to_json_pretty()` on either one. Save a
 `QuirkReport` as a baseline and `report.diff(&baseline)` returns a `QuirkDiff` of
@@ -2021,6 +2026,11 @@ deviating paths shifted). With a full sweep covering 52 operations, comparing tw
 reports by hand is not viable; "three things changed since the firmware update"
 is. Output is order-deterministic, so a saved JSON baseline also diffs cleanly
 with ordinary text tools.
+
+For colliding groups, `QuirkDiff` retains rows as unmatched observations rather
+than inventing a pairing. `resolved` then does not prove a defect was fixed, and
+even identical ambiguous reports may produce a nonempty diff. See the
+[report identity limits](docs/replay-storage.md#reports).
 
 ### Progress — driving a real camera takes a while
 

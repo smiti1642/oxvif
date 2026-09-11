@@ -705,15 +705,17 @@ let info = client.get_device_info().await?;
 
 錄製資料會移除支援格式的 WS-Security `Password`／`Nonce` 與 literal URL `user:pass@`。
 Canonical key 也會在 entity decoding 後清除 URL 帳密，replay 使用相同的去憑證 key。
-載入舊檔僅清理記憶體中的 key；需明確呼叫 save 才會保存修正，僅憑證不同的重複 key
-採最後一筆資料。分享前仍須檢查 capture 與舊副本；這些指定格式的轉換並不保證能偵測
+載入舊檔僅清理記憶體中的 key；需明確呼叫 save 才會保存修正，只有同一 key 群組內
+等價的請求採最後一筆資料。分享前仍須檢查 capture 與舊副本；這些指定格式的轉換並不保證能偵測
 自訂欄位、任意裝置資料或 malformed XML 中的所有秘密。
 
-Replay 在 legacy key 命中後再次核對 scoped XML 身分；不同 scalar、namespace
-或 structure 轉入 synthetic。完全相同的 raw recording 仍可 replay；非同一原文的
+儲存層保留 legacy key 碰撞下的不同請求。Replay 由群組選出唯一的 scoped XML 身分，
+沒有匹配才轉入 synthetic。完全相同的 raw recording 仍可 replay；非同一原文的
 malformed XML、mixed content 或未解析 `xsi:type` 不視為等價。支援一般 namespace
 別名、decoded scalar text 與選定的 qualified SOAP-header ephemera。此防護不是
-完整 protocol validation，無法恢復已被 key collision 覆蓋的錄製；index／檔案格式不變。
+完整 protocol validation，也無法恢復舊版已覆蓋的錄製。JSON 格式不變，但降版後舊讀取器
+可能再次合併資料。僅提供 key 的 `lookup` 在歧義時回傳 `None`；請改用 `lookup_request`。
+詳見[錄製儲存與報告遷移](docs/replay-storage_zh.md)。
 
 `record_surface` 可配合 `SurfaceSelection` 只錄製指定 service group，並以 `SweepReport` 回報 recorded、failed 與 skipped operation。Replay read 會逐 byte 使用錄製 response；write 則轉入 synthetic `DeviceState`，依已提交的 profile effect 或尚未遷移的 legacy family 政策使 fixture 失效。完整依賴追蹤仍待完成。
 

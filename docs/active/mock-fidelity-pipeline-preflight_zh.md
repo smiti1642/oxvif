@@ -2,6 +2,11 @@
 
 [English](mock-fidelity-pipeline-preflight.md) | [繁體中文](mock-fidelity-pipeline-preflight_zh.md)
 
+2026-09-11 K27 後續修正：碰撞儲存保留及完整請求查詢已實作，詳見
+[儲存遷移](../replay-storage_zh.md)及[發布驗證](release-0.17-cut_zh.md#驗證紀錄)。
+下列較早的覆蓋重現／containment 記錄保留作為歷史證據，不代表目前仍會覆蓋；
+W19 其餘項目仍未結案。
+
 W02／W03／W06／W19 工程檢查點，2026-09-10；原始碼基準 `9978220`。
 本文件是從程式碼整理的依賴圖，不是規範契約表。整體 W02 仍為 PARTIAL；
 W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯誤遷移尚未完成；已完成的共用基礎補充於

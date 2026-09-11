@@ -2,6 +2,12 @@
 
 [English](mock-fidelity-source-audit.md) | [繁體中文](mock-fidelity-source-audit_zh.md)
 
+2026-09-11 K27 follow-up: collision retention and request-aware lookup are
+implemented; see [storage migration](../replay-storage.md) and
+[release evidence](release-0.17-cut.md#evidence). Earlier overwrite reproductions
+and containment records below are historical evidence, not the current storage
+behavior. The remaining W19 work is not complete.
+
 Source baseline: `892aa94`, audited 2026-09-10. Work: W00 and W02.
 This is measured project-source indexing, not a schema catalogue.
 [Execution checklist](mock-fidelity-execution-checklist.md) · [Operation ledger](mock-fidelity-operation-ledger.md)

@@ -17,7 +17,10 @@
 //! path (no structural drift), but the typed parser rejects it. Conversely a
 //! harmless vendor extension shows as structural drift but parses fine here.
 //!
-//! Both reports are keyed by `(action, key_canon)`, so a UI can join them per
+//! Both reports carry `(action, key_canon)` as a grouping key, not a unique ID.
+//! Distinct recorded requests can share it; align full per-fixture reports by
+//! insertion ordinal from the same frozen store, and do not join filtered reports
+//! by the pair alone. For unique pairs a UI can join them per
 //! operation: the parse verdict as the headline badge, the side-by-side SOAP diff
 //! as the drill-down evidence, and [`ParseVerdict::value`] as "what oxvif got"
 //! next to the raw XML.
@@ -78,7 +81,7 @@ pub enum ParseStatus {
 pub struct ParseVerdict {
     /// The SOAP action URI this exchange answered.
     pub action: String,
-    /// The canonical, ephemera-masked request (the fixture key) — the join key
+    /// The canonical, ephemera-masked request (a non-unique grouping key)
     /// shared with [`OperationQuirk`](super::OperationQuirk) /
     /// [`OperationDiff`](super::OperationDiff).
     pub key_canon: String,

@@ -16,7 +16,8 @@
 //!
 //! On disk it is a single `fixtures.json` per device directory
 //! (`<vendor>-<model>/fixtures.json`); [`FixtureStore::load`] pulls the whole
-//! set into memory and each [`lookup`](FixtureStore::lookup) is a hash hit.
+//! set into memory. Canonical keys select buckets, not unique identities.
+//! Distinct requests survive collisions; request-aware lookups scan their bucket.
 
 use std::collections::HashMap;
 use std::io;
@@ -55,8 +56,8 @@ pub struct Fixture {
 ///
 /// Emitted by [`FixtureStore::verify_parsing_with_progress`] and
 /// [`FixtureStore::diff_against_synthetic_with_progress`]. The unit of work is
-/// one recorded [`Fixture`], identified by the same `(action, key_canon)` pair
-/// the reports are keyed on, so a UI can highlight the row it is working on.
+/// one recorded [`Fixture`]. `(action, key_canon)` can collide; use `done` to
+/// identify its ordinal within this pass, not that pair as a unique row ID.
 ///
 /// [`FixtureStore::verify_parsing_with_progress`]: FixtureStore::verify_parsing_with_progress
 /// [`FixtureStore::diff_against_synthetic_with_progress`]: FixtureStore::diff_against_synthetic_with_progress
@@ -86,10 +87,12 @@ struct OnDisk {
 pub struct FixtureStore {
     device: String,
     fixtures: Vec<Fixture>,
-    /// `(action, key_canon)` → index into `fixtures`. Both halves are needed:
+    /// `(action, key_canon)` → collision bucket of indices into `fixtures`.
+    /// Full request equivalence, not the legacy key, permits replacement.
+    /// Both key halves are needed:
     /// the key alone collides across services (Media1 and Media2 `GetProfiles`
     /// canonicalise identically), the action alone collides across params.
-    index: HashMap<(String, String), usize>,
+    index: HashMap<(String, String), Vec<usize>>,
 }
 
 impl FixtureStore {
@@ -105,7 +108,10 @@ impl FixtureStore {
     /// Load `<dir>/fixtures.json` into memory.
     ///
     /// URL credential pairs in legacy canonical keys are removed in memory;
-    /// resulting duplicate `(action, key)` entries use the last stored entry.
+    /// same-request duplicates use the last stored entry; distinct requests in
+    /// the same canonical bucket are retained. Previously overwritten records
+    /// cannot be recovered. The on-disk JSON shape is unchanged, but older
+    /// readers can collapse collision buckets again; keep backups on downgrade.
     /// This does not rewrite the source file or resanitize its raw envelopes.
     /// Explicitly save the returned store to persist the cleaned keys, and
     /// review older files/backups before sharing them.
@@ -142,8 +148,8 @@ impl FixtureStore {
     /// Record one exchange: derive the canonical key from `request_raw`, scrub
     /// the supported credential forms (WS-Security `Password`/`Nonce` in the
     /// request, plus literal `user:pass@` URL pairs in either envelope), and upsert (last write
-    /// wins per `(action, key_canon)` pair — so re-recording the same operation
-    /// replaces it, while a different action sharing the key is kept apart).
+    /// wins only for an equivalent sanitized request within the same Action/key
+    /// bucket). Distinct requests sharing the legacy projection remain stored.
     /// URL credential pairs are also stripped after canonical projection so
     /// the key and replay lookup do not depend on a URL password. Do not use
     /// this as a general-purpose sanitizer for arbitrary private device data.
@@ -165,13 +171,38 @@ impl FixtureStore {
     /// `key_canon`; only the action tells them apart.
     /// Legacy caller-provided keys have URL credential pairs stripped before
     /// lookup, matching the in-memory normalization performed by [`Self::load`].
-    /// This key-only API does not compare XML request identity; the legacy
-    /// projection can still collide. Built-in replay performs an additional
-    /// scoped identity check before returning a recorded response.
+    /// Returns `None` for a colliding bucket: the key alone cannot select an
+    /// identity safely. Use [`Self::lookup_request`] when the request is known.
     pub fn lookup(&self, action: &str, key_canon: &str) -> Option<&Fixture> {
-        self.index
-            .get(&(action.to_string(), scrub_url_userinfo(key_canon)))
-            .map(|&i| &self.fixtures[i])
+        let indices = self
+            .index
+            .get(&(action.to_string(), scrub_url_userinfo(key_canon)))?;
+        match indices.as_slice() {
+            [i] => self.fixtures.get(*i),
+            _ => None,
+        }
+    }
+
+    /// Select a fixture by full Action and request identity, not just a legacy key.
+    ///
+    /// Distinct requests sharing a canonical key remain separate. Returns `None`
+    /// when no unique match exists. Qualified header ephemera and equivalent XML
+    /// spellings may match; malformed, mixed-content or unresolved QName documents
+    /// require exact sanitized bytes. This is not full ONVIF validation.
+    pub fn lookup_request(&self, action: &str, request: &str) -> Option<&Fixture> {
+        let key = canonicalize(request, Masking::Key);
+        let indices = self.index.get(&(action.to_string(), key))?;
+        let request = scrub_url_userinfo(&redact_credentials(request));
+        let mut matches = indices.iter().filter_map(|&i| {
+            let fixture = &self.fixtures[i];
+            crate::mock::recording_equivalent(&fixture.request_raw, &request).then_some(fixture)
+        });
+        let matched = matches.next()?;
+        if matches.next().is_some() {
+            None
+        } else {
+            Some(matched)
+        }
     }
 
     /// The device label this set was recorded for.
@@ -199,11 +230,14 @@ impl FixtureStore {
 
     fn insert(&mut self, f: Fixture) {
         let key = (f.action.clone(), f.key_canon.clone());
-        if let Some(&i) = self.index.get(&key) {
+        let bucket = self.index.entry(key).or_default();
+        if let Some(i) = bucket.iter().copied().find(|&i| {
+            crate::mock::recording_equivalent(&self.fixtures[i].request_raw, &f.request_raw)
+        }) {
             self.fixtures[i] = f;
         } else {
             let i = self.fixtures.len();
-            self.index.insert(key, i);
+            bucket.push(i);
             self.fixtures.push(f);
         }
     }
@@ -241,9 +275,9 @@ mod tests {
     #[test]
     fn ephemera_jitter_does_not_fragment_the_key() {
         let mut store = FixtureStore::new("dev");
-        let req1 = "<Envelope><Header><MessageID>uuid:aaa</MessageID></Header>\
+        let req1 = "<Envelope xmlns='http://www.w3.org/2003/05/soap-envelope'><Header><MessageID xmlns='http://www.w3.org/2005/08/addressing'>uuid:aaa</MessageID></Header>\
                     <Body><GetHostname/></Body></Envelope>";
-        let req2 = "<Envelope><Header><MessageID>uuid:bbb</MessageID></Header>\
+        let req2 = "<Envelope xmlns='http://www.w3.org/2003/05/soap-envelope'><Header><MessageID xmlns='http://www.w3.org/2005/08/addressing'>uuid:bbb</MessageID></Header>\
                     <Body><GetHostname/></Body></Envelope>";
         store.record("act/GetHostname", req1, "<r1/>");
         store.record("act/GetHostname", req2, "<r2/>");
@@ -390,6 +424,56 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn legacy_key_cleanup_preserves_distinct_colliding_requests() {
+        let dir = tmp_dir("legacy-url-collision");
+        let action = "urn:legacy/GetResource";
+        let first =
+            "<GetResource><Uri>rtsp://camera.invalid/path</Uri><Token> P</Token></GetResource>";
+        let second = first.replace("> P<", ">P<");
+        let mut store = FixtureStore::new("synthetic-legacy-collision");
+        store.record(action, first, "<first-931/>");
+        let mut legacy = store.fixtures()[0].clone();
+        legacy.key_canon = legacy
+            .key_canon
+            .replace("rtsp://", "rtsp://probe:secret-931@");
+        legacy.request_raw = second.clone();
+        legacy.response_raw = "<second-932/>".into();
+        store.insert(legacy);
+        store.save(&dir).unwrap();
+        let path = dir.join(FIXTURES_FILE);
+        let original = std::fs::read(&path).unwrap();
+        let loaded = FixtureStore::load(&dir).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(
+            loaded.fixtures()[0].key_canon,
+            loaded.fixtures()[1].key_canon
+        );
+        assert!(
+            loaded
+                .lookup(action, &loaded.fixtures()[0].key_canon)
+                .is_none()
+        );
+        assert_eq!(
+            loaded.lookup_request(action, first).unwrap().response_raw,
+            "<first-931/>"
+        );
+        assert_eq!(
+            loaded.lookup_request(action, &second).unwrap().response_raw,
+            "<second-932/>"
+        );
+        loaded.save(&dir).unwrap();
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("secret-931")
+        );
+        assert_eq!(FixtureStore::load(&dir).unwrap().len(), 2);
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(dir).unwrap();
+    }
+
     // ── NET 4: invariants Stage 3 must preserve ───────────────────────────────
 
     /// Ephemera de-duplication, checked on the whole `Fixture` rather than just
@@ -402,9 +486,9 @@ mod tests {
     #[test]
     fn ephemera_dedup_keeps_one_fixture_with_its_action_and_key() {
         const ACTION: &str = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
-        let req1 = "<Envelope><Header><MessageID>uuid:aaa</MessageID></Header>\
+        let req1 = "<Envelope xmlns='http://www.w3.org/2003/05/soap-envelope'><Header><MessageID xmlns='http://www.w3.org/2005/08/addressing'>uuid:aaa</MessageID></Header>\
                     <Body><GetHostname/></Body></Envelope>";
-        let req2 = "<Envelope><Header><MessageID>uuid:bbb</MessageID></Header>\
+        let req2 = "<Envelope xmlns='http://www.w3.org/2003/05/soap-envelope'><Header><MessageID xmlns='http://www.w3.org/2005/08/addressing'>uuid:bbb</MessageID></Header>\
                     <Body><GetHostname/></Body></Envelope>";
 
         // Both requests canonicalise to the same key — that is *why* they merge.

@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 
+#[cfg(test)]
 use crate::mock::canon::{Masking, canonicalize};
 use crate::mock::effect::{Effect, EffectObserver, tracks_commit};
 use crate::mock::fault_injection::FaultInjector;
@@ -34,7 +35,8 @@ const METAMORPH_BASE: &str = "http://metamorph";
 ///   request. Distinct scalar/namespace/structure values pass to synthetic.
 ///   Exact raw fixtures remain supported; otherwise malformed XML, mixed content
 ///   or unresolved `xsi:type` cannot establish equivalence. This is not complete
-///   protocol validation and does not repair collisions in the stored key index.
+///   protocol validation. Colliding recorded requests remain separate and are
+///   selected through [`FixtureStore::lookup_request`], never key-only lookup.
 /// - A **write** (anything not `Get*`) always passes, so `SyntheticResponder`
 ///   applies it to `DeviceState`, and invalidates that family's replay — the
 ///   coarse copy-on-write of `docs/active/metamorph.md` D5, so `Set → Get` reflects the
@@ -201,10 +203,8 @@ impl Responder for ReplayResponder {
             return None;
         }
         drop(retired);
-        let key = canonicalize(ctx.body, Masking::Key);
         self.store
-            .lookup(ctx.action, &key)
-            .filter(|fixture| crate::mock::recording_equivalent(&fixture.request_raw, ctx.body))
+            .lookup_request(ctx.action, ctx.body)
             .map(|f| f.response_raw.clone())
     }
 }

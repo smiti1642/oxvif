@@ -122,13 +122,17 @@ impl QuirkReport {
 /// Differences between two [`QuirkReport`]s — what a device's structural quirks
 /// gained, lost, or shifted between two runs.
 ///
-/// A quirk's identity is the `(action, key_canon)` pair — the join key the
+/// A quirk's legacy grouping key is the `(action, key_canon)` pair — the key the
 /// [module docs](crate::metamorph) share with [`ParseVerdict`] and
 /// [`OperationDiff`]. `action` alone will not do: one action can have many
 /// fixtures distinguished only by their `token=` params. `key_canon` alone will
 /// not do either: two services can share one canonical request (Media1's
 /// `<trt:GetProfiles/>` and Media2's `<tr2:GetProfiles/>` canonicalise
-/// identically). The pair is exactly [`FixtureStore`]'s own index key.
+/// identically). The pair selects a [`FixtureStore`] bucket, not a unique request.
+/// If either report contains duplicate pairs, all corresponding rows are retained
+/// as unmatched `appeared`/`resolved` observations, with no invented `changed`
+/// pairing. In that case `resolved` does not prove a device defect was fixed;
+/// inspect the original request/response records. Reports lack request identities.
 ///
 /// Entries are ordered by that pair and every path list is sorted, so two runs
 /// over identical input serialise byte-identically.
@@ -183,12 +187,22 @@ impl QuirkDiff {
         let now_by_key = index_by_key(now);
 
         let mut appeared = Vec::new();
+        let mut resolved = Vec::new();
         let mut changed = Vec::new();
 
-        for (key, q) in &now_by_key {
+        for (key, candidates) in &now_by_key {
             match prev_by_key.get(key) {
-                None => appeared.push((*q).clone()),
-                Some(p) => {
+                None => appeared.extend(candidates.iter().map(|q| (*q).clone())),
+                Some(previous) if candidates.len() != 1 || previous.len() != 1 => {
+                    // Legacy reports have no request identity to pair collisions.
+                    // Retain every unmatched observation instead of overwriting
+                    // map entries or inventing a correspondence between runs.
+                    appeared.extend(candidates.iter().map(|q| (*q).clone()));
+                    resolved.extend(previous.iter().map(|q| (*q).clone()));
+                }
+                Some(previous) => {
+                    let q = candidates[0];
+                    let p = previous[0];
                     let entry = ChangedQuirk {
                         action: q.action.clone(),
                         key_canon: q.key_canon.clone(),
@@ -211,11 +225,13 @@ impl QuirkDiff {
             }
         }
 
-        let resolved = prev_by_key
-            .iter()
-            .filter(|(key, _)| !now_by_key.contains_key(*key))
-            .map(|(_, q)| (*q).clone())
-            .collect();
+        resolved.extend(
+            prev_by_key
+                .iter()
+                .filter(|(key, _)| !now_by_key.contains_key(*key))
+                .flat_map(|(_, items)| items.iter().map(|q| (*q).clone())),
+        );
+        resolved.sort_by(|a, b| (&a.action, &a.key_canon).cmp(&(&b.action, &b.key_canon)));
 
         Self {
             appeared,
@@ -228,11 +244,15 @@ impl QuirkDiff {
 /// Index a report's quirks on their identity — the `(action, key_canon)` *pair*,
 /// since `key_canon` alone collides across actions. The `BTreeMap` also fixes the
 /// diff's output order deterministically.
-fn index_by_key(r: &QuirkReport) -> BTreeMap<(&str, &str), &OperationQuirk> {
-    r.quirks
-        .iter()
-        .map(|q| ((q.action.as_str(), q.key_canon.as_str()), q))
-        .collect()
+fn index_by_key(r: &QuirkReport) -> BTreeMap<(&str, &str), Vec<&OperationQuirk>> {
+    let mut index = BTreeMap::<_, Vec<_>>::new();
+    for q in &r.quirks {
+        index
+            .entry((q.action.as_str(), q.key_canon.as_str()))
+            .or_default()
+            .push(q);
+    }
+    index
 }
 
 /// The paths in `a` absent from `b`, sorted and deduplicated — so the result is
@@ -734,6 +754,29 @@ mod tests {
 
     const GET_PROFILES: &str = "http://www.onvif.org/ver10/media/wsdl/GetProfiles";
     const GET_HOSTNAME: &str = "http://www.onvif.org/ver10/device/wsdl/GetHostname";
+
+    #[test]
+    fn colliding_report_rows_are_retained_without_an_invented_pairing() {
+        let first = quirk(GET_PROFILES, "collision", &["first"], &[]);
+        let second = quirk(GET_PROFILES, "collision", &["second"], &[]);
+        let new = quirk(GET_PROFILES, "collision", &["new"], &[]);
+        let previous = report(vec![first.clone(), second.clone()]);
+        let current = report(vec![new.clone()]);
+        let diff = current.diff(&previous);
+        assert_eq!(diff.resolved, vec![first.clone(), second.clone()]);
+        assert_eq!(diff.appeared, vec![new.clone()]);
+        assert!(diff.changed.is_empty());
+        let reverse = previous.diff(&current);
+        assert_eq!(reverse.appeared, vec![first.clone(), second.clone()]);
+        assert_eq!(reverse.resolved, vec![new]);
+        assert!(reverse.changed.is_empty());
+        let empty = report(vec![]);
+        assert_eq!(
+            previous.diff(&empty).appeared,
+            vec![first.clone(), second.clone()]
+        );
+        assert_eq!(empty.diff(&previous).resolved, vec![first, second]);
+    }
 
     #[test]
     fn to_json_round_trips() {

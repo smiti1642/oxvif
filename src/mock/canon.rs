@@ -23,8 +23,10 @@
 //! fidelity limitation; complete Action keys do not eliminate collisions inside
 //! one operation. URL `user:pass@` pairs are removed after projection, including
 //! entity-decoded text/attributes and the unparseable-input fallback.
+//! Fixture storage treats these keys as buckets and compares full request
+//! identity before replacement or replay; the projection is not a unique ID.
 
-// The `metamorph` feature's ReplayResponder is the production caller of
+// The `metamorph` feature's fixture store is the production caller of
 // `canonicalize` / `Masking`. With only `mock` enabled the module has no
 // non-test caller, so silence dead_code just there; under `metamorph` (and the
 // `--all-features` gate) real dead-code detection stays on.

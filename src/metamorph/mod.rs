@@ -30,9 +30,11 @@
 //! URL `user:pass@` pairs. Canonical keys also strip decoded URL pairs. Loading
 //! legacy keys cleans them in memory, not on disk. Inspect captures and older
 //! copies before sharing: targeted redaction is not a general secret detector.
-//! Replay adds a scoped XML-identity check after a legacy key hit. Different
-//! request identities fall through to synthetic; exact raw recordings remain
-//! supported. This does not recover overwritten recordings or migrate the index.
+//! Storage retains distinct requests in legacy-key collision buckets. Replay
+//! selects a unique scoped XML identity; absent matches fall through to synthetic,
+//! while exact raw recordings remain supported. Key-only lookup refuses ambiguity.
+//! The JSON shape is unchanged, but older readers can collapse entries on downgrade.
+//! Recordings overwritten by older versions cannot be recovered.
 //!
 //! # Will oxvif parse this device correctly?
 //!
@@ -161,9 +163,9 @@
 //!   the device *declined* with a SOAP Fault is classified
 //!   [`ParseStatus::Faulted`], kept out of [`ParseReport::failures`] — a
 //!   restricted account gets "the device said no", not "oxvif cannot parse this".
-//!   The two reports are complementary and share the `(action, key_canon)` key so
-//!   a UI can join them: the parse verdict as the badge, the SOAP diff as the
-//!   drill-down evidence.
+//!   The reports share a non-unique `(action, key_canon)` grouping key. For
+//!   colliding requests, align complete per-fixture output by insertion ordinal
+//!   from the same frozen store; never join filtered rows by that pair alone.
 //! - **Progress**: each long pass has a `*_with_progress` twin taking an
 //!   `Fn(..) + Send + Sync` callback — [`drive_surface_with_progress`],
 //!   [`record_surface_with_progress`], [`FixtureStore::verify_parsing_with_progress`]

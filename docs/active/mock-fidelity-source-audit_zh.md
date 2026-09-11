@@ -2,6 +2,11 @@
 
 [English](mock-fidelity-source-audit.md) | [繁體中文](mock-fidelity-source-audit_zh.md)
 
+2026-09-11 K27 後續修正：碰撞儲存保留及完整請求查詢已實作，詳見
+[儲存遷移](../replay-storage_zh.md)及[發布驗證](release-0.17-cut_zh.md#驗證紀錄)。
+下列較早的覆蓋重現／containment 記錄保留作為歷史證據，不代表目前仍會覆蓋；
+W19 其餘項目仍未結案。
+
 來源基準：`892aa94`，2026-09-10 盤點。工作：W00、W02。
 這是實際量測的專案原始碼索引，不是 schema 目錄。
 [施工檢查表](mock-fidelity-execution-checklist_zh.md) · [逐操作清冊](mock-fidelity-operation-ledger_zh.md)

@@ -41,6 +41,8 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
   option values, metadata required fields and XML literal whitespace handling.
 - Selected Mock request identity, atomic Media writes, coherent snapshots/hooks
   and committed replay invalidation; classified unmodeled effects refuse by default.
+- Metamorph retains distinct recordings when legacy canonical keys collide,
+  including load/save and reports; request-aware lookup selects the recording.
 - Windows debug CLI startup stack use, cancellation behavior and bounded
   human-terminal layout; timing-sensitive tests retain functional output checks.
 
@@ -61,9 +63,10 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
   becomes `gg`; input-mode editing remains literal.
 - Configuration exports are not restorable backups and diagnostics do not verify
   RTSP playback. Mock receipts are not evidence of physical effects.
+- Key-only fixture lookup returns `None` for collisions; use `lookup_request`.
+  Keep recording backups before downgrading: older readers can collapse entries.
 
-**Acceptance is still open:** K27 recorded-key collisions can overwrite distinct
-recordings; containment of wrong replay does not repair storage. Native CI,
+**Acceptance is still open:** complete-candidate and security review, native CI,
 final-version package/install checks and real-camera acceptance remain required.
 See the [release cut](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/active/release-0.17-cut.md).
 These changes are not part of the published 0.16.0 artifacts.

@@ -291,8 +291,9 @@
 //!   redacted as it records; canonical keys also strip decoded URL pairs. Loading
 //!   legacy keys cleans them in memory, not on disk. Inspect captures and older
 //!   copies before sharing; this is not a general secret detector.
-//!   Replay checks scoped XML identity after a key hit to contain selected
-//!   legacy-key collisions; stored-key migration remains incomplete.
+//!   Distinct requests sharing a legacy canonical key are retained separately.
+//!   Replay uses request-aware selection; key-only fixture lookup refuses an
+//!   ambiguous bucket. Older readers can collapse these records on downgrade.
 //! - **Pick what to clone** — `metamorph::SurfaceSelection` selects whole
 //!   service zones (`SurfaceGroup`) or individual operations (`SurfaceOp`).
 //!   Prerequisites are expanded for you, so selecting `GetStreamUri` still

@@ -671,13 +671,15 @@ Profile 組裝亦遷移重複 token 及 binding reference 的拒絕。公開 `su
 
 Replay key 現在於投影後清除 URL `user:pass@`，包含 XML entity decoding 後的帳密。
 舊檔載入僅清理記憶體中的 key，不自動覆寫磁碟；需明確保存，分享前亦須檢查舊副本。
-僅憑證不同而碰撞的 key 保留最後一筆。Raw envelope 仍僅針對指定格式去除憑證，
+只有同一 key 群組內等價的請求保留最後一筆。Raw envelope 仍僅針對指定格式去除憑證，
 不保證任意裝置資料均無秘密。詳見[函式庫指南](../LIBRARY_GUIDE_zh.md#metamorphmetamorph--metamorph-server-feature)。
 
-Replay 現在於 key 命中後檢查 scoped XML 身分；不同 namespace、scalar 或 structure
+儲存層保留 key 碰撞下的不同請求；replay 選取唯一 scoped XML 身分，沒有匹配才
 轉入 synthetic，完全相同的 raw recording 仍受支援。非同一原文的 malformed XML、
-mixed content 與未解析 `xsi:type` 不構成等價。此防護限制選定的 response substitution，
-未遷移 index 或恢復被覆蓋的錄製，亦非完整 protocol／QName-valued content 驗證。
+mixed content 與未解析 `xsi:type` 不構成等價。僅提供 key 的 `lookup` 在歧義時回傳
+`None`，請改用 `lookup_request`。這不是完整 protocol／QName-valued content 驗證，
+也不能恢復舊版已覆蓋的錄製。JSON 格式不變；降版前應備份，以免舊讀取器再次合併資料。
+詳見[錄製儲存與報告遷移](replay-storage_zh.md)。
 
 許多 token-error reason 帶有 operation tag 與 numeric id，例如：
 

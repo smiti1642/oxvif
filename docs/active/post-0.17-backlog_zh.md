@@ -21,7 +21,7 @@
 | F03 | 完整 Device／DeviceIO／network／user／relay 契約與 Recording／Search／Replay 生命週期 | W13／W14；不改 host network；硬體效果另行授權 |
 | F04 | Events filter、subscription、queue 隔離、renew／expiry／termination 及傳送建模 | W15；Media sync 不等於 Events sync；保留目前僅收件確認的預設拒絕 |
 | F05 | 更完整 HTTP binding、WSSE freshness／replay protection、角色及 fault injection 重設計 | W07–W09；先完成本版安全／完整性判定；raw hook 保留明確逃生出口 |
-| F06 | 全程式 capability 一致性、併發／rollback、replay 相依及超出必要 K27 修復的 key-format 重設計 | W16–W19；K27 儲存遺失問題不延後 |
+| F06 | 全程式 capability 一致性、併發／rollback、replay 相依及超出 K27 碰撞保留修正的 key-format 重設計 | W16–W19；K27 儲存保留已在候選修復，並未延後；見[遷移](../replay-storage_zh.md) |
 | F07 | 其餘 schema／QName／wildcard 控制、更廣 corpus 及 fuzz／property 覆蓋 | W20–W23；保留選定獨立 corpus 關卡，不宣稱全部操作覆蓋 |
 | F08 | RTSP decoder／playback、批次檔案匯出、CLI 攝影機寫入及獨立導覽 crate | 既有 CLI 維護／導覽計畫；寫入前先建立威脅模型與權限 UX |
 | F09 | 官方 Homebrew Core、Debian／Ubuntu 與 Windows 社群套件渠道申請 | 散布計畫；目前原生包裝驗證仍是發布關卡，產出 artifact 不代表已提交申請 |

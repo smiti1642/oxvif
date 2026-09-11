@@ -2,6 +2,12 @@
 
 [English](mock-fidelity-pipeline-preflight.md) | [繁體中文](mock-fidelity-pipeline-preflight_zh.md)
 
+2026-09-11 K27 follow-up: collision retention and request-aware lookup are
+implemented; see [storage migration](../replay-storage.md) and
+[release evidence](release-0.17-cut.md#evidence). Earlier overwrite reproductions
+and containment records below are historical evidence, not the current storage
+behavior. The remaining W19 work is not complete.
+
 W02/W03/W06/W19 engineering checkpoint, 2026-09-10. Source baseline `9978220`.
 This is a source-derived dependency map, not a normative protocol catalogue.
 W02 and W03 remain PARTIAL across the programme; common synthetic validation is

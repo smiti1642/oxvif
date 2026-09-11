@@ -1,6 +1,4 @@
-//! K27 collision containment and remaining storage gaps, not conformance acceptance.
-//! Storage still collides; replay must fall through instead of substituting a
-//! different request's response. Never restore substitution to keep tests green.
+//! K27 collision-safe storage and request-aware replay, not conformance acceptance.
 #![cfg(feature = "metamorph")]
 
 use oxvif::{
@@ -26,6 +24,12 @@ async fn namespace_aliases_entities_and_real_header_ephemera_still_replay() {
     let mut store = FixtureStore::new("synthetic-identity-equivalence");
     store.record(ACTION, &recorded, FIRST);
     assert_ne!(store.fixtures()[0].request_raw, incoming);
+    store.record(ACTION, &incoming, FIRST);
+    assert_eq!(
+        store.len(),
+        1,
+        "qualified ephemera updates the same recording"
+    );
     let replay = MetamorphTransport::new(store.clone());
     assert_eq!(
         replay
@@ -53,7 +57,7 @@ async fn namespace_aliases_entities_and_real_header_ephemera_still_replay() {
 }
 
 #[tokio::test]
-async fn legacy_key_collision_does_not_replay_a_different_request() {
+async fn legacy_key_collisions_preserve_both_recordings_and_replay_identity() {
     for (case, first, second) in [
         (
             "leading space",
@@ -91,6 +95,11 @@ async fn legacy_key_collision_does_not_replay_a_different_request() {
             "<GetResource><Created>second</Created></GetResource>",
         ),
         (
+            "unqualified header is not SOAP ephemera",
+            "<Envelope><Header><MessageID>first</MessageID></Header><Body><GetResource/></Body></Envelope>",
+            "<Envelope><Header><MessageID>second</MessageID></Header><Body><GetResource/></Body></Envelope>",
+        ),
+        (
             "mixed content ordering",
             "<GetResource><A>x<B/>y</A></GetResource>",
             "<GetResource><A>xy<B/></A></GetResource>",
@@ -106,30 +115,111 @@ async fn legacy_key_collision_does_not_replay_a_different_request() {
         store.record(ACTION, first, FIRST);
         let first_key = store.fixtures()[0].key_canon.clone();
         store.record(ACTION, second, SECOND);
+        assert_eq!(store.len(), 2, "distinct identities must coexist: {case}");
         assert_eq!(
-            store.len(),
-            1,
-            "K27 baseline moved: {case}; replace with corrected invariant"
-        );
-        assert_eq!(
-            store.fixtures()[0].key_canon,
+            store.fixtures()[1].key_canon,
             first_key,
-            "collision premise: {case}"
+            "legacy collision: {case}"
         );
-        assert_eq!(store.fixtures()[0].request_raw, second);
-        let fallback = oxvif::mock::MockTransport::new()
-            .soap_post("http://mock", ACTION, first.into())
-            .await
-            .unwrap();
-        assert_ne!(fallback, SECOND);
+        assert_eq!(store.fixtures()[0].request_raw, first);
+        assert_eq!(store.fixtures()[1].request_raw, second);
+        let details = store.diff_details();
+        assert_eq!(details.len(), 2, "report retains every fixture: {case}");
+        assert!(details[0].clone_xml.contains("first-recording-927"));
+        assert!(details[1].clone_xml.contains("second-recording-928"));
+        let progress = std::sync::Mutex::new(Vec::new());
+        let report = store.diff_against_synthetic_with_progress(|p| {
+            progress.lock().unwrap().push(p);
+        });
+        assert_eq!(report.compared, 2);
+        assert_eq!(report.quirks.len(), 2);
+        assert!(
+            report.quirks[0]
+                .only_in_clone
+                .iter()
+                .any(|p| p.contains("first-recording-927"))
+        );
+        assert!(
+            report.quirks[1]
+                .only_in_clone
+                .iter()
+                .any(|p| p.contains("second-recording-928"))
+        );
+        let progress = progress.into_inner().unwrap();
+        assert_eq!(
+            progress
+                .iter()
+                .map(|p| (p.done, p.total))
+                .collect::<Vec<_>>(),
+            vec![(1, 2), (2, 2)]
+        );
+        assert!(
+            store.lookup(ACTION, &first_key).is_none(),
+            "ambiguous key-only lookup: {case}"
+        );
+        assert_eq!(
+            store.lookup_request(ACTION, first).unwrap().response_raw,
+            FIRST
+        );
+        assert_eq!(
+            store.lookup_request(ACTION, second).unwrap().response_raw,
+            SECOND
+        );
+        assert!(
+            store
+                .lookup_request("urn:wrong/GetResource", first)
+                .is_none()
+        );
+        assert!(
+            store
+                .lookup_request(ACTION, "<GetResource missing='true'/>")
+                .is_none()
+        );
+
+        let dir = std::env::temp_dir().join(format!(
+            "oxvif-k27-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        std::fs::create_dir(&dir).unwrap();
+        store.save(&dir).unwrap();
+        let path = dir.join("fixtures.json");
+        let bytes = std::fs::read(&path).unwrap();
+        let mut loaded = FixtureStore::load(&dir).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), bytes, "load never rewrites");
+        assert_eq!(loaded.len(), 2, "load retains collision: {case}");
+        assert!(loaded.lookup(ACTION, &first_key).is_none());
+        loaded.record(ACTION, first, "<updated-first-930/>");
+        assert_eq!(loaded.len(), 2, "same request replaces only itself: {case}");
+        assert_eq!(
+            loaded.lookup_request(ACTION, first).unwrap().response_raw,
+            "<updated-first-930/>"
+        );
+        assert_eq!(
+            loaded.lookup_request(ACTION, second).unwrap().response_raw,
+            SECOND
+        );
+        loaded.save(&dir).unwrap();
+        let loaded = FixtureStore::load(&dir).unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(
+            loaded.lookup_request(ACTION, first).unwrap().response_raw,
+            "<updated-first-930/>"
+        );
+        assert_eq!(
+            loaded.lookup_request(ACTION, second).unwrap().response_raw,
+            SECOND
+        );
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(dir).unwrap();
         let replay = MetamorphTransport::new(store.clone());
         assert_eq!(
             replay
                 .soap_post("http://mock", ACTION, first.into())
                 .await
                 .unwrap(),
-            fallback,
-            "a colliding request must fall through, not replay another identity: {case}"
+            FIRST,
+            "the first colliding recording is retained: {case}"
         );
         assert_eq!(
             replay
@@ -152,8 +242,8 @@ async fn legacy_key_collision_does_not_replay_a_different_request() {
                 http.soap_post(server.device_url(), ACTION, first.into())
                     .await
                     .unwrap(),
-                fallback,
-                "HTTP containment: {case}"
+                FIRST,
+                "HTTP first identity: {case}"
             );
             assert_eq!(
                 http.soap_post(server.device_url(), ACTION, second.into())

@@ -3,9 +3,10 @@
 [English](release-0.17-cut.md) | [繁體中文](release-0.17-cut_zh.md)
 
 狀態：IN-PROGRESS／尚不可發布。2026-09-11 授權執行。
-比較基準：`v0.16.0`；凍結的實作候選：
+比較基準：`v0.16.0`；凍結的範圍基準：
 `f9448e515baec6169f40ec7f38ec2e0fcc752826`（證據補充 `2f92b75`）。
 此處凍結的是範圍，不代表 hardening 分支歷史已獲驗收。
+下列 K27 修正接續此基準，屬於已授權的資料完整性範圍。
 
 | 章節 | 用途 |
 | --- | --- |
@@ -40,7 +41,7 @@
 | Gate | 目前狀態 | 結案條件 |
 | --- | --- | --- |
 | G01 完整候選審查 | OPEN | 審查相對 v0.16.0 的全部差異，不只 PR #14／#16／#17；確認各收錄批次的讀寫／options／capability／replay 相依完整及遷移方式 |
-| G02 資料完整性 K27 | BLOCKED | canonical key 碰撞仍會用不同請求覆蓋錄製內容。須保留不同身分或明確拒絕碰撞，涵蓋 load／save 及公開 lookup；保留機密清理與相同請求替換語意。阻止錯誤 replay 不等於修復儲存 |
+| G02 資料完整性 K27 | LOCAL-PASS | 碰撞群組在 record／load／save 及完整請求 replay 中保留不同請求；key-only 歧義回傳 None；等價請求仍替換，去憑證維持指定格式。報告群組保留各列。見下方 K27 證據；G05 仍獨立待驗 |
 | G03 安全及回應完整性 | OPEN | 處理已知機密洩漏、部分寫入、不安全 URL、誤導效果回覆及共用邊界回歸；不得把重大問題改名為後續工作 |
 | G04 本機程式及文件 | LOCAL-PASS 基準 | 精確重用未變動程式的證據；修正、改版號或合併後重驗受影響關卡 |
 | G05 原生 CI | BLOCKED | 最終候選的 Windows／Linux／macOS 真實結果；先前 dispatch 遭 HTTP 403 拒絕，沒有 run |
@@ -49,8 +50,10 @@
 | G08 版號及發布連結 | OPEN | 候選驗收後同步 library／CLI 版號；schema v3 宣稱須符合測試；草稿連結固定至最終 tag，遷移警告不可隱藏 |
 | G09 RC 及授權 | NOT-RUN | RC 也須明確發布授權；建議觀察 3–7 天，不因日期到期自動通過；取得正式發布同意 |
 
-`tests/mock_replay_key_gaps.rs` 已重現 K27：不同請求縮成一份 fixture，
-但 replay 會拒絕替換成錯誤回應。Known-gap 測試綠燈證明缺陷存在，不能結案 G02。
+`tests/mock_replay_key_gaps.rs` 現在斷言資料保留，不再斷言遺失：十組碰撞在
+record／load／save、公開 lookup、報告及雙 replay transport 中保留兩份請求。
+舊版已覆蓋資料無法恢復；降版後舊讀取器仍可能合併格式未變的 JSON。
+詳見[儲存與報告遷移](../replay-storage_zh.md)。
 
 HTTP binding／UTF-8 與其餘 fault／field 語意須在 G01／G03 判定對收錄宣稱的
 影響。完整重設計可延後；已證實影響本版的重大失敗不可延後。
@@ -95,7 +98,8 @@ fmt、strict docs、Rust 1.88、獨立 feature 及 encoding 關閉／開啟控�
 conformance。Library package dry-run 通過，未上傳。以上不能結案儲存缺陷、
 新版套件、原生 CI 或實機關卡。
 
-2026-09-11 切點／文件驗收重跑，實作未變動：
+2026-09-11 `e661781` 切點／文件驗收重跑，實作未變動
+（K27 修正前的歷史基準）：
 
 | 檢查 | 觀察結果 |
 | --- | --- |
@@ -109,6 +113,45 @@ conformance。Library package dry-run 通過，未上傳。以上不能結案儲
 | K27 | 既有可執行回歸仍重現儲存覆蓋；G02 維持 BLOCKED |
 | CI dispatch | 再次執行仍回傳 HTTP 403，沒有新 run；G05 維持 BLOCKED |
 
-本次只修改文件。Rust／lockfile 輸入相同，重用先前 MSRV、strict rustdoc、
+該基準提交只修改文件。Rust／lockfile 輸入相同，重用先前 MSRV、strict rustdoc、
 XML feature 及外部 corpus 證據，不宣稱本輪重新執行。未新增實機／終端 session、
 最終版號套件或安裝驗證。可發布候選備妥前，版號仍為 0.16.0；未改變已發布產物。
+
+### K27 碰撞保留修正
+
+2026-09-11，接續 `e661781`。儲存索引改為碰撞群組，只有去憑證後等價的請求才能
+替換。完整請求 lookup 選取唯一匹配，key-only lookup 拒絕歧義；legacy key
+清理不再合併不同請求。`QuirkDiff` 將歧義列完整保留為未配對觀察值，不丟棄資料
+或虛構對應。
+
+碰撞回歸包含十組虛構請求，涵蓋空白、namespace／structure／attribute 邊界、
+body 與未限定 namespace 的 header 欄位、mixed content、trailing root 及
+QName binding。各組驗證不同回應、保存／載入／原檔不變、同請求替換、報告列及
+進度、key-only 拒絕與 in-process／HTTP replay。Qualified ephemera 及一般
+token／Action 正向控制仍通過。Legacy URL 清理另有相同請求合併及不同請求保留控制。
+
+一次 workspace 全量 all-features、`--no-fail-fast` 擾動，暫時恢復同 key 替換
+及報告 map 覆蓋；恰有三項在實際斷言失敗，而非編譯失敗：
+
+- `metamorph::fixture::tests::legacy_key_cleanup_preserves_distinct_colliding_requests`
+- `metamorph::quirk::tests::colliding_report_rows_are_retained_without_an_invented_pairing`
+- `legacy_key_collisions_preserve_both_recordings_and_replay_identity`
+
+擾動執行共有 1,297 通過、三項失敗、五項 ignored，涵蓋 41 suites。碰撞迴圈在
+第一組即失敗，不宣稱每條 XML 比較規則均有獨立擾動敏感度。兩處擾動均精確還原後
+才執行下列關卡。
+
+| 檢查 | K27 結果 |
+| --- | --- |
+| Workspace all-features／default、no-fail-fast | 1,300／1,190 通過，各五項 ignored、41 suites |
+| Workspace Clippy all／default 與 fmt | 通過 |
+| Rust 1.88 workspace all-features／all-targets | 通過 |
+| Library 獨立 feature | default、health、mock、mock-server、metamorph、metamorph-server、serde 的 Clippy 均通過 |
+| Strict workspace rustdoc all／default | `-D warnings` 通過 |
+| Markdown | 已檢查修改文件的 310 個本機檔案目標及 18 個導覽 anchor；正規化換行後，已發布 CHANGELOG 內容不變 |
+| 遠端權限 | 唯讀檢查顯示 `viewerPermission=READ`；未再次 dispatch、換憑證或繞過限制；G05 仍阻擋 |
+
+未修改 ONVIF 方法、SOAP parser、相依套件、workflow 或 CLI 實作。既有 XML
+feature-unification 及外部 corpus 證據僅重用未變動輸入，不宣稱本輪重跑 schema。
+本輪未執行實機、原生平台、最終版號套件或安裝驗收。G02 本機結案；G01／G03
+完整候選與安全審查、G05–G09 仍依上表待完成。

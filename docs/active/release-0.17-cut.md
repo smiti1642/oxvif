@@ -3,9 +3,10 @@
 [English](release-0.17-cut.md) | [繁體中文](release-0.17-cut_zh.md)
 
 Status: IN-PROGRESS / NOT RELEASE-READY. Authorized 2026-09-11.
-Comparison base: `v0.16.0`; frozen implementation candidate:
+Comparison base: `v0.16.0`; frozen scope baseline:
 `f9448e515baec6169f40ec7f38ec2e0fcc752826` (evidence update `2f92b75`).
 This freezes scope, not a claim that the hardening ancestry is accepted.
+The K27 repair below follows that baseline within the approved integrity scope.
 
 | Section | Purpose |
 | --- | --- |
@@ -41,7 +42,7 @@ review all transitive consumers of an included helper. Public claims may not say
 | Gate | Current disposition | Required closure |
 | --- | --- | --- |
 | G01 Complete candidate review | OPEN | Review all differences from v0.16.0, not only PRs #14/#16/#17; verify each included batch's read/write/options/capability/replay closure and migration |
-| G02 Data integrity, K27 | BLOCKED | Stored canonical-key collisions still replace distinct recordings. Preserve distinct identities or explicitly reject collisions, including load/save and public lookup; retain secret redaction and same-request replacement semantics. Containment of wrong replay is not storage repair |
+| G02 Data integrity, K27 | LOCAL-PASS | Collision buckets preserve distinct requests across record/load/save and request-aware replay; key-only ambiguity returns None; equivalent requests still replace and credential cleanup remains targeted. Report groups retain all rows. See the K27 evidence below; G05 remains separate |
 | G03 Security and response integrity | OPEN | Disposition of known credential leaks, partial writes, unsafe URLs, ambiguous effect receipts and shared-boundary regressions; a severe known issue cannot become future work by relabeling it |
 | G04 Local code and documents | LOCAL-PASS baseline | Reuse exact unchanged-code evidence; revalidate affected gates after fixes, version changes or merges |
 | G05 Native CI | BLOCKED | Actual Windows/Linux/macOS results on final candidate; previous workflow dispatch returned HTTP 403 and no run exists |
@@ -50,9 +51,11 @@ review all transitive consumers of an included helper. Public claims may not say
 | G08 Versions and release links | OPEN | Update library/CLI versions together after candidate acceptance; preserve schema-v3 claims only if tests agree, resolve every draft link to the final tag, keep migration warnings visible |
 | G09 RC and approval | NOT-RUN | Publish an RC only with explicit authorization; suggested 3–7 day observation, no calendar-based automatic success; obtain final release approval |
 
-K27 is already reproduced in `tests/mock_replay_key_gaps.rs`: different requests
-collapse into one stored fixture while replay refuses to substitute the wrong
-response. A green known-gap test proves the gap exists. It cannot close G02.
+`tests/mock_replay_key_gaps.rs` now asserts retention rather than reproducing loss:
+ten collision pairs retain both requests across record/load/save, public lookup,
+reports and both replay transports. Old recordings already overwritten cannot be
+recovered; old readers can collapse the unchanged JSON shape on downgrade.
+See [storage and report migration](../replay-storage.md).
 
 HTTP binding/UTF-8 handling and remaining fault/field semantics need G01/G03
 triage for their impact on included claims. A full redesign may be deferred;
@@ -104,7 +107,8 @@ encoding-off/on controls passed. Selected external corpus: 160 XML instances,
 Library package dry-run passed; no upload occurred. These results do not close
 the known storage defect, new version packaging, native CI or hardware gates.
 
-2026-09-11 scope/document acceptance rerun, unchanged implementation:
+2026-09-11 scope/document acceptance rerun at `e661781`, unchanged implementation
+(historical baseline, before the K27 repair):
 
 | Check | Observed result |
 | --- | --- |
@@ -118,8 +122,53 @@ the known storage defect, new version packaging, native CI or hardware gates.
 | K27 | Existing executable regression still reproduces storage overwrite; G02 remains BLOCKED |
 | CI dispatch | Reattempt returned HTTP 403; no new run, G05 remains BLOCKED |
 
-This commit changes documentation only. Previously verified MSRV, strict rustdoc,
+That baseline commit changes documentation only. Previously verified MSRV, strict rustdoc,
 XML feature and external-corpus results are reused for identical Rust/lockfile
 inputs, not represented as newly executed. No new real-camera/terminal session,
 final-version package or installation test is claimed. Versions remain 0.16.0
 until a releasable candidate is prepared; no published artifacts were changed.
+
+### K27 collision-retention repair
+
+2026-09-11, following `e661781`. The storage index now holds collision buckets;
+replacement requires equivalent sanitized requests. Public request-aware lookup
+selects a unique match, key-only lookup refuses ambiguity, and legacy-key cleanup
+does not merge distinct requests. `QuirkDiff` retains ambiguous rows as unmatched
+observations rather than dropping rows or inventing correspondence.
+
+The collision regression covers ten synthetic pairs, including whitespace,
+namespace/structure/attribute boundaries, body and unqualified-header fields,
+mixed content, trailing roots and QName bindings. Each pair checks distinct
+payloads, save/load/source-file preservation, same-request replacement, report
+rows/progress, key-only refusal and in-process/HTTP replay. Qualified ephemera
+and ordinary token/Action controls remain positive. Legacy URL cleanup has
+separate same-request merge and distinct-request retention controls.
+
+One workspace-wide all-feature `--no-fail-fast` mutation campaign reinstated
+same-key replacement and report-map overwriting. Exactly three tests failed on
+assertions, not compilation:
+
+- `metamorph::fixture::tests::legacy_key_cleanup_preserves_distinct_colliding_requests`
+- `metamorph::quirk::tests::colliding_report_rows_are_retained_without_an_invented_pairing`
+- `legacy_key_collisions_preserve_both_recordings_and_replay_identity`
+
+The mutation run had 1,297 passes, three failures and five ignored across 41
+suites. The collision-loop mutation fails on its first case; this does not claim
+independent mutation sensitivity for every XML comparison rule. Both mutations
+were restored exactly before the following gates.
+
+| Check | K27 result |
+| --- | --- |
+| Workspace all-features / default, no-fail-fast | 1,300 / 1,190 passed; five ignored each, 41 suites |
+| Workspace Clippy, all/default, and fmt | Passed |
+| Rust 1.88 workspace all-features/all-targets | Passed |
+| Isolated library features | Clippy passed for default, health, mock, mock-server, metamorph, metamorph-server and serde |
+| Strict workspace rustdoc, all/default | Passed with `-D warnings` |
+| Markdown | 310 changed-document local file targets and 18 navigation anchors checked; published CHANGELOG content unchanged after line-ending normalization |
+| Remote permission | Read-only inspection reports `viewerPermission=READ`; no new workflow dispatch, credentials change or bypass; G05 remains blocked |
+
+No ONVIF method, SOAP parser, dependency, workflow or CLI implementation changed.
+Earlier XML feature-unification and external-corpus evidence is reused for those
+unchanged inputs, not claimed as a new schema run. No hardware, native-platform,
+final-version package or installation acceptance occurred. G02 is locally closed;
+G01/G03 complete-candidate and security review, G05–G09 remain as listed above.
