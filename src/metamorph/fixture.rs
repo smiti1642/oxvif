@@ -165,6 +165,9 @@ impl FixtureStore {
     /// `key_canon`; only the action tells them apart.
     /// Legacy caller-provided keys have URL credential pairs stripped before
     /// lookup, matching the in-memory normalization performed by [`Self::load`].
+    /// This key-only API does not compare XML request identity; the legacy
+    /// projection can still collide. Built-in replay performs an additional
+    /// scoped identity check before returning a recorded response.
     pub fn lookup(&self, action: &str, key_canon: &str) -> Option<&Fixture> {
         self.index
             .get(&(action.to_string(), scrub_url_userinfo(key_canon)))

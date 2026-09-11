@@ -555,6 +555,11 @@ Replay key 現在於投影後清除 URL `user:pass@`，包含 XML entity decodin
 僅憑證不同而碰撞的 key 保留最後一筆。Raw envelope 仍僅針對指定格式去除憑證，
 不保證任意裝置資料均無秘密。詳見[函式庫指南](../LIBRARY_GUIDE_zh.md#metamorphmetamorph--metamorph-server-feature)。
 
+Replay 現在於 key 命中後檢查 scoped XML 身分；不同 namespace、scalar 或 structure
+轉入 synthetic，完全相同的 raw recording 仍受支援。非同一原文的 malformed XML、
+mixed content 與未解析 `xsi:type` 不構成等價。此防護限制選定的 response substitution，
+未遷移 index 或恢復被覆蓋的錄製，亦非完整 protocol／QName-valued content 驗證。
+
 許多 token-error reason 帶有 operation tag 與 numeric id，例如：
 
 ```text

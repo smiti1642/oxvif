@@ -22,6 +22,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Replay now checks scoped XML identity after a legacy fixture-key hit, preventing
+  selected whitespace, namespace and structure collisions from substituting a
+  different request's response. Unconfirmed matches fall through to synthetic;
+  exact raw recordings remain supported. Stored-key collisions and full protocol
+  validation remain under audit; no existing recording file is rewritten.
 - Metamorph canonical fixture keys and value projections now strip URL
   `user:pass@` pairs, including after XML entity decoding. Replay uses the same
   credential-free key. Loading older keys cleans them in memory without rewriting
@@ -94,9 +99,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Executable replay-key audit cases expose unresolved namespace, whitespace,
-  serialization and trailing-document collisions. Passing known-gap assertions
-  mean reproduced, not repaired; paired migration tracking now covers profile
+- Executable replay-key audit cases expose remaining stored-key namespace,
+  whitespace, serialization and trailing-document collisions; replay substitution
+  is now contained as noted above. Paired migration tracking covers profile
   identity consumers and the separately reviewed Media synchronization proposal.
 - CLI regression checks now compare functional JSON output independently of
   per-execution timing, while still validating the timing field and all remaining

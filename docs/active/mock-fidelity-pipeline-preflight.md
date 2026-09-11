@@ -28,7 +28,7 @@ below. No new product decision is required here.
 
 ## Replay key collision reproduction
 
-`tests/mock_replay_key_gaps.rs` reproduces six distinct-wire/same-Action pairs
+At `2ecb557`, `tests/mock_replay_key_gaps.rs` reproduced six distinct-wire/same-Action pairs
 that currently collapse to one stored key: leading and repeated scalar spaces,
 different field namespaces, escaped text versus child structure, an escaped quote
 crossing an attribute boundary, and a second root ignored by the compatibility
@@ -46,8 +46,8 @@ version/legacy-load behavior, namespace identity, scalar whitespace, unambiguous
 serialization, complete-document handling, masking scope and malformed-input
 fallback review. Do not silently reinterpret or rewrite existing recordings.
 
-Next bounded W19 implementation: keep the public key/file shape unchanged, but
-verify a matched recording's complete decoded XML identity before serving it.
+Implemented bounded W19 containment: keep the public key/file shape unchanged, but
+verify a matched recording's scoped decoded XML identity before serving it.
 Distinct namespaces/scalars/structure must fall through to synthetic, not replay
 another request's response. Preserve exact raw-fixture replay; retain reviewed
 transport-ephemera masking and URL credential normalization. Unparseable or mixed
@@ -55,11 +55,40 @@ content that cannot be compared safely must not gain semantic equivalence merely
 from a legacy key collision. This containment cannot recover overwritten fixtures
 or complete the later persisted-key migration.
 
-2026-09-11 audit-only gate: formatting, both workspace/all-target Clippy modes,
+Historical `2ecb557` audit-only gate (2026-09-11): formatting, both workspace/all-target Clippy modes,
 inventory controls, 1,206 all-feature tests and 1,112 default tests passed; each
 test run had 5 ignored across 27 suites. These totals include the intentionally
 passing K27 reproduction. No production identity containment is implemented by
 this audit commit. The preceding `4220ec2` CI run 34556356514 completed successfully.
+
+The secondary `request::recording_equivalent` check compares expanded element and
+attribute names, scalar whitespace, child order/count and URL-normalized values.
+It uses the bounded parser without synthetic operation validation or fault policy.
+Ephemera masking is restricted to selected qualified WSA/WSSE/WSU fields under
+the SOAP Envelope's Header; same-named Body fields remain significant. Exact raw
+input bypasses semantic comparison intentionally. Other parse failures and mixed
+content fall through; nonidentical documents carrying unresolved `xsi:type` also
+fall through rather than comparing its unexpanded lexical QName. Other QName-valued
+content and full SOAP/HTTP semantics still need their own audit.
+
+Both in-process and HTTP controls now cover nine colliding pairs and exact-raw
+replay; a separate positive retains prefix aliases, entity/CDATA equivalence,
+URL destination and WS-Security nonce/time changes. The old implementation failed
+the corrected substitution assertion (RTK 1789096026); the initial guard failed
+the additional xsi:type case (1789096304). Disabling qualified WSA masking made
+the positive fail at its recorded-payload assertion (1789096245), then was restored.
+The standalone ReplayResponder MessageID probe now supplies a qualified SOAP/WSA
+request; unqualified lookalike Header fields are no longer considered ephemera.
+FixtureStore::lookup remains a key-only public API, not this secondary check.
+The old response-substitution baseline above is historical; the current replay
+assertion checks synthetic fallback while preserving the unresolved index probe.
+
+Containment gate (2026-09-11, Windows isolated build): formatting, both workspace /
+all-target Clippy modes, both strict workspace rustdoc modes and inventory controls
+passed. All-features: 1,207 passed; default: 1,112 passed; both had 5 ignored across
+27 suites. No new XSD instance validation or hardware mutation occurred. The prior
+audit commit `2ecb557` CI run 34557140934 completed successfully; this local gate
+does not claim whole-programme or release acceptance.
 
 ## Replay key credential boundary
 

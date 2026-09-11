@@ -30,6 +30,9 @@
 //! URL `user:pass@` pairs. Canonical keys also strip decoded URL pairs. Loading
 //! legacy keys cleans them in memory, not on disk. Inspect captures and older
 //! copies before sharing: targeted redaction is not a general secret detector.
+//! Replay adds a scoped XML-identity check after a legacy key hit. Different
+//! request identities fall through to synthetic; exact raw recordings remain
+//! supported. This does not recover overwritten recordings or migrate the index.
 //!
 //! # Will oxvif parse this device correctly?
 //!

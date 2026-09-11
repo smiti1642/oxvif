@@ -27,7 +27,7 @@ W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯�
 
 ## Replay key 碰撞重現
 
-`tests/mock_replay_key_gaps.rs` 重現六種不同 wire、相同 Action 卻只保存一個 key
+在 `2ecb557`，`tests/mock_replay_key_gaps.rs` 重現六種不同 wire、相同 Action 卻只保存一個 key
 的組合：scalar 前導與重複空白、不同 field namespace、escaped text 與 child
 結構、escaped quote 跨 attribute boundary，以及 compatibility DOM 忽略第二個
 root。最後錄製的 response 回答兩個 request。另一項控制仍區分一般不同 token
@@ -41,17 +41,41 @@ count assertion 失敗（RTK log 1789095344）；兩項 mutation 均已還原。
 namespace identity、scalar 空白、無歧義序列化、完整文件、masking scope 與
 malformed-input fallback 政策，不默默重新詮釋或覆寫既有錄製資料。
 
-下一個有界 W19 實作：維持公開 key／檔案格式，但回傳命中的錄製前，再次驗證完整
+已實作有界 W19 防護：維持公開 key／檔案格式，但回傳命中的錄製前，再次驗證 scoped
 decoded XML 身分。不同 namespace／scalar／structure 應轉入 synthetic，不 replay
 另一個 request 的 response。保留完全相同的 raw fixture replay，以及已審查的
 transport-ephemera masking／URL 去憑證正規化。無法安全比較的 unparseable 或
 mixed content 不得僅因 legacy key 碰撞就被視為等價。此防護無法恢復被覆蓋的
 fixture，也不等於完成後續持久化 key 遷移。
 
-2026-09-11 audit-only 關卡：formatting、兩種 workspace／all-target Clippy、
+歷史 `2ecb557` audit-only 關卡（2026-09-11）：formatting、兩種 workspace／all-target Clippy、
 inventory 控制、1,206 all-feature 與 1,112 default 測試通過；兩者均為 27 suites、
 5 ignored，包含刻意通過的 K27 重現。本 audit commit 尚未實作 production identity
 防護。前一提交 `4220ec2` 的 CI run 34556356514 已成功完成。
+
+第二層 `request::recording_equivalent` 比對 expanded element／attribute name、
+scalar 空白、child 順序／數量及 URL-normalized value。使用 bounded parser，但不
+套用 synthetic operation validation／fault policy。Ephemera masking 限於 SOAP
+Envelope Header 中選定的 qualified WSA／WSSE／WSU 欄位，Body 同名欄位仍有意義。
+完全相同 raw input 刻意略過語意比較；其他 parse failure／mixed content 轉入 synthetic。
+含未解析 `xsi:type` 的非同一原文亦轉入 synthetic，不只比較未展開的 lexical QName。
+其他 QName-valued content 與完整 SOAP／HTTP 語意仍須另行審查。
+
+In-process 與 HTTP 控制均涵蓋九組碰撞及 exact-raw replay；另有正向測試保留 prefix
+alias、entity／CDATA 等價、URL destination 與 WS-Security nonce／time 變動。
+舊實作於修正後的替換 assertion 失敗（RTK 1789096026），初版 guard 於新增 xsi:type
+案例失敗（1789096304）。停用 qualified WSA masking 使正向測試於 recorded-payload
+assertion 失敗（1789096245），之後已還原。Standalone ReplayResponder MessageID
+probe 改用 qualified SOAP／WSA request；unqualified lookalike Header 欄位不再視為
+ephemera。`FixtureStore::lookup` 仍是 key-only 公開 API，不包含第二層檢查。
+上方回覆替換基準為歷史紀錄；目前 replay assertion 檢查 synthetic fallback，
+並保留未修正的 index probe。
+
+防護關卡（2026-09-11，Windows 獨立 build）：formatting、兩種 workspace／all-target
+Clippy、兩種 strict workspace rustdoc 與 inventory 控制通過。All-features：1,207
+passed；default：1,112 passed；兩者均為 27 suites、5 ignored。未新增 XSD instance
+驗證或硬體 mutation。前一 audit commit `2ecb557` 的 CI run 34557140934 成功完成；
+本機關卡不代表整套計畫或 Release 已驗收。
 
 ## Replay key 憑證邊界
 

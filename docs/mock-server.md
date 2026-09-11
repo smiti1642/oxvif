@@ -983,6 +983,13 @@ keep the last stored entry. Raw-envelope redaction remains targeted; arbitrary
 device data is not certified secret-free. See the Metamorph section of the
 [library guide](../LIBRARY_GUIDE.md#metamorph-metamorph--metamorph-server-features).
 
+Replay now checks scoped XML identity after a key hit. Different namespaces,
+scalars and structures fall through to synthetic, while exact raw recordings
+remain supported. Nonidentical malformed XML, mixed content and unresolved
+`xsi:type` do not establish equivalence. This contains selected response-substitution
+defects without migrating the index or recovering overwritten recordings; it is
+not complete protocol or QName-valued-content validation.
+
 ### 9.2 Reason strings are tagged and unique
 
 Many token-error reasons carry an operation tag and a numeric id:

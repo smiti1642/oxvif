@@ -2,7 +2,9 @@
 //!
 //! Unlike the compatibility client DOM, this keeps namespace scopes and text.
 //! It is not an XSD validator. Legacy fragment extractors remain in use by
-//! handlers that have not yet migrated; replay and authentication are unchanged.
+//! handlers that have not yet migrated. Replay uses a bounded secondary identity
+//! check over this tree without applying synthetic routing/fault policy;
+//! authentication is unchanged.
 
 use std::{borrow::Cow, collections::HashMap};
 
@@ -16,6 +18,85 @@ const SOAP: &str = "http://www.w3.org/2003/05/soap-envelope";
 const MAX_BYTES: usize = 2 * 1024 * 1024;
 const MAX_DEPTH: usize = 64;
 const MAX_NODES: usize = 16_384;
+
+/// Secondary check for a legacy replay-key hit, not a new fixture key format.
+/// Exact raw recordings remain intentional escape hatches. Otherwise compare
+/// bounded decoded trees, never let a parse failure establish equivalence.
+#[cfg(feature = "metamorph")]
+pub(crate) fn recording_equivalent(recorded: &str, incoming: &str) -> bool {
+    if recorded == incoming {
+        return true;
+    }
+    let (Ok(recorded), Ok(incoming)) = (Request::parse(recorded), Request::parse(incoming)) else {
+        return false;
+    };
+    same_recorded_node(&recorded.root, &incoming.root, false, true)
+}
+
+#[cfg(feature = "metamorph")]
+fn same_recorded_node(left: &Node, right: &Node, in_header: bool, root: bool) -> bool {
+    use crate::redact::scrub_url_userinfo;
+    if left.ns != right.ns
+        || left.name != right.name
+        || left.attributes.len() != right.attributes.len()
+        || left.children.len() != right.children.len()
+    {
+        return false;
+    }
+    if !left.attributes.iter().all(|(name, value)| {
+        right
+            .attributes
+            .get(name)
+            .is_some_and(|other| scrub_url_userinfo(value) == scrub_url_userinfo(other))
+    }) {
+        return false;
+    }
+    if left
+        .attribute("http://www.w3.org/2001/XMLSchema-instance", "type")
+        .is_some()
+    {
+        // The tree keeps expanded attribute names, not namespace bindings for
+        // QName-valued content. Do not equate different wire documents with an
+        // unresolved xsi:type; the exact-raw fast path still supports fixtures.
+        return false;
+    }
+    let ephemeral = in_header
+        && match left.ns.as_str() {
+            "http://www.w3.org/2005/08/addressing" => {
+                matches!(left.name.as_str(), "MessageID" | "To" | "Address")
+            }
+            "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" => {
+                matches!(left.name.as_str(), "Password" | "Nonce")
+            }
+            "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" => {
+                matches!(left.name.as_str(), "Created" | "Expires")
+            }
+            _ => false,
+        };
+    if left.children.is_empty() {
+        if !ephemeral && scrub_url_userinfo(&left.text) != scrub_url_userinfo(&right.text) {
+            return false;
+        }
+    } else if !left.text.chars().all(xml_space) || !right.text.chars().all(xml_space) {
+        // Node intentionally aggregates text. Its representation cannot prove
+        // mixed-content ordering, so only the exact raw fast path may replay it.
+        return false;
+    }
+    left.children.iter().zip(&right.children).all(|(a, b)| {
+        let header = in_header
+            || (root
+                && left.ns == SOAP
+                && left.name == "Envelope"
+                && a.ns == SOAP
+                && a.name == "Header");
+        same_recorded_node(a, b, header, false)
+    })
+}
+
+#[cfg(feature = "metamorph")]
+fn xml_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\n' | '\r')
+}
 
 /// Typed private diagnostics: routing/fault policy must match variants, never
 /// guess a category from a human-readable message. No request text is retained.

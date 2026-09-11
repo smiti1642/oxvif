@@ -28,6 +28,11 @@ const METAMORPH_BASE: &str = "http://metamorph";
 /// - A **read** (`Get*`) is answered from the fixture matching the canonical
 ///   (`Masking::Key`) request — unless its operation *family* has been
 ///   invalidated by a prior write, in which case it passes to synthetic.
+///   A key hit additionally checks scoped XML identity against the recorded
+///   request. Distinct scalar/namespace/structure values pass to synthetic.
+///   Exact raw fixtures remain supported; otherwise malformed XML, mixed content
+///   or unresolved `xsi:type` cannot establish equivalence. This is not complete
+///   protocol validation and does not repair collisions in the stored key index.
 /// - A **write** (anything not `Get*`) always passes, so `SyntheticResponder`
 ///   applies it to `DeviceState`, and invalidates that family's replay — the
 ///   coarse copy-on-write of `docs/active/metamorph.md` D5, so `Set → Get` reflects the
@@ -109,6 +114,7 @@ impl Responder for ReplayResponder {
         let key = canonicalize(ctx.body, Masking::Key);
         self.store
             .lookup(ctx.action, &key)
+            .filter(|fixture| crate::mock::recording_equivalent(&fixture.request_raw, ctx.body))
             .map(|f| f.response_raw.clone())
     }
 }
@@ -296,8 +302,11 @@ mod tests {
 
     fn hostname_request(message_id: &str) -> String {
         format!(
-            "<Envelope><Header><MessageID>uuid:{message_id}</MessageID></Header>\
-             <Body><GetHostname/></Body></Envelope>"
+            "<s:Envelope xmlns:s='http://www.w3.org/2003/05/soap-envelope' \
+             xmlns:w='http://www.w3.org/2005/08/addressing' \
+             xmlns:d='http://www.onvif.org/ver10/device/wsdl'>\
+             <s:Header><w:MessageID>uuid:{message_id}</w:MessageID></s:Header>\
+             <s:Body><d:GetHostname/></s:Body></s:Envelope>"
         )
     }
 

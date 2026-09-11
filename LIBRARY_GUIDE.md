@@ -1755,6 +1755,14 @@ in memory; explicitly save to persist the cleanup. Credential-only duplicate key
 use the last stored entry. Review captures and older copies before sharing:
 these targeted transforms do not detect arbitrary secrets in custom fields.
 
+Replay verifies scoped XML identity after a legacy key hit. Different scalar,
+namespace or structure values fall through to synthetic. Exact raw recordings
+remain replayable; nonidentical malformed XML, mixed content and unresolved
+`xsi:type` are not treated as equivalent. Normal namespace aliases, decoded scalar
+text and selected qualified SOAP-header ephemera are supported. This containment
+is not full protocol validation and cannot recover recordings already overwritten
+by a stored-key collision; the index/file format is unchanged.
+
 Or from the command line, no code at all:
 
 ```bash

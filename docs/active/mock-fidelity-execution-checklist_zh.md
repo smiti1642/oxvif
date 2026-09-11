@@ -171,7 +171,8 @@ W02 發現新相依性時須擴充本表。
 | K11／待整合 | PR #16 不在來源基準內 | W26；另行重審，不默默納入 |
 | K17／內建 DeleteProfile 路徑已修正 | 內建 in-process／HTTP clone 於拒絕刪除時保留錄製結果，commit 後才淘汰選定的跨服務 profile read | W19／W03／W18 部分完成；其他 mutation、單獨 responder 政策、完整相依圖及併發／callback 可見性仍待完成；見管線開工核對 |
 | K18／選定 create／binding 依賴已修正 | 已提交的 CreateProfile 與已建模 Media binding 淘汰三個 profile-read Action；拒絕寫入保留錄製結果 | W19／W10 部分完成；兩種 transport、無關服務及獨立 instance 已測試；完整讀取相依圖與其他 mutation 仍待完成 |
-| K28／key 中的 URL 憑證已修正 | Canonical projection 與舊檔／caller key 清除 URL 帳密；載入唯讀，明確保存才持久化清理 | W19 部分完成；虛構資料的隱私／lookup／磁碟控制，JSON 格式不變；raw envelope 僅針對指定格式去憑證，K27 碰撞仍待修正；見管線開工核對 |
+| K27／選定 replay 回覆替換已限制 | 九組碰撞於無法確認 scoped identity 時轉入 synthetic；exact raw recording 與 qualified-header ephemera 仍可 replay | W19 部分完成；兩種 transport 已測試；index 仍碰撞、被覆蓋錄製無法恢復，完整 key／QName／protocol 遷移仍待完成 |
+| K28／key 中的 URL 憑證已修正 | Canonical projection 與舊檔／caller key 清除 URL 帳密；載入唯讀，明確保存才持久化清理 | W19 部分完成；虛構資料的隱私／lookup／磁碟控制，JSON 格式不變；raw envelope 僅針對指定格式去憑證，K27 index 碰撞仍待修正；見管線開工核對 |
 | K19／已重現的外部相容性發現 | 目前 Media 來源相依集合在獨立 XSD 1.0 驗證器中無法編譯，但可通過 strict XSD 1.1 編譯 | W21；見 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)；不修改 schema 或停用檢查，須驗收候選工具並明示 schema 語言 |
 | K20／已重現並修正 formatter | `auth::auth_fault` 原先輸出未宣告的 wsse subcode 及原始 reason 文字 | W05 serializer 遷移維持 code／subcode，修正 scoped binding／text，並加入 client／health／CLI 控制；認證解析與政策仍屬 W08 待辦 |
 | K21／Python 限制；已有獨立編譯路徑 | Python 回報 Device type-table warning；固定版本 Xerces 以 full checking 及 warnings-as-errors 編譯同一完整閉包通過 | W21；獨立 generic 選型通過，未修改 schema 或停用警告；不代表 Python 警告錯誤或 mock instance 有效 |

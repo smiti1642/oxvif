@@ -654,6 +654,12 @@ Canonical key 也會在 entity decoding 後清除 URL 帳密，replay 使用相�
 採最後一筆資料。分享前仍須檢查 capture 與舊副本；這些指定格式的轉換並不保證能偵測
 自訂欄位、任意裝置資料或 malformed XML 中的所有秘密。
 
+Replay 在 legacy key 命中後再次核對 scoped XML 身分；不同 scalar、namespace
+或 structure 轉入 synthetic。完全相同的 raw recording 仍可 replay；非同一原文的
+malformed XML、mixed content 或未解析 `xsi:type` 不視為等價。支援一般 namespace
+別名、decoded scalar text 與選定的 qualified SOAP-header ephemera。此防護不是
+完整 protocol validation，無法恢復已被 key collision 覆蓋的錄製；index／檔案格式不變。
+
 `record_surface` 可配合 `SurfaceSelection` 只錄製指定 service group，並以 `SweepReport` 回報 recorded、failed 與 skipped operation。Replay read 會逐 byte 使用錄製 response；write 則轉入 synthetic `DeviceState`，依已提交的 profile effect 或尚未遷移的 legacy family 政策使 fixture 失效。完整依賴追蹤仍待完成。
 
 `FixtureStore::diff_against_synthetic()` 比較 element-path set，結果表示與 oxvif reference mock 的結構差異，**不是 ONVIF schema conformance verdict**。`verify_parsing().await` 則使用 oxvif typed parser，將每項 fixture 分類為 `Parsed`、`Failed`、`Faulted` 或 `Unverified`；`failures()` 刻意排除裝置正常拒絕操作的 `Faulted`。

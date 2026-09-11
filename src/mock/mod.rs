@@ -153,6 +153,8 @@ mod fault;
 pub(crate) mod fault_injection;
 pub(crate) mod helpers;
 mod request;
+#[cfg(feature = "metamorph")]
+pub(crate) use request::recording_equivalent;
 pub(crate) mod responder;
 mod services;
 mod transport;
