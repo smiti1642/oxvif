@@ -104,4 +104,3 @@ an optional caller-owned persistence hook; no RTP or real-camera write is perfor
 See [AM1 execution evidence](active/mock-fidelity-audio-metadata.md) for measured
 tests, external schema validation and limits. Structural validation is not ONVIF
 certification or proof of real-device streaming behavior.
-

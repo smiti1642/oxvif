@@ -97,4 +97,3 @@ AutoStart 輸入會驗證但忽略；不產生串流的 mock 回報 false。
 
 測試、外部 schema 驗證及限制詳見 [AM1 執行證據](active/mock-fidelity-audio-metadata_zh.md)。
 結構驗證不是 ONVIF 認證，也不證明真實裝置的串流行為。
-
