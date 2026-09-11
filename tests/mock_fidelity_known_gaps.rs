@@ -290,35 +290,6 @@ async fn rejected_delete_preserves_state_and_hook_but_success_notifies() {
 }
 
 #[tokio::test]
-async fn profile_name_remains_literal_text_in_both_services() {
-    for (version, prefix) in [("ver10", "trt"), ("ver20", "tr2")] {
-        let transport = MockTransport::new();
-        transport.device().modify(|state| {
-            state.profiles.profiles[0].name =
-                "before<AuditMarker>injected</AuditMarker>after".to_owned();
-        });
-        let ns = format!("http://www.onvif.org/{version}/media/wsdl");
-        let xml = transport
-            .soap_post(
-                "http://mock",
-                &format!("{ns}/GetProfiles"),
-                format!("<{prefix}:GetProfiles xmlns:{prefix}='{ns}'/>"),
-            )
-            .await
-            .unwrap();
-        let body = parse_soap_body(&xml).unwrap();
-        let name = body
-            .path(&["GetProfilesResponse", "Profiles", "Name"])
-            .unwrap();
-        assert!(name.children.is_empty(), "profile Name must remain scalar");
-        assert_eq!(
-            name.text(),
-            "before<AuditMarker>injected</AuditMarker>after"
-        );
-    }
-}
-
-#[tokio::test]
 async fn rejected_late_binding_preserves_the_entire_state() {
     let transport = MockTransport::new();
     let (profile, config) = {

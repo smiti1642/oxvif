@@ -24,7 +24,7 @@ impl CredentialStore for SystemCredentialStore {
     fn set(&self, reference: &str, password: &str) -> Result<(), AppError> {
         entry(reference)?
             .set_password(password)
-            .map_err(|_| AppError::credential_backend_unavailable("store"))
+            .map_err(|error| backend_error("store", error))
     }
 
     fn get(&self, reference: &str) -> Result<Option<SecretString>, AppError> {
@@ -33,22 +33,27 @@ impl CredentialStore for SystemCredentialStore {
                 .map(Some)
                 .map_err(|_| AppError::credential_backend_unavailable("load")),
             Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err(AppError::credential_backend_unavailable("load")),
+            Err(error) => Err(backend_error("load", error)),
         }
     }
 
     fn delete(&self, reference: &str) -> Result<(), AppError> {
         match entry(reference)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(AppError::credential_backend_unavailable("delete")),
+            Err(error) => Err(backend_error("delete", error)),
         }
     }
 }
 
 #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 fn entry(reference: &str) -> Result<keyring::Entry, AppError> {
-    keyring::Entry::new(KEYRING_SERVICE, reference)
-        .map_err(|_| AppError::credential_backend_unavailable("access"))
+    keyring::Entry::new(KEYRING_SERVICE, reference).map_err(|error| backend_error("access", error))
+}
+
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+fn backend_error(operation: &str, _error: keyring::Error) -> AppError {
+    // Native errors can contain account identifiers and secret material.
+    AppError::credential_backend_unavailable(operation)
 }
 
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
@@ -150,14 +155,37 @@ mod tests {
         assert_store_contract(&store, "device/camera");
     }
 
+    #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
     #[test]
     fn native_backend_error_contract_does_not_echo_sensitive_context() {
-        let error = AppError::credential_backend_unavailable("load");
-        let rendered = format!("{error:?}");
-        assert_eq!(error.code, crate::ErrorCode::CredentialUnavailable);
-        assert!(!rendered.contains("sensitive-account"));
-        assert!(!rendered.contains("sensitive-secret"));
-        assert!(rendered.contains("plaintext fallback"));
+        for operation in ["access", "store", "load", "delete"] {
+            let raw = keyring::Error::PlatformFailure(Box::new(std::io::Error::other(
+                "sensitive-account: sensitive-secret",
+            )));
+            assert!(raw.to_string().contains("sensitive-account"));
+            assert!(raw.to_string().contains("sensitive-secret"));
+            let error = backend_error(operation, raw);
+            assert_eq!(error.code, crate::ErrorCode::CredentialUnavailable);
+            for rendered in [
+                error.to_string(),
+                format!("{error:?}"),
+                serde_json::to_string(&error).unwrap(),
+            ] {
+                assert!(!rendered.contains("sensitive-account"));
+                assert!(!rendered.contains("sensitive-secret"));
+            }
+            assert_eq!(
+                error.message,
+                format!("The native credential backend could not {operation} the secret.")
+            );
+            assert!(!error.retryable);
+            assert!(
+                error
+                    .suggested_action
+                    .unwrap()
+                    .contains("plaintext fallback")
+            );
+        }
     }
 
     #[cfg(target_os = "linux")]

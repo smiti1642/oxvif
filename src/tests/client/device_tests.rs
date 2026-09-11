@@ -73,14 +73,20 @@ async fn test_get_capabilities_returns_correct_urls() {
 
 #[tokio::test]
 async fn test_get_capabilities_soap_fault_returns_error() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
-        .with_transport(mock(soap_fault_xml()));
-
-    let err = client.get_capabilities().await.unwrap_err();
-    assert!(matches!(
-        err,
-        OnvifError::Soap(crate::soap::SoapError::Fault { .. })
-    ));
+    // Retain both language-tagged and untagged Reason/Text fixtures.
+    for (xml, code, reason) in [
+        (soap_fault_xml().to_owned(), "s:Sender", "Not Authorized"),
+        (
+            make_soap_fault_xml("s:Receiver", "CapabilitiesUnavailable-3816")
+                .replace(" xml:lang=\"en\"", ""),
+            "s:Receiver",
+            "CapabilitiesUnavailable-3816",
+        ),
+    ] {
+        let client =
+            OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(&xml));
+        assert_fault(client.get_capabilities().await.unwrap_err(), code, reason);
+    }
 }
 
 #[tokio::test]
@@ -355,22 +361,6 @@ async fn test_get_capabilities_malformed_xml_returns_err() {
         .with_transport(mock("this is not xml at all"));
     let result = client.get_capabilities().await;
     assert!(result.is_err(), "expected Err on malformed XML");
-}
-
-#[tokio::test]
-async fn test_get_capabilities_soap_fault_returns_err() {
-    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(
-        &make_soap_fault_xml("s:Sender", "Sender not Authorized"),
-    ));
-    let result = client.get_capabilities().await;
-    assert!(
-        matches!(
-            result,
-            Err(OnvifError::Soap(crate::soap::SoapError::Fault { ref code, .. }))
-            if code == "s:Sender"
-        ),
-        "expected SOAP Fault error, got: {result:?}"
-    );
 }
 
 // ── HTTP transport error ──────────────────────────────────────────────────

@@ -912,6 +912,7 @@ pub(crate) fn aligned_menu_rows<const N: usize>(rows: &[[String; N]]) -> Vec<Str
                     .chars()
                     .filter(|c| !c.is_control())
                     .collect::<String>();
+                let safe = oxvif_cli::terminal_field(&safe);
                 if column + 1 == N {
                     safe
                 } else {
@@ -1049,7 +1050,9 @@ fn wrap_panel_text(text: &str, width: usize) -> Vec<String> {
     for line in text.lines() {
         let mut row = String::new();
         let mut used = 0;
-        for c in line.chars().filter(|c| !c.is_control()) {
+        let line = line.chars().filter(|c| !c.is_control()).collect::<String>();
+        let line = oxvif_cli::terminal_field(&line);
+        for c in line.chars() {
             let size = UnicodeWidthChar::width(c).unwrap_or(0);
             if used + size > width.max(1) && !row.is_empty() {
                 lines.push(std::mem::take(&mut row));
@@ -1696,8 +1699,11 @@ fn fit_cell(value: &str, width: usize) -> String {
 }
 
 fn truncate_to_width(value: &str, width: usize) -> String {
-    if UnicodeWidthStr::width(value) <= width {
-        return value.to_owned();
+    // Escape before measuring: directional controls can reorder otherwise
+    // printable camera data, and their visible escape occupies display cells.
+    let value = oxvif_cli::terminal_field(value);
+    if UnicodeWidthStr::width(value.as_str()) <= width {
+        return value;
     }
     if width == 0 {
         return String::new();
@@ -1727,6 +1733,43 @@ fn terminal_error(error: io::Error) -> AppError {
 mod tests {
     use super::*;
     use crate::navigation::Motion;
+
+    #[test]
+    fn interactive_frames_escape_directional_data_before_measuring_width() {
+        let literal = "Camera\u{202e}txt\u{2066}end";
+        let expected = "Camera\\u{202e}txt\\u{2066}end";
+        let choices = vec![literal.to_owned()];
+        let frame = menu_frame(
+            literal,
+            &choices,
+            Viewport::default(),
+            &Navigation::default(),
+            100,
+            12,
+            LineNumbers::Hybrid,
+        );
+        assert_eq!(frame[0], expected);
+        assert!(frame[2].contains(expected));
+        assert_eq!(
+            choices[0], literal,
+            "display escaping must not change selection data"
+        );
+        let wrapped = wrap_panel_text(literal, 12);
+        assert_eq!(
+            wrapped.concat(),
+            expected,
+            "escape before wrapping, without losing text"
+        );
+        assert!(
+            wrapped
+                .iter()
+                .all(|line| UnicodeWidthStr::width(line.as_str()) <= 12)
+        );
+        assert_eq!(truncate_to_width(literal, 12), "Camera\\u{20…");
+        let rows = aligned_menu_rows(&[[literal.to_owned(), "address".into()]]);
+        assert!(!rows[0].contains('\u{202e}'));
+        assert!(!rows[0].contains('\u{2066}'));
+    }
 
     #[test]
     fn discovery_vim_counts_status_and_compact_frames() {

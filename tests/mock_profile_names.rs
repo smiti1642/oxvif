@@ -87,6 +87,24 @@ async fn exercise(
     hooks: &AtomicUsize,
 ) {
     let client = OnvifClient::new(url).with_transport(transport.clone());
+    // Seed state directly as well as exercising CreateProfile: persisted names
+    // must remain literal text on every read path and on both transports.
+    let literal = "before<AuditMarker>injected</AuditMarker>after";
+    let token = state.modify_returning(|device| {
+        let profile = &mut device.profiles.profiles[0];
+        profile.name = literal.to_owned();
+        profile.token.clone()
+    });
+    let notifications = hooks.load(Ordering::SeqCst);
+    assert_reads(
+        transport.as_ref(),
+        url,
+        &token,
+        literal,
+        "before&lt;AuditMarker&gt;injected&lt;/AuditMarker&gt;after",
+    )
+    .await;
+    assert_eq!(hooks.load(Ordering::SeqCst), notifications);
     for namespace in [MEDIA1, MEDIA2] {
         for (field, literal, escaped) in [
             (

@@ -1824,42 +1824,46 @@ mod serde_support {
     /// downstream REST/NVR code.
     #[test]
     fn ptz_preset_json_roundtrip() {
-        let preset = PtzPreset {
-            token: "Preset_1".to_string(),
-            name: "Front <door>".to_string(), // exercises string escaping in JSON
-            pan_tilt: Some((0.5, -0.25)),
-            zoom: Some(0.75),
-        };
-
-        let json = serde_json::to_string(&preset).unwrap();
-        // Field names are the plain Rust identifiers (no `rename_all`).
-        assert!(json.contains("\"token\":\"Preset_1\""), "json was: {json}");
-        assert!(
-            json.contains("\"pan_tilt\":[0.5,-0.25]"),
-            "json was: {json}"
-        );
-
-        let back: PtzPreset = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.token, preset.token);
-        assert_eq!(back.name, preset.name);
-        assert_eq!(back.pan_tilt, preset.pan_tilt);
-        assert_eq!(back.zoom, preset.zoom);
-    }
-
-    /// A struct parsed from a real SOAP response deserializes back from the
-    /// JSON it produces — the round trip a webapp would rely on.
-    #[test]
-    fn parsed_struct_reserializes_stably() {
-        let preset = PtzPreset {
-            token: "p2".to_string(),
-            name: "Gate".to_string(),
-            pan_tilt: None,
-            zoom: None,
-        };
-        let json = serde_json::to_string(&preset).unwrap();
-        let back: PtzPreset = serde_json::from_str(&json).unwrap();
-        // Re-serializing the deserialized value yields byte-identical JSON.
-        assert_eq!(json, serde_json::to_string(&back).unwrap());
+        let presets = PtzPreset::vec_from_xml(&parse(
+            r#"<GetPresetsResponse>
+                <Preset token="Preset_1"><Name>Front &lt;door&gt;</Name>
+                    <PTZPosition><PanTilt x="0.5" y="-0.25"/><Zoom x="0.75"/></PTZPosition>
+                </Preset>
+                <Preset token="p2"><Name>Gate</Name></Preset>
+            </GetPresetsResponse>"#,
+        ))
+        .unwrap();
+        assert_eq!(presets.len(), 2);
+        for (preset, token, name, pan_tilt, zoom, expected) in [
+            (
+                &presets[0],
+                "Preset_1",
+                "Front <door>",
+                Some((0.5, -0.25)),
+                Some(0.75),
+                serde_json::json!({"token": "Preset_1", "name": "Front <door>", "pan_tilt": [0.5, -0.25], "zoom": 0.75}),
+            ),
+            (
+                &presets[1],
+                "p2",
+                "Gate",
+                None,
+                None,
+                serde_json::json!({"token": "p2", "name": "Gate", "pan_tilt": null, "zoom": null}),
+            ),
+        ] {
+            let json = serde_json::to_string(preset).unwrap();
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&json).unwrap(),
+                expected
+            );
+            let back: PtzPreset = serde_json::from_str(&json).unwrap();
+            assert_eq!(back.token, token);
+            assert_eq!(back.name, name);
+            assert_eq!(back.pan_tilt, pan_tilt);
+            assert_eq!(back.zoom, zoom);
+            assert_eq!(json, serde_json::to_string(&back).unwrap());
+        }
     }
 
     /// The exact pattern the issue asked for: return `Json(response)` straight
