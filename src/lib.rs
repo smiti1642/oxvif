@@ -249,7 +249,10 @@
 //!   `(SOAP action, canonical request)` so two services that canonicalise
 //!   identically stay distinct. Save it, replay it in-process, or serve it from
 //!   a real bound port with **`metamorph-server`** — the camera can then be
-//!   unplugged. Credentials are redacted as it records.
+//!   unplugged. Supported WS-Security fields and literal URL credential pairs are
+//!   redacted as it records; canonical keys also strip decoded URL pairs. Loading
+//!   legacy keys cleans them in memory, not on disk. Inspect captures and older
+//!   copies before sharing; this is not a general secret detector.
 //! - **Pick what to clone** — `metamorph::SurfaceSelection` selects whole
 //!   service zones (`SurfaceGroup`) or individual operations (`SurfaceOp`).
 //!   Prerequisites are expanded for you, so selecting `GetStreamUri` still

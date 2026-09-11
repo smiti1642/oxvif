@@ -22,6 +22,32 @@ W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯�
 | [完整 Action 路由](#完整-action-路由) | K06 路由子批次及 W03／W07 剩餘工作 |
 | [Parsed synthetic 邊界](#parsed-synthetic-邊界) | P-D 已實作檢查、證據及排除範圍 |
 | [State hook 快照工作](#state-hook-快照工作) | W18 有界鎖定及觀察策略 |
+| [Replay key 憑證邊界](#replay-key-憑證邊界) | K28 清理、遷移與排除範圍 |
+
+## Replay key 憑證邊界
+
+W19／K28：`canonicalize` 於 parsed projection 與 raw fallback 後均清除 URL
+`user:pass@`。Record、replay 與 value diff 共用投影；parsed text／attribute
+包含 entity 解碼後的分隔字元。`FixtureStore::load` 建立索引前清理舊 key，`lookup`
+接受相同去憑證規則的 caller key。JSON 格式不變；僅憑證不同的重複 key 沿用最後一筆
+資料。載入不寫檔，也不從已去憑證的 request 重新產生 key；明確 save 才保存清理結果。
+
+虛構資料測試在舊實作上失敗：兩個 replay 入口測試於 key 保留憑證的 assertion
+失敗（RTK log 1789050592），另有 projection（1789050645）與舊檔載入正規化
+（1789050655）。修正後的控制涵蓋兩種 transport、輪替／省略 URL 憑證、不同 host
+隔離、兩種 projection、text／attribute／entity／CDATA／fallback、載入不改磁碟、
+舊 caller key lookup 與明確重新保存。這是專案自訂隱私控制，不是獨立 schema 驗收。
+
+限制：raw envelope 沿用指定格式的 redactor；malformed XML、encoded raw 憑證、
+自訂欄位、action／device label、舊檔與備份均未保證無秘密。未檢查或變更使用者錄製。
+K27 namespace、顯著空白及未 escape 序列化的碰撞，需另外重現並設計持久化 key 相容性；
+本次不是 key-v2 遷移，也不是完整 W19 驗收。
+
+驗證（2026-09-11，獨立 Windows build）：formatting、兩種 workspace／all-target
+Clippy 與兩種 strict workspace rustdoc 通過。Workspace all-features：1,204
+passed；default：1,112 passed；兩者均為 26 suites、5 ignored。Inventory checker
+維持 159 宣告點／157 routes／255 reader occurrences，拒絕控制亦通過。本機檢查點
+不宣稱新增外部 XSD instance、原生 Linux／macOS 或 release 驗收。
 
 ## 入口與責任
 

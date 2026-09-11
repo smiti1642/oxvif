@@ -26,8 +26,10 @@
 //! # Ok(()) }
 //! ```
 //!
-//! A saved clone carries **no secrets**: WS-Security `Password`/`Nonce` and any
-//! `user:pass@` in a URL are scrubbed before anything reaches disk.
+//! Recordings scrub supported WS-Security `Password`/`Nonce` fields and literal
+//! URL `user:pass@` pairs. Canonical keys also strip decoded URL pairs. Loading
+//! legacy keys cleans them in memory, not on disk. Inspect captures and older
+//! copies before sharing: targeted redaction is not a general secret detector.
 //!
 //! # Will oxvif parse this device correctly?
 //!

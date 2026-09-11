@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Metamorph canonical fixture keys and value projections now strip URL
+  `user:pass@` pairs, including after XML entity decoding. Replay uses the same
+  credential-free key. Loading older keys cleans them in memory without rewriting
+  the source file; explicitly save to persist the cleanup and review old copies
+  before sharing. Credential-only duplicate keys use the last stored entry.
+  Raw-envelope redaction remains targeted, not a general secret detector.
 - Built-in replay now refreshes profile views after committed Media1 video
   source/encoder binding and Media2 generic binding. Refused bindings no longer
   retire unrelated services' recordings merely because their operation-family

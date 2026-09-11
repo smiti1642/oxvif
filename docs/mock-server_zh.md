@@ -550,6 +550,11 @@ profile 錄製結果，成功 synthetic 建立或刪除後才淘汰 Media1 GetPr
 單獨建構 ReplayResponder、更多相依關係及併發可見性
 仍待審查。
 
+Replay key 現在於投影後清除 URL `user:pass@`，包含 XML entity decoding 後的帳密。
+舊檔載入僅清理記憶體中的 key，不自動覆寫磁碟；需明確保存，分享前亦須檢查舊副本。
+僅憑證不同而碰撞的 key 保留最後一筆。Raw envelope 仍僅針對指定格式去除憑證，
+不保證任意裝置資料均無秘密。詳見[函式庫指南](../LIBRARY_GUIDE_zh.md#metamorphmetamorph--metamorph-server-feature)。
+
 許多 token-error reason 帶有 operation tag 與 numeric id，例如：
 
 ```text

@@ -1748,8 +1748,12 @@ for v in report.failures() {
 }
 ```
 
-Saved clones carry **no secrets** — WS-Security `Password`/`Nonce` and any
-`user:pass@` in a URL are scrubbed before anything is written.
+Recordings scrub the supported WS-Security `Password`/`Nonce` fields and literal
+URL `user:pass@` pairs. Canonical keys also strip URL pairs after entity decoding;
+replay uses the same credential-free key. Loading legacy keys cleans them only
+in memory; explicitly save to persist the cleanup. Credential-only duplicate keys
+use the last stored entry. Review captures and older copies before sharing:
+these targeted transforms do not detect arbitrary secrets in custom fields.
 
 Or from the command line, no code at all:
 
@@ -1787,9 +1791,10 @@ Everything from here down is detail. The block above is enough to use it.
 returns a `FixtureStore` — the recorded SOAP exchanges keyed by the *canonical,
 ephemera-masked request*, so `GetProfile(token=A)` and `(token=B)` stay distinct
 while per-request nonce / MessageID / timestamps never fragment the key. Recorded
-envelopes have their WS-Security `Password`/`Nonce` and any `user:pass@` URL
-credential (e.g. an RTSP stream URI) scrubbed, so a saved `fixtures.json` carries
-no secret.
+requests have supported WS-Security `Password`/`Nonce` fields scrubbed, and both
+envelopes have literal URL `user:pass@` pairs removed. Canonical projections also
+strip decoded URL pairs. This is targeted redaction, not a guarantee that arbitrary
+recorded device data or malformed XML contains no secrets.
 
 ```rust
 use oxvif::metamorph::record_standard_surface;

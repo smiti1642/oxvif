@@ -34,17 +34,19 @@ const FIXTURES_FILE: &str = "fixtures.json";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fixture {
     /// The canonical, (a)-masked request — half of the lookup key (`action` is
-    /// the other half), and human-readable.
+    /// the other half), and human-readable. URL `user:pass@` pairs are removed
+    /// from the projection as well as from the recorded request.
     pub key_canon: String,
     /// The SOAP action URI this exchange answered.
     pub action: String,
     /// The request envelope as recorded, with WS-Security `Password`/`Nonce`
-    /// blanked and any `user:pass@` URL credential stripped, so nothing secret
-    /// lands on disk.
+    /// blanked and literal `user:pass@` URL credential pairs stripped. These
+    /// targeted transforms are not a general secret detector; inspect captures
+    /// before sharing, especially custom fields or encoded credential forms.
     pub request_raw: String,
     /// The device's response envelope, stored for faithful replay — with any
-    /// `user:pass@` URL credential (e.g. an `rtsp://` stream URI) stripped so no
-    /// credential lands on disk.
+    /// literal `user:pass@` URL credential pair (e.g. an `rtsp://` stream URI)
+    /// stripped. Other response content is retained, not certified secret-free.
     pub response_raw: String,
 }
 
@@ -101,13 +103,23 @@ impl FixtureStore {
     }
 
     /// Load `<dir>/fixtures.json` into memory.
+    ///
+    /// URL credential pairs in legacy canonical keys are removed in memory;
+    /// resulting duplicate `(action, key)` entries use the last stored entry.
+    /// This does not rewrite the source file or resanitize its raw envelopes.
+    /// Explicitly save the returned store to persist the cleaned keys, and
+    /// review older files/backups before sharing them.
     pub fn load(dir: impl AsRef<Path>) -> io::Result<Self> {
         let path = dir.as_ref().join(FIXTURES_FILE);
         let text = std::fs::read_to_string(&path)?;
         let on_disk: OnDisk = serde_json::from_str(&text)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         let mut store = Self::new(on_disk.device);
-        for f in on_disk.fixtures {
+        for mut f in on_disk.fixtures {
+            // Older recorders scrubbed the envelope but not its projected key.
+            // Normalize only that credential representation; do not regenerate
+            // the key from redacted raw XML or rewrite the caller's file here.
+            f.key_canon = scrub_url_userinfo(&f.key_canon);
             store.insert(f);
         }
         Ok(store)
@@ -128,10 +140,13 @@ impl FixtureStore {
     }
 
     /// Record one exchange: derive the canonical key from `request_raw`, scrub
-    /// every credential (WS-Security `Password`/`Nonce` in the request, plus any
-    /// `user:pass@` URL credential in either envelope), and upsert (last write
+    /// the supported credential forms (WS-Security `Password`/`Nonce` in the
+    /// request, plus literal `user:pass@` URL pairs in either envelope), and upsert (last write
     /// wins per `(action, key_canon)` pair — so re-recording the same operation
     /// replaces it, while a different action sharing the key is kept apart).
+    /// URL credential pairs are also stripped after canonical projection so
+    /// the key and replay lookup do not depend on a URL password. Do not use
+    /// this as a general-purpose sanitizer for arbitrary private device data.
     pub fn record(&mut self, action: &str, request_raw: &str, response_raw: &str) {
         let key_canon = canonicalize(request_raw, Masking::Key);
         self.insert(Fixture {
@@ -148,9 +163,11 @@ impl FixtureStore {
     /// and masks the endpoint URL as transport ephemera, so Media1's
     /// `<trt:GetProfiles/>` and Media2's `<tr2:GetProfiles/>` produce the *same*
     /// `key_canon`; only the action tells them apart.
+    /// Legacy caller-provided keys have URL credential pairs stripped before
+    /// lookup, matching the in-memory normalization performed by [`Self::load`].
     pub fn lookup(&self, action: &str, key_canon: &str) -> Option<&Fixture> {
         self.index
-            .get(&(action.to_string(), key_canon.to_string()))
+            .get(&(action.to_string(), scrub_url_userinfo(key_canon)))
             .map(|&i| &self.fixtures[i])
     }
 
@@ -312,6 +329,61 @@ mod tests {
             "<r/>"
         );
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn loading_legacy_url_keys_sanitizes_memory_without_rewriting_disk() {
+        let dir = tmp_dir("legacy-url-key");
+        let request = "<GetResource><Uri>rtsp://camera.invalid/path</Uri></GetResource>";
+        let mut store = FixtureStore::new("synthetic-legacy-927");
+        store.record("urn:legacy/GetResource", request, "<older-927/>");
+        // Model an older file whose raw envelopes were scrubbed but whose key
+        // was derived before scrubbing. No real credentials or files are used.
+        let mut legacy = store.fixtures()[0].clone();
+        legacy.key_canon = legacy
+            .key_canon
+            .replace("rtsp://", "rtsp://probe:secret-927@");
+        legacy.response_raw = "<newer-928/>".into();
+        store.insert(legacy.clone());
+        store.save(&dir).unwrap();
+        let path = dir.join(FIXTURES_FILE);
+        let original_bytes = std::fs::read(&path).unwrap();
+
+        let loaded = FixtureStore::load(&dir).unwrap();
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            original_bytes,
+            "load must not rewrite disk"
+        );
+        assert_eq!(
+            loaded.len(),
+            1,
+            "credential-only duplicate keys merge last-write-wins"
+        );
+        let clean_key = canonicalize(request, Masking::Key);
+        assert_eq!(loaded.fixtures()[0].key_canon, clean_key);
+        assert_eq!(
+            loaded
+                .lookup("urn:legacy/GetResource", &clean_key)
+                .unwrap()
+                .response_raw,
+            "<newer-928/>"
+        );
+        assert_eq!(
+            loaded
+                .lookup("urn:legacy/GetResource", &legacy.key_canon)
+                .unwrap()
+                .response_raw,
+            "<newer-928/>"
+        );
+
+        loaded.save(&dir).unwrap();
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("secret-927")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -354,6 +354,8 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 
 | ID | 證據 | 處置 |
 | --- | --- | --- |
+| K27 | `canon::write_node` 移除 namespace、壓縮 scalar 空白，並未 escape 就輸出 decoded text／attribute；不同 identifier 或文字／結構可能在同一完整 Action 下共用 key。 | W19／W10／W11：由來源確認的候選風險；token 解析／輸出閉合前，需補具辨識力的碰撞測試與持久化 key 遷移設計。去除憑證不會修正此問題。 |
+| K28 | 已錄製 request 的 URL 憑證仍存於 `key_canon`，舊檔 key 載入時也未清除。虛構資料的 assertion failure 已重現兩項缺陷。 | W19：recording／replay／diff 投影與舊檔／caller lookup key 均清除 URL 帳密；載入不覆寫磁碟，正規化碰撞維持 last-write-wins。Raw envelope 仍僅針對指定格式去除憑證，並非通用秘密偵測器。 |
 | K24 | 固定來源的輸出型別審查發現 Media2 audio renderer／options 沿用 Media1 codec 名稱，共用 writer 也未經 service adapter 就直接儲存。XSD 字串合法性無法驗證兩者不同的 codec 詞彙。 | W01／W10：將 audio list／options、profile 內嵌 audio、共用寫入及 client 跨服務預期視為同一相依範圍審查。已由來源確認，具辨識力的 wire／state 重現待補。不可只改輸出而破壞寫入。 |
 | K25 | Audio encoder writer 儲存請求的 Multicast AutoStart；Media2 metadata 依 address 存在與否推導該值，但 mock 不實作 persistent streaming。外部輸出型別筆記指出該欄位的唯讀效果意義。 | W01／W10／W17：重現 read／write／capability 差異，修改預設前核對唯讀處理及 multicast 省略／提供行為。來源已確認，未驗證任何實際 RTP 效果。 |
 | K26 | `apply_video_encoder_write` 直接儲存 Encoding，兩個 video renderer 均輸出共用名稱；Media2 專屬 codec 可能未經可表示性政策就進入 Media1 view。 | W01／W10／W17：重現 H265 write／profile／list／options 組合，核對兩種服務契約並明示共用狀態 view／拒絕策略；不可靜默轉換 codec 身分或放寬 schema。來源風險已確認，wire 重現待補。 |

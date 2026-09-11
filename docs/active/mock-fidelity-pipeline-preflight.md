@@ -23,6 +23,39 @@ below. No new product decision is required here.
 | [Exact Action routing](#exact-action-routing) | K06 routing slice and remaining W03/W07 work |
 | [Parsed synthetic boundary](#parsed-synthetic-boundary) | P-D implemented checks, evidence and exclusions |
 | [State hook snapshot work](#state-hook-snapshot-work) | W18 bounded lock and observation policy |
+| [Replay key credential boundary](#replay-key-credential-boundary) | K28 cleanup, migration and exclusions |
+
+## Replay key credential boundary
+
+W19/K28: `canonicalize` scrubs URL `user:pass@` pairs after both parsed projection
+and raw fallback. Record, replay and value diff share this projection; decoded
+entity delimiters are covered for parsed text/attributes. `FixtureStore::load`
+scrubs legacy keys before indexing, and `lookup` accepts equivalently scrubbed
+caller keys. The JSON shape is unchanged. Credential-only duplicate keys follow
+the existing last-stored-entry rule. Loading does not write files or regenerate
+keys from already redacted request text; explicit save persists the cleaned keys.
+
+Synthetic controls failed against the previous implementation: both replay
+entry-point tests at the retained-key credential assertion (RTK log 1789050592),
+the projection test (1789050645), and legacy-load normalization (1789050655).
+The corrected tests cover both transports, rotated/absent URL credentials,
+different-host isolation, both projections, text/attribute/entity/CDATA/fallback
+cases, disk immutability on load, legacy caller lookup and explicit resave.
+These are project-authored privacy controls, not independent schema acceptance.
+
+Limitations: raw envelopes retain the existing targeted redactor; malformed XML,
+encoded raw credentials, custom fields, action/device labels and older files or
+backups are not certified secret-free. No user recording was inspected or changed.
+K27 namespace, significant-whitespace and unescaped serialization collisions need
+separate reproduction and persisted-key compatibility design; this is not a key-v2
+migration or complete W19 acceptance.
+
+Verification (2026-09-11, isolated Windows build): formatting, both workspace /
+all-target Clippy modes and both strict workspace rustdoc modes passed. Workspace
+all-features: 1,204 passed; default: 1,112 passed; each had 5 ignored across 26
+suites. The inventory checker retained 159 declaration sites / 157 routes / 255
+reader occurrences and its rejection controls. No new external XSD instance,
+native Linux/macOS or release acceptance is claimed by this local checkpoint.
 
 ## Entry points and ownership
 

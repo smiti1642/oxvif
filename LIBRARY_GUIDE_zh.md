@@ -648,7 +648,13 @@ let client = OnvifClient::new("http://replay")
 let info = client.get_device_info().await?;
 ```
 
-保存的 clone 會移除 WS-Security `Password` / `Nonce` 與 URL 中的 `user:pass@`。`record_surface` 可配合 `SurfaceSelection` 只錄製指定 service group，並以 `SweepReport` 回報 recorded、failed 與 skipped operation。Replay read 會逐 byte 使用錄製 response；write 則轉入 synthetic `DeviceState` 並使同 family fixture 失效，使 `Set → Get` 仍可 round-trip。
+錄製資料會移除支援格式的 WS-Security `Password`／`Nonce` 與 literal URL `user:pass@`。
+Canonical key 也會在 entity decoding 後清除 URL 帳密，replay 使用相同的去憑證 key。
+載入舊檔僅清理記憶體中的 key；需明確呼叫 save 才會保存修正，僅憑證不同的重複 key
+採最後一筆資料。分享前仍須檢查 capture 與舊副本；這些指定格式的轉換並不保證能偵測
+自訂欄位、任意裝置資料或 malformed XML 中的所有秘密。
+
+`record_surface` 可配合 `SurfaceSelection` 只錄製指定 service group，並以 `SweepReport` 回報 recorded、failed 與 skipped operation。Replay read 會逐 byte 使用錄製 response；write 則轉入 synthetic `DeviceState`，依已提交的 profile effect 或尚未遷移的 legacy family 政策使 fixture 失效。完整依賴追蹤仍待完成。
 
 `FixtureStore::diff_against_synthetic()` 比較 element-path set，結果表示與 oxvif reference mock 的結構差異，**不是 ONVIF schema conformance verdict**。`verify_parsing().await` 則使用 oxvif typed parser，將每項 fixture 分類為 `Parsed`、`Failed`、`Faulted` 或 `Unverified`；`failures()` 刻意排除裝置正常拒絕操作的 `Faulted`。
 

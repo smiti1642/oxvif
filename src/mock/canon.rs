@@ -19,7 +19,10 @@
 //!
 //! Pragmatic, not W3C C14N: prefixes are stripped to local names rather than
 //! resolved to namespace URIs, so two *different* namespaces that reuse a local
-//! name are treated as one — a non-issue for ONVIF SOAP.
+//! name are treated as one. Namespace and significant-text collisions remain a
+//! fidelity limitation; complete Action keys do not eliminate collisions inside
+//! one operation. URL `user:pass@` pairs are removed after projection, including
+//! entity-decoded text/attributes and the unparseable-input fallback.
 
 // The `metamorph` feature's ReplayResponder is the production caller of
 // `canonicalize` / `Masking`. With only `mock` enabled the module has no
@@ -27,6 +30,7 @@
 // `--all-features` gate) real dead-code detection stays on.
 #![cfg_attr(not(feature = "metamorph"), allow(dead_code))]
 
+use crate::redact::scrub_url_userinfo;
 use crate::soap::XmlNode;
 
 /// Placeholder substituted for every masked value.
@@ -75,14 +79,18 @@ const IDENTIFIER_ATTR: &[&str] = &["token", "ReferenceToken", "CurrentToken"];
 /// Canonicalise `xml` under `masking`. On unparseable input, falls back to the
 /// whitespace-collapsed raw string (still deterministic, just un-normalised).
 pub(crate) fn canonicalize(xml: &str, masking: Masking) -> String {
-    match XmlNode::parse(xml) {
+    let projected = match XmlNode::parse(xml) {
         Ok(root) => {
             let mut out = String::with_capacity(xml.len());
             write_node(&mut out, &root, masking);
             out
         }
         Err(_) => xml.split_whitespace().collect::<Vec<_>>().join(" "),
-    }
+    };
+    // Keys and value diffs are also exposed in stored fixtures/reports. Scrub
+    // after decoding so numeric entities cannot hide a credential delimiter.
+    // Apply the same transform to the legacy unparseable-input fallback.
+    scrub_url_userinfo(&projected)
 }
 
 pub(crate) fn mask_text(local: &str, masking: Masking) -> bool {
@@ -196,5 +204,25 @@ mod tests {
     fn unparseable_input_falls_back_without_panicking() {
         let out = canonicalize("not <<< xml at %% all", Masking::Key);
         assert_eq!(out, "not <<< xml at %% all");
+    }
+
+    #[test]
+    fn projections_remove_url_credentials_after_entity_decoding() {
+        for xml in [
+            "<GetResource><Uri>rtsp://probe:secret-927@camera.invalid/path</Uri></GetResource>",
+            "<GetResource uri='rtsp://probe:secret-927@camera.invalid/path'/>",
+            "<GetResource><Uri>rtsp://probe&#58;secret-927&#64;camera.invalid/path</Uri></GetResource>",
+            "<GetResource><Uri><![CDATA[rtsp://probe:secret-927@camera.invalid/path]]></Uri></GetResource>",
+            "not XML rtsp://probe:secret-927@camera.invalid/path",
+        ] {
+            for projection in [Masking::Key, Masking::Value] {
+                let actual = canonicalize(xml, projection);
+                assert!(
+                    !actual.contains("secret-927"),
+                    "credential survived projection"
+                );
+                assert!(actual.contains("rtsp://camera.invalid/path"));
+            }
+        }
     }
 }

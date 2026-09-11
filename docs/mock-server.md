@@ -976,6 +976,13 @@ preserve recordings, including other-service reads with matching family names.
 Configuration writes and other mutations, standalone ReplayResponder
 construction, additional dependencies and concurrent visibility remain under review.
 
+Replay keys now strip URL `user:pass@` pairs after projection, including decoded
+XML entities. Legacy loaded keys are cleaned in memory, not automatically on disk;
+explicitly save and review old copies before sharing. Credential-only key collisions
+keep the last stored entry. Raw-envelope redaction remains targeted; arbitrary
+device data is not certified secret-free. See the Metamorph section of the
+[library guide](../LIBRARY_GUIDE.md#metamorph-metamorph--metamorph-server-features).
+
 ### 9.2 Reason strings are tagged and unique
 
 Many token-error reasons carry an operation tag and a numeric id:
