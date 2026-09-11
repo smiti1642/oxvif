@@ -11,7 +11,7 @@ use std::sync::{
 };
 
 const REFUSAL: &str = "This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior";
-const CASES: [(&str, &str, &str); 3] = [
+const CASES: [(&str, &str, &str); 11] = [
     (
         "http://www.onvif.org/ver10/device/wsdl/SetSystemFactoryDefault",
         "<tds:SetSystemFactoryDefault><tds:FactoryDefault>Soft</tds:FactoryDefault></tds:SetSystemFactoryDefault>",
@@ -27,25 +27,131 @@ const CASES: [(&str, &str, &str); 3] = [
         "<tev:SetSynchronizationPoint/>",
         "SetSynchronizationPointResponse",
     ),
+    (
+        "http://www.onvif.org/ver10/device/wsdl/SendAuxiliaryCommand",
+        "<tds:SendAuxiliaryCommand><tds:AuxiliaryCommand>tt:Wiper|On</tds:AuxiliaryCommand></tds:SendAuxiliaryCommand>",
+        "SendAuxiliaryCommandResponse",
+    ),
+    (
+        "http://www.onvif.org/ver20/ptz/wsdl/SendAuxiliaryCommand",
+        "<tptz:SendAuxiliaryCommand><tptz:ProfileToken>Profile_1</tptz:ProfileToken><tptz:AuxiliaryData>tt:Wiper|On</tptz:AuxiliaryData></tptz:SendAuxiliaryCommand>",
+        "SendAuxiliaryCommandResponse",
+    ),
+    (
+        "http://www.onvif.org/ver10/device/wsdl/SystemReboot",
+        "<tds:SystemReboot/>",
+        "SystemRebootResponse",
+    ),
+    (
+        "http://www.onvif.org/ver10/device/wsdl/StartFirmwareUpgrade",
+        "<tds:StartFirmwareUpgrade/>",
+        "StartFirmwareUpgradeResponse",
+    ),
+    (
+        "http://www.onvif.org/ver10/device/wsdl/StartSystemRestore",
+        "<tds:StartSystemRestore/>",
+        "StartSystemRestoreResponse",
+    ),
+    (
+        "http://docs.oasis-open.org/wsn/bw-2/NotificationProducer/SubscribeRequest",
+        "<wsnt:Subscribe><wsnt:ConsumerReference><wsa:Address>http://consumer.invalid/notify</wsa:Address></wsnt:ConsumerReference><wsnt:InitialTerminationTime>PT60S</wsnt:InitialTerminationTime></wsnt:Subscribe>",
+        "SubscribeResponse",
+    ),
+    (
+        "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest",
+        "<wsnt:Renew><wsnt:TerminationTime>PT60S</wsnt:TerminationTime></wsnt:Renew>",
+        "RenewResponse",
+    ),
+    (
+        "http://www.onvif.org/ver10/search/wsdl/EndSearch",
+        "<tse:EndSearch><tse:SearchToken>search_mock_001</tse:SearchToken></tse:EndSearch>",
+        "EndSearchResponse",
+    ),
 ];
-const OPERATIONS: [AckOnlyOperation; 3] = [
+const OPERATIONS: [AckOnlyOperation; 11] = [
     AckOnlyOperation::DeviceFactoryDefault,
     AckOnlyOperation::EventsUnsubscribe,
     AckOnlyOperation::EventsSynchronizationPoint,
+    AckOnlyOperation::DeviceAuxiliaryCommand,
+    AckOnlyOperation::PtzAuxiliaryCommand,
+    AckOnlyOperation::DeviceReboot,
+    AckOnlyOperation::DeviceFirmwareUpgrade,
+    AckOnlyOperation::DeviceSystemRestore,
+    AckOnlyOperation::EventsSubscribe,
+    AckOnlyOperation::EventsRenew,
+    AckOnlyOperation::SearchEnd,
 ];
-const NAMESPACES: [&str; 3] = [
+const NAMESPACES: [&str; 11] = [
     "http://www.onvif.org/ver10/device/wsdl",
     "http://docs.oasis-open.org/wsn/b-2",
     "http://www.onvif.org/ver10/events/wsdl",
+    "http://www.onvif.org/ver10/device/wsdl",
+    "http://www.onvif.org/ver20/ptz/wsdl",
+    "http://www.onvif.org/ver10/device/wsdl",
+    "http://www.onvif.org/ver10/device/wsdl",
+    "http://www.onvif.org/ver10/device/wsdl",
+    "http://docs.oasis-open.org/wsn/b-2",
+    "http://docs.oasis-open.org/wsn/b-2",
+    "http://www.onvif.org/ver10/search/wsdl",
 ];
 
-fn assert_ack(xml: &str, index: usize) {
+fn timestamp() -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    oxvif::soap::security::unix_secs_to_iso8601(seconds as i64)
+}
+
+fn assert_ack(xml: &str, index: usize, base: &str, earliest: &str) {
     use quick_xml::{NsReader, events::Event, name::ResolveResult};
     let body = parse_soap_body(xml).unwrap();
     assert_eq!(body.children.len(), 1);
     let response = find_response(&body, CASES[index].2).unwrap();
-    assert!(response.children.is_empty());
     assert_eq!(response.text(), "");
+    let value = |name| response.child(name).unwrap().text();
+    let check_time = |time: &str| {
+        assert_eq!(time.len(), 20);
+        assert!(
+            time >= earliest && time <= timestamp().as_str(),
+            "timestamp {time} outside request interval"
+        );
+    };
+    match index {
+        0..=2 => assert!(response.children.is_empty()),
+        3 => assert_eq!(value("AuxiliaryCommandResponse"), "OK"),
+        4 => assert_eq!(value("AuxiliaryResponse"), "tt:Wiper|On accepted"),
+        5 => assert_eq!(
+            value("Message"),
+            "Mock acknowledgment only; no reboot performed"
+        ),
+        6 => {
+            assert_eq!(value("UploadUri"), format!("{base}/upload/firmware"));
+            assert_eq!(value("UploadDelay"), "PT0S");
+            assert_eq!(value("ExpectedDownTime"), "PT30S");
+        }
+        7 => {
+            assert_eq!(value("UploadUri"), format!("{base}/upload/restore"));
+            assert_eq!(value("ExpectedDownTime"), "PT30S");
+        }
+        8 => {
+            assert_eq!(
+                response
+                    .path(&["SubscriptionReference", "Address"])
+                    .unwrap()
+                    .text(),
+                format!("{base}/onvif/events/push_sub_1")
+            );
+            check_time(value("CurrentTime"));
+            assert_eq!(value("TerminationTime"), value("CurrentTime"));
+        }
+        9 => {
+            check_time(value("CurrentTime"));
+            assert_eq!(value("TerminationTime"), value("CurrentTime"));
+        }
+        10 => check_time(value("Endpoint")),
+        _ => panic!("unreviewed receipt case"),
+    }
     let mut reader = NsReader::from_str(xml);
     let mut found = 0;
     loop {
@@ -73,14 +179,20 @@ async fn check_selected(
     selected: &[usize],
 ) {
     let before = serde_json::to_value(&*state.read()).unwrap();
+    let base = if url == "http://mock" {
+        "http://mock"
+    } else {
+        url.strip_suffix("/onvif/device").unwrap_or(url)
+    };
     for (index, (action, payload, _)) in CASES.iter().enumerate() {
         assert_eq!(OPERATIONS[index].action(), *action);
+        let earliest = timestamp();
         let xml = t
             .soap_post(url, action, SoapEnvelope::new((*payload).into()).build())
             .await
             .unwrap();
         if selected.contains(&index) {
-            assert_ack(&xml, index);
+            assert_ack(&xml, index, base, &earliest);
         } else {
             assert_refused(&xml);
         }
@@ -172,7 +284,14 @@ async fn selections_are_exact_additive_and_clone_local() {
         .iter()
         .fold(base.clone(), |t, op| t.with_acknowledgment_only(*op))
         .with_acknowledgment_only(OPERATIONS[0]);
-    check_selected(&all, "http://mock", all.device(), &hooks, &[0, 1, 2]).await;
+    check_selected(
+        &all,
+        "http://mock",
+        all.device(),
+        &hooks,
+        &(0..CASES.len()).collect::<Vec<_>>(),
+    )
+    .await;
     check_default(&base, "http://mock", base.device(), &hooks).await;
 }
 
@@ -184,7 +303,14 @@ async fn http_selections_are_exact_and_additive() {
     #[cfg(not(feature = "metamorph"))]
     let replay_modes = [false];
     for _replay in replay_modes {
-        for selected in [vec![0], vec![1], vec![2], vec![0, 1, 2, 0]] {
+        for selected in (0..CASES.len())
+            .map(|index| vec![index])
+            .chain(std::iter::once(
+                (0..CASES.len())
+                    .chain(std::iter::once(0))
+                    .collect::<Vec<_>>(),
+            ))
+        {
             let hooks = Arc::new(AtomicUsize::new(0));
             let seen = hooks.clone();
             let builder = oxvif::mock::MockServer::builder()
@@ -301,7 +427,14 @@ async fn replay_and_adapter_fallback_share_policy_without_raw_or_invalidation_ch
     let replay = OPERATIONS
         .iter()
         .fold(replay, |t, op| t.with_acknowledgment_only(*op));
-    check_selected(&replay, "http://mock", replay.device(), &hooks, &[0, 1, 2]).await;
+    check_selected(
+        &replay,
+        "http://metamorph",
+        replay.device(),
+        &hooks,
+        &(0..CASES.len()).collect::<Vec<_>>(),
+    )
+    .await;
 
     let invalidated = Arc::new(Mutex::new(HashSet::from(["keep-ack-529".into()])));
     let responder = ReplayResponder::new(Arc::new(FixtureStore::default()), invalidated.clone());
@@ -336,6 +469,7 @@ async fn replay_and_adapter_fallback_share_policy_without_raw_or_invalidation_ch
         .fold(adapter, |t, op| t.with_acknowledgment_only(*op));
     for (index, (action, payload, _)) in CASES.iter().enumerate() {
         let before = serde_json::to_value(&*adapter.device().read()).unwrap();
+        let earliest = timestamp();
         let xml = adapter
             .soap_post(
                 "http://mock",
@@ -344,7 +478,7 @@ async fn replay_and_adapter_fallback_share_policy_without_raw_or_invalidation_ch
             )
             .await
             .unwrap();
-        assert_ack(&xml, index);
+        assert_ack(&xml, index, "http://metamorph-adapter", &earliest);
         assert_eq!(
             serde_json::to_value(&*adapter.device().read()).unwrap(),
             before

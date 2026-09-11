@@ -485,6 +485,8 @@ pub fn resp_recording_search_results(state: &SharedState) -> String {
 /// The clock is `soap::security::unix_secs_to_iso8601`, the same conversion
 /// `GetSystemDateAndTime` and `PTZStatus/UtcTime` use, so the mock has one
 /// clock rather than three.
+/// Synthetic dispatch requires explicit SearchEnd acknowledgment-only opt-in;
+/// the returned clock value is fixture data, not evidence that a search ended.
 pub fn resp_end_search() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

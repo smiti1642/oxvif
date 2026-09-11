@@ -644,7 +644,7 @@ makes two tokens disagree.
 | `GetRelayOutputs`, `SetRelayOutputState`, `SetRelayOutputSettings` | ● | See §13 on `SetRelayOutputState`. Device-service operations even though DeviceIO binds them too — `deviceio.wsdl` types their messages with the `tds:` elements. |
 | `GetStorageConfigurations` / `SetStorageConfiguration` | ● | Unknown token faults; token-less Set creates. |
 | `GetSystemLog`, `GetSystemUris` | ○ | Static read fixtures. |
-| `SendAuxiliaryCommand`, `StartFirmwareUpgrade`, `StartSystemRestore`, `SystemReboot` | ○ | Legacy acknowledgment stubs; effects unmodeled, policy migration pending. |
+| `SendAuxiliaryCommand`, `StartFirmwareUpgrade`, `StartSystemRestore`, `SystemReboot` | — | Refuse by default; individual receipt-only opt-ins (§13.5), no command/maintenance effects. |
 | `SetSystemFactoryDefault` | — | Refuses by default; explicit receipt-only opt-in, no reset (§13.5). |
 
 ### 7.1a DeviceIO — 1 operation
@@ -709,7 +709,9 @@ supply the token. Missing/empty and unknown-token ordinary Fault payloads are
 retained. Configuration/preset/tour tokens, coordinate parsing, full Fault policy,
 replay invalidation and timing guarantees remain separate work.
 
-**Every per-profile operation requires `ProfileToken`.** A missing token faults
+**Operations using profile/head resolution require `ProfileToken`.** PTZ auxiliary
+is a separate receipt-only stub with no profile validation (see §13.5).
+For profile/head resolution, a missing token faults
 (`env:Sender` / `NoProfileToken-…`); a token naming no profile faults
 (`ter:NoProfile` / `NoSuchProfile-…`); and a profile that binds no PTZ
 configuration faults (`ter:NoConfig` / `NoPTZConfig-…-5619`), because it
@@ -724,7 +726,8 @@ addresses no head at all — §6.4.
 | `GetNodes`, `GetConfigurations` | ● | Whole-catalogue reads; no token to discriminate on. |
 | `GetNode`, `GetConfiguration`, `GetConfigurationOptions`, `SetConfiguration` | ● **T** | Addressed by **node** or **configuration** token, not by profile. An unknown token faults. `GetConfigurationOptions` reports the coordinate spaces of the node its configuration drives, so `PTZConfig_2` answers with zoom slots only. |
 | `GetCompatibleConfigurations` | ● **T** | The profile's bound configuration — or an **empty list**, not a fault, for a profile that is not PTZ-capable. |
-| `SendAuxiliaryCommand`, `GetServiceCapabilities` | ○ | |
+| `GetServiceCapabilities` | ○ | Static capability fixture. |
+| `SendAuxiliaryCommand` | — | Refuses by default; PTZ-specific opt-in retains the command allowlist but does not validate ProfileToken or execute commands (§13.5). |
 
 ### 7.5 Imaging — 8 operations
 
@@ -741,7 +744,7 @@ addresses no head at all — §6.4.
 | `PullMessagesRequest` | ● | Emits a periodic synthetic stream plus any pending REST-injected I/O events; `event_seq` increments per call. |
 | `GetEventPropertiesRequest` | ○ | Topic set. Declares `tns1` on the element. |
 | `GetServiceCapabilitiesRequest` | ○ | Static read fixture. |
-| `SubscribeRequest`, `RenewRequest` | ○ | Legacy lifecycle stubs; policy migration pending. |
+| `SubscribeRequest`, `RenewRequest` | — | Refuse by default; receipt-only opt-ins do not create push subscriptions or extend lifetimes (§13.5). |
 | `UnsubscribeRequest`, `SetSynchronizationPointRequest` | — | Refuse by default; explicit receipt-only opt-in, no lifecycle/event effect (§13.5). |
 
 ### 7.7 Recording / Search / Replay — 17 operations
@@ -753,7 +756,8 @@ addresses no head at all — §6.4.
 | `GetRecordingSearchResults` | ● | |
 | `GetReplayUri` | ● **T** | Faults on a token naming no recording. |
 | `FindRecordings` | ○ | One search token; no cursor — see §13. |
-| `EndSearch`, three × `GetServiceCapabilities` | ○ | `EndSearchResponse` carries the required `Endpoint`, read from the same clock as `GetSystemDateAndTime`. It was an empty body until 0.15.0. |
+| Three × `GetServiceCapabilities` | ○ | Static capability fixtures. |
+| `EndSearch` | — | Refuses by default. Opt-in returns a fixture `Endpoint` timestamp, not a search termination (§13.5). |
 
 ---
 
@@ -1361,7 +1365,7 @@ Audit §6.
 
 ### 13.5 Explicit acknowledgment-only policy
 
-**Unreleased:** three classified operations refuse by default with `s:Receiver`
+**Unreleased:** eleven classified operations refuse by default with `s:Receiver`
 and first subcode `mock:UnmodeledEffect`. For a workflow that needs only a receipt:
 
 ```rust
@@ -1376,6 +1380,14 @@ let mock = MockTransport::new()
 | `DeviceFactoryDefault` | Device state reset |
 | `EventsUnsubscribe` | Subscription termination or queued-event removal |
 | `EventsSynchronizationPoint` | Synchronization-event creation or delivery |
+| `DeviceAuxiliaryCommand` | Execution of a Device auxiliary command |
+| `PtzAuxiliaryCommand` | Execution or profile validation of a PTZ auxiliary command |
+| `DeviceReboot` | Restart; the receipt explicitly states no reboot was performed |
+| `DeviceFirmwareUpgrade` | Working upload endpoint or firmware upgrade |
+| `DeviceSystemRestore` | Working upload endpoint or restored configuration |
+| `EventsSubscribe` | Push subscription creation or notification delivery |
+| `EventsRenew` | Subscription lifetime extension |
+| `SearchEnd` | Search termination or expiration |
 
 The same method is available on `MockServer::builder()`, `MetamorphTransport`
 and `AdapterTransport`. Repeated calls accumulate selected operations; transport
@@ -1387,8 +1399,12 @@ Both refusal and acknowledgment leave state, change hooks, committed effects and
 replay invalidation unchanged. Common XML/Action/body identity checks still run;
 complete operation-field and subscription validation is not implied. Fault/auth
 and caller-owned raw adapter responses retain precedence. Selection is not stored
-in device snapshots. Other auxiliary/reboot/upgrade/restore, subscription and search
-lifecycle stubs are still being classified. See the
+in device snapshots. PTZ auxiliary retains its legacy command allowlist, not full
+ProfileToken/field validation. Upload URIs, subscription references and timestamps
+are fixture data; they do not identify working services or completed effects.
+Capability responses remain static fixtures and may overstate modeled behavior;
+full reconciliation is tracked under W17. Remaining operation contracts and
+partially modeled effects still require review. See the
 [policy checkpoint](active/mock-fidelity-ack-policy-preflight.md) and
 `tests/mock_ack_policy.rs`; this is not a hardware-effect or conformance test.
 

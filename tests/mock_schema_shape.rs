@@ -1680,7 +1680,7 @@ async fn mock_output_matches_the_onvif_schema() {
         );
     }
 
-    // Corpus: default response per client action, plus the three explicitly
+    // Corpus: default response per client action, plus explicitly
     // selected receipt-only responses. A policy migration must not erase the
     // legacy success shapes from this external check or loosen coverage floors.
     let transport = MockTransport::new();
@@ -1703,6 +1703,14 @@ async fn mock_output_matches_the_onvif_schema() {
                 AckOnlyOperation::DeviceFactoryDefault,
                 AckOnlyOperation::EventsUnsubscribe,
                 AckOnlyOperation::EventsSynchronizationPoint,
+                AckOnlyOperation::DeviceAuxiliaryCommand,
+                AckOnlyOperation::PtzAuxiliaryCommand,
+                AckOnlyOperation::DeviceReboot,
+                AckOnlyOperation::DeviceFirmwareUpgrade,
+                AckOnlyOperation::DeviceSystemRestore,
+                AckOnlyOperation::EventsSubscribe,
+                AckOnlyOperation::EventsRenew,
+                AckOnlyOperation::SearchEnd,
             ]
             .into_iter()
             .find(|operation| operation.action() == uri)

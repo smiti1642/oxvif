@@ -143,13 +143,15 @@
 //!
 //! # Unreleased request hardening
 //!
-//! Factory Reset, Events Unsubscribe and Events SetSynchronizationPoint refuse
-//! by default with Receiver / `mock:UnmodeledEffect`. Select individual
+//! Eleven classified reset, auxiliary, reboot/maintenance, subscription and
+//! search-ending stubs refuse by default with Receiver / `mock:UnmodeledEffect`,
+//! including Events SetSynchronizationPoint. Select individual
 //! [`AckOnlyOperation`] values using `with_acknowledgment_only` on mock, replay
 //! or adapter transports, or the HTTP builder, for receipt-only workflow tests.
 //! Neither path changes state, invokes hooks or invalidates replay; reset,
-//! subscription termination and synchronization events are not modeled. This
-//! first classification does not settle other effectful stubs.
+//! auxiliary execution, maintenance, subscription/search lifetimes and events
+//! are not modeled. Upload URIs, references and timestamps are fixtures. Full
+//! operation contracts and capability reconciliation remain under review.
 //!
 //! Media1/Media2 `DeleteProfile` now select a namespace-qualified direct token
 //! child, decode XML text once and preserve token whitespace. Invalid requests

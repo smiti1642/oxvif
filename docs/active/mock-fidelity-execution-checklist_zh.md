@@ -9,6 +9,7 @@
 | 章節 | 用途 |
 | --- | --- |
 | [執行規則](#執行規則) | 不依賴對話歷史即可接續施工 |
+| [批次與驗證節奏](#批次與驗證節奏) | 已核准的全套測試重複執行減量方式 |
 | [開工條件與操作工作卡](#開工條件與操作工作卡) | 修改 handler 前必須完成的工作 |
 | [稽核面向](#稽核面向) | 每個操作均須套用的檢查項目 |
 | [工作清單](#工作清單) | 編號、相依性、位置及驗收 |
@@ -26,7 +27,8 @@
    呼叫形式，不會發現所有 handler 內部變更或新增 helper。
 3. 選擇相依條件已滿足的工作編號。服務遷移前，先完成該批次**所有操作列**的
    W01 工作卡，包含讀取操作。
-4. 可獨立驗證的範圍分段 commit。同一批同步更新雙語文件、操作狀態、證據及
+4. 依下述節奏，以可獨立驗證的完整服務子群分段 commit，不再逐一 helper 或操作
+   修正提交。同一批同步更新雙語文件、操作狀態、證據及
    下一項工作。不得因一個 helper 或兩個操作已修正就將整個里程碑標記完成。
 5. 新發現須先記錄編號、來源 symbol、受影響操作 ID、重現方式或明確的
    `UNVERIFIED`、風險、測試位置與處置，再繼續施工。不得只留在對話或測試總數中。
@@ -34,6 +36,36 @@
 工作狀態：`TODO`、`IN-PROGRESS`、`DONE`、`BLOCKED:<reason>`、
 `NA:<reason/evidence>`。`PARTIAL` 僅用於已有紀錄的部分實作。
 不以路由數量推估工期或完成百分比。
+
+## 批次與驗證節奏
+
+維護者於 2026-09-11、`6382458` 之後核准：先完成具一致目的的完整服務子群，
+再進行完整驗證與 commit，以減少重複測試。此調整改變施工粒度，不降低既定
+fidelity 或發布驗收標準。
+
+| 階段 | 必要工作 | 避免重複執行 |
+| --- | --- | --- |
+| 批次開始 | 記錄操作 ID、共用相依性、驗收案例及預定 commit 範圍；相關程式未變更時沿用清冊 | 已有對應綠燈基準時再跑全 workspace baseline |
+| 施工 | 一次完成該子群，在有意義的檢查點執行編譯與受影響測試 | 每改一個 helper、assertion、操作或文字就跑全套 |
+| 敏感性檢查 | 規劃一次整批擾動驗證，包含必要的 unfiltered all-feature／no-fail-fast run，並精確還原 | 每新增一個 assertion 就另跑完整擾動流程 |
+| 批次驗收 | 對還原後的候選版本執行一次程式碼 commit 所需五項 gate；wire 輸出改變時執行一次相關外部 schema 檢查 | 正式 gate 前再額外跑一次相同的完整綠燈測試 |
+| 失敗修復 | 先修正並重跑失敗／受影響測試；程式碼變更後，commit 前取得最終綠燈 gate | 診斷單一失敗期間反覆跑未受影響的矩陣 |
+| 文件與交付 | 雙語文件與證據一起更新；驗收後整批 commit、push 一次 | 為文件另行多次 push，重複觸發相同 CI |
+| 全案驗收 | 完成 feature／MSRV／原生平台與發布專屬矩陣 | 未涉及相關風險的每個服務子群都跑完整發布矩陣 |
+
+不得為減少執行次數而刪除、ignore 或弱化測試。保留正負控制、精確 Fault 斷言、
+state／effect 檢查及 HTTP／in-process 覆蓋。僅在相關程式碼、相依套件、feature
+與工具輸入均未改變時沿用證據；記錄來源 revision，不將舊 run 稱為新結果。
+新增失敗或共用相依性改變時，須重跑受影響檢查。子群 gate 通過不等於 release
+驗收完成。
+
+依此節奏交付的首批為八個已由原始碼確認的 effect stub：Device 與 PTZ auxiliary command、
+Device reboot／firmware upgrade／system restore、Events subscribe／renew，以及
+Search EndSearch。其精確操作政策、mock／replay／HTTP 行為、既有 workflow 遷移
+與雙語文件視為一個一致交付範圍，不拆成八次獨立 gate／commit；實作紀錄為政策
+preflight 的 A3。下一批先完成 Media1／Media2 profile 建立／binding 的剩餘契約
+（初始 Configuration、selector 衝突、capacity 與引用關係），再進入 video
+configuration／options。進度回報以已完成／剩餘子群及 blocker 為主，不將測試數換算為完成率。
 
 ## 開工條件與操作工作卡
 
@@ -106,7 +138,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W13／M2–M4／TODO | W01、W03–W06、W08 設計 | `services/device.rs`、DeviceIO dispatch、device state | 重複 users／network entries／scopes、storage 子樹、relay token；失敗不改 state／auth／events／hooks；維護效果依 D2 分類 |
 | W14／M2–M4／TODO | W01、W03–W06 | `services/recording.rs`：分開的 Recording／Search／Replay dispatch 與狀態生命週期 | Recording／track／job 辨識及連鎖處理；search token／終止／timeout、replay 選擇；有限模擬不代表實際錄影或媒體傳送 |
 | W15／M2–M4／TODO | W01、W03–W06 | `services/events.rs`、IO event queue、subscription state | 核對 filter namespace／dialect、lifetime／renew／unsubscribe／pull 限制、queue 隔離／順序／終止；既有 Events sync 不是 PR #16 Media sync |
-| W16／M4／PARTIAL | W01 分類、W05／W06 | [首批 acknowledgment 政策](mock-fidelity-ack-policy-preflight_zh.md)：Factory Reset、Events unsubscribe／sync；mock／replay／adapter transport、HTTP builder 及 responder | 精確操作 opt-in、預設 mock-specific 拒絕、不變更 state／hook／effect／replay retirement；其他 effectful stub 與完整 registry 分類仍未完成；未新增追蹤 |
+| W16／M4／PARTIAL | W01 分類、W05／W06 | [A2／A3 acknowledgment 政策](mock-fidelity-ack-policy-preflight_zh.md)：11 條已分類 reset／auxiliary／maintenance／subscription／結束搜尋 route，共用 transport／server 政策 | 精確操作 opt-in、預設拒絕、不變更 state／hook／effect／replay retirement；此 stub 子群已遷移，但完整操作語意、部分建模效果及 capability 核對仍未完成 |
 | W17／M4／TODO | W10–W16 分類 | 全部 capability renderer、`discovery_responder.rs`、`fleet.rs`、`snapshot.rs`、`font.rs`、公開 mock 文件 | Services／XAddrs／feature／limit 與建模行為一致；核對 discovery／snapshot 側路徑；靜態 URI／圖片不證明 codec／串流輸出 |
 | W18／M4／PARTIAL | W10–W16 候選行為 | K13 無碰撞配置、K16 原子 binding plan、條件式通知；K08 hook 在鎖外接收 commit 快照，profile／catalogue 讀取共用一次快照 | 選定配置、binding、reentrant 及三路徑 profile snapshot 控制；更廣泛併發寫入、instance、rollback、其他 queue／read snapshot 及 replay 待完成；公開 signature 不變，callback 排序由使用者管理 |
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | Configuration 寫入與其他 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密 |

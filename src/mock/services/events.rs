@@ -306,10 +306,11 @@ pub fn resp_renew() -> String {
 /// sub-tree, and `resp_capabilities` in `device.rs` is where the mock emits
 /// it. The nearest thing here is `MaxPullPoints`.
 ///
-/// The mock serves pull-point and `Subscribe` but has no pausable-subscription
-/// manager and no MQTT broker, so `EventBrokerProtocols` is **omitted** rather
-/// than sent empty — a device with no brokers does not advertise a protocol
-/// list.
+/// These are static capability fixtures, not proof of complete subscription
+/// support. `Subscribe`/`Renew` require acknowledgment-only opt-ins and do not
+/// create push subscriptions or extend lifetimes. No pausable manager or MQTT
+/// broker is modeled; `EventBrokerProtocols` remains omitted. Full capability
+/// reconciliation is tracked separately under W17.
 pub fn resp_event_service_capabilities() -> String {
     soap(
         r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl""#,

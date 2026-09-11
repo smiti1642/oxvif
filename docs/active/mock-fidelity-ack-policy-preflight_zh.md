@@ -3,12 +3,15 @@
 [English](mock-fidelity-ack-policy-preflight.md) | [繁體中文](mock-fidelity-ack-policy-preflight_zh.md)
 
 W16／K05，2026-09-11，基準 `a51490c`。此設計於實作前記錄。
+目前實作涵蓋 11 項已分類操作。下方範圍／設計／驗證保留首批三項操作的檢查點；
+A3 章節記錄另外八項操作的擴充。
 
 | 章節 | 用途 |
 | --- | --- |
 | [範圍](#範圍) | 首批分類操作與剩餘工作 |
 | [設計](#設計) | 明確的局部政策及相容性邊界 |
 | [驗證](#驗證) | 拒絕、opt-in 與優先順序控制 |
+| [剩餘 effect stub 批次](#剩餘-effect-stub-批次) | 一次交付八項額外政策分類 |
 
 ## 範圍
 
@@ -67,3 +70,64 @@ Windows 本機 gate 通過：workspace all-feature 1,224 tests、default 1,127 t
 文件與雙語清冊自我測試均通過。清冊維持 159 個 Action 使用點／157 條 route／243 個
 直接 reader。前一筆認證 commit `a51490c` 已通過 CI `34564803484`。本批不是 release
 驗收；其他 effectful route 尚待分類，因此 W16 維持 PARTIAL。
+
+## 剩餘 effect stub 批次
+
+基準 `6382458`，2026-09-11；於實作前記錄。依核准 D2，一次交付以下已由原始碼
+確認的完整 stub 子群。這是政策遷移，不是各操作全部欄位或規範 Fault 的驗收。
+
+| 清冊 ID | 目前 handler／輸入 | 目前回應與未模擬效果 |
+| --- | --- | --- |
+| `device.SendAuxiliaryCommand` | `device::resp_send_auxiliary_command`，忽略 request 欄位 | `OK`；不執行 auxiliary |
+| `ptz.SendAuxiliaryCommand` | `ptz::handle_ptz_send_auxiliary_command`，legacy AuxiliaryData allowlist；忽略 ProfileToken | accepted 文字或 legacy 拒絕；不執行 auxiliary |
+| `device.SystemReboot` | `device::resp_system_reboot`，無 request reader | 重啟訊息；不重啟 |
+| `device.StartFirmwareUpgrade` | `device::resp_start_firmware_upgrade`，僅 base URL | Upload URI／duration；不接收上傳或升級 |
+| `device.StartSystemRestore` | `device::resp_start_system_restore`，僅 base URL | Upload URI／duration；不還原 |
+| `events.SubscribeRequest` | `events::resp_subscribe`，僅 base URL | Reference／目前時間；不建立 push subscription 或推送 |
+| `events.RenewRequest` | `events::resp_renew`，無 request reader | 目前時間；不延長 lifetime |
+| `search.EndSearch` | `recording::resp_end_search`，無 request reader | 目前時間；不終止搜尋 |
+
+八個 handler 目前均不寫入 state，既有 client／session 及 dispatch 身分不變。
+在現有政策加入各自 enum variant／完整 Action，於 handler 前預設回覆固定的
+`mock:UnmodeledEffect`。Opt-in 保留既有回應投影與 PTZ allowlist，但 reboot
+訊息須明確表示未執行重啟。不新增 upload endpoint、subscription、timer 或 search
+session。共用 parser 檢查仍優先於政策；raw adapter 仍掌管自己的回應。收件或拒絕
+都不得淘汰 replay 資料。不變更公開 struct 必填欄位、snapshot、錯誤型別或 CLI exit。
+
+C01／C07／C08／C10／C11：精確選項、錯誤 service／body、回應欄位、一般拒絕及
+既有 typed workflow。C06／C09：非預設 state、零 hook／invalidation 及既有共用
+auth／limit 控制。C12：一次整批擾動與最後 gate，不逐操作執行全套。C02–C05 的完整
+欄位、token、enum／extension 及 lifecycle 驗證仍未驗收；政策修正不等於升級 legacy
+reader。不依專案 fixture 重定義規範 payload 映射；映射維持不變。外部 schema probe
+同時新增明確 opt-in 與預設回應，保留既有成功覆蓋。清冊、公開文件及原始碼行為聲明
+與本批一起更新。
+
+### A3 實作證據
+
+擴充後的預設拒絕控制在 `6382458` 上，對兩種 transport 的八項既有成功操作均失敗
+（`1789107385_cargo_test.log`）。針對性 policy／workflow／action snapshot 共 34 個
+測試通過。接著一次完整 workspace／all-feature／no-fail-fast 擾動，同時繞過 reboot
+政策、變更 auxiliary 收件內容及 Renew replay 處理（`1789107591_cargo_test.log`）。
+預設拒絕／隔離／snapshot 斷言捕捉到 reboot 繞過；typed auxiliary workflow 捕捉到
+收件文字變更。Replay 測試先停在 reboot 斷言，因此此組合 run 不獨立證明對 Renew
+invalidation 擾動的敏感性。所有擾動均已還原；最後擴充的 replay 測試會確認全部
+十一項操作均不改變 invalidation set。
+
+該完整 run 亦發現兩個既有 HTTP maintenance 測試仍假設預設成功，已遷移至明確
+逐操作 opt-in，並精確斷言 URI／duration；其針對性重跑通過。這是 fixture 遷移，
+不是放寬預設拒絕的理由。未執行實際 upload、restart、push delivery 或 search
+termination。前一筆 commit `6382458` 已通過 CI `34566149186`。
+
+還原後的 Windows workspace 最終 gate 通過：all features 為 1,224 passed，
+default features 為 1,127 passed；各為 33 suites、5 個條件式 ignore。格式、
+兩種 all-target Clippy（warnings denied）、兩種 feature 模式的 strict docs、
+雙語清冊自我測試及 `git diff --check` 均通過。清冊維持 159 個 Action 使用點／
+157 條 route／243 個直接 reader。
+
+另行明確執行的 legacy 外部 schema 檢查通過，共 169 份 response：111 份成功
+payload、58 份 Fault、1,319 個 anchored node、1,464 個 skipped child、409 個
+已檢查 attribute；十類 finding 均為零。新增逐操作 opt-in，讓既有成功覆蓋與
+預設拒絕同時保留。未變更 schema resource、finding pin 或 coverage floor。
+這不等同於八項操作已通過獨立 Xerces 驗收、完整欄位／lifecycle 驗證或實機效果
+測試。A3 完成此八項 stub 的政策遷移，累計十一項已分類操作；W16 維持 PARTIAL，
+W17 capability 核對仍未完成。本批不包含發布、系統 binary 更新或分支合併。

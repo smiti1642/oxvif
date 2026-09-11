@@ -1404,8 +1404,9 @@ match client.get_capabilities().await {
 
 A built-in mock ONVIF device routes all 157 implemented SOAP actions. Modeled
 writes persist and corresponding getters reflect them; routing coverage does not
-mean every effect is modeled. Factory Reset and Events unsubscribe/synchronization
-now require explicit acknowledgment-only opt-in for receipt-only workflows; see
+mean every effect is modeled. Classified reset, auxiliary, maintenance,
+subscription/synchronization and search-ending stubs require individual
+acknowledgment-only opt-ins for receipt-only workflows; see
 [mock fidelity policy](docs/mock-server.md#135-explicit-acknowledgment-only-policy).
 
 ### Try it now — a test that needs nothing

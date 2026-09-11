@@ -3,12 +3,15 @@
 [English](mock-fidelity-ack-policy-preflight.md) | [繁體中文](mock-fidelity-ack-policy-preflight_zh.md)
 
 W16/K05, 2026-09-11, baseline `a51490c`. Design recorded before implementation.
+Current implementation: 11 classified operations. Scope/Design/Verification below
+retain the first three-operation checkpoint; the A3 section records the eight-operation extension.
 
 | Section | Purpose |
 | --- | --- |
 | [Scope](#scope) | First classified operations and remaining work |
 | [Design](#design) | Explicit, local policy and compatibility boundaries |
 | [Verification](#verification) | Refusal, opt-in and precedence controls |
+| [Remaining effect-stub batch](#remaining-effect-stub-batch) | Eight additional policy classifications delivered together |
 
 ## Scope
 
@@ -78,3 +81,76 @@ formatting, strict default/all-feature docs and paired inventory self-tests.
 Inventory remains 159 Action sites / 157 routes / 243 direct readers. Authentication
 predecessor `a51490c` passed CI `34564803484`. This slice is not release acceptance;
 W16 remains PARTIAL until the remaining effectful routes are classified.
+
+## Remaining effect-stub batch
+
+Baseline `6382458`, 2026-09-11; recorded before implementation. Apply approved D2
+to the following complete source-confirmed stub subgroup in one delivery. This
+is a policy migration, not full operation-field or normative Fault acceptance.
+
+| Ledger ID | Current handler/input | Current response and absent effect |
+| --- | --- | --- |
+| `device.SendAuxiliaryCommand` | `device::resp_send_auxiliary_command`, ignores request fields | `OK`; no auxiliary execution |
+| `ptz.SendAuxiliaryCommand` | `ptz::handle_ptz_send_auxiliary_command`, legacy AuxiliaryData allowlist; ignores ProfileToken | Accepted text or legacy refusal; no auxiliary execution |
+| `device.SystemReboot` | `device::resp_system_reboot`, no request reader | Reboot message; no restart |
+| `device.StartFirmwareUpgrade` | `device::resp_start_firmware_upgrade`, base URL only | Upload URI/durations; no upload or upgrade |
+| `device.StartSystemRestore` | `device::resp_start_system_restore`, base URL only | Upload URI/duration; no restore |
+| `events.SubscribeRequest` | `events::resp_subscribe`, base URL only | Reference/current timestamps; no push subscription or delivery |
+| `events.RenewRequest` | `events::resp_renew`, no request reader | Current timestamps; no lifetime extension |
+| `search.EndSearch` | `recording::resp_end_search`, no request reader | Current timestamp; no search termination |
+
+All eight handlers currently avoid state writes; their existing client/session
+and dispatch identities remain unchanged. Add distinct enum variants/full Actions
+to the existing policy, before handlers; default refusal has the existing static
+`mock:UnmodeledEffect` shape. Opt-in retains the existing response projection and
+PTZ allowlist, except the reboot message must explicitly state no reboot occurred.
+No new upload endpoints, subscriptions, timers or search sessions are introduced.
+Common parser checks still precede policy; raw adapters still own their responses.
+Replay must not retire data on either receipt or refusal. No public required
+struct fields, device snapshots, error types or CLI exits change.
+
+C01/C07/C08/C10/C11: exercise exact selection, wrong service/body, response fields,
+ordinary refusal and existing typed workflow. C06/C09: non-default state, zero
+hooks/invalidation and existing shared auth/limit controls. C12: one planned batch
+mutation plus final gates, not one full gate per operation. C02–C05 full field,
+token, enum/extension and lifecycle validation remain unaccepted; these policy
+changes do not upgrade legacy request readers. Normative payload mappings are
+unchanged and are not redefined from project fixtures. Preserve all previous
+successful external-schema probes by adding explicit opt-in alongside defaults.
+Update operation ledger, affected public docs and source claims as one batch.
+
+### A3 implementation evidence
+
+The extended default-refusal controls failed against `6382458` for all eight
+previously successful operations over both transports (`1789107385_cargo_test.log`).
+The focused policy/workflow/action-snapshot run passed 34 tests. One unfiltered
+workspace/all-feature/no-fail-fast mutation campaign then bypassed reboot policy,
+changed the auxiliary receipt and altered Renew replay handling
+(`1789107591_cargo_test.log`). Default/isolation/snapshot assertions caught the
+reboot bypass; the typed auxiliary workflow caught the changed receipt. Replay
+tests stopped at the earlier reboot assertion, so this combined run does not
+independently prove sensitivity to the Renew-invalidation mutation. All mutations
+were restored. The final expanded replay test checks all eleven operations leave
+the invalidation set unchanged.
+
+That full campaign also found two existing HTTP maintenance tests still assuming
+default success; they were migrated to explicit per-operation opt-in and exact
+URI/duration assertions. Their focused rerun passed. This was fixture migration,
+not a reason to weaken default refusal. No actual upload, restart, push delivery
+or search termination was performed. Prior commit `6382458` passed CI `34566149186`.
+
+Final restored Windows workspace gates passed: all features 1,224 passed and
+default features 1,127 passed, each with 5 conditional ignores across 33 suites.
+Formatting, both all-target Clippy modes with warnings denied, strict docs in both
+feature modes, paired inventory self-tests and `git diff --check` passed. The
+inventory remains 159 Action sites / 157 routes / 243 direct readers.
+
+The separately selected legacy external-schema check passed with 169 responses:
+111 success payloads, 58 Faults, 1,319 anchored nodes, 1,464 skipped children and
+409 checked attributes; all ten finding categories remain zero. Extra per-operation
+opt-ins preserve the previous success coverage alongside default refusals. No
+schema resources, finding pins or coverage floors changed. This is not independent
+Xerces acceptance of the eight operations, full field/lifecycle validation or a
+real-device effect test. A3 completes this eight-stub policy migration, bringing
+the classified total to eleven; W16 remains PARTIAL and W17 capability reconciliation
+remains open. No release, system binary update or branch merge is included.

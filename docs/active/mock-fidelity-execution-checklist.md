@@ -10,6 +10,7 @@ complete. No additional runtime behavior is changed by this planning revision.
 | Section | Purpose |
 | --- | --- |
 | [Execution rules](#execution-rules) | Resume without conversation history |
+| [Batch and verification cadence](#batch-and-verification-cadence) | Approved reduction of repeated full-suite runs |
 | [Readiness and operation card](#readiness-and-operation-card) | Required work before editing a handler |
 | [Review axes](#review-axes) | Checklist inherited by every operation |
 | [Work register](#work-register) | IDs, dependencies, locations and acceptance |
@@ -27,7 +28,8 @@ complete. No additional runtime behavior is changed by this planning revision.
    the checker only sees dispatch signatures, not handler changes or new helpers.
 3. Select a work ID whose dependencies are satisfied. For a service migration,
    first complete W01 cards for **every row in that batch**, including reads.
-4. Commit independently verifiable slices. Update both language versions, operation
+4. Commit independently verifiable service subgroups using the cadence below, not
+   each individual helper or operation fix. Update both language versions, operation
    statuses, evidence and the next task in the same slice. Do not mark a milestone
    complete because one helper or two operations have been repaired.
 5. New findings get an ID, source symbol, affected operation IDs, reproduction or
@@ -37,6 +39,40 @@ complete. No additional runtime behavior is changed by this planning revision.
 Status vocabulary: `TODO`, `IN-PROGRESS`, `DONE`, `BLOCKED:<reason>`,
 `NA:<reason/evidence>`. `PARTIAL` is reserved for a documented sub-slice.
 No time or completion percentage is inferred from route counts.
+
+## Batch and verification cadence
+
+Maintainer-approved on 2026-09-11, after `6382458`: reduce repeated test runs by
+completing coherent service subgroups before full validation and commit. This
+changes execution granularity, not the agreed fidelity or release criteria.
+
+| Stage | Required work | Avoid repeating |
+| --- | --- | --- |
+| Batch entry | Record operation IDs, shared dependencies, acceptance cases and intended commit scope; reuse current inventory unless relevant source changed | Whole-workspace baseline runs when a matching green baseline already exists |
+| Implementation | Finish the subgroup together; use compilation and focused affected tests at meaningful checkpoints | A full suite after every helper, assertion, operation or prose edit |
+| Sensitivity check | One planned batch mutation campaign, with the required unfiltered all-feature/no-fail-fast run; restore exactly | Separate full mutation campaigns for each new assertion |
+| Batch acceptance | Run the five per-code-commit gates once on the restored candidate; run relevant external schema checks once if wire output changed | An additional full green run immediately before the same acceptance gate |
+| Failure recovery | Fix and rerun the failing/affected tests first; establish final green gates for changed code before commit | Repeated unaffected matrices while diagnosing one failure |
+| Documentation and delivery | Update paired docs and evidence together; commit and push the accepted subgroup once | Separate documentation-only pushes that trigger the same CI repeatedly |
+| Final programme acceptance | Complete the feature/MSRV/native-platform and release-specific matrix | The full release matrix on every service subgroup unless that change affects it |
+
+No test is deleted, ignored or weakened to reduce run count. Retain positive and
+negative controls, exact fault assertions, state/effect checks and HTTP/in-process
+coverage. Reuse evidence only when its relevant code, dependency, feature and
+tooling inputs are unchanged; record the source revision and do not call an old
+run a new result. New failures or changed common dependencies require the affected
+checks to run again. Do not claim release acceptance from a subgroup's green gate.
+
+The first batch under this cadence covers eight source-confirmed effect stubs: Device and
+PTZ auxiliary commands, Device reboot/firmware-upgrade/system-restore, Events
+subscribe/renew, and Search EndSearch. Treat their exact-operation policy,
+mock/replay/HTTP behavior, existing workflow migration and paired documentation
+as one cohesive delivery, not eight separately gated commits. Implementation is
+recorded as A3 in the policy preflight. Next: close the remaining Media1/Media2
+profile creation/binding contracts (initial Configuration, selector conflicts,
+capacity and references) before advancing to video configuration/options.
+Report completed/remaining subgroups and open
+blockers rather than using test counts as a completion percentage.
 
 ## Readiness and operation card
 
@@ -114,7 +150,7 @@ include operation-sized Fault migration after W05, not just request parsing.
 | W13 / M2–M4 / TODO | W01, W03–W06, W08 design | `services/device.rs`, DeviceIO dispatch, device state | Repeated users/network entries/scopes, storage subtrees and relay tokens; failure leaves state/auth/events/hooks unchanged; maintenance effects classified under D2 |
 | W14 / M2–M4 / TODO | W01, W03–W06 | `services/recording.rs`: separate Recording/Search/Replay dispatch and state lifecycles | Recording/track/job discrimination and cascades; search token/termination/timeout and replay selection audited; finite simulation, not actual recording/media delivery |
 | W15 / M2–M4 / TODO | W01, W03–W06 | `services/events.rs`, IO event queue and subscription state | Filter namespace/dialect and lifetime/renew/unsubscribe/pull limits reviewed; queue isolation/order/termination; existing Events sync is not PR #16 Media sync |
-| W16 / M4 / PARTIAL | W01 classifications, W05/W06 | [First acknowledgment policy](mock-fidelity-ack-policy-preflight.md): Factory Reset, Events unsubscribe/sync; mock/replay/adapter transports, HTTP builder and responders | Exact-operation opt-in, default mock-specific refusal, no state/hook/effect/replay retirement; remaining effectful stubs and full registry classification open; no tracing added |
+| W16 / M4 / PARTIAL | W01 classifications, W05/W06 | [A2/A3 acknowledgment policy](mock-fidelity-ack-policy-preflight.md): 11 classified reset/auxiliary/maintenance/subscription/search-ending routes; shared transport/server policy | Exact-operation opt-in, default refusal, no state/hook/effect/replay retirement; this stub subgroup is migrated, but full operation semantics, partial effects and capability reconciliation remain open |
 | W17 / M4 / TODO | W10–W16 classifications | All capability renderers, `discovery_responder.rs`, `fleet.rs`, `snapshot.rs`, `font.rs`, public mock docs | Services/XAddrs/features/limits agree with modeled behavior; discovery/snapshot side channels checked; codec/stream rendering not claimed from static URIs or images |
 | W18 / M4 / PARTIAL | W10–W16 candidate behavior | K13 collision-safe allocation; K16 atomic binding plans; conditional notifications; K08 hooks run outside locks with commit snapshots, and profile/catalogue reads share one snapshot | Selected allocation, binding, reentrant and three-path profile snapshot controls; broader concurrent writes, instances, rollback, other queue/read snapshots and replay remain open; public signatures unchanged, callback ordering caller-managed |
 | W19 / M3,M6 / PARTIAL | W03/W09 designs | Built-in profile creation/deletion, Media1 video binding and Media2 generic binding use private committed effects; cross-service reads, HTTP, instance and chain controls | Configuration writes and other mutations, standalone replay policy, full read dependencies, normalization/key collisions and concurrent/callback visibility remain open; no new recording of device secrets |

@@ -453,7 +453,7 @@ Metadata 有 `MetaConf_1` 與 `MetaConf_2`；兩者在 analytics、PTZ status/po
 
 ### 7.1 Device 與 DeviceIO
 
-Device 共 38 項操作。裝置資訊、日期時間設定、hostname、NTP、DNS、scope、user、network interface/protocol/gateway、discovery mode、relay 與 storage 均為 ●。`GetCapabilities`、`GetServices` 與 `GetServiceCapabilities` 使用 static service metadata；`GetSystemLog`／`GetSystemUris` 為 static read fixture。`SetSystemFactoryDefault` 預設拒絕，須明確 opt-in 僅回覆收件、不重設 state（§13.5）。Auxiliary、upgrade／restore 與 reboot 仍為舊 acknowledgment stub，效果未建模，政策遷移尚待完成。
+Device 共 38 項操作。裝置資訊、日期時間設定、hostname、NTP、DNS、scope、user、network interface/protocol/gateway、discovery mode、relay 與 storage 均為 ●。`GetCapabilities`、`GetServices` 與 `GetServiceCapabilities` 使用 static service metadata；`GetSystemLog`／`GetSystemUris` 為 static read fixture。`SetSystemFactoryDefault`、auxiliary、upgrade／restore 與 reboot 預設拒絕，須逐項明確 opt-in 僅回覆收件，不執行對應效果（§13.5）。
 
 DeviceIO 的唯一操作是 `GetDigitalInputs`，由 REST simulator 驅動。其 endpoint 為 `{base}/onvif/deviceio`；action segment 使用小寫 `deviceio`，element namespace 則為 `…/ver10/deviceIO/wsdl`。
 
@@ -480,14 +480,15 @@ Media2 與 Media1 共用 profile、video、audio 狀態，並另提供 metadata�
 Configuration／preset／tour token、座標解析、完整 Fault policy、replay invalidation
 與時間行為保證仍為獨立工作。
 
-所有 per-profile 操作都要求 `ProfileToken`。缺少 token 時回傳 `env:Sender`；不存在的 profile 回傳 `ter:NoProfile`；未繫結 PTZ configuration 的 profile 回傳 `ter:NoConfig`。Move 為立即完成，不模擬移動時間。以 node 或 configuration token 定址的 getter/setter 對未知 token 會 fault；`GetCompatibleConfigurations` 對不具 PTZ 能力的 profile 回傳空 list。
+使用 profile／head resolver 的操作要求 `ProfileToken`。缺少 token 時回傳 `env:Sender`；不存在的 profile 回傳 `ter:NoProfile`；未繫結 PTZ configuration 的 profile 回傳 `ter:NoConfig`。PTZ `SendAuxiliaryCommand` 為獨立 receipt-only stub：預設拒絕，opt-in 保留 command allowlist，但不驗證 ProfileToken，也不執行命令（§13.5）。Move 為立即完成，不模擬移動時間。以 node 或 configuration token 定址的 getter/setter 對未知 token 會 fault；`GetCompatibleConfigurations` 對不具 PTZ 能力的 profile 回傳空 list。
 
 ### 7.5 Imaging、Events、Recording、Search 與 Replay
 
 - Imaging 的七項影像操作依 `VideoSourceToken` 存取狀態，`GetServiceCapabilities` 為 static。
-- Events 的 `CreatePullPointSubscriptionRequest` 會儲存 topic filter；`PullMessagesRequest` 會輸出週期性 synthetic stream 與 REST 注入的 I/O event，並遞增 `event_seq`。`UnsubscribeRequest`／`SetSynchronizationPointRequest` 預設拒絕，須明確 opt-in 僅確認收件（§13.5）；`SubscribeRequest`／`RenewRequest` 仍為待遷移的 lifecycle stub。`GetServiceCapabilitiesRequest` 為 static read fixture。
+- Events 的 `CreatePullPointSubscriptionRequest` 會儲存 topic filter；`PullMessagesRequest` 會輸出週期性 synthetic stream 與 REST 注入的 I/O event，並遞增 `event_seq`。`SubscribeRequest`／`RenewRequest`／`UnsubscribeRequest`／`SetSynchronizationPointRequest` 預設拒絕；逐項 opt-in 只確認收件，不建立 push subscription、延長 lifetime 或送出同步事件（§13.5）。`GetServiceCapabilitiesRequest` 為 static read fixture。
 - Recording 的 recording、track 與 job 操作均由狀態支援；刪除 recording 會一併刪除所屬 job。
 - `FindRecordings` 只提供單一 search token，不模擬 cursor；`GetRecordingSearchResults` 讀取目前 recording list。
+- `EndSearch` 預設拒絕；opt-in 僅回傳 fixture `Endpoint` timestamp，不終止搜尋（§13.5）。
 - `GetReplayUri` 依 recording token 回答，未知 token 會 fault。
 
 ---
@@ -778,7 +779,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 
 ### 13.5 明確的 acknowledgment-only 政策
 
-**尚未發布：**三項已分類操作預設回傳 `s:Receiver`，第一層 subcode 為
+**尚未發布：**十一項已分類操作預設回傳 `s:Receiver`，第一層 subcode 為
 `mock:UnmodeledEffect`。若測試流程僅需確認收件，可逐項啟用：
 
 ```rust
@@ -793,6 +794,14 @@ let mock = MockTransport::new()
 | `DeviceFactoryDefault` | 裝置 state 已重設 |
 | `EventsUnsubscribe` | Subscription 已終止或佇列事件已移除 |
 | `EventsSynchronizationPoint` | 已產生或送出同步事件 |
+| `DeviceAuxiliaryCommand` | 已執行 Device auxiliary command |
+| `PtzAuxiliaryCommand` | 已執行 PTZ auxiliary command 或驗證 profile |
+| `DeviceReboot` | 已重啟；收件訊息明確表示未執行重啟 |
+| `DeviceFirmwareUpgrade` | Upload endpoint 可用或已升級韌體 |
+| `DeviceSystemRestore` | Upload endpoint 可用或已還原設定 |
+| `EventsSubscribe` | 已建立 push subscription 或推送通知 |
+| `EventsRenew` | 已延長 subscription lifetime |
+| `SearchEnd` | 已終止搜尋或使其過期 |
 
 `MockServer::builder()`、`MetamorphTransport` 與 `AdapterTransport` 亦提供相同
 方法。重複呼叫會累加選定操作；transport clone 個別複製政策，但保留既有共用
@@ -802,8 +811,11 @@ opt-in。Events synchronization 與 Media synchronization 為不同操作。
 拒絕與 acknowledgment 均不改變 state、change hook、committed effect 或 replay
 invalidation。共用 XML／Action／body 身分檢查仍執行，但不代表各操作全部欄位及
 subscription 已驗證。Fault／auth 與呼叫端 raw adapter 回應仍保有優先順序。
-選項不寫入裝置 snapshot。其他 auxiliary／reboot／upgrade／restore、subscription
-及 search lifecycle stub 仍待分類。詳見[政策檢查點](active/mock-fidelity-ack-policy-preflight_zh.md)
+選項不寫入裝置 snapshot。PTZ auxiliary 保留 legacy command allowlist，但不完整
+驗證 ProfileToken／欄位。Upload URI、subscription reference 與 timestamp 均為
+fixture 資料，不代表服務可用或效果已完成。Capability 回應仍為 static fixture，
+可能高估已建模行為；完整核對另列 W17。其他操作契約及部分建模效果仍須審閱。
+詳見[政策檢查點](active/mock-fidelity-ack-policy-preflight_zh.md)
 及 `tests/mock_ack_policy.rs`；這不是 hardware-effect 或 conformance 測試。
 
 ## 14. 擴充 mock

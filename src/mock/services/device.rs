@@ -1071,7 +1071,7 @@ pub fn resp_system_reboot() -> String {
     soap(
         NS,
         r#"<tds:SystemRebootResponse>
-          <tds:Message>Rebooting in 30 seconds</tds:Message>
+          <tds:Message>Mock acknowledgment only; no reboot performed</tds:Message>
         </tds:SystemRebootResponse>"#,
     )
 }
@@ -1090,9 +1090,9 @@ pub fn resp_system_reboot() -> String {
 ///   `UserConfigNotSupported` are **negative-sense**: absent means the feature
 ///   *is* supported. Two are omitted here and one is present-and-false, so a
 ///   parser that inverts them wrongly cannot pass by accident.
-/// - `Misc/@AuxiliaryCommands` is the discoverable list behind
-///   `SendAuxiliaryCommand`; the values match what `resp_send_auxiliary_command`
-///   accepts.
+/// - `Misc/@AuxiliaryCommands` remains static fixture data. Device/PTZ auxiliary
+///   commands now require separate acknowledgment-only opt-ins; neither executes
+///   commands. PTZ retains its legacy allowlist; Device ignores command fields.
 /// - `SupportedEAPMethods` is a `tt:IntList` — the whole collection in one
 ///   attribute, where `resp_capabilities` sends the same two numbers as
 ///   repeated `<tt:SupportedEAPMethod>` elements.

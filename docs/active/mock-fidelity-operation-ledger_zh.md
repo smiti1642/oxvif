@@ -51,6 +51,8 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 
 A2：首批收件政策及 effect 邊界，詳見 [政策檢查點](mock-fidelity-ack-policy-preflight_zh.md)。
 
+A3：額外八項 effect stub 的政策遷移，詳見 [批次紀錄](mock-fidelity-ack-policy-preflight_zh.md#剩餘-effect-stub-批次)。
+
 ## device
 
 [dispatch_device](../../src/mock/dispatch.rs) · [services/device.rs](../../src/mock/services/device.rs)
@@ -81,7 +83,7 @@ A2：首批收件政策及 effect 邊界，詳見 [政策檢查點](mock-fidelit
 | `device.SetNetworkProtocols` | `device::handle_set_network_protocols` | `state, body` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.GetNetworkDefaultGateway` | `device::resp_network_default_gateway` | `state` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.SetNetworkDefaultGateway` | `device::handle_set_network_default_gateway` | `state, body` | W13 | TODO | TODO | TODO | TODO | TODO | - |
-| `device.SendAuxiliaryCommand` | `device::resp_send_auxiliary_command` | `` | W13 | TODO | TODO | TODO | TODO | TODO | - |
+| `device.SendAuxiliaryCommand` | `device::resp_send_auxiliary_command` | `` | W13 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 | `device.GetSystemLog` | `device::resp_system_log` | `` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.GetRelayOutputs` | `device::resp_relay_outputs` | `state` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.SetRelayOutputState` | `device::handle_set_relay_output_state` | `state, body` | W13 | TODO | TODO | TODO | TODO | TODO | - |
@@ -90,11 +92,11 @@ A2：首批收件政策及 effect 邊界，詳見 [政策檢查點](mock-fidelit
 | `device.GetStorageConfigurations` | `device::resp_storage_configurations` | `state` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.SetStorageConfiguration` | `device::handle_set_storage_configuration` | `state, body` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.GetSystemUris` | `device::resp_system_uris` | `base` | W13 | TODO | TODO | TODO | TODO | TODO | - |
-| `device.StartFirmwareUpgrade` | `device::resp_start_firmware_upgrade` | `base` | W13 | TODO | TODO | TODO | TODO | TODO | - |
-| `device.StartSystemRestore` | `device::resp_start_system_restore` | `base` | W13 | TODO | TODO | TODO | TODO | TODO | - |
+| `device.StartFirmwareUpgrade` | `device::resp_start_firmware_upgrade` | `base` | W13 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
+| `device.StartSystemRestore` | `device::resp_start_system_restore` | `base` | W13 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 | `device.GetDiscoveryMode` | `device::resp_discovery_mode` | `state` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.SetDiscoveryMode` | `device::handle_set_discovery_mode` | `state, body` | W13 | TODO | TODO | TODO | TODO | TODO | - |
-| `device.SystemReboot` | `device::resp_system_reboot` | `` | W13 | TODO | TODO | TODO | TODO | TODO | - |
+| `device.SystemReboot` | `device::resp_system_reboot` | `` | W13 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 
 ## device-io
 
@@ -215,7 +217,7 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 | `ptz.ModifyPresetTour` | `ptz::handle_ptz_modify_preset_tour` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
 | `ptz.OperatePresetTour` | `ptz::handle_ptz_operate_preset_tour` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
 | `ptz.RemovePresetTour` | `ptz::handle_ptz_remove_preset_tour` | `state, body, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
-| `ptz.SendAuxiliaryCommand` | `ptz::handle_ptz_send_auxiliary_command` | `body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
+| `ptz.SendAuxiliaryCommand` | `ptz::handle_ptz_send_auxiliary_command` | `body` | W11 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 
 ## imaging
 
@@ -242,8 +244,8 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 | `events.GetEventPropertiesRequest` | `events::resp_event_properties` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.CreatePullPointSubscriptionRequest` | `events::resp_create_pull_point_subscription` | `base, state, body` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.PullMessagesRequest` | `events::resp_pull_messages` | `state` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.SubscribeRequest` | `events::resp_subscribe` | `base` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.RenewRequest` | `events::resp_renew` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
+| `events.SubscribeRequest` | `events::resp_subscribe` | `base` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
+| `events.RenewRequest` | `events::resp_renew` | `` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 | `events.UnsubscribeRequest` | `resp_empty` | `"wsnt", "UnsubscribeResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
 | `events.SetSynchronizationPointRequest` | `resp_empty` | `"tev", "SetSynchronizationPointResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
 
@@ -274,7 +276,7 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 | `search.GetServiceCapabilities` | `recording::resp_search_service_capabilities` | `` | W14 | TODO | TODO | TODO | TODO | TODO | - |
 | `search.FindRecordings` | `recording::resp_find_recordings` | `` | W14 | TODO | TODO | TODO | TODO | TODO | - |
 | `search.GetRecordingSearchResults` | `recording::resp_recording_search_results` | `state` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `search.EndSearch` | `recording::resp_end_search` | `` | W14 | TODO | TODO | TODO | TODO | TODO | - |
+| `search.EndSearch` | `recording::resp_end_search` | `` | W14 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 
 ## replay
 

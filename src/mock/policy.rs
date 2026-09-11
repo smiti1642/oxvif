@@ -6,7 +6,9 @@ use std::collections::BTreeSet;
 ///
 /// These operations refuse by default with `s:Receiver` / `mock:UnmodeledEffect`.
 /// Opting in permits a response shape for workflow tests; it does **not** reset a
-/// device, terminate a subscription, generate events or prove a hardware effect.
+/// device, execute auxiliary commands, reboot/upgrade/restore, manage subscription
+/// or search lifetimes, generate events or prove a hardware effect. Upload URIs,
+/// subscription references and timestamps in these responses are fixture data.
 /// Only common XML/Action/body identity checks are applied, not complete field or
 /// subscription validation. Other mock operations are still being classified.
 ///
@@ -23,6 +25,23 @@ pub enum AckOnlyOperation {
     /// Events `SetSynchronizationPoint`; does not enqueue synchronization events.
     /// This is not Media1/Media2's similarly named operation.
     EventsSynchronizationPoint,
+    /// Device `SendAuxiliaryCommand`; does not execute the command.
+    DeviceAuxiliaryCommand,
+    /// PTZ `SendAuxiliaryCommand`; retains the legacy command allowlist but does
+    /// not validate profile identity or execute the command.
+    PtzAuxiliaryCommand,
+    /// Device `SystemReboot`; returns an explicit no-reboot receipt.
+    DeviceReboot,
+    /// Device `StartFirmwareUpgrade`; the upload URI is a fixture, not an upload service.
+    DeviceFirmwareUpgrade,
+    /// Device `StartSystemRestore`; does not accept uploads or restore state.
+    DeviceSystemRestore,
+    /// Events `Subscribe`; does not create a push subscription or send notifications.
+    EventsSubscribe,
+    /// Events `Renew`; does not extend subscription lifetime.
+    EventsRenew,
+    /// Search `EndSearch`; does not terminate or expire a search session.
+    SearchEnd,
 }
 
 impl AckOnlyOperation {
@@ -38,6 +57,24 @@ impl AckOnlyOperation {
             Self::EventsSynchronizationPoint => {
                 "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/SetSynchronizationPointRequest"
             }
+            Self::DeviceAuxiliaryCommand => {
+                "http://www.onvif.org/ver10/device/wsdl/SendAuxiliaryCommand"
+            }
+            Self::PtzAuxiliaryCommand => "http://www.onvif.org/ver20/ptz/wsdl/SendAuxiliaryCommand",
+            Self::DeviceReboot => "http://www.onvif.org/ver10/device/wsdl/SystemReboot",
+            Self::DeviceFirmwareUpgrade => {
+                "http://www.onvif.org/ver10/device/wsdl/StartFirmwareUpgrade"
+            }
+            Self::DeviceSystemRestore => {
+                "http://www.onvif.org/ver10/device/wsdl/StartSystemRestore"
+            }
+            Self::EventsSubscribe => {
+                "http://docs.oasis-open.org/wsn/bw-2/NotificationProducer/SubscribeRequest"
+            }
+            Self::EventsRenew => {
+                "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest"
+            }
+            Self::SearchEnd => "http://www.onvif.org/ver10/search/wsdl/EndSearch",
         }
     }
 
@@ -46,6 +83,14 @@ impl AckOnlyOperation {
             Self::DeviceFactoryDefault,
             Self::EventsUnsubscribe,
             Self::EventsSynchronizationPoint,
+            Self::DeviceAuxiliaryCommand,
+            Self::PtzAuxiliaryCommand,
+            Self::DeviceReboot,
+            Self::DeviceFirmwareUpgrade,
+            Self::DeviceSystemRestore,
+            Self::EventsSubscribe,
+            Self::EventsRenew,
+            Self::SearchEnd,
         ]
         .into_iter()
         .find(|operation| operation.action() == action)

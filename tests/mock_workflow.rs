@@ -735,13 +735,21 @@ async fn ptz_preset_tour_round_trip() {
 
 /// The two `SendAuxiliaryCommand` operations, driven over HTTP against the
 /// same mock device, proving they are distinct endpoints rather than one
-/// method with two names — and that what the Device service *advertises* in
-/// `Misc/@AuxiliaryCommands` is what the PTZ service actually *accepts*. That
-/// link is the only reason a caller can use the PTZ operation without
-/// guessing, so it is worth a test rather than only a doc comment.
+/// method with two names. With explicit receipt-only opt-ins, the static Device
+/// capability list matches the PTZ allowlist. No hardware effect is asserted.
 #[tokio::test]
 async fn auxiliary_commands_are_discoverable_and_accepted() {
-    let (_srv, s) = setup().await;
+    use oxvif::mock::AckOnlyOperation;
+    let server = MockServer::builder()
+        .with_acknowledgment_only(AckOnlyOperation::DeviceAuxiliaryCommand)
+        .with_acknowledgment_only(AckOnlyOperation::PtzAuxiliaryCommand)
+        .start()
+        .await
+        .unwrap();
+    let s = OnvifSession::builder(server.device_url())
+        .build()
+        .await
+        .unwrap();
     let profile = s.get_profiles().await.unwrap()[0].token.clone();
 
     let advertised = s
@@ -756,14 +764,16 @@ async fn auxiliary_commands_are_discoverable_and_accepted() {
     // Every advertised command is accepted by the PTZ operation.
     for cmd in &advertised {
         let answer = s.ptz_send_auxiliary_command(&profile, cmd).await.unwrap();
-        assert!(answer.contains(cmd), "got {answer} for {cmd}");
+        assert_eq!(answer, format!("{cmd} accepted"));
     }
 
     // Something not on the list faults rather than silently succeeding.
-    assert!(
+    assert_fault(
         s.ptz_send_auxiliary_command(&profile, "tt:Sprinkler|On")
             .await
-            .is_err()
+            .unwrap_err(),
+        "ter:InvalidArgVal",
+        "NoAuxiliaryCommand: tt:Sprinkler|On",
     );
 
     // The Device operation is a different endpoint and still answers.

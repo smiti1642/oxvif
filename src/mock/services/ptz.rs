@@ -1260,13 +1260,15 @@ pub fn handle_ptz_remove_preset_tour(state: &SharedState, body: &str, operation:
 // ── SendAuxiliaryCommand ─────────────────────────────────────────────────────
 
 /// The **PTZ** `SendAuxiliaryCommand`, not the Device one in `device.rs`. Two
-/// different operations, two endpoints, and this one returns a payload where
-/// the Device one returns a bare acknowledgement.
+/// different operations and separate acknowledgment-only opt-ins. This one
+/// returns command text; Device returns an `OK` payload. Neither executes commands.
 ///
 /// The accepted values are exactly those advertised by
 /// `resp_service_capabilities` in `device.rs` as `Misc/@AuxiliaryCommands` —
 /// a mock that accepted anything would let a client ship code that only works
 /// against the mock.
+/// This legacy reader does not validate ProfileToken or every request field;
+/// opting in does not make that projection a complete operation model.
 pub fn handle_ptz_send_auxiliary_command(body: &str) -> String {
     const ACCEPTED: &[&str] = &[
         "tt:Wiper|On",

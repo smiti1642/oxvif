@@ -109,7 +109,10 @@ const EXPECTED: &[(&str, &str)] = &[
     ("set_hostname", "ok"),
     ("get_ntp", "ok"),
     ("set_ntp", "ok"),
-    ("system_reboot", "ok"),
+    (
+        "system_reboot",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
     ("get_scopes", "ok"),
     ("set_scopes", "ok"),
     ("get_users", "ok"),
@@ -124,7 +127,10 @@ const EXPECTED: &[(&str, &str)] = &[
     ("set_dns", "ok"),
     ("get_network_default_gateway", "ok"),
     ("set_network_default_gateway", "ok"),
-    ("send_auxiliary_command", "ok"),
+    (
+        "send_auxiliary_command",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
     ("get_system_log", "ok"),
     ("get_relay_outputs", "ok"),
     ("set_relay_output_settings", "ok"),
@@ -137,15 +143,24 @@ const EXPECTED: &[(&str, &str)] = &[
     ("get_storage_configurations", "ok"),
     ("set_storage_configuration", "ok"),
     ("get_system_uris", "ok"),
-    ("start_firmware_upgrade", "ok"),
-    ("start_system_restore", "ok"),
+    (
+        "start_firmware_upgrade",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
+    (
+        "start_system_restore",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
     ("get_discovery_mode", "ok"),
     ("set_discovery_mode", "ok"),
     // ── Events ────────────────────────────────────────────────────────────
     ("get_event_properties", "ok"),
     ("create_pull_point_subscription", "ok"),
     ("pull_messages", "ok"),
-    ("renew_subscription", "ok"),
+    (
+        "renew_subscription",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
     (
         "set_synchronization_point",
         "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
@@ -154,7 +169,10 @@ const EXPECTED: &[(&str, &str)] = &[
         "unsubscribe",
         "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
     ),
-    ("subscribe", "ok"),
+    (
+        "subscribe",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
     // ── Imaging ───────────────────────────────────────────────────────────
     ("get_imaging_settings", "ok"),
     ("set_imaging_settings", "ok"),
@@ -262,7 +280,10 @@ const EXPECTED: &[(&str, &str)] = &[
     ("get_recording_job_state", "ok"),
     ("find_recordings", "ok"),
     ("get_recording_search_results", "ok"),
-    ("end_search", "ok"),
+    (
+        "end_search",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
     ("get_replay_uri", "ok"),
 ];
 

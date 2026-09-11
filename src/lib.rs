@@ -209,7 +209,8 @@
 //! tokens. The mock does not silently rename persisted entries.
 //! Opt-in mock authentication uses scoped Header/UsernameToken fields and explicit
 //! PasswordDigest Type; it does not enforce freshness, nonce reuse or user permissions.
-//! Factory Reset, Events Unsubscribe and Events synchronization now refuse by default.
+//! Classified reset, auxiliary, reboot/maintenance, subscription and search-ending
+//! stubs now refuse by default, including Events synchronization.
 //! Select individual `mock::AckOnlyOperation` values with `with_acknowledgment_only`
 //! only for receipt-only workflows; no corresponding device effects are modeled.
 //!

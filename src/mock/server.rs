@@ -507,19 +507,35 @@ mod tests {
 
     #[tokio::test]
     async fn bound_server_start_firmware_upgrade_returns_upload_uri() {
-        let server = MockServer::start().await.unwrap();
+        let server = MockServer::builder()
+            .with_acknowledgment_only(crate::mock::AckOnlyOperation::DeviceFirmwareUpgrade)
+            .start()
+            .await
+            .unwrap();
         let client = OnvifClient::new(server.device_url());
         let start = client.start_firmware_upgrade().await.unwrap();
-        assert!(start.upload_uri.ends_with("/upload/firmware"));
+        assert_eq!(
+            start.upload_uri,
+            format!("{}/upload/firmware", server.base_url())
+        );
+        assert_eq!(start.upload_delay, "PT0S");
         assert_eq!(start.expected_down_time, "PT30S");
     }
 
     #[tokio::test]
     async fn bound_server_start_system_restore_returns_upload_uri() {
-        let server = MockServer::start().await.unwrap();
+        let server = MockServer::builder()
+            .with_acknowledgment_only(crate::mock::AckOnlyOperation::DeviceSystemRestore)
+            .start()
+            .await
+            .unwrap();
         let client = OnvifClient::new(server.device_url());
         let start = client.start_system_restore().await.unwrap();
-        assert!(start.upload_uri.ends_with("/upload/restore"));
+        assert_eq!(
+            start.upload_uri,
+            format!("{}/upload/restore", server.base_url())
+        );
+        assert_eq!(start.expected_down_time, "PT30S");
     }
 
     #[tokio::test]
