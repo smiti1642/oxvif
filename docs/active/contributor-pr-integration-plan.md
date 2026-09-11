@@ -255,7 +255,7 @@ Do not add full release/staging matrices to every small correction.
 
 | Item | Status | Required closure |
 | --- | --- | --- |
-| B17 | TODO | N01–N08 evidence, compatible public API, lifecycle limits and paired guide examples |
+| B17 | LOCAL-PASS | N01–N08, compatibility/lifecycle controls, both code/doc gates pass; hosted CI pending |
 | B16 / W26 | TODO | S01–S08 evidence, complete cards, explicit acknowledgment boundary |
 | B14 | LOCAL-PASS | Dependency review, audit, Clippy/tests, MSRV and XML controls pass; hosted CI pending |
 | Combined candidate | TODO | Exact SHA and ancestry accepted; final tests/CI actually complete |
@@ -298,3 +298,17 @@ Rust 1.88 locked workspace/all-target/all-feature check passed. The independent
 XML consumer passed all three cases with encoding off and on. No new production
 logic/assertions were introduced, so no new mutation campaign was needed for this
 dependency-only batch. Hosted combined-candidate acceptance remains pending.
+
+B17 implements the additive wrapper/listener, unchanged legacy payload/serde and
+owned-task shutdown. Nine origin unit controls plus two external-consumer controls
+cover the N01–N08 cases; IPv6 loopback ran successfully on this Windows host.
+The independent namespace control caught an incorrect expected fixture count
+(eight unbound element occurrences, not six); the expectation was corrected and
+the valid/invalid control passed. This did not require a production parser change.
+The single full-workspace sensitivity campaign (`1789119597_cargo_test.log` in the
+local RTK evidence directory) replaced the peer port with zero: five origin tests
+failed at exact address assertions, including multi-connection attribution.
+The perturbation was removed. Strict docs, inventory self-tests and both Clippy
+modes pass; restored all-feature tests pass (1,284, five ignored, 40 suites).
+Restored default tests also pass (1,179, five ignored, 40 suites). Final hosted
+acceptance remains pending; this is not an ONVIF certification or release gate.

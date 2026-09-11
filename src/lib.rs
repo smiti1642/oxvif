@@ -24,6 +24,8 @@
 //! [audio/metadata guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/audio-metadata.md).
 //! Audio options retain all repeated Items; mock audio/metadata writes validate
 //! complete settings and readonly status without claiming actual RTP streaming.
+//! Push events can include local TCP origin through [`notification_listener_with_peer`]
+//! and [`ReceivedNotification`], without changing legacy event payloads or ONVIF XML.
 //!
 //! | Section | Purpose |
 //! | --- | --- |
@@ -362,7 +364,7 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
-pub use client::{OnvifClient, notification_listener};
+pub use client::{OnvifClient, notification_listener, notification_listener_with_peer};
 pub use discovery::{
     DiscoveredDevice, DiscoveryEvent, DiscoveryInterface, discovery_interfaces, probe_result,
     probe_result_on, probe_unicast,
@@ -401,10 +403,10 @@ pub use types::{
     PtzPresetTourSpotOptions, PtzPresetTourStartingCondition,
     PtzPresetTourStartingConditionOptions, PtzPresetTourState, PtzPresetTourStatus,
     PtzServiceCapabilities, PtzSpaceRange, PtzSpeed, PtzStatus, PullPointSubscription,
-    PushSubscription, RecordingCapabilities, RecordingConfiguration, RecordingInformation,
-    RecordingItem, RecordingJob, RecordingJobConfiguration, RecordingJobState,
-    RecordingServiceCapabilities, RecordingSourceInformation, RecordingTrack, RelayOutput,
-    ReplayCapabilities, ReplayServiceCapabilities, Resolution, SearchCapabilities,
+    PushSubscription, ReceivedNotification, RecordingCapabilities, RecordingConfiguration,
+    RecordingInformation, RecordingItem, RecordingJob, RecordingJobConfiguration,
+    RecordingJobState, RecordingServiceCapabilities, RecordingSourceInformation, RecordingTrack,
+    RelayOutput, ReplayCapabilities, ReplayServiceCapabilities, Resolution, SearchCapabilities,
     SearchServiceCapabilities, SecurityCapabilities, SetDateTimeRequest, SnapshotUri, SourceBounds,
     StorageConfiguration, StreamUri, StreamingCapabilities, SystemCapabilities, SystemDateTime,
     SystemLog, SystemRestoreStart, SystemUris, User, UtcDateTime, VideoEncoderConfiguration,

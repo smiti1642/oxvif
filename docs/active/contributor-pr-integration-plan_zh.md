@@ -228,7 +228,7 @@ advisory 來取得通過結果。
 
 | 項目 | 狀態 | 結案條件 |
 | --- | --- | --- |
-| B17 | TODO | N01–N08 證據、相容公開 API、生命週期限制與雙語指南範例 |
+| B17 | LOCAL-PASS | N01–N08、相容性／生命週期控制與兩組程式／文件關卡通過；hosted CI 待完成 |
 | B16／W26 | TODO | S01–S08 證據、完整工作卡與明確 acknowledgment 邊界 |
 | B14 | LOCAL-PASS | 相依審查、audit、Clippy／tests、MSRV／XML 通過；hosted CI 待完成 |
 | 合併候選 | TODO | 精確 SHA 與 ancestry 已接受；最終 tests／CI 真正完成 |
@@ -265,3 +265,14 @@ B14 本機關卡通過：all-features 1,272 項、workspace default 1,167 項，
 all-target／all-feature check 通過。獨立 XML consumer 在 encoding 關閉／開啟時
 各通過三個案例。此批僅更新相依，未新增 production 邏輯或 assertion，因此不另跑
 新的 mutation campaign。合併候選的 hosted 驗收仍待完成。
+
+B17 已實作新增包裝型別／listener、維持舊 payload／serde 及所屬 task 清理。
+九個 origin unit 控制與兩個外部 consumer 控制涵蓋 N01–N08；本機 Windows 的 IPv6
+loopback 實際通過。獨立 namespace 控制發現 fixture 預期數量不正確（未宣告
+element prefix 出現八次而非六次）；修正預期後正／負控制通過，無須改動 production
+parser。單次完整 workspace 敏感度 campaign（本機 RTK 證據目錄的
+`1789119597_cargo_test.log`）將 peer port 改為零，五個 origin 測試在精確位址斷言
+失敗，包含多連線歸屬。擾動已移除。Strict docs、inventory self-test 與兩組 Clippy
+通過；還原後 all-features 為 1,284 通過、五項 ignored、40 suites。
+還原後 default 測試亦通過（1,179 通過、五項 ignored、40 suites）。最終 hosted
+驗收仍待完成，不代表 ONVIF 認證或 Release 關卡已完成。

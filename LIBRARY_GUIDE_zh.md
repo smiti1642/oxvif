@@ -477,6 +477,30 @@ OSD 用於在 video stream 上疊加文字或影像，並使用 Media1 URL。
 
 ## Events Service 方法
 
+### 推播通知來源
+
+使用 `notification_listener_with_peer(bind_addr).await?`，可先完成 bind 再訂閱，
+接收 `ReceivedNotification { message, peer }`。Bind 錯誤直接回傳；`message` 仍是
+原本的 `NotificationMessage`。同步 `notification_listener` 保留原本 payload 與 signature。
+
+```rust
+use futures::StreamExt as _;
+let mut notifications = oxvif::notification_listener_with_peer(
+    "127.0.0.1:8080".parse()?
+).await?;
+while let Some(received) = notifications.next().await {
+    println!("{}: {}", received.peer, received.message.topic);
+}
+```
+
+Peer 來自 TCP socket，而非 ONVIF XML 或代理 header。Port 是此連線的來源 port，
+不是攝影機服務 port。NAT／proxy 可能隱藏原始裝置，不能視為已驗證的攝影機身分。
+包裝型別不 derive serde，讓位址匯出保持明確選擇，既有事件 JSON 不變。
+Drop stream 會取消所屬連線；仍須另外取消裝置端訂閱。此最小 listener 不提供
+TLS／認證或完整 HTTP server 安全防護。
+
+### Pull-point 訂閱
+
 ONVIF Events 使用 pull-point subscription model：
 
 ```rust

@@ -952,6 +952,32 @@ for o in &osds {
 
 ## Events Service methods
 
+### Push notification origin
+
+Use `notification_listener_with_peer(bind_addr).await?` to bind before subscribing
+and receive `ReceivedNotification { message, peer }`. Bind errors are returned;
+`message` remains the ordinary `NotificationMessage`. The synchronous
+`notification_listener` remains available with its original payload and signature.
+
+```rust
+use futures::StreamExt as _;
+let mut notifications = oxvif::notification_listener_with_peer(
+    "127.0.0.1:8080".parse()?
+).await?;
+while let Some(received) = notifications.next().await {
+    println!("{}: {}", received.peer, received.message.topic);
+}
+```
+
+The peer comes from the TCP socket, not ONVIF XML or proxy headers. Its port is
+the connection's source port, not the camera service port. NAT/proxies can hide
+the original device; this is not authenticated camera identity. The wrapper does
+not derive serde, leaving address export explicit and existing event JSON intact.
+Dropping the stream cancels owned connections; unsubscribe on the device separately.
+The minimal listener does not provide TLS/authentication or full HTTP-server hardening.
+
+### Pull-point subscriptions
+
 ONVIF Events use a pull-point subscription model. All operations start with `events_url` from `caps.events.url`.
 
 ```rust

@@ -38,7 +38,7 @@ mod media2;
 mod ptz;
 mod recording;
 
-pub use events::notification_listener;
+pub use events::{notification_listener, notification_listener_with_peer};
 
 // ── OnvifClient ───────────────────────────────────────────────────────────────
 

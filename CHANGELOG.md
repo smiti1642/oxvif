@@ -20,12 +20,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Changed
-
-- Refresh the reviewed dependency group from PR #14, including futures,
-  thiserror and toml, and the CLI's jsonschema/shlex test dependencies.
-  CLI schema and credential backend selections are unchanged.
-
 ### Fixed
 
 - **Breaking, next minor:** MetadataConfiguration and mock MetadataEntry now
@@ -199,6 +193,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Push-event TCP origin through `notification_listener_with_peer` and
+  `ReceivedNotification`, inspired by PR #17. The new async listener reports bind
+  errors and is ready on return. Legacy event structs, JSON and listener signature
+  remain unchanged; dropping either stream cancels owned connections. Socket
+  origin is not authenticated camera identity and is not added to ONVIF XML.
 - Executable replay-key audit cases expose remaining stored-key namespace,
   whitespace, serialization and trailing-document collisions; replay substitution
   is now contained as noted above. Paired migration tracking covers profile
@@ -285,6 +284,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Refresh the reviewed dependency group from PR #14, including futures,
+  thiserror and toml, and the CLI's jsonschema/shlex test dependencies.
+  CLI schema and credential backend selections are unchanged.
 - Mock Media1/Media2 `DeleteProfile` now preserves escaped/whitespace token
   identity and rejects ambiguous, mislocated or malformed inputs before changing
   state. Hand-written request fragments need valid namespace declarations;

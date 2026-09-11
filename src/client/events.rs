@@ -5,7 +5,7 @@ use crate::error::OnvifError;
 use crate::soap::{find_response, parse_soap_body};
 use crate::types::{
     EventProperties, EventsServiceCapabilities, NotificationMessage, PullPointSubscription,
-    PushSubscription, xml_escape,
+    PushSubscription, ReceivedNotification, xml_escape,
 };
 use futures_core::Stream;
 
@@ -324,6 +324,12 @@ impl OnvifClient {
 /// it, then call [`unsubscribe`](super::OnvifClient::unsubscribe) to cancel the
 /// device subscription.
 ///
+/// Bind failures close this legacy stream without a diagnostic. Prefer
+/// [`notification_listener_with_peer`] for bind errors, readiness and TCP origin.
+/// Dropping either stream stops accepting and cancels its owned connections;
+/// device-side subscriptions must still be cancelled separately.
+/// This minimal HTTP listener is not an authenticated Internet-facing server.
+///
 /// # Example
 ///
 /// ```no_run
@@ -347,7 +353,7 @@ impl OnvifClient {
 pub fn notification_listener(
     bind_addr: std::net::SocketAddr,
 ) -> std::pin::Pin<Box<dyn futures_core::Stream<Item = NotificationMessage> + Send>> {
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<NotificationMessage>(256);
+    let (tx, rx) = tokio::sync::mpsc::channel::<ReceivedNotification>(256);
 
     // Spawn a background task that accepts connections concurrently so that
     // rapid-fire notifications from one or more devices are not serialised.
@@ -355,23 +361,91 @@ pub fn notification_listener(
         let Ok(listener) = tokio::net::TcpListener::bind(bind_addr).await else {
             return;
         };
-        while let Ok((mut conn, _)) = listener.accept().await {
-            let tx = tx.clone();
-            tokio::spawn(async move {
-                for msg in handle_notify_connection(&mut conn).await {
-                    if tx.send(msg).await.is_err() {
-                        break; // receiver dropped — stream consumed
-                    }
-                }
-            });
-        }
+        serve_notifications(listener, tx).await;
     });
 
+    legacy_notifications(rx)
+}
+
+fn legacy_notifications(
+    mut rx: tokio::sync::mpsc::Receiver<ReceivedNotification>,
+) -> std::pin::Pin<Box<dyn Stream<Item = NotificationMessage> + Send>> {
     Box::pin(async_stream::stream! {
         while let Some(msg) = rx.recv().await {
-            yield msg;
+            yield msg.message;
         }
     })
+}
+
+/// Bind a minimal push-event listener and report each notification's TCP origin.
+///
+/// Binding completes before this function returns: the listener is ready even
+/// before the stream is first polled. Each [`ReceivedNotification`] contains the
+/// actual socket peer, not an XML or proxy-header identity. Behind NAT or a proxy,
+/// that address may not identify a camera uniquely and is not authentication.
+/// Dropping the stream stops accepting and cancels owned connection tasks.
+/// Cancel the device subscription separately with [`OnvifClient::unsubscribe`].
+/// The listener retains the legacy HTTP/body limits; it does not add TLS or auth.
+///
+/// # Errors
+/// Returns the operating system's bind error (for example, address already in use).
+/// Subsequent accept failure ends the stream; per-request parse failures yield no
+/// notifications. It is not a diagnostic stream for connection errors.
+///
+/// # Example
+/// ```no_run
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// use futures::StreamExt as _;
+/// let mut events = oxvif::notification_listener_with_peer("127.0.0.1:8080".parse()?).await?;
+/// while let Some(received) = events.next().await {
+///     // Exporting the address is an explicit application decision.
+///     println!("{}: {}", received.peer, received.message.topic);
+/// }
+/// # Ok(()) }
+/// ```
+pub async fn notification_listener_with_peer(
+    bind_addr: std::net::SocketAddr,
+) -> std::io::Result<std::pin::Pin<Box<dyn Stream<Item = ReceivedNotification> + Send>>> {
+    let listener = tokio::net::TcpListener::bind(bind_addr).await?;
+    Ok(notification_stream(listener))
+}
+
+fn notification_stream(
+    listener: tokio::net::TcpListener,
+) -> std::pin::Pin<Box<dyn Stream<Item = ReceivedNotification> + Send>> {
+    let (tx, mut rx) = tokio::sync::mpsc::channel(256);
+    tokio::spawn(serve_notifications(listener, tx));
+    Box::pin(async_stream::stream! {
+        while let Some(received) = rx.recv().await {
+            yield received;
+        }
+    })
+}
+
+async fn serve_notifications(
+    listener: tokio::net::TcpListener,
+    tx: tokio::sync::mpsc::Sender<ReceivedNotification>,
+) {
+    let mut connections = tokio::task::JoinSet::new();
+    loop {
+        tokio::select! {
+            biased;
+            _ = tx.closed() => break,
+            _ = connections.join_next(), if !connections.is_empty() => {},
+            accepted = listener.accept() => {
+                let Ok((mut conn, peer)) = accepted else { break };
+                let tx = tx.clone();
+                connections.spawn(async move {
+                    for message in handle_notify_connection(&mut conn).await {
+                        if tx.send(ReceivedNotification { message, peer }).await.is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
+        }
+    }
+    connections.shutdown().await;
 }
 
 async fn handle_notify_connection(conn: &mut tokio::net::TcpStream) -> Vec<NotificationMessage> {
@@ -462,3 +536,7 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 #[cfg(test)]
 #[path = "../tests/client/events_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../tests/client/notification_origin_tests.rs"]
+mod origin_tests;

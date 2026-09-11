@@ -81,7 +81,7 @@ impl PushSubscription {
 
 // ── NotificationMessage ───────────────────────────────────────────────────────
 
-/// A single ONVIF event notification received via `PullMessages`.
+/// A single ONVIF event notification received via PullMessages or push delivery.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct NotificationMessage {
@@ -96,6 +96,23 @@ pub struct NotificationMessage {
     pub source: HashMap<String, String>,
     /// Data `SimpleItem` pairs (e.g. `IsMotion = "true"`).
     pub data: HashMap<String, String>,
+}
+
+/// A push notification and the TCP peer observed by the receiving socket.
+///
+/// Returned by [`crate::notification_listener_with_peer`]. This is local transport
+/// metadata, not an ONVIF XML extension or authenticated device identity. A proxy
+/// or NAT may hide the original camera; the port is the connection's source port,
+/// not the camera's ONVIF service port. Proxy headers are never trusted here.
+///
+/// This wrapper deliberately does not derive serde: exporting network addresses
+/// is an explicit caller decision. [`NotificationMessage`]'s JSON is unchanged.
+#[derive(Debug, Clone)]
+pub struct ReceivedNotification {
+    /// Parsed ONVIF notification, unchanged from the legacy listener's payload.
+    pub message: NotificationMessage,
+    /// Direct TCP peer, including the source port of this connection.
+    pub peer: std::net::SocketAddr,
 }
 
 impl NotificationMessage {
