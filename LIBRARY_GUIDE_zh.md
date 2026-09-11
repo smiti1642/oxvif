@@ -588,7 +588,13 @@ if !report.ok() {
 
 `report.to_json()` / `to_json_pretty()` 可供 CI 使用，`report.diff(&previous)` 可比較前次 baseline。`CheckResult::error` 提供 structured `ErrorClass`、ONVIF subcode、fault code、reason 與 detail；`ProfileAssessment` 將 genuine failure 與無法驗證區分為 `missing` 與 `unverified`。
 
-啟用 liveness probe 後，stream URI 會進行 RTSP `OPTIONS`，snapshot URI 會實際抓取並驗證 image bytes，Profile G 會執行 recording search 與 replay URI resolution。這些行為會建立額外連線，因此預設關閉。
+啟用 liveness probe 後，stream URI 會進行 RTSP `OPTIONS`，snapshot URI 會抓取有界圖片資料並檢查檔頭（不是完整解碼），Profile G 會執行 recording search 與 replay URI resolution。這些行為會建立額外連線，因此預設關閉。
+
+快照使用與 CLI 共用的 `health::snapshot` 核心：限同一設備主機，不重新導向、
+不使用 proxy、不降級 HTTPS，限制 16 MiB 及總期限。Digest 失敗不改送 Basic；
+HTTP/1.1 首字母大寫標頭改善韌體相容性，但不變更標準 Digest 參數。
+可透過 `with_snapshot_options` 設定快照期限及額外 CA 根憑證；SOAP transport
+另行設定。PNG／BMP 辨識為相容性擴充，不代表 ONVIF JPEG 合規或成功解碼。
 
 九項 `service_caps_*` check 會詢問各 service 的 `GetServiceCapabilities`；`service_caps_self_consistent` 比較 device-level 與 service-level 重複宣告的 24 個 attribute。Device-level 為 `true` 而 service-level 為 `false` 時回報 contradiction `Warn`；反向情況只計數不警告，因為 device-level 缺少 element 也可能被解析為 `false`。
 

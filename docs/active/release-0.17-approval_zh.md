@@ -21,8 +21,8 @@
 
 | 工作 | 狀態 | 剩餘項目 |
 | --- | --- | --- |
-| 1. 完整候選／安全審查 | IN-PROGRESS | A01、A02 已本機修復；須完成下方全部差異及相依使用者的結案 |
-| 2. 套件安裝與人類／實機驗收 | PARTIAL | 3eccfd1 原生 CI 通過；之後修正須重跑。實機 export／diff 通過，snapshot HTTP 401 未解。最終終端與散布 staging 待驗 |
+| 1. 完整候選／安全審查 | IN-PROGRESS | A01、A02、A03 已本機修復；須完成下方全部差異及相依使用者的結案 |
+| 2. 套件安裝與人類／實機驗收 | PARTIAL | 3eccfd1 原生 CI 通過；之後修正須重跑。實機 export／diff 與修復後快照驗收通過，限制如下；Hanwha 非影像回應仍為限制。最終終端與散布 staging 待驗 |
 | 3. 版號、連結與文件 | 已準備，尚未升版 | 雙語發布紀錄及本清單已更新；實際版號仍為 0.16.0，核准後才套用版號修改清單 |
 | 4. 使用者確認 | 尚未請求正式提交核准 | 正式版號 commit 前呈現最終證據及風險；發布須另行授權 |
 
@@ -32,10 +32,11 @@
 | --- | --- | --- |
 | A01 | HTTP lossy UTF-8 decoding 將 FF 位元組轉成 U+FFFD，成功建立不同名稱的 profile | 6135e72 修復：responder 前回傳 HTTP 400／Sender／mock:RequestPolicy。五類無效位元組、合法 Unicode、完整狀態／hook 保留及 queued fault 控制均本機通過 |
 | A02 | Snapshot Authorization 把 `qop=auth` 改成帶引號值 | 移除改寫，斷言未加引號 qop／algorithm／nc 及精確 URI；依據 [RFC 7616 §3.4](https://www.rfc-editor.org/rfc/rfc7616.html#section-3.4)，不增加設備特例或認證降級 |
-| A03 | 實機兩個 profile 在 A02 修正前後，snapshot_fetch 都回 HTTP 401 | OPEN：不能把全部失敗歸因於 A02。確認攝影機 HTTP／快照憑證與權限，必要時以受信任的獨立 client 重現；不猜憑證、不放寬 Basic／TLS／重新導向限制 |
+| A03 | 已儲存攝影機的兩個 profile 在 A02 修正前後皆回 HTTP 401；擴大測試另發現 18 台類似失敗 | 已本機修復：HTTP/1.1 欄位名稱採 Title-Case，處理韌體錯誤區分大小寫；CLI／health 共用 Digest 核心並保留認證與目的地安全限制。原始攝影機兩個 profile 已保存及解碼成功。見[修復證據](snapshot-auth-repair_zh.md)；託管發布閘門仍未完成 |
 
-A01 不代表一般 HTTP binding／charset／fault status 稽核完成。A02 不證明
-實機接受已儲存憑證；不能將未驗證的成功宣稱移至[後續清單](post-0.17-backlog_zh.md)。
+A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02 並未解決 A03。
+下列 A03 結果僅涵蓋受測設備與 profile，不代表普遍相容性；剩餘項目仍須明列於
+[後續清單](post-0.17-backlog_zh.md)。
 
 ## 已執行檢查
 
@@ -48,14 +49,26 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成。A02 不
 | A02 修正後關卡 | all-feature 1,303／default 1,193 通過，各五項 ignored、41 suites；兩組 workspace Clippy 通過。公開文件未變，沿用 A01 strict rustdoc 結果；本次格式／連結檢查隨提交記錄 |
 | 新執行的相依檢查 | cargo audit：410 個 locked package，未回報弱點。cargo outdated 列出 reqwest 0.13.5、tokio-rustls 0.26.5、toml 1.1.6 及 dev-only dirs 7；keyring 4 遷移產生 obsolete-feature 警告。未改 lockfile；升級須獨立審查，不在發布前自動更新 |
 | Windows x64 實機 | GeoVision_2 GV-TBL8810、firmware V111_2025_12_09；info 與兩個 profile 查詢 exit 0 |
-| 兩個 profile 的實機 diagnose | exit 20、complete=false：五階段通過，snapshot_fetch 回 401，RTSP transport／decode 為 not_tested。失敗仍保留部分證據，不宣稱播放成功 |
-| 人類表格／Agent 版號 | 純文字表格同樣 exit 20，指出 401／部分結果／播放限制；不是互動終端測試。實際執行的 guide 回報 CLI 0.16.0、schema 3、guide 8 |
+| 共用修復前：兩個 profile 的實機 diagnose | exit 20、complete=false：五階段通過，snapshot_fetch 回 401，RTSP transport／decode 為 not_tested。失敗仍保留部分證據，不宣稱播放成功 |
+| 共用修復前：人類表格／Agent 版號 | 純文字表格同樣 exit 20，指出 401／部分結果／播放限制；不是互動終端測試。實際執行的 guide 回報 CLI 0.16.0、schema 3、guide 8 |
 | 實機 export／diff | 八個 section 通過；export exit 0／complete=true；再次寫同一路徑為 exit 4／RESOURCE_ALREADY_EXISTS，檔案 hash 不變；live diff exit 0／complete=true／matches=true、零差異 |
 | 隱私邊界 | 僅執行唯讀攝影機操作；baseline 保留於 Git 外的私人暫存目錄。本文件不記錄 IP、序號、憑證、URI、Digest challenge 或影像 |
-| 最終文件／清冊 | fmt 與 diff 空白通過；檢查 123 個本機 Markdown 目標，已發布 CHANGELOG 歷史未變。清冊 self-test 通過：159 routes、161 Action sites、191 readers；不代表規範或完整相依圖驗收 |
+| 先前文件／清冊 | fmt 與 diff 空白通過；檢查 123 個本機 Markdown 目標，已發布 CHANGELOG 歷史未變。清冊 self-test 通過：159 routes、161 Action sites、191 readers；不代表規範或完整相依圖驗收 |
 
-此證據僅涵蓋一台設備／firmware，不代表整個品牌的互通性。尚未成功保存實機
-圖片；未為製造 diff 而更改攝影機設定。公開證據刻意排除原始回應與私人產物。
+以上實機列為修復前基準；本批次更新證據如下：
+
+| 共用修復，Windows x64 | 結果及限制 |
+| --- | --- |
+| 候選 CLI SHA-256 | `9F2856CC727596791945A2DCC3F0243E3FB1ECA2CB09D054B5C0E894FEA1DF97`；一般本機 debug 建置，非已發布 release binary |
+| 完整敏感度測試 | 故意破壞送出的 Digest response：1,306 通過／兩項斷言失敗／五項 ignored，41 suites；精確還原正式原始碼，並非僅編譯失敗 |
+| 還原後閘門 | all-feature 1,308／default 1,198 通過，各五項 ignored、41 suites；兩組 workspace Clippy、strict rustdoc 及 fmt 通過 |
+| 先前失敗設備 | 18 台各抽樣第一個 profile：17 台在 8 秒預算下成功；一台逾時，單次改用 20 秒預算複測成功。18 台皆取得 JPEG signature，但不能將首輪描述為 18/18 |
+| 正常控制組／Hanwha | 控制組持續成功；Hanwha XND-C6083RV 在 20 秒複測後仍被判定非影像，不自動建立 MJPEG profile 或修改 CGI |
+| 原始已儲存 GV-TBL8810 | 兩個 profile 的 diagnose 皆 exit 0／complete=true，保存 exit 0；System.Drawing 獨立解碼確認 640×360 圖片。重複保存 exit 4，各檔案 hash 保持不變 |
+| 隱私／解讀 | 兩張影像保留於 Git 外私人暫存目錄，未改攝影機設定。RTSP transport／video decode 仍為 not_tested；快照抽樣不代表全品牌或全部 profile 相容 |
+
+公開證據不包含 IP、憑證、URI/query、認證標頭或實機影像。
+本機修復結果不取代託管、互動終端或散布套件 staging 驗收。
 
 ## 審查結案清單
 

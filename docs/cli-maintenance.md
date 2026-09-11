@@ -193,6 +193,18 @@ anchor is clamped, not preserved as a logical-text bookmark.
 
 ## Snapshot download
 
+Snapshot downloads and library health probes now share one bounded HTTP core.
+HTTP/1.1 uses title-case field names for firmware that mishandles lowercase
+Authorization; standard unquoted Digest parameters are preserved. Multiple
+challenges, case-insensitive scheme/parameter names and auth-int for empty GET
+entities are handled. A same-policy stale nonce may be retried once within the
+total deadline. Digest failure never triggers Basic fallback.
+
+Signature recognition is not full decoding or ONVIF certification. ONVIF snapshots
+are JPEG; accepted PNG/BMP files are compatibility extensions. An HTTP 200 text
+error remains a failure: inspect camera snapshot/profile configuration, but the
+CLI never creates an MJPEG profile or rewrites a vendor CGI automatically.
+
 ```sh
 oxvif snapshot front-door --profile Profile_1 --save front-door.jpg
 oxvif media snapshot-save --target 192.168.1.100 --profile Profile_1 --save front-door.jpg --output json --non-interactive

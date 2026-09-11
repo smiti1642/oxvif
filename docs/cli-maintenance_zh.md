@@ -168,6 +168,16 @@ oxvif --line-numbers off discover
 
 ## 快照下載
 
+快照下載與 library health probe 現在共用同一個有界 HTTP 核心。HTTP/1.1
+採用首字母大寫的標頭名稱，以相容錯誤處理小寫 Authorization 的韌體；Digest
+參數仍遵循標準引號格式。支援多重 challenge、scheme／參數名稱大小寫，以及
+空 GET 實體的 auth-int。同一安全政策下的 stale nonce 最多重試一次，包含在
+總期限內；Digest 失敗不會觸發 Basic 降級。
+
+檔頭辨識不等於完整解碼或 ONVIF 認證。ONVIF 快照要求 JPEG；接受 PNG／BMP
+屬相容性擴充。HTTP 200 的純文字錯誤仍判定失敗，應檢查攝影機快照及 profile
+設定；CLI 不會自動建立 MJPEG profile 或改寫廠商 CGI。
+
 ```sh
 oxvif snapshot front-door --profile Profile_1 --save front-door.jpg
 oxvif media snapshot-save --target 192.168.1.100 --profile Profile_1 --save front-door.jpg --output json --non-interactive

@@ -559,6 +559,11 @@ oxvif media profiles --target 192.168.1.100 --output json --non-interactive
 
 ## Maintenance workflows (unreleased)
 
+Snapshot HTTP/1.1 header compatibility and bounded Digest handling are shared
+with library health probes. Authentication is not downgraded after failure;
+non-image responses remain explicit failures. See
+[snapshot download limits](cli-maintenance.md#snapshot-download).
+
 The development checkout adds `snapshot --save` / `media snapshot-save`,
 `diagnose`, and `config export` / `config diff`. These features are not included
 in published 0.16.0 artifacts. They use the shared human/Agent application layer

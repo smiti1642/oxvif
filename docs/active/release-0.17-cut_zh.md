@@ -9,7 +9,7 @@
 下列 K27 修正接續此基準，屬於已授權的資料完整性範圍。
 
 [正式版號前審查資料](release-0.17-approval_zh.md) 追蹤使用者要求的四項工作、
-A01／A02 修正、尚未解決的實機 snapshot HTTP 401、維護者 staging 操作及
+A01／A02 修正及[共用快照修復](snapshot-auth-repair_zh.md)、維護者 staging 操作及
 留待核准的版號修改；不代表完整候選審查或安裝已通過。
 
 | 章節 | 用途 |

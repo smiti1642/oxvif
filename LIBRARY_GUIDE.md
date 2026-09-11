@@ -1310,12 +1310,19 @@ let report = HealthCheck::new(url)
 ```
 
 With it on, `get_stream_uri` follows the RTSP URI with a non-destructive
-`OPTIONS` reachability probe, `get_snapshot_uri` fetches the bytes and validates
-them as a real image (rejecting a 0-byte body or an HTML error page returned with
-a `200`), and the `recording` / `search` / `replay` checks genuinely exercise
+`OPTIONS` reachability probe, `get_snapshot_uri` fetches bounded bytes and checks
+the image signature (not full decoding), and the `recording` / `search` / `replay` checks genuinely exercise
 Profile G (recording search + replay-URI resolution) instead of reporting
 advertised-only presence. Off by default because these open extra RTSP/HTTP
 connections the read-only SOAP checks never touch.
+
+Snapshots use the CLI's shared `health::snapshot` core: same device host,
+no redirect/proxy/HTTPS downgrade, a 16 MiB limit and one total deadline.
+Digest failure never falls back to Basic. HTTP/1.1 title-case field names address
+firmware interoperability without changing standard Digest values. Configure
+snapshot deadlines and additional certificate roots with `with_snapshot_options`;
+SOAP transport configuration remains separate. PNG/BMP recognition is an extra
+compatibility feature, not proof of ONVIF JPEG conformance or successful decoding.
 
 **Force-verifying undeclared services (opt-in).** `with_force_unsupported(true)`
 goes after the *opposite* problem — a device that under-declares. For each

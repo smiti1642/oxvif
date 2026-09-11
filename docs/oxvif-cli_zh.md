@@ -364,6 +364,10 @@ oxvif media profiles --target 192.168.1.100 --output json --non-interactive
 
 ## 維運工作流程（尚未發布）
 
+快照 HTTP/1.1 標頭相容處理與有界 Digest 認證由 CLI 及 library health probe
+共用。認證失敗不降級，非圖片回應仍明確判定失敗；詳見
+[快照下載限制](cli-maintenance_zh.md#快照下載)。
+
 開發中的原始碼新增 `snapshot --save`／`media snapshot-save`、`diagnose` 及
 `config export`／`config diff`，尚未包含於已發布的 0.16.0 成品。人類與 Agent
 共用應用層，所有操作均不修改攝影機設定。範例、下載／認證限制、基準檔格式與

@@ -45,6 +45,9 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
   request values and potentially committing a different write.
 - Snapshot Digest authentication preserves unquoted Authorization parameters
   required by RFC 7616 instead of rewriting `qop=auth` as a quoted value.
+- CLI and library health share bounded snapshot downloads, HTTP/1.1 header-case
+  compatibility and corrected Digest challenge handling. Health no longer
+  downgrades failed Digest authentication to Basic or reads unbounded images.
 - Metamorph retains distinct recordings when legacy canonical keys collide,
   including load/save and reports; request-aware lookup selects the recording.
 - Windows debug CLI startup stack use, cancellation behavior and bounded

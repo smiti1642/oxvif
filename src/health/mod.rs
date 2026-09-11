@@ -78,6 +78,7 @@ mod capture;
 mod checks;
 mod coverage;
 mod report;
+pub mod snapshot;
 
 pub use report::{
     CapturedExchange, Category, CheckError, CheckResult, CheckStatus, ErrorClass, HealthReport,
@@ -97,6 +98,7 @@ pub struct HealthCheck {
     transport: Option<std::sync::Arc<dyn crate::transport::Transport>>,
     write_checks: bool,
     liveness_probes: bool,
+    snapshot_options: snapshot::SnapshotOptions,
     force_unsupported: bool,
     clock_sync: bool,
     capture: bool,
@@ -111,10 +113,21 @@ impl HealthCheck {
             transport: None,
             write_checks: false,
             liveness_probes: false,
+            snapshot_options: snapshot::SnapshotOptions::default(),
             force_unsupported: false,
             clock_sync: false,
             capture: false,
         }
+    }
+
+    /// Configure snapshot deadlines and extra CA roots for liveness probes.
+    ///
+    /// This does not configure the SOAP transport. Snapshot requests retain the
+    /// same-host, no-redirect, no-proxy and no-auth-downgrade policies shared
+    /// with the CLI. Image signatures are checked; full decoding is not tested.
+    pub fn with_snapshot_options(mut self, options: snapshot::SnapshotOptions) -> Self {
+        self.snapshot_options = options;
+        self
     }
 
     /// Supply credentials for WS-Security / HTTP Digest.
@@ -150,8 +163,8 @@ impl HealthCheck {
 
     /// Enable opt-in active liveness probes that go beyond the SOAP responses:
     /// an RTSP `OPTIONS` reachability probe on the stream URI, a snapshot byte
-    /// fetch (validated as a real image, not a 0-byte body or an HTML error
-    /// page), and a real Profile G exercise (recording search + replay URI)
+    /// fetch (signature checked, not fully decoded; empty bodies and HTML error
+    /// pages are rejected), and a real Profile G exercise (recording search + replay URI)
     /// instead of advertised-only presence. Off by default because these open
     /// extra network connections (RTSP/TCP and HTTP GET) the read-only SOAP
     /// checks never touch.
@@ -286,7 +299,11 @@ impl HealthCheck {
             let s = session.clone();
             let liveness = self.liveness_probes;
             let creds = self.credentials.clone();
-            set.spawn(async move { checks::media(&s, liveness, creds.as_ref()).await });
+            let url = self.device_url.clone();
+            let snapshot_options = self.snapshot_options.clone();
+            set.spawn(async move {
+                checks::media(&s, liveness, creds.as_ref(), &url, &snapshot_options).await
+            });
         }
         {
             let s = session.clone();
@@ -687,8 +704,8 @@ mod tests {
                 .unwrap_or_default()
         };
 
-        // Snapshot was actually fetched and validated as a real image (the mock
-        // serves a test-pattern JPEG at /mock/snapshot.jpg).
+        // Snapshot bytes were fetched and signature checked (the mock serves a
+        // test-pattern BMP at /mock/snapshot.jpg, not ONVIF-conformant JPEG).
         assert!(
             check_passed(&report.checks, "get_snapshot_uri"),
             "snapshot check should pass:\n{report}"

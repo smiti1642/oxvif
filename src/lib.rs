@@ -340,6 +340,12 @@
 //! from "did not say", so the other direction is counted rather than warned
 //! about. See `LIBRARY_GUIDE.md` for the detailed table.
 //!
+//! Snapshot liveness probes and the CLI share the bounded `health::snapshot`
+//! downloader: same-host HTTP(S), no redirects/proxy/HTTPS downgrade, 16 MiB
+//! maximum and a total deadline. Digest failure never falls back to Basic.
+//! HTTP/1.1 title-case headers improve firmware interoperability without changing
+//! standard Digest values. Signature recognition is not full image decoding.
+//!
 //! [ONVIF]: https://www.onvif.org
 
 pub mod client;

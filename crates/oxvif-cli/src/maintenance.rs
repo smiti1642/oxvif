@@ -16,7 +16,8 @@ use tokio::time::{Instant, timeout};
 use crate::application::{ResolvedTarget, build_http_transport};
 use crate::{AppError, ClockSyncPolicy, ExecutionOptions, TargetSelector};
 
-const MAX_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+#[cfg(test)]
+const MAX_IMAGE_BYTES: usize = oxvif::health::snapshot::MAX_IMAGE_BYTES;
 const MAX_INVENTORY_BYTES: u64 = 4 * 1024 * 1024;
 const SECTIONS: &[&str] = &[
     "hostname",
@@ -902,164 +903,38 @@ fn assess(stages: &[Step]) -> Value {
         "blocked_checks": names("prerequisite_failed"), "limitations": names("not_implemented")})
 }
 
-fn snapshot_url(uri: &str, device: &str) -> Result<url::Url, AppError> {
-    let url = url::Url::parse(uri)
-        .map_err(|_| AppError::invalid_argument("Invalid snapshot URL (withheld)."))?;
-    let device = url::Url::parse(device)
-        .map_err(|_| AppError::invalid_argument("Invalid device target."))?;
-    if !matches!(url.scheme(), "http" | "https")
-        || url.host_str().is_none()
-        || url.host_str() != device.host_str()
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.fragment().is_some()
-        || (device.scheme() == "https" && url.scheme() != "https")
-    {
-        return Err(AppError::invalid_argument(
-            "Snapshot URL rejected: require HTTP(S), the device host, no userinfo/fragment and no HTTPS downgrade.",
-        ));
+fn snapshot_error(error: oxvif::health::snapshot::SnapshotError) -> AppError {
+    if error.is_invalid_argument() {
+        AppError::invalid_argument(error.to_string())
+    } else {
+        AppError::device_operation_failed(error.to_string(), error.is_retryable())
     }
-    Ok(url)
 }
+
+#[cfg(test)]
+fn snapshot_url(uri: &str, device: &str) -> Result<url::Url, AppError> {
+    oxvif::health::snapshot::validate_url(uri, device).map_err(snapshot_error)
+}
+
+#[cfg(test)]
+use oxvif::health::snapshot::image_type;
 
 async fn fetch_image(
     uri: &str,
     resolved: &ResolvedTarget,
     options: &ExecutionOptions,
 ) -> Result<(Vec<u8>, &'static str), AppError> {
-    let url = snapshot_url(uri, &resolved.target)?;
-    let mut builder = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(options.timeout);
-    for pem in &options.ca_certificates {
-        let certificates = reqwest::Certificate::from_pem_bundle(pem)
-            .map_err(|_| AppError::invalid_argument("Invalid private CA bundle."))?;
-        if certificates.is_empty() {
-            return Err(AppError::invalid_argument("Empty private CA bundle."));
-        }
-        for certificate in certificates {
-            builder = builder.add_root_certificate(certificate);
-        }
-    }
-    let client = builder.build().map_err(|_| {
-        AppError::device_operation_failed("Cannot initialize snapshot HTTP client.", false)
-    })?;
-    let future = async {
-        let mut response = client.get(url.clone()).send().await.map_err(http_error)?;
-        if response.status() == reqwest::StatusCode::UNAUTHORIZED
-            && let (Some(user), Some(password)) =
-                (resolved.username.as_deref(), resolved.password())
-        {
-            let challenges = response
-                .headers()
-                .get_all(reqwest::header::WWW_AUTHENTICATE)
-                .iter()
-                .filter_map(|h| h.to_str().ok())
-                .collect::<Vec<_>>();
-            let mut request = client.get(url.clone());
-            if let Some(challenge) = challenges
-                .iter()
-                .find(|h| h.to_ascii_lowercase().starts_with("digest "))
-            {
-                let request_uri = match url.query() {
-                    Some(q) => format!("{}?{q}", url.path()),
-                    None => url.path().to_owned(),
-                };
-                let mut prompt = digest_auth::parse(challenge).map_err(|_| {
-                    AppError::device_operation_failed(
-                        "Unsupported snapshot Digest challenge.",
-                        false,
-                    )
-                })?;
-                let context = digest_auth::AuthContext::new(user, password, &request_uri);
-                let answer = prompt.respond(&context).map_err(|_| {
-                    AppError::device_operation_failed(
-                        "Cannot answer snapshot Digest challenge.",
-                        false,
-                    )
-                })?;
-                // RFC 7616 section 3.4 requires unquoted qop/algorithm/nc
-                // in Authorization; do not apply challenge-header quoting.
-                request = request.header(reqwest::header::AUTHORIZATION, answer.to_header_string());
-            } else if challenges
-                .iter()
-                .any(|h| h.to_ascii_lowercase().starts_with("basic "))
-            {
-                request = request.basic_auth(user, Some(password));
-            } else {
-                return Err(AppError::device_operation_failed(
-                    "Snapshot authentication challenge is unsupported.",
-                    false,
-                ));
-            }
-            response = request.send().await.map_err(http_error)?;
-        }
-        if response.status() != reqwest::StatusCode::OK {
-            return Err(AppError::device_operation_failed(
-                format!(
-                    "Snapshot returned HTTP {}; redirects are not followed.",
-                    response.status().as_u16()
-                ),
-                false,
-            ));
-        }
-        if response
-            .content_length()
-            .is_some_and(|n| n > MAX_IMAGE_BYTES as u64)
-        {
-            return Err(AppError::device_operation_failed(
-                "Snapshot exceeds 16 MiB.",
-                false,
-            ));
-        }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(http_error)? {
-            if chunk.len() > MAX_IMAGE_BYTES - bytes.len() {
-                return Err(AppError::device_operation_failed(
-                    "Snapshot exceeds 16 MiB.",
-                    false,
-                ));
-            }
-            bytes.extend_from_slice(&chunk);
-        }
-        let image_type = image_type(&bytes).ok_or_else(|| {
-            AppError::device_operation_failed(
-                "Snapshot is empty, truncated or has no supported JPEG/PNG/BMP signature.",
-                false,
-            )
-        })?;
-        Ok((bytes, image_type))
-    };
-    timeout(options.timeout, future).await.map_err(|_| {
-        AppError::device_operation_failed("Snapshot exceeded its total download timeout.", true)
-    })?
-}
-
-fn http_error(error: reqwest::Error) -> AppError {
-    AppError::device_operation_failed(
-        if error.is_timeout() {
-            "Snapshot HTTP request timed out (URL withheld)."
-        } else {
-            "Snapshot HTTP request failed (URL/body withheld)."
+    oxvif::health::snapshot::fetch(
+        uri,
+        &resolved.target,
+        resolved.username.as_deref().zip(resolved.password()),
+        &oxvif::health::snapshot::SnapshotOptions {
+            timeout: options.timeout,
+            ca_certificates: options.ca_certificates.clone(),
         },
-        error.is_timeout() || error.is_connect(),
     )
-}
-
-fn image_type(bytes: &[u8]) -> Option<&'static str> {
-    if bytes.len() >= 4 && bytes.starts_with(b"\xff\xd8\xff") && bytes.ends_with(b"\xff\xd9") {
-        Some("jpeg")
-    } else if bytes.len() >= 33
-        && bytes.starts_with(b"\x89PNG\r\n\x1a\n")
-        && bytes.get(12..16) == Some(b"IHDR")
-    {
-        Some("png")
-    } else if bytes.len() >= 54 && bytes.starts_with(b"BM") {
-        Some("bmp")
-    } else {
-        None
-    }
+    .await
+    .map_err(snapshot_error)
 }
 
 async fn collect_inventory(

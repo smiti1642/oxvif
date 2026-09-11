@@ -2142,7 +2142,6 @@ dependencies = [
  "clap",
  "clap_complete",
  "crossterm",
- "digest_auth",
  "directories",
  "fs2",
  "ipnet",
