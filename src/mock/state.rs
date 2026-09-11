@@ -3778,8 +3778,32 @@ mod tests {
             "GetVideoEncoderConfigurationOptions",
             "<trt:GetVideoEncoderConfigurationOptions/>",
         );
-        assert!(xml.contains("<tt:Width>2592</tt:Width>"), "got: {xml}");
-        assert!(xml.contains("<tt:Width>352</tt:Width>"));
+        let body = crate::soap::parse_soap_body(&xml).unwrap();
+        let response =
+            crate::soap::find_response(&body, "GetVideoEncoderConfigurationOptionsResponse")
+                .unwrap();
+        let options = crate::types::VideoEncoderConfigurationOptions::from_xml(response).unwrap();
+        assert_eq!(
+            options
+                .h264
+                .unwrap()
+                .resolutions
+                .iter()
+                .map(|r| (r.width, r.height))
+                .collect::<Vec<_>>(),
+            [
+                (2592, 1944),
+                (2592, 1520),
+                (2560, 1440),
+                (2304, 1296),
+                (1920, 1080),
+                (1280, 720),
+                (704, 480),
+                (352, 240),
+                (480, 240),
+            ],
+            "generic options must include the resolution union across both sensors"
+        );
     }
 
     #[test]
@@ -3989,8 +4013,34 @@ mod tests {
             "GetVideoEncoderConfigurationOptions",
             "<tr2:GetVideoEncoderConfigurationOptions/>",
         );
-        assert!(xml.contains("<tt:Width>2592</tt:Width>"), "got: {xml}");
-        assert!(xml.contains("<tt:Width>352</tt:Width>"));
+        let body = crate::soap::parse_soap_body(&xml).unwrap();
+        let response =
+            crate::soap::find_response(&body, "GetVideoEncoderConfigurationOptionsResponse")
+                .unwrap();
+        let options = crate::types::VideoEncoderConfigurationOptions2::from_xml(response).unwrap();
+        let h264 = options
+            .options
+            .iter()
+            .find(|o| o.encoding == crate::VideoEncoding::H264)
+            .unwrap();
+        assert_eq!(
+            h264.resolutions
+                .iter()
+                .map(|r| (r.width, r.height))
+                .collect::<Vec<_>>(),
+            [
+                (2592, 1944),
+                (2592, 1520),
+                (2560, 1440),
+                (2304, 1296),
+                (1920, 1080),
+                (1280, 720),
+                (704, 480),
+                (352, 240),
+                (480, 240),
+            ],
+            "generic options must include the resolution union across both sensors"
+        );
     }
 
     #[test]

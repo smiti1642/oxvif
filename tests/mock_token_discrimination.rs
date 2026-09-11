@@ -283,11 +283,27 @@ async fn m2_source_options(d: &Dev, t: &str) -> String {
 }
 
 async fn m2_encoder_instances(d: &Dev, t: &str) -> String {
-    fingerprint(
-        d.client
-            .get_video_encoder_instances_media2(&d.url("media2"), t)
-            .await,
-    )
+    let instances = d
+        .client
+        .get_video_encoder_instances_media2(&d.url("media2"), t)
+        .await
+        .expect("both seeded source configurations must report encoder capacity");
+    let (total, codecs) = match t {
+        "VSC_1" => (4, vec![("JPEG", 2), ("H264", 2), ("H265", 2)]),
+        "VSC_2" => (2, vec![("JPEG", 2), ("H264", 2)]),
+        _ => panic!("encoder-instance probe needs an explicit fixture expectation: {t}"),
+    };
+    assert_eq!(instances.total, total, "{t}");
+    assert_eq!(
+        instances
+            .encodings
+            .iter()
+            .map(|c| (c.encoding.as_str(), c.number))
+            .collect::<Vec<_>>(),
+        codecs,
+        "{t}"
+    );
+    format!("{instances:?}")
 }
 
 async fn m2_stream_uri(d: &Dev, t: &str) -> String {

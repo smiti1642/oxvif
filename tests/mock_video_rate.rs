@@ -336,6 +336,27 @@ async fn replay(t: &dyn Transport, url: &str) {
             .await
             .contains("<tt:FrameRateLimit>12.5</tt:FrameRateLimit>")
     );
+    // This exact request was recorded above. A committed encoder write retires
+    // its recording even though the bare Media2 view omits configurations.
+    let bare = post(t, url, M2, "GetProfiles", "").await;
+    let body = parse_soap_body(&bare).unwrap();
+    assert_eq!(body.children.len(), 1);
+    let response = &body.children[0];
+    assert_eq!(response.local_name, "GetProfilesResponse", "{bare}");
+    let profiles = response.children_named("Profiles").collect::<Vec<_>>();
+    assert_eq!(
+        profiles
+            .iter()
+            .map(|p| (p.attr("token").unwrap(), p.child("Name").unwrap().text()))
+            .collect::<Vec<_>>(),
+        [
+            ("Profile_1", "mainStream"),
+            ("Profile_2", "subStream"),
+            ("Profile_3", "mainStream2"),
+            ("Profile_4", "subStream2"),
+        ]
+    );
+    assert!(profiles.iter().all(|p| p.child("Configurations").is_none()));
     for op in ["GetVideoEncoderConfigurations", "GetProfiles"] {
         fault(
             &post(t, url, M1, op, "").await,

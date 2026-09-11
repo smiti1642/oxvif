@@ -67,9 +67,11 @@ async fn encoder_replay_contract(t: &dyn Transport, url: &str, state: &oxvif::mo
     let invalid =
         setting("VEC_1").replace("<tt:Quality>6</tt:Quality>", "<tt:Quality>NaN</tt:Quality>");
     let failed = post_at(t, url, M2, "SetVideoEncoderConfiguration", &invalid).await;
-    assert_eq!(
-        parse_soap_body(&failed).unwrap().children[0].local_name,
-        "Fault"
+    assert_fault(
+        &failed,
+        "s:Sender",
+        &["ter:InvalidArgVal", "ter:ConfigModify"],
+        "Invalid mock encoder setting: Quality",
     );
     assert_eq!(serde_json::to_value(&*state.read()).unwrap(), before);
     for (index, (ns, op, fields, _)) in ENCODER_REPLAY_READS.iter().enumerate() {
