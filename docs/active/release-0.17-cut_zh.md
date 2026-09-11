@@ -44,8 +44,8 @@
 | G02 資料完整性 K27 | LOCAL-PASS | 碰撞群組在 record／load／save 及完整請求 replay 中保留不同請求；key-only 歧義回傳 None；等價請求仍替換，去憑證維持指定格式。報告群組保留各列。見下方 K27 證據；G05 仍獨立待驗 |
 | G03 安全及回應完整性 | OPEN | 處理已知機密洩漏、部分寫入、不安全 URL、誤導效果回覆及共用邊界回歸；不得把重大問題改名為後續工作 |
 | G04 本機程式及文件 | LOCAL-PASS 基準 | 精確重用未變動程式的證據；修正、改版號或合併後重驗受影響關卡 |
-| G05 原生 CI | BLOCKED | 最終候選的 Windows／Linux／macOS 真實結果；先前 dispatch 遭 HTTP 403 拒絕，沒有 run |
-| G06 套件及散布 | PARTIAL | 0.16.0 版號的 library dry-run 通過；仍須最終版號的 library／CLI 套件、原生憑證／portable install、source／binary SBOM、checksum 及不發布的 staging |
+| G05 原生 CI | FAILED／須重跑 | 維護者為 111c185 啟動 run 34594415559；macOS Intel 四項 CLI 維運測試失敗，其餘平台 test job 通過。測試預算／證據修正仍須新 run；本機仍無 dispatch 權限 |
+| G06 套件及散布 | PARTIAL | 111c185 的原生憑證 job 通過，但測試失敗後 Package/docs 略過。0.16.0 版號的 library dry-run 通過；仍須最終版號套件、portable install、SBOM／checksum 及不發布的 staging |
 | G07 人類及 Agent 驗收 | PARTIAL | 已有 Windows synthetic terminal／executable 證據；仍須最終候選的 resize／cancel／input 及實機唯讀 snapshot／diagnose／export／diff 證據；公開證據不含機密或影像 |
 | G08 版號及發布連結 | OPEN | 候選驗收後同步 library／CLI 版號；schema v3 宣稱須符合測試；草稿連結固定至最終 tag，遷移警告不可隱藏 |
 | G09 RC 及授權 | NOT-RUN | RC 也須明確發布授權；建議觀察 3–7 天，不因日期到期自動通過；取得正式發布同意 |
@@ -155,3 +155,51 @@ token／Action 正向控制仍通過。Legacy URL 清理另有相同請求合併
 feature-unification 及外部 corpus 證據僅重用未變動輸入，不宣稱本輪重跑 schema。
 本輪未執行實機、原生平台、最終版號套件或安裝驗收。G02 本機結案；G01／G03
 完整候選與安全審查、G05–G09 仍依上表待完成。
+
+### 原生 CI 維運測試後續修正
+
+維護者啟動的 [run 34594415559](https://github.com/smiti1642/oxvif/actions/runs/34594415559)
+測試 `111c185`。Windows、Linux x64／ARM 與 macOS ARM test job 通過；macOS
+Intel 的 `chunked_snapshot_limit_is_enforced_without_content_length`、
+`diagnostic_picker_retains_evidence_and_never_falls_back`、
+`fleet_diagnose_retains_partial_and_total_failure_evidence` 及
+`managed_session_reuses_expires_and_preserves_no_clobber` 失敗。Package/docs
+因此略過；原生憑證、CLI smoke 及選定外部 schema job 通過。這是部分原生證據，
+不是發布關卡通過。
+
+原始維運測試在本機 19 項全部通過。四個失敗均使用共用的兩秒功能網路預算，
+但舊斷言未呈現實際錯誤／診斷章節，因此 runner 資源競爭目前只是工作假設，
+並非已證實的 macOS 失敗原因。
+
+後續只修改 `maintenance.rs` 的 `cfg(test)` 模組：
+
+- 功能測試採有限的 30 秒預算，fixture server 等待連線亦同；明確的 10 毫秒
+  SOAP 與 100 毫秒 snapshot deadline 測試保留各自預算。
+- 延遲 HTTP 與 SOAP fixture 超過舊兩秒上限，仍須回傳精確圖片 bytes／type
+  及具有識別性的 SOAP 階段結果。
+- Chunked 大小測試要求精確的 16 MiB 拒絕訊息及不可重試分類，而非任意錯誤；
+  stalled 測試必須帶有超時證據。
+- Export 完整性、diff 結果與 picker／fleet 失敗顯示結構化證據，保留不覆寫、
+  選定 profile、exit code、session reuse／expiry、fault 及取消斷言。
+  未略過任何測試，產品 timeout、圖片限制、重試及 CLI 輸出皆未改動。
+
+修正版聚焦測試 20 項通過。一次 workspace 全量 all-features、`--no-fail-fast`
+擾動再恢復兩秒預算、放過額外一個圖片 byte，並將兩處超時訊息替換為無關的可重試
+錯誤。恰有三項斷言失敗：延遲進度、chunked 上限及 stalled snapshot 測試
+（1,298 通過、三項失敗、五項 ignored，共 41 suites）。延遲測試先在 SOAP 階段
+斷言失敗，不代表後續每個斷言均有獨立擾動證據。正式關卡前已精確還原全部暫時
+改動；原生驗收仍須針對此修正版啟動新 run，不是重跑舊 commit。
+
+精確還原後的最終本機關卡：
+
+| 檢查 | 結果 |
+| --- | --- |
+| Workspace all-features／default、locked、no-fail-fast | 1,301／1,191 通過，各五項既有 ignored、41 suites |
+| Workspace Clippy all-features／default、all-targets | `-D warnings` 通過 |
+| 格式與 diff 空白 | 通過 |
+| 產品程式碼邊界 | `maintenance.rs` 的 `cfg(test)` 之前內容與 `111c185` 相同，未改產品行為 |
+| 文件 | 44 個本機 Markdown 檔案目標通過，已發布 CHANGELOG 內容未變 |
+| 託管驗收 | 仍須新 run；目前 GitHub CLI 權限檢查為 READ |
+
+本次測試修正不宣稱新增原生平台、套件／安裝、實機、MSRV 或外部 schema 執行。
+先前產品程式碼證據仍屬歷史，不能據此結案 G05 或其他尚未完成的發布關卡。

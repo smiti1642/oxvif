@@ -45,8 +45,8 @@ review all transitive consumers of an included helper. Public claims may not say
 | G02 Data integrity, K27 | LOCAL-PASS | Collision buckets preserve distinct requests across record/load/save and request-aware replay; key-only ambiguity returns None; equivalent requests still replace and credential cleanup remains targeted. Report groups retain all rows. See the K27 evidence below; G05 remains separate |
 | G03 Security and response integrity | OPEN | Disposition of known credential leaks, partial writes, unsafe URLs, ambiguous effect receipts and shared-boundary regressions; a severe known issue cannot become future work by relabeling it |
 | G04 Local code and documents | LOCAL-PASS baseline | Reuse exact unchanged-code evidence; revalidate affected gates after fixes, version changes or merges |
-| G05 Native CI | BLOCKED | Actual Windows/Linux/macOS results on final candidate; previous workflow dispatch returned HTTP 403 and no run exists |
-| G06 Package and distribution | PARTIAL | Library dry-run passed at 0.16.0; final-version library/CLI packages, native credential/portable-install checks, source/binary SBOM, checksums and non-publishing staging remain required |
+| G05 Native CI | FAILED / rerun required | Maintainer run 34594415559 at 111c185 failed four CLI maintenance tests on macOS Intel; other platform test jobs passed. Test-budget/evidence follow-up requires a new run; local dispatch permission is still unavailable |
+| G06 Package and distribution | PARTIAL | Native credential jobs passed at 111c185, but Package/docs was skipped after the test failure. Library dry-run passed at 0.16.0; final-version packages, portable installs, SBOM/checksums and non-publishing staging remain required |
 | G07 Human and Agent acceptance | PARTIAL | Existing Windows synthetic terminal/executable evidence; final-candidate terminal resize/cancel/input plus real-camera read-only snapshot/diagnose/export/diff evidence. No secrets/images in public evidence |
 | G08 Versions and release links | OPEN | Update library/CLI versions together after candidate acceptance; preserve schema-v3 claims only if tests agree, resolve every draft link to the final tag, keep migration warnings visible |
 | G09 RC and approval | NOT-RUN | Publish an RC only with explicit authorization; suggested 3–7 day observation, no calendar-based automatic success; obtain final release approval |
@@ -172,3 +172,57 @@ Earlier XML feature-unification and external-corpus evidence is reused for those
 unchanged inputs, not claimed as a new schema run. No hardware, native-platform,
 final-version package or installation acceptance occurred. G02 is locally closed;
 G01/G03 complete-candidate and security review, G05–G09 remain as listed above.
+
+### Native CI maintenance-test follow-up
+
+The maintainer's [run 34594415559](https://github.com/smiti1642/oxvif/actions/runs/34594415559)
+tested `111c185`. Windows, Linux x64/ARM and macOS ARM test jobs passed. macOS
+Intel failed `chunked_snapshot_limit_is_enforced_without_content_length`,
+`diagnostic_picker_retains_evidence_and_never_falls_back`,
+`fleet_diagnose_retains_partial_and_total_failure_evidence` and
+`managed_session_reuses_expires_and_preserves_no_clobber`. Package/docs was
+skipped; native credential, CLI smoke and selected external-schema jobs passed.
+This is partial native evidence, not a green release gate.
+
+The original maintenance tests passed locally (19 tests). All four failures use
+the shared two-second functional network budget. Their original assertions
+omitted the actual error/diagnostic sections, so runner contention is a working
+hypothesis rather than a proven explanation of the macOS failures.
+
+The follow-up changes only `maintenance.rs`'s `cfg(test)` module:
+
+- A bounded 30-second functional budget also covers fixture-server acceptance;
+  explicit 10 ms SOAP and 100 ms snapshot deadline tests retain their own budgets.
+- Delayed HTTP and SOAP fixtures exceed the old two-second budget and must still
+  return exact image bytes/type and the distinctive SOAP-stage result.
+- The chunked size test requires the exact 16 MiB refusal and non-retryable
+  classification, not merely any error. The stalled test requires timeout evidence.
+- Export completeness, diff results and picker/fleet failures expose their
+  structured evidence while preserving no-clobber, selected-profile, exit-code,
+  session reuse/expiry, fault and cancellation assertions. No test is skipped and
+  production timeouts, image limits, retries and CLI output are unchanged.
+
+The focused revised suite passed 20 tests. One full workspace all-feature
+`--no-fail-fast` mutation campaign then reinstated the two-second budget, allowed
+one extra image byte and replaced both timeout messages with an unrelated
+retryable error. Exactly three assertions failed: the delayed progress, chunked
+limit and stalled snapshot tests (1,298 passed, three failed, five ignored across
+41 suites). The delayed test fails at its SOAP-stage assertion first; this does
+not establish independent mutation coverage for every subsequent assertion.
+All temporary mutations were restored before the final gates. Native acceptance
+still requires a new run of this follow-up, not a rerun of the old commit.
+
+Final local gates after restoration:
+
+| Check | Result |
+| --- | --- |
+| Workspace all-features / default, locked, no-fail-fast | 1,301 / 1,191 passed; five existing ignored each, 41 suites |
+| Workspace Clippy all-features / default, all-targets | Passed with `-D warnings` |
+| Formatting and diff whitespace | Passed |
+| Production boundary | `maintenance.rs` before `cfg(test)` matches `111c185`; no product behavior change |
+| Documentation | 44 local Markdown file targets checked; published CHANGELOG content unchanged |
+| Hosted acceptance | New run still required; current GitHub CLI inspection reports READ permission |
+
+No new native-platform, package/install, hardware, MSRV or external-schema run is
+claimed for this test-only follow-up. Previous production-code evidence remains
+historical; it does not close G05 or the other outstanding release gates.

@@ -45,6 +45,8 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
   including load/save and reports; request-aware lookup selects the recording.
 - Windows debug CLI startup stack use, cancellation behavior and bounded
   human-terminal layout; timing-sensitive tests retain functional output checks.
+  Maintenance contract tests separate runner latency from explicit deadline tests
+  and retain exact size-limit and diagnostic-evidence assertions.
 
 ### Changed
 

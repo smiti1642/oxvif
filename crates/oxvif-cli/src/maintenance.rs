@@ -1230,6 +1230,11 @@ mod tests {
     use std::sync::Arc;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+    // These are contract tests, not two-second runner benchmarks. Hosted
+    // runners may contend while transferring 16 MiB or running SOAP workflows.
+    // Timeout-specific tests override this budget explicitly below.
+    const FUNCTIONAL_TIMEOUT: Duration = Duration::from_secs(30);
+
     fn resolved(url: &str) -> ResolvedTarget {
         ResolvedTarget {
             device_id: None,
@@ -1242,7 +1247,7 @@ mod tests {
 
     fn options() -> ExecutionOptions {
         ExecutionOptions {
-            timeout: Duration::from_secs(2),
+            timeout: FUNCTIONAL_TIMEOUT,
             non_interactive: true,
             clock_sync: ClockSyncPolicy::Never,
             ..Default::default()
@@ -1267,6 +1272,13 @@ mod tests {
     async fn http_server(
         responses: Vec<Vec<u8>>,
     ) -> (String, tokio::task::JoinHandle<Vec<String>>) {
+        http_server_with_delay(responses, Duration::ZERO).await
+    }
+
+    async fn http_server_with_delay(
+        responses: Vec<Vec<u8>>,
+        delay: Duration,
+    ) -> (String, tokio::task::JoinHandle<Vec<String>>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!(
             "http://{}/image?ticket=never-log-this",
@@ -1275,7 +1287,7 @@ mod tests {
         let task = tokio::spawn(async move {
             let mut requests = Vec::new();
             for response in responses {
-                let (mut socket, _) = timeout(Duration::from_secs(3), listener.accept())
+                let (mut socket, _) = timeout(FUNCTIONAL_TIMEOUT, listener.accept())
                     .await
                     .unwrap()
                     .unwrap();
@@ -1292,6 +1304,7 @@ mod tests {
                     }
                 }
                 requests.push(String::from_utf8(request).unwrap());
+                tokio::time::sleep(delay).await;
                 let _ = socket.write_all(&response).await;
             }
             requests
@@ -1433,8 +1446,36 @@ mod tests {
         let error = fetch_image(&url, &resolved(&url), &options())
             .await
             .unwrap_err();
-        assert!(error.message.contains("16 MiB"));
+        assert_eq!(error.message, "Snapshot exceeds 16 MiB.", "{error:?}");
+        assert!(
+            !error.retryable,
+            "size refusal must not be a timeout: {error:?}"
+        );
         task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn functional_budget_accepts_slow_http_and_soap_progress() {
+        // A controlled delay beyond the old two-second functional budget.
+        // No timing upper bound is asserted; payload and stage results matter.
+        let delay = Duration::from_millis(2100);
+        let (url, task) =
+            http_server_with_delay(vec![response("200 OK", "", b"\xff\xd8\xff\xd9")], delay).await;
+        let options = options();
+        let target = resolved(&url);
+        let (image, (step, value)) = tokio::join!(
+            fetch_image(&url, &target, &options),
+            onvif_step("slow_fixture", &options, || async {
+                tokio::time::sleep(delay).await;
+                Ok(937_u32)
+            })
+        );
+        assert!(matches!(step.status, Status::Pass), "{step:?}");
+        assert_eq!(value, Some(937));
+        let (bytes, kind) = image.expect("slow fixture must still return its payload");
+        assert_eq!(bytes, b"\xff\xd8\xff\xd9");
+        assert_eq!(kind, "jpeg");
+        assert_eq!(task.await.unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -1453,6 +1494,14 @@ mod tests {
             .await
             .unwrap_err();
         assert!(error.retryable);
+        assert!(
+            matches!(
+                error.message.as_str(),
+                "Snapshot exceeded its total download timeout."
+                    | "Snapshot HTTP request timed out (URL withheld)."
+            ),
+            "expected deadline evidence, not another retryable error: {error:?}"
+        );
         task.abort();
         let _ = task.await;
     }
@@ -1639,21 +1688,18 @@ mod tests {
         );
         assert_eq!(fs::read(&image).unwrap(), original);
         let baseline = directory.path().join("baseline.json");
-        managed
+        let exported = managed
             .execute(ManagedAction::Export {
                 save: baseline.clone(),
             })
             .await
             .unwrap();
-        assert_eq!(
-            result(
-                &managed
-                    .execute(ManagedAction::Diff { against: baseline })
-                    .await
-                    .unwrap()
-            )["matches"],
-            true
-        );
+        assert_eq!(result(&exported)["complete"], true, "{}", result(&exported));
+        let compared = managed
+            .execute(ManagedAction::Diff { against: baseline })
+            .await
+            .unwrap();
+        assert_eq!(result(&compared)["matches"], true, "{}", result(&compared));
         managed.connected_at = Some(Instant::now() - Duration::from_secs(61));
         assert!(managed.needs_connection());
         server.inject_fault(
@@ -1827,7 +1873,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(report.exit_code(), 0);
+        assert_eq!(report.exit_code(), 0, "{}", result(&report));
         let client = oxvif::OnvifClient::new(server.device_url());
         assert!(client.get_capabilities().await.is_err());
         assert!(
@@ -2105,7 +2151,7 @@ mod tests {
             })
         };
         let report = app.execute(request(), &options()).await.unwrap();
-        assert_eq!(report.exit_code(), 6);
+        assert_eq!(report.exit_code(), 6, "{:?}", report.data);
         let jsonl = crate::render_success(crate::OutputFormat::JsonLines, &report).unwrap();
         let lines: Vec<Value> = jsonl
             .lines()
