@@ -346,6 +346,131 @@ async fn profile_exchanges() -> Vec<Exchange> {
         .unwrap()
 }
 
+async fn rate_exchanges() -> Vec<Exchange> {
+    let capture = Capture {
+        mock: MockTransport::new(),
+        exchanges: Arc::default(),
+    };
+    let client = OnvifClient::new(TARGET).with_transport(Arc::new(capture.clone()));
+    let mut config = client
+        .get_video_encoder_configuration_media2(TARGET, "VEC_1")
+        .await
+        .unwrap();
+    assert_eq!(config.rate_control.as_ref().unwrap().frame_rate_limit, 25.0);
+    config.rate_control.as_mut().unwrap().frame_rate_limit = 12.5;
+    client
+        .set_video_encoder_configuration_media2(TARGET, &config)
+        .await
+        .unwrap();
+    assert_eq!(
+        capture.mock.device().read().video_encoders[0].frame_rate_limit,
+        12.5
+    );
+    let actual = client
+        .get_video_encoder_configuration_media2(TARGET, "VEC_1")
+        .await
+        .unwrap();
+    assert_eq!(actual.rate_control.as_ref().unwrap().frame_rate_limit, 12.5);
+    let error = client
+        .get_video_encoder_configuration(TARGET, "VEC_1")
+        .await
+        .unwrap_err();
+    let OnvifError::Soap(error) = error else {
+        panic!("expected Media1 representation Fault")
+    };
+    assert_eq!(
+        error,
+        SoapError::Fault {
+            code: "s:Receiver".into(),
+            reason: "Encoder frame rate cannot be represented by Media1; use Media2".into(),
+            subcode: Some("mock:RequestPolicy".into()),
+            detail: None
+        }
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    config.rate_control.as_mut().unwrap().frame_rate_limit = 25.0;
+    client
+        .set_video_encoder_configuration_media2(TARGET, &config)
+        .await
+        .unwrap();
+    let actual = client
+        .get_video_encoder_configuration(TARGET, "VEC_1")
+        .await
+        .unwrap();
+    assert_eq!(actual.rate_control.as_ref().unwrap().frame_rate_limit, 25);
+    // A source-authored, structurally valid negative value bypasses the client
+    // preflight to exercise the synthetic refusal and unchanged state.
+    let before = serde_json::to_value(&*capture.mock.device().read()).unwrap();
+    let previous = capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|e| e.action.ends_with("/SetVideoEncoderConfiguration"))
+        .unwrap()
+        .request
+        .clone();
+    let xml = capture
+        .soap_post(
+            TARGET,
+            "http://www.onvif.org/ver20/media/wsdl/SetVideoEncoderConfiguration",
+            previous.replace(
+                "<tt:FrameRateLimit>12.5</tt:FrameRateLimit>",
+                "<tt:FrameRateLimit>-1</tt:FrameRateLimit>",
+            ),
+        )
+        .await
+        .unwrap();
+    let body = parse_soap_body(&xml).unwrap();
+    let fault = body.child("Fault").unwrap();
+    assert_eq!(fault.path(&["Code", "Value"]).unwrap().text(), "s:Sender");
+    assert_eq!(
+        fault.path(&["Code", "Subcode", "Value"]).unwrap().text(),
+        "ter:InvalidArgs"
+    );
+    assert_eq!(
+        fault.path(&["Reason", "Text"]).unwrap().text(),
+        "Invalid encoder FrameRateLimit"
+    );
+    assert_eq!(
+        serde_json::to_value(&*capture.mock.device().read()).unwrap(),
+        before
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    drop(client);
+    Arc::try_unwrap(capture.exchanges)
+        .unwrap_or_else(|_| panic!("capture still shared"))
+        .into_inner()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn captures_fractional_rate_and_explicit_media1_limit() {
+    let exchanges = rate_exchanges().await;
+    assert_eq!(exchanges.len(), 7);
+    assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 2);
+    assert_eq!(
+        exchanges
+            .iter()
+            .map(|e| &e.action)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        3
+    );
+}
+
 async fn source_exchanges() -> Vec<Exchange> {
     let capture = Capture {
         mock: MockTransport::new(),
@@ -748,6 +873,7 @@ async fn export_reviewed_batches_for_independent_validation() {
         .expect("OXVIF_MOCK_CORPUS is required; missing output is not an export pass");
     let mut exchanges = profile_exchanges().await;
     exchanges.extend(source_exchanges().await);
+    exchanges.extend(rate_exchanges().await);
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
     eprintln!(

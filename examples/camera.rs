@@ -1934,7 +1934,8 @@ async fn video_config_media2(cfg: &Config) -> Result<(), OnvifError> {
                     c.name,
                     c.encoding,
                     c.resolution,
-                    rc.map(|r| r.frame_rate_limit).unwrap_or(0),
+                    rc.map(|r| r.frame_rate_limit.to_string())
+                        .unwrap_or_else(|| "not provided".into()),
                     rc.map(|r| r.bitrate_limit).unwrap_or(0),
                     c.gov_length,
                     c.profile,

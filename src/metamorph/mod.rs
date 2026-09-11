@@ -112,6 +112,8 @@
 //!   retire profile views and dependent configuration reads/reference counts.
 //!   Source configuration writes likewise retire dependent source/profile/options
 //!   recordings only after successful synthetic commits.
+//!   Encoder writes similarly retire dependent encoder/profile recordings only
+//!   after commit; rejected rate values preserve recordings.
 //!   Other mutations and standalone responder
 //!   construction retain the legacy policy during migration.
 //! - **Persona C — adapter / skin (M5)**: [`AdapterResponder`] answers from a

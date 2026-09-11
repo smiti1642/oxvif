@@ -1389,7 +1389,7 @@ mod media2 {
         );
         assert!((cfg.quality - 7.0).abs() < 1e-5);
         let rc = cfg.rate_control.unwrap();
-        assert_eq!(rc.frame_rate_limit, 30);
+        assert_eq!(rc.frame_rate_limit, 30.0);
         assert_eq!(rc.bitrate_limit, 8192);
         assert_eq!(cfg.gov_length, Some(60));
         assert_eq!(cfg.profile.as_deref(), Some("Main"));
@@ -1408,13 +1408,13 @@ mod media2 {
             },
             quality: 6.0,
             rate_control: Some(VideoRateControl2 {
-                frame_rate_limit: 25,
+                frame_rate_limit: 25.0,
                 bitrate_limit: 4096,
             }),
             gov_length: Some(50),
             profile: Some("Main".into()),
         };
-        let xml = cfg.to_xml_body();
+        let xml = cfg.to_xml_body().unwrap();
         assert!(xml.contains("token=\"enc2\""));
         assert!(xml.contains("<tt:Encoding>H265</tt:Encoding>"));
         assert!(xml.contains("<tt:Width>1920</tt:Width>"));
@@ -1447,7 +1447,7 @@ mod media2 {
             gov_length: None,
             profile: None,
         };
-        let xml = cfg.to_xml_body();
+        let xml = cfg.to_xml_body().unwrap();
         assert!(xml.contains(r#"<tr2:Configuration token="enc2">"#));
         assert!(!xml.contains("GovLength"));
         assert!(!xml.contains("Profile"));
@@ -1994,7 +1994,7 @@ mod encoding_serialisation {
 
     #[test]
     fn video_encoding_h264_serialises_identically_in_media2() {
-        let body = video_cfg2(VideoEncoding::H264).to_xml_body();
+        let body = video_cfg2(VideoEncoding::H264).to_xml_body().unwrap();
         assert!(
             body.contains("<tt:Encoding>H264</tt:Encoding>"),
             "body was: {body}"
@@ -2195,7 +2195,9 @@ mod encoding_serialisation {
     /// Site 2 — `VideoEncoderConfiguration2::to_xml_body()` (`src/types/video.rs`).
     #[test]
     fn video_encoding_other_is_escaped_in_media2_body() {
-        let body = video_cfg2(VideoEncoding::Other(HOSTILE_ENCODING.into())).to_xml_body();
+        let body = video_cfg2(VideoEncoding::Other(HOSTILE_ENCODING.into()))
+            .to_xml_body()
+            .unwrap();
         assert_eq!(
             body,
             format!(

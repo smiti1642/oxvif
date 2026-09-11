@@ -21,6 +21,7 @@
 | [5. 狀態模型](#5-狀態模型) | 服務之間共用的可變狀態 |
 | [6. 預載 fixture](#6-預載-fixture) | 初始的裝置、媒體、PTZ、音訊與錄影資料 |
 | [6.2.1 Source configuration 契約](#621-source-configuration-契約) | 原子寫入、sensor options 與模型限制 |
+| [6.2.2 Encoder 幀率](#622-encoder-幀率) | 小數幀率、狀態遷移與 Media1 限制 |
 | [7. 操作參考](#7-操作參考) | stateful、static 與不支援的操作 |
 | [8. 實作範例](#8-實作範例) | 代表性請求與回應 |
 | [9. 錯誤模型](#9-錯誤模型) | SOAP fault 結構與代碼 |
@@ -382,6 +383,20 @@ Source options 依實體 sensor 尺寸，不再隨 crop 縮小。省略 configur
 ConfigurationToken／ProfileToken。Mock 允許所有 profile 重新指定 source，未建模
 實體 encoder-routing 衝突。內建 replay 拒絕時保留 recording，成功後才淘汰相依的
 source／profile／options 讀取。詳見 [VS1 證據與限制](active/mock-fidelity-video-source_zh.md)。
+
+### 6.2.2 Encoder 幀率
+
+**尚未發布：**共用 encoder 幀率改用 `f32`。已提供的 scoped rate block 會先驗證
+再改變狀態；無效幀率／bitrate 保留完整狀態且不呼叫 change hook，省略則保留現值。
+此為 rate 欄位的驗證邊界，不代表全部 encoder 欄位或 options 契約已完成。
+
+Media2 保留小數幀率。Media1 encoder／profile 回覆若包含無法表示的幀率，會回傳
+頂層 Receiver／`mock:RequestPolicy` Fault，不取整數、不省略、不修改狀態。
+手動 seed 的無效幀率同樣拒絕輸出。一般舊整數 JSON 仍可載入；持久化會拒絕負值
+及非有限幀率，不輸出 `null`。內建 replay 僅在 encoder 成功寫入後淘汰相依
+encoder／profile 讀取；standalone responder 政策不變。詳見
+[遷移指南](media2-frame-rate_zh.md) 及
+[K34 證據與 VE1 剩餘工作](active/mock-fidelity-video-encoder_zh.md)。
 
 ### 6.3 Profile
 
@@ -778,7 +793,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 | End-to-end flow | `tests/mock_workflow.rs` |
 | XML namespace、name、cardinality 與 sequence order 符合 ONVIF schema | `tests/mock_schema_shape.rs`；限制如下 |
 
-`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 現已使用固定版本的 Xerces 與外部 schema，驗證選定的 70 份 profile／source request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
+`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 已設定使用固定版本的 Xerces 與外部 schema，驗證選定的 84 份 profile／source／rate request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
 
 目前 49 組 round-trip 全數為 working，無 static 或 known-broken；35 組 token row 中 29 組可區分、6 組明確標記為 blind。測試表的每個 row 都宣告意圖，避免已知限制演變成未追蹤的永久盲點。
 

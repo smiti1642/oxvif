@@ -211,7 +211,7 @@ command remains a Python-backend diagnostic expected to expose K21.
 Windows/Linux CI now runs generic controls and independent Xerces qualification,
 followed by a separate **Official schemas and selected Media corpus** job with fixed source
 hashes, external directories and no uploaded artifacts. Both gate packaging;
-the latter explicitly exports and validates the selected 70 profile/source instances
+the latter explicitly exports and validates the selected 84 profile/source/rate instances
 after compilation. Each failed native command terminates the job; a missing
 export cannot pass because validation requires an existing, nonempty corpus.
 neither should be reported as full operation/corpus acceptance. Prior CI
@@ -232,7 +232,7 @@ from the driver, not a string search of the response.
 The ignored export requires `OXVIF_MOCK_CORPUS` naming a **new absolute external
 directory whose parent exists**. It refuses empty data, credential-bearing
 requests, relative/existing destinations and checkout/ancestor destinations.
-The exporter preserves XML bytes, emits 70 files plus `cases.json`, and records
+The exporter preserves XML bytes, emits 84 files plus `cases.json`, and records
 explicit Envelope/Body/operation expectations for requests and success/Fault
 responses. It never reads environment credentials or overwrites existing files.
 This is a diagnostic corpus, not comprehensive per-operation acceptance.
@@ -280,13 +280,20 @@ strict Xerces XSD 1.1 on Windows; the explicitly selected legacy structural chec
 passed. Sources/corpus stay outside the checkout. This is not complete semantic or
 ONVIF certification evidence; see [VS1](mock-fidelity-video-source.md).
 
+K34 adds seven rate exchanges across three additional operations: fractional read/write,
+integral restoration, explicit Media1 view refusal and a raw negative-rate refusal.
+On 2026-09-11 the combined external `oxvif-profile-corpus-20260911-06` passed strict
+Xerces XSD 1.1: **84 instances**, 42 exchanges, 24 operations, 30 successes and
+12 Faults. The explicitly selected legacy shape check also passed. These are local
+results; this batch's hosted CI must be checked separately. See [K34](mock-fidelity-video-encoder.md).
+
 ## Next work
 
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
-and expand the corpus beyond the selected 21-operation batches. W21 remains PARTIAL: complete the
+and expand the corpus beyond the selected 24-operation batches. W21 remains PARTIAL: complete the
 positive/negative envelope, payload and Fault instances from the mock corpus and
 qualify broader paths against actual emitted exchanges. W22 now checks the selected
-70-instance profile/source corpus on Windows/Linux, but the full fail-closed instance
+84-instance profile/source/rate corpus on Windows/Linux, but the full fail-closed instance
 CI gate still needs the remaining operation batches. Do not substitute this tool
 experiment for P-B's per-operation field/Fault/semantic review.
 

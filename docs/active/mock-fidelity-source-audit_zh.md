@@ -23,7 +23,7 @@
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 233 個直接呼叫：218 個位於頂層 test module 之前，15 個
+- 五種 reader 拼法共 231 個直接呼叫：216 個位於頂層 test module 之前，15 個
   位於其中。前者分布於 68 個 enclosing symbol（VS1 重新量測），**不是** 68 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
@@ -251,7 +251,7 @@
 | `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
-| `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
+| `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:10` |
 | `src/mock/services/media.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::require_config_token` | `extract_tag` | `production:1` |
@@ -351,7 +351,9 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 | K28 | 已錄製 request 的 URL 憑證仍存於 `key_canon`，舊檔 key 載入時也未清除。虛構資料的 assertion failure 已重現兩項缺陷。 | W19：recording／replay／diff 投影與舊檔／caller lookup key 均清除 URL 帳密；載入不覆寫磁碟，正規化碰撞維持 last-write-wins。Raw envelope 仍僅針對指定格式去除憑證，並非通用秘密偵測器。 |
 | K24 | 固定來源的輸出型別審查發現 Media2 audio renderer／options 沿用 Media1 codec 名稱，共用 writer 也未經 service adapter 就直接儲存。XSD 字串合法性無法驗證兩者不同的 codec 詞彙。 | W01／W10：將 audio list／options、profile 內嵌 audio、共用寫入及 client 跨服務預期視為同一相依範圍審查。已由來源確認，具辨識力的 wire／state 重現待補。不可只改輸出而破壞寫入。 |
 | K25 | Audio encoder writer 儲存請求的 Multicast AutoStart；Media2 metadata 依 address 存在與否推導該值，但 mock 不實作 persistent streaming。外部輸出型別筆記指出該欄位的唯讀效果意義。 | W01／W10／W17：重現 read／write／capability 差異，修改預設前核對唯讀處理及 multicast 省略／提供行為。來源已確認，未驗證任何實際 RTP 效果。 |
-| K26 | `apply_video_encoder_write` 直接儲存 Encoding，兩個 video renderer 均輸出共用名稱；Media2 專屬 codec 可能未經可表示性政策就進入 Media1 view。 | W01／W10／W17：重現 H265 write／profile／list／options 組合，核對兩種服務契約並明示共用狀態 view／拒絕策略；不可靜默轉換 codec 身分或放寬 schema。來源風險已確認，wire 重現待補。 |
+| K26 | `apply_video_encoder_write` 直接儲存 Encoding，兩個 video renderer 均輸出共用名稱；Media2 專屬 codec 可能未經 codec 可表示性政策就進入 Media1 view；K34 僅防護幀率。 | W01／W10／W17：重現 H265 write／profile／list／options 組合，核對兩種服務契約並明示共用狀態 view／拒絕策略；不可靜默轉換 codec 身分或放寬 schema。來源風險已確認，wire 重現待補。 |
+| K34 — rate 契約已修正 | 公開 client 重現 12.5 → 0；無效幀率文字亦變成零，共用整數 mock storage 掩蓋不一致。 | 已核准下一個 minor 的 `f32` 遷移、嚴格 present rate 解析、outbound／serde 有限值防護、共用 mock rate、Media1 view 拒絕及成功後 replay 失效。詳見 [VE1 證據](mock-fidelity-video-encoder_zh.md)。 |
+| K35 — encoder 剩餘契約 | 非 rate 欄位仍使用全域 reader；selector／options／capacity 及完整 candidate 語意尚未完成。 | 依八張 [VE1 operation card](mock-fidelity-video-encoder_zh.md) 施工；K34 不表示這些路徑已驗收。 |
 | K23 | Windows CI run 34471659927（`2a488be`）的 `line_number_override_is_validated_but_never_changes_agent_or_plain_output` 失敗：逐位元 JSON 比較包含各自量測的 `meta.elapsed_ms`（0 與 9）。 | W22 測試框架修正：要求耗時為數字，JSON 相等比較只排除該確切欄位；保留其他全部欄位、stderr 及純文字輸出檢查，加入確定性的耗時／資料／型別控制。不改 CLI 輸出，不遮蔽其他 metadata。 |
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
 | K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |

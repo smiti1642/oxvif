@@ -912,6 +912,10 @@ impl OnvifSession {
     }
 
     /// List all video encoder configurations via the Media2 service.
+    ///
+    /// # Errors
+    /// Malformed present rate control errors instead of becoming zero; see
+    /// [`OnvifClient::get_video_encoder_configurations_media2`].
     pub async fn get_video_encoder_configurations_media2(
         &self,
     ) -> Result<Vec<VideoEncoderConfiguration2>, OnvifError> {
@@ -921,6 +925,10 @@ impl OnvifSession {
     }
 
     /// Retrieve a single video encoder configuration by token via the Media2 service.
+    ///
+    /// # Errors
+    /// Malformed present rate control errors instead of becoming zero; see
+    /// [`OnvifClient::get_video_encoder_configuration_media2`].
     pub async fn get_video_encoder_configuration_media2(
         &self,
         token: &str,
@@ -931,6 +939,11 @@ impl OnvifSession {
     }
 
     /// Apply a modified video encoder configuration via the Media2 service.
+    ///
+    /// # Errors
+    /// Negative or nonfinite frame rates are rejected before transport. Device
+    /// options still determine the usable range; see
+    /// [`OnvifClient::set_video_encoder_configuration_media2`].
     pub async fn set_video_encoder_configuration_media2(
         &self,
         config: &VideoEncoderConfiguration2,

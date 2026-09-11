@@ -15,10 +15,14 @@ pub fn resp_profiles(state: &SharedState) -> String {
     if snapshot.iter().any(|profile| profile.token.is_empty()) {
         return empty_profile_token_fault(crate::mock::fault::Code::Receiver);
     }
-    let items: String = snapshot
+    let items = snapshot
         .iter()
         .map(|p| render_profile(p, "Profiles", &cat))
-        .collect();
+        .collect::<Result<String, String>>();
+    let items = match items {
+        Ok(items) => items,
+        Err(fault) => return fault,
+    };
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
         &format!("<trt:GetProfilesResponse>{items}</trt:GetProfilesResponse>"),
@@ -38,13 +42,19 @@ pub fn resp_profile(state: &SharedState, operation: &crate::mock::request::Node)
         .iter()
         .find(|p| !want.is_empty() && p.token == want)
     {
-        Some(p) => soap(
-            r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-            &format!(
-                "<trt:GetProfileResponse>{}</trt:GetProfileResponse>",
-                render_profile(p, "Profile", &cat)
-            ),
-        ),
+        Some(p) => {
+            let profile = match render_profile(p, "Profile", &cat) {
+                Ok(profile) => profile,
+                Err(fault) => return fault,
+            };
+            soap(
+                r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+                &format!(
+                    "<trt:GetProfileResponse>{}</trt:GetProfileResponse>",
+                    profile
+                ),
+            )
+        }
         None => resp_soap_fault("ter:NoProfile", &format!("Profile not found: {want}")),
     }
 }
@@ -79,14 +89,24 @@ pub fn resp_snapshot_uri(base: &str) -> String {
     )
 }
 
-pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+pub fn handle_set_video_encoder_configuration(
+    state: &SharedState,
+    body: &str,
+    operation: &crate::mock::request::Node,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     match apply_video_encoder_write(
         state,
         body,
+        operation,
+        false,
         "NoConfigToken-SETVEC-5517",
         "NoSuchConfig-SETVEC-5518",
     ) {
-        Ok(()) => resp_empty("trt", "SetVideoEncoderConfigurationResponse"),
+        Ok(()) => {
+            *effect = Some(crate::mock::effect::Effect::VideoEncoderCommitted);
+            resp_empty("trt", "SetVideoEncoderConfigurationResponse")
+        }
         Err(fault) => fault,
     }
 }
@@ -211,7 +231,10 @@ pub fn handle_create_profile(
             "<trt:CreateProfileResponse>{}</trt:CreateProfileResponse>",
             // A freshly created profile carries no configurations yet, so the
             // catalogues are never consulted.
-            render_profile(&entry, "Profile", &catalogues(state))
+            match render_profile(&entry, "Profile", &catalogues(state)) {
+                Ok(profile) => profile,
+                Err(fault) => return fault,
+            }
         ),
     )
 }
@@ -412,84 +435,86 @@ pub(crate) fn create_profile_with_bindings(
 /// wrote state, so the identical call changed the device on one service only.
 /// Same class as the reported profile divergence, pointing the other way.
 ///
-/// The two bodies differ in exactly one place: Media2's encoder config is flat
-/// and carries `GovLength` / `Profile` as **attributes** of
-/// `tr2:Configuration`, which is what `tt:VideoEncoder2Configuration` declares;
-/// Media1 nests the gov length inside `<tt:H264>` and names the profile
-/// `<tt:H264Profile>` / `<tt:H265Profile>`. Every form is read here — a given
-/// body contains at most one, so there is nothing to disambiguate and no
-/// parameter to get wrong. The attribute is tried first: until 0.15 both sides
-/// used the element form, so a body still carrying `<tt:GovLength>` is a
-/// pre-0.15 caller, not a conformant one.
+/// K34 validates the service-specific, qualified rate block before any mutation.
+/// Media2 accepts fractional rates; Media1 requires an exactly representable
+/// nonnegative integer. An omitted block preserves both stored rate fields.
+/// Token selection and modification share one conditional write lock, so missing
+/// targets do not notify hooks. Successful writes produce a committed effect.
+///
+/// Other fields still use legacy body readers: Media2 codec attributes and
+/// Media1 codec children feed the same state. This is not a complete scoped
+/// configuration candidate; duplicate/ambiguous non-rate fields, unsupported
+/// settings and options-compatible adaptation remain VE1/K35 work.
 ///
 /// `Err` is a rendered SOAP fault. The reasons are per-service so an assertion
 /// can tell *which* service refused.
 pub(crate) fn apply_video_encoder_write(
     state: &SharedState,
     body: &str,
+    operation: &crate::mock::request::Node,
+    media2: bool,
     missing_reason: &str,
     unknown_prefix: &str,
 ) -> Result<(), String> {
+    let rate = super::video_rate::candidate(operation, media2)?;
     // The token *selects* which of the channels to write. An absent or unknown
     // token is a fault: with more than one encoder, writing to a guessed channel
     // is the same silent-wrong-answer failure the getters avoid.
     let Some(want) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) else {
         return Err(resp_soap_fault("env:Sender", missing_reason));
     };
-    if !state.read().video_encoders.iter().any(|c| c.token == want) {
-        return Err(resp_soap_fault(
-            "env:Sender",
-            &format!("{unknown_prefix}: {want}"),
-        ));
-    }
-    state.modify(|s| {
-        let Some(ve) = s.video_encoders.iter_mut().find(|c| c.token == want) else {
-            return;
-        };
-        if let Some(v) = extract_tag(body, "Name") {
-            ve.name = v;
-        }
-        if let Some(v) = extract_tag(body, "Encoding") {
-            ve.encoding = v;
-        }
-        if let Some(v) = extract_tag(body, "Width").and_then(|x| x.parse().ok()) {
-            ve.width = v;
-        }
-        if let Some(v) = extract_tag(body, "Height").and_then(|x| x.parse().ok()) {
-            ve.height = v;
-        }
-        if let Some(v) = extract_tag(body, "Quality").and_then(|x| x.parse().ok()) {
-            ve.quality = v;
-        }
-        if let Some(v) = extract_tag(body, "FrameRateLimit").and_then(|x| x.parse().ok()) {
-            ve.frame_rate_limit = v;
-        }
-        if let Some(v) = extract_tag(body, "BitrateLimit").and_then(|x| x.parse().ok()) {
-            ve.bitrate_limit = v;
-        }
-        // Media2 sends `GovLength` / `Profile` as attributes of
-        // `tr2:Configuration`; Media1 sends the gov length as an element
-        // *inside* `<tt:H264>` / `<tt:H265>` and the profile as
-        // `<tt:H264Profile>` / `<tt:H265Profile>`. Neither schema declares a
-        // flat `<tt:GovLength>` or `<tt:Profile>` child of the configuration,
-        // so neither is accepted here: reading the codec block by name rather
-        // than searching the whole body is what keeps a client that regresses
-        // to the pre-0.15 element form from being silently understood.
-        let codec = extract_tag(body, "H264").or_else(|| extract_tag(body, "H265"));
-        if let Some(v) = extract_attr(body, "Configuration", "GovLength")
-            .or_else(|| codec.as_deref().and_then(|c| extract_tag(c, "GovLength")))
-            .and_then(|x| x.parse().ok())
-        {
-            ve.gov_length = v;
-        }
-        if let Some(v) = extract_attr(body, "Configuration", "Profile")
-            .or_else(|| extract_tag(body, "H264Profile"))
-            .or_else(|| extract_tag(body, "H265Profile"))
-        {
-            ve.profile = v;
-        }
-    });
-    Ok(())
+    state.modify_returning_if(
+        |s| {
+            let Some(ve) = s.video_encoders.iter_mut().find(|c| c.token == want) else {
+                return Err(resp_soap_fault(
+                    "env:Sender",
+                    &format!("{unknown_prefix}: {want}"),
+                ));
+            };
+            if let Some(v) = extract_tag(body, "Name") {
+                ve.name = v;
+            }
+            if let Some(v) = extract_tag(body, "Encoding") {
+                ve.encoding = v;
+            }
+            if let Some(v) = extract_tag(body, "Width").and_then(|x| x.parse().ok()) {
+                ve.width = v;
+            }
+            if let Some(v) = extract_tag(body, "Height").and_then(|x| x.parse().ok()) {
+                ve.height = v;
+            }
+            if let Some(v) = extract_tag(body, "Quality").and_then(|x| x.parse().ok()) {
+                ve.quality = v;
+            }
+            if let Some((fps, bitrate)) = rate {
+                ve.frame_rate_limit = fps;
+                ve.bitrate_limit = bitrate;
+            }
+            // Media2 sends `GovLength` / `Profile` as attributes of
+            // `tr2:Configuration`; Media1 sends the gov length as an element
+            // *inside* `<tt:H264>` / `<tt:H265>` and the profile as
+            // `<tt:H264Profile>` / `<tt:H265Profile>`. Neither schema declares a
+            // flat `<tt:GovLength>` or `<tt:Profile>` child of the configuration,
+            // so neither is accepted here: reading the codec block by name rather
+            // than searching the whole body is what keeps a client that regresses
+            // to the pre-0.15 element form from being silently understood.
+            let codec = extract_tag(body, "H264").or_else(|| extract_tag(body, "H265"));
+            if let Some(v) = extract_attr(body, "Configuration", "GovLength")
+                .or_else(|| codec.as_deref().and_then(|c| extract_tag(c, "GovLength")))
+                .and_then(|x| x.parse().ok())
+            {
+                ve.gov_length = v;
+            }
+            if let Some(v) = extract_attr(body, "Configuration", "Profile")
+                .or_else(|| extract_tag(body, "H264Profile"))
+                .or_else(|| extract_tag(body, "H265Profile"))
+            {
+                ve.profile = v;
+            }
+            Ok(())
+        },
+        Result::is_ok,
+    )
 }
 
 /// Which slot of a [`ProfileEntry`] a configuration binding writes to.
@@ -786,7 +811,7 @@ pub(crate) fn delete_profile_in_state(state: &SharedState, token: &str) -> Delet
 // audio encoder alike. Until 0.15 the details for VSC_1, VEC_1 and VEC_2 were
 // literals here, which is how `VEC_2` came to have three names in three files.
 
-fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
+fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> Result<String, String> {
     let vsc = p
         .video_source_config_token
         .as_deref()
@@ -796,6 +821,7 @@ fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
         .video_encoder_config_token
         .as_deref()
         .map(|t| render_vec_inline(&cat.vecs, t))
+        .transpose()?
         .unwrap_or_default();
     // Both were `match token { "ASC_1" => <literal>, _ => "" }`, so a profile
     // bound to any other token rendered **nothing** and said so nowhere.
@@ -828,7 +854,7 @@ fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
     // 0.15 and the order every reader assumes. `tr2:ConfigurationSet` happens
     // to declare the same interleaving, but it is a different type in a
     // different schema and each order is derived on its own.
-    format!(
+    Ok(format!(
         r#"<trt:{tag} token="{token}" fixed="{fixed}">
           <tt:Name>{name}</tt:Name>
           {vsc}{asc}{vec}{aec}{ptz}
@@ -836,7 +862,7 @@ fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
         token = crate::types::xml_escape(&p.token),
         fixed = p.fixed,
         name = crate::types::xml_escape(&p.name),
-    )
+    ))
 }
 
 /// Every catalogue a profile can inline, cloned under a **single** read lock.
@@ -916,10 +942,10 @@ const VEC_TAIL: &str = concat!(
     "<tt:SessionTimeout>PT0S</tt:SessionTimeout>",
 );
 
-fn render_vec_inline(vecs: &[VideoEncoderState], token: &str) -> String {
+fn render_vec_inline(vecs: &[VideoEncoderState], token: &str) -> Result<String, String> {
     match vecs.iter().find(|c| c.token == token) {
         Some(c) => render_vec_body(c, "tt:VideoEncoderConfiguration"),
-        None => String::new(),
+        None => Ok(String::new()),
     }
 }
 
@@ -934,7 +960,8 @@ fn render_vec_inline(vecs: &[VideoEncoderState], token: &str) -> String {
 /// The `tt:H264` block is emitted only for H264, because the schema element is
 /// encoding-specific; a JPEG config carrying `tt:H264` is not something a
 /// conformant device sends.
-fn render_vec_body(c: &VideoEncoderState, tag: &str) -> String {
+fn render_vec_body(c: &VideoEncoderState, tag: &str) -> Result<String, String> {
+    super::video_rate::view(c, false)?;
     let codec = if c.encoding == "H264" {
         format!(
             "<tt:H264><tt:GovLength>{gov}</tt:GovLength>\
@@ -945,7 +972,7 @@ fn render_vec_body(c: &VideoEncoderState, tag: &str) -> String {
     } else {
         String::new()
     };
-    format!(
+    Ok(format!(
         r#"<{tag} token="{token}">
           <tt:Name>{name}</tt:Name>
           <tt:UseCount>{use_count}</tt:UseCount>
@@ -964,7 +991,7 @@ fn render_vec_body(c: &VideoEncoderState, tag: &str) -> String {
         quality = c.quality,
         fps = c.frame_rate_limit,
         bitrate = c.bitrate_limit,
-    )
+    ))
 }
 
 /// `<tt:Multicast>` — one shape, shared by every configuration that has one.
@@ -1093,11 +1120,15 @@ pub fn resp_video_source_configurations(
 pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> String {
     let vecs = state.read().video_encoders.clone();
     let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
-    let items: String = vecs
+    let items = vecs
         .iter()
         .filter(|c| want.as_deref().is_none_or(|t| t == c.token))
         .map(|c| render_vec_body(c, "trt:Configurations"))
-        .collect();
+        .collect::<Result<String, String>>();
+    let items = match items {
+        Ok(items) => items,
+        Err(fault) => return fault,
+    };
     soap(
         r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
         &format!(
@@ -1218,13 +1249,19 @@ pub fn resp_video_encoder_configuration(state: &SharedState, body: &str) -> Stri
     };
     let vecs = state.read().video_encoders.clone();
     match vecs.iter().find(|c| c.token == want) {
-        Some(c) => soap(
-            r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-            &format!(
-                "<trt:GetVideoEncoderConfigurationResponse>{}</trt:GetVideoEncoderConfigurationResponse>",
-                render_vec_body(c, "trt:Configuration")
-            ),
-        ),
+        Some(c) => {
+            let configuration = match render_vec_body(c, "trt:Configuration") {
+                Ok(config) => config,
+                Err(fault) => return fault,
+            };
+            soap(
+                r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+                &format!(
+                    "<trt:GetVideoEncoderConfigurationResponse>{}</trt:GetVideoEncoderConfigurationResponse>",
+                    configuration
+                ),
+            )
+        }
         None => resp_soap_fault("env:Sender", &format!("NoSuchConfig-VEC-5506: {want}")),
     }
 }

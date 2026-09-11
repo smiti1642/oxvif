@@ -905,7 +905,11 @@ pub struct VideoEncoderState {
     pub width: u32,
     pub height: u32,
     pub quality: f32,
-    pub frame_rate_limit: u32,
+    /// Finite, nonnegative Media2 frame rate. Fractional rates cannot be
+    /// represented by a Media1 view and produce an explicit mock-policy Fault.
+    /// Changed from `u32`; old integer JSON snapshots remain readable.
+    #[serde(with = "crate::types::frame_rate_serde")]
+    pub frame_rate_limit: f32,
     pub bitrate_limit: u32,
     pub gov_length: u32,
     pub profile: String,
@@ -1593,7 +1597,7 @@ fn default_video_encoders() -> Vec<VideoEncoderState> {
             width: 1920,
             height: 1080,
             quality: 5.0,
-            frame_rate_limit: 25,
+            frame_rate_limit: 25.0,
             bitrate_limit: 4096,
             gov_length: 25,
             profile: "Main".into(),
@@ -1615,7 +1619,7 @@ fn default_video_encoders() -> Vec<VideoEncoderState> {
             width: 704,
             height: 480,
             quality: 4.0,
-            frame_rate_limit: 15,
+            frame_rate_limit: 15.0,
             bitrate_limit: 1024,
             gov_length: 30,
             profile: "Main".into(),
@@ -1631,7 +1635,7 @@ fn default_video_encoders() -> Vec<VideoEncoderState> {
             width: 1280,
             height: 720,
             quality: 5.0,
-            frame_rate_limit: 25,
+            frame_rate_limit: 25.0,
             bitrate_limit: 2048,
             gov_length: 50,
             profile: "High".into(),
@@ -1646,7 +1650,7 @@ fn default_video_encoders() -> Vec<VideoEncoderState> {
             width: 704,
             height: 480,
             quality: 3.0,
-            frame_rate_limit: 10,
+            frame_rate_limit: 10.0,
             bitrate_limit: 512,
             gov_length: 15,
             profile: "Baseline".into(),
@@ -3982,7 +3986,6 @@ mod tests {
     /// so it is replaced by one that reads the sibling channels.
     #[test]
     fn media2_set_video_encoder_writes_only_the_named_channel() {
-        use crate::mock::services::media2;
         let s = new_state();
         // `GovLength` / `Profile` are attributes of `tr2:Configuration` — the
         // shape `tt:VideoEncoder2Configuration` declares and the one the client
@@ -3995,7 +3998,7 @@ mod tests {
             <tt:RateControl><tt:FrameRateLimit>12</tt:FrameRateLimit><tt:BitrateLimit>777</tt:BitrateLimit></tt:RateControl>
             <tt:Quality>6</tt:Quality>
           </tr2:Configuration></tr2:SetVideoEncoderConfiguration>"#;
-        let resp = media2::handle_set_video_encoder_configuration(&s, body);
+        let resp = encoder_write(&s, body);
         assert!(resp.contains("SetVideoEncoderConfigurationResponse"));
         assert!(!resp.contains("Fault"));
 
@@ -4005,6 +4008,7 @@ mod tests {
         assert_eq!(three.name, "Retuned");
         assert_eq!((three.width, three.height), (704, 480));
         assert_eq!(three.bitrate_limit, 777);
+        assert_eq!(three.frame_rate_limit, 12.0);
         assert_eq!(three.gov_length, 60);
         assert_eq!(three.profile, "Baseline");
         // The other three keep their factory values — in particular VEC_1 must
@@ -4019,9 +4023,8 @@ mod tests {
 
     #[test]
     fn media2_set_video_encoder_without_token_faults() {
-        use crate::mock::services::media2;
         let s = new_state();
-        let resp = media2::handle_set_video_encoder_configuration(
+        let resp = encoder_write(
             &s,
             "<tr2:SetVideoEncoderConfiguration><tr2:Configuration>\
                <tt:Name>Nope</tt:Name>\
@@ -4034,9 +4037,8 @@ mod tests {
 
     #[test]
     fn media2_set_video_encoder_unknown_token_faults() {
-        use crate::mock::services::media2;
         let s = new_state();
-        let resp = media2::handle_set_video_encoder_configuration(
+        let resp = encoder_write(
             &s,
             r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_88">
                <tt:Name>Nope</tt:Name>
@@ -4047,6 +4049,17 @@ mod tests {
             "got: {resp}"
         );
         assert!(s.read().video_encoders.iter().all(|c| c.name != "Nope"));
+    }
+
+    fn encoder_write(state: &MockState, body: &str) -> String {
+        crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver20/media/wsdl/SetVideoEncoderConfiguration",
+            "http://mock",
+            state,
+            &format!(
+                "<s:Envelope xmlns:s='http://www.w3.org/2003/05/soap-envelope' xmlns:tr2='http://www.onvif.org/ver20/media/wsdl' xmlns:tt='http://www.onvif.org/ver10/schema'><s:Body>{body}</s:Body></s:Envelope>"
+            ),
+        )
     }
 
     // ── Imaging: every operation is per-VideoSourceToken ──────────────────

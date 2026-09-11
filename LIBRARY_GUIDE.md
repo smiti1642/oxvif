@@ -634,6 +634,10 @@ client.set_video_encoder_configuration(media_url, &enc).await?;
 
 Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 support and a simplified encoder config structure. All Media2 methods use `media2_url`.
 
+Unreleased: Media2 frame-rate limits now use `f32`; fractional values are preserved,
+and malformed present rate control returns an error. See the
+[Rust/JSON migration and Media1 mock policy](docs/media2-frame-rate.md).
+
 ### Media1 vs Media2 key differences
 
 | Feature | Media1 | Media2 |

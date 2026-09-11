@@ -12,6 +12,8 @@ mod ptz_config;
 mod recording;
 mod service_capabilities;
 mod video;
+#[cfg(feature = "mock")]
+pub(crate) use video::frame_rate_serde;
 
 pub use audio::*;
 pub use capabilities::*;

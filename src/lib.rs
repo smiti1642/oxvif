@@ -11,6 +11,12 @@
 //!
 //! ## Quick navigation
 //!
+//! Unreleased Media2 migration: [`VideoRateControl2::frame_rate_limit`] uses `f32`
+//! to preserve fractional rates. Malformed present rate control returns an error;
+//! negative/nonfinite rates fail before writing. Ordinary integer JSON remains
+//! readable. Media1's public rate type is unchanged. See the
+//! [migration guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/media2-frame-rate.md).
+//!
 //! | Section | Purpose |
 //! | --- | --- |
 //! | [Profile coverage](#onvif-profile-coverage) | Supported ONVIF profiles and known gaps. |

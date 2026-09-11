@@ -41,7 +41,11 @@ fn require_config_token(body: &str, missing_reason: &str) -> Result<String, Stri
 /// configuration they both name.
 ///
 /// [`MediaProfile2`]: crate::MediaProfile2
-fn render_profile_media2(p: &ProfileEntry, tag: &str, cat: &media::Catalogues) -> String {
+fn render_profile_media2(
+    p: &ProfileEntry,
+    tag: &str,
+    cat: &media::Catalogues,
+) -> Result<String, String> {
     // Declaration order of `tr2:ConfigurationSet`: VideoSource, AudioSource,
     // VideoEncoder, AudioEncoder, Analytics, PTZ, … — audio source sits
     // *between* the two video members. This emitted the two video members
@@ -63,6 +67,7 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str, cat: &media::Catalogues) -
         .as_deref()
         .and_then(|t| cat.vecs.iter().find(|c| c.token == t))
         .map(|c| render_video_encoder(c, "tr2:VideoEncoder"))
+        .transpose()?
         .unwrap_or_default();
     let aec = p
         .audio_encoder_config_token
@@ -93,7 +98,7 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str, cat: &media::Catalogues) -
     // `media2.wsdl` sets `elementFormDefault="qualified"`, so it is in the
     // Media2 namespace. Media1's `tt:Profile` declares its own `Name` in
     // `onvif.xsd`, which is why the same-looking element differs by service.
-    format!(
+    Ok(format!(
         r#"<tr2:{tag} token="{token}" fixed="{fixed}">
           <tr2:Name>{name}</tr2:Name>
           {configurations}
@@ -101,7 +106,7 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str, cat: &media::Catalogues) -
         token = crate::types::xml_escape(&p.token),
         fixed = p.fixed,
         name = crate::types::xml_escape(&p.name),
-    )
+    ))
 }
 
 /// The device's profiles, in the Media2 shape.
@@ -157,7 +162,7 @@ pub fn resp_profiles_media2(state: &SharedState, operation: &crate::mock::reques
     // All expands to every associated configuration; other lists match literally.
     // Project onto clones so reads cannot unbind shared profiles.
     let selected = |kind: &str| types.as_slice() == ["All"] || types.contains(&kind);
-    let items: String = snapshot
+    let items = snapshot
         .into_iter()
         .filter(|profile| token.is_none_or(|token| profile.token == token))
         .map(|mut profile| {
@@ -174,7 +179,11 @@ pub fn resp_profiles_media2(state: &SharedState, operation: &crate::mock::reques
             }
             render_profile_media2(&profile, "Profiles", &cat)
         })
-        .collect();
+        .collect::<Result<String, String>>();
+    let items = match items {
+        Ok(items) => items,
+        Err(fault) => return fault,
+    };
     soap(
         NS,
         &format!("<tr2:GetProfilesResponse>{items}</tr2:GetProfilesResponse>"),
@@ -323,11 +332,15 @@ pub fn resp_video_encoder_configuration_options_media2(state: &SharedState, body
 pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> String {
     let vecs = state.read().video_encoders.clone();
     let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
-    let items: String = vecs
+    let items = vecs
         .iter()
         .filter(|c| want.as_deref().is_none_or(|t| t == c.token))
         .map(|c| render_video_encoder(c, "tr2:Configurations"))
-        .collect();
+        .collect::<Result<String, String>>();
+    let items = match items {
+        Ok(items) => items,
+        Err(fault) => return fault,
+    };
     soap(
         NS,
         &format!(
@@ -485,14 +498,24 @@ fn configuration_plan(
     Ok(planned)
 }
 
-pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
+pub fn handle_set_video_encoder_configuration(
+    state: &SharedState,
+    body: &str,
+    operation: &crate::mock::request::Node,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
     match media::apply_video_encoder_write(
         state,
         body,
+        operation,
+        true,
         "NoConfigToken-SETVEC2-5515",
         "NoSuchConfig-SETVEC2-5516",
     ) {
-        Ok(()) => resp_empty("tr2", "SetVideoEncoderConfigurationResponse"),
+        Ok(()) => {
+            *effect = Some(crate::mock::effect::Effect::VideoEncoderCommitted);
+            resp_empty("tr2", "SetVideoEncoderConfigurationResponse")
+        }
         Err(fault) => fault,
     }
 }
@@ -514,8 +537,9 @@ pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -
 /// `UNKNOWN-CHILD` rule could not report `GovLength` at all. Its
 /// `ATTR-AS-ELEMENT` rule, added later in 0.15, can: reverting this line opens
 /// two rows, one here and one on the profile that inlines the same helper.
-fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> String {
-    format!(
+fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> Result<String, String> {
+    super::video_rate::view(ve, true)?;
+    Ok(format!(
         r#"<{qname} token="{token}" GovLength="{gov}" Profile="{profile}">
             <tt:Name>{name}</tt:Name>
             <tt:UseCount>{use_count}</tt:UseCount>
@@ -538,7 +562,7 @@ fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> String {
         gov = ve.gov_length,
         profile = ve.profile,
         quality = ve.quality,
-    )
+    ))
 }
 
 /// `tr2:EncoderInstanceInfo` declares `Codec` (`tr2:EncoderInstance`, `[0..*]`)

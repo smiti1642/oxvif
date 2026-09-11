@@ -238,7 +238,7 @@ fn dispatch_media(
         // Was `resp_empty` — success with no write, while the Media2 arm below
         // wrote state. One catalogue, so both must write.
         "SetVideoEncoderConfiguration" => {
-            media::handle_set_video_encoder_configuration(state, body)
+            media::handle_set_video_encoder_configuration(state, body, operation, effect)
         }
         "GetVideoEncoderConfigurationOptions" => {
             media::resp_video_encoder_configuration_options(state, body)
@@ -316,7 +316,7 @@ fn dispatch_media2(
         }
         "GetVideoEncoderConfigurations" => media2::resp_video_encoder_configurations(state, body),
         "SetVideoEncoderConfiguration" => {
-            media2::handle_set_video_encoder_configuration(state, body)
+            media2::handle_set_video_encoder_configuration(state, body, operation, effect)
         }
         "GetVideoEncoderConfigurationOptions" => {
             media2::resp_video_encoder_configuration_options_media2(state, body)

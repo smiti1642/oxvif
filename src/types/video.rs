@@ -856,10 +856,39 @@ pub struct VideoEncoderConfiguration2 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct VideoRateControl2 {
-    /// Maximum output frame rate, in frames per second.
-    pub frame_rate_limit: u32,
+    /// Desired output frame rate, including fractional values such as `12.5`.
+    ///
+    /// Changed from `u32` to `f32` for the next minor release. Integer struct
+    /// literals must become float literals (for example, `25.0`). XML reads and
+    /// writes reject negative or nonfinite rates; an explicit zero is retained.
+    /// Device-specific usable ranges must still be obtained from encoder options.
+    #[cfg_attr(feature = "serde", serde(with = "frame_rate_serde"))]
+    pub frame_rate_limit: f32,
     /// Maximum output bitrate, in kbps.
     pub bitrate_limit: u32,
+}
+
+/// Keep JSON from replacing a nonfinite frame rate with null. Shared with the
+/// mock's persisted rate; other numeric contracts are deliberately untouched.
+#[cfg(any(feature = "serde", feature = "mock"))]
+pub(crate) mod frame_rate_serde {
+    use serde::{Deserialize, Deserializer, Serializer};
+    const MESSAGE: &str = "frame rate must be finite and nonnegative";
+
+    pub fn serialize<S: Serializer>(value: &f32, serializer: S) -> Result<S::Ok, S::Error> {
+        if !value.is_finite() || *value < 0.0 {
+            return Err(serde::ser::Error::custom(MESSAGE));
+        }
+        serializer.serialize_f32(*value)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f32, D::Error> {
+        let value = f32::deserialize(deserializer)?;
+        if !value.is_finite() || value < 0.0 {
+            return Err(serde::de::Error::custom(MESSAGE));
+        }
+        Ok(value)
+    }
 }
 
 impl VideoEncoderConfiguration2 {
@@ -869,6 +898,40 @@ impl VideoEncoderConfiguration2 {
             .filter(|t| !t.is_empty())
             .ok_or_else(|| SoapError::missing("Configuration/@token"))?
             .to_string();
+        if node.children_named("RateControl").count() > 1 {
+            return Err(SoapError::invalid("Configuration/RateControl", "duplicate field").into());
+        }
+        let rate_control = node
+            .child("RateControl")
+            .map(|rc| -> Result<VideoRateControl2, OnvifError> {
+                let scalar = |name: &str, path: &'static str| -> Result<&str, OnvifError> {
+                    if rc.children_named(name).count() > 1 {
+                        return Err(SoapError::invalid(path, "duplicate field").into());
+                    }
+                    let child = rc.child(name).ok_or_else(|| SoapError::missing(path))?;
+                    if !child.children.is_empty() {
+                        return Err(SoapError::invalid(path, "non-scalar value").into());
+                    }
+                    Ok(child.text())
+                };
+                const FPS: &str = "Configuration/RateControl/FrameRateLimit";
+                const BITRATE: &str = "Configuration/RateControl/BitrateLimit";
+                let value = scalar("FrameRateLimit", FPS)?;
+                let frame_rate_limit = value
+                    .parse::<f32>()
+                    .ok()
+                    .filter(|v| v.is_finite() && *v >= 0.0)
+                    .ok_or_else(|| SoapError::invalid(FPS, value))?;
+                let value = scalar("BitrateLimit", BITRATE)?;
+                let bitrate_limit = value
+                    .parse::<u32>()
+                    .map_err(|_| SoapError::invalid(BITRATE, value))?;
+                Ok(VideoRateControl2 {
+                    frame_rate_limit,
+                    bitrate_limit,
+                })
+            })
+            .transpose()?;
         Ok(Self {
             token,
             name: xml_str(node, "Name").unwrap_or_default(),
@@ -884,10 +947,7 @@ impl VideoEncoderConfiguration2 {
                 .child("Quality")
                 .and_then(|n| n.text().parse().ok())
                 .unwrap_or(0.0),
-            rate_control: node.child("RateControl").map(|rc| VideoRateControl2 {
-                frame_rate_limit: xml_u32(rc, "FrameRateLimit").unwrap_or(0),
-                bitrate_limit: xml_u32(rc, "BitrateLimit").unwrap_or(0),
-            }),
+            rate_control,
             // Attributes, not child elements. `tt:VideoEncoder2Configuration`
             // declares `GovLength` and `Profile` as `xs:attribute`; the same
             // two names are child elements on Media1's `tt:H264Configuration`,
@@ -909,7 +969,16 @@ impl VideoEncoderConfiguration2 {
     }
 
     /// Serialise to a `<tr2:Configuration>` XML fragment for `SetVideoEncoderConfiguration` (Media2).
-    pub(crate) fn to_xml_body(&self) -> String {
+    pub(crate) fn to_xml_body(&self) -> Result<String, OnvifError> {
+        if let Some(rate) = &self.rate_control
+            && (!rate.frame_rate_limit.is_finite() || rate.frame_rate_limit < 0.0)
+        {
+            return Err(SoapError::invalid(
+                "Configuration/RateControl/FrameRateLimit",
+                rate.frame_rate_limit.to_string(),
+            )
+            .into());
+        }
         let res = format!(
             "<tt:Resolution><tt:Width>{}</tt:Width><tt:Height>{}</tt:Height></tt:Resolution>",
             self.resolution.width, self.resolution.height
@@ -936,7 +1005,7 @@ impl VideoEncoderConfiguration2 {
             .as_deref()
             .map(|p| format!(" Profile=\"{}\"", xml_escape(p)))
             .unwrap_or_default();
-        format!(
+        Ok(format!(
             "<tr2:Configuration token=\"{token}\"{gov}{profile}>\
                <tt:Name>{name}</tt:Name>\
                <tt:UseCount>{use_count}</tt:UseCount>\
@@ -951,7 +1020,7 @@ impl VideoEncoderConfiguration2 {
             // through `Display` would put it on the wire unescaped.
             encoding = xml_escape(self.encoding.as_str()),
             quality = self.quality,
-        )
+        ))
     }
 }
 

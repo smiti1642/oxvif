@@ -164,6 +164,11 @@ impl OnvifClient {
     ///
     /// Returns [`VideoEncoderConfiguration2`] which uses a flat layout with
     /// native H.265 support.
+    ///
+    /// # Errors
+    /// A present rate-control block must contain valid rate and bitrate scalars;
+    /// missing, duplicate, nested or invalid values error instead of becoming zero.
+    /// Fractional rates are preserved; negative and nonfinite rates are rejected.
     pub async fn get_video_encoder_configurations_media2(
         &self,
         media2_url: &str,
@@ -178,6 +183,10 @@ impl OnvifClient {
     }
 
     /// Retrieve a single video encoder configuration by token from the Media2 service.
+    ///
+    /// # Errors
+    /// Malformed present rate control fails as described by
+    /// [`Self::get_video_encoder_configurations_media2`]; absence remains `None`.
     pub async fn get_video_encoder_configuration_media2(
         &self,
         media2_url: &str,
@@ -204,6 +213,11 @@ impl OnvifClient {
     /// Apply a modified video encoder configuration via the Media2 service.
     ///
     /// Note: Media2 does not use `ForcePersistence`.
+    ///
+    /// # Errors
+    /// Negative or nonfinite frame-rate limits are rejected before transport.
+    /// Device-specific rate ranges remain the device's responsibility; query
+    /// encoder options before choosing a setting.
     pub async fn set_video_encoder_configuration_media2(
         &self,
         media2_url: &str,
@@ -212,7 +226,7 @@ impl OnvifClient {
         const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/SetVideoEncoderConfiguration";
         let body = format!(
             "<tr2:SetVideoEncoderConfiguration>{cfg}</tr2:SetVideoEncoderConfiguration>",
-            cfg = config.to_xml_body()
+            cfg = config.to_xml_body()?
         );
 
         let xml = self.call(media2_url, ACTION, &body).await?;

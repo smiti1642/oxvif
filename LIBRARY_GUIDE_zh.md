@@ -366,6 +366,9 @@ client.set_video_encoder_configuration(media_url, &enc).await?;
 
 Media2 是 Media1 的後繼介面，原生支援 H.265，且 encoder configuration 結構較扁平。所有方法使用 `media2_url`。
 
+尚未發布：Media2 幀率限制改用 `f32`，保留小數；已提供但無效的 rate control 會回錯誤。
+詳見 [Rust／JSON 遷移與 Media1 mock 政策](docs/media2-frame-rate_zh.md)。
+
 | 特性 | Media1 | Media2 |
 |---|---|---|
 | H.265 | `Other(String)` | `VideoEncoding::H265` |

@@ -7,6 +7,7 @@ use std::sync::Arc;
 pub(crate) enum Effect {
     ProfilesChanged,
     VideoSourceChanged,
+    VideoEncoderCommitted,
 }
 
 pub(crate) type EffectObserver = Arc<dyn Fn(Effect) + Send + Sync>;
@@ -29,5 +30,7 @@ pub(crate) fn tracks_commit(action: &str) -> bool {
             | "http://www.onvif.org/ver20/media/wsdl/RemoveConfiguration"
             | "http://www.onvif.org/ver10/media/wsdl/SetVideoSourceConfiguration"
             | "http://www.onvif.org/ver20/media/wsdl/SetVideoSourceConfiguration"
+            | "http://www.onvif.org/ver10/media/wsdl/SetVideoEncoderConfiguration"
+            | "http://www.onvif.org/ver20/media/wsdl/SetVideoEncoderConfiguration"
     )
 }

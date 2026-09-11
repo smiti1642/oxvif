@@ -22,6 +22,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Breaking, next minor:** Media2 `VideoRateControl2.frame_rate_limit` and mock
+  `VideoEncoderState.frame_rate_limit` change from `u32` to `f32`; fractional rates
+  no longer silently parse as zero. Present incomplete/invalid rate blocks error,
+  and negative/nonfinite rates fail before writes. Serde retains ordinary integer
+  JSON input but emits potentially fractional numbers and refuses invalid rates.
+  Mock Media1 explicitly faults on unrepresentable fractional views; built-in
+  replay preserves recordings on refused encoder writes. Change Rust literals
+  such as `25` to `25.0` and review integer-only consumers; see the
+  [migration guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/media2-frame-rate.md).
 - Mock video source configuration now validates complete scoped settings before
   an atomic write across both Media services. Invalid values, unknown references
   and unmodeled offsets/extensions no longer silently succeed. Source options

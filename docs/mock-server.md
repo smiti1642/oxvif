@@ -30,6 +30,7 @@ omission is a bug, a documented one is a design decision.**
 | [5. State model](#5-state-model) | Which services share mutable state? |
 | [6. Seeded fixture](#6-seeded-fixture) | What device, media, PTZ, audio, and recording data exists initially? |
 | [6.2.1 Source configuration](#621-source-configuration-contract) | Which source settings and selectors are modeled? |
+| [6.2.2 Encoder frame rates](#622-encoder-frame-rates) | Fractional rates, state migration and Media1 limits |
 | [7. Operation reference](#7-operation-reference) | Which operations are stateful, static, or unsupported? |
 | [8. Worked examples](#8-worked-examples) | What do representative requests and responses look like? |
 | [9. Error model](#9-error-model) | Which SOAP fault shapes and codes are emitted? |
@@ -470,6 +471,22 @@ and ProfileToken. The mock permits source reassignment for all profiles and does
 model physical encoder-routing conflicts. Built-in replay preserves recordings on
 refusal and retires dependent source/profile/options reads only after a commit.
 See [VS1 evidence and limits](active/mock-fidelity-video-source.md).
+
+### 6.2.2 Encoder frame rates
+
+**Unreleased:** shared encoder rates now use `f32`. Present scoped rate blocks
+are validated before mutation; invalid rates/bitrates leave the whole state and
+change hook unchanged. Omission retains the stored rate. This is a rate-only
+boundary, not complete encoder-field validation or options conformance.
+
+Media2 preserves fractional rates. A Media1 encoder/profile response containing
+an unrepresentable rate returns a top-level Receiver / `mock:RequestPolicy` Fault,
+without rounding, omission or mutation. Invalid manually seeded rates likewise
+refuse rendering. Ordinary old integer JSON loads; persistence rejects negative
+and nonfinite rates instead of emitting `null`. Built-in replay retires dependent
+encoder/profile reads only after a successful encoder write; standalone responder
+policy is unchanged. See the [migration guide](media2-frame-rate.md) and
+[K34 evidence / remaining VE1 work](active/mock-fidelity-video-encoder.md).
 
 ### 6.3 Profiles
 
@@ -1269,7 +1286,7 @@ from that schema may enter this repository. Explicitly selecting the test now
 fails if resources are missing; the external SOAP 1.2 envelope schema is also
 required. Node-scoped namespace resolution and separate Envelope/payload checks
 include Fault structure, but do not validate all XSD values or error semantics.
-Separate Windows/Linux CI now validates the selected 70 profile/source request/response
+Separate Windows/Linux CI is configured to validate the selected 84 profile/source/rate request/response
 instances with independently pinned Xerces and external schemas. That limited
 corpus does not cover all operations or authentication; the inventory job alone
 does not validate XML. See the

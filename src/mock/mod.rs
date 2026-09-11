@@ -79,6 +79,10 @@
 //! values refuse without hooks or replay invalidation. Oversized positive crops
 //! are clamped to the selected sensor and exposed through both service views.
 //! Source options follow physical sensor dimensions, not the mutable crop.
+//! Shared encoder rates use `f32`; present rate blocks validate before mutation.
+//! Media1 views with fractional rates return an explicit model-policy Fault rather
+//! than rounding. Invalid seeded rates also refuse rendering; persistence rejects
+//! negative/nonfinite rates. Other encoder fields/options remain under review.
 //!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A
 //! mock that answers everything is not a test harness — it is a way of proving

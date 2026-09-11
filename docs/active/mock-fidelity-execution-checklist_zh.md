@@ -144,8 +144,8 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W18／M4／PARTIAL | W10–W16 候選行為 | K13 無碰撞配置、K16 原子 binding plan、條件式通知；K08 hook 在鎖外接收 commit 快照，profile／catalogue 讀取共用一次快照 | 選定配置、binding、reentrant 及三路徑 profile snapshot 控制；更廣泛併發寫入、instance、rollback、其他 queue／read snapshot 及 replay 待完成；公開 signature 不變，callback 排序由使用者管理 |
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | 其餘 configuration 寫入與 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密；PA1 將已提交 profile effect 延伸至引用計數與 PTZ compatible read，VS1 加入成功 source 提交後的 source／profile／options 失效，保留實體來源與靜態 encoder instance recording |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
-| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及選定 21 操作 profile／source corpus 匯出與明確 payload anchor | VS1 後 70 份 instance 通過，包含十個拒絕（七個 profile、三個 source）。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
-| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 21 操作的 70 份 instance；全程式 instance 覆蓋及 release 證據檢查仍待完成 |
+| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及選定 24 操作 profile／source／rate corpus 匯出與明確 payload anchor | K34 後本機 84 份 instance 通過，包含 12 個拒絕（七個 profile、三個 source、兩個 rate）。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source／rate instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 24 操作的 84 份 instance；K34 託管 CI、全程式 instance 覆蓋及 release 證據檢查仍待完成 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
 | W25／M6／TODO | W00–W24 驗收 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |
@@ -265,7 +265,10 @@ not-run 分開記錄；schema skip、既有 `Broken`／`Blind` 預期不算新�
 下一個可開工 ID、尚需測試、使用者決策或外部前置條件。待辦發現必須有 ID 及
 負責工作項目才能移交；接續施工以這些紀錄為準，不依賴對話歷史。
 
-目前 W00 已完成；233 個直接 reader 已索引，不表示均已驗收。Scoped synthetic
+目前 W00 已完成；231 個直接 reader 已索引，不表示均已驗收。
+已核准的 K34 rate 遷移記於 [VE1 計畫](mock-fidelity-video-encoder_zh.md)。
+VE1 剩餘 selector、options、完整 candidate、codec view 及 capacity，之後為
+audio／metadata；K34 不表示 W10 或整體計畫完成。Scoped synthetic
 request／auth 邊界、選定 profile 身分／effect、11 項 acknowledgment-only 政策及
 [PA1 組裝](mock-fidelity-profile-assembly_zh.md) 及 [VS1](mock-fidelity-video-source_zh.md)
 為已實作子群。**下一批為 W10 八項 encoder configuration／options／instances**，包含相容性及巢狀欄位契約，再依序處理

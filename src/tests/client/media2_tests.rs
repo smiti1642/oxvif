@@ -216,7 +216,7 @@ async fn test_get_video_encoder_configurations_media2_parses_h265() {
     assert_eq!(cfgs[0].gov_length, Some(60));
     assert_eq!(cfgs[0].profile.as_deref(), Some("Main"));
     let rc = cfgs[0].rate_control.as_ref().unwrap();
-    assert_eq!(rc.frame_rate_limit, 30);
+    assert_eq!(rc.frame_rate_limit, 30.0);
     assert_eq!(rc.bitrate_limit, 8192);
 }
 
@@ -801,7 +801,7 @@ async fn test_get_video_encoder_configuration_media2_returns_first_configuration
         .rate_control
         .as_ref()
         .expect("RateControl must be parsed");
-    assert_eq!(rc.frame_rate_limit, 15);
+    assert_eq!(rc.frame_rate_limit, 15.0);
     assert_eq!(rc.bitrate_limit, 2048);
 }
 
@@ -1117,7 +1117,7 @@ mod request_body_shapes {
             },
             quality: 5.0,
             rate_control: Some(VideoRateControl2 {
-                frame_rate_limit: 25,
+                frame_rate_limit: 25.0,
                 bitrate_limit: 4096,
             }),
             gov_length: Some(50),
