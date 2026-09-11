@@ -232,7 +232,7 @@ advisory 來取得通過結果。
 | B17 | LOCAL-PASS | N01–N08、相容性／生命週期控制與兩組程式／文件關卡通過；hosted CI 待完成 |
 | B16／W26 | LOCAL-PASS | S01–S08、完整工作卡及明確僅收件確認邊界；hosted CI 待完成 |
 | B14 | LOCAL-PASS | 相依審查、audit、Clippy／tests、MSRV／XML 通過；hosted CI 待完成 |
-| 合併候選 | LOCAL-PASS／CI PENDING | 本機關卡全部通過；hardening ancestry 尚未接受合併主分支 |
+| 合併候選 | LOCAL-PASS／CI BLOCKED | Workflow dispatch 遭 HTTP 403 拒絕；hardening ancestry 尚未接受合併主分支 |
 | 遠端整合 | NOT AUTHORIZED | 明確授權、有署名的 commits 與驗證完成的目標分支 |
 
 各批更新公開 method／type rustdoc、`src/lib.rs`、CHANGELOG Unreleased 及
@@ -302,3 +302,22 @@ rustdoc、兩組 workspace Clippy、Rust 1.88 all-target／all-feature check、�
 獨立 library feature Clippy 及下游 encoding 關閉／開啟 XML 控制通過。
 還原後 all-features workspace 為 1,298 通過、default 為 1,190 通過，各有五項 ignored、41 suites；八個還原後專用控制亦通過。
 以上本機結果不代表已合併主分支、native hosted CI 完成或已觀察實際媒體串流。
+
+### 遠端交接
+
+已推送候選 `f9448e515baec6169f40ec7f38ec2e0fcc752826` 至
+`codex/contributor-pr-integration`，含各自獨立提交且保留署名的 B14 `07a7d61`、
+B17 `563bbcf`、B16 `f9448e5`。遠端 master／develop 均維持
+`9dccf9df4099183d7b1edbb1941c7610ab27dfc0`，未合併或關閉 PR。
+
+手動觸發 `ci.yml` 遭 GitHub HTTP 403 拒絕（“Must have admin rights to
+Repository”），此分支沒有 CI run。可 push 不代表有 workflow dispatch 權限。
+須由有權限的維護者為此分支啟動 CI，或修復目前憑證的 workflow 權限。
+不得藉由修改 workflow trigger、另開替代 PR 或嘗試其他憑證繞過。
+不發布的 artifact staging 因相同授權邊界標記 NOT-RUN。
+未發布 Release、建立 tag、publish、安裝本機軟體或操作實機。
+
+候選的 `cargo publish --dry-run --locked -p oxvif` 通過：打包 199 個檔案，解包後
+的 library 建置成功，dry-run 明確中止上傳。Cargo 提醒 0.16.0 已存在；本項只
+驗證套件建構，不代表可以或已準備好重發該版本。新的發布版本及最終組合套件／
+native 驗收仍須另行完成。

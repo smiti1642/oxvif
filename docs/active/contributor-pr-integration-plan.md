@@ -259,7 +259,7 @@ Do not add full release/staging matrices to every small correction.
 | B17 | LOCAL-PASS | N01–N08, compatibility/lifecycle controls, both code/doc gates pass; hosted CI pending |
 | B16 / W26 | LOCAL-PASS | S01–S08, complete cards, explicit receipt-only boundary; hosted CI pending |
 | B14 | LOCAL-PASS | Dependency review, audit, Clippy/tests, MSRV and XML controls pass; hosted CI pending |
-| Combined candidate | LOCAL-PASS / CI PENDING | All local gates pass; hardening ancestry is not accepted for main-branch merge |
+| Combined candidate | LOCAL-PASS / CI BLOCKED | Workflow dispatch denied (HTTP 403); hardening ancestry is not accepted for main-branch merge |
 | Remote integration | NOT AUTHORIZED | Explicit authority, credited commits and verified target branches |
 
 Update each batch's public method/type rustdoc, `src/lib.rs`, CHANGELOG Unreleased
@@ -346,3 +346,24 @@ configurations and the downstream encoding-off/on XML checks pass. The restored
 all-feature workspace passes 1,298 tests; default passes 1,190, each with five ignored across 41 suites. Restored targeted controls pass (eight).
 Main-branch integration, native hosted CI and actual media-stream observation are
 not implied by these local results.
+
+### Remote handoff
+
+Pushed candidate `f9448e515baec6169f40ec7f38ec2e0fcc752826` on
+`codex/contributor-pr-integration` contains B14 `07a7d61`, B17 `563bbcf` and B16
+`f9448e5`, each independently committed with attribution. Remote master/develop
+remain `9dccf9df4099183d7b1edbb1941c7610ab27dfc0`; no PR was merged or closed.
+
+Manual dispatch of `ci.yml` was denied by GitHub with HTTP 403 (“Must have admin
+rights to Repository”); the branch has no CI run. Push access did not establish
+workflow-dispatch access. An authorized maintainer must run CI for this branch,
+or restore the credential's workflow permission. Do not bypass this by changing
+workflow triggers, opening a replacement PR or trying another credential.
+Non-publishing artifact staging is NOT-RUN for the same authorization boundary.
+No release, tag, publication, local install or hardware actuation was performed.
+
+`cargo publish --dry-run --locked -p oxvif` passed on the candidate: 199 files
+packaged and the extracted library built successfully; upload was explicitly
+aborted by dry-run. Cargo warned that 0.16.0 already exists. This is a package
+construction check, not permission or readiness to republish that version; a new
+release version and final combined-package/native acceptance remain separate.
