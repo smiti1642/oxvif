@@ -91,16 +91,12 @@ pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -
     }
 }
 
-pub fn handle_set_video_source_configuration(state: &SharedState, body: &str) -> String {
-    match apply_video_source_write(
-        state,
-        body,
-        "NoConfigToken-SETVSC-5521",
-        "NoSuchConfig-SETVSC-5522",
-    ) {
-        Ok(()) => resp_empty("trt", "SetVideoSourceConfigurationResponse"),
-        Err(fault) => fault,
-    }
+pub fn handle_set_video_source_configuration(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
+    super::video_source::set(state, operation, false, effect)
 }
 
 pub fn handle_add_video_encoder_configuration(
@@ -492,62 +488,6 @@ pub(crate) fn apply_video_encoder_write(
         {
             ve.profile = v;
         }
-    });
-    Ok(())
-}
-
-/// Apply a `SetVideoSourceConfiguration` body to the addressed channel.
-///
-/// Shared by Media1 and Media2 for the same reason as the encoder write above,
-/// and it is the same defect: both dispatchers answered this with `resp_empty`
-/// until 0.15 — a success that wrote nothing, over a getter that *is*
-/// state-driven. Audit §3 items 1.1 and 1.2.
-///
-/// The two request bodies are identical apart from the prefix
-/// (`<trt:Configuration>` vs `<tr2:Configuration>`), and `extract_attr` /
-/// `extract_tag` both match on the local name, so one reader serves both.
-///
-/// `Bounds/@x` and `@y` are read from the wire and dropped: `VideoSourceConfigEntry`
-/// models a size, not an offset, and every renderer emits `x="0" y="0"`. Writing
-/// them into a field that does not exist is not possible; **saying so here is
-/// what keeps it from looking like the `MTU` case in item 1.8.**
-pub(crate) fn apply_video_source_write(
-    state: &SharedState,
-    body: &str,
-    missing_reason: &str,
-    unknown_prefix: &str,
-) -> Result<(), String> {
-    let Some(want) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) else {
-        return Err(resp_soap_fault("env:Sender", missing_reason));
-    };
-    if !state
-        .read()
-        .video_source_configs
-        .iter()
-        .any(|c| c.token == want)
-    {
-        return Err(resp_soap_fault(
-            "env:Sender",
-            &format!("{unknown_prefix}: {want}"),
-        ));
-    }
-    state.modify(|s| {
-        let Some(vsc) = s.video_source_configs.iter_mut().find(|c| c.token == want) else {
-            return;
-        };
-        if let Some(v) = extract_tag(body, "Name") {
-            vsc.name = v;
-        }
-        if let Some(v) = extract_tag(body, "SourceToken") {
-            vsc.source_token = v;
-        }
-        if let Some(v) = extract_attr(body, "Bounds", "width").and_then(|x| x.parse().ok()) {
-            vsc.width = v;
-        }
-        if let Some(v) = extract_attr(body, "Bounds", "height").and_then(|x| x.parse().ok()) {
-            vsc.height = v;
-        }
-        eprintln!("    [STATE] video source config updated: {want}");
     });
     Ok(())
 }
@@ -958,10 +898,10 @@ pub(crate) fn render_vsc_body(c: &VideoSourceConfigEntry, tag: &str) -> String {
           <tt:SourceToken>{source}</tt:SourceToken>
           <tt:Bounds x="0" y="0" width="{width}" height="{height}"/>
         </{tag}>"#,
-        token = c.token,
-        name = c.name,
+        token = crate::types::xml_escape(&c.token),
+        name = crate::types::xml_escape(&c.name),
         use_count = c.use_count,
-        source = c.source_token,
+        source = crate::types::xml_escape(&c.source_token),
         width = c.width,
         height = c.height,
     )
@@ -1098,7 +1038,10 @@ pub(crate) fn render_audio_encoder(c: &AudioEncoderEntry, qname: &str) -> String
     )
 }
 
-pub fn resp_video_sources(state: &SharedState) -> String {
+pub fn resp_video_sources(state: &SharedState, operation: &crate::mock::request::Node) -> String {
+    if let Err(fault) = super::video_source::empty(operation, false) {
+        return fault;
+    }
     let sources = state.read().video_sources.clone();
     let items: String = sources
         .iter()
@@ -1108,7 +1051,7 @@ pub fn resp_video_sources(state: &SharedState) -> String {
             <tt:Framerate>{fps}</tt:Framerate>
             <tt:Resolution><tt:Width>{width}</tt:Width><tt:Height>{height}</tt:Height></tt:Resolution>
           </trt:VideoSources>"#,
-                token = s.token,
+                token = crate::types::xml_escape(&s.token),
                 fps = s.framerate,
                 width = s.width,
                 height = s.height,
@@ -1121,7 +1064,13 @@ pub fn resp_video_sources(state: &SharedState) -> String {
     )
 }
 
-pub fn resp_video_source_configurations(state: &SharedState) -> String {
+pub fn resp_video_source_configurations(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    if let Err(fault) = super::video_source::empty(operation, false) {
+        return fault;
+    }
     let vscs = state.read().video_source_configs.clone();
     let items: String = vscs
         .iter()
@@ -1234,29 +1183,19 @@ fn require_config_token(body: &str, missing_reason: &str) -> Result<String, Stri
         .ok_or_else(|| resp_soap_fault("env:Sender", missing_reason))
 }
 
-pub fn resp_video_source_configuration(state: &SharedState, body: &str) -> String {
-    let want = match require_config_token(body, "NoConfigToken-VSC-5501") {
-        Ok(t) => t,
-        Err(fault) => return fault,
-    };
-    let vscs = state.read().video_source_configs.clone();
-    match vscs.iter().find(|c| c.token == want) {
-        Some(c) => soap(
-            r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-            &format!(
-                "<trt:GetVideoSourceConfigurationResponse>{}</trt:GetVideoSourceConfigurationResponse>",
-                render_vsc_body(c, "trt:Configuration")
-            ),
-        ),
-        None => resp_soap_fault("env:Sender", &format!("NoSuchConfig-VSC-5502: {want}")),
-    }
+pub fn resp_video_source_configuration(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_source::get(state, operation, false)
 }
 
 /// `GetVideoSourceConfigurationOptions` — per-channel.
 ///
 /// `BoundsRange` maxima are the addressed **sensor's** own resolution, so the
-/// two channels report different ceilings; `VideoSourceTokensAvailable` names
-/// only the sensor this configuration is attached to.
+/// two channels report different ceilings even after cropping. An omitted
+/// configuration selector returns conservative generic options, not a guessed
+/// channel. Profile context is validated; physical routing conflicts are not modeled.
 ///
 /// **`MaximumNumberOfProfiles` is an attribute.**
 /// `tt:VideoSourceConfigurationOptions` declares it as `xs:attribute` and only
@@ -1265,34 +1204,11 @@ pub fn resp_video_source_configuration(state: &SharedState, body: &str) -> Strin
 /// bug it was written beside. Media1 and Media2 return the *same* type here, so
 /// `resp_video_source_configuration_options_media2` carries the identical
 /// correction.
-pub fn resp_video_source_configuration_options(state: &SharedState, body: &str) -> String {
-    let want = match require_config_token(body, "NoConfigToken-VSCOPT-5503") {
-        Ok(t) => t,
-        Err(fault) => return fault,
-    };
-    let vscs = state.read().video_source_configs.clone();
-    let Some(c) = vscs.iter().find(|c| c.token == want) else {
-        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-VSCOPT-5504: {want}"));
-    };
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        &format!(
-            r#"<trt:GetVideoSourceConfigurationOptionsResponse>
-          <trt:Options MaximumNumberOfProfiles="5">
-            <tt:BoundsRange>
-              <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
-              <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
-              <tt:WidthRange><tt:Min>160</tt:Min><tt:Max>{width}</tt:Max></tt:WidthRange>
-              <tt:HeightRange><tt:Min>90</tt:Min><tt:Max>{height}</tt:Max></tt:HeightRange>
-            </tt:BoundsRange>
-            <tt:VideoSourceTokensAvailable>{source}</tt:VideoSourceTokensAvailable>
-          </trt:Options>
-        </trt:GetVideoSourceConfigurationOptionsResponse>"#,
-            width = c.width,
-            height = c.height,
-            source = c.source_token,
-        ),
-    )
+pub fn resp_video_source_configuration_options(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_source::options(state, operation, false)
 }
 
 pub fn resp_video_encoder_configuration(state: &SharedState, body: &str) -> String {

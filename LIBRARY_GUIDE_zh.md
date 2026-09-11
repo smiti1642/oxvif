@@ -594,6 +594,10 @@ Profile 建立遵守公告容量；Media2 初始 binding、改名及 All 選擇�
 受影響引用計數與 replay read 跟隨 commit 更新。不截斷匯入 fixture，詳見
 [profile 組裝及限制](docs/mock-server_zh.md#63-profile)。
 
+Source configuration 寫入會先驗證完整已建模值，再原子提交；options 使用 sensor 範圍，
+不依目前 crop。非零原點與未建模 extension 明確拒絕，詳見
+[source 設定與 selector](docs/mock-server_zh.md#621-source-configuration-契約)。
+
 內建 mock 可路由 oxvif 實作的 157 個 SOAP action。已建模的寫入會保留於記憶體，並由對應 getter 反映；路由覆蓋不代表每項效果都已建模。已分類的 reset、auxiliary、maintenance、subscription／synchronization 及結束搜尋 stub，若僅需確認收到請求，必須明確逐項 opt-in acknowledgment-only；詳見 [mock fidelity 政策](docs/mock-server_zh.md#135-明確的-acknowledgment-only-政策)。
 
 | | `MockTransport`（`mock`） | `MockServer`（`mock-server`） |

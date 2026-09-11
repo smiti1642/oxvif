@@ -29,6 +29,7 @@ omission is a bug, a documented one is a design decision.**
 | [4. Authentication](#4-authentication) | Which authentication behavior is modeled? |
 | [5. State model](#5-state-model) | Which services share mutable state? |
 | [6. Seeded fixture](#6-seeded-fixture) | What device, media, PTZ, audio, and recording data exists initially? |
+| [6.2.1 Source configuration](#621-source-configuration-contract) | Which source settings and selectors are modeled? |
 | [7. Operation reference](#7-operation-reference) | Which operations are stateful, static, or unsupported? |
 | [8. Worked examples](#8-worked-examples) | What do representative requests and responses look like? |
 | [9. Error model](#9-error-model) | Which SOAP fault shapes and codes are emitted? |
@@ -446,6 +447,29 @@ carry the same value, they do not.
 1280×720. **Only `VS_1` advertises H.265.** An assertion that reads a
 resolution list or an encoding set therefore fails if the handler answers for
 the wrong channel.
+
+### 6.2.1 Source configuration contract
+
+**Unreleased:** both Media services require a complete modeled source configuration
+and validate its scoped fields before one atomic commit. Name and identity text are
+decoded and escaped once. UseCount and ViewMode are read-only; callers cannot change
+the stored reference count. Media1 ForcePersistence must be a valid boolean; storage
+remains in-memory with the existing optional caller-owned persistence hook.
+
+Only zero-origin crops are modeled. Nonzero x/y, invalid numbers and unknown source
+references are refused. Positive dimensions larger than the selected sensor are
+clamped; readback returns the committed dimensions. Nonempty extensions/other
+unmodeled settings refuse explicitly instead of being discarded. Unknown configuration
+or profile references use Sender/InvalidArgVal/NoConfig or NoProfile; unassignable
+settings use ConfigModify. Structural errors retain the generic request Fault policy.
+
+Source options use physical sensor dimensions, so cropping does not shrink the options.
+An omitted configuration selector returns conservative generic ranges and available
+sources; ProfileToken is validated. Media2 list requests support ConfigurationToken
+and ProfileToken. The mock permits source reassignment for all profiles and does not
+model physical encoder-routing conflicts. Built-in replay preserves recordings on
+refusal and retires dependent source/profile/options reads only after a commit.
+See [VS1 evidence and limits](active/mock-fidelity-video-source.md).
 
 ### 6.3 Profiles
 
@@ -1245,7 +1269,7 @@ from that schema may enter this repository. Explicitly selecting the test now
 fails if resources are missing; the external SOAP 1.2 envelope schema is also
 required. Node-scoped namespace resolution and separate Envelope/payload checks
 include Fault structure, but do not validate all XSD values or error semantics.
-Separate Windows/Linux CI now validates the selected 40 profile request/response
+Separate Windows/Linux CI now validates the selected 70 profile/source request/response
 instances with independently pinned Xerces and external schemas. That limited
 corpus does not cover all operations or authentication; the inventory job alone
 does not validate XML. See the
@@ -1336,8 +1360,8 @@ Audit §6.
 - **No search cursor.** `FindRecordings` hands out one token and
   `GetRecordingSearchResults` renders the whole current list against it. A real
   device pages and expires searches.
-- **`Bounds/@x` and `@y` are read from the wire and dropped.**
-  `VideoSourceConfigEntry` models a size, not an offset.
+- **Source crops only support zero origin.** Nonzero `Bounds/@x` or `@y` now
+  faults; positive sizes may be clamped to the selected sensor. See §6.2.1.
 - **Media1 `SetAudioEncoderConfiguration` refuses a body without `Multicast` or
   `SessionTimeout`** (`ter:ConfigModify` / `IncompleteAudioEncoder-SETAEC-5715`).
   Both are *required* members of `tt:AudioEncoderConfiguration`, so a device

@@ -274,7 +274,7 @@ async fn video_source_options_max_profiles_is_an_attribute() {
         .get_video_source_configuration_options("VSC_1")
         .await
         .unwrap();
-    assert_eq!(m1.max_limit, Some(5), "Media1 MaximumNumberOfProfiles");
+    assert_eq!(m1.max_limit, Some(8), "Media1 MaximumNumberOfProfiles");
     // The sibling elements still parse, so the assertion above is about the
     // attribute and not about the whole `Options` block being missed.
     assert_eq!(m1.source_tokens, ["VS_1"]);
@@ -284,7 +284,7 @@ async fn video_source_options_max_profiles_is_an_attribute() {
         .get_video_source_configuration_options_media2("VSC_2")
         .await
         .unwrap();
-    assert_eq!(m2.max_limit, Some(5), "Media2 MaximumNumberOfProfiles");
+    assert_eq!(m2.max_limit, Some(8), "Media2 MaximumNumberOfProfiles");
     assert_eq!(m2.source_tokens, ["VS_2"]);
     assert_eq!(m2.bounds_range.expect("BoundsRange").width_range.max, 1280);
 }

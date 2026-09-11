@@ -61,6 +61,8 @@ A3: policy migration for eight additional effect stubs; see [batch record](mock-
 
 PA1: profile assembly, capacity and reference-count subgroup; see [batch record](mock-fidelity-profile-assembly.md). Full field/physical compatibility remains separate.
 
+VS1: eight source read/write/options operations; see [batch evidence and limits](mock-fidelity-video-source.md). Rows remain PARTIAL, not full schema/device-contract acceptance.
+
 ## device
 
 [dispatch_device](../../src/mock/dispatch.rs) · [services/device.rs](../../src/mock/services/device.rs)
@@ -131,11 +133,11 @@ configuration tokens. P1 and P2 together remain partial operation acceptance.
 | `media.DeleteProfile` | `media::handle_delete_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1/PA1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetVideoSources` | `media::resp_video_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetVideoSourceConfigurations` | `media::resp_video_source_configurations` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetVideoSourceConfiguration` | `media::resp_video_source_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.SetVideoSourceConfiguration` | `media::handle_set_video_source_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetVideoSourceConfigurationOptions` | `media::resp_video_source_configuration_options` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.GetVideoSources` | `media::resp_video_sources` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
+| `media.GetVideoSourceConfigurations` | `media::resp_video_source_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
+| `media.GetVideoSourceConfiguration` | `media::resp_video_source_configuration` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
+| `media.SetVideoSourceConfiguration` | `media::handle_set_video_source_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
+| `media.GetVideoSourceConfigurationOptions` | `media::resp_video_source_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media.GetVideoEncoderConfigurations` | `media::resp_video_encoder_configurations` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetVideoEncoderConfiguration` | `media::resp_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.SetVideoEncoderConfiguration` | `media::handle_set_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -171,9 +173,9 @@ configuration tokens. P1 and P2 together remain partial operation acceptance.
 | `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
 | `media2.GetStreamUri` | `media2::resp_stream_uri_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetSnapshotUri` | `media2::resp_snapshot_uri_media2` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetVideoSourceConfigurations` | `media2::resp_video_source_configurations_media2` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.SetVideoSourceConfiguration` | `media2::handle_set_video_source_configuration_media2` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetVideoSourceConfigurationOptions` | `media2::resp_video_source_configuration_options_media2` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media2.GetVideoSourceConfigurations` | `media2::resp_video_source_configurations_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
+| `media2.SetVideoSourceConfiguration` | `media2::handle_set_video_source_configuration_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
+| `media2.GetVideoSourceConfigurationOptions` | `media2::resp_video_source_configuration_options_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media2.GetVideoEncoderConfigurations` | `media2::resp_video_encoder_configurations` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.SetVideoEncoderConfiguration` | `media2::handle_set_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetVideoEncoderConfigurationOptions` | `media2::resp_video_encoder_configuration_options_media2` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |

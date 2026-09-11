@@ -224,12 +224,14 @@ fn dispatch_media(
         "DeleteProfile" => media::handle_delete_profile(state, operation, effect),
         "GetStreamUri" => media::resp_stream_uri(),
         "GetSnapshotUri" => media::resp_snapshot_uri(base),
-        "GetVideoSources" => media::resp_video_sources(state),
-        "GetVideoSourceConfigurations" => media::resp_video_source_configurations(state),
-        "GetVideoSourceConfiguration" => media::resp_video_source_configuration(state, body),
-        "SetVideoSourceConfiguration" => media::handle_set_video_source_configuration(state, body),
+        "GetVideoSources" => media::resp_video_sources(state, operation),
+        "GetVideoSourceConfigurations" => media::resp_video_source_configurations(state, operation),
+        "GetVideoSourceConfiguration" => media::resp_video_source_configuration(state, operation),
+        "SetVideoSourceConfiguration" => {
+            media::handle_set_video_source_configuration(state, operation, effect)
+        }
         "GetVideoSourceConfigurationOptions" => {
-            media::resp_video_source_configuration_options(state, body)
+            media::resp_video_source_configuration_options(state, operation)
         }
         "GetVideoEncoderConfigurations" => media::resp_video_encoder_configurations(state, body),
         "GetVideoEncoderConfiguration" => media::resp_video_encoder_configuration(state, body),
@@ -303,12 +305,14 @@ fn dispatch_media2(
         }
         "GetStreamUri" => media2::resp_stream_uri_media2(),
         "GetSnapshotUri" => media2::resp_snapshot_uri_media2(base),
-        "GetVideoSourceConfigurations" => media2::resp_video_source_configurations_media2(state),
+        "GetVideoSourceConfigurations" => {
+            media2::resp_video_source_configurations_media2(state, operation)
+        }
         "SetVideoSourceConfiguration" => {
-            media2::handle_set_video_source_configuration_media2(state, body)
+            media2::handle_set_video_source_configuration_media2(state, operation, effect)
         }
         "GetVideoSourceConfigurationOptions" => {
-            media2::resp_video_source_configuration_options_media2(state, body)
+            media2::resp_video_source_configuration_options_media2(state, operation)
         }
         "GetVideoEncoderConfigurations" => media2::resp_video_encoder_configurations(state, body),
         "SetVideoEncoderConfiguration" => {

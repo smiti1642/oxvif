@@ -201,33 +201,11 @@ pub fn resp_snapshot_uri_media2(base: &str) -> String {
     )
 }
 
-pub fn resp_video_source_configurations_media2(state: &SharedState) -> String {
-    let vscs = state.read().video_source_configs.clone();
-    let items: String = vscs
-        .iter()
-        .map(|c| {
-            format!(
-                r#"<tr2:Configurations token="{token}">
-            <tt:Name>{name}</tt:Name>
-            <tt:UseCount>{use_count}</tt:UseCount>
-            <tt:SourceToken>{source}</tt:SourceToken>
-            <tt:Bounds x="0" y="0" width="{width}" height="{height}"/>
-          </tr2:Configurations>"#,
-                token = c.token,
-                name = c.name,
-                use_count = c.use_count,
-                source = c.source_token,
-                width = c.width,
-                height = c.height,
-            )
-        })
-        .collect();
-    soap(
-        NS,
-        &format!(
-            "<tr2:GetVideoSourceConfigurationsResponse>{items}</tr2:GetVideoSourceConfigurationsResponse>"
-        ),
-    )
+pub fn resp_video_source_configurations_media2(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_source::get(state, operation, true)
 }
 
 /// Per-channel — the bounds ceiling is the addressed sensor's own resolution.
@@ -236,34 +214,11 @@ pub fn resp_video_source_configurations_media2(state: &SharedState) -> String {
 /// Media1 returns, so `MaximumNumberOfProfiles` is an `xs:attribute` here for
 /// the same reason and with the same value — see
 /// [`super::media::resp_video_source_configuration_options`].
-pub fn resp_video_source_configuration_options_media2(state: &SharedState, body: &str) -> String {
-    let want = match require_config_token(body, "NoConfigToken-VSCOPT2-5511") {
-        Ok(t) => t,
-        Err(fault) => return fault,
-    };
-    let vscs = state.read().video_source_configs.clone();
-    let Some(c) = vscs.iter().find(|c| c.token == want) else {
-        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-VSCOPT2-5512: {want}"));
-    };
-    soap(
-        NS,
-        &format!(
-            r#"<tr2:GetVideoSourceConfigurationOptionsResponse>
-          <tr2:Options MaximumNumberOfProfiles="5">
-            <tt:BoundsRange>
-              <tt:XRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:XRange>
-              <tt:YRange><tt:Min>0</tt:Min><tt:Max>0</tt:Max></tt:YRange>
-              <tt:WidthRange><tt:Min>160</tt:Min><tt:Max>{width}</tt:Max></tt:WidthRange>
-              <tt:HeightRange><tt:Min>90</tt:Min><tt:Max>{height}</tt:Max></tt:HeightRange>
-            </tt:BoundsRange>
-            <tt:VideoSourceTokensAvailable>{source}</tt:VideoSourceTokensAvailable>
-          </tr2:Options>
-        </tr2:GetVideoSourceConfigurationOptionsResponse>"#,
-            width = c.width,
-            height = c.height,
-            source = c.source_token,
-        ),
-    )
+pub fn resp_video_source_configuration_options_media2(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_source::options(state, operation, true)
 }
 
 /// Per-channel. Media2 returns one `Options` block **per encoding**, so the
@@ -381,19 +336,14 @@ pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> Str
     )
 }
 
-/// `SetVideoEncoderConfiguration` (Media2) — persists the posted fields into
-/// state so a following `GetVideoEncoderConfigurations` reflects them. Only the
-/// fields present in the request body are updated.
-pub fn handle_set_video_source_configuration_media2(state: &SharedState, body: &str) -> String {
-    match media::apply_video_source_write(
-        state,
-        body,
-        "NoConfigToken-SETVSC2-5523",
-        "NoSuchConfig-SETVSC2-5524",
-    ) {
-        Ok(()) => resp_empty("tr2", "SetVideoSourceConfigurationResponse"),
-        Err(fault) => fault,
-    }
+/// Atomically apply the complete modeled source configuration and publish its
+/// effect only after success. Unsupported source settings are explicitly refused.
+pub fn handle_set_video_source_configuration_media2(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
+    super::video_source::set(state, operation, true, effect)
 }
 
 /// `tr2:AddConfiguration` — one generic operation carrying `<tr2:Type>`, where

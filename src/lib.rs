@@ -210,6 +210,10 @@
 //! Profile creation enforces the advertised capacity. Media2 profile assembly
 //! applies initial bindings, rename and All selection atomically, updating touched
 //! reference counts; full physical configuration compatibility remains unmodeled.
+//! Source configuration validates complete scoped settings atomically, preserves
+//! read-only counts and clamps positive crops to the selected sensor. Source
+//! options remain sensor-based after cropping; nonzero origins/unmodeled settings
+//! refuse explicitly. Public client/session signatures are unchanged.
 //! Opt-in mock authentication uses scoped Header/UsernameToken fields and explicit
 //! PasswordDigest Type; it does not enforce freshness, nonce reuse or user permissions.
 //! Classified reset, auxiliary, reboot/maintenance, subscription and search-ending

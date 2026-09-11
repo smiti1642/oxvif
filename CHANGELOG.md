@@ -22,6 +22,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock video source configuration now validates complete scoped settings before
+  an atomic write across both Media services. Invalid values, unknown references
+  and unmodeled offsets/extensions no longer silently succeed. Source options
+  follow sensor limits instead of the current crop; generic/profile selectors
+  are supported and Media2 list selectors are honored. Built-in replay only
+  retires dependent reads after successful writes. Existing partial-body mock
+  requests must provide the full configuration; see the
+  [source migration](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/mock-server.md#621-source-configuration-contract).
 - Mock Media2 profile creation now applies initial modeled configurations; binding
   supports rename-only updates, add/create `All` no-ops and remove `All` clearing.
   Binding tokens are decoded from scoped fields; conflicting assignments to one

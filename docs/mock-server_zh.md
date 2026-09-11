@@ -20,6 +20,7 @@
 | [4. 驗證](#4-驗證) | 已建模的驗證行為 |
 | [5. 狀態模型](#5-狀態模型) | 服務之間共用的可變狀態 |
 | [6. 預載 fixture](#6-預載-fixture) | 初始的裝置、媒體、PTZ、音訊與錄影資料 |
+| [6.2.1 Source configuration 契約](#621-source-configuration-契約) | 原子寫入、sensor options 與模型限制 |
 | [7. 操作參考](#7-操作參考) | stateful、static 與不支援的操作 |
 | [8. 實作範例](#8-實作範例) | 代表性請求與回應 |
 | [9. 錯誤模型](#9-錯誤模型) | SOAP fault 結構與代碼 |
@@ -363,6 +364,24 @@ Factory device 是一台**雙感測器攝影機**。單 channel fixture 無法�
 | `VS_2` | `VSC_2`（`VSConfig2`） | `VEC_3` `MainStream2` 1280×720、`VEC_4` | 1280×720 |
 
 `VEC_1` 公告六種解析度，最高 2592×1944；`VEC_3` 最高為 1280×720。只有 `VS_1` 公告 H.265，因此對解析度或 encoding set 的 assertion 可偵測 handler 是否回傳錯誤 channel。
+
+### 6.2.1 Source configuration 契約
+
+**尚未發布：**兩種 Media service 均要求完整已建模 source configuration，先驗證 scoped
+欄位，再一次原子提交。Name 與身分文字解碼、轉義一次。UseCount 與 ViewMode 為唯讀，
+caller 不能改寫引用計數。Media1 ForcePersistence 必須是有效 boolean；儲存仍為記憶體
+狀態及既有選填、由使用者管理的 persistence hook。
+
+僅建模零原點 crop；非零 x／y、錯誤數字及不存在的 source reference 均拒絕。超過所選
+sensor 的正值尺寸會 clamp，回讀顯示實際提交尺寸。非空 extension／其他未建模設定
+明確拒絕，不默默捨棄。未知 configuration／profile 採 Sender／InvalidArgVal／NoConfig
+或 NoProfile；無法套用的設定採 ConfigModify；結構錯誤沿用共用 request Fault 政策。
+
+Source options 依實體 sensor 尺寸，不再隨 crop 縮小。省略 configuration selector
+回傳保守的 generic 範圍與可用 source；ProfileToken 會驗證存在。Media2 清單支援
+ConfigurationToken／ProfileToken。Mock 允許所有 profile 重新指定 source，未建模
+實體 encoder-routing 衝突。內建 replay 拒絕時保留 recording，成功後才淘汰相依的
+source／profile／options 讀取。詳見 [VS1 證據與限制](active/mock-fidelity-video-source_zh.md)。
 
 ### 6.3 Profile
 
@@ -759,7 +778,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 | End-to-end flow | `tests/mock_workflow.rs` |
 | XML namespace、name、cardinality 與 sequence order 符合 ONVIF schema | `tests/mock_schema_shape.rs`；限制如下 |
 
-`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 現已使用固定版本的 Xerces 與外部 schema，驗證選定的 40 份 profile request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
+`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 現已使用固定版本的 Xerces 與外部 schema，驗證選定的 70 份 profile／source request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
 
 目前 49 組 round-trip 全數為 working，無 static 或 known-broken；35 組 token row 中 29 組可區分、6 組明確標記為 blind。測試表的每個 row 都宣告意圖，避免已知限制演變成未追蹤的永久盲點。
 
@@ -784,7 +803,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 
 - 不模擬移動時間；PTZ move 立即更新 position，`MoveStatus` 固定為 `IDLE`。Monostable relay 也不會自動還原，請使用 REST pulse hook。
 - 不模擬 search cursor；`FindRecordings` 只提供一個 token，結果一次回傳完整目前清單。
-- `Bounds/@x` 與 `@y` 會由 wire 讀取後捨棄；`VideoSourceConfigEntry` 只建模 size。
+- Source crop 僅支援零原點；非零 `Bounds/@x`／`@y` 現在回 Fault，正值尺寸可 clamp 至所選 sensor 範圍，詳見 §6.2.1。
 - Media1 audio encoder request 缺少 required `Multicast` 或 `SessionTimeout` 時會回傳 `ter:ConfigModify` / `IncompleteAudioEncoder-SETAEC-5715`。
 - Media2 `SetAudioEncoderConfiguration` 無法表示 `SessionTimeout`，所以會保留原值；可選 `Multicast` 則會寫入，包括 `None`。
 - `SetConfiguration` 忽略 `ForcePersistence`，一律持久儲存；`UseCount` 不由 caller 修改。

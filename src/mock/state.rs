@@ -878,6 +878,8 @@ pub struct VideoSourceEntry {
 
 /// A video *source* configuration — the crop/bounds view onto one sensor.
 /// `source_token` is what ties it back to a [`VideoSourceEntry`].
+/// Synthetic writes only support zero-origin crops, clamp positive sizes to that
+/// sensor, and leave `use_count` read-only. Unsupported settings refuse atomically.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoSourceConfigEntry {
     pub token: String,
@@ -3638,9 +3640,8 @@ mod tests {
 
     #[test]
     fn get_video_sources_lists_both_sensors() {
-        use crate::mock::services::media;
         let s = new_state();
-        let xml = media::resp_video_sources(&s);
+        let xml = source_query(&s, false, "GetVideoSources", None);
         assert!(xml.contains(r#"token="VS_1""#));
         assert!(xml.contains(r#"token="VS_2""#));
         // Their resolutions differ, so this is not one sensor listed twice.
@@ -3741,20 +3742,43 @@ mod tests {
 
     // ── Media1 video source options ───────────────────────────────────────
 
-    fn vsc_options_body(token: &str) -> String {
-        format!(
-            "<trt:GetVideoSourceConfigurationOptions>\
-               <trt:ConfigurationToken>{token}</trt:ConfigurationToken>\
-             </trt:GetVideoSourceConfigurationOptions>"
+    fn source_query(s: &MockState, media2: bool, op: &str, token: Option<&str>) -> String {
+        let ns = if media2 {
+            "http://www.onvif.org/ver20/media/wsdl"
+        } else {
+            "http://www.onvif.org/ver10/media/wsdl"
+        };
+        let fields = token
+            .map(|token| {
+                format!(
+                    "<m:ConfigurationToken>{}</m:ConfigurationToken>",
+                    crate::types::xml_escape(token)
+                )
+            })
+            .unwrap_or_default();
+        crate::mock::dispatch::dispatch(
+            &format!("{ns}/{op}"),
+            "http://mock",
+            s,
+            &format!("<m:{op} xmlns:m='{ns}'>{fields}</m:{op}>"),
         )
     }
 
     #[test]
     fn video_source_options_are_per_channel() {
-        use crate::mock::services::media;
         let s = new_state();
-        let lens1 = media::resp_video_source_configuration_options(&s, &vsc_options_body("VSC_1"));
-        let lens2 = media::resp_video_source_configuration_options(&s, &vsc_options_body("VSC_2"));
+        let lens1 = source_query(
+            &s,
+            false,
+            "GetVideoSourceConfigurationOptions",
+            Some("VSC_1"),
+        );
+        let lens2 = source_query(
+            &s,
+            false,
+            "GetVideoSourceConfigurationOptions",
+            Some("VSC_2"),
+        );
 
         assert!(lens1.contains("<tt:Max>2592</tt:Max>"), "VSC_1 bounds");
         assert!(lens2.contains("<tt:Max>1280</tt:Max>"), "VSC_2 bounds");
@@ -3765,24 +3789,38 @@ mod tests {
     }
 
     #[test]
-    fn video_source_options_without_token_faults() {
-        use crate::mock::services::media;
+    fn video_source_options_without_token_are_generic() {
         let s = new_state();
-        let xml = media::resp_video_source_configuration_options(
-            &s,
-            "<trt:GetVideoSourceConfigurationOptions/>",
+        let xml = source_query(&s, false, "GetVideoSourceConfigurationOptions", None);
+        let parsed = crate::soap::parse_soap_body(&xml).unwrap();
+        let options = parsed.children[0].child("Options").unwrap();
+        assert_eq!(
+            options
+                .children_named("VideoSourceTokensAvailable")
+                .map(|n| n.text())
+                .collect::<Vec<_>>(),
+            ["VS_1", "VS_2"]
         );
-        assert!(xml.contains("NoConfigToken-VSCOPT-5503"), "got: {xml}");
-        assert!(!xml.contains("BoundsRange"));
+        assert_eq!(
+            options
+                .path(&["BoundsRange", "WidthRange", "Max"])
+                .unwrap()
+                .text(),
+            "1280"
+        );
     }
 
     #[test]
     fn video_source_options_unknown_token_faults() {
-        use crate::mock::services::media;
         let s = new_state();
-        let xml = media::resp_video_source_configuration_options(&s, &vsc_options_body("VSC_9"));
+        let xml = source_query(
+            &s,
+            false,
+            "GetVideoSourceConfigurationOptions",
+            Some("VSC_9"),
+        );
         assert!(
-            xml.contains("NoSuchConfig-VSCOPT-5504: VSC_9"),
+            xml.contains("Source configuration not found: VSC_9"),
             "got: {xml}"
         );
         assert!(!xml.contains("BoundsRange"));
@@ -3829,17 +3867,9 @@ mod tests {
 
     #[test]
     fn get_video_source_configuration_is_per_channel() {
-        use crate::mock::services::media;
         let s = new_state();
-        let body = |t: &str| {
-            format!(
-                "<trt:GetVideoSourceConfiguration>\
-                   <trt:ConfigurationToken>{t}</trt:ConfigurationToken>\
-                 </trt:GetVideoSourceConfiguration>"
-            )
-        };
-        let one = media::resp_video_source_configuration(&s, &body("VSC_1"));
-        let two = media::resp_video_source_configuration(&s, &body("VSC_2"));
+        let one = source_query(&s, false, "GetVideoSourceConfiguration", Some("VSC_1"));
+        let two = source_query(&s, false, "GetVideoSourceConfiguration", Some("VSC_2"));
         assert!(one.contains("<tt:SourceToken>VS_1</tt:SourceToken>"));
         assert!(two.contains("<tt:SourceToken>VS_2</tt:SourceToken>"));
         assert!(!two.contains("<tt:SourceToken>VS_1</tt:SourceToken>"));
@@ -3847,15 +3877,12 @@ mod tests {
 
     #[test]
     fn get_video_source_configuration_unknown_token_faults() {
-        use crate::mock::services::media;
         let s = new_state();
-        let xml = media::resp_video_source_configuration(
-            &s,
-            "<trt:GetVideoSourceConfiguration>\
-               <trt:ConfigurationToken>VSC_77</trt:ConfigurationToken>\
-             </trt:GetVideoSourceConfiguration>",
+        let xml = source_query(&s, false, "GetVideoSourceConfiguration", Some("VSC_77"));
+        assert!(
+            xml.contains("Source configuration not found: VSC_77"),
+            "got: {xml}"
         );
-        assert!(xml.contains("NoSuchConfig-VSC-5502: VSC_77"), "got: {xml}");
     }
 
     // ── Media2 ────────────────────────────────────────────────────────────
@@ -3913,17 +3940,19 @@ mod tests {
 
     #[test]
     fn media2_video_source_options_are_per_channel() {
-        use crate::mock::services::media2;
         let s = new_state();
-        let body = |t: &str| {
-            format!(
-                "<tr2:GetVideoSourceConfigurationOptions>\
-                   <tr2:ConfigurationToken>{t}</tr2:ConfigurationToken>\
-                 </tr2:GetVideoSourceConfigurationOptions>"
-            )
-        };
-        let one = media2::resp_video_source_configuration_options_media2(&s, &body("VSC_1"));
-        let two = media2::resp_video_source_configuration_options_media2(&s, &body("VSC_2"));
+        let one = source_query(
+            &s,
+            true,
+            "GetVideoSourceConfigurationOptions",
+            Some("VSC_1"),
+        );
+        let two = source_query(
+            &s,
+            true,
+            "GetVideoSourceConfigurationOptions",
+            Some("VSC_2"),
+        );
         assert!(one.contains("<tt:VideoSourceTokensAvailable>VS_1<"));
         assert!(two.contains("<tt:VideoSourceTokensAvailable>VS_2<"));
         assert!(one.contains("<tt:Max>2592</tt:Max>"));
@@ -3932,16 +3961,15 @@ mod tests {
 
     #[test]
     fn media2_video_source_options_unknown_token_faults() {
-        use crate::mock::services::media2;
         let s = new_state();
-        let xml = media2::resp_video_source_configuration_options_media2(
+        let xml = source_query(
             &s,
-            "<tr2:GetVideoSourceConfigurationOptions>\
-               <tr2:ConfigurationToken>VSC_42</tr2:ConfigurationToken>\
-             </tr2:GetVideoSourceConfigurationOptions>",
+            true,
+            "GetVideoSourceConfigurationOptions",
+            Some("VSC_42"),
         );
         assert!(
-            xml.contains("NoSuchConfig-VSCOPT2-5512: VSC_42"),
+            xml.contains("Source configuration not found: VSC_42"),
             "got: {xml}"
         );
     }

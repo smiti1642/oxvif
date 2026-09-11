@@ -209,9 +209,9 @@ does not validate any mock exchange. The earlier `verify_schemas.py compile`
 command remains a Python-backend diagnostic expected to expose K21.
 
 Windows/Linux CI now runs generic controls and independent Xerces qualification,
-followed by a separate **Official schemas and selected profile corpus** job with fixed source
+followed by a separate **Official schemas and selected Media corpus** job with fixed source
 hashes, external directories and no uploaded artifacts. Both gate packaging;
-the latter explicitly exports and validates the selected 40 profile instances
+the latter explicitly exports and validates the selected 70 profile/source instances
 after compilation. Each failed native command terminates the job; a missing
 export cannot pass because validation requires an existing, nonempty corpus.
 neither should be reported as full operation/corpus acceptance. Prior CI
@@ -232,14 +232,14 @@ from the driver, not a string search of the response.
 The ignored export requires `OXVIF_MOCK_CORPUS` naming a **new absolute external
 directory whose parent exists**. It refuses empty data, credential-bearing
 requests, relative/existing destinations and checkout/ancestor destinations.
-The exporter preserves XML bytes, emits 40 files plus `cases.json`, and records
+The exporter preserves XML bytes, emits 70 files plus `cases.json`, and records
 explicit Envelope/Body/operation expectations for requests and success/Fault
 responses. It never reads environment credentials or overwrites existing files.
 This is a diagnostic corpus, not comprehensive per-operation acceptance.
 
 ```powershell
 $env:OXVIF_MOCK_CORPUS = 'C:/Temp/oxvif-profile-corpus-new'
-cargo test --all-features --test mock_schema_corpus export_first_profile_batch -- --ignored --nocapture
+cargo test --all-features --test mock_schema_corpus export_reviewed_batches_for_independent_validation -- --ignored --nocapture
 Remove-Item Env:OXVIF_MOCK_CORPUS
 ```
 
@@ -272,13 +272,21 @@ passed all 27 jobs for `cdfeaec`, including Windows/Linux official schema
 compilation. It predates this corpus addition. No release, installation, live
 device write, public API or contributor PR was changed.
 
+VS1 adds 15 source exchanges (eight operations, three refusals), including client
+reads/writes, clamped readback and raw generic options for both services. The combined
+export has 35 exchanges: 35 requests, 25 successes and ten Faults. On 2026-09-11 all
+70 instances in the new external `oxvif-profile-corpus-20260911-05` directory passed
+strict Xerces XSD 1.1 on Windows; the explicitly selected legacy structural check also
+passed. Sources/corpus stay outside the checkout. This is not complete semantic or
+ONVIF certification evidence; see [VS1](mock-fidelity-video-source.md).
+
 ## Next work
 
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
-and expand the corpus beyond the first 13-operation batch. W21 remains PARTIAL: complete the
+and expand the corpus beyond the selected 21-operation batches. W21 remains PARTIAL: complete the
 positive/negative envelope, payload and Fault instances from the mock corpus and
 qualify broader paths against actual emitted exchanges. W22 now checks the selected
-40-instance profile corpus on Windows/Linux, but the full fail-closed instance
+70-instance profile/source corpus on Windows/Linux, but the full fail-closed instance
 CI gate still needs the remaining operation batches. Do not substitute this tool
 experiment for P-B's per-operation field/Fault/semantic review.
 

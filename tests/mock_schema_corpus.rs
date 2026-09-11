@@ -346,6 +346,192 @@ async fn profile_exchanges() -> Vec<Exchange> {
         .unwrap()
 }
 
+async fn source_exchanges() -> Vec<Exchange> {
+    let capture = Capture {
+        mock: MockTransport::new(),
+        exchanges: Arc::default(),
+    };
+    const TOKEN: &str = "Corpus & <source> 北";
+    capture.mock.device().modify(|state| {
+        state.video_source_configs[0].token = TOKEN.into();
+        for profile in &mut state.profiles.profiles {
+            if profile.video_source_config_token.as_deref() == Some("VSC_1") {
+                profile.video_source_config_token = Some(TOKEN.into());
+            }
+        }
+    });
+    let client = OnvifClient::new(TARGET).with_transport(Arc::new(capture.clone()));
+    let sensors = client.get_video_sources(TARGET).await.unwrap();
+    assert_eq!(sensors.len(), 2);
+    let configs = client
+        .get_video_source_configurations(TARGET)
+        .await
+        .unwrap();
+    assert_eq!(configs[0].token, TOKEN);
+    let mut config = client
+        .get_video_source_configuration(TARGET, TOKEN)
+        .await
+        .unwrap();
+    assert_eq!(config.source_token, "VS_1");
+    let options = client
+        .get_video_source_configuration_options(TARGET, TOKEN)
+        .await
+        .unwrap();
+    assert_eq!(options.bounds_range.unwrap().width_range.max, 2592);
+    config.name = "Corpus source & <改名>".into();
+    config.bounds.width = 640;
+    config.bounds.height = 360;
+    client
+        .set_video_source_configuration(TARGET, &config)
+        .await
+        .unwrap();
+    assert_eq!(
+        capture.mock.device().read().video_source_configs[0].width,
+        640
+    );
+    let options = client
+        .get_video_source_configuration_options(TARGET, TOKEN)
+        .await
+        .unwrap();
+    assert_eq!(options.bounds_range.unwrap().width_range.max, 2592);
+    let configs = client
+        .get_video_source_configurations_media2(TARGET)
+        .await
+        .unwrap();
+    assert_eq!(configs[0].name, config.name);
+    config.source_token = "VS_2".into();
+    config.bounds.width = 3000;
+    config.bounds.height = 2000;
+    client
+        .set_video_source_configuration_media2(TARGET, &config)
+        .await
+        .unwrap();
+    assert_eq!(
+        capture.mock.device().read().video_source_configs[0].width,
+        1280
+    );
+    let options = client
+        .get_video_source_configuration_options_media2(TARGET, TOKEN)
+        .await
+        .unwrap();
+    assert_eq!(options.source_tokens, ["VS_2"]);
+    let configs = client
+        .get_video_source_configurations_media2(TARGET)
+        .await
+        .unwrap();
+    assert_eq!(
+        (configs[0].bounds.width, configs[0].bounds.height),
+        (1280, 720)
+    );
+    let before = serde_json::to_value(&*capture.mock.device().read()).unwrap();
+    let error = client
+        .get_video_source_configuration(TARGET, "absent-source-941")
+        .await
+        .unwrap_err();
+    assert_delete_fault(
+        error,
+        "ter:InvalidArgVal",
+        "Source configuration not found: absent-source-941",
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    let error = client
+        .get_video_source_configuration_options_media2(TARGET, "absent-source-942")
+        .await
+        .unwrap_err();
+    assert_delete_fault(
+        error,
+        "ter:InvalidArgVal",
+        "Source configuration not found: absent-source-942",
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    config.bounds.x = 7;
+    let error = client
+        .set_video_source_configuration_media2(TARGET, &config)
+        .await
+        .unwrap_err();
+    assert_delete_fault(
+        error,
+        "ter:InvalidArgVal",
+        "Invalid mock source setting: Bounds/@x (only zero origin is modeled)",
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    for version in ["ver10", "ver20"] {
+        let ns = format!("http://www.onvif.org/{version}/media/wsdl");
+        let op = "GetVideoSourceConfigurationOptions";
+        let xml = capture.soap_post(TARGET, &format!("{ns}/{op}"), format!("<s:Envelope xmlns:s='{SOAP}' xmlns:m='{ns}'><s:Body><m:{op}/></s:Body></s:Envelope>")).await.unwrap();
+        let body = parse_soap_body(&xml).unwrap();
+        assert_eq!(
+            body.children[0]
+                .path(&["Options", "BoundsRange", "WidthRange", "Max"])
+                .unwrap()
+                .text(),
+            "1280"
+        );
+    }
+    assert_eq!(
+        serde_json::to_value(&*capture.mock.device().read()).unwrap(),
+        before
+    );
+    drop(client);
+    Arc::try_unwrap(capture.exchanges)
+        .unwrap_or_else(|_| panic!("capture still shared"))
+        .into_inner()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn captures_source_batch_with_write_readback_and_refusals() {
+    let exchanges = source_exchanges().await;
+    assert_eq!(exchanges.len(), 15);
+    assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 3);
+    assert_eq!(
+        exchanges
+            .iter()
+            .map(|e| &e.action)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        8
+    );
+    for e in exchanges.iter().filter(|e| e.expected_fault) {
+        let body = parse_soap_body(&e.response).unwrap();
+        let fault = body.child("Fault").unwrap();
+        assert_eq!(fault.path(&["Code", "Value"]).unwrap().text(), "s:Sender");
+        assert_eq!(
+            fault.path(&["Code", "Subcode", "Value"]).unwrap().text(),
+            "ter:InvalidArgVal"
+        );
+        assert_eq!(
+            fault
+                .path(&["Code", "Subcode", "Subcode", "Value"])
+                .unwrap()
+                .text(),
+            if e.action.ends_with("/SetVideoSourceConfiguration") {
+                "ter:ConfigModify"
+            } else {
+                "ter:NoConfig"
+            }
+        );
+    }
+}
+
 fn assert_empty_policy(error: OnvifError, code: &str) {
     let OnvifError::Soap(fault) = error else {
         panic!("expected an explicit mock policy Fault");
@@ -557,10 +743,11 @@ fn corpus_export_rejects_empty_relative_existing_and_checkout_destinations() {
 
 #[tokio::test]
 #[ignore = "explicit external-only export; set OXVIF_MOCK_CORPUS to a new absolute directory"]
-async fn export_first_profile_batch_for_independent_validation() {
+async fn export_reviewed_batches_for_independent_validation() {
     let directory = std::env::var_os("OXVIF_MOCK_CORPUS")
         .expect("OXVIF_MOCK_CORPUS is required; missing output is not an export pass");
-    let exchanges = profile_exchanges().await;
+    let mut exchanges = profile_exchanges().await;
+    exchanges.extend(source_exchanges().await);
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
     eprintln!(

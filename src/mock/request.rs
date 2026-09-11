@@ -243,6 +243,19 @@ pub(super) struct Node {
 }
 
 impl Node {
+    /// Inspect modeled-field boundaries without falling back to fragment XML.
+    pub(super) fn element_children(&self) -> impl Iterator<Item = (&str, &str, &Self)> {
+        self.children
+            .iter()
+            .map(|child| (child.ns.as_str(), child.name.as_str(), child))
+    }
+
+    pub(super) fn expanded_attributes(&self) -> impl Iterator<Item = (&str, &str, &str)> {
+        self.attributes
+            .iter()
+            .map(|((ns, name), value)| (ns.as_str(), name.as_str(), value.as_str()))
+    }
+
     /// Check direct element identity and order for an operation's source-selected
     /// fields. Callers still own multiplicity, required fields and scalar rules.
     pub(super) fn check_child_sequence(

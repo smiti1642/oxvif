@@ -23,9 +23,9 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 238 direct occurrences of five reader spellings are indexed: 223 before
-  top-level test modules and 15 inside those modules. The former span 71
-  enclosing symbols, **not** 71 defective operations. This includes test-only
+- 233 direct occurrences of five reader spellings are indexed: 218 before
+  top-level test modules and 15 inside those modules. The former span 68
+  enclosing symbols, **not** 68 defective operations (recounted for VS1). This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
   helper touch; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
@@ -258,8 +258,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
-| `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
-| `src/mock/services/media.rs::apply_video_source_write` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::require_config_token` | `extract_tag` | `production:1` |
@@ -326,7 +324,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | W08 | `auth::validate_ws_security`: Username/Password/Nonce/Created scalar extraction | AuthResponder, exemption selector and Device user mutations; migrate within auth boundary, never by body-wide lookup |
 | W19 | Legacy `canon::canonicalize` key DOM plus `request::recording_equivalent` secondary replay check | Fixture keys, masking, recording, adapter and invalidation remain separate from synthetic routing/fault policy; exact raw replay retained, selected identity collisions contained without rewriting stored keys |
 | W17 | `discovery_responder::probe_reply`: DOM | UDP Probe matching, QName scope and input bounds; not the SOAP synthetic entry point |
-| W10 | Media profile scalar selectors and create fields; DeleteProfile strict reader; `bind_configuration`/`unbind_configuration`; encoder/source/audio write helpers | Media2 wrappers reuse Media1 helpers; replace fragment contracts with parsed values/subtrees, not decode-and-reinsert strings |
+| W10 | Media profile scalar selectors and create fields; DeleteProfile strict reader; `bind_configuration`/`unbind_configuration`; scoped `video_source` subtree contract; remaining encoder/audio write helpers | Media2 wrappers reuse shared helpers; replace fragment contracts with parsed values/subtrees, not decode-and-reinsert strings |
 | W10 | Media OSD helpers, colour/position attributes and nested TextString; configuration option selectors | Rendering and typed parsers, list filtering, quota/state; `_force_use_extract_all` is not a routed behavior |
 | W10 | `media2::configuration_plan`: scoped repeated Type/Token references shared by create/add/remove | Complete value plan, optional rename and reference counts commit atomically; see [assembly batch](mock-fidelity-profile-assembly.md). Nested configuration writers remain separate work. |
 | W11 | PTZ selector scalars, nested operation/config/tour/space fragments and coordinate attributes | Profile-to-node resolution; `min_max`, range/vector readers, per-head slots and repeated tour spots |
@@ -355,6 +353,7 @@ while the complete dependency graph remains open.
 
 | ID | Evidence | Disposition |
 | --- | --- | --- |
+| K31–K33 — selected VS1 paths repaired | Old-code regressions reproduced crop-dependent options ceilings and success on invalid final fields. The batch mutation demonstrated source-selection and full-state refusal assertion sensitivity. | W01/W10/W17–W19: complete scoped candidates commit atomically; sensor-derived options, escaped identities and post-commit replay invalidation. Both transports, 70 external instances and limits are in [VS1](mock-fidelity-video-source.md); scalar attributes, arbitrary imported snapshots and physical routing remain incompletely modeled. |
 | K29 — shared escaping corrected | `types::xml_escape` escaped markup but emitted CR/LF/tab literally even for attributes. New wire/value assertions and both-transport profile Name cases failed on the old helper. | W03/W10/W06 shared representation slice: emit numeric character references, preserve ordinary borrowed values and literal Name state/read behavior; raw renderers, token-reader closure, schema field constraints and invalid XML characters remain separate. |
 | K30 — empty profile policy corrected | Both transports reproduced committed empty-token state after a client parse failure. Explicit empty Create/read selectors now refuse with Sender/mock:RequestPolicy before effects; lists with empty seeds return Receiver, preserving snapshots and valid individual reads. | W01/W10/W06 bounded mock policy, not a normative xs:string restriction. Raw/client state, hooks, allocation, replay and independent policy-Fault controls are in the profile preflight; other seed and field constraints remain open. |
 | K27 — substitution contained, index still collides | `mock_replay_key_gaps` retains the six original stored-key collisions and adds body ephemera, mixed-content ordering and xsi:type namespace controls. Replay now rejects unconfirmed scoped identity matches and falls through to synthetic. | W19 partial: both transports and exact raw/qualified-header controls pass; index/file shape unchanged, overwritten recordings unrecoverable, full key migration and other QName/HTTP/protocol semantics remain open. |

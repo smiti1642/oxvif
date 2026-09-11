@@ -236,7 +236,7 @@ async fn video_source_options_unknown_channel_is_refused() {
         .get_video_source_configuration_options("VSC_9")
         .await
         .unwrap_err();
-    assert_fault(err, "env:Sender", "NoSuchConfig-VSCOPT-5504: VSC_9");
+    assert_fault(err, "s:Sender", "Source configuration not found: VSC_9");
 }
 
 #[tokio::test]

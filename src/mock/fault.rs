@@ -61,6 +61,7 @@ pub(super) const INVALID_ARG_VAL: FaultQName = FaultQName::new("ter", ONVIF_ERRO
 pub(super) const ACTION: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "Action");
 pub(super) const NO_PROFILE: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "NoProfile");
 pub(super) const NO_CONFIG: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "NoConfig");
+pub(super) const CONFIG_MODIFY: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "ConfigModify");
 pub(super) const PROFILE_EXISTS: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "ProfileExists");
 pub(super) const MAX_PROFILES: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "MaxNVTProfiles");
 pub(super) const CONFIGURATION_CONFLICT: FaultQName =

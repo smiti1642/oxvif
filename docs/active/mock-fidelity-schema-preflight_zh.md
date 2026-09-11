@@ -186,8 +186,8 @@ python packaging/verify_schemas_xerces.py compile --root /absolute/external/oxvi
 仍是 Python 後端診斷命令，預期會揭露 K21。
 
 Windows／Linux CI 現在先執行 generic 控制及獨立 Xerces 選型，再執行獨立的
-**Official schemas and selected profile corpus** job，使用固定來源雜湊、外部目錄且不上傳 artifact。
-後者在編譯後明確匯出並驗證選定的 40 份 profile instance。每個 native 命令失敗均
+**Official schemas and selected Media corpus** job，使用固定來源雜湊、外部目錄且不上傳 artifact。
+後者在編譯後明確匯出並驗證選定的 70 份 profile／source instance。每個 native 命令失敗均
 終止 job；驗證要求既有且非空的 corpus，因此缺少匯出不會視為通過。
 兩者均作為 package 前提，但不可回報為完整操作／corpus 驗收。前次 CI
 [34461384194](https://github.com/smiti1642/oxvif/actions/runs/34461384194)
@@ -204,13 +204,13 @@ mock，擷取完整 request／response 字串；不讀取官方 schema，也不�
 
 Ignored 匯出測試要求 `OXVIF_MOCK_CORPUS` 指向**尚未存在的外部絕對目錄，且其
 parent 已存在**。工具拒絕空資料、含認證欄位的 request、相對／既有目錄及
-checkout／其上層位置。匯出保留 XML bytes，產生 40 個檔案及 `cases.json`，並為
+checkout／其上層位置。匯出保留 XML bytes，產生 70 個檔案及 `cases.json`，並為
 request、成功與 Fault response 記錄明確的 Envelope／Body／operation 預期。
 不讀取環境憑證或覆寫檔案；這是診斷 corpus，不是完整逐操作驗收。
 
 ```powershell
 $env:OXVIF_MOCK_CORPUS = 'C:/Temp/oxvif-profile-corpus-new'
-cargo test --all-features --test mock_schema_corpus export_first_profile_batch -- --ignored --nocapture
+cargo test --all-features --test mock_schema_corpus export_reviewed_batches_for_independent_validation -- --ignored --nocapture
 Remove-Item Env:OXVIF_MOCK_CORPUS
 ```
 
@@ -238,12 +238,18 @@ Action 集合及目錄錯誤斷言也在完整全部功能 `--no-fail-fast` 擾�
 該 run 早於此次 corpus 新增。未變更 Release、安裝版本、實機設定、公開 API 或
 貢獻者 PR。
 
+VS1 新增 15 組 source exchange（八項操作、三個拒絕），包括 client 讀寫、clamp 回讀及
+兩種服務的 raw generic options。合計 35 組 exchange：35 份 request、25 份成功回應及十份
+Fault。2026-09-11 Windows 外部新目錄 `oxvif-profile-corpus-20260911-05` 的 70 份 instance
+均通過 strict Xerces XSD 1.1；explicit legacy structural check 亦通過。來源及 corpus
+保留在 checkout 外；不代表完整語意或 ONVIF 認證。詳見 [VS1](mock-fidelity-video-source_zh.md)。
+
 ## 後續工作
 
 W20 仍為 PARTIAL：須核對未解析／wildcard 計數、Fault 的 QName 文字，以及擴充
-第一批 13 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
+已驗證的 21 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
 payload、Fault 正負 instance 驗收更廣泛的實際 exchange。W22 已在 Windows／Linux
-加入選定的 40 份 profile corpus 驗證；缺少前提即失敗的完整 instance gate 仍須涵蓋
+加入選定的 70 份 profile／source corpus 驗證；缺少前提即失敗的完整 instance gate 仍須涵蓋
 其餘操作批次。此工具實驗不能取代
 P-B 的逐操作欄位、Fault 與語意審查。
 

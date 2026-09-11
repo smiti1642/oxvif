@@ -1414,6 +1414,10 @@ and All selection commit atomically; touched reference counts and dependent repl
 reads follow the commit. Imported fixtures are not truncated. See
 [profile assembly and limits](docs/mock-server.md#63-profiles).
 
+Source configuration writes validate the complete modeled value atomically; options
+use sensor bounds rather than the current crop. Nonzero crop origins and unmodeled
+extensions refuse explicitly. See [source settings and selectors](docs/mock-server.md#621-source-configuration-contract).
+
 ### Try it now — a test that needs nothing
 
 ```toml

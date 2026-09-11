@@ -1,7 +1,7 @@
 //! Persona B replay: answer reads from a recorded [`FixtureStore`], with coarse
 //! copy-on-write so writes still round-trip through synthetic `DeviceState`.
 //! Built-in devices use committed effects for profile creation/deletion and
-//! modeled Media bindings; remaining mutations and standalone responder
+//! modeled Media bindings and source configuration; remaining mutations and standalone responder
 //! construction retain the legacy policy.
 
 use std::collections::HashSet;
@@ -42,7 +42,9 @@ const METAMORPH_BASE: &str = "http://metamorph";
 /// The public constructor retains this standalone policy because it cannot
 /// observe a caller's later responders. Built-in replay devices additionally
 /// observe committed profile creation/deletion and Media binding effects: refusals retain recorded
-/// reads, and success retires profile reads across both Media services. Other
+/// reads, and success retires profile reads across both Media services. Source
+/// configuration writes also retire their dependent source/profile/options reads
+/// only after commit. Other
 /// mutations still require migration; this is not full dependency tracking.
 /// Classified [`AckOnlyOperation`] requests never invalidate replay, including
 /// through the standalone constructor: refusal or receipt is not a modeled effect.
@@ -77,6 +79,23 @@ impl ReplayResponder {
         let invalidated = self.invalidated.clone();
         Arc::new(move |effect| {
             match effect {
+                Effect::VideoSourceChanged => {
+                    let mut retired = invalidated
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    for action in [
+                        "http://www.onvif.org/ver10/media/wsdl/GetProfile",
+                        "http://www.onvif.org/ver10/media/wsdl/GetProfiles",
+                        "http://www.onvif.org/ver20/media/wsdl/GetProfiles",
+                        "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurations",
+                        "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfiguration",
+                        "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurationOptions",
+                        "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurations",
+                        "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions",
+                    ] {
+                        retired.insert(action.to_owned());
+                    }
+                }
                 Effect::ProfilesChanged => {
                     let mut retired = invalidated
                         .lock()
@@ -91,6 +110,8 @@ impl ReplayResponder {
                         "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurations",
                         "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfiguration",
                         "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurations",
+                        "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurationOptions",
+                        "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions",
                         "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfiguration",
                         "http://www.onvif.org/ver10/media/wsdl/GetAudioSourceConfigurations",
                         "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurations",

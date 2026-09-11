@@ -74,6 +74,11 @@
 //! namespace-qualified ProfileToken from the shared parsed operation, preserving
 //! decoded whitespace and rejecting duplicate or nested scalar values. Other PTZ
 //! fields, fault policies and adapter token paths are not fully migrated.
+//! Source configuration uses a complete scoped candidate and one atomic commit.
+//! Only zero-origin crop storage is modeled; unsupported settings and malformed
+//! values refuse without hooks or replay invalidation. Oversized positive crops
+//! are clamped to the selected sensor and exposed through both service views.
+//! Source options follow physical sensor dimensions, not the mutable crop.
 //!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A
 //! mock that answers everything is not a test harness — it is a way of proving
@@ -83,8 +88,10 @@
 //! **1. A per-channel operation needs its token, and a wrong token is refused.**
 //! Operations addressing a specific head, sensor or configuration
 //! (`ProfileToken` for PTZ, `VideoSourceToken` for Imaging, `ConfigurationToken`
-//! for the Media options getters) fault on a missing token and fault again on
-//! one that names nothing. They no longer fall back to a default channel.
+//! for the remaining Media encoder/audio options getters) fault on a missing
+//! token and fault again on one that names nothing. Source options now support
+//! omitted selectors explicitly as conservative generic ranges, not a default
+//! channel; explicit unknown source configuration/profile references still fault.
 //!
 //! This is the harshest change and the one most likely to break existing tests
 //! — and it is the whole point. A device that silently answers for channel 0 is
@@ -96,9 +103,9 @@
 //!
 //! **2. A write either persists or says it cannot.** `Set` handlers do not
 //! return an empty success while discarding the body. Where the mock genuinely
-//! cannot model an operation — currently only Media2 `SetVideoSourceMode` — it
-//! returns a fault (`ter:ActionNotSupported`) rather than a success no getter
-//! could contradict. `tests/mock_roundtrip.rs` pins every `Set` to the getter
+//! cannot model an operation or requested setting, it returns a fault rather
+//! than a success no getter could contradict; classified receipt-only operations
+//! require explicit opt-in. `tests/mock_roundtrip.rs` pins its selected `Set` rows to the getter
 //! that should show it, and a row must declare `Works`, `Broken` — a real defect
 //! with an audit citation — or `Static`, a deliberate stub. Wiring a `Broken` or
 //! `Static` row up turns the test red so the declaration cannot rot. As of

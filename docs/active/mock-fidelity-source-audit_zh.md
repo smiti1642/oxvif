@@ -23,8 +23,8 @@
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 238 個直接呼叫：223 個位於頂層 test module 之前，15 個
-  位於其中。前者分布於 71 個 enclosing symbol，**不是** 71 個有缺陷的操作。
+- 五種 reader 拼法共 233 個直接呼叫：218 個位於頂層 test module 之前，15 個
+  位於其中。前者分布於 68 個 enclosing symbol（VS1 重新量測），**不是** 68 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
 - W00 已完成目前字面值形式的來源核對；K06 synthetic 別名路由已於
@@ -252,8 +252,6 @@
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
-| `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
-| `src/mock/services/media.rs::apply_video_source_write` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::require_config_token` | `extract_tag` | `production:1` |
@@ -320,7 +318,7 @@
 | W08 | `auth::validate_ws_security`：Username／Password／Nonce／Created scalar | AuthResponder、豁免 selector、Device users；於 auth 邊界遷移，不可使用整個 body 同名欄位搜尋 |
 | W19 | Legacy `canon::canonicalize` key DOM，加上 `request::recording_equivalent` 第二層 replay 檢查 | Fixture key、masking、recording、adapter、invalidation 與 synthetic routing／fault policy 分離；保留 exact raw replay，不改 stored key 即限制選定身分碰撞 |
 | W17 | `discovery_responder::probe_reply`：DOM | UDP Probe matching、QName scope、輸入限制；不是 SOAP synthetic 入口 |
-| W10 | Media profile scalar selector／create、DeleteProfile strict reader、`bind_configuration`／`unbind_configuration`、encoder／source／audio write helper | Media2 wrapper 共用 Media1 helper；以 parsed value／subtree 取代 fragment 契約，不做解碼再插回 XML |
+| W10 | Media profile scalar selector／create、DeleteProfile strict reader、`bind_configuration`／`unbind_configuration`、scoped `video_source` subtree 契約及其餘 encoder／audio write helper | Media2 wrapper 共用 Media1 helper；以 parsed value／subtree 取代 fragment 契約，不做解碼再插回 XML |
 | W10 | Media OSD helper、color／position attribute、巢狀 TextString、configuration options selector | Rendering／typed parser、list filter、quota／state；`_force_use_extract_all` 不是 routed behavior |
 | W10 | `media2::configuration_plan`：create／add／remove 共用 scoped 重複 Type／Token reference | 完整 value plan、選填改名與引用計數原子提交；見 [組裝批次](mock-fidelity-profile-assembly_zh.md)。巢狀 configuration writer 仍屬後續工作。 |
 | W11 | PTZ selector scalar、巢狀 operation／config／tour／space fragment、座標 attribute | Profile-to-node、`min_max`、range／vector reader、per-head slot、重複 tour spot |
@@ -346,6 +344,7 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 
 | ID | 證據 | 處置 |
 | --- | --- | --- |
+| K31–K33 — VS1 已修正選定路徑 | 舊碼重現 crop 導致 options 上限縮小及錯誤末欄位仍成功。整批擾動證實 source 選擇與拒絕後完整狀態斷言可辨識缺陷。 | W01／W10／W17–W19：完整 scoped candidate 原子提交、sensor-derived options、escaped identity 與成功後 replay 失效。兩種 transport、70 份外部 instance 及限制詳見 [VS1](mock-fidelity-video-source_zh.md)；scalar attribute、任意匯入 snapshot 與實體 routing 仍未完整建模。 |
 | K29 — 共用 escaping 已修正 | `types::xml_escape` 處理 markup，卻在 attribute 中也直接輸出 CR／LF／tab；新增 wire／value assertion 與兩種 transport 的 profile Name 案例均在舊 helper 失敗。 | W03／W10／W06 共用表示子批次：輸出 numeric character reference，保留一般值的 borrowed 路徑與 literal Name state／read；raw renderer、token-reader 閉合、schema 欄位限制與 invalid XML character 仍為獨立項目。 |
 | K30 — 空 profile 政策已修正 | 兩種 transport 均重現 client parse failure 後已提交空 token state。明確空值的 Create／read selector 現在於 effect 前以 Sender／mock:RequestPolicy 拒絕；含空 seed 的 list 回傳 Receiver，保留 snapshot 及有效個別讀取。 | W01／W10／W06 有界 mock 政策，不是規範上的 xs:string 限制。Raw／client state、hook、配置、replay 及獨立政策 Fault 控制記於 profile preflight；其他 seed 與欄位限制仍待處理。 |
 | K27 — 已限制回覆替換，index 仍碰撞 | `mock_replay_key_gaps` 保留原本六種 stored-key collision，增加 body ephemera、mixed-content ordering 與 xsi:type namespace 控制；replay 現在拒絕未確認的 scoped identity match，轉入 synthetic。 | W19 部分完成：兩種 transport 及 exact raw／qualified-header 控制通過；index／檔案格式不變，被覆蓋錄製無法恢復；完整 key 遷移及其他 QName／HTTP／protocol 語意仍待完成。 |
