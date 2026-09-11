@@ -21,6 +21,7 @@ use tokio::sync::oneshot;
 
 use crate::discovery::{DiscoveredDevice, new_uuid};
 use crate::mock::discovery_responder::DiscoveryResponder;
+use crate::mock::fault::{Code, Fault, MOCK_REQUEST_POLICY};
 use crate::mock::fault_injection::{FaultInjector, PendingFault};
 use crate::mock::policy::{AckOnlyOperation, AckOnlyPolicy};
 use crate::mock::responder::{Chain, RequestCtx};
@@ -228,6 +229,11 @@ impl MockServerBuilder {
 
 /// A bound-port mock ONVIF server. Shuts down on drop.
 ///
+/// SOAP request bodies must be valid UTF-8. Invalid bytes receive HTTP 400 with
+/// `s:Sender` / `mock:RequestPolicy` before fault injection, authentication,
+/// replay or mutation. Bytes are never repaired with replacement characters.
+/// This is a mock transport policy, not full HTTP/charset conformance.
+///
 /// ```no_run
 /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 /// let server = oxvif::mock::MockServer::start().await?;
@@ -312,7 +318,21 @@ async fn handle_soap(
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
     let action = helpers::extract_action(&headers).unwrap_or_default();
-    let body_str = String::from_utf8_lossy(&body);
+    let body_str = match std::str::from_utf8(&body) {
+        Ok(body) => body,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                [(header::CONTENT_TYPE, SOAP_CT)],
+                Fault::new(
+                    Code::Sender,
+                    &[MOCK_REQUEST_POLICY],
+                    "Mock HTTP request body must be valid UTF-8.",
+                )
+                .to_xml(),
+            );
+        }
+    };
 
     // Default pipeline: armed fault → auth gate → synthetic dispatch. With a
     // replay clone loaded, the replay responder is spliced in just ahead of the
@@ -339,7 +359,7 @@ async fn handle_soap(
     let rctx = RequestCtx {
         action: &action,
         base: &ctx.base,
-        body: &body_str,
+        body: body_str,
         state: &ctx.state,
     };
     let xml = chain.respond(&rctx).await;

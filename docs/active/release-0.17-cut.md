@@ -45,8 +45,8 @@ review all transitive consumers of an included helper. Public claims may not say
 | G02 Data integrity, K27 | LOCAL-PASS | Collision buckets preserve distinct requests across record/load/save and request-aware replay; key-only ambiguity returns None; equivalent requests still replace and credential cleanup remains targeted. Report groups retain all rows. See the K27 evidence below; G05 remains separate |
 | G03 Security and response integrity | OPEN | Disposition of known credential leaks, partial writes, unsafe URLs, ambiguous effect receipts and shared-boundary regressions; a severe known issue cannot become future work by relabeling it |
 | G04 Local code and documents | LOCAL-PASS baseline | Reuse exact unchanged-code evidence; revalidate affected gates after fixes, version changes or merges |
-| G05 Native CI | FAILED / rerun required | Maintainer run 34594415559 at 111c185 failed four CLI maintenance tests on macOS Intel; other platform test jobs passed. Test-budget/evidence follow-up requires a new run; local dispatch permission is still unavailable |
-| G06 Package and distribution | PARTIAL | Native credential jobs passed at 111c185, but Package/docs was skipped after the test failure. Library dry-run passed at 0.16.0; final-version packages, portable installs, SBOM/checksums and non-publishing staging remain required |
+| G05 Native CI | PASS at 3eccfd1; later fixes require a new run | Maintainer run 34597167495 passed all 27 jobs, including all five native targets. Local workflow dispatch permission remains unavailable |
+| G06 Package and distribution | PARTIAL | Package/docs passed at 3eccfd1: library package verification, CLI package file listing, archive controls and docs. Listing is not CLI package/install verification; final-version packages, portable installs, SBOM/checksums and non-publishing staging remain required |
 | G07 Human and Agent acceptance | PARTIAL | Existing Windows synthetic terminal/executable evidence; final-candidate terminal resize/cancel/input plus real-camera read-only snapshot/diagnose/export/diff evidence. No secrets/images in public evidence |
 | G08 Versions and release links | OPEN | Update library/CLI versions together after candidate acceptance; preserve schema-v3 claims only if tests agree, resolve every draft link to the final tag, keep migration warnings visible |
 | G09 RC and approval | NOT-RUN | Publish an RC only with explicit authorization; suggested 3–7 day observation, no calendar-based automatic success; obtain final release approval |
@@ -226,3 +226,26 @@ Final local gates after restoration:
 No new native-platform, package/install, hardware, MSRV or external-schema run is
 claimed for this test-only follow-up. Previous production-code evidence remains
 historical; it does not close G05 or the other outstanding release gates.
+
+### Pre-version acceptance follow-up
+
+The preceding run-required statements are historical. The maintainer's
+[run 34597167495](https://github.com/smiti1642/oxvif/actions/runs/34597167495)
+passed all 27 jobs at `3eccfd15274d4e978501634e4155477760502b6b`, including
+Windows, Linux x64/ARM and macOS Intel/ARM tests, smoke and native credentials.
+Package/docs verified the library but only listed CLI package files. This does
+not accept later fixes or distribution installation.
+
+Review finding A01: HTTP `from_utf8_lossy` changed invalid bytes into U+FFFD and
+successfully created a different profile. The new HTTP entry guard rejects invalid
+UTF-8 with HTTP 400 / Sender / mock:RequestPolicy before the responder chain.
+It does not redesign Content-Type, declared charset or general fault status mapping.
+The full workspace all-feature pre-fix sensitivity run had 1,301 passes, two
+assertion failures and five ignored (41 suites). The profile test observed an
+actual state mutation; the second test observed the armed-fault path returning 200.
+After the fix: 1,303 all-feature / 1,193 default passes, five ignored each;
+both workspace Clippy modes and strict rustdoc modes passed. Five invalid byte
+patterns are refused; valid Chinese/U+FFFD roundtrips and an armed fault survives.
+
+The user requested a stop before the formal 0.17 version/release commit. Versions
+remain 0.16.0; no tag, publication or main-branch merge is authorized by these checks.

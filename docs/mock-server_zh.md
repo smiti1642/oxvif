@@ -156,6 +156,12 @@ synthetic 邊界檢查。
 
 ### Synthetic 請求邊界
 
+HTTP SOAP 端點僅接受有效 UTF-8 位元組。無效序列會在 fault injection、
+authentication、replay 或 mutation 前回傳 HTTP 400、`s:Sender`／
+`mock:RequestPolicy`，reason 為 `Mock HTTP request body must be valid UTF-8.`。
+不以替代字元修補輸入；正確編碼的 Unicode（包含 U+FFFD 本身）仍可使用。
+這是專案的 transport 策略，不代表支援所有 XML charset 或完整 HTTP binding。
+
 到達 synthetic dispatch 的請求會解析一次，建立有資源上限且保留 namespace 的
 樹狀結構。Operation 的 namespace／local name 必須符合解析後的 Action，
 靜態讀取也適用。SOAP envelope 必須在可選 Header 之後包含單一 Body，Body
@@ -636,7 +642,7 @@ Parser 應優先使用最深層節點，並逐層向外 fallback。不存在的�
 
 ## 9. 錯誤模型
 
-Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多數服務 handler 仍使用 `helpers::resp_soap_fault`）。目前 HTTP status 維持 **200**；SOAP HTTP binding 稽核尚未完成。XML 結構正確不能證明 HTTP 行為正確。
+Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多數服務 handler 仍使用 `helpers::resp_soap_fault`）。Dispatcher fault 的 HTTP status 仍為 **200**；HTTP SOAP 入口的無效 UTF-8 使用 **400**。其餘 SOAP HTTP binding 稽核尚未完成。XML 結構正確不能證明 HTTP 行為正確。
 
 在強化分支中，Media1／Media2 `DeleteProfile` 對不存在或固定 profile 的拒絕使用
 巢狀 Sender Fault。`SoapError::Fault.code` 為 `s:Sender`，`subcode` 維持**第一層**：

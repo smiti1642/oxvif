@@ -187,6 +187,13 @@ An action that matches no arm returns:
 
 ### Synthetic request boundary
 
+The HTTP SOAP endpoint accepts valid UTF-8 bytes only. Invalid sequences receive
+HTTP 400 with `s:Sender` / `mock:RequestPolicy` and reason
+`Mock HTTP request body must be valid UTF-8.` before fault injection, authentication,
+replay or mutation. No replacement-character repair is performed; correctly
+encoded Unicode, including U+FFFD itself, remains allowed. This is a project
+transport policy, not support for every XML charset or complete HTTP binding.
+
 Requests that reach synthetic dispatch are parsed once into a bounded,
 namespace-aware tree. The operation namespace/local name must match the resolved
 Action, including on static reads. SOAP envelopes require one Body after an
@@ -1093,8 +1100,9 @@ value; address-less metadata blocks are explicitly unrepresentable. See the
 ### 9.1 Shape
 
 SOAP 1.2 `<s:Fault>` with `Code/Value` and `Reason/Text`
-(most service handlers still use `helpers::resp_soap_fault`). HTTP status is
-currently **200**; the SOAP HTTP binding audit remains pending. Do not infer
+(most service handlers still use `helpers::resp_soap_fault`). Dispatcher faults
+still use HTTP **200**; invalid UTF-8 at the HTTP SOAP entry point uses **400**.
+The rest of the SOAP HTTP binding audit remains pending. Do not infer
 correct HTTP behavior from a well-formed Fault body.
 
 On the hardening branch, Media1/Media2 `DeleteProfile` missing/fixed-profile

@@ -284,3 +284,160 @@ async fn http_static_and_stateful_requests_share_the_parsed_boundary() {
     )
     .await;
 }
+
+#[cfg(feature = "mock-server")]
+#[tokio::test]
+async fn http_invalid_utf8_cannot_become_a_different_profile_write() {
+    const MEDIA: &str = "http://www.onvif.org/ver10/media/wsdl";
+    let hooks = Arc::new(AtomicUsize::new(0));
+    let observed = hooks.clone();
+    let server = oxvif::mock::MockServer::builder()
+        .on_change(Arc::new(move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+        }))
+        .start()
+        .await
+        .unwrap();
+    let before = serde_json::to_value(&*server.device().read()).unwrap();
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap();
+    let prefix =
+        format!("<s:Envelope xmlns:s='{SOAP}' xmlns:m='{MEDIA}'><s:Body><m:CreateProfile><m:Name>");
+    let suffix = "</m:Name><m:Token>utf8-943</m:Token></m:CreateProfile></s:Body></s:Envelope>";
+    for invalid in [
+        &[0xff][..],
+        &[0xc0, 0xaf],
+        &[0xed, 0xa0, 0x80],
+        &[0xe2, 0x82],
+        &[0xf4, 0x90, 0x80, 0x80],
+    ] {
+        let body = [prefix.as_bytes(), invalid, suffix.as_bytes()].concat();
+        let response = client
+            .post(server.device_url())
+            .header(
+                "Content-Type",
+                format!("application/soap+xml; charset=utf-8; action=\"{MEDIA}/CreateProfile\""),
+            )
+            .body(body)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let content_type = response.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let xml = response.text().await.unwrap();
+        // Assert state first: a lossy decoder must visibly reproduce the write,
+        // not merely fail an expected HTTP-status assertion.
+        assert_eq!(
+            serde_json::to_value(&*server.device().read()).unwrap(),
+            before,
+            "invalid bytes {invalid:?}: {xml}"
+        );
+        assert_eq!(hooks.load(Ordering::SeqCst), 0);
+        assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+        assert_eq!(content_type, "application/soap+xml; charset=utf-8");
+        assert_eq!(
+            find_response(&parse_soap_body(&xml).unwrap(), "unused").unwrap_err(),
+            SoapError::Fault {
+                code: "s:Sender".into(),
+                subcode: Some("mock:RequestPolicy".into()),
+                reason: "Mock HTTP request body must be valid UTF-8.".into(),
+                detail: None,
+            }
+        );
+        assert_eq!(
+            expanded_fault_values(&xml),
+            vec![
+                (SOAP.into(), "Sender".into()),
+                ("urn:oxvif:mock:error".into(), "RequestPolicy".into()),
+            ]
+        );
+    }
+    // U+FFFD is itself valid Unicode; reject bad bytes, not that character.
+    let literal = "入口-\u{fffd}-943";
+    let xml = oxvif::transport::HttpTransport::new()
+        .soap_post(
+            server.device_url(),
+            &format!("{MEDIA}/CreateProfile"),
+            format!("{prefix}{literal}{suffix}"),
+        )
+        .await
+        .unwrap();
+    let response = parse_soap_body(&xml).unwrap();
+    let profile = find_response(&response, "CreateProfileResponse")
+        .unwrap()
+        .child("Profile")
+        .unwrap();
+    assert_eq!(profile.attr("token"), Some("utf8-943"));
+    assert_eq!(profile.child("Name").unwrap().text(), literal);
+    assert_eq!(hooks.load(Ordering::SeqCst), 1);
+    let profiles = oxvif::OnvifClient::new(server.device_url())
+        .get_profiles(server.device_url())
+        .await
+        .unwrap();
+    assert_eq!(
+        profiles
+            .iter()
+            .find(|p| p.token == "utf8-943")
+            .unwrap()
+            .name,
+        literal
+    );
+}
+
+#[cfg(feature = "mock-server")]
+#[tokio::test]
+async fn http_invalid_utf8_does_not_consume_an_armed_fault() {
+    let server = oxvif::mock::MockServer::start().await.unwrap();
+    let action = format!("{DEVICE}/GetDeviceInformation");
+    server.inject_fault("GetDeviceInformation", "s:Receiver", "queued-944");
+    let response = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap()
+        .post(server.device_url())
+        .header(
+            "Content-Type",
+            format!("application/soap+xml; action=\"{action}\""),
+        )
+        .body(vec![0xff])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST);
+    let transport = oxvif::transport::HttpTransport::new();
+    let body = envelope("<d:GetDeviceInformation/>");
+    let xml = transport
+        .soap_post(server.device_url(), &action, body.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        find_response(&parse_soap_body(&xml).unwrap(), "unused").unwrap_err(),
+        SoapError::Fault {
+            code: "s:Receiver".into(),
+            reason: "queued-944".into(),
+            subcode: None,
+            detail: None,
+        }
+    );
+    let xml = transport
+        .soap_post(server.device_url(), &action, body)
+        .await
+        .unwrap();
+    assert_eq!(
+        find_response(
+            &parse_soap_body(&xml).unwrap(),
+            "GetDeviceInformationResponse"
+        )
+        .unwrap()
+        .child("Manufacturer")
+        .unwrap()
+        .text(),
+        "oxvif-mock"
+    );
+}

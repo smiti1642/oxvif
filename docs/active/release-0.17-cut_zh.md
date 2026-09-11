@@ -44,8 +44,8 @@
 | G02 資料完整性 K27 | LOCAL-PASS | 碰撞群組在 record／load／save 及完整請求 replay 中保留不同請求；key-only 歧義回傳 None；等價請求仍替換，去憑證維持指定格式。報告群組保留各列。見下方 K27 證據；G05 仍獨立待驗 |
 | G03 安全及回應完整性 | OPEN | 處理已知機密洩漏、部分寫入、不安全 URL、誤導效果回覆及共用邊界回歸；不得把重大問題改名為後續工作 |
 | G04 本機程式及文件 | LOCAL-PASS 基準 | 精確重用未變動程式的證據；修正、改版號或合併後重驗受影響關卡 |
-| G05 原生 CI | FAILED／須重跑 | 維護者為 111c185 啟動 run 34594415559；macOS Intel 四項 CLI 維運測試失敗，其餘平台 test job 通過。測試預算／證據修正仍須新 run；本機仍無 dispatch 權限 |
-| G06 套件及散布 | PARTIAL | 111c185 的原生憑證 job 通過，但測試失敗後 Package/docs 略過。0.16.0 版號的 library dry-run 通過；仍須最終版號套件、portable install、SBOM／checksum 及不發布的 staging |
+| G05 原生 CI | 3eccfd1 通過；後續修正須新 run | 維護者的 run 34597167495 全部 27 個 job 通過，包含五種原生目標。本機仍無 workflow dispatch 權限 |
+| G06 套件及散布 | PARTIAL | 3eccfd1 的 Package/docs 通過：library package 驗證、CLI package 檔案清單、archive 控制及文件。清單不等於 CLI package／安裝驗證；仍須最終版號套件、portable install、SBOM／checksum 及不發布的 staging |
 | G07 人類及 Agent 驗收 | PARTIAL | 已有 Windows synthetic terminal／executable 證據；仍須最終候選的 resize／cancel／input 及實機唯讀 snapshot／diagnose／export／diff 證據；公開證據不含機密或影像 |
 | G08 版號及發布連結 | OPEN | 候選驗收後同步 library／CLI 版號；schema v3 宣稱須符合測試；草稿連結固定至最終 tag，遷移警告不可隱藏 |
 | G09 RC 及授權 | NOT-RUN | RC 也須明確發布授權；建議觀察 3–7 天，不因日期到期自動通過；取得正式發布同意 |
@@ -203,3 +203,24 @@ Intel 的 `chunked_snapshot_limit_is_enforced_without_content_length`、
 
 本次測試修正不宣稱新增原生平台、套件／安裝、實機、MSRV 或外部 schema 執行。
 先前產品程式碼證據仍屬歷史，不能據此結案 G05 或其他尚未完成的發布關卡。
+
+### 正式版號提交前的驗收進度
+
+上方要求重跑的敘述為歷史紀錄。維護者的
+[run 34597167495](https://github.com/smiti1642/oxvif/actions/runs/34597167495)
+在 `3eccfd15274d4e978501634e4155477760502b6b` 全部 27 個 job 通過，包含
+Windows、Linux x64／ARM、macOS Intel／ARM 的測試、smoke 及原生憑證。
+Package/docs 驗證 library，但 CLI 僅列出套件檔案；不代表後續修正或散布安裝已驗收。
+
+審查發現 A01：HTTP 的 `from_utf8_lossy` 將無效位元組改為 U+FFFD，並成功建立
+不同名稱的 profile。新增的 HTTP 入口檢查在 responder chain 前，以 HTTP 400／
+Sender／mock:RequestPolicy 拒絕無效 UTF-8；未重設計 Content-Type、宣告的
+charset 或一般 fault status mapping。修正前的完整 workspace all-feature
+敏感度驗證有 1,301 通過、兩項斷言失敗、五項 ignored（41 suites）：profile
+測試確實觀察到狀態被修改；另一項觀察到 armed-fault 路徑回傳 200。
+修正後 all-feature 1,303／default 1,193 通過，各五項 ignored；兩組 workspace
+Clippy 及 strict rustdoc 通過。五種無效位元組拒絕、合法中文／U+FFFD roundtrip
+及 armed fault 保留均通過。
+
+使用者要求停在正式 0.17 版號／發布 commit 之前。目前版號維持 0.16.0；
+這些檢查不授權建立 tag、發布或合併主分支。

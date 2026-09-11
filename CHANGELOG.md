@@ -41,6 +41,8 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
   option values, metadata required fields and XML literal whitespace handling.
 - Selected Mock request identity, atomic Media writes, coherent snapshots/hooks
   and committed replay invalidation; classified unmodeled effects refuse by default.
+- Mock HTTP rejects invalid UTF-8 before dispatch instead of silently changing
+  request values and potentially committing a different write.
 - Metamorph retains distinct recordings when legacy canonical keys collide,
   including load/save and reports; request-aware lookup selects the recording.
 - Windows debug CLI startup stack use, cancellation behavior and bounded
