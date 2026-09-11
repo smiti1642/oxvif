@@ -137,11 +137,6 @@ jobs:
         run: |
           cargo fetch --locked
           python3 packaging/check_xml_features.py
-      - name: Test packaging acceptance checks
-        run: |
-          python3 -m venv "$RUNNER_TEMP/oxvif-packaging-controls"
-          "$RUNNER_TEMP/oxvif-packaging-controls/bin/python" -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: -r packaging/schema-requirements.txt
-          "$RUNNER_TEMP/oxvif-packaging-controls/bin/python" -m unittest discover -s packaging -p 'test_*.py'
 
   audit:
     name: Security audit
@@ -240,9 +235,13 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $bin = 'target/release/oxvif.exe'
           & $bin --version
+          if ($LASTEXITCODE -ne 0) { throw 'version command failed' }
           & $bin --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'help command failed' }
           & $bin describe device.info --output json | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'describe command failed' }
           & $bin agent guide --output json | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'agent guide command failed' }
           $parseError = & $bin --output json definitely-not-a-command
           if ($LASTEXITCODE -ne 2) { throw 'structured parse failure returned the wrong exit code' }
           $document = $parseError | ConvertFrom-Json

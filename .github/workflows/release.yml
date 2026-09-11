@@ -224,15 +224,21 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $bin = "target/$env:TARGET/release/oxvif.exe"
           & $bin --version
+          if ($LASTEXITCODE -ne 0) { throw 'version command failed' }
           & $bin --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'help command failed' }
           & $bin describe device.info --output json --non-interactive | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'describe command failed' }
           & $bin agent guide --output json --non-interactive | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'agent guide command failed' }
           $sysroot = & rustc --print sysroot
+          if ($LASTEXITCODE -ne 0) { throw 'Rust sysroot lookup failed' }
           $llvmObjdump = Join-Path $sysroot 'lib/rustlib/x86_64-pc-windows-msvc/bin/llvm-objdump.exe'
           if (-not (Test-Path -LiteralPath $llvmObjdump)) {
             throw "llvm-objdump was not found at the expected Rust sysroot path: $llvmObjdump"
           }
           $imports = & $llvmObjdump -p $bin
+          if ($LASTEXITCODE -ne 0) { throw 'PE import inspection failed' }
           if ($imports -match '(?i)(vcruntime|msvcp|ucrtbase|api-ms-win-crt)') {
             throw 'Windows release binary unexpectedly depends on a dynamic C/C++ runtime'
           }
@@ -286,20 +292,28 @@ jobs:
           Copy-Item "crates/oxvif-cli/schema/*.json" "$root/schema"
           $bin = "target/$env:TARGET/release/oxvif.exe"
           & $bin --version | Out-File -Encoding utf8 "$root/metadata/version.txt"
+          if ($LASTEXITCODE -ne 0) { throw 'version metadata generation failed' }
           & $bin agent guide --output json --non-interactive | Out-File -Encoding utf8 "$root/metadata/agent-guide.json"
+          if ($LASTEXITCODE -ne 0) { throw 'agent metadata generation failed' }
           & rustc -Vv | Out-File -Encoding utf8 "$root/metadata/build-tools.txt"
+          if ($LASTEXITCODE -ne 0) { throw 'Rust version lookup failed' }
           & cargo -V | Out-File -Encoding utf8 -Append "$root/metadata/build-tools.txt"
+          if ($LASTEXITCODE -ne 0) { throw 'Cargo version lookup failed' }
           & python --version 2>&1 | Out-File -Encoding utf8 -Append "$root/metadata/build-tools.txt"
+          if ($LASTEXITCODE -ne 0) { throw 'Python version lookup failed' }
           "RUSTFLAGS=$env:RUSTFLAGS" | Out-File -Encoding utf8 -Append "$root/metadata/build-tools.txt"
           foreach ($shell in @('bash', 'zsh', 'fish', 'powershell')) {
             & $bin completion $shell | Out-File -Encoding utf8 "$root/completions/oxvif.$shell"
+            if ($LASTEXITCODE -ne 0) { throw "completion generation failed for $shell" }
           }
           $sourceDateEpoch = git show -s --format=%ct HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'source timestamp lookup failed' }
           python packaging/create_archive.py `
             --format zip `
             --source $root `
             --output "dist/$env:ARCHIVE_NAME.zip" `
             --epoch $sourceDateEpoch
+          if ($LASTEXITCODE -ne 0) { throw 'archive generation failed' }
           $hash = (Get-FileHash "dist/$env:ARCHIVE_NAME.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $env:ARCHIVE_NAME.zip" | Out-File -Encoding ascii "dist/$env:ARCHIVE_NAME.zip.sha256"
       - name: Build, lint, install, and remove Debian package
