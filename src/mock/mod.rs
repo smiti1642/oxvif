@@ -161,6 +161,10 @@
 //! Remaining shared fault output escapes text and binds known prefixes, but still
 //! uses the legacy flat code hierarchy. These changes do not claim full conformance.
 
+#[cfg(feature = "metamorph")]
+mod adapter_request;
+#[cfg(feature = "metamorph")]
+pub(crate) use adapter_request::AdapterRequest;
 mod auth;
 pub(crate) mod canon;
 pub(crate) mod dispatch;

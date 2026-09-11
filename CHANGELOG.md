@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Typed Metamorph adapters now require exact supported Action/operation identity
+  and preserve decoded profile-token whitespace. Malformed or ambiguous requests
+  no longer call typed hooks with invented empty tokens. ContinuousMove requires
+  both axis groups with finite coordinates and no explicit space/Timeout; other
+  forms go to the existing raw/synthetic fallback instead of silently losing
+  options or substituting zero. Public trait signatures and raw bytes are unchanged.
 - Mock Media profile tokens now retain their literal identity through creation,
   both profile views, the six existing binding entry points and PTZ lookup.
   Profile token attributes are escaped once, including whitespace references;

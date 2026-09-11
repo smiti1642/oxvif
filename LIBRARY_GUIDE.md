@@ -1998,6 +1998,15 @@ device (e.g. an RTSP-only camera). Only `identity` and `stream_uri` are required
 else (profiles, capabilities, services) falls through to the synthetic mock.
 `continuous_move` and `snapshot` are optional hooks that default to unsupported.
 
+Typed hooks require an exact supported Action and matching qualified operation;
+profile identities are decoded without trimming. Missing, duplicate, nested or
+misrouted identity fields do not reach a typed hook. ContinuousMove accepts both
+axis groups with finite coordinates and no explicit space or Timeout; the current
+`PtzVector` cannot preserve omitted axes or those options. Other forms are offered
+unchanged to `respond_raw`, then synthetic fallback. A raw adapter owns validation
+of those requests. This is a typed API limit, not an ONVIF invalidity verdict.
+Full StreamSetup/Protocol handling and physical effects are not validated here.
+
 ```rust
 use std::sync::Arc;
 use oxvif::OnvifClient;

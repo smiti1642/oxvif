@@ -18,6 +18,7 @@ Owner: current hardening branch. [Execution checklist](mock-fidelity-execution-c
 | [PTZ profile identity](#ptz-profile-identity) | PTZ1 prerequisite before Media token migration |
 | [Media profile identity](#media-profile-identity) | P2 paired creation/read/render/binding migration |
 | [Empty profile policy](#empty-profile-policy) | K30 explicit mock limits and state-after-error controls |
+| [Typed adapter boundary](#typed-adapter-boundary) | A1 exact typed routing and representable arguments |
 
 ## Shared whitespace serialization
 
@@ -200,6 +201,51 @@ five ignored across 30 suites; both workspace/all-target Clippy builds, formatti
 strict default/all-feature rustdoc and diff checks pass. P2 `3f0c326` passed
 hosted CI 34561233409; that run predates K30. Next: typed adapter identity and
 remaining field/effect work, not release acceptance.
+
+## Typed adapter boundary
+
+A1 design before implementation, baseline `92e8ff5`: the typed adapter dispatches
+on Action suffixes and parses profile/velocity through the trimmed local-name DOM.
+Test the existing public adapter seam; do not add an HTTP adapter API solely for
+tests. Preserve `DeviceAdapter` signatures, raw Action-local-name/body fallback,
+fault/auth precedence and caller-owned raw response bytes.
+
+Select only the four existing full Action URIs (identity, two stream services,
+ContinuousMove), then validate the matching qualified operation and one direct,
+decoded nonempty ProfileToken. Missing/ambiguous input must not invoke a typed
+hook with an invented empty identity. Typed PTZ may consume only values its public
+`PtzVector` can represent: both axis groups, finite scalar coordinates, no explicit
+space or Timeout. Other forms decline to raw/synthetic fallback; do not turn an
+omitted axis into zero motion or claim invalid ONVIF. Full StreamSetup/Protocol,
+authorization and actual device effects remain separately unaccepted.
+
+Controls: distinct profile observations, exact velocity values, prefix/CDATA/entity
+variants, wrong/mismatched Actions, duplicate/nested/foreign identity, malformed/
+bounded input, velocity omissions/duplicates/nonfinite values and unrepresentable
+options; assert zero typed calls plus exact unchanged raw fallback bytes on decline.
+Run old-code reproduction, unfiltered mutation and complete gates.
+
+A1 implementation uses private `mock::adapter_request::AdapterRequest`, preserving
+the shared bounded parser's private Node API and all public trait signatures.
+The old-code run failed both new tests on wrong-Action invocation and trimmed
+identity (`1789101208_cargo_test.log`). Restoring a missing-coordinate zero
+fallback made the exact raw-fallback assertion fail in a full unfiltered
+workspace/all-feature/no-fail-fast run (`1789101443_cargo_test.log`); restored.
+Normal client and raw prefix/CDATA/entity/decoy controls check exact identities,
+velocity and call counts, rather than merely checking successful responses.
+
+The existing adapter has no public bound-port builder; this slice checks its
+in-process Transport and public Responder seam, not a newly invented HTTP adapter
+or real-device effects. The 40-instance synthetic profile corpus is unchanged and
+does not validate these adapter arguments. Remaining: StreamSetup/Protocol,
+spaces/timeouts/optional-axis API design, authorization and broader fidelity.
+
+A1 local gate: 1,215 all-feature and 1,119 default workspace tests passed, with
+five ignored across 31 suites. Both workspace/all-target Clippy builds, strict
+default/all-feature rustdoc, formatting, diff checks and the 159/157/247 inventory
+self-tests passed. The former private unqualified velocity unit probe was replaced
+by public client/responder tests with exact payload observations. No new schema
+instance or native HTTP adapter acceptance is claimed.
 
 ## Profile-token dependency closure
 

@@ -22,19 +22,24 @@
 //! [`DeviceAdapter::respond_raw`]: a raw escape hatch handed the operation's
 //! local name and the SOAP request body, returning a full response envelope
 //! (build it with [`soap_body`]) or `None` to fall through. It is consulted
-//! only after every typed hook declines, so it never has to re-handle
-//! `GetDeviceInformation` or `GetStreamUri`.
+//! after typed handling declines, including malformed/mismatched or
+//! unrepresentable typed requests; the raw implementation owns those cases.
+//! Typed dispatch requires an exact supported Action and matching qualified
+//! operation. Profile tokens are decoded once without trimming. ContinuousMove
+//! requires both axis groups with finite coordinates and no explicit space or
+//! Timeout, because the current typed API cannot preserve those options.
+//! Declining typed handling is not an assertion that the request violates ONVIF.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+use crate::mock::AdapterRequest;
 use crate::mock::fault_injection::FaultInjector;
 use crate::mock::helpers::{resp_empty, soap};
 use crate::mock::responder::{Chain, RequestCtx, Responder};
 use crate::mock::state::MockState;
-use crate::soap::XmlNode;
 use crate::transport::{Transport, TransportError};
 use crate::types::xml_escape;
 
@@ -76,11 +81,16 @@ pub trait DeviceAdapter: Send + Sync {
     fn identity(&self) -> DeviceIdentity;
 
     /// The real media URI for a profile (the stream being skinned). `None`
-    /// falls through to the synthetic mock's stream URI.
+    /// falls through to the raw hook, then the synthetic mock's stream URI.
+    /// `profile` is the decoded nonempty identity, without trimming. Typed
+    /// dispatch does not yet validate or expose StreamSetup/Protocol options.
     fn stream_uri(&self, profile: &str) -> Option<String>;
 
     /// Drive a real PTZ. Default: unsupported (falls through). Return
-    /// [`AdapterResult::Handled`] once actioned.
+    /// [`AdapterResult::Handled`] once actioned. The typed responder invokes this
+    /// only for both axis groups with finite coordinates, no explicit space and
+    /// no Timeout; other requests are offered to [`Self::respond_raw`]. This
+    /// avoids converting omitted axes to zero or silently dropping options.
     async fn continuous_move(&self, _profile: &str, _velocity: PtzVector) -> AdapterResult {
         AdapterResult::Unsupported
     }
@@ -99,8 +109,10 @@ pub trait DeviceAdapter: Send + Sync {
     /// SOAP request envelope. Return the full SOAP response envelope — build it
     /// with [`soap_body`] — or `None` to fall through to the synthetic mock.
     ///
-    /// Consulted only after every typed hook declines, so it never has to
-    /// re-handle `GetDeviceInformation`, `GetStreamUri`, or `ContinuousMove`.
+    /// Consulted after typed handling declines, including unsupported Actions,
+    /// malformed/mismatched requests, or options the typed API cannot represent.
+    /// Receives the original body unchanged; implementing this opts into handling
+    /// such input independently of typed/synthetic request validation.
     /// Default: `None` (everything falls through).
     async fn respond_raw(&self, _op: &str, _body: &str) -> Option<String> {
         None
@@ -135,7 +147,7 @@ impl AdapterResponder {
 impl Responder for AdapterResponder {
     async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
         let op = ctx.action.rsplit('/').next().unwrap_or(ctx.action);
-        if let Some(resp) = self.typed(op, ctx).await {
+        if let Some(resp) = self.typed(ctx).await {
             return Some(resp);
         }
         // Every typed hook declined — offer the operation to the raw escape
@@ -147,23 +159,20 @@ impl Responder for AdapterResponder {
 impl AdapterResponder {
     /// The ergonomic typed hooks. `None` means "not one of these" *or* the
     /// matching hook declined — either way the caller then tries `respond_raw`.
-    async fn typed(&self, op: &str, ctx: &RequestCtx<'_>) -> Option<String> {
-        match op {
-            "GetDeviceInformation" => Some(device_information(&self.adapter.identity())),
-            "GetStreamUri" => {
-                let profile = profile_token(ctx.body).unwrap_or_default();
+    async fn typed(&self, ctx: &RequestCtx<'_>) -> Option<String> {
+        match AdapterRequest::parse(ctx.action, ctx.body)? {
+            AdapterRequest::Identity => Some(device_information(&self.adapter.identity())),
+            AdapterRequest::Stream(profile) => {
                 let uri = self.adapter.stream_uri(&profile)?;
                 Some(stream_uri_response(ctx.action, &uri))
             }
-            "ContinuousMove" => {
-                let profile = ctx_profile(ctx.body).unwrap_or_default();
-                let velocity = ptz_velocity(ctx.body);
+            AdapterRequest::Move(profile, [pan, tilt, zoom]) => {
+                let velocity = PtzVector { pan, tilt, zoom };
                 match self.adapter.continuous_move(&profile, velocity).await {
                     AdapterResult::Handled => Some(resp_empty("tptz", "ContinuousMoveResponse")),
                     AdapterResult::Unsupported => None,
                 }
             }
-            _ => None,
         }
     }
 }
@@ -211,41 +220,6 @@ fn stream_uri_response(action: &str, uri: &str) -> String {
             </trt:MediaUri></trt:GetStreamUriResponse>"#
             ),
         )
-    }
-}
-
-/// Extract `Body/GetStreamUri/ProfileToken`.
-fn profile_token(body: &str) -> Option<String> {
-    let root = XmlNode::parse(body).ok()?;
-    root.path(&["Body", "GetStreamUri", "ProfileToken"])
-        .map(|n| n.text().to_string())
-        .filter(|s| !s.is_empty())
-}
-
-/// Extract `Body/ContinuousMove/ProfileToken`.
-fn ctx_profile(body: &str) -> Option<String> {
-    let root = XmlNode::parse(body).ok()?;
-    root.path(&["Body", "ContinuousMove", "ProfileToken"])
-        .map(|n| n.text().to_string())
-        .filter(|s| !s.is_empty())
-}
-
-/// Extract the PanTilt (x/y) and Zoom (x) velocity from a `ContinuousMove`.
-fn ptz_velocity(body: &str) -> PtzVector {
-    let Ok(root) = XmlNode::parse(body) else {
-        return PtzVector::default();
-    };
-    let velocity = root.path(&["Body", "ContinuousMove", "Velocity"]);
-    let attr_f = |node: Option<&XmlNode>, child: &str, attr: &str| {
-        node.and_then(|n| n.child(child))
-            .and_then(|c| c.attr(attr))
-            .and_then(|v| v.parse::<f32>().ok())
-            .unwrap_or(0.0)
-    };
-    PtzVector {
-        pan: attr_f(velocity, "PanTilt", "x"),
-        tilt: attr_f(velocity, "PanTilt", "y"),
-        zoom: attr_f(velocity, "Zoom", "x"),
     }
 }
 
@@ -414,18 +388,6 @@ mod tests {
         let h = c.get_hostname().await.unwrap();
         // The escape hatch's value wins over the synthetic default.
         assert_eq!(h.name.as_deref(), Some("escape-hatch-host"));
-    }
-
-    #[test]
-    fn ptz_velocity_parses_pan_tilt_zoom() {
-        let body = r#"<s:Envelope><s:Body><ContinuousMove>
-            <ProfileToken>p0</ProfileToken>
-            <Velocity><PanTilt x="0.5" y="-0.25"/><Zoom x="0.1"/></Velocity>
-        </ContinuousMove></s:Body></s:Envelope>"#;
-        let v = ptz_velocity(body);
-        assert_eq!(v.pan, 0.5);
-        assert_eq!(v.tilt, -0.25);
-        assert_eq!(v.zoom, 0.1);
     }
 
     /// The adapter's own data types serialise, so a Persona C device profile

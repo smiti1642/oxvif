@@ -114,6 +114,10 @@
 //! - **Persona C — adapter / skin (M5)**: [`AdapterResponder`] answers from a
 //!   [`DeviceAdapter`] you implement for a non-ONVIF device; unimplemented
 //!   operations fall through to synthetic. Driven by [`AdapterTransport`].
+//!   Typed hooks require full Action/operation identity and preserve decoded
+//!   profile whitespace. Unsupported or unrepresentable typed requests are
+//!   offered unchanged to the raw hook before synthetic fallback; see
+//!   [`DeviceAdapter::continuous_move`] for the bounded velocity projection.
 //!
 //! Persona B's two halves:
 //!

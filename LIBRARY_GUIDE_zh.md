@@ -674,6 +674,13 @@ malformed XML、mixed content 或未解析 `xsi:type` 不視為等價。支援�
 
 `DeviceAdapter` trait 可替 RTSP-only 等非 ONVIF 裝置提供 ONVIF skin。只需實作 `identity` 與 `stream_uri`；profile、capabilities 與 services 由 synthetic mock 補足，`continuous_move` 與 `snapshot` 為可選 hook。
 
+Typed hook 要求完整且支援的 Action 與對應 qualified operation；profile 身分
+解碼後不裁切空白。缺少、重複、巢狀或路由不一致的身分欄位不會進入 typed hook。
+ContinuousMove 僅接受兩組座標軸、有限座標值，且無明確 space 或 Timeout；目前
+`PtzVector` 無法保留省略的軸或這些選項。其他形式以原始 bytes 交由 `respond_raw`，
+再交由 synthetic fallback。Raw adapter 自行負責這些請求的驗證。這是 typed API
+限制，不是 ONVIF 無效性判定；此處尚未驗證完整 StreamSetup／Protocol 或實際效果。
+
 ---
 
 ## 執行內建範例

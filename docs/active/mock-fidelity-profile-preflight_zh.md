@@ -18,6 +18,7 @@
 | [PTZ profile 身分](#ptz-profile-身分) | Media token 遷移前的 PTZ1 前置工作 |
 | [Media profile 身分](#media-profile-身分) | P2 建立／讀取／render／binding 成對遷移 |
 | [空 profile 政策](#空-profile-政策) | K30 明確 mock 限制與錯誤後 state 控制 |
+| [Typed adapter 邊界](#typed-adapter-邊界) | A1 精確 typed 路由與可表示參數 |
 
 ## 共用空白序列化
 
@@ -171,6 +172,43 @@ exchange／40 份 XML instance，全部通過固定版本 strict Xerces XSD 1.1�
 formatting、strict default／all-feature rustdoc 及 diff 檢查通過。
 P2 `3f0c326` 通過託管 CI 34561233409，該 run 早於 K30。下一步為 typed adapter
 身分及其餘欄位／effect 工作，不是 Release 驗收。
+
+## Typed adapter 邊界
+
+A1 實作前設計，基準 `92e8ff5`：typed adapter 以 Action 尾端分派，並透過
+會 trim 的 local-name DOM 解析 profile／velocity。測試既有公開 adapter 介面；
+不僅為測試新增 HTTP adapter API。保留 `DeviceAdapter` 簽章、raw Action local-name／
+body fallback、fault／auth 優先順序及 caller 自訂 raw response bytes。
+
+僅選取四個既有完整 Action URI（identity、兩種 stream service、ContinuousMove），
+再驗證對應 qualified operation 及唯一直接、解碼後非空的 ProfileToken。
+缺少或歧義輸入不得以自動補空字串呼叫 typed hook。Typed PTZ 僅消費公開
+`PtzVector` 可表示的值：兩組座標軸、有限 scalar 座標，且無明確 space 或 Timeout。
+其餘形式交由 raw／synthetic fallback，不把省略的軸改為零運動，也不宣稱其違反
+ONVIF。完整 StreamSetup／Protocol、authorization 及實際裝置效果仍未驗收。
+
+控制：不同 profile 的觀測、精確 velocity、prefix／CDATA／entity 變體、錯誤／
+不一致 Action、重複／巢狀／foreign 身分、malformed／超界輸入、velocity 省略／
+重複／非有限值及無法表示的選項；decline 必須零 typed 呼叫且 raw fallback bytes
+完全不變。執行舊程式碼重現、完整擾動及全部 gate。
+
+A1 使用私有 `mock::adapter_request::AdapterRequest`，保留共用有界 parser 的私有
+Node API 及全部公開 trait 簽章。舊程式碼執行中，兩個新測試分別因錯誤 Action
+觸發 hook 及身分空白被裁切而失敗（`1789101208_cargo_test.log`）。還原缺少座標
+補零的行為後，完整 workspace／all-feature／no-fail-fast 執行在精確 raw fallback
+斷言失敗（`1789101443_cargo_test.log`）；擾動已還原。正常 client 與 raw
+prefix／CDATA／entity／decoy 控制檢查精確身分、velocity 及呼叫數，不僅確認成功。
+
+既有 adapter 沒有公開 bound-port builder；本批次驗證 in-process Transport 與
+公開 Responder 介面，不另造 HTTP adapter 或宣稱實機效果。40 份 synthetic
+profile corpus 未變更，亦不驗證這些 adapter 參數。剩餘工作：StreamSetup／Protocol、
+space／timeout／optional-axis API 設計、authorization 及更廣 fidelity。
+
+A1 本機 gate：workspace all-feature 1,215 項與 default 1,119 項測試通過，
+31 個 suite 中五項忽略。兩種 workspace／all-target Clippy、strict default／
+all-feature rustdoc、formatting、diff 及 159／157／247 清冊 self-test 通過。
+原有私有 unqualified velocity unit probe 已由公開 client／responder 的精確
+payload 觀測取代。不宣稱新增 schema instance 或 native HTTP adapter 驗收。
 
 ## Profile-token 依賴追蹤
 

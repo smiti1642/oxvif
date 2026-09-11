@@ -361,7 +361,7 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
 | K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |
 | K14 — 基準後已修正 | DeleteProfile 使用明確的 committed-outcome predicate；NotFound／Fixed 不通知，Deleted 通知一次。 | W18 部分完成；回歸檢查完整 state、兩服務、hook 次數及公開 helper 相容性。Replay 另由 K17 追蹤。 |
-| K15 — Name 與選定 profile-token 路徑已修正 | 兩個 CreateProfile Name reader 解碼 scalar；Media1 Create／GetProfile 及六個 binding 入口採用 scoped profile 身分。兩個 profile renderer 將 Name 與 token attribute 轉義一次。 | W10；P2 workflow／refusal 控制及 PTZ1 涵蓋選定 token 路徑。空 token 政策、typed adapter、recorded key 及巢狀 configuration 文字仍未結案。 |
+| K15 — Name 與選定 profile-token 路徑已修正 | 兩個 CreateProfile Name reader 解碼 scalar；Media1 Create／GetProfile 及六個 binding 入口採用 scoped profile 身分。兩個 profile renderer 將 Name 與 token attribute 轉義一次。 | W10；P2 workflow／refusal 控制及 PTZ1 涵蓋選定 token 路徑。K30 已完成空 token 政策；A1 涵蓋 typed adapter 身分與可表示移動參數。Recorded key、其他 adapter 選項及巢狀 configuration 文字仍未結案。 |
 | K16 — 部分修正 | Media2 profile-list 選擇已於 `c6af85b` 修正；create 只讀 Name；binding 驗證並提交完整、以值表示的 plan。 | 後筆無效 token 部分寫入及選定讀取語意具 state／hook／HTTP 控制；create／name／binding Type=All／conflict 及廣泛欄位／輸出驗證仍屬 W01／W10。 |
 
 K23 現僅修正測試框架。確定性控制可區分純耗時變動與資料／command 變動，

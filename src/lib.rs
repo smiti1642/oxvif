@@ -281,6 +281,9 @@
 //! - **Put an ONVIF skin on something else** — implement
 //!   `metamorph::DeviceAdapter` to answer ONVIF operations from a non-ONVIF
 //!   source.
+//!   Typed adapter hooks now check full Action/operation identity and preserve
+//!   decoded profile tokens. Requests the typed API cannot represent fall back
+//!   to the original raw hook; this is not full request or device-effect validation.
 //!
 //! The four long operations have `*_with_progress` twins that report
 //! determinate progress, so a UI can show a real bar rather than freezing for

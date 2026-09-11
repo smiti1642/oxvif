@@ -175,7 +175,8 @@ W02 發現新相依性時須擴充本表。
 | K28／key 中的 URL 憑證已修正 | Canonical projection 與舊檔／caller key 清除 URL 帳密；載入唯讀，明確保存才持久化清理 | W19 部分完成；虛構資料的隱私／lookup／磁碟控制，JSON 格式不變；raw envelope 僅針對指定格式去憑證，K27 index 碰撞仍待修正；見管線開工核對 |
 | K29／共用 XML 空白保留已修正 | 共用 escaping 在 text／attribute 以 numeric reference 保留 CR／LF／tab，Fault 使用相同 helper | W03／W06／W10 部分完成；已檢查兩種 transport、共用 helper 與 34 份外部 instance；raw token／nested renderer 與欄位限制仍待完成，詳見 profile preflight |
 | K30／有界政策已修正 | 明確空 Create／read selector 在 effect 前拒絕；含無效 seed 的 list 回傳 Receiver，不修復 snapshot | W01／W10／W06；兩種 transport 的錯誤後 state 重現、raw／client payload、hook、replay 及外部政策 Fault 控制記於 profile preflight |
-| P2／選定 profile 身分成對遷移 | Create／read／render／六個 binding 路徑在 Media／PTZ 流程保留 decoded 非空 token | W10 部分完成；其他 configuration 欄位、adapter／replay key、容量及完整語意仍待完成，詳見 profile preflight |
+| P2／選定 profile 身分成對遷移 | Create／read／render／六個 binding 路徑在 Media／PTZ 流程保留 decoded 非空 token | W10 部分完成；其他 configuration 欄位、replay key、容量及完整語意仍待完成，詳見 profile preflight |
+| A1／typed adapter 身分成對遷移 | 四個精確 Action 採有界 qualified operation 解析；保留 token 空白，typed hook 不接收無法表示的 PTZ 參數 | 公開簽章／raw fallback 不變；Transport／Responder 控制記於 profile preflight。其他 stream 選項、authorization、實際效果與更廣 adapter 契約仍待完成 |
 | K19／已重現的外部相容性發現 | 目前 Media 來源相依集合在獨立 XSD 1.0 驗證器中無法編譯，但可通過 strict XSD 1.1 編譯 | W21；見 [schema 前置檢查](mock-fidelity-schema-preflight_zh.md)；不修改 schema 或停用檢查，須驗收候選工具並明示 schema 語言 |
 | K20／已重現並修正 formatter | `auth::auth_fault` 原先輸出未宣告的 wsse subcode 及原始 reason 文字 | W05 serializer 遷移維持 code／subcode，修正 scoped binding／text，並加入 client／health／CLI 控制；認證解析與政策仍屬 W08 待辦 |
 | K21／Python 限制；已有獨立編譯路徑 | Python 回報 Device type-table warning；固定版本 Xerces 以 full checking 及 warnings-as-errors 編譯同一完整閉包通過 | W21；獨立 generic 選型通過，未修改 schema 或停用警告；不代表 Python 警告錯誤或 mock instance 有效 |
