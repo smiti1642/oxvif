@@ -223,6 +223,12 @@ let uri = session.get_stream_uri(&profiles[0].token).await?;
 
 `OnvifClient` 為 stateless 且 clone 成本低，可由 `Arc` 跨 thread 共用。Service URL 由呼叫端透過 `get_capabilities()` 或 `get_services()` 取得並管理。
 
+參數應傳 literal string，不要預先 escape XML。共用序列化會 escape markup，並以
+character reference 表示 CR、LF、tab 資料，避免 XML text／attribute normalization
+改變字元。各欄位有效性與裝置檢查仍適用。包含這些資料字元的 bytewise fixture
+需採用新的 reference 表示；公開 signature 與一般值不變。此修正不包含仍略過
+共用 serializer 或使用 legacy token extraction 的 mock 路徑。
+
 | 方法 | 說明 |
 |---|---|
 | `OnvifClient::new(device_url)` | 使用 device service URL 建立 client |

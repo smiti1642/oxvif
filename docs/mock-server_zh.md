@@ -298,6 +298,9 @@ mock conformance。詳見[強化計畫](active/mock-fidelity-hardening-plan_zh.m
 兩個 profile 建立操作都要求唯一的直接 scalar `Name`。名稱以解碼後文字存入
 狀態，並在 profile 回應轉義一次；透過 `MockState` 設定的名稱亦然，請勿預先
 轉義。空名稱及有效空白會保留於狀態與原始 XML（公開 client DOM 仍修剪文字）。
+共用 escaping 以 character reference 表示 CR／LF／tab 資料，避免 XML normalization
+改變 decoded value。Client request 與 structured Fault serializer 亦使用此機制；
+含上述資料字元的 bytewise raw fixture 採用新的 reference 表示。
 缺少、重複或巢狀名稱會在配置 token 前被拒絕，不通知狀態 hook。這不代表
 profile token、巢狀 configuration、attribute、長度、容量或整個操作已完成驗證。
 既有持久化 snapshot 不會自動解碼，因為類似 entity 的名稱也可能是刻意使用的

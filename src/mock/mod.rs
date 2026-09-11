@@ -57,6 +57,9 @@
 //! under one read lock; separate requests remain independent snapshots.
 //! Profile creation requires one direct scalar Name, stores decoded text and
 //! escapes it once in profile responses; empty names and whitespace are retained.
+//! Shared escaping uses character references for CR/LF/tab data so XML
+//! normalization does not replace them; the compatibility client DOM still trims
+//! leading/trailing text. Structured Fault output uses the same escaping helper.
 //! Profile-token and nested-configuration text handling remains under review.
 //!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A

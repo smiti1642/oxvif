@@ -44,6 +44,11 @@ pub use events::notification_listener;
 
 /// Async ONVIF device client.
 ///
+/// Pass literal strings, not pre-escaped XML. Shared request serialization
+/// escapes markup and writes CR/LF/tab data as character references so XML
+/// normalization does not silently replace those characters. Field-specific
+/// lexical constraints and device validation still apply.
+///
 /// # Quick start
 ///
 /// ```no_run

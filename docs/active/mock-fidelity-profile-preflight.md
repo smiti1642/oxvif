@@ -14,6 +14,47 @@ Owner: current hardening branch. [Execution checklist](mock-fidelity-execution-c
 | [Reference review](#reference-review) | Checked conclusions and missing evidence |
 | [Cases and readiness](#cases-and-readiness) | Required regression and remaining design |
 | [Profile-token dependency closure](#profile-token-dependency-closure) | Paired migration paths and test boundaries |
+| [Shared whitespace serialization](#shared-whitespace-serialization) | K29 data preservation before token migration |
+
+## Shared whitespace serialization
+
+K29/W03/W06/W10, 2026-09-11: the common private `types::xml_escape` helper is
+used for both text and attributes, but previously left CR/LF/tab literal.
+Its output now uses numeric character references for these data characters;
+ordinary strings retain the borrowed fast path. This is a shared representation
+fix, not a public signature or field-validation change. It also corrects profile
+Name CR preservation, since both Create readers already decode text and both
+profile renderers call this helper. Raw token renderers/readers remain separate.
+
+Reviewed primary XML behavior: [XML 1.0 line-ending handling](https://www.w3.org/TR/xml/#sec-line-ends)
+and [attribute-value normalization](https://www.w3.org/TR/xml/#AVNormalize).
+The synthetic values in regression tests are project-authored, not copied schema
+fixtures. `xml_escape_preserves_whitespace_in_text_and_attributes` checks exact
+wire spelling and decoded text/attribute values; normal borrowed-value tests remain.
+Both-transport profile Name tests exercise raw references and client-generated
+values through creation, state, all three profile views and deletion.
+
+Old-code failures: RTK 1789096994 (both profile transports) and 1789097019 (shared
+helper assertion). The first full regression found the structured Fault serializer's
+redundant CR-only transform and old hexadecimal-spelling assertion (1789097328).
+It now uses shared escaping directly, with the exact decoded reason/code/subcode
+assertions preserved; only its wire spelling changes to the shared decimal form.
+The first-profile external corpus also uses CR/LF/tab in project-authored creation
+Names; it still captures 17 exchanges / 34 XML instances, not new operation coverage.
+
+Final verification passed formatting, both workspace Clippy modes, 1,208
+all-feature and 1,113 default tests (5 ignored, 27 suites each), both strict
+documentation builds and unchanged 159/157/255 inventory self-tests. External
+corpus `oxvif-profile-corpus-20260911-01` passed all 34 instances with pinned
+Xerces XSD 1.1. The legacy breadth check retained 158 responses, 111 success
+payloads, 47 faults, 1,242 anchors, 1,431 skipped children and 398 checked
+attributes, with all ten finding pins at zero. Neither validator proves full
+operation semantics or hardware behavior. Prior commit `31e2e20` passed hosted
+CI 34558092566; that run does not cover this later serialization change.
+
+Remaining: full profile-token/input/output closure, raw nested renderers, invalid
+XML character handling outside Faults, field-specific whitespace/length constraints
+and real-device compatibility. Existing snapshots are not decoded or rewritten.
 
 ## Profile-token dependency closure
 

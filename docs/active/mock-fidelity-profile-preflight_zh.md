@@ -14,6 +14,41 @@
 | [參考資料審閱](#參考資料審閱) | 已確認結論及尚缺證據 |
 | [案例與開工條件](#案例與開工條件) | 必要回歸與剩餘設計 |
 | [Profile-token 依賴追蹤](#profile-token-依賴追蹤) | 成對遷移路徑及測試邊界 |
+| [共用空白序列化](#共用空白序列化) | Token 遷移前的 K29 資料保留 |
+
+## 共用空白序列化
+
+K29／W03／W06／W10，2026-09-11：共用私有 `types::xml_escape` 同時用於 text
+與 attribute，先前卻直接輸出 CR／LF／tab。現在以 numeric character reference
+表示這些資料字元，一般字串仍走 borrowed fast path。這是共用表示修正，不變更
+公開 signature 或欄位驗證。兩個 Create reader 已 decode 文字，兩個 profile renderer
+亦使用此 helper，因此也修正 Name 的 CR 保留。Raw token renderer／reader 仍需另行遷移。
+
+已核對的原始來源：[XML 1.0 換行處理](https://www.w3.org/TR/xml/#sec-line-ends)
+及 [attribute-value normalization](https://www.w3.org/TR/xml/#AVNormalize)。
+回歸資料為專案自訂，並非複製 schema fixture。`xml_escape_preserves_whitespace_in_text_and_attributes`
+檢查精確 wire 表示與 decoded text／attribute value，保留一般值 borrowed 測試。
+兩種 transport 的 Name 測試涵蓋 raw reference 與 client-generated value，通過
+建立、state、三種 profile view 與刪除流程。
+
+舊程式失敗紀錄：RTK 1789096994（兩種 profile transport）、1789097019（共用
+helper assertion）。第一次完整回歸發現 structured Fault serializer 重複處理 CR，
+且 assertion 固定舊十六進位拼法（1789097328）。現在直接使用共用 escaping，保留
+精確 decoded reason／code／subcode assertion，只將 wire 拼法統一為十進位。
+第一批 profile 外部 corpus 的自訂 Create Name 也加入 CR／LF／tab；仍為 17 次
+exchange／34 份 XML instance，沒有增加 operation coverage。
+
+最終驗證通過格式檢查、兩種 workspace Clippy、1,208 項 all-features 與 1,113 項
+default 測試（各 5 ignored、27 suites）、兩種嚴格文件建置，以及未變動的
+159／157／255 inventory self-test。外部 corpus `oxvif-profile-corpus-20260911-01`
+的 34 份 instance 全數通過 pinned Xerces XSD 1.1。舊版廣度檢查維持 158 份
+response、111 個 success payload、47 個 fault、1,242 個 anchor、1,431 個
+skipped child 與 398 個 checked attribute，十類 finding pin 均為零。兩種
+validator 均不證明完整 operation 語意或實機行為。前一提交 `31e2e20` 通過 hosted
+CI 34558092566；該次執行不涵蓋本次後續序列化變更。
+
+尚待完成：完整 profile-token input／output 閉合、raw nested renderer、Fault 以外的
+invalid XML character 處理、欄位特定空白／長度限制與實機相容性；不解碼或覆寫舊 snapshot。
 
 ## Profile-token 依賴追蹤
 

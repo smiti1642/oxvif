@@ -58,12 +58,15 @@ pub(crate) fn xml_str(node: &XmlNode, child: &str) -> Option<String> {
 }
 
 /// Escape XML special characters for safe embedding in element content or attributes.
+/// Character references preserve CR/LF/tab data across XML line-ending and
+/// attribute-value normalization. This does not validate other XML characters
+/// or a field's schema-specific whitespace/lexical constraints.
 ///
 /// Returns a [`Cow::Borrowed`] reference when no escaping is needed, avoiding
 /// allocation in the common case (tokens, numeric strings, ISO durations, etc.).
 pub(crate) fn xml_escape(s: &str) -> Cow<'_, str> {
     if s.bytes()
-        .any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\''))
+        .any(|b| matches!(b, b'&' | b'<' | b'>' | b'"' | b'\'' | b'\r' | b'\n' | b'\t'))
     {
         let mut out = String::with_capacity(s.len());
         for c in s.chars() {
@@ -73,6 +76,9 @@ pub(crate) fn xml_escape(s: &str) -> Cow<'_, str> {
                 '>' => out.push_str("&gt;"),
                 '"' => out.push_str("&quot;"),
                 '\'' => out.push_str("&apos;"),
+                '\r' => out.push_str("&#13;"),
+                '\n' => out.push_str("&#10;"),
+                '\t' => out.push_str("&#9;"),
                 _ => out.push(c),
             }
         }

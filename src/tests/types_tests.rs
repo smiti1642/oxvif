@@ -1770,6 +1770,31 @@ mod xml_escape_tests {
     }
 
     #[test]
+    fn xml_escape_preserves_whitespace_in_text_and_attributes() {
+        for (literal, expected) in [
+            ("a\rb", "a&#13;b"),
+            ("a\nb", "a&#10;b"),
+            ("a\tb", "a&#9;b"),
+            ("a\r\n\tb", "a&#13;&#10;&#9;b"),
+            (
+                "中文 &\r\n\t\"'<> end",
+                "中文 &amp;&#13;&#10;&#9;&quot;&apos;&lt;&gt; end",
+            ),
+        ] {
+            let escaped = xml_escape(literal);
+            assert_eq!(
+                escaped, expected,
+                "wire representation must preserve data whitespace"
+            );
+            assert!(matches!(escaped, Cow::Owned(_)));
+            let xml = format!("<Value v=\"{escaped}\">{escaped}</Value>");
+            let parsed = crate::soap::XmlNode::parse(&xml).unwrap();
+            assert_eq!(parsed.attr("v"), Some(literal));
+            assert_eq!(parsed.text(), literal);
+        }
+    }
+
+    #[test]
     fn test_xml_escape_only_special_chars() {
         assert_eq!(xml_escape("&"), "&amp;");
         assert_eq!(xml_escape("<"), "&lt;");

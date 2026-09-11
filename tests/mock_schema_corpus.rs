@@ -98,11 +98,11 @@ async fn profile_exchanges() -> Vec<Exchange> {
         .unwrap();
     assert_eq!(fetched.token, profiles[0].token);
     let created = client
-        .create_profile(TARGET, "Corpus-Media1", Some("Corpus-1"))
+        .create_profile(TARGET, "Corpus-Media1\r\n\tend", Some("Corpus-1"))
         .await
         .unwrap();
     assert_eq!(created.token, "Corpus-1");
-    assert_eq!(created.name, "Corpus-Media1");
+    assert_eq!(created.name, "Corpus-Media1\r\n\tend");
     let source = capture.mock.device().read().video_source_configs[0]
         .token
         .clone();
@@ -188,7 +188,7 @@ async fn profile_exchanges() -> Vec<Exchange> {
     let second_view = client.get_profiles_media2(TARGET).await.unwrap();
     assert_eq!(second_view.len(), before);
     let second = client
-        .create_profile_media2(TARGET, "Corpus-Media2")
+        .create_profile_media2(TARGET, "Corpus-Media2\r\n\tend")
         .await
         .unwrap();
     assert_eq!(
@@ -201,7 +201,7 @@ async fn profile_exchanges() -> Vec<Exchange> {
             .last()
             .unwrap()
             .name,
-        "Corpus-Media2"
+        "Corpus-Media2\r\n\tend"
     );
     client
         .add_configuration_media2(TARGET, &second, "VideoEncoder", &encoder)

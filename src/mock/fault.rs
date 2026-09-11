@@ -124,7 +124,7 @@ impl<'a> Fault<'a> {
                 _ => '\u{fffd}',
             })
             .collect();
-        body.push_str(&crate::types::xml_escape(&clean).replace('\r', "&#xD;"));
+        body.push_str(&crate::types::xml_escape(&clean));
         body.push_str("</s:Text></s:Reason></s:Fault>");
         soap("", &body)
     }
@@ -215,6 +215,6 @@ mod tests {
             }
         );
         assert!(!xml.contains('\0'));
-        assert!(xml.contains("&#xD;"));
+        assert!(xml.contains("&#13;"));
     }
 }

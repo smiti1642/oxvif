@@ -298,6 +298,14 @@ Stateless and cheaply cloneable — safe to wrap in `Arc` and share across threa
 You manage the service URLs (obtained from `get_capabilities()` or `get_services()`),
 which gives you full control over per-call routing.
 
+Pass literal strings, not pre-escaped XML. Shared serialization escapes markup
+and represents CR, LF and tab data with character references, preserving those
+characters across XML text/attribute normalization. Field-specific validity and
+device checks still apply. Existing bytewise fixtures containing these data
+characters need the new reference spelling; public signatures and ordinary
+values are unchanged. This does not repair mock paths that still bypass the
+shared serializer or use legacy token extraction.
+
 ### Constructors and builder methods
 
 | Method | Description |

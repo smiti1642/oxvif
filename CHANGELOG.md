@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Shared XML string escaping now emits character references for CR, LF and tab,
+  preserving literal data across XML text/attribute normalization. This also
+  preserves carriage returns through client profile creation and mock Name reads.
+  Public signatures and ordinary wire values are unchanged; bytewise fixtures
+  containing these data characters need the new reference spelling. Remaining
+  raw mock renderers and profile-token readers still require their own migration.
 - Replay now checks scoped XML identity after a legacy fixture-key hit, preventing
   selected whitespace, namespace and structure collisions from substituting a
   different request's response. Unconfirmed matches fall through to synthetic;

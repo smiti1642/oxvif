@@ -142,6 +142,9 @@
 //! ## Quick start
 //!
 //! Two ways to use oxvif — pick whichever suits your workflow.
+//! Pass literal argument strings, not pre-escaped XML. Shared serialization uses
+//! character references for CR/LF/tab data to preserve their values across XML
+//! normalization; individual fields still have their own validity constraints.
 //!
 //! ### `OnvifSession` — URL caching handled for you
 //!

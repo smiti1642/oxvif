@@ -356,6 +356,10 @@ Both profile-creation operations require one direct scalar `Name`. Names are
 stored as decoded text and escaped once in profile responses, including names
 seeded through `MockState`; do not pre-escape them. Empty names and significant
 whitespace survive in state and raw XML (the public client DOM still trims text).
+Shared escaping represents CR/LF/tab data as character references, preserving
+their decoded values rather than letting XML normalization change them. This is
+also used by client requests and the structured Fault serializer; bytewise raw
+fixtures containing those data characters use the new reference spelling.
 Missing, duplicate or nested names are refused before allocation without a state
 notification. This does not complete profile-token, nested-configuration,
 attribute, length, capacity or whole-operation validation.

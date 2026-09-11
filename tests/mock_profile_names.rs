@@ -102,9 +102,14 @@ async fn exercise(
             (
                 "<m:Name>&#x20;numeric&#32;&#x26;&#10;</m:Name>",
                 " numeric &\n",
-                " numeric &amp;\n",
+                " numeric &amp;&#10;",
             ),
             ("<m:Name/>", "", ""),
+            (
+                "<m:Name>left&#13;&#10;&#9;right</m:Name>",
+                "left\r\n\tright",
+                "left&#13;&#10;&#9;right",
+            ),
         ] {
             let count = state.read().profiles.profiles.len();
             let notifications = hooks.load(Ordering::SeqCst);
@@ -139,7 +144,7 @@ async fn exercise(
 
         // Exercise the public encoder too, with a literal entity spelling that
         // distinguishes exactly-once encoding from accidental double decoding.
-        let literal = "client &amp; <marker> \"' 中文";
+        let literal = "client &amp; <marker> \"' 中文\r\n\tend";
         let token = if namespace == MEDIA1 {
             let profile = client.create_profile(url, literal, None).await.unwrap();
             assert_eq!(profile.name, literal);
@@ -152,7 +157,7 @@ async fn exercise(
             url,
             &token,
             literal,
-            "client &amp;amp; &lt;marker&gt; &quot;&apos; 中文",
+            "client &amp;amp; &lt;marker&gt; &quot;&apos; 中文&#13;&#10;&#9;end",
         )
         .await;
         assert_eq!(
