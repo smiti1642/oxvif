@@ -9,7 +9,7 @@ use crate::{
 /// Render a successful command according to the caller's selected policy.
 pub fn render_success(format: OutputFormat, success: &CommandSuccess) -> Result<String, AppError> {
     match format {
-        OutputFormat::Table => Ok(render_human(success)),
+        OutputFormat::Table => Ok(escape_terminal(&render_human(success), true)),
         OutputFormat::Json => serde_json::to_string_pretty(&SuccessEnvelope::from(success))
             .map_err(|error| AppError::serialization_failed(error.to_string())),
         OutputFormat::JsonLines => render_json_lines(success),
@@ -48,7 +48,11 @@ pub fn render_success_with_details(
             _ => {}
         }
     }
-    Ok(output)
+    Ok(if format == OutputFormat::Table {
+        escape_terminal(&output, true)
+    } else {
+        output
+    })
 }
 
 /// Render an application or argument error with the same schema as all future
@@ -64,7 +68,7 @@ pub fn render_error(
             if let Some(suggested_action) = &error.suggested_action {
                 let _ = write!(rendered, "\nhint: {suggested_action}");
             }
-            Ok(rendered)
+            Ok(escape_terminal(&rendered, true))
         }
         OutputFormat::Json => serde_json::to_string_pretty(&ErrorEnvelope::new(error, meta))
             .map_err(|serialization_error| {
@@ -76,6 +80,34 @@ pub fn render_error(
             })
         }
     }
+}
+
+/// Render a single untrusted terminal field without control or directional commands.
+///
+/// This is presentation only: never use the escaped value as a device ID, profile
+/// token, path or credential. Structured output retains the original values.
+pub fn terminal_field(value: &str) -> String {
+    escape_terminal(value, false)
+}
+
+fn escape_terminal(value: &str, layout: bool) -> String {
+    let mut safe = String::with_capacity(value.len());
+    for c in value.chars() {
+        let direction = matches!(c, '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}');
+        if direction || (c.is_control() && !(layout && matches!(c, '\n' | '\t'))) {
+            match c {
+                '\n' => safe.push_str("\\n"),
+                '\r' => safe.push_str("\\r"),
+                '\t' => safe.push_str("\\t"),
+                _ => {
+                    let _ = write!(safe, "\\u{{{:x}}}", c as u32);
+                }
+            }
+        } else {
+            safe.push(c);
+        }
+    }
+    safe
 }
 
 fn render_human(success: &CommandSuccess) -> String {
@@ -1243,6 +1275,64 @@ const fn yes_no(value: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn human_output_neutralizes_terminal_commands_without_changing_json() {
+        assert_eq!(terminal_field("前門\nnext\titem"), "前門\\nnext\\titem");
+        assert_eq!(
+            terminal_field("front-door / profile-1"),
+            "front-door / profile-1"
+        );
+        let payload = "camera\u{1b}]52;c;ZmFrZQ==\u{7}\u{9b}2J\r\u{202e}text";
+        let success = CommandSuccess {
+            data: CommandData::DeviceDiagnostic {
+                operation: "media.profiles".into(),
+                device_id: None,
+                target: "http://camera.test/onvif".into(),
+                result: serde_json::json!([{"token":"p", "name":payload}]),
+            },
+            warnings: vec![],
+            meta: ResultMeta::default(),
+        };
+        let table = render_success(OutputFormat::Table, &success).unwrap();
+        assert!(
+            table.contains("camera\\u{1b}]52;c;ZmFrZQ==\\u{7}\\u{9b}2J\\r\\u{202e}text"),
+            "terminal controls were not escaped"
+        );
+        assert!(
+            !table
+                .chars()
+                .any(|c| c.is_control() && c != '\n' && c != '\t')
+        );
+        for mode in [OutputFormat::Json, OutputFormat::JsonLines] {
+            let raw = render_success(mode, &success).unwrap();
+            let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+            assert_eq!(value["data"]["result"][0]["name"], payload);
+        }
+    }
+
+    #[test]
+    fn verbose_stages_and_error_hints_cannot_emit_terminal_commands() {
+        let success = CommandSuccess {
+            data: CommandData::DeviceDiagnostic {
+                operation: "diagnose".into(),
+                device_id: None,
+                target: "http://camera.test/onvif".into(),
+                result: serde_json::json!({"complete":false,"failed":1,
+                    "summary":{"passed":0,"unsupported":0,"not_tested":2},
+                    "stages":[{"name":"stage", "status":"fail", "detail":"bad\u{1b}[2J", "next_step":"look\u{7}"}]}),
+            },
+            warnings: vec![],
+            meta: ResultMeta::default(),
+        };
+        let text = render_success_with_details(OutputFormat::Table, &success, true).unwrap();
+        assert!(text.contains("bad\\u{1b}[2J"));
+        assert!(!text.contains('\u{1b}'));
+        let mut error = AppError::invalid_argument("bad\u{1b}[2J");
+        error.suggested_action = Some("look\u{7}".into());
+        let text = render_error(OutputFormat::Table, &error, &ResultMeta::default()).unwrap();
+        assert!(text.contains("bad\\u{1b}[2J\nhint: look\\u{7}"));
+    }
 
     #[test]
     fn config_diff_rows_distinguish_missing_null_and_incomplete() {

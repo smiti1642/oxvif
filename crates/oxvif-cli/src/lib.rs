@@ -56,7 +56,9 @@ pub use inventory::{
     FilterOperator, GroupMemberView, GroupView, ImportDisposition, MatchMode, NewGroup,
     NewSavedView, SavedView, ViewExplanation, discovery_query_matches,
 };
-pub use output::{profile_label, render_error, render_success, render_success_with_details};
+pub use output::{
+    profile_label, render_error, render_success, render_success_with_details, terminal_field,
+};
 pub use registry::{
     DeviceMetadata, DeviceUpdate, DeviceView, NewDevice, REGISTRY_VERSION, RegistryStore,
     normalize_target, validate_device_id,

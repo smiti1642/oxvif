@@ -644,6 +644,14 @@ oxvif agent prompt
 
 ## Output formats
 
+In the development candidate, human table reports, verbose details and errors
+render terminal control and bidirectional formatting characters as visible
+escapes, such as `\u{1b}`. Line-oriented profile menus also escape embedded
+newlines and tabs. Report layout retains newlines and tabs; this is not a
+single-line guarantee for every data field. JSON/JSONL retain the original
+values: parse structured output for automation, rather than copying display
+escapes into profile tokens or device identifiers.
+
 Schema version 3 is published with the CLI crate under `schema/` and attached
 to release artifacts as `oxvif-envelope.schema.json` and
 `command-descriptor.schema.json`. CI validates representative JSON and every

@@ -2,7 +2,7 @@
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-Status: IN-PROGRESS / NOT APPROVED. Updated 2026-09-11.
+Status: IN-PROGRESS / NOT APPROVED. Updated 2026-09-12.
 This packet supplements the [release cut](release-0.17-cut.md), not replaces its
 blocking gates. The user requested a stop before the formal 0.17 version/release
 commit. Ordinary repairs and evidence commits are allowed; version promotion,
@@ -23,7 +23,7 @@ are not performed by this acceptance work.
 
 | Step | Status | Remaining work |
 | --- | --- | --- |
-| 1. Complete candidate/security review | IN-PROGRESS | A01, A02 and A03 repaired locally; complete the all-diff closure below, including transitive consumers |
+| 1. Complete candidate/security review | IN-PROGRESS | A01–A04 repaired locally; complete the all-diff closure below, including transitive consumers |
 | 2. Package/install and human/real-camera acceptance | PARTIAL | Native CI passed at 3eccfd1; later repairs need CI. Real export/diff and repaired snapshot acceptance passed with the boundaries below; Hanwha non-image responses remain a limitation. Final terminal and distribution staging remain open |
 | 3. Versions, links and documents | PREPARED, not promoted | Bilingual release records and this checklist updated. Actual versions remain 0.16.0; apply the version-edit checklist only after approval |
 | 4. User confirmation | NOT REQUESTED for promotion | Present the final evidence and unresolved risks before the formal version commit; publication requires separate authorization |
@@ -35,6 +35,7 @@ are not performed by this acceptance work.
 | A01 | HTTP lossy UTF-8 decoding converted byte FF into U+FFFD and committed a differently named profile | Repaired in 6135e72: HTTP 400 / Sender / mock:RequestPolicy before responders. Five invalid-byte classes, valid Unicode, full-state/hook preservation and queued-fault control pass locally |
 | A02 | Snapshot Authorization rewrote `qop=auth` as a quoted value | Remove the rewrite; assert unquoted qop/algorithm/nc and exact request URI. This follows [RFC 7616 §3.4](https://www.rfc-editor.org/rfc/rfc7616.html#section-3.4), not camera-specific downgrade behavior |
 | A03 | Both saved-camera profiles returned HTTP 401 before and after A02; wider testing found 18 similar failures | REPAIRED locally: title-case HTTP/1.1 field names resolve case-sensitive firmware handling; shared CLI/health Digest core retains authentication and destination safeguards. Saved-camera profiles now save and decode successfully. See [repair evidence](snapshot-auth-repair.md); hosted release gates remain open |
+| A04 | Human output emitted terminal commands embedded in camera/profile text, verbose details and error hints | REPAIRED locally: escape C0/C1 and bidirectional formatting controls at human report boundaries and single-line menu/context fields; JSON/JSONL values remain unchanged. Report LF/TAB layout remains allowed; this is not a guarantee against every multiline presentation ambiguity |
 
 A01 does not complete the general HTTP binding/charset/fault-status audit. A02
 alone did not resolve A03. The A03 result below is scoped to tested devices and
@@ -45,6 +46,7 @@ profiles, not universal compatibility; remaining work stays explicit in the
 
 | Evidence | Result and boundary |
 | --- | --- |
+| A04 human-output repair, 2026-09-12 | Before repair: 1,308 pass / two assertion failures / five ignored. Repaired: 1,310 all-feature / 1,200 default passes, five ignored each, 41 suites; both Clippy and strict rustdoc modes pass. Actual debug executable preserves JSON/JSONL values and error exit 3 while escaping human stderr. See the [batch record](release-0.17-review.md#a04-human-output-repair); this is not full-screen terminal acceptance |
 | Hosted CI at 3eccfd15274d4e978501634e4155477760502b6b | [Run 34597167495](https://github.com/smiti1642/oxvif/actions/runs/34597167495): all 27 jobs passed, five native targets; does not cover later repairs |
 | A01 sensitivity | Full workspace all-features, no-fail-fast: 1,301 pass / two assertion failures / five ignored; actual unwanted state mutation observed |
 | A01 restored gates | 1,303 all-feature / 1,193 default passes, five ignored each, 41 suites; both Clippy and strict rustdoc modes, fmt, local links and published-history check pass |
@@ -75,6 +77,13 @@ included in public evidence. These repaired local results do not replace hosted,
 terminal or distribution-staging acceptance.
 
 ## Review closure
+
+The [per-file ledger](release-0.17-review-ledger.json) freezes the later
+`v0.16.0..b7bc881` inventory at 208 paths. It records this pass's exact read
+coverage, not a percentage of release readiness. `in_progress` does not close
+a gate; `pending` does not erase older batch evidence. Subsequent repair and
+documentation deltas are listed separately. See the
+[batch review record](release-0.17-review.md) for sequencing and exit criteria.
 
 The exact review baseline is `git diff v0.16.0 3eccfd1`: 200 changed files,
 39,614 added and 3,007 removed lines. Later repair/evidence commits are an

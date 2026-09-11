@@ -37,6 +37,8 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 
 ### Fixed
 
+- Human table output, detailed reports, errors and line-oriented profile menus
+  escape terminal control characters; JSON/JSONL retain original data values.
 - Media2 full-profile requests, fractional frame-rate parsing, repeated audio
   option values, metadata required fields and XML literal whitespace handling.
 - Selected Mock request identity, atomic Media writes, coherent snapshots/hooks

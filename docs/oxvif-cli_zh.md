@@ -406,6 +406,12 @@ JSONL 每台裝置輸出一筆 `fleet_item`，最後再輸出一筆 `fleet_summa
 
 ## 輸出格式與 exit code
 
+開發中候選版本的人類表格、詳細報告及錯誤輸出，會將終端控制字元及雙向文字
+格式控制字元轉成可見跳脫表示，例如 `\u{1b}`。逐行 profile 選單也會轉義資料中的
+換行與定位字元。報告排版保留換行與定位字元，因此不保證所有資料欄位皆為單行。
+JSON／JSONL 保留原始值；自動化應解析結構化輸出，不應將畫面上的跳脫表示
+複製成 profile token 或裝置識別碼。
+
 `--output table` 是預設的人類輸出；`json` 適合單一 structured result；`jsonl` 適合 fleet
 串流。Structured error 會在 stdout 保持合法 JSON/JSONL，診斷訊息則不應污染資料流。
 

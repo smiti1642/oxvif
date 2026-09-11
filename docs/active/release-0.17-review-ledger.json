@@ -1,0 +1,1468 @@
+{
+  "baseline": "v0.16.0",
+  "candidate": "b7bc881",
+  "purpose": "Per-file closure inventory; pending is not reviewed. Record exact evidence before closing each row.",
+  "files": [
+    {
+      "path": ".github/FUNDING.yml",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": ".github/dependabot.yml",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": ".gitignore",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "CHANGELOG.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "CLAUDE.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "CONTRIBUTING_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "Cargo.lock",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "Cargo.toml",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "LIBRARY_GUIDE.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "LIBRARY_GUIDE_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "OPERATIONS.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "OPERATIONS_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "README.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "README_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "crates/oxvif-cli/Cargo.toml",
+      "group": "CLI",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "crates/oxvif-cli/README.md",
+      "group": "CLI",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "crates/oxvif-cli/schema/oxvif-envelope.schema.json",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed conditional maintenance shape diff inspected; schema is an additive minimum envelope, not validation of every possible result field. Test/descriptor reconciliation remains."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/agent.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed guide diff inspected: additive workflow guidance, non-interactive selectors, no camera writes or RTSP playback claim. Reconcile generated guide assertions."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/application.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed diff; diagnose picker/managed/fleet dispatch, preflight ordering, shared HTTP construction and health retry/result handling. Remaining unchanged selector/credential consumers and test assertions need closure."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/contract.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed command/request/result/exit-code diff; maintenance failure retention and mixed/all-failed fleet semantics. Cross-check remaining executable/schema assertions."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/describe.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed descriptor diff inspected: command metadata, local artifact risk and parameters. Reconcile generated help/manpage/guide outputs."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/interactive.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Production through helpers inspected: password lifecycle, guards, resize/redraw, filtering and navigation. Most test bodies and final terminal sessions remain open; A04 is not a universal full-screen sanitization claim."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/lib.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed reexport diff inspected; A04 terminal_field is presentation-only. Reconcile all public prose against completed workflow review."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/main.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed diff, SystemPrompt selection, maintenance flag normalization and execute_and_emit paths; A04 line-menu/context escaping. Remaining executable/terminal acceptance is separate."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/maintenance.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Production through diff_value and test setup inspected: session cancellation/expiry, file no-clobber, bounded baselines, staged reports, normalization/diff. Remaining test bodies and all unchanged consumers need closure."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/manage.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Production and local test inspected: device/profile selection, session credentials, cancellation and explicit file operations. Final terminal acceptance remains open."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/navigation.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Full source and unit assertions inspected: bounded counts, pending grammar, saturation, half/full-page and gg/G semantics. Reconcile cross-adapter integration tests."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/output.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed diff, render entry points and formatting helpers; A04 guards and two regression assertions reviewed and verified. Remaining pre-existing human branches/test deltas not fully reconciled."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/registry.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed SHA-256 fingerprint formatting diff and leading-zero regression. Shared selector and persistent-store behavior requires transitive closure."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/src/ui_settings.rs",
+      "group": "CLI",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Production and preference tests inspected: lazy resolution, explicit persistence, atomic replacement/locking, corrupt-file preservation. Reconcile callers and human acceptance."
+        }
+      ]
+    },
+    {
+      "path": "crates/oxvif-cli/tests/cli.rs",
+      "group": "CLI",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "crates/oxvif-cli/tests/navigation_core.rs",
+      "group": "CLI",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/README.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/check-mock-fidelity-inventory.ps1",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/cli-maintenance-ux-plan.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/cli-maintenance-ux-plan_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/cli-maintenance-workflows-plan.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/cli-maintenance-workflows-plan_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/cli-manage-plan.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/cli-manage-plan_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/cli-vim-navigation-plan.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/cli-vim-navigation-plan_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/contributor-pr-integration-plan.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/contributor-pr-integration-plan_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/dependency-maintenance-plan.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/dependency-maintenance-plan_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-audit-2026-07.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-ack-policy-preflight.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-ack-policy-preflight_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-audio-metadata.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-audio-metadata_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-auth-preflight.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-auth-preflight_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-execution-checklist.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-execution-checklist_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-hardening-plan.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-hardening-plan_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-operation-ledger.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-operation-ledger_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-pipeline-preflight.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-pipeline-preflight_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-pr16-integration.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-pr16-integration_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-profile-assembly.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-profile-assembly_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-profile-preflight.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-profile-preflight_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-schema-preflight.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-schema-preflight_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-source-audit.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-source-audit_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-source-index.ps1",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-video-encoder.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-video-encoder_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-video-source.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/mock-fidelity-video-source_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/post-0.17-backlog.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/post-0.17-backlog_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/release-0.17-approval.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/release-0.17-approval_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/release-0.17-cut.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/release-0.17-cut_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/snapshot-auth-repair.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/active/snapshot-auth-repair_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/audio-metadata.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/audio-metadata_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/cli-maintenance.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/cli-maintenance_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/dependency-pitfalls.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/media-synchronization.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/media-synchronization_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/media2-frame-rate.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/media2-frame-rate_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/mock-server.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/mock-server_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/oxvif-cli.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/oxvif-cli_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/reference/media1.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/reference/media2.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/releases/0.17.0-changelog.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/releases/0.17.0-changelog_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/releases/0.17.0.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/releases/0.17.0_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/replay-storage.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "docs/replay-storage_zh.md",
+      "group": "DOCS",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "examples/camera.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/SchemaVerifier.java",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/check_source_sbom.py",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/check_xml_features.py",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/homebrew/oxvif.rb.in",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/qualify_xerces.py",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/schema-requirements.txt",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/schema-sources.json",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/test_check_source_sbom.py",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/test_verify_schemas.py",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/test_xerces_tooling.py",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/verify_schemas.py",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/verify_schemas_xerces.py",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "packaging/xerces-validator.json",
+      "group": "DELIVERY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/client/events.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed peer-listener diff and inherited notification HTTP reader inspected. TCP peer is not authenticated identity; inherited unbounded connection count/timeouts and lossy notification decoding are not solved by the additive API. Reconcile B17 scope and tests."
+        }
+      ]
+    },
+    {
+      "path": "src/client/media.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed Media1 synchronization method inspected: escaped token, exact service Action and response path. Reconcile operation-card/Mock and public compatibility evidence."
+        }
+      ]
+    },
+    {
+      "path": "src/client/media2.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed Media2 sync/profile/rate/metadata methods inspected. Reconcile serializers, public migrations, no-transport-on-invalid-value assertions and operation cards."
+        }
+      ]
+    },
+    {
+      "path": "src/client/mod.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed exports/XML escaping prose inspected. Shared XML helper affects unchanged consumers; their coverage remains open."
+        }
+      ]
+    },
+    {
+      "path": "src/health/checks.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/health/mod.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/health/snapshot.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/health/snapshot/tests.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/lib.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/metamorph/adapter.rs",
+      "group": "REPLAY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/metamorph/fixture.rs",
+      "group": "REPLAY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/metamorph/mod.rs",
+      "group": "REPLAY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/metamorph/parse.rs",
+      "group": "REPLAY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/metamorph/quirk.rs",
+      "group": "REPLAY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/metamorph/replay.rs",
+      "group": "REPLAY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/adapter_request.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/auth.rs",
+      "group": "MOCK",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed scoped WS-Security authentication and tests inspected: qualified Header fields, digest requirements, safe fault text. Freshness/replay cache are not provided; reconcile dispatch precedence and scope docs."
+        }
+      ]
+    },
+    {
+      "path": "src/mock/canon.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/dispatch.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/effect.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/fault.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/helpers.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/mod.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/policy.rs",
+      "group": "MOCK",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Full receipt-policy source inspected: thirteen exact operations, deny by default, per-clone opt-in and no physical-effect claim. Reconcile service handlers and assertions."
+        }
+      ]
+    },
+    {
+      "path": "src/mock/request.rs",
+      "group": "MOCK",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Full bounded request tree and local tests inspected: limits, namespace scope, direct scalar/attribute access, operation shape, replay equivalence. Not XSD validation; shared handler/replay consumers and normative policy checks remain."
+        }
+      ]
+    },
+    {
+      "path": "src/mock/responder.rs",
+      "group": "MOCK",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Production responder chain inspected: injected fault, auth, raw/extra responder, synthetic dispatch and committed-effect observers. Remaining changed test bodies and replay integration remain open."
+        }
+      ]
+    },
+    {
+      "path": "src/mock/server.rs",
+      "group": "MOCK",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed strict UTF-8, policy and commit-observer integration inspected. A01 prior evidence applies to identical code; remaining HTTP binding/fault semantics are not closed."
+        }
+      ]
+    },
+    {
+      "path": "src/mock/services/audio_metadata.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/device.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/events.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/media.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/media2.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/mod.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/ptz.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/recording.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/video_encoder.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/video_rate.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/services/video_source.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/state.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/mock/transport.rs",
+      "group": "MOCK",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed policy/auth/routing wiring inspected. Reconcile HTTP parity and shared dispatcher consumers."
+        }
+      ]
+    },
+    {
+      "path": "src/session.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed delegation and migration prose inspected. Distinct Media1/2 service URLs preserved; cross-service tests need reconciliation."
+        }
+      ]
+    },
+    {
+      "path": "src/soap/error.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "quick-xml API migration diff inspected; public error compatibility tests/claims need reconciliation."
+        }
+      ]
+    },
+    {
+      "path": "src/soap/xml.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "quick-xml string API and literal-whitespace escaping diff inspected. Compatibility DOM is not namespace-aware/XSD validation; shared consumer review remains."
+        }
+      ]
+    },
+    {
+      "path": "src/tests/client/media2_tests.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/tests/client/media_tests.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/tests/client/notification_origin_tests.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/tests/session_tests.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/tests/types_tests.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "src/types/audio.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed repeated-item audio-options parsing inspected, including permissive legacy whitespace behavior. No broad strict-parser claim; reconcile tests and serializers."
+        }
+      ]
+    },
+    {
+      "path": "src/types/events.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Additive ReceivedNotification type/prose inspected: unchanged NotificationMessage and unauthenticated socket peer semantics. Reconcile serialization/source-compatibility assertions."
+        }
+      ]
+    },
+    {
+      "path": "src/types/media.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed metadata/multicast/duration validation and serialization diff inspected. Modeled subset is not a lossless arbitrary XML editor; reconcile other multicast consumers and tests."
+        }
+      ]
+    },
+    {
+      "path": "src/types/mod.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed type/export diff inspected with media migration; public coverage reconciliation remains."
+        }
+      ]
+    },
+    {
+      "path": "src/types/video.rs",
+      "group": "LIBRARY",
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_inspection",
+          "date": "2026-09-12",
+          "scope": "Changed fractional-rate and finite preflight paths inspected. Other inherited permissive fields are outside the new required-rate claims; reconcile dependent callers/tests."
+        }
+      ]
+    },
+    {
+      "path": "tests/media2_rate_control.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/metamorph_adapter_identity.rs",
+      "group": "REPLAY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_ack_policy.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_action_snapshot.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_audio_metadata.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_auth_scope.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_binding_atomicity.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_empty_profile_policy.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_fidelity_known_gaps.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_fixture_key_credentials.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_media1_media2_agree.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_media_profile_identity.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_media_sync.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_multi_sensor.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_profile_assembly.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_profile_names.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_profile_selection.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_profile_snapshot.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_ptz_profile_identity.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_replay_effects.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_replay_key_gaps.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_request_boundary.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_request_identity.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_roundtrip.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_schema_corpus.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_schema_shape.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_token_discrimination.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_video_encoder.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_video_rate.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_video_source.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/mock_workflow.rs",
+      "group": "MOCK",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/notification_origin.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "path": "tests/xml_compat.rs",
+      "group": "LIBRARY",
+      "status": "pending",
+      "evidence": []
+    }
+  ],
+  "status_definitions": {
+    "pending": "Not yet reconciled in this pass; does not erase earlier evidence.",
+    "in_progress": "Exact partial coverage recorded; final closure still required.",
+    "reviewed": "Source delta, consumers, assertions and claims reconciled against exact revisions."
+  },
+  "delta_paths": [
+    "crates/oxvif-cli/src/lib.rs",
+    "crates/oxvif-cli/src/main.rs",
+    "crates/oxvif-cli/src/output.rs",
+    "CHANGELOG.md",
+    "docs/oxvif-cli.md",
+    "docs/oxvif-cli_zh.md",
+    "docs/releases/0.17.0-changelog.md",
+    "docs/releases/0.17.0-changelog_zh.md",
+    "docs/active/release-0.17-approval.md",
+    "docs/active/release-0.17-approval_zh.md",
+    "docs/active/release-0.17-review.md",
+    "docs/active/release-0.17-review_zh.md",
+    "docs/active/release-0.17-review-ledger.json"
+  ],
+  "delta_note": "A04 and review documentation after b7bc881; source behavior and regression evidence are in release-0.17-review.md. Does not promote the frozen baseline or close the whole-candidate gates."
+}

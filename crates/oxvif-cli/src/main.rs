@@ -86,7 +86,7 @@ impl Prompt for SystemPrompt {
         Self::ensure_terminal()?;
         eprintln!("{label}");
         for (index, choice) in choices.iter().enumerate() {
-            eprintln!("  {}. {choice}", index + 1);
+            eprintln!("  {}. {}", index + 1, oxvif_cli::terminal_field(choice));
         }
         let answer = self.text("Selection [1]: ")?;
         let selected = if answer.is_empty() {
@@ -1141,7 +1141,11 @@ async fn execute_and_emit(
                             success.meta.target.as_deref(),
                         )
                     {
-                        println!("Using device: {device_id} ({target})\n\n{rendered}");
+                        println!(
+                            "Using device: {} ({})\n\n{rendered}",
+                            oxvif_cli::terminal_field(device_id),
+                            oxvif_cli::terminal_field(target)
+                        );
                     } else {
                         println!("{rendered}");
                     }

@@ -2,7 +2,7 @@
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-狀態：IN-PROGRESS／尚未核准。更新日期：2026-09-11。
+狀態：IN-PROGRESS／尚未核准。更新日期：2026-09-12。
 本資料補充[發布切點](release-0.17-cut_zh.md)，不取代其中的阻擋關卡。
 使用者要求停在正式 0.17 版號／發布 commit 前。允許一般修正及證據提交；
 本次驗收不執行版號升級、主分支合併、tag、發布、PR 關閉或本機系統安裝。
@@ -21,7 +21,7 @@
 
 | 工作 | 狀態 | 剩餘項目 |
 | --- | --- | --- |
-| 1. 完整候選／安全審查 | IN-PROGRESS | A01、A02、A03 已本機修復；須完成下方全部差異及相依使用者的結案 |
+| 1. 完整候選／安全審查 | IN-PROGRESS | A01–A04 已本機修復；須完成下方全部差異及相依使用者的結案 |
 | 2. 套件安裝與人類／實機驗收 | PARTIAL | 3eccfd1 原生 CI 通過；之後修正須重跑。實機 export／diff 與修復後快照驗收通過，限制如下；Hanwha 非影像回應仍為限制。最終終端與散布 staging 待驗 |
 | 3. 版號、連結與文件 | 已準備，尚未升版 | 雙語發布紀錄及本清單已更新；實際版號仍為 0.16.0，核准後才套用版號修改清單 |
 | 4. 使用者確認 | 尚未請求正式提交核准 | 正式版號 commit 前呈現最終證據及風險；發布須另行授權 |
@@ -33,6 +33,7 @@
 | A01 | HTTP lossy UTF-8 decoding 將 FF 位元組轉成 U+FFFD，成功建立不同名稱的 profile | 6135e72 修復：responder 前回傳 HTTP 400／Sender／mock:RequestPolicy。五類無效位元組、合法 Unicode、完整狀態／hook 保留及 queued fault 控制均本機通過 |
 | A02 | Snapshot Authorization 把 `qop=auth` 改成帶引號值 | 移除改寫，斷言未加引號 qop／algorithm／nc 及精確 URI；依據 [RFC 7616 §3.4](https://www.rfc-editor.org/rfc/rfc7616.html#section-3.4)，不增加設備特例或認證降級 |
 | A03 | 已儲存攝影機的兩個 profile 在 A02 修正前後皆回 HTTP 401；擴大測試另發現 18 台類似失敗 | 已本機修復：HTTP/1.1 欄位名稱採 Title-Case，處理韌體錯誤區分大小寫；CLI／health 共用 Digest 核心並保留認證與目的地安全限制。原始攝影機兩個 profile 已保存及解碼成功。見[修復證據](snapshot-auth-repair_zh.md)；託管發布閘門仍未完成 |
+| A04 | 人類輸出會原樣送出攝影機／profile 文字、詳細報告與錯誤提示中的終端控制序列 | 已本機修復：在人類報告邊界及單行選單／上下文欄位轉義 C0／C1 與雙向文字格式控制字元；JSON／JSONL 資料值不變。報告仍允許 LF／TAB 排版，不代表消除所有多行顯示歧義 |
 
 A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02 並未解決 A03。
 下列 A03 結果僅涵蓋受測設備與 profile，不代表普遍相容性；剩餘項目仍須明列於
@@ -42,6 +43,7 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 
 | 證據 | 結果及限制 |
 | --- | --- |
+| A04 人類輸出修正，2026-09-12 | 修正前 1,308 通過／兩項斷言失敗／五項 ignored；修正後 all-feature 1,310／default 1,200 通過，各五項 ignored、41 suites；兩組 Clippy 與 strict rustdoc 通過。實際 debug 執行檔保留 JSON／JSONL 原值及錯誤 exit 3，人類 stderr 已轉義。見[批次紀錄](release-0.17-review_zh.md#a04-人類輸出修正)；不是全螢幕終端驗收 |
 | 3eccfd15274d4e978501634e4155477760502b6b 託管 CI | [Run 34597167495](https://github.com/smiti1642/oxvif/actions/runs/34597167495)：全部 27 個 job、五種原生目標通過；不涵蓋後續修正 |
 | A01 敏感度驗證 | 完整 workspace all-features、no-fail-fast：1,301 通過／兩項斷言失敗／五項 ignored；實際觀察到非預期狀態修改 |
 | A01 修正後關卡 | all-feature 1,303／default 1,193 通過，各五項 ignored、41 suites；兩組 Clippy、strict rustdoc、fmt、本機連結及發布歷史檢查通過 |
@@ -71,6 +73,12 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 本機修復結果不取代託管、互動終端或散布套件 staging 驗收。
 
 ## 審查結案清單
+
+[逐檔清冊](release-0.17-review-ledger.json) 將較新的 `v0.16.0..b7bc881`
+清單固定為 208 個路徑，記錄本輪確切閱讀範圍，而非發布完成百分比。
+`in_progress` 不代表關卡結案；`pending` 也不抹除之前批次的證據。
+後續修正與文件差異另列。批次順序及結案條件見
+[批次審查紀錄](release-0.17-review_zh.md)。
 
 精確審查基準為 `git diff v0.16.0 3eccfd1`：200 個檔案變更、新增 39,614 行、
 刪除 3,007 行；之後的修正與證據提交須另計差異。清冊或綠色測試不等於全部差異審查。
