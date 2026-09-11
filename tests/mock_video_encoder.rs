@@ -4,6 +4,142 @@ use std::sync::Arc;
 
 const M1: &str = "http://www.onvif.org/ver10/media/wsdl";
 const M2: &str = "http://www.onvif.org/ver20/media/wsdl";
+#[cfg(feature = "metamorph")]
+const ENCODER_REPLAY_READS: &[(&str, &str, &str, bool)] = &[
+    (
+        M1,
+        "GetProfile",
+        "<m:ProfileToken>Profile_1</m:ProfileToken>",
+        true,
+    ),
+    (M1, "GetProfiles", "", true),
+    (M2, "GetProfiles", "<m:Type>All</m:Type>", true),
+    (M1, "GetVideoEncoderConfigurations", "", true),
+    (
+        M1,
+        "GetVideoEncoderConfiguration",
+        "<m:ConfigurationToken>VEC_1</m:ConfigurationToken>",
+        true,
+    ),
+    (
+        M2,
+        "GetVideoEncoderConfigurations",
+        "<m:ConfigurationToken>VEC_1</m:ConfigurationToken>",
+        true,
+    ),
+    (M1, "GetVideoSources", "", false),
+    (
+        M2,
+        "GetVideoEncoderConfigurationOptions",
+        "<m:ConfigurationToken>VEC_1</m:ConfigurationToken>",
+        false,
+    ),
+];
+
+#[cfg(feature = "metamorph")]
+fn encoder_recordings() -> oxvif::metamorph::FixtureStore {
+    let mut store = oxvif::metamorph::FixtureStore::new("synthetic-encoder-replay-017");
+    for (index, (ns, op, fields, _)) in ENCODER_REPLAY_READS.iter().enumerate() {
+        let request = format!(
+            "<s:Envelope xmlns:s='http://www.w3.org/2003/05/soap-envelope' xmlns:m='{ns}' xmlns:tt='http://www.onvif.org/ver10/schema'><s:Body><m:{op}>{fields}</m:{op}></s:Body></s:Envelope>"
+        );
+        // Deliberately distinctive raw fixtures prove which responder answered.
+        // They are not protocol-shape or real-camera evidence.
+        store.record(
+            &format!("{ns}/{op}"),
+            &request,
+            &format!("<recorded-encoder-017-{index}/>"),
+        );
+    }
+    store
+}
+
+#[cfg(feature = "metamorph")]
+async fn encoder_replay_contract(t: &dyn Transport, url: &str, state: &oxvif::mock::MockState) {
+    let before = serde_json::to_value(&*state.read()).unwrap();
+    for (index, (ns, op, fields, _)) in ENCODER_REPLAY_READS.iter().enumerate() {
+        assert_eq!(
+            post_at(t, url, ns, op, fields).await,
+            format!("<recorded-encoder-017-{index}/>")
+        );
+    }
+
+    let invalid =
+        setting("VEC_1").replace("<tt:Quality>6</tt:Quality>", "<tt:Quality>NaN</tt:Quality>");
+    let failed = post_at(t, url, M2, "SetVideoEncoderConfiguration", &invalid).await;
+    assert_eq!(
+        parse_soap_body(&failed).unwrap().children[0].local_name,
+        "Fault"
+    );
+    assert_eq!(serde_json::to_value(&*state.read()).unwrap(), before);
+    for (index, (ns, op, fields, _)) in ENCODER_REPLAY_READS.iter().enumerate() {
+        assert_eq!(
+            post_at(t, url, ns, op, fields).await,
+            format!("<recorded-encoder-017-{index}/>"),
+            "a rejected encoder write must preserve every recording"
+        );
+    }
+
+    let committed = post_at(
+        t,
+        url,
+        M2,
+        "SetVideoEncoderConfiguration",
+        &setting("VEC_1"),
+    )
+    .await;
+    assert_eq!(
+        parse_soap_body(&committed).unwrap().children[0].local_name,
+        "SetVideoEncoderConfigurationResponse"
+    );
+    for (index, (ns, op, fields, affected)) in ENCODER_REPLAY_READS.iter().enumerate() {
+        let response = post_at(t, url, ns, op, fields).await;
+        if *affected {
+            assert!(
+                !response.contains("recorded-encoder-017"),
+                "committed encoder write replayed stale {ns}/{op}"
+            );
+            assert!(
+                response.contains("<tt:Name>scoped-963</tt:Name>"),
+                "dependent read did not expose committed encoder: {ns}/{op}: {response}"
+            );
+            assert_ne!(
+                parse_soap_body(&response).unwrap().children[0].local_name,
+                "Fault"
+            );
+        } else {
+            assert_eq!(
+                response,
+                format!("<recorded-encoder-017-{index}/>"),
+                "unrelated physical-source/options recording was retired"
+            );
+        }
+    }
+}
+
+#[cfg(feature = "metamorph")]
+#[tokio::test]
+async fn media2_encoder_commit_retires_recorded_views_in_process() {
+    let replay = oxvif::metamorph::MetamorphTransport::new(encoder_recordings());
+    encoder_replay_contract(&replay, "http://mock", replay.device()).await;
+}
+
+#[cfg(feature = "metamorph-server")]
+#[tokio::test]
+async fn media2_encoder_commit_retires_recorded_views_over_http() {
+    let server = oxvif::mock::MockServer::builder()
+        .port(0)
+        .replay(encoder_recordings())
+        .start()
+        .await
+        .unwrap();
+    encoder_replay_contract(
+        &oxvif::transport::HttpTransport::default(),
+        server.device_url(),
+        server.device(),
+    )
+    .await;
+}
 async fn post(t: &dyn Transport, ns: &str, op: &str, fields: &str) -> String {
     post_at(t, "http://mock", ns, op, fields).await
 }

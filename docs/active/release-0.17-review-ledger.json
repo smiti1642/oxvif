@@ -726,14 +726,26 @@
     {
       "path": "docs/replay-storage.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Entire storage/report/privacy/downgrade guide reconciled with fixture, request equivalence, report iteration and ambiguous QuirkDiff behavior; reciprocal translation checked. No durability or full conformance claim."
+        }
+      ]
     },
     {
       "path": "docs/replay-storage_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Entire paired translation checked against English storage/report/privacy/downgrade scope and inspected implementation."
+        }
+      ]
     },
     {
       "path": "examples/camera.rs",
@@ -900,44 +912,86 @@
     {
       "path": "src/metamorph/adapter.rs",
       "group": "REPLAY",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Full changed diff and AdapterRequest projection read with public hooks and metamorph_adapter_identity assertions: exact Action/scoped token/finite axes, raw input unchanged on declined typed handling. Ack-only/auth/fallback cross-chain review remains in Mock batch."
+        }
+      ]
     },
     {
       "path": "src/metamorph/fixture.rs",
       "group": "REPLAY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "v0.16.0..b7bc881 collision-bucket/storage changes, exact/shared request comparison, public lookup/load/save claims and K27 tests reconciled with replay selection and report consumers. Distinct fixtures survive; legacy save atomicity and arbitrary-secret sanitization remain explicitly unclaimed."
+        }
+      ]
     },
     {
       "path": "src/metamorph/mod.rs",
       "group": "REPLAY",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "All changed public storage, reports, adapter and committed-effect prose read; replay storage claims reconciled. Final cross-service committed-effect closure follows Mock service subgroup review."
+        }
+      ]
     },
     {
       "path": "src/metamorph/parse.rs",
       "group": "REPLAY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Changed grouping-key docs/test request reconciled with unchanged per-fixture iteration/progress; no map-based loss introduced. Full-store ordinals, not filtered report positions, are the supported association."
+        }
+      ]
     },
     {
       "path": "src/metamorph/quirk.rs",
       "group": "REPLAY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Changed collision grouping/diff logic and all added assertions reviewed together with report generation, stable row order, singleton path differences and bilingual replay-storage limits. Ambiguous groups retain all unmatched rows, not invented identity or defect-resolution claims."
+        }
+      ]
     },
     {
       "path": "src/metamorph/replay.rs",
       "group": "REPLAY",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Full production and changed test diff inspected, including effect_observer, tracks_commit, actual chain/server wiring and inherited standalone policy. Source/audio/metadata and existing video-rate replay assertions inspected; added V01 six-view Media2 encoder coverage. Remaining profile/binding and complete service-consumer closure is open."
+        }
+      ]
     },
     {
       "path": "src/mock/adapter_request.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Full private projection inspected with typed adapter tests. Supported exact Actions, scoped scalar identity and finite complete axes; unsupported spaces/timeouts decline typed API without altering raw fallback. No full service validator claim."
+        }
+      ]
     },
     {
       "path": "src/mock/auth.rs",
@@ -954,8 +1008,14 @@
     {
       "path": "src/mock/canon.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Full changed projection/doc/test diff read with FixtureStore and report consumers. URL credentials scrubbed after decoded projection; keys remain deliberately non-unique. Wider inherited XML/render consumers remain part of shared-helper closure."
+        }
+      ]
     },
     {
       "path": "src/mock/dispatch.rs",
@@ -966,8 +1026,14 @@
     {
       "path": "src/mock/effect.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Full effect enum/tracks_commit allowlist inspected against ReplayResponder and SyntheticResponder. Six-view VideoEncoderCommitted test expansion added; full service mutation/reference dependency reconciliation remains open."
+        }
+      ]
     },
     {
       "path": "src/mock/fault.rs",
@@ -1254,8 +1320,14 @@
     {
       "path": "tests/metamorph_adapter_identity.rs",
       "group": "REPLAY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Entire two-test file reviewed: typed identity/stream/move values, wrong routing/namespace/duplicate/nested/malformed/finite/space/timeout refusal, raw arguments preserved and unchanged full state. Covered by all-feature workspace gates; does not validate arbitrary ONVIF requests."
+        }
+      ]
     },
     {
       "path": "tests/mock_ack_policy.rs",
@@ -1368,8 +1440,14 @@
     {
       "path": "tests/mock_replay_key_gaps.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Entire K27 file reviewed: ten actual equal-key/different-request pairs survive record/load/save and HTTP/in-process selection, ordinal reports retained, equivalent request replacement and distinct full Action controls. Existing restored all-feature run covers unchanged source."
+        }
+      ]
     },
     {
       "path": "tests/mock_request_boundary.rs",
@@ -1410,14 +1488,26 @@
     {
       "path": "tests/mock_video_encoder.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "V01 adds two Media2 encoder replay tests (in-process/HTTP), six affected views and two preservation controls; mutation suppressing VideoEncoderCommitted retirement exposes stale GetProfile. Existing contract helper and its Media1/2 controls partially read; complete original test-file review remains."
+        }
+      ]
     },
     {
       "path": "tests/mock_video_rate.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        {
+          "kind": "source_and_assertion_review",
+          "date": "2026-09-12",
+          "scope": "Existing recordings/replay helpers and in-process/HTTP assertions inspected; they already test rate refusal retention, fractional committed readback, Media1 refusal and unrelated-source retention. Mutation also fails these two existing tests; V01 is expanded coverage, not the first replay test."
+        }
+      ]
     },
     {
       "path": "tests/mock_video_source.rs",
@@ -1462,7 +1552,8 @@
     "docs/active/release-0.17-approval_zh.md",
     "docs/active/release-0.17-review.md",
     "docs/active/release-0.17-review_zh.md",
-    "docs/active/release-0.17-review-ledger.json"
+    "docs/active/release-0.17-review-ledger.json",
+    "tests/mock_video_encoder.rs"
   ],
-  "delta_note": "A04 and review documentation after b7bc881; source behavior and regression evidence are in release-0.17-review.md. Does not promote the frozen baseline or close the whole-candidate gates."
+  "delta_note": "Cumulative A04/V01 and review documentation after b7bc881. A04 was committed as 1ea4fff; V01 expands existing encoder replay coverage without production changes. Neither promotes versions nor closes the whole-candidate gates."
 }

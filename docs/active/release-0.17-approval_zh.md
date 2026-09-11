@@ -43,6 +43,7 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 
 | 證據 | 結果及限制 |
 | --- | --- |
+| V01 擴充 encoder replay，2026-09-12 | 停用失效邏輯後 1,308 通過／四項斷言失敗／五項 ignored，包含兩項新測試及兩項既有 rate 測試。還原後 all-feature 1,312／default 1,200 通過，各五項 ignored、41 suites。產品程式與 1ea4fff 相同；見[範圍](release-0.17-review_zh.md#v01-編碼器-replay-覆蓋)。完整候選審查仍未結案 |
 | A04 人類輸出修正，2026-09-12 | 修正前 1,308 通過／兩項斷言失敗／五項 ignored；修正後 all-feature 1,310／default 1,200 通過，各五項 ignored、41 suites；兩組 Clippy 與 strict rustdoc 通過。實際 debug 執行檔保留 JSON／JSONL 原值及錯誤 exit 3，人類 stderr 已轉義。見[批次紀錄](release-0.17-review_zh.md#a04-人類輸出修正)；不是全螢幕終端驗收 |
 | 3eccfd15274d4e978501634e4155477760502b6b 託管 CI | [Run 34597167495](https://github.com/smiti1642/oxvif/actions/runs/34597167495)：全部 27 個 job、五種原生目標通過；不涵蓋後續修正 |
 | A01 敏感度驗證 | 完整 workspace all-features、no-fail-fast：1,301 通過／兩項斷言失敗／五項 ignored；實際觀察到非預期狀態修改 |

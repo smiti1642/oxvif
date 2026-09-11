@@ -11,6 +11,7 @@ approval. [Approval packet](release-0.17-approval.md) and
 | [Inventory](#inventory) | Frozen inputs and honest coverage |
 | [Batch order](#batch-order) | Work remaining before closure |
 | [A04 human-output repair](#a04-human-output-repair) | Reproduction, repair and checks |
+| [V01 encoder replay coverage](#v01-encoder-replay-coverage) | Expanded tests, not a new production repair |
 | [Handoff boundary](#handoff-boundary) | Maintainer CI and reserved actions |
 
 ## Inventory
@@ -39,7 +40,7 @@ workspace after each file or documentation edit.
 | CLI | 18 | Changed application/contract/registry/main/descriptor/Agent/schema paths; maintenance/manage/navigation/preferences production; interactive rendering/lifecycle; human-output boundaries | Remaining test diffs and unchanged consumers; executable and final interactive-terminal acceptance; package prose |
 | Library | 26 | Media1/2/session/type/XML changed paths and notification listener, including its inherited HTTP reader | Public migration/reexport/examples and all affected readers/writers; reconcile exact prior snapshot evidence; notification limitations and assertions |
 | Mock | 54 | Scoped request tree, authentication, receipt policy, responder production, server/transport deltas | Dispatch/fault/shared-state and every included service subgroup; reconcile read/write/options/capability/replay and inherited helper consumers against operation cards |
-| Replay | 7 | Prior K27 evidence exists; no new closure claimed | All fixture, adapter, parse, quirk, replay and report changes; collision retention, mutation-driven invalidation, downgrade compatibility |
+| Replay | 7 | Storage/report changes reconciled with K27 assertions and bilingual migration; typed-adapter projection reviewed; committed-effect implementation and selected assertions inspected | Finish adapter policy/auth chain and cross-service profile/binding/reference consumers; this does not close all replay dependencies |
 | Delivery | 19 | Prior CI/package evidence exists; no new closure claimed | Source/tool versions, workflow inputs, schema tools, SBOM/checksum/install assertions; new native/staging runs |
 | Documents | 84 | Release-cut/approval/backlog boundaries and A04 claim delta | Reconcile final claims across guides/READMEs/manpage, paired links and published history; do not repeat historical tests solely for prose |
 
@@ -74,6 +75,35 @@ version changes in A04.
 The pre-repair run proves the new assertions catch the original behavior.
 The executable check supplements unit tests; it does not replace native CI.
 Raw logs are local evidence, not committed camera data.
+
+## V01 encoder replay coverage
+
+Existing `mock_video_rate` tests already exercise failed-rate retention,
+fractional readback, Media1 refusal and physical-source preservation. V01
+extends that coverage; it does not repair a newly reproduced production defect.
+
+Two tests in `mock_video_encoder` exercise a Media2 encoder write over in-process
+and HTTP replay. Eight unique raw markers establish the initial recording hits.
+A rejected nonfinite Quality leaves the full state and all recordings unchanged.
+An accepted integer-rate configuration refreshes six dependent profile/encoder
+views across Media1/2 with the actual committed name, while preserving unrelated
+physical-source and encoder-options recordings. The test inputs are synthetic
+controls, not independently schema-validated or real-camera fixtures. Media1
+write entry is not newly exercised by these two tests.
+
+Temporarily suppressing the `VideoEncoderCommitted` retirement arm fails the two
+new tests on stale `GetProfile`, and the two existing rate-replay tests. This
+checks the shared retirement boundary, not independent mutation sensitivity of
+each of the six action entries. Production source is restored exactly before
+the final gates. No ONVIF method, parser, dependency or production behavior is
+changed by V01.
+
+| V01 check | Result |
+| --- | --- |
+| Suppressed retirement, complete all-features/no-fail-fast | 1,308 passed; four expected assertion failures; five ignored; 41 suites |
+| Restored all-features/default | 1,312 / 1,200 passed; zero failed; five ignored and 41 suites each |
+| Static checks | Both workspace all-target Clippy modes with warnings denied and fmt pass; strict rustdoc evidence from A04 applies to unchanged public source |
+| Production restoration | No diff from `1ea4fff` in `src`, CLI crates, manifests/lockfile or workflows; only tests and review documentation change |
 
 ## Handoff boundary
 

@@ -11,6 +11,7 @@
 | [清冊](#清冊) | 固定輸入與確切涵蓋範圍 |
 | [批次順序](#批次順序) | 結案前剩餘工作 |
 | [A04 人類輸出修正](#a04-人類輸出修正) | 重現、修正及驗證 |
+| [V01 編碼器 Replay 覆蓋](#v01-編碼器-replay-覆蓋) | 擴充測試，不是新的產品修正 |
 | [交付邊界](#交付邊界) | 維護者 CI 與保留操作 |
 
 ## 清冊
@@ -36,7 +37,7 @@
 | CLI | 18 | application／contract／registry／main／descriptor／Agent／schema 差異；maintenance／manage／navigation／preferences 產品程式；互動繪製／生命週期；人類輸出邊界 | 其餘測試差異與未修改使用者；執行檔與最終互動終端驗收；套件說明 |
 | Library | 26 | Media1／2／session／type／XML 差異與通知 listener，包含沿用的 HTTP reader | 公開遷移／reexport／範例及受影響讀寫；核對先前快照證據的精確版本；通知限制與斷言 |
 | Mock | 54 | scoped request tree、認證、receipt policy、responder 產品程式及 server／transport 差異 | dispatch／fault／shared-state 與收錄的各服務子群；對照工作卡核對讀寫／options／capability／replay 及既有 helper 使用者 |
-| Replay | 7 | 已有先前 K27 證據；不宣稱本輪結案 | fixture／adapter／parse／quirk／replay／report 全部差異；碰撞保留、成功修改後失效及降版相容 |
+| Replay | 7 | 儲存／報告差異已對照 K27 斷言及雙語遷移；已審查 typed adapter projection，檢視 committed-effect 實作及部分斷言 | 完成 adapter policy／auth chain 與跨服務 profile／binding／reference 使用者；不代表全部 replay 相依結案 |
 | Delivery | 19 | 已有先前 CI／package 證據；不宣稱本輪結案 | source／tool 版本、workflow 輸入、schema 工具、SBOM／checksum／安裝斷言及新一輪原生／staging 結果 |
 | 文件 | 84 | 發布切點／核准／後續清單邊界與 A04 宣稱差異 | 核對指南／README／manpage 最終宣稱、雙語連結與已發布歷史；不僅因說明文字重跑歷史測試 |
 
@@ -66,6 +67,30 @@ JSON／JSONL 保留原始值。人類報告排版保留 LF／TAB，因此不保�
 
 修正前執行證明新增斷言能抓到原始行為。執行檔檢查補充單元測試，
 不取代原生 CI。原始 log 為本機證據，不提交攝影機資料。
+
+## V01 編碼器 Replay 覆蓋
+
+既有 `mock_video_rate` 已測試無效 rate 的錄製保留、fractional rate 讀回、
+Media1 拒絕及實體來源保留。V01 是擴充這些覆蓋，不是修復新重現的產品缺陷。
+
+`mock_video_encoder` 的兩項測試透過 in-process 與 HTTP replay 執行 Media2
+encoder 寫入。八種不同 raw marker 先證明錄製命中；拒絕非有限 Quality 後，
+完整狀態與全部錄製皆不變。接受整數 rate 設定後，Media1／2 的六種相關
+profile／encoder 讀取回傳實際提交的名稱，另保留無關的實體來源及 encoder
+options 錄製。輸入為合成控制，不是獨立 schema 驗證或實機 fixture；這兩項
+測試未新增對 Media1 寫入入口的驗證。
+
+暫時停用 `VideoEncoderCommitted` 失效分支後，兩項新測試在過期 `GetProfile`
+失敗，既有兩項 rate-replay 測試也失敗。這證明共用失效邊界的敏感度，不代表
+對六個 Action 各自進行獨立 mutation。最終關卡前已精確還原產品程式。
+V01 不修改 ONVIF 方法、解析器、相依套件或產品行為。
+
+| V01 檢查 | 結果 |
+| --- | --- |
+| 停用失效邏輯，完整 all-features／no-fail-fast | 1,308 通過；四項預期斷言失敗；五項 ignored；41 suites |
+| 還原後 all-features／default | 1,312／1,200 通過；零失敗；各五項 ignored、41 suites |
+| 靜態檢查 | 兩組 workspace all-target Clippy 禁止警告及 fmt 通過；公開原始碼未變，沿用 A04 strict rustdoc 證據 |
+| 產品程式還原 | `src`、CLI crates、manifest／lockfile 及 workflow 相對 `1ea4fff` 無差異；只改測試與審查文件 |
 
 ## 交付邊界
 
