@@ -316,6 +316,16 @@ impl Node {
         Ok(value)
     }
 
+    /// A unique optional direct scalar, retaining the distinction between
+    /// omission and an explicitly empty value. Callers own their field policy.
+    pub(super) fn optional_child_text(
+        &self,
+        ns: &str,
+        name: &str,
+    ) -> Result<Option<&str>, RequestError> {
+        self.child(ns, name)?.map(Self::scalar_text).transpose()
+    }
+
     /// Attributes use expanded names. The default namespace does not qualify
     /// an unprefixed attribute. Values are XML-normalized and decoded once.
     // Staged W04 API: retained for attribute/subtree handler migration; tested

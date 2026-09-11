@@ -23,9 +23,9 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 254 direct occurrences of five reader spellings are indexed: 239 before
-  top-level test modules and 15 inside those modules. The former span 75
-  enclosing symbols, **not** 75 defective operations. This includes test-only
+- 247 direct occurrences of five reader spellings are indexed: 232 before
+  top-level test modules and 15 inside those modules. The former span 72
+  enclosing symbols, **not** 72 defective operations. This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
   helper touch; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
@@ -257,14 +257,11 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/events.rs::resp_create_pull_point_subscription` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
-| `src/mock/services/media.rs::resp_profile` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::handle_create_profile` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::bind_configuration` | `extract_tag` | `production:3` |
-| `src/mock/services/media.rs::unbind_configuration` | `extract_tag` | `production:1` |
+| `src/mock/services/media.rs::bind_configuration` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::require_config_token` | `extract_tag` | `production:1` |
@@ -284,7 +281,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/media.rs::apply_audio_encoder_write` | `extract_tag` | `production:11` |
 | `src/mock/services/media2.rs::require_config_token` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
-| `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:3` |
+| `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:2` |
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_all_tags` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
@@ -363,6 +360,7 @@ while the complete dependency graph remains open.
 | ID | Evidence | Disposition |
 | --- | --- | --- |
 | K29 — shared escaping corrected | `types::xml_escape` escaped markup but emitted CR/LF/tab literally even for attributes. New wire/value assertions and both-transport profile Name cases failed on the old helper. | W03/W10/W06 shared representation slice: emit numeric character references, preserve ordinary borrowed values and literal Name state/read behavior; raw renderers, token-reader closure, schema field constraints and invalid XML characters remain separate. |
+| K30 — empty profile identity policy remains open | Source-confirmed: Media1 Create accepts an explicitly empty Token; GetProfile retains an empty lookup fallback, but typed MediaProfile parsing rejects an empty token and binding/Delete/PTZ paths cannot use it consistently. | W01/W10/W06; `media::{handle_create_profile,resp_profile}`, `Node::optional_child_text` and typed profile parsers. Add raw/client state-after-error controls before choosing the mock refusal/allocation policy; do not infer a normative prohibition from xs:string alone. No runtime acceptance claimed. |
 | K27 — substitution contained, index still collides | `mock_replay_key_gaps` retains the six original stored-key collisions and adds body ephemera, mixed-content ordering and xsi:type namespace controls. Replay now rejects unconfirmed scoped identity matches and falls through to synthetic. | W19 partial: both transports and exact raw/qualified-header controls pass; index/file shape unchanged, overwritten recordings unrecoverable, full key migration and other QName/HTTP/protocol semantics remain open. |
 | K28 | Recorded request URL credentials survived in `key_canon`; old persisted keys were loaded unchanged. Synthetic assertion failures reproduced both defects. | W19: scrub projected URL pairs for recording/replay/diff and legacy loaded/caller lookup keys; loading does not rewrite disk, normalization collisions remain last-write-wins. Raw-envelope redaction is still targeted, not a general secret detector. |
 | K24 | Pinned output-type review finds Media2 audio renderers/options reuse Media1 codec labels, and shared writes store those labels without a service adapter. XSD string validity does not verify the different codec vocabulary. | W01/W10: review audio list/options, profile-inlined audio, shared writes and client cross-service expectations as one dependency set. Source-confirmed; discriminating wire/state reproduction pending. Do not fix rendering alone and break writes. |
@@ -372,7 +370,7 @@ while the complete dependency graph remains open.
 | K12 | Source comment at `media::bind_configuration` describes binding a fixed profile as a mock deviation. Official Media1/Media2 §4.1 distinguish deletion from configuration changes. | Correct the comment and preserve legal binding; do not “repair” it by making fixed profiles immutable. References below. |
 | K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; capacity and other CreateProfile semantics remain open. |
 | K14 — fixed after baseline | DeleteProfile now uses an explicit committed-outcome predicate; NotFound/Fixed do not notify, Deleted notifies once. | W18 partial; regression checks full state, both services, hook count and public-helper compatibility. Replay remains separate K17. |
-| K15 — Name repaired | Both CreateProfile Name readers now decode scoped scalar text; both profile renderers escape Name once, including seeded state. Profile-token attributes and nested configuration text remain open. | W10; corrected seeded-markup control and both-transport create/read/state/refusal tests. This does not close the token or nested-renderer audit. |
+| K15 — Name and selected profile-token paths repaired | Both CreateProfile Name readers decode scalar text; Media1 Create/GetProfile and six binding entries use scoped profile identity. Both profile renderers escape Name and token attributes once. | W10; P2 workflow/refusal controls and PTZ1 support selected token paths. Empty-token policy, typed adapters, recorded keys and nested configuration text remain open. |
 | K16 — partial repair | Media2 profile-list selection is repaired in `c6af85b`; create reads Name only; binding validates and commits one complete value-based plan. | Late-invalid-token partial writes and selected read semantics have state/hook/HTTP controls. Create/name/binding Type=All/conflicts and broader field/output validation remain W01/W10 work. |
 
 K23 is now repaired in the test harness only. Deterministic controls distinguish

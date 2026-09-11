@@ -16,6 +16,7 @@
 | [Profile-token 依賴追蹤](#profile-token-依賴追蹤) | 成對遷移路徑及測試邊界 |
 | [共用空白序列化](#共用空白序列化) | Token 遷移前的 K29 資料保留 |
 | [PTZ profile 身分](#ptz-profile-身分) | Media token 遷移前的 PTZ1 前置工作 |
+| [Media profile 身分](#media-profile-身分) | P2 建立／讀取／render／binding 成對遷移 |
 
 ## 共用空白序列化
 
@@ -91,6 +92,46 @@ key 遷移。PTZ node／config／preset／tour token 與 nested value、完整 f
 capability／effect policy、併發 validation／mutation 與 replay dependency 仍屬
 W11／W16／W19 工作；不自動 unescape 或改寫既有 state 字串。
 
+## Media profile 身分
+
+P2，2026-09-11，基準 `0053eef`：Media1 optional Create Token、GetProfile 及六個
+Media binding ProfileToken reader，現在借用唯一、直接 qualified scalar。
+兩個 profile renderer 將 token attribute 轉義一次；Media2 產生的 Create token
+回應亦使用共用 escaping。不變更公開 signature 或持久化資料；巢狀 configuration
+值仍使用舊 reader。
+
+Optional scalar accessor 區分 omission 與明確空值，不加入欄位特定 trim。
+保留既有 missing／empty policy：Create 仍可儲存明確空 token，GetProfile 保留
+空值 lookup fallback，而 binding plan 拒絕空身分。Typed client 無法消費空 profile
+token。這是已記錄的剩餘政策缺陷，不表示空 token 流程已驗收，也不是新增規範上的
+空 token 規則。長度／容量、重複 configuration／Type／Name／initial binding 規則
+與完整普通 Fault mapping 仍待逐操作工作卡完成。
+
+`tests/mock_media_profile_identity.rs` 在兩種 transport 驗證 raw 與公開 client
+建立、精確 literal state 與 attribute 拼法、三種 profile view、六個 binding
+入口、所選 PTZ head status 及兩種刪除服務。自訂 token 包含類 entity 文字、markup、
+顯著前後空白與 CR／LF／tab。檢查 slot 值、兩服務 PTZ binding、完整最終 state 與
+精確 hook 計數。重複／巢狀身分在 mutation 前回傳 fault；Header／foreign／nested
+decoy 不能取代直接欄位。一般流程通過後，舊 reader 在兩個測試的 trimmed creation
+state 失敗（RTK 1789099120）。先前 1789099105 是測試欄位名稱誤用造成的編譯
+錯誤，不算回歸證據。繞過 optional scalar 唯一性後，完整 workspace／all-features／
+no-fail-fast mutation 執行的兩個精確 fault assertion 均失敗（1789099566），已還原。
+
+新外部 corpus `oxvif-profile-corpus-20260911-02` 的 34 份 instance 均通過 pinned
+strict Xerces XSD 1.1，新增自訂特殊 Media1 Create token。該 corpus 不獨立驗收
+全部新 raw probe 或特殊 token 的 Media2 profile 輸出。Typed adapter、stored replay
+key 與完整 read-effect graph 仍是獨立閉合條件。舊 snapshot 必須明確檢查：類 entity
+的既有 token 仍為 literal，不靜默 decode 或重新命名。PTZ1 提交 `0053eef` 是前置
+工作，不代表完整 Media／PTZ 計畫已完成。
+
+P2 最終通過格式檢查、兩種 workspace Clippy、1,212 項 all-features 與 1,117 項
+default 測試（各 5 ignored、29 suites）、兩種嚴格文件建置及 inventory self-test
+（159 個 Action site／157 個 route／247 個 reader）。舊版廣度檢查維持 158 份
+response、111 個 success、47 個 fault、1,242 個 anchor、1,431 個 skipped child、
+398 個 checked attribute，finding pin 均為零。PTZ1 `0053eef` 通過 hosted
+CI 34560282523。K30 已明確追蹤保留的空 token 不一致；先重現 client 錯誤後的
+state，再實作有界政策修正，之後繼續 adapter 與 replay 閉合。
+
 ## Profile-token 依賴追蹤
 
 來源檢查點 `4220ec2`，2026-09-11；W02／W10／W11／W19。本節在變更儲存表示前
@@ -134,18 +175,18 @@ fault 優先於表列操作專屬分支。CreateProfile Name 與 Media2 GetProfi
 | 清冊 ID | Client → handler | 目前輸入擷取 | 狀態／renderer 路徑 | 目前一般 Fault code（未註明者為平面） |
 | --- | --- | --- | --- | --- |
 | `media.GetProfiles` | get_profiles → resp_profiles | 不接收 body | profiles + catalogues → render_profile | Handler 無操作專屬錯誤分支 |
-| `media.GetProfile` | get_profile → resp_profile | GetProfile fragment → ProfileToken；缺少時為空字串 | profiles + catalogues → render_profile | ter:NoProfile |
-| `media.CreateProfile` | create_profile → handle_create_profile | Parsed 直接 scalar Name；選填 Token 仍使用舊 fragment／text | create_profile_in_state → profiles, next_token_id → render_profile | Generic field fault；ter:ProfileExists |
+| `media.GetProfile` | get_profile → resp_profile | Parsed 唯一直接 ProfileToken；保留既有 missing／empty fallback | profiles + catalogues → render_profile | 通用身分欄位 fault； ter:NoProfile |
+| `media.CreateProfile` | create_profile → handle_create_profile | Parsed 直接 scalar Name 與唯一 optional Token；保留空值政策 | create_profile_in_state → profiles, next_token_id → render_profile | Generic field fault；ter:ProfileExists |
 | `media.DeleteProfile` | delete_profile → handle_delete_profile | parsed operation.required_child_text(ProfileToken)，嚴格 scalar identity | delete_profile_in_state → profiles → empty response | 欄位驗證：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
-| `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
-| `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile |
-| `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
-| `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | ProfileToken；舊 scalar | unbind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile |
+| `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | Parsed 唯一直接 ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoSource) → profile slot | 通用身分欄位 fault； env:Sender / ter:NoProfile / ter:NoConfig |
+| `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | Parsed 唯一直接 ProfileToken；decoded scalar | unbind_configuration(VideoSource) → profile slot | 通用身分欄位 fault； env:Sender / ter:NoProfile |
+| `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | Parsed 唯一直接 ProfileToken；ConfigurationToken，並以 Token fallback | bind_configuration(VideoEncoder) → profile slot | 通用身分欄位 fault； env:Sender / ter:NoProfile / ter:NoConfig |
+| `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | Parsed 唯一直接 ProfileToken；decoded scalar | unbind_configuration(VideoEncoder) → profile slot | 通用身分欄位 fault； env:Sender / ter:NoProfile |
 | `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | Parsed Token／Type、scoped scalar 及直接 sequence 檢查 | cloned profile projection + media::catalogues → render_profile_media2 | Generic field fault；巢狀 s:Sender／InvalidArgVal／NoProfile |
 | `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Parsed 直接 scalar Name；不讀 Configuration | media::create_profile_in_state(None) → profiles, counter → Token response | Generic field fault；ter:ProfileExists 分支（目前傳 None 不會到達） |
 | `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | parsed operation.required_child_text(Token)，嚴格 scalar identity | media::delete_profile_in_state → profiles → empty response | 欄位驗證：env:Sender；不存在／固定：巢狀 s:Sender（見下方審閱） |
-| `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken；重複 Configuration／Type／Token；不讀 Name | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
-| `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken；重複 Configuration／Type／Token | apply_media2_configuration → atomic media::apply_configuration_bindings(add=false) | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
+| `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | Parsed 唯一直接 ProfileToken；重複 Configuration／Type／Token；不讀 Name | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | 通用身分欄位 fault； env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
+| `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | Parsed 唯一直接 ProfileToken；重複 Configuration／Type／Token | apply_media2_configuration → atomic media::apply_configuration_bindings(add=false) | 通用身分欄位 fault； env:Sender / ter:ConfigurationConflict / ter:NoProfile |
 
 ## 共用路徑與目前行為
 

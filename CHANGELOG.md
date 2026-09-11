@@ -22,6 +22,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock Media profile tokens now retain their literal identity through creation,
+  both profile views, the six existing binding entry points and PTZ lookup.
+  Profile token attributes are escaped once, including whitespace references;
+  duplicate/nested identity fields are refused before mutation. Review older
+  snapshots explicitly: stored entity-looking tokens are not automatically
+  decoded or renamed. Empty-token policy, other configuration fields, adapters
+  and recorded-key migration remain part of the ongoing hardening work.
 - Mock PTZ profile/head lookup now preserves decoded token identity, including
   significant whitespace, across its 19 existing consumers. Header, nested and
   foreign fields no longer select a head; duplicate/nested scalar tokens are

@@ -98,10 +98,14 @@ async fn profile_exchanges() -> Vec<Exchange> {
         .unwrap();
     assert_eq!(fetched.token, profiles[0].token);
     let created = client
-        .create_profile(TARGET, "Corpus-Media1\r\n\tend", Some("Corpus-1"))
+        .create_profile(
+            TARGET,
+            "Corpus-Media1\r\n\tend",
+            Some(" Corpus &amp;\r\n\tend "),
+        )
         .await
         .unwrap();
-    assert_eq!(created.token, "Corpus-1");
+    assert_eq!(created.token, " Corpus &amp;\r\n\tend ");
     assert_eq!(created.name, "Corpus-Media1\r\n\tend");
     let source = capture.mock.device().read().video_source_configs[0]
         .token

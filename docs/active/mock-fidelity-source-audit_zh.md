@@ -23,8 +23,8 @@
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 254 個直接呼叫：239 個位於頂層 test module 之前，15 個
-  位於其中。前者分布於 75 個 enclosing symbol，**不是** 75 個有缺陷的操作。
+- 五種 reader 拼法共 247 個直接呼叫：232 個位於頂層 test module 之前，15 個
+  位於其中。前者分布於 72 個 enclosing symbol，**不是** 72 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
 - W00 已完成目前字面值形式的來源核對；K06 synthetic 別名路由已於
@@ -251,14 +251,11 @@
 | `src/mock/services/events.rs::resp_create_pull_point_subscription` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
-| `src/mock/services/media.rs::resp_profile` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::handle_create_profile` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:12` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_attr` | `production:3` |
 | `src/mock/services/media.rs::apply_video_source_write` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::bind_configuration` | `extract_tag` | `production:3` |
-| `src/mock/services/media.rs::unbind_configuration` | `extract_tag` | `production:1` |
+| `src/mock/services/media.rs::bind_configuration` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::require_config_token` | `extract_tag` | `production:1` |
@@ -278,7 +275,7 @@
 | `src/mock/services/media.rs::apply_audio_encoder_write` | `extract_tag` | `production:11` |
 | `src/mock/services/media2.rs::require_config_token` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
-| `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:3` |
+| `src/mock/services/media2.rs::apply_media2_configuration` | `extract_tag` | `production:2` |
 | `src/mock/services/media2.rs::apply_media2_configuration` | `extract_all_tags` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
@@ -354,6 +351,7 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 | ID | 證據 | 處置 |
 | --- | --- | --- |
 | K29 — 共用 escaping 已修正 | `types::xml_escape` 處理 markup，卻在 attribute 中也直接輸出 CR／LF／tab；新增 wire／value assertion 與兩種 transport 的 profile Name 案例均在舊 helper 失敗。 | W03／W10／W06 共用表示子批次：輸出 numeric character reference，保留一般值的 borrowed 路徑與 literal Name state／read；raw renderer、token-reader 閉合、schema 欄位限制與 invalid XML character 仍為獨立項目。 |
+| K30 — 空 profile 身分政策仍未結案 | 來源已確認：Media1 Create 接受明確空 Token，GetProfile 保留空值 lookup fallback，但 typed MediaProfile parser 拒絕空 token，binding／Delete／PTZ 路徑無法一致使用。 | W01／W10／W06；`media::{handle_create_profile,resp_profile}`、`Node::optional_child_text` 與 typed profile parser。先增加 raw／client 錯誤後 state 控制，再選擇 mock 拒絕／配置政策；不僅憑 xs:string 推論規範禁止空值，不宣稱 runtime 已驗收。 |
 | K27 — 已限制回覆替換，index 仍碰撞 | `mock_replay_key_gaps` 保留原本六種 stored-key collision，增加 body ephemera、mixed-content ordering 與 xsi:type namespace 控制；replay 現在拒絕未確認的 scoped identity match，轉入 synthetic。 | W19 部分完成：兩種 transport 及 exact raw／qualified-header 控制通過；index／檔案格式不變，被覆蓋錄製無法恢復；完整 key 遷移及其他 QName／HTTP／protocol 語意仍待完成。 |
 | K28 | 已錄製 request 的 URL 憑證仍存於 `key_canon`，舊檔 key 載入時也未清除。虛構資料的 assertion failure 已重現兩項缺陷。 | W19：recording／replay／diff 投影與舊檔／caller lookup key 均清除 URL 帳密；載入不覆寫磁碟，正規化碰撞維持 last-write-wins。Raw envelope 仍僅針對指定格式去除憑證，並非通用秘密偵測器。 |
 | K24 | 固定來源的輸出型別審查發現 Media2 audio renderer／options 沿用 Media1 codec 名稱，共用 writer 也未經 service adapter 就直接儲存。XSD 字串合法性無法驗證兩者不同的 codec 詞彙。 | W01／W10：將 audio list／options、profile 內嵌 audio、共用寫入及 client 跨服務預期視為同一相依範圍審查。已由來源確認，具辨識力的 wire／state 重現待補。不可只改輸出而破壞寫入。 |
@@ -363,7 +361,7 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
 | K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |
 | K14 — 基準後已修正 | DeleteProfile 使用明確的 committed-outcome predicate；NotFound／Fixed 不通知，Deleted 通知一次。 | W18 部分完成；回歸檢查完整 state、兩服務、hook 次數及公開 helper 相容性。Replay 另由 K17 追蹤。 |
-| K15 — Name 已修正 | 兩個 CreateProfile Name reader 現解碼 scoped scalar 文字；兩個 profile renderer 將 Name 轉義一次，包含 seed state。Profile-token attribute 及巢狀 configuration 文字仍待處理。 | W10；seeded-markup 正確不變量及兩種 transport 的 create／read／state／refusal 測試。不代表 token 或巢狀 renderer 審查完成。 |
+| K15 — Name 與選定 profile-token 路徑已修正 | 兩個 CreateProfile Name reader 解碼 scalar；Media1 Create／GetProfile 及六個 binding 入口採用 scoped profile 身分。兩個 profile renderer 將 Name 與 token attribute 轉義一次。 | W10；P2 workflow／refusal 控制及 PTZ1 涵蓋選定 token 路徑。空 token 政策、typed adapter、recorded key 及巢狀 configuration 文字仍未結案。 |
 | K16 — 部分修正 | Media2 profile-list 選擇已於 `c6af85b` 修正；create 只讀 Name；binding 驗證並提交完整、以值表示的 plan。 | 後筆無效 token 部分寫入及選定讀取語意具 state／hook／HTTP 控制；create／name／binding Type=All／conflict 及廣泛欄位／輸出驗證仍屬 W01／W10。 |
 
 K23 現僅修正測試框架。確定性控制可區分純耗時變動與資料／command 變動，

@@ -104,14 +104,18 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 
 ## media
 
+P2 為 [profile 身分成對遷移](mock-fidelity-profile-preflight_zh.md#media-profile-身分)。
+完整欄位／fault policy、空 token 政策及其他 configuration token 尚未結案；
+P1 與 P2 合計仍只構成部分 operation 驗收。
+
 [dispatch_media](../../src/mock/dispatch.rs) · [services/media.rs](../../src/mock/services/media.rs)
 
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `media.GetServiceCapabilities` | `media::resp_service_capabilities` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetProfiles` | `media::resp_profiles` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.GetProfile` | `media::resp_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.CreateProfile` | `media::handle_create_profile` | `state, body, operation, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.GetProfile` | `media::resp_profile` | `state, operation` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media.CreateProfile` | `media::handle_create_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
 | `media.DeleteProfile` | `media::handle_delete_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -124,10 +128,10 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | `media.GetVideoEncoderConfiguration` | `media::resp_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.SetVideoEncoderConfiguration` | `media::handle_set_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetVideoEncoderConfigurationOptions` | `media::resp_video_encoder_configuration_options` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.AddVideoEncoderConfiguration` | `media::handle_add_video_encoder_configuration` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.RemoveVideoSourceConfiguration` | `media::handle_remove_video_source_configuration` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.AddVideoEncoderConfiguration` | `media::handle_add_video_encoder_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media.RemoveVideoSourceConfiguration` | `media::handle_remove_video_source_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
 | `media.GetAudioSources` | `media::resp_audio_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetAudioSourceConfigurations` | `media::resp_audio_source_configurations` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetAudioEncoderConfiguration` | `media::resp_audio_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -151,8 +155,8 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | `media2.GetProfiles` | `media2::resp_profiles_media2` | `state, operation` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, operation, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1 |
-| `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
 | `media2.GetStreamUri` | `media2::resp_stream_uri_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetSnapshotUri` | `media2::resp_snapshot_uri_media2` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetVideoSourceConfigurations` | `media2::resp_video_source_configurations_media2` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |

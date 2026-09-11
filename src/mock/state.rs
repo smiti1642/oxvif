@@ -828,6 +828,10 @@ pub struct RecordingJobEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileEntry {
+    /// Literal profile identifier. Migrated Media and PTZ identity paths decode
+    /// request XML once and compare this value without trimming. Profile views
+    /// escape it on output; loading a snapshot never unescapes it automatically.
+    /// Empty-token policy and other mock consumer paths remain separately scoped.
     pub token: String,
     pub name: String,
     /// `true` for factory-baked profiles that can't be deleted.
@@ -2779,16 +2783,20 @@ mod tests {
     /// kinds, which accepted anything until their catalogues existed.
     #[test]
     fn media2_binding_an_unknown_ptz_configuration_faults() {
-        use crate::mock::services::media2;
         let s = new_state();
-        let body = r#"<tr2:AddConfiguration>
+        let body = r#"<tr2:AddConfiguration xmlns:tr2='http://www.onvif.org/ver20/media/wsdl'>
              <tr2:ProfileToken>Profile_4</tr2:ProfileToken>
              <tr2:Configuration>
                <tr2:Type>PTZ</tr2:Type>
                <tr2:Token>PTZConfig_9</tr2:Token>
              </tr2:Configuration>
            </tr2:AddConfiguration>"#;
-        let xml = media2::handle_add_configuration_media2(&s, body, &mut None);
+        let xml = crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver20/media/wsdl/AddConfiguration",
+            "http://mock",
+            &s,
+            body,
+        );
         assert!(xml.contains("NoSuchConfig-ADDCFG2-5543"), "got {xml}");
         assert!(xml.contains("PTZConfig_9"), "got {xml}");
         let s = s.read();
@@ -2816,10 +2824,9 @@ mod tests {
     /// for everything.
     #[test]
     fn media2_binding_an_unknown_audio_configuration_faults() {
-        use crate::mock::services::media2;
         let req = |kind: &str, token: &str| {
             format!(
-                r#"<tr2:AddConfiguration>
+                r#"<tr2:AddConfiguration xmlns:tr2='http://www.onvif.org/ver20/media/wsdl'>
                      <tr2:ProfileToken>Profile_4</tr2:ProfileToken>
                      <tr2:Configuration>
                        <tr2:Type>{kind}</tr2:Type>
@@ -2834,7 +2841,12 @@ mod tests {
             ("AudioEncoder", "AEC_9", "AEC_2"),
         ] {
             let s = new_state();
-            let xml = media2::handle_add_configuration_media2(&s, &req(kind, bogus), &mut None);
+            let xml = crate::mock::dispatch::dispatch(
+                "http://www.onvif.org/ver20/media/wsdl/AddConfiguration",
+                "http://mock",
+                &s,
+                &req(kind, bogus),
+            );
             assert!(
                 xml.contains("NoSuchConfig-ADDCFG2-5543") && xml.contains(bogus),
                 "{kind}: binding {bogus} must fault naming the token, got {xml}"
@@ -2859,7 +2871,12 @@ mod tests {
                 "{kind}: refused bind must leave the slot empty"
             );
 
-            let ok = media2::handle_add_configuration_media2(&s, &req(kind, real), &mut None);
+            let ok = crate::mock::dispatch::dispatch(
+                "http://www.onvif.org/ver20/media/wsdl/AddConfiguration",
+                "http://mock",
+                &s,
+                &req(kind, real),
+            );
             assert!(
                 !ok.contains("NoSuchConfig"),
                 "{kind}: {real} is seeded and must bind, got {ok}"
@@ -3358,11 +3375,14 @@ mod tests {
 
     #[test]
     fn get_profile_by_token() {
-        use crate::mock::services::media;
         let s = new_state();
-        let body =
-            r#"<trt:GetProfile><trt:ProfileToken>Profile_2</trt:ProfileToken></trt:GetProfile>"#;
-        let resp = media::resp_profile(&s, body);
+        let body = r#"<trt:GetProfile xmlns:trt='http://www.onvif.org/ver10/media/wsdl'><trt:ProfileToken>Profile_2</trt:ProfileToken></trt:GetProfile>"#;
+        let resp = crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver10/media/wsdl/GetProfile",
+            "http://mock",
+            &s,
+            body,
+        );
         assert!(resp.contains("GetProfileResponse"));
         assert!(resp.contains("subStream"));
         assert!(!resp.contains("mainStream"));
@@ -3370,10 +3390,14 @@ mod tests {
 
     #[test]
     fn get_profile_unknown_token_returns_fault() {
-        use crate::mock::services::media;
         let s = new_state();
-        let body = r#"<trt:GetProfile><trt:ProfileToken>Bogus</trt:ProfileToken></trt:GetProfile>"#;
-        let resp = media::resp_profile(&s, body);
+        let body = r#"<trt:GetProfile xmlns:trt='http://www.onvif.org/ver10/media/wsdl'><trt:ProfileToken>Bogus</trt:ProfileToken></trt:GetProfile>"#;
+        let resp = crate::mock::dispatch::dispatch(
+            "http://www.onvif.org/ver10/media/wsdl/GetProfile",
+            "http://mock",
+            &s,
+            body,
+        );
         assert!(resp.contains("Fault"));
         assert!(resp.contains("NoProfile"));
     }

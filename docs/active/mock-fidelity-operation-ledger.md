@@ -110,14 +110,18 @@ Do not change a route before opening its row and the corresponding work package.
 
 ## media
 
+P2 is the [paired profile identity migration](mock-fidelity-profile-preflight.md#media-profile-identity).
+It does not close complete field/fault policy, empty-token handling or other
+configuration tokens. P1 and P2 together remain partial operation acceptance.
+
 [dispatch_media](../../src/mock/dispatch.rs) · [services/media.rs](../../src/mock/services/media.rs)
 
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `media.GetServiceCapabilities` | `media::resp_service_capabilities` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetProfiles` | `media::resp_profiles` | `state` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.GetProfile` | `media::resp_profile` | `state, body` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.CreateProfile` | `media::handle_create_profile` | `state, body, operation, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.GetProfile` | `media::resp_profile` | `state, operation` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media.CreateProfile` | `media::handle_create_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
 | `media.DeleteProfile` | `media::handle_delete_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -130,10 +134,10 @@ Do not change a route before opening its row and the corresponding work package.
 | `media.GetVideoEncoderConfiguration` | `media::resp_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.SetVideoEncoderConfiguration` | `media::handle_set_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetVideoEncoderConfigurationOptions` | `media::resp_video_encoder_configuration_options` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.AddVideoEncoderConfiguration` | `media::handle_add_video_encoder_configuration` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media.RemoveVideoSourceConfiguration` | `media::handle_remove_video_source_configuration` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media.AddVideoEncoderConfiguration` | `media::handle_add_video_encoder_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media.RemoveVideoSourceConfiguration` | `media::handle_remove_video_source_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
 | `media.GetAudioSources` | `media::resp_audio_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetAudioSourceConfigurations` | `media::resp_audio_source_configurations` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetAudioEncoderConfiguration` | `media::resp_audio_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -157,8 +161,8 @@ Do not change a route before opening its row and the corresponding work package.
 | `media2.GetProfiles` | `media2::resp_profiles_media2` | `state, operation` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.CreateProfile` | `media2::handle_create_profile_media2` | `state, operation, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
 | `media2.DeleteProfile` | `media2::handle_delete_profile_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1 |
-| `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
-| `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body, effect` | W10 | PARTIAL | TODO | TODO | TODO | TODO | P1 |
+| `media2.AddConfiguration` | `media2::handle_add_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
+| `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2 |
 | `media2.GetStreamUri` | `media2::resp_stream_uri_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetSnapshotUri` | `media2::resp_snapshot_uri_media2` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetVideoSourceConfigurations` | `media2::resp_video_source_configurations_media2` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |

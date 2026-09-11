@@ -19,9 +19,13 @@ pub fn resp_profiles(state: &SharedState) -> String {
     )
 }
 
-pub fn resp_profile(state: &SharedState, body: &str) -> String {
-    let inner = extract_tag(body, "GetProfile").unwrap_or_default();
-    let want = extract_tag(&inner, "ProfileToken").unwrap_or_default();
+pub fn resp_profile(state: &SharedState, operation: &crate::mock::request::Node) -> String {
+    let want = match operation
+        .optional_child_text("http://www.onvif.org/ver10/media/wsdl", "ProfileToken")
+    {
+        Ok(token) => token.unwrap_or_default(),
+        Err(error) => return error.to_fault(),
+    };
     let (snapshot, cat) = profile_snapshot(state);
     match snapshot.iter().find(|p| p.token == want) {
         Some(p) => soap(
@@ -92,9 +96,16 @@ pub fn handle_set_video_source_configuration(state: &SharedState, body: &str) ->
 pub fn handle_add_video_encoder_configuration(
     state: &SharedState,
     body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
-    match bind_configuration(state, body, ConfigKind::VideoEncoder, "ADDVEC-5531") {
+    match bind_configuration(
+        state,
+        body,
+        operation,
+        ConfigKind::VideoEncoder,
+        "ADDVEC-5531",
+    ) {
         Ok(()) => {
             *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
             resp_empty("trt", "AddVideoEncoderConfigurationResponse")
@@ -105,10 +116,10 @@ pub fn handle_add_video_encoder_configuration(
 
 pub fn handle_remove_video_encoder_configuration(
     state: &SharedState,
-    body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
-    match unbind_configuration(state, body, ConfigKind::VideoEncoder, "RMVEC-5532") {
+    match unbind_configuration(state, operation, ConfigKind::VideoEncoder, "RMVEC-5532") {
         Ok(()) => {
             *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
             resp_empty("trt", "RemoveVideoEncoderConfigurationResponse")
@@ -120,9 +131,16 @@ pub fn handle_remove_video_encoder_configuration(
 pub fn handle_add_video_source_configuration(
     state: &SharedState,
     body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
-    match bind_configuration(state, body, ConfigKind::VideoSource, "ADDVSC-5533") {
+    match bind_configuration(
+        state,
+        body,
+        operation,
+        ConfigKind::VideoSource,
+        "ADDVSC-5533",
+    ) {
         Ok(()) => {
             *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
             resp_empty("trt", "AddVideoSourceConfigurationResponse")
@@ -133,10 +151,10 @@ pub fn handle_add_video_source_configuration(
 
 pub fn handle_remove_video_source_configuration(
     state: &SharedState,
-    body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
-    match unbind_configuration(state, body, ConfigKind::VideoSource, "RMVSC-5534") {
+    match unbind_configuration(state, operation, ConfigKind::VideoSource, "RMVSC-5534") {
         Ok(()) => {
             *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
             resp_empty("trt", "RemoveVideoSourceConfigurationResponse")
@@ -147,7 +165,6 @@ pub fn handle_remove_video_source_configuration(
 
 pub fn handle_create_profile(
     state: &SharedState,
-    body: &str,
     operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
@@ -155,9 +172,12 @@ pub fn handle_create_profile(
         Ok(name) => name,
         Err(error) => return error.to_fault(),
     };
-    let inner = extract_tag(body, "CreateProfile").unwrap_or_default();
     // Caller may supply an explicit token (rare — most cameras assign).
-    let supplied_token = extract_tag(&inner, "Token");
+    let supplied_token =
+        match operation.optional_child_text("http://www.onvif.org/ver10/media/wsdl", "Token") {
+            Ok(token) => token.map(str::to_owned),
+            Err(error) => return error.to_fault(),
+        };
 
     let entry = match create_profile_in_state(state, name, supplied_token) {
         CreateOutcome::Created(e) => {
@@ -184,7 +204,7 @@ pub fn handle_create_profile(
 }
 
 /// Profile names are decoded state text, not serialized XML. An explicit empty
-/// name is distinct from omission; token/attribute/length migration is separate.
+/// name is distinct from omission; field-length validation is separate.
 pub(crate) fn profile_name<'a>(
     operation: &'a crate::mock::request::Node,
     namespace: &str,
@@ -536,14 +556,18 @@ impl ConfigKind {
 pub(crate) fn bind_configuration(
     state: &SharedState,
     body: &str,
+    operation: &crate::mock::request::Node,
     kind: ConfigKind,
     tag: &str,
 ) -> Result<(), String> {
-    let profile = extract_tag(body, "ProfileToken").unwrap_or_default();
+    let profile = operation
+        .optional_child_text("http://www.onvif.org/ver10/media/wsdl", "ProfileToken")
+        .map_err(|error| error.to_fault())?
+        .unwrap_or_default();
     let config = extract_tag(body, "ConfigurationToken")
         .or_else(|| extract_tag(body, "Token"))
         .unwrap_or_default();
-    apply_configuration_bindings(state, &profile, &[(kind, config)], true, tag)
+    apply_configuration_bindings(state, profile, &[(kind, config)], true, tag)
 }
 
 /// Clear a configuration slot on a profile. Audit §3 items 1.5, 1.6 and 1.7.
@@ -552,12 +576,15 @@ pub(crate) fn bind_configuration(
 /// idempotent and ONVIF does not require a device to complain.
 pub(crate) fn unbind_configuration(
     state: &SharedState,
-    body: &str,
+    operation: &crate::mock::request::Node,
     kind: ConfigKind,
     tag: &str,
 ) -> Result<(), String> {
-    let profile = extract_tag(body, "ProfileToken").unwrap_or_default();
-    apply_configuration_bindings(state, &profile, &[(kind, String::new())], false, tag)
+    let profile = operation
+        .optional_child_text("http://www.onvif.org/ver10/media/wsdl", "ProfileToken")
+        .map_err(|error| error.to_fault())?
+        .unwrap_or_default();
+    apply_configuration_bindings(state, profile, &[(kind, String::new())], false, tag)
 }
 
 /// Validate a complete value-based plan and commit its slots under one lock.
@@ -683,7 +710,7 @@ fn render_profile(p: &ProfileEntry, tag: &str, cat: &Catalogues) -> String {
           <tt:Name>{name}</tt:Name>
           {vsc}{asc}{vec}{aec}{ptz}
         </trt:{tag}>"#,
-        token = p.token,
+        token = crate::types::xml_escape(&p.token),
         fixed = p.fixed,
         name = crate::types::xml_escape(&p.name),
     )

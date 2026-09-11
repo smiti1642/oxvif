@@ -16,6 +16,7 @@ Owner: current hardening branch. [Execution checklist](mock-fidelity-execution-c
 | [Profile-token dependency closure](#profile-token-dependency-closure) | Paired migration paths and test boundaries |
 | [Shared whitespace serialization](#shared-whitespace-serialization) | K29 data preservation before token migration |
 | [PTZ profile identity](#ptz-profile-identity) | PTZ1 prerequisite before Media token migration |
+| [Media profile identity](#media-profile-identity) | P2 paired creation/read/render/binding migration |
 
 ## Shared whitespace serialization
 
@@ -104,6 +105,54 @@ complete fault mapping, capability/effect policy, concurrent validation/mutation
 and replay dependencies remain W11/W16/W19 work. Existing state strings are
 never automatically unescaped or rewritten.
 
+## Media profile identity
+
+P2, 2026-09-11, baseline `0053eef`: Media1 optional Create Token, GetProfile and
+all six Media binding ProfileToken readers now borrow unique direct qualified
+scalar values. Both profile renderers escape token attributes once; Media2's
+generated Create token output also uses shared escaping. No public signatures or
+persisted data are rewritten. Nested configuration values remain legacy readers.
+
+The optional scalar accessor distinguishes omission from explicit empty input,
+without adding a field-specific trim. Existing missing/empty policy is retained:
+Create can still store an explicitly empty token; GetProfile retains its empty
+lookup fallback, while binding plans refuse empty identity. The typed client
+cannot consume empty profile tokens. This is a recorded remaining policy defect,
+not acceptance of empty-token workflows or a new normative empty-token rule.
+Length/capacity, repeated configuration/Type/Name/initial-binding rules and full
+ordinary Fault mappings still need their operation-card completion.
+
+`tests/mock_media_profile_identity.rs` exercises raw and public-client creation,
+exact literal state and attribute spelling, all three profile views, all six
+binding entries, selected PTZ head status and both deletion services in both
+transports. Authored tokens include entity-looking text, markup, significant
+edge whitespace and CR/LF/tab. It checks slot contents, both-service PTZ bindings,
+complete final state and exact hook counts. Duplicate/nested identities fault
+before mutation; Header/foreign/nested decoys cannot replace the direct field.
+The old reader failed both tests at trimmed creation state after the ordinary
+workflow passed (RTK 1789099120). A preceding compile failure (1789099105) was a
+test field-name error, not regression evidence. Bypassing optional scalar
+uniqueness failed both exact fault assertions in the unfiltered workspace,
+all-features, no-fail-fast mutation run (1789099566); it was restored.
+
+Fresh external corpus `oxvif-profile-corpus-20260911-02` passed all 34 instances
+with pinned strict Xerces XSD 1.1, now including an authored special Media1 Create
+token. This corpus does not independently accept every new raw probe or the
+special-token Media2 profile output. Typed adapters, stored replay keys and the
+complete read-effect graph remain separate closure requirements. Review old
+snapshots explicitly: entity-looking stored tokens remain literal, never silently
+decoded or renamed. PTZ1 commit `0053eef` is the prerequisite, not a claim that
+the full Media/PTZ programme is complete.
+
+Final P2 gates passed formatting, both workspace Clippy modes, 1,212 all-feature
+and 1,117 default tests (5 ignored, 29 suites each), both strict documentation
+builds and inventory self-tests (159 Action sites / 157 routes / 247 readers).
+Legacy breadth coverage retained 158 responses, 111 successes, 47 faults,
+1,242 anchors, 1,431 skipped children, 398 checked attributes and zero finding
+pins. PTZ1 `0053eef` passed hosted CI 34560282523. K30 now explicitly tracks the
+retained empty-token inconsistency; reproduce state after the client error before
+implementing its bounded policy correction. Adapter and replay closure follows.
+
 ## Profile-token dependency closure
 
 Source checkpoint `4220ec2`, 2026-09-11; W02/W10/W11/W19. This inventories the
@@ -152,18 +201,18 @@ selectors also borrow parsed fields; remaining field migrations stay open.
 | Ledger ID | Client → handler | Current input extraction | State/renderer path | Current ordinary Fault codes (flat unless noted) |
 | --- | --- | --- | --- | --- |
 | `media.GetProfiles` | get_profiles → resp_profiles | No body consumed | profiles + catalogues → render_profile | No operation-specific branch in handler |
-| `media.GetProfile` | get_profile → resp_profile | GetProfile fragment → ProfileToken; absent becomes empty | profiles + catalogues → render_profile | ter:NoProfile |
-| `media.CreateProfile` | create_profile → handle_create_profile | Parsed direct scalar Name; optional Token still uses legacy fragment/text | create_profile_in_state → profiles, next_token_id → render_profile | Generic field faults; ter:ProfileExists |
+| `media.GetProfile` | get_profile → resp_profile | Parsed unique direct ProfileToken; existing missing/empty fallback retained | profiles + catalogues → render_profile | Generic identity-field faults; ter:NoProfile |
+| `media.CreateProfile` | create_profile → handle_create_profile | Parsed direct scalar Name and unique optional Token; empty policy retained | create_profile_in_state → profiles, next_token_id → render_profile | Generic field faults; ter:ProfileExists |
 | `media.DeleteProfile` | delete_profile → handle_delete_profile | parsed operation.required_child_text(ProfileToken), strict scalar identity | delete_profile_in_state → profiles → empty response | Field validation: env:Sender; missing/fixed: nested s:Sender (review below) |
-| `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
-| `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | ProfileToken; legacy scalar | unbind_configuration(VideoSource) → profile slot | env:Sender / ter:NoProfile |
-| `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile / ter:NoConfig |
-| `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | ProfileToken; legacy scalar | unbind_configuration(VideoEncoder) → profile slot | env:Sender / ter:NoProfile |
+| `media.AddVideoSourceConfiguration` | add_video_source_configuration → handle_add_video_source_configuration | Parsed unique direct ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoSource) → profile slot | Generic identity-field faults; env:Sender / ter:NoProfile / ter:NoConfig |
+| `media.RemoveVideoSourceConfiguration` | remove_video_source_configuration → handle_remove_video_source_configuration | Parsed unique direct ProfileToken; decoded scalar | unbind_configuration(VideoSource) → profile slot | Generic identity-field faults; env:Sender / ter:NoProfile |
+| `media.AddVideoEncoderConfiguration` | add_video_encoder_configuration → handle_add_video_encoder_configuration | Parsed unique direct ProfileToken; ConfigurationToken with Token fallback | bind_configuration(VideoEncoder) → profile slot | Generic identity-field faults; env:Sender / ter:NoProfile / ter:NoConfig |
+| `media.RemoveVideoEncoderConfiguration` | remove_video_encoder_configuration → handle_remove_video_encoder_configuration | Parsed unique direct ProfileToken; decoded scalar | unbind_configuration(VideoEncoder) → profile slot | Generic identity-field faults; env:Sender / ter:NoProfile |
 | `media2.GetProfiles` | get_profiles_media2 → resp_profiles_media2 | Parsed Token/Type, scoped scalar and direct sequence checks | cloned profile projection + media::catalogues → render_profile_media2 | Generic field faults; nested s:Sender / InvalidArgVal / NoProfile |
 | `media2.CreateProfile` | create_profile_media2 → handle_create_profile_media2 | Parsed direct scalar Name; Configuration not read | media::create_profile_in_state(None) → profiles, counter → Token response | Generic field faults; ter:ProfileExists branch (currently unreachable with None) |
 | `media2.DeleteProfile` | delete_profile_media2 → handle_delete_profile_media2 | parsed operation.required_child_text(Token), strict scalar identity | media::delete_profile_in_state → profiles → empty response | Field validation: env:Sender; missing/fixed: nested s:Sender (review below) |
-| `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | ProfileToken; repeated Configuration/Type/Token; Name not read | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
-| `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | ProfileToken; repeated Configuration/Type/Token | apply_media2_configuration → atomic media::apply_configuration_bindings(add=false) | env:Sender / ter:ConfigurationConflict / ter:NoProfile |
+| `media2.AddConfiguration` | add_configuration_media2 → handle_add_configuration_media2 | Parsed unique direct ProfileToken; repeated Configuration/Type/Token; Name not read | apply_media2_configuration → atomic media::apply_configuration_bindings(add=true) | Generic identity-field faults; env:Sender / ter:ConfigurationConflict / ter:NoProfile / ter:NoConfig |
+| `media2.RemoveConfiguration` | remove_configuration_media2 → handle_remove_configuration_media2 | Parsed unique direct ProfileToken; repeated Configuration/Type/Token | apply_media2_configuration → atomic media::apply_configuration_bindings(add=false) | Generic identity-field faults; env:Sender / ter:ConfigurationConflict / ter:NoProfile |
 
 ## Shared paths and current behavior
 

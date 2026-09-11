@@ -98,7 +98,7 @@ fn render_profile_media2(p: &ProfileEntry, tag: &str, cat: &media::Catalogues) -
           <tr2:Name>{name}</tr2:Name>
           {configurations}
         </tr2:{tag}>"#,
-        token = p.token,
+        token = crate::types::xml_escape(&p.token),
         fixed = p.fixed,
         name = crate::types::xml_escape(&p.name),
     )
@@ -411,9 +411,10 @@ pub fn handle_set_video_source_configuration_media2(state: &SharedState, body: &
 pub fn handle_add_configuration_media2(
     state: &SharedState,
     body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
-    match apply_media2_configuration(state, body, true) {
+    match apply_media2_configuration(state, body, operation, true) {
         Ok(()) => {
             *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
             resp_empty("tr2", "AddConfigurationResponse")
@@ -425,9 +426,10 @@ pub fn handle_add_configuration_media2(
 pub fn handle_remove_configuration_media2(
     state: &SharedState,
     body: &str,
+    operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
-    match apply_media2_configuration(state, body, false) {
+    match apply_media2_configuration(state, body, operation, false) {
         Ok(()) => {
             *effect = Some(crate::mock::effect::Effect::ProfilesChanged);
             resp_empty("tr2", "RemoveConfigurationResponse")
@@ -441,8 +443,16 @@ pub fn handle_remove_configuration_media2(
 /// The request may carry several `<tr2:Configuration>` children; every one is
 /// planned, and all supported kinds and required tokens are checked before any
 /// slot is written. The shared value-based plan commits under one write lock.
-fn apply_media2_configuration(state: &SharedState, body: &str, add: bool) -> Result<(), String> {
-    let profile = extract_tag(body, "ProfileToken").unwrap_or_default();
+fn apply_media2_configuration(
+    state: &SharedState,
+    body: &str,
+    operation: &crate::mock::request::Node,
+    add: bool,
+) -> Result<(), String> {
+    let profile = operation
+        .optional_child_text("http://www.onvif.org/ver20/media/wsdl", "ProfileToken")
+        .map_err(|error| error.to_fault())?
+        .unwrap_or_default();
     let entries = extract_all_tags(body, "Configuration");
     if entries.is_empty() {
         return Err(resp_soap_fault(
@@ -469,7 +479,7 @@ fn apply_media2_configuration(state: &SharedState, body: &str, add: bool) -> Res
     }
 
     let tag = if add { "ADDCFG2-5543" } else { "RMCFG2-5544" };
-    media::apply_configuration_bindings(state, &profile, &planned, add, tag)
+    media::apply_configuration_bindings(state, profile, &planned, add, tag)
 }
 
 pub fn handle_set_video_encoder_configuration(state: &SharedState, body: &str) -> String {
@@ -589,7 +599,7 @@ pub fn handle_create_profile_media2(
                 NS,
                 &format!(
                     "<tr2:CreateProfileResponse><tr2:Token>{}</tr2:Token></tr2:CreateProfileResponse>",
-                    entry.token
+                    crate::types::xml_escape(&entry.token)
                 ),
             )
         }

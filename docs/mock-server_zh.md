@@ -302,9 +302,17 @@ mock conformance。詳見[強化計畫](active/mock-fidelity-hardening-plan_zh.m
 改變 decoded value。Client request 與 structured Fault serializer 亦使用此機制；
 含上述資料字元的 bytewise raw fixture 採用新的 reference 表示。
 缺少、重複或巢狀名稱會在配置 token 前被拒絕，不通知狀態 hook。這不代表
-profile token、巢狀 configuration、attribute、長度、容量或整個操作已完成驗證。
+巢狀 configuration、attribute、長度、容量或整個操作已完成驗證。
 既有持久化 snapshot 不會自動解碼，因為類似 entity 的名稱也可能是刻意使用的
 literal 文字。請檢查舊 mock 版本建立的名稱；若誤存 XML 拼法，須明確修正 fixture 值。
+
+Media1 CreateProfile 的 optional Token、GetProfile 的 ProfileToken，以及六個
+Media binding 入口，現在讀取唯一、直接 qualified scalar 身分。兩種 profile view
+都將 token attribute 轉義一次，保留有效空白；重複或巢狀身分欄位在 mutation 前
+回傳 fault。Seed 與持久化的 profile token 應為 literal 字串，而非預先轉義 XML；
+不自動重新命名或解碼舊 snapshot。本次有界遷移刻意保留既有 missing／empty policy：
+明確空值的 Create token 仍可能建立 typed client 無法使用的 state。請避免空 token；
+完整欄位政策、configuration-token 解析、adapter 與 replay-key 遷移仍待完成。
 
 Media1 `GetProfiles`／`GetProfile` 與 Media2 `GetProfiles` 在同一 read lock
 內取得 profile 及全部 configuration catalogue，再產生回應，避免將不同版本

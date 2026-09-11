@@ -60,11 +60,15 @@
 //! Shared escaping uses character references for CR/LF/tab data so XML
 //! normalization does not replace them; the compatibility client DOM still trims
 //! leading/trailing text. Structured Fault output uses the same escaping helper.
-//! Profile-token and nested-configuration text handling remains under review.
+//! Media1 CreateProfile/GetProfile and all six existing Media binding entry
+//! points use scoped decoded profile tokens; both profile views escape the
+//! token attribute once. Persisted tokens remain literal strings, never
+//! automatically decoded again. Empty-token policy, other configuration text,
+//! typed adapters and recorded-key migration remain under review.
 //! The 19 PTZ handlers using profile/head resolution now read one direct,
 //! namespace-qualified ProfileToken from the shared parsed operation, preserving
 //! decoded whitespace and rejecting duplicate or nested scalar values. Other PTZ
-//! fields, fault policies and Media/adapter token paths are not fully migrated.
+//! fields, fault policies and adapter token paths are not fully migrated.
 //!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A
 //! mock that answers everything is not a test harness — it is a way of proving

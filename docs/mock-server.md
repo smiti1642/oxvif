@@ -361,11 +361,21 @@ their decoded values rather than letting XML normalization change them. This is
 also used by client requests and the structured Fault serializer; bytewise raw
 fixtures containing those data characters use the new reference spelling.
 Missing, duplicate or nested names are refused before allocation without a state
-notification. This does not complete profile-token, nested-configuration,
+notification. This does not complete nested-configuration,
 attribute, length, capacity or whole-operation validation.
 Existing persisted snapshots are not automatically decoded: an entity-looking
 name may be intentional literal text. Review names created by older mock versions
 and correct their fixture values explicitly if they contain accidental XML spelling.
+
+Media1 CreateProfile's optional Token, GetProfile's ProfileToken and all six
+Media binding entry points now read unique, direct qualified scalar identities.
+Both profile views escape the token attribute once, preserving meaningful
+whitespace. Duplicate or nested identity fields fault before mutation. Seed and
+persist profile tokens as literal strings, not pre-escaped XML; older snapshots
+are not automatically renamed or decoded. Missing/empty policy is deliberately
+unchanged in this bounded migration: an explicitly empty Create token can still
+produce state the typed client cannot use. Avoid empty tokens; full field policy,
+configuration-token parsing, adapters and replay-key migration remain open.
 
 Media1 `GetProfiles`/`GetProfile` and Media2 `GetProfiles` capture profiles and all
 configuration catalogues under one read lock before rendering. A response cannot
