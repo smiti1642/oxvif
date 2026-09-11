@@ -193,6 +193,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Media1/Media2 synchronization requests through client and session methods,
+  adapted from PR #16. Scoped mock selectors and independent service opt-ins
+  preserve default refusal for unmodeled effects; receipts do not generate media
+  or retire recorded reads. See the
+  [guide](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/media-synchronization.md).
 - Push-event TCP origin through `notification_listener_with_peer` and
   `ReceivedNotification`, inspired by PR #17. The new async listener reports bind
   errors and is ready on return. Legacy event structs, JSON and listener signature

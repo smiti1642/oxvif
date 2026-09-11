@@ -5,6 +5,74 @@ use std::sync::{Arc, Mutex};
 use crate::tests::common::ErrorTransport;
 use crate::transport::TransportError;
 
+#[tokio::test]
+async fn media_sync_session_routes_services_and_reports_missing_urls() {
+    for media2 in [false, true] {
+        let response = crate::tests::common::empty_response_xml("SetSynchronizationPointResponse");
+        let (transport, captured) = crate::tests::common::RecordingTransport::new(&response);
+        let mut caps = Capabilities::default();
+        caps.media.url = Some("http://media1.invalid/service".into());
+        caps.media2.url = Some("http://media2.invalid/service".into());
+        let session = OnvifSession {
+            client: OnvifClient::new("http://device.invalid").with_transport(transport),
+            caps,
+        };
+        if media2 {
+            session
+                .set_synchronization_point_media2("target")
+                .await
+                .unwrap();
+        } else {
+            session
+                .media_set_synchronization_point("target")
+                .await
+                .unwrap();
+        }
+        {
+            let call = captured.lock().unwrap();
+            assert_eq!(
+                call.url,
+                if media2 {
+                    "http://media2.invalid/service"
+                } else {
+                    "http://media1.invalid/service"
+                }
+            );
+            assert_eq!(
+                call.action,
+                format!(
+                    "http://www.onvif.org/{}/media/wsdl/SetSynchronizationPoint",
+                    if media2 { "ver20" } else { "ver10" }
+                )
+            );
+            assert!(call.body.contains(">target</"));
+        }
+        let session = OnvifSession {
+            caps: Capabilities::default(),
+            ..session
+        };
+        let error = if media2 {
+            session
+                .set_synchronization_point_media2("target")
+                .await
+                .unwrap_err()
+        } else {
+            session
+                .media_set_synchronization_point("target")
+                .await
+                .unwrap_err()
+        };
+        crate::tests::common::assert_missing_field(
+            error,
+            if media2 {
+                "Media2 service URL"
+            } else {
+                "Media service URL"
+            },
+        );
+    }
+}
+
 // ── SequenceTransport: returns responses in order ─────────────────────────
 
 struct SequenceTransport {

@@ -4,7 +4,7 @@
 
 程式碼基準：`b134f73`，2026-09-10。本文件是專案原始碼清冊，不是 ONVIF
 schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispatcher 的全部
-**157** 個字面值路由分支；此數量不是已完整驗證的操作數，也不是 ONVIF 定義的全部操作數。
+包含 B16 後共 **159** 個字面值路由分支；此數量不是已完整驗證的操作數，也不是 ONVIF 定義的全部操作數。
 
 先閱讀[施工檢查表](mock-fidelity-execution-checklist_zh.md)；
 政策與歷史證據保留於[主計畫](mock-fidelity-hardening-plan_zh.md)。
@@ -15,8 +15,8 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | [追蹤契約](#追蹤契約) | 欄位意義及完成證據 |
 | [device](#device) | 38 個路由分支；W13 |
 | [device_io](#device-io) | 1 個路由分支；W13 |
-| [media](#media) | 32 個路由分支；W10 |
-| [media2](#media2) | 26 個路由分支；W10 |
+| [media](#media) | 33 個路由分支；W10/W26 |
+| [media2](#media2) | 27 個路由分支；W10/W26 |
 | [ptz](#ptz) | 27 個路由分支；W11 |
 | [imaging](#imaging) | 8 個路由分支；W12 |
 | [events](#events) | 8 個路由分支；W15 |
@@ -131,6 +131,7 @@ P1 與 P2 合計仍只構成部分 operation 驗收。
 | `media.DeleteProfile` | `media::handle_delete_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1/PA1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.SetSynchronizationPoint` | `media::handle_set_synchronization_point` | `state, operation, false` | W26 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | B16 |
 | `media.GetVideoSources` | `media::resp_video_sources` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media.GetVideoSourceConfigurations` | `media::resp_video_source_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media.GetVideoSourceConfiguration` | `media::resp_video_source_configuration` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
@@ -171,6 +172,7 @@ P1 與 P2 合計仍只構成部分 operation 驗收。
 | `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
 | `media2.GetStreamUri` | `media2::resp_stream_uri_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetSnapshotUri` | `media2::resp_snapshot_uri_media2` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media2.SetSynchronizationPoint` | `media::handle_set_synchronization_point` | `state, operation, true` | W26 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | B16 |
 | `media2.GetVideoSourceConfigurations` | `media2::resp_video_source_configurations_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media2.SetVideoSourceConfiguration` | `media2::handle_set_video_source_configuration_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media2.GetVideoSourceConfigurationOptions` | `media2::resp_video_source_configuration_options_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |

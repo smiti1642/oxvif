@@ -71,6 +71,7 @@
 | `AddVideoSourceConfiguration` / `RemoveVideoSourceConfiguration` | ✓ |
 | `GetStreamUri` | ✓ |
 | `GetSnapshotUri` | ✓ |
+| `SetSynchronizationPoint` | ✓ |
 | `GetVideoSources` | ✓ |
 | `GetVideoSourceConfigurations` / `GetVideoSourceConfiguration` | ✓ |
 | `SetVideoSourceConfiguration` | ✓ |
@@ -95,6 +96,7 @@
 | `GetProfiles` | ✓ |
 | `CreateProfile` / `DeleteProfile` | ✓ |
 | `GetStreamUri` / `GetSnapshotUri` | ✓ |
+| `SetSynchronizationPoint` | ✓ |
 | `GetVideoSourceConfigurations` / `SetVideoSourceConfiguration` | ✓ |
 | `GetVideoSourceConfigurationOptions` | ✓ |
 | `GetVideoEncoderConfigurations` / `GetVideoEncoderConfiguration` | ✓ |

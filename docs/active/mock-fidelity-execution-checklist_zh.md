@@ -3,7 +3,7 @@
 [English](mock-fidelity-execution-checklist.md) | [繁體中文](mock-fidelity-execution-checklist_zh.md)
 
 規劃基準：`b134f73`，2026-09-10。政策依據：[已核准主計畫](mock-fidelity-hardening-plan_zh.md)。
-範圍索引：[157 個路由操作](mock-fidelity-operation-ledger_zh.md)。
+範圍索引：[159 個路由操作](mock-fidelity-operation-ledger_zh.md)。
 本文件將 M0–M6 拆成可追蹤工作，不代表里程碑已完成；本次規劃補充不改變 runtime 行為。
 
 相關有限範圍工作：[社群 PR 整合計畫](contributor-pr-integration-plan_zh.md) 涵蓋
@@ -148,12 +148,12 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W18／M4／PARTIAL | W10–W16 候選行為 | K13 無碰撞配置、K16 原子 binding plan、條件式通知；K08 hook 在鎖外接收 commit 快照，profile／catalogue 讀取共用一次快照 | 選定配置、binding、reentrant 及三路徑 profile snapshot 控制；更廣泛併發寫入、instance、rollback、其他 queue／read snapshot 及 replay 待完成；公開 signature 不變，callback 排序由使用者管理 |
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | 其餘 configuration 寫入與 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密；PA1 將已提交 profile effect 延伸至引用計數與 PTZ compatible read，VS1 加入成功 source 提交後的 source／profile／options 失效，保留實體來源 recording；VE1 加入 source-capacity 與 profile-encoder-options 失效 AM1 加入 audio／metadata committed effects。 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
-| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及選定 44 操作 profile／source／rate／encoder corpus 匯出與明確 payload anchor | AM1 後本機 148 份 instance 通過，包含 17 個拒絕（七個 profile、三個 source、兩個 rate、兩個 encoder、三個 audio／metadata）。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
-| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source／rate／encoder instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 44 操作的 148 份 instance；VE1 託管 CI、全程式 instance 覆蓋及 release 證據檢查仍待完成 |
+| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及選定 46 操作 Media corpus 匯出與明確 payload anchor | B16 後本機 160 份 instance 通過，包含 21 個拒絕（七個 profile、三個 source、兩個 rate、兩個 encoder、三個 audio／metadata、四個 synchronization）。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source／rate／encoder instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 46 操作的 160 份 instance；合併候選託管 CI、全程式 instance 覆蓋及 release 證據檢查仍待完成 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
 | W25／M6／TODO | W00–W24 驗收 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |
-| W26／條件式／TODO | 另行授權 PR 整合 | 重新審閱 PR #16 當時 head；Media `SetSynchronizationPoint` client／session／mock／tests／docs | Head 改變須重審；不自動合併；若納入則新增清冊／工作卡、特殊 token 負向案例、ack／effect 邊界及雙語 operation table，否則記錄未整合 |
+| W26／IN-PROGRESS | 已授權社群整合 | 已移植 PR #16 client／session，實作 scoped 僅收件確認 mock、工作卡、雙語文件與 S01–S08 控制 | 針對性測試、清冊及 160 份外部 instance 通過；最終關卡／託管 CI 見 [B16 證據](contributor-pr-integration-plan_zh.md#執行紀錄)。未合併主分支，未驗收實際媒體效果 |
 
 ## 服務施工批次
 
@@ -205,7 +205,7 @@ W02 發現新相依性時須擴充本表。
 | K08／選定 hook 缺陷已重現並修正 | Hook 原本持有 read lock，且可能觀察介入寫入而非原 mutation；現以 owned commit 快照在鎖外執行 | W18／W19 部分完成；管線開工核對有確定性 reentrant／snapshot 控制；queue、read snapshot、廣泛寫入及 replay 可見性仍待完成 |
 | K09／未驗證 | 必填欄位／範圍／extension／capability 宣告可能與契約不符 | W01／W10–W17；實作前完成批次工作卡 |
 | K10／未執行 | E1 沒有完整外部 schema、Linux／macOS 原生、多廠牌驗證 | W21／W24；實機證據分開記錄，未另授權只做唯讀 |
-| K11／待整合 | PR #16 不在來源基準內 | W26；另行重審，不默默納入 |
+| K11／候選已實作 | B16 保留 PR #16 client／session 貢獻署名並替換 mock | W26；最終候選證據待完成，未合併主分支 |
 | K17／內建 DeleteProfile 路徑已修正 | 內建 in-process／HTTP clone 於拒絕刪除時保留錄製結果，commit 後才淘汰選定的跨服務 profile read | W19／W03／W18 部分完成；其他 mutation、單獨 responder 政策、完整相依圖及併發／callback 可見性仍待完成；見管線開工核對 |
 | K18／選定 create／binding 依賴已修正 | 已提交的 CreateProfile 與已建模 Media binding 淘汰三個 profile-read Action；拒絕寫入保留錄製結果 | W19／W10 部分完成；兩種 transport、無關服務及獨立 instance 已測試；完整讀取相依圖與其他 mutation 仍待完成 |
 | K27／選定 replay 回覆替換已限制 | 九組碰撞於無法確認 scoped identity 時轉入 synthetic；exact raw recording 與 qualified-header ephemera 仍可 replay | W19 部分完成；兩種 transport 已測試；index 仍碰撞、被覆蓋錄製無法恢復，完整 key／QName／protocol 遷移仍待完成 |

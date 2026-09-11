@@ -161,7 +161,9 @@
 //!
 //! Eleven classified reset, auxiliary, reboot/maintenance, subscription and
 //! search-ending stubs refuse by default with Receiver / `mock:UnmodeledEffect`,
-//! including Events SetSynchronizationPoint. Select individual
+//! including Events SetSynchronizationPoint. Media1/Media2 synchronization has
+//! separate selections and validates scoped profile selectors after opt-in;
+//! neither generates video or metadata streams. Select individual
 //! [`AckOnlyOperation`] values using `with_acknowledgment_only` on mock, replay
 //! or adapter transports, or the HTTP builder, for receipt-only workflow tests.
 //! Neither path changes state, invokes hooks or invalidates replay; reset,

@@ -596,6 +596,20 @@ impl OnvifSession {
             .await
     }
 
+    /// Request synchronization of a Media1 profile's associated streams.
+    ///
+    /// Delegates to [`OnvifClient::media_set_synchronization_point`]; this does not
+    /// synchronize Events subscriptions. Missing service URLs and client errors
+    /// are returned. A successful response does not verify delivered media.
+    pub async fn media_set_synchronization_point(
+        &self,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .media_set_synchronization_point(self.media_url()?, profile_token)
+            .await
+    }
+
     /// Bind a video encoder configuration to a media profile.
     pub async fn add_video_encoder_configuration(
         &self,
@@ -879,6 +893,20 @@ impl OnvifSession {
     pub async fn get_snapshot_uri_media2(&self, profile_token: &str) -> Result<String, OnvifError> {
         self.client
             .get_snapshot_uri_media2(self.media2_url()?, profile_token)
+            .await
+    }
+
+    /// Request synchronization of a Media2 profile's associated streams.
+    ///
+    /// Delegates to [`OnvifClient::set_synchronization_point_media2`], without
+    /// falling back to Media1 or Events. Missing service URLs and client errors
+    /// are returned; a successful response does not verify delivered media.
+    pub async fn set_synchronization_point_media2(
+        &self,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        self.client
+            .set_synchronization_point_media2(self.media2_url()?, profile_token)
             .await
     }
 

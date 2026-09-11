@@ -9,8 +9,9 @@ use std::collections::BTreeSet;
 /// device, execute auxiliary commands, reboot/upgrade/restore, manage subscription
 /// or search lifetimes, generate events or prove a hardware effect. Upload URIs,
 /// subscription references and timestamps in these responses are fixture data.
-/// Only common XML/Action/body identity checks are applied, not complete field or
-/// subscription validation. Other mock operations are still being classified.
+/// Most selections only apply common XML/Action/body identity checks, not full
+/// field or subscription validation. Media synchronization additionally validates
+/// its scoped profile selector. Other mock operations are still being classified.
 ///
 /// Select individual operations using [`super::MockTransport::with_acknowledgment_only`]
 /// or the corresponding HTTP/replay/adapter builder method. There is no global
@@ -18,6 +19,10 @@ use std::collections::BTreeSet;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[non_exhaustive]
 pub enum AckOnlyOperation {
+    /// Media1 synchronization receipt; does not emit video or metadata streams.
+    MediaSynchronizationPoint,
+    /// Media2 synchronization receipt; independent of Media1 and Events policy.
+    Media2SynchronizationPoint,
     /// Device `SetSystemFactoryDefault`; does not reset any state.
     DeviceFactoryDefault,
     /// Events `Unsubscribe`; does not end a subscription or remove queued events.
@@ -48,6 +53,12 @@ impl AckOnlyOperation {
     /// The exact full Action URI selected by this variant, never a suffix match.
     pub const fn action(self) -> &'static str {
         match self {
+            Self::MediaSynchronizationPoint => {
+                "http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint"
+            }
+            Self::Media2SynchronizationPoint => {
+                "http://www.onvif.org/ver20/media/wsdl/SetSynchronizationPoint"
+            }
             Self::DeviceFactoryDefault => {
                 "http://www.onvif.org/ver10/device/wsdl/SetSystemFactoryDefault"
             }
@@ -80,6 +91,8 @@ impl AckOnlyOperation {
 
     pub(crate) fn for_action(action: &str) -> Option<Self> {
         [
+            Self::MediaSynchronizationPoint,
+            Self::Media2SynchronizationPoint,
             Self::DeviceFactoryDefault,
             Self::EventsUnsubscribe,
             Self::EventsSynchronizationPoint,

@@ -53,7 +53,7 @@ PR 內的驗證清單為作者陳述，不等於維護者驗收。
 
 ## B17 通知來源
 
-執行負責者：維護者。狀態：TODO。不依賴 W15 全部完成。
+執行負責者：維護者。狀態：LOCAL-PASS。不依賴 W15 全部完成。
 
 ### 檔案與 API
 
@@ -98,7 +98,7 @@ PR 內的驗證清單為作者陳述，不等於維護者驗收。
 
 ## B16 媒體同步
 
-執行負責者：維護者。狀態：TODO；對應 W26。參閱
+執行負責者：維護者。狀態：LOCAL-PASS；對應 W26。參閱
 [PR 詳細審查](mock-fidelity-pr16-integration_zh.md)。本計畫取代該文件的舊前置工作
 順序，但不撤銷尚未解決的發現。目前基準已有 scoped request、structured fault、
 profile lookup 與 `AckOnlyOperation`；應確認實際傳遞相依性，不重新實作這些設施。
@@ -118,8 +118,9 @@ profile lookup 與 `AckOnlyOperation`；應確認實際傳遞相依性，不重�
   的 profile，使用已審查的 structured fault。文字僅 decode 一次，保留 token
   有意義的空白，以一致的 state snapshot 進行檢查。
 - 拒絕與 opt-in acknowledgment 均不得改變 state、hook、event queue 或淘汰 replay
-  紀錄。不宣稱 commit、I-frame、PTZ refresh 或 RTP delivery。明確選用的 raw／
-  recorded fixture 保留已記載的優先順序，另行驗證，不與 synthetic 預設政策混淆。
+  紀錄。不宣稱 commit、I-frame、PTZ refresh 或 RTP delivery。錄製的讀取與明確
+  fault injection 保留優先順序；既有 replay guard 排除錄製的寫入回覆。分別驗證，
+  不與 synthetic 預設政策混淆（施工時依既有行為修正計畫）。
 - 視適用範圍擴充 `tests/mock_ack_policy.rs`、Client Media 測試、action snapshot、
   workflow、token discrimination、replay 與 corpus 測試。移除無條件成功的期待，
   不為了保留測試而放寬預設政策。
@@ -148,7 +149,7 @@ CLI discovery 或 HTTP 成功不等於該證據。
 
 ## B14 相依套件
 
-狀態：TODO，已納入本輪並可獨立審查。參閱[維護政策](dependency-maintenance-plan_zh.md)；
+狀態：LOCAL-PASS，已納入本輪並可獨立審查。參閱[維護政策](dependency-maintenance-plan_zh.md)；
 既有驗收僅涵蓋更早的 PR，不包含 #14。對選定 base 檢查目前 `Cargo.lock` 與
 `crates/oxvif-cli/Cargo.toml` diff，包含 transitive 更新與已套用版本，不能整份
 覆蓋回過時的 lockfile。
@@ -229,14 +230,14 @@ advisory 來取得通過結果。
 | 項目 | 狀態 | 結案條件 |
 | --- | --- | --- |
 | B17 | LOCAL-PASS | N01–N08、相容性／生命週期控制與兩組程式／文件關卡通過；hosted CI 待完成 |
-| B16／W26 | TODO | S01–S08 證據、完整工作卡與明確 acknowledgment 邊界 |
+| B16／W26 | LOCAL-PASS | S01–S08、完整工作卡及明確僅收件確認邊界；hosted CI 待完成 |
 | B14 | LOCAL-PASS | 相依審查、audit、Clippy／tests、MSRV／XML 通過；hosted CI 待完成 |
-| 合併候選 | TODO | 精確 SHA 與 ancestry 已接受；最終 tests／CI 真正完成 |
+| 合併候選 | LOCAL-PASS／CI PENDING | 本機關卡全部通過；hardening ancestry 尚未接受合併主分支 |
 | 遠端整合 | NOT AUTHORIZED | 明確授權、有署名的 commits 與驗證完成的目標分支 |
 
 各批更新公開 method／type rustdoc、`src/lib.rs`、CHANGELOG Unreleased 及
 `LIBRARY_GUIDE.md`／`_zh.md`。B16 另更新 `OPERATIONS.md`／`_zh.md`、Media reference
-雙語文件、mock-server 雙語文件、相關 examples、operation ledger、source inventory、
+英文內部文件與新增的雙語同步指南、mock-server 雙語文件、相關 examples、operation ledger、source inventory、
 W26 與詳細審查。README 僅在必要時增加短連結，不加入 API 細節。新 CLI 命令及其
 人類／Agent schema 不在範圍內；間接造成 CLI 行為改變則視為回歸問題調查。
 
@@ -276,3 +277,28 @@ parser。單次完整 workspace 敏感度 campaign（本機 RTK 證據目錄的
 通過；還原後 all-features 為 1,284 通過、五項 ignored、40 suites。
 還原後 default 測試亦通過（1,179 通過、五項 ignored、40 suites）。最終 hosted
 驗收仍待完成，不代表 ONVIF 認證或 Release 關卡已完成。
+
+B16 保留署名移植貢獻者的兩個 Client／Session 操作，並以 scoped、decode-once
+profile 驗證及各自獨立的 Media1／Media2 acknowledgment opt-in 替換 Mock handler。
+八個專用 Mock 控制涵蓋 synthetic、HTTP、replay、adapter；四個 Client 測試及
+一個 Session 測試涵蓋 wire／fault／route。既有 Action policy／snapshot 改為期待
+預設拒絕，而非尚未實作。不為媒體效果虛構 Set/Get 配對，roundtrip／token 表格
+改連結至收件政策控制。Client 回應解析保留既有空白正規化；wire assertion 獨立
+檢查 caller 精確 escaped token。
+
+單次未篩選 workspace／all-features／no-fail-fast 擾動
+（`1789120789_cargo_test.log`）故意誤送 Media2 Action 並繞過 Media 收件政策。
+Client、Session Action 斷言、Action snapshot、五個收件政策測試與 corpus 拒絕
+捕捉均失敗。另有三個舊 policy 測試暴露「尚未實作」的過期期待，已修正，但不
+列為新增敏感度證據。較早的拒絕斷言會遮蔽後續檢查，因此不能宣稱每個負向案例
+均獨立受擾動。後加的兩個 fixture 控制（`1789121094_cargo_test.log`）改變 Unicode
+seed identity 與預期 raw adapter 回覆，對應斷言均失敗，之後已還原 fixture。
+
+外部證據：本機 `oxvif-corpus-20260911-pr16` 匯出包含 160 份 XML／80 次交換／
+46 個操作，含 21 次拒絕交換。Pinned Xerces strict XSD 1.1 與 legacy 外部
+schema-shape 測試通過。清冊 self-test 通過，計 159 routes、161 Action 宣告與
+191 reader site。Schema 及衍生 instance 均留在 repository 外。兩種 strict
+rustdoc、兩組 workspace Clippy、Rust 1.88 all-target／all-feature check、七種
+獨立 library feature Clippy 及下游 encoding 關閉／開啟 XML 控制通過。
+還原後 all-features workspace 為 1,298 通過、default 為 1,190 通過，各有五項 ignored、41 suites；八個還原後專用控制亦通過。
+以上本機結果不代表已合併主分支、native hosted CI 完成或已觀察實際媒體串流。

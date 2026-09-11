@@ -14,6 +14,8 @@
 //! cargo run --example camera -- device-management
 //! cargo run --example camera -- stream-uris
 //! cargo run --example camera -- snapshot-uris
+//! cargo run --example camera -- media-sync --profile Profile_1
+//! cargo run --example camera -- media-sync-media2 --profile Profile_1
 //! cargo run --example camera -- system-datetime
 //! cargo run --example camera -- ptz-presets
 //! cargo run --example camera -- ptz-status
@@ -149,6 +151,8 @@ async fn main() {
         "device-management" => device_management(&cfg).await,
         "stream-uris" => stream_uris(&cfg).await,
         "snapshot-uris" => snapshot_uris(&cfg).await,
+        "media-sync" => media_sync_example(&cfg, false).await,
+        "media-sync-media2" => media_sync_example(&cfg, true).await,
         "system-datetime" => system_datetime(&cfg).await,
         "ptz-presets" => ptz_presets(&cfg).await,
         "ptz-status" => ptz_status(&cfg).await,
@@ -191,6 +195,9 @@ async fn main() {
 }
 
 fn print_help() {
+    println!(
+        "Media synchronization: media-sync / media-sync-media2 --profile <token> (actuates the selected stream)"
+    );
     println!("oxvif IPCam integration examples");
     println!();
     println!("USAGE:");
@@ -307,6 +314,9 @@ fn section(title: &str) {
 /// with a matching cleanup (e.g. CreateProfile → DeleteProfile) so the camera
 /// is left in the same state it was found in.
 async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
+    println!(
+        "Media synchronization is skipped here; explicitly run media-sync or media-sync-media2 with --profile to request a stream effect."
+    );
     println!("=== Full workflow ===");
     println!("Connecting to {}", cfg.camera_url);
 
@@ -1395,6 +1405,33 @@ async fn stream_uris(cfg: &Config) -> Result<(), OnvifError> {
 }
 
 // ── Example 5: snapshot URIs ──────────────────────────────────────────────────
+
+async fn media_sync_example(cfg: &Config, media2: bool) -> Result<(), OnvifError> {
+    let args: Vec<_> = env::args().collect();
+    let token = args
+        .iter()
+        .position(|a| a == "--profile")
+        .and_then(|i| args.get(i + 1))
+        .filter(|s| !s.is_empty());
+    let Some(token) = token else {
+        eprintln!("A specific --profile <token> is required; no synchronization request was sent.");
+        return Ok(());
+    };
+    let (client, caps) = connect(cfg).await?;
+    let url = if media2 {
+        caps.media2.url.as_deref()
+    } else {
+        caps.media.url.as_deref()
+    }
+    .ok_or_else(|| oxvif::soap::SoapError::missing("Selected Media service URL"))?;
+    if media2 {
+        client.set_synchronization_point_media2(url, token).await?;
+    } else {
+        client.media_set_synchronization_point(url, token).await?;
+    }
+    println!("Synchronization acknowledged; inspect the selected stream to verify the effect.");
+    Ok(())
+}
 
 async fn snapshot_uris(cfg: &Config) -> Result<(), OnvifError> {
     println!("=== Snapshot URIs ===");

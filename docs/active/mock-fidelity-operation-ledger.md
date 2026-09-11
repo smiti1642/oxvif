@@ -3,7 +3,7 @@
 [English](mock-fidelity-operation-ledger.md) | [繁體中文](mock-fidelity-operation-ledger_zh.md)
 
 Source baseline: `b134f73`, 2026-09-10. This is a project-source inventory,
-not an ONVIF schema catalogue or a claim of conformance. It lists all **157**
+not an ONVIF schema catalogue or a claim of conformance. Including B16, it lists all **159**
 literal route arms in the **10** production sub-dispatchers. These counts are
 not the number of fully verified operations or all operations ONVIF defines.
 
@@ -16,8 +16,8 @@ Do not change a route before opening its row and the corresponding work package.
 | [Tracking contract](#tracking-contract) | Column meaning and completion evidence |
 | [device](#device) | 38 route arms; W13 |
 | [device_io](#device-io) | 1 route arms; W13 |
-| [media](#media) | 32 route arms; W10 |
-| [media2](#media2) | 26 route arms; W10 |
+| [media](#media) | 33 route arms; W10/W26 |
+| [media2](#media2) | 27 route arms; W10/W26 |
 | [ptz](#ptz) | 27 route arms; W11 |
 | [imaging](#imaging) | 8 route arms; W12 |
 | [events](#events) | 8 route arms; W15 |
@@ -27,6 +27,9 @@ Do not change a route before opening its row and the corresponding work package.
 | [Maintenance](#maintenance) | Source drift and change protocol |
 
 ## Tracking contract
+
+B16: [Media synchronization cards and evidence](mock-fidelity-pr16-integration.md),
+default refusal and explicitly selected receipts, not actual streaming.
 
 K34 means the historical rate-only migration in the [VE1 plan](mock-fidelity-video-encoder.md),
 including dependent encoder/profile reads. VE1 names the later eight-operation
@@ -138,6 +141,7 @@ configuration tokens. P1 and P2 together remain partial operation acceptance.
 | `media.DeleteProfile` | `media::handle_delete_profile` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | E1,P1/PA1 |
 | `media.GetStreamUri` | `media::resp_stream_uri` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetSnapshotUri` | `media::resp_snapshot_uri` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.SetSynchronizationPoint` | `media::handle_set_synchronization_point` | `state, operation, false` | W26 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | B16 |
 | `media.GetVideoSources` | `media::resp_video_sources` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media.GetVideoSourceConfigurations` | `media::resp_video_source_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media.GetVideoSourceConfiguration` | `media::resp_video_source_configuration` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
@@ -178,6 +182,7 @@ configuration tokens. P1 and P2 together remain partial operation acceptance.
 | `media2.RemoveConfiguration` | `media2::handle_remove_configuration_media2` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
 | `media2.GetStreamUri` | `media2::resp_stream_uri_media2` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetSnapshotUri` | `media2::resp_snapshot_uri_media2` | `base` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media2.SetSynchronizationPoint` | `media::handle_set_synchronization_point` | `state, operation, true` | W26 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | B16 |
 | `media2.GetVideoSourceConfigurations` | `media2::resp_video_source_configurations_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media2.SetVideoSourceConfiguration` | `media2::handle_set_video_source_configuration_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media2.GetVideoSourceConfigurationOptions` | `media2::resp_video_source_configuration_options_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |

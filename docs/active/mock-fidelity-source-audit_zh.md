@@ -17,8 +17,8 @@
 
 ## 結果與邊界
 
-- `src/client/*.rs` 加上 `src/session.rs` 共 159 個字面值 `const ACTION`
-  宣告，對應 157 個不同 Action URI，涵蓋全部 157 個 dispatch key。
+- 包含 B16 後，`src/client/*.rs` 加上 `src/session.rs` 共 161 個字面值 `const ACTION`
+  宣告，對應 159 個不同 Action URI，涵蓋全部 159 個 dispatch key。
   兩個 Media2 encoder 方法共用一個 URI；session `get_osd_options` 重複 client
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
@@ -104,6 +104,7 @@
 | `src/client/media.rs::get_profiles` | `http://www.onvif.org/ver10/media/wsdl/GetProfiles` | `media.GetProfiles` |
 | `src/client/media.rs::get_stream_uri` | `http://www.onvif.org/ver10/media/wsdl/GetStreamUri` | `media.GetStreamUri` |
 | `src/client/media.rs::get_snapshot_uri` | `http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri` | `media.GetSnapshotUri` |
+| `src/client/media.rs::media_set_synchronization_point` | `http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint` | `media.SetSynchronizationPoint` |
 | `src/client/media.rs::create_profile` | `http://www.onvif.org/ver10/media/wsdl/CreateProfile` | `media.CreateProfile` |
 | `src/client/media.rs::delete_profile` | `http://www.onvif.org/ver10/media/wsdl/DeleteProfile` | `media.DeleteProfile` |
 | `src/client/media.rs::get_profile` | `http://www.onvif.org/ver10/media/wsdl/GetProfile` | `media.GetProfile` |
@@ -136,6 +137,7 @@
 | `src/client/media2.rs::get_profiles_media2` | `http://www.onvif.org/ver20/media/wsdl/GetProfiles` | `media2.GetProfiles` |
 | `src/client/media2.rs::get_stream_uri_media2` | `http://www.onvif.org/ver20/media/wsdl/GetStreamUri` | `media2.GetStreamUri` |
 | `src/client/media2.rs::get_snapshot_uri_media2` | `http://www.onvif.org/ver20/media/wsdl/GetSnapshotUri` | `media2.GetSnapshotUri` |
+| `src/client/media2.rs::set_synchronization_point_media2` | `http://www.onvif.org/ver20/media/wsdl/SetSynchronizationPoint` | `media2.SetSynchronizationPoint` |
 | `src/client/media2.rs::get_video_source_configurations_media2` | `http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurations` | `media2.GetVideoSourceConfigurations` |
 | `src/client/media2.rs::set_video_source_configuration_media2` | `http://www.onvif.org/ver20/media/wsdl/SetVideoSourceConfiguration` | `media2.SetVideoSourceConfiguration` |
 | `src/client/media2.rs::get_video_source_configuration_options_media2` | `http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions` | `media2.GetVideoSourceConfigurationOptions` |

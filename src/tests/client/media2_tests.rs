@@ -4,6 +4,55 @@
 use super::*;
 use crate::tests::common::*;
 
+#[tokio::test]
+async fn set_synchronization_point_media2_wire_contract() {
+    let response = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tr2="http://www.onvif.org/ver20/media/wsdl"><s:Body><tr2:SetSynchronizationPointResponse/></s:Body></s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(response);
+    let client = OnvifClient::new("http://device.invalid").with_transport(transport);
+    client
+        .set_synchronization_point_media2("http://media.invalid/service", " Profile<&同步 ")
+        .await
+        .unwrap();
+    let call = captured.lock().unwrap();
+    assert_eq!(call.url, "http://media.invalid/service");
+    assert_eq!(
+        call.action,
+        "http://www.onvif.org/ver20/media/wsdl/SetSynchronizationPoint"
+    );
+    assert!(call.body.contains("<tr2:SetSynchronizationPoint><tr2:ProfileToken> Profile&lt;&amp;同步 </tr2:ProfileToken></tr2:SetSynchronizationPoint>"), "{}", call.body);
+    let body = parse_soap_body(&call.body).unwrap();
+    assert_eq!(body.children.len(), 1);
+    assert_eq!(body.children[0].children.len(), 1);
+    assert_eq!(
+        body.children[0].child("ProfileToken").unwrap().text(),
+        "Profile<&同步" // Legacy client DOM trims; exact wire assertion above preserves spaces.
+    );
+}
+
+#[tokio::test]
+async fn set_synchronization_point_media2_fault_and_wrong_wrapper() {
+    let fault = make_soap_fault_xml("s:Receiver", "sync-device-failure-817");
+    let client = OnvifClient::new("http://device.invalid").with_transport(mock(&fault));
+    let error = client
+        .set_synchronization_point_media2("http://media.invalid/service", "missing")
+        .await
+        .unwrap_err();
+    assert_fault(error, "s:Receiver", "sync-device-failure-817");
+    let wrong = empty_response_xml("OtherResponse");
+    let client = OnvifClient::new("http://device.invalid").with_transport(mock(&wrong));
+    let error = client
+        .set_synchronization_point_media2("http://media.invalid/service", "p")
+        .await
+        .unwrap_err();
+    match error {
+        OnvifError::Soap(error) => assert_eq!(
+            error,
+            crate::soap::SoapError::UnexpectedResponse("SetSynchronizationPointResponse".into())
+        ),
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
 // ── Media2 fixtures ───────────────────────────────────────────────────────
 
 /// Two profiles in the shape `tr2:ConfigurationSet` actually declares.

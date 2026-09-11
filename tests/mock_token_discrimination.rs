@@ -6,6 +6,11 @@
 //! `tests/mock_roundtrip.rs`. That table asks *did my write land?*; this one asks
 //! **did the token I sent select the answer I got back?**
 //!
+//! Media1/Media2 SetSynchronizationPoint have no returned per-token value.
+//! Their selector rows are asserted in `tests/mock_media_sync.rs`: two known
+//! identities, unknown/trimmed/double-escaped selectors, scoped-field rejection
+//! and unchanged snapshots. Equal empty receipts are not token-blind getters.
+//!
 //! They catch different bugs. A handler can persist state perfectly and still
 //! answer for the wrong channel — which is the failure `CLAUDE.md`'s
 //! multi-sensor rule is about, and the one that is silent by construction:

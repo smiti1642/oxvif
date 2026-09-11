@@ -232,7 +232,7 @@ async fn check_selected(
             .text(),
         "oxvif-mock"
     );
-    // Selection never authorizes another service or an Action alias.
+    // Events selection never authorizes the separately classified Media service.
     let alias = "http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint";
     let xml = t
         .soap_post(
@@ -246,8 +246,8 @@ async fn check_selected(
         find_response(&parse_soap_body(&xml).unwrap(), "unused").unwrap_err(),
         SoapError::Fault {
             code: "s:Receiver".into(),
-            reason: format!("Not implemented: {alias}"),
-            subcode: None,
+            reason: REFUSAL.into(),
+            subcode: Some("mock:UnmodeledEffect".into()),
             detail: None
         }
     );

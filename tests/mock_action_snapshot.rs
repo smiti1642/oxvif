@@ -99,6 +99,14 @@ macro_rules! probe {
 /// forces a deliberate one-line edit here. Do not "make it pass" by
 /// regenerating it.
 const EXPECTED: &[(&str, &str)] = &[
+    (
+        "media_set_synchronization_point",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
+    (
+        "set_synchronization_point_media2",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
     // ── Device ────────────────────────────────────────────────────────────
     ("get_capabilities", "ok"),
     ("get_services", "ok"),
@@ -295,6 +303,16 @@ async fn observed() -> Vec<(&'static str, String)> {
     };
 
     let mut out: Vec<(&'static str, String)> = Vec::new();
+    probe!(
+        out,
+        "media_set_synchronization_point",
+        media_set_synchronization_point(MEDIA, PROFILE)
+    );
+    probe!(
+        out,
+        "set_synchronization_point_media2",
+        set_synchronization_point_media2(MEDIA2, PROFILE)
+    );
 
     // ── Device ────────────────────────────────────────────────────────────
     probe!(out, "get_capabilities", get_capabilities());
@@ -944,12 +962,12 @@ async fn observed() -> Vec<(&'static str, String)> {
 
 /// NET 1 — the full mock action snapshot.
 ///
-/// Covers **141 ONVIF operations**: every `pub async fn` on `OnvifClient`
+/// Covers the explicitly listed ONVIF operations: each `pub async fn` on `OnvifClient`
 /// that maps to exactly one SOAP action. Enumerated mechanically from
-/// `grep 'pub async fn' src/client/*.rs`; the only two exclusions are
+/// `rg 'pub async fn' src/client`; exclusions include
 /// `search_recordings` (a convenience wrapper over FindRecordings +
 /// GetRecordingSearchResults + EndSearch, all three of which are covered
-/// individually) and `notification_listener` (a free function returning a
+/// individually) and notification listeners (free functions returning a
 /// stream, not a single request/response).
 ///
 /// Each operation runs against its own fresh `MockTransport`, so no write

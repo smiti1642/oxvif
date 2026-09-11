@@ -26,6 +26,9 @@
 //! complete settings and readonly status without claiming actual RTP streaming.
 //! Push events can include local TCP origin through [`notification_listener_with_peer`]
 //! and [`ReceivedNotification`], without changing legacy event payloads or ONVIF XML.
+//! Media synchronization is available through [`OnvifClient::media_set_synchronization_point`]
+//! and [`OnvifClient::set_synchronization_point_media2`] (and session wrappers).
+//! Mock support is default-refused, opt-in acknowledgment only, not media generation.
 //!
 //! | Section | Purpose |
 //! | --- | --- |

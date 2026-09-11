@@ -579,6 +579,11 @@ the device service's own elements.
 
 ## Media Service (Media1) methods
 
+`media_set_synchronization_point(url, profile_token)` (also on `OnvifSession`)
+requests synchronization of the selected profile's associated streams. See the
+[Media synchronization guide](docs/media-synchronization.md) for service selection,
+mock receipt-only policy and real-stream verification limits.
+
 All Media1 methods use `media_url` from `caps.media.url`.
 
 ### Profile management
@@ -631,6 +636,11 @@ client.set_video_encoder_configuration(media_url, &enc).await?;
 ---
 
 ## Media2 methods
+
+`set_synchronization_point_media2(url, profile_token)` provides the corresponding
+Media2 request, with a session wrapper and separate mock opt-in. It is not the
+Events subscription synchronization operation; see the
+[Media synchronization guide](docs/media-synchronization.md).
 
 Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 support and a simplified encoder config structure. All Media2 methods use `media2_url`.
 

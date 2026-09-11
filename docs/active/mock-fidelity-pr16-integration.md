@@ -2,18 +2,19 @@
 
 [English](mock-fidelity-pr16-integration.md) | [繁體中文](mock-fidelity-pr16-integration_zh.md)
 
-2026-09-11 source review; W26 remains conditional, not integrated.
+2026-09-11 source review; W26 implemented on the integration candidate; local gates pass, hosted CI pending.
 
 The [contributor integration plan](contributor-pr-integration-plan.md) now owns
 execution order, current prerequisite checks, acceptance and branch boundaries for
 #14/#17/#16. It supersedes the historical prerequisite sequence below; the review
-findings remain open until implemented and verified.
+findings below describe the contributor head, not the rewritten candidate; current evidence is in that plan.
 
 | Section | Purpose |
 | --- | --- |
 | [Reviewed revision](#reviewed-revision) | Immutable head and incremental changes |
 | [Disposition](#disposition) | Reusable code and required corrections |
 | [Integration sequence](#integration-sequence) | Dependencies and acceptance |
+| [B16 operation cards](#b16-operation-cards) | Current bounded implementation contracts |
 
 ## Reviewed revision
 
@@ -48,10 +49,37 @@ or schema-derived fixtures in this repository.
   negative client/fault assertions, session routing controls or mock token/state
   controls. The two workflow additions only unwrap success. An action snapshot
   and a schema-shape probe cannot prove media delivery or I-frame emission.
-- Operation/reference documentation is not completely bilingual in the diff:
-  `OPERATIONS_zh.md` and the paired translated reference pages are absent. Public
+- Operation documentation is not completely bilingual in the diff:
+  `OPERATIONS_zh.md` is not updated. Internal Media reference pages already had no
+  translated counterparts in the base repository; that is not a contributor omission. Public
   descriptions also need an explicit mock acknowledgment/effect boundary and
   should describe profile-associated streams, not only video I-frames.
+
+## B16 operation cards
+
+Implementation authorized 2026-09-11; baseline `07a7d61`. Scoped requests, faults,
+profile catalogues and exact-operation policy now exist. Official sections above
+were rechecked for unknown-profile failures and associated-stream semantics.
+Detailed normative material remains external; these are project behavior cards.
+
+| Field | `media.SetSynchronizationPoint` | `media2.SetSynchronizationPoint` |
+| --- | --- | --- |
+| Action | `http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint` | `http://www.onvif.org/ver20/media/wsdl/SetSynchronizationPoint` |
+| Client/session | `media_set_synchronization_point`, Media1 endpoint | `set_synchronization_point_media2`, Media2 endpoint |
+| Input | Unique scoped `ProfileToken`; decode once, opaque identity, no trimming | Same input in Media2 namespace, not local-name search |
+| Code path | `services/media.rs::handle_set_synchronization_point`, borrowed Node, structured Fault, shared profile catalogue | Separate dispatch arm calling the checked helper with explicit service identity |
+| Behavior | Default refusal; exact-operation opt-in acknowledgment after shape/profile validation | Separate Media2 opt-in, never enabled by Media1 or Events |
+| Output/fault | Service-specific empty response; reviewed nested unknown-profile Fault; generic malformed request policy | Same classification, own response namespace |
+| State/effect | One coherent profile read; no state writes, hooks, queues, RTP or replay retirement | Shared catalogue, no cross-service mutations |
+| Replay | Recorded reads and explicit fault injection retain precedence; recorded write receipts are excluded and synthetic fallback obeys policy | Same, including identity controls |
+| Compatibility | Additive methods, no default mock success promise | No implicit fallback to Media1 or Events |
+| Tests/delivery | S01–S08, client tests, `tests/mock_media_sync.rs`, corpus, W26/inventory/paired docs | Same plus cross-service policy isolation |
+
+C01–C05 map to S01/S04/S08; C06 to S05; C07/C08 to S02/S07. C09 reuses auth
+and common request controls with no new exemption (test invalid auth cannot ack).
+C10 maps to S03/S05; C11 to S01/S02/S06 (new CLI methods NA); C12 to both
+transports, mutation and external validation. Neither card completes W10/W15.
+Optional hardware actuation requires separate permission; no new encoder simulator.
 
 ## Integration sequence
 

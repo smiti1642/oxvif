@@ -58,7 +58,7 @@ can accept this plan as a unit; no additional product decision is currently need
 
 ## B17 notification origin
 
-Owner at execution: maintainer. Status: TODO. No dependency on W15 completion.
+Owner at execution: maintainer. Status: LOCAL-PASS. No dependency on W15 completion.
 
 ### Files and API
 
@@ -108,7 +108,7 @@ not an ONVIF wire extension or a camera authentication mechanism.
 
 ## B16 media synchronization
 
-Owner at execution: maintainer. Status: TODO; maps to W26. See the
+Owner at execution: maintainer. Status: LOCAL-PASS; maps to W26. See the
 [detailed PR review](mock-fidelity-pr16-integration.md). This plan supersedes its
 old prerequisite ordering, not its unresolved findings. The baseline now contains
 scoped requests, structured faults, profile lookup and `AckOnlyOperation`; verify
@@ -131,8 +131,9 @@ the actual transitive dependencies instead of reimplementing these facilities.
   preserve significant token whitespace. Inspect one coherent state snapshot.
 - Both refusal and opt-in acknowledgment leave state, hooks, event queues and
   replay retirement unchanged. Do not claim a commit, I-frame, PTZ refresh or RTP
-  delivery. Explicit raw/recorded fixtures retain their documented precedence;
-  verify this separately from the synthetic default policy.
+  delivery. Recorded reads and explicit fault injection retain precedence;
+  recorded write receipts are excluded by the existing replay guard. Verify these
+  separately from synthetic default policy (implementation-time plan correction).
 - Extend `tests/mock_ack_policy.rs`, client Media test files, action snapshot,
   workflow, token discrimination, replay and corpus tests as applicable. Remove
   unconditional-success expectations rather than making the default permissive.
@@ -163,7 +164,7 @@ only video I-frames. Do not infer normative Fault mappings from the old mock.
 
 ## B14 dependencies
 
-Status: TODO, included in this round and independently reviewable. See the
+Status: LOCAL-PASS, included in this round and independently reviewable. See the
 [maintenance policy](dependency-maintenance-plan.md); its prior acceptance covers
 earlier PRs, not #14. Inspect the current `Cargo.lock` and
 `crates/oxvif-cli/Cargo.toml` diff against the chosen base, including transitive
@@ -256,14 +257,14 @@ Do not add full release/staging matrices to every small correction.
 | Item | Status | Required closure |
 | --- | --- | --- |
 | B17 | LOCAL-PASS | N01–N08, compatibility/lifecycle controls, both code/doc gates pass; hosted CI pending |
-| B16 / W26 | TODO | S01–S08 evidence, complete cards, explicit acknowledgment boundary |
+| B16 / W26 | LOCAL-PASS | S01–S08, complete cards, explicit receipt-only boundary; hosted CI pending |
 | B14 | LOCAL-PASS | Dependency review, audit, Clippy/tests, MSRV and XML controls pass; hosted CI pending |
-| Combined candidate | TODO | Exact SHA and ancestry accepted; final tests/CI actually complete |
+| Combined candidate | LOCAL-PASS / CI PENDING | All local gates pass; hardening ancestry is not accepted for main-branch merge |
 | Remote integration | NOT AUTHORIZED | Explicit authority, credited commits and verified target branches |
 
 Update each batch's public method/type rustdoc, `src/lib.rs`, CHANGELOG Unreleased
 and `LIBRARY_GUIDE.md` / `_zh.md`. B16 also updates `OPERATIONS.md` / `_zh.md`,
-Media reference pairs, mock-server pairs, affected examples, operation ledger,
+English internal Media references and the new bilingual synchronization guide, mock-server pairs, affected examples, operation ledger,
 source inventory, W26 and the detailed review. README receives only a short link
 if needed, not API details. New CLI commands and their human/Agent schemas are
 out of scope; any incidental CLI behavior change is a regression to investigate.
@@ -312,3 +313,36 @@ The perturbation was removed. Strict docs, inventory self-tests and both Clippy
 modes pass; restored all-feature tests pass (1,284, five ignored, 40 suites).
 Restored default tests also pass (1,179, five ignored, 40 suites). Final hosted
 acceptance remains pending; this is not an ONVIF certification or release gate.
+
+B16 ports the contributor's two client/session operations with attribution and
+replaces the mock handler with scoped, decode-once profile validation and separate
+Media1/Media2 acknowledgment opt-ins. Eight dedicated mock controls cover the
+synthetic, HTTP, replay and adapter paths; four client tests and a session test
+cover wire/fault/route behavior. Existing action-policy/snapshot controls now
+expect default refusal rather than an unimplemented operation. No Set/Get pair
+is invented for a media effect: roundtrip/token tables link to the receipt-policy
+controls. Client response parsing retains its existing whitespace normalization;
+wire assertions independently verify the caller's exact escaped token.
+
+One unfiltered workspace/all-feature/no-fail-fast mutation run
+(`1789120789_cargo_test.log`) misrouted the Media2 Action and bypassed Media receipt
+policy. Client and session Action checks, the action snapshot, five receipt-policy
+tests and the corpus refusal capture failed. Three older policy tests also exposed
+stale “not implemented” expectations; those are corrected, not counted as new
+sensitivity evidence. Earlier refusal assertions mask later checks, so this is
+not evidence that every negative case was independently perturbed. Two later
+fixture controls (`1789121094_cargo_test.log`) changed the seeded Unicode identity
+and expected raw adapter reply; both corresponding assertions failed, then the
+fixtures were restored.
+
+External evidence: the B16 export in the local `oxvif-corpus-20260911-pr16`
+directory contains 160 XML instances / 80 exchanges / 46 operations, including
+21 refusal exchanges. Pinned Xerces strict XSD 1.1 validation and the legacy
+external schema-shape test pass. Inventory self-tests pass with 159 routes,
+161 Action declarations and 191 reader sites. Schemas and derived instances remain
+outside the repository. Both strict rustdoc modes, both workspace Clippy modes,
+Rust 1.88 all-target/all-feature check, seven isolated library feature Clippy
+configurations and the downstream encoding-off/on XML checks pass. The restored
+all-feature workspace passes 1,298 tests; default passes 1,190, each with five ignored across 41 suites. Restored targeted controls pass (eight).
+Main-branch integration, native hosted CI and actual media-stream observation are
+not implied by these local results.

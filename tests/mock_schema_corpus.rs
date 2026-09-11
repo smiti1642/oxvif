@@ -1002,6 +1002,7 @@ async fn export_reviewed_batches_for_independent_validation() {
     exchanges.extend(rate_exchanges().await);
     exchanges.extend(encoder_exchanges().await);
     exchanges.extend(audio_metadata_exchanges().await);
+    exchanges.extend(media_sync_exchanges().await);
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
     eprintln!(
@@ -1153,4 +1154,85 @@ async fn captures_audio_metadata_subgroup_and_refusals() {
     let operations: BTreeSet<_> = exchanges.iter().map(|e| e.action.as_str()).collect();
     assert_eq!(operations.len(), 15);
     assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 3);
+}
+
+async fn media_sync_exchanges() -> Vec<Exchange> {
+    let mut all = Vec::new();
+    for selected in [false, true] {
+        let mock = MockTransport::new();
+        let mock = if selected {
+            mock.with_acknowledgment_only(oxvif::mock::AckOnlyOperation::MediaSynchronizationPoint)
+                .with_acknowledgment_only(oxvif::mock::AckOnlyOperation::Media2SynchronizationPoint)
+        } else {
+            mock
+        };
+        let capture = Capture {
+            mock,
+            exchanges: Arc::default(),
+        };
+        let c = OnvifClient::new(TARGET).with_transport(Arc::new(capture.clone()));
+        for media2 in [false, true] {
+            let tokens = if selected {
+                vec!["Profile_1", "Corpus-absent"]
+            } else {
+                vec!["Profile_1"]
+            };
+            for token in tokens {
+                let result = if media2 {
+                    c.set_synchronization_point_media2(TARGET, token).await
+                } else {
+                    c.media_set_synchronization_point(TARGET, token).await
+                };
+                if !selected {
+                    match result.unwrap_err() {
+                        OnvifError::Soap(error) => assert_eq!(error, SoapError::Fault {
+                            code: "s:Receiver".into(),
+                            reason: "This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior".into(),
+                            subcode: Some("mock:UnmodeledEffect".into()), detail: None,
+                        }),
+                        other => panic!("unexpected refusal: {other:?}"),
+                    }
+                } else if token == "Corpus-absent" {
+                    assert_delete_fault(
+                        result.unwrap_err(),
+                        "ter:InvalidArgVal",
+                        "Profile not found: Corpus-absent",
+                    );
+                } else {
+                    result.unwrap();
+                    let exchanges = capture.exchanges.lock().unwrap();
+                    let body = parse_soap_body(&exchanges.last().unwrap().response).unwrap();
+                    assert_eq!(
+                        body.children[0].local_name,
+                        "SetSynchronizationPointResponse"
+                    );
+                    assert!(body.children[0].children.is_empty());
+                }
+                capture
+                    .exchanges
+                    .lock()
+                    .unwrap()
+                    .last_mut()
+                    .unwrap()
+                    .expected_fault = !selected || token == "Corpus-absent";
+            }
+        }
+        all.extend(std::mem::take(&mut *capture.exchanges.lock().unwrap()));
+    }
+    all
+}
+
+#[tokio::test]
+async fn captures_media_sync_receipts_and_refusals() {
+    let exchanges = media_sync_exchanges().await;
+    assert_eq!(exchanges.len(), 6);
+    assert_eq!(
+        exchanges
+            .iter()
+            .map(|e| &e.action)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        2
+    );
+    assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 4);
 }

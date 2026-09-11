@@ -10,6 +10,70 @@ use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 /// Existing advertised synthetic capacity; imported fixtures are never truncated.
 pub(crate) const PROFILE_LIMIT: usize = 8;
 
+/// B16 acknowledgment only. Dispatch policy refuses by default; opting in does
+/// not bypass selector validation and never produces a committed stream effect.
+pub fn handle_set_synchronization_point(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+    media2: bool,
+) -> String {
+    use crate::mock::{
+        fault::{Code, Fault, INVALID_ARG_VAL, MOCK_REQUEST_POLICY, NO_PROFILE},
+        request::RequestError,
+    };
+    let ns = if media2 {
+        "http://www.onvif.org/ver20/media/wsdl"
+    } else {
+        "http://www.onvif.org/ver10/media/wsdl"
+    };
+    let token = (|| {
+        if operation.expanded_attributes().next().is_some() {
+            return Err(RequestError::OperationIdentity);
+        }
+        operation.check_child_sequence(ns, &["ProfileToken"])?;
+        let field = operation
+            .child(ns, "ProfileToken")?
+            .ok_or(RequestError::MissingField)?;
+        if field.expanded_attributes().next().is_some() {
+            return Err(RequestError::OperationIdentity);
+        }
+        let token = operation.required_child_text(ns, "ProfileToken")?;
+        if token.chars().count() > 64 {
+            return Err(RequestError::EmptyField);
+        }
+        Ok(token)
+    })();
+    let token = match token {
+        Ok(token) => token,
+        Err(error) => return error.to_fault(),
+    };
+    let count = state
+        .read()
+        .profiles
+        .profiles
+        .iter()
+        .filter(|p| p.token == token)
+        .count();
+    match count {
+        0 => Fault::new(
+            Code::Sender,
+            &[INVALID_ARG_VAL, NO_PROFILE],
+            &format!("Profile not found: {token}"),
+        )
+        .to_xml(),
+        1 => resp_empty(
+            if media2 { "tr2" } else { "trt" },
+            "SetSynchronizationPointResponse",
+        ),
+        _ => Fault::new(
+            Code::Receiver,
+            &[MOCK_REQUEST_POLICY],
+            "Ambiguous mock profile identity",
+        )
+        .to_xml(),
+    }
+}
+
 pub fn resp_profiles(state: &SharedState) -> String {
     let (snapshot, cat) = profile_snapshot(state);
     if snapshot.iter().any(|profile| profile.token.is_empty()) {

@@ -1321,7 +1321,7 @@ from that schema may enter this repository. Explicitly selecting the test now
 fails if resources are missing; the external SOAP 1.2 envelope schema is also
 required. Node-scoped namespace resolution and separate Envelope/payload checks
 include Fault structure, but do not validate all XSD values or error semantics.
-Separate Windows/Linux CI is configured to validate the selected 110 profile/source/rate/encoder request/response
+Separate Windows/Linux CI is configured to validate the selected 160 profile/source/rate/encoder/audio/metadata/synchronization request/response
 instances with independently pinned Xerces and external schemas. That limited
 corpus does not cover all operations or authentication; the inventory job alone
 does not validate XML. See the
@@ -1468,7 +1468,11 @@ Audit §6.
 
 ### 13.5 Explicit acknowledgment-only policy
 
-**Unreleased:** eleven classified operations refuse by default with `s:Receiver`
+Media synchronization also validates the unique scoped profile selector after
+opt-in. It never emits media or invalidates recorded reads; recorded write
+receipts are not replayed. See the [Media synchronization guide](media-synchronization.md).
+
+**Unreleased:** thirteen classified operations refuse by default with `s:Receiver`
 and first subcode `mock:UnmodeledEffect`. For a workflow that needs only a receipt:
 
 ```rust
@@ -1489,6 +1493,8 @@ let mock = MockTransport::new()
 | `DeviceFirmwareUpgrade` | Working upload endpoint or firmware upgrade |
 | `DeviceSystemRestore` | Working upload endpoint or restored configuration |
 | `EventsSubscribe` | Push subscription creation or notification delivery |
+| `MediaSynchronizationPoint` | Media1 video/metadata stream synchronization |
+| `Media2SynchronizationPoint` | Media2 video/metadata stream synchronization; independent of Media1/Events |
 | `EventsRenew` | Subscription lifetime extension |
 | `SearchEnd` | Search termination or expiration |
 

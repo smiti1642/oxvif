@@ -325,6 +325,10 @@ Service capability 中的 flag 使用 `Option<bool>`：`None` 表示裝置未宣
 
 ## Media Service（Media1）方法
 
+`media_set_synchronization_point(url, profile_token)`（亦提供 `OnvifSession`
+wrapper）請求所選 profile 的關聯串流同步。Service 選擇、Mock 僅收件確認政策及
+真實串流驗證限制，詳見 [Media synchronization 指南](docs/media-synchronization_zh.md)。
+
 所有 Media1 方法均使用 `caps.media.url`。
 
 ### Profile 與 stream
@@ -363,6 +367,10 @@ client.set_video_encoder_configuration(media_url, &enc).await?;
 ---
 
 ## Media2 方法
+
+`set_synchronization_point_media2(url, profile_token)` 提供對應 Media2 請求、
+Session wrapper 及獨立 Mock opt-in，不是 Events subscription 同步操作；參閱
+[Media synchronization 指南](docs/media-synchronization_zh.md)。
 
 Media2 是 Media1 的後繼介面，原生支援 H.265，且 encoder configuration 結構較扁平。所有方法使用 `media2_url`。
 

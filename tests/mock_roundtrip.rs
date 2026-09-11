@@ -32,6 +32,17 @@
 //! This is not a fidelity check. It asks one question per pair — *did the value
 //! I wrote come back?* — over the **public API only** (`oxvif::mock` plus the
 //! ordinary client), over real HTTP, against a fresh server per pair.
+//!
+//! Effect-only operations have no Set/Get value pair and do not join the 49
+//! configuration pairs below. Their asserted policy rows live in
+//! `tests/mock_media_sync.rs` (in-process and HTTP, full snapshots and read views):
+//!
+//! | Operation | Expected observation |
+//! | --- | --- |
+//! | Media1 SetSynchronizationPoint | Default refusal; opted-in receipt, unchanged state/GetProfiles |
+//! | Media2 SetSynchronizationPoint | Independent default refusal/opt-in, unchanged state/GetProfiles |
+//!
+//! Neither receipt proves media emission; these are not `Expect::Works` pairs.
 #![cfg(feature = "mock-server")]
 
 use std::fmt::Debug;

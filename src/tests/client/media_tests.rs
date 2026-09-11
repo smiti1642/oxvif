@@ -3,6 +3,56 @@
 
 use super::*;
 use crate::tests::common::*;
+
+#[tokio::test]
+async fn media_set_synchronization_point_wire_contract() {
+    let response = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:trt="http://www.onvif.org/ver10/media/wsdl"><s:Body><trt:SetSynchronizationPointResponse/></s:Body></s:Envelope>"#;
+    let (transport, captured) = RecordingTransport::new(response);
+    let client = OnvifClient::new("http://device.invalid").with_transport(transport);
+    client
+        .media_set_synchronization_point("http://media.invalid/service", " Profile<&同步 ")
+        .await
+        .unwrap();
+    let call = captured.lock().unwrap();
+    assert_eq!(call.url, "http://media.invalid/service");
+    assert_eq!(
+        call.action,
+        "http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint"
+    );
+    assert!(call.body.contains("<trt:SetSynchronizationPoint><trt:ProfileToken> Profile&lt;&amp;同步 </trt:ProfileToken></trt:SetSynchronizationPoint>"), "{}", call.body);
+    let body = parse_soap_body(&call.body).unwrap();
+    assert_eq!(body.children.len(), 1);
+    assert_eq!(body.children[0].children.len(), 1);
+    assert_eq!(
+        body.children[0].child("ProfileToken").unwrap().text(),
+        "Profile<&同步" // Legacy client DOM trims; exact wire assertion above preserves spaces.
+    );
+}
+
+#[tokio::test]
+async fn media_set_synchronization_point_fault_and_wrong_wrapper() {
+    let fault = make_soap_fault_xml("s:Receiver", "sync-device-failure-817");
+    let client = OnvifClient::new("http://device.invalid").with_transport(mock(&fault));
+    let error = client
+        .media_set_synchronization_point("http://media.invalid/service", "missing")
+        .await
+        .unwrap_err();
+    assert_fault(error, "s:Receiver", "sync-device-failure-817");
+    let wrong = empty_response_xml("OtherResponse");
+    let client = OnvifClient::new("http://device.invalid").with_transport(mock(&wrong));
+    let error = client
+        .media_set_synchronization_point("http://media.invalid/service", "p")
+        .await
+        .unwrap_err();
+    match error {
+        OnvifError::Soap(error) => assert_eq!(
+            error,
+            crate::soap::SoapError::UnexpectedResponse("SetSynchronizationPointResponse".into())
+        ),
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
 use std::sync::Arc;
 
 fn profiles_xml() -> &'static str {

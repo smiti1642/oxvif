@@ -11,6 +11,33 @@ use crate::types::{
 };
 
 impl OnvifClient {
+    /// Request a synchronization point for the streams associated with a profile.
+    ///
+    /// This can request a video intra frame and metadata status refresh; a SOAP
+    /// acknowledgment alone does not prove that the stream delivered either.
+    /// This is distinct from Events service synchronization.
+    /// The built-in mock refuses by default; explicit acknowledgment-only policy
+    /// enables a receipt without generating media.
+    ///
+    /// # Errors
+    /// Returns transport errors, device SOAP faults (including unknown profiles),
+    /// or an error when the expected response wrapper is absent.
+    pub async fn media_set_synchronization_point(
+        &self,
+        media_url: &str,
+        profile_token: &str,
+    ) -> Result<(), OnvifError> {
+        const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint";
+        let profile_token = xml_escape(profile_token);
+        let body = format!(
+            "<trt:SetSynchronizationPoint><trt:ProfileToken>{profile_token}</trt:ProfileToken></trt:SetSynchronizationPoint>"
+        );
+        let xml = self.call(media_url, ACTION, &body).await?;
+        let body_node = parse_soap_body(&xml)?;
+        find_response(&body_node, "SetSynchronizationPointResponse")?;
+        Ok(())
+    }
+
     /// Ask the Media1 service what it can do.
     ///
     /// Answers whether snapshots, OSD and rotation are available and which RTP

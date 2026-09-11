@@ -17,8 +17,8 @@ This is measured project-source indexing, not a schema catalogue.
 
 ## Results and boundaries
 
-- 159 literal `const ACTION` declarations in `src/client/*.rs` plus
-  `src/session.rs` map to 157 unique Action URIs and all 157 dispatch keys.
+- Including B16, 161 literal `const ACTION` declarations in `src/client/*.rs` plus
+  `src/session.rs` map to 159 unique Action URIs and all 159 dispatch keys.
   Two Media2 encoder methods share one URI; session `get_osd_options` repeats
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
@@ -109,6 +109,7 @@ an unchanged last segment. This does not enforce those checks in runtime dispatc
 | `src/client/media.rs::get_profiles` | `http://www.onvif.org/ver10/media/wsdl/GetProfiles` | `media.GetProfiles` |
 | `src/client/media.rs::get_stream_uri` | `http://www.onvif.org/ver10/media/wsdl/GetStreamUri` | `media.GetStreamUri` |
 | `src/client/media.rs::get_snapshot_uri` | `http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri` | `media.GetSnapshotUri` |
+| `src/client/media.rs::media_set_synchronization_point` | `http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint` | `media.SetSynchronizationPoint` |
 | `src/client/media.rs::create_profile` | `http://www.onvif.org/ver10/media/wsdl/CreateProfile` | `media.CreateProfile` |
 | `src/client/media.rs::delete_profile` | `http://www.onvif.org/ver10/media/wsdl/DeleteProfile` | `media.DeleteProfile` |
 | `src/client/media.rs::get_profile` | `http://www.onvif.org/ver10/media/wsdl/GetProfile` | `media.GetProfile` |
@@ -141,6 +142,7 @@ an unchanged last segment. This does not enforce those checks in runtime dispatc
 | `src/client/media2.rs::get_profiles_media2` | `http://www.onvif.org/ver20/media/wsdl/GetProfiles` | `media2.GetProfiles` |
 | `src/client/media2.rs::get_stream_uri_media2` | `http://www.onvif.org/ver20/media/wsdl/GetStreamUri` | `media2.GetStreamUri` |
 | `src/client/media2.rs::get_snapshot_uri_media2` | `http://www.onvif.org/ver20/media/wsdl/GetSnapshotUri` | `media2.GetSnapshotUri` |
+| `src/client/media2.rs::set_synchronization_point_media2` | `http://www.onvif.org/ver20/media/wsdl/SetSynchronizationPoint` | `media2.SetSynchronizationPoint` |
 | `src/client/media2.rs::get_video_source_configurations_media2` | `http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurations` | `media2.GetVideoSourceConfigurations` |
 | `src/client/media2.rs::set_video_source_configuration_media2` | `http://www.onvif.org/ver20/media/wsdl/SetVideoSourceConfiguration` | `media2.SetVideoSourceConfiguration` |
 | `src/client/media2.rs::get_video_source_configuration_options_media2` | `http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions` | `media2.GetVideoSourceConfigurationOptions` |
