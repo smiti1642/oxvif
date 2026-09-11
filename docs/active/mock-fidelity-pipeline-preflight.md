@@ -24,6 +24,42 @@ below. No new product decision is required here.
 | [Parsed synthetic boundary](#parsed-synthetic-boundary) | P-D implemented checks, evidence and exclusions |
 | [State hook snapshot work](#state-hook-snapshot-work) | W18 bounded lock and observation policy |
 | [Replay key credential boundary](#replay-key-credential-boundary) | K28 cleanup, migration and exclusions |
+| [Replay key collision reproduction](#replay-key-collision-reproduction) | K27 six-case known-gap evidence |
+
+## Replay key collision reproduction
+
+`tests/mock_replay_key_gaps.rs` reproduces six distinct-wire/same-Action pairs
+that currently collapse to one stored key: leading and repeated scalar spaces,
+different field namespaces, escaped text versus child structure, an escaped quote
+crossing an attribute boundary, and a second root ignored by the compatibility
+DOM. Last recording wins and answers both requests. The companion control keeps
+ordinary distinct tokens and full Actions separate. These are intentionally
+passing known-gap assertions, not corrected invariants or conformance acceptance.
+Changing the second recorded response and collapsing the control Action made
+both tests fail at payload/count assertions (RTK log 1789095344); both mutations
+were restored. Replace the baseline with distinct-key/response expectations when
+the migration is implemented, never restore the collisions to satisfy the test.
+
+The [profile-token closure](mock-fidelity-profile-preflight.md#profile-token-dependency-closure)
+now lists paired Media, PTZ, adapter and replay paths. K27 requires explicit key
+version/legacy-load behavior, namespace identity, scalar whitespace, unambiguous
+serialization, complete-document handling, masking scope and malformed-input
+fallback review. Do not silently reinterpret or rewrite existing recordings.
+
+Next bounded W19 implementation: keep the public key/file shape unchanged, but
+verify a matched recording's complete decoded XML identity before serving it.
+Distinct namespaces/scalars/structure must fall through to synthetic, not replay
+another request's response. Preserve exact raw-fixture replay; retain reviewed
+transport-ephemera masking and URL credential normalization. Unparseable or mixed
+content that cannot be compared safely must not gain semantic equivalence merely
+from a legacy key collision. This containment cannot recover overwritten fixtures
+or complete the later persisted-key migration.
+
+2026-09-11 audit-only gate: formatting, both workspace/all-target Clippy modes,
+inventory controls, 1,206 all-feature tests and 1,112 default tests passed; each
+test run had 5 ignored across 27 suites. These totals include the intentionally
+passing K27 reproduction. No production identity containment is implemented by
+this audit commit. The preceding `4220ec2` CI run 34556356514 completed successfully.
 
 ## Replay key credential boundary
 
@@ -46,8 +82,8 @@ These are project-authored privacy controls, not independent schema acceptance.
 Limitations: raw envelopes retain the existing targeted redactor; malformed XML,
 encoded raw credentials, custom fields, action/device labels and older files or
 backups are not certified secret-free. No user recording was inspected or changed.
-K27 namespace, significant-whitespace and unescaped serialization collisions need
-separate reproduction and persisted-key compatibility design; this is not a key-v2
+K27 namespace, significant-whitespace and unescaped serialization collisions now
+have separate reproductions but still need persisted-key compatibility design; this is not a key-v2
 migration or complete W19 acceptance.
 
 Verification (2026-09-11, isolated Windows build): formatting, both workspace /

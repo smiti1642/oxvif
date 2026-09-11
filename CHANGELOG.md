@@ -94,6 +94,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Executable replay-key audit cases expose unresolved namespace, whitespace,
+  serialization and trailing-document collisions. Passing known-gap assertions
+  mean reproduced, not repaired; paired migration tracking now covers profile
+  identity consumers and the separately reviewed Media synchronization proposal.
 - CLI regression checks now compare functional JSON output independently of
   per-execution timing, while still validating the timing field and all remaining
   metadata. This removes a Windows CI false failure without changing CLI output.

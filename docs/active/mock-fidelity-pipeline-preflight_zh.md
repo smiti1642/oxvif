@@ -23,6 +23,35 @@ W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯�
 | [Parsed synthetic 邊界](#parsed-synthetic-邊界) | P-D 已實作檢查、證據及排除範圍 |
 | [State hook 快照工作](#state-hook-快照工作) | W18 有界鎖定及觀察策略 |
 | [Replay key 憑證邊界](#replay-key-憑證邊界) | K28 清理、遷移與排除範圍 |
+| [Replay key 碰撞重現](#replay-key-碰撞重現) | K27 六項已知缺陷證據 |
+
+## Replay key 碰撞重現
+
+`tests/mock_replay_key_gaps.rs` 重現六種不同 wire、相同 Action 卻只保存一個 key
+的組合：scalar 前導與重複空白、不同 field namespace、escaped text 與 child
+結構、escaped quote 跨 attribute boundary，以及 compatibility DOM 忽略第二個
+root。最後錄製的 response 回答兩個 request。另一項控制仍區分一般不同 token
+與完整 Action。這些刻意通過的 known-gap assertion 並非已修正不變量或規範驗收。
+改動第二筆錄製 response，並將控制組 Action 合併，會使兩項測試分別在 payload／
+count assertion 失敗（RTK log 1789095344）；兩項 mutation 均已還原。完成遷移後
+應改成 distinct-key／response 預期，不能恢復碰撞來滿足測試。
+
+[Profile-token 依賴追蹤](mock-fidelity-profile-preflight_zh.md#profile-token-依賴追蹤)
+已列出成對 Media、PTZ、adapter 與 replay 路徑。K27 需明示 key version／舊檔載入、
+namespace identity、scalar 空白、無歧義序列化、完整文件、masking scope 與
+malformed-input fallback 政策，不默默重新詮釋或覆寫既有錄製資料。
+
+下一個有界 W19 實作：維持公開 key／檔案格式，但回傳命中的錄製前，再次驗證完整
+decoded XML 身分。不同 namespace／scalar／structure 應轉入 synthetic，不 replay
+另一個 request 的 response。保留完全相同的 raw fixture replay，以及已審查的
+transport-ephemera masking／URL 去憑證正規化。無法安全比較的 unparseable 或
+mixed content 不得僅因 legacy key 碰撞就被視為等價。此防護無法恢復被覆蓋的
+fixture，也不等於完成後續持久化 key 遷移。
+
+2026-09-11 audit-only 關卡：formatting、兩種 workspace／all-target Clippy、
+inventory 控制、1,206 all-feature 與 1,112 default 測試通過；兩者均為 27 suites、
+5 ignored，包含刻意通過的 K27 重現。本 audit commit 尚未實作 production identity
+防護。前一提交 `4220ec2` 的 CI run 34556356514 已成功完成。
 
 ## Replay key 憑證邊界
 
@@ -40,7 +69,7 @@ W19／K28：`canonicalize` 於 parsed projection 與 raw fallback 後均清除 U
 
 限制：raw envelope 沿用指定格式的 redactor；malformed XML、encoded raw 憑證、
 自訂欄位、action／device label、舊檔與備份均未保證無秘密。未檢查或變更使用者錄製。
-K27 namespace、顯著空白及未 escape 序列化的碰撞，需另外重現並設計持久化 key 相容性；
+K27 namespace、顯著空白及未 escape 序列化的碰撞已有獨立重現，持久化 key 相容性仍待設計；
 本次不是 key-v2 遷移，也不是完整 W19 驗收。
 
 驗證（2026-09-11，獨立 Windows build）：formatting、兩種 workspace／all-target

@@ -13,6 +13,31 @@
 | [共用路徑與目前行為](#共用路徑與目前行為) | 輸入、效果及消費端 |
 | [參考資料審閱](#參考資料審閱) | 已確認結論及尚缺證據 |
 | [案例與開工條件](#案例與開工條件) | 必要回歸與剩餘設計 |
+| [Profile-token 依賴追蹤](#profile-token-依賴追蹤) | 成對遷移路徑及測試邊界 |
+
+## Profile-token 依賴追蹤
+
+來源檢查點 `4220ec2`，2026-09-11；W02／W10／W11／W19。本節在變更儲存表示前
+盤點 profile 身分路徑，不宣稱已審查所有 configuration token 或 PTZ operation。
+
+| 路徑 | 目前 reader／consumer | 成對遷移責任 |
+| --- | --- | --- |
+| Media1 建立與讀取 | `handle_create_profile` 的 optional Token 與 `resp_profile` 的 ProfileToken 仍用 fragment；`render_profile` 原樣輸出 profile token attribute | Scoped optional／required scalar decoding 與 attribute escaping 同步遷移；保留顯著空白，區分 character reference 與 literal attribute whitespace |
+| Media2 讀取／刪除 | `resp_profiles_media2` Token 與兩個 DeleteProfile reader 已用 Node；`render_profile_media2` 原樣輸出 token attribute | 兩種 view 保留 decoded 身分；不再次 decode 已保存的 literal string |
+| Profile binding | `media::{bind_configuration,unbind_configuration}` 及 `media2::apply_media2_configuration` 用 legacy reader 讀 ProfileToken | 六個 wrapper 全部遷移 profile 身分；configuration-token 與 Type／Name 驗證另列範圍，不默認完成 |
+| PTZ head 解析 | `ptz::require_profile` → `require_head` → ProfileEntry PTZ config → node；18 個 `head!` caller 及 `resp_ptz_compatible_configurations` | 所選 handler 傳遞 parsed 身分；更新未宣告 namespace 的 `state.rs::ptz_body` 測試，不放寬驗證；使用刻意不同的兩個 head |
+| Typed adapter | `adapter::{profile_token,ctx_profile}` 對 GetStreamUri／ContinuousMove 使用會 trim 的 local-name DOM | 保留公開 DeviceAdapter signature 與 raw fallback；另審 exact Action dispatch，不以嚴格 synthetic 處理取代使用者 raw adapter |
+| Recorded replay | `canon::canonicalize` → fixture index → ReplayResponder，先於 synthetic | K27 已重現六種 key collision；宣稱完整 token workflow 適用 replay 前，先設計持久化 key 相容性與精確 input identity |
+
+驗收順序：建立具辨識力的特殊 token fixture；設計 key 遷移，避免意外改變公開
+fixture／adapter 契約；成對處理 Create／read／render／profile-binding／PTZ；
+再以兩種 transport 驗證 Create → 兩種 service view → bind → PTZ head query →
+remove／delete，精確比對 state／hook／拒絕。Compatibility client DOM 會 trim
+文字之處，須使用 raw wire assertion。Attribute 輸出測試包含 tab／newline／CR
+reference；只 escape `<`、`&` 與引號不足以保留 XML attribute whitespace。
+保留一般 token、另一個 profile、malformed／duplicate／wrong-namespace 控制。
+Adapter 與 replay 未各自驗證前，不可稱為閉合。Empty-token、長度／容量政策仍須
+核對 operation card，不從 renderer 修正推導規則。
 
 ## 範圍與身分
 

@@ -7,6 +7,8 @@ the full programme remains in progress.
 Date: 2026-09-10. Repository baseline: `9dccf9d`.
 Trigger: review of [PR #16](https://github.com/smiti1642/oxvif/pull/16)
 at `dc69e9a`; that contribution is not assumed to be merged.
+The [2026-09-11 PR integration review](mock-fidelity-pr16-integration.md) rechecks
+head `3db6459` and records reuse, correction and verification prerequisites.
 
 | Section | Purpose |
 | --- | --- |

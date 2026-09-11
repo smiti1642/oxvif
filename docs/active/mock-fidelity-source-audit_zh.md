@@ -354,7 +354,7 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 
 | ID | 證據 | 處置 |
 | --- | --- | --- |
-| K27 | `canon::write_node` 移除 namespace、壓縮 scalar 空白，並未 escape 就輸出 decoded text／attribute；不同 identifier 或文字／結構可能在同一完整 Action 下共用 key。 | W19／W10／W11：由來源確認的候選風險；token 解析／輸出閉合前，需補具辨識力的碰撞測試與持久化 key 遷移設計。去除憑證不會修正此問題。 |
+| K27 — 已重現、未修正 | `mock_replay_key_gaps` 證明六種同 Action 碰撞：前導／重複空白、field namespace、文字與結構、attribute boundary、忽略結尾多餘 root；兩個 request 均 replay 最後一筆 response。 | W19／W10／W11：known-gap 測試通過表示已重現；一般 token 與完整 Action 控制仍可區分。Token 閉合前仍需持久化 key 遷移設計；去除憑證不修正碰撞。 |
 | K28 | 已錄製 request 的 URL 憑證仍存於 `key_canon`，舊檔 key 載入時也未清除。虛構資料的 assertion failure 已重現兩項缺陷。 | W19：recording／replay／diff 投影與舊檔／caller lookup key 均清除 URL 帳密；載入不覆寫磁碟，正規化碰撞維持 last-write-wins。Raw envelope 仍僅針對指定格式去除憑證，並非通用秘密偵測器。 |
 | K24 | 固定來源的輸出型別審查發現 Media2 audio renderer／options 沿用 Media1 codec 名稱，共用 writer 也未經 service adapter 就直接儲存。XSD 字串合法性無法驗證兩者不同的 codec 詞彙。 | W01／W10：將 audio list／options、profile 內嵌 audio、共用寫入及 client 跨服務預期視為同一相依範圍審查。已由來源確認，具辨識力的 wire／state 重現待補。不可只改輸出而破壞寫入。 |
 | K25 | Audio encoder writer 儲存請求的 Multicast AutoStart；Media2 metadata 依 address 存在與否推導該值，但 mock 不實作 persistent streaming。外部輸出型別筆記指出該欄位的唯讀效果意義。 | W01／W10／W17：重現 read／write／capability 差異，修改預設前核對唯讀處理及 multicast 省略／提供行為。來源已確認，未驗證任何實際 RTP 效果。 |

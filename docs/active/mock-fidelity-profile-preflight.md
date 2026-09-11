@@ -13,6 +13,34 @@ Owner: current hardening branch. [Execution checklist](mock-fidelity-execution-c
 | [Shared paths and current behavior](#shared-paths-and-current-behavior) | Inputs, effects and consumers |
 | [Reference review](#reference-review) | Checked conclusions and missing evidence |
 | [Cases and readiness](#cases-and-readiness) | Required regression and remaining design |
+| [Profile-token dependency closure](#profile-token-dependency-closure) | Paired migration paths and test boundaries |
+
+## Profile-token dependency closure
+
+Source checkpoint `4220ec2`, 2026-09-11; W02/W10/W11/W19. This inventories the
+profile identity path before changing its stored representation. It does not
+declare all configuration tokens or PTZ operations audited.
+
+| Path | Current reader/consumer | Paired migration obligation |
+| --- | --- | --- |
+| Media1 creation and reads | `handle_create_profile` optional Token and `resp_profile` ProfileToken use fragments; `render_profile` writes the profile token attribute verbatim | Decode scoped optional/required scalar fields and escape the attribute together; preserve meaningful whitespace and distinguish character references from literal attribute whitespace |
+| Media2 reads/deletion | `resp_profiles_media2` Token and both DeleteProfile readers already use Node; `render_profile_media2` writes the token attribute verbatim | Preserve decoded identity across both views; do not decode persisted literal strings again |
+| Profile bindings | `media::{bind_configuration,unbind_configuration}` and `media2::apply_media2_configuration` read ProfileToken via legacy extraction | Migrate profile identity on all six wrappers; configuration-token and Type/Name validation remain separately scoped, not silently certified |
+| PTZ head resolution | `ptz::require_profile` → `require_head` → ProfileEntry PTZ config → node; 18 `head!` callers plus `resp_ptz_compatible_configurations` | Pass parsed identity through all selected handlers; migrate the unqualified `state.rs::ptz_body` test inputs rather than weakening namespace validation; check both deliberately different heads |
+| Typed adapter | `adapter::{profile_token,ctx_profile}` parse a trimmed local-name DOM for GetStreamUri/ContinuousMove | Preserve public DeviceAdapter signatures and raw fallback; review exact Action dispatch separately; do not substitute strict synthetic handling for user-owned raw adapters |
+| Recorded replay | `canon::canonicalize` → fixture index → ReplayResponder, ahead of synthetic | K27 reproduces six key collisions; design persisted-key compatibility and exact input identity before claiming the complete token workflow works in replay |
+
+Acceptance sequence: establish discriminating special-token fixtures; define the
+key migration without changing public fixture/adapter contracts inadvertently;
+pair Create/read/render/profile-binding/PTZ paths; then test Create → both service
+views → bind → PTZ head query → remove/delete across both transports, with exact
+state/hook/refusal assertions. Use raw wire assertions where the compatibility
+client DOM trims text. Include tabs/newlines/CR references in attribute output
+tests: escaping only `<`, `&` and quotes does not preserve XML attribute whitespace.
+Retain normal-token, alternate-profile and malformed/duplicate/wrong-namespace
+controls. Do not call this complete until adapter and replay paths are separately
+verified. Empty-token and length/capacity policies still require their reviewed
+operation cards; do not infer those rules from a renderer fix.
 
 ## Scope and identities
 
