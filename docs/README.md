@@ -21,7 +21,7 @@ with the top-level [`README.md`](../README.md), the
 | [`reference/`](reference/) | **ONVIF protocol reference** — the WSDL/XSD transcriptions used while implementing oxvif. Stable facts, not plans. |
 | [`active/`](active/) | **In-progress plans** — design docs / milestones for work that is under way or not yet finished. |
 | [`done/`](done/) | **Completed plans** — finished design/audit docs, kept as a record. |
-| [`mock-server.md`](mock-server.md) | **Reference for `oxvif::mock`** — the outward-facing one. Routing, envelope/namespace contract, the full state model, the seeded fixture, all 157 operations with which are state-backed and which are static, worked request/response examples, the fault catalogue, and an explicit list of what the mock does *not* model. Read this before driving the mock from anything, Rust or not. |
+| [`mock-server.md`](mock-server.md) | **Reference for `oxvif::mock`** — routing, envelope/namespace contracts, modeled state, seeded fixtures, operation behavior, request/response examples, faults and explicit simulation limits. The operation ledger owns current route counts; this reference is not a conformance certificate. |
 | [`mock-server_zh.md`](mock-server_zh.md) | **Mock 裝置參考（繁體中文）** — the Traditional Chinese counterpart to the complete Mock behavior and fidelity contract. |
 | [`oxvif-cli.md`](oxvif-cli.md) | **Complete CLI guide** — installation, human and Agent workflows, inventory, discovery, fleet execution, credentials, TLS, structured output, typed errors, and exit codes. |
 | [`oxvif-cli_zh.md`](oxvif-cli_zh.md) | **CLI 使用指南（繁體中文）** — the Traditional Chinese companion to the complete CLI guide. |
@@ -30,6 +30,8 @@ with the top-level [`README.md`](../README.md), the
 | [`support.md`](support.md) | Versioned support boundaries for the Rust library and CLI beta, including OS, credential, schema, TLS, camera-evidence, and commercial-claim limits. |
 | [`support_zh.md`](support_zh.md) | **支援與相容性政策（繁體中文）** — the Traditional Chinese counterpart to the support policy. |
 | [`releases/`](releases/) | Version-specific release notes and verification evidence. Entries marked unreleased describe staging, not public availability. |
+| [0.17 summary](releases/0.17.0.md) · [繁體中文](releases/0.17.0_zh.md) | Draft user-facing release notes; not release approval. |
+| [0.17 full changelog](releases/0.17.0-changelog.md) · [繁體中文](releases/0.17.0-changelog_zh.md) | CLI, Library, Mock, migration, evidence and limitations. |
 
 A plan graduates from `active/` to `done/` when its milestones are all shipped.
 
@@ -41,6 +43,11 @@ WSDLs, for cross-reference while implementing oxvif. See
 conventions, and attribution/licensing.
 
 ## `active/` — in-progress plans
+
+The [0.17 release cut](active/release-0.17-cut.md) ([繁體中文](active/release-0.17-cut_zh.md))
+owns current acceptance. The [post-0.17 backlog](active/post-0.17-backlog.md)
+([繁體中文](active/post-0.17-backlog_zh.md)) retains deferred scope without closing
+unfinished technical milestones.
 
 | Doc | About |
 |-----|-------|

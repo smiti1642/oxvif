@@ -26,6 +26,11 @@ It does not mark the remaining service batches complete or authorize main-branch
 
 ## Execution rules
 
+Release scheduling is now owned by the [0.17 cut](release-0.17-cut.md) and
+[follow-up backlog](post-0.17-backlog.md). Existing PARTIAL/TODO states remain
+technical evidence, not a requirement to finish every service before 0.17.
+Known data loss and security blockers cannot be deferred.
+
 1. Read the main plan's D1–D3 decisions, this checklist, and the operation ledger.
    Start from `git status` and the actual commit, not the last conversation.
 2. Run the inventory checker. Review source changes since the recorded baseline;

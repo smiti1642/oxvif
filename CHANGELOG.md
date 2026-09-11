@@ -20,315 +20,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Fixed
+Target: **0.17.0 — not yet release-ready or available on crates.io.**
 
-- **Breaking, next minor:** MetadataConfiguration and mock MetadataEntry now
-  retain structured multicast and session timeout instead of flattened address/
-  port fields. Migrate Rust literals and old JSON using known complete values.
-  Metadata requests include required fields in service order; IPv6 multicast
-  serialization preserves its address family. See the
-  [migration guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/audio-metadata.md).
-- Mock audio/metadata operations validate scoped selectors and complete candidates
-  before atomic commits. Audio uses service-specific codec names and advertised
-  combinations; AutoStart no longer falsely indicates streaming. Refused writes
-  preserve replay recordings. Audio options emit repeated integer Items, and the
-  client now reads all repeated values rather than silently losing later items.
-- Mock video encoder configuration now validates complete scoped candidates
-  atomically across both Media services. Options and writes share modeled limits;
-  bitrate/quality/rate adaptation is explicit, unknown selectors fault, and H265
-  no longer leaks into Media1 views. Capacity now requires a source configuration
-  token. Update partial raw fixtures and tests relying on silently ignored fields;
-  see the [encoder contract](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/mock-server.md#622-encoder-configuration-contract)
-  for supported fields, generic options and non-streaming limits.
-- **Breaking, next minor:** Media2 `VideoRateControl2.frame_rate_limit` and mock
-  `VideoEncoderState.frame_rate_limit` change from `u32` to `f32`; fractional rates
-  no longer silently parse as zero. Present incomplete/invalid rate blocks error,
-  and negative/nonfinite rates fail before writes. Serde retains ordinary integer
-  JSON input but emits potentially fractional numbers and refuses invalid rates.
-  Mock Media1 explicitly faults on unrepresentable fractional views; built-in
-  replay preserves recordings on refused encoder writes. Change Rust literals
-  such as `25` to `25.0` and review integer-only consumers; see the
-  [migration guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/media2-frame-rate.md).
-- Mock video source configuration now validates complete scoped settings before
-  an atomic write across both Media services. Invalid values, unknown references
-  and unmodeled offsets/extensions no longer silently succeed. Source options
-  follow sensor limits instead of the current crop; generic/profile selectors
-  are supported and Media2 list selectors are honored. Built-in replay only
-  retires dependent reads after successful writes. Existing partial-body mock
-  requests must provide the full configuration; see the
-  [source migration](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/mock-server.md#621-source-configuration-contract).
-- Mock Media2 profile creation now applies initial modeled configurations; binding
-  supports rename-only updates, add/create `All` no-ops and remove `All` clearing.
-  Binding tokens are decoded from scoped fields; conflicting assignments to one
-  slot and invalid later references refuse before mutation. Both Media services
-  enforce the advertised eight-profile creation limit without truncating imported
-  fixtures. Touched configuration reference counts update with profile mutations,
-  and built-in replay retires their dependent reads. Profile capacity, duplicate
-  and binding-reference faults use structured SOAP hierarchies. Media2 capability
-  now advertises the modeled PTZ slot instead of unsupported Metadata binding.
-  See the [assembly migration](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/active/mock-fidelity-profile-assembly.md)
-  for limits; full configuration compatibility and field validation remain open.
-- Mock Factory Reset, Device/PTZ auxiliary commands, reboot, firmware upgrade,
-  system restore, Events subscribe/renew/unsubscribe/synchronization and EndSearch
-  now refuse by default with Receiver / `mock:UnmodeledEffect`. Workflow tests
-  needing only a receipt can select an individual `AckOnlyOperation` via
-  `with_acknowledgment_only` on mock/replay/adapter transports or the HTTP builder.
-  Neither refusal nor acknowledgment changes state, triggers hooks or invalidates
-  replay. Reboot receipts explicitly state that no reboot occurred; upload URIs,
-  subscription references and timestamps are fixture data, not working services.
-  The PTZ auxiliary allowlist remains, but profile validation and full operation
-  semantics are not implied. Broader fidelity/capability review remains open; see the
-  [policy checkpoint](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/active/mock-fidelity-ack-policy-preflight.md).
-- Opt-in mock authentication now reads unique qualified Header/UsernameToken
-  fields, preserving decoded username/Created text and rejecting misplaced or
-  ambiguous credentials. Password requires explicit PasswordDigest Type; nonce
-  encoding must be supported and decode to nonempty bytes. Authentication errors
-  no longer echo credentials. Update bare/unqualified test fixtures to proper
-  SOAP headers. Auth defaults, ordinary missing-credential CLI diagnostics and
-  Fault classification are unchanged; freshness, nonce reuse prevention and
-  user-level authorization remain unimplemented.
-- Typed Metamorph adapters now require exact supported Action/operation identity
-  and preserve decoded profile-token whitespace. Malformed or ambiguous requests
-  no longer call typed hooks with invented empty tokens. ContinuousMove requires
-  both axis groups with finite coordinates and no explicit space/Timeout; other
-  forms go to the existing raw/synthetic fallback instead of silently losing
-  options or substituting zero. Public trait signatures and raw bytes are unchanged.
-- Mock Media profile tokens now retain their literal identity through creation,
-  both profile views, the six existing binding entry points and PTZ lookup.
-  Profile token attributes are escaped once, including whitespace references;
-  duplicate/nested identity fields are refused before mutation. Review older
-  snapshots explicitly: stored entity-looking tokens are not automatically
-  decoded or renamed. Explicitly empty Create tokens/read selectors now return
-  Sender / `mock:RequestPolicy` before state changes; omit the Create token for
-  allocation. Lists containing an empty seeded profile return Receiver with the
-  same mock-specific policy code; repair those snapshot entries explicitly.
-  Nonempty whitespace and valid individual reads remain supported. Other
-  configuration fields, adapters and recorded-key migration remain ongoing work.
-- Mock PTZ profile/head lookup now preserves decoded token identity, including
-  significant whitespace, across its 19 existing consumers. Header, nested and
-  foreign fields no longer select a head; duplicate/nested scalar tokens are
-  rejected before mutation. Ordinary missing/empty/unknown fault payloads remain
-  unchanged. Other PTZ fields, Media token paths and replay effects remain under
-  the [hardening programme](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/active/mock-fidelity-profile-preflight.md).
-- Shared XML string escaping now emits character references for CR, LF and tab,
-  preserving literal data across XML text/attribute normalization. This also
-  preserves carriage returns through client profile creation and mock Name reads.
-  Public signatures and ordinary wire values are unchanged; bytewise fixtures
-  containing these data characters need the new reference spelling. Remaining
-  raw mock renderers and profile-token readers still require their own migration.
-- Replay now checks scoped XML identity after a legacy fixture-key hit, preventing
-  selected whitespace, namespace and structure collisions from substituting a
-  different request's response. Unconfirmed matches fall through to synthetic;
-  exact raw recordings remain supported. Stored-key collisions and full protocol
-  validation remain under audit; no existing recording file is rewritten.
-- Metamorph canonical fixture keys and value projections now strip URL
-  `user:pass@` pairs, including after XML entity decoding. Replay uses the same
-  credential-free key. Loading older keys cleans them in memory without rewriting
-  the source file; explicitly save to persist the cleanup and review old copies
-  before sharing. Credential-only duplicate keys use the last stored entry.
-  Raw-envelope redaction remains targeted, not a general secret detector.
-- Built-in replay now refreshes profile views after committed Media1 video
-  source/encoder binding and Media2 generic binding. Refused bindings no longer
-  retire unrelated services' recordings merely because their operation-family
-  names match. Successful idempotent removals conservatively refresh profile
-  views too; configuration writes and complete dependency tracking remain open.
-- Built-in replay devices now retain recordings when Media1/Media2 profile
-  creation is refused, and retire both services' profile views only after a
-  successful creation. Recorded profile lists no longer hide a newly created
-  profile. Standalone responder and other mutation policies remain under review.
-- Mock Media1/Media2 profile creation now stores decoded literal names, and
-  profile responses escape those names once. Seeded markup remains text;
-  significant whitespace is preserved in state and raw responses. A missing,
-  duplicate or nested `Name` is rejected before creation instead of using a
-  default or fragment. Profile-token and nested-configuration text handling
-  remain under the separate fidelity audit.
-- Mock Media profile reads now capture profiles and their associated configuration
-  catalogues under one read lock, preventing responses assembled from different
-  concurrent state revisions. This does not make separate requests transactional.
-- Mock state-change hooks now receive a snapshot captured with their mutation
-  and execute without holding the state lock. A bounded reentrant write no longer
-  deadlocks, and intervening writes no longer replace the notified snapshot.
-  Concurrent callback order remains caller-managed; public signatures are unchanged.
-- Mock Media2 `GetProfiles` now honors decoded `Token` and `Type` selectors.
-  Omitting `Type` returns profile identities without configuration details;
-  existing full-profile client calls still request `Type=All`. Invalid scalar,
-  duplicate-token and field-order inputs are rejected without changing state.
-- Requests reaching the synthetic mock now share bounded namespace-aware XML
-  parsing and Action/body identity checks, including static reads. Malformed XML,
-  wrong operation identities and invalid SOAP container structure return generic
-  structured faults before handlers run. Direct harnesses must send an identified
-  operation rather than empty strings or bare field fragments. Raw responder and
-  replay precedence is preserved; full field validation and HTTP binding remain
-  under review.
-- Synthetic mock routing now matches complete Action identities, including the
-  Events port segment. Wrong hosts, inserted path segments and cross-port aliases
-  no longer reach handlers. Existing client Actions are unchanged; HTTP header
-  parsing and replay policy remain under review; common body identity validation
-  is covered by the boundary change above.
-- Mock Media configuration binding now validates and commits a complete request
-  under one write lock. A late invalid Media2 configuration no longer leaves
-  earlier slots changed; successful multi-entry requests notify once and refused
-  requests do not notify. Strict parsing and remaining binding semantics are still
-  under review.
-- Mock profile creation now skips occupied generated tokens and checks explicit
-  duplicates under the same write lock as insertion. Rejected duplicates preserve
-  state and do not notify the change hook; allocation no longer panics at the
-  persisted counter boundary. Capacity enforcement is described above.
-- Mock Media1/Media2 rejected profile deletion no longer invokes the persistence
-  change hook. Successful deletion still notifies once; public state helpers
-  retain their existing notification behavior.
-- Built-in replay devices now preserve profile recordings when Media1/Media2
-  deletion is rejected, and retire both services' profile views only after a
-  successful synthetic deletion. Fault/auth/custom-responder short circuits do
-  not report committed effects. Creation has also migrated as noted above;
-  remaining mutations and standalone `ReplayResponder`
-  construction retain their legacy policy pending their own migration; the full
-  dependency graph and concurrent visibility remain under review.
-- Media2 profile enumeration now explicitly requests `Type=All`, so conforming
-  cameras return associated configuration/source information to the existing
-  `get_profiles_media2` client and session methods. Previously the request omitted
-  `Type` while the mock returned configurations anyway, masking incomplete results
-  on real devices. Public signatures are unchanged; mock selector handling remains
-  under the separate fidelity audit.
+[Release summary](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0.md) ·
+[Full changelog and migration](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0-changelog.md) ·
+[繁體中文](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0-changelog_zh.md)
 
 ### Added
 
-- Media1/Media2 synchronization requests through client and session methods,
-  adapted from PR #16. Scoped mock selectors and independent service opt-ins
-  preserve default refusal for unmodeled effects; receipts do not generate media
-  or retire recorded reads. See the
-  [guide](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/media-synchronization.md).
-- Push-event TCP origin through `notification_listener_with_peer` and
-  `ReceivedNotification`, inspired by PR #17. The new async listener reports bind
-  errors and is ready on return. Legacy event structs, JSON and listener signature
-  remain unchanged; dropping either stream cancels owned connections. Socket
-  origin is not authenticated camera identity and is not added to ONVIF XML.
-- Executable replay-key audit cases expose remaining stored-key namespace,
-  whitespace, serialization and trailing-document collisions; replay substitution
-  is now contained as noted above. Paired migration tracking covers profile
-  identity consumers and the separately reviewed Media synchronization proposal.
-- CLI regression checks now compare functional JSON output independently of
-  per-execution timing, while still validating the timing field and all remaining
-  metadata. This removes a Windows CI false failure without changing CLI output.
-- CI now checks the mock's Action/handler/reader inventory and bilingual tracking
-  on Windows and Linux before the package job can run. This source-consistency
-  check does not replace external schema or behavioral acceptance.
-- Mock fidelity auditing now indexes complete client/session Action declarations
-  and request-reader call sites. Regression controls preserve configuration
-  changes on fixed profiles; separate known-gap probes expose unresolved profile
-  XML escaping and replay invalidation
-  defects. A passing
-  known-gap probe means reproduced, not fixed or ONVIF-conformant.
-- Mock responder regression tests now guard fault/auth precedence and preserve
-  raw custom-responder input/output during the planned parser migration.
-- The private mock request representation now retains scoped attributes and
-  ordered subtrees alongside decoded scalar text, with normalization and resource
-  boundary controls. Broad handler and structured-fault migration remain pending.
-- The external structural audit now resolves namespace bindings per node and
-  includes SOAP Envelope/Fault structure. Explicit runs fail on missing resources;
-  provide the SOAP 1.2 envelope schema as well as the service schemas. This remains
-  a structural check, not full XSD or semantic conformance acceptance.
-- External schema verification tooling now pins source hashes and verification
-  dependencies, checks import closure and prevents network fallback during
-  validation. Windows/Linux tooling controls and a separate pinned Xerces XSD 1.1
-  source-compilation and selected profile-corpus job gate packaging. Full mock-corpus acceptance remains
-  incomplete; this tooling
-  does not establish ONVIF conformance or change installed runtime dependencies.
-- An opt-in, external-only profile exchange corpus now captures credential-free
-  client requests and mock responses for the first 13 profile operations. Both
-  validator backends enforce explicit payload anchors beyond envelope wildcards;
-  selected instances are validated independently, without claiming complete
-  operation or semantic coverage.
-- Mock Media1/Media2 `DeleteProfile` now reports missing/fixed profiles through
-  nested SOAP Sender faults instead of flat ONVIF codes. Client `code` is now
-  `s:Sender`; `subcode` remains the first level (`ter:InvalidArgVal` or
-  `ter:Action`), not the deepest ONVIF condition. Reason strings are preserved.
-  Other operation Fault mappings and rejected-write side effects remain under audit.
-- Mock authentication faults now bind the existing `wsse:FailedAuthentication`
-  subcode and escape literal reason text through a private structured serializer.
-  XML-invalid reason characters become replacement characters. The existing
-  client first-subcode field and CLI error/exit-code contracts remain unchanged;
-  this does not strengthen the mock's authentication policy.
-- Human terminal line numbers are configurable as `absolute`, `relative`, `hybrid`
-  (unchanged default), or `off`. Use `--line-numbers` for this invocation, or `?`
-  in navigation screens to preview, apply for the session, or explicitly save a
-  default in `ui-preferences.json`. Navigation keys, device identities and Agent
-  output remain unchanged. See [line-number settings](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md#line-number-settings).
-- Reduce main-thread stack use to prevent Windows debug CLI startup stack overflow.
-- Human CLI navigation now shares a backend-free Vim-style core: `gg` / `G`,
-  counted `j` / `k`, absolute `nG` / `ngg`, hybrid relative numbers and compact
-  NORMAL / INPUT / SEARCH / BUSY status lines. Pending sequences are visible and
-  cancellable. Discovery's former single `g` becomes `gg`; Home remains available.
-  Input/search fields retain literal typing and Ctrl+U clearing. Recognized paste
-  events do not execute navigation; Windows/legacy paste-as-keystrokes remains a
-  terminal limitation. See the [navigation guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md#vim-style-navigation).
-- Bound centered camera description columns so an unusually long name does not
-  hide other camera identities. Cancelling a profile preflight now stops the entire
-  requested workflow instead of falling through into another diagnostic request.
-- Interactive camera chooser columns are centered to their longest displayed
-  value across the full list, keeping separators and addresses aligned between
-  pages. Menus and scrollable views accept Ctrl+D / Ctrl+U for half-page movement;
-  input fields and discovery search retain Ctrl+U to clear text.
-- Interactive CLI screens separate headings, content and operation hints with
-  terminal-width horizontal rules; compact maintenance/profile screens prioritize
-  content when terminal height is limited. Machine output is unchanged.
-- CLI `snapshot --save` and `media snapshot-save` download size-limited images
-  into new files without overwriting, with private-CA support and challenged
-  HTTP authentication. Existing URI-only behavior remains available.
-- CLI `diagnose` reports bounded ONVIF and snapshot-delivery stages, retaining
-  failure evidence for single devices and Groups/Views. RTSP transport and video
-  decoding are explicitly not tested; this is not playback verification.
-- CLI `config export` / `config diff` provide versioned read-only camera-setting
-  inventories and JSON Pointer differences. Partial sections remain incomparable;
-  exports are not restorable backups. File workflows are single-device.
-- Embedded Agent guide v8 documents retained failure reports, profile selection
-  reason codes/candidates, untested-stage reasons and new workflow
-  exit semantics; stdout schema v3 and existing commands remain compatible.
-  See the [maintenance guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md)
-  for limits and manual acceptance.
+- Guided human `oxvif manage` workspace, snapshot saving, staged diagnosis,
+  read-only configuration export/diff and richer profile metadata.
+- Shared counted Vim navigation, compact status lines and configurable line
+  numbers; Agent JSON/JSONL remains non-interactive.
+- Additive push-notification TCP peer API and Media1/Media2 synchronization
+  requests, with contributor attribution retained.
+
+### Fixed
+
+- Media2 full-profile requests, fractional frame-rate parsing, repeated audio
+  option values, metadata required fields and XML literal whitespace handling.
+- Selected Mock request identity, atomic Media writes, coherent snapshots/hooks
+  and committed replay invalidation; classified unmodeled effects refuse by default.
+- Windows debug CLI startup stack use, cancellation behavior and bounded
+  human-terminal layout; timing-sensitive tests retain functional output checks.
 
 ### Changed
 
-- Refresh the reviewed dependency group from PR #14, including futures,
-  thiserror and toml, and the CLI's jsonschema/shlex test dependencies.
-  CLI schema and credential backend selections are unchanged.
-- Mock Media1/Media2 `DeleteProfile` now preserves escaped/whitespace token
-  identity and rejects ambiguous, mislocated or malformed inputs before changing
-  state. Hand-written request fragments need valid namespace declarations;
-  missing/empty tokens now return `env:Sender` with an
-  `InvalidRequest-DELETEPROFILE` reason. Shared mock faults bind known prefixes
-  and escape code/reason text; injection callers should pass literal text.
-  Full fault hierarchies and other request handlers are not yet migrated.
-  See [mock request hardening](https://github.com/smiti1642/oxvif/blob/master/docs/mock-server.md#31-unreleased-request-hardening).
-- Add development-only `manage`, a terminal workspace retaining device/profile
-  context across diagnosis, snapshots and configuration inventory/comparison.
-  Reuse sessions for at most 60 seconds and invalidate after failures/cancellation;
-  session-only credentials never replace saved credentials. JSON/non-interactive
-  callers use existing commands instead. No camera settings are changed.
-- Profile reports add optional configured encoding/resolution/FPS and explicit
-  metadata availability. Diagnostic assessments distinguish observed failures,
-  dependent untested checks and unimplemented limitations for humans and Agents.
-- Maintenance commands accept root selectors and execution options before or
-  after the command, preserving command-local options. Diagnosis reuses its session
-  for an optional paginated human profile picker; cancellation retains prior checks.
-  Reports are summary-first (`-v` expands stages), setting differences use readable
-  rows, and slow operations show terminal-only progress. JSON/redirected calls
-  never prompt. These refinements do not change existing schema-v3 exit semantics.
-- Update quick-xml to 0.42 and CLI sha2 to 0.11, with compatible string-based
-  XML parsing and explicit lowercase SHA-256 fingerprint encoding. Existing
-  registry data, reviewed import fingerprints, and CLI schema v3 are unchanged.
-- Refresh the locked base64, ipnet, and async-trait patch versions and pin
-  `anchore/sbom-action` to 0.24.2. Release staging remains a separate acceptance
-  gate; ordinary Rust CI does not validate the SBOM generator.
-- Add downstream XML feature-on/off regression coverage to CI.
-- Consolidate routine Cargo and GitHub Actions updates into one weekly
-  Dependabot maintenance group. Human review remains required; security updates
-  can still create separate PRs.
-- Add a separate source SPDX inventory checked against every locked Cargo
-  package/version. Binary-only scanning does not reliably recover Rust
-  dependencies; the source inventory includes development and platform-specific
-  packages and is not a per-binary linkage manifest.
+- Agent guide v8 describes additive maintenance result fields while retaining
+  envelope schema v3 and existing command exit contracts.
+- Reviewed dependency updates, weekly Dependabot grouping, source SPDX inventory,
+  downstream XML compatibility and pinned external-schema/inventory controls.
 
+### Breaking
+
+- Metadata structs require structured multicast/session-timeout values; Media2
+  and mock frame rates use `f32`. Update Rust literals and old snapshots using
+  known complete values.
+- Partial/ambiguous mock fixtures may fault; selected SOAP faults now have nested
+  subcodes. Receipt-only tests must opt in explicitly. Discovery single `g`
+  becomes `gg`; input-mode editing remains literal.
+- Configuration exports are not restorable backups and diagnostics do not verify
+  RTSP playback. Mock receipts are not evidence of physical effects.
+
+**Acceptance is still open:** K27 recorded-key collisions can overwrite distinct
+recordings; containment of wrong replay does not repair storage. Native CI,
+final-version package/install checks and real-camera acceptance remain required.
+See the [release cut](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/active/release-0.17-cut.md).
 These changes are not part of the published 0.16.0 artifacts.
 
 ## [0.16.0] - 2026-09-04

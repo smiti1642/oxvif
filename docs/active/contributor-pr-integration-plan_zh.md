@@ -247,6 +247,9 @@ W26 與詳細審查。README 僅在必要時增加短連結，不加入 API 細�
 
 ## 執行紀錄
 
+已授權的 [0.17 發布切點](release-0.17-cut_zh.md)現在負責完整候選驗收及延後範圍。
+B14／B17／B16 本機完成不代表整段 hardening 歷史已驗收，也不結案 K27 儲存阻擋。
+
 B14 候選重現已審查的相依版本，未用舊分支 lockfile 覆蓋目前內容，也未修改 Rust
 程式或 workflow。僅於 CLI 範例解析測試使用 `shlex::split`，未使用移除的 quote／
 join 或 mutable-deref API。jsonschema 仍停用 default features。檢查的套件宣告

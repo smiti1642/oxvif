@@ -277,6 +277,10 @@ Completion of B17/B16 requires no newly discovered unrelated service repairs.
 
 ## Execution record
 
+The authorized [0.17 release cut](release-0.17-cut.md) now owns candidate-wide
+acceptance and deferred scope. B14/B17/B16 local completion does not accept the
+entire hardening ancestry or close the K27 storage blocker.
+
 B14 candidate reproduces the reviewed dependency versions without replacing the
 current lockfile with the older branch's lockfile. No Rust code or workflow changed.
 Only `shlex::split` is used, in CLI example-parsing tests; removed quote/join and
