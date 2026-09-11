@@ -8,8 +8,9 @@ feature on for us.** The dangerous shape is a **public API gated
 `#[cfg(not(feature = X))]`** — it *disappears* the moment any crate enables
 `X`, and we get a compile error we can't reproduce in isolation.
 
-This file is dev-only (the `docs/` directory is excluded from the published
-crate). Linked from `CLAUDE.md` → checked before every publish.
+This file is dev-only and explicitly excluded from the published crate;
+selected public guides under `docs/` are included. Linked from `CLAUDE.md` →
+checked before every publish.
 
 | Section | Purpose |
 | --- | --- |

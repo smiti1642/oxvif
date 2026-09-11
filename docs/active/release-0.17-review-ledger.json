@@ -6,722 +6,1451 @@
     {
       "path": ".github/FUNDING.yml",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "70fd2fde44c36f97a18ad6be8190bff350b3180f"
+        }
+      ]
     },
     {
       "path": ".github/dependabot.yml",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "77243d6a991ad451f8b3cd072178fe19e357e985"
+        }
+      ]
     },
     {
       "path": ".github/workflows/ci.yml",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "33372879d827c35abd00c19ef825cb07c306a8cb"
+        }
+      ]
     },
     {
       "path": ".github/workflows/release.yml",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "377b6fd7a4994cd3573c521f3390f4bb7eb9a1aa"
+        }
+      ]
     },
     {
       "path": ".gitignore",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "5cf9df82d0d738299411174ec175aec54927955b"
+        }
+      ]
     },
     {
       "path": "CHANGELOG.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "c00b537fe320ab42a3ef0c5dd3745c24e60e3b19"
+        }
+      ]
     },
     {
       "path": "CLAUDE.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "538f6c269f3ae6e6d95a26845ac7d64c34182304"
+        }
+      ]
     },
     {
       "path": "CONTRIBUTING.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "92aa30846744b33382de0b955d9e15695b07b3f5"
+        }
+      ]
     },
     {
       "path": "CONTRIBUTING_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "b8ca6e524a829f5991012ba294920505c938b896"
+        }
+      ]
     },
     {
       "path": "Cargo.lock",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "975fd1c00af24b14ba6b925ed2b5369e821c07c3"
+        }
+      ]
     },
     {
       "path": "Cargo.toml",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "bb09054db02f82a035ed230a940f1bcb1df85ca4"
+        }
+      ]
     },
     {
       "path": "LIBRARY_GUIDE.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "258e6f84c3a0dddc6ea4d9eca74f4c8cca0ddd37"
+        }
+      ]
     },
     {
       "path": "LIBRARY_GUIDE_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "3e8c38379eaf6848296a1df3c0e246aba34e8579"
+        }
+      ]
     },
     {
       "path": "OPERATIONS.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "bdd827a7b8cbd639f0f89b27e86d32e6ed1ab7d5"
+        }
+      ]
     },
     {
       "path": "OPERATIONS_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "79bb2ec5be89f78b6c8feee3d612019bbbb52af9"
+        }
+      ]
     },
     {
       "path": "README.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "f99d296f81536c5b01968782a69dc076304fcd54"
+        }
+      ]
     },
     {
       "path": "README_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "5316fcf2d528257b73aa1dcabf35a72fa94eea14"
+        }
+      ]
     },
     {
       "path": "crates/oxvif-cli/Cargo.toml",
       "group": "CLI",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "e5b0e69489a70d2051596de345ca34273c2afd7b"
+        }
+      ]
     },
     {
       "path": "crates/oxvif-cli/README.md",
       "group": "CLI",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "91cc567587d5d698a2167b2edc539a4520cb5e1c"
+        }
+      ]
     },
     {
       "path": "crates/oxvif-cli/schema/oxvif-envelope.schema.json",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed conditional maintenance shape diff inspected; schema is an additive minimum envelope, not validation of every possible result field. Test/descriptor reconciliation remains."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "4a1bba90d050f935568f73d02118dd65b2bdf664"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/agent.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed guide diff inspected: additive workflow guidance, non-interactive selectors, no camera writes or RTSP playback claim. Reconcile generated guide assertions."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "20f34fa4fff8de8fe434921aefa6a8ebfada78f4"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/application.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed diff; diagnose picker/managed/fleet dispatch, preflight ordering, shared HTTP construction and health retry/result handling. Remaining unchanged selector/credential consumers and test assertions need closure."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "bf66d7a7622aab2ecceed85a83ec43e2c6e593fd"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/contract.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed command/request/result/exit-code diff; maintenance failure retention and mixed/all-failed fleet semantics. Cross-check remaining executable/schema assertions."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "8d0b80a8b23c43871385aa2f0444ada6ffd2b38e"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/describe.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed descriptor diff inspected: command metadata, local artifact risk and parameters. Reconcile generated help/manpage/guide outputs."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "a65226a4ebccf486502712a380a2b4e797e15412"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/interactive.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Production through helpers inspected: password lifecycle, guards, resize/redraw, filtering and navigation. Most test bodies and final terminal sessions remain open; A04 is not a universal full-screen sanitization claim."
+        },
+        "Closure pass after 44302c8: full production rendering/lifecycle read; A05 original assertion failed, escaping now precedes width/wrapping. Shared frame tests and copied executable ConPTY navigation/input/profile/snapshot cancellation pass. See review A05/T01; broader guide reconciliation remains.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "99d7caa8143d76d2c5a8a4853797291514f2e173"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/lib.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed reexport diff inspected; A04 terminal_field is presentation-only. Reconcile all public prose against completed workflow review."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "588f0ea1e54e23e29fc2a60ddf61e93ac16c6a98"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/main.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed diff, SystemPrompt selection, maintenance flag normalization and execute_and_emit paths; A04 line-menu/context escaping. Remaining executable/terminal acceptance is separate."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "d8d6c47e38b9f72ae098636589402dcc7e3ca432"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/maintenance.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Production through diff_value and test setup inspected: session cancellation/expiry, file no-clobber, bounded baselines, staged reports, normalization/diff. Remaining test bodies and all unchanged consumers need closure."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "530acad90cbcc294475eb62b669038476c5872b9"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/manage.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Production and local test inspected: device/profile selection, session credentials, cancellation and explicit file operations. Final terminal acceptance remains open."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "f499e4af49e76174e351d786e4e0c10a57324069"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/navigation.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Full source and unit assertions inspected: bounded counts, pending grammar, saturation, half/full-page and gg/G semantics. Reconcile cross-adapter integration tests."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "e64095b605f1ec84a726f08b5cf9de1bb709bd27"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/output.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed diff, render entry points and formatting helpers; A04 guards and two regression assertions reviewed and verified. Remaining pre-existing human branches/test deltas not fully reconciled."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "46eacd3f8ea2b7d5b8b50c682fd11ce08af5d0b8"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/registry.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed SHA-256 fingerprint formatting diff and leading-zero regression. Shared selector and persistent-store behavior requires transitive closure."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "0605533bd1d18215a1c805199596d76a0863a514"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/src/ui_settings.rs",
       "group": "CLI",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Production and preference tests inspected: lazy resolution, explicit persistence, atomic replacement/locking, corrupt-file preservation. Reconcile callers and human acceptance."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "092c9c29086a8d9ab827a16983fd699093e6ac5b"
         }
       ]
     },
     {
       "path": "crates/oxvif-cli/tests/cli.rs",
       "group": "CLI",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "f73e7f8fc56476dd143860dea37b78b0f3616acb"
+        }
+      ]
     },
     {
       "path": "crates/oxvif-cli/tests/navigation_core.rs",
       "group": "CLI",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "CLI",
+          "blob": "34bc91b3d02b09de8a21c38adda67b9a94929a75"
+        }
+      ]
     },
     {
       "path": "docs/README.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "01ca994752cdd644b4d505e39f98870fc2d514fb"
+        }
+      ]
     },
     {
       "path": "docs/active/check-mock-fidelity-inventory.ps1",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "b21bb828570a80316bb88f603c6a835acc03c724"
+        }
+      ]
     },
     {
       "path": "docs/active/cli-maintenance-ux-plan.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "64a8d7537c3db99ee123e2490d2f257b34c75b57"
+        }
+      ]
     },
     {
       "path": "docs/active/cli-maintenance-ux-plan_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "bae2e3c425ab43f5e6d857a707ff42e82a932fd9"
+        }
+      ]
     },
     {
       "path": "docs/active/cli-maintenance-workflows-plan.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "b7f0b028b10822f6748541721dbf8dc4b5bf610b"
+        }
+      ]
     },
     {
       "path": "docs/active/cli-maintenance-workflows-plan_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "e80c5442534f74fc3b891e92b064550a5606e728"
+        }
+      ]
     },
     {
       "path": "docs/active/cli-manage-plan.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "ce56f1eebc763db29cd84cba04bf1471fd4245a4"
+        }
+      ]
     },
     {
       "path": "docs/active/cli-manage-plan_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "44e4273b2db18862bf3f3eda2fc8e56feff8f51f"
+        }
+      ]
     },
     {
       "path": "docs/active/cli-vim-navigation-plan.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "179d3b985302500c93ea8bdbf7d7c5a20d95c13b"
+        }
+      ]
     },
     {
       "path": "docs/active/cli-vim-navigation-plan_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "68556087f0a816c059c5ca5a470a04310398065c"
+        }
+      ]
     },
     {
       "path": "docs/active/contributor-pr-integration-plan.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "d4a9ce91ebae579ec0e22654011f6ea2096018c3"
+        }
+      ]
     },
     {
       "path": "docs/active/contributor-pr-integration-plan_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "6c53c18f93d9cd3036a43694de206c36d2233625"
+        }
+      ]
     },
     {
       "path": "docs/active/dependency-maintenance-plan.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "c3eb4ca1154240a5c22c9e8d174271fbbfc129e6"
+        }
+      ]
     },
     {
       "path": "docs/active/dependency-maintenance-plan_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "8e3766b51fbd61f294f421f8be98cafe6bff47ff"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-audit-2026-07.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "41d288f5d8660337c969aaba0f4c56dddb3038d2"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-ack-policy-preflight.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "90985706d5b66a168e232a3c0056a378d33ae417"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-ack-policy-preflight_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "8dc855563d3bca0a3d7401c115d315fa3430a7d4"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-audio-metadata.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "36bfc8364cfce9707bbdb58b0053e0db6c9a6172"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-audio-metadata_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "83335ebe872b0ab4716753338578e50afa706023"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-auth-preflight.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "e17507fc5f66046d4815c36e77beaff0dbe4634b"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-auth-preflight_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "3c03351ed1f708bba4dc2ec02994123cc0a1f6dd"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-execution-checklist.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "e8dffd5922ae99736e220525283565f945210fb7"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-execution-checklist_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "d3b3bf508ce8b8525b139c5c338e030d5e2f59f2"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-hardening-plan.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "8771c62e6a8e70637609ee2a4e5fb18939633590"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-hardening-plan_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "d7ac452995bea5dfc5b62553020e849a7996dbc2"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-operation-ledger.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "0feb36ce299f60d2abcc6e20effa9404dc556ab5"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-operation-ledger_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "680c5f69e876d27a715b4341b8bc75198acc4e56"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-pipeline-preflight.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "e8de27cd225e095a59511cd70c596b465715f51a"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-pipeline-preflight_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "89877ac64a491bf1622d1561ef8878d1868ddeaa"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-pr16-integration.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "159fc6c9d6006a74bfc505c6de03edb52dd0ef2b"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-pr16-integration_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "4090e5fdec9f6d856b0ebd654d8c1fcf5078f79d"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-profile-assembly.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "3907bef79a6d895b90f20ebb95dac189d9868890"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-profile-assembly_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "02c1c565c2352ba1520a26373bb77c024d498fac"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-profile-preflight.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "ea747bd0b6ed77160c510495590efb2520378252"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-profile-preflight_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "0060bc724d27689e945168dfbb64d43555cb476d"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-schema-preflight.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "e6661fc6f493038da9d84fede07d14a1aa969629"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-schema-preflight_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "3bb10f0be8644b2bd18e5ae4c460279114ce5721"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-source-audit.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "324773368d678d7512f30d1b6c2dede7d64a0cf2"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-source-audit_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "b7857fc4dff2a1c997317f2b84d8ec10310f9cdd"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-source-index.ps1",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "c6e508b61e18bbc1c9038b8d850b9f7f6838dcd3"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-video-encoder.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "8de40e4f56fd57643994f4475c478df3fdebfc98"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-video-encoder_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "4270d5ddafb5d4141b2f1a28d093a569babc40e3"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-video-source.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "a6d6eb570eaa3f322c9eab3383fc7df4da45b086"
+        }
+      ]
     },
     {
       "path": "docs/active/mock-fidelity-video-source_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "a05341490329a3546ec80a1072f9e4b7446b1650"
+        }
+      ]
     },
     {
       "path": "docs/active/post-0.17-backlog.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "317b2e8c3f96160ec79447a06b89f139da63cfc5"
+        }
+      ]
     },
     {
       "path": "docs/active/post-0.17-backlog_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "1fe705fd1ae9b50846f8ee6293cf38104fec205d"
+        }
+      ]
     },
     {
       "path": "docs/active/release-0.17-approval.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "9f198aafc2a51a5072a412be885c21eb56047ff4"
+        }
+      ]
     },
     {
       "path": "docs/active/release-0.17-approval_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "bb5e1938f215b6e6c170271526e031211c08fa2d"
+        }
+      ]
     },
     {
       "path": "docs/active/release-0.17-cut.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "7ad5c9b2e2f3ee2a4428a7637d9eff257dbd14f8"
+        }
+      ]
     },
     {
       "path": "docs/active/release-0.17-cut_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "89b53c438b533ba3ecdd2bf53d06c84567762702"
+        }
+      ]
     },
     {
       "path": "docs/active/snapshot-auth-repair.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "7ecf868fc3276b002fbfd142bab95e89eefb77e5"
+        }
+      ]
     },
     {
       "path": "docs/active/snapshot-auth-repair_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "ad5c5ad956332bac2eadfbb50a3e17082038a13e"
+        }
+      ]
     },
     {
       "path": "docs/audio-metadata.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "70f4311b61baffffdf13a2efcbce06a86defc941"
+        }
+      ]
     },
     {
       "path": "docs/audio-metadata_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "0f4101fd6a95aa8809c51a727cd6637be812250c"
+        }
+      ]
     },
     {
       "path": "docs/cli-maintenance.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "055ac69c16fb0598a36339075774fe74c1482fff"
+        }
+      ]
     },
     {
       "path": "docs/cli-maintenance_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "04c2b94c532d3c3b90861802e56af38185892b06"
+        }
+      ]
     },
     {
       "path": "docs/dependency-pitfalls.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "da79e0b77b2ebdc404dc83c6deb2e6be963e9cdb"
+        }
+      ]
     },
     {
       "path": "docs/media-synchronization.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "b8c45d56e67c765fe483c38465e7b3a40331087a"
+        }
+      ]
     },
     {
       "path": "docs/media-synchronization_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "acff8bf2580fd7983ca59ee1721603523159bdee"
+        }
+      ]
     },
     {
       "path": "docs/media2-frame-rate.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "0488f11cd18c651ed7f60b4b5540c2d072c49eda"
+        }
+      ]
     },
     {
       "path": "docs/media2-frame-rate_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "5a44ed0a5866bc7d0e78635cdaf1065b51c1067f"
+        }
+      ]
     },
     {
       "path": "docs/mock-server.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "06c45b191738edde8f0a8a6bcda9dc6d24eeddd7"
+        }
+      ]
     },
     {
       "path": "docs/mock-server_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "60d35c67d5cfa4c62b814ad94565629556a847ac"
+        }
+      ]
     },
     {
       "path": "docs/oxvif-cli.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "f004015b358cc155f6e8a16c9bbf043020db7b9a"
+        }
+      ]
     },
     {
       "path": "docs/oxvif-cli_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "7649f71b9721b988c8a9984828745912d27a55c1"
+        }
+      ]
     },
     {
       "path": "docs/reference/media1.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "40ec4d5b1df25b88e210888db7822a19120b17a4"
+        }
+      ]
     },
     {
       "path": "docs/reference/media2.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "9682230dccd3ce97eb3e5d54156f68ae74a68848"
+        }
+      ]
     },
     {
       "path": "docs/releases/0.17.0-changelog.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "37e195b75ceb6089f623c10d12ca74bd3a011fe2"
+        }
+      ]
     },
     {
       "path": "docs/releases/0.17.0-changelog_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "b9b2b75a0f85b62386290ebf2f877d5fe829b2b2"
+        }
+      ]
     },
     {
       "path": "docs/releases/0.17.0.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "aef2d198be2389b08aae2132775c99ed7db4ee9e"
+        }
+      ]
     },
     {
       "path": "docs/releases/0.17.0_zh.md",
       "group": "DOCS",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "27caca3a60c06bd9965da00d0090eeebc47c419b"
+        }
+      ]
     },
     {
       "path": "docs/replay-storage.md",
@@ -732,6 +1461,12 @@
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Entire storage/report/privacy/downgrade guide reconciled with fixture, request equivalence, report iteration and ambiguous QuirkDiff behavior; reciprocal translation checked. No durability or full conformance claim."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "bfc577239e04b4a74e0f3300729eed13051ce689"
         }
       ]
     },
@@ -744,180 +1479,349 @@
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Entire paired translation checked against English storage/report/privacy/downgrade scope and inspected implementation."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DOCS",
+          "blob": "1e96f2debf4a9f92714754f80ab7f336c28a2f67"
         }
       ]
     },
     {
       "path": "examples/camera.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "c08142833248cca159f387aa1d93dd2240a4ac31"
+        }
+      ]
     },
     {
       "path": "packaging/SchemaVerifier.java",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "8694fd9f28ff1c6617f74fa7e10ebfb695090518"
+        }
+      ]
     },
     {
       "path": "packaging/check_source_sbom.py",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "e22cd64e56313452d143e5de3611e09b91d29d9d"
+        }
+      ]
     },
     {
       "path": "packaging/check_xml_features.py",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "0f4a597cf55633efe2ca97049077ee3db5c74d3f"
+        }
+      ]
     },
     {
       "path": "packaging/homebrew/oxvif.rb.in",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "efb39a4eb70a09391aca5e02100832b825598744"
+        }
+      ]
     },
     {
       "path": "packaging/qualify_xerces.py",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "fb205a1880688d8028d56a0a5b1198b813e74348"
+        }
+      ]
     },
     {
       "path": "packaging/schema-requirements.txt",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "43d2156e88d8587c7b2887804984325d6a50c515"
+        }
+      ]
     },
     {
       "path": "packaging/schema-sources.json",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "e61e8dadd3de4965acebcf941e239d1d0825fb9b"
+        }
+      ]
     },
     {
       "path": "packaging/test_check_source_sbom.py",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "06d70cbde413b19eba5a162cbcc67ef325f6767b"
+        }
+      ]
     },
     {
       "path": "packaging/test_verify_schemas.py",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "1e3c433983758dc9a94ca3e539fc4a86018a1be5"
+        }
+      ]
     },
     {
       "path": "packaging/test_xerces_tooling.py",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "9a2c3e85c0f7dfaaf92847d90b51473fab66af78"
+        }
+      ]
     },
     {
       "path": "packaging/verify_schemas.py",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "2b7e477a70127e14a759e93ecd6139ccda795e27"
+        }
+      ]
     },
     {
       "path": "packaging/verify_schemas_xerces.py",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "b30a6c64a2e53b4789b26a62c027147ce05c7f9c"
+        }
+      ]
     },
     {
       "path": "packaging/xerces-validator.json",
       "group": "DELIVERY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "DELIVERY",
+          "blob": "1ee64571f40c16d2362c5816141e55492fcd595a"
+        }
+      ]
     },
     {
       "path": "src/client/events.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed peer-listener diff and inherited notification HTTP reader inspected. TCP peer is not authenticated identity; inherited unbounded connection count/timeouts and lossy notification decoding are not solved by the additive API. Reconcile B17 scope and tests."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "5ab5f1ecbd8d746b1b2bad2e41207c7b596b24bd"
         }
       ]
     },
     {
       "path": "src/client/media.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed Media1 synchronization method inspected: escaped token, exact service Action and response path. Reconcile operation-card/Mock and public compatibility evidence."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "b2c16907425d534faf22311c85f8f15759df06c7"
         }
       ]
     },
     {
       "path": "src/client/media2.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed Media2 sync/profile/rate/metadata methods inspected. Reconcile serializers, public migrations, no-transport-on-invalid-value assertions and operation cards."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "8f06efeaa66139947a1c97c6228605e09d86efd1"
         }
       ]
     },
     {
       "path": "src/client/mod.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed exports/XML escaping prose inspected. Shared XML helper affects unchanged consumers; their coverage remains open."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "4ebc2cc91817e2c082dbc0613c3279d14de59d18"
         }
       ]
     },
     {
       "path": "src/health/checks.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "b7000c5e3b3bd9624d647952bd395c636fcf31c9"
+        }
+      ]
     },
     {
       "path": "src/health/mod.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "6c65615cf324fc809450fb125ef248fa4ad2c7cb"
+        }
+      ]
     },
     {
       "path": "src/health/snapshot.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "7dac64a74b4606ab8b2c79b1c6b659bf1a44eb39"
+        }
+      ]
     },
     {
       "path": "src/health/snapshot/tests.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "faea4462fabf01e4268602b8baec74884ab1b22a"
+        }
+      ]
     },
     {
       "path": "src/lib.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "1a7866cb9d7b5f7fc898015bf3eff8160cdedddf"
+        }
+      ]
     },
     {
       "path": "src/metamorph/adapter.rs",
       "group": "REPLAY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Full changed diff and AdapterRequest projection read with public hooks and metamorph_adapter_identity assertions: exact Action/scoped token/finite axes, raw input unchanged on declined typed handling. Ack-only/auth/fallback cross-chain review remains in Mock batch."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "REPLAY",
+          "blob": "786c33c14681f9d43f043d8f49a4d86dc69fce15"
         }
       ]
     },
@@ -930,18 +1834,30 @@
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "v0.16.0..b7bc881 collision-bucket/storage changes, exact/shared request comparison, public lookup/load/save claims and K27 tests reconciled with replay selection and report consumers. Distinct fixtures survive; legacy save atomicity and arbitrary-secret sanitization remain explicitly unclaimed."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "REPLAY",
+          "blob": "f08ee8a126d7598820f91d480ff479b880c26925"
         }
       ]
     },
     {
       "path": "src/metamorph/mod.rs",
       "group": "REPLAY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "All changed public storage, reports, adapter and committed-effect prose read; replay storage claims reconciled. Final cross-service committed-effect closure follows Mock service subgroup review."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "REPLAY",
+          "blob": "2d7b43e5354060d96d187be5ce9b183b8e7614a0"
         }
       ]
     },
@@ -954,6 +1870,12 @@
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Changed grouping-key docs/test request reconciled with unchanged per-fixture iteration/progress; no map-based loss introduced. Full-store ordinals, not filtered report positions, are the supported association."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "REPLAY",
+          "blob": "35caac75ca0762f7e6fc1f6d9c3168ff444ad4bb"
         }
       ]
     },
@@ -966,356 +1888,635 @@
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Changed collision grouping/diff logic and all added assertions reviewed together with report generation, stable row order, singleton path differences and bilingual replay-storage limits. Ambiguous groups retain all unmatched rows, not invented identity or defect-resolution claims."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "REPLAY",
+          "blob": "2e39d5bd65ea1849dc01813caf4f53c452b48a7b"
         }
       ]
     },
     {
       "path": "src/metamorph/replay.rs",
       "group": "REPLAY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Full production and changed test diff inspected, including effect_observer, tracks_commit, actual chain/server wiring and inherited standalone policy. Source/audio/metadata and existing video-rate replay assertions inspected; added V01 six-view Media2 encoder coverage. Remaining profile/binding and complete service-consumer closure is open."
+        },
+        "Closure pass: full production responder/transport read; 17 tracked exact writes use post-commit observers, 13 receipts never retire, instance-local sets. Exact affected Action sets traced; standalone and other writes retain documented coarse policy.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "REPLAY",
+          "blob": "745ca2b704d5a66ac5ac2c3a7d4d8c24066f438f"
         }
       ]
     },
     {
       "path": "src/mock/adapter_request.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Full private projection inspected with typed adapter tests. Supported exact Actions, scoped scalar identity and finite complete axes; unsupported spaces/timeouts decline typed API without altering raw fallback. No full service validator claim."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "54b5cdfcfb6978a365395484598a08fb21d42c3e"
         }
       ]
     },
     {
       "path": "src/mock/auth.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed scoped WS-Security authentication and tests inspected: qualified Header fields, digest requirements, safe fault text. Freshness/replay cache are not provided; reconcile dispatch precedence and scope docs."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "28780b7b2a5a480b26e630cdb893982aef11490d"
         }
       ]
     },
     {
       "path": "src/mock/canon.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Full changed projection/doc/test diff read with FixtureStore and report consumers. URL credentials scrubbed after decoded projection; keys remain deliberately non-unique. Wider inherited XML/render consumers remain part of shared-helper closure."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "7a4aaf2110402b7d379795173302525385335254"
         }
       ]
     },
     {
       "path": "src/mock/dispatch.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Closure pass: exact route resolver, qualified operation guard, receipt policy and Media/PTZ dispatch deltas inspected with identity/Action assertions. Legacy service fields remain unmigrated and static capabilities are not physical-effect evidence.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "bbb3ec8d1167568b0b975f3ad96c6d9523c7d1fa"
+        }
+      ]
     },
     {
       "path": "src/mock/effect.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Full effect enum/tracks_commit allowlist inspected against ReplayResponder and SyntheticResponder. Six-view VideoEncoderCommitted test expansion added; full service mutation/reference dependency reconciliation remains open."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "7d733100a038e7e3f34a313263da3dad5a467ead"
         }
       ]
     },
     {
       "path": "src/mock/fault.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "0268635d6688b1348cd6269bbca2eec1362ba7f7"
+        }
+      ]
     },
     {
       "path": "src/mock/helpers.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "920d9caa26c13c90e5d7d053ece3daa04ed479ac"
+        }
+      ]
     },
     {
       "path": "src/mock/mod.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "b5585e50d4a6dfe47bdb3179305163fa9d486219"
+        }
+      ]
     },
     {
       "path": "src/mock/policy.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Full receipt-policy source inspected: thirteen exact operations, deny by default, per-clone opt-in and no physical-effect claim. Reconcile service handlers and assertions."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "9ae69cb637d87f3d28c2b8736eb8e30cc86f9f0b"
         }
       ]
     },
     {
       "path": "src/mock/request.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Full bounded request tree and local tests inspected: limits, namespace scope, direct scalar/attribute access, operation shape, replay equivalence. Not XSD validation; shared handler/replay consumers and normative policy checks remain."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "292f04b53760543adb769557329a18aa8c7f6d73"
         }
       ]
     },
     {
       "path": "src/mock/responder.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Production responder chain inspected: injected fault, auth, raw/extra responder, synthetic dispatch and committed-effect observers. Remaining changed test bodies and replay integration remain open."
+        },
+        "Closure pass: full chain and tests read: armed fault -> auth -> extras -> synthetic; committed observer only from terminal effect. Raw extras remain deliberate escape hatch; no full HTTP/security claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "e16a03fc2a39afcc9497f4e86370ae503817007b"
         }
       ]
     },
     {
       "path": "src/mock/server.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed strict UTF-8, policy and commit-observer integration inspected. A01 prior evidence applies to identical code; remaining HTTP binding/fault semantics are not closed."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "677145d80634eecef24273063b32d765377e6871"
         }
       ]
     },
     {
       "path": "src/mock/services/audio_metadata.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Closure pass: full selectors/options/readers/candidates and atomic setters read. Distinct codec/wire ordering, multicast validation/readonly AutoStart, metadata duration ignored on write and replay effects traced; AM1 guide reconciliation remains.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "d6cc5835807f69a5da61e0ebf52bf676bffd5407"
+        }
+      ]
     },
     {
       "path": "src/mock/services/device.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "ba38d51bad72175bdadafb58cbbcf256e6e2eb8a"
+        }
+      ]
     },
     {
       "path": "src/mock/services/events.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "339293a8d10bdb96c1c3b27a4e1ab6dd3e0fa1a9"
+        }
+      ]
     },
     {
       "path": "src/mock/services/media.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Closure pass: profile allocation/delete/binding/reference-count/single-lock snapshot and nested renderers read; VS1/VE1/AM1 delegation and replay consumers traced. Imported dangling/invalid state, legacy OSD/URI and broad field/fault policies remain bounded limitations; final guide reconciliation still open.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "51b7e8cd61deec720ce7ff5ed951d68a0e9bbf00"
+        }
+      ]
     },
     {
       "path": "src/mock/services/media2.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Closure pass: Type projection on cloned profiles, initial/bulk binding plans, create/delete, codec attributes, shared source/encoder/audio/metadata delegates and capabilities read. Five modeled slots and exact service wrappers traced to selected test drivers; final guide reconciliation still open.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "2f3df6d466766b72711cef81acc05f151ed40357"
+        }
+      ]
     },
     {
       "path": "src/mock/services/mod.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "e02714b9716c847869c9552012c8dd1bbdfac556"
+        }
+      ]
     },
     {
       "path": "src/mock/services/ptz.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "a0b323e4278387ac3ddf3010018132477cc4deff"
+        }
+      ]
     },
     {
       "path": "src/mock/services/recording.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "787c054342d5a8d14b85c83f4a63e0fe57cca815"
+        }
+      ]
     },
     {
       "path": "src/mock/services/video_encoder.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Closure pass: full scoped candidates/options/views/instances read with VE1 card and replay consumer. Refusal precedes replacement, source-specific limits/adaptation, optional rate retention and Media1 refusal traced; test oracle limits recorded in review.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "895c1deeffb999fb5b60ce5570873a8a5a2184e2"
+        }
+      ]
     },
     {
       "path": "src/mock/services/video_rate.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Closure pass: full numeric candidate and Media1 view guard read; exact f32/i32 representability, finite/nonnegative checks and shared consumers reconciled with rate tests and VE1 card.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "0002dbf71d7ece04b8de9ecad2e0d7fe0218798f"
+        }
+      ]
     },
     {
       "path": "src/mock/services/video_source.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Closure pass: full candidates/options/get/set read with VS1 card and selected test audit; rejects before one commit, sensor-derived clamps/options, literal identities, read-only counts and ViewMode accepted in existing readonly test. Not physical routing or arbitrary imported-state validation.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "f3581d46835ab6044e08415362a2187ba23cd5b8"
+        }
+      ]
     },
     {
       "path": "src/mock/state.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Closure pass: public type/migration and complete mutation-hook production delta inspected; test audit confirms try_write/reentrant snapshot and deterministic intervening-commit assertions. Generic encoder-options widths can match first catalogue; partial refusal probes remain limited.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "b670a35913bc7180d5201e71b7abc3dadad3bdb4"
+        }
+      ]
     },
     {
       "path": "src/mock/transport.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed policy/auth/routing wiring inspected. Reconcile HTTP parity and shared dispatcher consumers."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "194750a85b2be8c8df19431456c61eac03b884c9"
         }
       ]
     },
     {
       "path": "src/session.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed delegation and migration prose inspected. Distinct Media1/2 service URLs preserved; cross-service tests need reconciliation."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "b2cde7f657cd0d4c3bf7db8aaa478c882758efb6"
         }
       ]
     },
     {
       "path": "src/soap/error.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "quick-xml API migration diff inspected; public error compatibility tests/claims need reconciliation."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "fb8949450705bcde9b3001de932bd52acd462ef4"
         }
       ]
     },
     {
       "path": "src/soap/xml.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "quick-xml string API and literal-whitespace escaping diff inspected. Compatibility DOM is not namespace-aware/XSD validation; shared consumer review remains."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "f02edb1a2d972ba783b433983142e47951d51e51"
         }
       ]
     },
     {
       "path": "src/tests/client/media2_tests.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "e8ced7e3d78d52abeec4f9af84c3917854ea6d93"
+        }
+      ]
     },
     {
       "path": "src/tests/client/media_tests.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "026864b31365cc5cfec6ebaf4c051eab971f1f74"
+        }
+      ]
     },
     {
       "path": "src/tests/client/notification_origin_tests.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "e1ac486f21f407790aa2ac86cf61be7e2aa59dbe"
+        }
+      ]
     },
     {
       "path": "src/tests/session_tests.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "337d59a6bb98a44c039b56340a2e0cae3e692de5"
+        }
+      ]
     },
     {
       "path": "src/tests/types_tests.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "T01: merge duplicate preset JSON test into actual XML-parsed Some/None positions with exact JSON and fields; Name perturbation fails. Other changed Media/metadata type assertions inspected in this pass.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "5f772a3dc8907a79aaaefd412cdd4c816caa8be7"
+        }
+      ]
     },
     {
       "path": "src/types/audio.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed repeated-item audio-options parsing inspected, including permissive legacy whitespace behavior. No broad strict-parser claim; reconcile tests and serializers."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "b4bed2d9828e729c18a8d25e51ca93568c958864"
         }
       ]
     },
     {
       "path": "src/types/events.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Additive ReceivedNotification type/prose inspected: unchanged NotificationMessage and unauthenticated socket peer semantics. Reconcile serialization/source-compatibility assertions."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "3b765b24d9d363ccd706c9d3455a872514cd9611"
         }
       ]
     },
     {
       "path": "src/types/media.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed metadata/multicast/duration validation and serialization diff inspected. Modeled subset is not a lossless arbitrary XML editor; reconcile other multicast consumers and tests."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "c455e1a834cacd2cc1d6bd564adde95cba19f7aa"
         }
       ]
     },
     {
       "path": "src/types/mod.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed type/export diff inspected with media migration; public coverage reconciliation remains."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "4cbc6733a0d7cf1cacfb04cf0318c65e4e7263af"
         }
       ]
     },
     {
       "path": "src/types/video.rs",
       "group": "LIBRARY",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_inspection",
           "date": "2026-09-12",
           "scope": "Changed fractional-rate and finite preflight paths inspected. Other inherited permissive fields are outside the new required-rate claims; reconcile dependent callers/tests."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "722621a6c0a43a2e77a65217df48bdbfa84196ed"
         }
       ]
     },
     {
       "path": "tests/media2_rate_control.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "2430899e56ca35ae40ccee8eaa025e73ad051f35"
+        }
+      ]
     },
     {
       "path": "tests/metamorph_adapter_identity.rs",
@@ -1326,116 +2527,265 @@
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Entire two-test file reviewed: typed identity/stream/move values, wrong routing/namespace/duplicate/nested/malformed/finite/space/timeout refusal, raw arguments preserved and unchanged full state. Covered by all-feature workspace gates; does not validate arbitrary ONVIF requests."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "REPLAY",
+          "blob": "0ec2d913340417392e6c31da5206fbd7f0861c13"
         }
       ]
     },
     {
       "path": "tests/mock_ack_policy.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: exact receipt selection/payload, state/hooks, auth/fault and recording retention; adapter hook counter is not wired. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "b3cd05d69f9cc3a2694e7b5bfa595c1d25c1e94e"
+        }
+      ]
     },
     {
       "path": "tests/mock_action_snapshot.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: independent probe states/exact code/reason, receipt policy; success flattened and subcode/detail omitted. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "a06abef1baca4b6122156e134a25d4f0edf552b0"
+        }
+      ]
     },
     {
       "path": "tests/mock_audio_metadata.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: catalogues/options/literal values/atomic refusals and replay; advertised cross-product loops can be vacuous. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "3107e52a64c312db897a4c0c9f6be8c7f93f3d16"
+        }
+      ]
     },
     {
       "path": "tests/mock_auth_scope.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: credential literal scope/rotation, full refusal state/hooks and HTTP 413; digest helper is not independent algorithm oracle. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "e5baddd19be104f5840f91f6cf51941b20ae390b"
+        }
+      ]
     },
     {
       "path": "tests/mock_binding_atomicity.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: late refusal exact fault/state/hooks, literal two-slot commit/counts and both transports. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "bf7b8dedde6d71df7cf6e78990d8ab422b18c844"
+        }
+      ]
     },
     {
       "path": "tests/mock_empty_profile_policy.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: wire empty variants, exact model refusal/state/hooks/allocation preservation; project policy. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "297886a980fa98b9da78c7658131f137d2d01470"
+        }
+      ]
     },
     {
       "path": "tests/mock_fidelity_known_gaps.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "T01: removed duplicate seeded-name case now covered more strongly in shared profile driver; five retained known-gap tests pass. Passing known-gap tests are not product fixes.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "6ae0c8702297b9c23f575ef2c0b91e825dbba18a"
+        }
+      ]
     },
     {
       "path": "tests/mock_fixture_key_credentials.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "3f53ac046a8e419eaa18c5e27d70eb2e4503a77a"
+        }
+      ]
     },
     {
       "path": "tests/mock_media1_media2_agree.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: semantic tuple/cross-service writes and nonempty options; normalization can mask same shared bugs. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "7e6f10e51059b40e8014930dc5f0aba40f8d9857"
+        }
+      ]
     },
     {
       "path": "tests/mock_media_profile_identity.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: literal scalar/attribute identity, binding/head/delete state; decoy expected partly same implementation. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "8ec25dff49754f2bcd54450cfae6cc53b244aa08"
+        }
+      ]
     },
     {
       "path": "tests/mock_media_sync.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: Media1/2/Events isolation, length boundaries and full receipt state/hooks; no media effect. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "cd154e0faf0e7134b4276dd496b658319039d409"
+        }
+      ]
     },
     {
       "path": "tests/mock_multi_sensor.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: exact two-source codec lists/fault messages; not all subcodes. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "f1466dabe3af530e9020bb9c8c0fe25feaaee952"
+        }
+      ]
     },
     {
       "path": "tests/mock_profile_assembly.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: initial binding/count/capacity, atomic late refusal and replay retirement; capacity is self-consistency. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "0f7e8fc0e9c08cba448177f1cd3a266182ec19a1"
+        }
+      ]
     },
     {
       "path": "tests/mock_profile_names.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "T01: seeded literal name moved into shared three-read exercise over HTTP and in-process, raw XML plus client values; changed seed causes both transport assertions to fail.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "35b19a3d76d6563311567c7d99a560eccc88f767"
+        }
+      ]
     },
     {
       "path": "tests/mock_profile_selection.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: exact Type/profiles/slots, faults and unchanged state; namespace-stripped payload parser. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "98df9aa00c1a8ab8079ceb227e06df79e5ede38c"
+        }
+      ]
     },
     {
       "path": "tests/mock_profile_snapshot.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: three reader paths and generation matching; bounded race probe, not forced interleaving. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "95026ee42bd47d22a48e810a18d69ed4f439d2ae"
+        }
+      ]
     },
     {
       "path": "tests/mock_ptz_profile_identity.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: 19-operation differential literal identity and full refusals; positive expected partly same implementation. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "9c836f79399c83117bd7bfdbd1fb5f8b00b69480"
+        }
+      ]
     },
     {
       "path": "tests/mock_replay_effects.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: failed writes preserve full state/markers, commit refreshes exact reads, fresh instance isolation; no hook observer. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "45de736780839004fa707357cd94d0043ecaf354"
+        }
+      ]
     },
     {
       "path": "tests/mock_replay_key_gaps.rs",
@@ -1446,92 +2796,190 @@
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Entire K27 file reviewed: ten actual equal-key/different-request pairs survive record/load/save and HTTP/in-process selection, ordinal reports retained, equivalent request replacement and distinct full Action controls. Existing restored all-feature run covers unchanged source."
+        },
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "310640a8afbc656cab4a0a87ad25698f9cc30bd6"
         }
       ]
     },
     {
       "path": "tests/mock_request_boundary.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: exact faults/state/hooks, namespace-aware QName and HTTP UTF-8/fault-survival controls. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "9b58a616b93b40d256b8321fa3a20edcca5f0bfd"
+        }
+      ]
     },
     {
       "path": "tests/mock_request_identity.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: exact aliases/fixed binding/literal deletion; not full state after every alias. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "caed0c43ebf6d5b0911dcc59172b36887bc1a7ca"
+        }
+      ]
     },
     {
       "path": "tests/mock_roundtrip.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: distinct audio values/read-only AutoStart/Media1 timeout retained; sibling and TTL assertions partial. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "1dcbc6cdd700c98f46ade805f6fd0ce67440d8c9"
+        }
+      ]
     },
     {
       "path": "tests/mock_schema_corpus.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: real client capture, scenario values/state, safe explicit export and negative paths; export is not XSD validation. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "63fec03f2bcc8197fd9222558f197401e85ab3c3"
+        }
+      ]
     },
     {
       "path": "tests/mock_schema_shape.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: namespace scope/QName/anchor/missing-resource/floors; ignored structural-only test, no lexical/semantic guarantee. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "e8c2e4b723edd4ee466207c1f7333c95b41eb466"
+        }
+      ]
     },
     {
       "path": "tests/mock_token_discrimination.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: HTTP profile identity exact; encoder-instance fingerprint can discriminate two errors. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "0e9d0affe8f46b7bf59e222fae5aa72b778e3e37"
+        }
+      ]
     },
     {
       "path": "tests/mock_video_encoder.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "V01 adds two Media2 encoder replay tests (in-process/HTTP), six affected views and two preservation controls; mutation suppressing VideoEncoderCommitted retirement exposes stale GetProfile. Existing contract helper and its Media1/2 controls partially read; complete original test-file review remains."
+        },
+        "Read-only assertion audit v0.16.0..44302c8: exact ordinary fault/state/hooks/adaptation and committed replay payload; replay invalid Quality root-only limitation. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "b72b16303034a6e2a05c69545e6aa3ae5420e293"
         }
       ]
     },
     {
       "path": "tests/mock_video_rate.rs",
       "group": "MOCK",
-      "status": "in_progress",
+      "status": "reviewed",
       "evidence": [
         {
           "kind": "source_and_assertion_review",
           "date": "2026-09-12",
           "scope": "Existing recordings/replay helpers and in-process/HTTP assertions inspected; they already test rate refusal retention, fractional committed readback, Media1 refusal and unrelated-source retention. Mutation also fails these two existing tests; V01 is expanded coverage, not the first replay test."
+        },
+        "Read-only assertion audit v0.16.0..44302c8: fractional readback, omitted rate, serde/nonfinite and refused/committed replay; bare Media2 profile recording not read after commit. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "479bf69f540c7d79d2ffbbda7ee4519c21c0e0da"
         }
       ]
     },
     {
       "path": "tests/mock_video_source.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: exact late/selector faults/state/hooks, sensor options/clamps and replay; profile replay checks root only. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "7280c633a05b29a69aecf7b5313857ce5f5a3de6"
+        }
+      ]
     },
     {
       "path": "tests/mock_workflow.rs",
       "group": "MOCK",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        "Read-only assertion audit v0.16.0..44302c8: rate/GOV/instance values, receipt opt-in, metadata TTL/AutoStart/duration; sampled lists and some shared faults. Review record describes limits; not an independent conformance claim.",
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "MOCK",
+          "blob": "d07e9105474144c5409b2bdf8c51a35746e3c5bb"
+        }
+      ]
     },
     {
       "path": "tests/notification_origin.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "45d02b95bd08848b24350e4d5d7d5c9fc500840c"
+        }
+      ]
     },
     {
       "path": "tests/xml_compat.rs",
       "group": "LIBRARY",
-      "status": "pending",
-      "evidence": []
+      "status": "reviewed",
+      "evidence": [
+        {
+          "kind": "closure_review",
+          "date": "2026-09-12",
+          "batch": "LIBRARY",
+          "blob": "1893d50c8c881649ed9ecfb31005636ff0aad6ad"
+        }
+      ]
     }
   ],
   "status_definitions": {
@@ -1540,20 +2988,141 @@
     "reviewed": "Source delta, consumers, assertions and claims reconciled against exact revisions."
   },
   "delta_paths": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
+    "CHANGELOG.md",
+    "LIBRARY_GUIDE.md",
+    "LIBRARY_GUIDE_zh.md",
+    "README.md",
+    "README_zh.md",
+    "crates/oxvif-cli/README.md",
+    "crates/oxvif-cli/src/credential.rs",
+    "crates/oxvif-cli/src/interactive.rs",
     "crates/oxvif-cli/src/lib.rs",
     "crates/oxvif-cli/src/main.rs",
     "crates/oxvif-cli/src/output.rs",
-    "CHANGELOG.md",
+    "docs/README.md",
+    "docs/active/cli-vim-navigation-plan.md",
+    "docs/active/cli-vim-navigation-plan_zh.md",
+    "docs/active/contributor-pr-integration-plan.md",
+    "docs/active/contributor-pr-integration-plan_zh.md",
+    "docs/active/mock-fidelity-ack-policy-preflight.md",
+    "docs/active/mock-fidelity-ack-policy-preflight_zh.md",
+    "docs/active/mock-fidelity-audio-metadata.md",
+    "docs/active/mock-fidelity-audio-metadata_zh.md",
+    "docs/active/mock-fidelity-execution-checklist.md",
+    "docs/active/mock-fidelity-execution-checklist_zh.md",
+    "docs/active/mock-fidelity-hardening-plan.md",
+    "docs/active/mock-fidelity-hardening-plan_zh.md",
+    "docs/active/mock-fidelity-operation-ledger.md",
+    "docs/active/mock-fidelity-operation-ledger_zh.md",
+    "docs/active/mock-fidelity-pipeline-preflight.md",
+    "docs/active/mock-fidelity-pipeline-preflight_zh.md",
+    "docs/active/mock-fidelity-profile-assembly.md",
+    "docs/active/mock-fidelity-profile-assembly_zh.md",
+    "docs/active/mock-fidelity-profile-preflight.md",
+    "docs/active/mock-fidelity-profile-preflight_zh.md",
+    "docs/active/mock-fidelity-schema-preflight.md",
+    "docs/active/mock-fidelity-schema-preflight_zh.md",
+    "docs/active/mock-fidelity-source-audit.md",
+    "docs/active/mock-fidelity-source-audit_zh.md",
+    "docs/active/mock-fidelity-video-encoder.md",
+    "docs/active/mock-fidelity-video-encoder_zh.md",
+    "docs/active/mock-fidelity-video-source.md",
+    "docs/active/mock-fidelity-video-source_zh.md",
+    "docs/active/post-0.17-backlog.md",
+    "docs/active/post-0.17-backlog_zh.md",
+    "docs/active/release-0.17-approval.md",
+    "docs/active/release-0.17-approval_zh.md",
+    "docs/active/release-0.17-cut.md",
+    "docs/active/release-0.17-cut_zh.md",
+    "docs/active/release-0.17-review-ledger.json",
+    "docs/active/release-0.17-review.md",
+    "docs/active/release-0.17-review_zh.md",
+    "docs/cli-maintenance.md",
+    "docs/cli-maintenance_zh.md",
+    "docs/dependency-pitfalls.md",
+    "docs/mock-server.md",
+    "docs/mock-server_zh.md",
     "docs/oxvif-cli.md",
     "docs/oxvif-cli_zh.md",
     "docs/releases/0.17.0-changelog.md",
     "docs/releases/0.17.0-changelog_zh.md",
-    "docs/active/release-0.17-approval.md",
-    "docs/active/release-0.17-approval_zh.md",
-    "docs/active/release-0.17-review.md",
-    "docs/active/release-0.17-review_zh.md",
-    "docs/active/release-0.17-review-ledger.json",
-    "tests/mock_video_encoder.rs"
+    "docs/releases/0.17.0.md",
+    "docs/releases/0.17.0_zh.md",
+    "src/lib.rs",
+    "src/mock/mod.rs",
+    "src/mock/state.rs",
+    "src/tests/client/device_tests.rs",
+    "src/tests/types_tests.rs",
+    "tests/mock_action_snapshot.rs",
+    "tests/mock_fidelity_known_gaps.rs",
+    "tests/mock_profile_names.rs",
+    "tests/mock_token_discrimination.rs",
+    "tests/mock_video_encoder.rs",
+    "tests/mock_video_rate.rs"
   ],
-  "delta_note": "Cumulative A04/V01 and review documentation after b7bc881. A04 was committed as 1ea4fff; V01 expands existing encoder replay coverage without production changes. Neither promotes versions nor closes the whole-candidate gates."
+  "delta_note": "Closure branch codex/release-0.17-closure starts at 44302c8. A05/T01 Rust commit 214d989 and Windows workflow guards 210bfc3 precede the final T02 assertion/document follow-up. Frozen inventory remains v0.16.0..b7bc881; all 208 rows and later deltas are reviewed, with source/affected consumer/assertion/public-claim closure recorded by group. Blob hashes identify actual reviewed inputs, not a percentage of release readiness. G01/G03 are LOCAL-PASS for the included cut. Full workspace all-feature/default follow-up: 1310/1198 pass, five ignored each, 41 suites; both Clippy/strict rustdoc modes, Rust 1.88 all-target/all-feature and document/inventory controls pass. Native/staging and remaining human/platform acceptance stay separate.",
+  "closure_batches": {
+    "CLI": {
+      "date": "2026-09-12",
+      "scope": "Changed command, selector, application, registry/fingerprint, maintenance, manage, navigation, rendering, preferences, output and descriptor/schema paths reconciled with affected unit/executable assertions and bilingual guides. A04/A05 preserve machine values; T01 tests actual native-backend redaction. Actual Windows ConPTY covers manage/profile/input/resize/cancellation and console restoration; other-platform terminal and packaged-native acceptance remain separate. Descriptor tests pin identity and first examples, not every prose assertion; reused navigation tests are a compile boundary, not extra behavior coverage."
+    },
+    "LIBRARY": {
+      "date": "2026-09-12",
+      "scope": "Changed Media1/2/client/session/type/XML/snapshot and notification paths, public reexports and camera example reconciled with wire/fault/type/serde/loopback/compatibility assertions and bilingual migration guides. Media sync is explicit and actuating; no real-stream acceptance inferred. Peer is TCP metadata; inherited HTTP listener is not Internet-hardened. Metadata is a modeled subset; signature recognition is not image decoding. Existing exact-input XML/corpus and real snapshot observations are reused with their recorded revisions, not counted as fresh tests."
+    },
+    "MOCK": {
+      "date": "2026-09-12",
+      "scope": "Selected request/auth/Fault/dispatch, profile/name/identity/binding/snapshot/hook, PTZ profile/head, source/encoder/rate and audio/metadata changes and affected inherited helper consumers reconciled with source, operation cards, both-transport/state/replay/wire assertions and corrected public claims. Test-value audits preserved useful boundaries and strengthened exact Fault/profile/union/capacity assertions. Thirteen receipt-only operations are default-refused; arbitrary raw responses, remaining legacy field/Fault/HTTP/capability semantics and concurrent replay visibility retain explicit limits. This review accepts the included change scope, not all W00-W26 or ONVIF conformance."
+    },
+    "REPLAY": {
+      "date": "2026-09-12",
+      "scope": "Fixture/parse/report collision-bucket migration, request-aware equivalence, typed adapter projection, responder fault/auth/raw ordering and selected committed-effect retirement reconciled with K27 and identity/retention controls plus bilingual storage and Mock guides. Exact raw recording remains caller-owned; key-only ambiguous lookup refuses; downgrade may collapse entries and lost historical recordings cannot be recovered. Generic legacy invalidation and concurrent publication are not promoted to complete transactional guarantees."
+    },
+    "DELIVERY": {
+      "date": "2026-09-12",
+      "scope": "Manifest/lockfile changes, CI and complete release workflow, pinned schema/Xerces tools, external source closure, packaging controls, source-SPDX checker and Homebrew template reconciled with test assertions and contribution/release documentation. All 24 packaging controls retained in dedicated Ubuntu/Windows jobs. CI/release native-exit guards have local negative controls. Source SPDX includes dev/other-platform dependencies; binary scan is separate. Current-source review does not accept the old hosted SHA or replace final-candidate native, staging and final-version package/install gates."
+    },
+    "DOCS": {
+      "date": "2026-09-12",
+      "scope": "Changed public guides, paired migrations, release summaries/full record, repository instructions and historical execution cards reconciled with their source/test consumers and dated evidence. Current claims distinguish 159 routes/161 Action declarations/191 reader sites from the 160-instance corpus; indexed readers are scanner observations. Old checkpoint defects/counts remain dated; current candidate status belongs to release-cut/approval/review. Draft links use the candidate branch, versions remain 0.16.0, and published CHANGELOG history is preserved. No new external-source, hardware, full-programme or hosted acceptance is inferred from prose review."
+    }
+  },
+  "delta_reviews": [
+    {
+      "path": "crates/oxvif-cli/src/credential.rs",
+      "status": "reviewed",
+      "date": "2026-09-12",
+      "blob": "58bc7791488c1a373329462d98a69ab4cb6f53e1",
+      "scope": "CLI native-backend error redaction and exact synthetic-secret assertion reviewed with the real adapter consumer."
+    },
+    {
+      "path": "docs/active/release-0.17-review-ledger.json",
+      "status": "reviewed",
+      "date": "2026-09-12",
+      "scope": "Review ledger structure, all frozen statuses, delta path coverage and per-file blob hashes validated; the ledger itself is identified by its containing commit to avoid a recursive self-hash."
+    },
+    {
+      "path": "docs/active/release-0.17-review.md",
+      "status": "reviewed",
+      "date": "2026-09-12",
+      "blob": "48e2ba66ff2c8cf7a420f708330fc89e64d51440",
+      "scope": "Final repair/evidence/backlog and bilingual release claims reconciled with the six closure batches and reserved acceptance gates."
+    },
+    {
+      "path": "docs/active/release-0.17-review_zh.md",
+      "status": "reviewed",
+      "date": "2026-09-12",
+      "blob": "0ab9ad1e7e85d993057bc792c88e29d21e416338",
+      "scope": "Final repair/evidence/backlog and bilingual release claims reconciled with the six closure batches and reserved acceptance gates."
+    },
+    {
+      "path": "src/tests/client/device_tests.rs",
+      "status": "reviewed",
+      "date": "2026-09-12",
+      "blob": "b5005885c6366c08a9df98d7b4cf1e27a23672f2",
+      "scope": "Capability Fault parsing with and without xml:lang reviewed with exact reason/consumer assertions."
+    }
+  ]
 }

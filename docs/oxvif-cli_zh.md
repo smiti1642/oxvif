@@ -412,6 +412,9 @@ JSONL 每台裝置輸出一筆 `fleet_item`，最後再輸出一筆 `fleet_summa
 JSON／JSONL 保留原始值；自動化應解析結構化輸出，不應將畫面上的跳脫表示
 複製成 profile token 或裝置識別碼。
 
+全螢幕選單及文字顯示也會先轉義雙向文字格式控制字元，再量測欄寬、截斷及換行；
+選取時仍使用原始資料。
+
 `--output table` 是預設的人類輸出；`json` 適合單一 structured result；`jsonl` 適合 fleet
 串流。Structured error 會在 stdout 保持合法 JSON/JSONL，診斷訊息則不應污染資料流。
 

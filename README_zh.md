@@ -33,8 +33,8 @@ library 與命令列工具，涵蓋裝置探索、裝置管理、Media1／Media2
 ## 安裝
 
 下一版 **0.17.0** 正在驗收，尚未發布；重點為引導式 CLI 維護及選定 Mock 契約
-強化，包含原始碼不相容遷移。參閱[簡要摘要](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0_zh.md)
-或[完整變更與遷移](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0-changelog_zh.md)。
+強化，包含原始碼不相容遷移。參閱[簡要摘要](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0_zh.md)
+或[完整變更與遷移](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0-changelog_zh.md)。
 
 在應用程式中加入 oxvif 0.16：
 

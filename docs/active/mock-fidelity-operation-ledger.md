@@ -2,7 +2,8 @@
 
 [English](mock-fidelity-operation-ledger.md) | [繁體中文](mock-fidelity-operation-ledger_zh.md)
 
-Source baseline: `b134f73`, 2026-09-10. This is a project-source inventory,
+Initial source baseline: `b134f73`, 2026-09-10; rows include subsequent named batches.
+This is a project-source inventory,
 not an ONVIF schema catalogue or a claim of conformance. Including B16, it lists all **159**
 literal route arms in the **10** production sub-dispatchers. These counts are
 not the number of fully verified operations or all operations ONVIF defines.
@@ -71,6 +72,11 @@ PA1: profile assembly, capacity and reference-count subgroup; see [batch record]
 
 VS1: eight source read/write/options operations; see [batch evidence and limits](mock-fidelity-video-source.md). Rows remain PARTIAL, not full schema/device-contract acceptance.
 
+AM1 identifies the [15-operation audio/metadata subgroup](mock-fidelity-audio-metadata.md).
+The [0.17 cut](release-0.17-cut.md) accepts selected R01–R08 contracts separately
+from whole-programme C/R/F/B/V completion; no TODO/PARTIAL row is promoted by a
+release or by matching inventory counts.
+
 ## device
 
 [dispatch_device](../../src/mock/dispatch.rs) · [services/device.rs](../../src/mock/services/device.rs)
@@ -127,8 +133,9 @@ VS1: eight source read/write/options operations; see [batch evidence and limits]
 ## media
 
 P2 is the [paired profile identity migration](mock-fidelity-profile-preflight.md#media-profile-identity).
-It does not close complete field/fault policy, empty-token handling or other
-configuration tokens. P1 and P2 together remain partial operation acceptance.
+It does not close complete field/fault policy or every configuration token.
+K30 subsequently supplies the bounded empty-profile-token policy; PA1 supplies
+modeled assembly/capacity behavior. These slices remain partial operation acceptance.
 
 [dispatch_media](../../src/mock/dispatch.rs) · [services/media.rs](../../src/mock/services/media.rs)
 
@@ -316,15 +323,17 @@ rtk powershell -NoProfile -File docs/active/check-mock-fidelity-inventory.ps1 -S
 ```
 
 The read-only checker compares route keys, handler symbols, arguments and
-bilingual tracking, rejects duplicates/empty inventories and detects unsupported
-dispatch syntax. Its in-memory self-tests do not edit source or use a camera.
+bilingual tracking, plus literal Action declarations and the five reader spellings
+indexed in the source audit. It rejects duplicates/empty inventories and supported
+classes of source-shape drift. Its in-memory self-tests do not edit source or use a camera.
 It is a source-shape check, not a Rust AST, call-graph or normative validator.
-It does not inspect handler internals or prove Action URI/body agreement.
+It does not audit handler semantics or prove runtime Action URI/body agreement.
 W00/W02/W07 cover those separate checks. The W22 source-inventory sub-slice is
 wired in `.github/workflows/ci.yml` for Windows and Linux, using PowerShell 7
-and `-SelfTest`; `package` depends on its success. Hosted execution has not yet
-been observed. External-schema CI and repository required-check settings remain
-separate, unfinished acceptance work.
+and `-SelfTest`; `package` depends on its success. External-schema CI is also wired
+for the selected corpus. Hosted results are revision-specific in the
+[release evidence](release-0.17-cut.md#evidence); this source-shape check does not
+establish final-candidate CI acceptance or repository required-check settings.
 
 Local W22 evidence (2026-09-10): PowerShell 7 executed the exact CI command;
 all 16 rejection controls and real-source reconciliation passed. Temporarily

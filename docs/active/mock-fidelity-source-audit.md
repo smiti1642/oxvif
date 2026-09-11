@@ -8,7 +8,8 @@ implemented; see [storage migration](../replay-storage.md) and
 and containment records below are historical evidence, not the current storage
 behavior. The remaining W19 work is not complete.
 
-Source baseline: `892aa94`, audited 2026-09-10. Work: W00 and W02.
+Initial source baseline: `892aa94`, audited 2026-09-10; the index below includes
+subsequent named migrations and B16. Work: W00 and W02.
 This is measured project-source indexing, not a schema catalogue.
 [Execution checklist](mock-fidelity-execution-checklist.md) · [Operation ledger](mock-fidelity-operation-ledger.md)
 
@@ -46,6 +47,11 @@ This is measured project-source indexing, not a schema catalogue.
   invocation changes, closures and custom readers require manual review. A new
   method need not use a constant named ACTION; inspect request call sites too.
   Compare the index with `rg`, do not mistake equality for normative acceptance.
+
+The [0.17 cut](release-0.17-cut.md) defines R01–R08 selected contracts and their
+release gates. These counts do not close those gates, transitive review, W00–W26
+programme work or every operation's field/fault semantics. Historical run totals
+below remain evidence for their recorded inputs, not a current-candidate rerun.
 
 ## Action declarations
 
@@ -314,12 +320,12 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 
 | Owner | Direct consumers / use | Required transitive review |
 | --- | --- | --- |
-| W08 | `auth::validate_ws_security`: Username/Password/Nonce/Created scalar extraction | AuthResponder, exemption selector and Device user mutations; migrate within auth boundary, never by body-wide lookup |
-| W19 | Legacy `canon::canonicalize` key DOM plus `request::recording_equivalent` secondary replay check | Fixture keys, masking, recording, adapter and invalidation remain separate from synthetic routing/fault policy; exact raw replay retained, selected identity collisions contained without rewriting stored keys |
-| W17 | `discovery_responder::probe_reply`: DOM | UDP Probe matching, QName scope and input bounds; not the SOAP synthetic entry point |
-| W10 | Media profile scalar selectors and create fields; DeleteProfile strict reader; `bind_configuration`/`unbind_configuration`; scoped `video_source` subtree contract; scoped `video_encoder` contract; remaining audio write helpers | Media2 wrappers reuse shared helpers; replace fragment contracts with parsed values/subtrees, not decode-and-reinsert strings |
+| W08 | `auth::validate_ws_security`: migrated scoped Username/Password/Nonce/Created parsing | AuthResponder, exemption selector and Device user mutations remain shared consumers; no legacy auth reader site remains in this index, but full security semantics remain separate |
+| W19 | Legacy `canon::canonicalize` key DOM plus `request::recording_equivalent` replay comparison | Fixture keys, masking, recording, adapter and invalidation remain separate from synthetic routing/fault policy; K27 now retains collision buckets with request-aware selection, while legacy key normalization and broader semantics remain separate |
+| W17 | `discovery_responder::probe_response`: DOM | UDP Probe matching, QName scope and input bounds; not the SOAP synthetic entry point |
+| W10 | Migrated Media profile/create/delete/binding readers and shared `video_source`, `video_encoder`, `audio_metadata` scoped contracts | Media2 wrappers reuse shared helpers; these completed migrations remain transitive-review context, not remaining legacy-reader sites; broader per-field/model limitations remain in their batch cards |
 | W10 | Media OSD helpers, colour/position attributes and nested TextString; configuration option selectors | Rendering and typed parsers, list filtering, quota/state; `_force_use_extract_all` is not a routed behavior |
-| W10 | `media2::configuration_plan`: scoped repeated Type/Token references shared by create/add/remove | Complete value plan, optional rename and reference counts commit atomically; see [assembly batch](mock-fidelity-profile-assembly.md). Nested configuration writers remain separate work. |
+| W10 | `media2::configuration_plan`: scoped repeated Type/Token references shared by create/add/remove | Complete value plan, optional rename and reference counts commit atomically; see [assembly batch](mock-fidelity-profile-assembly.md). VS1/VE1/AM1 separately implement selected nested writers; wider fields and physical compatibility remain open. |
 | W11 | PTZ selector scalars, nested operation/config/tour/space fragments and coordinate attributes | Profile-to-node resolution; `min_max`, range/vector readers, per-head slots and repeated tour spots |
 | W12 | Imaging source selector and scalar setting reads | Source resolution and nested settings; current parse-failure/default behavior is not the target contract |
 | W13 | Device scalar fields, repeated scopes/users/IP entries, storage/network/relay attributes/subtrees | Multi-entry validation, auth state, IO queue, change hooks; audit every field rather than replacing the helper mechanically |
@@ -328,7 +334,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | W04/W23 | Test-only strict/legacy/discovery readers | Keep lexical helper unit tests distinct from independent protocol assertions; do not use legacy extraction to prove corrected wire output |
 
 The work packages above own all indexed entries, including the non-routed
-synthetic helper touch. Per-field meanings and every transitive wrapper remain
+synthetic helper touch, and retain migrated shared consumers for context. Per-field meanings and every transitive wrapper remain
 W01/W02 work; the index must not be marked as a finished migration.
 
 ## New findings
@@ -349,8 +355,8 @@ while the complete dependency graph remains open.
 | K31–K33 — selected VS1 paths repaired | Old-code regressions reproduced crop-dependent options ceilings and success on invalid final fields. The batch mutation demonstrated source-selection and full-state refusal assertion sensitivity. | W01/W10/W17–W19: complete scoped candidates commit atomically; sensor-derived options, escaped identities and post-commit replay invalidation. Both transports, 70 external instances and limits are in [VS1](mock-fidelity-video-source.md); scalar attributes, arbitrary imported snapshots and physical routing remain incompletely modeled. |
 | K29 — shared escaping corrected | `types::xml_escape` escaped markup but emitted CR/LF/tab literally even for attributes. New wire/value assertions and both-transport profile Name cases failed on the old helper. | W03/W10/W06 shared representation slice: emit numeric character references, preserve ordinary borrowed values and literal Name state/read behavior; raw renderers, token-reader closure, schema field constraints and invalid XML characters remain separate. |
 | K30 — empty profile policy corrected | Both transports reproduced committed empty-token state after a client parse failure. Explicit empty Create/read selectors now refuse with Sender/mock:RequestPolicy before effects; lists with empty seeds return Receiver, preserving snapshots and valid individual reads. | W01/W10/W06 bounded mock policy, not a normative xs:string restriction. Raw/client state, hooks, allocation, replay and independent policy-Fault controls are in the profile preflight; other seed and field constraints remain open. |
-| K27 — substitution contained, index still collides | `mock_replay_key_gaps` retains the six original stored-key collisions and adds body ephemera, mixed-content ordering and xsi:type namespace controls. Replay now rejects unconfirmed scoped identity matches and falls through to synthetic. | W19 partial: both transports and exact raw/qualified-header controls pass; index/file shape unchanged, overwritten recordings unrecoverable, full key migration and other QName/HTTP/protocol semantics remain open. |
-| K28 | Recorded request URL credentials survived in `key_canon`; old persisted keys were loaded unchanged. Synthetic assertion failures reproduced both defects. | W19: scrub projected URL pairs for recording/replay/diff and legacy loaded/caller lookup keys; loading does not rewrite disk, normalization collisions remain last-write-wins. Raw-envelope redaction is still targeted, not a general secret detector. |
+| K27 — collision storage repaired after containment | The earlier six-pair containment checkpoint is superseded by ten collision pairs checking distinct payload retention, save/load, lookup, reports and both replay transports. | W19 partial: collision buckets preserve distinct requests and key-only ambiguity returns None; equivalent requests still replace. Old overwritten recordings remain unrecoverable; broader QName/HTTP/protocol semantics remain open. See the release evidence linked above. |
+| K28 | Recorded request URL credentials survived in `key_canon`; old persisted keys were loaded unchanged. Synthetic assertion failures reproduced both defects. | W19: scrub projected URL pairs for recording/replay/diff and legacy loaded/caller lookup keys; loading does not rewrite disk. K27 subsequently preserves distinct requests after normalization while equivalent requests replace. Raw-envelope redaction is still targeted, not a general secret detector. |
 | K24 | Media2 audio vocabulary differs from Media1. | AM1: G711/PCMU, AAC/MP4A-LATM; ONVIF G726 + bitrate. [AM1](mock-fidelity-audio-metadata.md) |
 | K25 | AutoStart was inferred from an address or directly writable. | AM1: readonly input validated/ignored; non-streaming defaults false. |
 | K26 — selected codec views repaired | VE1 H265 write/read and Media1 top-level refusal are covered; both profile renderers share the same representability guard. | W01/W10/W17: retain codec identity and refuse incompatible Media1 views; no silent conversion or schema weakening. See VE1 evidence and synthetic limits. |
@@ -360,18 +366,19 @@ while the complete dependency graph remains open.
 | K37 | AM1 corpus 08 rejected multi-value integer Items; client previously read only the first Items. | AM1: one integer per element, read all Items; corpus 09 passes 148 Xerces instances. |
 | K23 | Windows CI run 34471659927 (`2a488be`) failed `line_number_override_is_validated_but_never_changes_agent_or_plain_output`: bytewise JSON comparison included independently measured `meta.elapsed_ms` (0 versus 9). | W22 test-harness repair: require numeric timing, omit only that exact field from JSON equality, keep all other fields, stderr and plain-output checks; add deterministic timing/data/type controls. Do not alter CLI output or hide other metadata. |
 | K12 | Source comment at `media::bind_configuration` describes binding a fixed profile as a mock deviation. Official Media1/Media2 §4.1 distinguish deletion from configuration changes. | Correct the comment and preserve legal binding; do not “repair” it by making fixed profiles immutable. References below. |
-| K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; capacity and other CreateProfile semantics remain open. |
+| K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; PA1 subsequently implements modeled capacity/assembly, while complete CreateProfile semantics remain open. |
 | K14 — fixed after baseline | DeleteProfile now uses an explicit committed-outcome predicate; NotFound/Fixed do not notify, Deleted notifies once. | W18 partial; regression checks full state, both services, hook count and public-helper compatibility. Replay remains separate K17. |
 | K15 — Name and selected profile-token paths repaired | Both CreateProfile Name readers decode scalar text; Media1 Create/GetProfile and six binding entries use scoped profile identity. Both profile renderers escape Name and token attributes once. | W10; P2 workflow/refusal controls and PTZ1 support selected token paths. K30 closes the empty-token policy; A1 scopes typed adapter identity and representable movement arguments. Recorded keys, other adapter options and nested configuration text remain open. |
-| K16 — partial repair | Media2 profile-list selection is repaired in `c6af85b`; create reads Name only; binding validates and commits one complete value-based plan. | Late-invalid-token partial writes and selected read semantics have state/hook/HTTP controls. Create/name/binding Type=All/conflicts and broader field/output validation remain W01/W10 work. |
+| K16 — selected selection/assembly repairs | Media2 profile-list selection is repaired in `c6af85b`; PA1 subsequently adds initial create configurations, optional rename, Type=All/conflict handling and complete value-based binding plans. | Late-invalid-token refusal, selected reads and assembly have state/hook/HTTP controls. Full per-field/output validation and physical compatibility remain W01/W10 work; see the assembly card's limits. |
 
-K23 is now repaired in the test harness only. Deterministic controls distinguish
+At the K23 checkpoint, the repair changed the test harness only. Deterministic controls distinguish
 timing-only changes from data/command changes and reject invalid timing types.
 Broadening the comparison mask and bypassing type validation made both new
 controls fail in a full-workspace all-feature no-fail-fast mutation run; restored
 formatting, both Clippy modes, 1,181 all-feature and 1,097 default tests passed
 (5 ignored, 21 suites each). No CLI production output or public schema changed;
-the next hosted run must still confirm the repaired gate.
+that checkpoint required a subsequent hosted run. Later candidate CI evidence is
+tracked in the release cut and does not follow from these historical totals.
 
 K12 reference conclusions were checked against
 [Media1 v24.12 §4.1](https://www.onvif.org/specs/2412/ONVIF-Media-Service-Spec-v2412.pdf)
@@ -395,14 +402,16 @@ late unknown, wrong-family and empty tokens, complete success visible in both
 Media views, fixed-profile changes, repeated removals and one callback observing
 both committed slots. Missing mandatory values are checked before state lookup;
 this changes error precedence for requests containing multiple distinct errors.
-Other K16 semantics remain open; this is not full binding conformance acceptance.
+PA1 subsequently adds create/name/All/conflict semantics within its stated model;
+this remains short of full binding conformance acceptance.
 
 K13 now has a corrected both-service collision regression and private helper
 controls for the counter boundary, duplicate full-state/hook preservation and
 concurrent generated/explicit allocations. The duplicate check and insertion
 share the write lock; only a Created outcome notifies. The persisted u32 field
-remains compatible as a wrapping search hint. This does not enforce the advertised
-profile capacity or repair parsing, rendering, initial bindings or replay.
+remains compatible as a wrapping search hint. That allocation-only repair did not
+enforce advertised capacity or repair parsing, rendering, initial bindings or replay;
+subsequent P2/PA1 and committed-effect slices address selected parts separately.
 
 Subsequent K14 repair replaces that known-gap expectation with
 `rejected_delete_preserves_state_and_hook_but_success_notifies`. The original
@@ -425,13 +434,17 @@ rtk rg -n 'extract_tag|extract_all_tags|extract_attr|required_text|XmlNode::pars
 The checker now verifies both this source index and the operation ledger.
 Its extra controls cover changed/missing/duplicate entries, unsupported Action
 expressions, unknown Action families and extra URI segments; reader controls
-distinguish production from test calls and preserve occurrence counts.
+distinguish the scanner's before/inside-top-level-test-module scopes and preserve
+occurrence counts. The `production` label is a source-position convention, not
+a compiled-code or behavior classification.
 
-Next: complete W01 profile/binding cards and transitive W02 paths; reproduce
-K13–K16 without real-camera writes, then satisfy W03–W06 before broad handler
-migration. No change to runtime Action acceptance is claimed in this audit.
+The initial handoff called for K13–K16 reproduction and W01/W02 readiness.
+Those reproductions and selected repairs are now recorded above; do not repeat
+them as undiscovered gaps. Remaining programme work is the unaccepted field and
+transitive paths; current release sequencing follows R01–R08 in the release cut.
+This source index itself does not enforce runtime Action acceptance.
 
-Verification at this checkpoint (Windows, isolated `target/mock-fidelity-build`):
+Historical verification at the initial checkpoint (Windows, isolated `target/mock-fidelity-build`):
 formatting and both workspace/all-target Clippy configurations passed;
 workspace all-features tests: 1,146 passed, 4 ignored; workspace default tests:
 1,066 passed, 4 ignored. Totals include the four deliberately passing known-gap
@@ -440,6 +453,7 @@ ten and additional six rejection controls; 264 local links/anchors across ten
 planning documents resolved. No external schema gate, other native OS run,
 real-camera command, publication, merge or installed-binary update occurred.
 
-Handoff: W00 DONE for literal source reconciliation; W01 IN-PROGRESS and W02
-PARTIAL. The first 13 cards now exist and K13–K16 have the reproductions above;
-next work is their remaining contract/design readiness, not repeating discovery.
+Programme handoff: W00 DONE for literal source reconciliation; W01 IN-PROGRESS
+and W02 PARTIAL. The initial 13 cards and K13–K16 reproductions have subsequent
+bounded repairs; remaining contract/design work stays in the programme backlog,
+not an automatic prerequisite to the selected 0.17 cut.

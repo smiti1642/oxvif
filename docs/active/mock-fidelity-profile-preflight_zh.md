@@ -7,6 +7,15 @@
 負責者：目前 hardening 分支。[施工檢查表](mock-fidelity-execution-checklist_zh.md) ·
 [來源索引](mock-fidelity-source-audit_zh.md) · [逐操作清冊](mock-fidelity-operation-ledger_zh.md)
 
+2026-09-12 證據核對：本卡保留各日期的實作檢查點，包含當時缺口、測試數量及外部
+執行紀錄，不代表新一次驗收。選定 R03–R05 目前包含 P2／K30 profile 身分與空 token
+政策、A1 typed-adapter 路由，以及 PA1 profile assembly／容量／reference effect；
+見 [profile assembly](mock-fidelity-profile-assembly_zh.md) 與
+[Release 審查](release-0.17-review_zh.md)。K27 已在本機修復：collision bucket
+保留不同 request，replay 採 request-aware lookup；見[儲存遷移](../replay-storage_zh.md)。
+Legacy canonical key 仍可能碰撞。這些局部修正不代表 W00–W26、全部 profile 欄位、
+replay 相依圖、HTTP binding 符合性或實機驗收已完成。
+
 | 章節 | 用途 |
 | --- | --- |
 | [範圍與身分](#範圍與身分) | 確切 13 個操作工作卡 |
@@ -212,10 +221,11 @@ payload 觀測取代。不宣稱新增 schema instance 或 native HTTP adapter �
 
 ## Profile-token 依賴追蹤
 
-來源檢查點 `4220ec2`，2026-09-11；W02／W10／W11／W19。本節在變更儲存表示前
-盤點 profile 身分路徑，不宣稱已審查所有 configuration token 或 PTZ operation。
+來源檢查點 `4220ec2`，2026-09-11；W02／W10／W11／W19。下表是變更儲存表示前的
+歷史 profile 身分路徑；P2、PTZ1、A1 與後續 K27 修正已取代表中的對應待辦敘述。
+不宣稱已審查所有 configuration token 或 PTZ operation。
 
-| 路徑 | 目前 reader／consumer | 成對遷移責任 |
+| 路徑 | 此檢查點的 reader／consumer | 此檢查點的成對遷移責任 |
 | --- | --- | --- |
 | Media1 建立與讀取 | `handle_create_profile` 的 optional Token 與 `resp_profile` 的 ProfileToken 仍用 fragment；`render_profile` 原樣輸出 profile token attribute | Scoped optional／required scalar decoding 與 attribute escaping 同步遷移；保留顯著空白，區分 character reference 與 literal attribute whitespace |
 | Media2 讀取／刪除 | `resp_profiles_media2` Token 與兩個 DeleteProfile reader 已用 Node；`render_profile_media2` 原樣輸出 token attribute | 兩種 view 保留 decoded 身分；不再次 decode 已保存的 literal string |
@@ -236,7 +246,9 @@ Adapter 與 replay 未各自驗證前，不可稱為閉合。Empty-token、長�
 
 ## 範圍與身分
 
-下表是各操作工作卡的「目前行為」部分；13 張工作卡均繼承下方共用路徑、
+下表保留 P2／K30 之後、PA1 之前的逐操作快照；Token fallback、忽略初始
+Configuration／Name、容量及一般 Fault 敘述均屬歷史，PA1 後來已變更這些路徑。
+現況以連結的 profile-assembly 卡及逐操作清冊為準。13 張工作卡均繼承下方共用路徑、
 參考審閱及 C01–C12。輸入是既有原始碼觀察，**不是**規範欄位表或核准的預設值。
 各操作完整 Action URI／來源方法已分別記錄於來源索引；
 handler 位於 `src/mock/services/media.rs`／`media2.rs`，dispatch 位於
@@ -275,15 +287,16 @@ fault 優先於表列操作專屬分支。CreateProfile Name 與 Media2 GetProfi
 - Request：session wrapper（含 Media 版本偏好／fallback）→ client method →
   `OnvifClient::call` envelope／security → MockTransport／MockServer →
   FaultResponder → AuthResponder → 選用 replay → SyntheticResponder → dispatch。
-  13 個 client 方法會 escape 呼叫者字串；舊 mock 擷取不解碼。共用 identity／XML
+  13 個 client 方法會 escape 呼叫者字串；舊 mock 擷取曾不解碼。共用 identity／XML
   驗證現在也涵蓋靜態 handler。
 - Scalar：`xml_parse::{extract_tag,extract_all_tags,extract_attr}` 依 local name
   找位置並傳回裁切／raw fragment；Delete 使用已解析 operation 的 scalar accessor。
-  Binding 現在將擷取的值傳入共用原子 plan，不再合成及重複解析單筆 XML。
-  有 scope 的輸入解碼仍待獨立 parser 遷移。
+  P2 與 PA1 亦遷移選定 profile／configuration 身分欄位。Binding 將 decoded 值
+  傳入共用原子 plan，不再合成及重複解析單筆 XML；其他舊欄位仍須遷移 scoped reader。
 - Create：explicit duplicate 檢查與新增現在使用同一 write lock；產生 token 時跳過已用身分。
-  新增 `ProfileEntry` 的 configuration slot 全為 None，fixed 為 false；未建模
-  capacity 檢查。Media2 忽略初始 Configuration。K13 碰撞在兩服務已有正確回歸；
+  Media1 新增 `ProfileEntry` 的 configuration slot 全為 None，fixed 為 false。
+  PA1 已加入原子的 Media2 初始 binding，並執行既有八個 profile 的 synthetic 容量
+  限制，不截斷匯入 state。K13 碰撞在兩服務已有正確回歸；
   共用 helper 控制涵蓋併發配置、重複請求完整 state 保留、通知次數及 counter 邊界。
 - Delete：`delete_profile_in_state` 於 write lock 下找 token，拒絕 fixed／missing，
   否則移除一個 profile。K14 已使用明確的 committed-outcome 通知 predicate 修正：
@@ -295,14 +308,17 @@ fault 優先於表列操作專屬分支。CreateProfile Name 與 Media2 GetProfi
   檢查 profile／config 並寫入全部 slot。Media2 先解析 kind 再提交完整列表。
   Fixed 不阻止 binding 變更。已重現的 K16 部分寫入已修正，兩種 transport
   皆有完整 state 及單次通知控制。
-  未建模類型、Type=All、只更新 name、configuration conflict 須明確審查目標行為。
+  PA1 另處理選定 Type=All、只更新 name 及 binding compatibility；未建模類型與
+  更廣 conflict／field 規則仍受明確局部政策限制。
 - Rendering：`profile_snapshot` 在同一 read guard 內取得 profile 及所有 configuration catalogue。
   `render_profile`／`render_profile_media2` 內嵌 VSC、encoder、audio source／encoder、
-  PTZ renderer。Profile Name 現將解碼後 state 文字轉義一次；profile-token 與巢狀 configuration 文字仍屬 K15 未結項目。
+  PTZ renderer。Profile Name 將解碼後 state 文字轉義一次，P2 亦 escape profile-token
+  attribute。後續服務批次遷移選定巢狀 configuration renderer，其餘路徑仍未結案。
   其他巢狀 renderer escaping 與其他快照路徑仍屬 W10／W18。
 - State hook：`MockState::{modify,modify_returning,notify}` 在 write lock 內取得
-  mutation 快照，釋放鎖後才呼叫 callback，支援有界重入寫入。Callback 序列化與失敗寫入的 replay invalidation
-  屬 W18／W19；mock 本身不實作外部持久化。
+  mutation 快照，釋放鎖後才呼叫 callback，支援有界重入寫入。選定內建 profile／
+  source／encoder／audio／metadata effect 僅於 commit 後淘汰宣告的 read；callback
+  序列化與更廣 replay 可見性仍屬 W18／W19。Mock 本身不實作外部持久化。
 - 消費端：`src/types/media.rs` 的 `MediaProfile`／`MediaProfile2` 與巢狀
   configuration parser；`parse_soap_body/find_response` 處理 SOAP error；
   session profile 選擇、CLI profile view／error。巢狀 Fault 前須檢查
@@ -332,9 +348,9 @@ K22：已直接核對 §5.1.2 及固定來源的 Media2 請求宣告。既有完
 
 亦已直接檢查固定 WSDL 閉包中全部 13 操作的直接輸入序列；詳細欄位筆記保留於
 checkout 外的來源根目錄（`profile-contract-review-20260910.md`）。這不代表完整
-輸出型別或 Core／共用錯誤審查完成。來源中的容量及 capability 不一致仍待處理：
-建立 profile 未遵守公告上限，Media2 公告的 configuration 種類也與現有 binding
-實作不一致。
+輸出型別或 Core／共用錯誤審查完成。當時建立 profile 未遵守公告上限，Media2 公告
+configuration 種類亦與 binding 實作不一致；PA1 後來修正這些選定容量／capability
+路徑，不代表逐欄位審查已全部完成。
 
 此次局部 DeleteProfile Fault 審查依據 Media1 §5.2.22 與 Media2 §5.1.5：兩個服務
 對不存在 profile 均使用 Sender → InvalidArgVal → NoProfile，對固定 profile 均使用
@@ -484,8 +500,9 @@ warnings-as-errors 文件建置，以及未變動的 157／159／260 清冊均�
 
 前一筆配置 commit `2a488be` 的託管 run 34471659927，僅 Windows CLI 行號
 輸出比較失敗，原因是兩個子程序的 `meta.elapsed_ms` 分別為 0 與 9；因此
-packaging 被跳過。這不是託管驗收通過。此獨立測試框架問題將另行 commit
-修正，不改變 CLI 的耗時契約。
+packaging 被跳過。這不是託管驗收通過。後續測試框架修正只從 JSON 比較排除
+數值 `meta.elapsed_ms`，其餘 envelope 完整比對，保留 CLI 耗時契約。
+這次歷史失敗仍是失敗紀錄。
 
 限定的 K13 state 批次：外部已查核的 token 唯一性要求及既有重複拒絕行為，
 足以修正配置，無須同時遷移 request parsing 或 Fault 契約。將明確 token 的
@@ -509,22 +526,23 @@ workspace Clippy 及兩種 warnings-as-errors 文件建置通過。還原後全�
 | 面向 | 既有證據或確切下一項案例 | 狀態 |
 | --- | --- | --- |
 | C01 | 來源索引及 runtime alias／body／service 不一致拒絕控制已實作；HTTP binding 政策仍屬 W03／W07 | PARTIAL |
-| C02 | `delete_profile_preserves_escaped_and_whitespace_identity`、K15 markup 基準；新增 create／get／bind 的 literal name／token round trip | PARTIAL |
-| C03 | `delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutation`；擴展至其他 11 列的 namespace／decoy 控制 | PARTIAL |
-| C04 | 外部欄位核對後新增 required／empty／duplicate／repeat／extension 案例，保留合法 repeat | TODO |
+| C02 | DeleteProfile identity 加上 `mock_profile_names`／`mock_media_profile_identity` 的 create／get／bind literal name／token round trip；其餘 field policy 未結案 | PARTIAL |
+| C03 | DeleteProfile 拒絕加上選定 Media／PTZ identity 與 PA1 namespace／decoy 控制；不是其他 11 列全部欄位的完整驗證 | PARTIAL |
+| C04 | 選定 Name／identity／selector／binding 的 required、empty、duplicate 與 repeated-field 案例已實作；其餘 field／attribute／extension policy 待參考審閱後完成 | PARTIAL |
 | C05 | 既有 `mock_token_discrimination`／`mock_media1_media2_agree`；全部 binding 增加 escaped／wrong-family token | PARTIAL |
 | C06 | K13 配置、K14 通知及 K16 部分 binding 已有正確回歸；更廣泛的 transaction、conflict 及 callback 尚待完成 | PARTIAL |
-| C07 | `profile_name_remains_literal_text_in_both_services` 及兩種 transport 的 Name 控制；補完 token／巢狀 renderer escaping、獨立 namespace／shape 檢查 | PARTIAL |
+| C07 | Seeded literal markup 已整併至兩種 transport 共用的 `mock_profile_names` exercise；P2 涵蓋 profile-token escaping；補完其餘巢狀 renderer 及獨立 namespace／shape 檢查 | PARTIAL |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`；corpus 檢查不存在／固定 DeleteProfile 巢狀 Fault；其他 mapping／HTTP code 待 W05–W07 | PARTIAL |
-| C09 | 兩種 transport 的共用靜態／狀態型 depth／node 限制已有控制；byte limit 涵蓋 in-process，scoped auth 及 HTTP byte 對應待查 | PARTIAL |
+| C09 | 兩種 transport 的共用靜態／狀態型 depth／node 限制已有控制；byte limit 涵蓋 in-process，後續 scoped-auth 控制另有盤點，HTTP byte 對應仍未驗收 | PARTIAL |
 | C10 | 模型限制及 K12 修正；`fixed_profile_configuration_remains_mutable_in_both_media_services` 證明 fixed profile 的 Add／Remove 實際改變 state | PARTIAL |
 | C11 | 已驗證選定 DeleteProfile client／health first-subcode 控制與 K22 請求選擇；其餘 consumer／CLI 審查待 W06 | PARTIAL |
-| C12 | 擾動四個 known-gap assertion 均於 payload／state assertion 失敗；反轉 fixed-binding attachment 預期亦失敗，還原後通過 | PARTIAL |
+| C12 | 歷史稽核：當時四個 known-gap assertion 均於 payload／state assertion 失敗；反轉 fixed-binding attachment 預期亦失敗，還原後通過。後續整併不保留該測試數量 | PARTIAL |
 
-`tests/mock_fidelity_known_gaps.rs` 的 K15 Name 已斷言正確 literal-text invariant；
-token 及巢狀 renderer 風險仍未結案。其他 `known_gap_` 測試仍刻意斷言目前缺陷：
-**通過表示已重現，不表示已修復。** 修正時須改成正確 invariant 並更新 finding，
-不得為恢復綠燈而保留缺陷。
+`tests/mock_fidelity_known_gaps.rs` 較弱的 K15 seeded-Name 重複案例已整併至
+`tests/mock_profile_names.rs` 的 shared exercise：兩種 transport 檢查 escaped
+wire 文字、沒有注入 child、三種 view，以及 read-hook 次數不變。P2 另測
+profile-token 身分；不因此關閉其餘巢狀欄位風險。歷史 `known_gap_` 名稱或通過數量
+無法判定斷言是在重現缺陷或保護修正，須閱讀目前預期 state 與 payload。
 
 開工條件仍受工程工作限制：W02 間接呼叫閉包、W03／W04 parsed-input 邊界、
 W05／W06 Fault 設計、外部逐欄位核對，以及明確原子性／capacity 行為。

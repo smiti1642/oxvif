@@ -227,8 +227,8 @@ M2、M3 按服務拆分遷移，不一次全面重寫。共用 helper 變更若�
 | 項目 | 狀態 |
 | --- | --- |
 | D1 — 預設行為與 release 邊界 | 2026-09-10 已核准；下一個 minor release、修正後預設、不新增全域 legacy mode |
-| D2 — 未模擬效果及 opt-in stub | 2026-09-10 已核准；待實作 |
-| D3 — 外部 schema CI／release gate | 2026-09-10 已核准；既有不隨專案散布政策不變；待實作 |
+| D2 — 未模擬效果及 opt-in stub | 2026-09-10 已核准；十三項已分類操作完成，較廣的效果／capability 核對仍部分完成 |
+| D3 — 外部 schema CI／release gate | 2026-09-10 已核准；選定 pinned corpus／工具已實作，不隨專案散布政策不變；最終候選 CI 仍為發布關卡 |
 | 執行授權 | 2026-09-10 已核准：依計畫實作與驗證至結束；自己的工作直接 commit，不另開自己的 PR；可推送 hardening 分支跑 CI。研究納入 PR #16 要求的功能。不自動合併貢獻者 PR／主分支、不打 tag／發布／更新已安裝 binary。 |
 | M0–M3 | 進行中；下列第一批實作不代表這些里程碑已全部完成 |
 | M4–M6 | 尚未完成 |
@@ -312,4 +312,5 @@ name 成為 markup、後筆 binding 失敗卻保留前筆寫入。這些 probe �
 後續實作狀態以 execution checklist 與各 preflight 為準：K13 配置及 K14 刪除
 通知已有正確回歸；選定 DeleteProfile Fault／effect 路徑、K22 client 選擇及
 外部 schema／corpus CI 亦已修改。前文描述初始檢查點，不代表目前驗收狀態。
-廣泛 parsing、語意遷移及 PR #16 整合仍待完成；Release 及已安裝 binary 未變動。
+廣泛 parsing 與語意遷移仍未完成。B16 後續已實作 PR #16 功能，Mock 採 scoped、
+opt-in 僅收件確認；這不代表合併貢獻者 PR 或整套計畫驗收。Release 及已安裝 binary 未變動。

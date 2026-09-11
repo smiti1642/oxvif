@@ -12,7 +12,7 @@
 | [四項工作](#四項工作) | 區分各種證據的目前狀態 |
 | [審查發現](#審查發現) | 修正與未結案結果 |
 | [已執行檢查](#已執行檢查) | 本機、託管與實機觀察 |
-| [審查結案清單](#審查結案清單) | 剩餘原始碼審查 |
+| [審查結案清單](#審查結案清單) | 已完成的本機審查及剩餘發布關卡 |
 | [維護者操作](#維護者操作) | 不發布的 CI 與安裝 staging |
 | [正式版號修改清單](#正式版號修改清單) | 留待核准後提交的修改 |
 | [核准邊界](#核准邊界) | 正式版號提交前的條件 |
@@ -21,8 +21,8 @@
 
 | 工作 | 狀態 | 剩餘項目 |
 | --- | --- | --- |
-| 1. 完整候選／安全審查 | IN-PROGRESS | A01–A04 已本機修復；須完成下方全部差異及相依使用者的結案 |
-| 2. 套件安裝與人類／實機驗收 | PARTIAL | 3eccfd1 原生 CI 通過；之後修正須重跑。實機 export／diff 與修復後快照驗收通過，限制如下；Hanwha 非影像回應仍為限制。最終終端與散布 staging 待驗 |
+| 1. 完整候選／安全審查 | LOCAL-PASS | 208 個固定路徑及後續差異均核對受影響消費端／斷言／宣稱；A01–A05 已修復，T01／T02 已加強，詳見下方結案紀錄 |
+| 2. 套件安裝與人類／實機驗收 | PARTIAL | 3eccfd1 原生 CI 通過；之後修正須重跑。實機 export／diff 與修復後快照驗收通過，限制如下；Hanwha 非影像回應仍為限制。有界 Windows ConPTY 通過；其餘人工／平台驗收與散布 staging 待驗 |
 | 3. 版號、連結與文件 | 已準備，尚未升版 | 雙語發布紀錄及本清單已更新；實際版號仍為 0.16.0，核准後才套用版號修改清單 |
 | 4. 使用者確認 | 尚未請求正式提交核准 | 正式版號 commit 前呈現最終證據及風險；發布須另行授權 |
 
@@ -34,6 +34,8 @@
 | A02 | Snapshot Authorization 把 `qop=auth` 改成帶引號值 | 移除改寫，斷言未加引號 qop／algorithm／nc 及精確 URI；依據 [RFC 7616 §3.4](https://www.rfc-editor.org/rfc/rfc7616.html#section-3.4)，不增加設備特例或認證降級 |
 | A03 | 已儲存攝影機的兩個 profile 在 A02 修正前後皆回 HTTP 401；擴大測試另發現 18 台類似失敗 | 已本機修復：HTTP/1.1 欄位名稱採 Title-Case，處理韌體錯誤區分大小寫；CLI／health 共用 Digest 核心並保留認證與目的地安全限制。原始攝影機兩個 profile 已保存及解碼成功。見[修復證據](snapshot-auth-repair_zh.md)；託管發布閘門仍未完成 |
 | A04 | 人類輸出會原樣送出攝影機／profile 文字、詳細報告與錯誤提示中的終端控制序列 | 已本機修復：在人類報告邊界及單行選單／上下文欄位轉義 C0／C1 與雙向文字格式控制字元；JSON／JSONL 資料值不變。報告仍允許 LF／TAB 排版，不代表消除所有多行顯示歧義 |
+| A05 | 全螢幕繪製仍輸出方向格式控制字元 | 214d989 已修復：寬度／截斷／換行／cell 排版前轉義，選取資料保留原值；修正前斷言失敗 |
+| C01 | Windows native 失敗可能被後續成功命令掩蓋 | 210bfc3 已修復：四個 CI、十四個 release exit guard；本機正負控制通過，仍須最終託管執行 |
 
 A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02 並未解決 A03。
 下列 A03 結果僅涵蓋受測設備與 profile，不代表普遍相容性；剩餘項目仍須明列於
@@ -43,7 +45,9 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 
 | 證據 | 結果及限制 |
 | --- | --- |
-| V01 擴充 encoder replay，2026-09-12 | 停用失效邏輯後 1,308 通過／四項斷言失敗／五項 ignored，包含兩項新測試及兩項既有 rate 測試。還原後 all-feature 1,312／default 1,200 通過，各五項 ignored、41 suites。產品程式與 1ea4fff 相同；見[範圍](release-0.17-review_zh.md#v01-編碼器-replay-覆蓋)。完整候選審查仍未結案 |
+| 最終本機結案，2026-09-12 | Workspace all-feature／default：1,310／1,198 通過，各五項 ignored、41 suites；兩組 all-target Clippy、strict rustdoc、fmt 及 Rust 1.88 all-target／all-feature 檢查通過。[A05／T01／T02 及 native exit 證據](release-0.17-review_zh.md#a05-終端顯示與-t01-斷言後續) |
+| Windows debug ConPTY | 40 台合成裝置，manage／detail／profile／input／password／resize、已開始的 snapshot 取消、正常／Ctrl-C 退出的精確 console mode 恢復均通過；設定 hash 不變。未新增攝影機掃描或 host 安裝；G07 剩餘範圍如下 |
+| V01 擴充 encoder replay，2026-09-12 | 停用失效邏輯後 1,308 通過／四項斷言失敗／五項 ignored，包含兩項新測試及兩項既有 rate 測試。還原後 all-feature 1,312／default 1,200 通過，各五項 ignored、41 suites。產品程式與 1ea4fff 相同；見[範圍](release-0.17-review_zh.md#v01-編碼器-replay-覆蓋)。此為歷史 V01 結果；最終本機結案記於下方 |
 | A04 人類輸出修正，2026-09-12 | 修正前 1,308 通過／兩項斷言失敗／五項 ignored；修正後 all-feature 1,310／default 1,200 通過，各五項 ignored、41 suites；兩組 Clippy 與 strict rustdoc 通過。實際 debug 執行檔保留 JSON／JSONL 原值及錯誤 exit 3，人類 stderr 已轉義。見[批次紀錄](release-0.17-review_zh.md#a04-人類輸出修正)；不是全螢幕終端驗收 |
 | 3eccfd15274d4e978501634e4155477760502b6b 託管 CI | [Run 34597167495](https://github.com/smiti1642/oxvif/actions/runs/34597167495)：全部 27 個 job、五種原生目標通過；不涵蓋後續修正 |
 | A01 敏感度驗證 | 完整 workspace all-features、no-fail-fast：1,301 通過／兩項斷言失敗／五項 ignored；實際觀察到非預期狀態修改 |
@@ -75,26 +79,22 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 
 ## 審查結案清單
 
-[逐檔清冊](release-0.17-review-ledger.json) 將較新的 `v0.16.0..b7bc881`
-清單固定為 208 個路徑，記錄本輪確切閱讀範圍，而非發布完成百分比。
-`in_progress` 不代表關卡結案；`pending` 也不抹除之前批次的證據。
-後續修正與文件差異另列。批次順序及結案條件見
-[批次審查紀錄](release-0.17-review_zh.md)。
+G01／G03 對 R01–R08 為 LOCAL-PASS。[逐檔清冊](release-0.17-review-ledger.json)
+列出 `v0.16.0..b7bc881` 的 208 個 reviewed 路徑，後續差異另行審查。
+各已審輸入有 blob ID，清冊本身以所屬 commit 識別。
+[批次審查](release-0.17-review_zh.md#批次順序) 六組記錄原始碼、受影響消費端、
+斷言及公開宣稱的核對。
 
-精確審查基準為 `git diff v0.16.0 3eccfd1`：200 個檔案變更、新增 39,614 行、
-刪除 3,007 行；之後的修正與證據提交須另計差異。清冊或綠色測試不等於全部差異審查。
+較早的 `v0.16.0..3eccfd1` 比較包含 200 檔、新增 39,614 行、刪除 3,007 行，
+屬歷史檢查點，不是最終審查輸入。A01–A05 修正、T01／T02 測試品質、CI／release
+guard 控制及雙語宣稱校正已完成本機可處理的發現；本次審查未留下收錄切點內
+已知且未處理的重大 blocker。
 
-| 群組 | 目前證據 | 最終結案要求 |
-| --- | --- | --- |
-| CLI application／maintenance／manage、navigation／preferences、Agent／exit 契約 | 已檢視產品入口，已有回歸及上述實機控制 | 一起完成 main／interactive／output／registry／schema／descriptor 差異審查；檢查終端生命週期、控制字元、明確 selector 及本機檔案副作用 |
-| Library Media1／2、session、notification peer、XML／type 遷移 | 社群與操作工作卡；已檢視 additive peer wrapper 及遷移入口 | 將公開方法／型別／reexport／example／相容文件全部對照最終差異；不以局部修正宣稱完整 XML 驗證 |
-| Mock request／auth／fault／dispatch 及服務 handler | 既有操作清冊與雙語批次證據；A01 獨立重現 | 確認每個收錄批次的讀寫／options／capability／replay 關聯、受 shared helper 影響的未修改 handler，並結案其餘 HTTP／fault 語意判定 |
-| Metamorph storage／report／replay／adapter | K27 修復及目前資料保留測試 | 完成其餘 fixture／parse／canonicalization／adapter／replay 差異與降版文件審查；粗粒度 invalidation 仍為明確子集合 |
-| 相依、workflow 及 packaging | 原生 CI 證據；已檢視 CI／release／SBOM／formula 修改 | 驗證 source／tooling ref、staging artifact、checksum、source／binary SBOM 區別及安裝後指令；完成 schema verifier／工具來源審查 |
-| 文件與測試斷言 | 雙語發布／遷移紀錄及歷史證據保留 | 核對 README／指南／support／manpage 的目前宣稱，區分 synthetic、獨立 corpus 與實機；每個變更檔案均須歸入已審查群組，不能只看列出的入口 |
-
-上述結案前，G01／G03 維持 open。只有輸入完全相同時，才可重用既有批次原始碼
-審查與外部 corpus 結果；不得表示成新執行的全程式獨立稽核。
+這是有界工程審查，不是獨立全程式或 ONVIF 認證。完整 HTTP／field／Fault 語意、
+沿用 listener 安全、raw recording 隱私限制、併發 replay 可見性及 snapshot 格式
+相容性，仍於[後續清單](post-0.17-backlog_zh.md) 明列範圍。
+歷史外部 corpus／實機證據只適用於相符輸入。G05／G06 須以精確新候選執行原生 CI
+及不發布 staging；G07 仍部分完成，G08／G09 保留核准邊界。
 
 ## 維護者操作
 
@@ -102,10 +102,10 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 開 workaround PR 來啟動 workflow。一般修正提交推送後，維護者可執行：
 
 ```powershell
-git fetch origin codex/contributor-pr-integration
-$candidate = git rev-parse origin/codex/contributor-pr-integration
-gh workflow run ci.yml --ref codex/contributor-pr-integration
-gh workflow run release.yml --ref codex/contributor-pr-integration -f tag=$candidate -F publish=false -F prerelease=true
+git fetch origin codex/release-0.17-closure
+$candidate = git rev-parse origin/codex/release-0.17-closure
+gh workflow run ci.yml --ref codex/release-0.17-closure
+gh workflow run release.yml --ref codex/release-0.17-closure -f tag=$candidate -F publish=false -F prerelease=true
 ```
 
 記錄每個 run URL 及實際 checkout SHA；dispatch 後分支移動不可默默改變驗收候選。
@@ -118,9 +118,11 @@ Debian package install／remove、兩種 Linux 架構的暫時簽章 APT reposit
 這些安裝發生於 CI runner，不修改使用者機器。目前 0.16 版號的 staging 不可取代
 最終 0.17 package 驗證；官方渠道收錄及正式 APT signing key 仍是獨立工作。
 
-人工終端仍須驗收 manage／discover／diagnose 的 resize、filter、數字／gg／G、
-Ctrl-D／U、行號模式、輸入／密碼取消與畫面恢復。以授權帳號驗證 snapshot 成功；
-不要在 issue、commit 或對話中分享密碼。
+本次有界 Windows ConPTY 已驗收上述 manage／profile／input／resize、開始後的
+snapshot 取消及 console 恢復。先前 Vim／discovery 證據保留原始版本；仍須完成
+最終候選的 discover／diagnose navigation、filter／數字／gg／G／Ctrl-D／U／行號
+矩陣及其他平台人工驗收，因此 G07 保持 PARTIAL。實機 snapshot 成功沿用已授權
+設備的證據，不表示本次重新掃描設備群。
 
 ## 正式版號修改清單
 

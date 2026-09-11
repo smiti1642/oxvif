@@ -4,6 +4,10 @@
 
 W20/W21 checkpoint, 2026-09-10. The full programme remains in progress.
 
+Dated validation results below retain their original corpus and tool scope. Current
+export composition includes B16; a historical passing run is not acceptance of the
+current candidate. See the [execution checklist](mock-fidelity-execution-checklist.md).
+
 | Section | Purpose |
 | --- | --- |
 | [Structural checker](#structural-checker) | Delivered W20 scope |
@@ -208,13 +212,14 @@ corpus generation and operation coverage remain open; compiling official schema 
 does not validate any mock exchange. The earlier `verify_schemas.py compile`
 command remains a Python-backend diagnostic expected to expose K21.
 
-Windows/Linux CI now runs generic controls and independent Xerces qualification,
+The Windows/Linux CI definition runs generic controls and independent Xerces qualification,
 followed by a separate **Official schemas and selected Media corpus** job with fixed source
 hashes, external directories and no uploaded artifacts. Both gate packaging;
-the latter explicitly exports and validates the selected 110 profile/source/rate/encoder instances
+the latter explicitly exports and validates the selected profile/source/rate/encoder/audio/metadata/synchronization corpus
 after compilation. Each failed native command terminates the job; a missing
 export cannot pass because validation requires an existing, nonempty corpus.
-neither should be reported as full operation/corpus acceptance. Prior CI
+Neither should be reported as full operation/corpus acceptance or as a completed
+run for the current candidate. Prior CI
 [34461384194](https://github.com/smiti1642/oxvif/actions/runs/34461384194) passed all
 25 jobs for `4fdd9f2`; it predates the Xerces adapter and new compilation jobs.
 
@@ -232,10 +237,12 @@ from the driver, not a string search of the response.
 The ignored export requires `OXVIF_MOCK_CORPUS` naming a **new absolute external
 directory whose parent exists**. It refuses empty data, credential-bearing
 requests, relative/existing destinations and checkout/ancestor destinations.
-The exporter preserves XML bytes, emits 110 files plus `cases.json`, and records
+The exporter preserves XML bytes, emits two XML files per exchange plus `cases.json`, and records
 explicit Envelope/Body/operation expectations for requests and success/Fault
 responses. It never reads environment credentials or overwrites existing files.
 This is a diagnostic corpus, not comprehensive per-operation acceptance.
+The current six drivers select 80 exchanges / 160 XML instances over 46 operations,
+including 21 Fault responses. This is the exporter composition, not a new validation result.
 
 ```powershell
 $env:OXVIF_MOCK_CORPUS = 'C:/Temp/oxvif-profile-corpus-new'
@@ -302,15 +309,23 @@ Fresh corpus `oxvif-corpus-20260911-09` passes **148 strict Xerces instances**:
 stored in the checkout. See [AM1](mock-fidelity-audio-metadata.md); CI and semantic
 coverage are separate from this local structural result.
 
+B16 adds six synchronization exchanges across two operations: two receipts and four
+refusals. The current exporter therefore selects 80 exchanges, 46 operations,
+59 successes and 21 Faults (160 XML instances). Historical local validation and
+the current candidate's outstanding CI are tracked in the
+[B16 evidence](contributor-pr-integration-plan.md#execution-record).
+
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
-and expand the corpus beyond the selected 44-operation batches. W21 remains PARTIAL: complete the
+and expand the corpus beyond the selected 46-operation batches. W21 remains PARTIAL: complete the
 positive/negative envelope, payload and Fault instances from the mock corpus and
 qualify broader paths against actual emitted exchanges. W22 now checks the selected
-148-instance profile/source/rate/encoder/audio/metadata corpus on Windows/Linux, but the full fail-closed instance
+160-instance profile/source/rate/encoder/audio/metadata/synchronization corpus in the Windows/Linux CI definition, but the full fail-closed instance
 CI gate still needs the remaining operation batches. Do not substitute this tool
 experiment for P-B's per-operation field/Fault/semantic review.
 
 No maintainer decision is required for this diagnostic checkpoint. If the chosen
 gate cannot retain the approved D3 distribution or strict-validation boundaries,
-escalate before weakening them. PR #16 integration still depends on the reviewed
-Fault and D2 policy paths; its existing acknowledgment-only mock is not accepted.
+escalate before weakening them. B16 replaced PR #16's permissive acknowledgment
+behavior with scoped, opt-in receipts; actual synchronization/media effects remain
+outside that implemented model. Contributor integration and release status remain in
+the execution checklist.

@@ -34,7 +34,8 @@ Known data loss and security blockers cannot be deferred.
 1. Read the main plan's D1–D3 decisions, this checklist, and the operation ledger.
    Start from `git status` and the actual commit, not the last conversation.
 2. Run the inventory checker. Review source changes since the recorded baseline;
-   the checker only sees dispatch signatures, not handler changes or new helpers.
+   the checker reconciles dispatch signatures, literal Action sites and the five
+   indexed reader spellings. It does not audit handler semantics or transitive helpers.
 3. Select a work ID whose dependencies are satisfied. For a service migration,
    first complete W01 cards for **every row in that batch**, including reads.
 4. Commit independently verifiable service subgroups using the cadence below, not
@@ -72,6 +73,15 @@ tooling inputs are unchanged; record the source revision and do not call an old
 run a new result. New failures or changed common dependencies require the affected
 checks to run again. Do not claim release acceptance from a subgroup's green gate.
 
+Evidence limits also apply within a passing suite: PTZ1's 19-helper identity
+comparison uses the same implementation with a different token, alongside separate
+literal two-head controls; it is not an independent oracle for all PTZ semantics.
+The three profile-read paths have bounded concurrent generation probes, not forced
+interleaving proofs. VE1/AM1 option-to-write checks establish selected mock
+self-consistency, not independent physical capabilities or every value combination.
+The external corpus validates captured instances and explicit payload anchors;
+export success or client round trips alone do not establish schema validity.
+
 The first batch under this cadence covers eight source-confirmed effect stubs: Device and
 PTZ auxiliary commands, Device reboot/firmware-upgrade/system-restore, Events
 subscribe/renew, and Search EndSearch. Treat their exact-operation policy,
@@ -79,17 +89,19 @@ mock/replay/HTTP behavior, existing workflow migration and paired documentation
 as one cohesive delivery, not eight separately gated commits. Implementation is
 recorded as A3 in the policy preflight. The subsequent [PA1 assembly batch](mock-fidelity-profile-assembly.md)
 implements initial Configuration, optional rename/All, same-slot conflicts, capacity
-and touched reference counts. Next: video configuration/options, including shared
-source/encoder compatibility and remaining field contracts. [VS1](mock-fidelity-video-source.md)
-now implements the eight source operations; next are the eight encoder
-configuration/options/instances operations. Neither subgroup closes W10.
+and touched reference counts. [VS1](mock-fidelity-video-source.md),
+[VE1](mock-fidelity-video-encoder.md) and [AM1](mock-fidelity-audio-metadata.md)
+subsequently implemented the eight source, eight encoder and fifteen audio/metadata
+operations respectively. These are completed implementation subgroups with bounded
+evidence, not W10 closure; release scheduling follows the 0.17 cut above.
 Report completed/remaining subgroups and open
 blockers rather than using test counts as a completion percentage.
 
 ## Readiness and operation card
 
 The route locations are now enumerated. **Field-by-field contracts, complete
-Fault mappings and fidelity classifications have not yet been audited.** W01 is
+Fault mappings and fidelity classifications have not been fully audited across
+the programme.** Selected batch cards record their narrower reviews. W01 is
 mandatory design work before the next handler migration, not something to fill
 in after changing tests. Work may proceed batch by batch; unrelated batches do
 not have to be normative-audited before shared infrastructure work begins.
@@ -153,10 +165,10 @@ include operation-sized Fault migration after W05, not just request parsing.
 | W04 / M1,M3 / PARTIAL | W02 | `request.rs`: P-A private owning request, scalar/scoped-attribute/subtree/repeated access implemented; typed field rules and QName-valued content remain open | Seven P-A controls perturbed and restored; C02–C04/C09 controls must also cover migrated handlers, legal extensions and field-specific constraints |
 | W05 / M2 / PARTIAL | W01 for mapping; W02 for callers | Structured auth/empty-chain/selected DeleteProfile faults plus reviewed generic synthetic-boundary faults; resource/DTD policy names are explicitly mock-specific | Expanded fault QName, typed failure, consumer and state controls; other ordinary service branches and structured Detail remain open; no blanket conformance claim |
 | W06 / M2 / PARTIAL | W05 design before default switch | First-subcode client/health controls and auth CLI JSON/table subprocess controls implemented; public error fields unchanged | Broader nested/flat/vendor error, transport/session and consumer coverage still required before the service default switch; preserve diagnostics and exit-code meanings |
-| W07 / M2,M3 / PARTIAL | W03/W05 designs, W06 | Exact synthetic Action routing and common body identity implemented; HTTP extraction and binding remain open | Source-wide routing and HTTP/in-process boundary controls; content type/status/invalid UTF-8/missing/conflicting headers and endpoint policy are not accepted |
+| W07 / M2,M3 / PARTIAL | W03/W05 designs, W06 | Exact synthetic Action routing and common body identity implemented; A01 rejects invalid HTTP UTF-8 before responders | Source-wide routing and HTTP/in-process boundary controls; A01 checks HTTP 400/policy Fault, state/hook preservation, retained armed fault and valid Unicode. Full content type/status/header and endpoint policy remain open |
 | W08 / M3 / PARTIAL | W02/W04/W05 | Scoped Header/UsernameToken parsing, explicit digest/encoding/role policy, static non-reflecting errors and exact exemption; see [auth preflight](mock-fidelity-auth-preflight.md) | Both-transport identity, refusal, state/hook and live user-table controls; auth defaults/order and ordinary CLI classification retained. No freshness/nonce-reuse, role authorization or complete WSSE/HTTP security acceptance |
 | W09 / M2 / TODO | W05/W06 | `fault_injection.rs`, `responder.rs`, server admin endpoints and public injection builders | Literal/structured versus intentionally raw malformed output separated; custom QName handling, one-shot matching, ordering, concurrency, clear/reset and compatibility tests |
-| W10 / M2–M4 / PARTIAL | W01 for batch, W03–W06 | `services/media.rs`, `media2.rs`, shared state and renderers; batches below | Every Media row passes C01–C12; both views agree on state without sharing incorrect wire shapes; E1 does not close DeleteProfile rows; PA1 implements initial binding/rename/All/capacity/reference counts; VS1 implements scoped source reads/writes; VE1 implements scoped encoder candidates/options/capacity and committed replay; see batch records |
+| W10 / M2–M4 / PARTIAL | W01 for batch, W03–W06 | `services/media.rs`, `media2.rs`, shared state and renderers; batches below | Completion requires every Media row to pass C01–C12 and both views to agree on state without sharing incorrect wire shapes. E1 does not close DeleteProfile rows; PA1 implements initial binding/rename/All/capacity/reference counts; VS1 implements scoped source reads/writes; VE1 implements scoped encoder candidates/options/capacity and committed replay; AM1 implements selected audio/metadata contracts; see batch records |
 | W11 / M2–M4 / PARTIAL | W01, W03–W06 | PTZ1 scoped ProfileToken identity for 19 existing profile/head consumers; other selectors, coordinate attributes/spaces, configuration subtree, presets/tours and auxiliary commands remain open | Both transports and two different heads; complete field effects/fault policy/concurrency still unaccepted, no invented movement/timing guarantees |
 | W12 / M2–M4 / TODO | W01, W03–W06 | `services/imaging.rs`: per-source settings/options/status/move/stop | Fixed versus movable lens, nested settings and typed ranges; no global-name fallback or silent partial application |
 | W13 / M2–M4 / TODO | W01, W03–W06, W08 design | `services/device.rs`, DeviceIO dispatch, device state | Repeated users/network entries/scopes, storage subtrees and relay tokens; failure leaves state/auth/events/hooks unchanged; maintenance effects classified under D2 |
@@ -168,10 +180,10 @@ include operation-sized Fault migration after W05, not just request parsing.
 | W19 / M3,M6 / PARTIAL | W03/W09 designs | Built-in profile creation/deletion, Media1 video binding and Media2 generic binding use private committed effects; cross-service reads, HTTP, instance and chain controls | Remaining configuration writes and other mutations, standalone replay policy, full read dependencies, full normalization/key-format redesign and concurrent/callback visibility remain open (bounded K27 storage repair is recorded below); no new recording of device secrets; PA1 extends committed profile effects to reference-count and PTZ-compatible reads; VS1 adds post-commit source/profile/options invalidation while physical-source recordings remain intact; VE1 adds source-capacity and profile-encoder-options invalidation; AM1 adds audio/metadata committed effects. |
 | W20 / M5 / PARTIAL | W04/W05 corpus | `tests/mock_schema_shape.rs`: scoped resolution, Envelope/Fault inclusion and missing-resource failure implemented; see schema preflight | Seven generic controls and Fault-wrapper perturbation passed sensitivity checks; QName values, wildcard/unresolved accounting and request corpus remain open; pins unchanged |
 | W21 / M5 / PARTIAL | W20, D3 | Pinned offline tooling, 20 schema-free controls, seven independent-backend tests, and selected 46-operation Media corpus export with explicit payload anchors | 160 instances pass locally after B16, including 21 refusals (seven profile, three source, two rate, two encoder, three audio/metadata and four synchronization). Remaining operations and broader input/semantic coverage are not accepted |
-| W22 / M5 / PARTIAL | W00 for inventory; W21 for schema job | Windows/Linux inventory, Xerces qualification, official-source compilation and selected profile/source/rate/encoder-instance validation gate package | Sources and corpus stay external with no uploaded artifacts. Selected corpus has 160 instances over 46 operations; combined-candidate hosted CI, whole-program instance coverage and release evidence check remain pending |
+| W22 / M5 / PARTIAL | W00 for inventory; W21 for schema job | Windows/Linux inventory, Xerces qualification, official-source compilation and selected profile/source/rate/encoder/audio/metadata/synchronization instance validation gate package | Sources and corpus stay external with no uploaded artifacts. Selected corpus has 160 instances over 46 operations; hosted evidence is revision-specific in the release cut. Whole-program instance coverage and final-candidate release evidence remain open |
 | W23 / M1,M6 / TODO | Each migrated batch | All named regression suites, client fixtures and generic parser tests | Audit hollow positives/negatives and namespace-stripped or fragment probes; mutations fail at intended assertions; include all targets with `--no-fail-fast`; bounded fuzz/property campaign with seed/limits recorded |
 | W24 / M6 / TODO | Integration candidate | Cargo features/MSRV, `.github/workflows/ci.yml`, `packaging/check_xml_features.py`, docs builds | Native Windows/Linux/macOS default/all-feature runs, per-feature warning sweep, MSRV and downstream XML feature-unification checks; mark unavailable evidence blocked/not-run |
-| W25 / M6 / TODO | W00–W24 accepted | Bilingual mock/library/CLI/support docs as affected, `OPERATIONS`, README links, CHANGELOG, rustdoc, release evidence | Document D1/D2 migration with working examples; audit all current claims and historical notes without rewriting shipped facts; approval before publish/merge/push/install |
+| W25 / M6 / TODO | W00–W24 accepted for programme closure; selected release scope follows the cut | Bilingual mock/library/CLI/support docs as affected, `OPERATIONS`, README links, CHANGELOG, rustdoc, release evidence | Document D1/D2 migration with working examples; audit all current claims and historical notes without rewriting shipped facts; publish/merge/push/install follow applicable authorization |
 | W26 / IN-PROGRESS | Authorized contributor integration | PR #16 client/session port; scoped receipt-only mock, operation cards, bilingual docs and S01–S08 controls implemented | Targeted tests, inventory and 160 external instances pass; final gates/hosted CI tracked in [B16 evidence](contributor-pr-integration-plan.md#execution-record). No main-branch merge or media-effect acceptance |
 
 ## Service batches
@@ -183,7 +195,7 @@ their union for a completed service equals that service's ledger rows.
 
 | Work | Suggested independently committable sequence | Extra interaction to inspect |
 | --- | --- | --- |
-| W10 | Profiles/create/delete/binding → video sources/encoders/options → audio/metadata → OSD → stream/snapshot URI and source-mode/static capability rows | Shared `ConfigKind`/selectors/renderers; Media2 wrappers calling Media1 helpers; type attribute versus element differences; fixed/in-use references; PA1 implements initial binding/rename/All/capacity/reference counts; VS1 implements scoped source reads/writes; VE1 implements scoped encoder candidates/options/capacity and committed replay; see batch records |
+| W10 | Profiles/create/delete/binding → video sources/encoders/options → audio/metadata → OSD → stream/snapshot URI and source-mode/static capability rows | Shared `ConfigKind`/selectors/renderers; Media2 wrappers calling Media1 helpers; type attribute versus element differences; fixed/in-use references; PA1 implements initial binding/rename/All/capacity/reference counts; VS1 implements scoped source reads/writes; VE1 implements scoped encoder candidates/options/capacity and committed replay; AM1 implements selected audio/metadata contracts; see batch records |
 | W11 | Profile/node/config selectors → configuration/spaces → movement/home/presets → tours/auxiliary/static capabilities | Profiles sharing one node versus separate heads; repeated tour spots; disabled axes; no real motion timing claim |
 | W12 | Source selector/settings/options → status/move options/move/stop → capabilities | Focus support, nested mode/value settings, currently ignored inputs |
 | W13 | Hostname/time/scopes → users/auth → DNS/NTP/interfaces/protocols/gateway → storage → relays/DeviceIO → maintenance/discovery/services/capabilities/log/URI | Partial multi-entry updates, password handling, IO events versus saved settings, simulated network changes must not reconfigure host networking |
@@ -216,12 +228,12 @@ These are planning seeds, not a claim of an exhaustive defect audit.
 | ID / evidence level | Observation or question | Owner / closure |
 | --- | --- | --- |
 | K01 / reproduced, partial fix | DeleteProfile escaped/decoy token failures fixed in E1; other operations not systematically reproduced | W04/W10; retain E1 and add operation cards |
-| K02 / source-confirmed | Legacy fragment readers remain across services and auth | W02–W15; no ordinary unaccounted callers at M3 exit |
+| K02 / source-confirmed | Legacy fragment readers remain in service handlers; auth scalar parsing has migrated to its scoped boundary | W02–W15; no ordinary unaccounted callers at M3 exit |
 | K03 / selected DeleteProfile branches fixed | Both services now use nested Sender faults for missing/fixed profiles; independent selected corpus passes | W05/W06; other operation mappings remain open. Client still exposes the first subcode, not the leaf; full-program acceptance is pending |
 | K04 / documented risk | Legacy escaped input echoed through the escaped fault helper can double-escape | W05/W23; trace every interpolated reason and reproduce affected paths |
 | K05 / selected policy implemented | Factory Reset and Events unsubscribe/sync default to refusal; individual acknowledgment-only opt-in is explicit | [W16 evidence](mock-fidelity-ack-policy-preflight.md); no reset/lifecycle/event effects modeled; remaining operation contracts and effectful stubs open |
-| K06 / routing slice fixed; HTTP open | Synthetic Action aliases no longer reach handlers; HTTP handler still returns 200 and uses lossy UTF-8 conversion | W03/W07; see pipeline routing evidence; common body agreement and generic boundary faults implemented; HTTP extraction/status and replay remain open |
-| K07 / source-confirmed | Schema/namespace probes have scope/Fault coverage blind spots | W20–W22; fail-sensitive independent validation |
+| K06 / routing and UTF-8 slices fixed; HTTP binding open | Synthetic Action aliases no longer reach handlers; A01 rejects invalid HTTP UTF-8 with 400 before responders; ordinary SOAP responses retain the existing 200 mapping | W03/W07; common body agreement and generic boundary faults implemented; complete HTTP extraction/status policy and replay semantics remain separate |
+| K07 / selected scope/Fault probes repaired | Scoped namespace resolution and Envelope/Fault anchors are covered; QName-valued content, wildcard/unresolved accounting and wider corpus coverage remain incomplete | W20–W22; retain fail-sensitive independent validation and its stated limits |
 | K08 / selected hook defects reproduced and fixed | Hooks previously held a read lock and could observe an intervening write instead of their mutation; owned commit snapshots now run without that lock | W18/W19 partial; deterministic reentrant/snapshot controls in pipeline preflight; queues, read snapshots, broader writes and replay visibility remain open |
 | K09 / unverified | Required fields/ranges/extensions/capability claims may differ from contract | W01/W10–W17; complete batch readiness cards before implementation |
 | K10 / not run | Full external schema, Linux/macOS native and multi-vendor validation absent from E1 | W21/W24; real-device evidence remains separate and read-only unless authorized |
@@ -232,24 +244,24 @@ These are planning seeds, not a claim of an exhaustive defect audit.
 | K28 / URL credentials in keys fixed | Canonical projections and legacy loaded/caller keys strip URL credential pairs; load is read-only and explicit save persists cleanup | W19 partial; synthetic privacy/lookup/disk controls, unchanged JSON shape; raw-envelope redaction remains targeted; K27 storage retention is repaired separately; see pipeline preflight and storage migration |
 | K29 / shared XML whitespace preservation fixed | Common escaping emits numeric references for CR/LF/tab in text and attributes; Fault serialization uses the same helper | W03/W06/W10 partial; both transports, shared helper and 34 external instances checked; raw token/nested renderers and field constraints remain open; see profile preflight |
 | K30 / bounded policy corrected | Explicit empty Create/read selectors refuse before effects; invalid seeded lists return Receiver without snapshot repair | W01/W10/W06; both-transport state-after-error reproduction, raw/client payload, hook, replay and external policy-Fault controls in profile preflight |
-| P2 / selected profile identity paired | Create/read/render/six binding paths now preserve decoded nonempty tokens through Media/PTZ workflows | W10 partial; other configuration fields, replay keys, capacity and complete semantics remain open; see profile preflight |
+| P2 / selected profile identity paired | Create/read/render/six binding paths now preserve decoded nonempty tokens through Media/PTZ workflows | W10 partial; PA1 separately implements modeled capacity and K27 separately repairs collision storage. Other configuration fields and complete semantics remain open; see profile preflight |
 | A1 / typed adapter identity paired | Four exact Action identities use bounded qualified operation parsing; token whitespace is preserved and unrepresentable PTZ arguments do not invoke typed hooks | Public signatures/raw fallback unchanged; Transport/Responder controls in profile preflight. Other stream options, authorization, physical effects and broader adapter contracts remain open |
 | K19 / reproduced external compatibility finding | Current Media source closures reject XSD 1.0 compilation in independent validators but compile under strict XSD 1.1 | W21; [schema preflight](mock-fidelity-schema-preflight.md), no schema edits or disabled checks; qualify the candidate tool and report the schema language explicitly |
-| K20 / reproduced and formatter fixed | `auth::auth_fault` formerly emitted an unbound wsse subcode and raw reason text | W05 serializer migration preserves code/subcode, fixes scoped binding/text, and adds client/health/CLI controls; authentication parsing/policy remains W08 work |
+| K20 / reproduced and formatter fixed | `auth::auth_fault` formerly emitted an unbound wsse subcode and raw reason text | W05 serializer migration preserves code/subcode, fixes scoped binding/text, and adds client/health/CLI controls; scoped auth parsing/policy has subsequent W08 evidence; complete security semantics remain open |
 | K21 / Python limitation; independent compilation available | Python reports a Device type-table warning; pinned Xerces compiles the same complete closure with full checking and warnings-as-errors | W21; independent generic qualification passes without schema edits or warning suppression. Does not prove the Python warning false or mock instances valid |
 | K22 / client and selected mock selectors fixed | Full Media2 profile query omitted Type, while the mock returned configurations regardless; client now explicitly requests All | W06/W10; captured request regression fails on the old body. Scoped mock Token/Type selection now has two-transport and token-table controls; broader field/rendering rules remain P-E; XSD validity alone cannot catch the original request intent |
 
 Additional output-closure findings are tracked in the source audit: K24 audio
 codec vocabulary (W01/W10), K25 multicast read-only/effect meaning and K26 video
-codec representability across shared service views (W01/W10/W17). All require
-discriminating wire/state reproduction and explicit disposition before the
-associated profile/configuration cards can close; source review is not runtime
-verification.
+codec representability across shared service views (W01/W10/W17). AM1 and VE1
+record the selected repairs and wire/state evidence. Their modeled limits and
+remaining field/operation contracts still apply; source review alone is not
+runtime verification.
 
 K15 now has a bounded Name repair: both CreateProfile operations read scoped,
 decoded scalar names and both profile renderers escape them once. Seeded-state
 and HTTP/in-process create/read/refusal controls are implemented. Caller-supplied
-profile tokens, configuration text and other field rules remain W01/W10 work;
+profile tokens have a subsequent P2 repair; remaining configuration text and other field rules remain W01/W10 work;
 this does not close the profile batch or bypass its remaining readiness checks.
 
 ## Verification commands
@@ -278,9 +290,10 @@ record the environment. Run doctests and the per-feature/MSRV/XML-unification
 checks prescribed by `CLAUDE.md` at W24. `rg` is an audit aid, not a call-graph
 proof: inspect aliases, wrappers and subtree consumers, including test fixtures.
 
-W21 must provide the exact external-validator invocation after tool selection.
-The existing `OXVIF_ONVIF_SCHEMA` ignored test is only a structural check and
-cannot stand in for that gate. Do not invent a command or mark it passed now.
+The [schema preflight](mock-fidelity-schema-preflight.md) records the selected
+external-validator commands and dated corpus results. The existing
+`OXVIF_ONVIF_SCHEMA` ignored test is only a structural check and cannot stand in
+for that gate. An ordinary skipped test is not an external validation pass.
 
 ## Closure and handoff
 
@@ -304,16 +317,18 @@ its dated evidence distinguishes local gates from hosted CI (VE1 run 34579594778
 subgroup with the K36/D4 migration approved on 2026-09-11; see its dated gates.
 VE1 does not close W10 or the overall programme.
 Scoped synthetic request/auth boundaries, selected profile identity/effects,
-11 acknowledgment-only policies, [PA1 assembly](mock-fidelity-profile-assembly.md)
+13 acknowledgment-only policies (A2/A3 plus B16), [PA1 assembly](mock-fidelity-profile-assembly.md)
 and [VS1 source configuration](mock-fidelity-video-source.md)
 and [VE1 encoder configuration](mock-fidelity-video-encoder.md)
 and [AM1 audio/metadata](mock-fidelity-audio-metadata.md)
-are implemented subgroups. **Next: remaining W10 URI/OSD/capability closure**,
-followed by other service subgroups. W07 HTTP binding, remaining W04 typed/QName rules, broader W06
+are implemented subgroups. **Programme backlog: remaining W10 URI/OSD/capability closure**,
+followed by other service subgroups; these are not all prerequisites for 0.17.
+W07 HTTP binding, remaining W04 typed/QName rules, broader W06
 Fault migration and security semantics remain open. The [schema preflight](mock-fidelity-schema-preflight.md)
 records working external tooling and selected corpus coverage, not whole-programme acceptance.
 
-The planning revision does not select a release version, merge PR #16, publish,
-push or install binaries. Final release acceptance requires M0–M6 evidence at a
-recorded candidate commit and the applicable maintainer authorization. Keep the
-requirement to notify the user before updating a release on their system.
+The [0.17 cut](release-0.17-cut.md) owns R01–R08 selected-contract acceptance and
+its release gates at a recorded candidate commit. That acceptance does not close
+M0–M6 or promote W00–W26 TODO/PARTIAL rows. Publication, main-branch merge and
+installation follow the applicable authorization; notify the user before updating
+a release on their system.

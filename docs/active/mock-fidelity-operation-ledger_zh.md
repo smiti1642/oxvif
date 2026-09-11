@@ -2,9 +2,9 @@
 
 [English](mock-fidelity-operation-ledger.md) | [繁體中文](mock-fidelity-operation-ledger_zh.md)
 
-程式碼基準：`b134f73`，2026-09-10。本文件是專案原始碼清冊，不是 ONVIF
-schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispatcher 的全部
-包含 B16 後共 **159** 個字面值路由分支；此數量不是已完整驗證的操作數，也不是 ONVIF 定義的全部操作數。
+初始程式碼基準：`b134f73`，2026-09-10；表列含後續具名批次。本文件是專案原始碼清冊，
+不是 ONVIF schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispatcher
+包含 B16 後的全部 **159** 個字面值路由分支；此數量不是已完整驗證的操作數，也不是 ONVIF 定義的全部操作數。
 
 先閱讀[施工檢查表](mock-fidelity-execution-checklist_zh.md)；
 政策與歷史證據保留於[主計畫](mock-fidelity-hardening-plan_zh.md)。
@@ -26,6 +26,9 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | [維護方式](#維護方式) | 程式碼差異及變更流程 |
 
 ## 追蹤契約
+
+B16：[Media synchronization 工作卡及證據](mock-fidelity-pr16-integration_zh.md)，
+預設拒絕及明確選定的收件確認，不代表實際串流。
 
 K34 指 [VE1 計畫](mock-fidelity-video-encoder_zh.md) 的歷史 rate 遷移，包含相依的
 encoder／profile 讀取。VE1 指後續八項操作交付：完整 candidate、selector／options、
@@ -60,6 +63,10 @@ A3：額外八項 effect stub 的政策遷移，詳見 [批次紀錄](mock-fidel
 PA1：profile 組裝、容量及引用計數子群，詳見 [批次紀錄](mock-fidelity-profile-assembly_zh.md)。完整欄位／實體相容性仍分開驗收。
 
 VS1：八項 source 讀寫／options 子群，詳見 [批次證據與限制](mock-fidelity-video-source_zh.md)。列仍為 PARTIAL，不代表完整 schema／實機契約驗收。
+
+AM1 指 [15 操作 audio／metadata 子群](mock-fidelity-audio-metadata_zh.md)。
+[0.17 切點](release-0.17-cut_zh.md) 的 R01–R08 選定契約驗收與全計畫 C／R／F／B／V
+完成分開；不得因發布或清冊數量相等而將 TODO／PARTIAL 列升級。
 
 ## device
 
@@ -117,8 +124,8 @@ VS1：八項 source 讀寫／options 子群，詳見 [批次證據與限制](moc
 ## media
 
 P2 為 [profile 身分成對遷移](mock-fidelity-profile-preflight_zh.md#media-profile-身分)。
-完整欄位／fault policy、空 token 政策及其他 configuration token 尚未結案；
-P1 與 P2 合計仍只構成部分 operation 驗收。
+完整欄位／fault policy 與所有 configuration token 尚未結案。K30 後續提供有界的空
+profile token 政策，PA1 提供模型組裝／容量行為；這些批次仍只構成部分 operation 驗收。
 
 [dispatch_media](../../src/mock/dispatch.rs) · [services/media.rs](../../src/mock/services/media.rs)
 
@@ -305,14 +312,16 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 rtk powershell -NoProfile -File docs/active/check-mock-fidelity-inventory.ps1 -SelfTest
 ```
 
-唯讀檢查器比對路由 key、handler symbol、arguments 及雙語追蹤欄位，
-拒絕重複／空清冊並偵測不支援的 dispatch 語法。記憶體內自我測試不修改原始碼，
+唯讀檢查器比對路由 key、handler symbol、arguments、雙語追蹤欄位、字面值 Action
+宣告與來源稽核索引的五種 reader 拼法；拒絕重複／空清冊並偵測所支援類別的
+原始碼形狀差異。記憶體內自我測試不修改原始碼，
 也不使用攝影機。這是原始碼形狀檢查，不是 Rust AST、call graph 或規範驗證器。
-它不檢查 handler 內部，也不證明 Action URI 與 body 一致；
+它不稽核 handler 語意，也不證明 runtime Action URI 與 body 一致；
 相關工作分別列於 W00／W02／W07。W22 的原始碼清冊子項已接入
 `.github/workflows/ci.yml`，在 Windows 與 Linux 使用 PowerShell 7 執行
-`-SelfTest`；`package` 依賴此檢查成功。目前尚未觀察託管 runner 的執行結果。
-外部 schema CI 與儲存庫必要狀態檢查設定仍是獨立且未完成的驗收工作。
+`-SelfTest`；`package` 依賴此檢查成功。選定 corpus 亦已接入外部 schema CI。
+託管結果依 revision 記於[發布證據](release-0.17-cut_zh.md#驗證紀錄)；來源形狀檢查
+不代表最終候選 CI 驗收或儲存庫必要狀態檢查設定已完成。
 
 W22 本機證據（2026-09-10）：PowerShell 7 執行與 CI 相同的命令，16 個拒絕
 控制案例及實際原始碼核對均通過。暫時修改 `media.GetProfiles` 清冊的 handler

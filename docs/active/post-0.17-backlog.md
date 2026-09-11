@@ -25,6 +25,24 @@ is promised. [Release blockers](release-0.17-cut.md#blocking-acceptance) stay in
 | F07 | Remaining schema/QName/wildcard controls, wider corpus and fuzz/property coverage | W20–W23; retain selected independent corpus gates, no all-operation coverage claim |
 | F08 | RTSP decoder/playback, batch file exports, camera-write CLI commands and standalone reusable navigation crate | Existing CLI maintenance/navigation plans; new threat model and permission UX before writes |
 | F09 | Official Homebrew Core, Debian/Ubuntu and Windows community-channel submissions | Distribution plan; current native packaging checks remain a release gate, submission is not implied by generated artifacts |
+| F10 | Bounded snapshot image-compatibility investigation | Preserve A03 destination/auth/size/no-clobber policies; obtain a sanitized reproducible response before changing image acceptance |
+
+F10 research disposition, 2026-09-12: review of the user-provided ONVIF Device
+Manager source found GetSnapshotUri → HTTP stream download → WPF image decoding,
+with no RTSP fallback in that path. A synthetic JPEG with trailing CR/LF decoded
+through the independent Windows decoder but failed oxvif's terminal-EOI signature
+check. This establishes one compatibility difference, not the cause of the
+observed Hanwha non-image response. No GPL code was transplanted; any follow-up
+must be independently implemented. Permissive certificate acceptance, redirects,
+proxy behavior or credential-bearing URL normalization are not accepted solutions.
+The existing successful read-only snapshot/diagnose evidence remains in the
+[snapshot repair record](snapshot-auth-repair.md).
+
+F05 also retains the notification listener's inherited bounded HTTP reader:
+the peer wrapper is connection metadata, not authentication. It does not add
+TLS, chunked decoding, per-connection read deadlines or a connection limit.
+Listener lifecycle tests and peer assertions do not establish suitability for an
+untrusted public endpoint. No new internet-exposure claim is part of this cut.
 
 No new dependency major upgrade enters 0.17 just because an outdated report lists
 it. Advisory remediation and compatibility fixes remain governed by the release

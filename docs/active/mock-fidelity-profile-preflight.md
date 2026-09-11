@@ -7,6 +7,18 @@ Work: W01/W02 for the first W10 batch. Baseline `892aa94`; investigation started
 Owner: current hardening branch. [Execution checklist](mock-fidelity-execution-checklist.md) ·
 [Source index](mock-fidelity-source-audit.md) · [Operation ledger](mock-fidelity-operation-ledger.md)
 
+2026-09-12 evidence reconciliation: this card preserves dated implementation
+checkpoints, including their then-current gaps, test totals and external runs.
+They are not fresh acceptance results. The selected R03–R05 implementation now
+includes P2/K30 profile identity and empty-token policy, A1 typed-adapter routing,
+and PA1 profile assembly/capacity/reference effects; see
+[profile assembly](mock-fidelity-profile-assembly.md) and the
+[release review](release-0.17-review.md). K27 is locally repaired: collision
+buckets retain distinct requests and replay uses request-aware lookup; see
+[storage migration](../replay-storage.md). The legacy canonical keys can still
+collide. These selected repairs do not complete W00–W26, every profile field,
+the replay dependency graph, HTTP binding conformance or real-device acceptance.
+
 | Section | Purpose |
 | --- | --- |
 | [Scope and identities](#scope-and-identities) | Exact 13 operation cards |
@@ -249,11 +261,12 @@ instance or native HTTP adapter acceptance is claimed.
 
 ## Profile-token dependency closure
 
-Source checkpoint `4220ec2`, 2026-09-11; W02/W10/W11/W19. This inventories the
-profile identity path before changing its stored representation. It does not
-declare all configuration tokens or PTZ operations audited.
+Source checkpoint `4220ec2`, 2026-09-11; W02/W10/W11/W19. The table records the
+historical profile identity path before changing its stored representation. P2,
+PTZ1, A1 and the later K27 repair supersede its pending migration descriptions.
+It does not declare all configuration tokens or PTZ operations audited.
 
-| Path | Current reader/consumer | Paired migration obligation |
+| Path | Reader/consumer at this checkpoint | Paired migration obligation at this checkpoint |
 | --- | --- | --- |
 | Media1 creation and reads | `handle_create_profile` optional Token and `resp_profile` ProfileToken use fragments; `render_profile` writes the profile token attribute verbatim | Decode scoped optional/required scalar fields and escape the attribute together; preserve meaningful whitespace and distinguish character references from literal attribute whitespace |
 | Media2 reads/deletion | `resp_profiles_media2` Token and both DeleteProfile readers already use Node; `render_profile_media2` writes the token attribute verbatim | Preserve decoded identity across both views; do not decode persisted literal strings again |
@@ -276,7 +289,11 @@ operation cards; do not infer those rules from a renderer fix.
 
 ## Scope and identities
 
-The table below is the per-operation current-behavior part of each card.
+The table below preserves the per-operation snapshot after P2/K30 and before
+PA1. In particular, its Token fallback, ignored initial Configuration/Name,
+capacity and ordinary Fault descriptions are historical; PA1 subsequently
+changed those paths. Use the linked profile-assembly card and operation ledger
+for their current disposition.
 All 13 cards inherit the shared-path, reference and C01–C12 sections below.
 Inputs describe existing source, **not** a normative field table or approved
 defaults. Action URI and source method are individually recorded in the source
@@ -318,16 +335,18 @@ K17 tracks pre-success replay invalidation separately from K14's state hook.
   methods → `OnvifClient::call` envelope/security → MockTransport/MockServer →
   FaultResponder → AuthResponder → optional replay → SyntheticResponder →
   dispatch. These 13 client methods escape caller strings; old mock extraction
-  does not decode them. Common identity/XML validation now includes static handlers.
+  did not decode them. Common identity/XML validation now includes static handlers.
 - Scalar extraction: `xml_parse::{extract_tag,extract_all_tags,extract_attr}`
   locate local names and return trimmed/raw fragments. Delete uses
-  the already-parsed operation's scalar accessor instead. Binding now passes extracted values into a
+  the already-parsed operation's scalar accessor instead. P2 and PA1 also migrated
+  the selected profile/configuration identity fields. Binding now passes decoded values into a
   shared atomic plan; it no longer synthesizes and reparses per-entry XML.
-  Scoped input decoding remains a separate parser migration.
+  Other legacy fields still need separate scoped-reader migration.
 - Creation: explicit duplicate check and insertion now share the write lock;
   generated identities skip occupied tokens. `ProfileEntry` is appended with all
-  configuration slots None and fixed false. There is no modeled capacity check.
-  Media2 ignores initial Configuration entries. K13's collision is now a corrected
+  configuration slots None and fixed false for Media1. PA1 adds atomic initial
+  Media2 bindings and enforces the existing eight-profile synthetic capacity
+  without truncating imported state. K13's collision is now a corrected
   regression for both services; shared-helper controls cover concurrent allocation,
   duplicate full-state preservation, notification counts and counter boundaries.
 - Deletion: `delete_profile_in_state` locates token under write lock, refuses
@@ -341,17 +360,21 @@ K17 tracks pre-success replay invalidation separately from K14's state hook.
   and all slot writes share one write lock. Media2 pre-resolves kinds and submits
   the complete list. Fixed does not prevent binding changes. The reproduced K16
   partial write is repaired, with full-state and one-notification controls through
-  both transports. Unsupported kinds, Type=All, name-only updates and configuration
-  conflicts need reviewed target behavior, not accidental fallbacks.
+  both transports. PA1 also handles selected Type=All and name-only updates and
+  binding compatibility; unsupported kinds and broader conflict/field rules
+  retain their explicitly bounded policy.
 - Rendering: `profile_snapshot` captures profiles and all configuration catalogues
   under one read guard; `render_profile` / `render_profile_media2` inline VSC, encoder,
   audio source/encoder and PTZ render helpers. Profile Name now escapes decoded
-  state text once; profile-token and nested-configuration text remain open under K15.
+  state text once; P2 also escapes profile-token attributes. Later service slices
+  migrate selected nested configuration renderers; the remaining paths stay open.
   Further nested renderers' escaping and other snapshot paths remain W10/W18.
 - State hooks: `MockState::{modify,modify_returning,notify}` capture the mutation
   snapshot under the write lock and invoke callbacks after releasing it. Bounded
-  reentrant writes are supported; callback serialization and failed-write replay
-  invalidation remain W18/W19. The mock does not implement external persistence.
+  reentrant writes are supported. Selected built-in profile/source/encoder/audio/
+  metadata effects now retire their declared reads only after commit; callback
+  serialization and broader replay visibility remain W18/W19. The mock does not
+  implement external persistence.
 - Consumers: `MediaProfile` / `MediaProfile2` and nested configuration parsers
   in `src/types/media.rs`; SOAP errors via `parse_soap_body/find_response`;
   session profile selection and CLI profile views/errors. Review `SoapError`
@@ -390,9 +413,10 @@ validity alone cannot detect this valid-but-inappropriate request choice.
 Direct input sequences for all 13 operations were also inspected in the pinned
 WSDL closure; detailed field notes remain outside the checkout under the external
 source root (`profile-contract-review-20260910.md`). This is not full output-type
-or Core/common error review. Source capacity and capability inconsistencies also
-remain open: creation does not enforce the advertised profile limit; Media2's
-advertised configuration kinds disagree with the current binding implementation.
+or Core/common error review. At that checkpoint, creation did not enforce the
+advertised profile limit and Media2's advertised configuration kinds disagreed
+with its binding implementation. PA1 subsequently repairs those selected
+capacity/capability paths; this does not complete the per-field review.
 
 The bounded DeleteProfile fault review uses Media1 §5.2.22 and Media2 §5.1.5:
 both services require Sender → InvalidArgVal → NoProfile for an unknown profile,
@@ -576,8 +600,9 @@ pinned Xerces XSD 1.1 validation; full operation semantics remain unaccepted.
 Hosted run 34471659927 for prior allocation commit `2a488be` failed only the
 Windows CLI line-number output comparison because `meta.elapsed_ms` differed
 between subprocesses (0 versus 9); packaging was therefore skipped. It is not a
-green hosted acceptance. This independent test-harness finding will be corrected
-in a separate commit without changing the CLI timing contract.
+green hosted acceptance. The later harness correction excludes only numeric
+`meta.elapsed_ms` from the JSON comparison and compares the remaining envelope
+exactly, preserving the CLI timing contract. This historical run remains failed.
 
 Bounded K13 state slice: the externally reviewed token-uniqueness requirement
 and existing duplicate refusal are sufficient to repair allocation without
@@ -606,22 +631,25 @@ acceptance. Prior deletion-effect commit `340fc89` passed hosted CI run
 | Axis | Existing evidence or exact next case | State |
 | --- | --- | --- |
 | C01 | Source index and runtime alias/body/service mismatch controls implemented; HTTP binding policy remains open under W03/W07 | PARTIAL |
-| C02 | `delete_profile_preserves_escaped_and_whitespace_identity`; K15 markup baseline; add literal name/token round trips on create/get/bind | PARTIAL |
-| C03 | `delete_profile_rejects_ambiguous_or_mislocated_identity_without_mutation`; extend namespace/decoy controls to other 11 rows | PARTIAL |
-| C04 | Add required/empty/duplicate/repeated/extension cases per field after external field review; preserve legal repeats | TODO |
+| C02 | DeleteProfile identity plus `mock_profile_names` and `mock_media_profile_identity` literal name/token round trips through create/get/bind; remaining field policies stay open | PARTIAL |
+| C03 | DeleteProfile refusal plus selected Media/PTZ identity and PA1 namespace/decoy controls; this is not complete validation of every field on the other 11 rows | PARTIAL |
+| C04 | Selected Name/identity/selector/binding required, empty, duplicate and repeated-field cases are implemented; complete remaining field/attribute/extension policies after reference review | PARTIAL |
 | C05 | Existing `mock_token_discrimination` and `mock_media1_media2_agree`; add escaped tokens and wrong-family targets for all bindings | PARTIAL |
 | C06 | K13 allocation, K14 notification and K16 partial binding have corrected regressions; broader transactions, conflicts and callbacks remain open | PARTIAL |
-| C07 | `profile_name_remains_literal_text_in_both_services` and both-transport Name controls; complete token/nested renderer escaping and independent namespace/shape checks | PARTIAL |
+| C07 | Seeded literal markup is now in the shared `mock_profile_names` exercise for both transports; P2 covers profile-token escaping; complete remaining nested renderers and independent namespace/shape checks | PARTIAL |
 | C08 | `unknown_token_fault_preserves_literal_text_and_state`; corpus checks missing/fixed DeleteProfile nested faults; other mappings/HTTP codes pending W05–W07 | PARTIAL |
-| C09 | Common static/stateful depth/node limits covered in both transports; byte limit in-process; scoped auth and HTTP byte mapping pending | PARTIAL |
+| C09 | Common static/stateful depth/node limits covered in both transports; byte limit in-process; later scoped-auth controls have their own preflight, while HTTP byte mapping remains unaccepted | PARTIAL |
 | C10 | Model limits and K12 corrected; `fixed_profile_configuration_remains_mutable_in_both_media_services` proves Add/Remove changes actual state on fixed profiles | PARTIAL |
 | C11 | Selected DeleteProfile client/health first-subcode controls and K22 request selection verified; remaining consumer/CLI review pending W06 | PARTIAL |
-| C12 | Audit assertions perturbed: all four known-gap tests failed at payload/state assertions; fixed-binding control also failed when expected attachment was inverted, then restored green | PARTIAL |
+| C12 | Historical audit: all four then-current known-gap tests failed at payload/state assertions; fixed-binding control also failed when expected attachment was inverted, then restored green. Later consolidation does not preserve that test count | PARTIAL |
 
-The K15 Name test in `tests/mock_fidelity_known_gaps.rs` now asserts the corrected
-literal-text invariant. Token and nested-renderer risks remain open. Other
-`known_gap_` tests still deliberately assert current defects: **passing means
-reproduced, not fixed.** Convert each when repaired; never restore a defect for green.
+The weaker K15 seeded-Name duplicate in `tests/mock_fidelity_known_gaps.rs` was
+consolidated into the shared `tests/mock_profile_names.rs` exercise: it checks
+escaped wire text, absence of injected children, all three views and unchanged
+read-hook counts in both transports. P2 covers profile-token identity separately;
+remaining nested-field risks are not thereby closed. A historical `known_gap_`
+name or passing count alone does not show whether an assertion reproduces a
+defect or protects a repair; inspect its current expected state and payload.
 
 Readiness remains blocked by engineering work W02 transitive closure, W03/W04
 parsed-input boundary, W05/W06 fault design, external per-field review and explicit

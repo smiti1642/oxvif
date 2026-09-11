@@ -4,6 +4,10 @@
 
 Baseline: `7e9b68f`, 2026-09-11. Owner: current hardening task. W01/W10/W17/W18/W19.
 
+The operation-card defects describe that baseline. Test, inventory and corpus counts,
+and the next-subgroup handoff below, are historical VS1 results. Current candidate
+acceptance is tracked in the [execution checklist](mock-fidelity-execution-checklist.md).
+
 | Section | Purpose |
 | --- | --- |
 | [Operation cards](#operation-cards) | Complete source-selected subgroup |
@@ -20,7 +24,7 @@ Client entry points are in `src/client/media.rs` and `media2.rs`, with correspon
 session wrappers in `src/session.rs`; endpoint routing remains the shared synthetic
 Action resolver, not a new HTTP path restriction.
 
-| ID | Existing handler and source input | Output / target |
+| ID | Baseline handler and source input | Output / target |
 | --- | --- | --- |
 | media.GetVideoSources | `media::resp_video_sources(state)`; ignores body | Physical source catalogue, unescaped tokens; validate empty operation, escape identities |
 | media.GetVideoSourceConfigurations | `media::resp_video_source_configurations(state)`; ignores body | Whole configuration catalogue; validate empty operation, shared escaped renderer |
@@ -122,5 +126,5 @@ Broader scalar/operation-attribute rules, arbitrary imported snapshot validation
 physical routing compatibility, full HTTP binding and every ordinary Fault branch
 remain open. This is not ONVIF certification, a native three-platform acceptance,
 a real-camera write test or release approval. No system binary was replaced.
-Next complete subgroup is encoder configuration/options/instances (the remaining eight video
+The next subgroup at the VS1 handoff was encoder configuration/options/instances (the remaining eight video
 operations); audio/metadata follows. VS1 does not close W10 or the whole programme.

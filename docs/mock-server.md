@@ -30,7 +30,7 @@ omission is a bug, a documented one is a design decision.**
 | [5. State model](#5-state-model) | Which services share mutable state? |
 | [6. Seeded fixture](#6-seeded-fixture) | What device, media, PTZ, audio, and recording data exists initially? |
 | [6.2.1 Source configuration](#621-source-configuration-contract) | Which source settings and selectors are modeled? |
-| [6.2.2 Encoder frame rates](#622-encoder-frame-rates) | Fractional rates, state migration and Media1 limits |
+| [6.2.2 Encoder configuration](#622-encoder-configuration-contract) | Configuration, fractional rates and Media1 limits |
 | [7. Operation reference](#7-operation-reference) | Which operations are stateful, static, or unsupported? |
 | [8. Worked examples](#8-worked-examples) | What do representative requests and responses look like? |
 | [9. Error model](#9-error-model) | Which SOAP fault shapes and codes are emitted? |
@@ -152,8 +152,8 @@ now checked at the common synthetic boundary described below.
 |---|---|---|
 | `…/ver10/device/wsdl/` | `dispatch_device` | 38 |
 | `…/ver10/deviceio/wsdl/` | `dispatch_device_io` | 1 |
-| `…/ver10/media/wsdl/` | `dispatch_media` | 32 |
-| `…/ver20/media/wsdl/` | `dispatch_media2` | 26 |
+| `…/ver10/media/wsdl/` | `dispatch_media` | 33 |
+| `…/ver20/media/wsdl/` | `dispatch_media2` | 27 |
 | `…/ver20/ptz/wsdl/` | `dispatch_ptz` | 27 |
 | `…/ver20/imaging/wsdl/` | `dispatch_imaging` | 8 |
 | Exact ONVIF Events / OASIS WSN port paths | `dispatch_events` | 8 |
@@ -161,7 +161,8 @@ now checked at the common synthetic boundary described below.
 | `…/ver10/search/wsdl/` | `dispatch_search` | 4 |
 | `…/ver10/replay/wsdl/` | `dispatch_replay` | 2 |
 
-**157 operations total** — unchanged in 0.15.0; `GetDigitalInputs` moved from
+**159 routes in this candidate**, including the two new Media synchronization
+operations. Version 0.15.0 had 157; its `GetDigitalInputs` moved from
 `dispatch_device` to `dispatch_device_io`, it was not added. The `deviceio`
 prefix is lowercase because that is how `deviceio.wsdl` spells its soapActions,
 while the elements it declares are in `…/ver10/deviceIO/wsdl`.
@@ -216,7 +217,7 @@ these are mock parser limits, not camera capacity. Resource refusals use
 `urn:oxvif:mock:error`. These reasons contain no request text. HTTP may reject a
 request before this engine; header/status/encoding policy remains under review.
 
-This is not runtime XSD validation or complete field validation. Authentication,
+This is not runtime XSD validation or complete field validation. Full WS-Security,
 must-understand/encoding policy, remaining handler readers and replay effects still
 need their own migration. Explicit fault/auth/raw/replay responders retain their
 precedence. Metamorph comparisons use the stricter synthetic baseline without
@@ -236,7 +237,7 @@ Every response is a SOAP 1.2 envelope built by `helpers::soap`:
 ```
 
 `xmlns:s` and `xmlns:tt` are always present; each handler adds its own service
-namespace. Two rules are now **mechanically enforced across all 157 operations**
+namespace. Two rules are now **mechanically checked across the inventoried routes**
 (`src/mock/dispatch.rs`):
 
 | Guard | Rule |
@@ -285,9 +286,10 @@ ONVIF protocol limits. Failures return `env:Sender` with an
 `InvalidRequest-DELETEPROFILE` reason. Missing/empty tokens now use this error
 rather than the old `ter:InvalidArgs` response.
 
-Only these two operations have migrated so far. Other handlers still use the
-legacy extractors; authentication, client response parsing and recorded replay
-are unchanged. This is not full XSD validation or complete mock conformance.
+This was the first scoped migration. The candidate also migrates authentication,
+selected profile/PTZ identities and the source/encoder/audio/metadata families
+described below. Other handlers still use legacy field extractors. This is not
+full XSD validation or complete mock conformance.
 See the [hardening plan](active/mock-fidelity-hardening-plan.md).
 
 ---
@@ -406,8 +408,8 @@ unfiltered profile read containing an empty seeded token returns `s:Receiver` /
 `mock:RequestPolicy`; valid profiles can still be selected individually. Repair
 such snapshot entries explicitly. These are mock limits, not a claim that ONVIF
 prohibits every empty string. Raw/replay overrides retain their precedence.
-Full field policy, configuration-token parsing, adapters and replay-key migration
-remain open.
+Full field policy remains incomplete. Selected configuration and adapter paths
+are described below; recording-key collision handling is documented in §9.1.
 
 Media1 `GetProfiles`/`GetProfile` and Media2 `GetProfiles` capture profiles and all
 configuration catalogues under one read lock before rendering. A response cannot
@@ -753,7 +755,7 @@ lowercase `deviceio`; the elements are in `…/ver10/deviceIO/wsdl`. Shares one
 |---|---|---|
 | `GetDigitalInputs` | ● | Driven by the REST simulator. Was answered at the device endpoint in `tds:` until 0.15.0. |
 
-### 7.2 Media1 — 32 operations
+### 7.2 Media1 — 33 operations
 
 | Operation | | Notes |
 |---|---|---|
@@ -770,8 +772,9 @@ lowercase `deviceio`; the elements are in `…/ver10/deviceIO/wsdl`. Shares one
 | `GetAudioEncoderConfiguration`, `GetAudioEncoderConfigurationOptions` | ● **T** | Per configuration; unknown token faults. Options use Media1's **wrapped** nesting — §6.5. |
 | `SetAudioEncoderConfiguration` | ● | **Refuses a body without `Multicast` or `SessionTimeout`** — both are required by `tt:AudioEncoderConfiguration`. §13.3. |
 | `GetOSDOptions`, `GetServiceCapabilities` | ○ | |
+| `SetSynchronizationPoint` | — | Refuse by default; explicit Media1 receipt-only opt-in, no stream effect (§13.5). |
 
-### 7.3 Media2 — 26 operations
+### 7.3 Media2 — 27 operations
 
 Selector duplicate/scalar/order checks are implemented; full field-length and
 attribute policy remain part of the unfinished validation programme.
@@ -783,7 +786,7 @@ attribute policy remain part of the unfinished validation programme.
 | `AddConfiguration`, `RemoveConfiguration` | ● | Resolves every kind and validates all required tokens before committing the complete plan; one notification per successful request. |
 | `GetVideoSourceConfigurations`, `SetVideoSourceConfiguration`, `GetVideoSourceConfigurationOptions` | ● **T** | |
 | `GetVideoEncoderConfigurations`, `SetVideoEncoderConfiguration`, `GetVideoEncoderConfigurationOptions` | ● **T** | |
-| `GetMetadataConfigurations` | ● **T** | `ConfigurationToken` is a **filter** — no match yields an empty list, not a fault. |
+| `GetMetadataConfigurations` | ● **T** | Scoped configuration/profile selectors; unknown references fault (§6.4, AM1). |
 | `GetMetadataConfigurationOptions` | ● **T** | Addressed read — no match **faults**. |
 | `SetMetadataConfiguration` | ● | Unknown token faults. |
 | `GetStreamUri`, `GetSnapshotUri` | ○ | |
@@ -793,6 +796,7 @@ attribute policy remain part of the unfinished validation programme.
 | `SetAudioEncoderConfiguration` | ● | Shares Media1's writer. Not required to carry `Multicast`, and cannot carry `SessionTimeout` — §13.3. |
 | `GetVideoSourceModes` | ○ | Declared stub — §13. |
 | `SetVideoSourceMode` | — | **Always faults** (`ter:ActionNotSupported`). The mock does not model sensor modes and will not claim it does — §13.1. |
+| `SetSynchronizationPoint` | — | Refuse by default; independent Media2 receipt-only opt-in, no stream effect (§13.5). |
 
 ### 7.4 PTZ — 27 operations
 
@@ -1314,7 +1318,7 @@ check whether it is pinned or incidental.
 
 | Guarantee | Test |
 |---|---|
-| Every action the client can send is routed (157) | `mock_handles_every_action_the_client_can_send` (`src/mock/dispatch.rs`) |
+| Inventoried client Actions are routed (159 routes) | `mock_handles_every_action_the_client_can_send` (`src/mock/dispatch.rs`); routing is not complete field/effect coverage |
 | No response repeats an attribute | `no_response_declares_an_attribute_twice` |
 | No response uses an undeclared prefix | `every_response_binds_the_prefixes_it_uses` |
 | The 49 selected write/read pairs round-trip | `tests/mock_roundtrip.rs` — does not cover every effectful operation |
@@ -1361,8 +1365,8 @@ telling you to move the row, so the list cannot rot into a permanent blind
 spot. Current state: 49 round-trip pairs (**49** working, **0** static, 0
 known-broken) and 35 token rows (30 discriminating, 5 blind).
 
-**Every `Set` on this mock now round-trips.** The last two static rows were the
-audio encoder configurations, and wiring them emptied the audit's Tier 3. Both
+**All 49 selected write/read pairs round-trip.** The last two static rows were
+audio encoder configurations; other effectful operations are outside that table. Both
 `Expect::Static` and `Expect::Broken` are kept as arms with an `#[allow(dead_code)]`
 and a comment saying why: they are the only place the distinction between
 "deliberately fixture data" and "not wired up yet" can be *written down*, and
@@ -1433,7 +1437,8 @@ Audit §6.
 - **A Media2 `SetAudioEncoderConfiguration` never changes `SessionTimeout`.**
   `tt:AudioEncoder2Configuration` has no such member, so a Media2 write cannot
   express it; the stored value is preserved rather than cleared. `Multicast` is
-  optional there and *is* written, including to `None`. `UseCount` and the
+  optional there: omission preserves the shared value, and a supplied complete
+  block updates it. `UseCount` and the
   options list are the device's, not the caller's, and are never written.
 - **`SetConfiguration` ignores `ForcePersistence`.** The configuration is always
   stored as if `true`. Real devices differ too widely on what `false` means —

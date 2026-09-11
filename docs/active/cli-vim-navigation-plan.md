@@ -28,8 +28,10 @@ Ctrl+D / Ctrl+U half-page movement. Scope: human-facing terminal navigation only
    Rust CLI can reuse without importing ONVIF, a registry, networking or a terminal
    backend. This is a Vim-inspired navigation subset, not a Vim emulator.
 
-Do not add editing operators, macros, registers, key remapping, persistent UI
-preferences, a new search engine or additional camera operations. Existing search
+The initial M1–M5 scope excluded persistent UI preferences; the
+[line-number follow-up](#line-number-follow-up) later added that capability.
+Do not add editing operators, macros, registers, key remapping,
+a new search engine or additional camera operations. Existing search
 remains available; adding search to manage is a separate feature. No Agent schema,
 exit-code, command-selection, credential, or camera-write behavior changes.
 
@@ -73,9 +75,9 @@ retains its current clear operation. Clear pending state on mode/screen changes,
 filter changes, replacement/reordering of data, cancellation and terminal resize.
 Returning from details must not restore an old count.
 
-Compatibility note: Discovery currently accepts a single `g` for the first entry.
-It will require `gg`; Home remains an immediate alternative. Document this deliberate
-change rather than silently maintaining an ambiguous single-`g` alias.
+Compatibility note: before this implementation, Discovery accepted a single `g`
+for the first entry. It now requires `gg`; Home remains an immediate alternative.
+The previous single-`g` alias is not retained.
 
 ## Relative numbering and viewport
 
@@ -95,9 +97,11 @@ change rather than silently maintaining an ambiguous single-`g` alias.
 - For read-only text viewers, the first visible display line is the relative-number
   anchor, not an editable cursor. Counts address wrapped display lines; `G` shows the
   last page, and `nG` places the requested line at the top where space permits.
-- Filtering restarts the ordinal space over the matching items and clears pending
-  input. A changed dataset retains selection by stable identity when available;
-  otherwise clamp the existing ordinal, with no automatic item activation.
+- Filtering restarts the ordinal space over the matching items, clears pending
+  input and selects the first match. Current screen instances use fixed datasets;
+  live replacement/reordering with selection retained by stable identity is not
+  implemented. A future host that replaces data must define that retention policy
+  and must not automatically activate an item.
 - Empty lists show an explicit empty state, no fictional item `1`, and no selectable
   row. Short terminals prioritize a visible selected item and return/cancel guidance;
   hide decorative/relative-gutter detail before hiding essential content. Resize must
@@ -168,7 +172,7 @@ requirement for that delivery and must not be reported as completed by it.
 | Rendering | Correct absolute/relative numbers, stable gutter and data-column widths across pages, Unicode, no control-character leakage, pending hints, empty states and selected-item visibility |
 | Mode isolation | Search clearing, typing `123ggjk` in input, masked passwords, paste without navigation execution, mode changes, returning from details, and unchanged cancel behavior |
 | Reuse | Compile and test the same core with plain Rust tooling, without Cargo/ONVIF/crossterm dependencies |
-| Automation | Existing JSON/JSONL, non-interactive and redirected command tests stay unchanged and pass; no gutter, ANSI, key hints or prompt leakage |
+| Automation | Preserve JSON/JSONL, non-interactive and redirected command contracts in their tests; no gutter, ANSI, key hints or prompt leakage |
 
 Perturb count handling, `gg` completion or relative-number calculation and confirm
 the relevant assertions fail; restore before the full gates. Do not rely only on
@@ -195,6 +199,12 @@ testing and distinguish agent-simulated critique from a real human study.
 
 Local validation on Windows x64, 2026-09-09, covers the initial implementation,
 not Release publication or three-platform terminal UX certification.
+The counts and terminal sessions below are historical observations. Current
+candidate evidence is recorded in the [0.17 review ledger](release-0.17-review.md).
+The Cargo navigation harness includes the same source and reruns its four tests;
+it verifies a separate compilation boundary, not four additional behavioral
+contracts. Terminal restoration evidence comes from the recorded ConPTY sessions,
+not the pure-core or frame-rendering unit assertions.
 
 | Check | Observed result |
 | --- | --- |
@@ -254,7 +264,9 @@ All three sessions restored the terminal and exited with code 0.
 
 Regression checks cover all four numeric contracts, narrow/Unicode rendering,
 settings/input boundaries, save/override precedence, failed saves, unknown-field
-preservation and byte-identical Agent/plain output even with corrupted UI settings.
+preservation and unchanged output even with corrupted UI settings. Plain output is
+compared byte-for-byte; JSON comparison excludes only numeric `meta.elapsed_ms`
+and compares the entire remaining envelope, including command metadata.
 Changing relative mode to return absolute ordinals caused both numeric and rendering
 assertions to fail; restoring the implementation passed. The isolated Windows debug
 build also exposed main-thread stack overflow during black-box invocations; boxing

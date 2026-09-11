@@ -21,7 +21,7 @@
 | [5. 狀態模型](#5-狀態模型) | 服務之間共用的可變狀態 |
 | [6. 預載 fixture](#6-預載-fixture) | 初始的裝置、媒體、PTZ、音訊與錄影資料 |
 | [6.2.1 Source configuration 契約](#621-source-configuration-契約) | 原子寫入、sensor options 與模型限制 |
-| [6.2.2 Encoder 幀率](#622-encoder-幀率) | 小數幀率、狀態遷移與 Media1 限制 |
+| [6.2.2 Encoder configuration 契約](#622-encoder-configuration-契約) | 設定、小數幀率與 Media1 限制 |
 | [7. 操作參考](#7-操作參考) | stateful、static 與不支援的操作 |
 | [8. 實作範例](#8-實作範例) | 代表性請求與回應 |
 | [9. 錯誤模型](#9-錯誤模型) | SOAP fault 結構與代碼 |
@@ -128,8 +128,8 @@ synthetic 邊界檢查。
 |---|---|---|
 | `…/ver10/device/wsdl/` | `dispatch_device` | 38 |
 | `…/ver10/deviceio/wsdl/` | `dispatch_device_io` | 1 |
-| `…/ver10/media/wsdl/` | `dispatch_media` | 32 |
-| `…/ver20/media/wsdl/` | `dispatch_media2` | 26 |
+| `…/ver10/media/wsdl/` | `dispatch_media` | 33 |
+| `…/ver20/media/wsdl/` | `dispatch_media2` | 27 |
 | `…/ver20/ptz/wsdl/` | `dispatch_ptz` | 27 |
 | `…/ver20/imaging/wsdl/` | `dispatch_imaging` | 8 |
 | 完整 ONVIF Events／OASIS WSN port path | `dispatch_events` | 8 |
@@ -137,7 +137,7 @@ synthetic 邊界檢查。
 | `…/ver10/search/wsdl/` | `dispatch_search` | 4 |
 | `…/ver10/replay/wsdl/` | `dispatch_replay` | 2 |
 
-總計 **157 項操作**。0.15.0 只將 `GetDigitalInputs` 由 `dispatch_device` 移至 `dispatch_device_io`，並未增加操作數。`deviceio` action prefix 使用小寫，符合 `deviceio.wsdl`；其 element 則位於 `…/ver10/deviceIO/wsdl`。Events action URI 另含 portType segment 與 `Request` suffix，因此 operation name 為 `GetServiceCapabilitiesRequest`、`PullMessagesRequest` 等。
+此候選版本共 **159 條路由**，包含兩個新增 Media synchronization 操作。0.15.0 為 157 項，當時只將 `GetDigitalInputs` 由 `dispatch_device` 移至 `dispatch_device_io`，並未增加操作數。`deviceio` action prefix 使用小寫，符合 `deviceio.wsdl`；其 element 則位於 `…/ver10/deviceIO/wsdl`。Events action URI 另含 portType segment 與 `Request` suffix，因此 operation name 為 `GetServiceCapabilitiesRequest`、`PullMessagesRequest` 等。
 
 未匹配任何分派規則的 action 會回傳：
 
@@ -181,7 +181,7 @@ Malformed XML、namespace 錯誤、operation 不符及 container shape 錯誤改
 `mock:RequestPolicy`，兩者均綁定 `urn:oxvif:mock:error`，reason 不包含請求
 文字。HTTP 可能在進入引擎之前拒絕請求；header／status／encoding 策略仍待審查。
 
-此功能不是 runtime XSD validation，也不是完整欄位驗證。Authentication、
+此功能不是 runtime XSD validation，也不是完整欄位驗證。完整 WS-Security、
 must-understand／encoding 策略、其他 handler reader 及 replay effect 仍需
 各自遷移。Fault／auth／raw／replay responder 保留優先順序。Metamorph 比較
 採用較嚴格的 synthetic baseline，但不改寫已儲存的 request／response bytes。
@@ -199,7 +199,7 @@ must-understand／encoding 策略、其他 handler reader 及 replay effect 仍�
 </s:Envelope>
 ```
 
-`xmlns:s` 與 `xmlns:tt` 一定存在，各 handler 會加入所屬 service namespace。以下規則會對全部 157 項操作進行機械式驗證（`src/mock/dispatch.rs`）：
+`xmlns:s` 與 `xmlns:tt` 一定存在，各 handler 會加入所屬 service namespace。以下規則會對清冊中的路由進行機械式檢查（`src/mock/dispatch.rs`）：
 
 | Guard | 規則 |
 |---|---|
@@ -238,9 +238,10 @@ element，包含 envelope。這些是 mock 資源限制，不是 ONVIF 協定限
 失敗時回傳 `env:Sender`，reason 帶有 `InvalidRequest-DELETEPROFILE`。
 缺少／空 token 也改用此錯誤，不再回傳舊的 `ter:InvalidArgs`。
 
-目前僅上述兩個操作完成遷移。其他 handler 仍使用舊 extractor；authentication、
-client response parsing 與錄製 replay 均未變更。這不是完整 XSD 驗證或整體
-mock conformance。詳見[強化計畫](active/mock-fidelity-hardening-plan_zh.md)。
+這是最初的 scoped 遷移；候選版本也遷移 authentication、選定的 profile／PTZ
+身分及下述 source／encoder／audio／metadata 家族。其他 handler 仍使用舊欄位
+extractor。這不是完整 XSD 驗證或整體 mock conformance。
+詳見[強化計畫](active/mock-fidelity-hardening-plan_zh.md)。
 
 ---
 
@@ -338,8 +339,8 @@ mutation 前回傳 `s:Sender`／`mock:RequestPolicy`；若要自動配置 token�
 Create token。非空字串的空白仍有意義。未篩選的 profile 讀取若包含空 seed token，
 回傳 `s:Receiver`／`mock:RequestPolicy`；仍可個別選取有效 profile。此類 snapshot
 entry 須明確修正。這是 mock 限制，不表示 ONVIF 一律禁止空字串。Raw／replay
-override 保留原有優先順序。完整欄位政策、configuration-token 解析、adapter 與
-replay-key 遷移仍待完成。
+override 保留原有優先順序。完整欄位政策仍未完成；選定 configuration／adapter
+路徑見下文，recording-key 碰撞處理見 §9。
 
 Media1 `GetProfiles`／`GetProfile` 與 Media2 `GetProfiles` 在同一 read lock
 內取得 profile 及全部 configuration catalogue，再產生回應，避免將不同版本
@@ -528,11 +529,13 @@ Device 共 38 項操作。裝置資訊、日期時間設定、hostname、NTP、D
 
 DeviceIO 的唯一操作是 `GetDigitalInputs`，由 REST simulator 驅動。其 endpoint 為 `{base}/onvif/deviceio`；action segment 使用小寫 `deviceio`，element namespace 則為 `…/ver10/deviceIO/wsdl`。
 
-### 7.2 Media1（32 項操作）
+### 7.2 Media1（33 項操作）
 
 Profile、video source/configuration、video encoder、OSD 與 audio catalog/configuration 均由共享狀態支援。`GetStreamUri` 與 `GetSnapshotUri` 對所有 profile 回傳同一組 canned URI；`GetOSDOptions` 與 `GetServiceCapabilities` 為 static。`SetAudioEncoderConfiguration` 若缺少規範要求的 `Multicast` 或 `SessionTimeout` 會拒絕 request。
 
-### 7.3 Media2（26 項操作）
+`SetSynchronizationPoint` 預設拒絕；Media1 須逐項 opt-in，僅回覆收件，不產生串流效果（§13.5）。
+
+### 7.3 Media2（27 項操作）
 
 `GetProfiles` 的可省略 `Token` 使用解碼後完整值，選出單一 profile 或回傳 Fault。
 省略 `Type` 時不回傳 configuration；單一 `All` 回傳全部 binding，其他 list
@@ -540,7 +543,9 @@ Profile、video source/configuration、video encoder、OSD 與 audio catalog/con
 既有完整 profile client 方法明確傳送 `Type=All`。重複 Token、巢狀 scalar 及
 不合法欄位順序會被拒絕；完整欄位長度／attribute 政策仍屬未完成的驗證範圍。
 
-Media2 與 Media1 共用 profile、video、audio 狀態，並另提供 metadata。`GetMetadataConfigurations` 的 `ConfigurationToken` 是 filter；無結果時回傳空 list，而 `GetMetadataConfigurationOptions` 的未知 token 會 fault。`GetVideoSourceModes` 為已宣告 stub；`SetVideoSourceMode` 一律回傳 `ter:ActionNotSupported`，不會宣稱已儲存未建模的 sensor mode。
+Media2 與 Media1 共用 profile、video、audio 狀態，並另提供 metadata。AM1 的 metadata 清單與 options 使用 scoped configuration／profile selector，未知參照均回傳 Fault。`GetVideoSourceModes` 為已宣告 stub；`SetVideoSourceMode` 一律回傳 `ter:ActionNotSupported`，不會宣稱已儲存未建模的 sensor mode。
+
+`SetSynchronizationPoint` 預設拒絕；Media2 有獨立的逐項收件 opt-in，不產生串流效果（§13.5）。
 
 ### 7.4 PTZ（27 項操作）
 
@@ -815,7 +820,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 
 | 保證 | 測試 |
 |---|---|
-| Client 可送出的全部 157 個 action 都有路由 | `mock_handles_every_action_the_client_can_send` |
+| 清冊中的 client Action 均有路由（159 條） | `mock_handles_every_action_the_client_can_send`；不代表完整欄位／效果覆蓋 |
 | Response 不重複 attribute | `no_response_declares_an_attribute_twice` |
 | Response 不使用未宣告 prefix | `every_response_binds_the_prefixes_it_uses` |
 | 選定的 49 組 write／read 配對可 round-trip | `tests/mock_roundtrip.rs`；不涵蓋全部 effectful 操作 |
@@ -853,7 +858,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 - 不模擬 search cursor；`FindRecordings` 只提供一個 token，結果一次回傳完整目前清單。
 - Source crop 僅支援零原點；非零 `Bounds/@x`／`@y` 現在回 Fault，正值尺寸可 clamp 至所選 sensor 範圍，詳見 §6.2.1。
 - Media1 audio encoder request 缺少 required `Multicast` 或 `SessionTimeout` 時會回傳 `ter:ConfigModify` / `IncompleteAudioEncoder-SETAEC-5715`。
-- Media2 `SetAudioEncoderConfiguration` 無法表示 `SessionTimeout`，所以會保留原值；可選 `Multicast` 則會寫入，包括 `None`。
+- Media2 `SetAudioEncoderConfiguration` 無法表示 `SessionTimeout`，所以會保留原值；省略可選 `Multicast` 時保留共用設定，提供完整 block 時才更新。
 - `SetConfiguration` 忽略 `ForcePersistence`，一律持久儲存；`UseCount` 不由 caller 修改。
 - 新建 recording 不建立虛構 time bound，因此省略 `Earliest` / `Latest`；刪除 recording 會同時刪除其 job。
 - Media1 encoder options 不提供 H.265；H.265 僅位於 extension。Media2 只在 `VS_1` 公告 H.265。
@@ -896,6 +901,8 @@ let mock = MockTransport::new()
 | `DeviceFirmwareUpgrade` | Upload endpoint 可用或已升級韌體 |
 | `DeviceSystemRestore` | Upload endpoint 可用或已還原設定 |
 | `EventsSubscribe` | 已建立 push subscription 或推送通知 |
+| `MediaSynchronizationPoint` | Media1 video／metadata 串流同步 |
+| `Media2SynchronizationPoint` | Media2 video／metadata 串流同步；與 Media1／Events 分開 |
 | `EventsRenew` | 已延長 subscription lifetime |
 | `SearchEnd` | 已終止搜尋或使其過期 |
 

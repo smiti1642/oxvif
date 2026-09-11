@@ -8,6 +8,16 @@ implemented; see [storage migration](../replay-storage.md) and
 and containment records below are historical evidence, not the current storage
 behavior. The remaining W19 work is not complete.
 
+2026-09-12 evidence reconciliation: dated sections below preserve their original
+source/test checkpoints; their counts, mutation logs and external runs are reused
+historical evidence, not fresh gates. Current selected R03–R05 work additionally
+includes scoped auth, P2/K30 identity, PA1 profile assembly/reference counts and
+source/encoder/audio/metadata committed effects. The original three-profile-read
+effect lists below are not the complete current lists. See the
+[release review](release-0.17-review.md), [profile assembly](mock-fidelity-profile-assembly.md)
+and linked service cards. This does not close all W00–W26, standalone downstream
+commit observation, concurrent replay visibility, broad HTTP conformance or hardware behavior.
+
 W02/W03/W06/W19 engineering checkpoint, 2026-09-10. Source baseline `9978220`.
 This is a source-derived dependency map, not a normative protocol catalogue.
 W02 and W03 remain PARTIAL across the programme; common synthetic validation is
@@ -37,16 +47,17 @@ below. No new product decision is required here.
 ## Replay key collision reproduction
 
 At `2ecb557`, `tests/mock_replay_key_gaps.rs` reproduced six distinct-wire/same-Action pairs
-that currently collapse to one stored key: leading and repeated scalar spaces,
+that then collapsed to one stored key: leading and repeated scalar spaces,
 different field namespaces, escaped text versus child structure, an escaped quote
 crossing an attribute boundary, and a second root ignored by the compatibility
-DOM. Last recording wins and answers both requests. The companion control keeps
+DOM. The last recording won and answered both requests. The companion control kept
 ordinary distinct tokens and full Actions separate. These are intentionally
-passing known-gap assertions, not corrected invariants or conformance acceptance.
+passing known-gap assertions at that checkpoint, not conformance acceptance.
 Changing the second recorded response and collapsing the control Action made
 both tests fail at payload/count assertions (RTK log 1789095344); both mutations
-were restored. Replace the baseline with distinct-key/response expectations when
-the migration is implemented, never restore the collisions to satisfy the test.
+were restored. The later K27 repair replaces the baseline with distinct stored
+request/response expectations while retaining the colliding legacy key; never
+restore storage loss to satisfy an old assertion.
 
 The [profile-token closure](mock-fidelity-profile-preflight.md#profile-token-dependency-closure)
 now lists paired Media, PTZ, adapter and replay paths. K27 requires explicit key
@@ -79,17 +90,21 @@ content fall through; nonidentical documents carrying unresolved `xsi:type` also
 fall through rather than comparing its unexpanded lexical QName. Other QName-valued
 content and full SOAP/HTTP semantics still need their own audit.
 
-Both in-process and HTTP controls now cover nine colliding pairs and exact-raw
-replay; a separate positive retains prefix aliases, entity/CDATA equivalence,
+The containment-stage in-process and HTTP controls covered nine colliding pairs
+and exact-raw replay; a separate positive retains prefix aliases, entity/CDATA equivalence,
 URL destination and WS-Security nonce/time changes. The old implementation failed
 the corrected substitution assertion (RTK 1789096026); the initial guard failed
 the additional xsi:type case (1789096304). Disabling qualified WSA masking made
 the positive fail at its recorded-payload assertion (1789096245), then was restored.
 The standalone ReplayResponder MessageID probe now supplies a qualified SOAP/WSA
 request; unqualified lookalike Header fields are no longer considered ephemera.
-FixtureStore::lookup remains a key-only public API, not this secondary check.
-The old response-substitution baseline above is historical; the current replay
-assertion checks synthetic fallback while preserving the unresolved index probe.
+At the containment checkpoint, FixtureStore::lookup was still key-only and the
+tests checked synthetic fallback while retaining an unresolved index probe.
+K27 subsequently replaced that probe: ten distinct-request pairs must coexist,
+survive save/load and same-request replacement, retain report rows, and select
+their own payload in both replay transports. Key-only lookup now returns None
+for ambiguous buckets; ReplayResponder uses FixtureStore::lookup_request.
+Exact sanitized requests can replay even when semantic comparison is unavailable.
 
 Containment gate (2026-09-11, Windows isolated build): formatting, both workspace /
 all-target Clippy modes, both strict workspace rustdoc modes and inventory controls
@@ -100,8 +115,8 @@ does not claim whole-programme or release acceptance.
 
 ## Replay key credential boundary
 
-W19/K28: `canonicalize` scrubs URL `user:pass@` pairs after both parsed projection
-and raw fallback. Record, replay and value diff share this projection; decoded
+W19/K28 checkpoint: `canonicalize` scrubs URL `user:pass@` pairs after both parsed
+projection and raw fallback. Record, replay and value diff share this projection; decoded
 entity delimiters are covered for parsed text/attributes. `FixtureStore::load`
 scrubs legacy keys before indexing, and `lookup` accepts equivalently scrubbed
 caller keys. The JSON shape is unchanged. Credential-only duplicate keys follow
@@ -119,9 +134,11 @@ These are project-authored privacy controls, not independent schema acceptance.
 Limitations: raw envelopes retain the existing targeted redactor; malformed XML,
 encoded raw credentials, custom fields, action/device labels and older files or
 backups are not certified secret-free. No user recording was inspected or changed.
-K27 namespace, significant-whitespace and unescaped serialization collisions now
-have separate reproductions but still need persisted-key compatibility design; this is not a key-v2
-migration or complete W19 acceptance.
+At this K28 checkpoint, K27 namespace, significant-whitespace and unescaped
+serialization collisions still needed a storage design. The later K27 repair
+retains distinct requests within legacy-key buckets, with replacement only for
+equivalent sanitized requests; credential cleanup alone does not merge distinct
+identities. Neither change is a key-v2 migration or complete W19 acceptance.
 
 Verification (2026-09-11, isolated Windows build): formatting, both workspace /
 all-target Clippy modes and both strict workspace rustdoc modes passed. Workspace
@@ -163,8 +180,9 @@ complete per-field audit of other services.
    `extract_attr` scans the first matching tag header and returns raw spelling.
 2. `handle_create_profile` and `handle_create_profile_media2` now pass a decoded
    direct scalar Name to `create_profile_in_state`; both profile renderers escape
-   this stored text once. Media1 still supplies a raw Token. The remaining token
-   and configuration text migration must pair decoding with output escaping;
+   this stored text once. P2 subsequently migrated Media1's optional Token and
+   profile-token renderers; PA1 migrated selected binding references. Remaining
+   configuration text migration must pair decoding with output escaping;
    decoding every legacy helper would corrupt subtree callers.
 3. `resp_profiles/resp_profile` and `resp_profiles_media2` now collect profiles and
    catalogues in one `profile_snapshot` read guard; the former separate snapshots
@@ -175,7 +193,7 @@ complete per-field audit of other services.
 4. At baseline `apply_media2_configuration` synthesized per-entry XML and called
    bind/unbind repeatedly. The K16 state repair now passes an extracted-value
    plan into `apply_configuration_bindings`, validating the full plan under the
-   write lock before changing slots. Scoped decoding remains a parser task; the
+   write lock before changing slots. PA1 adds scoped configuration decoding; the
    shared writer no longer reinserts values into XML or reparses fragments.
 5. `create_profile_in_state/delete_profile_in_state/bind_configuration` reach
    `MockState::modify[_returning]` → committed snapshot → `notify` → caller
@@ -244,8 +262,10 @@ passed for the preceding authentication-Fault commit `e6145b3`, not this new sli
   and `metamorph::parse::extract_fault` consume the result. Nested faults require
   tests of these consumers, not just the fault renderer. No public error field
   or CLI exit-code change is approved by this checkpoint.
-- Auth still has its own legacy parser and formatter; strict DeleteProfile and
-  escaped `resp_soap_fault` do not establish auth security or authorization.
+- At this baseline auth had its own legacy parser and formatter. The later scoped
+  auth slice is recorded in the linked authentication preflight; strict
+  DeleteProfile and escaped `resp_soap_fault` alone do not establish auth security
+  or authorization.
 
 ## Implementation order
 
@@ -413,8 +433,10 @@ all three profile views, already-empty removal, independent instances, and an
 unrelated service recording with the old binding-family spelling. The original
 family invalidation retired that unrelated recording even for a refused write.
 No host/device network or media effect is simulated. Standalone ReplayResponder,
-configuration writes, additional dependencies and concurrent/callback visibility
-remain open; invalidation still occurs after the caller's state hook.
+configuration writes and additional dependencies were still open at this effect
+checkpoint. Later selected source/encoder/audio/metadata writes and PA1 reference
+reads have their own effects and tests; concurrent/callback visibility remains
+open, and invalidation still occurs after the caller's state hook.
 
 ## Committed creation effects
 
@@ -460,7 +482,10 @@ The public standalone ReplayResponder constructor retains its existing policy:
 it cannot observe a caller-owned downstream responder. Built-in clones enable the
 private commit-aware path only where the terminal is owned. This is a staged
 migration, not a public configuration switch or whole W19 acceptance. Other
-mutations other than the creation and binding slices above still use the old family invalidation.
+mutations outside the subsequently selected profile/source/encoder/audio/metadata
+commit paths retain the legacy family policy; classified acknowledgment-only
+operations never invalidate. The standalone constructor still lacks downstream
+commit observation.
 Additional profile-dependent reads, malformed Action handling, callback
 ordering and concurrent linearizability remain open. The effect observer runs
 after the existing state-change callback; this slice does not make that callback
@@ -568,10 +593,12 @@ external shape probe passed all unchanged zero-finding pins: 158 responses,
 checked attributes. More payloads are reached after wrapping its previously bare
 fields; those legacy request fields are not a normative request corpus.
 
-Remaining W03/W07/W08/W19 work includes HTTP action fallback/consistency, media
-type/encoding/status/endpoint rules, SOAP mustUnderstand/encodingStyle and
+At the P-D checkpoint, remaining W03/W07/W08/W19 work included HTTP action
+fallback/consistency, media type/encoding/status/endpoint rules, SOAP mustUnderstand/encodingStyle and
 attribute policy, processing instructions/outside comments, scoped WSSE/auth,
 operation-specific field semantics, ordinary service faults and replay effects.
+Later scoped-auth and selected service/effect slices supersede the corresponding
+pending items; full HTTP binding and dependency closure remain unaccepted.
 Raw fault/custom/replay responses retain their earlier precedence and bytes.
 No public API, error type, CLI exit code or installed binary was changed.
 

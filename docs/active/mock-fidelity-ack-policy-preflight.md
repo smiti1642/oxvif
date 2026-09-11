@@ -3,8 +3,10 @@
 [English](mock-fidelity-ack-policy-preflight.md) | [繁體中文](mock-fidelity-ack-policy-preflight_zh.md)
 
 W16/K05, 2026-09-11, baseline `a51490c`. Design recorded before implementation.
-Current implementation: 11 classified operations. Scope/Design/Verification below
-retain the first three-operation checkpoint; the A3 section records the eight-operation extension.
+This card records the first 11 classified operations. The current candidate also
+includes two Media operations, for 13 total; see [B16](mock-fidelity-pr16-integration.md#b16-operation-cards).
+Scope/Design/Verification below retain the first three-operation checkpoint;
+the A3 section records the eight-operation extension.
 
 | Section | Purpose |
 | --- | --- |

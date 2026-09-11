@@ -4,6 +4,9 @@
 
 基準：`0ae5b44`，2026-09-11。W10／W16／W18／W19 子群，不代表全案驗收。
 
+下列數量與下一子群均記錄本次歷史交付；目前候選版本驗收見
+[施工檢查表](mock-fidelity-execution-checklist_zh.md)。
+
 | 章節 | 用途 |
 | --- | --- |
 | [範圍](#範圍) | 原始碼位置及已審閱決策 |
@@ -59,10 +62,10 @@ all-feature 測試與 1,131 項 default 測試；兩輪各有五項預定 ignore
 相依；重跑的受影響 gate 包含兩種 transport 的精確 recording 保留斷言。
 此審查修正未另跑第二輪擾動。
 
-明確選取的舊 schema 檢查通過，finding pin 未變更。現有外部 profile exporter
+明確選取的舊 schema 檢查通過，finding pin 未變更。當時的外部 profile exporter
 產生 40 份 instance，固定版本 strict Xerces 全數驗證通過，外部 corpus 為
 `oxvif-profile-corpus-20260911-04`。這些僅涵蓋既有 13 操作 corpus，不包含所有新增
 raw 初始 binding、改名、容量與衝突變體。清冊 self-test 通過：159 個 Action site、
-157 條 route、238 個直接 reader（production 223／test 15），移除五處舊擷取呼叫。
-本批不代表 Linux／macOS 原生或 release 驗收。下一子群：video source／encoder
+157 條 route、238 個直接 reader（223 個位於頂層 test module 前、15 個位於其中），移除五處舊擷取呼叫。
+本批不代表 Linux／macOS 原生或 release 驗收。當時交接的下一子群：video source／encoder
 configuration 與 options。

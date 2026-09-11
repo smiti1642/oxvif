@@ -394,5 +394,5 @@ camera images or unredacted inventory into public issues.
 6. Run native Windows/macOS/Linux CI and installation checks before release.
 
 Local mock tests do not establish real-camera interoperability or three-platform
-acceptance. See the [implementation plan](https://github.com/smiti1642/oxvif/blob/master/docs/active/cli-maintenance-workflows-plan.md)
+acceptance. See the [implementation plan](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/active/cli-maintenance-workflows-plan.md)
 for current evidence and remaining gates.

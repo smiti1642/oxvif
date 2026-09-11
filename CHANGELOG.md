@@ -22,9 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Target: **0.17.0 — not yet release-ready or available on crates.io.**
 
-[Release summary](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0.md) ·
-[Full changelog and migration](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0-changelog.md) ·
-[繁體中文](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0-changelog_zh.md)
+[Release summary](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0.md) ·
+[Full changelog and migration](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0-changelog.md) ·
+[繁體中文](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0-changelog_zh.md)
 
 ### Added
 
@@ -39,6 +39,7 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 
 - Human table output, detailed reports, errors and line-oriented profile menus
   escape terminal control characters; JSON/JSONL retain original data values.
+  Full-screen rendering escapes directional controls before measuring display width.
 - Media2 full-profile requests, fractional frame-rate parsing, repeated audio
   option values, metadata required fields and XML literal whitespace handling.
 - Selected Mock request identity, atomic Media writes, coherent snapshots/hooks
@@ -77,9 +78,10 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 - Key-only fixture lookup returns `None` for collisions; use `lookup_request`.
   Keep recording backups before downgrading: older readers can collapse entries.
 
-**Acceptance is still open:** complete-candidate and security review, native CI,
-final-version package/install checks and real-camera acceptance remain required.
-See the [release cut](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/active/release-0.17-cut.md).
+**Local candidate/security review passed; release acceptance is still open:**
+final-candidate native CI, staging, final-version package/install checks and the
+remaining human/platform acceptance are required; hardware evidence remains scoped.
+See the [release cut](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/active/release-0.17-cut.md).
 These changes are not part of the published 0.16.0 artifacts.
 
 ## [0.16.0] - 2026-09-04

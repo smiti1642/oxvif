@@ -2,16 +2,19 @@
 
 [English](release-0.17-review.md) | [繁體中文](release-0.17-review_zh.md)
 
-Status: IN-PROGRESS. Updated 2026-09-12. This is an execution record, not release
+Status: LOCAL REVIEW COMPLETE. Updated 2026-09-12. This is an execution record, not release
 approval. [Approval packet](release-0.17-approval.md) and
 [release gates](release-0.17-cut.md) remain authoritative.
 
 | Section | Purpose |
 | --- | --- |
 | [Inventory](#inventory) | Frozen inputs and honest coverage |
-| [Batch order](#batch-order) | Work remaining before closure |
+| [Batch order](#batch-order) | Completed local review and retained limits |
 | [A04 human-output repair](#a04-human-output-repair) | Reproduction, repair and checks |
 | [V01 encoder replay coverage](#v01-encoder-replay-coverage) | Expanded tests, not a new production repair |
+| [A05 terminal display and T01 assertion follow-up](#a05-terminal-display-and-t01-assertion-follow-up) | Terminal repair, native-exit guards and local acceptance |
+| [T02 exact assertion follow-up](#t02-exact-assertion-follow-up) | Stronger existing drivers and negative controls |
+| [Assertion review boundaries](#assertion-review-boundaries) | What the tests do and do not establish |
 | [Handoff boundary](#handoff-boundary) | Maintainer CI and reserved actions |
 
 ## Inventory
@@ -29,20 +32,26 @@ operation-card evidence can be reused with an exact matching input revision;
 newly modified code needs delta review. Additions after the frozen inventory
 are tracked in `delta_paths`, including this record and its translation.
 
+All 208 frozen rows are now reviewed. Subsequent paths are reconciled separately
+in `delta_reviews`; per-file blob IDs identify reviewed inputs. This closes the
+local source/consumer/assertion/claim review for G01/G03, not native, staging,
+hardware or whole W00–W26 acceptance. Historical deficiencies and test totals
+remain dated in their original cards; the final disposition is recorded here.
+
 ## Batch order
 
 Work by complete service subgroup. Combine fixes in a coherent batch before
 running the complete sensitivity/restored gates; do not repeat the entire
 workspace after each file or documentation edit.
 
-| Batch | Frozen paths | Inspected in this pass | Remaining closure |
+| Batch | Frozen paths | Completed local review | Retained acceptance boundary |
 | --- | ---: | --- | --- |
-| CLI | 18 | Changed application/contract/registry/main/descriptor/Agent/schema paths; maintenance/manage/navigation/preferences production; interactive rendering/lifecycle; human-output boundaries | Remaining test diffs and unchanged consumers; executable and final interactive-terminal acceptance; package prose |
-| Library | 26 | Media1/2/session/type/XML changed paths and notification listener, including its inherited HTTP reader | Public migration/reexport/examples and all affected readers/writers; reconcile exact prior snapshot evidence; notification limitations and assertions |
-| Mock | 54 | Scoped request tree, authentication, receipt policy, responder production, server/transport deltas | Dispatch/fault/shared-state and every included service subgroup; reconcile read/write/options/capability/replay and inherited helper consumers against operation cards |
-| Replay | 7 | Storage/report changes reconciled with K27 assertions and bilingual migration; typed-adapter projection reviewed; committed-effect implementation and selected assertions inspected | Finish adapter policy/auth chain and cross-service profile/binding/reference consumers; this does not close all replay dependencies |
-| Delivery | 19 | Prior CI/package evidence exists; no new closure claimed | Source/tool versions, workflow inputs, schema tools, SBOM/checksum/install assertions; new native/staging runs |
-| Documents | 84 | Release-cut/approval/backlog boundaries and A04 claim delta | Reconcile final claims across guides/READMEs/manpage, paired links and published history; do not repeat historical tests solely for prose |
+| CLI | 18 | Entry points, selectors, registry, reports, maintenance/manage, navigation, preferences, rendering/lifecycle, Agent/schema/descriptor and affected tests reconciled with guides | Actual Windows debug ConPTY is bounded; remaining human/platform and packaged installation acceptance is separate |
+| Library | 26 | Media1/2, session, types/XML, public reexports/examples, notification listener and consumers reconciled with wire/fault/serde/loopback and migration assertions | Snapshot recognition is not decoding; inherited listener is not Internet-hardened; no universal hardware conformance |
+| Mock | 54 | Shared request/auth/fault/dispatch/state and included profile/PTZ/source/encoder/audio/metadata paths, inherited consumers, effects and operation cards reconciled | Selected contracts only; remaining legacy HTTP/field/Fault semantics and full W00–W26 stay explicit |
+| Replay | 7 | Fixture/parse/report collision buckets, adapter/auth/raw chain, committed effects and cross-service identity/reference consumers reconciled with K27 and retention controls | Raw recording remains caller-owned; downgrade and concurrent publication limits remain |
+| Delivery | 19 | Manifests/lockfile, complete CI/release workflows, schema tools/source refs, source-SPDX, archive/formula and install assertions reviewed; local native-exit controls passed | Final-candidate native CI, distribution staging and final-version package/install acceptance remain required |
+| Documents | 84 | Public guides/READMEs/manpage, paired migration/release records, historical operation cards, local links and published history reconciled | Historical external-corpus/hardware/CI results retain exact scope and revision; no new execution inferred from prose |
 
 The counts classify files, not independent risk units. A shared helper can cross
 several groups. Security findings within the included cut must be resolved or
@@ -105,14 +114,111 @@ changed by V01.
 | Static checks | Both workspace all-target Clippy modes with warnings denied and fmt pass; strict rustdoc evidence from A04 applies to unchanged public source |
 | Production restoration | No diff from `1ea4fff` in `src`, CLI crates, manifests/lockfile or workflows; only tests and review documentation change |
 
+## A05 terminal display and T01 assertion follow-up
+
+2026-09-12, on `codex/release-0.17-closure` after `44302c8`. Full-screen
+rendering removed control characters but still emitted Unicode directional
+formatting characters. A new test failed on the original menu title before the
+repair. Menu cells, truncation and wrapping now escape display data before
+measuring its width. Original selection data is retained. This extends A04 to
+these rendering paths; it is not a universal Unicode spoofing defense.
+
+The test audit retained distinct transport, state, replay and executable
+boundaries. Three redundant test functions were merged into stronger existing
+drivers: XML-parsed PTZ presets with exact JSON/field checks; capabilities Faults
+with and without `xml:lang`; and seeded literal profile names over three reads
+and both transports. Native credential errors now use one shared redaction
+function in the real keyring adapter, so the test can inject an error that
+actually contains synthetic sensitive text.
+
+Four targeted perturbations produced five assertion failures: backend-error
+leakage, changed preset Name, changed capabilities reason, and changed seeded
+profile text in both transports. All were restored; ten affected tests passed.
+These are targeted sensitivity checks, not a new workspace mutation campaign.
+
+| Check | Observed result |
+| --- | --- |
+| Workspace all-features/default, locked, no-fail-fast | 1,310 / 1,198 passed; five existing ignored and 41 suites each |
+| Both workspace all-target Clippy modes | Passed with warnings denied |
+| Documentation, compatibility and dependency gates | Both strict workspace rustdoc modes, fmt, diff whitespace and Rust 1.88 all-feature/all-target check passed; fresh cargo audit found no advisory in 410 locked dependencies |
+| Windows ConPTY, actual debug executable | 40 synthetic saved devices; `21G`, detail/back, 100×24 → 48×12 → 100×24 resize, profile lookup/cancel, text editing and masked-password cancel passed |
+| Snapshot cancellation in ConPTY | Loopback proxy signaled a started image body; Esc cancelled, published no destination or temporary file, and started no further request; next operation required reconnect |
+| Terminal and local state | Normal exit and Ctrl-C exit restored exact stdin/stdout console modes measured by the parent in the same console; saved configuration hashes unchanged |
+| Executable provenance | Final terminal run used a copied debug executable, SHA-256 `9fbcb9d166ecfc9987647f54051c7bcb17a3c7bd9387a4680c6e7e54606d1f1d`; local Windows evidence, not release archive/install acceptance |
+| Windows CI smoke source | Four immediate exit checks added. Extracted-script success control plus four simulated native failures passed; each failure stopped before later commands |
+| Windows release smoke and packaging | Fourteen immediate native-command checks, including PE inspection and archive generation. Each extracted guard passed real native exit-0/exit-17 controls (28 cases); no hosted workflow was dispatched |
+| Packaging test placement | Removed only the duplicate Clippy-job invocation; dedicated Ubuntu/Windows schema-tooling jobs retain the same 24 controls and remain package prerequisites |
+| Final documentation/inventory closure | 1,360 local Markdown targets and 670 anchors resolve; published CHANGELOG history is unchanged. Inventory self-tests pass with 159 routes, 161 Action sites and 191 readers; indexed operation/source rows and W00–W26 statuses are preserved |
+
+The first default build overlapped a running Mock executable and failed with
+Windows linker LNK1104. It passed after terminal helpers used executable copies.
+The initial terminal harness used the HTTP root instead of the Mock device path
+and received a transport failure; correcting it to `/onvif/device` required no
+product change. Neither failed attempt is acceptance. Inputs and local artifacts
+are synthetic; no host CLI installation or new camera scan occurred.
+The Rust repair and test consolidation are committed as `214d989`, and workflow
+guards as `210bfc3`. T02 changes only existing assertions; later source-comment
+and documentation changes do not alter product behavior.
+
+## T02 exact assertion follow-up
+
+Commit `a5907d3` strengthens four existing test files without adding test functions
+or changing production behavior. Encoder replay now pins Sender → InvalidArgVal
+→ ConfigModify and the Quality reason as well as full-state/recording preservation.
+Rate replay rereads the previously recorded bare Media2 GetProfiles after commit:
+one response, four literal token/name pairs and no Configurations. Encoder-instance
+discrimination requires successful capacities (VSC_1 total 4; VSC_2 total 2),
+including each codec list. Both generic H264 option tests pin the full ordered
+nine-resolution union, including 480×240.
+
+Four targeted perturbations produced seven assertion failures: altered Quality
+reason (two), stale bare profile names (two), wrong VSC_1 capacity (one), and missing
+480×240 from the union (two). All perturbations were restored exactly; the 17
+affected tests passed. The final workspace runs passed 1,310 all-feature and
+1,198 default tests, with five ignored and 41 suites each; both Clippy modes
+passed. These controls establish the strengthened assertions' sensitivity, not
+independent conformance or a new whole-workspace mutation campaign.
+
+## Assertion review boundaries
+
+The selected Mock/schema and CLI/navigation assertion audit found useful
+overlapping boundaries, not a reason to delete tests based on similar names.
+
+- Some profile/PTZ identity differential expectations come from another instance
+  of the same implementation. Literal tokens, distinct head positions, state and
+  hooks add useful checks; they do not independently validate all semantics.
+  The profile snapshot race test is a bounded probe, not a forced-interleaving proof.
+- Advertised encoder/audio option loops check self-consistency. Separate explicit
+  value/list assertions guard important examples; the loops alone do not establish
+  exhaustive non-vacuous codec validation.
+- The initial encoder Fault-detail and bare-profile replay gaps are closed by
+  T02 above; V01 separately checks Type=All profile readback. The shared retirement
+  mutation does not establish independent sensitivity for every action entry.
+- CLI schema checks alone do not pin every command's metadata. Some maintenance
+  refusals still use `is_err`. The manage unit decision table alone did not prove
+  end-to-end cancellation; the ConPTY run supplies that additional evidence.
+- Corpus export is not validation. Ignored structural tests are not passes;
+  external XSD results remain separate from lexical, semantic, HTTP and hardware
+  acceptance. These limits do not describe newly observed product defects.
+- T02 closes the encoder-instances row's ability to distinguish two errors
+  rather than requiring two successes.
+  The generic encoder-options widths 2592 and 352 already distinguish a VEC_1
+  fallback: 352 is absent from that encoder. The initial audit said otherwise;
+  checking the literal catalogue corrected that assessment. The Action snapshot flattens
+  success to `ok` and drops Fault subcode/detail; it is not a lossless payload
+  oracle. Preserve these limits when interpreting its coverage counts.
+
 ## Handoff boundary
 
-G01/G03 remain open until the remaining rows are reconciled. Maintainer CI and
+G01/G03 are LOCAL-PASS for the included cut: all changed inputs, affected consumers,
+assertions and public claims are reconciled; findings A01–A05 are locally repaired.
+The remaining scoped product limits are recorded in the backlog, not silently
+promoted to conformance. G05–G09 retain their separate dispositions. Maintainer CI and
 non-publishing staging require repository write permission and must record the
 exact candidate SHA; commands are in the [approval packet](release-0.17-approval.md#maintainer-actions).
-A CI run on an earlier SHA cannot accept A04.
+A CI run on an earlier SHA cannot accept the later repairs or workflow guards.
 
-Keep library/CLI versions at 0.16.0 while this pre-version review is incomplete.
+Keep library/CLI versions at 0.16.0 until the reserved version change is approved.
 Do not merge master/develop, create a tag, publish packages/releases, close PRs
 or install the candidate into the host system during this work. Ordinary repair
 commits do not constitute the formal 0.17 version commit.

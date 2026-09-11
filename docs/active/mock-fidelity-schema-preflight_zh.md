@@ -4,6 +4,9 @@
 
 W20／W21 檢查點，2026-09-10。完整計畫仍在執行中。
 
+下列具日期的驗證結果保留當時 corpus 與工具範圍。目前匯出內容已包含 B16；歷史通過
+不等於目前候選版本驗收。詳見[施工檢查表](mock-fidelity-execution-checklist_zh.md)。
+
 | 章節 | 用途 |
 | --- | --- |
 | [結構檢查器](#結構檢查器) | 已交付的 W20 範圍 |
@@ -185,11 +188,11 @@ python packaging/verify_schemas_xerces.py compile --root /absolute/external/oxvi
 編譯官方 schema 並不驗證任何 mock exchange。較早的 `verify_schemas.py compile`
 仍是 Python 後端診斷命令，預期會揭露 K21。
 
-Windows／Linux CI 現在先執行 generic 控制及獨立 Xerces 選型，再執行獨立的
+Windows／Linux CI 定義先執行 generic 控制及獨立 Xerces 選型，再執行獨立的
 **Official schemas and selected Media corpus** job，使用固定來源雜湊、外部目錄且不上傳 artifact。
-後者在編譯後明確匯出並驗證選定的 110 份 profile／source／rate／encoder instance。每個 native 命令失敗均
+後者在編譯後明確匯出並驗證選定的 profile／source／rate／encoder／audio／metadata／synchronization corpus。每個 native 命令失敗均
 終止 job；驗證要求既有且非空的 corpus，因此缺少匯出不會視為通過。
-兩者均作為 package 前提，但不可回報為完整操作／corpus 驗收。前次 CI
+兩者均作為 package 前提，但不可回報為完整操作／corpus 驗收或目前候選版本已完成的執行。前次 CI
 [34461384194](https://github.com/smiti1642/oxvif/actions/runs/34461384194)
 已通過 `4fdd9f2` 的全部 25 個 job；該 run 早於 Xerces adapter 及新增編譯 job。
 
@@ -204,9 +207,11 @@ mock，擷取完整 request／response 字串；不讀取官方 schema，也不�
 
 Ignored 匯出測試要求 `OXVIF_MOCK_CORPUS` 指向**尚未存在的外部絕對目錄，且其
 parent 已存在**。工具拒絕空資料、含認證欄位的 request、相對／既有目錄及
-checkout／其上層位置。匯出保留 XML bytes，產生 110 個檔案及 `cases.json`，並為
+checkout／其上層位置。匯出保留 XML bytes，每組 exchange 產生兩個 XML 檔案，另加 `cases.json`，並為
 request、成功與 Fault response 記錄明確的 Envelope／Body／operation 預期。
 不讀取環境憑證或覆寫檔案；這是診斷 corpus，不是完整逐操作驗收。
+目前六個 driver 選取 80 組 exchange／160 份 XML instance，涵蓋 46 項操作及
+21 個 Fault response。這是 exporter 的組成，不是新的驗證結果。
 
 ```powershell
 $env:OXVIF_MOCK_CORPUS = 'C:/Temp/oxvif-profile-corpus-new'
@@ -264,13 +269,19 @@ Mock 現在逐項輸出整數，公開 parser 保留全部 Items。
 74 組 exchange、44 項操作、57 個成功及 17 個 Fault。官方資源不進入 checkout。
 詳見 [AM1](mock-fidelity-audio-metadata_zh.md)；CI 與語意覆蓋不等於本機結構驗證。
 
+B16 新增兩項 synchronization 操作的六組 exchange：兩個 receipt 與四個拒絕。
+因此目前 exporter 選取 80 組 exchange、46 項操作、59 個成功及 21 個 Fault
+（160 份 XML instance）。歷史本機驗證與目前候選版本待執行的 CI 見
+[B16 證據](contributor-pr-integration-plan_zh.md#執行紀錄)。
+
 W20 仍為 PARTIAL：須核對未解析／wildcard 計數、Fault 的 QName 文字，以及擴充
-已驗證的 44 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
+選定的 46 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
 payload、Fault 正負 instance 驗收更廣泛的實際 exchange。W22 已在 Windows／Linux
-加入選定的 148 份 profile／source／rate／encoder／audio／metadata corpus 驗證；缺少前提即失敗的完整 instance gate 仍須涵蓋
+CI 定義加入選定的 160 份 profile／source／rate／encoder／audio／metadata／synchronization corpus 驗證；缺少前提即失敗的完整 instance gate 仍須涵蓋
 其餘操作批次。此工具實驗不能取代
 P-B 的逐操作欄位、Fault 與語意審查。
 
 此診斷檢查點不需維護者新增決策。若選定的 gate 無法維持 D3 的散布或嚴格
-驗證邊界，必須先提出討論，不能弱化規則。PR #16 整合仍依賴經審查的 Fault
-與 D2 policy 路徑；其現有 acknowledgment-only mock 尚未驗收。
+驗證邊界，必須先提出討論，不能弱化規則。B16 已將 PR #16 的寬鬆確認行為替換為
+限定作用域、明確選入的 receipt；實際同步／媒體效果仍不在該已實作模型內。
+貢獻整合與 release 狀態仍依施工檢查表追蹤。

@@ -5,8 +5,8 @@ for the [`oxvif`](https://crates.io/crates/oxvif) ONVIF client library.
 
 **Next release: 0.17.0 (not yet published).** Guided maintenance, snapshot saving,
 diagnostic reports and configurable Vim navigation are in release acceptance.
-Read the [release summary](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0.md)
-and [full changes, migration and limitations](https://github.com/smiti1642/oxvif/blob/codex/contributor-pr-integration/docs/releases/0.17.0-changelog.md).
+Read the [release summary](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0.md)
+and [full changes, migration and limitations](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0-changelog.md).
 The installation command below still installs the published version.
 
 For the complete operator and automation reference, read the
@@ -46,7 +46,7 @@ Development-only additions: `snapshot --save`, `media snapshot-save`, `diagnose`
 `config export`, and `config diff`. These are not in the published 0.16.0 package.
 They do not modify camera settings; diagnosis does not verify RTSP playback and
 configuration exports are not restorable backups. See the
-[maintenance guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md)
+[maintenance guide](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/cli-maintenance.md)
 for file safety, retained failure reports, JSON/exit semantics and acceptance tests.
 Diagnosis provides a paginated profile selector in human terminals, summary-first
 reports and `-v` details. JSON/JSONL never prompt; Agent guide v8 documents additive
@@ -56,7 +56,7 @@ with retained device/profile context, session-only credentials and bounded sessi
 Camera-reported profile settings and diagnostic assessments are also available to Agents.
 Human screens share counted Vim-style navigation, configurable line numbers (`?` settings
 or `--line-numbers absolute|relative|hybrid|off`) and a compact
-mode/status line; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md#vim-style-navigation).
+mode/status line; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/cli-maintenance.md#vim-style-navigation).
 
 On Windows, macOS, or a Linux desktop session with Secret Service, onboard one
 camera with a no-echo password prompt, live verification, native credential

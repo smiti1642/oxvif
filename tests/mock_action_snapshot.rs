@@ -59,9 +59,9 @@ fn fresh() -> OnvifClient {
 
 /// Collapse a client result into a short, stable outcome string.
 ///
-/// The error arms are deliberately lossless about *which* error it was —
-/// pinning "it failed" alone would let a stage swap one failure mode for
-/// another unnoticed.
+/// Error variants and the selected fields distinguish more than "it failed".
+/// Success payloads and Fault subcode/detail are omitted; this is an outcome
+/// snapshot, not a lossless wire or semantic oracle.
 fn outcome<T>(r: Result<T, OnvifError>) -> String {
     match r {
         Ok(_) => "ok".to_string(),

@@ -15,13 +15,13 @@
 //! to preserve fractional rates. Malformed present rate control returns an error;
 //! negative/nonfinite rates fail before writing. Ordinary integer JSON remains
 //! readable. Media1's public rate type is unchanged. See the
-//! [migration guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/media2-frame-rate.md).
+//! [migration guide](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/media2-frame-rate.md).
 //! Mock encoder writes validate complete scoped candidates atomically, share
 //! limits with options, adapt bitrate and refuse unsupported streaming effects.
 //! H265 remains Media2-only; synthetic capacity uses source configuration tokens.
 //! Metadata now retains structured multicast and required session timeout. Migrate
 //! old Rust/JSON fields explicitly; see the
-//! [audio/metadata guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/audio-metadata.md).
+//! [audio/metadata guide](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/audio-metadata.md).
 //! Audio options retain all repeated Items; mock audio/metadata writes validate
 //! complete settings and readonly status without claiming actual RTP streaming.
 //! Push events can include local TCP origin through [`notification_listener_with_peer`]

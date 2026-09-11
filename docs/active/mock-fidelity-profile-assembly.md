@@ -4,6 +4,9 @@
 
 Baseline: `0ae5b44`, 2026-09-11. W10/W16/W18/W19 subgroup, not whole-programme acceptance.
 
+Counts and next-subgroup references below record this historical delivery. Current
+candidate acceptance is tracked in the [execution checklist](mock-fidelity-execution-checklist.md).
+
 | Section | Purpose |
 | --- | --- |
 | [Scope](#scope) | Source paths and reviewed decisions |
@@ -74,10 +77,10 @@ recording-preservation assertions on both transports. No second mutation campaig
 was run for that review correction.
 
 The explicitly selected legacy schema check passed with unchanged finding pins.
-The current external profile exporter produced 40 instances; strict pinned Xerces
+The profile exporter at this checkpoint produced 40 instances; strict pinned Xerces
 validated all 40 in external corpus `oxvif-profile-corpus-20260911-04`. These cover
 the existing 13-operation corpus, not all new raw initial-binding, rename,
 capacity or conflict variants. Inventory self-tests passed: 159 Action sites,
-157 routes, 238 direct readers (223 production / 15 test); five legacy reader
+157 routes, 238 direct readers (223 before top-level test modules / 15 inside them); five legacy reader
 calls were removed. This batch does not establish native Linux/macOS or release
-acceptance. Next subgroup: video source/encoder configuration and options.
+acceptance. Next subgroup at that handoff: video source/encoder configuration and options.

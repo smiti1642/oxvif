@@ -7,6 +7,15 @@
 下列較早的覆蓋重現／containment 記錄保留作為歷史證據，不代表目前仍會覆蓋；
 W19 其餘項目仍未結案。
 
+2026-09-12 證據核對：下方有日期的章節保留原始 source／test 檢查點；數量、擾動
+log 與外部執行沿用為歷史證據，不是新一次 gate。目前選定 R03–R05 另包含 scoped
+auth、P2／K30 身分、PA1 profile assembly／reference count，以及 source／encoder／
+audio／metadata committed effect。下方原始三個 profile-read effect 清單不是目前
+完整清單，見 [Release 審查](release-0.17-review_zh.md)、
+[profile assembly](mock-fidelity-profile-assembly_zh.md) 及連結的服務卡。
+這不代表 W00–W26、standalone 下游 commit 觀察、併發 replay 可見性、廣泛 HTTP
+符合性或實機行為已驗收。
+
 W02／W03／W06／W19 工程檢查點，2026-09-10；原始碼基準 `9978220`。
 本文件是從程式碼整理的依賴圖，不是規範契約表。整體 W02 仍為 PARTIAL；
 W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯誤遷移尚未完成；已完成的共用基礎補充於
@@ -37,11 +46,12 @@ W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯�
 在 `2ecb557`，`tests/mock_replay_key_gaps.rs` 重現六種不同 wire、相同 Action 卻只保存一個 key
 的組合：scalar 前導與重複空白、不同 field namespace、escaped text 與 child
 結構、escaped quote 跨 attribute boundary，以及 compatibility DOM 忽略第二個
-root。最後錄製的 response 回答兩個 request。另一項控制仍區分一般不同 token
-與完整 Action。這些刻意通過的 known-gap assertion 並非已修正不變量或規範驗收。
+root。當時最後錄製的 response 回答兩個 request，另一項控制仍區分一般不同 token
+與完整 Action。這些是該檢查點刻意通過的 known-gap assertion，不是規範驗收。
 改動第二筆錄製 response，並將控制組 Action 合併，會使兩項測試分別在 payload／
-count assertion 失敗（RTK log 1789095344）；兩項 mutation 均已還原。完成遷移後
-應改成 distinct-key／response 預期，不能恢復碰撞來滿足測試。
+count assertion 失敗（RTK log 1789095344）；兩項 mutation 均已還原。後續 K27
+修正改成保留不同 stored request／response 的預期，legacy key 仍可碰撞；
+不能恢復資料遺失來滿足舊斷言。
 
 [Profile-token 依賴追蹤](mock-fidelity-profile-preflight_zh.md#profile-token-依賴追蹤)
 已列出成對 Media、PTZ、adapter 與 replay 路徑。K27 需明示 key version／舊檔載入、
@@ -68,15 +78,18 @@ Envelope Header 中選定的 qualified WSA／WSSE／WSU 欄位，Body 同名欄�
 含未解析 `xsi:type` 的非同一原文亦轉入 synthetic，不只比較未展開的 lexical QName。
 其他 QName-valued content 與完整 SOAP／HTTP 語意仍須另行審查。
 
-In-process 與 HTTP 控制均涵蓋九組碰撞及 exact-raw replay；另有正向測試保留 prefix
+Containment 階段的 in-process 與 HTTP 控制涵蓋九組碰撞及 exact-raw replay；另有正向測試保留 prefix
 alias、entity／CDATA 等價、URL destination 與 WS-Security nonce／time 變動。
 舊實作於修正後的替換 assertion 失敗（RTK 1789096026），初版 guard 於新增 xsi:type
 案例失敗（1789096304）。停用 qualified WSA masking 使正向測試於 recorded-payload
 assertion 失敗（1789096245），之後已還原。Standalone ReplayResponder MessageID
 probe 改用 qualified SOAP／WSA request；unqualified lookalike Header 欄位不再視為
-ephemera。`FixtureStore::lookup` 仍是 key-only 公開 API，不包含第二層檢查。
-上方回覆替換基準為歷史紀錄；目前 replay assertion 檢查 synthetic fallback，
-並保留未修正的 index probe。
+ephemera。在此 containment 檢查點，`FixtureStore::lookup` 仍僅依 key 查詢，
+測試檢查 synthetic fallback 並保留未修正 index probe。後續 K27 已取代該探針：
+十組不同 request 須並存、通過 save／load 與同 request 替換、保留 report row，
+並在兩種 replay transport 選到各自 payload。Key-only lookup 現對歧義 bucket
+回 None，ReplayResponder 使用 `FixtureStore::lookup_request`。
+完全相同的 sanitized request 即使無法語意比較，仍可 replay。
 
 防護關卡（2026-09-11，Windows 獨立 build）：formatting、兩種 workspace／all-target
 Clippy、兩種 strict workspace rustdoc 與 inventory 控制通過。All-features：1,207
@@ -86,7 +99,7 @@ passed；default：1,112 passed；兩者均為 27 suites、5 ignored。未新增
 
 ## Replay key 憑證邊界
 
-W19／K28：`canonicalize` 於 parsed projection 與 raw fallback 後均清除 URL
+W19／K28 檢查點：`canonicalize` 於 parsed projection 與 raw fallback 後均清除 URL
 `user:pass@`。Record、replay 與 value diff 共用投影；parsed text／attribute
 包含 entity 解碼後的分隔字元。`FixtureStore::load` 建立索引前清理舊 key，`lookup`
 接受相同去憑證規則的 caller key。JSON 格式不變；僅憑證不同的重複 key 沿用最後一筆
@@ -100,8 +113,9 @@ W19／K28：`canonicalize` 於 parsed projection 與 raw fallback 後均清除 U
 
 限制：raw envelope 沿用指定格式的 redactor；malformed XML、encoded raw 憑證、
 自訂欄位、action／device label、舊檔與備份均未保證無秘密。未檢查或變更使用者錄製。
-K27 namespace、顯著空白及未 escape 序列化的碰撞已有獨立重現，持久化 key 相容性仍待設計；
-本次不是 key-v2 遷移，也不是完整 W19 驗收。
+在此 K28 檢查點，K27 namespace、顯著空白及未 escape 序列化碰撞仍待儲存設計。
+後續 K27 修正以 legacy-key bucket 保留不同 request，僅替換 equivalent sanitized
+request，清理憑證本身不會合併不同身分。兩次修正都不是 key-v2 遷移或完整 W19 驗收。
 
 驗證（2026-09-11，獨立 Windows build）：formatting、兩種 workspace／all-target
 Clippy 與兩種 strict workspace rustdoc 通過。Workspace all-features：1,204
@@ -140,7 +154,8 @@ String 不等於能保留無效 HTTP encoding 的原始 bytes。
    `extract_attr` 掃描第一個符合 tag 的 header，保留原始拼寫。
 2. `handle_create_profile` 與 `handle_create_profile_media2` 現將解碼後的直接
    scalar Name 傳給 `create_profile_in_state`；兩個 profile renderer 將儲存文字
-   轉義一次。Media1 Token 仍使用 raw 值。其餘 token 及 configuration 文字遷移
+   轉義一次。P2 後來遷移 Media1 optional Token 與 profile-token renderer，PA1
+   遷移選定 binding reference。其餘 configuration 文字遷移
    必須成對處理解碼及輸出轉義；直接讓所有舊 helper 解碼仍可能破壞 subtree 呼叫端。
 3. `resp_profiles/resp_profile` 與 `resp_profiles_media2` 現於單一 `profile_snapshot`
    read guard 取得 profile 與 catalogue；原本分開快照已在併發寫入時重現混合版本。
@@ -150,7 +165,7 @@ String 不等於能保留無效 HTTP encoding 的原始 bytes。
    entity-looking 文字的資料，不可只測一個 getter。
 4. 基準的 `apply_media2_configuration` 合成單筆 XML 並重複呼叫 bind／unbind。
    K16 state 修正後，會將擷取的值組成 plan，交給 `apply_configuration_bindings`，
-   在 write lock 中驗證完整 plan 後才變更 slot。有 scope 的解碼仍屬 parser 工作；
+   在 write lock 中驗證完整 plan 後才變更 slot。PA1 加入 scoped configuration decoding；
    共用 writer 已不再把值插回 XML，也不重新解析 fragment。
 5. `create_profile_in_state/delete_profile_in_state/bind_configuration` 呼叫
    `MockState::modify[_returning]` → committed snapshot → `notify` → 釋放 state
@@ -209,8 +224,9 @@ CreateProfile 額外使 Profiles 失效後，兩項 baseline 在完整全部功�
   health assessment／JUnit、CLI application diagnostics，以及
   metamorph::parse::extract_fault 都是消費端。Nested Fault 必須測這些消費端，
   不只測 renderer。本檢查點沒有批准變更公開錯誤欄位或 CLI exit code。
-- Auth 仍有自己的舊 parser／formatter；嚴格 DeleteProfile 與已 escaping 的
-  resp_soap_fault 不能證明 auth 安全性或 authorization。
+- 此基準的 auth 有自己的舊 parser／formatter；後續 scoped auth 子批次記錄於
+  連結的認證盤點。僅嚴格 DeleteProfile 與已 escaping 的 resp_soap_fault，不能
+  證明 auth 安全性或 authorization。
 
 ## 實作順序
 
@@ -360,8 +376,9 @@ profile-read Action。冪等 remove 仍是成功 plan，保守地淘汰讀取。
 configuration 拒絕、完整預期 state、三個 profile view、已空白 remove、獨立 instance，
 以及使用舊 binding-family 拼法的其他服務錄製。原本的 family invalidation 即使寫入
 被拒絕仍會淘汰該無關錄製。不模擬主機／設備網路或媒體效果。Standalone ReplayResponder、
-configuration 寫入、其他相依關係及併發／callback 可見性仍未完成；invalidation
-仍在呼叫者的 state hook 之後發生。
+configuration 寫入及其他相依關係在此 effect 檢查點仍待完成。後續選定
+source／encoder／audio／metadata 寫入與 PA1 reference read 已有各自 effect 及測試；
+併發／callback 可見性仍未完成，invalidation 仍在呼叫者的 state hook 之後發生。
 
 ## 已提交的建立效果
 
@@ -399,8 +416,10 @@ service 同尾名操作及獨立 instance 不受影響。K17 舊 known-gap 測�
 
 公開的單獨 ReplayResponder constructor 保留既有政策，因為它無法觀察由呼叫者
 擁有的下游 responder。內建 clone 僅在自行掌管 terminal 時啟用私有 commit-aware
-路徑。這是分階段遷移，不是公開設定切換，也不是整體 W19 驗收。其他 mutation 仍
-除上方建立與綁定子批次以外仍使用舊 family invalidation。更多 profile 相依讀取、
+路徑。這是分階段遷移，不是公開設定切換，也不是整體 W19 驗收。後續選定
+profile／source／encoder／audio／metadata commit 路徑以外的 mutation 保留舊
+family policy；已分類 acknowledgment-only operation 不使錄製失效。
+Standalone constructor 仍無法觀察下游 commit。更多 profile 相依讀取、
 malformed Action、callback 順序及併發 linearizability 仍待處理。Effect observer
 在既有 state-change callback 之後執行；本批次未使 callback 與 replay invalidation
 成為原子操作，也未新增 rollback。
@@ -491,10 +510,12 @@ XSD 1.1；該 corpus 未包含新增 generic boundary fault。舊外部 shape pr
 先前 bare field 加入 operation 包裝後觸及更多 payload，但這些舊 request
 field 不構成規範請求 corpus。
 
-W03／W07／W08／W19 剩餘項目包括 HTTP action fallback／一致性、media type／
+在 P-D 檢查點，W03／W07／W08／W19 剩餘項目包括 HTTP action fallback／一致性、media type／
 encoding／status／endpoint、SOAP mustUnderstand／encodingStyle／attribute
 政策、processing instruction／root 外 comment、scoped WSSE／auth、逐操作
-欄位語意、其他服務 fault 及 replay effect。Raw fault／custom／replay 回應的
+欄位語意、其他服務 fault 及 replay effect。後續 scoped-auth 與選定服務／effect
+子批次已取代其中對應待辦；完整 HTTP binding 與相依閉包仍未驗收。
+Raw fault／custom／replay 回應的
 原有優先序與 bytes 保留。未變更公開 API、error type、CLI exit code 或已安裝 binary。
 
 ## State hook 快照工作

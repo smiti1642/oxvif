@@ -7,7 +7,7 @@
 下列較早的覆蓋重現／containment 記錄保留作為歷史證據，不代表目前仍會覆蓋；
 W19 其餘項目仍未結案。
 
-來源基準：`892aa94`，2026-09-10 盤點。工作：W00、W02。
+初始來源基準：`892aa94`，2026-09-10 盤點；下方索引含後續具名遷移及 B16。工作：W00、W02。
 這是實際量測的專案原始碼索引，不是 schema 目錄。
 [施工檢查表](mock-fidelity-execution-checklist_zh.md) · [逐操作清冊](mock-fidelity-operation-ledger_zh.md)
 
@@ -41,6 +41,10 @@ W19 其餘項目仍未結案。
   invocation 變化、closure、自訂 reader 仍需人工檢查。新方法不一定使用名為
   ACTION 的常數，因此 request 呼叫位置也須核對。以 `rg` 交叉檢查，不把索引
   相等當成規範驗收。
+
+[0.17 切點](release-0.17-cut_zh.md) 定義 R01–R08 選定契約及發布 gate。這些數量
+不代表發布 gate、間接路徑稽核、W00–W26 全計畫工作或每個操作的欄位／Fault 語意完成。
+下方歷史執行總數僅適用於其記錄輸入，不是目前候選版本重跑的結果。
 
 ## Action 宣告
 
@@ -307,12 +311,12 @@ W19 其餘項目仍未結案。
 
 | 負責工作 | 直接消費端／用途 | 必須追蹤的間接路徑 |
 | --- | --- | --- |
-| W08 | `auth::validate_ws_security`：Username／Password／Nonce／Created scalar | AuthResponder、豁免 selector、Device users；於 auth 邊界遷移，不可使用整個 body 同名欄位搜尋 |
-| W19 | Legacy `canon::canonicalize` key DOM，加上 `request::recording_equivalent` 第二層 replay 檢查 | Fixture key、masking、recording、adapter、invalidation 與 synthetic routing／fault policy 分離；保留 exact raw replay，不改 stored key 即限制選定身分碰撞 |
-| W17 | `discovery_responder::probe_reply`：DOM | UDP Probe matching、QName scope、輸入限制；不是 SOAP synthetic 入口 |
-| W10 | Media profile scalar selector／create、DeleteProfile strict reader、`bind_configuration`／`unbind_configuration`、scoped `video_source` subtree 契約及其餘 encoder／audio write helper | Media2 wrapper 共用 Media1 helper；以 parsed value／subtree 取代 fragment 契約，不做解碼再插回 XML |
+| W08 | `auth::validate_ws_security`：已遷移的 scoped Username／Password／Nonce／Created 解析 | AuthResponder、豁免 selector、Device users 仍為共用消費端；索引已無 legacy auth reader site，完整安全語意仍為獨立工作 |
+| W19 | Legacy `canon::canonicalize` key DOM，加上 `request::recording_equivalent` replay 比較 | Fixture key、masking、recording、adapter、invalidation 與 synthetic routing／fault policy 分離；K27 現以 collision bucket 及 request-aware 選取保留資料，舊 key 正規化與更廣語意仍分開處理 |
+| W17 | `discovery_responder::probe_response`：DOM | UDP Probe matching、QName scope、輸入限制；不是 SOAP synthetic 入口 |
+| W10 | 已遷移 Media profile／create／delete／binding reader 與共用 `video_source`、`video_encoder`、`audio_metadata` scoped 契約 | Media2 wrapper 共用 helper；這些已完成遷移保留作間接稽核脈絡，不是剩餘 legacy-reader site；更廣欄位／模型限制見批次工作卡 |
 | W10 | Media OSD helper、color／position attribute、巢狀 TextString、configuration options selector | Rendering／typed parser、list filter、quota／state；`_force_use_extract_all` 不是 routed behavior |
-| W10 | `media2::configuration_plan`：create／add／remove 共用 scoped 重複 Type／Token reference | 完整 value plan、選填改名與引用計數原子提交；見 [組裝批次](mock-fidelity-profile-assembly_zh.md)。巢狀 configuration writer 仍屬後續工作。 |
+| W10 | `media2::configuration_plan`：create／add／remove 共用 scoped 重複 Type／Token reference | 完整 value plan、選填改名與引用計數原子提交；見 [組裝批次](mock-fidelity-profile-assembly_zh.md)。VS1／VE1／AM1 另實作選定巢狀 writer；更廣欄位與實體相容性仍待完成。 |
 | W11 | PTZ selector scalar、巢狀 operation／config／tour／space fragment、座標 attribute | Profile-to-node、`min_max`、range／vector reader、per-head slot、重複 tour spot |
 | W12 | Imaging source selector、scalar settings | Source resolution、巢狀 settings；目前 parse failure／default 行為不是目標契約 |
 | W13 | Device scalar、重複 scope／user／IP entry、storage／network／relay attribute／子樹 | 多筆驗證、auth state、IO queue、change hook；逐欄位稽核，不機械式更換 helper |
@@ -320,7 +324,7 @@ W19 其餘項目仍未結案。
 | W15 | Event TopicExpression scalar | Namespace context、dialect／filter state、subscription 生命週期及 queue |
 | W04／W23 | Test-only strict／legacy／discovery reader | 詞法 helper unit test 不等同獨立協定 assertion；不以舊擷取器證明修正後的 wire 正確 |
 
-上述工作涵蓋全部索引項目，包含未路由的 synthetic helper touch；
+上述工作涵蓋全部索引項目，包含未路由的 synthetic helper touch，並保留已遷移共用消費端的脈絡；
 逐欄位意義及所有間接 wrapper 仍屬 W01／W02，不得把索引完成標為遷移完成。
 
 ## 新發現
@@ -339,8 +343,8 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 | K31–K33 — VS1 已修正選定路徑 | 舊碼重現 crop 導致 options 上限縮小及錯誤末欄位仍成功。整批擾動證實 source 選擇與拒絕後完整狀態斷言可辨識缺陷。 | W01／W10／W17–W19：完整 scoped candidate 原子提交、sensor-derived options、escaped identity 與成功後 replay 失效。兩種 transport、70 份外部 instance 及限制詳見 [VS1](mock-fidelity-video-source_zh.md)；scalar attribute、任意匯入 snapshot 與實體 routing 仍未完整建模。 |
 | K29 — 共用 escaping 已修正 | `types::xml_escape` 處理 markup，卻在 attribute 中也直接輸出 CR／LF／tab；新增 wire／value assertion 與兩種 transport 的 profile Name 案例均在舊 helper 失敗。 | W03／W10／W06 共用表示子批次：輸出 numeric character reference，保留一般值的 borrowed 路徑與 literal Name state／read；raw renderer、token-reader 閉合、schema 欄位限制與 invalid XML character 仍為獨立項目。 |
 | K30 — 空 profile 政策已修正 | 兩種 transport 均重現 client parse failure 後已提交空 token state。明確空值的 Create／read selector 現在於 effect 前以 Sender／mock:RequestPolicy 拒絕；含空 seed 的 list 回傳 Receiver，保留 snapshot 及有效個別讀取。 | W01／W10／W06 有界 mock 政策，不是規範上的 xs:string 限制。Raw／client state、hook、配置、replay 及獨立政策 Fault 控制記於 profile preflight；其他 seed 與欄位限制仍待處理。 |
-| K27 — 已限制回覆替換，index 仍碰撞 | `mock_replay_key_gaps` 保留原本六種 stored-key collision，增加 body ephemera、mixed-content ordering 與 xsi:type namespace 控制；replay 現在拒絕未確認的 scoped identity match，轉入 synthetic。 | W19 部分完成：兩種 transport 及 exact raw／qualified-header 控制通過；index／檔案格式不變，被覆蓋錄製無法恢復；完整 key 遷移及其他 QName／HTTP／protocol 語意仍待完成。 |
-| K28 | 已錄製 request 的 URL 憑證仍存於 `key_canon`，舊檔 key 載入時也未清除。虛構資料的 assertion failure 已重現兩項缺陷。 | W19：recording／replay／diff 投影與舊檔／caller lookup key 均清除 URL 帳密；載入不覆寫磁碟，正規化碰撞維持 last-write-wins。Raw envelope 仍僅針對指定格式去除憑證，並非通用秘密偵測器。 |
+| K27 — containment 後已修正碰撞儲存 | 早期六組 containment 檢查點已由十組碰撞控制取代，檢查不同 payload 保留、save／load、lookup、report 及兩種 replay transport。 | W19 部分完成：collision bucket 保留不同請求，key-only 歧義回傳 None；等價請求仍替換。無法恢復已遭覆蓋的舊錄製；更廣 QName／HTTP／protocol 語意仍待完成，詳見上方發布證據。 |
+| K28 | 已錄製 request 的 URL 憑證仍存於 `key_canon`，舊檔 key 載入時也未清除。虛構資料的 assertion failure 已重現兩項缺陷。 | W19：recording／replay／diff 投影與舊檔／caller lookup key 均清除 URL 帳密；載入不覆寫磁碟。K27 後續保留正規化後的不同請求，等價請求則替換。Raw envelope 仍僅針對指定格式去除憑證，並非通用秘密偵測器。 |
 | K24 | Media2 音訊編碼名稱與 Media1 不同。 | AM1: G711/PCMU, AAC/MP4A-LATM; ONVIF G726 + bitrate. [AM1](mock-fidelity-audio-metadata_zh.md) |
 | K25 | AutoStart 曾由位址推測或直接寫入。 | AM1: 唯讀輸入驗證後忽略；非串流預設 false。 |
 | K26 — 選定 codec view 已修正 | VE1 涵蓋 H265 寫入／回讀及 Media1 頂層拒絕；兩種 profile renderer 共用相同可表示性防護。 | W01／W10／W17：保留 codec 身分，拒絕不相容 Media1 view；不靜默轉換或放寬 schema。詳見 VE1 證據及合成模型限制。 |
@@ -350,17 +354,17 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 | K37 | AM1 外部 corpus 08 拒絕音訊 options 的多值 Items；client 原先僅讀取第一個 Items。 | AM1: 逐一輸出整數，讀取全部 Items；corpus 09 的 148 份 XML 通過 Xerces。 |
 | K23 | Windows CI run 34471659927（`2a488be`）的 `line_number_override_is_validated_but_never_changes_agent_or_plain_output` 失敗：逐位元 JSON 比較包含各自量測的 `meta.elapsed_ms`（0 與 9）。 | W22 測試框架修正：要求耗時為數字，JSON 相等比較只排除該確切欄位；保留其他全部欄位、stderr 及純文字輸出檢查，加入確定性的耗時／資料／型別控制。不改 CLI 輸出，不遮蔽其他 metadata。 |
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
-| K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |
+| K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；PA1 後續實作模型容量／組裝，完整 CreateProfile 語意仍待完成。 |
 | K14 — 基準後已修正 | DeleteProfile 使用明確的 committed-outcome predicate；NotFound／Fixed 不通知，Deleted 通知一次。 | W18 部分完成；回歸檢查完整 state、兩服務、hook 次數及公開 helper 相容性。Replay 另由 K17 追蹤。 |
 | K15 — Name 與選定 profile-token 路徑已修正 | 兩個 CreateProfile Name reader 解碼 scalar；Media1 Create／GetProfile 及六個 binding 入口採用 scoped profile 身分。兩個 profile renderer 將 Name 與 token attribute 轉義一次。 | W10；P2 workflow／refusal 控制及 PTZ1 涵蓋選定 token 路徑。K30 已完成空 token 政策；A1 涵蓋 typed adapter 身分與可表示移動參數。Recorded key、其他 adapter 選項及巢狀 configuration 文字仍未結案。 |
-| K16 — 部分修正 | Media2 profile-list 選擇已於 `c6af85b` 修正；create 只讀 Name；binding 驗證並提交完整、以值表示的 plan。 | 後筆無效 token 部分寫入及選定讀取語意具 state／hook／HTTP 控制；create／name／binding Type=All／conflict 及廣泛欄位／輸出驗證仍屬 W01／W10。 |
+| K16 — 選定 selection／assembly 已修正 | Media2 profile-list 選擇已於 `c6af85b` 修正；PA1 後續加入 create 初始 configuration、選填改名、Type=All／conflict 處理及完整 value-based binding plan。 | 後筆無效 token 拒絕、選定讀取及組裝具 state／hook／HTTP 控制；完整逐欄位／輸出驗證與實體相容性仍屬 W01／W10，詳見組裝工作卡限制。 |
 
-K23 現僅修正測試框架。確定性控制可區分純耗時變動與資料／command 變動，
+K23 檢查點僅修正測試框架。確定性控制可區分純耗時變動與資料／command 變動，
 並拒絕錯誤耗時型別。擴大比較遮罩及繞過型別驗證後，完整 workspace、
 all-feature、no-fail-fast 擾動執行中的兩項新控制均失敗；還原後格式、
 兩種 Clippy、全功能 1,181 項與預設 1,097 項測試通過（各 5 ignored、
-21 suites）。CLI production 輸出及公開 schema 均未變更；仍須由下一輪
-託管 CI 確認 gate 已恢復。
+21 suites）。CLI production 輸出及公開 schema 均未變更；該檢查點要求後續託管
+CI 確認 gate。較新候選的 CI 證據記於發布切點，不能由此歷史總數推得。
 
 K12 已於 2026-09-10 核對
 [Media1 v24.12 §4.1](https://www.onvif.org/specs/2412/ONVIF-Media-Service-Spec-v2412.pdf) 與
@@ -379,12 +383,14 @@ K16 binding 子案例現以單一 lock 驗證並提交全部請求 slot；原本
 控制涵蓋後筆未知、錯誤 family 及空 token、兩 Media view 可見的完整成功結果、
 fixed profile 變更、重複移除，以及單次 callback 觀察到兩個已提交 slot。
 必要值缺漏會先於 state lookup 檢查，因此同時具有多種錯誤的請求，其錯誤優先
-順序會改變。其他 K16 語意仍待處理；這不是完整 binding 符合性驗收。
+順序會改變。PA1 後續於明示模型內加入 create／name／All／conflict 語意；
+這仍不是完整 binding 符合性驗收。
 
 K13 現已有兩服務的正確碰撞回歸，以及 counter 邊界、重複請求完整 state／hook
 保留、明確／自動 token 併發配置的私有 helper 控制。重複檢查及新增共用 write
 lock；僅 Created 結果通知。持久化 u32 欄位維持相容，作為可環回的搜尋起點。
-這不代表已強制公告的 profile 容量，亦未修正解析、輸出、初始 binding 或 replay。
+該 allocation-only 修正當時未強制公告容量，也未修正解析、輸出、初始 binding 或 replay；
+後續 P2／PA1 與 committed-effect 批次另處理選定部分。
 
 後續 K14 修正已將該缺陷預期替換為
 `rejected_delete_preserves_state_and_hook_but_success_notifies`。原實作在拒絕控制
@@ -404,19 +410,20 @@ rtk rg -n 'extract_tag|extract_all_tags|extract_attr|required_text|XmlNode::pars
 
 檢查器現在同時核對本來源索引及逐操作清冊。新增控制涵蓋變更／缺少／重複項目、
 不支援的 Action expression、未知 Action family、多餘 URI segment；
-reader 控制區分 production／test 並保留呼叫次數。
+reader 控制區分掃描器的頂層 test module 之前／其中位置並保留呼叫次數。
+`production` 標籤是來源位置慣例，不是編譯後程式碼或行為分類。
 
-下一步：完成 W01 profile／binding 工作卡與 W02 間接路徑；不寫入實機地重現
-K13–K16，滿足 W03–W06 後才廣泛遷移 handler。本盤點不宣稱已改變 runtime
-Action 接受行為。
+初始交接要求 K13–K16 重現及 W01／W02 開工條件；上述已記錄重現與選定修正，
+不應再當作未發現的缺口。剩餘全案工作為未驗收欄位與間接路徑；目前發布順序
+依切點的 R01–R08。本來源索引本身不會強制 runtime Action 接受行為。
 
-本檢查點驗證（Windows，隔離 `target/mock-fidelity-build`）：formatting 與兩種
+初始檢查點的歷史驗證（Windows，隔離 `target/mock-fidelity-build`）：formatting 與兩種
 workspace／all-target Clippy 通過；workspace all-features 1,146 passed／4 ignored，
 workspace default 1,066 passed／4 ignored。總數包含四項刻意通過的 known-gap
 重現，不是四項已修正 invariant。檢查器原有十項與新增六項拒絕控制通過；十份規劃
 文件的 264 個本機連結／anchor 可解析。未執行外部 schema gate、其他 OS 原生
 測試、實機命令、發布、合併或更新已安裝 binary。
 
-交接：W00 字面值來源核對 DONE；W01 IN-PROGRESS、W02 PARTIAL。
-第一批 13 張工作卡已建立，K13–K16 已有上述重現；下一工作是剩餘契約／設計
-開工條件，不需重複 discovery。
+全案交接：W00 字面值來源核對 DONE；W01 IN-PROGRESS、W02 PARTIAL。
+初始 13 張工作卡與 K13–K16 重現已有後續有界修正；剩餘契約／設計工作保留於
+全案後續清單，不自動成為選定 0.17 切點的前置條件。

@@ -11,7 +11,8 @@ The K27 repair below follows that baseline within the approved integrity scope.
 The [pre-version review packet](release-0.17-approval.md) tracks the user's four
 requested steps, A01/A02 repairs and the [shared snapshot repair](snapshot-auth-repair.md),
 maintainer staging instructions and the version edits reserved for approval.
-It is not a declaration that complete-candidate review or installation passed.
+Local complete-candidate/security review is now closed; installation and final
+release acceptance retain their separate gates below.
 
 | Section | Purpose |
 | --- | --- |
@@ -46,13 +47,13 @@ review all transitive consumers of an included helper. Public claims may not say
 
 | Gate | Current disposition | Required closure |
 | --- | --- | --- |
-| G01 Complete candidate review | OPEN | Review all differences from v0.16.0, not only PRs #14/#16/#17; verify each included batch's read/write/options/capability/replay closure and migration |
+| G01 Complete candidate review | LOCAL-PASS | All 208 frozen paths and later deltas reviewed against source, affected consumers, assertions and public claims; six completed groups and input hashes in the [review record](release-0.17-review.md) |
 | G02 Data integrity, K27 | LOCAL-PASS | Collision buckets preserve distinct requests across record/load/save and request-aware replay; key-only ambiguity returns None; equivalent requests still replace and credential cleanup remains targeted. Report groups retain all rows. See the K27 evidence below; G05 remains separate |
-| G03 Security and response integrity | OPEN | Disposition of known credential leaks, partial writes, unsafe URLs, ambiguous effect receipts and shared-boundary regressions; a severe known issue cannot become future work by relabeling it |
-| G04 Local code and documents | LOCAL-PASS baseline | Reuse exact unchanged-code evidence; revalidate affected gates after fixes, version changes or merges |
+| G03 Security and response integrity | LOCAL-PASS | A01–A05 repaired locally; credential, state/write, URL, receipt and shared-boundary assertions reconciled. No known severe blocker remains identified in the included cut; documented model/HTTP/replay limits do not imply full hardening |
+| G04 Local code and documents | LOCAL-PASS | Final follow-up: 1,310 all-feature / 1,198 default passes, five ignored each; both Clippy/strict rustdoc modes, fmt, Rust 1.88 and document/inventory checks. Revalidate affected gates after version changes or merges |
 | G05 Native CI | PASS at 3eccfd1; later fixes require a new run | Maintainer run 34597167495 passed all 27 jobs, including all five native targets. Local workflow dispatch permission remains unavailable |
 | G06 Package and distribution | PARTIAL | Package/docs passed at 3eccfd1: library package verification, CLI package file listing, archive controls and docs. Listing is not CLI package/install verification; final-version packages, portable installs, SBOM/checksums and non-publishing staging remain required |
-| G07 Human and Agent acceptance | PARTIAL | Existing Windows synthetic terminal/executable evidence; final-candidate terminal resize/cancel/input plus real-camera read-only snapshot/diagnose/export/diff evidence. No secrets/images in public evidence |
+| G07 Human and Agent acceptance | PARTIAL | Current Windows debug ConPTY accepts bounded manage/profile/input/resize, started-snapshot cancellation and console restoration; historical real-camera snapshot/diagnose/export/diff evidence retained. Remaining discover/diagnose navigation matrix and other-platform human acceptance are explicit in the approval packet |
 | G08 Versions and release links | OPEN | Update library/CLI versions together after candidate acceptance; preserve schema-v3 claims only if tests agree, resolve every draft link to the final tag, keep migration warnings visible |
 | G09 RC and approval | NOT-RUN | Publish an RC only with explicit authorization; suggested 3–7 day observation, no calendar-based automatic success; obtain final release approval |
 
@@ -62,9 +63,10 @@ reports and both replay transports. Old recordings already overwritten cannot be
 recovered; old readers can collapse the unchanged JSON shape on downgrade.
 See [storage and report migration](../replay-storage.md).
 
-HTTP binding/UTF-8 handling and remaining fault/field semantics need G01/G03
-triage for their impact on included claims. A full redesign may be deferred;
-a demonstrated severe failure affecting this cut may not.
+A01 repairs invalid HTTP UTF-8 handling. Remaining HTTP binding and fault/field
+semantics were triaged against the included claims and retain the documented
+subset limits in the backlog. A demonstrated severe failure affecting this cut
+must still block release; local review does not waive future findings.
 
 ## Publication surfaces
 

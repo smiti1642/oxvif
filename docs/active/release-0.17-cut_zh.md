@@ -10,7 +10,8 @@
 
 [正式版號前審查資料](release-0.17-approval_zh.md) 追蹤使用者要求的四項工作、
 A01／A02 修正及[共用快照修復](snapshot-auth-repair_zh.md)、維護者 staging 操作及
-留待核准的版號修改；不代表完整候選審查或安裝已通過。
+留待核准的版號修改。本機完整候選／安全審查已結案；安裝與最終發布驗收仍依下方
+各自關卡判定。
 
 | 章節 | 用途 |
 | --- | --- |
@@ -44,13 +45,13 @@ A01／A02 修正及[共用快照修復](snapshot-auth-repair_zh.md)、維護者 
 
 | Gate | 目前狀態 | 結案條件 |
 | --- | --- | --- |
-| G01 完整候選審查 | OPEN | 審查相對 v0.16.0 的全部差異，不只 PR #14／#16／#17；確認各收錄批次的讀寫／options／capability／replay 相依完整及遷移方式 |
+| G01 完整候選審查 | LOCAL-PASS | 全部 208 個固定路徑及後續差異均核對 source、受影響消費端、斷言與公開宣稱；六組結案及輸入 hash 見[審查紀錄](release-0.17-review_zh.md) |
 | G02 資料完整性 K27 | LOCAL-PASS | 碰撞群組在 record／load／save 及完整請求 replay 中保留不同請求；key-only 歧義回傳 None；等價請求仍替換，去憑證維持指定格式。報告群組保留各列。見下方 K27 證據；G05 仍獨立待驗 |
-| G03 安全及回應完整性 | OPEN | 處理已知機密洩漏、部分寫入、不安全 URL、誤導效果回覆及共用邊界回歸；不得把重大問題改名為後續工作 |
-| G04 本機程式及文件 | LOCAL-PASS 基準 | 精確重用未變動程式的證據；修正、改版號或合併後重驗受影響關卡 |
+| G03 安全及回應完整性 | LOCAL-PASS | A01–A05 已本機修復；憑證、state／write、URL、receipt 及 shared-boundary 斷言已核對。收錄切點未留下已知重大 blocker；記錄的模型／HTTP／replay 限制不代表完整 hardening |
+| G04 本機程式及文件 | LOCAL-PASS | 最終 all-feature 1,310／default 1,198 通過，各五項 ignored；兩組 Clippy／strict rustdoc、fmt、Rust 1.88 及文件／清冊檢查通過。改版號或合併後重驗受影響關卡 |
 | G05 原生 CI | 3eccfd1 通過；後續修正須新 run | 維護者的 run 34597167495 全部 27 個 job 通過，包含五種原生目標。本機仍無 workflow dispatch 權限 |
 | G06 套件及散布 | PARTIAL | 3eccfd1 的 Package/docs 通過：library package 驗證、CLI package 檔案清單、archive 控制及文件。清單不等於 CLI package／安裝驗證；仍須最終版號套件、portable install、SBOM／checksum 及不發布的 staging |
-| G07 人類及 Agent 驗收 | PARTIAL | 已有 Windows synthetic terminal／executable 證據；仍須最終候選的 resize／cancel／input 及實機唯讀 snapshot／diagnose／export／diff 證據；公開證據不含機密或影像 |
+| G07 人類及 Agent 驗收 | PARTIAL | 本次 Windows debug ConPTY 通過有界 manage／profile／input／resize、開始後 snapshot 取消與 console 恢復；保留歷史實機 snapshot／diagnose／export／diff 證據。其餘 discover／diagnose 導航矩陣及其他平台人工驗收明列於核准資料 |
 | G08 版號及發布連結 | OPEN | 候選驗收後同步 library／CLI 版號；schema v3 宣稱須符合測試；草稿連結固定至最終 tag，遷移警告不可隱藏 |
 | G09 RC 及授權 | NOT-RUN | RC 也須明確發布授權；建議觀察 3–7 天，不因日期到期自動通過；取得正式發布同意 |
 
@@ -59,8 +60,9 @@ record／load／save、公開 lookup、報告及雙 replay transport 中保留�
 舊版已覆蓋資料無法恢復；降版後舊讀取器仍可能合併格式未變的 JSON。
 詳見[儲存與報告遷移](../replay-storage_zh.md)。
 
-HTTP binding／UTF-8 與其餘 fault／field 語意須在 G01／G03 判定對收錄宣稱的
-影響。完整重設計可延後；已證實影響本版的重大失敗不可延後。
+A01 修復無效 HTTP UTF-8 處理；其餘 HTTP binding 與 fault／field 語意已對收錄
+宣稱完成判定，保留 backlog 明列的子集合限制。若後續證實影響本切點的重大失敗，
+仍須阻擋發布；本機審查不豁免新發現。
 
 ## 發布文件
 

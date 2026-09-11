@@ -4,6 +4,9 @@
 
 基準：`7e9b68f`，2026-09-11。負責者：目前 hardening 工作。W01／W10／W17／W18／W19。
 
+操作卡中的缺陷描述上述基準。下列測試、清冊、corpus 數量及下一子群交接均為 VS1
+歷史結果；目前候選版本驗收見[施工檢查表](mock-fidelity-execution-checklist_zh.md)。
+
 | 章節 | 用途 |
 | --- | --- |
 | [操作卡](#操作卡) | 完整來源子群 |
@@ -19,7 +22,7 @@ Media1：`http://www.onvif.org/ver10/media/wsdl`；Media2：
 `media2.rs`，對應 session wrapper 位於 `src/session.rs`；endpoint 維持共用 synthetic
 Action resolver，不新增 HTTP path 限制。
 
-| ID | 現有 handler 與來源輸入 | 輸出／目標 |
+| ID | 基準 handler 與來源輸入 | 輸出／目標 |
 | --- | --- | --- |
 | media.GetVideoSources | `media::resp_video_sources(state)`；忽略 body | 實體 source catalogue，token 未轉義；驗證空操作並轉義身分 |
 | media.GetVideoSourceConfigurations | `media::resp_video_source_configurations(state)`；忽略 body | 全部 configuration；驗證空操作並共用轉義 renderer |
@@ -112,5 +115,5 @@ Windows、隔離 target、已還原程式碼的驗證：
 完整 HTTP binding 與所有一般 Fault 分支仍未完成。此結果不是 ONVIF 認證、三平台原生
 驗收、實機寫入測試或 release 核准；沒有替換系統 binary。
 
-下一完整子群為 encoder configuration／
+VS1 當時交接的下一完整子群為 encoder configuration／
 options／instances（其餘八個 video 操作），再接 audio／metadata。VS1 不代表 W10 或全案結案。

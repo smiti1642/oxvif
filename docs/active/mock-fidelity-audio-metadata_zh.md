@@ -7,6 +7,9 @@
 維護者於 2026-09-11 核准 D4。
 範圍：W01／W10／W17–W19；K24／K25／K36／K37。15 張工作卡以單一 AM1 批次交付。
 
+下列 preflight 缺陷、交付數量與下一子群均記錄 AM1 檢查點；目前候選版本驗收見
+[施工檢查表](mock-fidelity-execution-checklist_zh.md)。
+
 | 章節 | 用途 |
 | --- | --- |
 | [操作工作卡](#操作工作卡) | 完整子群與共用相依項目 |
@@ -16,10 +19,10 @@
 
 ## 操作工作卡
 
-身分均為專案 dispatch ID，不是複製的 schema 目錄。實作前先閱讀雙語操作清冊
-及 services/media.rs／media2.rs 中的對應函式。
+身分均為專案 dispatch ID，不是複製的 schema 目錄。表格記錄基準 Media1／Media2
+入口；已交付的共用處理位於 `src/mock/services/audio_metadata.rs`，詳見下方交付證據。
 
-| ID | 目前 handler | 目標 |
+| ID | 基準 handler | 目標 |
 | --- | --- | --- |
 | media.GetAudioSources | resp_audio_sources | 空請求、轉義且有界的實體 catalogue |
 | media.GetAudioSourceConfigurations | resp_audio_source_configurations | 空請求、一次快照及轉義 source reference |
@@ -61,7 +64,7 @@ D1–D3 持續有效：下一 minor 使用修正後預設值、明示非串流�
   使用單一資料來源，避免新舊可寫欄位矛盾。Media2 忽略已棄用 SessionTimeout 的值，
   但仍須處理必要 wire 欄位。Optional metadata 欄位與未支援內容另行核對，
   不將有限模型宣稱為任意資料的無損 roundtrip。
-- MulticastConfiguration 目前能讀 IPv6，serializer 卻使用 IPv4 wrapper；
+- 基準版本的 MulticastConfiguration 能讀 IPv6，serializer 卻使用 IPv4 wrapper；
   此共用相依項目應隨核准的公開遷移檢查，不能只在 mock 隱藏 IPv6。
   額外公開相容性變更須在施工前記錄。
 
@@ -134,7 +137,8 @@ MP4A-LATM。固定 ONVIF AudioEncodingMimeNames 明定以 G726 代表 bitrate �
 - 修改前，9016268 的三個 runtime failure（1789115957_cargo_test.log）
   重現錯誤編碼名稱、誤報持續串流及接受無效寫入。K36 外部診斷保留為歷史證據。
 - tests/mock_audio_metadata.rs 涵蓋 in-process／HTTP 具作用域的 read／options、
-  全部宣告的音訊組合、原子拒絕與 hook、唯讀欄位、IPv6 儲存、無效 seed 及兩種 replay。
+  公告的 codec／bitrate／rate 組合、原子拒絕與 hook、唯讀欄位、IPv6 儲存、無效 seed 及兩種 replay。
+  這些 mock 自洽迴圈本身不獨立證明設備能力。
   公開 client 測試檢查必要欄位路徑、完整 wire body、傳輸前拒絕及明確 JSON 遷移。
   既有 roundtrip／token／跨服務測試保留檢查目的，改用受支援值及服務專用編碼 view。
 - 整批執行一次 workspace／all-features／no-fail-fast 突變：
@@ -153,7 +157,7 @@ MP4A-LATM。固定 ONVIF AudioEncodingMimeNames 明定以 G726 代表 bitrate �
   最後再將負向 assertion 加強為精確 Fault payload，受影響 suite 的十項測試通過。
   變更 Markdown 的 337 個相對檔案連結均存在；此掃描不檢查 anchor。
 - 移除 23 個舊 reader 呼叫：159 個 Action site、157 route、
-  191 個剩餘 reader（production 176、test 15；production symbol 56）。
+  191 個剩餘 reader（176 個位於頂層 test module 前、15 個位於其中；production symbol 56）。
   這是來源清冊，不是已驗收的 ONVIF 操作數。
 - Windows x64，rustc 1.97.0（2d8144b78）、cargo 1.97.0（c980f4866）。
   Schema manifest SHA256：
@@ -167,7 +171,7 @@ OXVIF_MOCK_CORPUS 必須指定新的 repo 外絕對路徑。
 依 schema preflight 的固定 --root、--tool-root、--java 及 --corpus，
 執行 packaging/verify_schemas_xerces.py validate。缺少資源或略過 exporter 均不算通過。
 
-後續為 W10 其餘 URI／OSD／capability 收尾及其他服務批次。
+AM1 當時交接的後續為 W10 其餘 URI／OSD／capability 收尾及其他服務批次。
 W04／W06／W07／安全語意、更廣的 schema／語意覆蓋、feature／平台驗收及
 PR #16 整合仍未完成。本子群不代表 W10 或 M0–M6 完成。
 未寫入真實攝影機、建立 Release／tag／publish、安裝或合併主分支。

@@ -4,6 +4,9 @@
 
 基準：`e6962b5`，2026-09-11。負責者：目前 hardening 工作。W01／W10／W17–W19。
 
+下列 preflight 缺陷、交付數量與下一子群均為 K34／VE1 歷史紀錄；目前候選版本驗收見
+[施工檢查表](mock-fidelity-execution-checklist_zh.md)。
+
 | 章節 | 用途 |
 | --- | --- |
 | [操作卡](#操作卡) | 完整 encoder 子群及共用消費端 |
@@ -162,7 +165,8 @@ candidate／selector／options／capacity 已依[非串流模型](../mock-server
 - tests/mock_video_encoder.rs 在兩種 transport 驗證確切 Fault 階層／reason、
   拒絕後完整 state／hook、qualified selector、轉義身分、必要 Media1 欄位及
   未建模 interval／multicast／timeout 拒絕。公開介面逐一寫入各 seeded encoder／codec
-  公告的所有 Media2 幀率與解析度並回讀。另驗證極大有限幀率調整、有號 bitrate
+  公告的所有 Media2 幀率與解析度並回讀。這些迴圈驗證與 mock 自身公告清單的一致性，
+  不構成獨立能力 oracle 或全部交叉組合驗證。另驗證極大有限幀率調整、有號 bitrate
   邊界與 H265／Media1 view 拒絕。既有 source／profile replay driver 現亦驗證
   capacity／options recording 在拒絕時保留、成功提交後淘汰。全 profile 相容性為
   明示邏輯模型，非實體 routing。
@@ -174,7 +178,7 @@ candidate／selector／options／capacity 已依[非串流模型](../mock-server
 - 同次執行另找出三項舊 fixture 預期：capacity 誤用 VEC_1 而非 VSC_1，以及兩項
   跨服務測試寫入 VEC_1 未公告的解析度。已改用合法設定，保留確切回讀及跨服務 assertion。
 - 移除 17 個 legacy reader 呼叫。清冊／self-test 通過：159 Action site、157 route、
-  214 reader（199 production、15 test；63 production symbol）。Token discrimination
+  214 reader（199 個位於頂層 test module 前、15 個位於其中；63 production symbol）。Token discrimination
   為 35 row：30 可區分、5 明示 blind。
 - 外部 exporter 新增 13 組 encoder exchange，涵蓋全部八項操作。外部目錄
   oxvif-profile-corpus-20260911-07 的 110／110 instance 通過 strict Xerces XSD 1.1：
@@ -186,6 +190,6 @@ candidate／selector／options／capacity 已依[非串流模型](../mock-server
   及 282 個相對檔案連結均通過（該掃描未驗證 anchor）。前一筆 K34 commit 87cbf6c 已通過託管
   CI 34577502721，該執行不包含 VE1。
 
-下一子群：audio／metadata（K24／K25），再依施工檢查表完成其餘 W10 及其他服務。
+VE1 當時交接的下一子群：audio／metadata（K24／K25），再依施工檢查表完成其餘 W10 及其他服務。
 W04／W06／W07／安全、獨立 corpus 擴充、feature／平台驗收及 PR #16 仍未結案。
 本交付不包含發布、安裝、合併主分支、合併貢獻者 PR 或實機攝影機寫入。

@@ -10,7 +10,7 @@
 //!
 //! The outward-facing reference is `docs/mock-server.md` in the repository
 //! (not shipped in the published package): routing, the namespace contract, the
-//! full state model, the seeded fixture, all 157 operations marked
+//! state model, the seeded fixture, the candidate's 159 routes marked
 //! state-backed, static or refused, worked request/response pairs, and the fault
 //! catalogue.
 //!
@@ -68,8 +68,9 @@
 //! allocate one. Unfiltered profile reads containing an empty seeded token return
 //! Receiver / `mock:RequestPolicy`, without repairing the snapshot. Valid profiles
 //! remain individually readable. This is a mock limit, not a universal ONVIF
-//! string restriction. Other configuration text, typed adapters and recorded-key
-//! migration remain under review.
+//! string restriction. Selected configuration text and typed adapter paths are
+//! migrated; full field policy remains incomplete. Recording collision migration
+//! is documented by the metamorph module.
 //! The 19 PTZ handlers using profile/head resolution now read one direct,
 //! namespace-qualified ProfileToken from the shared parsed operation, preserving
 //! decoded whitespace and rejecting duplicate or nested scalar values. Other PTZ
@@ -95,11 +96,10 @@
 //!
 //! **1. A per-channel operation needs its token, and a wrong token is refused.**
 //! Operations addressing a specific head, sensor or configuration
-//! (`ProfileToken` for PTZ, `VideoSourceToken` for Imaging, `ConfigurationToken`
-//! for the remaining Media audio options getters) fault on a missing
-//! token and fault again on one that names nothing. Source options now support
+//! (`ProfileToken` for PTZ, `VideoSourceToken` for Imaging) fault on a missing
+//! token and fault again on one that names nothing. Source options support
 //! omitted selectors explicitly as conservative generic ranges, not a default
-//! channel; encoder options support generic unions. Explicit unknown configuration
+//! channel; encoder and audio options support generic unions. Explicit unknown configuration
 //! or profile references still fault.
 //!
 //! This is the harshest change and the one most likely to break existing tests
@@ -125,7 +125,7 @@
 //! 0.15: roughly a third of responses used an unbound prefix. Nothing here
 //! noticed, because `find_response` matches on local name and quick-xml enforces
 //! neither rule — but a conforming external client rejects such a document
-//! outright. Guarded across all 157 actions by
+//! outright. Checked across the inventoried routes by
 //! `every_response_binds_the_prefixes_it_uses` and
 //! `no_response_declares_an_attribute_twice`.
 //!
@@ -146,9 +146,9 @@
 //! write leaves the stored `SessionTimeout` alone, because it has no way to say
 //! anything about it.
 //!
-//! **6. A request the schema would reject is refused.** Media1
+//! **6. Selected required fields are enforced.** Media1
 //! `SetAudioEncoderConfiguration` faults on a body missing `Multicast` or
-//! `SessionTimeout` (`ter:ConfigModify`), because a validating device would.
+//! `SessionTimeout`, because a validating device would. This is not full XSD validation.
 //! oxvif itself sent that body until 0.15; accepting it here would have made the
 //! mock the one device on which the bug did not show.
 //!
@@ -174,7 +174,8 @@
 //! Media1/Media2 `DeleteProfile` now select a namespace-qualified direct token
 //! child, decode XML text once and preserve token whitespace. Invalid requests
 //! are rejected before mutation. This parser is bounded to 2 MiB, 64 element
-//! levels and 16,384 elements; other operations still use legacy extraction.
+//! levels and 16,384 elements. Selected migrated families above share it;
+//! unmigrated handlers retain legacy field extraction.
 //! Missing/fixed-profile refusals use nested Sender faults; the public error's
 //! subcode is still the first level, not the deepest condition. Refused deletion
 //! does not invoke the change hook; successful deletion invokes it once. Built-in

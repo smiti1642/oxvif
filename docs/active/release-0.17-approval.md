@@ -14,7 +14,7 @@ are not performed by this acceptance work.
 | [Four requested steps](#four-requested-steps) | Current status without conflating evidence |
 | [Findings](#findings) | Repairs and unresolved results |
 | [Executed checks](#executed-checks) | Local, hosted and real-camera observations |
-| [Review closure](#review-closure) | Remaining source-review work |
+| [Review closure](#review-closure) | Completed local review and remaining release gates |
 | [Maintainer actions](#maintainer-actions) | Non-publishing CI and installation staging |
 | [Version-edit checklist](#version-edit-checklist) | Changes reserved for the approved version commit |
 | [Approval boundary](#approval-boundary) | Conditions before asking for promotion |
@@ -23,8 +23,8 @@ are not performed by this acceptance work.
 
 | Step | Status | Remaining work |
 | --- | --- | --- |
-| 1. Complete candidate/security review | IN-PROGRESS | A01–A04 repaired locally; complete the all-diff closure below, including transitive consumers |
-| 2. Package/install and human/real-camera acceptance | PARTIAL | Native CI passed at 3eccfd1; later repairs need CI. Real export/diff and repaired snapshot acceptance passed with the boundaries below; Hanwha non-image responses remain a limitation. Final terminal and distribution staging remain open |
+| 1. Complete candidate/security review | LOCAL-PASS | All 208 frozen paths and later deltas reconciled with affected consumers/assertions/claims; A01–A05 repaired, T01/T02 strengthened. See the completed review below |
+| 2. Package/install and human/real-camera acceptance | PARTIAL | Native CI passed at 3eccfd1; later repairs need CI. Real export/diff and repaired snapshot acceptance passed with the boundaries below; Hanwha non-image responses remain a limitation. Bounded Windows ConPTY passed; remaining human/platform acceptance and distribution staging remain open |
 | 3. Versions, links and documents | PREPARED, not promoted | Bilingual release records and this checklist updated. Actual versions remain 0.16.0; apply the version-edit checklist only after approval |
 | 4. User confirmation | NOT REQUESTED for promotion | Present the final evidence and unresolved risks before the formal version commit; publication requires separate authorization |
 
@@ -36,6 +36,8 @@ are not performed by this acceptance work.
 | A02 | Snapshot Authorization rewrote `qop=auth` as a quoted value | Remove the rewrite; assert unquoted qop/algorithm/nc and exact request URI. This follows [RFC 7616 §3.4](https://www.rfc-editor.org/rfc/rfc7616.html#section-3.4), not camera-specific downgrade behavior |
 | A03 | Both saved-camera profiles returned HTTP 401 before and after A02; wider testing found 18 similar failures | REPAIRED locally: title-case HTTP/1.1 field names resolve case-sensitive firmware handling; shared CLI/health Digest core retains authentication and destination safeguards. Saved-camera profiles now save and decode successfully. See [repair evidence](snapshot-auth-repair.md); hosted release gates remain open |
 | A04 | Human output emitted terminal commands embedded in camera/profile text, verbose details and error hints | REPAIRED locally: escape C0/C1 and bidirectional formatting controls at human report boundaries and single-line menu/context fields; JSON/JSONL values remain unchanged. Report LF/TAB layout remains allowed; this is not a guarantee against every multiline presentation ambiguity |
+| A05 | Full-screen rendering still emitted directional formatting controls | REPAIRED in 214d989: escape before width, truncation, wrapping and cell layout; original selection data is preserved; a pre-repair assertion failed |
+| C01 | Windows native failures could be hidden by later successful commands | REPAIRED in 210bfc3: four CI and fourteen release exit guards; local success/failure controls pass. Final hosted run remains required |
 
 A01 does not complete the general HTTP binding/charset/fault-status audit. A02
 alone did not resolve A03. The A03 result below is scoped to tested devices and
@@ -46,7 +48,9 @@ profiles, not universal compatibility; remaining work stays explicit in the
 
 | Evidence | Result and boundary |
 | --- | --- |
-| V01 expanded encoder replay, 2026-09-12 | Suppressed retirement: 1,308 pass / four assertion failures / five ignored, including two new and two existing rate tests. Restored: 1,312 all-feature / 1,200 default passes, five ignored each, 41 suites. Production unchanged from 1ea4fff; see [scope](release-0.17-review.md#v01-encoder-replay-coverage). Full candidate review remains open |
+| Final local closure, 2026-09-12 | All-feature/default workspace: 1,310 / 1,198 passed, five ignored and 41 suites each; both all-target Clippy modes, strict rustdoc modes, fmt and Rust 1.88 all-target/all-feature check pass. [A05/T01/T02 and native-exit evidence](release-0.17-review.md#a05-terminal-display-and-t01-assertion-follow-up) |
+| Windows debug ConPTY | 40 synthetic devices, manage/detail/profile/input/password/resize, started snapshot cancellation and exact console-mode restoration on normal/Ctrl-C exits pass; configuration hashes unchanged. No new camera scan or host install; remaining G07 scope below |
+| V01 expanded encoder replay, 2026-09-12 | Suppressed retirement: 1,308 pass / four assertion failures / five ignored, including two new and two existing rate tests. Restored: 1,312 all-feature / 1,200 default passes, five ignored each, 41 suites. Production unchanged from 1ea4fff; see [scope](release-0.17-review.md#v01-encoder-replay-coverage). Historical V01 result; final local closure is recorded below |
 | A04 human-output repair, 2026-09-12 | Before repair: 1,308 pass / two assertion failures / five ignored. Repaired: 1,310 all-feature / 1,200 default passes, five ignored each, 41 suites; both Clippy and strict rustdoc modes pass. Actual debug executable preserves JSON/JSONL values and error exit 3 while escaping human stderr. See the [batch record](release-0.17-review.md#a04-human-output-repair); this is not full-screen terminal acceptance |
 | Hosted CI at 3eccfd15274d4e978501634e4155477760502b6b | [Run 34597167495](https://github.com/smiti1642/oxvif/actions/runs/34597167495): all 27 jobs passed, five native targets; does not cover later repairs |
 | A01 sensitivity | Full workspace all-features, no-fail-fast: 1,301 pass / two assertion failures / five ignored; actual unwanted state mutation observed |
@@ -79,29 +83,25 @@ terminal or distribution-staging acceptance.
 
 ## Review closure
 
-The [per-file ledger](release-0.17-review-ledger.json) freezes the later
-`v0.16.0..b7bc881` inventory at 208 paths. It records this pass's exact read
-coverage, not a percentage of release readiness. `in_progress` does not close
-a gate; `pending` does not erase older batch evidence. Subsequent repair and
-documentation deltas are listed separately. See the
-[batch review record](release-0.17-review.md) for sequencing and exit criteria.
+G01/G03 are LOCAL-PASS for R01–R08. The [per-file ledger](release-0.17-review-ledger.json)
+contains 208 reviewed paths from `v0.16.0..b7bc881`, plus separately reviewed later
+deltas. Each reviewed input has a blob ID; the ledger itself is identified by its
+containing commit. The six groups in the [batch review](release-0.17-review.md#batch-order)
+record source, affected consumers, assertions and public-claim reconciliation.
 
-The exact review baseline is `git diff v0.16.0 3eccfd1`: 200 changed files,
-39,614 added and 3,007 removed lines. Later repair/evidence commits are an
-additional delta. A file inventory or green suite is not an all-diff review.
+The earlier `v0.16.0..3eccfd1` comparison had 200 files, 39,614 added and 3,007
+removed lines. It is a historical checkpoint, not the final reviewed input.
+A01–A05 repairs, T01/T02 test-value work, CI/release guard controls and bilingual
+claim corrections close the locally actionable findings. The included cut has
+no remaining known severe blocker identified by this review.
 
-| Group | Current evidence | Required final closure |
-| --- | --- | --- |
-| CLI application/maintenance/manage, navigation/preferences, Agent/exit contracts | Production entry points inspected; existing regression and live checks above | Finish main/interactive/output/registry/schema/descriptor diff review together; terminal lifecycle, control-character handling, explicit selectors and local-file side effects |
-| Library Media1/2, session, notification peer, XML/type migrations | Contributor and operation cards; additive peer wrapper and migration entry points inspected | Reconcile all public methods/types/reexports/examples and compatibility docs against the final diff; do not infer complete XML validation from scoped fixes |
-| Mock request/auth/fault/dispatch and service handlers | Existing operation ledger and paired batch evidence; A01 independently reproduced | Read/write/options/capabilities/replay closure for every included batch; inherited unmodified handlers affected by shared helpers; complete disposition of remaining HTTP/fault semantics |
-| Metamorph storage/reports/replay/adapters | K27 collision repair and current retention tests | Check all remaining fixture/parse/canonicalization/adapter/replay changes and downgrade documentation; coarse invalidation remains an explicit subset |
-| Dependencies, workflows and packaging | Native CI evidence; changed CI/release/SBOM/formula code inspected | Validate source/tooling refs, staging artifacts, checksums, source/binary SBOM distinction and installed commands; finish schema-verifier/tool-source review |
-| Documentation and test assertions | Bilingual release/migration records and historical evidence preserved | Reconcile current claims across READMEs/guides/support/manpage; distinguish synthetic controls, independently validated corpus and real hardware. Resolve every changed file into a reviewed group, not just these entry points |
-
-Until those closures are signed off, G01/G03 remain open. Existing per-batch
-source reviews and external-corpus results can be reused only for identical
-inputs; they must not be represented as a new independent whole-program audit.
+This is bounded engineering review, not independent whole-program or ONVIF
+certification. Full HTTP/field/Fault semantics, inherited listener hardening,
+raw-recording privacy limits, concurrent replay visibility and snapshot-format
+compatibility remain explicitly scoped in the [backlog](post-0.17-backlog.md).
+Historical external-corpus and hardware evidence applies only to its matching
+inputs. G05/G06 need the exact new candidate in native CI and non-publishing
+staging; G07 remains partial, and G08/G09 retain their approval boundaries.
 
 ## Maintainer actions
 
@@ -110,10 +110,10 @@ change triggers, use another account or open a workaround PR to dispatch jobs.
 After ordinary repair commits are pushed, the maintainer can run:
 
 ```powershell
-git fetch origin codex/contributor-pr-integration
-$candidate = git rev-parse origin/codex/contributor-pr-integration
-gh workflow run ci.yml --ref codex/contributor-pr-integration
-gh workflow run release.yml --ref codex/contributor-pr-integration -f tag=$candidate -F publish=false -F prerelease=true
+git fetch origin codex/release-0.17-closure
+$candidate = git rev-parse origin/codex/release-0.17-closure
+gh workflow run ci.yml --ref codex/release-0.17-closure
+gh workflow run release.yml --ref codex/release-0.17-closure -f tag=$candidate -F publish=false -F prerelease=true
 ```
 
 Record each run URL and exact checked-out SHA; a branch moving after dispatch
@@ -128,10 +128,12 @@ architectures. These are CI-runner installs, not changes to the user's machine.
 Current 0.16-valued staging cannot substitute for final 0.17 package verification.
 Official channel admission and production APT signing keys remain separate work.
 
-Human terminal acceptance still needs resize, filter, counts/gg/G, Ctrl-D/U,
-line-number modes, input/password cancellation and screen restoration through
-manage/discover/diagnose. Test snapshot success with an authorized account;
-do not share passwords in an issue, commit or conversation.
+The bounded current Windows ConPTY run accepts the manage/profile/input/resize,
+started-snapshot cancellation and console-restoration paths listed above. Prior
+Vim/discovery evidence retains its recorded revision. Complete the remaining
+final-candidate discover/diagnose navigation, filter/counts/gg/G/Ctrl-D/U/line-number
+matrix and other-platform human acceptance; this is why G07 remains PARTIAL.
+Real snapshot success retains its authorized-device evidence, not a new fleet run.
 
 ## Version-edit checklist
 

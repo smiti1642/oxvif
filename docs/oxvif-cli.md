@@ -652,6 +652,9 @@ single-line guarantee for every data field. JSON/JSONL retain the original
 values: parse structured output for automation, rather than copying display
 escapes into profile tokens or device identifiers.
 
+Full-screen menu and text rendering also escape directional formatting controls
+before width measurement, truncation and wrapping; selection keeps the original data.
+
 Schema version 3 is published with the CLI crate under `schema/` and attached
 to release artifacts as `oxvif-envelope.schema.json` and
 `command-descriptor.schema.json`. CI validates representative JSON and every

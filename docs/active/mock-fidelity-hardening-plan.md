@@ -253,8 +253,8 @@ requirement to notify them before installing/updating a release on their system.
 | Item | Status |
 | --- | --- |
 | D1 — default behavior and release boundary | Approved 2026-09-10; next minor release, corrected defaults, no global legacy mode |
-| D2 — unmodelled effects and opt-in stubs | Approved 2026-09-10; implementation pending |
-| D3 — external-schema CI/release gate | Approved 2026-09-10; existing non-bundling policy unchanged; implementation pending |
+| D2 — unmodelled effects and opt-in stubs | Approved 2026-09-10; thirteen classified operations implemented, broader effect/capability reconciliation remains partial |
+| D3 — external-schema CI/release gate | Approved 2026-09-10; selected pinned corpus/tooling implemented, existing non-bundling policy unchanged; final-candidate CI remains a release gate |
 | Execution authorization | Approved 2026-09-10: implement and verify through the plan, commit own work directly without opening own PRs; push the hardening branch for CI. Investigate integration of PR #16's requested feature. No automatic contributor-PR merge, main-branch merge, tag, publication or installed-binary update. |
 | M0–M3 | In progress; first slice below does not complete these milestones |
 | M4–M6 | Not yet complete |
@@ -351,4 +351,6 @@ preflights: K13 allocation and K14 deletion notification now have corrected
 regressions; selected DeleteProfile fault/effect paths, K22 client selection and
 external schema/corpus CI have also changed. The preceding paragraphs describe
 the initial checkpoint, not current acceptance. Broad parsing, semantic migration
-and PR #16 integration remain open; releases and installed binaries are untouched.
+remain incomplete. B16 has since implemented the PR #16 feature with scoped,
+opt-in receipt-only Mock behavior; this does not imply merging the contributor
+PR or accepting the entire programme. Releases and installed binaries are untouched.

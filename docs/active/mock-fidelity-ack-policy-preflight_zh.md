@@ -3,8 +3,9 @@
 [English](mock-fidelity-ack-policy-preflight.md) | [繁體中文](mock-fidelity-ack-policy-preflight_zh.md)
 
 W16／K05，2026-09-11，基準 `a51490c`。此設計於實作前記錄。
-目前實作涵蓋 11 項已分類操作。下方範圍／設計／驗證保留首批三項操作的檢查點；
-A3 章節記錄另外八項操作的擴充。
+本卡記錄最初 11 項已分類操作；目前候選另含兩個 Media 操作，共 13 項，見
+[B16 工作卡](mock-fidelity-pr16-integration_zh.md#b16-操作工作卡)。
+下方範圍／設計／驗證保留首批三項操作的檢查點；A3 章節記錄另外八項的擴充。
 
 | 章節 | 用途 |
 | --- | --- |

@@ -8,6 +8,10 @@ on 2026-09-11**. Candidate branch: `codex/contributor-pr-integration`, based on
 `ad564cb`; its hardening ancestry must not be shipped under the feature-only scope.
 Existing PR checklists are author reports, not maintainer acceptance.
 
+This is the dated B14/B17/B16 implementation record. Its branch, permission and
+blocker observations describe that checkpoint. The [current review packet](release-0.17-approval.md)
+tracks subsequent K27/A01–A05 repairs and the final candidate's CI/staging boundary.
+
 | Section | Purpose |
 | --- | --- |
 | [Scope and revisions](#scope-and-revisions) | Fixed contributions and boundaries |

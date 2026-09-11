@@ -4,6 +4,10 @@
 
 Baseline: `e6962b5`, 2026-09-11. Owner: current hardening task. W01/W10/W17–W19.
 
+Preflight defects, delivery counts and next-subgroup references below are historical
+K34/VE1 records. Current candidate acceptance is tracked in the
+[execution checklist](mock-fidelity-execution-checklist.md).
+
 | Section | Purpose |
 | --- | --- |
 | [Operation cards](#operation-cards) | Complete encoder subgroup and shared consumers |
@@ -208,7 +212,9 @@ claimed. Optional rate absence retains prior values even on codec changes.
   full-state/hook refusal checks, qualified selectors, escaped identities,
   required Media1 fields and unmodeled interval/multicast/timeout refusal.
   Public roundtrips write every advertised Media2 frame rate and resolution for
-  every seeded encoder/codec. Separate checks cover huge finite rate adaptation,
+  every seeded encoder/codec. These loops check consistency with the mock's own
+  advertised lists; they are not an independent capability oracle or exhaustive
+  cross-product validation. Separate checks cover huge finite rate adaptation,
   signed bitrate bounds and H265/Media1 view refusal. Existing source and profile
   replay drivers now verify capacity/options recordings survive refusal and retire
   after commit. The all-profile compatibility policy is explicit, not physical routing.
@@ -224,7 +230,8 @@ claimed. Optional rate absence retains prior values even on codec changes.
   wrote resolutions absent from VEC_1 options. These now use valid advertised
   settings while retaining exact readback and cross-service assertions.
 - Removed 17 legacy reader calls. Inventory/self-tests pass: 159 Action sites,
-  157 routes, 214 readers (199 production, 15 test; 63 production symbols).
+  157 routes, 214 readers (199 before top-level test modules, 15 inside them;
+  63 production symbols).
   Token discrimination is 35 rows: 30 discriminating, 5 explicit blind cases.
 - The external exporter adds 13 encoder exchanges across all eight operations.
   Strict Xerces XSD 1.1 passed 110/110 instances in external directory
@@ -238,7 +245,7 @@ claimed. Optional rate absence retains prior values even on codec changes.
   (link anchors not checked by that scan). Previous K34 commit 87cbf6c
   passed hosted CI 34577502721; that run does not include VE1.
 
-Next subgroup: audio/metadata (K24/K25), then the remaining W10 and other service
+Next subgroup at the VE1 handoff: audio/metadata (K24/K25), then the remaining W10 and other service
 work in the execution checklist. W04/W06/W07/security, independent corpus expansion,
 feature/platform acceptance and PR #16 remain open. No release, install, main-branch
 merge, contributor PR merge or live camera write is included in this delivery.
