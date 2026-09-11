@@ -188,6 +188,11 @@ HTTP 認證與本文傳輸共用單次 `--timeout` 時限。SOAP 階段遵循 `-
 使用 Digest，僅在明確提供 Basic 時使用 Basic，Digest 被拒絕後不降級至 Basic。
 HTTP 上的 Basic 不加密憑證，應使用 HTTPS 或適當受信任的網路。
 
+Digest Authorization 保留產生器輸出的未加引號 `qop`、`algorithm` 及 `nc`，
+符合 [RFC 7616 第 3.4 節](https://www.rfc-editor.org/rfc/rfc7616.html#section-3.4)。
+不可將 challenge header 的引號規則套用至 client 回覆。HTTP 401 仍須確認憑證
+與攝影機 HTTP 權限；ONVIF SOAP 呼叫成功不代表已取得 snapshot 存取權。
+
 快照 URL 僅接受 HTTP(S)，主機名稱／IP 必須與設備目標完全相同（連接埠可不同），
 不得含 userinfo 或 fragment，且 HTTPS 設備目標不得降級至 HTTP。圖片下載不跟隨
 重新導向，也不使用環境變數設定的 HTTP proxy。其他主機、重新導向服務與內嵌憑證

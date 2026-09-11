@@ -979,10 +979,9 @@ async fn fetch_image(
                         false,
                     )
                 })?;
-                let header = answer
-                    .to_header_string()
-                    .replace("qop=auth,", "qop=\"auth\",");
-                request = request.header(reqwest::header::AUTHORIZATION, header);
+                // RFC 7616 section 3.4 requires unquoted qop/algorithm/nc
+                // in Authorization; do not apply challenge-header quoting.
+                request = request.header(reqwest::header::AUTHORIZATION, answer.to_header_string());
             } else if challenges
                 .iter()
                 .any(|h| h.to_ascii_lowercase().starts_with("basic "))
@@ -1402,6 +1401,26 @@ mod tests {
             if challenge.starts_with("Digest") {
                 assert!(requests[1].contains("/image?ticket=never-log-this"));
                 assert!(!requests[1].contains("test-password"));
+                // RFC 7616 section 3.4: Authorization qop/algorithm/nc are
+                // unquoted tokens, unlike qop in WWW-Authenticate challenges.
+                let authorization = requests[1]
+                    .lines()
+                    .find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("authorization")
+                            .then_some(value.trim())
+                    })
+                    .unwrap();
+                let parameters = authorization
+                    .strip_prefix("Digest ")
+                    .unwrap()
+                    .split(',')
+                    .map(str::trim)
+                    .collect::<Vec<_>>();
+                assert!(parameters.contains(&"qop=auth"), "{authorization}");
+                assert!(parameters.contains(&"algorithm=MD5"));
+                assert!(parameters.contains(&"nc=00000001"));
+                assert!(parameters.contains(&"uri=\"/image?ticket=never-log-this\""));
             }
         }
     }

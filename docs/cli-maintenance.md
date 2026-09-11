@@ -219,6 +219,12 @@ challenge-based: Digest is preferred over explicitly offered Basic, and rejected
 Digest is not downgraded to Basic. Basic over HTTP does not encrypt credentials;
 use HTTPS or an appropriately trusted network.
 
+Digest Authorization preserves the generated unquoted `qop`, `algorithm` and `nc`
+parameters as required by [RFC 7616 section 3.4](https://www.rfc-editor.org/rfc/rfc7616.html#section-3.4).
+Challenge-header quoting rules must not be applied to the client response. An
+HTTP 401 still requires investigation of credentials and camera HTTP permissions;
+successful ONVIF SOAP calls alone do not establish snapshot access.
+
 Snapshot URLs must use HTTP(S), match the device target hostname/IP exactly
 (ports may differ), have no userinfo or fragment, and never downgrade an HTTPS
 device target to HTTP. Redirects and environment HTTP proxies are not used for

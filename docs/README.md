@@ -20,6 +20,7 @@ with the top-level [`README.md`](../README.md), the
 | [`../OPERATIONS_zh.md`](../OPERATIONS_zh.md) | **已實作操作（繁體中文）** — the Traditional Chinese counterpart to the operation coverage tables. |
 | [`reference/`](reference/) | **ONVIF protocol reference** — the WSDL/XSD transcriptions used while implementing oxvif. Stable facts, not plans. |
 | [`active/`](active/) | **In-progress plans** — design docs / milestones for work that is under way or not yet finished. |
+| [`active/release-0.17-approval.md`](active/release-0.17-approval.md) · [繁體中文](active/release-0.17-approval_zh.md) | Pre-version 0.17 review packet: current evidence, unresolved findings, non-publishing staging and the approval-controlled version checklist. |
 | [`done/`](done/) | **Completed plans** — finished design/audit docs, kept as a record. |
 | [`mock-server.md`](mock-server.md) | **Reference for `oxvif::mock`** — routing, envelope/namespace contracts, modeled state, seeded fixtures, operation behavior, request/response examples, faults and explicit simulation limits. The operation ledger owns current route counts; this reference is not a conformance certificate. |
 | [`mock-server_zh.md`](mock-server_zh.md) | **Mock 裝置參考（繁體中文）** — the Traditional Chinese counterpart to the complete Mock behavior and fidelity contract. |

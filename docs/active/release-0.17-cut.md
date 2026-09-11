@@ -8,6 +8,11 @@ Comparison base: `v0.16.0`; frozen scope baseline:
 This freezes scope, not a claim that the hardening ancestry is accepted.
 The K27 repair below follows that baseline within the approved integrity scope.
 
+The [pre-version review packet](release-0.17-approval.md) tracks the user's four
+requested steps, A01/A02 repairs, unresolved real-camera snapshot HTTP 401,
+maintainer staging instructions and the version edits reserved for approval.
+It is not a declaration that complete-candidate review or installation passed.
+
 | Section | Purpose |
 | --- | --- |
 | [Included scope](#included-scope) | Bounded batches and their evidence |

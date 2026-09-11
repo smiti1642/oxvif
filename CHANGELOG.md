@@ -43,6 +43,8 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
   and committed replay invalidation; classified unmodeled effects refuse by default.
 - Mock HTTP rejects invalid UTF-8 before dispatch instead of silently changing
   request values and potentially committing a different write.
+- Snapshot Digest authentication preserves unquoted Authorization parameters
+  required by RFC 7616 instead of rewriting `qop=auth` as a quoted value.
 - Metamorph retains distinct recordings when legacy canonical keys collide,
   including load/save and reports; request-aware lookup selects the recording.
 - Windows debug CLI startup stack use, cancellation behavior and bounded
