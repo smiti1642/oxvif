@@ -4,6 +4,11 @@
 
 2026-09-11 source review; W26 remains conditional, not integrated.
 
+The [contributor integration plan](contributor-pr-integration-plan.md) now owns
+execution order, current prerequisite checks, acceptance and branch boundaries for
+#14/#17/#16. It supersedes the historical prerequisite sequence below; the review
+findings remain open until implemented and verified.
+
 | Section | Purpose |
 | --- | --- |
 | [Reviewed revision](#reviewed-revision) | Immutable head and incremental changes |

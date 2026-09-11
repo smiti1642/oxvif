@@ -20,6 +20,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh the reviewed dependency group from PR #14, including futures,
+  thiserror and toml, and the CLI's jsonschema/shlex test dependencies.
+  CLI schema and credential backend selections are unchanged.
+
 ### Fixed
 
 - **Breaking, next minor:** MetadataConfiguration and mock MetadataEntry now

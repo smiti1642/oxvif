@@ -7,6 +7,10 @@ Scope index: [157 routed operations](mock-fidelity-operation-ledger.md).
 This document turns M0–M6 into traceable work; it does not mark those milestones
 complete. No additional runtime behavior is changed by this planning revision.
 
+Related bounded work: [contributor PR integration](contributor-pr-integration-plan.md)
+covers #14 dependencies, #17 notification origin and W26/#16 Media synchronization.
+It does not mark the remaining service batches complete or authorize main-branch merges.
+
 | Section | Purpose |
 | --- | --- |
 | [Execution rules](#execution-rules) | Resume without conversation history |

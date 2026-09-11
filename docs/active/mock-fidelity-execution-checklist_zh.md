@@ -6,6 +6,10 @@
 範圍索引：[157 個路由操作](mock-fidelity-operation-ledger_zh.md)。
 本文件將 M0–M6 拆成可追蹤工作，不代表里程碑已完成；本次規劃補充不改變 runtime 行為。
 
+相關有限範圍工作：[社群 PR 整合計畫](contributor-pr-integration-plan_zh.md) 涵蓋
+#14 相依套件、#17 通知來源與 W26／#16 Media synchronization；不代表剩餘服務
+批次已完成，也不授權主分支合併。
+
 | 章節 | 用途 |
 | --- | --- |
 | [執行規則](#執行規則) | 不依賴對話歷史即可接續施工 |
