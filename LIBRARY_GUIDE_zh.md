@@ -368,6 +368,8 @@ Media2 是 Media1 的後繼介面，原生支援 H.265，且 encoder configurati
 
 尚未發布：Media2 幀率限制改用 `f32`，保留小數；已提供但無效的 rate control 會回錯誤。
 詳見 [Rust／JSON 遷移與 Media1 mock 政策](docs/media2-frame-rate_zh.md)。
+Mock 現在原子驗證完整 encoder 寫入，並共用 options／write 限制；capacity 使用
+source configuration token。詳見 [encoder 契約](docs/mock-server_zh.md#622-encoder-configuration-契約)。
 
 | 特性 | Media1 | Media2 |
 |---|---|---|

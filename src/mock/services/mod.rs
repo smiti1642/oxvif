@@ -5,5 +5,6 @@ pub mod media;
 pub mod media2;
 pub mod ptz;
 pub mod recording;
+pub(crate) mod video_encoder;
 pub(crate) mod video_rate;
 pub(crate) mod video_source;

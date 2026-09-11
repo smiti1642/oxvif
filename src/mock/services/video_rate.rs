@@ -1,4 +1,4 @@
-//! Rate-only migration boundary. Other encoder fields remain VE1 work.
+//! Numeric rate parsing and shared encoder view guards used by VE1.
 use crate::mock::{
     fault::{Code, Fault, INVALID_ARGS, MOCK_REQUEST_POLICY},
     request::{Node, RequestError},
@@ -7,7 +7,7 @@ use crate::mock::{
 
 const TT: &str = "http://www.onvif.org/ver10/schema";
 
-pub(super) fn candidate(operation: &Node, media2: bool) -> Result<Option<(f32, u32)>, String> {
+pub(super) fn candidate(operation: &Node, media2: bool) -> Result<Option<(f32, i32)>, String> {
     let ns = if media2 {
         "http://www.onvif.org/ver20/media/wsdl"
     } else {
@@ -69,7 +69,7 @@ pub(super) fn candidate(operation: &Node, media2: bool) -> Result<Option<(f32, u
         .required_child_text(TT, "BitrateLimit")
         .map_err(RequestError::to_fault)?
         .trim_matches([' ', '\t', '\r', '\n'])
-        .parse::<u32>()
+        .parse::<i32>()
         .map_err(|_| {
             Fault::new(
                 Code::Sender,
@@ -82,6 +82,29 @@ pub(super) fn candidate(operation: &Node, media2: bool) -> Result<Option<(f32, u
 }
 
 pub(super) fn view(encoder: &VideoEncoderState, media2: bool) -> Result<(), String> {
+    if !encoder.quality.is_finite()
+        || encoder.width == 0
+        || encoder.height == 0
+        || encoder.width > i32::MAX as u32
+        || encoder.height > i32::MAX as u32
+        || encoder.bitrate_limit > i32::MAX as u32
+        || encoder.gov_length > i32::MAX as u32
+    {
+        return Err(Fault::new(
+            Code::Receiver,
+            &[MOCK_REQUEST_POLICY],
+            "Invalid mock encoder snapshot",
+        )
+        .to_xml());
+    }
+    if !media2 && !matches!(encoder.encoding.as_str(), "JPEG" | "H264" | "MPEG4") {
+        return Err(Fault::new(
+            Code::Receiver,
+            &[MOCK_REQUEST_POLICY],
+            "Encoder codec cannot be represented by Media1; use Media2",
+        )
+        .to_xml());
+    }
     let rate = encoder.frame_rate_limit;
     if !rate.is_finite() || rate < 0.0 {
         return Err(Fault::new(

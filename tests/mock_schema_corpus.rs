@@ -346,6 +346,132 @@ async fn profile_exchanges() -> Vec<Exchange> {
         .unwrap()
 }
 
+async fn encoder_exchanges() -> Vec<Exchange> {
+    let capture = Capture {
+        mock: MockTransport::new(),
+        exchanges: Arc::default(),
+    };
+    let client = OnvifClient::new(TARGET).with_transport(Arc::new(capture.clone()));
+    let listed = client
+        .get_video_encoder_configurations(TARGET)
+        .await
+        .unwrap();
+    assert_eq!(listed.len(), 4);
+    let mut one = client
+        .get_video_encoder_configuration(TARGET, "VEC_1")
+        .await
+        .unwrap();
+    let options = client
+        .get_video_encoder_configuration_options(TARGET, "VEC_1")
+        .await
+        .unwrap();
+    assert!(options.h264.is_some());
+    one.name = "Encoder & <corpus> 北".into();
+    one.rate_control.as_mut().unwrap().bitrate_limit = 999999;
+    client
+        .set_video_encoder_configuration(TARGET, &one)
+        .await
+        .unwrap();
+    assert_eq!(
+        capture.mock.device().read().video_encoders[0].bitrate_limit,
+        16384
+    );
+    let read = client
+        .get_video_encoder_configuration(TARGET, "VEC_1")
+        .await
+        .unwrap();
+    assert_eq!(read.name, "Encoder & <corpus> 北");
+    let mut two = client
+        .get_video_encoder_configuration_media2(TARGET, "VEC_1")
+        .await
+        .unwrap();
+    let options = client
+        .get_video_encoder_configuration_options_media2(TARGET, "VEC_1")
+        .await
+        .unwrap();
+    assert_eq!(options.options.len(), 3);
+    two.encoding = oxvif::VideoEncoding::H265;
+    two.profile = Some("Main10".into());
+    client
+        .set_video_encoder_configuration_media2(TARGET, &two)
+        .await
+        .unwrap();
+    assert_eq!(
+        capture.mock.device().read().video_encoders[0].encoding,
+        "H265"
+    );
+    let read = client
+        .get_video_encoder_configuration_media2(TARGET, "VEC_1")
+        .await
+        .unwrap();
+    assert_eq!(read.profile.as_deref(), Some("Main10"));
+    for (token, expected) in [("VSC_1", 4), ("VSC_2", 2)] {
+        let instances = client
+            .get_video_encoder_instances_media2(TARGET, token)
+            .await
+            .unwrap();
+        assert_eq!(instances.total, expected);
+    }
+    let err = client
+        .get_video_encoder_configuration(TARGET, "VEC_1")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "SOAP fault [s:Receiver]: Encoder codec cannot be represented by Media1; use Media2"
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    let err = client
+        .get_video_encoder_instances_media2(TARGET, "VEC_1")
+        .await
+        .unwrap_err();
+    assert_delete_fault(
+        err,
+        "ter:InvalidArgVal",
+        "Encoder configuration not found: VEC_1",
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    drop(client);
+    Arc::try_unwrap(capture.exchanges)
+        .unwrap_or_else(|_| panic!("capture still shared"))
+        .into_inner()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn captures_encoder_subgroup_and_refusals() {
+    let exchanges = encoder_exchanges().await;
+    let actual: BTreeSet<_> = exchanges.iter().map(|e| e.action.clone()).collect();
+    let expected: BTreeSet<_> = [
+        ("ver10", "GetVideoEncoderConfigurations"),
+        ("ver10", "GetVideoEncoderConfiguration"),
+        ("ver10", "GetVideoEncoderConfigurationOptions"),
+        ("ver10", "SetVideoEncoderConfiguration"),
+        ("ver20", "GetVideoEncoderConfigurations"),
+        ("ver20", "GetVideoEncoderConfigurationOptions"),
+        ("ver20", "SetVideoEncoderConfiguration"),
+        ("ver20", "GetVideoEncoderInstances"),
+    ]
+    .into_iter()
+    .map(|(v, op)| format!("http://www.onvif.org/{v}/media/wsdl/{op}"))
+    .collect();
+    assert_eq!(actual, expected);
+    assert_eq!(exchanges.len(), 13);
+    assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 2);
+}
+
 async fn rate_exchanges() -> Vec<Exchange> {
     let capture = Capture {
         mock: MockTransport::new(),
@@ -874,6 +1000,7 @@ async fn export_reviewed_batches_for_independent_validation() {
     let mut exchanges = profile_exchanges().await;
     exchanges.extend(source_exchanges().await);
     exchanges.extend(rate_exchanges().await);
+    exchanges.extend(encoder_exchanges().await);
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
     eprintln!(

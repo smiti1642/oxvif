@@ -233,15 +233,17 @@ fn dispatch_media(
         "GetVideoSourceConfigurationOptions" => {
             media::resp_video_source_configuration_options(state, operation)
         }
-        "GetVideoEncoderConfigurations" => media::resp_video_encoder_configurations(state, body),
-        "GetVideoEncoderConfiguration" => media::resp_video_encoder_configuration(state, body),
+        "GetVideoEncoderConfigurations" => {
+            media::resp_video_encoder_configurations(state, operation)
+        }
+        "GetVideoEncoderConfiguration" => media::resp_video_encoder_configuration(state, operation),
         // Was `resp_empty` — success with no write, while the Media2 arm below
         // wrote state. One catalogue, so both must write.
         "SetVideoEncoderConfiguration" => {
-            media::handle_set_video_encoder_configuration(state, body, operation, effect)
+            media::handle_set_video_encoder_configuration(state, operation, effect)
         }
         "GetVideoEncoderConfigurationOptions" => {
-            media::resp_video_encoder_configuration_options(state, body)
+            media::resp_video_encoder_configuration_options(state, operation)
         }
         // All four were `resp_empty`, which meant a profile could not be
         // assembled on the mock at all — create one, add an encoder, read it
@@ -314,14 +316,16 @@ fn dispatch_media2(
         "GetVideoSourceConfigurationOptions" => {
             media2::resp_video_source_configuration_options_media2(state, operation)
         }
-        "GetVideoEncoderConfigurations" => media2::resp_video_encoder_configurations(state, body),
+        "GetVideoEncoderConfigurations" => {
+            media2::resp_video_encoder_configurations(state, operation)
+        }
         "SetVideoEncoderConfiguration" => {
-            media2::handle_set_video_encoder_configuration(state, body, operation, effect)
+            media2::handle_set_video_encoder_configuration(state, operation, effect)
         }
         "GetVideoEncoderConfigurationOptions" => {
-            media2::resp_video_encoder_configuration_options_media2(state, body)
+            media2::resp_video_encoder_configuration_options_media2(state, operation)
         }
-        "GetVideoEncoderInstances" => media2::resp_video_encoder_instances(),
+        "GetVideoEncoderInstances" => media2::resp_video_encoder_instances(state, operation),
         "GetMetadataConfigurations" => media2::resp_metadata_configurations(state, body),
         "SetMetadataConfiguration" => media2::handle_set_metadata_configuration(state, body),
         "GetMetadataConfigurationOptions" => {

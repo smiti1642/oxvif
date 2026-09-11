@@ -109,6 +109,7 @@ impl ReplayResponder {
                         "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurationOptions",
                         "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurations",
                         "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions",
+                        "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderInstances",
                     ] {
                         retired.insert(action.to_owned());
                     }
@@ -130,6 +131,8 @@ impl ReplayResponder {
                         "http://www.onvif.org/ver10/media/wsdl/GetVideoSourceConfigurationOptions",
                         "http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurationOptions",
                         "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfiguration",
+                        "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurationOptions",
+                        "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurationOptions",
                         "http://www.onvif.org/ver10/media/wsdl/GetAudioSourceConfigurations",
                         "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurations",
                         "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfiguration",

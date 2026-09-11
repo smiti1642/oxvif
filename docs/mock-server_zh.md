@@ -384,19 +384,39 @@ ConfigurationToken／ProfileToken。Mock 允許所有 profile 重新指定 sourc
 實體 encoder-routing 衝突。內建 replay 拒絕時保留 recording，成功後才淘汰相依的
 source／profile／options 讀取。詳見 [VS1 證據與限制](active/mock-fidelity-video-source_zh.md)。
 
-### 6.2.2 Encoder 幀率
+### 6.2.2 Encoder configuration 契約
 
-**尚未發布：**共用 encoder 幀率改用 `f32`。已提供的 scoped rate block 會先驗證
-再改變狀態；無效幀率／bitrate 保留完整狀態且不呼叫 change hook，省略則保留現值。
-此為 rate 欄位的驗證邊界，不代表全部 encoder 欄位或 options 契約已完成。
+**尚未發布：**兩種 Media service 均先驗證完整、具 namespace 範圍的 encoder candidate，
+再一次原子提交。拒絕時保留所有欄位、change hook 與內建 replay。Name／token 解碼、
+轉義一次；UseCount 為唯讀。既有部分 raw request fixture 須補齊必要 configuration
+欄位。Media1 另要求有效 boolean ForcePersistence；持久化仍為記憶體及選填、
+由使用者管理的 hook。
 
-Media2 保留小數幀率。Media1 encoder／profile 回覆若包含無法表示的幀率，會回傳
-頂層 Receiver／`mock:RequestPolicy` Fault，不取整數、不省略、不修改狀態。
-手動 seed 的無效幀率同樣拒絕輸出。一般舊整數 JSON 仍可載入；持久化會拒絕負值
-及非有限幀率，不輸出 `null`。內建 replay 僅在 encoder 成功寫入後淘汰相依
-encoder／profile 讀取；standalone responder 政策不變。詳見
-[遷移指南](media2-frame-rate_zh.md) 及
-[K34 證據與 VE1 剩餘工作](active/mock-fidelity-video-encoder_zh.md)。
+Configuration selector 回傳指定 encoder，不存在時回覆 Sender／InvalidArgVal／NoConfig。
+Profile selector 驗證存在；明示的全 profile 邏輯相容模型回傳相容 catalogue，而非只列出
+目前綁定的 configuration。省略 options selector 回傳整台設備的聯集，不是預設 channel，
+也不保證每個 encoder 均接受聯集中所有值。寫入前應查詢實際 configuration。
+明確空值、重複、巢狀及錯誤 namespace 欄位均拒絕。
+
+Options 與 setter 共用各 encoder 的解析度／codec／幀率限制。兩個 sensor 均建模
+JPEG／H264；H265 僅在 Media2 的 VS_1 提供。Quality 限制於 0–10；有效但超出範圍
+的有號 bitrate 調整至公告範圍。提供的幀率確定性地調整至最近公告值，等距時取較低值；
+零調整為 1。共用幀率使用 f32，包含 12.5，以及 VS_1 的 29.97。省略 RateControl
+保留原幀率／bitrate，即使切換 codec 亦然；需對齊新 codec 限制時應明確提供此欄位。
+
+Media1 encoder／profile view 若包含 H265 或小數幀率，回覆頂層 Receiver／
+mock:RequestPolicy Fault，不修改共用狀態。手動 seed 的無效數字亦拒絕輸出。
+舊整數 JSON 幀率仍可讀取；負值／非有限幀率不能持久化。不受影響的個別 encoder
+仍可讀取。詳見[幀率遷移](media2-frame-rate_zh.md)。
+
+不執行實際串流。Media1 僅接受未變更的 interval 1、零 multicast 位址／port、
+TTL 1、AutoStart false 與零 session timeout。不支援的 multicast、簽章或
+constant-bitrate 效果明確拒絕。Media2 GetVideoEncoderInstances 要求
+**source configuration** token：預設 VSC_1 的 total 為 4、VSC_2 為 2，另列各 codec
+限制。這些是合成容量邊界，非使用量或硬體效能；匯入 source catalogue 超過八個 profile
+模型上限時拒絕此 view。Source 提交淘汰 capacity recording；profile 提交淘汰具
+profile selector 的 encoder options；encoder 提交淘汰相依的 encoder／profile 讀取。
+詳見 [VE1 範圍與證據](active/mock-fidelity-video-encoder_zh.md)。
 
 ### 6.3 Profile
 
@@ -627,10 +647,11 @@ profile 錄製結果，成功 synthetic 建立或刪除後才淘汰 Media1 GetPr
 與 Media2 GetProfiles。因此建立會刷新錄製的 profile 清單及單筆 profile 檢視。
 已提交的 Media1 video source／encoder Add／Remove 與 Media2 Add／RemoveConfiguration
 亦淘汰上述 profile 讀取，包含成功的冪等 remove。這些已提交 effect 亦淘汰依賴 binding／
-引用計數的已建模 configuration read 及 PTZ compatible configuration；靜態 encoder instance
-fixture 不受影響，因此不淘汰。
+引用計數的已建模 configuration read、PTZ compatible configuration 及具 profile selector
+的 encoder options。Encoder capacity 不依賴 profile 使用量，故 binding 不淘汰其
+recording；source configuration 提交則會淘汰。
 被拒絕的 binding 保留錄製結果，
-也不會使其他服務中同 family 名稱的讀取失效。Configuration 寫入與其他 mutation、
+也不會使其他服務中同 family 名稱的讀取失效。其他 configuration 寫入與 mutation、
 單獨建構 ReplayResponder、更多相依關係及併發可見性
 仍待審查。
 
@@ -793,9 +814,9 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 | End-to-end flow | `tests/mock_workflow.rs` |
 | XML namespace、name、cardinality 與 sequence order 符合 ONVIF schema | `tests/mock_schema_shape.rs`；限制如下 |
 
-`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 已設定使用固定版本的 Xerces 與外部 schema，驗證選定的 84 份 profile／source／rate request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
+`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 已設定使用固定版本的 Xerces 與外部 schema，驗證選定的 110 份 profile／source／rate／encoder request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
 
-目前 49 組 round-trip 全數為 working，無 static 或 known-broken；35 組 token row 中 29 組可區分、6 組明確標記為 blind。測試表的每個 row 都宣告意圖，避免已知限制演變成未追蹤的永久盲點。
+目前 49 組 round-trip 全數為 working，無 static 或 known-broken；35 組 token row 中 30 組可區分、5 組明確標記為 blind。測試表的每個 row 都宣告意圖，避免已知限制演變成未追蹤的永久盲點。
 
 ---
 
@@ -807,7 +828,8 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 
 - Media2 `GetVideoSourceModes`：所有 `VideoSourceToken` 都回傳同一個 `Mode_1`。
 - 兩種 media service 的 `GetStreamUri` / `GetSnapshotUri`：所有 profile 都回傳同一 URI。
-- Media1 `GetOSDOptions` 與 Media2 `GetVideoEncoderInstances`。
+- Media1 `GetOSDOptions`。Media2 `GetVideoEncoderInstances` 已改為依 source configuration
+  選擇合成容量，詳見 §6.2.2，不再列為 static stub。
 
 ### 13.2 型別真實度缺口
 

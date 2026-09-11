@@ -91,24 +91,10 @@ pub fn resp_snapshot_uri(base: &str) -> String {
 
 pub fn handle_set_video_encoder_configuration(
     state: &SharedState,
-    body: &str,
     operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
-    match apply_video_encoder_write(
-        state,
-        body,
-        operation,
-        false,
-        "NoConfigToken-SETVEC-5517",
-        "NoSuchConfig-SETVEC-5518",
-    ) {
-        Ok(()) => {
-            *effect = Some(crate::mock::effect::Effect::VideoEncoderCommitted);
-            resp_empty("trt", "SetVideoEncoderConfigurationResponse")
-        }
-        Err(fault) => fault,
-    }
+    super::video_encoder::set(state, operation, false, effect)
 }
 
 pub fn handle_set_video_source_configuration(
@@ -424,96 +410,6 @@ pub(crate) fn create_profile_with_bindings(
             CreateOutcome::Created(entry)
         },
         |outcome| matches!(outcome, CreateOutcome::Created(_)),
-    )
-}
-
-/// Apply a `SetVideoEncoderConfiguration` body to the addressed channel.
-///
-/// Shared by Media1 and Media2 for the same reason as the profile operations
-/// above: one encoder catalogue, two request shapes. Until 0.15 **Media1's Set
-/// was `resp_empty`** — it reported success and wrote nothing — while Media2's
-/// wrote state, so the identical call changed the device on one service only.
-/// Same class as the reported profile divergence, pointing the other way.
-///
-/// K34 validates the service-specific, qualified rate block before any mutation.
-/// Media2 accepts fractional rates; Media1 requires an exactly representable
-/// nonnegative integer. An omitted block preserves both stored rate fields.
-/// Token selection and modification share one conditional write lock, so missing
-/// targets do not notify hooks. Successful writes produce a committed effect.
-///
-/// Other fields still use legacy body readers: Media2 codec attributes and
-/// Media1 codec children feed the same state. This is not a complete scoped
-/// configuration candidate; duplicate/ambiguous non-rate fields, unsupported
-/// settings and options-compatible adaptation remain VE1/K35 work.
-///
-/// `Err` is a rendered SOAP fault. The reasons are per-service so an assertion
-/// can tell *which* service refused.
-pub(crate) fn apply_video_encoder_write(
-    state: &SharedState,
-    body: &str,
-    operation: &crate::mock::request::Node,
-    media2: bool,
-    missing_reason: &str,
-    unknown_prefix: &str,
-) -> Result<(), String> {
-    let rate = super::video_rate::candidate(operation, media2)?;
-    // The token *selects* which of the channels to write. An absent or unknown
-    // token is a fault: with more than one encoder, writing to a guessed channel
-    // is the same silent-wrong-answer failure the getters avoid.
-    let Some(want) = extract_attr(body, "Configuration", "token").filter(|t| !t.is_empty()) else {
-        return Err(resp_soap_fault("env:Sender", missing_reason));
-    };
-    state.modify_returning_if(
-        |s| {
-            let Some(ve) = s.video_encoders.iter_mut().find(|c| c.token == want) else {
-                return Err(resp_soap_fault(
-                    "env:Sender",
-                    &format!("{unknown_prefix}: {want}"),
-                ));
-            };
-            if let Some(v) = extract_tag(body, "Name") {
-                ve.name = v;
-            }
-            if let Some(v) = extract_tag(body, "Encoding") {
-                ve.encoding = v;
-            }
-            if let Some(v) = extract_tag(body, "Width").and_then(|x| x.parse().ok()) {
-                ve.width = v;
-            }
-            if let Some(v) = extract_tag(body, "Height").and_then(|x| x.parse().ok()) {
-                ve.height = v;
-            }
-            if let Some(v) = extract_tag(body, "Quality").and_then(|x| x.parse().ok()) {
-                ve.quality = v;
-            }
-            if let Some((fps, bitrate)) = rate {
-                ve.frame_rate_limit = fps;
-                ve.bitrate_limit = bitrate;
-            }
-            // Media2 sends `GovLength` / `Profile` as attributes of
-            // `tr2:Configuration`; Media1 sends the gov length as an element
-            // *inside* `<tt:H264>` / `<tt:H265>` and the profile as
-            // `<tt:H264Profile>` / `<tt:H265Profile>`. Neither schema declares a
-            // flat `<tt:GovLength>` or `<tt:Profile>` child of the configuration,
-            // so neither is accepted here: reading the codec block by name rather
-            // than searching the whole body is what keeps a client that regresses
-            // to the pre-0.15 element form from being silently understood.
-            let codec = extract_tag(body, "H264").or_else(|| extract_tag(body, "H265"));
-            if let Some(v) = extract_attr(body, "Configuration", "GovLength")
-                .or_else(|| codec.as_deref().and_then(|c| extract_tag(c, "GovLength")))
-                .and_then(|x| x.parse().ok())
-            {
-                ve.gov_length = v;
-            }
-            if let Some(v) = extract_attr(body, "Configuration", "Profile")
-                .or_else(|| extract_tag(body, "H264Profile"))
-                .or_else(|| extract_tag(body, "H265Profile"))
-            {
-                ve.profile = v;
-            }
-            Ok(())
-        },
-        Result::is_ok,
     )
 }
 
@@ -960,14 +856,14 @@ fn render_vec_inline(vecs: &[VideoEncoderState], token: &str) -> Result<String, 
 /// The `tt:H264` block is emitted only for H264, because the schema element is
 /// encoding-specific; a JPEG config carrying `tt:H264` is not something a
 /// conformant device sends.
-fn render_vec_body(c: &VideoEncoderState, tag: &str) -> Result<String, String> {
+pub(super) fn render_vec_body(c: &VideoEncoderState, tag: &str) -> Result<String, String> {
     super::video_rate::view(c, false)?;
     let codec = if c.encoding == "H264" {
         format!(
             "<tt:H264><tt:GovLength>{gov}</tt:GovLength>\
              <tt:H264Profile>{profile}</tt:H264Profile></tt:H264>",
             gov = c.gov_length,
-            profile = c.profile,
+            profile = crate::types::xml_escape(&c.profile),
         )
     } else {
         String::new()
@@ -982,10 +878,10 @@ fn render_vec_body(c: &VideoEncoderState, tag: &str) -> Result<String, String> {
           <tt:RateControl><tt:FrameRateLimit>{fps}</tt:FrameRateLimit><tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>{bitrate}</tt:BitrateLimit></tt:RateControl>
           {codec}{VEC_TAIL}
         </{tag}>"#,
-        token = c.token,
-        name = c.name,
+        token = crate::types::xml_escape(&c.token),
+        name = crate::types::xml_escape(&c.name),
         use_count = c.use_count,
-        encoding = c.encoding,
+        encoding = crate::types::xml_escape(&c.encoding),
         width = c.width,
         height = c.height,
         quality = c.quality,
@@ -1111,30 +1007,11 @@ pub fn resp_video_source_configurations(
     )
 }
 
-/// `GetVideoEncoderConfigurations` — the whole catalogue, or one entry when the
-/// request carries a `ConfigurationToken`.
-///
-/// The token is genuinely optional here (the plural getter means "list them"),
-/// which is why an absent token returns everything rather than faulting. That
-/// is *not* true of the singular and Options getters below.
-pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> String {
-    let vecs = state.read().video_encoders.clone();
-    let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
-    let items = vecs
-        .iter()
-        .filter(|c| want.as_deref().is_none_or(|t| t == c.token))
-        .map(|c| render_vec_body(c, "trt:Configurations"))
-        .collect::<Result<String, String>>();
-    let items = match items {
-        Ok(items) => items,
-        Err(fault) => return fault,
-    };
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        &format!(
-            "<trt:GetVideoEncoderConfigurationsResponse>{items}</trt:GetVideoEncoderConfigurationsResponse>"
-        ),
-    )
+pub fn resp_video_encoder_configurations(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_encoder::get(state, operation, false, false)
 }
 
 pub fn resp_audio_sources(state: &SharedState) -> String {
@@ -1196,24 +1073,6 @@ pub fn resp_osds(state: &SharedState, body: &str) -> String {
     )
 }
 
-/// The `ConfigurationToken` of a **per-channel** request, or a SOAP Fault.
-///
-/// Absent is an error, not a default. On a multi-sensor device, answering a
-/// token-less per-channel query means picking a channel on the caller's behalf,
-/// and the pick is invisible — measured on a real two-sensor device
-/// (2026-07-28), a token-less `GetVideoEncoderConfigurationOptions` returned
-/// lens 0's resolution list, which the caller would then display for lens 1
-/// too. Nothing in the response says which lens answered.
-///
-/// The schema does mark the token optional, so this mock is stricter than the
-/// letter of the WSDL. That is the point: the omission is a client bug that a
-/// permissive device hides, and the mock exists to make our own bugs loud.
-fn require_config_token(body: &str, missing_reason: &str) -> Result<String, String> {
-    extract_tag(body, "ConfigurationToken")
-        .filter(|t| !t.is_empty())
-        .ok_or_else(|| resp_soap_fault("env:Sender", missing_reason))
-}
-
 pub fn resp_video_source_configuration(
     state: &SharedState,
     operation: &crate::mock::request::Node,
@@ -1242,112 +1101,18 @@ pub fn resp_video_source_configuration_options(
     super::video_source::options(state, operation, false)
 }
 
-pub fn resp_video_encoder_configuration(state: &SharedState, body: &str) -> String {
-    let want = match require_config_token(body, "NoConfigToken-VEC-5505") {
-        Ok(t) => t,
-        Err(fault) => return fault,
-    };
-    let vecs = state.read().video_encoders.clone();
-    match vecs.iter().find(|c| c.token == want) {
-        Some(c) => {
-            let configuration = match render_vec_body(c, "trt:Configuration") {
-                Ok(config) => config,
-                Err(fault) => return fault,
-            };
-            soap(
-                r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-                &format!(
-                    "<trt:GetVideoEncoderConfigurationResponse>{}</trt:GetVideoEncoderConfigurationResponse>",
-                    configuration
-                ),
-            )
-        }
-        None => resp_soap_fault("env:Sender", &format!("NoSuchConfig-VEC-5506: {want}")),
-    }
+pub fn resp_video_encoder_configuration(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_encoder::get(state, operation, false, true)
 }
 
-/// `trt:GetVideoEncoderConfigurationOptionsResponse` — **per-channel**.
-///
-/// This is the operation the multi-sensor rule in CLAUDE.md was written for.
-/// The resolution list comes from the addressed configuration's own
-/// `resolutions`, so `VEC_1` (sensor 1) reports up to 2592x1944 while `VEC_3`
-/// (sensor 2) tops out at 1280x720. Until 0.15 this responder took **no
-/// arguments at all**: every channel got sensor 1's list, so a parser that
-/// dropped the token on the floor passed every test in the tree.
-///
-/// Shaped after a real device: the top-level `tt:H264` is `tt:H264Options`,
-/// which has **no** `BitrateRange` in the schema, and the whole block is
-/// repeated under `tt:Extension` as `tt:H264Options2`, which does. Until 0.15
-/// this responder put `BitrateRange` at the top level — not a legal
-/// `tt:H264Options` — and so taught the parser a shape no conformant device
-/// sends. That is why the parser's failure to descend into `Extension` went
-/// unnoticed against both the mock and a hand-written fixture.
-///
-/// The two copies deliberately carry **different** resolution lists: the
-/// `Extension` copy is the superset a newer device sends, so a parser that
-/// reads only the shallow copy loses the largest entry and an assertion
-/// catches it. Nothing else in the tree pins that direction.
-///
-/// Deliberately still no `H265`: it would live at
-/// `Options/Extension/Extension/H265`, and adding it changes what every caller
-/// of this responder sees. The parser's two-level descent is covered by unit
-/// fixtures in `src/tests/types_tests.rs`.
-pub fn resp_video_encoder_configuration_options(state: &SharedState, body: &str) -> String {
-    let want = match require_config_token(body, "NoConfigToken-VECOPT-5507") {
-        Ok(t) => t,
-        Err(fault) => return fault,
-    };
-    let vecs = state.read().video_encoders.clone();
-    let Some(c) = vecs.iter().find(|c| c.token == want) else {
-        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-VECOPT-5508: {want}"));
-    };
-
-    let render = |list: &[(u32, u32)]| -> String {
-        list.iter()
-            .map(|(w, h)| {
-                format!(
-                    "<tt:ResolutionsAvailable><tt:Width>{w}</tt:Width>\
-                     <tt:Height>{h}</tt:Height></tt:ResolutionsAvailable>"
-                )
-            })
-            .collect()
-    };
-    // The shallow copy is what an older device sends: same channel, minus the
-    // widest mode the Extension added.
-    let shallow = render(c.resolutions.get(1..).unwrap_or_default());
-    let extended = render(&c.resolutions);
-
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        &format!(
-            r#"<trt:GetVideoEncoderConfigurationOptionsResponse>
-          <trt:Options>
-            <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
-            <tt:H264>
-              {shallow}
-              <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
-              <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
-              <tt:EncodingIntervalRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:EncodingIntervalRange>
-              <tt:H264ProfilesSupported>Baseline</tt:H264ProfilesSupported>
-              <tt:H264ProfilesSupported>Main</tt:H264ProfilesSupported>
-              <tt:H264ProfilesSupported>High</tt:H264ProfilesSupported>
-            </tt:H264>
-            <tt:Extension>
-              <tt:H264>
-                {extended}
-                <tt:GovLengthRange><tt:Min>1</tt:Min><tt:Max>300</tt:Max></tt:GovLengthRange>
-                <tt:FrameRateRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:FrameRateRange>
-                <tt:EncodingIntervalRange><tt:Min>1</tt:Min><tt:Max>30</tt:Max></tt:EncodingIntervalRange>
-                <tt:H264ProfilesSupported>Baseline</tt:H264ProfilesSupported>
-                <tt:H264ProfilesSupported>Main</tt:H264ProfilesSupported>
-                <tt:H264ProfilesSupported>High</tt:H264ProfilesSupported>
-                <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>16384</tt:Max></tt:BitrateRange>
-              </tt:H264>
-            </tt:Extension>
-          </trt:Options>
-        </trt:GetVideoEncoderConfigurationOptionsResponse>"#
-        ),
-    )
+pub fn resp_video_encoder_configuration_options(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_encoder::options(state, operation, false)
 }
 
 pub fn resp_osd(state: &SharedState, body: &str) -> String {

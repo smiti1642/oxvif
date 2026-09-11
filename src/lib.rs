@@ -16,6 +16,9 @@
 //! negative/nonfinite rates fail before writing. Ordinary integer JSON remains
 //! readable. Media1's public rate type is unchanged. See the
 //! [migration guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/media2-frame-rate.md).
+//! Mock encoder writes validate complete scoped candidates atomically, share
+//! limits with options, adapt bitrate and refuse unsupported streaming effects.
+//! H265 remains Media2-only; synthetic capacity uses source configuration tokens.
 //!
 //! | Section | Purpose |
 //! | --- | --- |

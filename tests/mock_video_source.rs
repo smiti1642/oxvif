@@ -428,6 +428,15 @@ fn recordings() -> oxvif::metamorph::FixtureStore {
         &envelope(M1, "GetVideoSources", ""),
         "<recorded-physical-937/>",
     );
+    store.record(
+        &format!("{M2}/GetVideoEncoderInstances"),
+        &envelope(
+            M2,
+            "GetVideoEncoderInstances",
+            "<m:ConfigurationToken>VSC_1</m:ConfigurationToken>",
+        ),
+        "<recorded-capacity-965/>",
+    );
     store
 }
 
@@ -563,6 +572,17 @@ async fn replay(t: &dyn Transport, url: &str) {
             assert_eq!(post(t, url, ns, op, fields).await, "<recorded-source-936/>");
         }
     }
+    assert_eq!(
+        post(
+            t,
+            url,
+            M2,
+            "GetVideoEncoderInstances",
+            "<m:ConfigurationToken>VSC_1</m:ConfigurationToken>"
+        )
+        .await,
+        "<recorded-capacity-965/>"
+    );
     let xml = post(
         t,
         url,
@@ -607,6 +627,22 @@ async fn replay(t: &dyn Transport, url: &str) {
             "GetProfilesResponse"
         );
     }
+    let capacity = post(
+        t,
+        url,
+        M2,
+        "GetVideoEncoderInstances",
+        "<m:ConfigurationToken>VSC_1</m:ConfigurationToken>",
+    )
+    .await;
+    assert_eq!(
+        parse_soap_body(&capacity)
+            .unwrap()
+            .path(&["GetVideoEncoderInstancesResponse", "Info", "Total"])
+            .unwrap()
+            .text(),
+        "4"
+    );
     assert_eq!(
         post(t, url, M1, "GetVideoSources", "").await,
         "<recorded-physical-937/>"

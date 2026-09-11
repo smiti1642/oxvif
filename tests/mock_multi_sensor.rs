@@ -174,8 +174,8 @@ async fn media2_encoder_options_offer_h265_on_one_sensor_only() {
             .map(|x| x.encoding.to_string())
             .collect::<Vec<_>>()
     };
-    assert_eq!(encodings(&lens1), ["H264", "H265"]);
-    assert_eq!(encodings(&lens2), ["H264"]);
+    assert_eq!(encodings(&lens1), ["JPEG", "H264", "H265"]);
+    assert_eq!(encodings(&lens2), ["JPEG", "H264"]);
 }
 
 /// Every configuration must run a resolution it also offers — checked through
@@ -225,7 +225,7 @@ async fn video_encoder_options_unknown_channel_is_refused() {
         .get_video_encoder_configuration_options("VEC_99")
         .await
         .unwrap_err();
-    assert_fault(err, "env:Sender", "NoSuchConfig-VECOPT-5508: VEC_99");
+    assert_fault(err, "s:Sender", "Encoder configuration not found: VEC_99");
 }
 
 #[tokio::test]
@@ -247,7 +247,7 @@ async fn media2_encoder_options_unknown_channel_is_refused() {
         .get_video_encoder_configuration_options_media2("VEC_42")
         .await
         .unwrap_err();
-    assert_fault(err, "env:Sender", "NoSuchConfig-VECOPT2-5514: VEC_42");
+    assert_fault(err, "s:Sender", "Encoder configuration not found: VEC_42");
 }
 
 /// An empty token is not a way to ask token-lessly. The client sends it, the
@@ -260,7 +260,7 @@ async fn empty_channel_token_is_refused_as_missing() {
         .get_video_encoder_configuration_options("")
         .await
         .unwrap_err();
-    assert_fault(err, "env:Sender", "NoConfigToken-VECOPT-5507");
+    assert_fault(err, "s:Sender", "Invalid Args");
 }
 
 // ── Imaging: every operation is per-VideoSourceToken ─────────────────────────

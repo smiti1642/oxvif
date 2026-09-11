@@ -75,8 +75,11 @@ These are explicit mock policies, not assertions about a real device's Faults.
 
 ## Limits
 
-This correction does not finish encoder selectors, options, bitrate adaptation,
-all-field validation, codec compatibility or capacity modeling. The CLI profile
+The subsequent VE1 batch adds bounded encoder selectors, options, bitrate adaptation,
+complete-candidate validation, codec views and synthetic capacity. The mock adapts
+provided rates to its advertised choices (zero becomes 1); client parsing still
+preserves a valid wire zero. Unmodeled streaming effects refuse explicitly; see the
+[encoder contract](mock-server.md#622-encoder-configuration-contract). The CLI profile
 report still uses Media1; no automatic Media2 fallback was added. Mock validation
 does not establish camera behavior or full ONVIF conformance. See the
 [encoder plan and evidence](active/mock-fidelity-video-encoder.md).

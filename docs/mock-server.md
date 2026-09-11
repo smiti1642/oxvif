@@ -472,21 +472,46 @@ model physical encoder-routing conflicts. Built-in replay preserves recordings o
 refusal and retires dependent source/profile/options reads only after a commit.
 See [VS1 evidence and limits](active/mock-fidelity-video-source.md).
 
-### 6.2.2 Encoder frame rates
+### 6.2.2 Encoder configuration contract
 
-**Unreleased:** shared encoder rates now use `f32`. Present scoped rate blocks
-are validated before mutation; invalid rates/bitrates leave the whole state and
-change hook unchanged. Omission retains the stored rate. This is a rate-only
-boundary, not complete encoder-field validation or options conformance.
+**Unreleased:** both Media services validate a complete, namespace-scoped encoder
+candidate before one atomic commit. Refusal preserves every field, change hooks
+and built-in replay. Name/token text is decoded and escaped once; UseCount is
+read-only. Partial raw request fixtures must supply required configuration fields.
+Media1 also requires a boolean ForcePersistence; persistence remains in memory
+with the optional caller-owned hook.
 
-Media2 preserves fractional rates. A Media1 encoder/profile response containing
-an unrepresentable rate returns a top-level Receiver / `mock:RequestPolicy` Fault,
-without rounding, omission or mutation. Invalid manually seeded rates likewise
-refuse rendering. Ordinary old integer JSON loads; persistence rejects negative
-and nonfinite rates instead of emitting `null`. Built-in replay retires dependent
-encoder/profile reads only after a successful encoder write; standalone responder
-policy is unchanged. See the [migration guide](media2-frame-rate.md) and
-[K34 evidence / remaining VE1 work](active/mock-fidelity-video-encoder.md).
+Configuration selectors return the matching encoder or Sender/InvalidArgVal/NoConfig.
+Profile selectors validate existence; the explicit all-profile logical compatibility
+model returns compatible catalogues, not just the currently bound configuration.
+Omitted options selectors return the device-wide union, not a default channel or
+a promise that every encoder accepts every value. Query the actual configuration
+before writing. Explicit empty, duplicate, nested and foreign fields are rejected.
+
+Options and writes share per-encoder resolution/codec/rate limits. JPEG/H264 are
+modeled on both sensors; H265 is available through Media2 for VS_1 only. Quality
+is clamped to 0–10 and valid signed out-of-range bitrate to the advertised range.
+Present rates are adapted deterministically to the nearest advertised value
+(ties select the lower rate); zero adapts to 1. Shared rates use f32 and include
+12.5 and, on VS_1, 29.97. Omitted RateControl retains stored rate/bitrate, including
+on codec changes; callers should provide it to reconcile new codec limits.
+
+Media1 encoder/profile views containing H265 or fractional rates return a
+top-level Receiver / mock:RequestPolicy Fault without altering shared state.
+Invalid seeded numeric values also refuse rendering. Ordinary integer JSON rates
+remain readable; negative/nonfinite rates cannot be persisted. Unaffected individual
+encoders remain readable. See the [rate migration](media2-frame-rate.md).
+
+No streaming is performed. Media1 accepts only the unchanged interval 1,
+zero multicast address/port, TTL 1, AutoStart false and zero session timeout.
+Unsupported multicast, signing or constant-bitrate effects refuse explicitly.
+Media2 GetVideoEncoderInstances requires a **source configuration** token:
+the defaults return totals 4 for VSC_1 and 2 for VSC_2, with codec-specific limits.
+These are synthetic capacity bounds, not usage counters or hardware performance.
+Imported source catalogues above the eight-profile model limit refuse this view.
+Source commits retire capacity recordings; profile commits retire profile-scoped
+encoder options; encoder commits retire dependent encoder/profile reads.
+See [VE1 scope and evidence](active/mock-fidelity-video-encoder.md).
 
 ### 6.3 Profiles
 
@@ -745,7 +770,8 @@ attribute policy remain part of the unfinished validation programme.
 | `GetMetadataConfigurations` | ● **T** | `ConfigurationToken` is a **filter** — no match yields an empty list, not a fault. |
 | `GetMetadataConfigurationOptions` | ● **T** | Addressed read — no match **faults**. |
 | `SetMetadataConfiguration` | ● | Unknown token faults. |
-| `GetStreamUri`, `GetSnapshotUri`, `GetVideoEncoderInstances` | ○ | |
+| `GetStreamUri`, `GetSnapshotUri` | ○ | |
+| `GetVideoEncoderInstances` | ● **T** | Source-configuration-selected synthetic capacity; §6.2.2. |
 | `GetAudioSourceConfigurations`, `GetAudioEncoderConfigurations`, `GetAudioOutputConfigurations`, `GetAudioDecoderConfigurations` | ● | Same state Media1 serves, in Media2's shapes. |
 | `GetAudioEncoderConfigurationOptions` | ● **T** | Media2's **flat** nesting — §6.5. |
 | `SetAudioEncoderConfiguration` | ● | Shares Media1's writer. Not required to carry `Multicast`, and cannot carry `SessionTimeout` — §13.3. |
@@ -1079,10 +1105,11 @@ profile lists as well as the singular profile view. Committed Media1 video
 source/encoder Add/Remove and Media2 Add/RemoveConfiguration also retire these
 profile reads, including successful idempotent removals. These committed effects
 also retire modeled configuration reads and PTZ compatible configurations,
-which depend on bindings/reference counts. The static encoder-instance fixture
-is unchanged and is not retired. Refused bindings
+which depend on bindings/reference counts, plus profile-scoped encoder options.
+Encoder capacity does not depend on profile usage and is not retired by bindings;
+source configuration commits do retire its recordings. Refused bindings
 preserve recordings, including other-service reads with matching family names.
-Configuration writes and other mutations, standalone ReplayResponder
+Other configuration writes and mutations, standalone ReplayResponder
 construction, additional dependencies and concurrent visibility remain under review.
 
 Profile assembly also migrates duplicate-token and binding-reference refusals.
@@ -1286,7 +1313,7 @@ from that schema may enter this repository. Explicitly selecting the test now
 fails if resources are missing; the external SOAP 1.2 envelope schema is also
 required. Node-scoped namespace resolution and separate Envelope/payload checks
 include Fault structure, but do not validate all XSD values or error semantics.
-Separate Windows/Linux CI is configured to validate the selected 84 profile/source/rate request/response
+Separate Windows/Linux CI is configured to validate the selected 110 profile/source/rate/encoder request/response
 instances with independently pinned Xerces and external schemas. That limited
 corpus does not cover all operations or authentication; the inventory job alone
 does not validate XML. See the
@@ -1314,7 +1341,7 @@ The two tables are the important ones. Each row **declares its intent** —
 and **all arms are asserted**. Wire a declared stub up and the test goes red
 telling you to move the row, so the list cannot rot into a permanent blind
 spot. Current state: 49 round-trip pairs (**49** working, **0** static, 0
-known-broken) and 35 token rows (29 discriminating, 6 blind).
+known-broken) and 35 token rows (30 discriminating, 5 blind).
 
 **Every `Set` on this mock now round-trips.** The last two static rows were the
 audio encoder configurations, and wiring them emptied the audit's Tier 3. Both
@@ -1349,7 +1376,7 @@ refusals and receipt-only stubs. The table below concerns static reads.
 |---|---|
 | **Media2 `GetVideoSourceModes`** | Static — one mode (`Mode_1`) for every `VideoSourceToken`. `SetVideoSourceMode` is **not** a stub: it faults, see below. |
 | **`GetStreamUri` / `GetSnapshotUri`**, both services | One canned URI for every profile. A real device gives each profile its own. |
-| **Media1 `GetOSDOptions`**, **Media2 `GetVideoEncoderInstances`** | Static. |
+| **Media1 `GetOSDOptions`** | Static. |
 
 ### 13.2 Fidelity gaps — a parser field nothing feeds
 

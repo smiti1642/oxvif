@@ -70,7 +70,10 @@ Media1 寫入須為非負 `i32`，且可由共用 `f32` 精確表示；不相容
 
 ## 限制
 
-本次修正未完成 encoder selector、options、bitrate 調整、全部欄位驗證、codec
-相容性及 capacity 建模。CLI profile 報告仍使用 Media1，未新增自動 Media2 fallback。
+後續 VE1 批次加入有限範圍的 encoder selector、options、bitrate 調整、完整 candidate
+驗證、codec view 及合成 capacity。Mock 將提供的幀率調整至公告值（零變為 1）；
+client 解析仍保留有效 wire 零值。未建模串流效果明確拒絕，詳見
+[encoder 契約](mock-server_zh.md#622-encoder-configuration-契約)。
+CLI profile 報告仍使用 Media1，未新增自動 Media2 fallback。
 Mock 驗證不代表實機行為或完整 ONVIF 符合性。詳見
 [encoder 計畫與證據](active/mock-fidelity-video-encoder_zh.md)。

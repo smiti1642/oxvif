@@ -82,7 +82,11 @@
 //! Shared encoder rates use `f32`; present rate blocks validate before mutation.
 //! Media1 views with fractional rates return an explicit model-policy Fault rather
 //! than rounding. Invalid seeded rates also refuse rendering; persistence rejects
-//! negative/nonfinite rates. Other encoder fields/options remain under review.
+//! negative/nonfinite rates. Complete scoped encoder writes now validate before
+//! one commit, adapt quality/rate/bitrate to modeled limits and reject unmodeled
+//! streaming effects. Media1 also refuses H265 views. Generic encoder options
+//! are a device-wide union; selected options and writes share per-encoder limits.
+//! Media2 encoder capacity selects a source configuration, not an encoder token.
 //!
 //! 0.15 made this mock noticeably harder to satisfy than 0.14, on purpose. A
 //! mock that answers everything is not a test harness — it is a way of proving
@@ -92,10 +96,11 @@
 //! **1. A per-channel operation needs its token, and a wrong token is refused.**
 //! Operations addressing a specific head, sensor or configuration
 //! (`ProfileToken` for PTZ, `VideoSourceToken` for Imaging, `ConfigurationToken`
-//! for the remaining Media encoder/audio options getters) fault on a missing
+//! for the remaining Media audio options getters) fault on a missing
 //! token and fault again on one that names nothing. Source options now support
 //! omitted selectors explicitly as conservative generic ranges, not a default
-//! channel; explicit unknown source configuration/profile references still fault.
+//! channel; encoder options support generic unions. Explicit unknown configuration
+//! or profile references still fault.
 //!
 //! This is the harshest change and the one most likely to break existing tests
 //! — and it is the whole point. A device that silently answers for channel 0 is

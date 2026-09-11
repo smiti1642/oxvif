@@ -22,6 +22,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock video encoder configuration now validates complete scoped candidates
+  atomically across both Media services. Options and writes share modeled limits;
+  bitrate/quality/rate adaptation is explicit, unknown selectors fault, and H265
+  no longer leaks into Media1 views. Capacity now requires a source configuration
+  token. Update partial raw fixtures and tests relying on silently ignored fields;
+  see the [encoder contract](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/mock-server.md#622-encoder-configuration-contract)
+  for supported fields, generic options and non-streaming limits.
 - **Breaking, next minor:** Media2 `VideoRateControl2.frame_rate_limit` and mock
   `VideoEncoderState.frame_rate_limit` change from `u32` to `f32`; fractional rates
   no longer silently parse as zero. Present incomplete/invalid rate blocks error,

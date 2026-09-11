@@ -695,7 +695,7 @@ async fn observed() -> Vec<(&'static str, String)> {
     probe!(
         out,
         "get_video_encoder_instances_media2",
-        get_video_encoder_instances_media2(MEDIA2, VEC)
+        get_video_encoder_instances_media2(MEDIA2, "VSC_1")
     );
     probe!(
         out,

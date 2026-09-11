@@ -3413,10 +3413,13 @@ mod tests {
 
     #[test]
     fn media2_get_video_encoder_configurations_returns_default() {
-        use crate::mock::services::media2;
         let s = new_state();
-        let xml =
-            media2::resp_video_encoder_configurations(&s, "<tr2:GetVideoEncoderConfigurations/>");
+        let xml = encoder_query(
+            &s,
+            true,
+            "GetVideoEncoderConfigurations",
+            "<tr2:GetVideoEncoderConfigurations/>",
+        );
         assert!(xml.contains("GetVideoEncoderConfigurationsResponse"));
         // All four channels, not just one: the token-less plural getter lists
         // everything, which is what makes the filtering test below meaningful.
@@ -3432,15 +3435,24 @@ mod tests {
 
     #[test]
     fn media2_get_video_encoder_configurations_filters_by_token() {
-        use crate::mock::services::media2;
         let s = new_state();
-        let xml = media2::resp_video_encoder_configurations(
+        let xml = encoder_query(
             &s,
+            true,
+            "GetVideoEncoderConfigurations",
             r#"<tr2:GetVideoEncoderConfigurations><tr2:ConfigurationToken>OTHER</tr2:ConfigurationToken></tr2:GetVideoEncoderConfigurations>"#,
         );
-        // Unknown token → response present but no configuration element.
-        assert!(xml.contains("GetVideoEncoderConfigurationsResponse"));
-        assert!(!xml.contains(r#"token="VEC_1""#));
+        assert!(xml.contains("ter:NoConfig"));
+        assert!(xml.contains("Encoder configuration not found: OTHER"));
+        assert!(!xml.contains("GetVideoEncoderConfigurationsResponse"));
+        let selected = encoder_query(
+            &s,
+            true,
+            "GetVideoEncoderConfigurations",
+            r#"<tr2:GetVideoEncoderConfigurations><tr2:ConfigurationToken>VEC_3</tr2:ConfigurationToken></tr2:GetVideoEncoderConfigurations>"#,
+        );
+        assert!(selected.contains(r#"token="VEC_3""#));
+        assert!(!selected.contains(r#"token="VEC_1""#));
     }
 
     // ── Relay output / Digital input (stateful) ───────────────────────────
@@ -3669,11 +3681,20 @@ mod tests {
     /// could not have failed.
     #[test]
     fn video_encoder_options_are_per_channel() {
-        use crate::mock::services::media;
         let s = new_state();
 
-        let lens1 = media::resp_video_encoder_configuration_options(&s, &vec_options_body("VEC_1"));
-        let lens2 = media::resp_video_encoder_configuration_options(&s, &vec_options_body("VEC_3"));
+        let lens1 = encoder_query(
+            &s,
+            false,
+            "GetVideoEncoderConfigurationOptions",
+            &vec_options_body("VEC_1"),
+        );
+        let lens2 = encoder_query(
+            &s,
+            false,
+            "GetVideoEncoderConfigurationOptions",
+            &vec_options_body("VEC_3"),
+        );
 
         // Sensor 1 offers 5MP; sensor 2 cannot and must not claim to.
         assert!(lens1.contains("<tt:Width>2592</tt:Width>"), "VEC_1 max");
@@ -3695,9 +3716,13 @@ mod tests {
     /// are generated from one list and could silently become identical.
     #[test]
     fn video_encoder_options_extension_copy_is_a_superset() {
-        use crate::mock::services::media;
         let s = new_state();
-        let xml = media::resp_video_encoder_configuration_options(&s, &vec_options_body("VEC_1"));
+        let xml = encoder_query(
+            &s,
+            false,
+            "GetVideoEncoderConfigurationOptions",
+            &vec_options_body("VEC_1"),
+        );
 
         // Match the full pair, not the width alone — VEC_1 offers both
         // 2592x1944 and 2592x1520, so a width-only check cannot tell the two
@@ -3720,25 +3745,29 @@ mod tests {
     }
 
     #[test]
-    fn video_encoder_options_without_token_faults() {
-        use crate::mock::services::media;
+    fn video_encoder_options_without_token_are_generic() {
         let s = new_state();
-        let xml = media::resp_video_encoder_configuration_options(
+        let xml = encoder_query(
             &s,
+            false,
+            "GetVideoEncoderConfigurationOptions",
             "<trt:GetVideoEncoderConfigurationOptions/>",
         );
-        assert!(xml.contains("NoConfigToken-VECOPT-5507"), "got: {xml}");
-        // Nothing resembling an answer came back with it.
-        assert!(!xml.contains("ResolutionsAvailable"));
+        assert!(xml.contains("<tt:Width>2592</tt:Width>"), "got: {xml}");
+        assert!(xml.contains("<tt:Width>352</tt:Width>"));
     }
 
     #[test]
     fn video_encoder_options_unknown_token_faults() {
-        use crate::mock::services::media;
         let s = new_state();
-        let xml = media::resp_video_encoder_configuration_options(&s, &vec_options_body("VEC_99"));
+        let xml = encoder_query(
+            &s,
+            false,
+            "GetVideoEncoderConfigurationOptions",
+            &vec_options_body("VEC_99"),
+        );
         assert!(
-            xml.contains("NoSuchConfig-VECOPT-5508: VEC_99"),
+            xml.contains("Encoder configuration not found: VEC_99"),
             "the fault must name the token that was rejected; got: {xml}"
         );
         assert!(!xml.contains("ResolutionsAvailable"));
@@ -3834,7 +3863,6 @@ mod tests {
 
     #[test]
     fn get_video_encoder_configuration_is_per_channel() {
-        use crate::mock::services::media;
         let s = new_state();
         let body = |t: &str| {
             format!(
@@ -3843,30 +3871,34 @@ mod tests {
                  </trt:GetVideoEncoderConfiguration>"
             )
         };
-        let one = media::resp_video_encoder_configuration(&s, &body("VEC_1"));
-        let three = media::resp_video_encoder_configuration(&s, &body("VEC_3"));
+        let one = encoder_query(&s, false, "GetVideoEncoderConfiguration", &body("VEC_1"));
+        let three = encoder_query(&s, false, "GetVideoEncoderConfiguration", &body("VEC_3"));
         assert!(one.contains(r#"token="VEC_1""#) && one.contains("<tt:Width>1920</tt:Width>"));
         assert!(three.contains(r#"token="VEC_3""#) && three.contains("<tt:Width>1280</tt:Width>"));
         assert!(!three.contains(r#"token="VEC_1""#));
 
         // JPEG channels carry no tt:H264 block — it is an encoding-specific
         // element and a conformant device does not send it here.
-        let four = media::resp_video_encoder_configuration(&s, &body("VEC_4"));
+        let four = encoder_query(&s, false, "GetVideoEncoderConfiguration", &body("VEC_4"));
         assert!(four.contains("<tt:Encoding>JPEG</tt:Encoding>"));
         assert!(!four.contains("<tt:H264>"));
     }
 
     #[test]
     fn get_video_encoder_configuration_unknown_token_faults() {
-        use crate::mock::services::media;
         let s = new_state();
-        let xml = media::resp_video_encoder_configuration(
+        let xml = encoder_query(
             &s,
+            false,
+            "GetVideoEncoderConfiguration",
             "<trt:GetVideoEncoderConfiguration>\
                <trt:ConfigurationToken>VEC_77</trt:ConfigurationToken>\
              </trt:GetVideoEncoderConfiguration>",
         );
-        assert!(xml.contains("NoSuchConfig-VEC-5506: VEC_77"), "got: {xml}");
+        assert!(
+            xml.contains("Encoder configuration not found: VEC_77"),
+            "got: {xml}"
+        );
     }
 
     #[test]
@@ -3893,7 +3925,6 @@ mod tests {
 
     #[test]
     fn media2_video_encoder_options_are_per_channel() {
-        use crate::mock::services::media2;
         let s = new_state();
         let body = |t: &str| {
             format!(
@@ -3902,8 +3933,18 @@ mod tests {
                  </tr2:GetVideoEncoderConfigurationOptions>"
             )
         };
-        let lens1 = media2::resp_video_encoder_configuration_options_media2(&s, &body("VEC_1"));
-        let lens2 = media2::resp_video_encoder_configuration_options_media2(&s, &body("VEC_3"));
+        let lens1 = encoder_query(
+            &s,
+            true,
+            "GetVideoEncoderConfigurationOptions",
+            &body("VEC_1"),
+        );
+        let lens2 = encoder_query(
+            &s,
+            true,
+            "GetVideoEncoderConfigurationOptions",
+            &body("VEC_3"),
+        );
 
         assert!(lens1.contains("<tt:Width>2592</tt:Width>"));
         assert!(!lens2.contains("<tt:Width>2592</tt:Width>"));
@@ -3915,29 +3956,31 @@ mod tests {
     }
 
     #[test]
-    fn media2_video_encoder_options_without_token_faults() {
-        use crate::mock::services::media2;
+    fn media2_video_encoder_options_without_token_are_generic() {
         let s = new_state();
-        let xml = media2::resp_video_encoder_configuration_options_media2(
+        let xml = encoder_query(
             &s,
+            true,
+            "GetVideoEncoderConfigurationOptions",
             "<tr2:GetVideoEncoderConfigurationOptions/>",
         );
-        assert!(xml.contains("NoConfigToken-VECOPT2-5513"), "got: {xml}");
-        assert!(!xml.contains("ResolutionsAvailable"));
+        assert!(xml.contains("<tt:Width>2592</tt:Width>"), "got: {xml}");
+        assert!(xml.contains("<tt:Width>352</tt:Width>"));
     }
 
     #[test]
     fn media2_video_encoder_options_unknown_token_faults() {
-        use crate::mock::services::media2;
         let s = new_state();
-        let xml = media2::resp_video_encoder_configuration_options_media2(
+        let xml = encoder_query(
             &s,
+            true,
+            "GetVideoEncoderConfigurationOptions",
             "<tr2:GetVideoEncoderConfigurationOptions>\
                <tr2:ConfigurationToken>VEC_42</tr2:ConfigurationToken>\
              </tr2:GetVideoEncoderConfigurationOptions>",
         );
         assert!(
-            xml.contains("NoSuchConfig-VECOPT2-5514: VEC_42"),
+            xml.contains("Encoder configuration not found: VEC_42"),
             "got: {xml}"
         );
     }
@@ -3993,6 +4036,7 @@ mod tests {
         // (`High`), so the assertion below cannot pass on the untouched value.
         let body = r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_3" GovLength="60" Profile="Baseline">
             <tt:Name>Retuned</tt:Name>
+            <tt:UseCount>1</tt:UseCount>
             <tt:Encoding>H264</tt:Encoding>
             <tt:Resolution><tt:Width>704</tt:Width><tt:Height>480</tt:Height></tt:Resolution>
             <tt:RateControl><tt:FrameRateLimit>12</tt:FrameRateLimit><tt:BitrateLimit>777</tt:BitrateLimit></tt:RateControl>
@@ -4030,7 +4074,7 @@ mod tests {
                <tt:Name>Nope</tt:Name>\
              </tr2:Configuration></tr2:SetVideoEncoderConfiguration>",
         );
-        assert!(resp.contains("NoConfigToken-SETVEC2-5515"), "got: {resp}");
+        assert!(resp.contains("Invalid Args"), "got: {resp}");
         // And no channel was renamed on the way past.
         assert!(s.read().video_encoders.iter().all(|c| c.name != "Nope"));
     }
@@ -4042,13 +4086,31 @@ mod tests {
             &s,
             r#"<tr2:SetVideoEncoderConfiguration><tr2:Configuration token="VEC_88">
                <tt:Name>Nope</tt:Name>
+               <tt:UseCount>1</tt:UseCount><tt:Encoding>H264</tt:Encoding>
+               <tt:Resolution><tt:Width>1920</tt:Width><tt:Height>1080</tt:Height></tt:Resolution><tt:Quality>5</tt:Quality>
              </tr2:Configuration></tr2:SetVideoEncoderConfiguration>"#,
         );
         assert!(
-            resp.contains("NoSuchConfig-SETVEC2-5516: VEC_88"),
+            resp.contains("Encoder configuration not found: VEC_88"),
             "got: {resp}"
         );
         assert!(s.read().video_encoders.iter().all(|c| c.name != "Nope"));
+    }
+
+    fn encoder_query(state: &MockState, media2: bool, op: &str, body: &str) -> String {
+        let ns = if media2 {
+            "http://www.onvif.org/ver20/media/wsdl"
+        } else {
+            "http://www.onvif.org/ver10/media/wsdl"
+        };
+        crate::mock::dispatch::dispatch(
+            &format!("{ns}/{op}"),
+            "http://mock",
+            state,
+            &format!(
+                "<s:Envelope xmlns:s='http://www.w3.org/2003/05/soap-envelope' xmlns:trt='http://www.onvif.org/ver10/media/wsdl' xmlns:tr2='http://www.onvif.org/ver20/media/wsdl' xmlns:tt='http://www.onvif.org/ver10/schema'><s:Body>{body}</s:Body></s:Envelope>"
+            ),
+        )
     }
 
     fn encoder_write(state: &MockState, body: &str) -> String {

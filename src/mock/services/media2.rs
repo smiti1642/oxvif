@@ -5,14 +5,6 @@ use crate::mock::xml_parse::extract_tag;
 
 const NS: &str = r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#;
 
-/// The `ConfigurationToken` of a per-channel Media2 request, or a SOAP Fault.
-/// Same reasoning as `media::require_config_token` — see that doc comment.
-fn require_config_token(body: &str, missing_reason: &str) -> Result<String, String> {
-    extract_tag(body, "ConfigurationToken")
-        .filter(|t| !t.is_empty())
-        .ok_or_else(|| resp_soap_fault("env:Sender", missing_reason))
-}
-
 /// One profile in the Media2 shape.
 ///
 /// **Not a prefix swap on `media::render_profile`.** The two services wrap their
@@ -230,123 +222,18 @@ pub fn resp_video_source_configuration_options_media2(
     super::video_source::options(state, operation, true)
 }
 
-/// Per-channel. Media2 returns one `Options` block **per encoding**, so the
-/// H.265 block is offered only where the sensor can actually do it — sensor 1.
-/// Sensor 2 gets H.264 alone, at its own smaller resolution list.
-///
-/// **`GovLengthRange`, `FrameRatesSupported` and `ProfilesSupported` are
-/// attributes, and two of them are lists.**
-/// `tt:VideoEncoder2ConfigurationOptions` declares exactly `Encoding`,
-/// `QualityRange`, `ResolutionsAvailable` and `BitrateRange` as child elements;
-/// everything else is `xs:attribute`. `tt:StringAttrList` and `tt:FloatList` are
-/// each `<xs:list itemType="…"/>`, so one attribute holds the whole
-/// space-separated collection rather than N repeated elements.
-///
-/// This emitted all three as elements until 0.15, agreeing with the client bug
-/// it was written beside — and, because the type carries an `xs:any`, the shape
-/// checker's `UNKNOWN-CHILD` rule could not report any of them. Only
-/// `ProfilesSupported` was visible at all, and only because no `tt:` element
-/// anywhere is spelled that way (Media1 says `H264ProfilesSupported`).
-///
-/// **That last sentence is now history, not a live limitation.** The checker
-/// reads `xs:attribute` as of 0.15 and reports `ATTR-AS-ELEMENT`, which asks
-/// whether a name the type *declares* is on the right side of the
-/// element/attribute line — a question no `xs:any` can suppress. Putting any of
-/// the three back opens a row.
-///
-/// There is no `FrameRateRange` on this type. The mock emitted one, and the
-/// checker could not see that either: `FrameRateRange` *is* a real `tt:` element
-/// on `H264Options` and `Mpeg4Options`, the Media1 types. It is replaced here by
-/// the discrete `FrameRatesSupported` list the schema does declare, whose values
-/// are `xs:float` — `12.5` below is deliberate, and a parser reading integers
-/// drops it silently.
-///
-/// The three lists differ **per sensor**, so a handler that ignored the token
-/// could not produce both answers.
-pub fn resp_video_encoder_configuration_options_media2(state: &SharedState, body: &str) -> String {
-    let want = match require_config_token(body, "NoConfigToken-VECOPT2-5513") {
-        Ok(t) => t,
-        Err(fault) => return fault,
-    };
-    let vecs = state.read().video_encoders.clone();
-    let Some(c) = vecs.iter().find(|c| c.token == want) else {
-        return resp_soap_fault("env:Sender", &format!("NoSuchConfig-VECOPT2-5514: {want}"));
-    };
-
-    let resolutions: String = c
-        .resolutions
-        .iter()
-        .map(|(w, h)| {
-            format!(
-                "<tt:ResolutionsAvailable><tt:Width>{w}</tt:Width>\
-                 <tt:Height>{h}</tt:Height></tt:ResolutionsAvailable>"
-            )
-        })
-        .collect();
-
-    // The 5MP sensor is the more capable one all the way down: longer GOVs, more
-    // frame rates and more H.264 profiles. Nothing shared between the two
-    // branches, so an answer for the wrong channel is visible in every list.
-    let is_sensor_1 = c.source_token == "VS_1";
-    let (h264_gov, h264_rates, h264_profiles, h264_bitrate) = if is_sensor_1 {
-        ("1 300", "30 25 15 12.5", "Baseline Main High", 16384)
-    } else {
-        ("2 150", "20 10", "Baseline Main", 8192)
-    };
-
-    // Only the 5MP sensor advertises H.265. Nothing else in the mock lets a
-    // test tell "this device supports H265" from "this *channel* supports it".
-    let h265 = if is_sensor_1 {
-        format!(
-            r#"<tr2:Options GovLengthRange="1 600" FrameRatesSupported="60 30" ProfilesSupported="Main Main10">
-            <tt:Encoding>H265</tt:Encoding>
-            <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
-            {resolutions}
-            <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>32768</tt:Max></tt:BitrateRange>
-          </tr2:Options>"#
-        )
-    } else {
-        String::new()
-    };
-
-    soap(
-        NS,
-        &format!(
-            r#"<tr2:GetVideoEncoderConfigurationOptionsResponse>
-          <tr2:Options GovLengthRange="{h264_gov}" FrameRatesSupported="{h264_rates}" ProfilesSupported="{h264_profiles}">
-            <tt:Encoding>H264</tt:Encoding>
-            <tt:QualityRange><tt:Min>0</tt:Min><tt:Max>10</tt:Max></tt:QualityRange>
-            {resolutions}
-            <tt:BitrateRange><tt:Min>64</tt:Min><tt:Max>{h264_bitrate}</tt:Max></tt:BitrateRange>
-          </tr2:Options>
-          {h265}
-        </tr2:GetVideoEncoderConfigurationOptionsResponse>"#
-        ),
-    )
+pub fn resp_video_encoder_configuration_options_media2(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_encoder::options(state, operation, true)
 }
 
-/// `GetVideoEncoderConfigurations` (Media2) — renders the encoder config from
-/// state. If the request carries a `ConfigurationToken`, only the matching
-/// config is returned (empty list otherwise), mirroring ONVIF token filtering.
-/// Pairs with [`handle_set_video_encoder_configuration`] for Set → Get roundtrips.
-pub fn resp_video_encoder_configurations(state: &SharedState, body: &str) -> String {
-    let vecs = state.read().video_encoders.clone();
-    let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
-    let items = vecs
-        .iter()
-        .filter(|c| want.as_deref().is_none_or(|t| t == c.token))
-        .map(|c| render_video_encoder(c, "tr2:Configurations"))
-        .collect::<Result<String, String>>();
-    let items = match items {
-        Ok(items) => items,
-        Err(fault) => return fault,
-    };
-    soap(
-        NS,
-        &format!(
-            "<tr2:GetVideoEncoderConfigurationsResponse>{items}</tr2:GetVideoEncoderConfigurationsResponse>"
-        ),
-    )
+pub fn resp_video_encoder_configurations(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_encoder::get(state, operation, true, false)
 }
 
 /// Atomically apply the complete modeled source configuration and publish its
@@ -500,24 +387,10 @@ fn configuration_plan(
 
 pub fn handle_set_video_encoder_configuration(
     state: &SharedState,
-    body: &str,
     operation: &crate::mock::request::Node,
     effect: &mut Option<crate::mock::effect::Effect>,
 ) -> String {
-    match media::apply_video_encoder_write(
-        state,
-        body,
-        operation,
-        true,
-        "NoConfigToken-SETVEC2-5515",
-        "NoSuchConfig-SETVEC2-5516",
-    ) {
-        Ok(()) => {
-            *effect = Some(crate::mock::effect::Effect::VideoEncoderCommitted);
-            resp_empty("tr2", "SetVideoEncoderConfigurationResponse")
-        }
-        Err(fault) => fault,
-    }
+    super::video_encoder::set(state, operation, true, effect)
 }
 
 /// One `tt:VideoEncoder2Configuration`, in the flat Media2 shape
@@ -537,10 +410,19 @@ pub fn handle_set_video_encoder_configuration(
 /// `UNKNOWN-CHILD` rule could not report `GovLength` at all. Its
 /// `ATTR-AS-ELEMENT` rule, added later in 0.15, can: reverting this line opens
 /// two rows, one here and one on the profile that inlines the same helper.
-fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> Result<String, String> {
+pub(super) fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> Result<String, String> {
     super::video_rate::view(ve, true)?;
+    let codec = if ve.encoding == "JPEG" {
+        String::new()
+    } else {
+        format!(
+            " GovLength=\"{}\" Profile=\"{}\"",
+            ve.gov_length,
+            crate::types::xml_escape(&ve.profile)
+        )
+    };
     Ok(format!(
-        r#"<{qname} token="{token}" GovLength="{gov}" Profile="{profile}">
+        r#"<{qname} token="{token}"{codec}>
             <tt:Name>{name}</tt:Name>
             <tt:UseCount>{use_count}</tt:UseCount>
             <tt:Encoding>{encoding}</tt:Encoding>
@@ -551,52 +433,23 @@ fn render_video_encoder(ve: &VideoEncoderState, qname: &str) -> Result<String, S
             </tt:RateControl>
             <tt:Quality>{quality}</tt:Quality>
           </{qname}>"#,
-        token = ve.token,
-        name = ve.name,
+        token = crate::types::xml_escape(&ve.token),
+        name = crate::types::xml_escape(&ve.name),
         use_count = ve.use_count,
-        encoding = ve.encoding,
+        encoding = crate::types::xml_escape(&ve.encoding),
         width = ve.width,
         height = ve.height,
         fr = ve.frame_rate_limit,
         br = ve.bitrate_limit,
-        gov = ve.gov_length,
-        profile = ve.profile,
         quality = ve.quality,
     ))
 }
 
-/// `tr2:EncoderInstanceInfo` declares `Codec` (`tr2:EncoderInstance`, `[0..*]`)
-/// then `Total`, in that order — and `tr2:EncoderInstance` declares `Encoding`
-/// then `Number`. Every name here is `tr2:`: both types live in `media2.wsdl`'s
-/// inline schema, which is `elementFormDefault="qualified"`.
-///
-/// The mock had the whole subtree wrong in four ways at once: the repeated
-/// wrapper was named `Encoding` after its own first child rather than `Codec`,
-/// the wrapper and both leaves were in `tt:`, and `Total` came first. Only one
-/// row was ever visible — `tt:Encoding` *is* a real name in `tt:` (on the video
-/// encoder configurations), and `tr2:EncoderInstanceInfo` carries an `xs:any`,
-/// which suppresses the unknown-child rule for the whole type.
-///
-/// It was also a **client** defect: `VideoEncoderInstances::from_xml` iterated
-/// `children_named("Encoding")`, so against a conformant device `encodings`
-/// came back empty and the mock had been written to agree with it.
-pub fn resp_video_encoder_instances() -> String {
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        r#"<tr2:GetVideoEncoderInstancesResponse>
-          <tr2:Info>
-            <tr2:Codec>
-              <tr2:Encoding>H264</tr2:Encoding>
-              <tr2:Number>2</tr2:Number>
-            </tr2:Codec>
-            <tr2:Codec>
-              <tr2:Encoding>H265</tr2:Encoding>
-              <tr2:Number>2</tr2:Number>
-            </tr2:Codec>
-            <tr2:Total>4</tr2:Total>
-          </tr2:Info>
-        </tr2:GetVideoEncoderInstancesResponse>"#,
-    )
+pub fn resp_video_encoder_instances(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::video_encoder::instances(state, operation)
 }
 
 /// Create a profile — in the shared list, not in a string literal.

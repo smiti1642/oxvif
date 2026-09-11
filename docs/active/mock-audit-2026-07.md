@@ -90,6 +90,10 @@ are the "before" picture the rest of this document reasons about.
   probe checks two distinct profile identities while the public client retains
   its existing all-profile API.
 
+  After VE1 encoder-capacity repair (2026-09-11): **35 token rows, 30 discriminating
+  and 5 blind**. GetVideoEncoderInstances now selects VSC_1/VSC_2 rather than
+  accepting an encoder token. The earlier capacity-stub description is historical.
+
   *Correction.* This line read "40 round-trip … 5 declared stubs" until the
   Storage work, which does not sum to 47 and was simply wrong; the figure was
   42. It went unnoticed because no test asserts the prose — the floor in

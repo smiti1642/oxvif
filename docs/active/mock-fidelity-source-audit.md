@@ -23,9 +23,9 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 231 direct occurrences of five reader spellings are indexed: 216 before
-  top-level test modules and 15 inside those modules. The former span 68
-  enclosing symbols, **not** 68 defective operations (recounted for VS1). This includes test-only
+- 214 direct occurrences of five reader spellings are indexed: 199 before
+  top-level test modules and 15 inside those modules. The former span 63
+  enclosing symbols, **not** 63 defective operations (recounted for VE1). This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
   helper touch; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
@@ -256,11 +256,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/events.rs::resp_create_pull_point_subscription` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
-| `src/mock/services/media.rs::apply_video_encoder_write` | `extract_attr` | `production:3` |
-| `src/mock/services/media.rs::apply_video_encoder_write` | `extract_tag` | `production:10` |
-| `src/mock/services/media.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::require_config_token` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::resp_osd` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::handle_create_osd` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::handle_set_osd` | `extract_attr` | `production:1` |
@@ -275,8 +271,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/media.rs::resp_audio_encoder_configuration_options` | `extract_tag` | `production:1` |
 | `src/mock/services/media.rs::apply_audio_encoder_write` | `extract_attr` | `production:1` |
 | `src/mock/services/media.rs::apply_audio_encoder_write` | `extract_tag` | `production:11` |
-| `src/mock/services/media2.rs::require_config_token` | `extract_tag` | `production:1` |
-| `src/mock/services/media2.rs::resp_video_encoder_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
 | `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |
@@ -324,7 +318,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | W08 | `auth::validate_ws_security`: Username/Password/Nonce/Created scalar extraction | AuthResponder, exemption selector and Device user mutations; migrate within auth boundary, never by body-wide lookup |
 | W19 | Legacy `canon::canonicalize` key DOM plus `request::recording_equivalent` secondary replay check | Fixture keys, masking, recording, adapter and invalidation remain separate from synthetic routing/fault policy; exact raw replay retained, selected identity collisions contained without rewriting stored keys |
 | W17 | `discovery_responder::probe_reply`: DOM | UDP Probe matching, QName scope and input bounds; not the SOAP synthetic entry point |
-| W10 | Media profile scalar selectors and create fields; DeleteProfile strict reader; `bind_configuration`/`unbind_configuration`; scoped `video_source` subtree contract; remaining encoder/audio write helpers | Media2 wrappers reuse shared helpers; replace fragment contracts with parsed values/subtrees, not decode-and-reinsert strings |
+| W10 | Media profile scalar selectors and create fields; DeleteProfile strict reader; `bind_configuration`/`unbind_configuration`; scoped `video_source` subtree contract; scoped `video_encoder` contract; remaining audio write helpers | Media2 wrappers reuse shared helpers; replace fragment contracts with parsed values/subtrees, not decode-and-reinsert strings |
 | W10 | Media OSD helpers, colour/position attributes and nested TextString; configuration option selectors | Rendering and typed parsers, list filtering, quota/state; `_force_use_extract_all` is not a routed behavior |
 | W10 | `media2::configuration_plan`: scoped repeated Type/Token references shared by create/add/remove | Complete value plan, optional rename and reference counts commit atomically; see [assembly batch](mock-fidelity-profile-assembly.md). Nested configuration writers remain separate work. |
 | W11 | PTZ selector scalars, nested operation/config/tour/space fragments and coordinate attributes | Profile-to-node resolution; `min_max`, range/vector readers, per-head slots and repeated tour spots |
@@ -360,9 +354,9 @@ while the complete dependency graph remains open.
 | K28 | Recorded request URL credentials survived in `key_canon`; old persisted keys were loaded unchanged. Synthetic assertion failures reproduced both defects. | W19: scrub projected URL pairs for recording/replay/diff and legacy loaded/caller lookup keys; loading does not rewrite disk, normalization collisions remain last-write-wins. Raw-envelope redaction is still targeted, not a general secret detector. |
 | K24 | Pinned output-type review finds Media2 audio renderers/options reuse Media1 codec labels, and shared writes store those labels without a service adapter. XSD string validity does not verify the different codec vocabulary. | W01/W10: review audio list/options, profile-inlined audio, shared writes and client cross-service expectations as one dependency set. Source-confirmed; discriminating wire/state reproduction pending. Do not fix rendering alone and break writes. |
 | K25 | The audio encoder write helper stores requested Multicast AutoStart, while Media2 metadata derives it from address presence; the mock does not implement persistent streaming. External output-type notes identify the field's read-only effect meaning. | W01/W10/W17: reproduce read/write/capability disagreement, review read-only treatment and absent/present multicast before changing defaults. Source-confirmed, no real RTP effect verified. |
-| K26 | `apply_video_encoder_write` stores Encoding verbatim and both video renderers echo the shared label. A Media2-only codec may therefore enter the Media1 view without a codec representability policy; K34 only guards rates. | W01/W10/W17: reproduce H265 write/profile/list/options combinations, review both service contracts and choose an explicit shared-state view/refusal policy; do not silently convert codec identity or weaken schemas. Source-confirmed risk, wire reproduction pending. |
+| K26 — selected codec views repaired | VE1 H265 write/read and Media1 top-level refusal are covered; both profile renderers share the same representability guard. | W01/W10/W17: retain codec identity and refuse incompatible Media1 views; no silent conversion or schema weakening. See VE1 evidence and synthetic limits. |
 | K34 — rate contract repaired | Public client reproduced 12.5 → 0; invalid rate text also became zero. Shared integer mock storage hid the mismatch. | Approved next-minor `f32` migration, strict present rate parsing, outbound/serde finite guards, shared mock rate, Media1 view refusal and committed replay. See [VE1 evidence](mock-fidelity-video-encoder.md). |
-| K35 — remaining encoder contract | Non-rate fields still use global readers; selectors/options/capacity and complete candidate semantics remain incomplete. | Follow the eight [VE1 operation cards](mock-fidelity-video-encoder.md); K34 does not accept these paths. |
+| K35 — selected encoder contract repaired | Eight VE1 routes now use scoped complete candidates/selectors, shared options/write limits and source-configuration capacity; 17 legacy reader calls removed. | [VE1 evidence](mock-fidelity-video-encoder.md): atomic refusal, adaptation, escaped identities, option roundtrips and replay dependencies. Streaming, physical routing and whole-program conformance remain outside this model. |
 | K23 | Windows CI run 34471659927 (`2a488be`) failed `line_number_override_is_validated_but_never_changes_agent_or_plain_output`: bytewise JSON comparison included independently measured `meta.elapsed_ms` (0 versus 9). | W22 test-harness repair: require numeric timing, omit only that exact field from JSON equality, keep all other fields, stderr and plain-output checks; add deterministic timing/data/type controls. Do not alter CLI output or hide other metadata. |
 | K12 | Source comment at `media::bind_configuration` describes binding a fixed profile as a mock deviation. Official Media1/Media2 §4.1 distinguish deletion from configuration changes. | Correct the comment and preserve legal binding; do not “repair” it by making fixed profiles immutable. References below. |
 | K13 — fixed after baseline | `create_profile_in_state` checks uniqueness and inserts under one write lock, skipping occupied generated tokens without overflowing the persisted counter. | Both-service collision regression, boundary/full-state controls and concurrent explicit/generated allocations cover this state slice; capacity and other CreateProfile semantics remain open. |

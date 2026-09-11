@@ -228,19 +228,21 @@ async fn media2_encoder_options_lists_are_attributes() {
         ["Baseline", "Main", "High"],
         "one attribute, three profiles"
     );
-    // 12.5 fps is why this list is `f32`: an integer parse drops it and the
-    // length goes to three.
-    assert_eq!(h264.frame_rates.len(), 4, "VEC_1 H264 FrameRatesSupported");
-    assert!((h264.frame_rates[0] - 30.0).abs() < 1e-5);
-    assert!((h264.frame_rates[3] - 12.5).abs() < 1e-5, "fractional rate");
+    // VE1 advertises every integral rate and two fractional modes.
+    assert_eq!(h264.frame_rates.len(), 32, "VEC_1 H264 FrameRatesSupported");
+    assert_eq!(h264.frame_rates[0], 1.0);
+    assert_eq!(h264.frame_rates[12], 12.5, "fractional rate");
+    assert_eq!(h264.frame_rates[30], 29.97);
+    assert_eq!(h264.frame_rates[31], 30.0);
 
     let h265 = by(&lens1, "H265");
     let gov = h265.gov_length_range.expect("GovLengthRange attribute");
     assert_eq!((gov.min, gov.max), (1, 600), "VEC_1 H265 GovLengthRange");
     assert_eq!(h265.profiles, ["Main", "Main10"]);
-    assert_eq!(h265.frame_rates.len(), 2);
+    assert_eq!(h265.frame_rates.len(), 62);
+    assert_eq!(h265.frame_rates.last(), Some(&60.0));
 
-    // Sensor 2, the 720p lens — every list is a different one.
+    // Sensor 2 has smaller resolution/rate/GOV limits; H264 profiles are shared.
     let lens2 = s
         .get_video_encoder_configuration_options_media2("VEC_3")
         .await
@@ -249,13 +251,15 @@ async fn media2_encoder_options_lists_are_attributes() {
     let h264_2 = by(&lens2, "H264");
     let gov2 = h264_2.gov_length_range.expect("GovLengthRange attribute");
     assert_eq!((gov2.min, gov2.max), (2, 150), "VEC_3 H264 GovLengthRange");
-    assert_eq!(h264_2.profiles, ["Baseline", "Main"]);
-    assert_eq!(h264_2.frame_rates.len(), 2);
+    // Include the actual High seed instead of advertising incompatible options.
+    assert_eq!(h264_2.profiles, ["Baseline", "Main", "High"]);
+    assert_eq!(h264_2.frame_rates.len(), 26);
+    assert_eq!(h264_2.frame_rates.last(), Some(&25.0));
 
     // Stated as the inequality too, so dropping the token cannot leave this
     // green by handing both callers the same answer.
     assert_ne!(gov.max, gov2.max);
-    assert_ne!(h264.profiles, h264_2.profiles);
+    assert_eq!(h264.profiles, h264_2.profiles);
     assert_ne!(h264.frame_rates.len(), h264_2.frame_rates.len());
 }
 
@@ -528,12 +532,16 @@ async fn media2_encoder_instances_are_grouped_by_codec() {
     assert_eq!(inst.total, 4);
     assert_eq!(
         inst.encodings.len(),
-        2,
-        "the two Codec entries must both be seen"
+        3,
+        "all supported Codec entries must be seen"
     );
-    assert_eq!(inst.encodings[0].encoding, oxvif::VideoEncoding::H264);
-    assert_eq!(inst.encodings[1].encoding, oxvif::VideoEncoding::H265);
-    assert_eq!(inst.encodings[0].number + inst.encodings[1].number, 4);
+    assert_eq!(inst.encodings[0].encoding.to_string(), "JPEG");
+    assert_eq!(inst.encodings[1].encoding, oxvif::VideoEncoding::H264);
+    assert_eq!(inst.encodings[2].encoding, oxvif::VideoEncoding::H265);
+    assert_eq!(
+        inst.encodings.iter().map(|c| c.number).collect::<Vec<_>>(),
+        [2, 2, 2]
+    );
 }
 
 #[tokio::test]

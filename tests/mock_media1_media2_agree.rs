@@ -399,14 +399,15 @@ async fn a_media1_encoder_write_actually_writes() {
         .await
         .expect("read VEC_1");
     assert_ne!(
-        before.resolution.width, 640,
+        before.resolution.width, 1280,
         "fixture must not already be at the value we write"
     );
 
     let mut cfg = before.clone();
     cfg.name = "renamed-via-media1".into();
-    cfg.resolution.width = 640;
-    cfg.resolution.height = 360;
+    // Use a resolution advertised for VEC_1; arbitrary crops are not encoder options.
+    cfg.resolution.width = 1280;
+    cfg.resolution.height = 720;
     client
         .set_video_encoder_configuration(&media_url, &cfg)
         .await
@@ -422,7 +423,7 @@ async fn a_media1_encoder_write_actually_writes() {
             after.resolution.width,
             after.resolution.height
         ),
-        ("renamed-via-media1", 640, 360),
+        ("renamed-via-media1", 1280, 720),
         "Media1 reported success and changed nothing — Set → Get must round-trip",
     );
 }
@@ -439,8 +440,8 @@ async fn an_encoder_write_on_either_service_is_visible_to_the_other() {
         .get_video_encoder_configuration(&media_url, "VEC_1")
         .await
         .unwrap();
-    cfg.resolution.width = 800;
-    cfg.resolution.height = 600;
+    cfg.resolution.width = 2560;
+    cfg.resolution.height = 1440;
     client
         .set_video_encoder_configuration(&media_url, &cfg)
         .await
@@ -456,7 +457,7 @@ async fn an_encoder_write_on_either_service_is_visible_to_the_other() {
 
     assert_eq!(
         (via_media2.resolution.width, via_media2.resolution.height),
-        (800, 600),
+        (2560, 1440),
         "a Media1 encoder write must be visible to Media2 — one device",
     );
 }

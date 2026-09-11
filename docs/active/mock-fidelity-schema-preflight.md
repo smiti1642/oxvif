@@ -211,7 +211,7 @@ command remains a Python-backend diagnostic expected to expose K21.
 Windows/Linux CI now runs generic controls and independent Xerces qualification,
 followed by a separate **Official schemas and selected Media corpus** job with fixed source
 hashes, external directories and no uploaded artifacts. Both gate packaging;
-the latter explicitly exports and validates the selected 84 profile/source/rate instances
+the latter explicitly exports and validates the selected 110 profile/source/rate/encoder instances
 after compilation. Each failed native command terminates the job; a missing
 export cannot pass because validation requires an existing, nonempty corpus.
 neither should be reported as full operation/corpus acceptance. Prior CI
@@ -232,7 +232,7 @@ from the driver, not a string search of the response.
 The ignored export requires `OXVIF_MOCK_CORPUS` naming a **new absolute external
 directory whose parent exists**. It refuses empty data, credential-bearing
 requests, relative/existing destinations and checkout/ancestor destinations.
-The exporter preserves XML bytes, emits 84 files plus `cases.json`, and records
+The exporter preserves XML bytes, emits 110 files plus `cases.json`, and records
 explicit Envelope/Body/operation expectations for requests and success/Fault
 responses. It never reads environment credentials or overwrites existing files.
 This is a diagnostic corpus, not comprehensive per-operation acceptance.
@@ -289,11 +289,16 @@ results; this batch's hosted CI must be checked separately. See [K34](mock-fidel
 
 ## Next work
 
+VE1 adds 13 encoder exchanges covering all eight selected operations. On 2026-09-11
+the combined external `oxvif-profile-corpus-20260911-07` passed strict Xerces XSD 1.1:
+**110 instances**, 55 exchanges, 29 operations, 41 successes and 14 Faults.
+This is local selected structural evidence, not full semantic or hosted CI acceptance.
+
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
-and expand the corpus beyond the selected 24-operation batches. W21 remains PARTIAL: complete the
+and expand the corpus beyond the selected 29-operation batches. W21 remains PARTIAL: complete the
 positive/negative envelope, payload and Fault instances from the mock corpus and
 qualify broader paths against actual emitted exchanges. W22 now checks the selected
-84-instance profile/source/rate corpus on Windows/Linux, but the full fail-closed instance
+110-instance profile/source/rate/encoder corpus on Windows/Linux, but the full fail-closed instance
 CI gate still needs the remaining operation batches. Do not substitute this tool
 experiment for P-B's per-operation field/Fault/semantic review.
 

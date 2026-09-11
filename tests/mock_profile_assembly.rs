@@ -350,6 +350,11 @@ fn recordings() -> oxvif::metamorph::FixtureStore {
             &body,
             "<recorded-count-906/>",
         );
+        store.record(
+            &format!("{ns}/GetVideoEncoderConfigurationOptions"),
+            &format!("<m:GetVideoEncoderConfigurationOptions xmlns:m='{ns}'><m:ProfileToken>Profile_4</m:ProfileToken></m:GetVideoEncoderConfigurationOptions>"),
+            "<recorded-options-966/>",
+        );
     }
     store.record(
         &format!("{M2}/GetVideoEncoderInstances"),
@@ -393,6 +398,8 @@ async fn replay_counts(t: &dyn Transport, url: &str) {
     );
     for ns in [M1, M2] {
         assert_eq!(read(t, url, ns).await, "<recorded-count-906/>");
+        assert_eq!(t.soap_post(url, &format!("{ns}/GetVideoEncoderConfigurationOptions"),
+            format!("<m:GetVideoEncoderConfigurationOptions xmlns:m='{ns}'><m:ProfileToken>Profile_4</m:ProfileToken></m:GetVideoEncoderConfigurationOptions>")).await.unwrap(), "<recorded-options-966/>");
     }
     let xml = post(
         t,
@@ -415,6 +422,13 @@ async fn replay_counts(t: &dyn Transport, url: &str) {
             .find(|c| c.attr("token") == Some("VEC_3"))
             .unwrap();
         assert_eq!(encoder.child("UseCount").unwrap().text(), "2");
+        let options = t.soap_post(url, &format!("{ns}/GetVideoEncoderConfigurationOptions"),
+            format!("<m:GetVideoEncoderConfigurationOptions xmlns:m='{ns}'><m:ProfileToken>Profile_4</m:ProfileToken></m:GetVideoEncoderConfigurationOptions>")).await.unwrap();
+        assert_eq!(
+            parse_soap_body(&options).unwrap().children[0].local_name,
+            "GetVideoEncoderConfigurationOptionsResponse"
+        );
+        assert!(options.contains("<tt:Width>2592</tt:Width>"));
     }
     assert_eq!(
         t.soap_post(

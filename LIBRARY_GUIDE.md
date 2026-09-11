@@ -637,6 +637,9 @@ Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 suppor
 Unreleased: Media2 frame-rate limits now use `f32`; fractional values are preserved,
 and malformed present rate control returns an error. See the
 [Rust/JSON migration and Media1 mock policy](docs/media2-frame-rate.md).
+The mock now validates complete encoder writes atomically and shares options/write
+limits. Capacity selects a source configuration; see the
+[encoder contract](docs/mock-server.md#622-encoder-configuration-contract).
 
 ### Media1 vs Media2 key differences
 

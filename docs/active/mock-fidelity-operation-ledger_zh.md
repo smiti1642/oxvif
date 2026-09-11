@@ -27,8 +27,9 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 
 ## 追蹤契約
 
-K34 指 [VE1 計畫](mock-fidelity-video-encoder_zh.md) 的 rate 遷移，包含相依的
-encoder／profile 讀取；其他 encoder 欄位及 selector 仍待完成。
+K34 指 [VE1 計畫](mock-fidelity-video-encoder_zh.md) 的歷史 rate 遷移，包含相依的
+encoder／profile 讀取。VE1 指後續八項操作交付：完整 candidate、selector／options、
+codec view 與 capacity。跨領域計畫驗收仍獨立追蹤，詳見計畫的具日期證據。
 
 - ID 為 `dispatcher.operation`，不只使用 Action 最後一段。保留 Events 實際的
   `Request` 後綴，不與 Media 的同步點操作混淆。
@@ -135,10 +136,10 @@ P1 與 P2 合計仍只構成部分 operation 驗收。
 | `media.GetVideoSourceConfiguration` | `media::resp_video_source_configuration` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media.SetVideoSourceConfiguration` | `media::handle_set_video_source_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media.GetVideoSourceConfigurationOptions` | `media::resp_video_source_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
-| `media.GetVideoEncoderConfigurations` | `media::resp_video_encoder_configurations` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetVideoEncoderConfiguration` | `media::resp_video_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.SetVideoEncoderConfiguration` | `media::handle_set_video_encoder_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | K34 |
-| `media.GetVideoEncoderConfigurationOptions` | `media::resp_video_encoder_configuration_options` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.GetVideoEncoderConfigurations` | `media::resp_video_encoder_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
+| `media.GetVideoEncoderConfiguration` | `media::resp_video_encoder_configuration` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
+| `media.SetVideoEncoderConfiguration` | `media::handle_set_video_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
+| `media.GetVideoEncoderConfigurationOptions` | `media::resp_video_encoder_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
 | `media.AddVideoEncoderConfiguration` | `media::handle_add_video_encoder_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
 | `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
 | `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
@@ -173,10 +174,10 @@ P1 與 P2 合計仍只構成部分 operation 驗收。
 | `media2.GetVideoSourceConfigurations` | `media2::resp_video_source_configurations_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media2.SetVideoSourceConfiguration` | `media2::handle_set_video_source_configuration_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
 | `media2.GetVideoSourceConfigurationOptions` | `media2::resp_video_source_configuration_options_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VS1 |
-| `media2.GetVideoEncoderConfigurations` | `media2::resp_video_encoder_configurations` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.SetVideoEncoderConfiguration` | `media2::handle_set_video_encoder_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | K34 |
-| `media2.GetVideoEncoderConfigurationOptions` | `media2::resp_video_encoder_configuration_options_media2` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetVideoEncoderInstances` | `media2::resp_video_encoder_instances` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media2.GetVideoEncoderConfigurations` | `media2::resp_video_encoder_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
+| `media2.SetVideoEncoderConfiguration` | `media2::handle_set_video_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
+| `media2.GetVideoEncoderConfigurationOptions` | `media2::resp_video_encoder_configuration_options_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
+| `media2.GetVideoEncoderInstances` | `media2::resp_video_encoder_instances` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
 | `media2.GetMetadataConfigurations` | `media2::resp_metadata_configurations` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.SetMetadataConfiguration` | `media2::handle_set_metadata_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.GetMetadataConfigurationOptions` | `media2::resp_metadata_configuration_options` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |

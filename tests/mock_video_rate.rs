@@ -21,7 +21,16 @@ fn envelope(ns: &str, op: &str, fields: &str) -> String {
     )
 }
 async fn post(t: &dyn Transport, url: &str, ns: &str, op: &str, fields: &str) -> String {
-    t.soap_post(url, &format!("{ns}/{op}"), envelope(ns, op, fields))
+    // VE1 requires the actual full Media1 shape, not a Media2 rate fragment.
+    let fields = if ns == M1 && op == "SetVideoEncoderConfiguration" {
+        fields.replace("<tt:RateControl>", "<tt:Quality>5</tt:Quality><tt:RateControl>")
+            .replace("<tt:BitrateLimit>", "<tt:EncodingInterval>1</tt:EncodingInterval><tt:BitrateLimit>")
+            .replace("</tt:RateControl><tt:Quality>5</tt:Quality>", "</tt:RateControl>")
+            .replace("</m:Configuration>", "<tt:Multicast><tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>0.0.0.0</tt:IPv4Address></tt:Address><tt:Port>0</tt:Port><tt:TTL>1</tt:TTL><tt:AutoStart>false</tt:AutoStart></tt:Multicast><tt:SessionTimeout>PT0S</tt:SessionTimeout></m:Configuration><m:ForcePersistence>true</m:ForcePersistence>")
+    } else {
+        fields.to_owned()
+    };
+    t.soap_post(url, &format!("{ns}/{op}"), envelope(ns, op, &fields))
         .await
         .unwrap()
 }

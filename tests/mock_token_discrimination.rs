@@ -134,7 +134,7 @@ const ROWS: &[Row] = rows![
     "media2/encoder-options"      => Expect::Discriminates, ("VEC_1", "VEC_3"), m2_encoder_options;
     "media2/encoder-config"       => Expect::Discriminates, ("VEC_1", "VEC_3"), m2_encoder_config;
     "media2/source-options"       => Expect::Discriminates, ("VSC_1", "VSC_2"), m2_source_options;
-    "media2/encoder-instances"    => Expect::Blind("audit §5 — static"), ("VEC_1", "VEC_3"), m2_encoder_instances;
+    "media2/encoder-instances"    => Expect::Discriminates, ("VSC_1", "VSC_2"), m2_encoder_instances;
     "media2/stream-uri"           => Expect::Blind("audit §5 — one canned URL"), ("Profile_1", "Profile_3"), m2_stream_uri;
     "media2/video-source-modes"   => Expect::Blind("audit §5 — static"), ("VS_1", "VS_2"), m2_video_source_modes;
     "media2/metadata-config"      => Expect::Discriminates, ("MetaConf_1", "MetaConf_2"), m2_metadata_config;
@@ -448,7 +448,7 @@ async fn every_token_taking_operation_matches_its_declared_expectation() {
         .count();
     assert_eq!(
         (ROWS.len(), declared_discriminating),
-        (35, 29),
+        (35, 30),
         "the table's shape changed (rows, declared-Discriminates). If that was \
          deliberate, update this expectation **and** the counts in \
          docs/mock-server.md §12, docs/mock-server_zh.md §12 and \

@@ -62,6 +62,16 @@ replay 相依、source 重設及 profile 引用計數。須一併審查，不附
 
 ## 驗證
 
+VE1 於 2026-09-11 從 `87cbf6c` 接續，剩餘八張工作卡一起施工。Synthetic options
+保留各 encoder 的 resolution 清單，支援 H264／JPEG，僅高容量 source 支援 H265；
+接受範圍內整數幀率與公告的 Media2 小數幀率。既有 encoder resolution 清單沒有共同
+交集，因此 generic options 使用設備聯集；寫入前須以實際 configuration 重查，
+不任選預設 channel。Profile reference 依既有全 profile 邏輯相容政策驗證。Quality／rate 依明示
+規則調整；超出範圍的 signed bitrate 採 clamp。省略 rate 保留現值；未知設定明確拒絕。
+Media1 僅接受未變更的無串流 multicast／session／interval 預設值。Capacity 由 source
+configuration 選取，且受 profile 上限約束，不代表真實串流效能。測試須明確修正舊有
+寬鬆 fixture，保留 deep-options 的差異辨識能力。
+
 新增 `tests/mock_video_encoder.rs`，共用 in-process／HTTP driver：末欄位錯誤後完整
 snapshot／hook、有效 Get→Set→Get、轉義、重複、錯誤 namespace、巢狀 decoy、非有限
 float、數值界線、generic／profile／config selector、雙 source options、公告值實際寫入、
@@ -88,7 +98,7 @@ Preflight 已於 VE1 runtime 修改前記錄。K34 已在 `e6962b5` 透過公開
 此外部診斷有獨立 lockfile，不取代 locked workspace gate 或外部 schema 驗證；沒有連線攝影機或網路。
 
 K34 公開 API 選擇已於 2026-09-11 核准，並依下列 rate 契約交付實作；
-Media1 自身的公開整數型別不變。八項操作的 VE1 剩餘工作**尚未完成**。
+Media1 自身的公開整數型別不變。後續八項操作的 VE1 交付記錄於下方。
 VE1 之後的完整服務子群為 audio／metadata；VE1 本身不代表 W10 結案。
 VS1 已以 `e6962b5` 提交並推送，CI `34574805465` 後續已通過。
 
@@ -133,7 +143,49 @@ VS1 已以 `e6962b5` 提交並推送，CI `34574805465` 後續已通過。
   [English](../media2-frame-rate.md)／[繁體中文](../media2-frame-rate_zh.md)。
 
 交接：K34 本機交付 gate 通過，以上結果不包含該批託管 CI。未發布、安裝、寫入實機、
-合併主分支或合併貢獻者 PR。下一步執行剩餘 VE1 工作卡，包含 K26 codec view 與
+合併主分支或合併貢獻者 PR。該歷史交接的下一步為執行 VE1 工作卡，包含 K26 codec view 與
 K35 完整 candidate／options／selector／capacity 語意。更廣的 HTTP／安全、其他服務、
 feature／平台驗收及 PR #16 整合仍列於[施工檢查表](mock-fidelity-execution-checklist_zh.md)。
 K34 與已核准的 VE1 政策目前不需新增決策。
+
+### VE1 encoder 交付，2026-09-11
+
+八項操作工作卡均已使用共用 scoped encoder 模組。K26 codec view 與 K35
+candidate／selector／options／capacity 已依[非串流模型](../mock-server_zh.md#622-encoder-configuration-契約)
+實作。Generic encoder options 為整台設備聯集；profile 沿用既有邏輯相容政策。
+不宣稱實際 routing、RTP、簽章、CBR 或硬體容量。省略 RateControl 時保留先前值，
+即使切換 codec 亦然。
+
+- 基準 87cbf6c 的 runtime 重現使三項新增回歸測試全數失敗：不存在的 configuration
+  誤報成功、後段無效 quality 仍改寫狀態，以及超範圍 bitrate 未調整。
+  RTK：1789114140_cargo_test.log。
+- tests/mock_video_encoder.rs 在兩種 transport 驗證確切 Fault 階層／reason、
+  拒絕後完整 state／hook、qualified selector、轉義身分、必要 Media1 欄位及
+  未建模 interval／multicast／timeout 拒絕。公開介面逐一寫入各 seeded encoder／codec
+  公告的所有 Media2 幀率與解析度並回讀。另驗證極大有限幀率調整、有號 bitrate
+  邊界與 H265／Media1 view 拒絕。既有 source／profile replay driver 現亦驗證
+  capacity／options recording 在拒絕時保留、成功提交後淘汰。全 profile 相容性為
+  明示邏輯模型，非實體 routing。
+- 一次完整 workspace／all-feature／no-fail-fast mutation campaign
+  （1789115078_cargo_test.log）停用 bitrate clamp、Media1 codec 防護、source-capacity
+  失效及 profile-encoder-options 失效。四個 target 的八項 runtime 失敗抓到 bitrate
+  與兩種 replay 相依性；較早的 bitrate assertion 遮蔽 codec mutation，故此 campaign
+  不作為該防護的獨立敏感度證據。最終 gate 前已完整還原所有 mutation。
+- 同次執行另找出三項舊 fixture 預期：capacity 誤用 VEC_1 而非 VSC_1，以及兩項
+  跨服務測試寫入 VEC_1 未公告的解析度。已改用合法設定，保留確切回讀及跨服務 assertion。
+- 移除 17 個 legacy reader 呼叫。清冊／self-test 通過：159 Action site、157 route、
+  214 reader（199 production、15 test；63 production symbol）。Token discrimination
+  為 35 row：30 可區分、5 明示 blind。
+- 外部 exporter 新增 13 組 encoder exchange，涵蓋全部八項操作。外部目錄
+  oxvif-profile-corpus-20260911-07 的 110／110 instance 通過 strict Xerces XSD 1.1：
+  55 組 exchange、29 操作、41 成功、14 Fault。明確選取的 legacy structural validation
+  亦通過；這是選定結構證據，不是完整 ONVIF 語意符合性。
+- 最終 workspace gate 全通過：all-feature 1,257 項、default 1,154 項測試，
+  各有五項既有 ignored case、38 suites。兩種 locked all-target Clippy 均以
+  -D warnings 通過；格式、diff 空白、兩種嚴格 workspace rustdoc、清冊／self-test
+  及 282 個相對檔案連結均通過（該掃描未驗證 anchor）。前一筆 K34 commit 87cbf6c 已通過託管
+  CI 34577502721，該執行不包含 VE1。
+
+下一子群：audio／metadata（K24／K25），再依施工檢查表完成其餘 W10 及其他服務。
+W04／W06／W07／安全、獨立 corpus 擴充、feature／平台驗收及 PR #16 仍未結案。
+本交付不包含發布、安裝、合併主分支、合併貢獻者 PR 或實機攝影機寫入。

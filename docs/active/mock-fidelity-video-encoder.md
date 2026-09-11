@@ -78,6 +78,21 @@ schema-derived tables/fixtures remain outside the repository.
 
 ## Verification
 
+VE1 execution resumed at `87cbf6c` on 2026-09-11. The remaining eight cards move
+together. The synthetic options model keeps each encoder's resolution catalogue,
+supports H264/JPEG and H265 only on the high-capacity source, and accepts integer
+rates throughout its range plus advertised fractional Media2 rates. Generic options
+are a device-wide union: existing encoder resolution catalogues have no common
+intersection. Callers must re-query with the actual configuration before writing.
+No arbitrary default channel is selected. Profile references are
+validated under the existing all-profile logical compatibility policy. Quality and
+rate adapt deterministically; signed out-of-range bitrate clamps. Optional rate
+omission retains state; unknown settings refuse, not disappear. Media1 accepts
+only the unchanged no-streaming multicast/session/interval defaults. Capacity is
+synthetic, source-configuration-selected and bounded by the profile limit, not a
+measurement of streaming performance. Tests must update obsolete permissive
+fixtures explicitly; preserve existing deep-options discrimination.
+
 Add `tests/mock_video_encoder.rs` with shared in-process/HTTP driver controls:
 complete snapshots/hooks after late-invalid fields; valid Get→Set→Get; escapes,
 duplicates, wrong namespaces, nested decoys, nonfinite floats and numeric bounds;
@@ -116,7 +131,7 @@ workspace gates or independent schema validation. No camera/network call occurs.
 
 K34's public API choice was approved on 2026-09-11 and is implemented as the
 rate-contract delivery below. Media1's own public integer type is unchanged.
-The remaining eight-operation VE1 work is **not complete**. The next service
+The later eight-operation VE1 delivery is recorded below. The next service
 subgroup after VE1 is audio/metadata; VE1 alone will not close W10.
 VS1 is committed/pushed as `e6962b5`; CI `34574805465` subsequently passed.
 
@@ -168,11 +183,62 @@ VS1 is committed/pushed as `e6962b5`; CI `34574805465` subsequently passed.
   Both ledgers and source audits agree. Public migration documentation is in
   [English](../media2-frame-rate.md) / [繁體中文](../media2-frame-rate_zh.md).
 
-Handoff: K34 local delivery gates pass; hosted CI is not included in these results.
+Historical K34 handoff: local delivery gates passed; hosted CI was not included then.
 No release,
 installation, live write, main-branch merge or contributor PR merge occurred.
-Next: execute the remaining VE1 operation cards, including K26 codec views and
+Next at that handoff: execute the remaining VE1 operation cards, including K26 codec views and
 K35 complete candidates/options/selector/capacity semantics. Broader HTTP/security,
 other services, feature/platform acceptance and PR #16 integration remain in the
 [execution checklist](mock-fidelity-execution-checklist.md); no new decision is required
 for K34 or the already approved VE1 policy.
+
+### VE1 encoder delivery, 2026-09-11
+
+All eight operation cards now route through the shared scoped encoder module.
+K26 codec views and K35 candidates/selectors/options/capacity are implemented
+within the [documented non-streaming model](../mock-server.md#622-encoder-configuration-contract).
+Generic encoder options are a device-wide union; profiles use the existing logical
+compatibility policy. No actual routing, RTP, signing, CBR or hardware capacity is
+claimed. Optional rate absence retains prior values even on codec changes.
+
+- Baseline runtime reproduction at 87cbf6c failed all three new regression tests:
+  missing configuration incorrectly succeeded, late invalid quality changed state,
+  and out-of-range bitrate was not adapted. RTK: 1789114140_cargo_test.log.
+- tests/mock_video_encoder.rs covers both transports with exact Fault chains/reasons,
+  full-state/hook refusal checks, qualified selectors, escaped identities,
+  required Media1 fields and unmodeled interval/multicast/timeout refusal.
+  Public roundtrips write every advertised Media2 frame rate and resolution for
+  every seeded encoder/codec. Separate checks cover huge finite rate adaptation,
+  signed bitrate bounds and H265/Media1 view refusal. Existing source and profile
+  replay drivers now verify capacity/options recordings survive refusal and retire
+  after commit. The all-profile compatibility policy is explicit, not physical routing.
+- One full workspace/all-feature/no-fail-fast mutation campaign
+  (1789115078_cargo_test.log) disabled bitrate clamping, Media1 codec guarding,
+  source-capacity invalidation and profile-encoder-options invalidation.
+  Eight runtime failures detected bitrate and both replay dependencies across
+  four targets. Earlier bitrate assertions masked the codec mutation, so the
+  campaign is not independent sensitivity evidence for that guard. All mutated
+  sources were restored exactly before final gates.
+- The same run exposed three obsolete fixture expectations outside those eight
+  failures: capacity supplied VEC_1 rather than VSC_1; two cross-service tests
+  wrote resolutions absent from VEC_1 options. These now use valid advertised
+  settings while retaining exact readback and cross-service assertions.
+- Removed 17 legacy reader calls. Inventory/self-tests pass: 159 Action sites,
+  157 routes, 214 readers (199 production, 15 test; 63 production symbols).
+  Token discrimination is 35 rows: 30 discriminating, 5 explicit blind cases.
+- The external exporter adds 13 encoder exchanges across all eight operations.
+  Strict Xerces XSD 1.1 passed 110/110 instances in external directory
+  oxvif-profile-corpus-20260911-07: 55 exchanges, 29 operations, 41 successes,
+  14 Faults. Explicit legacy structural validation passed. This is selected
+  structural evidence, not complete ONVIF semantic conformance.
+- Final workspace gates pass: all-feature 1,257 tests, default 1,154 tests,
+  each with five existing ignored cases across 38 suites. Both locked all-target
+  Clippy modes pass with -D warnings; formatting, diff whitespace, both strict
+  workspace rustdocs, inventory/self-tests and 282 relative file links pass
+  (link anchors not checked by that scan). Previous K34 commit 87cbf6c
+  passed hosted CI 34577502721; that run does not include VE1.
+
+Next subgroup: audio/metadata (K24/K25), then the remaining W10 and other service
+work in the execution checklist. W04/W06/W07/security, independent corpus expansion,
+feature/platform acceptance and PR #16 remain open. No release, install, main-branch
+merge, contributor PR merge or live camera write is included in this delivery.
