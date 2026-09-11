@@ -4,14 +4,14 @@
 //! Every vendor's ONVIF differs and depending on a physical IP camera in unit
 //! tests is painful. This module answers SOAP requests for **every operation
 //! oxvif implements**; most are stateful (a `Set` persists and the matching
-//! `Get` reflects it), a handful are declared static stubs, and one refuses
-//! outright. Which is which is not a matter of reading the source — see
+//! `Get` reflects it), others are static reads, effectful stubs or explicit
+//! refusals. Which is which is not a matter of reading the source — see
 //! *Strictness* below.
 //!
 //! The outward-facing reference is `docs/mock-server.md` in the repository
 //! (not shipped in the published package): routing, the namespace contract, the
 //! full state model, the seeded fixture, all 157 operations marked
-//! state-backed or static, worked request/response pairs, and the fault
+//! state-backed, static or refused, worked request/response pairs, and the fault
 //! catalogue.
 //!
 //! Two entry points, behind features:
@@ -143,6 +143,14 @@
 //!
 //! # Unreleased request hardening
 //!
+//! Factory Reset, Events Unsubscribe and Events SetSynchronizationPoint refuse
+//! by default with Receiver / `mock:UnmodeledEffect`. Select individual
+//! [`AckOnlyOperation`] values using `with_acknowledgment_only` on mock, replay
+//! or adapter transports, or the HTTP builder, for receipt-only workflow tests.
+//! Neither path changes state, invokes hooks or invalidates replay; reset,
+//! subscription termination and synchronization events are not modeled. This
+//! first classification does not settle other effectful stubs.
+//!
 //! Media1/Media2 `DeleteProfile` now select a namespace-qualified direct token
 //! child, decode XML text once and preserve token whitespace. Invalid requests
 //! are rejected before mutation. This parser is bounded to 2 MiB, 64 element
@@ -176,6 +184,7 @@ pub(crate) mod effect;
 mod fault;
 pub(crate) mod fault_injection;
 pub(crate) mod helpers;
+pub(crate) mod policy;
 mod request;
 #[cfg(feature = "metamorph")]
 pub(crate) use request::recording_equivalent;
@@ -197,6 +206,7 @@ mod server;
 #[cfg(feature = "mock-server")]
 mod snapshot;
 
+pub use policy::AckOnlyOperation;
 pub use responder::{Chain, RequestCtx, Responder};
 pub use state::{DeviceState, MockState};
 pub use transport::MockTransport;

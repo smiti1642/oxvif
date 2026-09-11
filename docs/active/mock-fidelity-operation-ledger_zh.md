@@ -49,6 +49,8 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
   known-gap 重現不代表驗收通過。
 - 下列服務實作路徑可直接開啟；以 Handler 欄的確切 symbol 搜尋定位，不固定易失效的行號。
 
+A2：首批收件政策及 effect 邊界，詳見 [政策檢查點](mock-fidelity-ack-policy-preflight_zh.md)。
+
 ## device
 
 [dispatch_device](../../src/mock/dispatch.rs) · [services/device.rs](../../src/mock/services/device.rs)
@@ -84,7 +86,7 @@ schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispat
 | `device.GetRelayOutputs` | `device::resp_relay_outputs` | `state` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.SetRelayOutputState` | `device::handle_set_relay_output_state` | `state, body` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.SetRelayOutputSettings` | `device::handle_set_relay_output_settings` | `state, body` | W13 | TODO | TODO | TODO | TODO | TODO | - |
-| `device.SetSystemFactoryDefault` | `resp_empty` | `"tds", "SetSystemFactoryDefaultResponse"` | W13 | TODO | TODO | TODO | TODO | TODO | - |
+| `device.SetSystemFactoryDefault` | `resp_empty` | `"tds", "SetSystemFactoryDefaultResponse"` | W13 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
 | `device.GetStorageConfigurations` | `device::resp_storage_configurations` | `state` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.SetStorageConfiguration` | `device::handle_set_storage_configuration` | `state, body` | W13 | TODO | TODO | TODO | TODO | TODO | - |
 | `device.GetSystemUris` | `device::resp_system_uris` | `base` | W13 | TODO | TODO | TODO | TODO | TODO | - |
@@ -242,8 +244,8 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 | `events.PullMessagesRequest` | `events::resp_pull_messages` | `state` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.SubscribeRequest` | `events::resp_subscribe` | `base` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.RenewRequest` | `events::resp_renew` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.UnsubscribeRequest` | `resp_empty` | `"wsnt", "UnsubscribeResponse"` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.SetSynchronizationPointRequest` | `resp_empty` | `"tev", "SetSynchronizationPointResponse"` | W15 | TODO | TODO | TODO | TODO | TODO | - |
+| `events.UnsubscribeRequest` | `resp_empty` | `"wsnt", "UnsubscribeResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
+| `events.SetSynchronizationPointRequest` | `resp_empty` | `"tev", "SetSynchronizationPointResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
 
 ## recording
 

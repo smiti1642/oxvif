@@ -22,6 +22,7 @@ use async_trait::async_trait;
 use crate::mock::dispatch::respond_with_effect;
 use crate::mock::effect::EffectObserver;
 use crate::mock::fault_injection::FaultInjector;
+use crate::mock::policy::AckOnlyPolicy;
 use crate::mock::state::MockState;
 use crate::mock::{auth, helpers};
 
@@ -65,8 +66,12 @@ impl Chain {
 
     /// The default mock pipeline: armed fault → auth gate → synthetic dispatch.
     /// Preserves fault/auth precedence and the synthetic terminal.
-    pub(crate) fn default_mock(faults: Arc<FaultInjector>, enforce_auth: bool) -> Self {
-        Self::mock_with_extra(faults, enforce_auth, Vec::new())
+    pub(crate) fn default_mock(
+        faults: Arc<FaultInjector>,
+        enforce_auth: bool,
+        policy: AckOnlyPolicy,
+    ) -> Self {
+        Self::mock_with_extra(faults, enforce_auth, Vec::new(), policy)
     }
 
     /// The default mock pipeline with `extra` responders spliced in immediately
@@ -77,8 +82,9 @@ impl Chain {
         faults: Arc<FaultInjector>,
         enforce_auth: bool,
         extra: Vec<Box<dyn Responder>>,
+        policy: AckOnlyPolicy,
     ) -> Self {
-        Self::mock_with_observer(faults, enforce_auth, extra, None)
+        Self::mock_with_observer(faults, enforce_auth, extra, None, policy)
     }
 
     pub(crate) fn mock_with_observer(
@@ -86,12 +92,13 @@ impl Chain {
         enforce_auth: bool,
         extra: Vec<Box<dyn Responder>>,
         observer: Option<EffectObserver>,
+        policy: AckOnlyPolicy,
     ) -> Self {
         let mut responders: Vec<Box<dyn Responder>> = Vec::with_capacity(extra.len() + 3);
         responders.push(Box::new(FaultResponder { faults }));
         responders.push(Box::new(AuthResponder { enforce_auth }));
         responders.extend(extra);
-        responders.push(Box::new(SyntheticResponder { observer }));
+        responders.push(Box::new(SyntheticResponder { observer, policy }));
         Self::new(responders)
     }
 
@@ -149,12 +156,14 @@ impl Responder for AuthResponder {
 /// Always answers, so it must be last in the chain.
 pub(crate) struct SyntheticResponder {
     observer: Option<EffectObserver>,
+    policy: AckOnlyPolicy,
 }
 
 #[async_trait]
 impl Responder for SyntheticResponder {
     async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
-        let (xml, effect) = respond_with_effect(ctx.action, ctx.base, ctx.state, ctx.body);
+        let (xml, effect) =
+            respond_with_effect(ctx.action, ctx.base, ctx.state, ctx.body, &self.policy);
         if let (Some(observer), Some(effect)) = (&self.observer, effect) {
             observer(effect);
         }
@@ -212,6 +221,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn acknowledgments_and_refusals_never_emit_committed_effects() {
+        use crate::mock::policy::AckOnlyOperation;
+        let state = MockState::new();
+        let before = serde_json::to_value(&*state.read()).unwrap();
+        let effects = Arc::new(Mutex::new(Vec::new()));
+        let seen = effects.clone();
+        let observer: EffectObserver = Arc::new(move |effect| seen.lock().unwrap().push(effect));
+        let cases = [
+            (
+                AckOnlyOperation::DeviceFactoryDefault,
+                "<d:SetSystemFactoryDefault xmlns:d='http://www.onvif.org/ver10/device/wsdl'><d:FactoryDefault>Soft</d:FactoryDefault></d:SetSystemFactoryDefault>",
+                "SetSystemFactoryDefaultResponse",
+            ),
+            (
+                AckOnlyOperation::EventsUnsubscribe,
+                "<n:Unsubscribe xmlns:n='http://docs.oasis-open.org/wsn/b-2'/>",
+                "UnsubscribeResponse",
+            ),
+            (
+                AckOnlyOperation::EventsSynchronizationPoint,
+                "<e:SetSynchronizationPoint xmlns:e='http://www.onvif.org/ver10/events/wsdl'/>",
+                "SetSynchronizationPointResponse",
+            ),
+        ];
+        for (operation, body, response) in cases {
+            for enabled in [false, true] {
+                let mut policy = AckOnlyPolicy::default();
+                if enabled {
+                    policy.enable(operation);
+                }
+                let chain = Chain::mock_with_observer(
+                    Arc::new(FaultInjector::new()),
+                    false,
+                    Vec::new(),
+                    Some(observer.clone()),
+                    policy,
+                );
+                let xml = chain.respond(&ctx(operation.action(), body, &state)).await;
+                if enabled {
+                    let body = parse_soap_body(&xml).unwrap();
+                    let node = find_response(&body, response).unwrap();
+                    assert!(node.children.is_empty());
+                    assert_eq!(node.text(), "");
+                } else {
+                    assert_fault(
+                        &xml,
+                        "s:Receiver",
+                        "This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+                        Some("mock:UnmodeledEffect"),
+                    );
+                }
+                assert_eq!(serde_json::to_value(&*state.read()).unwrap(), before);
+                assert_eq!(*effects.lock().unwrap(), Vec::<Effect>::new());
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn committed_effect_observer_is_not_a_request_or_fault_hook() {
         let state = MockState::new();
         state.modify(|s| s.profiles.profiles[1].fixed = false);
@@ -243,6 +310,7 @@ mod tests {
                     answer: Some("<raw-effect-832/>"),
                 })],
                 Some(observer.clone()),
+                Default::default(),
             );
             let xml = chain.respond(&ctx(action, &body, &state)).await;
             if inject {
@@ -265,6 +333,7 @@ mod tests {
             false,
             Vec::new(),
             Some(observer),
+            Default::default(),
         );
         let duplicate = body.replace(
             "</m:DeleteProfile>",
@@ -305,7 +374,7 @@ mod tests {
     #[tokio::test]
     async fn synthetic_terminal_answers() {
         let state = MockState::new();
-        let chain = Chain::default_mock(Arc::new(FaultInjector::new()), false);
+        let chain = Chain::default_mock(Arc::new(FaultInjector::new()), false, Default::default());
         let body = "<GetDeviceInformation xmlns='http://www.onvif.org/ver10/device/wsdl'/>";
         let out = chain.respond(&ctx(GET_DEVICE_INFO, body, &state)).await;
         assert!(out.contains("oxvif-mock"), "expected synthetic device info");
@@ -320,7 +389,7 @@ mod tests {
             code: "ter:NotAuthorized".into(),
             reason: "nope".into(),
         });
-        let chain = Chain::default_mock(faults, false);
+        let chain = Chain::default_mock(faults, false, Default::default());
         let out = chain.respond(&ctx(GET_DEVICE_INFO, "", &state)).await;
         assert!(
             out.contains("ter:NotAuthorized"),
@@ -335,7 +404,7 @@ mod tests {
     #[tokio::test]
     async fn auth_gate_blocks_when_enforced_without_credentials() {
         let state = MockState::new();
-        let chain = Chain::default_mock(Arc::new(FaultInjector::new()), true);
+        let chain = Chain::default_mock(Arc::new(FaultInjector::new()), true, Default::default());
         // GetDeviceInformation requires auth; an empty body has no WS-Security.
         let out = chain.respond(&ctx(GET_DEVICE_INFO, "", &state)).await;
         assert!(
@@ -362,6 +431,7 @@ mod tests {
                 seen: seen.clone(),
                 answer: Some("unexpected extra response"),
             })],
+            Default::default(),
         );
         let request = ctx(GET_DEVICE_INFO, "not <valid XML &unknown;", &state);
         assert_fault(
@@ -402,7 +472,12 @@ mod tests {
             }) as Box<dyn Responder>
         })
         .collect();
-        let chain = Chain::mock_with_extra(Arc::new(FaultInjector::new()), false, extras);
+        let chain = Chain::mock_with_extra(
+            Arc::new(FaultInjector::new()),
+            false,
+            extras,
+            Default::default(),
+        );
         assert_eq!(
             chain.respond(&ctx(GET_DEVICE_INFO, raw, &state)).await,
             answer

@@ -1680,7 +1680,9 @@ async fn mock_output_matches_the_onvif_schema() {
         );
     }
 
-    // Corpus: one response per action the client can send.
+    // Corpus: default response per client action, plus the three explicitly
+    // selected receipt-only responses. A policy migration must not erase the
+    // legacy success shapes from this external check or loosen coverage floors.
     let transport = MockTransport::new();
     let mut docs: Vec<(String, String)> = Vec::new();
     for (service, src) in CLIENT_SOURCES {
@@ -1692,10 +1694,27 @@ async fn mock_output_matches_the_onvif_schema() {
             let body =
                 identified_probe_request(uri, &format!("{}{}", body_for(op), extra_body(op)));
             let xml = transport
-                .soap_post("http://mock", uri, body)
+                .soap_post("http://mock", uri, body.clone())
                 .await
                 .unwrap_or_else(|e| panic!("{service}/{op}: mock transport failed: {e}"));
             docs.push((format!("{service}__{op}"), xml));
+            use oxvif::mock::AckOnlyOperation;
+            if let Some(operation) = [
+                AckOnlyOperation::DeviceFactoryDefault,
+                AckOnlyOperation::EventsUnsubscribe,
+                AckOnlyOperation::EventsSynchronizationPoint,
+            ]
+            .into_iter()
+            .find(|operation| operation.action() == uri)
+            {
+                let acknowledged = transport
+                    .clone()
+                    .with_acknowledgment_only(operation)
+                    .soap_post("http://mock", uri, body)
+                    .await
+                    .unwrap();
+                docs.push((format!("{service}__{op}__ack_only"), acknowledged));
+            }
         }
     }
 

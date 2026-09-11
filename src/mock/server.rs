@@ -22,6 +22,7 @@ use tokio::sync::oneshot;
 use crate::discovery::{DiscoveredDevice, new_uuid};
 use crate::mock::discovery_responder::DiscoveryResponder;
 use crate::mock::fault_injection::{FaultInjector, PendingFault};
+use crate::mock::policy::{AckOnlyOperation, AckOnlyPolicy};
 use crate::mock::responder::{Chain, RequestCtx};
 use crate::mock::state::{ChangeHook, DeviceState, MockState};
 use crate::mock::{helpers, snapshot};
@@ -34,6 +35,7 @@ struct Ctx {
     state: MockState,
     faults: Arc<FaultInjector>,
     enforce_auth: bool,
+    ack_only: AckOnlyPolicy,
     /// A loaded camera clone to replay reads from (feature `metamorph`); `None`
     /// for a plain synthetic mock.
     #[cfg(feature = "metamorph")]
@@ -56,6 +58,7 @@ pub struct MockServerBuilder {
     initial_state: Option<DeviceState>,
     on_change: Option<ChangeHook>,
     enforce_auth: bool,
+    ack_only: AckOnlyPolicy,
     discoverable: Option<Vec<String>>,
     #[cfg(feature = "metamorph")]
     replay: Option<crate::metamorph::FixtureStore>,
@@ -91,6 +94,14 @@ impl MockServerBuilder {
     /// not enforced; this is a test harness, not production access control.
     pub fn enforce_auth(mut self, yes: bool) -> Self {
         self.enforce_auth = yes;
+        self
+    }
+
+    /// Permit an acknowledgment-only response for one classified unmodeled operation.
+    /// Repeated calls accumulate selections; all default off. No state, change hook
+    /// or modeled effect is produced. See [`AckOnlyOperation`] for limitations.
+    pub fn with_acknowledgment_only(mut self, operation: AckOnlyOperation) -> Self {
+        self.ack_only.enable(operation);
         self
     }
 
@@ -146,6 +157,7 @@ impl MockServerBuilder {
             state,
             faults: Arc::new(FaultInjector::new()),
             enforce_auth: self.enforce_auth,
+            ack_only: self.ack_only,
             #[cfg(feature = "metamorph")]
             replay: self.replay.map(|store| ReplayHandle {
                 store: Arc::new(store),
@@ -317,12 +329,13 @@ async fn handle_soap(
                 ctx.enforce_auth,
                 vec![Box::new(replay)],
                 Some(observer),
+                ctx.ack_only.clone(),
             )
         }
-        None => Chain::default_mock(ctx.faults.clone(), ctx.enforce_auth),
+        None => Chain::default_mock(ctx.faults.clone(), ctx.enforce_auth, ctx.ack_only.clone()),
     };
     #[cfg(not(feature = "metamorph"))]
-    let chain = Chain::default_mock(ctx.faults.clone(), ctx.enforce_auth);
+    let chain = Chain::default_mock(ctx.faults.clone(), ctx.enforce_auth, ctx.ack_only.clone());
     let rctx = RequestCtx {
         action: &action,
         base: &ctx.base,

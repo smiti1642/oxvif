@@ -27,6 +27,7 @@
 | [11. 調整裝置](#11-調整裝置) | 自訂狀態與 responder |
 | [12. 保證範圍](#12-保證範圍與對應測試) | 各項真實度聲明的驗證測試 |
 | [13. 已知限制](#13-已知限制) | 刻意簡化或尚未實作的項目 |
+| [13.5. Acknowledgment-only 政策](#135-明確的-acknowledgment-only-政策) | 如何逐項啟用僅確認收件、不宣稱效果的回應 |
 | [14. 擴充 mock](#14-擴充-mock) | 安全新增行為的方式 |
 
 ---
@@ -452,7 +453,7 @@ Metadata 有 `MetaConf_1` 與 `MetaConf_2`；兩者在 analytics、PTZ status/po
 
 ### 7.1 Device 與 DeviceIO
 
-Device 共 38 項操作。裝置資訊、日期時間設定、hostname、NTP、DNS、scope、user、network interface/protocol/gateway、discovery mode、relay 與 storage 均為 ●。`GetCapabilities`、`GetServices` 與 `GetServiceCapabilities` 使用 static service metadata；系統維護類操作會回覆已接受，但不模擬後續行為。
+Device 共 38 項操作。裝置資訊、日期時間設定、hostname、NTP、DNS、scope、user、network interface/protocol/gateway、discovery mode、relay 與 storage 均為 ●。`GetCapabilities`、`GetServices` 與 `GetServiceCapabilities` 使用 static service metadata；`GetSystemLog`／`GetSystemUris` 為 static read fixture。`SetSystemFactoryDefault` 預設拒絕，須明確 opt-in 僅回覆收件、不重設 state（§13.5）。Auxiliary、upgrade／restore 與 reboot 仍為舊 acknowledgment stub，效果未建模，政策遷移尚待完成。
 
 DeviceIO 的唯一操作是 `GetDigitalInputs`，由 REST simulator 驅動。其 endpoint 為 `{base}/onvif/deviceio`；action segment 使用小寫 `deviceio`，element namespace 則為 `…/ver10/deviceIO/wsdl`。
 
@@ -484,7 +485,7 @@ Configuration／preset／tour token、座標解析、完整 Fault policy、repla
 ### 7.5 Imaging、Events、Recording、Search 與 Replay
 
 - Imaging 的七項影像操作依 `VideoSourceToken` 存取狀態，`GetServiceCapabilities` 為 static。
-- Events 的 `CreatePullPointSubscriptionRequest` 會儲存 topic filter；`PullMessagesRequest` 會輸出週期性 synthetic stream 與 REST 注入的 I/O event，並遞增 `event_seq`。其餘操作為 static。
+- Events 的 `CreatePullPointSubscriptionRequest` 會儲存 topic filter；`PullMessagesRequest` 會輸出週期性 synthetic stream 與 REST 注入的 I/O event，並遞增 `event_seq`。`UnsubscribeRequest`／`SetSynchronizationPointRequest` 預設拒絕，須明確 opt-in 僅確認收件（§13.5）；`SubscribeRequest`／`RenewRequest` 仍為待遷移的 lifecycle stub。`GetServiceCapabilitiesRequest` 為 static read fixture。
 - Recording 的 recording、track 與 job 操作均由狀態支援；刪除 recording 會一併刪除所屬 job。
 - `FindRecordings` 只提供單一 search token，不模擬 cursor；`GetRecordingSearchResults` 讀取目前 recording list。
 - `GetReplayUri` 依 recording token 回答，未知 token 會 fault。
@@ -726,7 +727,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 | Client 可送出的全部 157 個 action 都有路由 | `mock_handles_every_action_the_client_can_send` |
 | Response 不重複 attribute | `no_response_declares_an_attribute_twice` |
 | Response 不使用未宣告 prefix | `every_response_binds_the_prefixes_it_uses` |
-| 每個 `Set` 都能 round-trip，或明確宣告為 static | `tests/mock_roundtrip.rs` |
+| 選定的 49 組 write／read 配對可 round-trip | `tests/mock_roundtrip.rs`；不涵蓋全部 effectful 操作 |
 | 每個接受 token 的操作都能區分 token，或明確宣告為 blind | `tests/mock_token_discrimination.rs` |
 | Media1 與 Media2 的共享狀態保持一致 | `tests/mock_media1_media2_agree.rs` |
 | Per-sensor 回應確實不同 | `tests/mock_multi_sensor.rs` |
@@ -743,7 +744,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 
 ### 13.1 已宣告的 static read stub
 
-`tests/mock_roundtrip.rs` 已無 `Static` row，每個 `Set` 都會 round-trip。仍為 static 的 read family 包括：
+`tests/mock_roundtrip.rs` 的 49 組配對已無 `Static` row，但不涵蓋全部 `Set` 或 effectful 操作；§13.5 另列選定的拒絕與 receipt-only stub。仍為 static 的 read family 包括：
 
 - Media2 `GetVideoSourceModes`：所有 `VideoSourceToken` 都回傳同一個 `Mode_1`。
 - 兩種 media service 的 `GetStreamUri` / `GetSnapshotUri`：所有 profile 都回傳同一 URI。
@@ -774,6 +775,36 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 - Media2 `AddConfiguration` 會拒絕 `Metadata`、`Analytics`、`AudioOutput` 與 `AudioDecoder` configuration type，錯誤為 `UnmodelledConfigType-CFG2-5542`。`ProfileEntry` 與 `MediaProfile2` 未提供可觀察這些 binding 的欄位。
 
 ---
+
+### 13.5 明確的 acknowledgment-only 政策
+
+**尚未發布：**三項已分類操作預設回傳 `s:Receiver`，第一層 subcode 為
+`mock:UnmodeledEffect`。若測試流程僅需確認收件，可逐項啟用：
+
+```rust
+use oxvif::mock::{AckOnlyOperation, MockTransport};
+
+let mock = MockTransport::new()
+    .with_acknowledgment_only(AckOnlyOperation::EventsUnsubscribe);
+```
+
+| 選項 | 收件回應不證明的效果 |
+| --- | --- |
+| `DeviceFactoryDefault` | 裝置 state 已重設 |
+| `EventsUnsubscribe` | Subscription 已終止或佇列事件已移除 |
+| `EventsSynchronizationPoint` | 已產生或送出同步事件 |
+
+`MockServer::builder()`、`MetamorphTransport` 與 `AdapterTransport` 亦提供相同
+方法。重複呼叫會累加選定操作；transport clone 個別複製政策，但保留既有共用
+裝置 state。`AckOnlyOperation::action()` 顯示精確 Action URI；沒有全域或 suffix
+opt-in。Events synchronization 與 Media synchronization 為不同操作。
+
+拒絕與 acknowledgment 均不改變 state、change hook、committed effect 或 replay
+invalidation。共用 XML／Action／body 身分檢查仍執行，但不代表各操作全部欄位及
+subscription 已驗證。Fault／auth 與呼叫端 raw adapter 回應仍保有優先順序。
+選項不寫入裝置 snapshot。其他 auxiliary／reboot／upgrade／restore、subscription
+及 search lifecycle stub 仍待分類。詳見[政策檢查點](active/mock-fidelity-ack-policy-preflight_zh.md)
+及 `tests/mock_ack_policy.rs`；這不是 hardware-effect 或 conformance 測試。
 
 ## 14. 擴充 mock
 

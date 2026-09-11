@@ -1402,9 +1402,11 @@ match client.get_capabilities().await {
 
 ## Testing without a real camera
 
-A built-in, **stateful** mock ONVIF device — `Set` persists, `Get` reflects it —
-covering **every operation oxvif implements** (157 SOAP actions, and a test
-asserts none is missing). Two lenses, one behind the other.
+A built-in mock ONVIF device routes all 157 implemented SOAP actions. Modeled
+writes persist and corresponding getters reflect them; routing coverage does not
+mean every effect is modeled. Factory Reset and Events unsubscribe/synchronization
+now require explicit acknowledgment-only opt-in for receipt-only workflows; see
+[mock fidelity policy](docs/mock-server.md#135-explicit-acknowledgment-only-policy).
 
 ### Try it now — a test that needs nothing
 

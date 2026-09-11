@@ -22,6 +22,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Mock Factory Reset, Events Unsubscribe and Events SetSynchronizationPoint now
+  refuse by default with Receiver / `mock:UnmodeledEffect`. Workflow tests needing
+  only the empty acknowledgment can select an individual `AckOnlyOperation` via
+  `with_acknowledgment_only` on mock/replay/adapter transports or the HTTP builder.
+  Neither refusal nor acknowledgment changes state, triggers hooks or invalidates
+  replay. This does not simulate reset, subscription termination or event delivery.
+  Other effectful stubs remain under review; see the
+  [policy checkpoint](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/active/mock-fidelity-ack-policy-preflight.md).
 - Opt-in mock authentication now reads unique qualified Header/UsernameToken
   fields, preserving decoded username/Created text and rejecting misplaced or
   ambiguous credentials. Password requires explicit PasswordDigest Type; nonce

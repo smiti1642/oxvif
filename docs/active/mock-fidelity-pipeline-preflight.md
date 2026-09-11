@@ -26,6 +26,7 @@ below. No new product decision is required here.
 | [Replay key credential boundary](#replay-key-credential-boundary) | K28 cleanup, migration and exclusions |
 | [Replay key collision reproduction](#replay-key-collision-reproduction) | K27 six-case known-gap evidence |
 | [Authentication preflight](mock-fidelity-auth-preflight.md) | W08 scoped credentials, limits and verification |
+| [Acknowledgment policy](mock-fidelity-ack-policy-preflight.md) | W16 selected default refusals, opt-ins and effect boundaries |
 
 ## Replay key collision reproduction
 

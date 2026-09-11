@@ -250,6 +250,7 @@ pub struct AdapterTransport {
     faults: Arc<FaultInjector>,
     adapter: Arc<dyn DeviceAdapter>,
     enforce_auth: bool,
+    ack_only: crate::mock::policy::AckOnlyPolicy,
 }
 
 impl AdapterTransport {
@@ -260,7 +261,16 @@ impl AdapterTransport {
             faults: Arc::new(FaultInjector::new()),
             adapter,
             enforce_auth: false,
+            ack_only: Default::default(),
         }
+    }
+
+    /// Permit one synthetic acknowledgment-only response. Selections accumulate
+    /// and clones copy policy independently. Caller-owned adapter/raw responses
+    /// still take precedence. See [`crate::mock::AckOnlyOperation`] for limitations.
+    pub fn with_acknowledgment_only(mut self, operation: crate::mock::AckOnlyOperation) -> Self {
+        self.ack_only.enable(operation);
+        self
     }
 
     /// Access the synthetic fallback device state.
@@ -282,6 +292,7 @@ impl Transport for AdapterTransport {
             self.faults.clone(),
             self.enforce_auth,
             vec![Box::new(responder)],
+            self.ack_only.clone(),
         );
         let ctx = RequestCtx {
             action,

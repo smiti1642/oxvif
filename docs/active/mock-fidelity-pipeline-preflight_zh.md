@@ -25,6 +25,7 @@ W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯�
 | [Replay key 憑證邊界](#replay-key-憑證邊界) | K28 清理、遷移與排除範圍 |
 | [Replay key 碰撞重現](#replay-key-碰撞重現) | K27 六項已知缺陷證據 |
 | [認證開工盤點](mock-fidelity-auth-preflight_zh.md) | W08 scoped 憑證、限制與驗證 |
+| [Acknowledgment 政策](mock-fidelity-ack-policy-preflight_zh.md) | W16 選定預設拒絕、opt-in 及 effect 邊界 |
 
 ## Replay key 碰撞重現
 

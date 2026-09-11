@@ -71,6 +71,8 @@ pub(super) const MOCK_REQUEST_LIMIT: FaultQName =
     FaultQName::new("mock", "urn:oxvif:mock:error", "RequestLimit");
 pub(super) const MOCK_REQUEST_POLICY: FaultQName =
     FaultQName::new("mock", "urn:oxvif:mock:error", "RequestPolicy");
+pub(super) const MOCK_UNMODELED_EFFECT: FaultQName =
+    FaultQName::new("mock", "urn:oxvif:mock:error", "UnmodeledEffect");
 
 pub(super) struct Fault<'a> {
     code: Code,

@@ -5,7 +5,7 @@ use crate::mock::state::SharedState;
 
 #[cfg(any(feature = "metamorph", test))]
 pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> String {
-    respond_with_effect(action, base, state, body).0
+    respond_with_effect(action, base, state, body, &Default::default()).0
 }
 
 pub(crate) fn respond_with_effect(
@@ -13,6 +13,7 @@ pub(crate) fn respond_with_effect(
     base: &str,
     state: &SharedState,
     body: &str,
+    policy: &crate::mock::policy::AckOnlyPolicy,
 ) -> (String, Option<Effect>) {
     let mut effect = None;
     let Some(route) = Route::resolve(action) else {
@@ -27,6 +28,9 @@ pub(crate) fn respond_with_effect(
         Err(error) => return (error.to_fault(), None),
     };
     let op = route.operation;
+    if let Some(refusal) = policy.refusal(action) {
+        return (refusal, None);
+    }
     let response = match route.service {
         Service::Device => dispatch_device(op, base, state, body),
         Service::DeviceIo => dispatch_device_io(op, state),
@@ -628,7 +632,8 @@ mod tests {
                 format!("{action}?alias=941"),
                 format!("{action}/"),
             ] {
-                let (xml, effect) = respond_with_effect(&alias, "http://mock", &state, "");
+                let (xml, effect) =
+                    respond_with_effect(&alias, "http://mock", &state, "", &Default::default());
                 assert_eq!(
                     find_response(&parse_soap_body(&xml).unwrap(), "unused").unwrap_err(),
                     SoapError::Fault {

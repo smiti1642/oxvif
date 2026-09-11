@@ -36,6 +36,7 @@ omission is a bug, a documented one is a design decision.**
 | [11. Changing the device](#11-changing-the-device) | How can a test customize state and responders? |
 | [12. Guarantees](#12-what-is-guaranteed-and-by-which-test) | Which tests enforce each fidelity claim? |
 | [13. Known limitations](#13-known-limitations) | What is deliberately simplified or not implemented? |
+| [13.5. Acknowledgment-only policy](#135-explicit-acknowledgment-only-policy) | How do I opt in to a receipt without pretending an effect occurred? |
 | [14. Extending the mock](#14-extending-the-mock) | How should contributors add behavior safely? |
 
 ---
@@ -642,7 +643,9 @@ makes two tokens disagree.
 | `GetDiscoveryMode` / `SetDiscoveryMode` | ● | Only `Discoverable` / `NonDiscoverable` accepted. |
 | `GetRelayOutputs`, `SetRelayOutputState`, `SetRelayOutputSettings` | ● | See §13 on `SetRelayOutputState`. Device-service operations even though DeviceIO binds them too — `deviceio.wsdl` types their messages with the `tds:` elements. |
 | `GetStorageConfigurations` / `SetStorageConfiguration` | ● | Unknown token faults; token-less Set creates. |
-| `SendAuxiliaryCommand`, `GetSystemLog`, `GetSystemUris`, `StartFirmwareUpgrade`, `StartSystemRestore`, `SystemReboot`, `SetSystemFactoryDefault` | ○ | Acknowledged, nothing modelled. |
+| `GetSystemLog`, `GetSystemUris` | ○ | Static read fixtures. |
+| `SendAuxiliaryCommand`, `StartFirmwareUpgrade`, `StartSystemRestore`, `SystemReboot` | ○ | Legacy acknowledgment stubs; effects unmodeled, policy migration pending. |
+| `SetSystemFactoryDefault` | — | Refuses by default; explicit receipt-only opt-in, no reset (§13.5). |
 
 ### 7.1a DeviceIO — 1 operation
 
@@ -737,7 +740,9 @@ addresses no head at all — §6.4.
 | `CreatePullPointSubscriptionRequest` | ● | Stores the topic filter. |
 | `PullMessagesRequest` | ● | Emits a periodic synthetic stream plus any pending REST-injected I/O events; `event_seq` increments per call. |
 | `GetEventPropertiesRequest` | ○ | Topic set. Declares `tns1` on the element. |
-| `SubscribeRequest`, `RenewRequest`, `UnsubscribeRequest`, `SetSynchronizationPointRequest`, `GetServiceCapabilitiesRequest` | ○ | |
+| `GetServiceCapabilitiesRequest` | ○ | Static read fixture. |
+| `SubscribeRequest`, `RenewRequest` | ○ | Legacy lifecycle stubs; policy migration pending. |
+| `UnsubscribeRequest`, `SetSynchronizationPointRequest` | — | Refuse by default; explicit receipt-only opt-in, no lifecycle/event effect (§13.5). |
 
 ### 7.7 Recording / Search / Replay — 17 operations
 
@@ -1195,7 +1200,7 @@ check whether it is pinned or incidental.
 | Every action the client can send is routed (157) | `mock_handles_every_action_the_client_can_send` (`src/mock/dispatch.rs`) |
 | No response repeats an attribute | `no_response_declares_an_attribute_twice` |
 | No response uses an undeclared prefix | `every_response_binds_the_prefixes_it_uses` |
-| Every `Set` either round-trips or is declared static (49 pairs) | `tests/mock_roundtrip.rs` |
+| The 49 selected write/read pairs round-trip | `tests/mock_roundtrip.rs` — does not cover every effectful operation |
 | Every token-taking operation either discriminates or is declared blind (35 rows) | `tests/mock_token_discrimination.rs` |
 | Media1 and Media2 never disagree about shared state | `tests/mock_media1_media2_agree.rs` |
 | Per-sensor answers really differ | `tests/mock_multi_sensor.rs` |
@@ -1264,9 +1269,9 @@ where a family is static, the getter never claims to reflect a write.
 Pinned by a `Blind` row in `tests/mock_token_discrimination.rs`. Catalogued in
 [`active/mock-audit-2026-07.md`](active/mock-audit-2026-07.md) §5.
 
-**No `Static` row is left in `tests/mock_roundtrip.rs`** — the audio encoder
-configurations were the last two, and every `Set` on this mock now round-trips.
-What remains here is read-side.
+**No `Static` row is left in the 49-pair `tests/mock_roundtrip.rs` table.**
+That does not cover every `Set` or effectful operation: §13.5 documents selected
+refusals and receipt-only stubs. The table below concerns static reads.
 
 | Family | What is missing |
 |---|---|
@@ -1353,6 +1358,39 @@ Audit §6.
   leaving it rejected was not an option once the slot existed.
 
 ---
+
+### 13.5 Explicit acknowledgment-only policy
+
+**Unreleased:** three classified operations refuse by default with `s:Receiver`
+and first subcode `mock:UnmodeledEffect`. For a workflow that needs only a receipt:
+
+```rust
+use oxvif::mock::{AckOnlyOperation, MockTransport};
+
+let mock = MockTransport::new()
+    .with_acknowledgment_only(AckOnlyOperation::EventsUnsubscribe);
+```
+
+| Selection | Receipt does not prove |
+| --- | --- |
+| `DeviceFactoryDefault` | Device state reset |
+| `EventsUnsubscribe` | Subscription termination or queued-event removal |
+| `EventsSynchronizationPoint` | Synchronization-event creation or delivery |
+
+The same method is available on `MockServer::builder()`, `MetamorphTransport`
+and `AdapterTransport`. Repeated calls accumulate selected operations; transport
+clones copy policy independently while retaining existing shared device state.
+`AckOnlyOperation::action()` names the exact Action URI; no global/suffix opt-in
+exists. Events synchronization is distinct from Media synchronization.
+
+Both refusal and acknowledgment leave state, change hooks, committed effects and
+replay invalidation unchanged. Common XML/Action/body identity checks still run;
+complete operation-field and subscription validation is not implied. Fault/auth
+and caller-owned raw adapter responses retain precedence. Selection is not stored
+in device snapshots. Other auxiliary/reboot/upgrade/restore, subscription and search
+lifecycle stubs are still being classified. See the
+[policy checkpoint](active/mock-fidelity-ack-policy-preflight.md) and
+`tests/mock_ack_policy.rs`; this is not a hardware-effect or conformance test.
 
 ## 14. Extending the mock
 

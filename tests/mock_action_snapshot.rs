@@ -130,7 +130,10 @@ const EXPECTED: &[(&str, &str)] = &[
     ("set_relay_output_settings", "ok"),
     ("set_relay_output_state", "ok"),
     ("get_digital_inputs", "ok"),
-    ("set_system_factory_default", "ok"),
+    (
+        "set_system_factory_default",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
     ("get_storage_configurations", "ok"),
     ("set_storage_configuration", "ok"),
     ("get_system_uris", "ok"),
@@ -143,8 +146,14 @@ const EXPECTED: &[(&str, &str)] = &[
     ("create_pull_point_subscription", "ok"),
     ("pull_messages", "ok"),
     ("renew_subscription", "ok"),
-    ("set_synchronization_point", "ok"),
-    ("unsubscribe", "ok"),
+    (
+        "set_synchronization_point",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
+    (
+        "unsubscribe",
+        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+    ),
     ("subscribe", "ok"),
     // ── Imaging ───────────────────────────────────────────────────────────
     ("get_imaging_settings", "ok"),

@@ -106,7 +106,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W13／M2–M4／TODO | W01、W03–W06、W08 設計 | `services/device.rs`、DeviceIO dispatch、device state | 重複 users／network entries／scopes、storage 子樹、relay token；失敗不改 state／auth／events／hooks；維護效果依 D2 分類 |
 | W14／M2–M4／TODO | W01、W03–W06 | `services/recording.rs`：分開的 Recording／Search／Replay dispatch 與狀態生命週期 | Recording／track／job 辨識及連鎖處理；search token／終止／timeout、replay 選擇；有限模擬不代表實際錄影或媒體傳送 |
 | W15／M2–M4／TODO | W01、W03–W06 | `services/events.rs`、IO event queue、subscription state | 核對 filter namespace／dialect、lifetime／renew／unsubscribe／pull 限制、queue 隔離／順序／終止；既有 Events sync 不是 PR #16 Media sync |
-| W16／M4／TODO | W01 分類、W05／W06 | 提案中的 operation policy registry、mock transport／server builder、responder | 精確 service＋operation opt-in；未建模效果預設拒絕且不改狀態；區分 unsupported 與已啟用 ack；僅必要時加入有上限追蹤，排除憑證／raw envelope |
+| W16／M4／PARTIAL | W01 分類、W05／W06 | [首批 acknowledgment 政策](mock-fidelity-ack-policy-preflight_zh.md)：Factory Reset、Events unsubscribe／sync；mock／replay／adapter transport、HTTP builder 及 responder | 精確操作 opt-in、預設 mock-specific 拒絕、不變更 state／hook／effect／replay retirement；其他 effectful stub 與完整 registry 分類仍未完成；未新增追蹤 |
 | W17／M4／TODO | W10–W16 分類 | 全部 capability renderer、`discovery_responder.rs`、`fleet.rs`、`snapshot.rs`、`font.rs`、公開 mock 文件 | Services／XAddrs／feature／limit 與建模行為一致；核對 discovery／snapshot 側路徑；靜態 URI／圖片不證明 codec／串流輸出 |
 | W18／M4／PARTIAL | W10–W16 候選行為 | K13 無碰撞配置、K16 原子 binding plan、條件式通知；K08 hook 在鎖外接收 commit 快照，profile／catalogue 讀取共用一次快照 | 選定配置、binding、reentrant 及三路徑 profile snapshot 控制；更廣泛併發寫入、instance、rollback、其他 queue／read snapshot 及 replay 待完成；公開 signature 不變，callback 排序由使用者管理 |
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | Configuration 寫入與其他 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密 |
@@ -162,7 +162,7 @@ W02 發現新相依性時須擴充本表。
 | K02／程式碼確認 | Service 與 auth 仍使用舊 fragment reader | W02–W15；M3 結案時不得有未交代的一般 caller |
 | K03／選定 DeleteProfile 分支已修正 | 兩個服務對不存在／固定 profile 使用巢狀 Sender Fault；選定 corpus 的獨立驗證通過 | W05／W06；其餘操作映射仍待完成。Client 仍回報第一層而非最深層 subcode；全程式驗收尚未完成 |
 | K04／已記錄風險 | 舊 escaped 輸入經 escaping Fault helper 回顯可能重複轉義 | W05／W23；追蹤每個含插值的 reason，重現受影響路徑 |
-| K05／程式碼確認 | Factory reset、Events unsubscribe／sync 存在空成功路由，意圖／效果待分類 | W13／W15／W16；逐操作分類，不將所有 `resp_empty` 視為缺陷 |
+| K05／選定政策已實作 | Factory Reset 與 Events unsubscribe／sync 預設拒絕，僅能明確逐項 opt-in acknowledgment-only | [W16 證據](mock-fidelity-ack-policy-preflight_zh.md)；不模擬 reset／lifecycle／event 效果，其他操作契約與 effectful stub 仍未完成 |
 | K06／路由子批次已修正、HTTP 未完成 | Synthetic Action 別名不再進入 handler；HTTP handler 仍回 200 並使用 lossy UTF-8 conversion | W03／W07；參閱管線路由證據；共用 body 一致性與 generic boundary fault 已實作；HTTP 擷取／status 及 replay 仍未完成 |
 | K07／程式碼確認 | Schema／namespace probe 有 scope／Fault 覆蓋缺口 | W20–W22；具失敗敏感性的獨立驗證 |
 | K08／選定 hook 缺陷已重現並修正 | Hook 原本持有 read lock，且可能觀察介入寫入而非原 mutation；現以 owned commit 快照在鎖外執行 | W18／W19 部分完成；管線開工核對有確定性 reentrant／snapshot 控制；queue、read snapshot、廣泛寫入及 replay 可見性仍待完成 |

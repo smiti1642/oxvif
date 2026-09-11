@@ -9,6 +9,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::mock::fault_injection::{FaultInjector, PendingFault};
+use crate::mock::policy::{AckOnlyOperation, AckOnlyPolicy};
 use crate::mock::responder::{Chain, RequestCtx};
 use crate::mock::state::MockState;
 use crate::transport::{Transport, TransportError};
@@ -49,6 +50,7 @@ pub struct MockTransport {
     ///
     /// [`with_auth`]: MockTransport::with_auth
     enforce_auth: bool,
+    ack_only: AckOnlyPolicy,
 }
 
 impl MockTransport {
@@ -58,6 +60,7 @@ impl MockTransport {
             state: Arc::new(MockState::new()),
             faults: Arc::new(FaultInjector::new()),
             enforce_auth: false,
+            ack_only: AckOnlyPolicy::default(),
         }
     }
 
@@ -68,6 +71,7 @@ impl MockTransport {
             state: Arc::new(state),
             faults: Arc::new(FaultInjector::new()),
             enforce_auth: false,
+            ack_only: AckOnlyPolicy::default(),
         }
     }
 
@@ -79,6 +83,15 @@ impl MockTransport {
     /// this is a test harness, not production access control.
     pub fn with_auth(mut self) -> Self {
         self.enforce_auth = true;
+        self
+    }
+
+    /// Permit an acknowledgment-only response for one classified unmodeled operation.
+    /// Repeated calls accumulate selections. No device state, hook or effect is
+    /// changed by the acknowledgment. Clones copy this policy independently.
+    /// See [`AckOnlyOperation`] for limitations; all selections default off.
+    pub fn with_acknowledgment_only(mut self, operation: AckOnlyOperation) -> Self {
+        self.ack_only.enable(operation);
         self
     }
 
@@ -124,7 +137,11 @@ impl Transport for MockTransport {
         body: String,
     ) -> Result<String, TransportError> {
         // Default pipeline: armed fault → auth gate → synthetic dispatch.
-        let chain = Chain::default_mock(self.faults.clone(), self.enforce_auth);
+        let chain = Chain::default_mock(
+            self.faults.clone(),
+            self.enforce_auth,
+            self.ack_only.clone(),
+        );
         let ctx = RequestCtx {
             action,
             base: MOCK_BASE,

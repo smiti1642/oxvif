@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use crate::mock::canon::{Masking, canonicalize};
 use crate::mock::effect::{Effect, EffectObserver, tracks_commit};
 use crate::mock::fault_injection::FaultInjector;
+use crate::mock::policy::{AckOnlyOperation, AckOnlyPolicy};
 use crate::mock::responder::{Chain, RequestCtx, Responder};
 use crate::mock::state::MockState;
 use crate::transport::{Transport, TransportError};
@@ -43,6 +44,8 @@ const METAMORPH_BASE: &str = "http://metamorph";
 /// observe committed profile creation/deletion and Media binding effects: refusals retain recorded
 /// reads, and success retires profile reads across both Media services. Other
 /// mutations still require migration; this is not full dependency tracking.
+/// Classified [`AckOnlyOperation`] requests never invalidate replay, including
+/// through the standalone constructor: refusal or receipt is not a modeled effect.
 pub struct ReplayResponder {
     store: Arc<FixtureStore>,
     invalidated: Arc<Mutex<HashSet<String>>>,
@@ -53,7 +56,8 @@ impl ReplayResponder {
     /// A responder over `store`, sharing the `invalidated` family set with the
     /// device so copy-on-write state persists across requests. This standalone
     /// constructor retains legacy pre-write invalidation; it does not observe
-    /// whether a subsequent caller-owned responder commits a change.
+    /// whether a subsequent caller-owned responder commits a change. Classified
+    /// [`AckOnlyOperation`] requests are the exception and never invalidate here.
     pub fn new(store: Arc<FixtureStore>, invalidated: Arc<Mutex<HashSet<String>>>) -> Self {
         Self {
             store,
@@ -94,6 +98,11 @@ impl ReplayResponder {
 #[async_trait]
 impl Responder for ReplayResponder {
     async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
+        // A classified receipt is never a committed synthetic mutation. The
+        // standalone responder also leaves these caller-owned effects alone.
+        if AckOnlyOperation::for_action(ctx.action).is_some() {
+            return None;
+        }
         let op = operation(ctx.action);
         let fam = family(op);
         if is_write(op) {
@@ -164,6 +173,7 @@ pub struct MetamorphTransport {
     store: Arc<FixtureStore>,
     invalidated: Arc<Mutex<HashSet<String>>>,
     enforce_auth: bool,
+    ack_only: AckOnlyPolicy,
 }
 
 impl MetamorphTransport {
@@ -175,6 +185,7 @@ impl MetamorphTransport {
             store: Arc::new(store),
             invalidated: Arc::new(Mutex::new(HashSet::new())),
             enforce_auth: false,
+            ack_only: AckOnlyPolicy::default(),
         }
     }
 
@@ -188,6 +199,14 @@ impl MetamorphTransport {
     /// [`MockTransport::with_auth`](crate::mock::MockTransport::with_auth).
     pub fn with_auth(mut self) -> Self {
         self.enforce_auth = true;
+        self
+    }
+
+    /// Permit one synthetic acknowledgment-only response without invalidating replay.
+    /// Selections accumulate and are copied independently by clones. See
+    /// [`AckOnlyOperation`] for the operations and explicit lack of modeled effects.
+    pub fn with_acknowledgment_only(mut self, operation: AckOnlyOperation) -> Self {
+        self.ack_only.enable(operation);
         self
     }
 
@@ -214,6 +233,7 @@ impl Transport for MetamorphTransport {
             self.enforce_auth,
             vec![Box::new(replay)],
             Some(observer),
+            self.ack_only.clone(),
         );
         let ctx = RequestCtx {
             action,

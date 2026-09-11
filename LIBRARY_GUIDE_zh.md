@@ -590,7 +590,7 @@ HTTP 500 會先視為 transport success，讓 SOAP layer 解析 `<s:Fault>` 詳�
 
 ## 不使用實機進行測試
 
-內建 mock 是 stateful ONVIF 裝置，涵蓋 oxvif 實作的 157 個 SOAP action；`Set` 會持久存在記憶體，後續 `Get` 可觀察變更。
+內建 mock 可路由 oxvif 實作的 157 個 SOAP action。已建模的寫入會保留於記憶體，並由對應 getter 反映；路由覆蓋不代表每項效果都已建模。Factory Reset 與 Events unsubscribe／synchronization 若僅需確認收到請求，現在必須明確逐項 opt-in acknowledgment-only；詳見 [mock fidelity 政策](docs/mock-server_zh.md#135-明確的-acknowledgment-only-政策)。
 
 | | `MockTransport`（`mock`） | `MockServer`（`mock-server`） |
 |---|---|---|
