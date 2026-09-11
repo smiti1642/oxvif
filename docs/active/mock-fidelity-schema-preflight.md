@@ -294,11 +294,19 @@ the combined external `oxvif-profile-corpus-20260911-07` passed strict Xerces XS
 **110 instances**, 55 exchanges, 29 operations, 41 successes and 14 Faults.
 This is local selected structural evidence, not full semantic or hosted CI acceptance.
 
+AM1 (2026-09-11) adds 19 exchanges across all 15 audio/metadata operations.
+External corpus 08 failed datatype validation: audio options used multi-value Items.
+The mock now emits repeated integer elements; the public parser retains every item.
+Fresh corpus `oxvif-corpus-20260911-09` passes **148 strict Xerces instances**:
+74 exchanges, 44 operations, 57 successes and 17 Faults. No official resources are
+stored in the checkout. See [AM1](mock-fidelity-audio-metadata.md); CI and semantic
+coverage are separate from this local structural result.
+
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
-and expand the corpus beyond the selected 29-operation batches. W21 remains PARTIAL: complete the
+and expand the corpus beyond the selected 44-operation batches. W21 remains PARTIAL: complete the
 positive/negative envelope, payload and Fault instances from the mock corpus and
 qualify broader paths against actual emitted exchanges. W22 now checks the selected
-110-instance profile/source/rate/encoder corpus on Windows/Linux, but the full fail-closed instance
+148-instance profile/source/rate/encoder/audio/metadata corpus on Windows/Linux, but the full fail-closed instance
 CI gate still needs the remaining operation batches. Do not substitute this tool
 experiment for P-B's per-operation field/Fault/semantic review.
 

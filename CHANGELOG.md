@@ -22,6 +22,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Breaking, next minor:** MetadataConfiguration and mock MetadataEntry now
+  retain structured multicast and session timeout instead of flattened address/
+  port fields. Migrate Rust literals and old JSON using known complete values.
+  Metadata requests include required fields in service order; IPv6 multicast
+  serialization preserves its address family. See the
+  [migration guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/audio-metadata.md).
+- Mock audio/metadata operations validate scoped selectors and complete candidates
+  before atomic commits. Audio uses service-specific codec names and advertised
+  combinations; AutoStart no longer falsely indicates streaming. Refused writes
+  preserve replay recordings. Audio options emit repeated integer Items, and the
+  client now reads all repeated values rather than silently losing later items.
 - Mock video encoder configuration now validates complete scoped candidates
   atomically across both Media services. Options and writes share modeled limits;
   bitrate/quality/rate adaptation is explicit, unknown selectors fault, and H265

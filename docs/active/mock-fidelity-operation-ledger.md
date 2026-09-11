@@ -151,12 +151,12 @@ configuration tokens. P1 and P2 together remain partial operation acceptance.
 | `media.RemoveVideoEncoderConfiguration` | `media::handle_remove_video_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
 | `media.AddVideoSourceConfiguration` | `media::handle_add_video_source_configuration` | `state, body, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
 | `media.RemoveVideoSourceConfiguration` | `media::handle_remove_video_source_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | P1/P2/PA1 |
-| `media.GetAudioSources` | `media::resp_audio_sources` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetAudioSourceConfigurations` | `media::resp_audio_source_configurations` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetAudioEncoderConfiguration` | `media::resp_audio_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetAudioEncoderConfigurations` | `media::resp_audio_encoder_configurations` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.SetAudioEncoderConfiguration` | `media::handle_set_audio_encoder_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetAudioEncoderConfigurationOptions` | `media::resp_audio_encoder_configuration_options` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.GetAudioSources` | `media::resp_audio_sources` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media.GetAudioSourceConfigurations` | `media::resp_audio_source_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media.GetAudioEncoderConfiguration` | `media::resp_audio_encoder_configuration` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media.GetAudioEncoderConfigurations` | `media::resp_audio_encoder_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media.SetAudioEncoderConfiguration` | `media::handle_set_audio_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media.GetAudioEncoderConfigurationOptions` | `media::resp_audio_encoder_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetOSD` | `media::resp_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.GetOSDs` | `media::resp_osds` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.SetOSD` | `media::handle_set_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -185,15 +185,15 @@ configuration tokens. P1 and P2 together remain partial operation acceptance.
 | `media2.SetVideoEncoderConfiguration` | `media2::handle_set_video_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
 | `media2.GetVideoEncoderConfigurationOptions` | `media2::resp_video_encoder_configuration_options_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
 | `media2.GetVideoEncoderInstances` | `media2::resp_video_encoder_instances` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | VE1 |
-| `media2.GetMetadataConfigurations` | `media2::resp_metadata_configurations` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.SetMetadataConfiguration` | `media2::handle_set_metadata_configuration` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetMetadataConfigurationOptions` | `media2::resp_metadata_configuration_options` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetAudioSourceConfigurations` | `media2::resp_audio_source_configurations_media2` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetAudioEncoderConfigurations` | `media2::resp_audio_encoder_configurations_media2` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetAudioEncoderConfigurationOptions` | `media2::resp_audio_encoder_configuration_options_media2` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.SetAudioEncoderConfiguration` | `media2::handle_set_audio_encoder_configuration_media2` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetAudioOutputConfigurations` | `media2::resp_audio_output_configurations` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media2.GetAudioDecoderConfigurations` | `media2::resp_audio_decoder_configurations` | `state` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media2.GetMetadataConfigurations` | `media2::resp_metadata_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media2.SetMetadataConfiguration` | `media2::handle_set_metadata_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media2.GetMetadataConfigurationOptions` | `media2::resp_metadata_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media2.GetAudioSourceConfigurations` | `media2::resp_audio_source_configurations_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media2.GetAudioEncoderConfigurations` | `media2::resp_audio_encoder_configurations_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media2.GetAudioEncoderConfigurationOptions` | `media2::resp_audio_encoder_configuration_options_media2` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media2.SetAudioEncoderConfiguration` | `media2::handle_set_audio_encoder_configuration_media2` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media2.GetAudioOutputConfigurations` | `media2::resp_audio_output_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
+| `media2.GetAudioDecoderConfigurations` | `media2::resp_audio_decoder_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media2.GetVideoSourceModes` | `media2::resp_video_source_modes` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.SetVideoSourceMode` | `media2::resp_set_video_source_mode` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 

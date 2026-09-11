@@ -5,7 +5,7 @@ mod capabilities;
 mod device;
 mod events;
 mod imaging;
-mod media;
+pub(crate) mod media;
 mod osd;
 mod ptz;
 mod ptz_config;

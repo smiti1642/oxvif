@@ -655,13 +655,13 @@ async fn m1_audio_encoder_config(d: &Dev) -> Outcome {
     let url = d.url("media");
     let mut cfg = call!(
         "GetAudioEncoderConfiguration",
-        d.client.get_audio_encoder_configuration(&url, "AEC_1")
+        d.client.get_audio_encoder_configuration(&url, "AEC_2")
     );
-    // Seed: G711 / 64 / 8, multicast 239.0.0.5:40002 ttl 5, PT60S.
+    // Seed: AAC / 128 / 48, multicast 239.0.0.6:40006 ttl 3, PT30S.
     cfg.name = "rt-aec-4460".into();
     cfg.encoding = oxvif::AudioEncoding::G726;
-    cfg.bitrate = 44;
-    cfg.sample_rate = 16;
+    cfg.bitrate = 32;
+    cfg.sample_rate = 8;
     cfg.session_timeout = Some("PT15S".into());
     if let Some(m) = cfg.multicast.as_mut() {
         m.address = "239.0.0.9".into();
@@ -674,21 +674,21 @@ async fn m1_audio_encoder_config(d: &Dev) -> Outcome {
     );
     let got = call!(
         "GetAudioEncoderConfiguration",
-        d.client.get_audio_encoder_configuration(&url, "AEC_1")
+        d.client.get_audio_encoder_configuration(&url, "AEC_2")
     );
     let other = call!(
         "GetAudioEncoderConfiguration",
-        d.client.get_audio_encoder_configuration(&url, "AEC_2")
+        d.client.get_audio_encoder_configuration(&url, "AEC_1")
     );
     cmp(
         (
             "rt-aec-4460".to_string(),
             "G726".to_string(),
-            44,
-            16,
-            Some(("239.0.0.9".to_string(), 41000, true)),
+            32,
+            8,
+            Some(("239.0.0.9".to_string(), 41000, false)),
             Some("PT15S".to_string()),
-            "AudioEncoder2".to_string(),
+            "AudioEncoder1".to_string(),
         ),
         (
             got.name,
@@ -886,8 +886,8 @@ async fn m2_audio_encoder_config(d: &Dev) -> Outcome {
     .expect("AEC_2 exists");
     // Seed: AAC / 128 / 48, PT30S (which Media2 never sees).
     cfg.name = "rt-aec2-4461".into();
-    cfg.bitrate = 47;
-    cfg.sample_rate = 32;
+    cfg.bitrate = 256;
+    cfg.sample_rate = 16;
     call!(
         "SetAudioEncoderConfiguration",
         d.client.set_audio_encoder_configuration_media2(&url, &cfg)
@@ -907,8 +907,8 @@ async fn m2_audio_encoder_config(d: &Dev) -> Outcome {
     cmp(
         (
             "rt-aec2-4461".to_string(),
-            47,
-            32,
+            256,
+            16,
             "rt-aec2-4461".to_string(),
             Some("PT30S".to_string()),
         ),

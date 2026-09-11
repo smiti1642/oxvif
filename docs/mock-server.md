@@ -627,6 +627,13 @@ device always sends them, and this mock is the conformant device.
 while the family was a string literal, so both renderers emitted nothing and
 agreed perfectly.
 
+**Unreleased AM1:** the table above uses Media1 codec names. Media2 renders
+PCMU / MP4A-LATM; G726 uses the ONVIF name with a bitrate-selected variant.
+Complete candidates must match per-configuration options before an atomic write.
+Selectors are scoped; absent references fault. UseCount and AutoStart are readonly,
+and omitted Media2 multicast preserves shared settings. No RTP is produced.
+See [audio/metadata migration and limits](audio-metadata.md).
+
 ### 6.5 The two option shapes
 
 `GetAudioEncoderConfigurationOptions` nests **differently on the two services**,
@@ -641,7 +648,9 @@ Media2  Response/Options   tt:AudioEncoder2ConfigurationOptions  ← repeated, I
 Media1's response was flat (Media2's shape) and Media2's was wrapped (Media1's).
 `AudioEncoderConfigurationOptions::from_xml` read only the flat one, so Media1
 agreed with the parser and with no real device, and Media2 agreed with neither.
-Both were fixed in 0.15; the parser now reads either.
+Both nesting defects were fixed in 0.15; the parser reads either. AM1 additionally
+fixes Items cardinality: the mock emits one integer per element and the client
+reads every repeated item, retaining compatibility with old whitespace lists.
 
 **That makes a client-level test unable to tell the shapes apart**, which is why
 `audio_options_use_media1_nesting_on_the_wire` and its Media2 twin assert raw
@@ -667,8 +676,8 @@ assertion on any one of them can fail on its own.
 | `MetaConf_2` | `MetadataMinimal` | false | true / false | *(no group)* | false · true |
 
 `tt:MetadataConfiguration/Multicast` is **required**, so both configurations
-send the block; `MetaConf_2` omits the optional `Address/IPv4Address` inside it
-and reports `AutoStart` false, which is how a conformant device says "no group".
+send the block. The unreleased factory `MetaConf_2` explicitly uses 0.0.0.0,
+port 0 and TTL 1. Both entries report readonly AutoStart false and PT60S.
 The last column is `Options/PTZStatusFilterOptions`, answered per token by
 `GetMetadataConfigurationOptions`.
 
@@ -1050,11 +1059,10 @@ Prefer the deepest node and fall back outward.
 
 An absent value is an absent element. Note that `StorageConfiguration` in
 oxvif parses these as `String` with `unwrap_or_default()`, so **an oxvif
-client cannot distinguish omitted from empty here**; `MetadataConfiguration`'s
-`multicast_address` is `Option` and reads the genuinely optional
-`Multicast/Address/IPv4Address`, so there the distinction *is* visible.
-(`multicast_port` is not a second instance: `Multicast/Port` is required, so the
-mock sends `0` for a configuration with no group.)
+client cannot distinguish omitted from empty here**. The unreleased
+`MetadataConfiguration` instead requires a complete structured multicast
+value; address-less metadata blocks are explicitly unrepresentable. See the
+[metadata migration](audio-metadata.md).
 
 ### 8.7 A fault
 
@@ -1281,9 +1289,9 @@ These are read-only over SOAP; use §11.1:
 - `digital_inputs` — driven by the REST simulator only.
 - `MetadataEntry::pan_tilt_status_supported` / `zoom_status_supported` — device
   capabilities, not part of `tt:MetadataConfiguration`.
-- `MetadataEntry::multicast_address` / `multicast_port` —
-  `MetadataConfiguration::to_xml_body` carries no `Multicast`, so no
-  `SetMetadataConfiguration` can express them.
+- `MetadataEntry::session_timeout` — Media2 ignores this deprecated setting.
+- Multicast `auto_start` — readonly status, not a configuration start command.
+  Address/port/TTL are writable configuration data; the mock does not stream.
 - `use_count` anywhere — derived from bindings on a real device.
 
 ---

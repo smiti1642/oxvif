@@ -851,6 +851,11 @@ client.set_audio_encoder_configuration(&media_url, &enc).await?;
 
 **`AudioEncoding` variants:** `G711`, `G726`, `Aac`, `Other(String)`.
 
+Unreleased: query codec options from the target Media service; strings are not
+interchangeable. Audio options retain all repeated Items. Metadata now uses
+structured multicast plus required session timeout; old Rust/JSON fields need
+explicit migration. See [audio/metadata migration](docs/audio-metadata.md).
+
 ---
 
 ## Imaging Service methods

@@ -229,7 +229,15 @@ impl MediaProfile2 {
 
 /// Metadata stream configuration returned by `GetMetadataConfigurations` (Media2).
 ///
-/// ONVIF Media2 WSDL — Profile T §7.14/§7.15 (conditional).
+/// Retains structured multicast (including address family, TTL and readonly
+/// AutoStart) and the required session timeout. The previous flattened
+/// multicast_address/multicast_port fields are removed: migrate Rust literals
+/// and JSON using known values, not invented TTL or streaming state.
+///
+/// This models PTZ and analytics flags, not arbitrary Events filters, compression,
+/// analytics-engine configuration or vendor extensions. It is not a lossless
+/// editor for those optional fields. Reads require an explicit valid IP address;
+/// an address-less IPAddress block cannot be represented by this type.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct MetadataConfiguration {
@@ -245,10 +253,11 @@ pub struct MetadataConfiguration {
     pub ptz_status: bool,
     /// ONVIF `tt:PTZFilter/Position` — include PTZ position in metadata.
     pub ptz_position: bool,
-    /// Multicast settings, if any.
-    pub multicast_address: Option<String>,
-    /// Multicast destination port, paired with `multicast_address`.
-    pub multicast_port: Option<u32>,
+    /// Complete required multicast configuration. Replaces flattened address/port
+    /// fields in the next minor release; old JSON must be explicitly migrated.
+    pub multicast: super::MulticastConfiguration,
+    /// Required wire duration, preserved on roundtrip (deprecated/ignored by Media2).
+    pub session_timeout: String,
 }
 
 impl MetadataConfiguration {
@@ -258,53 +267,158 @@ impl MetadataConfiguration {
             .filter(|t| !t.is_empty())
             .ok_or_else(|| SoapError::missing("MetadataConfiguration/@token"))?
             .to_string();
-        let ptz = n.child("PTZStatus");
-        Ok(Self {
+        let name = metadata_scalar(n, "Name", "MetadataConfiguration/Name")?.to_string();
+        let count = metadata_scalar(n, "UseCount", "MetadataConfiguration/UseCount")?;
+        let use_count = count
+            .parse::<u32>()
+            .map_err(|_| SoapError::invalid("MetadataConfiguration/UseCount", count))?;
+        let boolean =
+            |node: &XmlNode, name: &str, path: &'static str| -> Result<bool, OnvifError> {
+                match metadata_scalar(node, name, path)? {
+                    "true" | "1" => Ok(true),
+                    "false" | "0" => Ok(false),
+                    value => Err(SoapError::invalid(path, value).into()),
+                }
+            };
+        let analytics = if n.child("Analytics").is_some() {
+            boolean(n, "Analytics", "MetadataConfiguration/Analytics")?
+        } else {
+            false
+        };
+        let (ptz_status, ptz_position) = if n.child("PTZStatus").is_some() {
+            let ptz = metadata_node(n, "PTZStatus", "MetadataConfiguration/PTZStatus")?;
+            (
+                boolean(ptz, "Status", "MetadataConfiguration/PTZStatus/Status")?,
+                boolean(ptz, "Position", "MetadataConfiguration/PTZStatus/Position")?,
+            )
+        } else {
+            (false, false)
+        };
+        let multicast = super::MulticastConfiguration::from_xml_strict(metadata_node(
+            n,
+            "Multicast",
+            "MetadataConfiguration/Multicast",
+        )?)?;
+        let session_timeout =
+            metadata_scalar(n, "SessionTimeout", "MetadataConfiguration/SessionTimeout")?
+                .to_string();
+        let result = Self {
             token,
-            name: xml_str(n, "Name").unwrap_or_default(),
-            use_count: n
-                .child("UseCount")
-                .and_then(|c| c.text().parse().ok())
-                .unwrap_or(0),
-            analytics: xml_bool(n, "Analytics"),
-            // tt:PTZFilter — ONVIF schema defines Status + Position
-            ptz_status: ptz.is_some_and(|p| xml_bool(p, "Status")),
-            ptz_position: ptz.is_some_and(|p| xml_bool(p, "Position")),
-            multicast_address: n
-                .path(&["Multicast", "Address", "IPv4Address"])
-                .map(|a| a.text().to_string()),
-            multicast_port: n
-                .path(&["Multicast", "Port"])
-                .and_then(|p| p.text().parse().ok()),
-        })
+            name,
+            use_count,
+            analytics,
+            ptz_status,
+            ptz_position,
+            multicast,
+            session_timeout,
+        };
+        result.validate()?;
+        Ok(result)
     }
-
     pub(crate) fn vec_from_xml(resp: &XmlNode) -> Result<Vec<Self>, OnvifError> {
         resp.children_named("Configurations")
             .map(Self::from_xml)
             .collect()
     }
-
-    pub(crate) fn to_xml_body(&self) -> String {
-        use super::xml_escape;
-        format!(
-            "<tr2:Configuration token=\"{token}\">\
-               <tt:Name>{name}</tt:Name>\
-               <tt:UseCount>{use_count}</tt:UseCount>\
-               <tt:Analytics>{analytics}</tt:Analytics>\
-               <tt:PTZStatus>\
-                 <tt:Status>{status}</tt:Status>\
-                 <tt:Position>{pos}</tt:Position>\
-               </tt:PTZStatus>\
-             </tr2:Configuration>",
-            token = xml_escape(&self.token),
-            name = xml_escape(&self.name),
-            use_count = self.use_count,
-            analytics = self.analytics,
-            status = self.ptz_status,
-            pos = self.ptz_position,
-        )
+    fn validate(&self) -> Result<(), OnvifError> {
+        if self.token.is_empty() {
+            return Err(SoapError::missing("MetadataConfiguration/@token").into());
+        }
+        self.multicast.validate_metadata()?;
+        if !valid_metadata_duration(&self.session_timeout) {
+            return Err(SoapError::invalid(
+                "MetadataConfiguration/SessionTimeout",
+                &self.session_timeout,
+            )
+            .into());
+        }
+        Ok(())
     }
+    pub(crate) fn to_xml_body(&self) -> Result<String, OnvifError> {
+        self.validate()?;
+        Ok(format!(
+            "<tr2:Configuration token=\"{}\"><tt:Name>{}</tt:Name><tt:UseCount>{}</tt:UseCount><tt:PTZStatus><tt:Status>{}</tt:Status><tt:Position>{}</tt:Position></tt:PTZStatus><tt:Analytics>{}</tt:Analytics>{}<tt:SessionTimeout>{}</tt:SessionTimeout></tr2:Configuration>",
+            super::xml_escape(&self.token),
+            super::xml_escape(&self.name),
+            self.use_count,
+            self.ptz_status,
+            self.ptz_position,
+            self.analytics,
+            self.multicast.to_xml_body(),
+            super::xml_escape(&self.session_timeout)
+        ))
+    }
+}
+
+pub(super) fn metadata_node<'a>(
+    n: &'a XmlNode,
+    name: &str,
+    path: &'static str,
+) -> Result<&'a XmlNode, OnvifError> {
+    if n.children_named(name).count() > 1 {
+        return Err(SoapError::invalid(path, "duplicate field").into());
+    }
+    n.child(name).ok_or_else(|| SoapError::missing(path).into())
+}
+pub(super) fn metadata_scalar<'a>(
+    n: &'a XmlNode,
+    name: &str,
+    path: &'static str,
+) -> Result<&'a str, OnvifError> {
+    let value = metadata_node(n, name, path)?;
+    if !value.children.is_empty() {
+        return Err(SoapError::invalid(path, "non-scalar value").into());
+    }
+    Ok(value.text())
+}
+
+/// Nonnegative duration lexical check; preserves the caller's spelling.
+pub(crate) fn valid_metadata_duration(value: &str) -> bool {
+    let Some(mut rest) = value.strip_prefix('P') else {
+        return false;
+    };
+    let mut time = false;
+    let mut last = 0;
+    let mut any = false;
+    let mut time_any = false;
+    while !rest.is_empty() {
+        if rest.starts_with('T') {
+            if time {
+                return false;
+            }
+            time = true;
+            last = 0;
+            rest = &rest[1..];
+            continue;
+        }
+        let end = rest
+            .find(|c: char| !c.is_ascii_digit() && c != '.')
+            .unwrap_or(rest.len());
+        if end == 0 || end == rest.len() {
+            return false;
+        }
+        let number = &rest[..end];
+        let unit = rest.as_bytes()[end];
+        let index = match (time, unit) {
+            (false, b'Y') | (true, b'H') => 1,
+            (false, b'M') | (true, b'M') => 2,
+            (false, b'D') | (true, b'S') => 3,
+            _ => return false,
+        };
+        if index <= last
+            || number.starts_with('.')
+            || number.ends_with('.')
+            || number.matches('.').count() > 1
+            || (number.contains('.') && (!time || unit != b'S'))
+        {
+            return false;
+        }
+        last = index;
+        any = true;
+        time_any |= time;
+        rest = &rest[end + 1..];
+    }
+    any && (!time || time_any)
 }
 
 // ── MetadataConfigurationOptions ──────────────────────────────────────────────

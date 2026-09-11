@@ -1001,6 +1001,7 @@ async fn export_reviewed_batches_for_independent_validation() {
     exchanges.extend(source_exchanges().await);
     exchanges.extend(rate_exchanges().await);
     exchanges.extend(encoder_exchanges().await);
+    exchanges.extend(audio_metadata_exchanges().await);
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
     eprintln!(
@@ -1008,4 +1009,148 @@ async fn export_reviewed_batches_for_independent_validation() {
         exchanges.len(),
         exchanges.len() * 2
     );
+}
+
+async fn audio_metadata_exchanges() -> Vec<Exchange> {
+    let capture = Capture {
+        mock: MockTransport::new(),
+        exchanges: Arc::default(),
+    };
+    let c = OnvifClient::new(TARGET).with_transport(Arc::new(capture.clone()));
+    let sources = c.get_audio_sources(TARGET).await.unwrap();
+    assert_eq!(sources.len(), 2);
+    let sources = c.get_audio_source_configurations(TARGET).await.unwrap();
+    assert_eq!(sources[1].token, "ASC_2");
+    let sources = c
+        .get_audio_source_configurations_media2(TARGET)
+        .await
+        .unwrap();
+    assert_eq!(sources[0].source_token, "AudioSrc_1");
+    let list = c.get_audio_encoder_configurations(TARGET).await.unwrap();
+    assert_eq!(list[0].encoding.as_str(), "G711");
+    let list = c
+        .get_audio_encoder_configurations_media2(TARGET)
+        .await
+        .unwrap();
+    assert_eq!(list[0].encoding.as_str(), "PCMU");
+    let mut audio = c
+        .get_audio_encoder_configuration(TARGET, "AEC_2")
+        .await
+        .unwrap();
+    assert_eq!(audio.sample_rate, 48);
+    let options = c
+        .get_audio_encoder_configuration_options(TARGET, "AEC_2")
+        .await
+        .unwrap();
+    assert_eq!(options.options.len(), 2);
+    let options = c
+        .get_audio_encoder_configuration_options_media2(TARGET, "AEC_2")
+        .await
+        .unwrap();
+    assert_eq!(options.options[1].encoding.as_str(), "G726");
+    audio.encoding = oxvif::AudioEncoding::G726;
+    audio.bitrate = 32;
+    audio.sample_rate = 8;
+    audio.name = "Corpus AM1 & audio".into();
+    c.set_audio_encoder_configuration(TARGET, &audio)
+        .await
+        .unwrap();
+    assert_eq!(
+        capture.mock.device().read().audio_encoders[1].name,
+        "Corpus AM1 & audio"
+    );
+    audio.encoding = oxvif::AudioEncoding::G726;
+    audio.multicast = None;
+    c.set_audio_encoder_configuration_media2(TARGET, &audio)
+        .await
+        .unwrap();
+    assert_eq!(capture.mock.device().read().audio_encoders[1].bitrate, 32);
+    let outputs = c
+        .get_audio_output_configurations_media2(TARGET)
+        .await
+        .unwrap();
+    assert_eq!(outputs[0].token, "AOC_1");
+    let decoders = c
+        .get_audio_decoder_configurations_media2(TARGET)
+        .await
+        .unwrap();
+    assert_eq!(decoders[0].token, "ADC_1");
+    let mut metadata = c
+        .get_metadata_configurations_media2(TARGET, Some("MetaConf_1"), None)
+        .await
+        .unwrap()
+        .remove(0);
+    assert!(!metadata.multicast.auto_start);
+    let options = c
+        .get_metadata_configuration_options_media2(TARGET, Some("MetaConf_1"), None)
+        .await
+        .unwrap();
+    assert!(options.pan_tilt_status_supported);
+    metadata.name = "Corpus AM1 & metadata".into();
+    metadata.multicast.address = "ff15::977".into();
+    metadata.multicast.ttl = 77;
+    c.set_metadata_configuration_media2(TARGET, &metadata)
+        .await
+        .unwrap();
+    assert_eq!(capture.mock.device().read().metadata[0].multicast.ttl, 77);
+    let read = c
+        .get_metadata_configurations_media2(TARGET, Some("MetaConf_1"), None)
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(read.multicast.address, "ff15::977");
+    let err = c
+        .get_audio_encoder_configuration(TARGET, "Corpus-absent")
+        .await
+        .unwrap_err();
+    assert_delete_fault(
+        err,
+        "ter:InvalidArgVal",
+        "Configuration not found: Corpus-absent",
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    metadata.token = "Corpus-absent".into();
+    let err = c
+        .set_metadata_configuration_media2(TARGET, &metadata)
+        .await
+        .unwrap_err();
+    assert_delete_fault(
+        err,
+        "ter:InvalidArgVal",
+        "Configuration not found: Corpus-absent",
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    let err = c
+        .get_metadata_configuration_options_media2(TARGET, None, Some("Corpus-absent"))
+        .await
+        .unwrap_err();
+    assert_delete_fault(err, "ter:InvalidArgVal", "Profile not found: Corpus-absent");
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    std::mem::take(&mut *capture.exchanges.lock().unwrap())
+}
+#[tokio::test]
+async fn captures_audio_metadata_subgroup_and_refusals() {
+    let exchanges = audio_metadata_exchanges().await;
+    assert_eq!(exchanges.len(), 19);
+    let operations: BTreeSet<_> = exchanges.iter().map(|e| e.action.as_str()).collect();
+    assert_eq!(operations.len(), 15);
+    assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 3);
 }

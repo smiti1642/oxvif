@@ -257,10 +257,17 @@ VE1 新增 13 組 encoder exchange，涵蓋全部八項選定操作。2026-09-11
 55 組 exchange、29 項操作、41 個成功及 14 個 Fault。這是本機選定結構證據，
 不是完整語意或託管 CI 驗收。
 
+AM1（2026-09-11）新增 19 組 exchange，涵蓋全部 15 項音訊／metadata 操作。
+外部 corpus 08 因音訊 options 使用多值 Items 而未通過 datatype 驗證。
+Mock 現在逐項輸出整數，公開 parser 保留全部 Items。
+新的 `oxvif-corpus-20260911-09` 通過 **148 份 strict Xerces instance**：
+74 組 exchange、44 項操作、57 個成功及 17 個 Fault。官方資源不進入 checkout。
+詳見 [AM1](mock-fidelity-audio-metadata_zh.md)；CI 與語意覆蓋不等於本機結構驗證。
+
 W20 仍為 PARTIAL：須核對未解析／wildcard 計數、Fault 的 QName 文字，以及擴充
-已驗證的 29 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
+已驗證的 44 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、
 payload、Fault 正負 instance 驗收更廣泛的實際 exchange。W22 已在 Windows／Linux
-加入選定的 110 份 profile／source／rate／encoder corpus 驗證；缺少前提即失敗的完整 instance gate 仍須涵蓋
+加入選定的 148 份 profile／source／rate／encoder／audio／metadata corpus 驗證；缺少前提即失敗的完整 instance gate 仍須涵蓋
 其餘操作批次。此工具實驗不能取代
 P-B 的逐操作欄位、Fault 與語意審查。
 

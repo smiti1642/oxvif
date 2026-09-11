@@ -125,9 +125,11 @@ impl std::fmt::Display for AudioEncoding {
 /// [`session_timeout`](Self::session_timeout); Media2's
 /// `tt:AudioEncoder2Configuration` makes `Multicast` optional, puts it before
 /// `Bitrate`, and has no `SessionTimeout` at all. Both are read into this
-/// struct and each service is written in its own shape — so a value that
-/// arrived from one service can be sent to the other, but a Media2 write
-/// carries no `session_timeout` for the device to store.
+/// struct and each service is written in its own shape. Codec vocabulary is
+/// service-specific: Media2 uses media subtypes (for example PCMU or MP4A-LATM),
+/// preserved in AudioEncoding::Other. Query the target service's options before
+/// reusing a configuration; there is no implicit cross-service codec conversion.
+/// A Media2 write carries no `session_timeout` for the device to store.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AudioEncoderConfiguration {
@@ -296,6 +298,8 @@ pub struct AudioEncoderOptions {
 /// Valid parameter ranges for `SetAudioEncoderConfiguration`.
 ///
 /// Contains one [`AudioEncoderOptions`] entry per encoding the device supports.
+/// All repeated `Items` values are read. Whitespace-separated legacy lists remain
+/// accepted for compatibility; conformant output uses one integer per element.
 ///
 /// The two services nest this response differently — Media1 wraps the entries
 /// one level deeper than Media2 — and both shapes are accepted. Until 0.15
@@ -343,25 +347,20 @@ impl AudioEncoderConfigurationOptions {
                     .map(|s| AudioEncoding::from_str(&s))
                     .unwrap_or_default();
 
-                let bitrate_list = opt
-                    .path(&["BitrateList", "Items"])
-                    .map(|n| {
-                        n.text()
-                            .split_whitespace()
-                            .filter_map(|s| s.parse().ok())
-                            .collect()
-                    })
-                    .unwrap_or_default();
-
-                let sample_rate_list = opt
-                    .path(&["SampleRateList", "Items"])
-                    .map(|n| {
-                        n.text()
-                            .split_whitespace()
-                            .filter_map(|s| s.parse().ok())
-                            .collect()
-                    })
-                    .unwrap_or_default();
+                // Accept repeated IntItems. Retain the previous whitespace-list
+                // compatibility for older devices/fixtures, without discarding siblings.
+                let items = |name| {
+                    opt.child(name)
+                        .map(|list| {
+                            list.children_named("Items")
+                                .flat_map(|n| n.text().split_whitespace())
+                                .filter_map(|value| value.parse().ok())
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                };
+                let bitrate_list = items("BitrateList");
+                let sample_rate_list = items("SampleRateList");
 
                 AudioEncoderOptions {
                     encoding,

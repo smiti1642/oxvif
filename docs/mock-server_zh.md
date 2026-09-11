@@ -481,6 +481,8 @@ ProfileToken → ProfileEntry.ptz_config_token → PtzConfigEntry.node_token →
 
 預載兩組可由 token 定址、且重要值彼此不同的 audio source/configuration。`AEC_1` 為 G711、64 kbps、8 kHz；`AEC_2` 為 AAC、128 kbps、48 kHz。只有 `Profile_1` 繫結 audio。
 
+**尚未發布的 AM1：** 上述使用 Media1 編碼名称；Media2 顯示 PCMU／MP4A-LATM，G726 以 ONVIF 名稱及 bitrate 選擇變體。完整候選設定須符合該 configuration 的 options 才能原子提交；selector 具作用域，未知參照回傳 Fault。UseCount／AutoStart 為唯讀，省略 Media2 multicast 會保留共用設定。Mock 不產生 RTP。詳見[音訊／metadata 遷移與限制](audio-metadata_zh.md)。
+
 `GetAudioEncoderConfigurationOptions` 在兩個服務中的 nesting 不同：
 
 ```text
@@ -489,7 +491,7 @@ Media1  Response/Options   tt:AudioEncoderConfigurationOptions   ← wrapper
 Media2  Response/Options   tt:AudioEncoder2ConfigurationOptions  ← repeated entry
 ```
 
-0.15.0 已修正兩者原先互換的問題；parser 現在可讀取兩種結構。Wire-level 測試仍直接驗證 raw bytes，以確保兩種 shape 不會因 parser 相容性而被混淆。
+0.15.0 已修正兩者原先互換的 nesting；AM1 另修正 Items 基數：mock 每個元素輸出一個整數，client 讀取全部重複元素並相容舊式空白清單。Wire-level 測試直接驗證 raw bytes，避免 parser 相容性掩蓋結構問題。
 
 ### 6.6 Storage、metadata、recording 與 I/O
 
@@ -499,7 +501,7 @@ Media2  Response/Options   tt:AudioEncoder2ConfigurationOptions  ← repeated en
 | `NAS_01` | `NFS` | `/mnt/nas` | `nfs://192.168.1.50/records` | `recorder` |
 | `CIFS_01` | `CIFS` | 無 | `smb://192.168.1.60/cam` | 無 |
 
-Metadata 有 `MetaConf_1` 與 `MetaConf_2`；兩者在 analytics、PTZ status/position、multicast 與 status capability 上刻意不同。`Multicast` block 為必要 element；無 multicast group 時省略可選的 `Address/IPv4Address`，並將 `AutoStart` 設為 false。
+Metadata 有 `MetaConf_1` 與 `MetaConf_2`；兩者在 analytics、PTZ status/position、multicast 與 status capability 上刻意不同。尚未發布的版本要求完整 multicast；`MetaConf_2` 明確使用 0.0.0.0、port 0、TTL 1。兩者的唯讀 AutoStart 均為 false，session timeout 為 PT60S。
 
 | Recording | Track | Bounds | Status |
 |---|---|---|---|
@@ -793,7 +795,8 @@ conditional outcome 仍不通知；此機制不提供部分寫入的 rollback。
 
 - `info` 與 `video_sources`。
 - `digital_inputs`；只能由 REST simulator 驅動。
-- `MetadataEntry::pan_tilt_status_supported`、`zoom_status_supported`、`multicast_address` 與 `multicast_port`。
+- `MetadataEntry::pan_tilt_status_supported`、`zoom_status_supported` 與 Media2 已棄用的 `session_timeout`。
+- Multicast `auto_start` 為唯讀狀態；address／port／TTL 可儲存設定，但 mock 不產生串流。
 - 所有 `use_count`；實機會由 binding 關係推導。
 
 ---

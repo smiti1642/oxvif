@@ -1,7 +1,6 @@
 use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
 use crate::mock::services::media;
 use crate::mock::state::{AudioEncoderEntry, ProfileEntry, SharedState, VideoEncoderState};
-use crate::mock::xml_parse::extract_tag;
 
 const NS: &str = r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#;
 
@@ -66,6 +65,7 @@ fn render_profile_media2(
         .as_deref()
         .and_then(|t| cat.aecs.iter().find(|c| c.token == t))
         .map(|c| render_audio_encoder_media2(c, "tr2:AudioEncoder"))
+        .transpose()?
         .unwrap_or_default();
     // `MediaProfile2::ptz_config_token` reads `Configurations/PTZ@token` and
     // nothing ever fed it: neither profile renderer emitted a PTZ element, and
@@ -558,351 +558,75 @@ pub fn handle_delete_profile_media2(
 // for the wrong configuration — the exact per-channel failure the multi-sensor
 // rule in `CLAUDE.md` describes.
 
-/// `TTL` and `SessionTimeout` are constants because there is nothing to store
-/// them from: `MetadataConfiguration::to_xml_body` sends neither, so no
-/// `SetMetadataConfiguration` the client can issue carries either value. A
-/// documented omission, not the `MTU` bug — see `CLAUDE.md` step 5c.
-const METADATA_MULTICAST_TTL: u32 = 1;
-const METADATA_SESSION_TIMEOUT: &str = "PT60S";
+// AM1 uses the complete stored multicast and session-timeout value.
 
-/// `tt:MetadataConfiguration`, in the sequence order the schema declares:
-/// `Name`, `UseCount`, `PTZStatus`, `Events`, `Analytics`, `Multicast`,
-/// `SessionTimeout`, then the three extension members. `Events` is `[0..1]` and
-/// the mock models no event filter, so it is the one omission here.
-///
-/// Two things this renderer used to get wrong. `Analytics` came *before*
-/// `PTZStatus`, which no `xs:sequence` permits; and `Multicast` was emitted
-/// only when the entry had an address, on the reasoning that the block was
-/// optional. It is `[1]`, as are its own `Address`, `Port`, `TTL` and
-/// `AutoStart`. What is optional is `tt:IPAddress/IPv4Address`, so an entry
-/// with no group sends the block with the address left out and `AutoStart`
-/// false — still `None` to `MetadataConfiguration::multicast_address`, and now
-/// a shape a conformant device actually produces.
-fn render_metadata(e: &crate::mock::state::MetadataEntry) -> String {
-    let ipv4 = match &e.multicast_address {
-        Some(addr) => format!("<tt:IPv4Address>{addr}</tt:IPv4Address>"),
-        None => String::new(),
-    };
-    format!(
-        "<tr2:Configurations token=\"{token}\">\
-           <tt:Name>{name}</tt:Name>\
-           <tt:UseCount>{use_count}</tt:UseCount>\
-           <tt:PTZStatus>\
-             <tt:Status>{status}</tt:Status>\
-             <tt:Position>{position}</tt:Position>\
-           </tt:PTZStatus>\
-           <tt:Analytics>{analytics}</tt:Analytics>\
-           <tt:Multicast>\
-             <tt:Address><tt:Type>IPv4</tt:Type>{ipv4}</tt:Address>\
-             <tt:Port>{port}</tt:Port>\
-             <tt:TTL>{METADATA_MULTICAST_TTL}</tt:TTL>\
-             <tt:AutoStart>{auto_start}</tt:AutoStart>\
-           </tt:Multicast>\
-           <tt:SessionTimeout>{METADATA_SESSION_TIMEOUT}</tt:SessionTimeout>\
-         </tr2:Configurations>",
-        token = e.token,
-        name = e.name,
-        use_count = e.use_count,
-        analytics = e.analytics,
-        status = e.ptz_status,
-        position = e.ptz_position,
-        port = e.multicast_port,
-        auto_start = e.multicast_address.is_some(),
-    )
+pub fn resp_metadata_configurations(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::audio_metadata::get(state, operation, true, "GetMetadataConfigurations")
 }
 
-/// `GetMetadataConfigurations`. The `ConfigurationToken` filter is optional in
-/// the WSDL: absent means "all", present means exactly that one. A token that
-/// names nothing yields an empty list rather than a fault, matching the
-/// filter semantics — it is a query, not an addressed read.
-pub fn resp_metadata_configurations(state: &SharedState, body: &str) -> String {
-    let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
-    let s = state.read();
-    let items: String = s
-        .metadata
-        .iter()
-        .filter(|e| want.as_deref().is_none_or(|w| w == e.token))
-        .map(render_metadata)
-        .collect();
-    soap(
-        NS,
-        &format!(
-            "<tr2:GetMetadataConfigurationsResponse>{items}</tr2:GetMetadataConfigurationsResponse>"
-        ),
-    )
+pub fn resp_metadata_configuration_options(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::audio_metadata::options(state, operation, true, true)
 }
 
-/// `GetMetadataConfigurationOptions` — answers for the addressed
-/// configuration.
-///
-/// This used to send `<tt:PTZStatusFilterOptions/>` empty plus an
-/// `<tt:Extension><tt:AnalyticsSupported>`. **`AnalyticsSupported` is declared
-/// nowhere in the ONVIF schema set, as element or attribute**, and it is not a
-/// misspelling of anything: `tt:MetadataConfigurationOptionsExtension` declares
-/// exactly `CompressionType` (`[0..*]`) and a further `Extension`. Whether a
-/// device can produce analytics metadata is answered by `GetCapabilities` —
-/// `tt:AnalyticsCapabilities/AnalyticsModuleSupport` — a different operation
-/// entirely, so the element is dropped rather than renamed.
-///
-/// `tt:PTZStatusFilterOptions` requires `PanTiltStatusSupported` and
-/// `ZoomStatusSupported` in that order, and they are what carries the
-/// per-configuration answer now.
-pub fn resp_metadata_configuration_options(state: &SharedState, body: &str) -> String {
-    let want = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty());
-    let s = state.read();
-    let entry = match &want {
-        Some(w) => s.metadata.iter().find(|e| &e.token == w),
-        None => s.metadata.first(),
-    };
-    let Some(entry) = entry else {
-        return resp_soap_fault(
-            "ter:NoConfig",
-            &format!(
-                "NoSuchMetadataConfig-METAOPT-5812: {}",
-                want.unwrap_or_default()
-            ),
-        );
-    };
-    let pan_tilt = entry.pan_tilt_status_supported;
-    let zoom = entry.zoom_status_supported;
-    soap(
-        NS,
-        &format!(
-            "<tr2:GetMetadataConfigurationOptionsResponse>\
-               <tr2:Options>\
-                 <tt:PTZStatusFilterOptions>\
-                   <tt:PanTiltStatusSupported>{pan_tilt}</tt:PanTiltStatusSupported>\
-                   <tt:ZoomStatusSupported>{zoom}</tt:ZoomStatusSupported>\
-                 </tt:PTZStatusFilterOptions>\
-               </tr2:Options>\
-             </tr2:GetMetadataConfigurationOptionsResponse>"
-        ),
-    )
+pub fn handle_set_metadata_configuration(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
+    super::audio_metadata::set_metadata(state, operation, effect)
 }
 
-/// `SetMetadataConfiguration`. Updates in place; an unknown token faults
-/// rather than being silently created, for the same reason as Storage — a typo
-/// must not be indistinguishable from a successful update.
-///
-/// The two `PTZStatusFilterOptions` booleans are deliberately **not** writable:
-/// they are device capabilities reported by the options getter, not part of
-/// `tt:MetadataConfiguration`, and the client never sends them. Neither are
-/// `Multicast` and `SessionTimeout` — `MetadataConfiguration::to_xml_body`
-/// carries neither, so there is no value to store.
-pub fn handle_set_metadata_configuration(state: &SharedState, body: &str) -> String {
-    let Some(token) = crate::mock::xml_parse::extract_attr(body, "Configuration", "token")
-        .filter(|t| !t.is_empty())
-    else {
-        return resp_soap_fault(
-            "env:Sender",
-            "NoMetadataToken-SETMETA-5810: Configuration/@token is required",
-        );
-    };
-    if !state.read().metadata.iter().any(|e| e.token == token) {
-        return resp_soap_fault(
-            "ter:NoConfig",
-            &format!("NoSuchMetadataConfig-SETMETA-5811: {token}"),
-        );
-    }
-    let name = extract_tag(body, "Name").unwrap_or_default();
-    let analytics = extract_tag(body, "Analytics").as_deref() == Some("true");
-    // `Status` and `Position` are both inside `tt:PTZStatus`; read that subtree
-    // so a `Status` element elsewhere in the body cannot be mistaken for it.
-    let ptz = extract_tag(body, "PTZStatus").unwrap_or_default();
-    let ptz_status = extract_tag(&ptz, "Status").as_deref() == Some("true");
-    let ptz_position = extract_tag(&ptz, "Position").as_deref() == Some("true");
-    state.modify(|s| {
-        if let Some(e) = s.metadata.iter_mut().find(|e| e.token == token) {
-            e.name = name.clone();
-            e.analytics = analytics;
-            e.ptz_status = ptz_status;
-            e.ptz_position = ptz_position;
-            eprintln!("    [STATE] metadata config updated: {token}");
-        }
-    });
-    resp_empty("tr2", "SetMetadataConfigurationResponse")
+pub fn resp_audio_source_configurations_media2(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::audio_metadata::get(state, operation, true, "GetAudioSourceConfigurations")
 }
 
-/// The **same** `AudioSourceConfigEntry` list Media1 renders.
-///
-/// `ASC_1` was `AudioSourceConfig1` reading `AudioSource_1` on Media1 and
-/// `AudioSourceConfig` reading `AudioSrc_1` here — one token, two answers, from
-/// two string literals in two files. `tests/mock_media1_media2_agree.rs` had no
-/// audio row, so nothing failed. `CLAUDE.md` step 5b.
-pub fn resp_audio_source_configurations_media2(state: &SharedState) -> String {
-    let items: String = state
-        .read()
-        .audio_source_configs
-        .iter()
-        .map(|c| media::render_audio_source_config(c, "tr2:Configurations"))
-        .collect();
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        &format!(
-            "<tr2:GetAudioSourceConfigurationsResponse>{items}\
-             </tr2:GetAudioSourceConfigurationsResponse>"
-        ),
-    )
+fn render_audio_encoder_media2(c: &AudioEncoderEntry, qname: &str) -> Result<String, String> {
+    super::audio_metadata::audio_render(c, qname, true)
 }
 
-/// `tt:AudioEncoder2Configuration` — a **different type** from Media1's, not a
-/// namespace variant of it.
-///
-/// ```text
-/// Media1  Encoding, Bitrate, SampleRate, Multicast, SessionTimeout
-/// Media2  Encoding, Multicast?, Bitrate, SampleRate
-/// ```
-///
-/// Same state, own sequence, and no `SessionTimeout` — the member does not
-/// exist here.
-fn render_audio_encoder_media2(c: &AudioEncoderEntry, qname: &str) -> String {
-    let multicast = c
-        .multicast
-        .as_ref()
-        .map(media::render_multicast)
-        .unwrap_or_default();
-    format!(
-        r#"<{qname} token="{token}">
-          <tt:Name>{name}</tt:Name>
-          <tt:UseCount>{use_count}</tt:UseCount>
-          <tt:Encoding>{encoding}</tt:Encoding>
-          {multicast}
-          <tt:Bitrate>{bitrate}</tt:Bitrate>
-          <tt:SampleRate>{sample_rate}</tt:SampleRate>
-        </{qname}>"#,
-        token = c.token,
-        name = c.name,
-        use_count = c.use_count,
-        encoding = c.encoding,
-        bitrate = c.bitrate,
-        sample_rate = c.sample_rate,
-    )
+pub fn resp_audio_encoder_configurations_media2(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::audio_metadata::get(state, operation, true, "GetAudioEncoderConfigurations")
 }
 
-pub fn resp_audio_encoder_configurations_media2(state: &SharedState) -> String {
-    let items: String = state
-        .read()
-        .audio_encoders
-        .iter()
-        .map(|c| render_audio_encoder_media2(c, "tr2:Configurations"))
-        .collect();
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        &format!(
-            "<tr2:GetAudioEncoderConfigurationsResponse>{items}\
-             </tr2:GetAudioEncoderConfigurationsResponse>"
-        ),
-    )
+pub fn resp_audio_encoder_configuration_options_media2(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::audio_metadata::options(state, operation, true, false)
 }
 
-/// Media2's options nesting is **flat**: `Options` is
-/// `tt:AudioEncoder2ConfigurationOptions` with `maxOccurs="unbounded"`, and
-/// `Encoding` / `BitrateList` / `SampleRateList` are its direct children.
-///
-/// This response wrapped them in an extra `tt:Options`, which is Media1's
-/// shape — the mirror image of the mistake Media1's handler was making. Both
-/// were wrong, in opposite directions, and one parser read one of them.
-pub fn resp_audio_encoder_configuration_options_media2(state: &SharedState, body: &str) -> String {
-    let Some(token) = extract_tag(body, "ConfigurationToken").filter(|t| !t.is_empty()) else {
-        return resp_soap_fault(
-            "env:Sender",
-            "NoConfigToken-AECOPTS2-5717: GetAudioEncoderConfigurationOptions is per configuration",
-        );
-    };
-    let Some(cfg) = state
-        .read()
-        .audio_encoders
-        .iter()
-        .find(|c| c.token == token)
-        .cloned()
-    else {
-        return resp_soap_fault(
-            "ter:NoConfig",
-            &format!("NoSuchAudioEncoder-AECOPTS2-5718: {token}"),
-        );
-    };
-    let items: String = cfg
-        .options
-        .iter()
-        .map(|o| media::render_audio_option(o, "tr2:Options"))
-        .collect();
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        &format!(
-            "<tr2:GetAudioEncoderConfigurationOptionsResponse>{items}\
-             </tr2:GetAudioEncoderConfigurationOptionsResponse>"
-        ),
-    )
+pub fn handle_set_audio_encoder_configuration_media2(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+    effect: &mut Option<crate::mock::effect::Effect>,
+) -> String {
+    media::apply_audio_encoder_write(state, operation, true, effect)
 }
 
-/// Media2 `SetAudioEncoderConfiguration`.
-///
-/// Shares Media1's writer over the same state, without Media1's
-/// required-member check: `Multicast` is optional in
-/// `tt:AudioEncoder2Configuration` and `SessionTimeout` is not a member, so a
-/// Media2 write leaves the stored timeout alone rather than clearing a value
-/// Media1 requires.
-pub fn handle_set_audio_encoder_configuration_media2(state: &SharedState, body: &str) -> String {
-    match media::apply_audio_encoder_write(state, body, false) {
-        Ok(()) => resp_empty("tr2", "SetAudioEncoderConfigurationResponse"),
-        Err(fault) => fault,
-    }
+pub fn resp_audio_output_configurations(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::audio_metadata::get(state, operation, true, "GetAudioOutputConfigurations")
 }
 
-pub fn resp_audio_output_configurations(state: &SharedState) -> String {
-    let items: String = state
-        .read()
-        .audio_outputs
-        .iter()
-        .map(|c| {
-            format!(
-                r#"<tr2:Configurations token="{token}">
-                  <tt:Name>{name}</tt:Name>
-                  <tt:UseCount>{use_count}</tt:UseCount>
-                  <tt:OutputToken>{output}</tt:OutputToken>
-                  <tt:OutputLevel>{level}</tt:OutputLevel>
-                </tr2:Configurations>"#,
-                token = c.token,
-                name = c.name,
-                use_count = c.use_count,
-                output = c.output_token,
-                level = c.output_level,
-            )
-        })
-        .collect();
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        &format!(
-            "<tr2:GetAudioOutputConfigurationsResponse>{items}\
-             </tr2:GetAudioOutputConfigurationsResponse>"
-        ),
-    )
-}
-
-pub fn resp_audio_decoder_configurations(state: &SharedState) -> String {
-    let items: String = state
-        .read()
-        .audio_decoders
-        .iter()
-        .map(|c| {
-            format!(
-                r#"<tr2:Configurations token="{token}">
-                  <tt:Name>{name}</tt:Name>
-                  <tt:UseCount>{use_count}</tt:UseCount>
-                </tr2:Configurations>"#,
-                token = c.token,
-                name = c.name,
-                use_count = c.use_count,
-            )
-        })
-        .collect();
-    soap(
-        r#"xmlns:tr2="http://www.onvif.org/ver20/media/wsdl""#,
-        &format!(
-            "<tr2:GetAudioDecoderConfigurationsResponse>{items}\
-             </tr2:GetAudioDecoderConfigurationsResponse>"
-        ),
-    )
+pub fn resp_audio_decoder_configurations(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    super::audio_metadata::get(state, operation, true, "GetAudioDecoderConfigurations")
 }
 
 /// All four members are `tr2:` — `tr2:VideoSourceMode` declares them locally

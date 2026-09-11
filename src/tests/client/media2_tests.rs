@@ -418,11 +418,13 @@ fn metadata_configs_xml() -> &'static str {
               <tr2:Configurations token="MetaConf_1">
                 <tt:Name>MetadataConfig</tt:Name>
                 <tt:UseCount>1</tt:UseCount>
-                <tt:Analytics>true</tt:Analytics>
                 <tt:PTZStatus>
                   <tt:Status>false</tt:Status>
                   <tt:Position>true</tt:Position>
                 </tt:PTZStatus>
+                <tt:Analytics>true</tt:Analytics>
+                <tt:Multicast><tt:Address><tt:Type>IPv6</tt:Type><tt:IPv6Address>ff15::97</tt:IPv6Address></tt:Address><tt:Port>4097</tt:Port><tt:TTL>7</tt:TTL><tt:AutoStart>true</tt:AutoStart></tt:Multicast>
+                <tt:SessionTimeout>PT97S</tt:SessionTimeout>
               </tr2:Configurations>
             </tr2:GetMetadataConfigurationsResponse>
           </s:Body>
@@ -951,8 +953,13 @@ async fn test_set_metadata_configuration_media2_sends_action_and_exact_body() {
         analytics: true,
         ptz_status: false,
         ptz_position: true,
-        multicast_address: None,
-        multicast_port: None,
+        multicast: crate::MulticastConfiguration {
+            address: "ff15::97".into(),
+            port: 4097,
+            ttl: 7,
+            auto_start: false,
+        },
+        session_timeout: "PT97S".into(),
     };
 
     client
@@ -970,8 +977,10 @@ async fn test_set_metadata_configuration_media2_sends_action_and_exact_body() {
         r#"<tr2:Configuration token="MetaConf_9">"#,
         "<tt:Name>MetaCfg</tt:Name>",
         "<tt:UseCount>2</tt:UseCount>",
-        "<tt:Analytics>true</tt:Analytics>",
         "<tt:PTZStatus><tt:Status>false</tt:Status><tt:Position>true</tt:Position></tt:PTZStatus>",
+        "<tt:Analytics>true</tt:Analytics>",
+        "<tt:Multicast><tt:Address><tt:Type>IPv6</tt:Type><tt:IPv6Address>ff15::97</tt:IPv6Address></tt:Address><tt:Port>4097</tt:Port><tt:TTL>7</tt:TTL><tt:AutoStart>false</tt:AutoStart></tt:Multicast>",
+        "<tt:SessionTimeout>PT97S</tt:SessionTimeout>",
         "</tr2:Configuration>",
         "</tr2:SetMetadataConfiguration>",
     );
@@ -1553,5 +1562,122 @@ async fn media2_service_capabilities_fault() {
         err,
         "ter:ActionNotSupported",
         "NoServiceCapabilities-tr2-2270",
+    );
+}
+
+#[tokio::test]
+async fn metadata_multicast_and_timeout_survive_read() {
+    let client = OnvifClient::new("http://mock").with_transport(mock(metadata_configs_xml()));
+    let c = client
+        .get_metadata_configurations_media2("http://mock", None, None)
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(
+        (
+            &*c.multicast.address,
+            c.multicast.port,
+            c.multicast.ttl,
+            c.multicast.auto_start
+        ),
+        ("ff15::97", 4097, 7, true)
+    );
+    assert_eq!(c.session_timeout, "PT97S");
+}
+#[tokio::test]
+async fn metadata_required_fields_report_exact_paths() {
+    for (remove, path) in [
+        ("<tt:TTL>7</tt:TTL>", "MetadataConfiguration/Multicast/TTL"),
+        (
+            "<tt:AutoStart>true</tt:AutoStart>",
+            "MetadataConfiguration/Multicast/AutoStart",
+        ),
+        (
+            "<tt:SessionTimeout>PT97S</tt:SessionTimeout>",
+            "MetadataConfiguration/SessionTimeout",
+        ),
+    ] {
+        let xml = metadata_configs_xml().replace(remove, "");
+        let client = OnvifClient::new("http://mock").with_transport(mock(&xml));
+        let err = client
+            .get_metadata_configurations_media2("http://mock", None, None)
+            .await
+            .unwrap_err();
+        assert_missing_field(err, path);
+    }
+}
+#[tokio::test]
+async fn metadata_invalid_values_report_payload_and_never_send() {
+    let reader = OnvifClient::new("http://mock").with_transport(mock(metadata_configs_xml()));
+    let original = reader
+        .get_metadata_configurations_media2("http://mock", None, None)
+        .await
+        .unwrap()
+        .remove(0);
+    for (field, value) in [
+        ("address", "bad-973"),
+        ("port", "65536"),
+        ("ttl", "256"),
+        ("duration", "PTbroken-973"),
+    ] {
+        let mut cfg = original.clone();
+        let path = match field {
+            "address" => {
+                cfg.multicast.address = value.into();
+                "MetadataConfiguration/Multicast/Address"
+            }
+            "port" => {
+                cfg.multicast.port = 65536;
+                "MetadataConfiguration/Multicast/Port"
+            }
+            "ttl" => {
+                cfg.multicast.ttl = 256;
+                "MetadataConfiguration/Multicast/TTL"
+            }
+            _ => {
+                cfg.session_timeout = value.into();
+                "MetadataConfiguration/SessionTimeout"
+            }
+        };
+        let (transport, captured) =
+            RecordingTransport::new(&empty_response_xml("SetMetadataConfigurationResponse"));
+        let client = OnvifClient::new("http://mock").with_transport(transport);
+        let err = client
+            .set_metadata_configuration_media2("http://mock", &cfg)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            crate::soap::SoapError::invalid(path, value).to_string()
+        );
+        assert!(
+            captured.lock().unwrap().action.is_empty(),
+            "invalid candidate reached transport"
+        );
+    }
+}
+#[cfg(feature = "serde")]
+#[tokio::test]
+async fn metadata_json_requires_explicit_migration() {
+    let client = OnvifClient::new("http://mock").with_transport(mock(metadata_configs_xml()));
+    let cfg = client
+        .get_metadata_configurations_media2("http://mock", None, None)
+        .await
+        .unwrap()
+        .remove(0);
+    let mut value = serde_json::to_value(&cfg).unwrap();
+    let decoded: crate::MetadataConfiguration = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(decoded.multicast, cfg.multicast);
+    assert_eq!(decoded.session_timeout, cfg.session_timeout);
+    let map = value.as_object_mut().unwrap();
+    map.remove("multicast");
+    map.remove("session_timeout");
+    map.insert("multicast_address".into(), serde_json::json!("ff15::97"));
+    map.insert("multicast_port".into(), serde_json::json!(4097));
+    assert_eq!(
+        serde_json::from_value::<crate::MetadataConfiguration>(value)
+            .unwrap_err()
+            .to_string(),
+        "missing field `multicast`"
     );
 }

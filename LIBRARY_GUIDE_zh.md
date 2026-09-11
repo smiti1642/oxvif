@@ -439,6 +439,10 @@ PTZ service 的 `ptz_send_auxiliary_command(ptz_url, profile_token, data)` 與 D
 
 `AudioEncoding` variant 為 `G711`、`G726`、`Aac` 與 `Other(String)`。
 
+尚未發布版本：請查詢目標 Media 服務的 codec options，不可直接互換編碼字串。
+音訊 options 保留全部重複 Items。Metadata 改用結構化 multicast 與必要的
+session timeout；舊 Rust／JSON 欄位須明確遷移。詳見[音訊／metadata 遷移](docs/audio-metadata_zh.md)。
+
 ---
 
 ## Imaging Service 方法

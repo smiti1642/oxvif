@@ -166,14 +166,9 @@ pub struct StorageEntry {
 /// is addressed by the same token, so without a per-entry value it could not
 /// discriminate.
 ///
-/// **`tt:MetadataConfiguration/Multicast` is `[1]`, and so are `Address`,
-/// `Port`, `TTL` and `AutoStart` inside it.** This doc used to say the block was
-/// *"genuinely optional"* and that the omitted-vs-present distinction was the
-/// observable one; it is not, and no conformant device omits it. The one member
-/// that really is optional is `tt:IPAddress/IPv4Address`, so an entry with no
-/// group configured still sends the block and simply leaves the address out —
-/// which keeps `MetadataConfiguration::multicast_address` reachable as `None`,
-/// the distinction the test was written for.
+/// Retains complete multicast and required session timeout. Older flattened
+/// snapshots require explicit migration from known complete values. AutoStart
+/// is readonly; the synthetic device does not implement persistent RTP.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetadataEntry {
     pub token: String,
@@ -182,12 +177,10 @@ pub struct MetadataEntry {
     pub analytics: bool,
     pub ptz_status: bool,
     pub ptz_position: bool,
-    /// `Multicast/Address/IPv4Address` — the block's only optional member.
-    /// `None` also renders `AutoStart` false: no group, nothing to start.
-    pub multicast_address: Option<String>,
-    /// `Multicast/Port` — required, so an unconfigured entry sends `0` rather
-    /// than nothing.
-    pub multicast_port: u32,
+    /// Full configured multicast value; AutoStart is a readonly indication.
+    pub multicast: MulticastEntry,
+    /// Required wire duration; deprecated and ignored by Media2 setters.
+    pub session_timeout: String,
     /// Reported as `Options/PTZStatusFilterOptions/PanTiltStatusSupported`.
     pub pan_tilt_status_supported: bool,
     /// Reported as `Options/PTZStatusFilterOptions/ZoomStatusSupported`.
@@ -1328,7 +1321,7 @@ fn default_audio_encoders() -> Vec<AudioEncoderEntry> {
                 address: "239.0.0.6".into(),
                 port: 40006,
                 ttl: 3,
-                auto_start: true,
+                auto_start: false,
             }),
             session_timeout: Some("PT30S".into()),
             // Two rows against `AEC_1`'s one, and neither encoding overlaps its
@@ -1758,8 +1751,13 @@ fn default_metadata() -> Vec<MetadataEntry> {
             analytics: true,
             ptz_status: false,
             ptz_position: true,
-            multicast_address: Some("239.0.1.10".into()),
-            multicast_port: 40010,
+            multicast: MulticastEntry {
+                address: "239.0.1.10".into(),
+                port: 40010,
+                ttl: 1,
+                auto_start: false,
+            },
+            session_timeout: "PT60S".into(),
             pan_tilt_status_supported: true,
             zoom_status_supported: false,
         },
@@ -1770,8 +1768,13 @@ fn default_metadata() -> Vec<MetadataEntry> {
             analytics: false,
             ptz_status: true,
             ptz_position: false,
-            multicast_address: None,
-            multicast_port: 0,
+            multicast: MulticastEntry {
+                address: "0.0.0.0".into(),
+                port: 0,
+                ttl: 1,
+                auto_start: false,
+            },
+            session_timeout: "PT60S".into(),
             pan_tilt_status_supported: false,
             zoom_status_supported: true,
         },
@@ -2600,18 +2603,29 @@ mod tests {
     // closes on the PTZ side, and it was found the same way: by a perturbation
     // that came back green.
 
+    fn encoder_query_audio(m2: bool, op: &str, state: &MockState, body: &str) -> String {
+        let prefix = if m2 { "tr2" } else { "trt" };
+        let body = if body.contains(&format!("<{prefix}:{op}>")) {
+            body.to_owned()
+        } else {
+            format!("<{prefix}:{op}>{body}</{prefix}:{op}>")
+        };
+        encoder_query(state, m2, op, &body)
+    }
     fn set_audio_req(prefix: &str, token: &str, extra: &str) -> String {
+        let encoding = if prefix == "tr2" { "PCMU" } else { "G711" };
+        let tail = if prefix == "tr2" {
+            format!("{extra}<tt:Bitrate>64</tt:Bitrate><tt:SampleRate>8</tt:SampleRate>")
+        } else {
+            format!("<tt:Bitrate>64</tt:Bitrate><tt:SampleRate>8</tt:SampleRate>{extra}")
+        };
+        let persistence = if prefix == "trt" {
+            "<trt:ForcePersistence>true</trt:ForcePersistence>"
+        } else {
+            ""
+        };
         format!(
-            r#"<{prefix}:SetAudioEncoderConfiguration>
-                 <{prefix}:Configuration token="{token}">
-                   <tt:Name>renamed-5719</tt:Name>
-                   <tt:UseCount>1</tt:UseCount>
-                   <tt:Encoding>G726</tt:Encoding>
-                   <tt:Bitrate>32</tt:Bitrate>
-                   <tt:SampleRate>16</tt:SampleRate>
-                   {extra}
-                 </{prefix}:Configuration>
-               </{prefix}:SetAudioEncoderConfiguration>"#
+            r#"<{prefix}:SetAudioEncoderConfiguration><{prefix}:Configuration token="{token}"><tt:Name>renamed-5719</tt:Name><tt:UseCount>1</tt:UseCount><tt:Encoding>{encoding}</tt:Encoding>{tail}</{prefix}:Configuration>{persistence}</{prefix}:SetAudioEncoderConfiguration>"#
         )
     }
 
@@ -2625,12 +2639,11 @@ mod tests {
     /// `tt:AudioEncoderConfigurationOption`.
     #[test]
     fn audio_options_use_media1_nesting_on_the_wire() {
-        use crate::mock::services::media;
         let s = new_state();
         let body = "<trt:GetAudioEncoderConfigurationOptions>\
                     <trt:ConfigurationToken>AEC_2</trt:ConfigurationToken>\
                     </trt:GetAudioEncoderConfigurationOptions>";
-        let xml = media::resp_audio_encoder_configuration_options(&s, body);
+        let xml = encoder_query_audio(false, "GetAudioEncoderConfigurationOptions", &s, body);
         assert!(xml.contains("<trt:Options><tt:Options>"), "got {xml}");
         // Two rows for `AEC_2`, and the second is `G726` — a handler ignoring
         // its token answers `AEC_1`'s single `G711` row.
@@ -2642,12 +2655,11 @@ mod tests {
     /// `Encoding` directly.
     #[test]
     fn audio_options_use_media2_nesting_on_the_wire() {
-        use crate::mock::services::media2;
         let s = new_state();
         let body = "<tr2:GetAudioEncoderConfigurationOptions>\
                     <tr2:ConfigurationToken>AEC_2</tr2:ConfigurationToken>\
                     </tr2:GetAudioEncoderConfigurationOptions>";
-        let xml = media2::resp_audio_encoder_configuration_options_media2(&s, body);
+        let xml = encoder_query_audio(true, "GetAudioEncoderConfigurationOptions", &s, body);
         assert!(
             !xml.contains("<tt:Options>"),
             "tt:Options is Media1's wrapper and has no place here: {xml}"
@@ -2660,10 +2672,9 @@ mod tests {
     /// Media2 renders `Multicast` before `Bitrate` and no `SessionTimeout`.
     #[test]
     fn the_two_services_sequence_the_audio_encoder_differently() {
-        use crate::mock::services::{media, media2};
         let s = new_state();
-        let m1 = media::resp_audio_encoder_configurations(&s);
-        let m2 = media2::resp_audio_encoder_configurations_media2(&s);
+        let m1 = encoder_query_audio(false, "GetAudioEncoderConfigurations", &s, "");
+        let m2 = encoder_query_audio(true, "GetAudioEncoderConfigurations", &s, "");
         let pos = |x: &str, t: &str| x.find(t).unwrap_or_else(|| panic!("{t} missing from {x}"));
 
         assert!(
@@ -2689,17 +2700,15 @@ mod tests {
     /// which is the body oxvif itself sent until 0.15.
     #[test]
     fn media1_set_audio_encoder_requires_multicast_and_session_timeout() {
-        use crate::mock::services::media;
         let s = new_state();
 
-        let xml =
-            media::handle_set_audio_encoder_configuration(&s, &set_audio_req("trt", "AEC_1", ""));
-        assert!(
-            xml.contains("IncompleteAudioEncoder-SETAEC-5715"),
-            "got {xml}"
+        let xml = encoder_query_audio(
+            false,
+            "SetAudioEncoderConfiguration",
+            &s,
+            &set_audio_req("trt", "AEC_1", ""),
         );
-        assert!(xml.contains("Multicast=false"), "got {xml}");
-        assert!(xml.contains("SessionTimeout=false"), "got {xml}");
+        assert!(xml.contains("Invalid Args"), "got {xml}");
         assert_eq!(
             s.read().audio_encoders[0].name,
             "AudioEncoder1",
@@ -2708,7 +2717,9 @@ mod tests {
 
         // …and accepts one that carries both.
         let full = format!("{MULTICAST_EL}<tt:SessionTimeout>PT5S</tt:SessionTimeout>");
-        let xml = media::handle_set_audio_encoder_configuration(
+        let xml = encoder_query_audio(
+            false,
+            "SetAudioEncoderConfiguration",
             &s,
             &set_audio_req("trt", "AEC_1", &full),
         );
@@ -2722,7 +2733,7 @@ mod tests {
         assert_eq!(
             c.multicast
                 .map(|m| (m.address, m.port, m.ttl, m.auto_start)),
-            Some(("239.9.9.9".to_string(), 41234, 7, true))
+            Some(("239.9.9.9".to_string(), 41234, 7, false))
         );
     }
 
@@ -2731,9 +2742,10 @@ mod tests {
     /// value the Media1 type requires.
     #[test]
     fn media2_set_audio_encoder_preserves_the_session_timeout() {
-        use crate::mock::services::media2;
         let s = new_state();
-        let xml = media2::handle_set_audio_encoder_configuration_media2(
+        let xml = encoder_query_audio(
+            true,
+            "SetAudioEncoderConfiguration",
             &s,
             &set_audio_req("tr2", "AEC_1", MULTICAST_EL),
         );
@@ -2752,32 +2764,45 @@ mod tests {
 
     #[test]
     fn audio_encoder_operations_fault_on_an_unknown_token() {
-        use crate::mock::services::{media, media2};
         let s = new_state();
-        let get = media::resp_audio_encoder_configuration(
+        let get = encoder_query_audio(
+            false,
+            "GetAudioEncoderConfiguration",
             &s,
             "<trt:ConfigurationToken>AEC_9</trt:ConfigurationToken>",
         );
-        assert!(get.contains("NoSuchAudioEncoder-GETAEC-5712"), "got {get}");
-        let opts = media::resp_audio_encoder_configuration_options(
+        assert!(get.contains("Configuration not found: AEC_9"), "got {get}");
+        let opts = encoder_query_audio(
+            false,
+            "GetAudioEncoderConfigurationOptions",
             &s,
             "<trt:ConfigurationToken>AEC_9</trt:ConfigurationToken>",
         );
         assert!(
-            opts.contains("NoSuchAudioEncoder-AECOPTS-5714"),
+            opts.contains("Configuration not found: AEC_9"),
             "got {opts}"
         );
-        let opts2 = media2::resp_audio_encoder_configuration_options_media2(
+        let opts2 = encoder_query_audio(
+            true,
+            "GetAudioEncoderConfigurationOptions",
             &s,
             "<tr2:ConfigurationToken>AEC_9</tr2:ConfigurationToken>",
         );
         assert!(
-            opts2.contains("NoSuchAudioEncoder-AECOPTS2-5718"),
+            opts2.contains("Configuration not found: AEC_9"),
             "got {opts2}"
         );
-        let set =
-            media::handle_set_audio_encoder_configuration(&s, &set_audio_req("trt", "AEC_9", ""));
-        assert!(set.contains("NoSuchAudioEncoder-SETAEC-5715"), "got {set}");
+        let set = encoder_query_audio(
+            false,
+            "SetAudioEncoderConfiguration",
+            &s,
+            &set_audio_req(
+                "trt",
+                "AEC_9",
+                &format!("{MULTICAST_EL}<tt:SessionTimeout>PT5S</tt:SessionTimeout>"),
+            ),
+        );
+        assert!(set.contains("Configuration not found: AEC_9"), "got {set}");
     }
 
     /// Binding a PTZ configuration the device does not have is refused, and the

@@ -23,8 +23,8 @@
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 214 個直接呼叫：199 個位於頂層 test module 之前，15 個
-  位於其中。前者分布於 63 個 enclosing symbol（VE1 重新量測），**不是** 63 個有缺陷的操作。
+- 五種 reader 拼法共 191 個直接呼叫：176 個位於頂層 test module 之前，15 個
+  位於其中。前者分布於 56 個 enclosing symbol（AM1 重新量測），**不是** 56 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
 - W00 已完成目前字面值形式的來源核對；K06 synthetic 別名路由已於
@@ -214,96 +214,87 @@
 | Site | Reader | Scope:occurrences |
 | --- | --- | --- |
 | `src/mock/canon.rs::canonicalize` | `XmlNode::parse` | `production:1` |
-| `src/mock/discovery_responder.rs::probe_response` | `XmlNode::parse` | `production:1` |
 | `src/mock/discovery_responder.rs::build_probe_match_round_trips_through_the_client_parser` | `XmlNode::parse` | `test:1` |
+| `src/mock/discovery_responder.rs::probe_response` | `XmlNode::parse` | `production:1` |
 | `src/mock/discovery_responder.rs::unicast_probe_round_trip` | `XmlNode::parse` | `test:1` |
-| `src/mock/request.rs::read` | `required_text` | `test:1` |
 | `src/mock/request.rs::namespace_attribute_values_are_normalized_once` | `required_text` | `test:1` |
-| `src/mock/xml_parse.rs::extract_simple_tag` | `extract_tag` | `test:1` |
-| `src/mock/xml_parse.rs::extract_no_namespace` | `extract_tag` | `test:1` |
-| `src/mock/xml_parse.rs::extract_nested` | `extract_tag` | `test:1` |
-| `src/mock/xml_parse.rs::extract_tag_with_attributes` | `extract_tag` | `test:1` |
-| `src/mock/xml_parse.rs::extract_nonce_with_encoding_type` | `extract_tag` | `test:1` |
-| `src/mock/xml_parse.rs::extract_all` | `extract_all_tags` | `test:1` |
-| `src/mock/xml_parse.rs::extract_missing` | `extract_tag` | `test:1` |
-| `src/mock/xml_parse.rs::extract_from_full_soap_security_header` | `extract_tag` | `test:4` |
+| `src/mock/request.rs::read` | `required_text` | `test:1` |
+| `src/mock/services/device.rs::handle_create_users` | `extract_all_tags` | `production:3` |
+| `src/mock/services/device.rs::handle_create_users` | `extract_tag` | `production:1` |
+| `src/mock/services/device.rs::handle_delete_users` | `extract_all_tags` | `production:1` |
+| `src/mock/services/device.rs::handle_delete_users` | `extract_tag` | `production:1` |
 | `src/mock/services/device.rs::handle_set_discovery_mode` | `extract_tag` | `production:1` |
-| `src/mock/services/device.rs::handle_set_hostname` | `extract_tag` | `production:1` |
-| `src/mock/services/device.rs::handle_set_ntp` | `extract_all_tags` | `production:1` |
-| `src/mock/services/device.rs::handle_set_ntp` | `extract_tag` | `production:1` |
 | `src/mock/services/device.rs::handle_set_dns` | `extract_all_tags` | `production:1` |
 | `src/mock/services/device.rs::handle_set_dns` | `extract_tag` | `production:1` |
-| `src/mock/services/device.rs::handle_set_scopes` | `extract_all_tags` | `production:1` |
-| `src/mock/services/device.rs::handle_set_system_date_and_time` | `extract_tag` | `production:2` |
-| `src/mock/services/device.rs::handle_create_users` | `extract_tag` | `production:1` |
-| `src/mock/services/device.rs::handle_create_users` | `extract_all_tags` | `production:3` |
-| `src/mock/services/device.rs::handle_delete_users` | `extract_tag` | `production:1` |
-| `src/mock/services/device.rs::handle_delete_users` | `extract_all_tags` | `production:1` |
-| `src/mock/services/device.rs::handle_set_user` | `extract_tag` | `production:4` |
+| `src/mock/services/device.rs::handle_set_hostname` | `extract_tag` | `production:1` |
+| `src/mock/services/device.rs::handle_set_network_default_gateway` | `extract_all_tags` | `production:1` |
 | `src/mock/services/device.rs::handle_set_network_interfaces` | `extract_tag` | `production:6` |
 | `src/mock/services/device.rs::handle_set_network_protocols` | `extract_all_tags` | `production:3` |
-| `src/mock/services/device.rs::handle_set_network_default_gateway` | `extract_all_tags` | `production:1` |
-| `src/mock/services/device.rs::handle_set_relay_output_state` | `extract_tag` | `production:2` |
+| `src/mock/services/device.rs::handle_set_ntp` | `extract_all_tags` | `production:1` |
+| `src/mock/services/device.rs::handle_set_ntp` | `extract_tag` | `production:1` |
 | `src/mock/services/device.rs::handle_set_relay_output_settings` | `extract_tag` | `production:4` |
+| `src/mock/services/device.rs::handle_set_relay_output_state` | `extract_tag` | `production:2` |
+| `src/mock/services/device.rs::handle_set_scopes` | `extract_all_tags` | `production:1` |
 | `src/mock/services/device.rs::handle_set_storage_configuration` | `extract_attr` | `production:2` |
 | `src/mock/services/device.rs::handle_set_storage_configuration` | `extract_tag` | `production:3` |
+| `src/mock/services/device.rs::handle_set_system_date_and_time` | `extract_tag` | `production:2` |
+| `src/mock/services/device.rs::handle_set_user` | `extract_tag` | `production:4` |
 | `src/mock/services/events.rs::resp_create_pull_point_subscription` | `extract_tag` | `production:1` |
-| `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
-| `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::resp_osd` | `extract_tag` | `production:2` |
+| `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
+| `src/mock/services/media.rs::_force_use_extract_all` | `extract_all_tags` | `production:1` |
 | `src/mock/services/media.rs::handle_create_osd` | `extract_tag` | `production:1` |
+| `src/mock/services/media.rs::handle_delete_osd` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::handle_set_osd` | `extract_attr` | `production:1` |
 | `src/mock/services/media.rs::handle_set_osd` | `extract_tag` | `production:1` |
-| `src/mock/services/media.rs::handle_delete_osd` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::parse_osd_payload` | `extract_tag` | `production:11` |
-| `src/mock/services/media.rs::parse_osd_payload` | `extract_attr` | `production:2` |
-| `src/mock/services/media.rs::parse_osd_color` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::parse_osd_color` | `extract_attr` | `production:4` |
-| `src/mock/services/media.rs::_force_use_extract_all` | `extract_all_tags` | `production:1` |
-| `src/mock/services/media.rs::resp_audio_encoder_configuration` | `extract_tag` | `production:1` |
-| `src/mock/services/media.rs::resp_audio_encoder_configuration_options` | `extract_tag` | `production:1` |
-| `src/mock/services/media.rs::apply_audio_encoder_write` | `extract_attr` | `production:1` |
-| `src/mock/services/media.rs::apply_audio_encoder_write` | `extract_tag` | `production:11` |
-| `src/mock/services/media2.rs::resp_metadata_configurations` | `extract_tag` | `production:1` |
-| `src/mock/services/media2.rs::resp_metadata_configuration_options` | `extract_tag` | `production:1` |
-| `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_attr` | `production:1` |
-| `src/mock/services/media2.rs::handle_set_metadata_configuration` | `extract_tag` | `production:5` |
-| `src/mock/services/media2.rs::resp_audio_encoder_configuration_options_media2` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::handle_ptz_set_preset` | `extract_tag` | `production:3` |
-| `src/mock/services/ptz.rs::handle_ptz_remove_preset` | `extract_tag` | `production:2` |
-| `src/mock/services/ptz.rs::handle_ptz_goto_preset` | `extract_tag` | `production:2` |
-| `src/mock/services/ptz.rs::has_pan_tilt` | `extract_attr` | `production:2` |
-| `src/mock/services/ptz.rs::handle_ptz_absolute_move` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::handle_ptz_absolute_move` | `extract_attr` | `production:3` |
-| `src/mock/services/ptz.rs::handle_ptz_relative_move` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::handle_ptz_relative_move` | `extract_attr` | `production:3` |
-| `src/mock/services/ptz.rs::handle_ptz_continuous_move` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::handle_ptz_continuous_move` | `extract_attr` | `production:3` |
-| `src/mock/services/ptz.rs::resp_ptz_node` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::resp_ptz_configuration` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::resp_ptz_configuration_options` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::min_max` | `extract_tag` | `production:2` |
-| `src/mock/services/ptz.rs::parse_limits` | `extract_tag` | `production:5` |
-| `src/mock/services/ptz.rs::pan_tilt_attrs` | `extract_attr` | `production:2` |
+| `src/mock/services/media.rs::parse_osd_color` | `extract_tag` | `production:2` |
+| `src/mock/services/media.rs::parse_osd_payload` | `extract_attr` | `production:2` |
+| `src/mock/services/media.rs::parse_osd_payload` | `extract_tag` | `production:11` |
+| `src/mock/services/media.rs::resp_osd` | `extract_tag` | `production:2` |
+| `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/ptz.rs::apply_ptz_configuration` | `extract_attr` | `production:2` |
 | `src/mock/services/ptz.rs::apply_ptz_configuration` | `extract_tag` | `production:11` |
-| `src/mock/services/ptz.rs::resp_ptz_preset_tour` | `extract_tag` | `production:2` |
-| `src/mock/services/ptz.rs::handle_ptz_modify_preset_tour` | `extract_tag` | `production:8` |
-| `src/mock/services/ptz.rs::handle_ptz_modify_preset_tour` | `extract_attr` | `production:2` |
+| `src/mock/services/ptz.rs::handle_ptz_absolute_move` | `extract_attr` | `production:3` |
+| `src/mock/services/ptz.rs::handle_ptz_absolute_move` | `extract_tag` | `production:1` |
+| `src/mock/services/ptz.rs::handle_ptz_continuous_move` | `extract_attr` | `production:3` |
+| `src/mock/services/ptz.rs::handle_ptz_continuous_move` | `extract_tag` | `production:1` |
+| `src/mock/services/ptz.rs::handle_ptz_goto_preset` | `extract_tag` | `production:2` |
 | `src/mock/services/ptz.rs::handle_ptz_modify_preset_tour` | `extract_all_tags` | `production:1` |
+| `src/mock/services/ptz.rs::handle_ptz_modify_preset_tour` | `extract_attr` | `production:2` |
+| `src/mock/services/ptz.rs::handle_ptz_modify_preset_tour` | `extract_tag` | `production:8` |
 | `src/mock/services/ptz.rs::handle_ptz_operate_preset_tour` | `extract_tag` | `production:3` |
+| `src/mock/services/ptz.rs::handle_ptz_relative_move` | `extract_attr` | `production:3` |
+| `src/mock/services/ptz.rs::handle_ptz_relative_move` | `extract_tag` | `production:1` |
 | `src/mock/services/ptz.rs::handle_ptz_remove_preset_tour` | `extract_tag` | `production:2` |
+| `src/mock/services/ptz.rs::handle_ptz_remove_preset` | `extract_tag` | `production:2` |
 | `src/mock/services/ptz.rs::handle_ptz_send_auxiliary_command` | `extract_tag` | `production:2` |
-| `src/mock/services/recording.rs::handle_create_recording` | `extract_tag` | `production:9` |
-| `src/mock/services/recording.rs::handle_delete_recording` | `extract_tag` | `production:1` |
-| `src/mock/services/recording.rs::handle_create_track` | `extract_tag` | `production:4` |
-| `src/mock/services/recording.rs::handle_delete_track` | `extract_tag` | `production:2` |
+| `src/mock/services/ptz.rs::handle_ptz_set_preset` | `extract_tag` | `production:3` |
+| `src/mock/services/ptz.rs::has_pan_tilt` | `extract_attr` | `production:2` |
+| `src/mock/services/ptz.rs::min_max` | `extract_tag` | `production:2` |
+| `src/mock/services/ptz.rs::pan_tilt_attrs` | `extract_attr` | `production:2` |
+| `src/mock/services/ptz.rs::parse_limits` | `extract_tag` | `production:5` |
+| `src/mock/services/ptz.rs::resp_ptz_configuration_options` | `extract_tag` | `production:1` |
+| `src/mock/services/ptz.rs::resp_ptz_configuration` | `extract_tag` | `production:1` |
+| `src/mock/services/ptz.rs::resp_ptz_node` | `extract_tag` | `production:1` |
+| `src/mock/services/ptz.rs::resp_ptz_preset_tour` | `extract_tag` | `production:2` |
 | `src/mock/services/recording.rs::handle_create_recording_job` | `extract_tag` | `production:5` |
-| `src/mock/services/recording.rs::handle_set_recording_job_mode` | `extract_tag` | `production:2` |
+| `src/mock/services/recording.rs::handle_create_recording` | `extract_tag` | `production:9` |
+| `src/mock/services/recording.rs::handle_create_track` | `extract_tag` | `production:4` |
 | `src/mock/services/recording.rs::handle_delete_recording_job` | `extract_tag` | `production:1` |
+| `src/mock/services/recording.rs::handle_delete_recording` | `extract_tag` | `production:1` |
+| `src/mock/services/recording.rs::handle_delete_track` | `extract_tag` | `production:2` |
+| `src/mock/services/recording.rs::handle_set_recording_job_mode` | `extract_tag` | `production:2` |
 | `src/mock/services/recording.rs::resp_recording_job_state` | `extract_tag` | `production:1` |
 | `src/mock/services/recording.rs::resp_replay_uri` | `extract_tag` | `production:1` |
+| `src/mock/xml_parse.rs::extract_all` | `extract_all_tags` | `test:1` |
+| `src/mock/xml_parse.rs::extract_from_full_soap_security_header` | `extract_tag` | `test:4` |
+| `src/mock/xml_parse.rs::extract_missing` | `extract_tag` | `test:1` |
+| `src/mock/xml_parse.rs::extract_nested` | `extract_tag` | `test:1` |
+| `src/mock/xml_parse.rs::extract_no_namespace` | `extract_tag` | `test:1` |
+| `src/mock/xml_parse.rs::extract_nonce_with_encoding_type` | `extract_tag` | `test:1` |
+| `src/mock/xml_parse.rs::extract_simple_tag` | `extract_tag` | `test:1` |
+| `src/mock/xml_parse.rs::extract_tag_with_attributes` | `extract_tag` | `test:1` |
 
 ## 遷移責任
 
@@ -343,11 +334,13 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 | K30 — 空 profile 政策已修正 | 兩種 transport 均重現 client parse failure 後已提交空 token state。明確空值的 Create／read selector 現在於 effect 前以 Sender／mock:RequestPolicy 拒絕；含空 seed 的 list 回傳 Receiver，保留 snapshot 及有效個別讀取。 | W01／W10／W06 有界 mock 政策，不是規範上的 xs:string 限制。Raw／client state、hook、配置、replay 及獨立政策 Fault 控制記於 profile preflight；其他 seed 與欄位限制仍待處理。 |
 | K27 — 已限制回覆替換，index 仍碰撞 | `mock_replay_key_gaps` 保留原本六種 stored-key collision，增加 body ephemera、mixed-content ordering 與 xsi:type namespace 控制；replay 現在拒絕未確認的 scoped identity match，轉入 synthetic。 | W19 部分完成：兩種 transport 及 exact raw／qualified-header 控制通過；index／檔案格式不變，被覆蓋錄製無法恢復；完整 key 遷移及其他 QName／HTTP／protocol 語意仍待完成。 |
 | K28 | 已錄製 request 的 URL 憑證仍存於 `key_canon`，舊檔 key 載入時也未清除。虛構資料的 assertion failure 已重現兩項缺陷。 | W19：recording／replay／diff 投影與舊檔／caller lookup key 均清除 URL 帳密；載入不覆寫磁碟，正規化碰撞維持 last-write-wins。Raw envelope 仍僅針對指定格式去除憑證，並非通用秘密偵測器。 |
-| K24 | 固定來源的輸出型別審查發現 Media2 audio renderer／options 沿用 Media1 codec 名稱，共用 writer 也未經 service adapter 就直接儲存。XSD 字串合法性無法驗證兩者不同的 codec 詞彙。 | W01／W10：將 audio list／options、profile 內嵌 audio、共用寫入及 client 跨服務預期視為同一相依範圍審查。已由來源確認，具辨識力的 wire／state 重現待補。不可只改輸出而破壞寫入。 |
-| K25 | Audio encoder writer 儲存請求的 Multicast AutoStart；Media2 metadata 依 address 存在與否推導該值，但 mock 不實作 persistent streaming。外部輸出型別筆記指出該欄位的唯讀效果意義。 | W01／W10／W17：重現 read／write／capability 差異，修改預設前核對唯讀處理及 multicast 省略／提供行為。來源已確認，未驗證任何實際 RTP 效果。 |
+| K24 | Media2 音訊編碼名稱與 Media1 不同。 | AM1: G711/PCMU, AAC/MP4A-LATM; ONVIF G726 + bitrate. [AM1](mock-fidelity-audio-metadata_zh.md) |
+| K25 | AutoStart 曾由位址推測或直接寫入。 | AM1: 唯讀輸入驗證後忽略；非串流預設 false。 |
 | K26 — 選定 codec view 已修正 | VE1 涵蓋 H265 寫入／回讀及 Media1 頂層拒絕；兩種 profile renderer 共用相同可表示性防護。 | W01／W10／W17：保留 codec 身分，拒絕不相容 Media1 view；不靜默轉換或放寬 schema。詳見 VE1 證據及合成模型限制。 |
 | K34 — rate 契約已修正 | 公開 client 重現 12.5 → 0；無效幀率文字亦變成零，共用整數 mock storage 掩蓋不一致。 | 已核准下一個 minor 的 `f32` 遷移、嚴格 present rate 解析、outbound／serde 有限值防護、共用 mock rate、Media1 view 拒絕及成功後 replay 失效。詳見 [VE1 證據](mock-fidelity-video-encoder_zh.md)。 |
 | K35 — 選定 encoder 契約已修正 | 八項 VE1 路由已使用 scoped 完整 candidate／selector、共用 options／write 限制及 source-configuration capacity；移除 17 個 legacy reader 呼叫。 | [VE1 證據](mock-fidelity-video-encoder_zh.md)：原子拒絕、調整、轉義身分、option 回讀及 replay 相依性。串流、實體 routing 及全程式符合性不在此模型範圍。 |
+| K36 / D4 | 2026-09-11 已核准 metadata 公開型別遷移。 | AM1: 完整 multicast 與 session timeout；修正序列化順序，明確記錄未建模欄位。 |
+| K37 | AM1 外部 corpus 08 拒絕音訊 options 的多值 Items；client 原先僅讀取第一個 Items。 | AM1: 逐一輸出整數，讀取全部 Items；corpus 09 的 148 份 XML 通過 Xerces。 |
 | K23 | Windows CI run 34471659927（`2a488be`）的 `line_number_override_is_validated_but_never_changes_agent_or_plain_output` 失敗：逐位元 JSON 比較包含各自量測的 `meta.elapsed_ms`（0 與 9）。 | W22 測試框架修正：要求耗時為數字，JSON 相等比較只排除該確切欄位；保留其他全部欄位、stderr 及純文字輸出檢查，加入確定性的耗時／資料／型別控制。不改 CLI 輸出，不遮蔽其他 metadata。 |
 | K12 | `media::bind_configuration` 註解將 fixed profile 綁定描述為 mock 偏差；官方 Media1／Media2 §4.1 區分刪除限制與 configuration 變更。 | 修正註解並保留合法綁定，不可把 fixed profile 改成完全不可修改；參考資料如下。 |
 | K13 — 基準後已修正 | `create_profile_in_state` 在同一 write lock 內檢查唯一性及新增，跳過已用的自動 token，並避免持久化 counter 溢位。 | 兩服務碰撞回歸、邊界／完整 state 控制及明確／自動 token 併發配置涵蓋此 state 批次；容量及其他 CreateProfile 語意仍待完成。 |

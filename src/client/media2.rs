@@ -429,7 +429,15 @@ impl OnvifClient {
 
     /// Apply a metadata configuration via Media2.
     ///
-    /// ONVIF Media2 WSDL `SetMetadataConfiguration` — Profile T §7.15.
+    /// Sends the complete modeled configuration in service order, including
+    /// multicast and the required (deprecated/ignored by Media2) session timeout.
+    /// AutoStart is readonly. Optional event/compression/vendor configuration is
+    /// not represented; do not use this as an arbitrary lossless configuration editor.
+    ///
+    /// # Errors
+    /// An empty token, malformed IP address, out-of-range port/TTL or invalid
+    /// nonnegative duration is rejected before transport. Device-specific
+    /// restrictions remain the device's responsibility.
     pub async fn set_metadata_configuration_media2(
         &self,
         media2_url: &str,
@@ -438,7 +446,7 @@ impl OnvifClient {
         const ACTION: &str = "http://www.onvif.org/ver20/media/wsdl/SetMetadataConfiguration";
         let body = format!(
             "<tr2:SetMetadataConfiguration>{}</tr2:SetMetadataConfiguration>",
-            config.to_xml_body()
+            config.to_xml_body()?
         );
         let xml = self.call(media2_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;

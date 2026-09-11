@@ -205,6 +205,7 @@ operations, fault injection, and limitations.
 | [CLI guide](docs/oxvif-cli.md) | Installation, commands, security, fleet workflows, structured output, and exit codes. |
 | [Implemented operations](OPERATIONS.md) | Exact per-service ONVIF coverage. |
 | [Mock device reference](docs/mock-server.md) | Complete behavior and fidelity contract for the mock. |
+| [Unreleased audio/metadata migration](docs/audio-metadata.md) | Next-minor Rust/JSON changes and mock limits. |
 | [Support boundaries](docs/support.md) | Versioned platform, security, compatibility, and commercial-claim limits. |
 | [Changelog](CHANGELOG.md) | Release history and current release changes. |
 

@@ -382,11 +382,109 @@ pub struct MulticastConfiguration {
     pub port: u32,
     /// IP time-to-live for multicast packets.
     pub ttl: u32,
-    /// `true` if the device starts streaming automatically on boot.
+    /// Readonly indication that persistent multicast streaming is active.
+    /// Setting this field does not replace StartMulticastStreaming.
     pub auto_start: bool,
 }
 
 impl MulticastConfiguration {
+    pub(crate) fn from_xml_strict(m: &XmlNode) -> Result<Self, OnvifError> {
+        use super::media::{metadata_node as node, metadata_scalar as scalar};
+        let address = node(m, "Address", "MetadataConfiguration/Multicast/Address")?;
+        let kind = scalar(
+            address,
+            "Type",
+            "MetadataConfiguration/Multicast/Address/Type",
+        )?;
+        let (field, path) = match kind {
+            "IPv4" => (
+                "IPv4Address",
+                "MetadataConfiguration/Multicast/Address/IPv4Address",
+            ),
+            "IPv6" => (
+                "IPv6Address",
+                "MetadataConfiguration/Multicast/Address/IPv6Address",
+            ),
+            _ => {
+                return Err(SoapError::invalid(
+                    "MetadataConfiguration/Multicast/Address/Type",
+                    kind,
+                )
+                .into());
+            }
+        };
+        if address
+            .child(if kind == "IPv4" {
+                "IPv6Address"
+            } else {
+                "IPv4Address"
+            })
+            .is_some()
+        {
+            return Err(SoapError::invalid(
+                "MetadataConfiguration/Multicast/Address",
+                "conflicting address family",
+            )
+            .into());
+        }
+        let address = scalar(address, field, path)?.to_string();
+        let ip = address
+            .parse::<std::net::IpAddr>()
+            .map_err(|_| SoapError::invalid(path, &address))?;
+        if ip.is_ipv4() != (kind == "IPv4") {
+            return Err(SoapError::invalid(path, &address).into());
+        }
+        let integer = |name, path| -> Result<u32, OnvifError> {
+            let value = scalar(m, name, path)?;
+            value
+                .parse()
+                .map_err(|_| SoapError::invalid(path, value).into())
+        };
+        let auto = scalar(m, "AutoStart", "MetadataConfiguration/Multicast/AutoStart")?;
+        let result = Self {
+            address,
+            port: integer("Port", "MetadataConfiguration/Multicast/Port")?,
+            ttl: integer("TTL", "MetadataConfiguration/Multicast/TTL")?,
+            auto_start: match auto {
+                "true" | "1" => true,
+                "false" | "0" => false,
+                _ => {
+                    return Err(SoapError::invalid(
+                        "MetadataConfiguration/Multicast/AutoStart",
+                        auto,
+                    )
+                    .into());
+                }
+            },
+        };
+        result.validate_metadata()?;
+        Ok(result)
+    }
+
+    pub(crate) fn validate_metadata(&self) -> Result<(), OnvifError> {
+        if self.address.parse::<std::net::IpAddr>().is_err() {
+            return Err(SoapError::invalid(
+                "MetadataConfiguration/Multicast/Address",
+                &self.address,
+            )
+            .into());
+        }
+        if self.port > u16::MAX as u32 {
+            return Err(SoapError::invalid(
+                "MetadataConfiguration/Multicast/Port",
+                self.port.to_string(),
+            )
+            .into());
+        }
+        if self.ttl > 255 {
+            return Err(SoapError::invalid(
+                "MetadataConfiguration/Multicast/TTL",
+                self.ttl.to_string(),
+            )
+            .into());
+        }
+        Ok(())
+    }
     /// Parse a `<tt:Multicast>` element.
     ///
     /// `tt:MulticastConfiguration` is one type, shared by the video encoder,
@@ -412,9 +510,14 @@ impl MulticastConfiguration {
 
     /// Render a `<tt:Multicast>` element.
     pub(crate) fn to_xml_body(&self) -> String {
+        let (kind, field) = if self.address.parse::<std::net::Ipv6Addr>().is_ok() {
+            ("IPv6", "IPv6Address")
+        } else {
+            ("IPv4", "IPv4Address")
+        };
         format!(
             "<tt:Multicast>\
-               <tt:Address><tt:Type>IPv4</tt:Type><tt:IPv4Address>{}</tt:IPv4Address></tt:Address>\
+               <tt:Address><tt:Type>{kind}</tt:Type><tt:{field}>{}</tt:{field}></tt:Address>\
                <tt:Port>{}</tt:Port>\
                <tt:TTL>{}</tt:TTL>\
                <tt:AutoStart>{}</tt:AutoStart>\

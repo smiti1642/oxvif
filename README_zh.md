@@ -197,6 +197,7 @@ async fn updates_a_mock_camera() {
 | [CLI 使用指南](docs/oxvif-cli_zh.md) | 安裝、命令、安全性、fleet workflow、structured output 與 exit code。 |
 | [已實作的 operation](OPERATIONS_zh.md) | 各 service 精確的 ONVIF coverage。 |
 | [Mock 裝置參考](docs/mock-server_zh.md) | Mock 的完整行為與 fidelity contract。 |
+| [尚未發布的音訊／metadata 遷移](docs/audio-metadata_zh.md) | 下一次版本的 Rust／JSON 變更與 mock 限制。 |
 | [支援範圍](docs/support_zh.md) | 版本化的平台、安全、相容性與商用宣稱限制。 |
 | [Changelog（英文）](CHANGELOG.md) | Release 歷史與目前版本的變更。 |
 

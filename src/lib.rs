@@ -19,6 +19,11 @@
 //! Mock encoder writes validate complete scoped candidates atomically, share
 //! limits with options, adapt bitrate and refuse unsupported streaming effects.
 //! H265 remains Media2-only; synthetic capacity uses source configuration tokens.
+//! Metadata now retains structured multicast and required session timeout. Migrate
+//! old Rust/JSON fields explicitly; see the
+//! [audio/metadata guide](https://github.com/smiti1642/oxvif/blob/codex/mock-fidelity-hardening/docs/audio-metadata.md).
+//! Audio options retain all repeated Items; mock audio/metadata writes validate
+//! complete settings and readonly status without claiming actual RTP streaming.
 //!
 //! | Section | Purpose |
 //! | --- | --- |

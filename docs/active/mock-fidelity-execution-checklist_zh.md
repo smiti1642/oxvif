@@ -142,10 +142,10 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W16／M4／PARTIAL | W01 分類、W05／W06 | [A2／A3 acknowledgment 政策](mock-fidelity-ack-policy-preflight_zh.md)：11 條已分類 reset／auxiliary／maintenance／subscription／結束搜尋 route，共用 transport／server 政策 | 精確操作 opt-in、預設拒絕、不變更 state／hook／effect／replay retirement；此 stub 子群已遷移，但完整操作語意、部分建模效果及 capability 核對仍未完成 |
 | W17／M4／PARTIAL | W10–W16 分類 | 全部 capability renderer、`discovery_responder.rs`、`fleet.rs`、`snapshot.rs`、`font.rs`、公開 mock 文件 | Services／XAddrs／feature／limit 與建模行為一致；核對 discovery／snapshot 側路徑；靜態 URI／圖片不證明 codec／串流輸出；PA1 已核對 profile 上限與五種 binding capability，其餘宣告待查 |
 | W18／M4／PARTIAL | W10–W16 候選行為 | K13 無碰撞配置、K16 原子 binding plan、條件式通知；K08 hook 在鎖外接收 commit 快照，profile／catalogue 讀取共用一次快照 | 選定配置、binding、reentrant 及三路徑 profile snapshot 控制；更廣泛併發寫入、instance、rollback、其他 queue／read snapshot 及 replay 待完成；公開 signature 不變，callback 排序由使用者管理 |
-| W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | 其餘 configuration 寫入與 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密；PA1 將已提交 profile effect 延伸至引用計數與 PTZ compatible read，VS1 加入成功 source 提交後的 source／profile／options 失效，保留實體來源 recording；VE1 加入 source-capacity 與 profile-encoder-options 失效 |
+| W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | 其餘 configuration 寫入與 mutation、單獨 replay 政策、完整讀取依賴、正規化／key collision 及併發／callback 可見性仍待完成；不新增錄製設備機密；PA1 將已提交 profile effect 延伸至引用計數與 PTZ compatible read，VS1 加入成功 source 提交後的 source／profile／options 失效，保留實體來源 recording；VE1 加入 source-capacity 與 profile-encoder-options 失效 AM1 加入 audio／metadata committed effects。 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
-| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及選定 29 操作 profile／source／rate／encoder corpus 匯出與明確 payload anchor | VE1 後本機 110 份 instance 通過，包含 14 個拒絕（七個 profile、三個 source、兩個 rate、兩個 encoder）。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
-| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source／rate／encoder instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 29 操作的 110 份 instance；VE1 託管 CI、全程式 instance 覆蓋及 release 證據檢查仍待完成 |
+| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及選定 44 操作 profile／source／rate／encoder corpus 匯出與明確 payload anchor | AM1 後本機 148 份 instance 通過，包含 17 個拒絕（七個 profile、三個 source、兩個 rate、兩個 encoder、三個 audio／metadata）。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source／rate／encoder instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 44 操作的 148 份 instance；VE1 託管 CI、全程式 instance 覆蓋及 release 證據檢查仍待完成 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
 | W25／M6／TODO | W00–W24 驗收 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |
@@ -265,14 +265,18 @@ not-run 分開記錄；schema skip、既有 `Broken`／`Blind` 預期不算新�
 下一個可開工 ID、尚需測試、使用者決策或外部前置條件。待辦發現必須有 ID 及
 負責工作項目才能移交；接續施工以這些紀錄為準，不依賴對話歷史。
 
-目前 W00 已完成；214 個直接 reader 已索引，不表示均已驗收。
+目前 W00 已完成；191 個直接 reader 已索引，不表示均已驗收。
 已核准的 K34 rate 遷移記於 [VE1 計畫](mock-fidelity-video-encoder_zh.md)。
 VE1 已實作 selector、options、完整 candidate、codec view 及 capacity；具日期證據
-區分本機 gate 與託管 CI。下一批為 audio／metadata；VE1 不表示 W10 或整體計畫完成。Scoped synthetic
+區分本機 gate 與託管 CI（VE1 run 34579594778 已通過）。
+[AM1 audio／metadata](mock-fidelity-audio-metadata_zh.md) 已實作 15 操作子群；
+K36／D4 遷移於 2026-09-11 核准，gate 結果見具日期證據。
+VE1 不表示 W10 或整體計畫完成。Scoped synthetic
 request／auth 邊界、選定 profile 身分／effect、11 項 acknowledgment-only 政策及
 [PA1 組裝](mock-fidelity-profile-assembly_zh.md) 及 [VS1](mock-fidelity-video-source_zh.md)
-及 [VE1 encoder configuration](mock-fidelity-video-encoder_zh.md) 為已實作子群。
-**下一批為 W10 audio／metadata**，再處理其他服務。W07 HTTP binding、其餘 W04 typed／QName、廣泛 W06
+及 [VE1 encoder configuration](mock-fidelity-video-encoder_zh.md)、
+[AM1 audio／metadata](mock-fidelity-audio-metadata_zh.md) 為已實作子群。
+**下一批為 W10 其餘 URI／OSD／capability 收尾**，再處理其他服務。W07 HTTP binding、其餘 W04 typed／QName、廣泛 W06
 Fault 遷移及安全語意仍未完成。[Schema 前置檢查](mock-fidelity-schema-preflight_zh.md)
 記錄已可運作的外部工具及選定 corpus 覆蓋，不是全程式驗收。
 

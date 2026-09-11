@@ -230,7 +230,12 @@ async fn both_services_agree_on_the_audio_catalogue() {
                 (
                     c.token,
                     c.name,
-                    c.encoding.as_str().to_string(),
+                    match c.encoding.as_str() {
+                        "PCMU" => "G711",
+                        "MP4A-LATM" => "AAC",
+                        other => other,
+                    }
+                    .to_string(),
                     c.bitrate,
                     c.sample_rate,
                     c.multicast.map(|m| (m.address, m.port)),
@@ -262,16 +267,22 @@ async fn both_services_agree_on_the_audio_catalogue() {
     // that can be asserted across them.
     for token in ["AEC_1", "AEC_2"] {
         let rows = |o: oxvif::AudioEncoderConfigurationOptions| {
-            o.options
-                .into_iter()
-                .map(|r| {
-                    (
-                        r.encoding.as_str().to_string(),
-                        r.bitrate_list,
-                        r.sample_rate_list,
-                    )
-                })
-                .collect::<Vec<_>>()
+            let mut rows = vec![];
+            for r in o.options {
+                let encoding = match r.encoding.as_str() {
+                    "PCMU" => "G711",
+                    "MP4A-LATM" => "AAC",
+                    s if s.starts_with("G726-") => "G726",
+                    s => s,
+                };
+                for bitrate in &r.bitrate_list {
+                    for rate in &r.sample_rate_list {
+                        rows.push((encoding.to_string(), *bitrate, *rate));
+                    }
+                }
+            }
+            rows.sort();
+            rows
         };
         let a = rows(
             client
@@ -287,7 +298,7 @@ async fn both_services_agree_on_the_audio_catalogue() {
         );
         assert_eq!(b, a, "the two services disagree about {token}'s options");
         assert!(
-            !a.is_empty() && !a[0].1.is_empty(),
+            !a.is_empty() && a[0].1 > 0,
             "{token}: an empty options answer is what the old parser produced \
              from a *correct* Media1 response, so it cannot be the expected \
              one here: {a:?}"

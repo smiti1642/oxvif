@@ -1005,8 +1005,11 @@ async fn metadata_configs_differ_on_every_field() {
     assert!(one.analytics);
     assert!(!one.ptz_status);
     assert!(one.ptz_position);
-    assert_eq!(one.multicast_address.as_deref(), Some("239.0.1.10"));
-    assert_eq!(one.multicast_port, Some(40010));
+    assert_eq!(one.multicast.address, "239.0.1.10");
+    assert_eq!(one.multicast.port, 40010);
+    assert_eq!(one.multicast.ttl, 1);
+    assert!(!one.multicast.auto_start);
+    assert_eq!(one.session_timeout, "PT60S");
 
     let two = all.iter().find(|c| c.token == "MetaConf_2").unwrap();
     assert_eq!(two.name, "MetadataMinimal");
@@ -1014,15 +1017,11 @@ async fn metadata_configs_differ_on_every_field() {
     assert!(!two.analytics);
     assert!(two.ptz_status);
     assert!(!two.ptz_position);
-    assert_eq!(
-        two.multicast_address, None,
-        "a config with no group must omit IPv4Address, not send it empty"
-    );
-    assert_eq!(
-        two.multicast_port,
-        Some(0),
-        "Multicast/Port is required, so it is 0 rather than absent"
-    );
+    assert_eq!(two.multicast.address, "0.0.0.0");
+    assert_eq!(two.multicast.port, 0);
+    assert_eq!(two.multicast.ttl, 1);
+    assert!(!two.multicast.auto_start);
+    assert_eq!(two.session_timeout, "PT60S");
 
     // The options getter answers for the addressed configuration, and the two
     // members `tt:PTZStatusFilterOptions` requires are what it discriminates
@@ -1062,36 +1061,24 @@ async fn metadata_unknown_token_is_refused() {
         .set_metadata_configuration_media2(&url, &cfg)
         .await
         .unwrap_err();
-    assert_fault(
-        err,
-        "ter:NoConfig",
-        "NoSuchMetadataConfig-SETMETA-5811: MetaConf_99",
-    );
+    assert_fault(err, "s:Sender", "Configuration not found: MetaConf_99");
 
     // The options getter is addressed, not a filter, so it faults too — and
-    // with its own tag, so this assertion cannot be satisfied by the one above.
+    // with the same standardized category and named missing reference.
     let err = s
         .client()
         .get_metadata_configuration_options_media2(&url, Some("MetaConf_99"), None)
         .await
         .unwrap_err();
-    assert_fault(
-        err,
-        "ter:NoConfig",
-        "NoSuchMetadataConfig-METAOPT-5812: MetaConf_99",
-    );
+    assert_fault(err, "s:Sender", "Configuration not found: MetaConf_99");
 
-    // But `GetMetadataConfigurations` is a *filter*: an unmatched token is an
-    // empty list, not an error. Asserting the difference is the point.
-    let empty = s
+    // An explicit unknown configuration is not an empty-list success.
+    let err = s
         .client()
         .get_metadata_configurations_media2(&url, Some("MetaConf_99"), None)
         .await
-        .unwrap();
-    assert!(
-        empty.is_empty(),
-        "a filter that matches nothing returns nothing, and does not fault"
-    );
+        .unwrap_err();
+    assert_fault(err, "s:Sender", "Configuration not found: MetaConf_99");
 }
 
 #[tokio::test]

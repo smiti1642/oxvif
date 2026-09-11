@@ -81,6 +81,24 @@ impl ReplayResponder {
         let invalidated = self.invalidated.clone();
         Arc::new(move |effect| {
             match effect {
+                Effect::AudioEncoderCommitted | Effect::MetadataCommitted => {
+                    let mut retired = invalidated.lock().unwrap_or_else(|p| p.into_inner());
+                    let actions: &[&str] = if effect == Effect::MetadataCommitted {
+                        &["http://www.onvif.org/ver20/media/wsdl/GetMetadataConfigurations"]
+                    } else {
+                        &[
+                            "http://www.onvif.org/ver10/media/wsdl/GetProfile",
+                            "http://www.onvif.org/ver10/media/wsdl/GetProfiles",
+                            "http://www.onvif.org/ver20/media/wsdl/GetProfiles",
+                            "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfiguration",
+                            "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurations",
+                            "http://www.onvif.org/ver20/media/wsdl/GetAudioEncoderConfigurations",
+                        ]
+                    };
+                    for action in actions {
+                        retired.insert((*action).to_owned());
+                    }
+                }
                 Effect::VideoEncoderCommitted => {
                     let mut retired = invalidated
                         .lock()
@@ -141,6 +159,12 @@ impl ReplayResponder {
                         "http://www.onvif.org/ver20/media/wsdl/GetAudioSourceConfigurations",
                         "http://www.onvif.org/ver20/media/wsdl/GetAudioEncoderConfigurations",
                         "http://www.onvif.org/ver20/ptz/wsdl/GetConfigurations",
+                        "http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurationOptions",
+                        "http://www.onvif.org/ver20/media/wsdl/GetAudioEncoderConfigurationOptions",
+                        "http://www.onvif.org/ver20/media/wsdl/GetAudioOutputConfigurations",
+                        "http://www.onvif.org/ver20/media/wsdl/GetAudioDecoderConfigurations",
+                        "http://www.onvif.org/ver20/media/wsdl/GetMetadataConfigurations",
+                        "http://www.onvif.org/ver20/media/wsdl/GetMetadataConfigurationOptions",
                         "http://www.onvif.org/ver20/ptz/wsdl/GetConfiguration",
                         "http://www.onvif.org/ver20/ptz/wsdl/GetCompatibleConfigurations",
                     ] {
