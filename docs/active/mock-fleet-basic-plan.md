@@ -4,7 +4,9 @@
 
 Status: IMPLEMENTING, authorized 2026-09-12. The first milestone is simple
 multi-camera startup and configuration for VMS testing. B1 init/check and three
-focused configuration tests pass; serve is explicitly unavailable until B2/B3.
+focused configuration tests pass. B2 HTTP serving, explicit network settings,
+member isolation and awaited cleanup pass five Fleet tests plus scoped Clippy.
+Shared discovery is still explicitly unavailable until B3.
 No release inclusion or 64/256-device stability result is claimed.
 
 | Section | Purpose |

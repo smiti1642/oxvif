@@ -14,14 +14,15 @@ init never overwrites files; check does not bind ports.\n\
 Default: loopback HTTP, no discovery, authentication not enforced.\n\
 Edit the manifest to explicitly enable lab-network access. State changes are not saved.";
 
-fn main() {
-    if let Err(error) = run(std::env::args().skip(1).collect()) {
+#[tokio::main]
+async fn main() {
+    if let Err(error) = run(std::env::args().skip(1).collect()).await {
         eprintln!("Mock Fleet: {error}");
         std::process::exit(1);
     }
 }
 
-fn run(args: Vec<String>) -> Result<(), String> {
+async fn run(args: Vec<String>) -> Result<(), String> {
     if args.is_empty() || args == ["--help"] || args == ["-h"] {
         println!("{HELP}");
         return Ok(());
@@ -62,9 +63,64 @@ fn run(args: Vec<String>) -> Result<(), String> {
             );
             Ok(())
         }
-        "serve" if args.len() == 2 => {
-            Err("Serving is not available in the configuration-only implementation batch".into())
-        }
+        "serve" if args.len() == 2 => serve(Path::new(path)).await,
         _ => Err("Unknown command or unexpected arguments; use --help".into()),
     }
+}
+
+async fn serve(path: &Path) -> Result<(), String> {
+    let manifest = Manifest::load(path)?;
+    let states = manifest.prepare(path)?;
+    if manifest.discovery {
+        return Err(
+            "Shared discovery is not available until the discovery implementation batch".into(),
+        );
+    }
+    let mut builder = oxvif::mock::Fleet::builder();
+    for (device, state) in manifest.devices.iter().zip(states) {
+        let scopes = state.scopes.clone();
+        let mut server = oxvif::mock::MockServer::builder()
+            .port(device.port)
+            .bind_ip(manifest.bind_ip)
+            .initial_state(state);
+        if let Some(ip) = manifest.advertise_ip {
+            server = server.advertise_ip(ip);
+        }
+        builder = builder.member(
+            server,
+            format!("urn:uuid:{}", device.uuid.to_ascii_lowercase()),
+            scopes,
+        );
+    }
+    let interrupt = tokio::signal::ctrl_c();
+    tokio::pin!(interrupt);
+    let fleet = tokio::select! {
+        result = builder.start() => result.map_err(|error| format!("Fleet startup failed: {error}"))?,
+        result = &mut interrupt => {
+            result.map_err(|_| "Cannot install Ctrl+C handler".to_owned())?;
+            return Err("Fleet startup interrupted".into());
+        }
+    };
+    println!(
+        "Started {} cameras | discovery: disabled | authentication: NOT ENFORCED",
+        fleet.len()
+    );
+    if !manifest.bind_ip.is_loopback() {
+        println!(
+            "WARNING: test HTTP and mock control endpoints are exposed beyond loopback. Use an isolated authorized lab network."
+        );
+    }
+    for (device, server) in manifest.devices.iter().zip(fleet.devices()) {
+        println!("{} | {}", device.id, server.device_url());
+    }
+    println!("No RTSP streams. Runtime state is not saved. Ctrl+C stops all devices.");
+    (&mut interrupt)
+        .await
+        .map_err(|_| "Ctrl+C handler failed".to_owned())?;
+    fleet
+        .shutdown()
+        .await
+        .map_err(|error| format!("Fleet shutdown failed: {error}"))?;
+    println!("Stopped all cameras.");
+    Ok(())
 }

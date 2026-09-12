@@ -6,7 +6,7 @@
 //! background task and shuts down gracefully when the [`MockServer`] is dropped.
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use axum::{
@@ -56,6 +56,8 @@ struct ReplayHandle {
 #[derive(Default)]
 pub struct MockServerBuilder {
     port: u16,
+    bind_ip: Option<Ipv4Addr>,
+    advertise_ip: Option<Ipv4Addr>,
     initial_state: Option<DeviceState>,
     on_change: Option<ChangeHook>,
     enforce_auth: bool,
@@ -66,6 +68,53 @@ pub struct MockServerBuilder {
 }
 
 impl MockServerBuilder {
+    /// Bind HTTP to this IPv4 address (default: loopback).
+    /// Non-loopback binding explicitly exposes a test server, including mock
+    /// control endpoints; this is not a production authentication boundary.
+    pub fn bind_ip(mut self, ip: Ipv4Addr) -> Self {
+        self.bind_ip = Some(ip);
+        self
+    }
+
+    /// Concrete local IPv4 address used in advertised HTTP service URLs.
+    /// Required for wildcard binding; otherwise must equal the bound address.
+    /// This does not configure host networking or enable discovery.
+    pub fn advertise_ip(mut self, ip: Ipv4Addr) -> Self {
+        self.advertise_ip = Some(ip);
+        self
+    }
+
+    pub(crate) fn network(&self) -> std::io::Result<(Ipv4Addr, Ipv4Addr)> {
+        let bind = self.bind_ip.unwrap_or(Ipv4Addr::LOCALHOST);
+        let advertise = self.advertise_ip.unwrap_or(bind);
+        if advertise.is_unspecified()
+            || advertise.is_multicast()
+            || advertise.is_broadcast()
+            || bind.is_multicast()
+            || bind.is_broadcast()
+            || (!bind.is_unspecified() && bind != advertise)
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "mock HTTP requires a unicast bind and matching concrete advertise IP (explicit advertise IP for wildcard bind)",
+            ));
+        }
+        if !if_addrs::get_if_addrs()?
+            .iter()
+            .any(|nic| nic.ip() == std::net::IpAddr::V4(advertise))
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "mock advertise IP is not assigned to this host",
+            ));
+        }
+        Ok((bind, advertise))
+    }
+
+    pub(crate) fn has_discovery(&self) -> bool {
+        self.discoverable.is_some()
+    }
+
     /// TCP port to bind. `0` (the default) picks an ephemeral free port.
     pub fn port(mut self, port: u16) -> Self {
         self.port = port;
@@ -108,8 +157,8 @@ impl MockServerBuilder {
 
     /// Answer WS-Discovery `Probe`s with the given ONVIF `scopes`
     /// (e.g. `onvif://www.onvif.org/name/MockCam`). Off by default.
-    /// HTTP still binds to loopback and the advertised XAddr is loopback-only;
-    /// this option does not make the HTTP service accessible from another host.
+    /// HTTP and XAddr default to loopback; explicit [`Self::bind_ip`] and
+    /// [`Self::advertise_ip`] control reachability from another host.
     ///
     /// Best-effort: this binds the shared UDP port `3702` and joins the ONVIF
     /// multicast group — if the bind fails (port already in use, sandboxed CI)
@@ -141,10 +190,14 @@ impl MockServerBuilder {
     }
 
     /// Bind the socket and spawn the server on a background task.
+    ///
+    /// # Errors
+    /// Returns an I/O error for invalid/nonlocal network settings or bind failure.
     pub async fn start(self) -> std::io::Result<MockServer> {
-        let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], self.port))).await?;
+        let (bind, advertise) = self.network()?;
+        let listener = TcpListener::bind(SocketAddr::from((bind, self.port))).await?;
         let local = listener.local_addr()?;
-        let base = format!("http://{local}");
+        let base = format!("http://{}", SocketAddr::from((advertise, local.port())));
 
         let mut state = match self.initial_state {
             Some(s) => MockState::with_state(s),
@@ -183,7 +236,7 @@ impl MockServerBuilder {
             .with_state(ctx.clone());
 
         let (tx, rx) = oneshot::channel::<()>();
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             let _ = axum::serve(listener, app)
                 .with_graceful_shutdown(async move {
                     let _ = rx.await;
@@ -223,6 +276,7 @@ impl MockServerBuilder {
             port: local.port(),
             ctx,
             shutdown: Some(tx),
+            task: Some(task),
             _discovery: discovery,
         })
     }
@@ -249,12 +303,38 @@ pub struct MockServer {
     port: u16,
     ctx: Arc<Ctx>,
     shutdown: Option<oneshot::Sender<()>>,
+    task: Option<tokio::task::JoinHandle<()>>,
     /// Kept alive so the WS-Discovery responder (if any) shuts down with the
     /// server. `None` unless [`MockServerBuilder::discoverable`] was set.
     _discovery: Option<DiscoveryResponder>,
 }
 
 impl MockServer {
+    /// Stop accepting connections and wait for owned serving work to finish.
+    /// Dropping a server requests shutdown without waiting; this method is for
+    /// deterministic fleet cleanup and port reuse. Stalled shutdown is aborted
+    /// after five seconds and reported as an error.
+    pub async fn shutdown(mut self) -> std::io::Result<()> {
+        self._discovery.take();
+        if let Some(tx) = self.shutdown.take() {
+            let _ = tx.send(());
+        }
+        if let Some(mut task) = self.task.take() {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), &mut task).await {
+                Ok(result) => result.map_err(std::io::Error::other)?,
+                Err(_) => {
+                    task.abort();
+                    let _ = task.await;
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "mock HTTP shutdown timed out",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Start a server on an ephemeral port with defaults (no auth, no persistence).
     pub async fn start() -> std::io::Result<Self> {
         MockServerBuilder::default().start().await
@@ -270,7 +350,7 @@ impl MockServer {
         &self.device_url
     }
 
-    /// Base URL (`http://127.0.0.1:<port>`).
+    /// Base URL (`http://<advertised-ip>:<port>`; loopback by default).
     pub fn base_url(&self) -> &str {
         &self.base
     }
