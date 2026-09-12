@@ -168,3 +168,8 @@ reciprocal language links and section-link tables for long documents.
   continuation and local registry reprojection. Binary tests: 54 passed; existing
   setup application scenarios: 5 passed; new local reprojection test: 1 passed.
   No terminal/native credential acceptance is claimed yet; that remains B4.
+- B2 implementation complete: bounded workspaces, saved-menu search and token-based
+  profile restoration. Saved-ID slots compare the full DeviceView (including target
+  and credential configuration) before reuse; any changed view conservatively
+  invalidates that slot. Binary tests: 57 passed, including A/B/A, same-address
+  identities, registry target changes, 256-slot limit and literal search mapping.

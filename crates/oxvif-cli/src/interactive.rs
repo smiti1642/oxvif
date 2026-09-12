@@ -31,6 +31,24 @@ use crate::ui_settings::{self, LineNumbers};
 
 const DEFAULT_PAGE_SIZE: usize = 12;
 
+#[derive(Default)]
+pub(crate) struct MenuSearch {
+    query: String,
+    view: Viewport,
+    identity: Option<String>,
+}
+
+impl MenuSearch {
+    fn matches(&self, text: &[String], fixed_start: usize) -> Vec<usize> {
+        let query = self.query.to_lowercase();
+        text.iter()
+            .enumerate()
+            .filter(|(index, text)| *index >= fixed_start || text.to_lowercase().contains(&query))
+            .map(|(index, _)| index)
+            .collect()
+    }
+}
+
 pub(crate) struct DiscoverySetup {
     pub(crate) id: String,
     pub(crate) username: String,
@@ -837,6 +855,150 @@ impl Panel {
                     self.0.invalidate()?;
                 }
                 Event::Paste(_) => nav.reset(),
+                _ => {}
+            }
+        }
+    }
+
+    /// Search only data rows; fixed action rows remain reachable even with no matches.
+    pub(crate) fn searchable_menu(
+        &mut self,
+        title: &str,
+        choices: &[String],
+        details: &[String],
+        identities: &[String],
+        fixed_start: usize,
+        state: &mut MenuSearch,
+    ) -> Result<Option<usize>, AppError> {
+        let mut editing = false;
+        let mut nav = Navigation::default();
+        let mut restore = true;
+        loop {
+            let filtered = state.matches(details, fixed_start);
+            if restore {
+                if let Some(index) = state
+                    .identity
+                    .as_ref()
+                    .and_then(|id| filtered.iter().position(|i| identities.get(*i) == Some(id)))
+                {
+                    state.view.selected = index;
+                }
+                restore = false;
+            }
+            let (_, height) = terminal::size().map_err(terminal_error)?;
+            let rows = panel_body_rows(height);
+            state.view.clamp(filtered.len(), rows);
+            state.identity = filtered
+                .get(state.view.selected)
+                .and_then(|i| identities.get(*i))
+                .cloned();
+            let labels = filtered
+                .iter()
+                .map(|i| choices[*i].clone())
+                .collect::<Vec<_>>();
+            let (width, height) = terminal::size().map_err(terminal_error)?;
+            let title = format!(
+                "{title} | Search: {} | {} matches",
+                if state.query.is_empty() {
+                    "(none)"
+                } else {
+                    &state.query
+                },
+                filtered.iter().filter(|i| **i < fixed_start).count()
+            );
+            let mut frame = menu_frame(
+                &title,
+                &labels,
+                state.view,
+                &nav,
+                width,
+                height,
+                ui_settings::current()?,
+            );
+            if height >= 3 {
+                let help = if editing {
+                    "Type search | Enter/Esc finish | Ctrl-U clear | Ctrl-C back"
+                } else {
+                    "/ search | c clear | j/k gg/G ^D/^U | Enter select | i info | ? settings | q back"
+                };
+                let index = frame.len().saturating_sub(2);
+                frame[index] = truncate_to_width(help, width.saturating_sub(1) as usize);
+                if editing {
+                    let index = frame.len().saturating_sub(1);
+                    frame[index] = truncate_to_width(
+                        "SEARCH | literal text",
+                        width.saturating_sub(1) as usize,
+                    );
+                }
+            }
+            draw_changed_lines(&mut self.0, frame)?;
+            match event::read().map_err(terminal_error)? {
+                Event::Key(key) if key.kind != KeyEventKind::Release => {
+                    if key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(KeyModifiers::CONTROL)
+                    {
+                        return Ok(None);
+                    }
+                    if editing {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Enter => editing = false,
+                            KeyCode::Backspace => {
+                                state.query.pop();
+                                state.view = Viewport::default();
+                            }
+                            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                state.query.clear();
+                                state.view = Viewport::default();
+                            }
+                            KeyCode::Char(c)
+                                if key.modifiers.is_empty()
+                                    || key.modifiers == KeyModifiers::SHIFT =>
+                            {
+                                state.query.push(c);
+                                state.view = Viewport::default();
+                            }
+                            _ => {}
+                        }
+                        continue;
+                    }
+                    match navigation_key(&mut nav, key, false) {
+                        Outcome::Action(motion) => state.view.apply(motion, filtered.len(), rows),
+                        Outcome::Unhandled => match key.code {
+                            KeyCode::Char('/') => {
+                                editing = true;
+                                nav.reset();
+                            }
+                            KeyCode::Char('c') => {
+                                state.query.clear();
+                                state.view = Viewport::default();
+                            }
+                            KeyCode::Esc | KeyCode::Char('q') => return Ok(None),
+                            KeyCode::Enter => {
+                                return Ok(filtered.get(state.view.selected).copied());
+                            }
+                            KeyCode::Char('?') => number_settings(&mut self.0)?,
+                            KeyCode::Char('i') => {
+                                if let Some(index) = filtered.get(state.view.selected) {
+                                    self.show("Saved camera details", &details[*index])?;
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+                Event::Paste(mut text) => {
+                    nav.reset();
+                    if editing {
+                        state.query.push_str(&text);
+                        state.view = Viewport::default();
+                    }
+                    text.zeroize();
+                }
+                Event::Resize(_, _) => {
+                    nav.reset();
+                    self.0.invalidate()?;
+                }
                 _ => {}
             }
         }
@@ -1960,6 +2122,27 @@ fn terminal_error(error: io::Error) -> AppError {
 mod tests {
     use super::*;
     use crate::navigation::Motion;
+
+    #[test]
+    fn saved_search_keeps_fixed_actions_and_maps_original_indices() {
+        let mut state = MenuSearch::default();
+        let mut text = (0..256)
+            .map(|n| format!("攝影機-{n} Entrance"))
+            .collect::<Vec<_>>();
+        text.extend(["search network".into(), "enter address".into()]);
+        state.query = "攝影機-255".into();
+        assert_eq!(state.matches(&text, 256), [255, 256, 257]);
+        state.query = "ENTRANCE".into();
+        assert_eq!(state.matches(&text, 256).len(), 258);
+        state.query = "7jgg/.*".into();
+        assert_eq!(
+            state.matches(&text, 256),
+            [256, 257],
+            "query is literal, not regex or navigation"
+        );
+        state.query.clear();
+        assert_eq!(state.matches(&text, 256), (0..258).collect::<Vec<_>>());
+    }
 
     #[test]
     fn manage_discovery_resume_preserves_filter_identity_and_viewport() {

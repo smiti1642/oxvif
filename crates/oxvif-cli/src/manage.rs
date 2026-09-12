@@ -1,5 +1,5 @@
 //! Human workflow adapter. All device work stays in the shared application layer.
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use oxvif_cli::{
     AppError, Application, CommandData, CommandRequest, CommandSuccess, DiscoverScanRequest,
@@ -7,7 +7,7 @@ use oxvif_cli::{
     SecretString, TargetSelector, profile_label, render_success_with_details,
 };
 
-use crate::interactive::{DiscoverySelection, DiscoverySelectionView, Panel};
+use crate::interactive::{DiscoverySelection, DiscoverySelectionView, MenuSearch, Panel};
 use crate::navigation::Viewport;
 
 enum WorkflowOutcome {
@@ -18,9 +18,91 @@ enum WorkflowOutcome {
 
 #[derive(Default)]
 struct DeviceChooser {
-    menu: Viewport,
+    menu: MenuSearch,
     search: Option<SearchResults>,
     browsing_search: bool,
+}
+
+const MAX_WORKSPACES: usize = 256;
+
+struct DeviceWorkspace {
+    context: ManagedDevice,
+    saved: Option<oxvif_cli::DeviceView>,
+    profile: Option<String>,
+    last: Option<CommandSuccess>,
+    action_view: Viewport,
+    profile_view: Viewport,
+}
+
+#[derive(Default)]
+struct Workspaces(BTreeMap<String, DeviceWorkspace>);
+
+impl Workspaces {
+    fn select(
+        &mut self,
+        app: &Application,
+        selector: TargetSelector,
+        options: &ExecutionOptions,
+    ) -> Result<&mut DeviceWorkspace, AppError> {
+        let saved = selector
+            .device
+            .as_ref()
+            .map(|id| app.registry().get(id))
+            .transpose()?;
+        let key = if let Some(device) = &saved {
+            format!("saved:{}", device.id)
+        } else {
+            format!(
+                "direct:{}",
+                oxvif_cli::normalize_target(
+                    selector
+                        .target
+                        .as_deref()
+                        .ok_or_else(AppError::missing_target)?
+                )?
+            )
+        };
+        let changed = self.0.get(&key).is_some_and(|state| state.saved != saved);
+        if changed {
+            self.0.remove(&key);
+        }
+        if !self.0.contains_key(&key) {
+            if self.0.len() >= MAX_WORKSPACES {
+                return Err(AppError::invalid_argument(
+                    "This workspace retains 256 cameras. Restart manage to select another camera; existing state has not been discarded.",
+                ));
+            }
+            self.0.insert(
+                key.clone(),
+                DeviceWorkspace {
+                    context: app.manage_device(selector, options)?,
+                    saved,
+                    profile: None,
+                    last: None,
+                    action_view: Viewport::default(),
+                    profile_view: Viewport::default(),
+                },
+            );
+        }
+        Ok(self.0.get_mut(&key).expect("inserted workspace"))
+    }
+}
+
+fn restore_profile(
+    profile: &mut Option<String>,
+    view: &mut Viewport,
+    profiles: &[serde_json::Value],
+) {
+    if let Some(index) = profile.as_ref().and_then(|token| {
+        profiles
+            .iter()
+            .position(|p| p["token"].as_str() == Some(token))
+    }) {
+        view.selected = index;
+    } else {
+        *profile = None;
+        *view = Viewport::default();
+    }
 }
 
 struct SearchResults {
@@ -52,6 +134,7 @@ pub(crate) async fn run(
 ) -> Result<(), AppError> {
     let mut panel = Panel::enter()?;
     let mut chooser = DeviceChooser::default();
+    let mut workspaces = Workspaces::default();
     let mut next = if initial.device.is_some() || initial.target.is_some() {
         Some(initial)
     } else {
@@ -70,16 +153,21 @@ pub(crate) async fn run(
             .clone()
             .or(selector.target.clone())
             .unwrap_or_default();
-        let mut context = match app.manage_device(selector, options) {
-            Ok(context) => context,
+        let state = match workspaces.select(app, selector, options) {
+            Ok(state) => state,
             Err(error) => {
                 panel.show("Cannot select device", &error.message)?;
                 continue;
             }
         };
-        let mut profile: Option<String> = None;
-        let mut last: Option<CommandSuccess> = None;
-        let mut action_view = Viewport::default();
+        let DeviceWorkspace {
+            context,
+            profile,
+            last,
+            action_view,
+            profile_view,
+            ..
+        } = state;
         loop {
             let title = format!(
                 "{label} | Profile: {} | {}",
@@ -103,8 +191,7 @@ pub(crate) async fn run(
                 "Change device",
             ]
             .map(str::to_owned);
-            let Some(choice) = panel.menu_with_view(&title, &choices, &[], &mut action_view)?
-            else {
+            let Some(choice) = panel.menu_with_view(&title, &choices, &[], action_view)? else {
                 break;
             };
             if choice == 9 {
@@ -113,7 +200,7 @@ pub(crate) async fn run(
             if choice == 5 {
                 panel.show(
                     "Last completed result",
-                    &match &last {
+                    &match last.as_ref() {
                         Some(result) => {
                             render_success_with_details(OutputFormat::Table, result, true)?
                         }
@@ -140,7 +227,7 @@ pub(crate) async fn run(
                 continue;
             }
             if choice == 1 || ((choice == 0 || choice == 2) && profile.is_none()) {
-                let outcome = execute(&mut panel, &mut context, ManagedAction::Profiles).await?;
+                let outcome = execute(&mut panel, context, ManagedAction::Profiles).await?;
                 // A failed optional lookup may still yield useful diagnosis, but a
                 // user's cancellation must never fall through into another request.
                 if !proceed_after_profiles(choice, &outcome) {
@@ -153,6 +240,7 @@ pub(crate) async fn run(
                     let profiles = data
                         .as_array()
                         .ok_or_else(|| AppError::internal("Invalid profile result."))?;
+                    restore_profile(profile, profile_view, profiles);
                     if profiles.is_empty() {
                         panel.show("No media profiles", "The camera returned no profiles. Diagnosis remains available to inspect other stages.")?;
                     } else {
@@ -164,20 +252,21 @@ pub(crate) async fn run(
                         let selected = if profiles.len() == 1 {
                             Some(0)
                         } else {
-                            panel.menu(
+                            panel.menu_with_view(
                                 "Select profile (camera configuration, not measured FPS)",
                                 &labels,
                                 &details,
+                                profile_view,
                             )?
                         };
                         if let Some(index) = selected {
-                            profile = profiles[index]["token"].as_str().map(str::to_owned);
+                            *profile = profiles[index]["token"].as_str().map(str::to_owned);
                         } else {
                             continue;
                         }
                     }
                     if choice == 1 {
-                        last = Some(*result);
+                        *last = Some(*result);
                     }
                 }
                 if choice == 1 {
@@ -189,7 +278,7 @@ pub(crate) async fn run(
                     profile: profile.clone(),
                 },
                 2 => {
-                    let Some(token) = &profile else {
+                    let Some(token) = profile.as_ref() else {
                         panel.show(
                             "Snapshot unavailable",
                             "Select an available media profile first.",
@@ -229,8 +318,7 @@ pub(crate) async fn run(
                 6 => ManagedAction::Info,
                 _ => continue,
             };
-            if let WorkflowOutcome::Completed(result) =
-                execute(&mut panel, &mut context, action).await?
+            if let WorkflowOutcome::Completed(result) = execute(&mut panel, context, action).await?
             {
                 let title = format!(
                     "Operation finished | exit {} | Enter: continue",
@@ -243,7 +331,7 @@ pub(crate) async fn run(
                         "Open Last result details for stage details and timings.",
                     ),
                 )?;
-                last = Some(*result);
+                *last = Some(*result);
             }
         }
     }
@@ -404,14 +492,25 @@ async fn choose_device(
             },
             "Enter device address (session only)".into(),
         ]);
-        let details = devices
+        let mut details = devices
             .iter()
             .map(|d| serde_json::to_string_pretty(d).unwrap_or_default())
             .collect::<Vec<_>>();
-        let Some(index) = panel.menu_with_view(
+        details.extend([
+            "Search network or return to cached results".into(),
+            "Connect by address without saving".into(),
+        ]);
+        let mut identities = devices
+            .iter()
+            .map(|device| format!("device:{}", device.id))
+            .collect::<Vec<_>>();
+        identities.extend(["action:search".into(), "action:address".into()]);
+        let Some(index) = panel.searchable_menu(
             "Choose camera | Esc/q: exit manage",
             &choices,
             &details,
+            &identities,
+            devices.len(),
             &mut chooser.menu,
         )?
         else {
@@ -447,6 +546,114 @@ async fn choose_device(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workspaces_retain_device_state_without_cross_identity_reuse_and_are_bounded() {
+        let directory = tempfile::tempdir().unwrap();
+        let registry = oxvif_cli::RegistryStore::at(directory.path());
+        let app = Application::with_stores(
+            registry.clone(),
+            std::sync::Arc::new(oxvif_cli::MemoryCredentialStore::default()),
+        );
+        let options = ExecutionOptions::default();
+        for id in ["a", "b"] {
+            registry
+                .add(oxvif_cli::NewDevice {
+                    id: id.into(),
+                    name: None,
+                    target: "192.0.2.1".into(),
+                    tags: Vec::new(),
+                })
+                .unwrap();
+        }
+        let selector = |id: &str| TargetSelector {
+            device: Some(id.into()),
+            ..Default::default()
+        };
+        let mut workspaces = Workspaces::default();
+        {
+            let a = workspaces.select(&app, selector("a"), &options).unwrap();
+            a.profile = Some("token-a".into());
+            a.action_view = Viewport {
+                selected: 7,
+                top: 3,
+            };
+            a.context
+                .set_credentials("account-a".into(), SecretString::new("fake-a").unwrap());
+        }
+        assert!(
+            workspaces
+                .select(&app, selector("b"), &options)
+                .unwrap()
+                .profile
+                .is_none()
+        );
+        let a = workspaces.select(&app, selector("a"), &options).unwrap();
+        assert_eq!(a.profile.as_deref(), Some("token-a"));
+        assert_eq!(
+            a.action_view,
+            Viewport {
+                selected: 7,
+                top: 3
+            }
+        );
+        let direct = |n| TargetSelector {
+            target: Some(format!("http://192.0.2.1:{n}/onvif/device_service")),
+            ..Default::default()
+        };
+        assert!(
+            workspaces
+                .select(&app, direct(80), &options)
+                .unwrap()
+                .profile
+                .is_none()
+        );
+        registry
+            .update(
+                "a",
+                oxvif_cli::DeviceUpdate {
+                    target: Some("192.0.2.2".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(
+            workspaces
+                .select(&app, selector("a"), &options)
+                .unwrap()
+                .profile
+                .is_none()
+        );
+        for port in 10000..10253 {
+            workspaces.select(&app, direct(port), &options).unwrap();
+        }
+        assert_eq!(workspaces.0.len(), MAX_WORKSPACES);
+        assert!(workspaces.select(&app, direct(11000), &options).is_err());
+        assert!(workspaces.select(&app, selector("b"), &options).is_ok());
+        assert_eq!(workspaces.0.len(), MAX_WORKSPACES);
+    }
+
+    #[test]
+    fn profile_restore_tracks_tokens_not_indices_and_clears_removed_tokens() {
+        let mut token = Some("chosen".into());
+        let mut view = Viewport {
+            selected: 0,
+            top: 0,
+        };
+        restore_profile(
+            &mut token,
+            &mut view,
+            &[
+                serde_json::json!({"token":"other"}),
+                serde_json::json!({"token":"chosen"}),
+            ],
+        );
+        assert_eq!(view.selected, 1);
+        assert_eq!(token.as_deref(), Some("chosen"));
+        restore_profile(&mut token, &mut view, &[]);
+        assert!(token.is_none());
+        assert_eq!(view, Viewport::default());
+    }
 
     #[test]
     fn cancelled_profile_preflight_never_starts_diagnosis_or_snapshot() {

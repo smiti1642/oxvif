@@ -145,3 +145,7 @@
 - B1 實作完成：共用 Panel 新增、manage a/add、獨立探索連續操作與本機登錄投影。
   Binary 測試 54 通過、既有 setup application 情境 5 通過、新增本機投影測試
   1 通過。尚不宣稱終端／原生密碼庫驗收完成，保留於 B4。
+- B2 實作完成：有界工作區、已存選單搜尋與按 token 還原 Profile。已存 ID 的
+  slot 在重用前比較完整 DeviceView（包含 target／憑證設定），任何變更均保守
+  地使該 slot 失效。Binary 測試 57 通過，涵蓋 A/B/A、同位址不同身分、
+  registry target 變更、256-slot 上限與一般文字搜尋映射。
