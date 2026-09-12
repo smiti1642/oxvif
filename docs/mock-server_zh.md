@@ -7,7 +7,8 @@
 本文件所述行為均可對照具名的原始碼 symbol 驗證。若某項行為是刻意簡化，而非真實度聲明，文件會明確指出。未記錄的遺漏視為錯誤；已記錄的限制則屬設計決策。
 
 - **適用對象**：oxvif 測試、下游 Rust crate，或連線至實體連接埠的非 Rust ONVIF client，例如 Frigate、ODM、gSOAP 或 C++ conformance suite。
-- **版本**：0.16.0。
+- **版本**：0.17.0 開發預覽；0.16.0 之後新增的行為不包含於已發布的 0.16.0 套件。
+  詳見[版本變更](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0-changelog_zh.md)。
 - **Feature flag**：程序內 transport 使用 `mock`，HTTP server 使用 `mock-server`。本 crate 不啟用任何 default feature；若未選用其中一項，以下 API 不會編譯。
 
 ## 快速導覽
@@ -15,6 +16,7 @@
 | 章節 | 說明 |
 | --- | --- |
 | [1. 快速開始](#1-快速開始) | 啟動程序內或 HTTP mock |
+| [1.4. 網路限制](#14-本機端點與探索限制) | 本機 HTTP 端點與 WS-Discovery 的差異 |
 | [2. 請求路由](#2-請求路由) | path、service URL 與 namespace 的分派方式 |
 | [3. Envelope 與 namespace 契約](#3-envelope-與-namespace-契約) | mock 保證的 SOAP/XML 結構 |
 | [4. 驗證](#4-驗證) | 已建模的驗證行為 |
@@ -76,7 +78,28 @@ Server 在背景 task 中執行，並於 `MockServer` 被 drop 時關閉，因�
 | `.discoverable(Vec<String>)` | 關閉 | 使用指定 scope，於 UDP `3702` 回應 WS-Discovery `Probe` |
 | `.replay(FixtureStore)` | 無 | 提供錄製的攝影機 clone；需要 `metamorph` feature |
 
-`.discoverable()` 採 best-effort：若 `:3702` 因連接埠占用或 CI sandbox 而無法繫結，HTTP server 仍會啟動，但不可被探索。每台 host 最多只能有一個 discoverable server。
+`.discoverable()` 採 best-effort：若 `:3702` 因連接埠占用或 CI sandbox 而無法繫結，
+HTTP server 仍會啟動，但不可被探索。目前未實作多個 discoverable server 共用
+listener；這是實作限制，不是 ONVIF 對每台 host 裝置數量的限制。
+
+### 1.4 本機端點與探索限制
+
+`MockServer` 的 HTTP 僅繫結 `127.0.0.1`，設定 `.port(...)` 或 `.discoverable(...)`
+也不會改變此行為。Discovery 公告的仍是 loopback HTTP URL；其他電腦即使收到
+ProbeMatch，也不能因此存取該端點。Builder 尚無 HTTP 繫結位址或公告位址覆寫選項。
+
+- `mock_server` 範例**未啟用 WS-Discovery**。請在同一台電腦，使用輸出的裝置 URL
+  直接連線。執行多個 instance 時，須使用不同連接埠及**不同的 `--config` 狀態檔**。
+- `Fleet` 建立獨立 HTTP server 與裝置狀態，但不會向 WS-Discovery 註冊成員。
+  請直接使用 `Fleet::device_urls()`。`mock_fleet` 範例查詢五台裝置後即結束，
+  不是持續運行的探索服務。
+- `DiscoveryResponder::spawn` 僅公告呼叫者提供的裝置，不會建立或對外開放 HTTP
+  服務；呼叫者須確保 XAddr 可由預期的 client 存取。
+- Probe filter 僅比對 type 的 local name，忽略 Scopes。Responder 自動測試涵蓋
+  loopback unicast，不代表已驗證多裝置 multicast 互通性。
+
+多裝置探索及明確的 LAN 繫結／公告位址設定屬後續工作；上述限制不妨礙同時執行
+多個本機 HTTP Mock。
 
 ---
 

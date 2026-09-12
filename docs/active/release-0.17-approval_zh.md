@@ -22,7 +22,7 @@
 | 工作 | 狀態 | 剩餘項目 |
 | --- | --- | --- |
 | 1. 完整候選／安全審查 | LOCAL-PASS | 208 個固定路徑及後續差異均核對受影響消費端／斷言／宣稱；A01–A05 已修復，T01／T02 已加強，詳見下方結案紀錄 |
-| 2. 套件安裝與人類／實機驗收 | PARTIAL | 3eccfd1 原生 CI 通過；之後修正須重跑。實機 export／diff 與修復後快照驗收通過，限制如下；Hanwha 非影像回應仍為限制。有界 Windows ConPTY 通過；其餘人工／平台驗收與散布 staging 待驗 |
+| 2. 套件安裝與人類／實機驗收 | PARTIAL | fed6777 原生 CI（run 34672460802）通過，包含後續修正。實機 export／diff 與修復後快照驗收通過，限制如下；Hanwha 非影像回應仍為限制。有界 Windows ConPTY 通過；其餘人工／平台驗收與散布 staging 待驗 |
 | 3. 版號、連結與文件 | 已準備，尚未升版 | 雙語發布紀錄及本清單已更新；實際版號仍為 0.16.0，核准後才套用版號修改清單 |
 | 4. 使用者確認 | 尚未請求正式提交核准 | 正式版號 commit 前呈現最終證據及風險；發布須另行授權 |
 
@@ -35,7 +35,7 @@
 | A03 | 已儲存攝影機的兩個 profile 在 A02 修正前後皆回 HTTP 401；擴大測試另發現 18 台類似失敗 | 已本機修復：HTTP/1.1 欄位名稱採 Title-Case，處理韌體錯誤區分大小寫；CLI／health 共用 Digest 核心並保留認證與目的地安全限制。原始攝影機兩個 profile 已保存及解碼成功。見[修復證據](snapshot-auth-repair_zh.md)；託管發布閘門仍未完成 |
 | A04 | 人類輸出會原樣送出攝影機／profile 文字、詳細報告與錯誤提示中的終端控制序列 | 已本機修復：在人類報告邊界及單行選單／上下文欄位轉義 C0／C1 與雙向文字格式控制字元；JSON／JSONL 資料值不變。報告仍允許 LF／TAB 排版，不代表消除所有多行顯示歧義 |
 | A05 | 全螢幕繪製仍輸出方向格式控制字元 | 214d989 已修復：寬度／截斷／換行／cell 排版前轉義，選取資料保留原值；修正前斷言失敗 |
-| C01 | Windows native 失敗可能被後續成功命令掩蓋 | 210bfc3 已修復：四個 CI、十四個 release exit guard；本機正負控制通過，仍須最終託管執行 |
+| C01 | Windows native 失敗可能被後續成功命令掩蓋 | 210bfc3 已修復：四個 CI、十四個 release exit guard；本機正負控制通過，fed6777 託管 CI 已通過，release workflow staging 仍待執行 |
 
 A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02 並未解決 A03。
 下列 A03 結果僅涵蓋受測設備與 profile，不代表普遍相容性；剩餘項目仍須明列於
@@ -93,8 +93,9 @@ guard 控制及雙語宣稱校正已完成本機可處理的發現；本次審�
 這是有界工程審查，不是獨立全程式或 ONVIF 認證。完整 HTTP／field／Fault 語意、
 沿用 listener 安全、raw recording 隱私限制、併發 replay 可見性及 snapshot 格式
 相容性，仍於[後續清單](post-0.17-backlog_zh.md) 明列範圍。
-歷史外部 corpus／實機證據只適用於相符輸入。G05／G06 須以精確新候選執行原生 CI
-及不發布 staging；G07 仍部分完成，G08／G09 保留核准邊界。
+歷史外部 corpus／實機證據只適用於相符輸入。G05 已於 `fed6777` 的
+[run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) 通過；該執行不涵蓋其後文件修改。
+G06 仍須不發布 staging 及最終版號套件驗收；G07 仍部分完成，G08／G09 保留核准邊界。
 
 ## 維護者操作
 

@@ -46,11 +46,11 @@ A01／A02 修正及[共用快照修復](snapshot-auth-repair_zh.md)、維護者 
 | Gate | 目前狀態 | 結案條件 |
 | --- | --- | --- |
 | G01 完整候選審查 | LOCAL-PASS | 全部 208 個固定路徑及後續差異均核對 source、受影響消費端、斷言與公開宣稱；六組結案及輸入 hash 見[審查紀錄](release-0.17-review_zh.md) |
-| G02 資料完整性 K27 | LOCAL-PASS | 碰撞群組在 record／load／save 及完整請求 replay 中保留不同請求；key-only 歧義回傳 None；等價請求仍替換，去憑證維持指定格式。報告群組保留各列。見下方 K27 證據；G05 仍獨立待驗 |
+| G02 資料完整性 K27 | LOCAL-PASS | 碰撞群組在 record／load／save 及完整請求 replay 中保留不同請求；key-only 歧義回傳 None；等價請求仍替換，去憑證維持指定格式。報告群組保留各列。見下方 K27 證據；G05 以獨立 CI 證據判定 |
 | G03 安全及回應完整性 | LOCAL-PASS | A01–A05 已本機修復；憑證、state／write、URL、receipt 及 shared-boundary 斷言已核對。收錄切點未留下已知重大 blocker；記錄的模型／HTTP／replay 限制不代表完整 hardening |
 | G04 本機程式及文件 | LOCAL-PASS | 最終 all-feature 1,310／default 1,198 通過，各五項 ignored；兩組 Clippy／strict rustdoc、fmt、Rust 1.88 及文件／清冊檢查通過。改版號或合併後重驗受影響關卡 |
-| G05 原生 CI | 3eccfd1 通過；後續修正須新 run | 維護者的 run 34597167495 全部 27 個 job 通過，包含五種原生目標。本機仍無 workflow dispatch 權限 |
-| G06 套件及散布 | PARTIAL | 3eccfd1 的 Package/docs 通過：library package 驗證、CLI package 檔案清單、archive 控制及文件。清單不等於 CLI package／安裝驗證；仍須最終版號套件、portable install、SBOM／checksum 及不發布的 staging |
+| G05 原生 CI | fed6777 通過 | [Run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) 全部 27 個 job、五種原生目標通過；此結果不涵蓋其後純文件修改 |
+| G06 套件及散布 | PARTIAL | fed6777 的 Package/docs 通過：library package 驗證、CLI package 檔案清單、archive 控制及文件。清單不等於 CLI package／安裝驗證；仍須最終版號套件、portable install、SBOM／checksum 及不發布的 staging |
 | G07 人類及 Agent 驗收 | PARTIAL | 本次 Windows debug ConPTY 通過有界 manage／profile／input／resize、開始後 snapshot 取消與 console 恢復；保留歷史實機 snapshot／diagnose／export／diff 證據。其餘 discover／diagnose 導航矩陣及其他平台人工驗收明列於核准資料 |
 | G08 版號及發布連結 | OPEN | 候選驗收後同步 library／CLI 版號；schema v3 宣稱須符合測試；草稿連結固定至最終 tag，遷移警告不可隱藏 |
 | G09 RC 及授權 | NOT-RUN | RC 也須明確發布授權；建議觀察 3–7 天，不因日期到期自動通過；取得正式發布同意 |

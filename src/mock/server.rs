@@ -106,14 +106,15 @@ impl MockServerBuilder {
         self
     }
 
-    /// Make the server answer WS-Discovery `Probe`s so a client (oxdm, ODM,
-    /// Frigate) finds it on the LAN, advertising the given ONVIF `scopes`
+    /// Answer WS-Discovery `Probe`s with the given ONVIF `scopes`
     /// (e.g. `onvif://www.onvif.org/name/MockCam`). Off by default.
+    /// HTTP still binds to loopback and the advertised XAddr is loopback-only;
+    /// this option does not make the HTTP service accessible from another host.
     ///
     /// Best-effort: this binds the shared UDP port `3702` and joins the ONVIF
     /// multicast group — if the bind fails (port already in use, sandboxed CI)
-    /// the HTTP server still starts, just undiscoverable. At most one
-    /// discoverable server can run per host.
+    /// the HTTP server still starts, just undiscoverable. This implementation
+    /// does not share its listener across multiple discoverable mock servers.
     pub fn discoverable(mut self, scopes: Vec<String>) -> Self {
         self.discoverable = Some(scopes);
         self

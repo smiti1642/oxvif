@@ -8,15 +8,15 @@
 //! receives — so what a device announces and what a client discovers are one
 //! type.
 //!
-//! UDP multicast is flaky in CI / containers (and port 3702 is a shared,
-//! single-listener resource), so the reusable core here is split into pure
+//! UDP multicast is unreliable in some CI / containers, and this implementation
+//! does not share its port 3702 listener across devices. The core is split into pure
 //! functions ([`build_probe_match`], [`probe_response`]) plus a spawnable
 //! listener; tests drive the pure path and a loopback **unicast** round-trip,
 //! never multicast.
 //!
 //! Simplification: only the `Probe`'s `<Types>` filter is honoured (an AND
-//! match by local name, empty = match all) — the rarely-used `<Scopes>` filter
-//! is ignored, matching how ONVIF discovery clients actually probe.
+//! match by local name, empty = match all). The `<Scopes>` filter is ignored;
+//! this is not complete WS-Discovery matching conformance.
 
 use std::net::Ipv4Addr;
 
@@ -140,8 +140,9 @@ impl DiscoveryResponder {
     /// group, and answer probes advertising `dev` on a background task.
     ///
     /// Pass `join_multicast = true` with `bind_addr = "0.0.0.0:3702"` for real
-    /// LAN discoverability; `false` with an ephemeral port (`"127.0.0.1:0"`) for
-    /// a unicast round-trip in tests.
+    /// multicast listening; `false` with an ephemeral port (`"127.0.0.1:0"`) for
+    /// a unicast round-trip in tests. The caller must supply reachable XAddrs;
+    /// this responder does not create or expose the advertised HTTP service.
     pub async fn spawn(
         bind_addr: &str,
         join_multicast: bool,

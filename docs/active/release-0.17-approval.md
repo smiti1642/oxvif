@@ -24,7 +24,7 @@ are not performed by this acceptance work.
 | Step | Status | Remaining work |
 | --- | --- | --- |
 | 1. Complete candidate/security review | LOCAL-PASS | All 208 frozen paths and later deltas reconciled with affected consumers/assertions/claims; A01–A05 repaired, T01/T02 strengthened. See the completed review below |
-| 2. Package/install and human/real-camera acceptance | PARTIAL | Native CI passed at 3eccfd1; later repairs need CI. Real export/diff and repaired snapshot acceptance passed with the boundaries below; Hanwha non-image responses remain a limitation. Bounded Windows ConPTY passed; remaining human/platform acceptance and distribution staging remain open |
+| 2. Package/install and human/real-camera acceptance | PARTIAL | Native CI passed at fed6777 (run 34672460802), including later repairs. Real export/diff and repaired snapshot acceptance passed with the boundaries below; Hanwha non-image responses remain a limitation. Bounded Windows ConPTY passed; remaining human/platform acceptance and distribution staging remain open |
 | 3. Versions, links and documents | PREPARED, not promoted | Bilingual release records and this checklist updated. Actual versions remain 0.16.0; apply the version-edit checklist only after approval |
 | 4. User confirmation | NOT REQUESTED for promotion | Present the final evidence and unresolved risks before the formal version commit; publication requires separate authorization |
 
@@ -37,7 +37,7 @@ are not performed by this acceptance work.
 | A03 | Both saved-camera profiles returned HTTP 401 before and after A02; wider testing found 18 similar failures | REPAIRED locally: title-case HTTP/1.1 field names resolve case-sensitive firmware handling; shared CLI/health Digest core retains authentication and destination safeguards. Saved-camera profiles now save and decode successfully. See [repair evidence](snapshot-auth-repair.md); hosted release gates remain open |
 | A04 | Human output emitted terminal commands embedded in camera/profile text, verbose details and error hints | REPAIRED locally: escape C0/C1 and bidirectional formatting controls at human report boundaries and single-line menu/context fields; JSON/JSONL values remain unchanged. Report LF/TAB layout remains allowed; this is not a guarantee against every multiline presentation ambiguity |
 | A05 | Full-screen rendering still emitted directional formatting controls | REPAIRED in 214d989: escape before width, truncation, wrapping and cell layout; original selection data is preserved; a pre-repair assertion failed |
-| C01 | Windows native failures could be hidden by later successful commands | REPAIRED in 210bfc3: four CI and fourteen release exit guards; local success/failure controls pass. Final hosted run remains required |
+| C01 | Windows native failures could be hidden by later successful commands | REPAIRED in 210bfc3: four CI and fourteen release exit guards; local success/failure controls pass. Hosted CI passed at fed6777; release-workflow staging remains required |
 
 A01 does not complete the general HTTP binding/charset/fault-status audit. A02
 alone did not resolve A03. The A03 result below is scoped to tested devices and
@@ -100,8 +100,10 @@ certification. Full HTTP/field/Fault semantics, inherited listener hardening,
 raw-recording privacy limits, concurrent replay visibility and snapshot-format
 compatibility remain explicitly scoped in the [backlog](post-0.17-backlog.md).
 Historical external-corpus and hardware evidence applies only to its matching
-inputs. G05/G06 need the exact new candidate in native CI and non-publishing
-staging; G07 remains partial, and G08/G09 retain their approval boundaries.
+inputs. G05 passed at `fed6777` in [run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802).
+Later documentation edits are not covered by that run. G06 still requires
+non-publishing staging and final-version package acceptance; G07 remains partial,
+and G08/G09 retain their approval boundaries.
 
 ## Maintainer actions
 

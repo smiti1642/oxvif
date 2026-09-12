@@ -26,9 +26,11 @@
 | F08 | RTSP decoder／playback、批次檔案匯出、CLI 攝影機寫入及獨立導覽 crate | 既有 CLI 維護／導覽計畫；寫入前先建立威脅模型與權限 UX |
 | F09 | 官方 Homebrew Core、Debian／Ubuntu 與 Windows 社群套件渠道申請 | 散布計畫；目前原生包裝驗證仍是發布關卡，產出 artifact 不代表已提交申請 |
 | F10 | 有界 snapshot 圖片相容性調查 | 保留 A03 的目的地／認證／大小／不覆寫政策；取得去敏、可重現回應後才修改圖片接受條件 |
+| F11 | Mock Fleet 多裝置 WS-Discovery 及明確 LAN 設定 | 共用 responder、獨立 UUID／狀態、可達的 HTTP 繫結及 XAddr、明確網路暴露選項、可觀察的啟動失敗，以及多裝置探索整合驗收 |
+| F12 | CLI 獨立固定底部狀態列 | 將模式／上下文／進度／位置與操作提示分離；pending 輸入僅在有效時顯示；驗證窄視窗、resize、輸入法及一般文字輸入，保留 Agent 輸出契約 |
 
 F10 調查處置，2026-09-12：使用者提供的 ONVIF Device Manager 原始碼走
-GetSnapshotUri → HTTP stream download → WPF image decode，此路徑没有 RTSP
+GetSnapshotUri → HTTP stream download → WPF image decode，此路徑沒有 RTSP
 fallback。合成 JPEG 尾端附 CR／LF 後，獨立 Windows decoder 可以解碼，oxvif 的
 末端 EOI signature 檢查則拒絕。這證明一種相容性差異，尚未證明是觀察到的 Hanwha
 非圖片回應原因。未移植 GPL 程式；後續須獨立實作，不採用寬鬆憑證驗證、redirect、

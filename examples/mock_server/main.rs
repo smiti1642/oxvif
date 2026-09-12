@@ -3,6 +3,9 @@
 //!
 //! The mock engine itself now lives in the library (`oxvif::mock`); this binary
 //! just wires it to a port and a state file. Requires the `mock-server` feature.
+//! HTTP is loopback-only and WS-Discovery is not enabled by this example. Connect
+//! directly to the printed device URL from the same computer. Multiple instances
+//! require distinct ports and distinct `--config` files.
 //!
 //! ```sh
 //! # Default: state saved to ~/.oxvif/mock_device.toml, port 18080
@@ -11,7 +14,7 @@
 //! # Custom port + config file
 //! cargo run --example mock_server --features mock-server -- 19090 --config /path/to/state.toml
 //!
-//! # Credentials: admin / admin
+//! # Authentication is not enforced; credentials are optional.
 //! ```
 
 use std::io::Write as _;

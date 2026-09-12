@@ -77,7 +77,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "c00b537fe320ab42a3ef0c5dd3745c24e60e3b19"
+          "blob": "e66d171d982fb6801c269400f775e6d3ea5dba8e"
         }
       ]
     },
@@ -207,7 +207,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "f99d296f81536c5b01968782a69dc076304fcd54"
+          "blob": "4d7381ceaca330cb57b0186f2ff0426b24e63bcd"
         }
       ]
     },
@@ -220,7 +220,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "5316fcf2d528257b73aa1dcabf35a72fa94eea14"
+          "blob": "5e558c11b061bdcfbb5ee82506e51be1767b3894"
         }
       ]
     },
@@ -246,7 +246,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "CLI",
-          "blob": "91cc567587d5d698a2167b2edc539a4520cb5e1c"
+          "blob": "10617f7f97a046d8b2fe16b15615649eb47edc1d"
         }
       ]
     },
@@ -1110,7 +1110,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "317b2e8c3f96160ec79447a06b89f139da63cfc5"
+          "blob": "041dba0cb7b986c4de02fa88626c1cc44a9439a6"
         }
       ]
     },
@@ -1123,7 +1123,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "1fe705fd1ae9b50846f8ee6293cf38104fec205d"
+          "blob": "2e8f5df0372f409cc9739f4813bdbd509663136c"
         }
       ]
     },
@@ -1136,7 +1136,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "9f198aafc2a51a5072a412be885c21eb56047ff4"
+          "blob": "3cd0bf8599bfb2543886ccd2af2c31cc21c91e9e"
         }
       ]
     },
@@ -1149,7 +1149,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "bb5e1938f215b6e6c170271526e031211c08fa2d"
+          "blob": "dcfdb7adf52202512c3786fe90665df0802b3e1f"
         }
       ]
     },
@@ -1162,7 +1162,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "7ad5c9b2e2f3ee2a4428a7637d9eff257dbd14f8"
+          "blob": "73364c73e0004ebf8e27bb86b1f3c4fff7a90864"
         }
       ]
     },
@@ -1175,7 +1175,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "89b53c438b533ba3ecdd2bf53d06c84567762702"
+          "blob": "3915523a276c3ce4405c51f9bbb646fcd74c2e1c"
         }
       ]
     },
@@ -1240,7 +1240,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "055ac69c16fb0598a36339075774fe74c1482fff"
+          "blob": "ef5cfd8fe5d499581052d688d0a54b074ed57ce2"
         }
       ]
     },
@@ -1253,7 +1253,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "04c2b94c532d3c3b90861802e56af38185892b06"
+          "blob": "cce5e5f0ffad0d68af36e19e9245a340f2b896bf"
         }
       ]
     },
@@ -1331,7 +1331,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "06c45b191738edde8f0a8a6bcda9dc6d24eeddd7"
+          "blob": "77fb6c2ea463c2a4f8ae283806ade78c44d7bae3"
         }
       ]
     },
@@ -1344,7 +1344,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "60d35c67d5cfa4c62b814ad94565629556a847ac"
+          "blob": "269a337a0f3840d0883ed9f5374a6f0b1503360b"
         }
       ]
     },
@@ -1409,7 +1409,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "37e195b75ceb6089f623c10d12ca74bd3a011fe2"
+          "blob": "de9dcb900ceabd00a66976e719408cc825d3da3b"
         }
       ]
     },
@@ -1422,7 +1422,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "b9b2b75a0f85b62386290ebf2f877d5fe829b2b2"
+          "blob": "f73357a89ada51bb6ff2a9d0e894bb923a293122"
         }
       ]
     },
@@ -1435,7 +1435,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "aef2d198be2389b08aae2132775c99ed7db4ee9e"
+          "blob": "48af40148c73b112ee9b2c6c1f36c823f76326a8"
         }
       ]
     },
@@ -1448,7 +1448,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "27caca3a60c06bd9965da00d0090eeebc47c419b"
+          "blob": "4935ff6dabe31fc134e984ebd441dbd0c5d44942"
         }
       ]
     },
@@ -1803,7 +1803,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "LIBRARY",
-          "blob": "1a7866cb9d7b5f7fc898015bf3eff8160cdedddf"
+          "blob": "12ab715ec7d9309cb72266295ff46fc690ee3a5b"
         }
       ]
     },
@@ -2110,7 +2110,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "MOCK",
-          "blob": "677145d80634eecef24273063b32d765377e6871"
+          "blob": "aab0bbc1310a07f5bf37a965c4785f3e9c5c5e5c"
         }
       ]
     },
@@ -3050,8 +3050,13 @@
     "docs/releases/0.17.0-changelog_zh.md",
     "docs/releases/0.17.0.md",
     "docs/releases/0.17.0_zh.md",
+    "examples/mock_fleet.rs",
+    "examples/mock_server/main.rs",
     "src/lib.rs",
+    "src/mock/discovery_responder.rs",
+    "src/mock/fleet.rs",
     "src/mock/mod.rs",
+    "src/mock/server.rs",
     "src/mock/state.rs",
     "src/tests/client/device_tests.rs",
     "src/tests/types_tests.rs",
@@ -3086,7 +3091,7 @@
     },
     "DOCS": {
       "date": "2026-09-12",
-      "scope": "Changed public guides, paired migrations, release summaries/full record, repository instructions and historical execution cards reconciled with their source/test consumers and dated evidence. Current claims distinguish 159 routes/161 Action declarations/191 reader sites from the 160-instance corpus; indexed readers are scanner observations. Old checkpoint defects/counts remain dated; current candidate status belongs to release-cut/approval/review. Draft links use the candidate branch, versions remain 0.16.0, and published CHANGELOG history is preserved. No new external-source, hardware, full-programme or hosted acceptance is inferred from prose review."
+      "scope": "Changed public guides, paired migrations, release summaries/full record, repository instructions and historical execution cards reconciled with their source/test consumers and dated evidence. Current claims distinguish 159 routes/161 Action declarations/191 reader sites from the 160-instance corpus; indexed readers are scanner observations. Old checkpoint defects/counts remain dated; current candidate status belongs to release-cut/approval/review. Preview links use immutable commits or repository-relative paths, versions remain 0.16.0, and published CHANGELOG history is preserved. No new external-source, hardware, full-programme or hosted acceptance is inferred from prose review."
     }
   },
   "delta_reviews": [
@@ -3118,11 +3123,46 @@
       "scope": "Final repair/evidence/backlog and bilingual release claims reconciled with the six closure batches and reserved acceptance gates."
     },
     {
+      "path": "examples/mock_fleet.rs",
+      "status": "reviewed",
+      "date": "2026-09-12",
+      "blob": "0220e1aa4e736573acb4700e1f12baeacdda0d0a",
+      "scope": "Documentation/comment-only follow-up; behavior checked against existing source. See documentation_cleanup for evidence and reserved release gates."
+    },
+    {
+      "path": "examples/mock_server/main.rs",
+      "status": "reviewed",
+      "date": "2026-09-12",
+      "blob": "891125e1ab3aaddc4e74651253ba6aa1d83f3683",
+      "scope": "Documentation/comment-only follow-up; behavior checked against existing source. See documentation_cleanup for evidence and reserved release gates."
+    },
+    {
+      "path": "src/mock/discovery_responder.rs",
+      "status": "reviewed",
+      "date": "2026-09-12",
+      "blob": "7b5f3b83793f23e1fc8e3f72dd04e1c5cb5426ae",
+      "scope": "Documentation/comment-only follow-up; behavior checked against existing source. See documentation_cleanup for evidence and reserved release gates."
+    },
+    {
+      "path": "src/mock/fleet.rs",
+      "status": "reviewed",
+      "date": "2026-09-12",
+      "blob": "e4725a63ce5f761d27611fbc25c285ae31567cca",
+      "scope": "Documentation/comment-only follow-up; behavior checked against existing source. See documentation_cleanup for evidence and reserved release gates."
+    },
+    {
       "path": "src/tests/client/device_tests.rs",
       "status": "reviewed",
       "date": "2026-09-12",
       "blob": "b5005885c6366c08a9df98d7b4cf1e27a23672f2",
       "scope": "Capability Fault parsing with and without xml:lang reviewed with exact reason/consumer assertions."
     }
-  ]
+  ],
+  "documentation_cleanup": {
+    "date": "2026-09-12",
+    "runtime_baseline": "fed6777fbc869a125082d9e2f43fb1a5e460f167",
+    "ci_run": "https://github.com/smiti1642/oxvif/actions/runs/34672460802",
+    "scope": "Public EN/ZH links, preview versus published versions, CI status and Mock loopback/discovery limitations reconciled with source. Added deferred F11/F12, not implementation. Rust deltas are comments only. Hosted CI covers fed6777, not this documentation revision; staging and final-version/human acceptance remain open. Published CHANGELOG history preserved.",
+    "verification": "Markdown file/anchor and immutable Git-object targets checked; fmt and strict workspace rustdoc all/default checked. Runtime code, tests, manifests, lockfile and workflows unchanged; reuse the exact-runtime CI evidence rather than repeat full suites for prose."
+  }
 }

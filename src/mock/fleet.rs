@@ -2,7 +2,7 @@
 //!
 //! A [`Fleet`] runs several independent [`MockServer`]s at once — each bound to
 //! its own ephemeral port with its own [`DeviceState`] — so a batch client (a
-//! fleet health-scan, a discovery UI, an NVR onboarding flow) can be exercised
+//! fleet health-scan or an NVR onboarding flow using known URLs) can be exercised
 //! against a handful of distinct virtual cameras without any hardware.
 //!
 //! ```no_run
@@ -18,9 +18,10 @@
 //!
 //! Each device is a plain `MockServer`, so per-device state, fault injection and
 //! auth all work exactly as they do standalone. Dropping the fleet shuts every
-//! device down. WS-Discovery is deliberately out of scope here: the ONVIF
-//! multicast port `3702` is shared per host, so at most one server can answer
-//! probes — address fleet members by their URLs instead.
+//! device down. HTTP endpoints are loopback-only. This fleet does not register
+//! its members with WS-Discovery; address them by their URLs instead. A shared
+//! multi-device discovery responder is not implemented, rather than forbidden
+//! by the ONVIF protocol.
 
 use std::io;
 

@@ -1,8 +1,9 @@
 //! Spin up a fleet of mock ONVIF cameras and batch-scan them.
 //!
 //! Each device binds its own ephemeral port with a distinct identity, so this
-//! mirrors what a fleet health-scan / discovery UI / NVR onboarding flow sees —
-//! no hardware required. Dropping the `Fleet` shuts every device down.
+//! exercises URL-based fleet queries without hardware. HTTP is loopback-only;
+//! fleet members are not advertised through WS-Discovery. This example queries
+//! five devices and exits, dropping the `Fleet` and shutting every device down.
 //!
 //! ```text
 //! cargo run --example mock_fleet --features mock-server

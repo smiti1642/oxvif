@@ -341,4 +341,4 @@ PTZ 與 health 執行行為不變。由於 `snapshot` 現在可以選擇保存�
 6. 發布前完成 Windows／macOS／Linux 原生 CI 與安裝檢查。
 
 本機 mock 測試不代表實機互通性或三平台驗收。現有證據與待驗項目請參閱
-[實作計畫](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/active/cli-maintenance-workflows-plan_zh.md)。
+[實作計畫](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/active/cli-maintenance-workflows-plan_zh.md)。

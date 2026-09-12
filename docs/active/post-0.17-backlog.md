@@ -26,6 +26,8 @@ is promised. [Release blockers](release-0.17-cut.md#blocking-acceptance) stay in
 | F08 | RTSP decoder/playback, batch file exports, camera-write CLI commands and standalone reusable navigation crate | Existing CLI maintenance/navigation plans; new threat model and permission UX before writes |
 | F09 | Official Homebrew Core, Debian/Ubuntu and Windows community-channel submissions | Distribution plan; current native packaging checks remain a release gate, submission is not implied by generated artifacts |
 | F10 | Bounded snapshot image-compatibility investigation | Preserve A03 destination/auth/size/no-clobber policies; obtain a sanitized reproducible response before changing image acceptance |
+| F11 | Multi-device WS-Discovery for Mock Fleet and explicit LAN configuration | Shared responder, independent UUIDs/state, reachable HTTP binds/XAddrs, explicit network exposure, observable startup failures and multi-device discovery integration acceptance |
+| F12 | Separate fixed-bottom CLI status bar | Separate mode/context/progress/position from key hints; display pending input only while active; validate narrow windows, resize, IME and literal typing without changing Agent output |
 
 F10 research disposition, 2026-09-12: review of the user-provided ONVIF Device
 Manager source found GetSnapshotUri → HTTP stream download → WPF image decoding,

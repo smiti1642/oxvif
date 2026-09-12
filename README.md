@@ -35,8 +35,8 @@ health diagnostics, and camera-free testing.
 
 The next release, **0.17.0**, is in acceptance, not yet published. Its focus is
 guided CLI maintenance and stricter selected Mock contracts, with source-breaking
-migration requirements. Read the [summary](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0.md)
-or [full changelog and migration](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0-changelog.md).
+migration requirements. Read the [summary](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0.md)
+or [full changelog and migration](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0-changelog.md).
 
 Add oxvif 0.16 to your application:
 
@@ -197,7 +197,9 @@ async fn updates_a_mock_camera() {
 }
 ```
 
-Use the `mock-server` feature when another process needs a real HTTP port. See
+Use `mock-server` for an HTTP endpoint on the same computer (loopback only).
+Multiple HTTP mocks are supported, but `Fleet` does not advertise them through
+WS-Discovery. See
 the [mock device reference](docs/mock-server.md) for routing, state, supported
 operations, fault injection, and limitations.
 

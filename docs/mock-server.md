@@ -14,7 +14,9 @@ omission is a bug, a documented one is a design decision.**
 - **Audience** — anyone driving the mock: oxvif's own tests, a downstream Rust
   crate, or a non-Rust ONVIF client (Frigate, ODM, gSOAP, a C++ conformance
   suite) pointed at the bound port.
-- **Version** — 0.16.0.
+- **Version** — 0.17.0 development preview; behavior added since 0.16.0 is not
+  available in the published 0.16.0 package. See the
+  [release changes](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0-changelog.md).
 - **Feature flags** — `mock` for the transport, `mock-server` for the HTTP
   server. This crate has **no default features**; nothing below compiles
   without one of those two.
@@ -24,6 +26,7 @@ omission is a bug, a documented one is a design decision.**
 | Section | What it answers |
 | --- | --- |
 | [1. Quick start](#1-quick-start) | How do I run the in-process or HTTP mock? |
+| [1.4. Networking limits](#14-local-endpoints-and-discovery-limitations) | Local HTTP endpoints versus WS-Discovery |
 | [2. Request routing](#2-request-routing) | How are paths, service URLs, and namespaces dispatched? |
 | [3. Envelope and namespace contract](#3-envelope-and-namespace-contract) | What SOAP/XML shape does the mock guarantee? |
 | [4. Authentication](#4-authentication) | Which authentication behavior is modeled? |
@@ -92,8 +95,30 @@ binds `127.0.0.1:0`; use `MockServer::builder().port(8080)` for a fixed port
 | `.replay(FixtureStore)` | none | Serve a recorded camera clone (`metamorph` feature). |
 
 `.discoverable()` is **best-effort**: if the `:3702` bind fails (port in use,
-sandboxed CI) the HTTP server still starts, just undiscoverable. At most one
-discoverable server per host.
+sandboxed CI) the HTTP server still starts, just undiscoverable. The current
+implementation has no shared listener for multiple discoverable servers; this
+is an implementation limitation, not an ONVIF restriction on devices per host.
+
+### 1.4 Local endpoints and discovery limitations
+
+`MockServer` binds HTTP to `127.0.0.1`, including when `.port(...)` or
+`.discoverable(...)` is set. Discovery advertises that loopback HTTP URL; receiving
+a ProbeMatch on another computer does not make the endpoint reachable there.
+The builder has no configurable HTTP bind address or advertised-address override.
+
+- The `mock_server` example does **not** enable WS-Discovery. Connect a client on
+  the same computer directly to the printed device URL. To run several instances,
+  use distinct ports **and distinct `--config` state files**.
+- `Fleet` creates independent HTTP servers and device states, but does not register
+  them with WS-Discovery. Use `Fleet::device_urls()` directly. The `mock_fleet`
+  example queries five devices and exits; it is not a persistent discovery service.
+- `DiscoveryResponder::spawn` advertises the supplied device; it does not create
+  or expose an HTTP service. The caller is responsible for reachable XAddrs.
+- Probe filtering matches type local names and ignores Scopes. Automated responder
+  tests cover loopback unicast, not multi-device multicast interoperability.
+
+Multi-device discovery and explicit LAN bind/advertise configuration are follow-up
+work. These limitations do not prevent multiple local HTTP mocks from running.
 
 ---
 

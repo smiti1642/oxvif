@@ -33,8 +33,8 @@ library 與命令列工具，涵蓋裝置探索、裝置管理、Media1／Media2
 ## 安裝
 
 下一版 **0.17.0** 正在驗收，尚未發布；重點為引導式 CLI 維護及選定 Mock 契約
-強化，包含原始碼不相容遷移。參閱[簡要摘要](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0_zh.md)
-或[完整變更與遷移](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0-changelog_zh.md)。
+強化，包含原始碼不相容遷移。參閱[簡要摘要](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0_zh.md)
+或[完整變更與遷移](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0-changelog_zh.md)。
 
 在應用程式中加入 oxvif 0.16：
 
@@ -188,7 +188,8 @@ async fn updates_a_mock_camera() {
 }
 ```
 
-當其他 process 需要真正的 HTTP port 時，請啟用 `mock-server` feature。完整的路由、
+同一台電腦的其他 process 需要 HTTP 端點時，請啟用 `mock-server`（僅繫結 loopback）。
+可同時執行多個 HTTP Mock，但 `Fleet` 不會透過 WS-Discovery 公告成員。完整的路由、
 狀態、支援 operation、fault injection 與限制，請參閱
 [Mock 裝置參考](docs/mock-server_zh.md)。
 
@@ -217,7 +218,7 @@ ONVIF 裝置差異很大，因此相容性宣稱以實測證據為準，不會�
 
 ## 貢獻與安全性
 
-提交變更前請閱讀 [CONTRIBUTING.md](CONTRIBUTING.md)。攝影機測試結果請使用
+提交變更前請閱讀[貢獻指南](CONTRIBUTING_zh.md)。攝影機測試結果請使用
 [compatibility report](https://github.com/smiti1642/oxvif/blob/master/.github/ISSUE_TEMPLATE/compatibility.yml)，
 並遵循其中的敏感資料清理清單。
 

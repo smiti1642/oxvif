@@ -5,14 +5,13 @@ for the [`oxvif`](https://crates.io/crates/oxvif) ONVIF client library.
 
 **Next release: 0.17.0 (not yet published).** Guided maintenance, snapshot saving,
 diagnostic reports and configurable Vim navigation are in release acceptance.
-Read the [release summary](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0.md)
-and [full changes, migration and limitations](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/releases/0.17.0-changelog.md).
+Read the [release summary](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0.md)
+and [full changes, migration and limitations](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0-changelog.md).
 The installation command below still installs the published version.
 
 For the complete operator and automation reference, read the
-[CLI guide](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli.md)
-or its
-[Traditional Chinese version](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli_zh.md).
+[CLI guide](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/oxvif-cli.md).
+The guide provides its own language switch and marks unpublished additions.
 
 The package installs an executable named `oxvif`. Install version 0.16 from
 crates.io:
@@ -40,13 +39,24 @@ version-matched operational and security rules embedded in the installed
 binary; `agent prompt` prints a compact prompt suitable for Agent instructions.
 The structured stdout contract is schema version 3 for the 0.16 release.
 
+## Quick navigation
+
+| Section | Purpose |
+| --- | --- |
+| [Human quick start](#human-quick-start) | Set up and inspect a camera |
+| [Named devices](#named-devices) | Save endpoints and select devices |
+| [Fleet inventory](#fleet-inventory) | Groups, views, discovery and bulk import |
+| [Read-only diagnostics](#read-only-diagnostics) | Network policies and structured results |
+| [Credentials](#credentials) | Native storage and ephemeral authentication |
+| [Read-only device operations](#read-only-device-operations) | Explicit commands and completion |
+
 ## Human quick start
 
 Development-only additions: `snapshot --save`, `media snapshot-save`, `diagnose`,
 `config export`, and `config diff`. These are not in the published 0.16.0 package.
 They do not modify camera settings; diagnosis does not verify RTSP playback and
 configuration exports are not restorable backups. See the
-[maintenance guide](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/cli-maintenance.md)
+[maintenance guide](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/cli-maintenance.md)
 for file safety, retained failure reports, JSON/exit semantics and acceptance tests.
 Diagnosis provides a paginated profile selector in human terminals, summary-first
 reports and `-v` details. JSON/JSONL never prompt; Agent guide v8 documents additive
@@ -56,7 +66,7 @@ with retained device/profile context, session-only credentials and bounded sessi
 Camera-reported profile settings and diagnostic assessments are also available to Agents.
 Human screens share counted Vim-style navigation, configurable line numbers (`?` settings
 or `--line-numbers absolute|relative|hybrid|off`) and a compact
-mode/status line; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/codex/release-0.17-closure/docs/cli-maintenance.md#vim-style-navigation).
+mode/status line; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/cli-maintenance.md#vim-style-navigation).
 
 On Windows, macOS, or a Linux desktop session with Secret Service, onboard one
 camera with a no-echo password prompt, live verification, native credential
@@ -120,7 +130,7 @@ name, target, tags, and cached device metadata may change; the device ID does
 not. Set `OXVIF_CONFIG_DIR` to isolate the registry for tests or containers.
 Default paths and the stop-writers/copy-whole-directory backup and restore
 procedure are documented in the
-[full CLI manual](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli.md#device-inventory).
+[full CLI manual](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/oxvif-cli.md#device-inventory).
 
 ```sh
 oxvif config path
@@ -352,5 +362,7 @@ oxvif completion fish
 oxvif completion powershell
 ```
 
-Further discovery, health, media, and PTZ operations are tracked in the
-[oxvif CLI plan](https://github.com/smiti1642/oxvif/blob/master/docs/active/oxvif-cli-plan.md).
+See the [CLI guide](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/oxvif-cli.md)
+for the supported command surface, and the
+[0.17 migration and limitations](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0-changelog.md)
+for the upcoming changes. Listed plans are not a promise of available commands.
