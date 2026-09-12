@@ -122,10 +122,10 @@
   UX 驗收不使用正式憑證或攝影機寫入。
 - [x] 分別記錄失敗／限制與通過證據；編譯不等於終端驗收。Linux/macOS
   runtime 仍待 CI／人工。
-- [ ] 更新成對 CLI 指南／維運文件、根目錄 Unreleased changelog、完整 0.17
+- [x] 更新成對 CLI 指南／維運文件、根目錄 Unreleased changelog、完整 0.17
   changelog、active 驗收與發布切點。歷史計數及已發布 0.16 不改；
   文件提交驗證後才刷新公開入口的固定版本連結。
-- [ ] 分批 commit／push 功能分支，交付精確 commit 與人工檢查。
+- [x] 分批 commit／push 功能分支，交付精確 commit 與人工檢查。
   不合併、不打 tag、不發布、不安裝系統 release。
 
 ## 驗證與文件
@@ -141,8 +141,7 @@
 ## 進度
 
 - 計畫完成：已檢查上述基準與各程式責任區。
-- B1–B4 尚未驗收；每批執行後填入證據及 commit。
-- 上述初始狀態由下方完成紀錄取代。
+- B1–B4 本機完成；下方明列平台／原生密碼庫／發布剩餘關卡。
 - B1 實作完成：共用 Panel 新增、manage a/add、獨立探索連續操作與本機登錄投影。
   Binary 測試 54 通過、既有 setup application 情境 5 通過、新增本機投影測試
   1 通過。尚不宣稱終端／原生密碼庫驗收完成，保留於 B4。
@@ -154,6 +153,8 @@
   以及最近匯出基準選擇／共用本機 preflight。Binary 測試 59 通過，CLI 全 target
   Clippy（警告視為錯誤）通過。B4 終端流程與最終文件仍待完成。
 - B1 `14d8b06`、B2 `36e7246`、B3 `a5342ad`；計畫 `05c0a58`。
+- B4 程式、終端工具與文件快照為 `b6c87ee`，已推送功能分支。
+  公開入口已固定指向該不可變文件快照。
 - B4 本機驗收通過：CLI package 193 通過、2 項預設略過（原生密碼庫與新增的
   opt-in 終端 fixture）。後者已明確執行 discover／manage 兩種模式。
   CLI 全 target Clippy（警告視為錯誤）及格式檢查通過，未改 ONVIF 核心／Mock。

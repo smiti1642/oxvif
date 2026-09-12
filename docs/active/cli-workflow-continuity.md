@@ -140,11 +140,11 @@ Existing code to preserve/reuse:
   Do not use production credentials or camera writes for UX acceptance.
 - [x] Document failures and limitations separately from passing evidence; compile
   alone is not terminal acceptance. Linux/macOS runtime acceptance remains CI/manual.
-- [ ] Update paired CLI guide/maintenance docs, root unreleased changelog, detailed
+- [x] Update paired CLI guide/maintenance docs, root unreleased changelog, detailed
   0.17 changelogs and active acceptance/release-cut records. Historical counts and
   published 0.16 sections stay unchanged. Refresh immutable public guide links only
   after a verified documentation commit exists.
-- [ ] Commit/push feature-branch batches; hand off exact commit and manual checks.
+- [x] Commit/push feature-branch batches; hand off exact commit and manual checks.
   Do not merge, tag, publish or install a system release.
 
 ## Validation and documentation
@@ -163,8 +163,7 @@ reciprocal language links and section-link tables for long documents.
 ## Progress
 
 - Planning complete: baseline and all source owners above inspected.
-- B1–B4 not yet accepted. Evidence and commit IDs will be appended per batch.
-- This initial status is superseded by the completion record below.
+- B1–B4 locally complete; remaining platform/native-store/release gates are explicit below.
 - B1 implementation complete: shared Panel onboarding, manage a/add, standalone
   continuation and local registry reprojection. Binary tests: 54 passed; existing
   setup application scenarios: 5 passed; new local reprojection test: 1 passed.
@@ -179,6 +178,8 @@ reciprocal language links and section-link tables for long documents.
   local preflight. Binary tests: 59 passed; CLI all-target Clippy with warnings
   denied passed. B4 terminal journeys and final docs remain open.
 - B1 `14d8b06`, B2 `36e7246`, B3 `a5342ad`; planning `05c0a58`.
+- B4 code, terminal harness and document snapshot: `b6c87ee`, pushed to the feature
+  branch. Public entry links now pin that immutable documentation snapshot.
 - B4 local acceptance passed: CLI package 193 passed, 2 default skips (native
   credential backend and the new opt-in terminal fixture). The latter was explicitly
   executed in both discover and manage modes. CLI all-target Clippy with warnings
