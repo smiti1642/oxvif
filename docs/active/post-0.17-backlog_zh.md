@@ -26,7 +26,7 @@
 | F08 | RTSP decoder／playback、批次檔案匯出、CLI 攝影機寫入及獨立導覽 crate | 既有 CLI 維護／導覽計畫；寫入前先建立威脅模型與權限 UX |
 | F09 | 官方 Homebrew Core、Debian／Ubuntu 與 Windows 社群套件渠道申請 | 散布計畫；目前原生包裝驗證仍是發布關卡，產出 artifact 不代表已提交申請 |
 | F10 | 有界 snapshot 圖片相容性調查 | 保留 A03 的目的地／認證／大小／不覆寫政策；取得去敏、可重現回應後才修改圖片接受條件 |
-| F11 | Mock Fleet 多裝置 WS-Discovery 及明確 LAN 設定 | 共用 responder、獨立 UUID／狀態、可達的 HTTP 繫結及 XAddr、明確網路暴露選項、可觀察的啟動失敗，以及多裝置探索整合驗收 |
+| F11 | Mock Fleet 多裝置 WS-Discovery 及明確 LAN 設定 | [基礎 Fleet 計畫](mock-fleet-basic-plan_zh.md)：先提供簡易啟動／設定、共用 responder、獨立 UUID／狀態及明確 LAN 暴露。本計畫本身不代表已核准施工或發布收錄 |
 | F12（重新納入） | CLI 獨立固定底部狀態列 | 依使用者要求重新納入 0.17，見 [CLI 重新驗收](cli-0.17-reentry_zh.md)；仍須原生平台／輸入法驗收 |
 
 F10 調查處置，2026-09-12：使用者提供的 ONVIF Device Manager 原始碼走

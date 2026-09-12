@@ -135,6 +135,10 @@ name = "mock_fleet"
 required-features = ["mock-server"]
 
 [[example]]
+name = "mock_fleet_serve"
+required-features = ["mock-server"]
+
+[[example]]
 name = "healthcheck"
 required-features = ["health"]
 

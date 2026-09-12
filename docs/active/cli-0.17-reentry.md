@@ -49,8 +49,11 @@ startup failure must be visible, not mistaken for full startup success.
 
 Separate independently started processes require an explicit coordination model
 or separate addresses. Merely enabling socket reuse is not an accepted design.
-The operator's preferred process model is pending. F11 remains a discussion,
-not a promise that the feature is in the current build.
+The operator subsequently narrowed the first milestone to simple multi-camera
+startup and configuration for VMS use. The [basic Fleet plan](mock-fleet-basic-plan.md)
+uses one process and same-IP/different-port endpoints as implementation defaults;
+64/256 capacity checks are opt-in and Metamorph mixtures remain later work.
+F11 is planned, not a feature available in the current build.
 
 Before implementation, define duplicate identity/config rejection, type/scope
 matching, response size limits, add/remove lifecycle and multi-interface behavior.
