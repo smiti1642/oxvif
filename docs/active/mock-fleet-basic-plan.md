@@ -6,7 +6,9 @@ Status: IMPLEMENTING, authorized 2026-09-12. The first milestone is simple
 multi-camera startup and configuration for VMS testing. B1 init/check and three
 focused configuration tests pass. B2 HTTP serving, explicit network settings,
 member isolation and awaited cleanup pass five Fleet tests plus scoped Clippy.
-Shared discovery is still explicitly unavailable until B3.
+ B3 now shares one listener across ready members, validates supported probe
+namespaces/types, declines scope filters and suppresses recent duplicate probes.
+The 211-test mock batch and scoped Clippy pass; final combined acceptance is B4.
 No release inclusion or 64/256-device stability result is claimed.
 
 | Section | Purpose |
@@ -42,7 +44,7 @@ Add a long-running `mock_fleet_serve` example behind `mock-server`, preserving
 the existing `mock_server` and short-lived `mock_fleet` example behavior. This
 does not add mock-serving dependencies to the installed `oxvif` CLI.
 
-Proposed commands — **not available in the current build**:
+Development commands (not in the published 0.16.0 package):
 
 ```sh
 cargo run --example mock_fleet_serve --features mock-server -- init lab.toml --count 4 --base-port 18080

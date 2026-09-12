@@ -19,12 +19,12 @@
 //! Each device is a plain `MockServer`, so per-device state, fault injection and
 //! auth all work exactly as they do standalone. Dropping the fleet shuts every
 //! device down. HTTP endpoints default to loopback; configured members may bind
-//! explicitly to a lab interface. This fleet does not yet register
-//! its members with WS-Discovery; address them by their URLs instead. A shared
-//! multi-device discovery responder is not implemented, rather than forbidden
-//! by the ONVIF protocol.
+//! explicitly to a lab interface. Opt-in [`FleetBuilder::discoverable`] shares
+//! one basic WS-Discovery responder across the ready members. Scoped probes,
+//! Hello/Bye and Resolve are not supported; this is not full conformance.
 
-use crate::discovery::new_uuid;
+use crate::discovery::{DiscoveredDevice, new_uuid};
+use crate::mock::discovery_responder::{DiscoveryResponder, validate_members};
 use std::io;
 
 use crate::mock::server::{MockServer, MockServerBuilder};
@@ -35,6 +35,7 @@ use crate::mock::state::DeviceState;
 /// Build one with [`Fleet::start`] (defaults) or [`Fleet::builder`] (custom
 /// per-device state). Shuts every device down on drop.
 pub struct Fleet {
+    discovery: Option<DiscoveryResponder>,
     devices: Vec<MockServer>,
 }
 
@@ -43,6 +44,7 @@ pub struct Fleet {
 pub struct FleetBuilder {
     members: Vec<Member>,
     enforce_auth: bool,
+    discovery: Option<(String, Option<std::net::Ipv4Addr>)>,
 }
 
 struct Member {
@@ -52,6 +54,15 @@ struct Member {
 }
 
 impl FleetBuilder {
+    /// Enable a shared UDP 3702 listener on an explicitly selected local IPv4
+    /// multicast interface. Members must advertise this reachable address.
+    /// Startup fails and cleans up HTTP members if discovery cannot start.
+    /// Basic unscoped Probe support only; no Hello/Bye, Resolve or full scope matching.
+    pub fn discoverable(mut self, interface: std::net::Ipv4Addr) -> Self {
+        self.discovery = Some(("0.0.0.0:3702".into(), Some(interface)));
+        self
+    }
+
     /// Add one device seeded with a caller-supplied state.
     pub fn device(mut self, state: DeviceState) -> Self {
         let scopes = state.scopes.clone();
@@ -104,8 +115,17 @@ impl FleetBuilder {
     /// If a later bind fails, previously started HTTP members are shut down.
     pub async fn start(self) -> io::Result<Fleet> {
         let mut endpoints = std::collections::HashSet::new();
+        let mut announcements = Vec::with_capacity(self.members.len());
         for member in &self.members {
-            member.server.network()?;
+            let (_, advertise) = member.server.network()?;
+            if let Some((_, Some(interface))) = &self.discovery
+                && (*interface != advertise || interface.is_loopback())
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "fleet discovery interface must match each non-loopback advertised HTTP address",
+                ));
+            }
             if member.server.has_discovery()
                 || member.endpoint.trim().is_empty()
                 || member.endpoint.len() > 256
@@ -122,6 +142,15 @@ impl FleetBuilder {
                     "invalid/duplicate fleet discovery metadata or per-server discovery enabled",
                 ));
             }
+            announcements.push(DiscoveredDevice {
+                endpoint: member.endpoint.clone(),
+                types: vec!["dn:NetworkVideoTransmitter".into(), "tds:Device".into()],
+                scopes: member.scopes.clone(),
+                xaddrs: vec![format!("http://{advertise}:65535/onvif/device")],
+            });
+        }
+        if self.discovery.is_some() {
+            validate_members(&announcements)?;
         }
         let mut devices = Vec::with_capacity(self.members.len());
         for member in self.members {
@@ -135,14 +164,34 @@ impl FleetBuilder {
                 }
             }
         }
-        Ok(Fleet { devices })
+        for (record, device) in announcements.iter_mut().zip(&devices) {
+            record.xaddrs = vec![device.device_url().to_owned()];
+        }
+        let discovery = match self.discovery {
+            Some((address, interface)) => {
+                match DiscoveryResponder::spawn_many(&address, interface, announcements).await {
+                    Ok(responder) => Some(responder),
+                    Err(error) => {
+                        for server in devices {
+                            let _ = server.shutdown().await;
+                        }
+                        return Err(error);
+                    }
+                }
+            }
+            None => None,
+        };
+        Ok(Fleet { discovery, devices })
     }
 }
 
 impl Fleet {
     /// Stop all members and wait for their HTTP listeners to close.
     /// All members are asked to stop even if one shutdown reports an error.
-    pub async fn shutdown(self) -> io::Result<()> {
+    pub async fn shutdown(mut self) -> io::Result<()> {
+        if let Some(discovery) = self.discovery.take() {
+            discovery.shutdown().await;
+        }
         let mut error = None;
         for server in self.devices {
             if let Err(e) = server.shutdown().await {
@@ -153,6 +202,11 @@ impl Fleet {
             Some(e) => Err(e),
             None => Ok(()),
         }
+    }
+
+    /// Bound address of the shared discovery listener, or `None` when disabled.
+    pub fn discovery_addr(&self) -> Option<std::net::SocketAddr> {
+        self.discovery.as_ref().map(DiscoveryResponder::local_addr)
     }
     /// Start `n` devices with distinct default identities, each on an ephemeral
     /// port.
@@ -205,6 +259,104 @@ fn distinct_default(n: usize) -> DeviceState {
 mod tests {
     use super::*;
     use crate::OnvifClient;
+
+    #[tokio::test]
+    async fn shared_discovery_reaches_each_member_and_releases_listener() {
+        let mut builder = Fleet::builder().devices(4);
+        builder.discovery = Some(("127.0.0.1:0".into(), None));
+        let fleet = builder.start().await.unwrap();
+        let address = fleet.discovery_addr().unwrap();
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let mut buf = vec![0; 65535];
+        let mut identities = std::collections::HashMap::new();
+        for round in 0..2 {
+            let id = format!("urn:fleet-probe-{round}");
+            let probe = format!(
+                r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery" xmlns:n="http://www.onvif.org/ver10/network/wsdl"><s:Header><a:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</a:Action><a:MessageID>{id}</a:MessageID></s:Header><s:Body><d:Probe><d:Types>n:NetworkVideoTransmitter</d:Types></d:Probe></s:Body></s:Envelope>"#
+            );
+            socket.send_to(probe.as_bytes(), address).await.unwrap();
+            // Duplicate datagrams must not create an extra wave of responses.
+            socket.send_to(probe.as_bytes(), address).await.unwrap();
+            let mut found = std::collections::HashSet::new();
+            for _ in 0..4 {
+                let (len, _) = tokio::time::timeout(
+                    std::time::Duration::from_secs(10),
+                    socket.recv_from(&mut buf),
+                )
+                .await
+                .unwrap()
+                .unwrap();
+                let root =
+                    crate::soap::XmlNode::parse(std::str::from_utf8(&buf[..len]).unwrap()).unwrap();
+                assert_eq!(root.path(&["Header", "RelatesTo"]).unwrap().text(), id);
+                let sequence: u32 = root
+                    .path(&["Header", "AppSequence"])
+                    .unwrap()
+                    .attr("MessageNumber")
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                let record = root.path(&["Body", "ProbeMatches", "ProbeMatch"]).unwrap();
+                let endpoint = record
+                    .path(&["EndpointReference", "Address"])
+                    .unwrap()
+                    .text()
+                    .to_owned();
+                let url = record.child("XAddrs").unwrap().text();
+                assert!(
+                    fleet.device_urls().contains(&url),
+                    "advertise an actual member URL"
+                );
+                assert!(found.insert(endpoint.clone()), "one response per member");
+                let info = OnvifClient::new(url).get_device_info().await.unwrap();
+                let member = fleet
+                    .devices()
+                    .iter()
+                    .find(|d| d.device_url() == url)
+                    .unwrap();
+                assert_eq!(
+                    info.serial_number,
+                    member.device().read().info.serial_number
+                );
+                if round == 0 {
+                    identities.insert(endpoint, (url.to_owned(), sequence));
+                } else {
+                    let (old_url, old_sequence) = identities.get(&endpoint).unwrap();
+                    assert_eq!(old_url, url);
+                    assert!(sequence > *old_sequence);
+                }
+            }
+            assert_eq!(found.len(), 4);
+        }
+        assert_eq!(identities.len(), 4);
+        fleet.shutdown().await.unwrap();
+        let rebound = tokio::net::UdpSocket::bind(address).await.unwrap();
+        assert_eq!(rebound.local_addr().unwrap(), address);
+    }
+
+    #[tokio::test]
+    async fn discovery_bind_failure_rolls_back_ready_http_members() {
+        let occupied = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let reservation = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = reservation.local_addr().unwrap().port();
+        drop(reservation);
+        let mut builder = Fleet::builder().member(
+            MockServer::builder().port(port),
+            "urn:rollback-device".into(),
+            vec![],
+        );
+        builder.discovery = Some((occupied.local_addr().unwrap().to_string(), None));
+        let error = builder
+            .start()
+            .await
+            .err()
+            .expect("occupied UDP port must fail fleet startup");
+        assert_eq!(error.kind(), io::ErrorKind::AddrInUse);
+        let released = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        assert_eq!(released.local_addr().unwrap().port(), port);
+    }
 
     #[tokio::test]
     async fn configured_members_keep_identity_state_and_release_ports() {

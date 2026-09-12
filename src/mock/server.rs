@@ -315,7 +315,9 @@ impl MockServer {
     /// deterministic fleet cleanup and port reuse. Stalled shutdown is aborted
     /// after five seconds and reported as an error.
     pub async fn shutdown(mut self) -> std::io::Result<()> {
-        self._discovery.take();
+        if let Some(discovery) = self._discovery.take() {
+            discovery.shutdown().await;
+        }
         if let Some(tx) = self.shutdown.take() {
             let _ = tx.send(());
         }

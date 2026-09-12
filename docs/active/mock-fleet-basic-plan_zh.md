@@ -4,8 +4,10 @@
 
 狀態：施工中，2026-09-12 授權執行。首階段為供 VMS 使用的簡易多台啟動與設定。
 B1 的 init／check 與三個針對性設定測試通過。B2 HTTP 服務、明確網路設定、
-成員隔離及可等待的清理通過五個 Fleet 測試與針對性 Clippy；B3 完成前共用
-探索仍明確回報尚不可用。不宣稱已納入發布或通過 64／256 台穩定性驗證。
+成員隔離及可等待的清理通過五個 Fleet 測試與針對性 Clippy。B3 已透過單一
+listener 公告已就緒成員，驗證支援的 probe namespace／type、拒絕 scope 篩選，
+並抑制近期重複 probe。211 個 Mock 測試與針對性 Clippy 通過，最終合併驗收為 B4。
+不宣稱已納入發布或通過 64／256 台穩定性驗證。
 
 | 章節 | 用途 |
 | --- | --- |
@@ -36,7 +38,7 @@ HTTP 且不啟用探索；LAN HTTP 與 multicast 公告須明確設定。
 `mock_server` 及短期執行的 `mock_fleet` 範例行為，不將 Mock 服務相依套件加入
 已安裝的 `oxvif` CLI。
 
-擬議命令，**目前建置尚未提供**：
+開發版命令（尚未包含於已發布的 0.16.0 套件）：
 
 ```sh
 cargo run --example mock_fleet_serve --features mock-server -- init lab.toml --count 4 --base-port 18080

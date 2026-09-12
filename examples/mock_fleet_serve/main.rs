@@ -71,12 +71,14 @@ async fn run(args: Vec<String>) -> Result<(), String> {
 async fn serve(path: &Path) -> Result<(), String> {
     let manifest = Manifest::load(path)?;
     let states = manifest.prepare(path)?;
+    let mut builder = oxvif::mock::Fleet::builder();
     if manifest.discovery {
-        return Err(
-            "Shared discovery is not available until the discovery implementation batch".into(),
+        builder = builder.discoverable(
+            manifest
+                .discovery_interface
+                .ok_or("Missing discovery interface")?,
         );
     }
-    let mut builder = oxvif::mock::Fleet::builder();
     for (device, state) in manifest.devices.iter().zip(states) {
         let scopes = state.scopes.clone();
         let mut server = oxvif::mock::MockServer::builder()
@@ -102,8 +104,13 @@ async fn serve(path: &Path) -> Result<(), String> {
         }
     };
     println!(
-        "Started {} cameras | discovery: disabled | authentication: NOT ENFORCED",
-        fleet.len()
+        "Started {} cameras | discovery: {} | authentication: NOT ENFORCED",
+        fleet.len(),
+        if fleet.discovery_addr().is_some() {
+            "enabled (unscoped Probe only)"
+        } else {
+            "disabled"
+        }
     );
     if !manifest.bind_ip.is_loopback() {
         println!(
