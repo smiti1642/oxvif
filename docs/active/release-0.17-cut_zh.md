@@ -6,6 +6,9 @@
 2026-09-12 更新：使用者重新開啟 CLI 範圍，納入 manage 搜尋篩選、F12 狀態列
 設計及選單位置保留，見 [CLI 重新驗收](cli-0.17-reentry_zh.md)。既有驗收及 CI
 僅保留為歷史證據，不代表已驗證本次變更。
+後續[基礎 Mock Fleet](mock-fleet-basic-plan_zh.md) 已實作並具本機證據，但發布
+收錄仍待決定。目前開發分支為 `feat/basic-mock-fleet`（本次文件整理前為
+`32fcc77`），包含 CLI `dcbff41`；查核時遠端 master／develop 均為 `5a1821b`。
 比較基準：`v0.16.0`；凍結的範圍基準：
 `f9448e515baec6169f40ec7f38ec2e0fcc752826`（證據補充 `2f92b75`）。
 此處記錄原凍結範圍，不代表 hardening 分支歷史已獲驗收。
@@ -26,8 +29,9 @@ A01／A02 修正及[共用快照修復](snapshot-auth-repair_zh.md)、維護者 
 
 ## 收錄範圍
 
-本切點不再增加使用者功能。允許修正下列契約所必需的問題；新發現依嚴重度
-分類，不默默擴充範圍。
+原切點排除新增使用者功能，之後使用者明確授權上述 CLI 重新納入作為例外。
+其餘新發現依嚴重度分類，不默默擴充範圍。Mock Fleet 雖已存在於開發分支，
+但在另行決定前仍不屬於已確認的發布範圍。
 
 | ID | 收錄行為 | 原始碼與驗證入口 |
 | --- | --- | --- |
@@ -48,13 +52,13 @@ A01／A02 修正及[共用快照修復](snapshot-auth-repair_zh.md)、維護者 
 
 | Gate | 目前狀態 | 結案條件 |
 | --- | --- | --- |
-| G01 完整候選審查 | LOCAL-PASS | 全部 208 個固定路徑及後續差異均核對 source、受影響消費端、斷言與公開宣稱；六組結案及輸入 hash 見[審查紀錄](release-0.17-review_zh.md) |
+| G01 完整候選審查 | 基準 LOCAL-PASS；目前差異 OPEN | 208 個路徑及已記錄差異的審查只適用於[審查紀錄](release-0.17-review_zh.md)的輸入 hash；須對最終候選核對後續 CLI 及任何收錄的 Fleet 變更，測試通過不自動擴充固定審查清冊 |
 | G02 資料完整性 K27 | LOCAL-PASS | 碰撞群組在 record／load／save 及完整請求 replay 中保留不同請求；key-only 歧義回傳 None；等價請求仍替換，去憑證維持指定格式。報告群組保留各列。見下方 K27 證據；G05 以獨立 CI 證據判定 |
-| G03 安全及回應完整性 | LOCAL-PASS | A01–A05 已本機修復；憑證、state／write、URL、receipt 及 shared-boundary 斷言已核對。收錄切點未留下已知重大 blocker；記錄的模型／HTTP／replay 限制不代表完整 hardening |
-| G04 本機程式及文件 | LOCAL-PASS | 最終 all-feature 1,310／default 1,198 通過，各五項 ignored；兩組 Clippy／strict rustdoc、fmt、Rust 1.88 及文件／清冊檢查通過。改版號或合併後重驗受影響關卡 |
-| G05 原生 CI | fed6777 通過 | [Run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) 全部 27 個 job、五種原生目標通過；此結果不涵蓋其後純文件修改 |
+| G03 安全及回應完整性 | 基準 LOCAL-PASS；目前差異 OPEN | A01–A05 保留已修復狀態及斷言證據；須核對後續終端行為與任何收錄的 Fleet LAN／控制端點／探索暴露。已知限制與本機測試不代表整體候選安全驗收 |
+| G04 本機程式及文件 | LOCAL-PASS，Windows 開發批次 | B4 全功能 1,316 通過／0 失敗／6 跳過，預設 1,204／0／6；兩組 Clippy／strict rustdoc 及 fmt 通過，見[精確證據及排除](mock-fleet-basic-plan_zh.md#本機證據)。先前 Rust 1.88／schema 證據為歷史，不是新執行；改版號、移除範圍或合併後重驗受影響關卡 |
+| G05 原生 CI | 歷史通過；目前待執行 | [Run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) 在 fed6777 通過全部 27 個 job／五種原生目標；不涵蓋後續 CLI／Fleet runtime 或 CI 步驟修改，最終候選須另行執行並記錄 |
 | G06 套件及散布 | PARTIAL | fed6777 的 Package/docs 通過：library package 驗證、CLI package 檔案清單、archive 控制及文件。清單不等於 CLI package／安裝驗證；仍須最終版號套件、portable install、SBOM／checksum 及不發布的 staging |
-| G07 人類及 Agent 驗收 | PARTIAL | 本次 Windows debug ConPTY 通過有界 manage／profile／input／resize、開始後 snapshot 取消與 console 恢復；保留歷史實機 snapshot／diagnose／export／diff 證據。其餘 discover／diagnose 導航矩陣及其他平台人工驗收明列於核准資料 |
+| G07 人類及 Agent 驗收 | PARTIAL | CLI dcbff41 Windows ConPTY 涵蓋 manage 探索文字／紀錄篩選、正確選取、縮放、底部狀態及選單保留；B4 另驗四台 CLI 讀取／重啟／清理。剩餘導覽／輸入法／其他平台及原生 LAN／VMS 驗收仍明列；歷史實機證據不是新執行 |
 | G08 版號及發布連結 | OPEN | 候選驗收後同步 library／CLI 版號；schema v3 宣稱須符合測試；草稿連結固定至最終 tag，遷移警告不可隱藏 |
 | G09 RC 及授權 | NOT-RUN | RC 也須明確發布授權；建議觀察 3–7 天，不因日期到期自動通過；取得正式發布同意 |
 
@@ -83,6 +87,11 @@ A01 修復無效 HTTP UTF-8 處理；其餘 HTTP binding 與 fault／field 語�
   RC 連結須使用自己的真實 RC tag。
 
 ## 施工順序
+
+下列第 1–3 步保留原始施工順序。目前候選應先決定 Fleet 發布歸屬、核對後續
+G01／G03 差異，再依更新的[維護者操作](release-0.17-approval_zh.md#維護者操作)
+對精確版本執行 CI／staging。若從發布移除 Fleet，也會改變受測輸入，須重驗
+受影響部分，不能直接沿用含 Fleet 的統計。
 
 1. 提交切點、雙語完整／摘要文件及[後續清單](post-0.17-backlog_zh.md)。
 2. 以既有批次 suites 及有限獨立控制重驗收錄契約；先記錄失敗再修正，不把已知

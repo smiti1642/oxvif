@@ -5,6 +5,9 @@
 Status: LOCAL REVIEW COMPLETE. Updated 2026-09-12. This is an execution record, not release
 approval. [Approval packet](release-0.17-approval.md) and
 [release gates](release-0.17-cut.md) remain authoritative.
+This completion applies to the input hashes recorded below. Later CLI `dcbff41`
+and Fleet development are not silently added to this ledger; their current-delta
+review status is tracked by those release gates.
 
 | Section | Purpose |
 | --- | --- |

@@ -7,6 +7,10 @@
 使用者要求停在正式 0.17 版號／發布 commit 前。允許一般修正及證據提交；
 本次驗收不執行版號升級、主分支合併、tag、發布、PR 關閉或本機系統安裝。
 
+目前開發內容包含 CLI `dcbff41` 與本機驗證的 Fleet 批次 `6cf345c`（排除項目
+說明為 `32fcc77`）。Fleet 發布歸屬仍待決定。下列 208 路徑審查與託管 CI 是
+歷史基準，不自動驗收後續變更，見[更新後關卡](release-0.17-cut_zh.md#發布阻擋關卡)。
+
 | 章節 | 用途 |
 | --- | --- |
 | [四項工作](#四項工作) | 區分各種證據的目前狀態 |
@@ -21,8 +25,8 @@
 
 | 工作 | 狀態 | 剩餘項目 |
 | --- | --- | --- |
-| 1. 完整候選／安全審查 | LOCAL-PASS | 208 個固定路徑及後續差異均核對受影響消費端／斷言／宣稱；A01–A05 已修復，T01／T02 已加強，詳見下方結案紀錄 |
-| 2. 套件安裝與人類／實機驗收 | PARTIAL | fed6777 原生 CI（run 34672460802）通過，包含後續修正。實機 export／diff 與修復後快照驗收通過，限制如下；Hanwha 非影像回應仍為限制。有界 Windows ConPTY 通過；其餘人工／平台驗收與散布 staging 待驗 |
+| 1. 完整候選／安全審查 | 基準 LOCAL-PASS；目前差異 OPEN | 208 路徑及已記錄後續審查只適用於其 hash；A01–A05 已修復，T01／T02 已加強。最終候選核准前須核對後續 CLI 與任何收錄的 Fleet 變更 |
+| 2. 套件安裝與人類／實機驗收 | PARTIAL | fed6777 原生 CI 通過，不涵蓋後續 CLI／Fleet 版本。新增有界 Windows ConPTY／本機 Fleet 證據列於下方；目前候選 CI、其餘人工／平台及散布 staging 未完成。保留包含 Hanwha 非影像回應在內的歷史實機限制 |
 | 3. 版號、連結與文件 | 已準備，尚未升版 | 雙語發布紀錄及本清單已更新；實際版號仍為 0.16.0，核准後才套用版號修改清單 |
 | 4. 使用者確認 | 尚未請求正式提交核准 | 正式版號 commit 前呈現最終證據及風險；發布須另行授權 |
 
@@ -45,7 +49,10 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 
 | 證據 | 結果及限制 |
 | --- | --- |
-| 最終本機結案，2026-09-12 | Workspace all-feature／default：1,310／1,198 通過，各五項 ignored、41 suites；兩組 all-target Clippy、strict rustdoc、fmt 及 Rust 1.88 all-target／all-feature 檢查通過。[A05／T01／T02 及 native exit 證據](release-0.17-review_zh.md#a05-終端顯示與-t01-斷言後續) |
+| 最新合併開發批次，6cf345c | 全功能 1,316 通過／0 失敗／6 跳過；預設 1,204／0／6，各 41 suites。兩組 Clippy／strict rustdoc 及 fmt 通過。三個範例測試與 64／256 台 loopback 容量測試另行通過，見[六項排除及邊界](mock-fleet-basic-plan_zh.md#跳過測試明細)；沒有新增 MSRV／schema／原生 CI 結果 |
+| CLI 重新驗收，dcbff41 | 全功能／預設 1,311／1,199 通過，零失敗、各五項跳過。Windows ConPTY 驗證實際 manage 探索文字／紀錄篩選、正確已存／session-only 選取、狀態列、選單位置、縮放及取消／恢復，見[範圍](cli-0.17-reentry_zh.md#驗收) |
+| Fleet 終端機，B4 | 兩輪四台前景 serve；CLI 核對每台設定身分，Ctrl+C 零退出、埠可重新繫結、manifest hash 不變。僅限 loopback；原生 multicast／VMS 未驗收 |
+| CLI 重新納入前的歷史本機結案，2026-09-12 | Workspace all-feature／default：1,310／1,198 通過，各五項 ignored、41 suites；兩組 all-target Clippy、strict rustdoc、fmt 及 Rust 1.88 all-target／all-feature 檢查通過。[A05／T01／T02 及 native exit 證據](release-0.17-review_zh.md#a05-終端顯示與-t01-斷言後續) |
 | Windows debug ConPTY | 40 台合成裝置，manage／detail／profile／input／password／resize、已開始的 snapshot 取消、正常／Ctrl-C 退出的精確 console mode 恢復均通過；設定 hash 不變。未新增攝影機掃描或 host 安裝；G07 剩餘範圍如下 |
 | V01 擴充 encoder replay，2026-09-12 | 停用失效邏輯後 1,308 通過／四項斷言失敗／五項 ignored，包含兩項新測試及兩項既有 rate 測試。還原後 all-feature 1,312／default 1,200 通過，各五項 ignored、41 suites。產品程式與 1ea4fff 相同；見[範圍](release-0.17-review_zh.md#v01-編碼器-replay-覆蓋)。此為歷史 V01 結果；最終本機結案記於下方 |
 | A04 人類輸出修正，2026-09-12 | 修正前 1,308 通過／兩項斷言失敗／五項 ignored；修正後 all-feature 1,310／default 1,200 通過，各五項 ignored、41 suites；兩組 Clippy 與 strict rustdoc 通過。實際 debug 執行檔保留 JSON／JSONL 原值及錯誤 exit 3，人類 stderr 已轉義。見[批次紀錄](release-0.17-review_zh.md#a04-人類輸出修正)；不是全螢幕終端驗收 |
@@ -79,7 +86,8 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 
 ## 審查結案清單
 
-G01／G03 對 R01–R08 為 LOCAL-PASS。[逐檔清冊](release-0.17-review-ledger.json)
+G01／G03 對已記錄的 R01–R08 基準為 LOCAL-PASS，後續 CLI／Fleet 差異核對仍未結案。
+[逐檔清冊](release-0.17-review-ledger.json)
 列出 `v0.16.0..b7bc881` 的 208 個 reviewed 路徑，後續差異另行審查。
 各已審輸入有 blob ID，清冊本身以所屬 commit 識別。
 [批次審查](release-0.17-review_zh.md#批次順序) 六組記錄原始碼、受影響消費端、
@@ -94,19 +102,26 @@ guard 控制及雙語宣稱校正已完成本機可處理的發現；本次審�
 沿用 listener 安全、raw recording 隱私限制、併發 replay 可見性及 snapshot 格式
 相容性，仍於[後續清單](post-0.17-backlog_zh.md) 明列範圍。
 歷史外部 corpus／實機證據只適用於相符輸入。G05 已於 `fed6777` 的
-[run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) 通過；該執行不涵蓋其後文件修改。
+[run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) 通過；該執行不涵蓋其後 CLI／Fleet runtime、CI 步驟及文件修改，目前候選的 G05 仍待完成。
 G06 仍須不發布 staging 及最終版號套件驗收；G07 仍部分完成，G08／G09 保留核准邊界。
 
 ## 維護者操作
 
-目前 GitHub CLI 帳號僅有 repository 讀取權限。不得修改 trigger、換帳號或
-開 workaround PR 來啟動 workflow。一般修正提交推送後，維護者可執行：
+使用維護者已授權且具有 workflow 權限的帳號。連結紀錄中的 READ／403 為歷史
+觀察，不代表目前帳號政策；不得換帳號或開 workaround PR 繞過權限失敗。
+目前開發分支包含 Fleet，測試該分支不代表核准 Fleet 發布。確認所需候選後，
+維護者可執行：
 
 ```powershell
-git fetch origin codex/release-0.17-closure
-$candidate = git rev-parse origin/codex/release-0.17-closure
-gh workflow run ci.yml --ref codex/release-0.17-closure
-gh workflow run release.yml --ref codex/release-0.17-closure -f tag=$candidate -F publish=false -F prerelease=true
+$candidateBranch = 'feat/basic-mock-fleet'
+git fetch origin $candidateBranch
+if ($LASTEXITCODE -ne 0) { throw 'Fetch failed' }
+$candidate = git rev-parse "origin/$candidateBranch"
+if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve candidate' }
+gh workflow run ci.yml --ref $candidateBranch
+if ($LASTEXITCODE -ne 0) { throw 'CI dispatch failed' }
+gh workflow run release.yml --ref $candidateBranch -f tag=$candidate -F publish=false -F prerelease=true
+if ($LASTEXITCODE -ne 0) { throw 'Staging dispatch failed' }
 ```
 
 記錄每個 run URL 及實際 checkout SHA；dispatch 後分支移動不可默默改變驗收候選。
@@ -120,7 +135,9 @@ Debian package install／remove、兩種 Linux 架構的暫時簽章 APT reposit
 最終 0.17 package 驗證；官方渠道收錄及正式 APT signing key 仍是獨立工作。
 
 本次有界 Windows ConPTY 已驗收上述 manage／profile／input／resize、開始後的
-snapshot 取消及 console 恢復。先前 Vim／discovery 證據保留原始版本；仍須完成
+snapshot 取消及 console 恢復。先前 Vim／discovery 證據保留原始版本；後續 dcbff41
+的 manage 探索／狀態／選單位置及 B4 loopback Fleet 證據是新增驗證，不取代
+未測路徑。仍須完成
 最終候選的 discover／diagnose navigation、filter／數字／gg／G／Ctrl-D／U／行號
 矩陣及其他平台人工驗收，因此 G07 保持 PARTIAL。實機 snapshot 成功沿用已授權
 設備的證據，不表示本次重新掃描設備群。
@@ -148,6 +165,10 @@ snapshot 取消及 console 恢復。先前 Vim／discovery 證據保留原始版
 人類／實機驗收、已解決的 A03、預定版號／連結 diff 及明確限制。
 缺少任何必要關卡時必須照實標示，不得宣稱四項全部完成。
 
-PR #14／#16／#17 仍為 open。候選已包含調整後且保留署名的實作；不可再次合併
-舊實作，也不可當作 master／develop 已包含這些工作而關閉 PR。
-主分支整合及 PR 結案須在核准後處理，與發布授權分開。
+2026-09-12 儲存庫查核確認 [PR #14](https://github.com/smiti1642/oxvif/pull/14)、
+[PR #16](https://github.com/smiti1642/oxvif/pull/16)、
+[PR #17](https://github.com/smiti1642/oxvif/pull/17) 均已關閉，GitHub 狀態為
+`merged=false`。其保留署名的改寫提交依序為 `07a7d61`、`f9448e5`、`563bbcf`，
+均為遠端 master／develop `5a1821b` 的祖先；這是改寫後收錄，不是 GitHub 直接
+合併原始 PR，不應再次整合。後續 CLI／Fleet 位於 `feat/basic-mock-fleet`，
+尚未合併至上述主分支。本次文件更新不執行合併或發布。

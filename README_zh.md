@@ -136,7 +136,8 @@ hostname 驗證。
 `oxvif manage` 將這些操作整合為保留設備／profile 的終端工作區，詳見
 [引導式工作區](docs/cli-maintenance_zh.md#引導式工作區)。
 人類操作介面共用 [Vim 風格導航](docs/cli-maintenance_zh.md#vim-風格導航)、可調整的行號（`?` 設定或 `--line-numbers`）及
-小型模式／狀態列。
+獨立固定底部模式／狀態列，與操作提示分離。Manage 網路搜尋結果支援 `/` 搜尋及
+已存／未存／全部篩選，返回時保留選單位置。
 
 Discovery 會將每筆結果標示為 `SAVED`、`NEW` 或 `INCOMPLETE`；終端使用者與 Agent
 都能依相同狀態篩選即時掃描及已保存的 snapshot。終端瀏覽器可按 `i` 開啟可捲動的

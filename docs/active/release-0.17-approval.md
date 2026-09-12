@@ -9,6 +9,11 @@ commit. Ordinary repairs and evidence commits are allowed; version promotion,
 main-branch merges, tags, publication, PR closure and host-system installation
 are not performed by this acceptance work.
 
+Current development includes CLI `dcbff41` and the locally verified Fleet batch
+`6cf345c` (exclusion clarification `32fcc77`). Fleet release placement remains
+undecided. The 208-path review and hosted CI below are historical baselines, not
+automatic acceptance of these later changes. See the [updated gates](release-0.17-cut.md#blocking-acceptance).
+
 | Section | Purpose |
 | --- | --- |
 | [Four requested steps](#four-requested-steps) | Current status without conflating evidence |
@@ -23,8 +28,8 @@ are not performed by this acceptance work.
 
 | Step | Status | Remaining work |
 | --- | --- | --- |
-| 1. Complete candidate/security review | LOCAL-PASS | All 208 frozen paths and later deltas reconciled with affected consumers/assertions/claims; A01–A05 repaired, T01/T02 strengthened. See the completed review below |
-| 2. Package/install and human/real-camera acceptance | PARTIAL | Native CI passed at fed6777 (run 34672460802), including later repairs. Real export/diff and repaired snapshot acceptance passed with the boundaries below; Hanwha non-image responses remain a limitation. Bounded Windows ConPTY passed; remaining human/platform acceptance and distribution staging remain open |
+| 1. Complete candidate/security review | BASELINE LOCAL-PASS; CURRENT DELTA OPEN | The 208-path review and recorded follow-ups remain valid for their hashes; A01–A05 repaired, T01/T02 strengthened. Reconcile later CLI and any included Fleet changes before final-candidate approval |
+| 2. Package/install and human/real-camera acceptance | PARTIAL | Native CI passed at fed6777, not at the later CLI/Fleet revisions. New bounded Windows ConPTY/local Fleet evidence is listed below; current-candidate CI, remaining human/platform checks and distribution staging are open. Historical real-device limits, including Hanwha non-image responses, remain |
 | 3. Versions, links and documents | PREPARED, not promoted | Bilingual release records and this checklist updated. Actual versions remain 0.16.0; apply the version-edit checklist only after approval |
 | 4. User confirmation | NOT REQUESTED for promotion | Present the final evidence and unresolved risks before the formal version commit; publication requires separate authorization |
 
@@ -48,7 +53,10 @@ profiles, not universal compatibility; remaining work stays explicit in the
 
 | Evidence | Result and boundary |
 | --- | --- |
-| Final local closure, 2026-09-12 | All-feature/default workspace: 1,310 / 1,198 passed, five ignored and 41 suites each; both all-target Clippy modes, strict rustdoc modes, fmt and Rust 1.88 all-target/all-feature check pass. [A05/T01/T02 and native-exit evidence](release-0.17-review.md#a05-terminal-display-and-t01-assertion-follow-up) |
+| Latest combined development batch, 6cf345c | All-features: 1,316 passed / 0 failed / 6 ignored; default: 1,204 / 0 / 6, each 41 suites. Both Clippy/strict rustdoc modes and fmt pass. Three example tests and 64/256 loopback capacity smoke pass separately; [six exclusions and boundaries](mock-fleet-basic-plan.md#ignored-tests). No new MSRV/schema/native CI result |
+| CLI re-entry, dcbff41 | All-features/default: 1,311 / 1,199 passed, zero failures and five ignores each. Windows ConPTY verifies actual manage discovery search/registration filters, exact saved/session-only selection, status bar, viewport retention, resize and cancellation/restoration; see [scope](cli-0.17-reentry.md#acceptance) |
+| Fleet terminal, B4 | Two four-camera foreground serve cycles; CLI reads each configured identity, Ctrl+C exits zero, ports can be rebound and manifest hash is unchanged. Loopback only; native multicast/VMS not accepted |
+| Historical pre-re-entry local closure, 2026-09-12 | All-feature/default workspace: 1,310 / 1,198 passed, five ignored and 41 suites each; both all-target Clippy modes, strict rustdoc modes, fmt and Rust 1.88 all-target/all-feature check pass. [A05/T01/T02 and native-exit evidence](release-0.17-review.md#a05-terminal-display-and-t01-assertion-follow-up) |
 | Windows debug ConPTY | 40 synthetic devices, manage/detail/profile/input/password/resize, started snapshot cancellation and exact console-mode restoration on normal/Ctrl-C exits pass; configuration hashes unchanged. No new camera scan or host install; remaining G07 scope below |
 | V01 expanded encoder replay, 2026-09-12 | Suppressed retirement: 1,308 pass / four assertion failures / five ignored, including two new and two existing rate tests. Restored: 1,312 all-feature / 1,200 default passes, five ignored each, 41 suites. Production unchanged from 1ea4fff; see [scope](release-0.17-review.md#v01-encoder-replay-coverage). Historical V01 result; final local closure is recorded below |
 | A04 human-output repair, 2026-09-12 | Before repair: 1,308 pass / two assertion failures / five ignored. Repaired: 1,310 all-feature / 1,200 default passes, five ignored each, 41 suites; both Clippy and strict rustdoc modes pass. Actual debug executable preserves JSON/JSONL values and error exit 3 while escaping human stderr. See the [batch record](release-0.17-review.md#a04-human-output-repair); this is not full-screen terminal acceptance |
@@ -83,7 +91,8 @@ terminal or distribution-staging acceptance.
 
 ## Review closure
 
-G01/G03 are LOCAL-PASS for R01–R08. The [per-file ledger](release-0.17-review-ledger.json)
+G01/G03 are LOCAL-PASS for the recorded R01–R08 baseline, with later CLI/Fleet
+delta reconciliation still open. The [per-file ledger](release-0.17-review-ledger.json)
 contains 208 reviewed paths from `v0.16.0..b7bc881`, plus separately reviewed later
 deltas. Each reviewed input has a blob ID; the ledger itself is identified by its
 containing commit. The six groups in the [batch review](release-0.17-review.md#batch-order)
@@ -101,21 +110,29 @@ raw-recording privacy limits, concurrent replay visibility and snapshot-format
 compatibility remain explicitly scoped in the [backlog](post-0.17-backlog.md).
 Historical external-corpus and hardware evidence applies only to its matching
 inputs. G05 passed at `fed6777` in [run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802).
-Later documentation edits are not covered by that run. G06 still requires
+Later CLI/Fleet runtime, CI-step and documentation edits are not covered by that run;
+G05 remains pending for the current candidate. G06 still requires
 non-publishing staging and final-version package acceptance; G07 remains partial,
 and G08/G09 retain their approval boundaries.
 
 ## Maintainer actions
 
-The current GitHub CLI identity has read-only repository permission. Do not
-change triggers, use another account or open a workaround PR to dispatch jobs.
-After ordinary repair commits are pushed, the maintainer can run:
+Use the maintainer's authorized account with workflow permissions. Earlier READ/403
+observations in linked records are historical, not current account policy.
+Do not switch accounts or open a workaround PR to bypass permission failures.
+The current development branch includes Fleet; testing it does not approve Fleet
+for release. After confirming the desired candidate, the maintainer can run:
 
 ```powershell
-git fetch origin codex/release-0.17-closure
-$candidate = git rev-parse origin/codex/release-0.17-closure
-gh workflow run ci.yml --ref codex/release-0.17-closure
-gh workflow run release.yml --ref codex/release-0.17-closure -f tag=$candidate -F publish=false -F prerelease=true
+$candidateBranch = 'feat/basic-mock-fleet'
+git fetch origin $candidateBranch
+if ($LASTEXITCODE -ne 0) { throw 'Fetch failed' }
+$candidate = git rev-parse "origin/$candidateBranch"
+if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve candidate' }
+gh workflow run ci.yml --ref $candidateBranch
+if ($LASTEXITCODE -ne 0) { throw 'CI dispatch failed' }
+gh workflow run release.yml --ref $candidateBranch -f tag=$candidate -F publish=false -F prerelease=true
+if ($LASTEXITCODE -ne 0) { throw 'Staging dispatch failed' }
 ```
 
 Record each run URL and exact checked-out SHA; a branch moving after dispatch
@@ -132,7 +149,9 @@ Official channel admission and production APT signing keys remain separate work.
 
 The bounded current Windows ConPTY run accepts the manage/profile/input/resize,
 started-snapshot cancellation and console-restoration paths listed above. Prior
-Vim/discovery evidence retains its recorded revision. Complete the remaining
+Vim/discovery evidence retains its recorded revision. The later dcbff41 manage
+discovery/status/viewport checks and B4 loopback Fleet checks above are additional,
+not replacements for untested paths. Complete the remaining
 final-candidate discover/diagnose navigation, filter/counts/gg/G/Ctrl-D/U/line-number
 matrix and other-platform human acceptance; this is why G07 remains PARTIAL.
 Real snapshot success retains its authorized-device evidence, not a new fleet run.
@@ -162,7 +181,12 @@ and hosted results, staging evidence, human/real-camera acceptance, resolved A03
 the proposed version/link diff and explicit limitations. If any required gate
 is missing, report it as missing and do not describe the four steps as complete.
 
-PR #14/#16/#17 are still open. Their adapted/credited implementations are in the
-candidate; do not merge the old implementations a second time or close the PRs
-as though master/develop already contain this work. Main-branch integration and
-PR disposition follow approval, separately from publication authorization.
+Repository inspection on 2026-09-12 confirms
+[PR #14](https://github.com/smiti1642/oxvif/pull/14),
+[PR #16](https://github.com/smiti1642/oxvif/pull/16) and
+[PR #17](https://github.com/smiti1642/oxvif/pull/17) are closed, with GitHub's
+`merged=false`. Their credited adaptations (`07a7d61`, `f9448e5`, `563bbcf`,
+respectively) are ancestors of remote master/develop `5a1821b`; this is adapted
+integration, not a GitHub merge of each original PR. Do not integrate them again.
+Later CLI/Fleet work is on `feat/basic-mock-fleet` and has not been merged into
+those main branches. This documentation update performs no merge or publication.

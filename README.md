@@ -141,7 +141,9 @@ details; automation receives the same evidence as structured reports.
 `oxvif manage` connects these operations in one guided terminal workspace, retaining
 the chosen device/profile; see the [guided workflow](docs/cli-maintenance.md#guided-workspace).
 Human screens share [Vim-style navigation](docs/cli-maintenance.md#vim-style-navigation),
-configurable line numbers (`?` settings or `--line-numbers`) and a compact mode/status line.
+configurable line numbers (`?` settings or `--line-numbers`) and a distinct fixed-bottom
+mode/status bar, separated from key hints. Manage network results support `/`
+search and saved/new/all filters; menus retain their position on return.
 
 Discovery marks every result as `SAVED`, `NEW`, or `INCOMPLETE`; both terminal
 users and Agents can filter current scans or saved snapshots by that status.

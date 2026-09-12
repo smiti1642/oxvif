@@ -6,6 +6,10 @@ Status: IN-PROGRESS / NOT RELEASE-READY. Authorized 2026-09-11.
 Update 2026-09-12: the operator reopened CLI scope for manage discovery filters,
 F12 status-bar design and menu-position retention. See [CLI re-entry](cli-0.17-reentry.md).
 Earlier acceptance and CI are historical evidence, not validation of these new bytes.
+The later [basic Mock Fleet](mock-fleet-basic-plan.md) is implemented with local
+evidence, but release inclusion is undecided. Current development is on
+`feat/basic-mock-fleet` (`32fcc77` before this documentation reconciliation),
+including CLI `dcbff41`; remote master/develop were both `5a1821b` at inspection.
 Comparison base: `v0.16.0`; frozen scope baseline:
 `f9448e515baec6169f40ec7f38ec2e0fcc752826` (evidence update `2f92b75`).
 This records the original frozen scope, not a claim that the hardening ancestry is accepted.
@@ -27,8 +31,10 @@ baseline; CLI re-entry, installation and final acceptance retain separate gates.
 
 ## Included scope
 
-No new user-facing feature enters this cut. Fixes required for the following
-contracts are allowed; discoveries are triaged by severity, not silently added.
+The original cut excluded new user-facing features. The operator subsequently
+authorized the CLI re-entry above as an explicit exception. Other discoveries
+are triaged by severity, not silently added; Mock Fleet remains outside confirmed
+release scope until a separate decision, even though it is present in the development branch.
 
 | ID | Included behavior | Source and verification entry points |
 | --- | --- | --- |
@@ -50,13 +56,13 @@ review all transitive consumers of an included helper. Public claims may not say
 
 | Gate | Current disposition | Required closure |
 | --- | --- | --- |
-| G01 Complete candidate review | LOCAL-PASS | All 208 frozen paths and later deltas reviewed against source, affected consumers, assertions and public claims; six completed groups and input hashes in the [review record](release-0.17-review.md) |
+| G01 Complete candidate review | BASELINE LOCAL-PASS; CURRENT DELTA OPEN | The 208-path review and recorded deltas remain accepted only for their input hashes in the [review record](release-0.17-review.md). Reconcile subsequent CLI and any included Fleet changes against the final candidate; passing tests do not extend the frozen review ledger |
 | G02 Data integrity, K27 | LOCAL-PASS | Collision buckets preserve distinct requests across record/load/save and request-aware replay; key-only ambiguity returns None; equivalent requests still replace and credential cleanup remains targeted. Report groups retain all rows. See the K27 evidence below; G05 remains separate |
-| G03 Security and response integrity | LOCAL-PASS | A01–A05 repaired locally; credential, state/write, URL, receipt and shared-boundary assertions reconciled. No known severe blocker remains identified in the included cut; documented model/HTTP/replay limits do not imply full hardening |
-| G04 Local code and documents | LOCAL-PASS | Final follow-up: 1,310 all-feature / 1,198 default passes, five ignored each; both Clippy/strict rustdoc modes, fmt, Rust 1.88 and document/inventory checks. Revalidate affected gates after version changes or merges |
-| G05 Native CI | PASS at fed6777 | [Run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) passed all 27 jobs and five native targets; subsequent documentation-only edits are not covered by that run |
+| G03 Security and response integrity | BASELINE LOCAL-PASS; CURRENT DELTA OPEN | A01–A05 remain repaired with recorded assertions. Reconcile later terminal behavior and any included Fleet LAN/control/discovery exposure; documented limits and local tests do not establish whole-candidate security acceptance |
+| G04 Local code and documents | LOCAL-PASS, Windows development batch | At B4: all-features 1,316 passed / 0 failed / 6 ignored; default 1,204 / 0 / 6. Both Clippy/strict rustdoc modes and fmt passed; [exact evidence and exclusions](mock-fleet-basic-plan.md#local-evidence). Rust 1.88/schema evidence from earlier batches is historical, not a new run. Revalidate affected gates after version changes, scope removal or merges |
+| G05 Native CI | HISTORICAL PASS; CURRENT PENDING | [Run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) passed all 27 jobs/five native targets at fed6777; it does not cover later CLI/Fleet runtime or CI-step changes. Dispatch and record the final candidate separately |
 | G06 Package and distribution | PARTIAL | Package/docs passed at fed6777: library package verification, CLI package file listing, archive controls and docs. Listing is not CLI package/install verification; final-version packages, portable installs, SBOM/checksums and non-publishing staging remain required |
-| G07 Human and Agent acceptance | PARTIAL | Current Windows debug ConPTY accepts bounded manage/profile/input/resize, started-snapshot cancellation and console restoration; historical real-camera snapshot/diagnose/export/diff evidence retained. Remaining discover/diagnose navigation matrix and other-platform human acceptance are explicit in the approval packet |
+| G07 Human and Agent acceptance | PARTIAL | CLI dcbff41 Windows ConPTY covers manage discovery search/registration filters, exact selection, resize, bottom status and menu retention; B4 separately covers four-camera CLI reads/restart/cleanup. Keep remaining navigation/IME/other-platform checks and native LAN/VMS acceptance explicit; historical hardware evidence is not a fresh run |
 | G08 Versions and release links | OPEN | Update library/CLI versions together after candidate acceptance; preserve schema-v3 claims only if tests agree, resolve every draft link to the final tag, keep migration warnings visible |
 | G09 RC and approval | NOT-RUN | Publish an RC only with explicit authorization; suggested 3–7 day observation, no calendar-based automatic success; obtain final release approval |
 
@@ -90,6 +96,12 @@ must still block release; local review does not waive future findings.
   RC links must use their own actual RC tag.
 
 ## Execution order
+
+Steps 1–3 below record the original construction order. For the current candidate,
+first decide Fleet release placement, reconcile the later G01/G03 deltas and
+use the updated [maintainer instructions](release-0.17-approval.md#maintainer-actions)
+for exact-revision CI/staging. Removing Fleet from the release also changes the
+tested input and requires affected verification; do not reuse the combined count unchanged.
 
 1. Commit the scope, paired full/summary documents and [follow-up backlog](post-0.17-backlog.md).
 2. Recheck selected contracts using existing batch suites and bounded independent
