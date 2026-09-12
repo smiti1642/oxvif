@@ -3,17 +3,38 @@ use std::path::PathBuf;
 
 use oxvif_cli::{
     AppError, Application, CommandData, CommandRequest, CommandSuccess, DiscoverScanRequest,
-    ExecutionOptions, ManagedAction, ManagedDevice, OutputFormat, SecretString, TargetSelector,
-    profile_label, render_success_with_details,
+    DiscoveryDeviceView, ExecutionOptions, ManagedAction, ManagedDevice, OutputFormat,
+    SecretString, TargetSelector, profile_label, render_success_with_details,
 };
 
-use crate::interactive::Panel;
+use crate::interactive::{DiscoverySelection, DiscoverySelectionView, Panel};
 use crate::navigation::Viewport;
 
 enum WorkflowOutcome {
     Completed(Box<CommandSuccess>),
     Failed,
     Cancelled,
+}
+
+#[derive(Default)]
+struct DeviceChooser {
+    menu: Viewport,
+    search: Option<SearchResults>,
+    browsing_search: bool,
+}
+
+struct SearchResults {
+    devices: Vec<DiscoveryDeviceView>,
+    view: DiscoverySelectionView,
+}
+
+impl DeviceChooser {
+    fn replace_search(&mut self, devices: Vec<DiscoveryDeviceView>) {
+        self.search = Some(SearchResults {
+            devices,
+            view: DiscoverySelectionView::default(),
+        });
+    }
 }
 
 fn proceed_after_profiles(choice: usize, outcome: &WorkflowOutcome) -> bool {
@@ -30,7 +51,7 @@ pub(crate) async fn run(
     options: &ExecutionOptions,
 ) -> Result<(), AppError> {
     let mut panel = Panel::enter()?;
-    let mut camera_view = Viewport::default();
+    let mut chooser = DeviceChooser::default();
     let mut next = if initial.device.is_some() || initial.target.is_some() {
         Some(initial)
     } else {
@@ -39,7 +60,7 @@ pub(crate) async fn run(
     loop {
         let selector = match next.take() {
             Some(selector) => selector,
-            None => match choose_device(&mut panel, app, options, &mut camera_view).await? {
+            None => match choose_device(&mut panel, app, options, &mut chooser).await? {
                 Some(selector) => selector,
                 None => return Ok(()),
             },
@@ -284,9 +305,77 @@ async fn choose_device(
     panel: &mut Panel,
     app: &Application,
     options: &ExecutionOptions,
-    view: &mut Viewport,
+    chooser: &mut DeviceChooser,
 ) -> Result<Option<TargetSelector>, AppError> {
     loop {
+        if chooser.browsing_search {
+            if let Some(results) = &mut chooser.search {
+                match panel.select_discovered_device(&results.devices, &mut results.view)? {
+                    DiscoverySelection::Back => {
+                        chooser.browsing_search = false;
+                        continue;
+                    }
+                    DiscoverySelection::Select(index) => {
+                        let device = &results.devices[index];
+                        if let Some(id) = &device.registered_device_id {
+                            return Ok(Some(TargetSelector {
+                                device: Some(id.clone()),
+                                ..Default::default()
+                            }));
+                        }
+                        if let Some(target) = device
+                            .record
+                            .xaddrs
+                            .iter()
+                            .find_map(|s| oxvif_cli::normalize_target(s).ok())
+                        {
+                            return Ok(Some(TargetSelector {
+                                target: Some(target),
+                                ..Default::default()
+                            }));
+                        }
+                        panel.show("No usable address", "This discovery record has no valid ONVIF address. Go back and use Enter device address, or press R to rescan.")?;
+                        continue;
+                    }
+                    DiscoverySelection::Rescan => {}
+                }
+            }
+            let scan = CommandRequest::DiscoverScan(DiscoverScanRequest {
+                snapshot_id: None,
+                interfaces: Vec::new(),
+                filters: Vec::new(),
+                query: None,
+            });
+            match panel
+                .wait(
+                    "Discovering cameras (Esc cancels)",
+                    app.execute(scan, options),
+                )
+                .await?
+            {
+                Some(Ok(result)) => {
+                    let CommandData::DiscoveryScan { devices, .. } = result.data else {
+                        unreachable!()
+                    };
+                    chooser.replace_search(devices);
+                }
+                Some(Err(error)) => panel.show(
+                    if chooser.search.is_some() {
+                        "Discovery failed; previous results retained"
+                    } else {
+                        "Discovery failed"
+                    },
+                    &error.message,
+                )?,
+                None => {}
+            }
+            // Only a completed scan replaces the results. Back and failed/cancelled
+            // rescans retain this manage session's data, filter and viewport.
+            if chooser.search.is_none() {
+                chooser.browsing_search = false;
+            }
+            continue;
+        }
         let (devices, _) = app.registry().list()?;
         let mut choices = super::interactive::aligned_menu_rows(
             &devices
@@ -301,7 +390,11 @@ async fn choose_device(
                 .collect::<Vec<_>>(),
         );
         choices.extend([
-            "Search network for cameras".into(),
+            if chooser.search.is_some() {
+                "Return to search results (R to rescan)".into()
+            } else {
+                "Search network for cameras".into()
+            },
             "Enter device address (session only)".into(),
         ]);
         let details = devices
@@ -312,7 +405,7 @@ async fn choose_device(
             "Choose camera | Esc/q: exit manage",
             &choices,
             &details,
-            view,
+            &mut chooser.menu,
         )?
         else {
             return Ok(None);
@@ -340,48 +433,7 @@ async fn choose_device(
             }
             continue;
         }
-        let scan = CommandRequest::DiscoverScan(DiscoverScanRequest {
-            snapshot_id: None,
-            interfaces: Vec::new(),
-            filters: Vec::new(),
-            query: None,
-        });
-        match panel
-            .wait(
-                "Discovering cameras (Esc cancels)",
-                app.execute(scan, options),
-            )
-            .await?
-        {
-            Some(Ok(result)) => {
-                let CommandData::DiscoveryScan { devices, .. } = result.data else {
-                    unreachable!()
-                };
-                if let Some(index) = panel.select_discovered_device(&devices)? {
-                    let device = &devices[index];
-                    if let Some(id) = &device.registered_device_id {
-                        return Ok(Some(TargetSelector {
-                            device: Some(id.clone()),
-                            ..Default::default()
-                        }));
-                    }
-                    if let Some(target) = device
-                        .record
-                        .xaddrs
-                        .iter()
-                        .find_map(|s| oxvif_cli::normalize_target(s).ok())
-                    {
-                        return Ok(Some(TargetSelector {
-                            target: Some(target),
-                            ..Default::default()
-                        }));
-                    }
-                    panel.show("No usable address", "This discovery record has no valid ONVIF address. Try Enter device address.")?;
-                }
-            }
-            Some(Err(error)) => panel.show("Discovery failed", &error.message)?,
-            None => {}
-        }
+        chooser.browsing_search = true;
     }
 }
 

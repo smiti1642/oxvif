@@ -43,6 +43,9 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 
 ### Fixed
 
+- Returning to `manage` discovery now retains session results, text/registration
+  filters and viewport instead of scanning again. Uppercase `R` explicitly rescans;
+  cancelled or failed rescans preserve the previous results.
 - `manage` network results now support `/` search and `r`/`n`/`A` registration
   filters through the shared discovery browser; filtered selection preserves
   camera identity and new cameras remain session-only.

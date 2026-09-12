@@ -9,6 +9,7 @@ separate release approval; no publication or system installation is authorized h
 | Section | Purpose |
 | --- | --- |
 | [Implementation batch](#implementation-batch) | Scope and checks |
+| [Search return follow-up](#search-return-follow-up) | Session cache and scoped regression evidence |
 | [Mock discussion](#mock-discussion) | Proposal, not implemented functionality |
 | [Acceptance](#acceptance) | Evidence and remaining gates |
 
@@ -29,6 +30,27 @@ separate release approval; no publication or system installation is authorized h
 
 This does not introduce RTSP playback, camera writes, a public navigation crate,
 new dependencies, Agent envelope changes or host/network configuration changes.
+
+## Search return follow-up
+
+On 2026-09-13, a reported Back/re-entry regression was reproduced against the
+previous binary: returning from a discovered camera lost the browser, and reopening
+search started another network scan. `manage` now owns its discovery results and
+view for the session. Back restores both; uppercase `R` requests a new scan.
+Successful scans reset the view, while cancellation or failure preserves it.
+The cache is labelled, may become stale, and is discarded when `manage` exits.
+Standalone `discover` retains state for details/setup cancellation, but submitting
+setup ends the command; a new invocation remains a new scan.
+
+Scoped validation passed: `cargo test -p oxvif-cli`, CLI all-target Clippy with
+warnings denied, and Windows ConPTY against the updated debug executable. The
+terminal check compared the complete filtered/scrolled screen after camera Back,
+chooser re-entry and cancelled rescan; it also verified successful explicit rescan
+resets the view, exit code zero and an unchanged isolated registry. Only read-only
+LAN discovery was performed; no camera operations or credentials were used. Two
+new unit tests cover checkpoint restoration and context-sensitive `R` handling.
+This follow-up does not rerun or replace the historical workspace counts below;
+cross-platform CI and release approval remain outstanding.
 
 ## Mock discussion
 

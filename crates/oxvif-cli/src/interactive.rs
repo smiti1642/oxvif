@@ -47,6 +47,22 @@ enum BrowserIntent {
     Quit,
     Settings,
     Activate(usize),
+    Rescan,
+}
+
+pub(crate) enum DiscoverySelection {
+    Back,
+    Select(usize),
+    Rescan,
+}
+
+/// UI state for the same in-memory result set; never stored in the registry.
+#[derive(Default)]
+pub(crate) struct DiscoverySelectionView {
+    query: String,
+    registration_view: RegistrationView,
+    selected: usize,
+    top: usize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -488,6 +504,7 @@ pub(crate) fn browse_discovery(
                 } else if let Some(action) = state.handle_key(key) {
                     match action {
                         BrowserIntent::Quit => return Ok(BrowserAction::Quit),
+                        BrowserIntent::Rescan => unreachable!("Rescan is manage-only"),
                         BrowserIntent::Settings => number_settings(&mut terminal)?,
                         BrowserIntent::Activate(index) => {
                             let device = &devices[index].record;
@@ -646,8 +663,9 @@ impl Panel {
     pub(crate) fn select_discovered_device(
         &mut self,
         devices: &[DiscoveryDeviceView],
-    ) -> Result<Option<usize>, AppError> {
-        let mut state = BrowserState::for_selection(devices);
+        view: &mut DiscoverySelectionView,
+    ) -> Result<DiscoverySelection, AppError> {
+        let mut state = BrowserState::resume_selection(devices, view);
         loop {
             let (_, height) = terminal::size().map_err(terminal_error)?;
             state.set_page_size(if state.showing_details {
@@ -658,8 +676,18 @@ impl Panel {
             render(&mut self.0, &mut state)?;
             match event::read().map_err(terminal_error)? {
                 Event::Key(key) => match state.handle_key(key) {
-                    Some(BrowserIntent::Quit) => return Ok(None),
-                    Some(BrowserIntent::Activate(index)) => return Ok(Some(index)),
+                    Some(BrowserIntent::Quit) => {
+                        state.save_selection(view);
+                        return Ok(DiscoverySelection::Back);
+                    }
+                    Some(BrowserIntent::Activate(index)) => {
+                        state.save_selection(view);
+                        return Ok(DiscoverySelection::Select(index));
+                    }
+                    Some(BrowserIntent::Rescan) => {
+                        state.save_selection(view);
+                        return Ok(DiscoverySelection::Rescan);
+                    }
                     Some(BrowserIntent::Settings) => number_settings(&mut self.0)?,
                     None => {}
                 },
@@ -1229,6 +1257,24 @@ impl<'a> BrowserState<'a> {
         }
     }
 
+    fn resume_selection(devices: &'a [DiscoveryDeviceView], view: &DiscoverySelectionView) -> Self {
+        let mut state = Self::for_selection(devices);
+        state.query.clone_from(&view.query);
+        state.registration_view = view.registration_view;
+        state.rebuild_filter();
+        state.selected = view.selected;
+        state.top = view.top;
+        state.clamp_selection();
+        state
+    }
+
+    fn save_selection(&self, view: &mut DiscoverySelectionView) {
+        view.query.clone_from(&self.query);
+        view.registration_view = self.registration_view;
+        view.selected = self.selected;
+        view.top = self.top;
+    }
+
     fn set_page_size(&mut self, page_size: usize) {
         self.page_size = page_size.max(1);
         self.clamp_selection();
@@ -1353,6 +1399,9 @@ impl<'a> BrowserState<'a> {
         }
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => Some(BrowserIntent::Quit),
+            KeyCode::Char('R') if self.purpose == DiscoveryPurpose::Select => {
+                Some(BrowserIntent::Rescan)
+            }
             KeyCode::Char('/') => {
                 self.filtering = true;
                 None
@@ -1512,7 +1561,7 @@ fn discovery_frame(
     let title = format!(
         "{} | {} found | {} saved | {} shown",
         if state.purpose == DiscoveryPurpose::Select {
-            "oxvif manage discovery"
+            "oxvif manage discovery (cached results)"
         } else {
             "oxvif discovery"
         },
@@ -1597,7 +1646,7 @@ fn discovery_frame(
         if state.filtering {
             "Type search | Enter/Esc back | Ctrl-U clear | Ctrl-C close"
         } else if state.purpose == DiscoveryPurpose::Select {
-            "? settings | j/k gg/G ^D/^U | / r n A filter | c clear | i info | Enter select | q back"
+            "? settings | j/k gg/G ^D/^U | / r n A filter | c clear | R rescan | i info | Enter select | q back"
         } else {
             "? settings | j/k gg/G ^D/^U | / r n A filter | c clear | i info | Enter add | q quit"
         },
@@ -1853,6 +1902,92 @@ fn terminal_error(error: io::Error) -> AppError {
 mod tests {
     use super::*;
     use crate::navigation::Motion;
+
+    #[test]
+    fn manage_discovery_resume_preserves_filter_identity_and_viewport() {
+        let devices = (1..=40)
+            .map(|i| {
+                view(
+                    &format!("192.0.2.{i}"),
+                    "Example",
+                    "Camera",
+                    (i % 2 == 0).then_some("saved"),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut state = BrowserState::for_selection(&devices);
+        let key = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+        for c in "/Example".chars() {
+            state.handle_key(key(c));
+        }
+        state.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        state.handle_key(key('n'));
+        for c in "17G".chars() {
+            state.handle_key(key(c));
+        }
+        let original = state.filtered[state.selected];
+        let before = (state.selected, state.top);
+        assert!(before.1 > 0, "exercise a scrolled result page");
+        assert!(
+            matches!(state.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)), Some(BrowserIntent::Activate(i)) if i == original)
+        );
+        let mut view = DiscoverySelectionView::default();
+        state.save_selection(&mut view);
+        let mut resumed = BrowserState::resume_selection(&devices, &view);
+        assert_eq!(resumed.query, "Example");
+        assert_eq!(resumed.registration_view, RegistrationView::Unregistered);
+        assert_eq!((resumed.selected, resumed.top), before);
+        assert_eq!(resumed.filtered[resumed.selected], original);
+        assert!(!resumed.filtering && !resumed.showing_details);
+        assert!(resumed.nav.pending().is_empty());
+        assert!(matches!(
+            resumed.handle_key(key('q')),
+            Some(BrowserIntent::Quit)
+        ));
+        resumed.save_selection(&mut view);
+        let reopened = BrowserState::resume_selection(&devices, &view);
+        assert_eq!((reopened.selected, reopened.top), before);
+        let empty = BrowserState::resume_selection(&[], &view);
+        assert!(empty.current().is_none());
+        assert_eq!((empty.selected, empty.top), (0, 0));
+    }
+
+    #[test]
+    fn manage_rescan_is_explicit_and_does_not_capture_search_text() {
+        let devices = vec![view("192.0.2.1", "Example", "Camera", None)];
+        let mut state = BrowserState::for_selection(&devices);
+        let rescan = KeyEvent::new(KeyCode::Char('R'), KeyModifiers::SHIFT);
+        assert!(matches!(
+            state.handle_key(rescan),
+            Some(BrowserIntent::Rescan)
+        ));
+        assert!(
+            state
+                .handle_key(KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE))
+                .is_none()
+        );
+        assert!(state.handle_key(rescan).is_none());
+        assert_eq!(state.query, "R", "R is literal text during search");
+        state.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        state.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+        state.handle_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
+        assert!(
+            state.handle_key(rescan).is_none(),
+            "details do not start a scan"
+        );
+        state.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(
+            state.handle_key(rescan),
+            Some(BrowserIntent::Rescan)
+        ));
+        let frame = discovery_frame(&state, 140, 24, LineNumbers::Hybrid).join("\n");
+        assert!(frame.contains("cached results") && frame.contains("R rescan"));
+        let mut onboarding = BrowserState::new(&devices, 12, 1);
+        assert!(
+            onboarding.handle_key(rescan).is_none(),
+            "standalone onboarding is unchanged"
+        );
+    }
 
     #[test]
     fn manage_discovery_filters_select_original_records_without_onboarding() {

@@ -61,6 +61,18 @@ shows all registration states. Registration filters combine with the text query;
 then Enter selects the highlighted camera and `q`/Esc returns to the chooser.
 Selecting a new record does not save it. These filter keys apply to network
 results, not the initial saved-camera chooser or action menus.
+
+Within one `manage` session, returning from a selected camera restores the cached
+discovery results, text/registration filters, selection and scroll position. Leaving
+the browser and choosing **Return to search results (R to rescan)** also reuses them.
+In normal list mode, uppercase `R` explicitly rescans; lowercase `r` remains the
+saved-record filter. A successful scan replaces the results and resets the view;
+cancellation or failure retains the previous results. The title identifies cached
+results, which may become stale; exiting `manage` discards this cache.
+Standalone `discover` retains its list state while inspecting details or cancelling
+the setup form, but submitting setup ends that command. Running `discover` again
+performs a new scan; it does not reuse the `manage` session cache.
+
 Camera chooser status, name and ID columns use the longest value in the full list
 as their display width, capped at 24 terminal cells per descriptive column, and
 center shorter values; addresses remain left-aligned. Full values are available with `i`.
