@@ -237,6 +237,8 @@ Remaining limitations and follow-up:
   cancelling credentials, or to the first camera after leaving the action menu.
   Preserving these positions is a low-priority follow-up; closing item details
   already preserves the selected item.
+  Update 2026-09-12: this follow-up is implemented in the [CLI re-entry](cli-0.17-reentry.md)
+  batch; the original acceptance above remains historical.
 - M6 remains deferred: the reusable core is an internal, backend-free module,
   not a separately published crate or stable public API.
 

@@ -8,7 +8,7 @@ use crossterm::{
     cursor::{Hide, MoveTo, MoveToColumn, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute, queue,
-    style::Print,
+    style::{Attribute, Print, SetAttribute},
     terminal::{
         self, BeginSynchronizedUpdate, Clear, ClearType, EndSynchronizedUpdate,
         EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -46,7 +46,13 @@ pub(crate) struct DiscoverySetup {
 enum BrowserIntent {
     Quit,
     Settings,
-    BeginSetup(Box<DiscoveryRecord>),
+    Activate(usize),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DiscoveryPurpose {
+    Add,
+    Select,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -290,13 +296,17 @@ fn nav_status(
 ) -> String {
     let pending = nav.pending();
     format!(
-        "{} | keys:{} | {}{}/{} | numbers:{}{}",
+        "{}{} | {}{}/{} | numbers:{}{}",
         if mode.contains("TEXT") {
             "NORMAL"
         } else {
             mode
         },
-        if pending.is_empty() { "-" } else { &pending },
+        if pending.is_empty() {
+            String::new()
+        } else {
+            format!(" | [{pending}]")
+        },
         if mode.contains("TEXT") {
             "line "
         } else {
@@ -479,14 +489,15 @@ pub(crate) fn browse_discovery(
                     match action {
                         BrowserIntent::Quit => return Ok(BrowserAction::Quit),
                         BrowserIntent::Settings => number_settings(&mut terminal)?,
-                        BrowserIntent::BeginSetup(device) => {
-                            let target = primary_target(&device).ok_or_else(|| {
+                        BrowserIntent::Activate(index) => {
+                            let device = &devices[index].record;
+                            let target = primary_target(device).ok_or_else(|| {
                                 AppError::invalid_argument(
                                     "The selected discovery record has no usable device-service address.",
                                 )
                             })?;
                             let suggested_id = super::suggested_device_id(target, None)?;
-                            setup_form = Some(SetupForm::new(*device, suggested_id));
+                            setup_form = Some(SetupForm::new(device.clone(), suggested_id));
                         }
                     }
                 }
@@ -596,10 +607,18 @@ fn settings_frame(
         "Enter apply | s save default | Esc cancel | j/k move",
         &if error.is_empty() {
             format!(
-                "SETTINGS | {} | keys:{} | {}",
+                "SETTINGS | {}{}{}",
                 preview.name(),
-                nav.pending(),
-                nav.hint()
+                if nav.pending().is_empty() {
+                    String::new()
+                } else {
+                    format!(" | [{}]", nav.pending())
+                },
+                if nav.hint().is_empty() {
+                    String::new()
+                } else {
+                    format!(" | {}", nav.hint())
+                }
             )
         } else {
             format!("SAVE FAILED | {error}")
@@ -620,6 +639,45 @@ pub(crate) struct Panel(TerminalSession);
 impl Panel {
     pub(crate) fn enter() -> Result<Self, AppError> {
         TerminalSession::enter().map(Self)
+    }
+
+    /// Return the original record index, not its position in the filtered view.
+    /// Selecting a new camera here does not register it or start the setup form.
+    pub(crate) fn select_discovered_device(
+        &mut self,
+        devices: &[DiscoveryDeviceView],
+    ) -> Result<Option<usize>, AppError> {
+        let mut state = BrowserState::for_selection(devices);
+        loop {
+            let (_, height) = terminal::size().map_err(terminal_error)?;
+            state.set_page_size(if state.showing_details {
+                panel_body_rows(height)
+            } else {
+                discovery_rows(height)
+            });
+            render(&mut self.0, &mut state)?;
+            match event::read().map_err(terminal_error)? {
+                Event::Key(key) => match state.handle_key(key) {
+                    Some(BrowserIntent::Quit) => return Ok(None),
+                    Some(BrowserIntent::Activate(index)) => return Ok(Some(index)),
+                    Some(BrowserIntent::Settings) => number_settings(&mut self.0)?,
+                    None => {}
+                },
+                Event::Resize(_, _) => {
+                    state.nav.reset();
+                    self.0.invalidate()?;
+                }
+                Event::Paste(mut value) => {
+                    state.nav.reset();
+                    if state.filtering {
+                        state.query.push_str(&value);
+                        state.rebuild_filter();
+                    }
+                    value.zeroize();
+                }
+                _ => {}
+            }
+        }
     }
 
     fn draw(
@@ -643,11 +701,20 @@ impl Panel {
         choices: &[String],
         details: &[String],
     ) -> Result<Option<usize>, AppError> {
+        self.menu_with_view(title, choices, details, &mut Viewport::default())
+    }
+
+    pub(crate) fn menu_with_view(
+        &mut self,
+        title: &str,
+        choices: &[String],
+        details: &[String],
+        view: &mut Viewport,
+    ) -> Result<Option<usize>, AppError> {
         if choices.is_empty() {
             self.show(title, "No items available.")?;
             return Ok(None);
         }
-        let mut view = Viewport::default();
         let mut nav = Navigation::default();
         loop {
             let mode = ui_settings::current()?;
@@ -656,7 +723,7 @@ impl Panel {
             view.clamp(choices.len(), rows);
             draw_changed_lines(
                 &mut self.0,
-                menu_frame(title, choices, view, &nav, width, height, mode),
+                menu_frame(title, choices, *view, &nav, width, height, mode),
             )?;
             match event::read().map_err(terminal_error)? {
                 Event::Key(key) => match navigation_key(&mut nav, key, false) {
@@ -801,9 +868,9 @@ impl Panel {
                 &body,
                 "Enter: confirm | Esc: cancel | Left/Right/Home/End: edit | Ctrl-U: clear",
                 if secret {
-                    "INPUT | password masked | Esc cancel"
+                    "INPUT | password masked"
                 } else {
-                    "INPUT | literal text | Esc cancel"
+                    "INPUT | literal text"
                 },
             )?;
             match event::read().map_err(terminal_error)? {
@@ -875,7 +942,7 @@ impl Panel {
                 biased;
                 result = &mut future => return Ok(Some(result)),
                 _ = ticker.tick() => {
-                    self.draw(title, &[format!("Working... {}s elapsed", start.elapsed().as_secs())], "Esc/Ctrl-C: cancel; completed results remain available", "BUSY | Esc/Ctrl-C cancel")?;
+                    self.draw(title, &[format!("Working... {}s elapsed", start.elapsed().as_secs())], "Esc/Ctrl-C: cancel; completed results remain available", &format!("BUSY | {}s elapsed", start.elapsed().as_secs()))?;
                     if event::poll(Duration::ZERO).map_err(terminal_error)? {
                         match event::read().map_err(terminal_error)? {
                             Event::Key(key) if key.kind != KeyEventKind::Release && (key.code == KeyCode::Esc || (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))) => return Ok(None),
@@ -977,7 +1044,7 @@ fn panel_lines(
         lines.push(footer.to_owned());
     }
     if height >= 2 {
-        lines.push(status.to_owned());
+        lines.push(status_bar(status, title, width));
     }
     lines
         .into_iter()
@@ -987,6 +1054,21 @@ fn panel_lines(
             truncate_to_width(&safe, width)
         })
         .collect()
+}
+
+// The bottom row is status, not a second help line. Add context only when the
+// complete status fits, so long device names cannot hide position or pending keys.
+fn status_bar(status: &str, context: &str, width: usize) -> String {
+    let status = truncate_to_width(status, width);
+    let used = UnicodeWidthStr::width(status.as_str());
+    let gap = width.saturating_sub(used);
+    if gap >= 16 {
+        let context = truncate_to_width(context.split(" | ").next().unwrap_or(context), gap - 3);
+        let padding = width - used - UnicodeWidthStr::width(context.as_str());
+        format!("{status}{}{context}", " ".repeat(padding))
+    } else {
+        format!("{status}{}", " ".repeat(gap))
+    }
 }
 
 // Resolve gutter width after wrapping; digit growth can only reduce content width.
@@ -1104,6 +1186,7 @@ impl Drop for TerminalSession {
 }
 
 struct BrowserState<'a> {
+    purpose: DiscoveryPurpose,
     devices: &'a [DiscoveryDeviceView],
     total_count: usize,
     filtered: Vec<usize>,
@@ -1122,6 +1205,7 @@ struct BrowserState<'a> {
 impl<'a> BrowserState<'a> {
     fn new(devices: &'a [DiscoveryDeviceView], page_size: usize, total_count: usize) -> Self {
         Self {
+            purpose: DiscoveryPurpose::Add,
             devices,
             total_count,
             filtered: (0..devices.len()).collect(),
@@ -1135,6 +1219,13 @@ impl<'a> BrowserState<'a> {
             showing_details: false,
             detail_scroll: 0,
             detail_max_scroll: 0,
+        }
+    }
+
+    fn for_selection(devices: &'a [DiscoveryDeviceView]) -> Self {
+        Self {
+            purpose: DiscoveryPurpose::Select,
+            ..Self::new(devices, DEFAULT_PAGE_SIZE, devices.len())
         }
     }
 
@@ -1302,11 +1393,17 @@ impl<'a> BrowserState<'a> {
                 }
                 None
             }
-            KeyCode::Enter | KeyCode::Char('a') => self.current().and_then(|device| {
-                (device.registration_status != DiscoveryRegistrationStatus::Saved
-                    && primary_target(device).is_some())
-                .then(|| BrowserIntent::BeginSetup(Box::new(device.record.clone())))
-            }),
+            KeyCode::Enter | KeyCode::Char('a') => {
+                let device = self.current()?;
+                let eligible = match self.purpose {
+                    DiscoveryPurpose::Select => key.code == KeyCode::Enter,
+                    DiscoveryPurpose::Add => {
+                        device.registration_status != DiscoveryRegistrationStatus::Saved
+                            && primary_target(device).is_some()
+                    }
+                };
+                eligible.then(|| BrowserIntent::Activate(self.filtered[self.selected]))
+            }
             _ => None,
         }
     }
@@ -1355,7 +1452,7 @@ fn render_setup(terminal: &mut TerminalSession, form: &SetupForm) -> Result<(), 
             "oxvif discovery - onboard selected device",
             &body,
             "Tab/Up/Down field | Enter next/submit | Ctrl-U clear | Esc back",
-            "INPUT | credentials masked | Esc back",
+            "INPUT | credentials masked",
             width,
             height,
         ),
@@ -1413,7 +1510,12 @@ fn discovery_frame(
         .filter(|d| d.registration_status == DiscoveryRegistrationStatus::Saved)
         .count();
     let title = format!(
-        "oxvif discovery | {} found | {} saved | {} shown",
+        "{} | {} found | {} saved | {} shown",
+        if state.purpose == DiscoveryPurpose::Select {
+            "oxvif manage discovery"
+        } else {
+            "oxvif discovery"
+        },
         state.total_count,
         saved,
         state.filtered.len()
@@ -1472,8 +1574,17 @@ fn discovery_frame(
                 .current()
                 .map(|d| {
                     format!(
-                        "Saved as: {} | {}",
-                        d.registered_device_id.as_deref().unwrap_or("(not saved)"),
+                        "{} | {}",
+                        if state.purpose == DiscoveryPurpose::Select
+                            && d.registration_status != DiscoveryRegistrationStatus::Saved
+                        {
+                            "Session only (not saved)".to_owned()
+                        } else {
+                            format!(
+                                "Saved as: {}",
+                                d.registered_device_id.as_deref().unwrap_or("(not saved)")
+                            )
+                        },
                         display_endpoint(d)
                     )
                 })
@@ -1484,9 +1595,11 @@ fn discovery_frame(
         &title,
         &body,
         if state.filtering {
-            "Type search | Enter/Esc back | Ctrl-U clear | Ctrl-C quit"
+            "Type search | Enter/Esc back | Ctrl-U clear | Ctrl-C close"
+        } else if state.purpose == DiscoveryPurpose::Select {
+            "? settings | j/k gg/G ^D/^U | / r n A filter | c clear | i info | Enter select | q back"
         } else {
-            "? settings | j/k gg/G ^D/^U | / r n A filter | i info | Enter add | q quit"
+            "? settings | j/k gg/G ^D/^U | / r n A filter | c clear | i info | Enter add | q quit"
         },
         &nav_status(
             if state.filtering { "SEARCH" } else { "NORMAL" },
@@ -1651,10 +1764,17 @@ fn draw_changed_lines(terminal: &mut TerminalSession, lines: Vec<String>) -> Res
         let current = lines.get(row).map_or("", String::as_str);
         let previous = terminal.previous_lines.get(row).map_or("", String::as_str);
         if current != previous {
+            let status_row = height >= 2 && row + 1 == usize::from(height);
             queue!(
                 terminal.stdout,
                 MoveTo(0, u16::try_from(row).unwrap_or(u16::MAX)),
+                SetAttribute(if status_row {
+                    Attribute::Reverse
+                } else {
+                    Attribute::Reset
+                }),
                 Print(current),
+                SetAttribute(Attribute::Reset),
                 Clear(ClearType::UntilNewLine)
             )
             .map_err(terminal_error)?;
@@ -1735,6 +1855,74 @@ mod tests {
     use crate::navigation::Motion;
 
     #[test]
+    fn manage_discovery_filters_select_original_records_without_onboarding() {
+        let devices = vec![
+            view("192.0.2.1", "Other", "Camera", None),
+            view("192.0.2.2", "Acme", "Camera", Some("front-door")),
+            view("192.0.2.3", "Acme", "Camera", None),
+        ];
+        let mut state = BrowserState::for_selection(&devices);
+        let key = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+        for c in "/Acme".chars() {
+            assert!(state.handle_key(key(c)).is_none());
+        }
+        assert!(state.filtering);
+        assert_eq!(state.filtered, [1, 2]);
+        let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(
+            state.handle_key(enter).is_none(),
+            "finish search, not select"
+        );
+        state.handle_key(key('r'));
+        assert_eq!(state.filtered, [1]);
+        assert!(matches!(
+            state.handle_key(enter),
+            Some(BrowserIntent::Activate(1))
+        ));
+        state.handle_key(key('n'));
+        assert_eq!(state.filtered, [2]);
+        assert!(
+            state.handle_key(key('a')).is_none(),
+            "manage never onboards"
+        );
+        assert!(matches!(
+            state.handle_key(enter),
+            Some(BrowserIntent::Activate(2))
+        ));
+        let frame = discovery_frame(&state, 120, 24, LineNumbers::Hybrid).join("\n");
+        assert!(frame.contains("oxvif manage discovery"));
+        assert!(frame.contains("Session only (not saved)"));
+        assert!(frame.contains("Enter select"));
+        assert!(!frame.contains("Enter add"));
+        state.handle_key(KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT));
+        assert_eq!(state.filtered, [1, 2], "A preserves the text query");
+        state.handle_key(key('c'));
+        assert_eq!(state.filtered, [0, 1, 2]);
+        for c in "/123ggjk".chars() {
+            state.handle_key(key(c));
+        }
+        assert_eq!(state.query, "123ggjk", "search bypasses Vim navigation");
+        assert!(state.filtered.is_empty());
+        assert!(state.handle_key(enter).is_none());
+        assert!(
+            state.handle_key(enter).is_none(),
+            "empty results cannot select"
+        );
+        state.handle_key(key('/'));
+        state.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+        assert_eq!(state.filtered, [0, 1, 2]);
+        assert!(
+            state
+                .handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+                .is_none()
+        );
+        assert!(matches!(
+            state.handle_key(key('q')),
+            Some(BrowserIntent::Quit)
+        ));
+    }
+
+    #[test]
     fn interactive_frames_escape_directional_data_before_measuring_width() {
         let literal = "Camera\u{202e}txt\u{2066}end";
         let expected = "Camera\\u{202e}txt\\u{2066}end";
@@ -1788,7 +1976,7 @@ mod tests {
             discovery_frame(&state, 80, 24, LineNumbers::Hybrid)
                 .last()
                 .unwrap()
-                .contains("keys:g")
+                .contains("[g]")
         );
         state.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(state.selected, 20);
@@ -2117,7 +2305,7 @@ mod tests {
                 "Camera",
                 "───────────",
                 "Esc back",
-                "NORMAL"
+                "NORMAL     "
             ]
         );
         for width in [0, 1, 2, 12, 80, 120] {
@@ -2137,7 +2325,13 @@ mod tests {
                 if width >= 12 && height >= 4 {
                     assert_eq!(lines[lines.len() - 3], separator(width as usize - 1));
                     assert_eq!(lines[lines.len() - 2], "Esc back");
-                    assert_eq!(lines.last().unwrap(), "NORMAL");
+                    let status = lines.last().unwrap();
+                    assert!(status.starts_with("NORMAL"));
+                    assert_eq!(UnicodeWidthStr::width(status.as_str()), width as usize - 1);
+                    assert!(!status.contains("Esc back"));
+                    if width >= 80 {
+                        assert!(status.ends_with("Title"));
+                    }
                 }
             }
         }
@@ -2200,7 +2394,7 @@ mod tests {
         assert_eq!(nav.pending(), "");
         assert_eq!(
             nav_status("NORMAL", &nav, 0, 0, LineNumbers::Hybrid),
-            "NORMAL | keys:- | item 0/0 | numbers:hybrid"
+            "NORMAL | item 0/0 | numbers:hybrid"
         );
     }
 

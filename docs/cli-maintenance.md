@@ -54,6 +54,13 @@ Use a real terminal with stdin/stdout/stderr attached. `manage` rejects JSON,
 redirection, non-interactive and fleet execution before opening the interface.
 Select a saved device, explicitly search the network, or enter an address.
 Discovery marks saved/new records; direct/new devices remain session-only.
+The network results use the same browser as `discover`: `/` starts live search,
+`r` toggles saved records, `n` toggles unregistered records, and uppercase `A`
+shows all registration states. Registration filters combine with the text query;
+`A` preserves that query, while `c` clears it. Enter/Esc finishes search editing;
+then Enter selects the highlighted camera and `q`/Esc returns to the chooser.
+Selecting a new record does not save it. These filter keys apply to network
+results, not the initial saved-camera chooser or action menus.
 Camera chooser status, name and ID columns use the longest value in the full list
 as their display width, capped at 24 terminal cells per descriptive column, and
 center shorter values; addresses remain left-aligned. Full values are available with `i`.
@@ -63,7 +70,10 @@ the registry nor saved credentials are changed. Restart the workspace to reload
 credentials modified outside it. Close the workspace before sharing your terminal.
 
 The workspace retains the device and chosen profile while you diagnose, inspect
-profiles/device information, save snapshots, export or compare settings. Arrows or
+profiles/device information, save snapshots, export or compare settings. Returning
+from an operation or cancelling credentials retains the action selection and
+scroll position; returning to the camera chooser also retains its position
+(clamped if the registry list has changed). Arrows or
 `j`/`k` move, Page Up/Down page, Enter selects, `i` opens item details, and Esc/`q`
 returns (at the device chooser it exits). Results scroll and remain available under
 **Last result details**. Failed actions do not replace the previous completed result.
@@ -114,7 +124,11 @@ its line numbers. Empty lists have no selectable row and show position `0/0`.
 
 The bottom status line displays `NORMAL`, `INPUT`, `SEARCH`, `BUSY` or `SETTINGS`. Navigation
 status includes pending keys and current item/line position, for example
-`NORMAL | keys:12g | item 21/40 | numbers:hybrid`. `^D` / `^U` in the footer mean Ctrl+D / Ctrl+U.
+`NORMAL | [12g] | item 21/40 | numbers:hybrid`. The reverse-video status bar is
+fixed to the bottom row, separate from key hints. Pending input appears only
+while a sequence is active; spare space shows screen/device context. BUSY shows
+elapsed time, not a guessed completion percentage. Very short terminals prioritize
+content; a one-row terminal omits the status bar. `^D` / `^U` in the footer mean Ctrl+D / Ctrl+U.
 Counts are limited to six digits. No typing timeout is imposed. Unsupported sequences
 such as `3i`, `gq` or count+Enter are cancelled with a hint, without opening an item
 or leaving the screen. Ctrl+C remains immediate cancellation/exit.
@@ -392,6 +406,12 @@ camera images or unredacted inventory into public issues.
 5. Exercise unsupported settings and mixed online/offline groups; inspect exit
    codes and JSON/JSONL reports from an Agent as well as human-readable output.
 6. Run native Windows/macOS/Linux CI and installation checks before release.
+7. In `manage`, choose **Search network for cameras** with both saved and new
+   devices available. Search by saved ID with `/`, then test `r`, `n`, `A` and
+   `c`; verify empty-result recovery and that Enter selects the displayed camera.
+   Selecting a new camera must not register it. Check status-bar separation,
+   half pages, resizing, literal Unicode/IME input, credential cancellation and
+   retained menu position. Check terminal restoration after Esc, `q` and Ctrl+C.
 
 Local mock tests do not establish real-camera interoperability or three-platform
 acceptance. See the [implementation plan](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/active/cli-maintenance-workflows-plan.md)

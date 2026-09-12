@@ -3,16 +3,19 @@
 [English](release-0.17-cut.md) | [繁體中文](release-0.17-cut_zh.md)
 
 Status: IN-PROGRESS / NOT RELEASE-READY. Authorized 2026-09-11.
+Update 2026-09-12: the operator reopened CLI scope for manage discovery filters,
+F12 status-bar design and menu-position retention. See [CLI re-entry](cli-0.17-reentry.md).
+Earlier acceptance and CI are historical evidence, not validation of these new bytes.
 Comparison base: `v0.16.0`; frozen scope baseline:
 `f9448e515baec6169f40ec7f38ec2e0fcc752826` (evidence update `2f92b75`).
-This freezes scope, not a claim that the hardening ancestry is accepted.
+This records the original frozen scope, not a claim that the hardening ancestry is accepted.
 The K27 repair below follows that baseline within the approved integrity scope.
 
 The [pre-version review packet](release-0.17-approval.md) tracks the user's four
 requested steps, A01/A02 repairs and the [shared snapshot repair](snapshot-auth-repair.md),
 maintainer staging instructions and the version edits reserved for approval.
-Local complete-candidate/security review is now closed; installation and final
-release acceptance retain their separate gates below.
+The earlier local complete-candidate/security review is closed for its recorded
+baseline; CLI re-entry, installation and final acceptance retain separate gates.
 
 | Section | Purpose |
 | --- | --- |

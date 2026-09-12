@@ -63,10 +63,13 @@ reports and `-v` details. JSON/JSONL never prompt; Agent guide v8 documents addi
 selection reasons/candidates while retaining schema v3 and existing exit meanings.
 Development `oxvif manage` provides a guided terminal workspace for these operations,
 with retained device/profile context, session-only credentials and bounded session reuse.
+Its network results share `discover` search and saved/new filters (`/`, `r`, `n`,
+uppercase `A`; `c` clears text), without automatically saving selected cameras.
+Returning from operations or cancelled credential entry retains menu positions.
 Camera-reported profile settings and diagnostic assessments are also available to Agents.
 Human screens share counted Vim-style navigation, configurable line numbers (`?` settings
-or `--line-numbers absolute|relative|hybrid|off`) and a compact
-mode/status line; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/cli-maintenance.md#vim-style-navigation).
+or `--line-numbers absolute|relative|hybrid|off`) and a fixed-bottom reverse-video
+status bar separate from key hints; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/master/docs/cli-maintenance.md#vim-style-navigation).
 
 On Windows, macOS, or a Linux desktop session with Secret Service, onboard one
 camera with a no-echo password prompt, live verification, native credential

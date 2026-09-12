@@ -32,11 +32,18 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
   read-only configuration export/diff and richer profile metadata.
 - Shared counted Vim navigation, compact status lines and configurable line
   numbers; Agent JSON/JSONL remains non-interactive.
+  Full-screen status now uses a distinct fixed-bottom reverse-video bar with
+  active pending input, position, optional context and elapsed BUSY time.
 - Additive push-notification TCP peer API and Media1/Media2 synchronization
   requests, with contributor attribution retained.
 
 ### Fixed
 
+- `manage` network results now support `/` search and `r`/`n`/`A` registration
+  filters through the shared discovery browser; filtered selection preserves
+  camera identity and new cameras remain session-only.
+- Manage action and camera menus retain their selection and viewport on return,
+  including cancellation of session credential entry.
 - Human table output, detailed reports, errors and line-oriented profile menus
   escape terminal control characters; JSON/JSONL retain original data values.
   Full-screen rendering escapes directional controls before measuring display width.

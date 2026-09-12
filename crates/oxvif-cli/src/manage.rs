@@ -8,6 +8,7 @@ use oxvif_cli::{
 };
 
 use crate::interactive::Panel;
+use crate::navigation::Viewport;
 
 enum WorkflowOutcome {
     Completed(Box<CommandSuccess>),
@@ -29,6 +30,7 @@ pub(crate) async fn run(
     options: &ExecutionOptions,
 ) -> Result<(), AppError> {
     let mut panel = Panel::enter()?;
+    let mut camera_view = Viewport::default();
     let mut next = if initial.device.is_some() || initial.target.is_some() {
         Some(initial)
     } else {
@@ -37,7 +39,7 @@ pub(crate) async fn run(
     loop {
         let selector = match next.take() {
             Some(selector) => selector,
-            None => match choose_device(&mut panel, app, options).await? {
+            None => match choose_device(&mut panel, app, options, &mut camera_view).await? {
                 Some(selector) => selector,
                 None => return Ok(()),
             },
@@ -56,6 +58,7 @@ pub(crate) async fn run(
         };
         let mut profile: Option<String> = None;
         let mut last: Option<CommandSuccess> = None;
+        let mut action_view = Viewport::default();
         loop {
             let title = format!(
                 "{label} | Profile: {} | {}",
@@ -79,7 +82,8 @@ pub(crate) async fn run(
                 "Change device",
             ]
             .map(str::to_owned);
-            let Some(choice) = panel.menu(&title, &choices, &[])? else {
+            let Some(choice) = panel.menu_with_view(&title, &choices, &[], &mut action_view)?
+            else {
                 break;
             };
             if choice == 9 {
@@ -280,6 +284,7 @@ async fn choose_device(
     panel: &mut Panel,
     app: &Application,
     options: &ExecutionOptions,
+    view: &mut Viewport,
 ) -> Result<Option<TargetSelector>, AppError> {
     loop {
         let (devices, _) = app.registry().list()?;
@@ -303,7 +308,12 @@ async fn choose_device(
             .iter()
             .map(|d| serde_json::to_string_pretty(d).unwrap_or_default())
             .collect::<Vec<_>>();
-        let Some(index) = panel.menu("Choose camera | Esc/q: exit manage", &choices, &details)?
+        let Some(index) = panel.menu_with_view(
+            "Choose camera | Esc/q: exit manage",
+            &choices,
+            &details,
+            view,
+        )?
         else {
             return Ok(None);
         };
@@ -347,31 +357,7 @@ async fn choose_device(
                 let CommandData::DiscoveryScan { devices, .. } = result.data else {
                     unreachable!()
                 };
-                let labels = super::interactive::aligned_menu_rows(
-                    &devices
-                        .iter()
-                        .map(|d| {
-                            [
-                                d.registration_status.as_str().to_owned(),
-                                d.record
-                                    .xaddrs
-                                    .first()
-                                    .map(String::as_str)
-                                    .unwrap_or("No usable address")
-                                    .to_owned(),
-                            ]
-                        })
-                        .collect::<Vec<_>>(),
-                );
-                let details = devices
-                    .iter()
-                    .map(|d| serde_json::to_string_pretty(d).unwrap_or_default())
-                    .collect::<Vec<_>>();
-                if let Some(index) = panel.menu(
-                    "Discovered cameras (new devices are not saved)",
-                    &labels,
-                    &details,
-                )? {
+                if let Some(index) = panel.select_discovered_device(&devices)? {
                     let device = &devices[index];
                     if let Some(id) = &device.registered_device_id {
                         return Ok(Some(TargetSelector {
