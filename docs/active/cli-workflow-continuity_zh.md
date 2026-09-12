@@ -82,45 +82,45 @@
 
 ### B1 — 連續探索新增
 
-- [ ] 將 main 中退出到 shell 的 setup 接線改為可重用同畫面流程，Panel 持有終端，
+- [x] 將 main 中退出到 shell 的 setup 接線改為可重用同畫面流程，Panel 持有終端，
   共用 Application setup。
-- [ ] 新增 manage a/add；獨立探索每次新增後可繼續。
-- [ ] 重用本機登錄投影；成功／失敗／取消／重複 ID／無效 XAddr 保留身分與篩選。
-- [ ] 擴充既有 UI/application 測試，涵蓋明確寫入、密碼清除、登錄刷新、
+- [x] 新增 manage a/add；獨立探索每次新增後可繼續。
+- [x] 重用本機登錄投影；成功／失敗／取消／重複 ID／無效 XAddr 保留身分與篩選。
+- [x] 擴充既有 UI/application 測試，涵蓋明確寫入、密碼清除、登錄刷新、
   待完成／搜尋按鍵不誤觸新增。
-- [ ] 集中執行 CLI 相關測試後提交完整批次。
+- [x] 集中執行 CLI 相關測試後提交完整批次。
 
 ### B2 — 設備工作區及可搜尋清單
 
-- [ ] 將每次選取的區域變數改為有界、按身分保存的工作區；
+- [x] 將每次選取的區域變數改為有界、按身分保存的工作區；
   已存身分／設定變更使舊資料失效，不跨設備共用。
-- [ ] 可搜尋已存清單，保留固定操作列及原始索引。
-- [ ] 還原 Profile token／位置；成功重新讀取後清除不存在的 token。
-- [ ] 測試 A→B→A、相同 IP 不同身分、256 個 context 邊界、零符合、Vim 文字查詢、
+- [x] 可搜尋已存清單，保留固定操作列及原始索引。
+- [x] 還原 Profile token／位置；成功重新讀取後清除不存在的 token。
+- [x] 測試 A→B→A、相同 IP 不同身分、256 個 context 邊界、零符合、Vim 文字查詢、
   registry 變更與 Profile 移除／重排。
-- [ ] 集中執行 CLI 相關測試後提交。
+- [x] 集中執行 CLI 相關測試後提交。
 
 ### B3 — 結果、修正與檔案流程
 
-- [ ] 直接錯誤／取消與完成資料分開保存。
-- [ ] 可重用、由呼叫端持有的報告文字搜尋／閱讀位置。
-- [ ] 保留位址／輸出／比較草稿，輸入錯誤在同框修正。
-- [ ] 確認成功匯出的檔案可選為比較基準；重新驗證刪除、格式錯誤或變更的檔案，
+- [x] 直接錯誤／取消與完成資料分開保存。
+- [x] 可重用、由呼叫端持有的報告文字搜尋／閱讀位置。
+- [x] 保留位址／輸出／比較草稿，輸入錯誤在同框修正。
+- [x] 確認成功匯出的檔案可選為比較基準；重新驗證刪除、格式錯誤或變更的檔案，
   維持不覆寫規則。
-- [ ] 測試舊成功／新失敗分離、取消、文字無符合／Unicode／縮放、修正輸入、
+- [x] 測試舊成功／新失敗分離、取消、文字無符合／Unicode／縮放、修正輸入、
   匯出後比較與遺失／無效基準。
-- [ ] 集中執行 CLI 相關測試後提交。
+- [x] 集中執行 CLI 相關測試後提交。
 
 ### B4 — 整合、文件與交付
 
-- [ ] B1–B3 後集中執行一次 CLI package suite 與 CLI 全 target Clippy／fmt。
+- [x] B1–B3 後集中執行一次 CLI package suite 與 CLI 全 target Clippy／fmt。
   重用 application／maintenance 證據；除非跨入 ONVIF 核心或 Mock，
   不重跑整套 1300 多項 Mock。
-- [ ] 用隔離 registry 與 mock fixture 執行 Windows ConPTY 真實終端流程：
+- [x] 用隔離 registry 與 mock fixture 執行 Windows ConPTY 真實終端流程：
   新增／修正／下一台、manage 搜尋／新增／操作／返回、A→B→A、
   256 台清單搜尋、Profile 消失、重看失敗、匯出比較、退出與終端恢復。
   UX 驗收不使用正式憑證或攝影機寫入。
-- [ ] 分別記錄失敗／限制與通過證據；編譯不等於終端驗收。Linux/macOS
+- [x] 分別記錄失敗／限制與通過證據；編譯不等於終端驗收。Linux/macOS
   runtime 仍待 CI／人工。
 - [ ] 更新成對 CLI 指南／維運文件、根目錄 Unreleased changelog、完整 0.17
   changelog、active 驗收與發布切點。歷史計數及已發布 0.16 不改；
@@ -142,6 +142,7 @@
 
 - 計畫完成：已檢查上述基準與各程式責任區。
 - B1–B4 尚未驗收；每批執行後填入證據及 commit。
+- 上述初始狀態由下方完成紀錄取代。
 - B1 實作完成：共用 Panel 新增、manage a/add、獨立探索連續操作與本機登錄投影。
   Binary 測試 54 通過、既有 setup application 情境 5 通過、新增本機投影測試
   1 通過。尚不宣稱終端／原生密碼庫驗收完成，保留於 B4。
@@ -152,3 +153,21 @@
 - B3 實作完成：獨立保存失敗／取消、可搜尋且保留位置的報告、非機密輸入草稿，
   以及最近匯出基準選擇／共用本機 preflight。Binary 測試 59 通過，CLI 全 target
   Clippy（警告視為錯誤）通過。B4 終端流程與最終文件仍待完成。
+- B1 `14d8b06`、B2 `36e7246`、B3 `a5342ad`；計畫 `05c0a58`。
+- B4 本機驗收通過：CLI package 193 通過、2 項預設略過（原生密碼庫與新增的
+  opt-in 終端 fixture）。後者已明確執行 discover／manage 兩種模式。
+  CLI 全 target Clippy（警告視為錯誤）及格式檢查通過，未改 ONVIF 核心／Mock。
+- 可重跑的[終端工具](../../packaging/test_cli_workflow_terminal.py) 以 ConPTY
+  驅動[隔離 fixture](../../crates/oxvif-cli/src/terminal_fixture.rs)。
+  先執行 `cargo test -p oxvif-cli --bin oxvif --no-run`，將印出的測試執行檔
+  路徑傳給 `python packaging/test_cli_workflow_terminal.py --binary <test-executable>`。
+  pywinpty／pyte 請裝在隔離 Python 環境，或以 `--deps` 指定。
+- 終端證據涵蓋錯誤密碼修正、連續新增、取消不儲存、本機 NEW/SAVED 更新、
+  256 列搜尋、零符合仍可操作、終端縮放、A/B/A 憑證隔離、Profile 移除、
+  報告 query／位置保存、失敗／取消、匯出比較、基準遺失、不覆寫與無效／取消位址
+  草稿。Fixture 斷言確認全域目前設備及暫存憑證的保存邊界。僅使用 loopback
+  Mock 與記憶體憑證庫；探索紀錄由 fixture 注入，不代表 multicast 或原生密碼庫
+  持久化驗收。先前 Back／重掃證據仍另行記錄。
+- B4 公開／active 雙語文件已更新。最後修正已存搜尋比對欄位值而非 JSON 欄名，
+  修正後重跑 binary 測試及兩組終端流程。不宣稱跨平台 runtime／hosted CI、
+  發布核准、系統安裝或主分支合併完成。

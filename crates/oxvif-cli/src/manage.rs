@@ -186,8 +186,27 @@ pub(crate) async fn run(
     initial: TargetSelector,
     options: &ExecutionOptions,
 ) -> Result<(), AppError> {
-    let mut panel = Panel::enter()?;
+    run_inner(app, initial, options, DeviceChooser::default()).await
+}
+
+#[cfg(test)]
+pub(crate) async fn run_fixture(
+    app: &Application,
+    options: &ExecutionOptions,
+    devices: Vec<DiscoveryDeviceView>,
+) -> Result<(), AppError> {
     let mut chooser = DeviceChooser::default();
+    chooser.replace_search(devices);
+    run_inner(app, TargetSelector::default(), options, chooser).await
+}
+
+async fn run_inner(
+    app: &Application,
+    initial: TargetSelector,
+    options: &ExecutionOptions,
+    mut chooser: DeviceChooser,
+) -> Result<(), AppError> {
+    let mut panel = Panel::enter()?;
     let mut workspaces = Workspaces::default();
     let mut next = if initial.device.is_some() || initial.target.is_some() {
         Some(initial)
@@ -610,9 +629,23 @@ async fn choose_device(
         ]);
         let mut identities = devices
             .iter()
-            .map(|device| format!("device:{}", device.id))
+            .map(|device| {
+                (
+                    format!("device:{}", device.id),
+                    format!(
+                        "{}\n{}\n{}\n{}",
+                        device.id,
+                        device.name,
+                        device.target,
+                        device.tags.join("\n")
+                    ),
+                )
+            })
             .collect::<Vec<_>>();
-        identities.extend(["action:search".into(), "action:address".into()]);
+        identities.extend([
+            ("action:search".into(), String::new()),
+            ("action:address".into(), String::new()),
+        ]);
         let Some(index) = panel.searchable_menu(
             "Choose camera | Esc/q: exit manage",
             &choices,

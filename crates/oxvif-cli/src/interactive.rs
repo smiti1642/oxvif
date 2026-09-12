@@ -884,21 +884,25 @@ impl Panel {
         title: &str,
         choices: &[String],
         details: &[String],
-        identities: &[String],
+        identities: &[(String, String)],
         fixed_start: usize,
         state: &mut MenuSearch,
     ) -> Result<Option<usize>, AppError> {
         let mut editing = false;
         let mut nav = Navigation::default();
         let mut restore = true;
+        let search_text = identities
+            .iter()
+            .map(|(_, text)| text.clone())
+            .collect::<Vec<_>>();
         loop {
-            let filtered = state.matches(details, fixed_start);
+            let filtered = state.matches(&search_text, fixed_start);
             if restore {
-                if let Some(index) = state
-                    .identity
-                    .as_ref()
-                    .and_then(|id| filtered.iter().position(|i| identities.get(*i) == Some(id)))
-                {
+                if let Some(index) = state.identity.as_ref().and_then(|id| {
+                    filtered
+                        .iter()
+                        .position(|i| identities.get(*i).is_some_and(|(key, _)| key == id))
+                }) {
                     state.view.selected = index;
                 }
                 restore = false;
@@ -909,7 +913,7 @@ impl Panel {
             state.identity = filtered
                 .get(state.view.selected)
                 .and_then(|i| identities.get(*i))
-                .cloned();
+                .map(|(key, _)| key.clone());
             let labels = filtered
                 .iter()
                 .map(|i| choices[*i].clone())

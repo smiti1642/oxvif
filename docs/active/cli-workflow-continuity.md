@@ -99,46 +99,46 @@ Existing code to preserve/reuse:
 
 ### B1 — Continuous discovery onboarding
 
-- [ ] Factor reusable inline setup execution out of the shell-returning main helper;
+- [x] Factor reusable inline setup execution out of the shell-returning main helper;
   keep terminal ownership in Panel and use the shared Application setup command.
-- [ ] Add manage a/add and continue standalone discovery after each setup.
-- [ ] Expose/reuse local registration reprojection; preserve record identity and
+- [x] Add manage a/add and continue standalone discovery after each setup.
+- [x] Expose/reuse local registration reprojection; preserve record identity and
   filters through success, failure, cancellation, duplicate IDs and unusable XAddr.
-- [ ] Extend existing UI/application tests for explicit writes, password clearing,
+- [x] Extend existing UI/application tests for explicit writes, password clearing,
   cached registration refresh and no accidental setup from pending/search keys.
-- [ ] Run focused CLI tests, then commit this complete behavior batch.
+- [x] Run focused CLI tests, then commit this complete behavior batch.
 
 ### B2 — Device workspaces and searchable chooser
 
-- [ ] Replace per-selection locals with bounded, identity-keyed workspaces;
+- [x] Replace per-selection locals with bounded, identity-keyed workspaces;
   invalidate changed saved identities/configuration without cross-camera reuse.
-- [ ] Add searchable saved chooser with fixed action rows and original-index mapping.
-- [ ] Restore profile token/viewport and remove stale tokens after a successful read.
-- [ ] Test A→B→A, same-IP distinct identities, 256-context boundary, empty filters,
+- [x] Add searchable saved chooser with fixed action rows and original-index mapping.
+- [x] Restore profile token/viewport and remove stale tokens after a successful read.
+- [x] Test A→B→A, same-IP distinct identities, 256-context boundary, empty filters,
   literal Vim-like queries, registry changes and profile removal/reordering.
-- [ ] Run focused CLI tests, then commit.
+- [x] Run focused CLI tests, then commit.
 
 ### B3 — Results, retries and file workflow
 
-- [ ] Retain structured direct failures/cancellations separately from completed data.
-- [ ] Add reusable caller-owned text search/position for reopened results.
-- [ ] Preserve address/output/compare drafts; keep invalid-input repair inline.
-- [ ] Offer a confirmed successful export as comparison baseline; revalidate deleted,
+- [x] Retain structured direct failures/cancellations separately from completed data.
+- [x] Add reusable caller-owned text search/position for reopened results.
+- [x] Preserve address/output/compare drafts; keep invalid-input repair inline.
+- [x] Offer a confirmed successful export as comparison baseline; revalidate deleted,
   malformed or changed files and retain existing no-clobber rules.
-- [ ] Test old-success/new-failure separation, cancellation, text no-match/Unicode/
+- [x] Test old-success/new-failure separation, cancellation, text no-match/Unicode/
   resize, corrected input, export→compare and absent/invalid baseline.
-- [ ] Run focused CLI tests, then commit.
+- [x] Run focused CLI tests, then commit.
 
 ### B4 — Integration, documentation and handoff
 
-- [ ] Run one CLI package suite and CLI all-target Clippy/fmt batch after B1–B3.
+- [x] Run one CLI package suite and CLI all-target Clippy/fmt batch after B1–B3.
   Reuse existing application/maintenance coverage; no full 1300+ Mock rerun unless
   implementation crosses into core ONVIF or Mock code.
-- [ ] Run actual Windows ConPTY journeys against isolated local registry and mock
+- [x] Run actual Windows ConPTY journeys against isolated local registry and mock
   fixtures: add→retry→add another; manage search→add→operate→Back; A→B→A; 256 saved
   rows/search; missing profile; retained failure; export→compare; quit/restoration.
   Do not use production credentials or camera writes for UX acceptance.
-- [ ] Document failures and limitations separately from passing evidence; compile
+- [x] Document failures and limitations separately from passing evidence; compile
   alone is not terminal acceptance. Linux/macOS runtime acceptance remains CI/manual.
 - [ ] Update paired CLI guide/maintenance docs, root unreleased changelog, detailed
   0.17 changelogs and active acceptance/release-cut records. Historical counts and
@@ -164,6 +164,7 @@ reciprocal language links and section-link tables for long documents.
 
 - Planning complete: baseline and all source owners above inspected.
 - B1–B4 not yet accepted. Evidence and commit IDs will be appended per batch.
+- This initial status is superseded by the completion record below.
 - B1 implementation complete: shared Panel onboarding, manage a/add, standalone
   continuation and local registry reprojection. Binary tests: 54 passed; existing
   setup application scenarios: 5 passed; new local reprojection test: 1 passed.
@@ -177,3 +178,28 @@ reciprocal language links and section-link tables for long documents.
   views, non-secret input drafts and last-export baseline selection with shared
   local preflight. Binary tests: 59 passed; CLI all-target Clippy with warnings
   denied passed. B4 terminal journeys and final docs remain open.
+- B1 `14d8b06`, B2 `36e7246`, B3 `a5342ad`; planning `05c0a58`.
+- B4 local acceptance passed: CLI package 193 passed, 2 default skips (native
+  credential backend and the new opt-in terminal fixture). The latter was explicitly
+  executed in both discover and manage modes. CLI all-target Clippy with warnings
+  denied and formatting passed. Core ONVIF/Mock sources were not changed.
+- Reproducible terminal harness:
+  [test_cli_workflow_terminal.py](../../packaging/test_cli_workflow_terminal.py)
+  drives [terminal_fixture.rs](../../crates/oxvif-cli/src/terminal_fixture.rs)
+  in ConPTY. Build with `cargo test -p oxvif-cli --bin oxvif --no-run`, then pass
+  the printed test-executable path to
+  `python packaging/test_cli_workflow_terminal.py --binary <test-executable>`.
+  Install pywinpty/pyte into an isolated Python environment or provide `--deps`.
+- Terminal evidence covers failed-secret retry, consecutive additions, cancel
+  without saving, local NEW/SAVED reprojection, 256-row search, zero matches with
+  reachable actions, terminal resize, A/B/A credential isolation, profile removal,
+  retained report query/position, failed/cancelled operations, export/compare,
+  deleted baseline, no-clobber and invalid/cancelled address drafts. Fixture
+  assertions confirm global-current and temporary-credential persistence boundaries.
+  Only loopback mocks and an in-memory credential store are used. Discovery records
+  are seeded in this harness; it does not certify multicast discovery or native
+  secret-store persistence. Previous Back/rescan evidence remains separately recorded.
+- B4 paired public/active documentation updated. A small final correction makes
+  saved search use field values rather than JSON field names; binary tests and both
+  terminal journeys were rerun after it. No cross-platform runtime/hosted CI, release
+  approval, system installation or main-branch merge is claimed.

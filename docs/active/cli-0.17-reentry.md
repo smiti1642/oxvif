@@ -33,6 +33,11 @@ new dependencies, Agent envelope changes or host/network configuration changes.
 
 ## Search return follow-up
 
+This subsection records the initial Back fix. The later
+[workflow continuity batch](cli-workflow-continuity.md) supersedes its standalone
+setup exit behavior with continuous inline onboarding and adds per-camera state.
+Its scoped evidence is separate from the historical counts below.
+
 On 2026-09-13, a reported Back/re-entry regression was reproduced against the
 previous binary: returning from a discovered camera lost the browser, and reopening
 search started another network scan. `manage` now owns its discovery results and

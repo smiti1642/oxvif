@@ -53,14 +53,17 @@ oxvif manage --target 192.168.1.100 --timeout 3s
 Use a real terminal with stdin/stdout/stderr attached. `manage` rejects JSON,
 redirection, non-interactive and fleet execution before opening the interface.
 Select a saved device, explicitly search the network, or enter an address.
-Discovery marks saved/new records; direct/new devices remain session-only.
+Discovery marks saved/new records; selecting direct/new devices is session-only.
 The network results use the same browser as `discover`: `/` starts live search,
 `r` toggles saved records, `n` toggles unregistered records, and uppercase `A`
 shows all registration states. Registration filters combine with the text query;
 `A` preserves that query, while `c` clears it. Enter/Esc finishes search editing;
 then Enter selects the highlighted camera and `q`/Esc returns to the chooser.
-Selecting a new record does not save it. These filter keys apply to network
-results, not the initial saved-camera chooser or action menus.
+Selecting a new record does not save it. Press `a` to explicitly verify and save
+a new discovered camera and its credentials in an inline setup form. Manage setup
+does not change the global current device. The saved-camera chooser also supports
+`/` and `c`, matching ID, name, address and tags; its search/address actions remain
+available with zero matches. Registration filters apply only to network results.
 
 Within one `manage` session, returning from a selected camera restores the cached
 discovery results, text/registration filters, selection and scroll position. Leaving
@@ -69,9 +72,12 @@ In normal list mode, uppercase `R` explicitly rescans; lowercase `r` remains the
 saved-record filter. A successful scan replaces the results and resets the view;
 cancellation or failure retains the previous results. The title identifies cached
 results, which may become stale; exiting `manage` discards this cache.
-Standalone `discover` retains its list state while inspecting details or cancelling
-the setup form, but submitting setup ends that command. Running `discover` again
-performs a new scan; it does not reuse the `manage` session cache.
+Both manage and standalone `discover` return to cached results after setup, allowing
+consecutive additions. Verification failures retain ID/username and clear the
+submitted password for explicit retry. Registration is reconciled locally without
+rescanning; NEW-only filters hide newly saved records. Standalone setup retains its
+existing current-device selection behavior. Running `discover` again performs a
+new scan; it does not reuse the `manage` session cache.
 
 Camera chooser status, name and ID columns use the longest value in the full list
 as their display width, capped at 24 terminal cells per descriptive column, and
@@ -81,6 +87,14 @@ Use **Session credentials (not saved)** if needed; passwords are masked and neit
 the registry nor saved credentials are changed. Restart the workspace to reload
 credentials modified outside it. Close the workspace before sharing your terminal.
 
+Switching A → B → A restores A's temporary credentials, selected profile, menu
+position and historical results within the same process. Saved and direct identities
+are separate, even at the same address. A changed saved-device record invalidates
+its old workspace; native-secret changes require restart. At most 256 distinct
+camera contexts are retained; another is refused with a restart hint rather than
+silently evicting state. Exiting clears these in-memory contexts. Live profile reads
+restore the selected token when present and clear it if it has disappeared.
+
 The workspace retains the device and chosen profile while you diagnose, inspect
 profiles/device information, save snapshots, export or compare settings. Returning
 from an operation or cancelling credentials retains the action selection and
@@ -89,6 +103,10 @@ scroll position; returning to the camera chooser also retains its position
 `j`/`k` move, Page Up/Down page, Enter selects, `i` opens item details, and Esc/`q`
 returns (at the device chooser it exits). Results scroll and remain available under
 **Last result details**. Failed actions do not replace the previous completed result.
+**Latest failure / cancellation** retains the most recent direct error or cancellation
+separately. These report viewers support literal, case-insensitive `/` line filtering
+and `c` to clear; reopening retains query/scroll position, while new evidence resets
+its view. Enter/Esc finishes search editing before it can leave the report.
 Menus, profile selection and scrollable results also accept Ctrl+D / Ctrl+U to move
 down/up half a page (rounded down, at least one item or line), stopping at either end.
 Input fields retain Ctrl+U to clear text; Page Up/Down still move a full page.
@@ -96,6 +114,11 @@ Paths are entered within the same screen, without shell quotes or variable expan
 use a literal path and an existing parent directory. Existing destinations are refused.
 Long input scrolls to keep the caret visible; Left/Right/Home/End edit the path.
 Destination validation retains the entered path for correction instead of clearing it.
+Address and path editors also retain non-secret drafts after cancellation and reopen
+invalid values for correction. Passwords are not drafts. **Compare settings** offers
+this camera's last successfully written export as a prefilled baseline, or a manual
+path; the baseline is validated again before live comparison. Missing or malformed
+files return to the editor. Snapshot output is never offered as an inventory baseline.
 
 Sessions expire after 60 seconds; failures/cancellation invalidate them. The interface
 announces reuse or reconnect. A cached session is not a liveness claim. Esc/Ctrl-C

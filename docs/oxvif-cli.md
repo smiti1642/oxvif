@@ -295,6 +295,13 @@ username, and masked password. Use Tab or Up/Down to change fields, Enter to
 advance or submit, Ctrl-U to clear the active field, and Esc to return to the
 discovery list without saving.
 
+In development builds, successful setup returns to the same list for another
+addition. Verification errors are shown inline; retry retains ID/username but clears
+the submitted password. Registration labels and active filters update without a new
+scan. Manage uses Enter to select and `a` to add, without changing the global current
+device. See [guided workspace](cli-maintenance.md#guided-workspace) for per-camera
+state, saved-list search, retained error reports and export/compare continuity.
+
 Registration is always explicit. Each row is `SAVED`, `NEW`, or `INCOMPLETE`
 and shows the saved device ID when present. Already registered records and
 records without a usable XAddr cannot be added from the browser. oxvif projects

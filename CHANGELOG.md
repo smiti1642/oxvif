@@ -43,6 +43,12 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 
 ### Fixed
 
+- Human discovery setup now supports inline retry and consecutive additions;
+  manage adds explicit `a` onboarding and searchable saved-device selection.
+  Per-camera temporary state survives switching, profiles restore by token,
+  failed/cancelled actions have a separate retained report, and report search,
+  input drafts and last-export comparison keep related steps in one workflow.
+
 - Returning to `manage` discovery now retains session results, text/registration
   filters and viewport instead of scanning again. Uppercase `R` explicitly rescans;
   cancelled or failed rescans preserve the previous results.

@@ -28,6 +28,8 @@ use tokio::time::Instant;
 mod interactive;
 mod manage;
 mod navigation;
+#[cfg(test)]
+mod terminal_fixture;
 mod ui_settings;
 
 use interactive::{await_discovery, browse_discovery};

@@ -3,6 +3,10 @@
 [English](release-0.17-cut.md) | [繁體中文](release-0.17-cut_zh.md)
 
 狀態：IN-PROGRESS／尚不可發布。2026-09-11 授權執行。
+2026-09-13 更新：[工作流程連續性](cli-workflow-continuity_zh.md) 已通過針對性 CLI
+測試與隔離 Windows 終端。本差異須納入最終候選審查／CI，不以歷史 workspace
+計數代替目前關卡。
+
 2026-09-12 更新：使用者重新開啟 CLI 範圍，納入 manage 搜尋篩選、F12 狀態列
 設計及選單位置保留，見 [CLI 重新驗收](cli-0.17-reentry_zh.md)。既有驗收及 CI
 僅保留為歷史證據，不代表已驗證本次變更。

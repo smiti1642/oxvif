@@ -2,7 +2,13 @@
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-Status: IN-PROGRESS / NOT APPROVED. Updated 2026-09-12.
+Status: IN-PROGRESS / NOT APPROVED. Updated 2026-09-13.
+
+The later [workflow continuity batch](cli-workflow-continuity.md) adds continuous
+onboarding and per-camera UI state. Scoped CLI tests: 193 passed, 2 default skips;
+the terminal fixture skip was separately executed in discover/manage ConPTY modes.
+Native-store acceptance and current-candidate cross-platform CI remain open.
+Earlier workspace totals below are historical, not a new full-workspace run.
 This packet supplements the [release cut](release-0.17-cut.md), not replaces its
 blocking gates. The user requested a stop before the formal 0.17 version/release
 commit. Ordinary repairs and evidence commits are allowed; version promotion,

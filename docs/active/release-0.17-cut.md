@@ -3,6 +3,10 @@
 [English](release-0.17-cut.md) | [繁體中文](release-0.17-cut_zh.md)
 
 Status: IN-PROGRESS / NOT RELEASE-READY. Authorized 2026-09-11.
+Update 2026-09-13: [workflow continuity](cli-workflow-continuity.md) is locally
+verified in scoped CLI tests and isolated Windows terminals. Include this delta
+in final-candidate review/CI; do not reuse historical workspace totals as its gate.
+
 Update 2026-09-12: the operator reopened CLI scope for manage discovery filters,
 F12 status-bar design and menu-position retention. See [CLI re-entry](cli-0.17-reentry.md).
 Earlier acceptance and CI are historical evidence, not validation of these new bytes.

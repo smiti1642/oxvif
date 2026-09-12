@@ -2,7 +2,12 @@
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-狀態：IN-PROGRESS／尚未核准。更新日期：2026-09-12。
+狀態：IN-PROGRESS／尚未核准。更新日期：2026-09-13。
+
+後續[工作流程連續性批次](cli-workflow-continuity_zh.md) 加入連續新增及各設備 UI
+狀態。CLI 針對性測試 193 通過、2 項預設略過；其中終端 fixture 已另以
+discover／manage ConPTY 模式執行。原生密碼庫驗收與目前候選的跨平台 CI
+仍待完成。下方 workspace 計數為歷史證據，不是新一輪完整 workspace 執行。
 本資料補充[發布切點](release-0.17-cut_zh.md)，不取代其中的阻擋關卡。
 使用者要求停在正式 0.17 版號／發布 commit 前。允許一般修正及證據提交；
 本次驗收不執行版號升級、主分支合併、tag、發布、PR 關閉或本機系統安裝。
