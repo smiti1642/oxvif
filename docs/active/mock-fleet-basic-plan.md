@@ -2,14 +2,11 @@
 
 [English](mock-fleet-basic-plan.md) | [繁體中文](mock-fleet-basic-plan_zh.md)
 
-Status: IMPLEMENTING, authorized 2026-09-12. The first milestone is simple
-multi-camera startup and configuration for VMS testing. B1 init/check and three
-focused configuration tests pass. B2 HTTP serving, explicit network settings,
-member isolation and awaited cleanup pass five Fleet tests plus scoped Clippy.
- B3 now shares one listener across ready members, validates supported probe
-namespaces/types, declines scope filters and suppresses recent duplicate probes.
-The 211-test mock batch and scoped Clippy pass; final combined acceptance is B4.
-No release inclusion or 64/256-device stability result is claimed.
+Status: B1–B4 implementation and local gates complete, authorized 2026-09-12.
+The first milestone provides simple multi-camera startup/configuration and basic
+shared discovery. Local terminal and 64/256-device capacity smoke checks pass;
+native LAN/VMS acceptance, Linux/macOS lifecycle and hosted CI remain pending.
+No release inclusion or sustained 64/256-device stability result is claimed.
 
 | Section | Purpose |
 | --- | --- |
@@ -18,6 +15,7 @@ No release inclusion or 64/256-device stability result is claimed.
 | [Runtime rules](#runtime-rules) | Identity, networking and failure behavior |
 | [Work batches](#work-batches) | Files, deliverables and completion checks |
 | [Acceptance](#acceptance) | Bounded automated and VMS checks |
+| [Local evidence](#local-evidence) | Batch commits, terminal and capacity results |
 | [Decisions](#decisions) | Defaults and conditions requiring another decision |
 
 ## Scope
@@ -59,7 +57,7 @@ file. It generates stable, distinct UUIDs, serials, names and sequential ports;
 or sending probes. `serve` prints device IDs/URLs and discovery status, remains
 running, and shuts down all owned listeners on Ctrl+C.
 
-Manifest contract to implement:
+Implemented manifest contract:
 
 | Location | Fields / semantics |
 | --- | --- |
@@ -67,7 +65,7 @@ Manifest contract to implement:
 | Each `[[devices]]` | Unique `id`, persisted `uuid`, fixed `port`, `name`, `manufacturer`, `model`, `serial_number`, optional `scopes` and `state_file` |
 | State source | Optional existing `DeviceState` TOML, relative to the manifest; manifest identity fields override loaded identity, with precedence documented |
 
-Reject unknown fields, unsupported schema versions, empty/duplicate identities,
+Reject unknown manifest fields, unsupported schema versions, empty/duplicate identities,
 duplicate/out-of-range ports, and invalid referenced state files. Never silently
 replace a malformed state file with factory defaults. Explicit device entries
 are authoritative; do not introduce a second count/template expansion system.
@@ -138,6 +136,31 @@ this milestone. Reconcile release-cut tracking after implementation, not in adva
    long-duration stability, streaming, event-subscription or brand-compatibility claims.
 6. Verify native Windows/Linux/macOS build/network lifecycle where available.
    Record missing native VMS/multicast checks rather than declaring them passed.
+
+## Local evidence
+
+2026-09-12, Windows x64, development checkout `feat/basic-mock-fleet`:
+
+| Batch | Evidence |
+| --- | --- |
+| B1 — `51df3f4` | Three configuration tests: init/check, no-clobber, stable identities, validation and read-only state precedence; scoped Clippy |
+| B2 — `6edea84` | Five Fleet tests: independent HTTP/state, network validation, occupied-port rollback and awaited cleanup; scoped Clippy |
+| B3 — `a876c81` | 211-test Mock batch plus two shared-discovery focused tests; qualified types, scope rejection, correlation, duplicate suppression, UDP rollback; scoped Clippy |
+| B4 terminal | Windows ConPTY runs init/check/no-clobber, then two four-device serve cycles. CLI `device info` verifies every configured identity; both Ctrl+C exits are zero, all ports can be rebound and manifest hash is unchanged |
+| B4 capacity, opt-in | 64 devices / 64 concurrent reads: startup 260 ms, total 802 ms. 256 devices / 256 concurrent reads: startup 909 ms, total 1546 ms. Every loopback-unicast identity and HTTP read verified within deadlines; zero failures |
+| B4 final gates | Workspace all-features: 1,316 passed / 6 ignored; default: 1,204 passed / 6 ignored, each 41 suites. Example configuration tests: 3 passed with mock-server and separately with all-features/locked. Both all-target Clippy and strict rustdoc configurations, fmt and whitespace checks pass. 1,447 local documentation targets / 718 anchors pass; published changelog history unchanged |
+| Future CI | Add an explicit example-test step to the existing five-runner OS matrix. YAML and its exact command validated locally; no hosted run is claimed |
+
+Capacity timings are one local smoke observation, not a benchmark. Peak memory/CPU,
+native multicast, target VMS behavior, sustained connections and Linux/macOS native
+network lifecycle were not measured. Historical CLI acceptance and hosted CI are not evidence
+for these new Mock changes.
+
+Public instructions: [Mock Fleet](../mock-fleet.md). Discovery review references:
+[ONVIF Core §7.3](https://www.onvif.org/specs/core/ONVIF-Core-Specification.pdf),
+[WS-Discovery April 2005 §2.4, §5.3, Appendix I](https://specs.xmlsoap.org/ws/2005/04/discovery/ws-discovery.pdf).
+No schema text or external implementation was copied. Full scope matching and
+discovery lifecycle remain excluded, rather than being declared conformant.
 
 ## Decisions
 

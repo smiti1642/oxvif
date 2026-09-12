@@ -38,7 +38,8 @@ Current source distinguishes three cases:
   and configuration files allow multiple instances, but do not advertise them.
 - `MockServerBuilder::discoverable` creates one UDP 3702 listener per device;
   bind failure logs a warning while HTTP continues. It is not a shared listener.
-- `Fleet` does not currently advertise its members via WS-Discovery.
+- `Fleet` now offers opt-in shared discovery through `FleetBuilder::discoverable`;
+  the new `mock_fleet_serve` runner exposes startup configuration for this path.
 
 Recommended first scope: one process owns multiple isolated devices and one
 discovery responder. Each device needs an independent stable identity and state,
@@ -53,10 +54,13 @@ The operator subsequently narrowed the first milestone to simple multi-camera
 startup and configuration for VMS use. The [basic Fleet plan](mock-fleet-basic-plan.md)
 uses one process and same-IP/different-port endpoints as implementation defaults;
 64/256 capacity checks are opt-in and Metamorph mixtures remain later work.
-F11 is planned, not a feature available in the current build.
+F11's basic implementation is now available in development source; see the
+[operator guide](../mock-fleet.md). Native LAN/VMS acceptance and release placement
+remain pending; the capacity smoke does not establish sustained VMS stability.
 
-Before implementation, define duplicate identity/config rejection, type/scope
-matching, response size limits, add/remove lifecycle and multi-interface behavior.
+The first slice rejects duplicate identities/configuration, bounds response sizes,
+checks qualified types and declines scope filters. Dynamic membership and multiple
+advertised interfaces remain excluded; see the plan for the exact boundary.
 Acceptance must discover multiple distinct devices and reach each advertised
 HTTP endpoint, verify state isolation and disappearance after shutdown, and
 report multicast/platform limitations independently from unicast test results.

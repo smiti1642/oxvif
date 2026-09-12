@@ -72,6 +72,8 @@ Server 在背景 task 中執行，並於 `MockServer` 被 drop 時關閉，因�
 | 方法 | 預設值 | 作用 |
 |---|---|---|
 | `.port(u16)` | `0`（ephemeral） | 要繫結的 TCP port |
+| `.bind_ip(Ipv4Addr)` | `127.0.0.1` | HTTP 介面；LAN 存取會暴露測試／控制端點 |
+| `.advertise_ip(Ipv4Addr)` | 明確繫結位址 | URL 使用的本機位址；wildcard 繫結時必填 |
 | `.initial_state(DeviceState)` | factory default | 設定完整初始裝置 |
 | `.on_change(ChangeHook)` | 無 | 每次 mutation 後觸發，可供持久化；server 本身不存取檔案系統 |
 | `.enforce_auth(bool)` | `false` | 要求 WS-Security `PasswordDigest` |
@@ -79,27 +81,30 @@ Server 在背景 task 中執行，並於 `MockServer` 被 drop 時關閉，因�
 | `.replay(FixtureStore)` | 無 | 提供錄製的攝影機 clone；需要 `metamorph` feature |
 
 `.discoverable()` 採 best-effort：若 `:3702` 因連接埠占用或 CI sandbox 而無法繫結，
-HTTP server 仍會啟動，但不可被探索。目前未實作多個 discoverable server 共用
-listener；這是實作限制，不是 ONVIF 對每台 host 裝置數量的限制。
+HTTP server 仍會啟動，但不可被探索。這些獨立 server 不共用 listener；另外的
+`FleetBuilder::discoverable` 路徑使用共用 responder，探索啟動失敗會使整體啟動失敗。
 
 ### 1.4 本機端點與探索限制
 
-`MockServer` 的 HTTP 僅繫結 `127.0.0.1`，設定 `.port(...)` 或 `.discoverable(...)`
-也不會改變此行為。Discovery 公告的仍是 loopback HTTP URL；其他電腦即使收到
-ProbeMatch，也不能因此存取該端點。Builder 尚無 HTTP 繫結位址或公告位址覆寫選項。
+`MockServer` 預設繫結 `127.0.0.1`，僅設定 `.port(...)` 或 `.discoverable(...)`
+不會改變位址。開發中原始碼新增明確的 `.bind_ip(...)` 與 `.advertise_ip(...)`
+設定；LAN 存取須刻意啟用，其他電腦收到 loopback URL 不代表可以存取該端點。
 
 - `mock_server` 範例**未啟用 WS-Discovery**。請在同一台電腦，使用輸出的裝置 URL
   直接連線。執行多個 instance 時，須使用不同連接埠及**不同的 `--config` 狀態檔**。
-- `Fleet` 建立獨立 HTTP server 與裝置狀態，但不會向 WS-Discovery 註冊成員。
-  請直接使用 `Fleet::device_urls()`。`mock_fleet` 範例查詢五台裝置後即結束，
+- `Fleet` 建立獨立 HTTP server 與裝置狀態；除非選用 `FleetBuilder::discoverable`，
+  否則不啟用探索。可用 `Fleet::device_urls()` 直接連線，並等待 `Fleet::shutdown()`
+  完成清理。`mock_fleet` 範例查詢五台裝置後即結束，
   不是持續運行的探索服務。
 - `DiscoveryResponder::spawn` 僅公告呼叫者提供的裝置，不會建立或對外開放 HTTP
   服務；呼叫者須確保 XAddr 可由預期的 client 存取。
-- Probe filter 僅比對 type 的 local name，忽略 Scopes。Responder 自動測試涵蓋
-  loopback unicast，不代表已驗證多裝置 multicast 互通性。
+- 單台 Probe filter 僅比對 type 的 local name，忽略 Scopes。共用的
+  `DiscoveryResponder::spawn_many` 路徑檢查 qualified type 並拒絕 scope 篩選，
+  未實作完整 scope 比對或 Hello／Bye／Resolve。自動測試涵蓋 loopback unicast，
+  不代表原生 multicast／VMS 已驗收。
 
-多裝置探索及明確的 LAN 繫結／公告位址設定屬後續工作；上述限制不妨礙同時執行
-多個本機 HTTP Mock。
+長駐多台設定、明確 LAN 設定、啟動失敗清理及安全限制，請參閱
+[Mock Fleet 指南](mock-fleet_zh.md)。啟動器不強制認證，也不回寫設定或狀態檔。
 
 ---
 

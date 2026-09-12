@@ -2,12 +2,10 @@
 
 [English](mock-fleet-basic-plan.md) | [繁體中文](mock-fleet-basic-plan_zh.md)
 
-狀態：施工中，2026-09-12 授權執行。首階段為供 VMS 使用的簡易多台啟動與設定。
-B1 的 init／check 與三個針對性設定測試通過。B2 HTTP 服務、明確網路設定、
-成員隔離及可等待的清理通過五個 Fleet 測試與針對性 Clippy。B3 已透過單一
-listener 公告已就緒成員，驗證支援的 probe namespace／type、拒絕 scope 篩選，
-並抑制近期重複 probe。211 個 Mock 測試與針對性 Clippy 通過，最終合併驗收為 B4。
-不宣稱已納入發布或通過 64／256 台穩定性驗證。
+狀態：B1–B4 實作與本機關卡完成，2026-09-12 授權執行。首階段提供簡易多台
+啟動／設定及基本共用探索。本機終端機與 64／256 台容量基本檢查通過；原生
+LAN／VMS 驗收、Linux／macOS 生命週期及託管 CI 仍待完成。不宣稱已納入發布
+或通過 64／256 台長時間穩定性驗證。
 
 | 章節 | 用途 |
 | --- | --- |
@@ -16,6 +14,7 @@ listener 公告已就緒成員，驗證支援的 probe namespace／type、拒絕
 | [執行規則](#執行規則) | 身分、網路與失敗處理 |
 | [施工批次](#施工批次) | 檔案、交付項目及完成條件 |
 | [驗收](#驗收) | 有限自動化及 VMS 檢查 |
+| [本機證據](#本機證據) | 批次提交、終端機及容量結果 |
 | [決策](#決策) | 預設方向及須再次討論的條件 |
 
 ## 範圍
@@ -51,7 +50,7 @@ cargo run --example mock_fleet_serve --features mock-server -- serve lab.toml
 不代表已驗證容量。`check` 驗證設定及引用的狀態檔，不繫結埠或傳送 probe。
 `serve` 列出設備 ID／URL 與探索狀態後持續執行，Ctrl+C 關閉全部自有 listener。
 
-待實作的 manifest 契約：
+已實作的 manifest 契約：
 
 | 位置 | 欄位／語意 |
 | --- | --- |
@@ -59,7 +58,7 @@ cargo run --example mock_fleet_serve --features mock-server -- serve lab.toml
 | 每個 `[[devices]]` | 唯一 `id`、持久保存的 `uuid`、固定 `port`、`name`、`manufacturer`、`model`、`serial_number`，以及選用的 `scopes`、`state_file` |
 | 狀態來源 | 選用既有 `DeviceState` TOML，路徑相對於 manifest；manifest 的身分欄位覆蓋載入的身分，並明確記載優先順序 |
 
-拒絕未知欄位、不支援的版本、空白／重複身分、重複／超出範圍的埠，以及無效的
+拒絕未知 manifest 欄位、不支援的版本、空白／重複身分、重複／超出範圍的埠，以及無效的
 引用狀態檔。不得將格式錯誤的狀態檔默默換成出廠預設。明列的設備項目為唯一
 啟動依據，不再建立第二套 count／template 展開機制。
 
@@ -118,6 +117,31 @@ cargo run --example mock_fleet_serve --features mock-server -- serve lab.toml
    檢查，不宣稱長時間穩定性、串流、事件訂閱或品牌相容性通過。
 6. 在可用環境驗證 Windows／Linux／macOS 原生建置與網路生命週期。缺少原生
    VMS／multicast 檢查時如實記錄，不宣告通過。
+
+## 本機證據
+
+2026-09-12，Windows x64，開發工作目錄 `feat/basic-mock-fleet`：
+
+| 批次 | 證據 |
+| --- | --- |
+| B1 — `51df3f4` | 三個設定測試：init／check、防覆寫、穩定身分、驗證及唯讀狀態優先序；針對性 Clippy |
+| B2 — `6edea84` | 五個 Fleet 測試：獨立 HTTP／狀態、網路驗證、埠占用回復及可等待清理；針對性 Clippy |
+| B3 — `a876c81` | 211 個 Mock 批次測試及兩個共用探索聚焦測試；qualified type、scope 拒絕、關聯、重複抑制、UDP 回復；針對性 Clippy |
+| B4 終端機 | Windows ConPTY 執行 init／check／防覆寫後，完成兩輪四台 serve。CLI `device info` 核對每台設定身分；兩次 Ctrl+C 均以零退出，全部埠可重新繫結，manifest hash 未變 |
+| B4 選用容量 | 64 台／64 個同時讀取：啟動 260 ms，總計 802 ms。256 台／256 個同時讀取：啟動 909 ms，總計 1546 ms。期限內核對全部 loopback unicast 身分及 HTTP 讀取，零失敗 |
+| B4 最終關卡 | Workspace 全功能：1,316 通過／6 忽略；預設：1,204 通過／6 忽略，各 41 個 suites。範例設定測試在 mock-server 與另外的 all-features／locked 組合均為 3 通過。兩種 all-target Clippy、strict rustdoc、fmt 及空白檢查通過；1,447 個本機文件目標／718 個錨點通過，已發布 changelog 歷史未變 |
+| 後續 CI | 在既有五個 runner 的作業系統矩陣加入明確的範例測試步驟；YAML 及相同命令已本機驗證，不宣稱託管執行已通過 |
+
+容量時間是單次本機基本檢查觀察，不是效能基準。未量測記憶體／CPU 峰值、原生
+multicast、目標 VMS 行為、持續連線或 Linux／macOS 原生網路生命週期。
+歷史 CLI 驗收及託管 CI 不作為本次新增
+Mock 變更的驗證證據。
+
+公開說明：[Mock Fleet](../mock-fleet_zh.md)。探索審查參考：
+[ONVIF Core §7.3](https://www.onvif.org/specs/core/ONVIF-Core-Specification.pdf)、
+[WS-Discovery April 2005 §2.4、§5.3、Appendix I](https://specs.xmlsoap.org/ws/2005/04/discovery/ws-discovery.pdf)。
+未複製 schema 原文或外部實作。完整 scope 比對及探索生命週期仍明確排除，
+不宣稱已相容。
 
 ## 決策
 

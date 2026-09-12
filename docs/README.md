@@ -24,6 +24,7 @@ with the top-level [`README.md`](../README.md), the
 | [`done/`](done/) | **Completed plans** — finished design/audit docs, kept as a record. |
 | [`mock-server.md`](mock-server.md) | **Reference for `oxvif::mock`** — routing, envelope/namespace contracts, modeled state, seeded fixtures, operation behavior, request/response examples, faults and explicit simulation limits. The operation ledger owns current route counts; this reference is not a conformance certificate. |
 | [`mock-server_zh.md`](mock-server_zh.md) | **Mock 裝置參考（繁體中文）** — the Traditional Chinese counterpart to the complete Mock behavior and fidelity contract. |
+| [`mock-fleet.md`](mock-fleet.md) · [繁體中文](mock-fleet_zh.md) | Configurable multi-camera development runner: init/check/serve, explicit LAN discovery, state isolation and capacity-smoke limits. |
 | [`oxvif-cli.md`](oxvif-cli.md) | **Complete CLI guide** — installation, human and Agent workflows, inventory, discovery, fleet execution, credentials, TLS, structured output, typed errors, and exit codes. |
 | [`oxvif-cli_zh.md`](oxvif-cli_zh.md) | **CLI 使用指南（繁體中文）** — the Traditional Chinese companion to the complete CLI guide. |
 | [`cli-maintenance.md`](cli-maintenance.md) · [繁體中文](cli-maintenance_zh.md) | Unreleased CLI image downloads, layered diagnosis, configuration inventory/diff, safety boundaries and manual acceptance. |

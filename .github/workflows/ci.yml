@@ -188,6 +188,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Run tests
         run: cargo test --workspace --all-features --locked
+      - name: Test Mock Fleet manifest example
+        run: cargo test --example mock_fleet_serve --all-features --locked
 
   cli-smoke:
     name: CLI smoke (${{ matrix.os }})

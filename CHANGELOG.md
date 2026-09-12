@@ -28,6 +28,10 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 
 ### Added
 
+- Development-only `mock_fleet_serve` example: validated, no-clobber TOML manifests,
+  persistent multi-camera HTTP serving, explicit LAN settings and basic shared
+  unscoped WS-Discovery. Input state is read-only; no RTSP or production auth.
+  See the [operator guide](docs/mock-fleet.md); release placement remains pending.
 - Guided human `oxvif manage` workspace, snapshot saving, staged diagnosis,
   read-only configuration export/diff and richer profile metadata.
 - Shared counted Vim navigation, compact status lines and configurable line

@@ -35,7 +35,8 @@
   可支援多開，但不會公告設備。
 - `MockServerBuilder::discoverable` 每台設備各自建立 UDP 3702 listener；
   繫結失敗時記錄警告，HTTP 仍啟動。它不是共用 listener。
-- `Fleet` 目前不透過 WS-Discovery 公告成員。
+- `Fleet` 現在可透過 `FleetBuilder::discoverable` 明確啟用共用探索；新加入的
+  `mock_fleet_serve` 啟動器提供此路徑的啟動設定。
 
 建議首階段採單一程序管理多台隔離設備與一個 discovery responder。每台須有
 獨立且穩定的身分與狀態、可到達的公告服務位址，以及明確的關閉／移除語意。
@@ -45,11 +46,13 @@ Mock 開放至 loopback 之外。使用者要求的探索啟動失敗必須明�
 多個獨立啟停的程序需要明確協調機制或不同位址，不能僅開啟 socket reuse。
 使用者後續將首階段縮小為供 VMS 使用的簡易多台啟動與設定。
 [基礎 Fleet 計畫](mock-fleet-basic-plan_zh.md) 以單一程序、同 IP 不同埠為實作預設；
-64／256 台容量檢查採選用方式，Metamorph 混合留待後續。F11 已有計畫，
-不表示目前建置已提供該功能。
+64／256 台容量檢查採選用方式，Metamorph 混合留待後續。F11 基礎實作已存在於
+開發中原始碼，詳見[操作指南](../mock-fleet_zh.md)。原生 LAN／VMS 驗收及發布收錄
+仍待完成；容量基本檢查不代表 VMS 長時間穩定性。
 
-實作前須定義重複身分／設定拒絕、type／scope 比對、回應大小限制、新增／移除
-生命週期及多網卡行為。驗收須探索多個獨立設備並到達每個公告 HTTP 端點，確認
+首階段已拒絕重複身分／設定、限制回應大小、檢查 qualified type 並拒絕 scope
+篩選。動態成員及多公告介面仍排除於此階段；具體邊界見計畫。
+驗收須探索多個獨立設備並到達每個公告 HTTP 端點，確認
 狀態隔離及關閉後不再出現；multicast／平台限制須與 unicast 測試結果分別記錄。
 
 ## 驗收

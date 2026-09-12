@@ -260,6 +260,78 @@ mod tests {
     use super::*;
     use crate::OnvifClient;
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "opt-in 64/256-device loopback capacity smoke, not VMS stability acceptance"]
+    async fn configured_fleet_capacity_smoke() {
+        for count in [64, 256] {
+            let started = std::time::Instant::now();
+            let mut builder = Fleet::builder();
+            for i in 0..count {
+                let mut state = DeviceState::default();
+                state.info.serial_number = format!("CAPACITY-{}", i + 1);
+                builder = builder.device(state);
+            }
+            builder.discovery = Some(("127.0.0.1:0".into(), None));
+            let fleet = builder.start().await.unwrap();
+            let startup = started.elapsed();
+            let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let probe = format!(
+                r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing" xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery"><s:Header><a:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</a:Action><a:MessageID>urn:capacity-{count}</a:MessageID></s:Header><s:Body><d:Probe/></s:Body></s:Envelope>"#
+            );
+            socket
+                .send_to(probe.as_bytes(), fleet.discovery_addr().unwrap())
+                .await
+                .unwrap();
+            let mut found = std::collections::HashMap::new();
+            let mut buf = vec![0; 65535];
+            tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                while found.len() < count {
+                    let (len, _) = socket.recv_from(&mut buf).await.unwrap();
+                    let root =
+                        crate::soap::XmlNode::parse(std::str::from_utf8(&buf[..len]).unwrap())
+                            .unwrap();
+                    let record = root.path(&["Body", "ProbeMatches", "ProbeMatch"]).unwrap();
+                    found.insert(
+                        record
+                            .path(&["EndpointReference", "Address"])
+                            .unwrap()
+                            .text()
+                            .to_owned(),
+                        record.child("XAddrs").unwrap().text().to_owned(),
+                    );
+                }
+            })
+            .await
+            .expect("all distinct loopback discovery records must arrive");
+            assert_eq!(found.len(), count);
+            let gate = std::sync::Arc::new(tokio::sync::Barrier::new(count));
+            let mut reads = tokio::task::JoinSet::new();
+            for (i, device) in fleet.devices().iter().enumerate() {
+                assert!(found.values().any(|url| url == device.device_url()));
+                let client = OnvifClient::new(device.device_url());
+                let gate = gate.clone();
+                reads.spawn(async move {
+                    gate.wait().await;
+                    let info = client.get_device_info().await.unwrap();
+                    assert_eq!(info.serial_number, format!("CAPACITY-{}", i + 1));
+                });
+            }
+            tokio::time::timeout(std::time::Duration::from_secs(30), async {
+                while let Some(result) = reads.join_next().await {
+                    result.unwrap();
+                }
+            })
+            .await
+            .expect("concurrent basic reads must finish");
+            fleet.shutdown().await.unwrap();
+            eprintln!(
+                "fleet capacity smoke: devices={count}, concurrent_reads={count}, startup_ms={}, total_ms={}",
+                startup.as_millis(),
+                started.elapsed().as_millis()
+            );
+        }
+    }
+
     #[tokio::test]
     async fn shared_discovery_reaches_each_member_and_releases_listener() {
         let mut builder = Fleet::builder().devices(4);

@@ -197,9 +197,9 @@ async fn updates_a_mock_camera() {
 }
 ```
 
-Use `mock-server` for an HTTP endpoint on the same computer (loopback only).
-Multiple HTTP mocks are supported, but `Fleet` does not advertise them through
-WS-Discovery. See
+Use `mock-server` for HTTP endpoints (loopback by default). Development source also
+provides a [configurable multi-camera runner](docs/mock-fleet.md) with opt-in LAN
+access and basic shared WS-Discovery. See
 the [mock device reference](docs/mock-server.md) for routing, state, supported
 operations, fault injection, and limitations.
 

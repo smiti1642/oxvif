@@ -1,8 +1,8 @@
 //! Spin up a fleet of mock ONVIF cameras and batch-scan them.
 //!
 //! Each device binds its own ephemeral port with a distinct identity, so this
-//! exercises URL-based fleet queries without hardware. HTTP is loopback-only;
-//! fleet members are not advertised through WS-Discovery. This example queries
+//! exercises URL-based fleet queries without hardware. This example uses loopback
+//! HTTP without WS-Discovery; see `mock_fleet_serve` for configurable serving. It queries
 //! five devices and exits, dropping the `Fleet` and shutting every device down.
 //!
 //! ```text

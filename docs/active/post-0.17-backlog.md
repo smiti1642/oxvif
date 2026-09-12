@@ -26,7 +26,7 @@ is promised. [Release blockers](release-0.17-cut.md#blocking-acceptance) stay in
 | F08 | RTSP decoder/playback, batch file exports, camera-write CLI commands and standalone reusable navigation crate | Existing CLI maintenance/navigation plans; new threat model and permission UX before writes |
 | F09 | Official Homebrew Core, Debian/Ubuntu and Windows community-channel submissions | Distribution plan; current native packaging checks remain a release gate, submission is not implied by generated artifacts |
 | F10 | Bounded snapshot image-compatibility investigation | Preserve A03 destination/auth/size/no-clobber policies; obtain a sanitized reproducible response before changing image acceptance |
-| F11 | Multi-device WS-Discovery for Mock Fleet and explicit LAN configuration | [Basic Fleet plan](mock-fleet-basic-plan.md): simple startup/configuration first; shared responder, independent UUIDs/state and explicit LAN exposure. Implementation and release placement remain unapproved by this plan alone |
+| F11 (first slice implemented) | Mock Fleet startup/configuration and basic shared discovery | [Basic Fleet evidence](mock-fleet-basic-plan.md) and [operator guide](../mock-fleet.md). Full scope matching, Hello/Bye/Resolve, native LAN/VMS acceptance and Metamorph mixtures remain open; release placement requires a separate decision |
 | F12 (promoted) | Separate fixed-bottom CLI status bar | Returned to 0.17 by operator request; see [CLI re-entry](cli-0.17-reentry.md). Native-platform/IME acceptance remains required |
 
 F10 research disposition, 2026-09-12: review of the user-provided ONVIF Device

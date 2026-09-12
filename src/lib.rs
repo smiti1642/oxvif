@@ -221,6 +221,9 @@
 //! drive an [`OnvifClient`] against it — no network, no real camera. The
 //! **`mock-server`** feature additionally provides a bound-port `mock::MockServer`
 //! for cross-process / non-Rust clients. See the `mock` module for details.
+//! HTTP defaults to loopback. The `mock_fleet_serve` example adds startup-only
+//! TOML configuration for multiple devices, explicit LAN access and optional
+//! shared, unscoped discovery. It provides no RTSP streams or production auth.
 //! Synthetic requests share bounded XML and operation-identity checks; full
 //! field fidelity and HTTP binding remain separate from that validation.
 //! Empty synthetic profile identities are refused with `mock:RequestPolicy`;

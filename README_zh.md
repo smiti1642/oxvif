@@ -188,8 +188,8 @@ async fn updates_a_mock_camera() {
 }
 ```
 
-同一台電腦的其他 process 需要 HTTP 端點時，請啟用 `mock-server`（僅繫結 loopback）。
-可同時執行多個 HTTP Mock，但 `Fleet` 不會透過 WS-Discovery 公告成員。完整的路由、
+需要 HTTP 端點時，請啟用 `mock-server`（預設繫結 loopback）。開發中原始碼另提供
+[可設定的多台啟動器](docs/mock-fleet_zh.md)，可明確啟用 LAN 存取及基本共用 WS-Discovery。完整的路由、
 狀態、支援 operation、fault injection 與限制，請參閱
 [Mock 裝置參考](docs/mock-server_zh.md)。
 

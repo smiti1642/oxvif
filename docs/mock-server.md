@@ -88,6 +88,8 @@ binds `127.0.0.1:0`; use `MockServer::builder().port(8080)` for a fixed port
 | Method | Default | Effect |
 |---|---|---|
 | `.port(u16)` | `0` (ephemeral) | TCP port to bind. |
+| `.bind_ip(Ipv4Addr)` | `127.0.0.1` | HTTP interface; LAN access exposes test/control endpoints. |
+| `.advertise_ip(Ipv4Addr)` | concrete bind address | Local address used in URLs; required for wildcard binding. |
 | `.initial_state(DeviceState)` | factory defaults | Seed the whole device. |
 | `.on_change(ChangeHook)` | none | Fired after every mutation — the seam for persistence. The server itself never touches the filesystem. |
 | `.enforce_auth(bool)` | `false` | Require WS-Security `PasswordDigest`. |
@@ -95,30 +97,34 @@ binds `127.0.0.1:0`; use `MockServer::builder().port(8080)` for a fixed port
 | `.replay(FixtureStore)` | none | Serve a recorded camera clone (`metamorph` feature). |
 
 `.discoverable()` is **best-effort**: if the `:3702` bind fails (port in use,
-sandboxed CI) the HTTP server still starts, just undiscoverable. The current
-implementation has no shared listener for multiple discoverable servers; this
-is an implementation limitation, not an ONVIF restriction on devices per host.
+sandboxed CI) the HTTP server still starts, just undiscoverable. These standalone
+servers do not share a listener. The separate `FleetBuilder::discoverable` path
+uses a shared responder and treats discovery startup failure as fatal.
 
 ### 1.4 Local endpoints and discovery limitations
 
-`MockServer` binds HTTP to `127.0.0.1`, including when `.port(...)` or
-`.discoverable(...)` is set. Discovery advertises that loopback HTTP URL; receiving
-a ProbeMatch on another computer does not make the endpoint reachable there.
-The builder has no configurable HTTP bind address or advertised-address override.
+`MockServer` defaults to `127.0.0.1`; `.port(...)` or `.discoverable(...)` alone
+does not change that address. Development source adds explicit `.bind_ip(...)`
+and `.advertise_ip(...)` settings. LAN access must be configured deliberately;
+receiving a loopback URL on another computer does not make it reachable there.
 
 - The `mock_server` example does **not** enable WS-Discovery. Connect a client on
   the same computer directly to the printed device URL. To run several instances,
   use distinct ports **and distinct `--config` state files**.
-- `Fleet` creates independent HTTP servers and device states, but does not register
-  them with WS-Discovery. Use `Fleet::device_urls()` directly. The `mock_fleet`
+- `Fleet` creates independent HTTP servers and device states. Discovery is off
+  unless `FleetBuilder::discoverable` is selected. Use `Fleet::device_urls()`
+  for direct access and await `Fleet::shutdown()` for cleanup. The `mock_fleet`
   example queries five devices and exits; it is not a persistent discovery service.
 - `DiscoveryResponder::spawn` advertises the supplied device; it does not create
   or expose an HTTP service. The caller is responsible for reachable XAddrs.
-- Probe filtering matches type local names and ignores Scopes. Automated responder
-  tests cover loopback unicast, not multi-device multicast interoperability.
+- Standalone Probe filtering matches type local names and ignores Scopes. The
+  shared `DiscoveryResponder::spawn_many` path checks qualified types and declines
+  scope filters; it does not implement full scope matching or Hello/Bye/Resolve.
+  Automated responder tests cover loopback unicast, not native multicast/VMS acceptance.
 
-Multi-device discovery and explicit LAN bind/advertise configuration are follow-up
-work. These limitations do not prevent multiple local HTTP mocks from running.
+For persistent configurable fleets, explicit LAN setup, startup rollback and
+security limitations, see the [Mock Fleet guide](mock-fleet.md). The runner leaves
+authentication unenforced and never rewrites configuration or state files.
 
 ---
 
