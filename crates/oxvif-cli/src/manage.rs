@@ -310,6 +310,7 @@ async fn choose_device(
     loop {
         if chooser.browsing_search {
             if let Some(results) = &mut chooser.search {
+                results.devices = app.refresh_discovery_registration(&results.devices)?;
                 match panel.select_discovered_device(&results.devices, &mut results.view)? {
                     DiscoverySelection::Back => {
                         chooser.browsing_search = false;
@@ -338,6 +339,12 @@ async fn choose_device(
                         continue;
                     }
                     DiscoverySelection::Rescan => {}
+                    DiscoverySelection::Add(index) => {
+                        panel
+                            .onboard_device(app, options, &results.devices[index].record, false)
+                            .await?;
+                        continue;
+                    }
                 }
             }
             let scan = CommandRequest::DiscoverScan(DiscoverScanRequest {

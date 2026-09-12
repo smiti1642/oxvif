@@ -30,7 +30,7 @@ mod manage;
 mod navigation;
 mod ui_settings;
 
-use interactive::{BrowserAction, DiscoverySetup, await_discovery, browse_discovery};
+use interactive::{await_discovery, browse_discovery};
 
 const AGENT_HELP: &str = "AI AGENTS:\n  Run `oxvif agent guide --output json` before operating devices.\n  Use structured output, --non-interactive, and an explicit device selector.\n  Never place passwords in command arguments, output, or logs.";
 
@@ -1103,25 +1103,14 @@ async fn execute_and_emit(
                 } = &success.data
                 && !devices.is_empty()
             {
-                match browse_discovery(devices, summary) {
-                    Ok(BrowserAction::Quit) => {
+                match browse_discovery(application, options, devices, summary).await {
+                    Ok(()) => {
                         println!(
                             "Discovery browser closed. Found {} device(s).",
                             summary.total_count
                         );
                         emit_verbose_success(options, command_name, &success, started);
                         return success.exit_code();
-                    }
-                    Ok(BrowserAction::Add(setup)) => {
-                        emit_verbose_success(options, command_name, &success, started);
-                        return setup_discovered_device(
-                            application,
-                            *setup,
-                            options,
-                            format,
-                            prompt,
-                        )
-                        .await;
                     }
                     Err(error) => {
                         emit_verbose_error(options, command_name, &error, started);
@@ -1170,55 +1159,6 @@ async fn execute_and_emit(
             error.exit_code()
         }
     }
-}
-
-async fn setup_discovered_device(
-    application: &Application,
-    setup: DiscoverySetup,
-    options: &ExecutionOptions,
-    format: OutputFormat,
-    prompt: &dyn Prompt,
-) -> u8 {
-    let Some(target) = setup
-        .device
-        .xaddrs
-        .iter()
-        .find(|target| normalize_target(target).is_ok())
-        .cloned()
-    else {
-        let error = AppError::invalid_argument(
-            "The selected discovery record has no usable device-service address.",
-        );
-        emit_error(format, &error, Some("setup"));
-        return error.exit_code();
-    };
-    let device = NewDevice {
-        id: setup.id,
-        name: None,
-        target,
-        tags: Vec::new(),
-    };
-    if let Err(error) = application.preflight_setup(&device) {
-        emit_error(format, &error, Some("setup"));
-        return error.exit_code();
-    }
-    let request = CommandRequest::DeviceSetup(DeviceSetupRequest {
-        device,
-        username: setup.username,
-        password: setup.password,
-        verify: true,
-        set_current: true,
-    });
-    Box::pin(execute_and_emit(
-        application,
-        request,
-        options,
-        format,
-        false,
-        false,
-        prompt,
-    ))
-    .await
 }
 
 fn interactive_terminal_available(format: OutputFormat, options: &ExecutionOptions) -> bool {

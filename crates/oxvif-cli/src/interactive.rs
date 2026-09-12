@@ -31,13 +31,7 @@ use crate::ui_settings::{self, LineNumbers};
 
 const DEFAULT_PAGE_SIZE: usize = 12;
 
-pub(crate) enum BrowserAction {
-    Quit,
-    Add(Box<DiscoverySetup>),
-}
-
 pub(crate) struct DiscoverySetup {
-    pub(crate) device: DiscoveryRecord,
     pub(crate) id: String,
     pub(crate) username: String,
     pub(crate) password: SecretString,
@@ -47,12 +41,14 @@ enum BrowserIntent {
     Quit,
     Settings,
     Activate(usize),
+    Add(usize),
     Rescan,
 }
 
 pub(crate) enum DiscoverySelection {
     Back,
     Select(usize),
+    Add(usize),
     Rescan,
 }
 
@@ -63,6 +59,7 @@ pub(crate) struct DiscoverySelectionView {
     registration_view: RegistrationView,
     selected: usize,
     top: usize,
+    record_index: Option<usize>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -199,11 +196,17 @@ impl SetupForm {
 
     fn finish(mut self) -> Result<DiscoverySetup, AppError> {
         Ok(DiscoverySetup {
-            device: self.device.clone(),
             id: self.id.trim().to_owned(),
             username: self.username.trim().to_owned(),
             password: SecretString::new(std::mem::take(&mut self.password))?,
         })
+    }
+
+    fn submit(&mut self) -> Result<DiscoverySetup, AppError> {
+        let mut retry = Self::new(self.device.clone(), self.id.clone());
+        retry.username.clone_from(&self.username);
+        retry.field = SetupField::Password;
+        std::mem::replace(self, retry).finish()
     }
 }
 
@@ -468,72 +471,25 @@ fn discovery_progress_text(elapsed: Duration) -> String {
     )
 }
 
-pub(crate) fn browse_discovery(
+pub(crate) async fn browse_discovery(
+    app: &oxvif_cli::Application,
+    options: &oxvif_cli::ExecutionOptions,
     devices: &[DiscoveryDeviceView],
-    summary: &DiscoveryResultSummary,
-) -> Result<BrowserAction, AppError> {
-    let mut terminal = TerminalSession::enter()?;
-    let mut state = BrowserState::new(devices, DEFAULT_PAGE_SIZE, summary.total_count);
-    let mut setup_form = None;
-
+    _summary: &DiscoveryResultSummary,
+) -> Result<(), AppError> {
+    let mut panel = Panel::enter()?;
+    let mut devices = devices.to_vec();
+    let mut view = DiscoverySelectionView::default();
     loop {
-        let (_, height) = terminal::size().map_err(terminal_error)?;
-        state.set_page_size(if state.showing_details {
-            panel_body_rows(height)
-        } else {
-            discovery_rows(height)
-        });
-        if let Some(form) = &setup_form {
-            render_setup(&mut terminal, form)?;
-        } else {
-            render(&mut terminal, &mut state)?;
-        }
-
-        match event::read().map_err(terminal_error)? {
-            Event::Key(key) if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {
-                if let Some(form) = setup_form.as_mut() {
-                    match form.handle_key(key) {
-                        Some(SetupIntent::Cancel) => setup_form = None,
-                        Some(SetupIntent::Quit) => return Ok(BrowserAction::Quit),
-                        Some(SetupIntent::Submit) => {
-                            let form = setup_form.take().expect("setup form should exist");
-                            return Ok(BrowserAction::Add(Box::new(form.finish()?)));
-                        }
-                        None => {}
-                    }
-                } else if let Some(action) = state.handle_key(key) {
-                    match action {
-                        BrowserIntent::Quit => return Ok(BrowserAction::Quit),
-                        BrowserIntent::Rescan => unreachable!("Rescan is manage-only"),
-                        BrowserIntent::Settings => number_settings(&mut terminal)?,
-                        BrowserIntent::Activate(index) => {
-                            let device = &devices[index].record;
-                            let target = primary_target(device).ok_or_else(|| {
-                                AppError::invalid_argument(
-                                    "The selected discovery record has no usable device-service address.",
-                                )
-                            })?;
-                            let suggested_id = super::suggested_device_id(target, None)?;
-                            setup_form = Some(SetupForm::new(device.clone(), suggested_id));
-                        }
-                    }
-                }
+        devices = app.refresh_discovery_registration(&devices)?;
+        match panel.discovery_browser(&devices, &mut view, DiscoveryPurpose::Add)? {
+            DiscoverySelection::Back => return Ok(()),
+            DiscoverySelection::Add(index) | DiscoverySelection::Select(index) => {
+                panel
+                    .onboard_device(app, options, &devices[index].record, true)
+                    .await?;
             }
-            Event::Resize(_, _) => {
-                state.nav.reset();
-                terminal.invalidate()?;
-            }
-            Event::Paste(mut value) => {
-                state.nav.reset();
-                if let Some(form) = setup_form.as_mut() {
-                    form.paste(&value);
-                } else if state.filtering {
-                    state.query.push_str(&value);
-                    state.rebuild_filter();
-                }
-                value.zeroize();
-            }
-            _ => {}
+            DiscoverySelection::Rescan => unreachable!("standalone browser does not rescan"),
         }
     }
 }
@@ -665,7 +621,17 @@ impl Panel {
         devices: &[DiscoveryDeviceView],
         view: &mut DiscoverySelectionView,
     ) -> Result<DiscoverySelection, AppError> {
+        self.discovery_browser(devices, view, DiscoveryPurpose::Select)
+    }
+
+    fn discovery_browser(
+        &mut self,
+        devices: &[DiscoveryDeviceView],
+        view: &mut DiscoverySelectionView,
+        purpose: DiscoveryPurpose,
+    ) -> Result<DiscoverySelection, AppError> {
         let mut state = BrowserState::resume_selection(devices, view);
+        state.purpose = purpose;
         loop {
             let (_, height) = terminal::size().map_err(terminal_error)?;
             state.set_page_size(if state.showing_details {
@@ -683,6 +649,10 @@ impl Panel {
                     Some(BrowserIntent::Activate(index)) => {
                         state.save_selection(view);
                         return Ok(DiscoverySelection::Select(index));
+                    }
+                    Some(BrowserIntent::Add(index)) => {
+                        state.save_selection(view);
+                        return Ok(DiscoverySelection::Add(index));
                     }
                     Some(BrowserIntent::Rescan) => {
                         state.save_selection(view);
@@ -703,6 +673,89 @@ impl Panel {
                     }
                     value.zeroize();
                 }
+                _ => {}
+            }
+        }
+    }
+
+    /// Explicit setup only: no automatic persistence from selecting a camera.
+    pub(crate) async fn onboard_device(
+        &mut self,
+        app: &oxvif_cli::Application,
+        options: &oxvif_cli::ExecutionOptions,
+        record: &DiscoveryRecord,
+        set_current: bool,
+    ) -> Result<(), AppError> {
+        let Some(target) = primary_target(record) else {
+            return self.show(
+                "Cannot add camera",
+                "No usable ONVIF address was advertised.",
+            );
+        };
+        let mut form = SetupForm::new(record.clone(), super::suggested_device_id(target, None)?);
+        loop {
+            render_setup(&mut self.0, &form)?;
+            match event::read().map_err(terminal_error)? {
+                Event::Key(key) if key.kind != KeyEventKind::Release => {
+                    match form.handle_key(key) {
+                        Some(SetupIntent::Cancel | SetupIntent::Quit) => return Ok(()),
+                        Some(SetupIntent::Submit) => {
+                            let setup = form.submit()?;
+                            let request = oxvif_cli::CommandRequest::DeviceSetup(
+                                oxvif_cli::DeviceSetupRequest {
+                                    device: oxvif_cli::NewDevice {
+                                        id: setup.id,
+                                        name: None,
+                                        target: target.to_owned(),
+                                        tags: Vec::new(),
+                                    },
+                                    username: setup.username,
+                                    password: setup.password,
+                                    verify: true,
+                                    set_current,
+                                },
+                            );
+                            match self
+                                .wait(
+                                    "Verifying camera and saving registration",
+                                    app.execute(request, options),
+                                )
+                                .await?
+                            {
+                                Some(Ok(_)) => {
+                                    self.show("Camera saved", "Registration and credentials saved. Returning to cached results; an active NEW filter hides this camera.")?;
+                                    return Ok(());
+                                }
+                                Some(Err(error)) => {
+                                    self.show(
+                                        "Setup failed",
+                                        &format!(
+                                            "{}\n{}\n{}",
+                                            error.code.as_str(),
+                                            error.message,
+                                            error.suggested_action.as_deref().unwrap_or(
+                                                "Review local registration before retrying."
+                                            )
+                                        ),
+                                    )?;
+                                    form.error = Some("Review the error; ID/account retained, password cleared. Enter password to retry, Esc to return.".into());
+                                }
+                                None => {
+                                    // The application has no await inside its local commit/rollback.
+                                    // Returning to the caller reprojects registry state before re-entry.
+                                    self.show("Setup cancelled", "Returning to the list and rechecking local registration. No automatic retry was started.")?;
+                                    return Ok(());
+                                }
+                            }
+                        }
+                        None => {}
+                    }
+                }
+                Event::Paste(mut value) => {
+                    form.paste(&value);
+                    value.zeroize();
+                }
+                Event::Resize(_, _) => self.0.invalidate()?,
                 _ => {}
             }
         }
@@ -1264,6 +1317,12 @@ impl<'a> BrowserState<'a> {
         state.rebuild_filter();
         state.selected = view.selected;
         state.top = view.top;
+        if let Some(selected) = view
+            .record_index
+            .and_then(|index| state.filtered.iter().position(|i| *i == index))
+        {
+            state.selected = selected;
+        }
         state.clamp_selection();
         state
     }
@@ -1273,6 +1332,7 @@ impl<'a> BrowserState<'a> {
         view.registration_view = self.registration_view;
         view.selected = self.selected;
         view.top = self.top;
+        view.record_index = self.filtered.get(self.selected).copied();
     }
 
     fn set_page_size(&mut self, page_size: usize) {
@@ -1444,14 +1504,12 @@ impl<'a> BrowserState<'a> {
             }
             KeyCode::Enter | KeyCode::Char('a') => {
                 let device = self.current()?;
-                let eligible = match self.purpose {
-                    DiscoveryPurpose::Select => key.code == KeyCode::Enter,
-                    DiscoveryPurpose::Add => {
-                        device.registration_status != DiscoveryRegistrationStatus::Saved
-                            && primary_target(device).is_some()
-                    }
-                };
-                eligible.then(|| BrowserIntent::Activate(self.filtered[self.selected]))
+                if self.purpose == DiscoveryPurpose::Select && key.code == KeyCode::Enter {
+                    return Some(BrowserIntent::Activate(self.filtered[self.selected]));
+                }
+                (device.registration_status != DiscoveryRegistrationStatus::Saved
+                    && primary_target(device).is_some())
+                .then(|| BrowserIntent::Add(self.filtered[self.selected]))
             }
             _ => None,
         }
@@ -1492,7 +1550,7 @@ fn render_setup(terminal: &mut TerminalSession, form: &SetupForm) -> Result<(), 
     body.push(
         form.error
             .as_deref()
-            .unwrap_or("Nothing saved until setup succeeds.")
+            .unwrap_or("Submit verifies and saves this device and its credentials.")
             .to_owned(),
     );
     draw_changed_lines(
@@ -1646,7 +1704,7 @@ fn discovery_frame(
         if state.filtering {
             "Type search | Enter/Esc back | Ctrl-U clear | Ctrl-C close"
         } else if state.purpose == DiscoveryPurpose::Select {
-            "? settings | j/k gg/G ^D/^U | / r n A filter | c clear | R rescan | i info | Enter select | q back"
+            "/ search | r/n/A filter | c clear | R rescan | Enter select | a add | i info | ? settings | q back"
         } else {
             "? settings | j/k gg/G ^D/^U | / r n A filter | c clear | i info | Enter add | q quit"
         },
@@ -1990,6 +2048,26 @@ mod tests {
     }
 
     #[test]
+    fn registration_reprojection_keeps_query_and_next_valid_record() {
+        let mut devices = vec![
+            view("192.0.2.1", "Example", "Camera", None),
+            view("192.0.2.2", "Example", "Camera", None),
+        ];
+        let mut state = BrowserState::for_selection(&devices);
+        state.query = "Example".into();
+        state.registration_view = RegistrationView::Unregistered;
+        state.rebuild_filter();
+        let mut checkpoint = DiscoverySelectionView::default();
+        state.save_selection(&mut checkpoint);
+        devices[0] = view("192.0.2.1", "Example", "Camera", Some("saved"));
+        let resumed = BrowserState::resume_selection(&devices, &checkpoint);
+        assert_eq!(resumed.query, "Example");
+        assert_eq!(resumed.registration_view, RegistrationView::Unregistered);
+        assert_eq!(resumed.filtered, [1]);
+        assert_eq!(resumed.selected, 0);
+    }
+
+    #[test]
     fn manage_discovery_filters_select_original_records_without_onboarding() {
         let devices = vec![
             view("192.0.2.1", "Other", "Camera", None),
@@ -2016,10 +2094,10 @@ mod tests {
         ));
         state.handle_key(key('n'));
         assert_eq!(state.filtered, [2]);
-        assert!(
-            state.handle_key(key('a')).is_none(),
-            "manage never onboards"
-        );
+        assert!(matches!(
+            state.handle_key(key('a')),
+            Some(BrowserIntent::Add(2))
+        ));
         assert!(matches!(
             state.handle_key(enter),
             Some(BrowserIntent::Activate(2))
@@ -2594,7 +2672,14 @@ mod tests {
             "> Password   ••••••_"
         );
 
-        let setup = form.finish().expect("valid setup form");
+        let setup = form.submit().expect("valid setup form");
+        assert_eq!(form.id, "camera-192-0-2-10");
+        assert_eq!(form.username, "admin");
+        assert!(
+            form.password.is_empty(),
+            "submitted secrets are not kept in retry drafts"
+        );
+        assert!(matches!(form.field, SetupField::Password));
         assert_eq!(setup.id, "camera-192-0-2-10");
         assert_eq!(setup.username, "admin");
         assert_eq!(setup.password.expose_secret(), "secret");

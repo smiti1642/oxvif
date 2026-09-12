@@ -973,6 +973,19 @@ impl Application {
         original
     }
 
+    /// Reconcile cached discovery records with local registration without network access.
+    pub fn refresh_discovery_registration(
+        &self,
+        devices: &[DiscoveryDeviceView],
+    ) -> Result<Vec<DiscoveryDeviceView>, AppError> {
+        self.discovery_devices(
+            devices.iter().map(|device| device.record.clone()).collect(),
+            &[],
+            None,
+        )
+        .map(|(devices, _)| devices)
+    }
+
     fn discovery_devices(
         &self,
         records: Vec<crate::DiscoveryRecord>,
@@ -2776,6 +2789,37 @@ mod tests {
         let registry_contents = std::fs::read_to_string(directory.path().join("devices.toml"))
             .expect("registry should exist");
         assert!(!registry_contents.contains("shared-secret"));
+    }
+
+    #[test]
+    fn cached_discovery_registration_reconciles_without_a_scan() {
+        let directory = tempfile::tempdir().unwrap();
+        let registry = RegistryStore::at(directory.path());
+        let app =
+            Application::with_stores(registry.clone(), Arc::new(MemoryCredentialStore::default()));
+        let record = crate::DiscoveryRecord {
+            endpoint: "urn:uuid:cached".into(),
+            types: Vec::new(),
+            scopes: Vec::new(),
+            xaddrs: vec!["http://192.0.2.1/onvif/device_service".into()],
+            manufacturer: None,
+            model: None,
+            firmware_version: None,
+            serial_number: None,
+        };
+        let cached = vec![DiscoveryDeviceView::new(record, None)];
+        registry
+            .add(NewDevice {
+                id: "saved".into(),
+                name: None,
+                target: cached[0].record.xaddrs[0].clone(),
+                tags: Vec::new(),
+            })
+            .unwrap();
+        let refreshed = app.refresh_discovery_registration(&cached).unwrap();
+        assert_eq!(refreshed[0].registered_device_id.as_deref(), Some("saved"));
+        assert_eq!(refreshed[0].record, cached[0].record);
+        assert!(cached[0].registered_device_id.is_none());
     }
 
     #[tokio::test]

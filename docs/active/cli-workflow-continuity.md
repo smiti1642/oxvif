@@ -164,3 +164,7 @@ reciprocal language links and section-link tables for long documents.
 
 - Planning complete: baseline and all source owners above inspected.
 - B1–B4 not yet accepted. Evidence and commit IDs will be appended per batch.
+- B1 implementation complete: shared Panel onboarding, manage a/add, standalone
+  continuation and local registry reprojection. Binary tests: 54 passed; existing
+  setup application scenarios: 5 passed; new local reprojection test: 1 passed.
+  No terminal/native credential acceptance is claimed yet; that remains B4.
