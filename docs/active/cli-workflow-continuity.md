@@ -173,3 +173,7 @@ reciprocal language links and section-link tables for long documents.
   and credential configuration) before reuse; any changed view conservatively
   invalidates that slot. Binary tests: 57 passed, including A/B/A, same-address
   identities, registry target changes, 256-slot limit and literal search mapping.
+- B3 implementation complete: separate retained issues, searchable persistent report
+  views, non-secret input drafts and last-export baseline selection with shared
+  local preflight. Binary tests: 59 passed; CLI all-target Clippy with warnings
+  denied passed. B4 terminal journeys and final docs remain open.

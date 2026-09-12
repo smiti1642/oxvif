@@ -49,6 +49,24 @@ impl MenuSearch {
     }
 }
 
+#[derive(Default)]
+pub(crate) struct TextView {
+    query: String,
+    offset: usize,
+}
+
+impl TextView {
+    fn lines(&self, text: &str, width: usize, mode: LineNumbers) -> Vec<String> {
+        let query = self.query.to_lowercase();
+        let filtered = text
+            .lines()
+            .filter(|line| line.to_lowercase().contains(&query))
+            .collect::<Vec<_>>()
+            .join("\n");
+        numbered_text(&filtered, width, mode)
+    }
+}
+
 pub(crate) struct DiscoverySetup {
     pub(crate) id: String,
     pub(crate) username: String,
@@ -1005,24 +1023,33 @@ impl Panel {
     }
 
     pub(crate) fn show(&mut self, title: &str, text: &str) -> Result<(), AppError> {
-        let mut offset = 0;
+        self.show_with_view(title, text, &mut TextView::default())
+    }
+
+    pub(crate) fn show_with_view(
+        &mut self,
+        title: &str,
+        text: &str,
+        view: &mut TextView,
+    ) -> Result<(), AppError> {
+        let mut editing = false;
         let mut nav = Navigation::default();
         loop {
             let mode = ui_settings::current()?;
             let (width, height) = terminal::size().map_err(terminal_error)?;
             let rows = panel_body_rows(height);
-            let lines = numbered_text(text, width.saturating_sub(1) as usize, mode);
-            offset = offset.min(lines.len().saturating_sub(rows));
+            let lines = view.lines(text, width.saturating_sub(1) as usize, mode);
+            view.offset = view.offset.min(lines.len().saturating_sub(rows));
             let body = lines
                 .iter()
                 .enumerate()
-                .skip(offset)
+                .skip(view.offset)
                 .take(rows)
                 .map(|(i, s)| {
                     numbered_line(
                         s,
                         i,
-                        offset,
+                        view.offset,
                         lines.len(),
                         width.saturating_sub(1) as usize,
                         mode,
@@ -1030,34 +1057,75 @@ impl Panel {
                 })
                 .collect::<Vec<_>>();
             self.draw(
-                title,
+                &format!("{title} | Search: {}", if view.query.is_empty() { "(none)" } else { &view.query }),
                 &body,
-                "? settings | j/k 7j/3k gg/G nG | PgUp/Dn ^D/^U | Enter/Esc/q back",
-                &nav_status("NORMAL (TEXT)", &nav, offset, lines.len(), mode),
+                if editing { "Type search | Enter/Esc finish | Ctrl-U clear | Ctrl-C back" } else { "/ search | c clear | ? settings | j/k gg/G nG | PgUp/Dn ^D/^U | Enter/Esc/q back" },
+                &nav_status(if editing { "SEARCH (TEXT)" } else { "NORMAL (TEXT)" }, &nav, view.offset, lines.len(), mode),
             )?;
             match event::read().map_err(terminal_error)? {
-                Event::Key(key) => match navigation_key(&mut nav, key, false) {
-                    Outcome::Action(motion) => {
-                        offset = navigation::scroll(offset, motion, lines.len(), rows)
+                Event::Key(key) if key.kind != KeyEventKind::Release => {
+                    if key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(KeyModifiers::CONTROL)
+                    {
+                        return Ok(());
                     }
-                    Outcome::Unhandled => match key.code {
-                        KeyCode::Char('?') => {
-                            nav.reset();
-                            number_settings(&mut self.0)?;
+                    if editing {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Enter => editing = false,
+                            KeyCode::Backspace => {
+                                view.query.pop();
+                                view.offset = 0;
+                            }
+                            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                view.query.clear();
+                                view.offset = 0;
+                            }
+                            KeyCode::Char(c)
+                                if key.modifiers.is_empty()
+                                    || key.modifiers == KeyModifiers::SHIFT =>
+                            {
+                                view.query.push(c);
+                                view.offset = 0;
+                            }
+                            _ => {}
                         }
-                        KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
-                        KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => {
-                            return Ok(());
+                        continue;
+                    }
+                    match navigation_key(&mut nav, key, false) {
+                        Outcome::Action(motion) => {
+                            view.offset = navigation::scroll(view.offset, motion, lines.len(), rows)
                         }
+                        Outcome::Unhandled => match key.code {
+                            KeyCode::Char('/') => {
+                                editing = true;
+                                nav.reset();
+                            }
+                            KeyCode::Char('c') => {
+                                view.query.clear();
+                                view.offset = 0;
+                            }
+                            KeyCode::Char('?') => {
+                                nav.reset();
+                                number_settings(&mut self.0)?;
+                            }
+                            KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
+                            _ => {}
+                        },
                         _ => {}
-                    },
-                    _ => {}
-                },
+                    }
+                }
                 Event::Resize(_, _) => {
                     nav.reset();
                     self.0.invalidate()?;
                 }
-                Event::Paste(_) => nav.reset(),
+                Event::Paste(mut text) => {
+                    nav.reset();
+                    if editing {
+                        view.query.push_str(&text);
+                        view.offset = 0;
+                    }
+                    text.zeroize();
+                }
                 _ => {}
             }
         }
@@ -1067,13 +1135,14 @@ impl Panel {
         self.input_inner(title, label, false, "")
     }
 
-    pub(crate) fn input_with_initial(
+    pub(crate) fn input_with_draft(
         &mut self,
         title: &str,
         label: &str,
-        initial: &str,
+        draft: &mut String,
     ) -> Result<Option<String>, AppError> {
-        self.input_inner(title, label, false, initial)
+        let initial = draft.clone();
+        self.input_inner_draft(title, label, false, &initial, Some(draft))
     }
 
     pub(crate) fn password(&mut self) -> Result<Option<String>, AppError> {
@@ -1092,9 +1161,23 @@ impl Panel {
         secret: bool,
         initial: &str,
     ) -> Result<Option<String>, AppError> {
+        self.input_inner_draft(title, label, secret, initial, None)
+    }
+
+    fn input_inner_draft(
+        &mut self,
+        title: &str,
+        label: &str,
+        secret: bool,
+        initial: &str,
+        mut draft: Option<&mut String>,
+    ) -> Result<Option<String>, AppError> {
         let mut value = zeroize::Zeroizing::new(initial.to_owned());
         let mut cursor = value.len();
         loop {
+            if let Some(draft) = draft.as_deref_mut() {
+                draft.clone_from(&value);
+            }
             let (width, height) = terminal::size().map_err(terminal_error)?;
             let mut body = Vec::new();
             if panel_body_rows(height) >= 2 {
@@ -2142,6 +2225,32 @@ mod tests {
         );
         state.query.clear();
         assert_eq!(state.matches(&text, 256), (0..258).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn report_search_is_literal_case_insensitive_and_width_bounded() {
+        let mut view = TextView {
+            query: "CAMERA".into(),
+            offset: 7,
+        };
+        let text = "Camera 攝影機\nOther\nCAMERA two\n7j.* literal\nunsafe\x1b[31m";
+        let lines = view.lines(text, 80, LineNumbers::Off);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("攝影機"));
+        assert_eq!(view.offset, 7, "rendering does not discard caller state");
+        view.query = "7j.*".into();
+        assert!(view.lines(text, 80, LineNumbers::Off)[0].contains("7j.* literal"));
+        view.query = "no matches".into();
+        assert!(
+            view.lines(text, 80, LineNumbers::Off)
+                .iter()
+                .all(|s| s.is_empty())
+        );
+        view.query.clear();
+        for width in [0, 1, 8, 30] {
+            let lines = view.lines(text, width, LineNumbers::Hybrid);
+            assert!(lines.iter().all(|line| !line.chars().any(char::is_control)));
+        }
     }
 
     #[test]

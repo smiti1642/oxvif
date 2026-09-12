@@ -290,6 +290,13 @@ pub struct ConfigDiffRequest {
     pub against: PathBuf,
 }
 
+impl ConfigDiffRequest {
+    /// Validate a baseline locally before entering a live comparison workflow.
+    pub fn preflight(&self) -> Result<(), AppError> {
+        read_baseline(&self.against).map(|_| ())
+    }
+}
+
 #[derive(Clone)]
 pub(crate) enum Workflow {
     Snapshot { profile: String, save: PathBuf },

@@ -149,3 +149,6 @@
   slot 在重用前比較完整 DeviceView（包含 target／憑證設定），任何變更均保守
   地使該 slot 失效。Binary 測試 57 通過，涵蓋 A/B/A、同位址不同身分、
   registry target 變更、256-slot 上限與一般文字搜尋映射。
+- B3 實作完成：獨立保存失敗／取消、可搜尋且保留位置的報告、非機密輸入草稿，
+  以及最近匯出基準選擇／共用本機 preflight。Binary 測試 59 通過，CLI 全 target
+  Clippy（警告視為錯誤）通過。B4 終端流程與最終文件仍待完成。

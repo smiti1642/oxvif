@@ -7,7 +7,7 @@ use oxvif_cli::{
     SecretString, TargetSelector, profile_label, render_success_with_details,
 };
 
-use crate::interactive::{DiscoverySelection, DiscoverySelectionView, MenuSearch, Panel};
+use crate::interactive::{DiscoverySelection, DiscoverySelectionView, MenuSearch, Panel, TextView};
 use crate::navigation::Viewport;
 
 enum WorkflowOutcome {
@@ -21,6 +21,7 @@ struct DeviceChooser {
     menu: MenuSearch,
     search: Option<SearchResults>,
     browsing_search: bool,
+    address_draft: String,
 }
 
 const MAX_WORKSPACES: usize = 256;
@@ -32,6 +33,56 @@ struct DeviceWorkspace {
     last: Option<CommandSuccess>,
     action_view: Viewport,
     profile_view: Viewport,
+    result_view: TextView,
+    issue: IssueLog,
+    paths: PathDrafts,
+}
+
+enum RecentIssue {
+    Failed(AppError),
+    Cancelled,
+}
+
+#[derive(Default)]
+struct IssueLog {
+    latest: Option<RecentIssue>,
+    view: TextView,
+}
+
+impl IssueLog {
+    fn record(&mut self, issue: RecentIssue) {
+        self.latest = Some(issue);
+        self.view = TextView::default();
+    }
+
+    fn text(&self) -> String {
+        match &self.latest {
+            Some(RecentIssue::Failed(error)) => format!("{}\n{}\n{}", error.code.as_str(), error.message, error.suggested_action.as_deref().unwrap_or("Check the target, ONVIF permissions or session credentials. No automatic alternate profile or TLS bypass was used.")),
+            Some(RecentIssue::Cancelled) => "Operation cancelled. Earlier completed result retained. Next operation reconnects. If saving a file, inspect the destination before trying again; completed files are never overwritten.".into(),
+            None => "No failure or cancellation recorded for this camera.".into(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct PathDrafts {
+    snapshot: String,
+    export: String,
+    compare: String,
+    last_export: Option<PathBuf>,
+}
+
+impl PathDrafts {
+    fn record_export(&mut self, result: &CommandSuccess) {
+        if let CommandData::DeviceDiagnostic {
+            operation, result, ..
+        } = &result.data
+            && operation == "config.export"
+            && let Some(path) = result["saved_to"].as_str()
+        {
+            self.last_export = Some(PathBuf::from(path));
+        }
+    }
 }
 
 #[derive(Default)]
@@ -81,6 +132,9 @@ impl Workspaces {
                     last: None,
                     action_view: Viewport::default(),
                     profile_view: Viewport::default(),
+                    result_view: TextView::default(),
+                    issue: IssueLog::default(),
+                    paths: PathDrafts::default(),
                 },
             );
         }
@@ -166,6 +220,9 @@ pub(crate) async fn run(
             last,
             action_view,
             profile_view,
+            result_view,
+            issue,
+            paths,
             ..
         } = state;
         loop {
@@ -189,6 +246,7 @@ pub(crate) async fn run(
                 "Session credentials (not saved)",
                 "Reconnect on next operation",
                 "Change device",
+                "Latest failure / cancellation",
             ]
             .map(str::to_owned);
             let Some(choice) = panel.menu_with_view(&title, &choices, &[], action_view)? else {
@@ -198,7 +256,7 @@ pub(crate) async fn run(
                 break;
             }
             if choice == 5 {
-                panel.show(
+                panel.show_with_view(
                     "Last completed result",
                     &match last.as_ref() {
                         Some(result) => {
@@ -209,6 +267,15 @@ pub(crate) async fn run(
                                 .into()
                         }
                     },
+                    result_view,
+                )?;
+                continue;
+            }
+            if choice == 10 {
+                panel.show_with_view(
+                    "Latest failure / cancellation (historical)",
+                    &issue.text(),
+                    &mut issue.view,
                 )?;
                 continue;
             }
@@ -227,7 +294,7 @@ pub(crate) async fn run(
                 continue;
             }
             if choice == 1 || ((choice == 0 || choice == 2) && profile.is_none()) {
-                let outcome = execute(&mut panel, context, ManagedAction::Profiles).await?;
+                let outcome = execute(&mut panel, context, ManagedAction::Profiles, issue).await?;
                 // A failed optional lookup may still yield useful diagnosis, but a
                 // user's cancellation must never fall through into another request.
                 if !proceed_after_profiles(choice, &outcome) {
@@ -267,6 +334,7 @@ pub(crate) async fn run(
                     }
                     if choice == 1 {
                         *last = Some(*result);
+                        *result_view = TextView::default();
                     }
                 }
                 if choice == 1 {
@@ -285,8 +353,11 @@ pub(crate) async fn run(
                         )?;
                         continue;
                     };
-                    let Some(save) =
-                        destination(&mut panel, "Save snapshot (format is not converted)")?
+                    let Some(save) = destination(
+                        &mut panel,
+                        "Save snapshot (format is not converted)",
+                        &mut paths.snapshot,
+                    )?
                     else {
                         continue;
                     };
@@ -296,29 +367,27 @@ pub(crate) async fn run(
                     }
                 }
                 3 => {
-                    let Some(save) =
-                        destination(&mut panel, "Export settings (not a restorable backup)")?
+                    let Some(save) = destination(
+                        &mut panel,
+                        "Export settings (not a restorable backup)",
+                        &mut paths.export,
+                    )?
                     else {
                         continue;
                     };
                     ManagedAction::Export { save }
                 }
                 4 => {
-                    let Some(path) = panel.input(
-                        "Compare settings",
-                        "Existing inventory path, without surrounding quotes:",
-                    )?
-                    else {
+                    let Some(path) = comparison(&mut panel, paths)? else {
                         continue;
                     };
-                    ManagedAction::Diff {
-                        against: PathBuf::from(path.trim()),
-                    }
+                    ManagedAction::Diff { against: path }
                 }
                 6 => ManagedAction::Info,
                 _ => continue,
             };
-            if let WorkflowOutcome::Completed(result) = execute(&mut panel, context, action).await?
+            if let WorkflowOutcome::Completed(result) =
+                execute(&mut panel, context, action, issue).await?
             {
                 let title = format!(
                     "Operation finished | exit {} | Enter: continue",
@@ -331,7 +400,9 @@ pub(crate) async fn run(
                         "Open Last result details for stage details and timings.",
                     ),
                 )?;
+                paths.record_export(&result);
                 *last = Some(*result);
+                *result_view = TextView::default();
             }
         }
     }
@@ -341,6 +412,7 @@ async fn execute(
     panel: &mut Panel,
     context: &mut ManagedDevice,
     action: ManagedAction,
+    issue: &mut IssueLog,
 ) -> Result<WorkflowOutcome, AppError> {
     let status = if context.needs_connection() {
         "Connecting / reconnecting (new, expired or previous failure)"
@@ -350,30 +422,34 @@ async fn execute(
     match panel.wait(status, context.execute(action)).await? {
         Some(Ok(result)) => Ok(WorkflowOutcome::Completed(Box::new(result))),
         Some(Err(error)) => {
-            panel.show("Operation failed; earlier result retained", &format!("{}\n{}\nCheck the target, ONVIF permissions or session credentials. No automatic alternate profile or TLS bypass was used.", error.code.as_str(), error.message))?;
+            issue.record(RecentIssue::Failed(error));
+            panel.show("Operation failed; earlier result retained", &issue.text())?;
             Ok(WorkflowOutcome::Failed)
         }
         None => {
             context.disconnect();
-            panel.show("Operation cancelled", "Earlier completed result retained. Next operation reconnects. If saving a file, inspect the destination before trying again; completed files are never overwritten.")?;
+            issue.record(RecentIssue::Cancelled);
+            panel.show("Operation cancelled", &issue.text())?;
             Ok(WorkflowOutcome::Cancelled)
         }
     }
 }
 
-fn destination(panel: &mut Panel, title: &str) -> Result<Option<PathBuf>, AppError> {
-    let mut initial = String::new();
+fn destination(
+    panel: &mut Panel,
+    title: &str,
+    draft: &mut String,
+) -> Result<Option<PathBuf>, AppError> {
     loop {
-        let Some(path) = panel.input_with_initial(
+        let Some(path) = panel.input_with_draft(
             title,
             "New output path; parent directory must exist. No quotes:",
-            &initial,
+            draft,
         )?
         else {
             return Ok(None);
         };
-        initial = path;
-        let path = PathBuf::from(initial.trim());
+        let path = PathBuf::from(path.trim());
         let request = oxvif_cli::SnapshotSaveRequest {
             selector: TargetSelector::default(),
             profile: "preflight".into(),
@@ -385,6 +461,38 @@ fn destination(panel: &mut Panel, title: &str) -> Result<Option<PathBuf>, AppErr
                 "Choose another destination (nothing written)",
                 &error.message,
             )?,
+        }
+    }
+}
+
+fn comparison(panel: &mut Panel, paths: &mut PathDrafts) -> Result<Option<PathBuf>, AppError> {
+    if let Some(path) = &paths.last_export {
+        let choices = vec![
+            format!("Use last successful export: {}", path.display()),
+            "Enter another inventory path".into(),
+        ];
+        match panel.menu("Choose comparison baseline", &choices, &[])? {
+            Some(0) => paths.compare = path.display().to_string(),
+            Some(_) => {}
+            None => return Ok(None),
+        }
+    }
+    loop {
+        let Some(path) = panel.input_with_draft(
+            "Compare settings",
+            "Existing inventory path, without surrounding quotes:",
+            &mut paths.compare,
+        )?
+        else {
+            return Ok(None);
+        };
+        let request = oxvif_cli::ConfigDiffRequest {
+            selector: TargetSelector::default(),
+            against: PathBuf::from(path.trim()),
+        };
+        match request.preflight() {
+            Ok(()) => return Ok(Some(request.against)),
+            Err(error) => panel.show("Invalid baseline; correct the path", &error.message)?,
         }
     }
 }
@@ -523,9 +631,10 @@ async fn choose_device(
             }));
         }
         if index == devices.len() + 1 {
-            if let Some(target) = panel.input(
+            while let Some(target) = panel.input_with_draft(
                 "Connect without saving a device",
                 "IP address, hostname or ONVIF device URL:",
+                &mut chooser.address_draft,
             )? {
                 match oxvif_cli::normalize_target(target.trim()) {
                     Ok(target) => {
@@ -546,6 +655,44 @@ async fn choose_device(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retained_issue_does_not_replace_completed_data_or_invent_an_export() {
+        let completed = |operation: &str, data| CommandSuccess {
+            data: CommandData::DeviceDiagnostic {
+                operation: operation.into(),
+                device_id: None,
+                target: "http://192.0.2.1/onvif/device_service".into(),
+                result: data,
+            },
+            warnings: Vec::new(),
+            meta: Default::default(),
+        };
+        let last = completed(
+            "config.export",
+            serde_json::json!({"saved_to":"inventory.json","complete":true}),
+        );
+        let mut paths = PathDrafts::default();
+        paths.record_export(&last);
+        assert_eq!(paths.last_export, Some(PathBuf::from("inventory.json")));
+        let mut issue = IssueLog::default();
+        let error = AppError::invalid_argument("broken baseline");
+        issue.record(RecentIssue::Failed(error.clone()));
+        assert!(matches!(&issue.latest, Some(RecentIssue::Failed(retained)) if retained == &error));
+        assert!(issue.text().contains("broken baseline"));
+        paths.record_export(&completed(
+            "media.snapshot-save",
+            serde_json::json!({"saved_to":"snapshot.jpg"}),
+        ));
+        paths.record_export(&completed(
+            "config.export",
+            serde_json::json!({"complete":false}),
+        ));
+        assert_eq!(paths.last_export, Some(PathBuf::from("inventory.json")));
+        issue.record(RecentIssue::Cancelled);
+        assert!(issue.text().contains("cancelled"));
+        assert!(matches!(last.data, CommandData::DeviceDiagnostic { .. }));
+    }
 
     #[test]
     fn workspaces_retain_device_state_without_cross_identity_reuse_and_are_bounded() {
