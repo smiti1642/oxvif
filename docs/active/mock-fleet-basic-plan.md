@@ -16,6 +16,7 @@ No release inclusion or sustained 64/256-device stability result is claimed.
 | [Work batches](#work-batches) | Files, deliverables and completion checks |
 | [Acceptance](#acceptance) | Bounded automated and VMS checks |
 | [Local evidence](#local-evidence) | Batch commits, terminal and capacity results |
+| [Ignored tests](#ignored-tests) | Six skipped checks, prerequisites and separate results |
 | [Decisions](#decisions) | Defaults and conditions requiring another decision |
 
 ## Scope
@@ -148,7 +149,7 @@ this milestone. Reconcile release-cut tracking after implementation, not in adva
 | B3 — `a876c81` | 211-test Mock batch plus two shared-discovery focused tests; qualified types, scope rejection, correlation, duplicate suppression, UDP rollback; scoped Clippy |
 | B4 terminal | Windows ConPTY runs init/check/no-clobber, then two four-device serve cycles. CLI `device info` verifies every configured identity; both Ctrl+C exits are zero, all ports can be rebound and manifest hash is unchanged |
 | B4 capacity, opt-in | 64 devices / 64 concurrent reads: startup 260 ms, total 802 ms. 256 devices / 256 concurrent reads: startup 909 ms, total 1546 ms. Every loopback-unicast identity and HTTP read verified within deadlines; zero failures |
-| B4 final gates | Workspace all-features: 1,316 passed / 6 ignored; default: 1,204 passed / 6 ignored, each 41 suites. Example configuration tests: 3 passed with mock-server and separately with all-features/locked. Both all-target Clippy and strict rustdoc configurations, fmt and whitespace checks pass. 1,447 local documentation targets / 718 anchors pass; published changelog history unchanged |
+| B4 final gates | Workspace all-features: 1,316 passed / 0 failed / 6 ignored; default: 1,204 passed / 0 failed / 6 ignored, each 41 suites. Example configuration tests: 3 passed with mock-server and separately with all-features/locked. Both all-target Clippy and strict rustdoc configurations, fmt and whitespace checks pass. 1,447 local documentation targets / 718 anchors pass at B4; published changelog history unchanged |
 | Future CI | Add an explicit example-test step to the existing five-runner OS matrix. YAML and its exact command validated locally; no hosted run is claimed |
 
 Capacity timings are one local smoke observation, not a benchmark. Peak memory/CPU,
@@ -161,6 +162,33 @@ Public instructions: [Mock Fleet](../mock-fleet.md). Discovery review references
 [WS-Discovery April 2005 §2.4, §5.3, Appendix I](https://specs.xmlsoap.org/ws/2005/04/discovery/ws-discovery.pdf).
 No schema text or external implementation was copied. Full scope matching and
 discovery lifecycle remain excluded, rather than being declared conformant.
+
+### Ignored tests
+
+The B4 Windows all-feature log (`target/fleet-tests-all.log`) records six ignored
+tests: five existing exclusions and the new opt-in capacity test. **No test failed.**
+Ignored means the test body was not executed in that command; it is not evidence
+of either success or failure. The default batch records the same six exclusions.
+
+| Test / source | Why it is skipped by default | Result in this batch |
+| --- | --- | --- |
+| `configured_fleet_capacity_smoke` — `src/mock/fleet.rs` | Opt-in 64/256-device startup, discovery and concurrent reads; avoid imposing this workload on ordinary runs | Separately executed and passed; loopback only, not VMS stability acceptance |
+| `export_reviewed_batches_for_independent_validation` — `tests/mock_schema_corpus.rs` | Requires explicit export to a new absolute directory through `OXVIF_MOCK_CORPUS` | Not executed; exporting alone would not prove schema validity |
+| `mock_output_matches_the_onvif_schema` — `tests/mock_schema_shape.rs` | Requires the external ONVIF schema set and validation prerequisites | Not executed in this batch |
+| `credential::tests::system_store_contract` — `crates/oxvif-cli/src/credential.rs` | Requires an isolated native credential-backend session | Not executed in this batch |
+| MockTransport usage doctest — `src/lib.rs` (`ignore` block at line 246 in B4) | Explicitly marked `ignore` in source | Not compiled or executed as a doctest |
+| MockServer usage doctest — `src/mock/mod.rs` (`ignore` block at line 35 in B4) | Explicitly marked `ignore` in source | Not compiled or executed as a doctest |
+
+The two ignored documentation snippets remain verification gaps; strict rustdoc
+success does not validate their code. Follow-up should make them feature-aware,
+compilable examples rather than treating the ignore markers as proof they cannot
+be tested. This documentation update does not change those markers or claim a rerun.
+
+The separately passed capacity and example configuration tests are not added to
+the 1,316 workspace total. Earlier schema/credential evidence, if any, belongs to
+its recorded commit and environment, not automatically to this batch. Native LAN
+multicast, target VMS, Linux/macOS network lifecycle and hosted CI remain pending
+outside this six-item count; these local results do not approve a release.
 
 ## Decisions
 

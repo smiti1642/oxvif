@@ -15,6 +15,7 @@ LAN／VMS 驗收、Linux／macOS 生命週期及託管 CI 仍待完成。不宣�
 | [施工批次](#施工批次) | 檔案、交付項目及完成條件 |
 | [驗收](#驗收) | 有限自動化及 VMS 檢查 |
 | [本機證據](#本機證據) | 批次提交、終端機及容量結果 |
+| [跳過測試明細](#跳過測試明細) | 六項未執行檢查、前置條件及另行結果 |
 | [決策](#決策) | 預設方向及須再次討論的條件 |
 
 ## 範圍
@@ -129,7 +130,7 @@ cargo run --example mock_fleet_serve --features mock-server -- serve lab.toml
 | B3 — `a876c81` | 211 個 Mock 批次測試及兩個共用探索聚焦測試；qualified type、scope 拒絕、關聯、重複抑制、UDP 回復；針對性 Clippy |
 | B4 終端機 | Windows ConPTY 執行 init／check／防覆寫後，完成兩輪四台 serve。CLI `device info` 核對每台設定身分；兩次 Ctrl+C 均以零退出，全部埠可重新繫結，manifest hash 未變 |
 | B4 選用容量 | 64 台／64 個同時讀取：啟動 260 ms，總計 802 ms。256 台／256 個同時讀取：啟動 909 ms，總計 1546 ms。期限內核對全部 loopback unicast 身分及 HTTP 讀取，零失敗 |
-| B4 最終關卡 | Workspace 全功能：1,316 通過／6 忽略；預設：1,204 通過／6 忽略，各 41 個 suites。範例設定測試在 mock-server 與另外的 all-features／locked 組合均為 3 通過。兩種 all-target Clippy、strict rustdoc、fmt 及空白檢查通過；1,447 個本機文件目標／718 個錨點通過，已發布 changelog 歷史未變 |
+| B4 最終關卡 | Workspace 全功能：1,316 通過／0 失敗／6 跳過；預設：1,204 通過／0 失敗／6 跳過，各 41 個 suites。範例設定測試在 mock-server 與另外的 all-features／locked 組合均為 3 通過。兩種 all-target Clippy、strict rustdoc、fmt 及空白檢查通過；B4 當時 1,447 個本機文件目標／718 個錨點通過，已發布 changelog 歷史未變 |
 | 後續 CI | 在既有五個 runner 的作業系統矩陣加入明確的範例測試步驟；YAML 及相同命令已本機驗證，不宣稱託管執行已通過 |
 
 容量時間是單次本機基本檢查觀察，不是效能基準。未量測記憶體／CPU 峰值、原生
@@ -142,6 +143,30 @@ Mock 變更的驗證證據。
 [WS-Discovery April 2005 §2.4、§5.3、Appendix I](https://specs.xmlsoap.org/ws/2005/04/discovery/ws-discovery.pdf)。
 未複製 schema 原文或外部實作。完整 scope 比對及探索生命週期仍明確排除，
 不宣稱已相容。
+
+### 跳過測試明細
+
+B4 Windows 全功能紀錄（`target/fleet-tests-all.log`）列出六項 `ignored`：
+五項既有排除及本次新增的選用容量測試。**沒有任何測試失敗。** 跳過表示該次命令
+未執行測試本體，不代表成功或失敗；預設功能批次也記錄相同六項。
+
+| 測試／來源 | 預設跳過原因 | 本批次結果 |
+| --- | --- | --- |
+| `configured_fleet_capacity_smoke` — `src/mock/fleet.rs` | 選用的 64／256 台啟動、探索及同時讀取，避免一般測試承擔此負載 | 已另行執行並通過；僅為 loopback，不代表 VMS 穩定性驗收 |
+| `export_reviewed_batches_for_independent_validation` — `tests/mock_schema_corpus.rs` | 須透過 `OXVIF_MOCK_CORPUS` 明確指定新的絕對目錄進行匯出 | 本次未執行；僅完成匯出也不能證明 schema 有效 |
+| `mock_output_matches_the_onvif_schema` — `tests/mock_schema_shape.rs` | 需要外部 ONVIF schema 及驗證前置條件 | 本批次未執行 |
+| `credential::tests::system_store_contract` — `crates/oxvif-cli/src/credential.rs` | 需要隔離的原生憑證儲存環境 | 本批次未執行 |
+| MockTransport 使用範例 — `src/lib.rs`（B4 第 246 行的 `ignore` 區塊） | 原始碼明確標記 `ignore` | 未作為 doctest 編譯或執行 |
+| MockServer 使用範例 — `src/mock/mod.rs`（B4 第 35 行的 `ignore` 區塊） | 原始碼明確標記 `ignore` | 未作為 doctest 編譯或執行 |
+
+兩個跳過的文件範例仍是驗證缺口；strict rustdoc 通過不代表範例程式碼已驗證。
+後續應改為依 feature 啟用、可編譯檢查的範例，不應將 `ignore` 標記當作無法測試
+的證明。本次文件更新不修改標記，也不宣稱已重新執行測試。
+
+另行通過的容量及範例設定測試不加計於 1,316 項 workspace 統計。先前若有
+schema／憑證驗證證據，僅適用於其記錄的提交及環境，不自動視為本批次結果。
+原生 LAN multicast、目標 VMS、Linux／macOS 網路生命週期及託管 CI 仍待完成，
+不包含於這六項統計；上述本機結果不構成發布核准。
 
 ## 決策
 

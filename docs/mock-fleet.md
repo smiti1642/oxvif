@@ -122,6 +122,14 @@ that identifies devices only by IP may also collapse this same-IP fleet.
 
 ## Validation
 
+The recorded Windows batch completed with **1,316 passed, 0 failed and 6 ignored**
+under all features; the default-feature batch completed with **1,204 passed,
+0 failed and 6 ignored**. Ignored tests are skipped, not failed or passed. The
+capacity test was run separately and passed; the other five were not executed
+in this batch. See the [six-item breakdown](active/mock-fleet-basic-plan.md#ignored-tests)
+for prerequisites and the two unverified documentation examples. These counts
+do not establish native LAN multicast, VMS or cross-platform acceptance.
+
 Focused configuration and lifecycle tests cover invalid inputs, no-clobber,
 independent state, occupied HTTP/UDP rollback, exact shared-probe identities/URLs,
 duplicate handling and cleanup. The optional capacity check is deliberately ignored
