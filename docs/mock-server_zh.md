@@ -8,7 +8,7 @@
 
 - **適用對象**：oxvif 測試、下游 Rust crate，或連線至實體連接埠的非 Rust ONVIF client，例如 Frigate、ODM、gSOAP 或 C++ conformance suite。
 - **版本**：0.17.0 開發預覽；0.16.0 之後新增的行為不包含於已發布的 0.16.0 套件。
-  詳見[版本變更](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0-changelog_zh.md)。
+  詳見[版本變更](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/releases/0.17.0-changelog_zh.md)。
 - **Feature flag**：程序內 transport 使用 `mock`，HTTP server 使用 `mock-server`。本 crate 不啟用任何 default feature；若未選用其中一項，以下 API 不會編譯。
 
 ## 快速導覽

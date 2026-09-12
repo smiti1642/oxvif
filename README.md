@@ -35,8 +35,8 @@ health diagnostics, and camera-free testing.
 
 The next release, **0.17.0**, is in acceptance, not yet published. Its focus is
 guided CLI maintenance and stricter selected Mock contracts, with source-breaking
-migration requirements. Read the [summary](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0.md)
-or [full changelog and migration](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0-changelog.md).
+migration requirements. Read the [summary](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/releases/0.17.0.md)
+or [full changelog and migration](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/releases/0.17.0-changelog.md).
 
 Add oxvif 0.16 to your application:
 

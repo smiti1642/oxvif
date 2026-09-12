@@ -77,7 +77,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "e66d171d982fb6801c269400f775e6d3ea5dba8e"
+          "blob": "d73ce44330df09a771da3085e09978be45fcbfe6"
         }
       ]
     },
@@ -207,7 +207,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "4d7381ceaca330cb57b0186f2ff0426b24e63bcd"
+          "blob": "a8aacc666bf7852acf7c89340a6ce1d2917f9189"
         }
       ]
     },
@@ -220,7 +220,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "5e558c11b061bdcfbb5ee82506e51be1767b3894"
+          "blob": "e53a546ca8fa3ce4e195a247a24d06d378bb84da"
         }
       ]
     },
@@ -246,7 +246,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "CLI",
-          "blob": "10617f7f97a046d8b2fe16b15615649eb47edc1d"
+          "blob": "4521ee418c1d0b3ccde7baf0ae7b5a552c869c33"
         }
       ]
     },
@@ -1240,7 +1240,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "ef5cfd8fe5d499581052d688d0a54b074ed57ce2"
+          "blob": "fa16aad28963d27ed6c6205d42275d3342f1f843"
         }
       ]
     },
@@ -1253,7 +1253,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "cce5e5f0ffad0d68af36e19e9245a340f2b896bf"
+          "blob": "af97dbf79fe16588f4ca6261a9adfe08a76e3194"
         }
       ]
     },
@@ -1331,7 +1331,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "77fb6c2ea463c2a4f8ae283806ade78c44d7bae3"
+          "blob": "457242e514ef0a7bda43a62aebaa621ece8f3523"
         }
       ]
     },
@@ -1344,7 +1344,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "269a337a0f3840d0883ed9f5374a6f0b1503360b"
+          "blob": "323d984c629f01d5b22d2e1de1856645380f4375"
         }
       ]
     },
@@ -1435,7 +1435,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "48af40148c73b112ee9b2c6c1f36c823f76326a8"
+          "blob": "0e7c6736d69262038e8e5e2256f1fe832ee3f9dc"
         }
       ]
     },
@@ -1448,7 +1448,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "DOCS",
-          "blob": "4935ff6dabe31fc134e984ebd441dbd0c5d44942"
+          "blob": "3ab21d699d32691ed48ffc4c79e1421ab7ace493"
         }
       ]
     },
@@ -1803,7 +1803,7 @@
           "kind": "closure_review",
           "date": "2026-09-12",
           "batch": "LIBRARY",
-          "blob": "12ab715ec7d9309cb72266295ff46fc690ee3a5b"
+          "blob": "b4b017446aaec2e4beb362d85b47f68046182554"
         }
       ]
     },

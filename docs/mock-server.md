@@ -16,7 +16,7 @@ omission is a bug, a documented one is a design decision.**
   suite) pointed at the bound port.
 - **Version** — 0.17.0 development preview; behavior added since 0.16.0 is not
   available in the published 0.16.0 package. See the
-  [release changes](https://github.com/smiti1642/oxvif/blob/fed6777fbc869a125082d9e2f43fb1a5e460f167/docs/releases/0.17.0-changelog.md).
+  [release changes](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/releases/0.17.0-changelog.md).
 - **Feature flags** — `mock` for the transport, `mock-server` for the HTTP
   server. This crate has **no default features**; nothing below compiles
   without one of those two.
