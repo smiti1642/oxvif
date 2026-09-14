@@ -31,8 +31,8 @@ R01–R08 維持[審查](release-0.17-review_zh.md)及
 | G02 Replay／資料完整性 | LOCAL-PASS | K27 保留碰撞及遷移警告；無法恢復舊版已覆蓋資料 |
 | G03 安全及回應完整性 | 受審範圍 LOCAL-PASS | A01–A05 及後續 CLI／Fleet 審查；HTTP／listener／錄製限制仍明列 |
 | G04 本機程式及文件 | 版號準備檢查通過 | Workspace check、strict rustdoc、打包及版本／help／連結檢查；舊完整測試計數仍屬歷史 |
-| G05 原生 CI | Runtime 基準通過；最終 0.17 待執行 | [d3ac1b6 的 27 jobs](https://github.com/smiti1642/oxvif/actions/runs/34809397553)；新版結果記入收尾紀錄 |
-| G06 套件／散布 | 兩個 0.17 套件本機驗證通過；staging 待執行 | Cargo 暫存本機 registry 驗證 CLI 對打包後 library 的相依；原生安裝／SBOM 關卡獨立判定 |
+| G05 原生 CI | PASS，0.17 候選 9305f5d | [全部 27 jobs](https://github.com/smiti1642/oxvif/actions/runs/34813217979) 通過 |
+| G06 套件／散布 | PASS，0.17 不發布的 staging | [17 個驗證 jobs](https://github.com/smiti1642/oxvif/actions/runs/34813220307) 通過；兩個套件本機驗證、五平台 artifacts、APT／Homebrew 安裝、SBOM 及 checksum 均通過；非官方通路收錄 |
 | G07 人類／Agent | 有限自動驗證及使用者回報人工 PASS | Discover／manage／resize ConPTY、schema 3／guide 8；不推定其他平台、設備或 VMS 覆蓋 |
 | G08 版號及文件 | 已準備 | 兩套件／相依／lockfile 均為 0.17.0；雙語文件及固定 tag 連結；日期／發布狀態刻意保留待核准 |
 | G09 發布授權 | OPEN | cargo publish、tag、GitHub Release 前停止；未發布 RC |

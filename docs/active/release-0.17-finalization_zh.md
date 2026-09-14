@@ -4,6 +4,8 @@
 
 更新日期：2026-09-14。已授權準備版號，尚未授權對外發布。
 準備分支：`codex/release-0.17-finalize`，基於 `d3ac1b6`。
+候選：`9305f5d8c080feca6adf555d4177f10556f45db3`，以 `smiti1642` 提交及推送。
+後續僅證據文件編輯不改變其 runtime／發布工具輸入。
 
 | 章節 | 用途 |
 | --- | --- |
@@ -37,17 +39,22 @@
 | 原精確 runtime／CI 基準 | [34809397553](https://github.com/smiti1642/oxvif/actions/runs/34809397553)，d3ac1b6：五種原生目標共 27 jobs 通過 |
 | 本機 0.17 workspace | `cargo check --workspace --all-features --offline` 通過 |
 | 本機 strict rustdoc | Workspace／all-features／no-deps／locked 搭配 `RUSTDOCFLAGS=-D warnings` 通過 |
-| 兩個實際套件 | `cargo package --workspace --allow-dirty --locked --target-dir target/package-017-final` 通過；Cargo 暫存 registry 讓 CLI 對打包後 library 編譯，未上傳 crates.io |
+| 兩個實際套件 | 在乾淨 commit 9305f5d 再執行 `cargo package --workspace --locked --target-dir target/package-017-final` 通過，未使用 allow-dirty；Cargo 暫存 registry 讓 CLI 對打包後 library 編譯，未上傳 crates.io |
 | 初次打包 | 無法覆寫使用者正在執行的 debug CLI；隔離 target 目錄後通過，未中止使用者程式 |
 | 打包後 CLI | 版本 0.17.0、schema 3、guide 8；structured describe 及 manage／diagnose／snapshot／config export／diff help 通過 |
-| 文件 | 最終證據編輯前，620 個公開本機／版本連結與 334 個錨點通過；0.16.0 起的已發布 CHANGELOG 歷史未改動 |
+| 文件 | 706 個公開／目前紀錄的本機及版本連結、382 個錨點通過；另對全庫指向修改文件的連結檢查：604 個連結／343 個錨點通過。0.16.0 起的已發布 CHANGELOG 歷史未改動；fmt 及 diff 空白檢查通過 |
 | 人工驗收 | 使用者回報人工 PASS，加上先前 Windows discover／manage／resize ConPTY 證據；不推定其他平台／設備／VMS 覆蓋 |
-| 最終 0.17 託管 CI／staging | 提交準備 SHA 後執行；合併／請求發布授權前記錄精確 URL 及結果 |
+| 最終 0.17 託管 CI | [34813217979](https://github.com/smiti1642/oxvif/actions/runs/34813217979)，上述精確候選；全部 27 jobs 通過 |
+| 最終 0.17 staging | [34813220307](https://github.com/smiti1642/oxvif/actions/runs/34813220307)，相同 workflow／source SHA，publish=false；17 個驗證 jobs 通過，公開 GitHub Release job 正確跳過 |
+| 下載產物 | 五份 archive 及兩份 Debian package：七份 SHA-256 checksum 全數通過；未安裝至使用者系統 |
+| SBOM 比對 | 五種目標均與[前次 staging 34811578831](https://github.com/smiti1642/oxvif/actions/runs/34811578831) 比對；兩類掃描均為 syft 1.51.1。各 source SBOM 有 411 筆，涵蓋全部 410 組 lockfile 套件／版本；只有自身套件更新至 0.17.0。Binary inventory 名稱／版本／計數未變：Windows 3 筆，其餘各 1 筆 |
 
 先前完整測試計數、原生安裝、實機及 ConPTY 證據保留原輸入版本，不能稱為此次
 版號建置新執行的結果。最終原生 CI／staging 必須涵蓋準備後版號。
 Staging 安裝驗證不代表已收錄至官方 winget／Chocolatey、Homebrew core 或
 Debian／Ubuntu repository。
+Binary inventory 稀疏，不是完整 Rust 相依清單；source inventory 含開發與其他平台
+相依，不代表各 binary 的精確 linkage。掃描器一致不代表消除這些限制。
 
 ## 發布邊界
 

@@ -24,7 +24,7 @@ Historical evidence retains its original revision. Current gates are in the
 | Step | Current status |
 | --- | --- |
 | 1. Candidate/security review | Baseline and bounded CLI/Fleet delta LOCAL-PASS; not ONVIF certification |
-| 2. Packages, installation and human acceptance | Both 0.17 packages locally verified; operator-reported manual PASS; final CI/staging to be recorded |
+| 2. Packages, installation and human acceptance | Both 0.17 packages, 27 CI jobs and 17 staging jobs passed; operator-reported manual PASS; exact results in finalization |
 | 3. Versions, links and documents | Both packages 0.17.0; existing public English/Chinese guides synchronized; date and Unreleased guards retained |
 | 4. User confirmation | Preparation authorized; public publication requires separate confirmation |
 

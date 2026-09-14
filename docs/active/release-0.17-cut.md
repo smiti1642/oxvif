@@ -34,8 +34,8 @@ long-duration 64/256-camera VMS stability is claimed.
 | G02 Replay/data integrity | LOCAL-PASS | K27 collision retention and migration warnings remain; overwritten old recordings cannot be recovered |
 | G03 Security/response integrity | LOCAL-PASS for reviewed scope | A01–A05 plus CLI/Fleet delta review; documented HTTP/listener/recording limits remain |
 | G04 Local code/documents | PASS for version-preparation checks | Workspace check, strict rustdoc, package verification and version/help/link checks; previous full-suite totals remain historical |
-| G05 Native CI | Runtime baseline PASS; final 0.17 run pending | [27 jobs at d3ac1b6](https://github.com/smiti1642/oxvif/actions/runs/34809397553); final version run recorded in finalization |
-| G06 Packages/distribution | Both 0.17 packages verified locally; staging pending | Workspace packaging verifies CLI against the packaged library through Cargo's temporary local registry; native install/SBOM gates remain separate |
+| G05 Native CI | PASS, 0.17 candidate 9305f5d | [All 27 jobs](https://github.com/smiti1642/oxvif/actions/runs/34813217979) passed |
+| G06 Packages/distribution | PASS, 0.17 non-publishing staging | [17 verification jobs](https://github.com/smiti1642/oxvif/actions/runs/34813220307) passed; both local packages, five native artifacts, APT/Homebrew installs, SBOM and checksums verified; not official-channel admission |
 | G07 Human/Agent | Scoped automated evidence plus operator-reported manual PASS | Discover/manage/resize ConPTY and schema 3/guide 8; no inferred additional OS, device or VMS coverage |
 | G08 Versions/documents | PREPARED | Both packages/dependency/lockfile 0.17.0; paired documents and tag-pinned links; release date/status intentionally pending |
 | G09 Publication approval | OPEN | Stop before cargo publish, tag or GitHub Release; no RC published |

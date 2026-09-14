@@ -106,11 +106,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Key-only fixture lookup returns `None` for collisions; use `lookup_request`.
   Keep recording backups before downgrading: older readers can collapse entries.
 
-**Verification:** [CI at `d3ac1b6`](https://github.com/smiti1642/oxvif/actions/runs/34809397553)
+**Verification:** [CI at `9305f5d`](https://github.com/smiti1642/oxvif/actions/runs/34813217979)
 passed all 27 jobs, including five native targets, external-schema controls and
 package/docs checks. Windows terminal journeys passed and the operator reported
-manual acceptance. Final 0.17 package/install verification and publication approval
-remain separate; see the [release checklist](docs/active/release-0.17-approval.md).
+manual acceptance. [0.17 staging](https://github.com/smiti1642/oxvif/actions/runs/34813220307) passed all
+17 verification jobs, including native artifacts, APT and Homebrew installation.
+Both packaged crates also compiled locally. Publication still requires approval;
+see the [release checklist](docs/active/release-0.17-approval.md).
 
 ## [0.16.0] - 2026-09-04
 
