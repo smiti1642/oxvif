@@ -2,7 +2,7 @@
 
 [English](release-0.17-finalization.md) | [繁體中文](release-0.17-finalization_zh.md)
 
-更新日期：2026-09-14。已授權準備版號，尚未授權對外發布。
+更新日期：2026-09-14。已授權 v0.17.0 tag 及正式 GitHub Release。
 準備分支：`codex/release-0.17-finalize`，基於 `d3ac1b6`。
 候選：`9305f5d8c080feca6adf555d4177f10556f45db3`，以 `smiti1642` 提交及推送。
 後續僅證據文件編輯不改變其 runtime／發布工具輸入。
@@ -60,8 +60,10 @@ Binary inventory 稀疏，不是完整 Rust 相依清單；source inventory 含�
 
 ## 發布邊界
 
-核准前保留 `Status: Unreleased` 與未填日期的 CHANGELOG 防護。
-v0.17.0 連結僅對本機路徑／錨點檢查，尚未建立 tag。
-必要 CI／staging 通過後提出證據，等待確認才更新日期、cargo publish、tag
-或 GitHub Release。先發布 library，再發布相依 CLI；staging 不更動使用者
-系統安裝或憑證。
+維護者於 2026-09-14 08:04:23 UTC 發布 oxvif 0.17.0，於 08:11:04 UTC
+發布 oxvif-cli 0.17.0；兩個 registry 項目均另行確認，且未撤回。本次工作不執行
+registry 上傳。使用者已明確授權 v0.17.0 tag 及正式 GitHub Release。
+發布日期及防護狀態已完成；既有 workflow 以 publish=true、prerelease=false
+執行，通過關卡後發布。Release 本文使用純英文分類摘要，不使用繁中檔或完整
+技術 Changelog。本次未授權安裝至使用者系統。
+GitHub 發布結果：等待 workflow 完成。

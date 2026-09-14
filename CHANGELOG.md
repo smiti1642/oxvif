@@ -7,8 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 | Range | Releases |
 | --- | --- |
-| Prepared | [0.17.0](#0170---unreleased) |
-| Latest | [0.16.0](#0160---2026-09-04) |
+| Latest | [0.17.0](#0170---2026-09-14) |
+| Previous | [0.16.0](#0160---2026-09-04) |
 | Recent stable | [0.15.0](#0150---2026-08-03) · [0.14.0](#0140---2026-07-27) · [0.13.0](#0130---2026-07-24) · [0.12.0](#0120---2026-07-09) · [0.11.0](#0110---2026-07-03) · [0.10.0](#0100---2026-06-30) |
 | 0.9 series | [0.9.9](#099---2026-06-11) · [0.9.8](#098---2026-06-10) · [0.9.7](#097---2026-05-31) · [0.9.6](#096---2026-05-26) · [0.9.4](#094---2026-05-04) · [0.9.3](#093---2026-04-17) · [0.9.2](#092---2026-04-17) · [0.9.1](#091---2026-04-16) · [0.9.0](#090---2026-04-15) |
 | 0.8 series | [0.8.6](#086---2026-04-08) · [0.8.5](#085---2026-04-06) · [0.8.4](#084---2026-04-05) · [0.8.3](#083---2026-04-05) · [0.8.2](#082---2026-04-04) · [0.8.1](#081---2026-04-04) · [0.8.0](#080---2026-04-04) |
@@ -18,9 +18,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [0.17.0] - Unreleased
+## [0.17.0] - 2026-09-14
 
-**0.17.0 release preparation. Publication remains pending; this is not yet a crates.io release.**
+**0.17.0: continuous CLI camera maintenance, snapshot saving and settings comparison.**
 
 [Release summary](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md) ·
 [Full changelog and migration](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md) ·
@@ -111,7 +111,7 @@ passed all 27 jobs, including five native targets, external-schema controls and
 package/docs checks. Windows terminal journeys passed and the operator reported
 manual acceptance. [0.17 staging](https://github.com/smiti1642/oxvif/actions/runs/34813220307) passed all
 17 verification jobs, including native artifacts, APT and Homebrew installation.
-Both packaged crates also compiled locally. Publication still requires approval;
+Both packaged crates also compiled locally. Publication was authorized on 2026-09-14;
 see the [release checklist](docs/active/release-0.17-approval.md).
 
 ## [0.16.0] - 2026-09-04

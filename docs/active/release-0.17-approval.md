@@ -2,8 +2,9 @@
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-Updated 2026-09-14. The user authorized 0.17 version/document preparation, not
-public publication. The candidate includes the merged CLI and basic Mock Fleet;
+Updated 2026-09-14. The user has now authorized tagging and public GitHub Release
+and published both crates. This packet preserves the earlier approval checklist;
+its publication stop is satisfied. The candidate includes the merged CLI and basic Mock Fleet;
 master/develop were both `d3ac1b6` before preparation.
 Preparation branch: `codex/release-0.17-finalize`, removed after fast-forward
 integration into local/remote master and develop. Maintenance resumes from develop.

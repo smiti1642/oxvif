@@ -2,7 +2,7 @@
 
 [English](release-0.17-finalization.md) | [繁體中文](release-0.17-finalization_zh.md)
 
-Updated 2026-09-14. Version preparation is authorized; public publication is not.
+Updated 2026-09-14. Public v0.17.0 tagging and GitHub Release are authorized.
 Prepared branch: `codex/release-0.17-finalize`, based on `d3ac1b6`.
 Candidate: `9305f5d8c080feca6adf555d4177f10556f45db3`, committed and pushed as
 `smiti1642`. Subsequent evidence-only documentation edits do not change its runtime/tooling tree.
@@ -64,9 +64,12 @@ precise per-binary linkage. Scanner parity does not remove these limitations.
 
 ## Publication boundary
 
-Keep `Status: Unreleased` and the undated CHANGELOG release guard until approval.
-The prepared v0.17.0 links are checked against local paths/anchors; the tag does
-not exist yet. After required CI/staging pass, present evidence and request
-confirmation before finalizing dates, cargo publish, tag or GitHub Release.
-Publish the library before its dependent CLI. Do not install into the user's
-system or change credentials as part of staging.
+The maintainer published oxvif 0.17.0 at 2026-09-14 08:04:23 UTC and oxvif-cli
+0.17.0 at 08:11:04 UTC; both registry entries were independently confirmed and
+are not yanked. No registry upload is performed by this task.
+The user explicitly authorized v0.17.0 tagging and stable GitHub Release.
+Release dates and publication guards are finalized; the existing workflow will
+publish with publish=true and prerelease=false after its gates pass.
+Its notes input is the English-only categorized summary, not the Chinese file
+or full technical changelog. No host-system installation is authorized.
+GitHub publication outcome: pending workflow completion.

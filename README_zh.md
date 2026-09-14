@@ -36,7 +36,7 @@ library 與命令列工具，涵蓋裝置探索、裝置管理、Media1／Media2
 強化，包含原始碼不相容遷移。參閱[簡要摘要](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0_zh.md)
 或[完整變更與遷移](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog_zh.md)。
 
-此 checkout 正在準備 0.17.0，尚待發布。發布後，在應用程式中加入：
+在應用程式中加入 oxvif 0.17：
 
 ```toml
 [dependencies]
@@ -102,7 +102,7 @@ service family、錯誤處理與進階功能。產生的
 `oxvif-cli` 套件提供 `oxvif` 執行檔，供人類與 Agent 使用。ONVIF 操作維持唯讀；
 可管理本機攝影機清單、儲存快照、匯出及比較設定，不修改攝影機組態。
 
-0.17.0 發布後可執行：
+從 crates.io 安裝 CLI：
 
 ```sh
 cargo install oxvif-cli --version 0.17.0 --locked

@@ -2,7 +2,8 @@
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-更新日期：2026-09-14。使用者已授權準備 0.17 版號／文件，不等於對外發布授權。
+更新日期：2026-09-14。使用者現已授權 tag 及 GitHub Release，並發布兩個 crate。
+本頁保留先前核准清單；其等待對外發布核准的停止條件已解除。
 目前收錄已合併的 CLI 與基礎 Mock Fleet；master／develop 在準備前均為
 `d3ac1b6`。準備分支 `codex/release-0.17-finalize` 已 fast-forward 整合至本機／遠端
 master 及 develop 後移除；後續維護從 develop 接續。

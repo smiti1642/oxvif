@@ -48,7 +48,7 @@ snapshot commands modify local CLI state only.
 
 ## Installation
 
-After publication, install version 0.17 from crates.io:
+Install version 0.17 from crates.io:
 
 ```sh
 cargo install oxvif-cli --version 0.17.0 --locked

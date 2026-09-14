@@ -82,7 +82,7 @@ oxvif completion powershell
 
 ## 安裝
 
-0.17 發布後，從 crates.io 安裝：
+從 crates.io 安裝 0.17：
 
 ```sh
 cargo install oxvif-cli --version 0.17.0 --locked

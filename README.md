@@ -37,7 +37,7 @@ health diagnostics, and camera-free testing.
 migration requirements. Read the [summary](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md)
 or [full changelog and migration](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md).
 
-This checkout prepares 0.17.0; publication is pending. After publication, add:
+Add oxvif 0.17 to your application:
 
 ```toml
 [dependencies]
@@ -105,7 +105,7 @@ The `oxvif-cli` package installs `oxvif`, a human- and Agent-friendly diagnostic
 tool. Its ONVIF operations are read-only; it can maintain local camera inventory,
 save snapshots, export settings and compare them without changing the camera.
 
-After 0.17.0 is published:
+Install the CLI from crates.io:
 
 ```sh
 cargo install oxvif-cli --version 0.17.0 --locked

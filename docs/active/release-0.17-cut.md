@@ -2,10 +2,13 @@
 
 [English](release-0.17-cut.md) | [繁體中文](release-0.17-cut_zh.md)
 
-Status: VERSION PREPARED / PUBLICATION NOT AUTHORIZED. Updated 2026-09-14.
+Status: PUBLICATION AUTHORIZED. Updated 2026-09-14.
+The maintainer published both crates and authorized v0.17.0 tagging and GitHub
+Release. The preparation checklist below retains its original order; its approval
+stop is now satisfied. See the finalization record for publication outcome.
 The user authorized version/document preparation after reporting CI and manual
 acceptance passed. This cut includes the merged CLI continuity and basic Mock
-Fleet work. Publication, tags and host-system installation remain separate.
+Fleet work. Host-system installation remains outside this authorization.
 
 | Section | Purpose |
 | --- | --- |
@@ -38,7 +41,7 @@ long-duration 64/256-camera VMS stability is claimed.
 | G06 Packages/distribution | PASS, 0.17 non-publishing staging | [17 verification jobs](https://github.com/smiti1642/oxvif/actions/runs/34813220307) passed; both local packages, five native artifacts, APT/Homebrew installs, SBOM and checksums verified; not official-channel admission |
 | G07 Human/Agent | Scoped automated evidence plus operator-reported manual PASS | Discover/manage/resize ConPTY and schema 3/guide 8; no inferred additional OS, device or VMS coverage |
 | G08 Versions/documents | PREPARED | Both packages/dependency/lockfile 0.17.0; paired documents and tag-pinned links; release date/status intentionally pending |
-| G09 Publication approval | OPEN | Stop before cargo publish, tag or GitHub Release; no RC published |
+| G09 Publication approval | AUTHORIZED | Maintainer published both crates on 2026-09-14; v0.17.0 tag and stable GitHub Release authorized; no RC required |
 
 ## Publication surfaces
 

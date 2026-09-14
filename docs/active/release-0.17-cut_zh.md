@@ -2,9 +2,11 @@
 
 [English](release-0.17-cut.md) | [繁體中文](release-0.17-cut_zh.md)
 
-狀態：版號已準備／尚未授權對外發布。更新日期：2026-09-14。
+狀態：已授權對外發布。更新日期：2026-09-14。
+維護者已發布兩個 crate，並授權 v0.17.0 tag 及 GitHub Release。下列準備清單
+保留原執行順序；等待核准的停止條件已解除，發布結果以收尾紀錄為準。
 使用者回報 CI 與人工驗收通過後，已授權版號及文件準備。本切點收錄已合併的
-CLI 工作流程及基礎 Mock Fleet；發布、tag 及本機系統安裝仍須另行授權。
+CLI 工作流程及基礎 Mock Fleet；本機系統安裝不在本次授權範圍。
 
 | 章節 | 用途 |
 | --- | --- |
@@ -35,7 +37,7 @@ R01–R08 維持[審查](release-0.17-review_zh.md)及
 | G06 套件／散布 | PASS，0.17 不發布的 staging | [17 個驗證 jobs](https://github.com/smiti1642/oxvif/actions/runs/34813220307) 通過；兩個套件本機驗證、五平台 artifacts、APT／Homebrew 安裝、SBOM 及 checksum 均通過；非官方通路收錄 |
 | G07 人類／Agent | 有限自動驗證及使用者回報人工 PASS | Discover／manage／resize ConPTY、schema 3／guide 8；不推定其他平台、設備或 VMS 覆蓋 |
 | G08 版號及文件 | 已準備 | 兩套件／相依／lockfile 均為 0.17.0；雙語文件及固定 tag 連結；日期／發布狀態刻意保留待核准 |
-| G09 發布授權 | OPEN | cargo publish、tag、GitHub Release 前停止；未發布 RC |
+| G09 發布授權 | 已授權 | 維護者於 2026-09-14 發布兩個 crate；已授權 v0.17.0 tag 及正式 GitHub Release，不另發 RC |
 
 ## 發布文件
 
