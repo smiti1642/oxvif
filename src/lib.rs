@@ -11,7 +11,7 @@
 //!
 //! ## Quick navigation
 //!
-//! Unreleased Media2 migration: [`VideoRateControl2::frame_rate_limit`] uses `f32`
+//! Since 0.17, [`VideoRateControl2::frame_rate_limit`] uses `f32`
 //! to preserve fractional rates. Malformed present rate control returns an error;
 //! negative/nonfinite rates fail before writing. Ordinary integer JSON remains
 //! readable. Media1's public rate type is unchanged. See the
@@ -244,7 +244,7 @@
 //! only for receipt-only workflows; no corresponding device effects are modeled.
 //!
 //! ```ignore
-//! // Cargo.toml:  oxvif = { version = "0.16", features = ["mock"] }
+//! // Cargo.toml:  oxvif = { version = "0.17", features = ["mock"] }
 //! use std::sync::Arc;
 //! use oxvif::{OnvifClient, mock::MockTransport};
 //!

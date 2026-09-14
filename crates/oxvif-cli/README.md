@@ -3,21 +3,21 @@
 `oxvif-cli` is the human- and Agent-friendly command-line operation surface
 for the [`oxvif`](https://crates.io/crates/oxvif) ONVIF client library.
 
-**Next release: 0.17.0 (not yet published).** Guided maintenance, snapshot saving,
+**oxvif-cli 0.17.0 — publication pending.** Guided maintenance, snapshot saving,
 diagnostic reports and configurable Vim navigation are in release acceptance.
-Read the [release summary](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0.md)
-and [full changes, migration and limitations](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0-changelog.md).
+Read the [release summary](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md)
+and [full changes, migration and limitations](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md).
 The installation command below still installs the published version.
 
 For the complete operator and automation reference, read the
-[CLI guide](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/oxvif-cli.md).
-The guide provides its own language switch and marks unpublished additions.
+[CLI guide](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/oxvif-cli.md).
+The guide provides its own language switch and documents the 0.17 command surface.
 
-The package installs an executable named `oxvif`. Install version 0.16 from
+The package installs an executable named `oxvif`. After publication, install version 0.17 from
 crates.io:
 
 ```sh
-cargo install oxvif-cli --locked
+cargo install oxvif-cli --version 0.17.0 --locked
 oxvif --version
 ```
 
@@ -37,7 +37,7 @@ crates.io or a checksum-verified portable artifact from the matching GitHub Rele
 Root help includes a short Agent onboarding hint. `agent guide` returns the
 version-matched operational and security rules embedded in the installed
 binary; `agent prompt` prints a compact prompt suitable for Agent instructions.
-The structured stdout contract is schema version 3 for the 0.16 release.
+The structured stdout contract is schema version 3 for the 0.17 release.
 
 ## Quick navigation
 
@@ -52,16 +52,16 @@ The structured stdout contract is schema version 3 for the 0.16 release.
 
 ## Human quick start
 
-Development-only additions: `snapshot --save`, `media snapshot-save`, `diagnose`,
-`config export`, and `config diff`. These are not in the published 0.16.0 package.
+Maintenance commands: `snapshot --save`, `media snapshot-save`, `diagnose`,
+`config export`, and `config diff`. These workflows are available in 0.17.
 They do not modify camera settings; diagnosis does not verify RTSP playback and
 configuration exports are not restorable backups. See the
-[maintenance guide](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/cli-maintenance.md)
+[maintenance guide](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/cli-maintenance.md)
 for file safety, retained failure reports, JSON/exit semantics and acceptance tests.
 Diagnosis provides a paginated profile selector in human terminals, summary-first
 reports and `-v` details. JSON/JSONL never prompt; Agent guide v8 documents additive
 selection reasons/candidates while retaining schema v3 and existing exit meanings.
-Development `oxvif manage` provides a guided terminal workspace for these operations,
+`oxvif manage` provides a guided terminal workspace for these operations,
 with retained device/profile context, session-only credentials and bounded session reuse.
 Its network results share `discover` search and saved/new filters (`/`, `r`, `n`,
 uppercase `A`; `c` clears text), without automatically saving selected cameras.
@@ -73,7 +73,7 @@ documented in the maintenance guide above.
 Camera-reported profile settings and diagnostic assessments are also available to Agents.
 Human screens share counted Vim-style navigation, configurable line numbers (`?` settings
 or `--line-numbers absolute|relative|hybrid|off`) and a fixed-bottom reverse-video
-status bar separate from key hints; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/cli-maintenance.md#vim-style-navigation).
+status bar separate from key hints; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/cli-maintenance.md#vim-style-navigation).
 
 On Windows, macOS, or a Linux desktop session with Secret Service, onboard one
 camera with a no-echo password prompt, live verification, native credential
@@ -137,7 +137,7 @@ name, target, tags, and cached device metadata may change; the device ID does
 not. Set `OXVIF_CONFIG_DIR` to isolate the registry for tests or containers.
 Default paths and the stop-writers/copy-whole-directory backup and restore
 procedure are documented in the
-[full CLI manual](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/oxvif-cli.md#device-inventory).
+[full CLI manual](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/oxvif-cli.md#device-inventory).
 
 ```sh
 oxvif config path
@@ -253,7 +253,7 @@ override document and snapshot generation are included in the plan fingerprint.
 
 ## Read-only diagnostics
 
-The 0.16 device surface is diagnostic-only. Every command accepts a saved device
+The 0.17 device surface is diagnostic-only. Every command accepts a saved device
 through root `--device` or an ephemeral endpoint through command-level
 `--target`; credentials are resolved from the saved device/profile or the
 `OXVIF_USERNAME` and `OXVIF_PASSWORD` environment variables.
@@ -369,7 +369,7 @@ oxvif completion fish
 oxvif completion powershell
 ```
 
-See the [CLI guide](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/oxvif-cli.md)
+See the [CLI guide](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/oxvif-cli.md)
 for the supported command surface, and the
-[0.17 migration and limitations](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0-changelog.md)
-for the upcoming changes. Listed plans are not a promise of available commands.
+[0.17 migration and limitations](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md)
+for upgrade requirements. Listed plans are not a promise of available commands.

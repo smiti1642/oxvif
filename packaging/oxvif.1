@@ -1,4 +1,4 @@
-.TH OXVIF 1 "September 2026" "oxvif-cli" "User Commands"
+.TH OXVIF 1 "September 2026" "oxvif-cli 0.17.0" "User Commands"
 .SH NAME
 oxvif \- human- and Agent-friendly ONVIF diagnostic CLI
 .SH SYNOPSIS
@@ -12,6 +12,26 @@ discovers ONVIF devices, maintains a local secret-free inventory, and runs
 read-only diagnostics against one device or a bounded Group/View fleet.
 Structured JSON and JSONL output is versioned for automation.
 .SH COMMON COMMANDS
+.TP
+.B manage
+Open a continuous camera-maintenance workspace. Search and filter cameras,
+add devices explicitly, and retain results, selected profiles and per-camera
+state when returning or switching devices. Temporary session credentials are
+not saved. Reconnect explicitly discards the cached session for the next operation.
+.TP
+.B diagnose [DEVICE]
+Collect staged device, profile, URI and snapshot evidence. Partial failures retain
+completed stages. RTSP playback and video decoding are not verified.
+.TP
+.B snapshot [DEVICE] --save PATH
+Save a recognized image without overwriting an existing file. Downloads are
+bounded to 16 MiB, reject redirects and preserve TLS and credential safeguards.
+.TP
+.B config export DEVICE --save PATH
+Export a read-only settings inventory. This is not a restorable camera backup.
+.TP
+.B config diff DEVICE --against PATH
+Compare the live settings inventory with an exported baseline.
 .TP
 .B setup [TARGET]
 Discover interactively when TARGET is omitted, or verify and save TARGET using
@@ -55,6 +75,14 @@ Print machine-readable command metadata.
 .TP
 .B agent guide
 Print the versioned Agent contract.
+.SH INTERACTIVE NAVIGATION
+Use j/k or arrows to move, gg/G for first/last, and numeric prefixes for counted
+movement. Page Up/Down moves a page; Ctrl+D/U moves half a page. Search with /;
+input fields keep literal typing and Ctrl+U clears input instead of scrolling.
+Lists fill the terminal height. A fixed-bottom status bar shows mode and position.
+Press ? for separately titled Line numbers and Read key bindings tabs; Tab switches
+tabs, Enter applies a line-number mode for the session, and s saves the default.
+Viewing help does not change preferences. Agent JSON/JSONL output never opens menus.
 .SH GLOBAL OPTIONS
 .TP
 .BR --device " " DEVICE

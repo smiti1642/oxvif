@@ -2,7 +2,7 @@
 
 [English](cli-maintenance.md) | [繁體中文](cli-maintenance_zh.md)
 
-以下功能**尚未發布**，僅適用於開發中的原始碼，不包含在已發布的 0.16.0 套件中。
+本指南說明 oxvif-cli 0.17 的維運工作流程；安裝前請確認[發布狀態](releases/0.17.0_zh.md)。
 所有操作均不修改攝影機設定。
 
 | 章節 | 用途 |
@@ -150,7 +150,7 @@ Ctrl+D／Ctrl+U。數字最多六位，不設輸入時限。`3i`、`gq` 或數�
 一般按鍵的終端，無法區分貼上與打字。請勿在導航畫面貼上命令。** 此限制不改變
 輸入欄位的文字輸入行為。
 
-Discovery 保留 `h`／`l` 翻頁別名與 `/`、`r`、`n`、`A` 篩選操作。開發版的單鍵 `g`
+Discovery 保留 `h`／`l` 翻頁別名與 `/`、`r`、`n`、`A` 篩選操作。0.17 的單鍵 `g`
 已改為 `gg`，Home 仍可直接到最前方；已發布的 0.16.0 套件維持舊行為。
 小視窗優先減少裝飾／行號細節，保留選取列；超長攝影機名稱先截斷再對齊，避免其他
 設備身分被擠出畫面。取消 Profile 前置查詢會回到動作選單，關閉取消訊息不會再啟動
@@ -171,7 +171,7 @@ Ctrl+D/U 或 gg/G 捲動說明；Tab 返回行號設定，Esc/q 關閉且不套�
 查看說明不會儲存偏好，返回時保留原畫面的 query、選取及位置。
 搜尋／輸入模式中的 `?` 仍為一般文字，須先結束編輯再開啟設定。
 
-此開發版功能適用於 manage 選單、獨立 Profile 選擇、Discovery 清單／詳情與文字結果，
+此功能適用於 manage 選單、獨立 Profile 選擇、Discovery 清單／詳情與文字結果，
 不影響一般表格或 JSON／JSONL。
 
 | 模式 | 選取列或最上方可見文字行 | 其他列 |
@@ -319,7 +319,7 @@ oxvif config diff front-door --against baseline.json --output json --non-interac
 ## 自動化契約
 
 人類與 Agent 使用共用的型別化請求。自動化應指定明確目標、`--output json` 或
-`jsonl`，以及 `--non-interactive`。以實際執行檔的 `describe` 查詢能力；目前開發版
+`jsonl`，以及 `--non-interactive`。以實際執行檔的 `describe` 查詢能力；0.17
 內建 Agent guide 為版本 8。基礎 stdout envelope 維持 schema 版本 3。新增操作
 回傳 `device_diagnostic`；批次診斷使用 `fleet_diagnostic` 或 JSONL `fleet_item`
 記錄，最後附上 `fleet_summary`。
@@ -391,4 +391,4 @@ PTZ 與 health 執行行為不變。由於 `snapshot` 現在可以選擇保存�
    Esc、`q` 與 Ctrl+C 後終端狀態正確恢復。
 
 本機 mock 測試不代表實機互通性或三平台驗收。現有證據與待驗項目請參閱
-[實作計畫](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/active/cli-maintenance-workflows-plan_zh.md)。
+[實作計畫](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/active/cli-maintenance-workflows-plan_zh.md)。

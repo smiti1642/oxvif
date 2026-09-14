@@ -119,7 +119,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.16", features = ["mock"] }
+oxvif = { version = "0.17", features = ["mock"] }
 ```
 
 ```rust
@@ -146,7 +146,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.16"
+oxvif = "0.17"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -193,7 +193,7 @@ APT and Homebrew packages are distributed only through channels explicitly
 listed in the project README after independent installation verification. Use
 crates.io or the checksum-verified portable artifacts attached to the matching GitHub
 Release until a native package channel is listed. See the
-[0.16.0 release verification](docs/releases/0.16.0.md#release-verification).
+[0.17.0 verification and limitations](docs/releases/0.17.0-changelog.md#verification-and-limitations).
 
 ---
 
@@ -207,7 +207,7 @@ without hand-cloning parallel structs.
 
 ```toml
 [dependencies]
-oxvif = { version = "0.16", features = ["serde"] }
+oxvif = { version = "0.17", features = ["serde"] }
 ```
 
 ```rust
@@ -644,7 +644,7 @@ Events subscription synchronization operation; see the
 
 Media2 (`ver20/media/wsdl`) is the successor to Media1, with native H.265 support and a simplified encoder config structure. All Media2 methods use `media2_url`.
 
-Unreleased: Media2 frame-rate limits now use `f32`; fractional values are preserved,
+Since 0.17: Media2 frame-rate limits now use `f32`; fractional values are preserved,
 and malformed present rate control returns an error. See the
 [Rust/JSON migration and Media1 mock policy](docs/media2-frame-rate.md).
 The mock now validates complete encoder writes atomically and shares options/write
@@ -861,7 +861,7 @@ client.set_audio_encoder_configuration(&media_url, &enc).await?;
 
 **`AudioEncoding` variants:** `G711`, `G726`, `Aac`, `Other(String)`.
 
-Unreleased: query codec options from the target Media service; strings are not
+Since 0.17: query codec options from the target Media service; strings are not
 interchangeable. Audio options retain all repeated Items. Metadata now uses
 structured multicast plus required session timeout; old Rust/JSON fields need
 explicit migration. See [audio/metadata migration](docs/audio-metadata.md).
@@ -1233,7 +1233,7 @@ cargo run --example healthcheck --features health -- \
 
 ```toml
 [dependencies]
-oxvif = { version = "0.16", features = ["health"] }
+oxvif = { version = "0.17", features = ["health"] }
 ```
 
 ```rust
@@ -1477,7 +1477,7 @@ extensions refuse explicitly. See [source settings and selectors](docs/mock-serv
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.16", features = ["mock"] }
+oxvif = { version = "0.17", features = ["mock"] }
 ```
 
 ```rust
@@ -1787,8 +1787,8 @@ chain and `DeviceState`); everything here is opt-in and feature-gated, and
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.16", features = ["metamorph"] }         # record / replay in-process
-# oxvif = { version = "0.16", features = ["metamorph-server"] } # + serve the clone over real HTTP
+oxvif = { version = "0.17", features = ["metamorph"] }         # record / replay in-process
+# oxvif = { version = "0.17", features = ["metamorph-server"] } # + serve the clone over real HTTP
 ```
 
 ### The shortest useful thing

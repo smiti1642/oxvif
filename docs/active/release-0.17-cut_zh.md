@@ -2,116 +2,64 @@
 
 [English](release-0.17-cut.md) | [繁體中文](release-0.17-cut_zh.md)
 
-狀態：IN-PROGRESS／尚不可發布。2026-09-11 授權執行。
-2026-09-13 更新：[工作流程連續性](cli-workflow-continuity_zh.md) 已通過針對性 CLI
-測試與隔離 Windows 終端。本差異須納入最終候選審查／CI，不以歷史 workspace
-計數代替目前關卡。
-
-2026-09-12 更新：使用者重新開啟 CLI 範圍，納入 manage 搜尋篩選、F12 狀態列
-設計及選單位置保留，見 [CLI 重新驗收](cli-0.17-reentry_zh.md)。既有驗收及 CI
-僅保留為歷史證據，不代表已驗證本次變更。
-後續[基礎 Mock Fleet](mock-fleet-basic-plan_zh.md) 已實作並具本機證據，但發布
-收錄仍待決定。目前開發分支為 `feat/basic-mock-fleet`（本次文件整理前為
-`32fcc77`），包含 CLI `dcbff41`；查核時遠端 master／develop 均為 `5a1821b`。
-比較基準：`v0.16.0`；凍結的範圍基準：
-`f9448e515baec6169f40ec7f38ec2e0fcc752826`（證據補充 `2f92b75`）。
-此處記錄原凍結範圍，不代表 hardening 分支歷史已獲驗收。
-下列 K27 修正接續此基準，屬於已授權的資料完整性範圍。
-
-[正式版號前審查資料](release-0.17-approval_zh.md) 追蹤使用者要求的四項工作、
-A01／A02 修正及[共用快照修復](snapshot-auth-repair_zh.md)、維護者 staging 操作及
-留待核准的版號修改。先前本機完整候選／安全審查僅對其記錄基準結案；CLI
-重新驗收、安裝與最終發布仍依各自關卡判定。
+狀態：版號已準備／尚未授權對外發布。更新日期：2026-09-14。
+使用者回報 CI 與人工驗收通過後，已授權版號及文件準備。本切點收錄已合併的
+CLI 工作流程及基礎 Mock Fleet；發布、tag 及本機系統安裝仍須另行授權。
 
 | 章節 | 用途 |
 | --- | --- |
-| [收錄範圍](#收錄範圍) | 有限批次及證據入口 |
-| [發布阻擋關卡](#發布阻擋關卡) | 不得延後的條件 |
-| [發布文件](#發布文件) | 簡要摘要、完整紀錄及 registry 連結 |
-| [施工順序](#施工順序) | 不依賴對話記憶即可接續 |
-| [驗證紀錄](#驗證紀錄) | 精確結果及未取得的證據 |
+| [收錄範圍](#收錄範圍) | 有限發布內容 |
+| [發布阻擋關卡](#發布阻擋關卡) | 目前狀態 |
+| [發布文件](#發布文件) | 版號與文件 |
+| [施工順序](#施工順序) | 剩餘工作 |
+| [驗證紀錄](#驗證紀錄) | 指定版本的歷史證據 |
 
 ## 收錄範圍
 
-原切點排除新增使用者功能，之後使用者明確授權上述 CLI 重新納入作為例外。
-其餘新發現依嚴重度分類，不默默擴充範圍。Mock Fleet 雖已存在於開發分支，
-但在另行決定前仍不屬於已確認的發布範圍。
-
-| ID | 收錄行為 | 原始碼與驗證入口 |
-| --- | --- | --- |
-| R01 | CLI 維護、manage、profile 資訊、人類／Agent 對齊 | `crates/oxvif-cli/src/{maintenance,manage,interactive,describe,agent,output}.rs`；CLI unit／executable tests；[維護驗收](../cli-maintenance_zh.md#人工驗收) |
-| R02 | Vim 核心、行號設定、排版與取消 | `navigation.rs`、`ui_settings.rs`、`interactive.rs`；`tests/navigation_core.rs`、`tests/cli.rs`；[既有終端證據](cli-vim-navigation-plan_zh.md) |
-| R03 | 已完成的共用 XML／Action／Fault／auth 邊界及 literal identity | W03–W08 已實作子群、P1／P2、PTZ1、A1；`request`、`dispatch`、`fault`、`auth`、共用 escaping；request／identity／auth／adapter 測試 |
-| R04 | Media profile 建立／讀取／刪除／binding、source、rate、encoder、audio／metadata | E1、PA1、VS1、rate 修正、VE1、AM1；[操作清冊](mock-fidelity-operation-ledger_zh.md)、服務工作卡及 profile／source／rate／encoder／audio 測試；涵蓋雙服務及雙 transport |
-| R05 | 選定的原子快照／hook 及 committed replay 相依 | W18／W19 已實作子群；`state.rs`、`responder.rs`、`metamorph/replay.rs`；reentrant hook、profile／read／replay 測試 |
-| R06 | 十三個已分類的僅收件確認操作，包含 Media sync | A2／A3 加 B16；`policy.rs`、`mock_ack_policy`、`mock_media_sync` 及工作卡；不宣稱硬體效果 |
-| R07 | Notification peer 包裝、listener 及相容性 | B17；`client/events.rs`、公開通知型別、`notification_origin` 測試 |
-| R08 | 相依套件、XML 相容性、source SBOM 及驗證工具 | B14 加已收錄的相依維護；lockfile、schema 工具、release workflow、下游 XML 測試、source SPDX 控制 |
-
-這些是選定契約，不是 W00–W26 或服務全部操作結案。未修改的 handler 仍可能
-受共用 parser／fault 影響；須審查收錄 helper 的全部下游。不得宣稱
-「Mock 全面 hardening 完成」或「所有 ONVIF 行為均已驗證」。
+R01–R08 維持[審查](release-0.17-review_zh.md)及
+[完整變更紀錄](../releases/0.17.0-changelog_zh.md)列出的 CLI、共用 XML／認證、
+選定 Media／Mock 狀態、僅收件操作、通知 listener、相依套件及 replay 完整性。
+後續授權範圍包含 manage 工作流程連續性、適應視窗的列表、情境按鍵說明及
+[基礎 Mock Fleet](../mock-fleet_zh.md)。
+不宣稱全服務擬真、ONVIF 認證、RTSP 串流、品牌模擬或 64／256 台 VMS 長時間穩定性。
 
 ## 發布阻擋關卡
 
-| Gate | 目前狀態 | 結案條件 |
+| Gate | 目前狀態 | 證據及邊界 |
 | --- | --- | --- |
-| G01 完整候選審查 | 基準 LOCAL-PASS；目前差異 OPEN | 208 個路徑及已記錄差異的審查只適用於[審查紀錄](release-0.17-review_zh.md)的輸入 hash；須對最終候選核對後續 CLI 及任何收錄的 Fleet 變更，測試通過不自動擴充固定審查清冊 |
-| G02 資料完整性 K27 | LOCAL-PASS | 碰撞群組在 record／load／save 及完整請求 replay 中保留不同請求；key-only 歧義回傳 None；等價請求仍替換，去憑證維持指定格式。報告群組保留各列。見下方 K27 證據；G05 以獨立 CI 證據判定 |
-| G03 安全及回應完整性 | 基準 LOCAL-PASS；目前差異 OPEN | A01–A05 保留已修復狀態及斷言證據；須核對後續終端行為與任何收錄的 Fleet LAN／控制端點／探索暴露。已知限制與本機測試不代表整體候選安全驗收 |
-| G04 本機程式及文件 | LOCAL-PASS，Windows 開發批次 | B4 全功能 1,316 通過／0 失敗／6 跳過，預設 1,204／0／6；兩組 Clippy／strict rustdoc 及 fmt 通過，見[精確證據及排除](mock-fleet-basic-plan_zh.md#本機證據)。先前 Rust 1.88／schema 證據為歷史，不是新執行；改版號、移除範圍或合併後重驗受影響關卡 |
-| G05 原生 CI | 歷史通過；目前待執行 | [Run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) 在 fed6777 通過全部 27 個 job／五種原生目標；不涵蓋後續 CLI／Fleet runtime 或 CI 步驟修改，最終候選須另行執行並記錄 |
-| G06 套件及散布 | PARTIAL | fed6777 的 Package/docs 通過：library package 驗證、CLI package 檔案清單、archive 控制及文件。清單不等於 CLI package／安裝驗證；仍須最終版號套件、portable install、SBOM／checksum 及不發布的 staging |
-| G07 人類及 Agent 驗收 | PARTIAL | CLI dcbff41 Windows ConPTY 涵蓋 manage 探索文字／紀錄篩選、正確選取、縮放、底部狀態及選單保留；B4 另驗四台 CLI 讀取／重啟／清理。剩餘導覽／輸入法／其他平台及原生 LAN／VMS 驗收仍明列；歷史實機證據不是新執行 |
-| G08 版號及發布連結 | OPEN | 候選驗收後同步 library／CLI 版號；schema v3 宣稱須符合測試；草稿連結固定至最終 tag，遷移警告不可隱藏 |
-| G09 RC 及授權 | NOT-RUN | RC 也須明確發布授權；建議觀察 3–7 天，不因日期到期自動通過；取得正式發布同意 |
-
-`tests/mock_replay_key_gaps.rs` 現在斷言資料保留，不再斷言遺失：十組碰撞在
-record／load／save、公開 lookup、報告及雙 replay transport 中保留兩份請求。
-舊版已覆蓋資料無法恢復；降版後舊讀取器仍可能合併格式未變的 JSON。
-詳見[儲存與報告遷移](../replay-storage_zh.md)。
-
-A01 修復無效 HTTP UTF-8 處理；其餘 HTTP binding 與 fault／field 語意已對收錄
-宣稱完成判定，保留 backlog 明列的子集合限制。若後續證實影響本切點的重大失敗，
-仍須阻擋發布；本機審查不豁免新發現。
+| G01 候選審查 | 有限切點與 CLI／Fleet 差異 LOCAL-PASS | 見[收尾審查](release-0.17-finalization_zh.md#差異審查)；不默默擴充原 208 路徑清冊 |
+| G02 Replay／資料完整性 | LOCAL-PASS | K27 保留碰撞及遷移警告；無法恢復舊版已覆蓋資料 |
+| G03 安全及回應完整性 | 受審範圍 LOCAL-PASS | A01–A05 及後續 CLI／Fleet 審查；HTTP／listener／錄製限制仍明列 |
+| G04 本機程式及文件 | 版號準備檢查通過 | Workspace check、strict rustdoc、打包及版本／help／連結檢查；舊完整測試計數仍屬歷史 |
+| G05 原生 CI | Runtime 基準通過；最終 0.17 待執行 | [d3ac1b6 的 27 jobs](https://github.com/smiti1642/oxvif/actions/runs/34809397553)；新版結果記入收尾紀錄 |
+| G06 套件／散布 | 兩個 0.17 套件本機驗證通過；staging 待執行 | Cargo 暫存本機 registry 驗證 CLI 對打包後 library 的相依；原生安裝／SBOM 關卡獨立判定 |
+| G07 人類／Agent | 有限自動驗證及使用者回報人工 PASS | Discover／manage／resize ConPTY、schema 3／guide 8；不推定其他平台、設備或 VMS 覆蓋 |
+| G08 版號及文件 | 已準備 | 兩套件／相依／lockfile 均為 0.17.0；雙語文件及固定 tag 連結；日期／發布狀態刻意保留待核准 |
+| G09 發布授權 | OPEN | cargo publish、tag、GitHub Release 前停止；未發布 RC |
 
 ## 發布文件
 
-- `docs/releases/0.17.0.md`／`_zh.md`：使用者導向的簡要摘要，沿用目前
-  release workflow 的 `--notes-file`，不必改 workflow 或繞過權限。
-- `docs/releases/0.17.0-changelog.md`／`_zh.md`：完整分類紀錄、不相容變更、
-  遷移範例、驗證範圍及限制。
-- `CHANGELOG.md`：精簡 Unreleased 摘要並連到完整紀錄；不改寫已發布歷史。
-- 根目錄及 CLI 套件 README：開發中只放簡短「下一版」連結。發布前兩個 crates.io
-  頁面均以絕對 GitHub URL 連至真實 release tag 下的完整紀錄；crates.io 不會自動
-  展示 repository 的 changelog。
-- 安裝指令在可發布版本備妥前仍維持已發布的 0.16。草稿保留
-  `Status: Unreleased`，使既有發布契約阻擋提早發布。
-- 最終連結使用 `blob/v0.17.0/...`，不指向 master／develop 或臨時分支；
-  RC 連結須使用自己的真實 RC tag。
+- 根目錄及 CLI README 使用準備中的 0.17 範例、未發布提示及最終 tag 絕對連結；
+  保留兩種 library Quick Start。
+- 簡要 Release 導向完整技術／遷移 Changelog。
+- 既有英／繁中公開指南同步收錄行為及限制；正確的 0.16 歷史比較不取代。
+- 保留 `Status: Unreleased` 及 `## [0.17.0] - Unreleased` 發布防護。
+  未來的 `blob/v0.17.0` 連結僅經本機結構驗證，不宣稱已上線。
+- 後續發布流程見[核准資料](release-0.17-approval_zh.md)。
 
 ## 施工順序
 
-下列第 1–3 步保留原始施工順序。目前候選應先決定 Fleet 發布歸屬、核對後續
-G01／G03 差異，再依更新的[維護者操作](release-0.17-approval_zh.md#維護者操作)
-對精確版本執行 CI／staging。若從發布移除 Fleet，也會改變受測輸入，須重驗
-受影響部分，不能直接沿用含 Fleet 的統計。
-
-1. 提交切點、雙語完整／摘要文件及[後續清單](post-0.17-backlog_zh.md)。
-2. 以既有批次 suites 及有限獨立控制重驗收錄契約；先記錄失敗再修正，不把已知
-   缺陷測試當成修復證據。
-3. 分批修復 G02 及 G01／G03 的發現，保留貢獻者署名；不擴張成全部服務遷移。
-4. 修復 workflow 權限或請維護者為精確候選啟動 CI。不得改 trigger、開 PR 或
-   更換憑證繞過 403。
-5. 本機及託管驗收後準備真正的 RC／版號，重驗受影響的套件／連結／CLI 版號
-   關卡；staging 明確使用 `publish=false`。
-6. 完成 G07／G09 後請求發布授權。測試通過不代表可以合併主分支、建 tag、
-   publish 至 crates.io 或安裝到使用者系統。
-
-[後續清單](post-0.17-backlog_zh.md) 排程剩餘工作，不將歷史 PARTIAL／TODO
-標記完成。本切點負責發布排程；操作清冊與證據工作卡仍是技術事實來源。
+1. 在 `codex/release-0.17-finalize` 提交版號與文件準備。
+2. 對精確 SHA 執行 CI 及手動、不發布的 release staging。
+3. 記錄結果，必要關卡通過後才同步主分支。
+4. 提出已知限制並取得明確發布同意。
+5. 核准後才完成日期／狀態、先發布 library 再發布相依 CLI，建立核准 tag 及
+   Release。若程式或發布工具再修改，重驗受影響項目。
 
 ## 驗證紀錄
+
+以下保留歷史證據，不是目前關卡表。舊分支、版號、CI 阻擋及待授權敘述只適用於
+當時輸入；目前結果以[收尾紀錄](release-0.17-finalization_zh.md)為準。
 
 基準證據見[社群整合紀錄](contributor-pr-integration-plan_zh.md#執行紀錄)：
 all-features 1,298、workspace default 1,190 通過，各五項 ignored；兩組 Clippy、

@@ -2,7 +2,7 @@
 
 [English](mock-fleet.md) | [繁體中文](mock-fleet_zh.md)
 
-Development feature; not included in the published 0.16.0 package. Run multiple
+The 0.17 `mock_fleet_serve` example runs multiple
 independent ONVIF test devices in one foreground process, using one IPv4 address
 and different HTTP ports. This runner is a Rust example, not an installed `oxvif`
 CLI command. It does not provide RTSP streams or a production security boundary.

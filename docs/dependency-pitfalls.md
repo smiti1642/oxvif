@@ -17,7 +17,7 @@ checked before every publish.
 | [Historical encoding failure](#case-1--quick-xml-encoding-removes-attributeunescape_value) | Why downstream feature tests exist |
 | [Audit procedure](#how-to-audit-for-new-instances-run-before-each-publish) | Review steps |
 | [Audit log](#audit-log) | Version-specific findings |
-| [Current XML and digest migration](#unreleased--quick-xml-042-and-sha2-011) | Current APIs and compatibility gates |
+| [Current XML and digest migration](#017--quick-xml-042-and-sha2-011) | Current APIs and compatibility gates |
 
 ---
 
@@ -50,7 +50,7 @@ cargo tree -e features -i quick-xml   # shows the `encoding` feature edge
 ### Fix
 
 This is the historical 0.39 fix. For 0.42, use the string-based API described
-in the [current migration](#unreleased--quick-xml-042-and-sha2-011); `Reader::decoder`
+in the [current migration](#017--quick-xml-042-and-sha2-011); `Reader::decoder`
 no longer exists.
 
 Go through the always-available decoder variant instead:
@@ -163,7 +163,7 @@ asserts the message, so nothing depends on it. MSRV moved to 1.71; ours is 1.85.
 
 `cargo audit`: zero vulnerabilities, 245 crate dependencies.
 
-### Unreleased — quick-xml 0.42 and sha2 0.11
+### 0.17 — quick-xml 0.42 and sha2 0.11
 
 quick-xml 0.42 events now hold UTF-8 strings. `XmlNode` and the optional schema
 check use string local names, reference/CDATA access, and

@@ -15,7 +15,7 @@
 | [批次匯入](#從-snapshot-批次匯入) | 可審查的 plan/apply 與 fingerprint。 |
 | [Group 與 View](#用-group-與-view-管理大量攝影機) | 靜態與動態 fleet 選擇。 |
 | [唯讀診斷](#唯讀診斷) | Device、Media、PTZ 與 health。 |
-| [維運工作流程](#維運工作流程尚未發布) | 尚未發布的快照下載、分層診斷與設定比較。 |
+| [維運工作流程](#維運工作流程) | 快照下載、分層診斷與設定比較。 |
 | [Fleet 診斷](#fleet-診斷) | 有界並行、排序與彙總結果。 |
 | [輸出與 exit code](#輸出格式與-exit-code) | JSON/JSONL contract 與程序狀態。 |
 | [環境變數](#常用環境變數) | Credential 與設定路徑輸入。 |
@@ -77,15 +77,15 @@ oxvif completion powershell
 - 人類使用者可以用名稱、Group、View 與表格輸出管理大量攝影機。
 - Agent 與自動化程式可以使用可描述的命令、JSON/JSONL、明確的 selector 與穩定的 exit code。
 
-0.16 的 ONVIF 操作面是唯讀診斷：可以探索、讀取裝置資訊、Media URI、PTZ 狀態與健康狀態，
+0.17 的 ONVIF 操作面是唯讀診斷：可以探索、讀取裝置資訊、Media URI、PTZ 狀態與健康狀態，
 但不會修改攝影機設定。新增裝置、Group、View 或 discovery snapshot 只會修改本機 registry。
 
 ## 安裝
 
-從 crates.io 安裝 0.16：
+0.17 發布後，從 crates.io 安裝：
 
 ```sh
-cargo install oxvif-cli --locked
+cargo install oxvif-cli --version 0.17.0 --locked
 oxvif --version
 ```
 
@@ -101,7 +101,7 @@ APT 與 Homebrew package 只透過專案
 [`README`](../README.md#command-line-interface) 明確列出、且已完成獨立安裝／移除驗證的
 channel 發布。原生 channel 尚未列出時，請使用 crates.io 或對應 GitHub Release 所附且可
 核對 checksum 的 portable artifact。平台驗證證據記錄於
-[0.16.0 release notes](releases/0.16.0.md#release-verification)。
+[0.17 驗證與限制](releases/0.17.0-changelog_zh.md#驗證與限制)。
 
 套件與執行檔名稱不同是刻意的：Cargo 使用 `oxvif-cli` 避免和 library crate `oxvif` 衝突，
 使用者則只需要記住 `oxvif <command>`。
@@ -183,7 +183,7 @@ oxvif describe --output json --non-interactive
 oxvif describe media.stream-uri --output json --non-interactive
 ```
 
-0.16 的 structured output schema version 是 3。Agent 應遵守以下原則：
+0.17 的 structured output schema version 是 3。Agent 應遵守以下原則：
 
 1. 使用明確的 `--device`、`--group`、`--view` 或 command-level `--target`，不要依賴目前選取的裝置。
 2. 使用 `--output json` 或 `--output jsonl`，並加上 `--non-interactive`。
@@ -215,17 +215,17 @@ setup，`q`、Esc 或 Ctrl-C 離開。`r` 切換只看已記錄裝置，`n` 切�
 清單與詳細頁另支援 Ctrl+D／Ctrl+U 向下／向上移動半頁（向下取整，至少一筆或
 一行）；抵達邊界時停止。即時搜尋模式的 Ctrl+U 仍清除搜尋文字。
 
-開發版另支援 `7j`、`3k` 及 `21G`／`21gg` 等數字操作，並與 manage、Profile 選擇
+0.17另支援 `7j`、`3k` 及 `21G`／`21gg` 等數字操作，並與 manage、Profile 選擇
 共用相對行號、未完成序列處理與小型模式／狀態列。完整規則、輸入模式例外及 Windows
 貼上限制請見 [Vim 風格導航](cli-maintenance_zh.md#vim-風格導航)。上述新操作及單鍵
 `g` 改為 `gg` 的變更不包含在已發布的 0.16.0 套件中。
 
-開發版可用全域選項 `--line-numbers absolute|relative|hybrid|off` 覆寫本次導航行號，
+0.17可用全域選項 `--line-numbers absolute|relative|hybrid|off` 覆寫本次導航行號，
 或在導航畫面按 `?` 預覽、套用或儲存預設值；未設定時維持 `hybrid`。不影響一般表格
 或 JSON，詳見[行號設定](cli-maintenance_zh.md#行號設定)。
 
 選擇加入裝置後，Device ID、使用者名稱與遮蔽密碼會在同一個 terminal 畫面的內嵌表單輸入。
-開發版成功新增後會返回同一清單，可接續新增。驗證錯誤在同畫面呈現；重試保留
+0.17成功新增後會返回同一清單，可接續新增。驗證錯誤在同畫面呈現；重試保留
 ID／帳號，但清除已提交密碼。登錄標記及有效篩選會更新，不重新掃描。
 Manage 以 Enter 選取、`a` 新增，且不修改全域目前設備。各設備狀態保存、
 已存清單搜尋、錯誤報告及匯出比較銜接，請參閱[引導式工作區](cli-maintenance_zh.md#引導式工作區)。
@@ -364,20 +364,20 @@ oxvif media profiles --target 192.168.1.100 --output json --non-interactive
 ```
 
 `--device`、`--group` 與 `--view` 是 root selector，已發布版本應放在 command 前；
-開發版維運命令也接受後置寫法。`--target` 屬於個別診斷 command，放在 command 後。
+0.17維運命令也接受後置寫法。`--target` 屬於個別診斷 command，放在 command 後。
 
-## 維運工作流程（尚未發布）
+## 維運工作流程
 
 快照 HTTP/1.1 標頭相容處理與有界 Digest 認證由 CLI 及 library health probe
 共用。認證失敗不降級，非圖片回應仍明確判定失敗；詳見
 [快照下載限制](cli-maintenance_zh.md#快照下載)。
 
-開發中的原始碼新增 `snapshot --save`／`media snapshot-save`、`diagnose` 及
-`config export`／`config diff`，尚未包含於已發布的 0.16.0 成品。人類與 Agent
+0.17 提供 `snapshot --save`／`media snapshot-save`、`diagnose` 及
+`config export`／`config diff`，於 0.17 提供。人類與 Agent
 共用應用層，所有操作均不修改攝影機設定。範例、下載／認證限制、基準檔格式與
 人工驗收請參閱[維運指南](cli-maintenance_zh.md)。
 診斷於互動終端提供名稱／token 分頁選單，報告先呈現摘要，以 `-v` 展開階段。
-JSON／JSONL 與重新導向呼叫不會要求互動。開發版 Agent guide v8 說明新增的選取
+JSON／JSONL 與重新導向呼叫不會要求互動。0.17 Agent guide v8 說明新增的選取
 原因與未測試原因，schema v3 維持不變。維運 root selector 及執行選項可放在指令前後。
 `oxvif manage` 提供保留設備／profile 的[引導式工作區](cli-maintenance_zh.md#引導式工作區)，
 僅限人類終端。Agent 維持使用個別命令，透過結構化輸出取得相同診斷判讀及設備回報的
@@ -390,7 +390,7 @@ profile 設定。
 
 ## Fleet 診斷
 
-尚未發布的 `diagnose` 即使全部設備失敗（退出碼 `20`）仍保留逐台報告；既有
+`diagnose` 即使全部設備失敗（退出碼 `20`）仍保留逐台報告；既有
 診斷的全部失敗 `FLEET_FAILED` 規則不適用於此新指令，詳見
 [維運自動化契約](cli-maintenance_zh.md#自動化契約)。
 
@@ -410,7 +410,7 @@ JSONL 每台裝置輸出一筆 `fleet_item`，最後再輸出一筆 `fleet_summa
 
 ## 輸出格式與 exit code
 
-開發中候選版本的人類表格、詳細報告及錯誤輸出，會將終端控制字元及雙向文字
+0.17 的人類表格、詳細報告及錯誤輸出，會將終端控制字元及雙向文字
 格式控制字元轉成可見跳脫表示，例如 `\u{1b}`。逐行 profile 選單也會轉義資料中的
 換行與定位字元。報告排版保留換行與定位字元，因此不保證所有資料欄位皆為單行。
 JSON／JSONL 保留原始值；自動化應解析結構化輸出，不應將畫面上的跳脫表示
@@ -432,7 +432,7 @@ JSON／JSONL 保留原始值；自動化應解析結構化輸出，不應將畫�
 | `6` | Fleet 部分成功 |
 | `10` | Config 或 registry 無法使用 |
 | `11` | Credential 無法使用 |
-| `20` | 裝置連線、探索、Fleet 全部失敗，或開發版維運檢查不完整 |
+| `20` | 裝置連線、探索、Fleet 全部失敗，或0.17維運檢查不完整 |
 | `70` | Serialization 或內部錯誤 |
 
 程式應同時檢查 exit code 與 structured error 的 `code`，不要解析人類訊息文字。

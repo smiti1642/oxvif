@@ -32,15 +32,15 @@ library 與命令列工具，涵蓋裝置探索、裝置管理、Media1／Media2
 
 ## 安裝
 
-下一版 **0.17.0** 正在驗收，尚未發布；重點為引導式 CLI 維護及選定 Mock 契約
-強化，包含原始碼不相容遷移。參閱[簡要摘要](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0_zh.md)
-或[完整變更與遷移](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0-changelog_zh.md)。
+**0.17.0** 提供引導式 CLI 維護及選定 Mock 契約
+強化，包含原始碼不相容遷移。參閱[簡要摘要](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0_zh.md)
+或[完整變更與遷移](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog_zh.md)。
 
-在應用程式中加入 oxvif 0.16：
+此 checkout 正在準備 0.17.0，尚待發布。發布後，在應用程式中加入：
 
 ```toml
 [dependencies]
-oxvif = "0.16"
+oxvif = "0.17"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -99,56 +99,26 @@ service family、錯誤處理與進階功能。產生的
 
 ## 命令列介面
 
-可獨立發布的 `oxvif-cli` package 會安裝名為 `oxvif` 的執行檔。0.16 版的 ONVIF
-操作面刻意限制為唯讀：操作人員與 Agent 可以探索裝置、維護本機 inventory、檢查
-device／media／PTZ 狀態，並執行 deterministic health 與 fleet diagnostics，
-但不會修改攝影機設定。
+`oxvif-cli` 套件提供 `oxvif` 執行檔，供人類與 Agent 使用。ONVIF 操作維持唯讀；
+可管理本機攝影機清單、儲存快照、匯出及比較設定，不修改攝影機組態。
 
-從 crates.io 安裝 CLI：
+0.17.0 發布後可執行：
 
 ```sh
-cargo install oxvif-cli --locked
-oxvif --version
+cargo install oxvif-cli --version 0.17.0 --locked
+oxvif setup
+oxvif manage
 ```
 
-Repository contributor 也可以安裝目前的 checkout：
+目前 checkout 可使用 `cargo run -p oxvif-cli -- manage`。
+引導式工作區保留探索結果及各攝影機狀態，支援搜尋、已儲存／新增篩選、
+Vim 操作、底部狀態列，以及 `?` 設定與按鍵說明。Agent 可透過版本化的
+JSON／JSONL 使用相同操作，不會出現互動提示。
 
-```sh
-cargo install --path crates/oxvif-cli --locked
-oxvif --help
-oxvif setup 192.168.1.100
-oxvif list
-oxvif info
-```
-
-密碼會保存在 Windows Credential Manager、macOS Keychain 或 Linux Secret Service，
-而不是 device registry。Private HTTPS trust anchor 可以明確加入，且不需要停用憑證或
-hostname 驗證。
-
-安裝方式、命令、安全行為、fleet workflow、structured output 與 exit code 請參閱
-[完整 CLI 使用指南](docs/oxvif-cli_zh.md)。
-
-開發中的原始碼另提供快照下載、分層診斷及攝影機設定比較，詳見
-[維運工作流程](docs/cli-maintenance_zh.md)。這些功能尚未發布，不包含影片播放驗證
-或設定還原。
-診斷提供互動 profile 選取、精簡摘要及 `-v` 階段詳情；自動化可透過結構化報告
-取得相同檢查證據。
-`oxvif manage` 將這些操作整合為保留設備／profile 的終端工作區，詳見
-[引導式工作區](docs/cli-maintenance_zh.md#引導式工作區)。
-人類操作介面共用 [Vim 風格導航](docs/cli-maintenance_zh.md#vim-風格導航)、可調整的行號（`?` 設定或 `--line-numbers`）及
-獨立固定底部模式／狀態列，與操作提示分離。Manage 網路搜尋結果支援 `/` 搜尋及
-已存／未存／全部篩選，返回時保留選單位置。
-
-Discovery 會將每筆結果標示為 `SAVED`、`NEW` 或 `INCOMPLETE`；終端使用者與 Agent
-都能依相同狀態篩選即時掃描及已保存的 snapshot。終端瀏覽器可按 `i` 開啟可捲動的
-完整資訊頁；`/` 與 Agent 使用的 `--query` 則共用相同的跨欄位搜尋語意。
-
-`oxvif list` 會用本機快取資料列出所有已保存攝影機，不會主動連線攝影機；Agent 與
-automation 可使用 canonical form：`oxvif device list --output json --non-interactive`。
-
-原生 APT 與 Homebrew package 只會在完成獨立安裝驗證後，透過本 README 明確列出的
-channel 發布。在這些 channel 列出前，請使用 crates.io，或使用對應 GitHub Release
-所附且可核對 checksum 的 portable artifact。
+安裝及自動化請參閱 [CLI 指南](docs/oxvif-cli_zh.md)；
+診斷、快照及設定比較請參閱[維運工作流程](docs/cli-maintenance_zh.md)。
+快照不代表影片播放驗證，匯出設定也不是可還原的備份。
+APT／Homebrew 暫存安裝驗證不代表官方渠道已收錄。
 
 ## 功能概覽
 
@@ -171,7 +141,7 @@ operation，不會被宣稱為已實作。
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.16", features = ["mock"] }
+oxvif = { version = "0.17", features = ["mock"] }
 ```
 
 ```rust
@@ -189,7 +159,7 @@ async fn updates_a_mock_camera() {
 }
 ```
 
-需要 HTTP 端點時，請啟用 `mock-server`（預設繫結 loopback）。開發中原始碼另提供
+需要 HTTP 端點時，請啟用 `mock-server`（預設繫結 loopback）。0.17 另提供
 [可設定的多台啟動器](docs/mock-fleet_zh.md)，可明確啟用 LAN 存取及基本共用 WS-Discovery。完整的路由、
 狀態、支援 operation、fault injection 與限制，請參閱
 [Mock 裝置參考](docs/mock-server_zh.md)。
@@ -203,7 +173,7 @@ async fn updates_a_mock_camera() {
 | [CLI 使用指南](docs/oxvif-cli_zh.md) | 安裝、命令、安全性、fleet workflow、structured output 與 exit code。 |
 | [已實作的 operation](OPERATIONS_zh.md) | 各 service 精確的 ONVIF coverage。 |
 | [Mock 裝置參考](docs/mock-server_zh.md) | Mock 的完整行為與 fidelity contract。 |
-| [尚未發布的音訊／metadata 遷移](docs/audio-metadata_zh.md) | 下一次版本的 Rust／JSON 變更與 mock 限制。 |
+| [音訊／metadata 遷移](docs/audio-metadata_zh.md) | 0.17 Rust／JSON 變更與 mock 限制。 |
 | [支援範圍](docs/support_zh.md) | 版本化的平台、安全、相容性與商用宣稱限制。 |
 | [Changelog（英文）](CHANGELOG.md) | Release 歷史與目前版本的變更。 |
 
@@ -213,9 +183,9 @@ oxvif 適合應用程式開發、診斷、互通性測試與受控 pilot。不�
 ONVIF 裝置差異很大，因此相容性宣稱以實測證據為準，不會只根據 protocol profile
 推論。歡迎提供經過敏感資料清理的其他實機報告。
 
-0.16 CLI 是唯讀診斷 beta，並提供版本化的 structured-output contract。Release
+0.17 CLI 是唯讀診斷 beta，並提供版本化的 structured-output contract。Release
 驗證與平台證據記錄於
-[0.16.0 release note（英文）](https://github.com/smiti1642/oxvif/blob/master/docs/releases/0.16.0.md)。
+[0.17.0 發布說明](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0_zh.md)。
 
 ## 貢獻與安全性
 

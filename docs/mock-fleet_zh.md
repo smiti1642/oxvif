@@ -2,7 +2,7 @@
 
 [English](mock-fleet.md) | [繁體中文](mock-fleet_zh.md)
 
-此為開發中功能，尚未包含於已發布的 0.16.0 套件。它以單一前景程序執行多台
+0.17 的 `mock_fleet_serve` 範例以單一前景程序執行多台
 獨立的 ONVIF 測試設備，使用同一個 IPv4 位址及不同 HTTP 埠。啟動器是 Rust
 範例，不是已安裝 `oxvif` CLI 的子命令；不提供 RTSP 串流或正式環境安全邊界。
 

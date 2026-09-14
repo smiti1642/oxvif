@@ -1,44 +1,35 @@
-# 0.17 正式版號提交前審查資料
+# 0.17 發布核准資料
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-狀態：IN-PROGRESS／尚未核准。更新日期：2026-09-14。
-
-最新人工驗收：PASS（使用者於 2026-09-14 回報討論中的第 2 項已通過）。此紀錄
-與候選程式碼／安全審查及自動化 CI 分開；未額外指定平台、硬體或 VMS 涵蓋範圍。
-[工作流程後續紀錄](cli-workflow-continuity_zh.md#進度)記載明確選單入口驗收，
-以及 `3b940e8` 兩項 CI 失敗的本機修復。發布核准仍須等待修復後候選的託管 CI 通過。
-
-後續[工作流程連續性批次](cli-workflow-continuity_zh.md) 加入連續新增及各設備 UI
-狀態。CLI 針對性測試 193 通過、2 項預設略過；其中終端 fixture 已另以
-discover／manage ConPTY 模式執行。原生密碼庫驗收與目前候選的跨平台 CI
-仍待完成。下方 workspace 計數為歷史證據，不是新一輪完整 workspace 執行。
-本資料補充[發布切點](release-0.17-cut_zh.md)，不取代其中的阻擋關卡。
-使用者要求停在正式 0.17 版號／發布 commit 前。允許一般修正及證據提交；
-本次驗收不執行版號升級、主分支合併、tag、發布、PR 關閉或本機系統安裝。
-
-目前開發內容包含 CLI `dcbff41` 與本機驗證的 Fleet 批次 `6cf345c`（排除項目
-說明為 `32fcc77`）。Fleet 發布歸屬仍待決定。下列 208 路徑審查與託管 CI 是
-歷史基準，不自動驗收後續變更，見[更新後關卡](release-0.17-cut_zh.md#發布阻擋關卡)。
+更新日期：2026-09-14。使用者已授權準備 0.17 版號／文件，不等於對外發布授權。
+目前收錄已合併的 CLI 與基礎 Mock Fleet；master／develop 在準備前均為
+`d3ac1b6`。目前分支為 `codex/release-0.17-finalize`。
+本頁歷史證據保留原版本；目前關卡以[切點](release-0.17-cut_zh.md)及
+[收尾紀錄](release-0.17-finalization_zh.md)為準。
 
 | 章節 | 用途 |
 | --- | --- |
-| [四項工作](#四項工作) | 區分各種證據的目前狀態 |
-| [審查發現](#審查發現) | 修正與未結案結果 |
-| [已執行檢查](#已執行檢查) | 本機、託管與實機觀察 |
-| [審查結案清單](#審查結案清單) | 已完成的本機審查及剩餘發布關卡 |
-| [維護者操作](#維護者操作) | 不發布的 CI 與安裝 staging |
-| [正式版號修改清單](#正式版號修改清單) | 留待核准後提交的修改 |
-| [核准邊界](#核准邊界) | 正式版號提交前的條件 |
+| [使用者要求的四項工作](#使用者要求的四項工作) | 目前狀態 |
+| [審查發現](#審查發現) | 歷史修復及限制 |
+| [已執行檢查](#已執行檢查) | 指定版本證據 |
+| [審查結案](#審查結案) | 本次差異審查 |
+| [維護者操作](#維護者操作) | CI／staging |
+| [版號修改清單](#版號修改清單) | 準備成果 |
+| [核准邊界](#核准邊界) | 真正發布前停止 |
 
-## 四項工作
+<a id="四項工作"></a>
 
-| 工作 | 狀態 | 剩餘項目 |
-| --- | --- | --- |
-| 1. 完整候選／安全審查 | 基準 LOCAL-PASS；目前差異 OPEN | 208 路徑及已記錄後續審查只適用於其 hash；A01–A05 已修復，T01／T02 已加強。最終候選核准前須核對後續 CLI 與任何收錄的 Fleet 變更 |
-| 2. 套件安裝與人類／實機驗收 | PARTIAL | fed6777 原生 CI 通過，不涵蓋後續 CLI／Fleet 版本。新增有界 Windows ConPTY／本機 Fleet 證據列於下方；目前候選 CI、其餘人工／平台及散布 staging 未完成。保留包含 Hanwha 非影像回應在內的歷史實機限制 |
-| 3. 版號、連結與文件 | 已準備，尚未升版 | 雙語發布紀錄及本清單已更新；實際版號仍為 0.16.0，核准後才套用版號修改清單 |
-| 4. 使用者確認 | 尚未請求正式提交核准 | 正式版號 commit 前呈現最終證據及風險；發布須另行授權 |
+## 使用者要求的四項工作
+
+| 工作 | 目前狀態 |
+| --- | --- |
+| 1. 候選／安全審查 | 基準及本次有限 CLI／Fleet 差異 LOCAL-PASS；非整體 ONVIF 認證 |
+| 2. 套件、安裝與人工驗收 | 0.17 兩個套件本機驗證通過；使用者回報人工 PASS；新版 CI／staging 待記錄 |
+| 3. 版號、連結與文件 | 兩套件 0.17.0；公開英／繁中指南同步；日期及 Unreleased 防護保留 |
+| 4. 使用者確認 | 準備已授權；對外發布另行確認 |
+
+下列發現及驗證表為歷史、指定版本的紀錄；其中舊「待執行」狀態不覆蓋上表。
 
 ## 審查發現
 
@@ -94,36 +85,21 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 公開證據不包含 IP、憑證、URI/query、認證標頭或實機影像。
 本機修復結果不取代託管、互動終端或散布套件 staging 驗收。
 
-## 審查結案清單
+<a id="審查結案清單"></a>
 
-G01／G03 對已記錄的 R01–R08 基準為 LOCAL-PASS，後續 CLI／Fleet 差異核對仍未結案。
-[逐檔清冊](release-0.17-review-ledger.json)
-列出 `v0.16.0..b7bc881` 的 208 個 reviewed 路徑，後續差異另行審查。
-各已審輸入有 blob ID，清冊本身以所屬 commit 識別。
-[批次審查](release-0.17-review_zh.md#批次順序) 六組記錄原始碼、受影響消費端、
-斷言及公開宣稱的核對。
+## 審查結案
 
-較早的 `v0.16.0..3eccfd1` 比較包含 200 檔、新增 39,614 行、刪除 3,007 行，
-屬歷史檢查點，不是最終審查輸入。A01–A05 修正、T01／T02 測試品質、CI／release
-guard 控制及雙語宣稱校正已完成本機可處理的發現；本次審查未留下收錄切點內
-已知且未處理的重大 blocker。
-
-這是有界工程審查，不是獨立全程式或 ONVIF 認證。完整 HTTP／field／Fault 語意、
-沿用 listener 安全、raw recording 隱私限制、併發 replay 可見性及 snapshot 格式
-相容性，仍於[後續清單](post-0.17-backlog_zh.md) 明列範圍。
-歷史外部 corpus／實機證據只適用於相符輸入。G05 已於 `fed6777` 的
-[run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) 通過；該執行不涵蓋其後 CLI／Fleet runtime、CI 步驟及文件修改，目前候選的 G05 仍待完成。
-G06 仍須不發布 staging 及最終版號套件驗收；G07 仍部分完成，G08／G09 保留核准邊界。
+原 208 路徑清冊保留原 blob 證據；`5a1821b..d3ac1b6` 的 CLI／Fleet
+差異另記於[收尾審查](release-0.17-finalization_zh.md#差異審查)，不因測試通過
+默默擴充清冊。已知子集合、快照格式、錄製隱私及 listener 限制仍見 backlog。
 
 ## 維護者操作
 
-使用維護者已授權且具有 workflow 權限的帳號。連結紀錄中的 READ／403 為歷史
-觀察，不代表目前帳號政策；不得換帳號或開 workaround PR 繞過權限失敗。
-目前開發分支包含 Fleet，測試該分支不代表核准 Fleet 發布。確認所需候選後，
-維護者可執行：
+使用授權的 `smiti1642` 帳號。以下只執行 CI 與暫存 Actions artifacts，不建立
+tag、不上傳 crates.io、不建立 GitHub Release，也不安裝至使用者系統。
 
 ```powershell
-$candidateBranch = 'feat/basic-mock-fleet'
+$candidateBranch = 'codex/release-0.17-finalize'
 git fetch origin $candidateBranch
 if ($LASTEXITCODE -ne 0) { throw 'Fetch failed' }
 $candidate = git rev-parse "origin/$candidateBranch"
@@ -134,51 +110,21 @@ gh workflow run release.yml --ref $candidateBranch -f tag=$candidate -F publish=
 if ($LASTEXITCODE -ne 0) { throw 'Staging dispatch failed' }
 ```
 
-記錄每個 run URL 及實際 checkout SHA；dispatch 後分支移動不可默默改變驗收候選。
-Staging 的 tag 輸入使用 filename-safe commit SHA，不使用含斜線的分支名稱。
-此輸入雖名為 tag，指令不會建立 Git tag；`publish` 必須保持 false。
+記錄精確 SHA 及 URL。要求五種原生套件、credential、checksum、兩類 SBOM、
+APT install/remove、Homebrew install/bottle/reinstall 全部通過；不代表已上官方通路。
 
-須驗證 Windows／Linux／macOS archives、checksum、source／binary SBOM、
-Debian package install／remove、兩種 Linux 架構的暫時簽章 APT repository 安裝，
-以及兩種 Mac 架構的 Homebrew formula／bottle install／reinstall。
-這些安裝發生於 CI runner，不修改使用者機器。目前 0.16 版號的 staging 不可取代
-最終 0.17 package 驗證；官方渠道收錄及正式 APT signing key 仍是獨立工作。
+<a id="正式版號修改清單"></a>
 
-本次有界 Windows ConPTY 已驗收上述 manage／profile／input／resize、開始後的
-snapshot 取消及 console 恢復。先前 Vim／discovery 證據保留原始版本；後續 dcbff41
-的 manage 探索／狀態／選單位置及 B4 loopback Fleet 證據是新增驗證，不取代
-未測路徑。仍須完成
-最終候選的 discover／diagnose navigation、filter／數字／gg／G／Ctrl-D／U／行號
-矩陣及其他平台人工驗收，因此 G07 保持 PARTIAL。實機 snapshot 成功沿用已授權
-設備的證據，不表示本次重新掃描設備群。
+## 版號修改清單
 
-## 正式版號修改清單
-
-以下保留至另行明確核准的版號 commit：
-
-| 位置 | 修改／檢查 |
-| --- | --- |
-| Cargo.toml、crates/oxvif-cli/Cargo.toml、Cargo.lock | 同步 workspace library／CLI 與 CLI library dependency 為 0.17.0；驗 metadata 與 package 相依解析 |
-| CHANGELOG.md、docs/releases/0.17.0{,_zh}.md 及完整 changelog 雙語檔 | 核准後才改 draft status／日期；更新索引與最終 tag 連結，維持簡要摘要與完整遷移分離 |
-| README 雙語檔、CLI package README | 將下一版提示改成 CLI 導向發布摘要及絕對 blob/v0.17.0 連結；保留 OnvifSession 與 OnvifClient 兩種 Quick Start |
-| LIBRARY_GUIDE 雙語檔、src/lib.rs | 更新安裝範例與公開遷移說明；保留正確的歷史比較引用 |
-| docs/oxvif-cli、docs/cli-maintenance、docs/support 雙語檔與 packaging/oxvif.1 | 同步支援版號、指令、唯讀診斷限制、導航與實際通過的安裝渠道 |
-| CLI guide／describe／schema | 分別驗 CLI version=0.17.0、Agent guide version 與 schema version；不因 package 升版就改 schema |
-| 套件驗證 | 依真正發布相依鏈驗證兩個 package；CLI --list 或 workspace build 不足。Library 必須先可取得，才能發布依賴它的 CLI |
-| 最終凍結候選 | 重驗受影響本機／原生／staging／版號／連結關卡並保留 hash；合併衝突解決後重新驗證 |
-
-不可機械式替換所有 0.16 引用：已發布歷史、遷移比較及固定測試資料可能刻意保留舊版。
+已同步 workspace／CLI 相依／lockfile 為 0.17.0，更新 README、指南、man page、
+簡要 Release 及完整 Changelog。Agent schema 3／guide 8 不因套件改版而遞增。
+本機 workspace 打包使用 Cargo 暫存 registry，確實編譯打包後的 CLI 及 library；
+實際發布仍須先讓 library 在 crates.io 可取得，再發布 CLI。
 
 ## 核准邊界
 
-正式版號 commit 前，提供已完成的 G01／G03、精確本機與託管結果、staging 證據、
-人類／實機驗收、已解決的 A03、預定版號／連結 diff 及明確限制。
-缺少任何必要關卡時必須照實標示，不得宣稱四項全部完成。
-
-2026-09-12 儲存庫查核確認 [PR #14](https://github.com/smiti1642/oxvif/pull/14)、
-[PR #16](https://github.com/smiti1642/oxvif/pull/16)、
-[PR #17](https://github.com/smiti1642/oxvif/pull/17) 均已關閉，GitHub 狀態為
-`merged=false`。其保留署名的改寫提交依序為 `07a7d61`、`f9448e5`、`563bbcf`，
-均為遠端 master／develop `5a1821b` 的祖先；這是改寫後收錄，不是 GitHub 直接
-合併原始 PR，不應再次整合。後續 CLI／Fleet 位於 `feat/basic-mock-fleet`，
-尚未合併至上述主分支。本次文件更新不執行合併或發布。
+CI 與 staging 通過後提出精確證據及限制，停止等待對外發布同意。
+核准後才能完成日期／狀態、cargo publish、tag 及 GitHub Release。
+PR #14／#16／#17 已透過保留貢獻者資訊的改寫整合，不是 GitHub 原 PR merge；
+不得重複整合。先前 CLI／Fleet 分支已合併且清理，不再使用舊分支操作指令。

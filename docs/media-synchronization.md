@@ -2,7 +2,7 @@
 
 [English](media-synchronization.md) | [繁體中文](media-synchronization_zh.md)
 
-Available in the next release; not part of the published 0.16.0 API.
+Available in the 0.17 API.
 
 | Section | Purpose |
 | --- | --- |

@@ -2,7 +2,7 @@
 
 [English](media-synchronization.md) | [繁體中文](media-synchronization_zh.md)
 
-於下一版提供，不屬於已發布的 0.16.0 API。
+於 0.17 API 提供。
 
 | 章節 | 用途 |
 | --- | --- |

@@ -2,8 +2,8 @@
 
 [English](cli-maintenance.md) | [繁體中文](cli-maintenance_zh.md)
 
-These features are **unreleased**, available in the development checkout but not
-in published 0.16.0 packages. They do not modify camera configuration.
+This guide covers oxvif-cli 0.17 maintenance workflows. They do not modify
+camera configuration. See the [release status](releases/0.17.0.md) before installing.
 
 | Section | Purpose |
 | --- | --- |
@@ -182,7 +182,7 @@ distinguish paste from typing. Do not paste commands into navigation screens.**
 This limitation does not change literal typing in input fields.
 
 Discovery preserves `h` / `l` page aliases and `/`, `r`, `n`, `A` filtering controls.
-In development builds, its old single `g` binding is replaced by `gg`; Home remains
+Since 0.17, its old single `g` binding is replaced by `gg`; Home remains
 an immediate alternative. Published 0.16.0 packages have the older behavior.
 Small screens reduce decoration/gutter detail before losing the selected row; long
 camera names are truncated before column alignment so other identities remain visible.
@@ -207,7 +207,7 @@ applying a preview. Viewing help never saves preferences, and returning retains 
 original screen's query, selection and viewport. In search/input mode, `?` remains
 literal text; finish editing before opening settings.
 
-This development-build feature applies to manage menus, standalone profile selection,
+This feature applies to manage menus, standalone profile selection,
 Discovery lists/details and text results. It does not affect plain tables or JSON/JSONL.
 
 | Mode | Selected row or first visible text line | Other rows |
@@ -462,5 +462,5 @@ camera images or unredacted inventory into public issues.
    retained menu position. Check terminal restoration after Esc, `q` and Ctrl+C.
 
 Local mock tests do not establish real-camera interoperability or three-platform
-acceptance. See the [implementation plan](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/active/cli-maintenance-workflows-plan.md)
+acceptance. See the [implementation plan](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/active/cli-maintenance-workflows-plan.md)
 for current evidence and remaining gates.

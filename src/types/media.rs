@@ -254,7 +254,7 @@ pub struct MetadataConfiguration {
     /// ONVIF `tt:PTZFilter/Position` — include PTZ position in metadata.
     pub ptz_position: bool,
     /// Complete required multicast configuration. Replaces flattened address/port
-    /// fields in the next minor release; old JSON must be explicitly migrated.
+    /// fields in 0.17; old JSON must be explicitly migrated.
     pub multicast: super::MulticastConfiguration,
     /// Required wire duration, preserved on roundtrip (deprecated/ignored by Media2).
     pub session_timeout: String,

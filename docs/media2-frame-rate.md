@@ -2,8 +2,8 @@
 
 [English](media2-frame-rate.md) | [繁體中文](media2-frame-rate_zh.md)
 
-Status: unreleased, approved for the next minor release. This is a source-breaking
-correction, not a claim about the installed 0.16.0 binary.
+Applies to 0.17. This is a source-breaking correction; older 0.16 binaries retain
+their previous behavior.
 
 | Section | Purpose |
 | --- | --- |

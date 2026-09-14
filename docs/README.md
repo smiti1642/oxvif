@@ -27,12 +27,12 @@ with the top-level [`README.md`](../README.md), the
 | [`mock-fleet.md`](mock-fleet.md) · [繁體中文](mock-fleet_zh.md) | Configurable multi-camera development runner: init/check/serve, explicit LAN discovery, state isolation and capacity-smoke limits. |
 | [`oxvif-cli.md`](oxvif-cli.md) | **Complete CLI guide** — installation, human and Agent workflows, inventory, discovery, fleet execution, credentials, TLS, structured output, typed errors, and exit codes. |
 | [`oxvif-cli_zh.md`](oxvif-cli_zh.md) | **CLI 使用指南（繁體中文）** — the Traditional Chinese companion to the complete CLI guide. |
-| [`cli-maintenance.md`](cli-maintenance.md) · [繁體中文](cli-maintenance_zh.md) | Unreleased CLI image downloads, layered diagnosis, configuration inventory/diff, safety boundaries and manual acceptance. |
+| [`cli-maintenance.md`](cli-maintenance.md) · [繁體中文](cli-maintenance_zh.md) | CLI 0.17 image downloads, layered diagnosis, configuration inventory/diff, safety boundaries and manual acceptance. |
 | [`dependency-pitfalls.md`](dependency-pitfalls.md) | Standing engineering guide (feature-unification footguns). Not a plan and not ONVIF reference, so it sits at the root; referenced from the release SOP in `CLAUDE.md`. |
 | [`support.md`](support.md) | Versioned support boundaries for the Rust library and CLI beta, including OS, credential, schema, TLS, camera-evidence, and commercial-claim limits. |
 | [`support_zh.md`](support_zh.md) | **支援與相容性政策（繁體中文）** — the Traditional Chinese counterpart to the support policy. |
 | [`releases/`](releases/) | Version-specific release notes and verification evidence. Entries marked unreleased describe staging, not public availability. |
-| [0.17 summary](releases/0.17.0.md) · [繁體中文](releases/0.17.0_zh.md) | Draft user-facing release notes; not release approval. |
+| [0.17 summary](releases/0.17.0.md) · [繁體中文](releases/0.17.0_zh.md) | 0.17 user-facing release notes and publication status. |
 | [0.17 full changelog](releases/0.17.0-changelog.md) · [繁體中文](releases/0.17.0-changelog_zh.md) | CLI, Library, Mock, migration, evidence and limitations. |
 
 A plan graduates from `active/` to `done/` when its milestones are all shipped.

@@ -2,7 +2,7 @@
 
 [English](replay-storage.md) | [繁體中文](replay-storage_zh.md)
 
-Status: 0.17 candidate behavior; not part of published 0.16 artifacts.
+Applies to 0.17 recording retention and replay behavior.
 
 | Section | Purpose |
 | --- | --- |

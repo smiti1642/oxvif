@@ -1,50 +1,35 @@
-# 0.17 pre-version review packet
+# 0.17 release approval packet
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-Status: IN-PROGRESS / NOT APPROVED. Updated 2026-09-14.
-
-Latest operator manual acceptance: PASS (user-reported on 2026-09-14 for the
-discussed item 2). Record this separately from candidate/security review and
-automated CI; no additional platform, hardware or VMS coverage was specified.
-The [workflow follow-up](cli-workflow-continuity.md#progress) records explicit
-menu-path acceptance and local repairs for both CI failures at `3b940e8`.
-Hosted CI must pass on the repaired candidate before release approval.
-
-The later [workflow continuity batch](cli-workflow-continuity.md) adds continuous
-onboarding and per-camera UI state. Scoped CLI tests: 193 passed, 2 default skips;
-the terminal fixture skip was separately executed in discover/manage ConPTY modes.
-Native-store acceptance and current-candidate cross-platform CI remain open.
-Earlier workspace totals below are historical, not a new full-workspace run.
-This packet supplements the [release cut](release-0.17-cut.md), not replaces its
-blocking gates. The user requested a stop before the formal 0.17 version/release
-commit. Ordinary repairs and evidence commits are allowed; version promotion,
-main-branch merges, tags, publication, PR closure and host-system installation
-are not performed by this acceptance work.
-
-Current development includes CLI `dcbff41` and the locally verified Fleet batch
-`6cf345c` (exclusion clarification `32fcc77`). Fleet release placement remains
-undecided. The 208-path review and hosted CI below are historical baselines, not
-automatic acceptance of these later changes. See the [updated gates](release-0.17-cut.md#blocking-acceptance).
+Updated 2026-09-14. The user authorized 0.17 version/document preparation, not
+public publication. The candidate includes the merged CLI and basic Mock Fleet;
+master/develop were both `d3ac1b6` before preparation.
+Current branch: `codex/release-0.17-finalize`.
+Historical evidence retains its original revision. Current gates are in the
+[cut](release-0.17-cut.md) and [finalization record](release-0.17-finalization.md).
 
 | Section | Purpose |
 | --- | --- |
-| [Four requested steps](#four-requested-steps) | Current status without conflating evidence |
-| [Findings](#findings) | Repairs and unresolved results |
-| [Executed checks](#executed-checks) | Local, hosted and real-camera observations |
-| [Review closure](#review-closure) | Completed local review and remaining release gates |
-| [Maintainer actions](#maintainer-actions) | Non-publishing CI and installation staging |
-| [Version-edit checklist](#version-edit-checklist) | Changes reserved for the approved version commit |
-| [Approval boundary](#approval-boundary) | Conditions before asking for promotion |
+| [Four requested steps](#four-requested-steps) | Current status |
+| [Findings](#findings) | Historical repairs and limits |
+| [Executed checks](#executed-checks) | Revision-specific evidence |
+| [Review closure](#review-closure) | Current delta review |
+| [Maintainer actions](#maintainer-actions) | CI/staging |
+| [Version-edit checklist](#version-edit-checklist) | Prepared changes |
+| [Approval boundary](#approval-boundary) | Stop before publication |
 
 ## Four requested steps
 
-| Step | Status | Remaining work |
-| --- | --- | --- |
-| 1. Complete candidate/security review | BASELINE LOCAL-PASS; CURRENT DELTA OPEN | The 208-path review and recorded follow-ups remain valid for their hashes; A01–A05 repaired, T01/T02 strengthened. Reconcile later CLI and any included Fleet changes before final-candidate approval |
-| 2. Package/install and human/real-camera acceptance | PARTIAL | Native CI passed at fed6777, not at the later CLI/Fleet revisions. New bounded Windows ConPTY/local Fleet evidence is listed below; current-candidate CI, remaining human/platform checks and distribution staging are open. Historical real-device limits, including Hanwha non-image responses, remain |
-| 3. Versions, links and documents | PREPARED, not promoted | Bilingual release records and this checklist updated. Actual versions remain 0.16.0; apply the version-edit checklist only after approval |
-| 4. User confirmation | NOT REQUESTED for promotion | Present the final evidence and unresolved risks before the formal version commit; publication requires separate authorization |
+| Step | Current status |
+| --- | --- |
+| 1. Candidate/security review | Baseline and bounded CLI/Fleet delta LOCAL-PASS; not ONVIF certification |
+| 2. Packages, installation and human acceptance | Both 0.17 packages locally verified; operator-reported manual PASS; final CI/staging to be recorded |
+| 3. Versions, links and documents | Both packages 0.17.0; existing public English/Chinese guides synchronized; date and Unreleased guards retained |
+| 4. User confirmation | Preparation authorized; public publication requires separate confirmation |
+
+The following findings/checks are historical, revision-specific records. Earlier
+pending dispositions do not override the current table.
 
 ## Findings
 
@@ -104,40 +89,19 @@ terminal or distribution-staging acceptance.
 
 ## Review closure
 
-G01/G03 are LOCAL-PASS for the recorded R01–R08 baseline, with later CLI/Fleet
-delta reconciliation still open. The [per-file ledger](release-0.17-review-ledger.json)
-contains 208 reviewed paths from `v0.16.0..b7bc881`, plus separately reviewed later
-deltas. Each reviewed input has a blob ID; the ledger itself is identified by its
-containing commit. The six groups in the [batch review](release-0.17-review.md#batch-order)
-record source, affected consumers, assertions and public-claim reconciliation.
-
-The earlier `v0.16.0..3eccfd1` comparison had 200 files, 39,614 added and 3,007
-removed lines. It is a historical checkpoint, not the final reviewed input.
-A01–A05 repairs, T01/T02 test-value work, CI/release guard controls and bilingual
-claim corrections close the locally actionable findings. The included cut has
-no remaining known severe blocker identified by this review.
-
-This is bounded engineering review, not independent whole-program or ONVIF
-certification. Full HTTP/field/Fault semantics, inherited listener hardening,
-raw-recording privacy limits, concurrent replay visibility and snapshot-format
-compatibility remain explicitly scoped in the [backlog](post-0.17-backlog.md).
-Historical external-corpus and hardware evidence applies only to its matching
-inputs. G05 passed at `fed6777` in [run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802).
-Later CLI/Fleet runtime, CI-step and documentation edits are not covered by that run;
-G05 remains pending for the current candidate. G06 still requires
-non-publishing staging and final-version package acceptance; G07 remains partial,
-and G08/G09 retain their approval boundaries.
+The original 208-path ledger retains its blob evidence. The
+`5a1821b..d3ac1b6` CLI/Fleet delta is separately recorded in the
+[finalization review](release-0.17-finalization.md#delta-review); passing tests do
+not silently extend the ledger. Subset, snapshot-format, recording-privacy and
+listener limits remain in the backlog.
 
 ## Maintainer actions
 
-Use the maintainer's authorized account with workflow permissions. Earlier READ/403
-observations in linked records are historical, not current account policy.
-Do not switch accounts or open a workaround PR to bypass permission failures.
-The current development branch includes Fleet; testing it does not approve Fleet
-for release. After confirming the desired candidate, the maintainer can run:
+Use the authorized `smiti1642` account. This runs CI and temporary Actions
+artifacts only: no tag, crates.io upload, GitHub Release or user-system install.
 
 ```powershell
-$candidateBranch = 'feat/basic-mock-fleet'
+$candidateBranch = 'codex/release-0.17-finalize'
 git fetch origin $candidateBranch
 if ($LASTEXITCODE -ne 0) { throw 'Fetch failed' }
 $candidate = git rev-parse "origin/$candidateBranch"
@@ -148,58 +112,23 @@ gh workflow run release.yml --ref $candidateBranch -f tag=$candidate -F publish=
 if ($LASTEXITCODE -ne 0) { throw 'Staging dispatch failed' }
 ```
 
-Record each run URL and exact checked-out SHA; a branch moving after dispatch
-must not silently change the accepted candidate. The staging tag input is a
-filename-safe commit SHA, not the slash-containing branch name. Despite the
-input's name, this command does not create a Git tag. `publish` must remain false.
-
-Acceptance requires Windows/Linux/macOS archives, checksums, source/binary SBOMs,
-Debian package install/remove, signed ephemeral APT repository install on both
-Linux architectures, and Homebrew formula/bottle install/reinstall on both Mac
-architectures. These are CI-runner installs, not changes to the user's machine.
-Current 0.16-valued staging cannot substitute for final 0.17 package verification.
-Official channel admission and production APT signing keys remain separate work.
-
-The bounded current Windows ConPTY run accepts the manage/profile/input/resize,
-started-snapshot cancellation and console-restoration paths listed above. Prior
-Vim/discovery evidence retains its recorded revision. The later dcbff41 manage
-discovery/status/viewport checks and B4 loopback Fleet checks above are additional,
-not replacements for untested paths. Complete the remaining
-final-candidate discover/diagnose navigation, filter/counts/gg/G/Ctrl-D/U/line-number
-matrix and other-platform human acceptance; this is why G07 remains PARTIAL.
-Real snapshot success retains its authorized-device evidence, not a new fleet run.
+Record exact SHAs and URLs. Require all five native packages, credentials,
+checksums, both SBOM inventories, APT install/remove and Homebrew
+install/bottle/reinstall. This does not establish official-channel admission.
 
 ## Version-edit checklist
 
-Reserved for the later, explicitly approved version commit:
-
-| Surface | Required edit/check |
-| --- | --- |
-| Cargo.toml; crates/oxvif-cli/Cargo.toml; Cargo.lock | Set workspace library/CLI and CLI library dependency to 0.17.0 together; verify metadata and packaged dependency resolution |
-| CHANGELOG.md; docs/releases/0.17.0{,_zh}.md and full changelog pair | Replace draft status/date only when approved; update index and final-tag links, keep short notes separate from the full migration record |
-| README pair; CLI package README | Replace next-release warning with released CLI-first summary and absolute blob/v0.17.0 links; keep both OnvifSession and OnvifClient quick starts |
-| LIBRARY_GUIDE pair; src/lib.rs | Update installation examples and public migration prose; retain true historical comparison references |
-| docs/oxvif-cli pair; docs/cli-maintenance pair; docs/support pair; packaging/oxvif.1 | Synchronize supported version, command coverage, diagnostics-only limits, navigation and actual accepted installation channels |
-| CLI guide/describe/schema | Verify CLI version=0.17.0, Agent guide version and schema version independently; do not bump schema merely because package version changes |
-| Package verification | Verify both packages against the actual publication dependency chain; a CLI --list or local workspace build is insufficient. Library must be available before publishing its dependent CLI |
-| Final frozen candidate | Repeat affected local/native/staging/version/link gates and preserve hashes; any merge conflict resolution requires revalidation |
-
-Do not mechanically replace every 0.16 reference: published history, migration
-comparisons and fixed test fixtures can intentionally reference the old version.
+Workspace/CLI dependency/lockfile are 0.17.0. READMEs, guides, man page, short
+release notes and full changelog are synchronized. Agent schema 3/guide 8 are
+independent of package version. Local workspace packaging uses Cargo's temporary
+registry and compiles the packaged CLI against the packaged library; actual
+publication must make the library available on crates.io before the CLI.
 
 ## Approval boundary
 
-Before the formal version commit, present completed G01/G03 reviews, exact local
-and hosted results, staging evidence, human/real-camera acceptance, resolved A03,
-the proposed version/link diff and explicit limitations. If any required gate
-is missing, report it as missing and do not describe the four steps as complete.
-
-Repository inspection on 2026-09-12 confirms
-[PR #14](https://github.com/smiti1642/oxvif/pull/14),
-[PR #16](https://github.com/smiti1642/oxvif/pull/16) and
-[PR #17](https://github.com/smiti1642/oxvif/pull/17) are closed, with GitHub's
-`merged=false`. Their credited adaptations (`07a7d61`, `f9448e5`, `563bbcf`,
-respectively) are ancestors of remote master/develop `5a1821b`; this is adapted
-integration, not a GitHub merge of each original PR. Do not integrate them again.
-Later CLI/Fleet work is on `feat/basic-mock-fleet` and has not been merged into
-those main branches. This documentation update performs no merge or publication.
+After CI/staging pass, present exact evidence and limitations, then stop for
+explicit publication approval. Only afterwards finalize date/status and perform
+cargo publish, tagging and GitHub Release.
+PRs #14/#16/#17 were integrated through credited adaptations, not GitHub merges
+of the original PRs; do not integrate them again. Earlier CLI/Fleet branches
+have been merged and cleaned up; their old commands are no longer current.

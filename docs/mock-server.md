@@ -14,9 +14,8 @@ omission is a bug, a documented one is a design decision.**
 - **Audience** — anyone driving the mock: oxvif's own tests, a downstream Rust
   crate, or a non-Rust ONVIF client (Frigate, ODM, gSOAP, a C++ conformance
   suite) pointed at the bound port.
-- **Version** — 0.17.0 development preview; behavior added since 0.16.0 is not
-  available in the published 0.16.0 package. See the
-  [release changes](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/releases/0.17.0-changelog.md).
+- **Version** — 0.17.0; selected contracts differ from 0.16.0. See the
+  [release changes](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md).
 - **Feature flags** — `mock` for the transport, `mock-server` for the HTTP
   server. This crate has **no default features**; nothing below compiles
   without one of those two.
@@ -302,7 +301,7 @@ Namespace prefixes the mock emits, and their bindings (`helpers::namespace_for`)
 
 ---
 
-### 3.1 Unreleased request hardening
+### 3.1 0.17 request hardening
 
 Media1 and Media2 `DeleteProfile` now read the required token from the identified
 operation's direct child in the correct service namespace. XML text is decoded
@@ -491,7 +490,7 @@ the wrong channel.
 
 ### 6.2.1 Source configuration contract
 
-**Unreleased:** both Media services require a complete modeled source configuration
+**Since 0.17:** both Media services require a complete modeled source configuration
 and validate its scoped fields before one atomic commit. Name and identity text are
 decoded and escaped once. UseCount and ViewMode are read-only; callers cannot change
 the stored reference count. Media1 ForcePersistence must be a valid boolean; storage
@@ -514,7 +513,7 @@ See [VS1 evidence and limits](active/mock-fidelity-video-source.md).
 
 ### 6.2.2 Encoder configuration contract
 
-**Unreleased:** both Media services validate a complete, namespace-scoped encoder
+**Since 0.17:** both Media services validate a complete, namespace-scoped encoder
 candidate before one atomic commit. Refusal preserves every field, change hooks
 and built-in replay. Name/token text is decoded and escaped once; UseCount is
 read-only. Partial raw request fixtures must supply required configuration fields.
@@ -667,7 +666,7 @@ device always sends them, and this mock is the conformant device.
 while the family was a string literal, so both renderers emitted nothing and
 agreed perfectly.
 
-**Unreleased AM1:** the table above uses Media1 codec names. Media2 renders
+**0.17 audio/metadata:** the table above uses Media1 codec names. Media2 renders
 PCMU / MP4A-LATM; G726 uses the ONVIF name with a bitrate-selected variant.
 Complete candidates must match per-configuration options before an atomic write.
 Selectors are scoped; absent references fault. UseCount and AutoStart are readonly,
@@ -716,7 +715,7 @@ assertion on any one of them can fail on its own.
 | `MetaConf_2` | `MetadataMinimal` | false | true / false | *(no group)* | false · true |
 
 `tt:MetadataConfiguration/Multicast` is **required**, so both configurations
-send the block. The unreleased factory `MetaConf_2` explicitly uses 0.0.0.0,
+send the block. The 0.17 factory `MetaConf_2` explicitly uses 0.0.0.0,
 port 0 and TTL 1. Both entries report readonly AutoStart false and PT60S.
 The last column is `Options/PTZStatusFilterOptions`, answered per token by
 `GetMetadataConfigurationOptions`.
@@ -1101,7 +1100,7 @@ Prefer the deepest node and fall back outward.
 
 An absent value is an absent element. Note that `StorageConfiguration` in
 oxvif parses these as `String` with `unwrap_or_default()`, so **an oxvif
-client cannot distinguish omitted from empty here**. The unreleased
+client cannot distinguish omitted from empty here**. The 0.17
 `MetadataConfiguration` instead requires a complete structured multicast
 value; address-less metadata blocks are explicitly unrepresentable. See the
 [metadata migration](audio-metadata.md).
@@ -1223,7 +1222,7 @@ oxvif's own testing rules ban that.
 | `ter:ActionNotSupported` | Routed, but deliberately not modelled — see §13.1 | `NotModelled-VSMODE-5813` |
 | `s:Receiver` | Unrouted action | `Not implemented: {action}` |
 
-**Unreleased correction.** The shared fault helper now declares `ter:` and
+**0.17 correction.** The shared fault helper now declares `ter:` and
 `env:` (in addition to `s:`) and escapes code/reason text, including explicit
 fault injections. Pass literal text to injection APIs, not pre-escaped XML.
 Custom, unknown QName prefixes are not automatically resolved by this helper.
@@ -1518,7 +1517,7 @@ Media synchronization also validates the unique scoped profile selector after
 opt-in. It never emits media or invalidates recorded reads; recorded write
 receipts are not replayed. See the [Media synchronization guide](media-synchronization.md).
 
-**Unreleased:** thirteen classified operations refuse by default with `s:Receiver`
+**Since 0.17:** thirteen classified operations refuse by default with `s:Receiver`
 and first subcode `mock:UnmodeledEffect`. For a workflow that needs only a receipt:
 
 ```rust

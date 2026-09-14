@@ -7,8 +7,8 @@
 本文件所述行為均可對照具名的原始碼 symbol 驗證。若某項行為是刻意簡化，而非真實度聲明，文件會明確指出。未記錄的遺漏視為錯誤；已記錄的限制則屬設計決策。
 
 - **適用對象**：oxvif 測試、下游 Rust crate，或連線至實體連接埠的非 Rust ONVIF client，例如 Frigate、ODM、gSOAP 或 C++ conformance suite。
-- **版本**：0.17.0 開發預覽；0.16.0 之後新增的行為不包含於已發布的 0.16.0 套件。
-  詳見[版本變更](https://github.com/smiti1642/oxvif/blob/ddec9ecfc69d503c54c487c28feb64fdad32dca5/docs/releases/0.17.0-changelog_zh.md)。
+- **版本**：0.17.0；選定契約與 0.16.0 不同。
+  詳見[版本變更](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog_zh.md)。
 - **Feature flag**：程序內 transport 使用 `mock`，HTTP server 使用 `mock-server`。本 crate 不啟用任何 default feature；若未選用其中一項，以下 API 不會編譯。
 
 ## 快速導覽
@@ -253,7 +253,7 @@ must-understand／encoding 策略、其他 handler reader 及 replay effect 仍�
 
 ---
 
-### 3.1 尚未發布的 request 強化
+### 3.1 0.17 request 強化
 
 Media1、Media2 `DeleteProfile` 現在從已識別 operation 的直接 child 讀取必要
 token，並比對正確的 service namespace。XML 文字僅解碼一次，不修剪 token。
@@ -403,7 +403,7 @@ Factory device 是一台**雙感測器攝影機**。單 channel fixture 無法�
 
 ### 6.2.1 Source configuration 契約
 
-**尚未發布：**兩種 Media service 均要求完整已建模 source configuration，先驗證 scoped
+**0.17 起：**兩種 Media service 均要求完整已建模 source configuration，先驗證 scoped
 欄位，再一次原子提交。Name 與身分文字解碼、轉義一次。UseCount 與 ViewMode 為唯讀，
 caller 不能改寫引用計數。Media1 ForcePersistence 必須是有效 boolean；儲存仍為記憶體
 狀態及既有選填、由使用者管理的 persistence hook。
@@ -421,7 +421,7 @@ source／profile／options 讀取。詳見 [VS1 證據與限制](active/mock-fid
 
 ### 6.2.2 Encoder configuration 契約
 
-**尚未發布：**兩種 Media service 均先驗證完整、具 namespace 範圍的 encoder candidate，
+**0.17 起：**兩種 Media service 均先驗證完整、具 namespace 範圍的 encoder candidate，
 再一次原子提交。拒絕時保留所有欄位、change hook 與內建 replay。Name／token 解碼、
 轉義一次；UseCount 為唯讀。既有部分 raw request fixture 須補齊必要 configuration
 欄位。Media1 另要求有效 boolean ForcePersistence；持久化仍為記憶體及選填、
@@ -516,7 +516,7 @@ ProfileToken → ProfileEntry.ptz_config_token → PtzConfigEntry.node_token →
 
 預載兩組可由 token 定址、且重要值彼此不同的 audio source/configuration。`AEC_1` 為 G711、64 kbps、8 kHz；`AEC_2` 為 AAC、128 kbps、48 kHz。只有 `Profile_1` 繫結 audio。
 
-**尚未發布的 AM1：** 上述使用 Media1 編碼名称；Media2 顯示 PCMU／MP4A-LATM，G726 以 ONVIF 名稱及 bitrate 選擇變體。完整候選設定須符合該 configuration 的 options 才能原子提交；selector 具作用域，未知參照回傳 Fault。UseCount／AutoStart 為唯讀，省略 Media2 multicast 會保留共用設定。Mock 不產生 RTP。詳見[音訊／metadata 遷移與限制](audio-metadata_zh.md)。
+**0.17 音訊／metadata：** 上述使用 Media1 編碼名稱；Media2 顯示 PCMU／MP4A-LATM，G726 以 ONVIF 名稱及 bitrate 選擇變體。完整候選設定須符合該 configuration 的 options 才能原子提交；selector 具作用域，未知參照回傳 Fault。UseCount／AutoStart 為唯讀，省略 Media2 multicast 會保留共用設定。Mock 不產生 RTP。詳見[音訊／metadata 遷移與限制](audio-metadata_zh.md)。
 
 `GetAudioEncoderConfigurationOptions` 在兩個服務中的 nesting 不同：
 
@@ -536,7 +536,7 @@ Media2  Response/Options   tt:AudioEncoder2ConfigurationOptions  ← repeated en
 | `NAS_01` | `NFS` | `/mnt/nas` | `nfs://192.168.1.50/records` | `recorder` |
 | `CIFS_01` | `CIFS` | 無 | `smb://192.168.1.60/cam` | 無 |
 
-Metadata 有 `MetaConf_1` 與 `MetaConf_2`；兩者在 analytics、PTZ status/position、multicast 與 status capability 上刻意不同。尚未發布的版本要求完整 multicast；`MetaConf_2` 明確使用 0.0.0.0、port 0、TTL 1。兩者的唯讀 AutoStart 均為 false，session timeout 為 PT60S。
+Metadata 有 `MetaConf_1` 與 `MetaConf_2`；兩者在 analytics、PTZ status/position、multicast 與 status capability 上刻意不同。0.17 要求完整 multicast；`MetaConf_2` 明確使用 0.0.0.0、port 0、TTL 1。兩者的唯讀 AutoStart 均為 false，session timeout 為 PT60S。
 
 | Recording | Track | Bounds | Status |
 |---|---|---|---|
@@ -744,7 +744,7 @@ NoSuchRecording-DELREC-5701: Rec_999
 | `ter:ActionNotSupported` | action 已路由，但刻意未建模 | `NotModelled-VSMODE-5813` |
 | `s:Receiver` | action 未路由 | `Not implemented: {action}` |
 
-**尚未發布的修正：** 共用 Fault helper 現在宣告 `ter:`、`env:` 及既有的 `s:`，
+**0.17 修正：** 共用 Fault helper 現在宣告 `ter:`、`env:` 及既有的 `s:`，
 並轉義 code／reason 文字，包含明確注入的 Fault。Injection API 應傳入原始文字，
 不要預先轉義 XML。Helper 不會自動解析自訂、未知的 QName prefix。
 
@@ -908,7 +908,7 @@ Media synchronization 在 opt-in 後也驗證唯一且 scoped 的 profile select
 與 `Media2SynchronizationPoint` 分別選擇 Media1／Media2，不受 Events 許可影響。
 目前分類共十三項；參閱[Media synchronization 指南](media-synchronization_zh.md)。
 
-**尚未發布：**十三項已分類操作預設回傳 `s:Receiver`，第一層 subcode 為
+**0.17 起：**十三項已分類操作預設回傳 `s:Receiver`，第一層 subcode 為
 `mock:UnmodeledEffect`。若測試流程僅需確認收件，可逐項啟用：
 
 ```rust

@@ -3,7 +3,7 @@
 **English** | [繁體中文](support_zh.md)
 
 This policy separates the Rust library from the `oxvif` command-line product.
-It applies to the oxvif 0.16.x library and the oxvif-cli 0.16.x diagnostic beta.
+It applies to the oxvif 0.17.x library and the oxvif-cli 0.17.x diagnostic beta.
 
 ## Rust library
 
@@ -18,7 +18,7 @@ It applies to the oxvif 0.16.x library and the oxvif-cli 0.16.x diagnostic beta.
 
 ## CLI diagnostic beta
 
-The first CLI release is a read-only device diagnostic beta. It may mutate its
+The 0.17 CLI remains a read-only device diagnostic beta. It may mutate its
 local registry, Groups, Views, discovery snapshots, and credential references,
 but it does not expose device-setting writes.
 

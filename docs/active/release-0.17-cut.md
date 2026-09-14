@@ -2,128 +2,69 @@
 
 [English](release-0.17-cut.md) | [繁體中文](release-0.17-cut_zh.md)
 
-Status: IN-PROGRESS / NOT RELEASE-READY. Authorized 2026-09-11.
-Update 2026-09-13: [workflow continuity](cli-workflow-continuity.md) is locally
-verified in scoped CLI tests and isolated Windows terminals. Include this delta
-in final-candidate review/CI; do not reuse historical workspace totals as its gate.
-
-Update 2026-09-12: the operator reopened CLI scope for manage discovery filters,
-F12 status-bar design and menu-position retention. See [CLI re-entry](cli-0.17-reentry.md).
-Earlier acceptance and CI are historical evidence, not validation of these new bytes.
-The later [basic Mock Fleet](mock-fleet-basic-plan.md) is implemented with local
-evidence, but release inclusion is undecided. Current development is on
-`feat/basic-mock-fleet` (`32fcc77` before this documentation reconciliation),
-including CLI `dcbff41`; remote master/develop were both `5a1821b` at inspection.
-Comparison base: `v0.16.0`; frozen scope baseline:
-`f9448e515baec6169f40ec7f38ec2e0fcc752826` (evidence update `2f92b75`).
-This records the original frozen scope, not a claim that the hardening ancestry is accepted.
-The K27 repair below follows that baseline within the approved integrity scope.
-
-The [pre-version review packet](release-0.17-approval.md) tracks the user's four
-requested steps, A01/A02 repairs and the [shared snapshot repair](snapshot-auth-repair.md),
-maintainer staging instructions and the version edits reserved for approval.
-The earlier local complete-candidate/security review is closed for its recorded
-baseline; CLI re-entry, installation and final acceptance retain separate gates.
+Status: VERSION PREPARED / PUBLICATION NOT AUTHORIZED. Updated 2026-09-14.
+The user authorized version/document preparation after reporting CI and manual
+acceptance passed. This cut includes the merged CLI continuity and basic Mock
+Fleet work. Publication, tags and host-system installation remain separate.
 
 | Section | Purpose |
 | --- | --- |
-| [Included scope](#included-scope) | Bounded batches and their evidence |
-| [Blocking acceptance](#blocking-acceptance) | Conditions that cannot be deferred |
-| [Publication surfaces](#publication-surfaces) | Short summary, full record and registry links |
-| [Execution order](#execution-order) | Resume without conversation history |
-| [Evidence](#evidence) | Exact results and unavailable checks |
+| [Included scope](#included-scope) | Bounded release content |
+| [Blocking acceptance](#blocking-acceptance) | Current gates |
+| [Publication surfaces](#publication-surfaces) | Version and documents |
+| [Execution order](#execution-order) | Remaining actions |
+| [Evidence](#evidence) | Historical, revision-specific records |
 
 ## Included scope
 
-The original cut excluded new user-facing features. The operator subsequently
-authorized the CLI re-entry above as an explicit exception. Other discoveries
-are triaged by severity, not silently added; Mock Fleet remains outside confirmed
-release scope until a separate decision, even though it is present in the development branch.
-
-| ID | Included behavior | Source and verification entry points |
-| --- | --- | --- |
-| R01 | CLI maintenance, manage, profile metadata, human/Agent parity | `crates/oxvif-cli/src/{maintenance,manage,interactive,describe,agent,output}.rs`; CLI unit/executable tests; [maintenance acceptance](../cli-maintenance.md#manual-acceptance) |
-| R02 | Vim core, line preferences, layout and cancellation | `navigation.rs`, `ui_settings.rs`, `interactive.rs`; `tests/navigation_core.rs`, `tests/cli.rs`; [prior terminal evidence](cli-vim-navigation-plan.md) |
-| R03 | Selected common XML/Action/Fault/auth boundaries and literal identity | W03–W08 implemented slices, P1/P2, PTZ1, A1; `request`, `dispatch`, `fault`, `auth`, shared escaping; request/identity/auth/adapter tests |
-| R04 | Media profile create/read/delete/binding, source, rate, encoder, audio/metadata | E1, PA1, VS1, rate correction, VE1, AM1; [operation ledger](mock-fidelity-operation-ledger.md), service cards, profile/source/rate/encoder/audio tests; both service views and transports |
-| R05 | Selected atomic snapshots/hooks and committed replay dependencies | W18/W19 implemented slices; `state.rs`, `responder.rs`, `metamorph/replay.rs`; reentrant-hook, profile/read/replay tests |
-| R06 | Thirteen classified receipt-only operations, including Media sync | A2/A3 plus B16; `policy.rs`, `mock_ack_policy`, `mock_media_sync`, operation cards; no physical-effect claim |
-| R07 | Notification peer wrapper/listener and compatibility | B17; `client/events.rs`, public notification types, `notification_origin` tests |
-| R08 | Dependency, XML compatibility, source SBOM and verification tooling | B14 plus already included dependency work; lockfile, schema tooling, release workflow, downstream XML tests, source-SPDX controls |
-
-These are selected contracts, not completion of W00–W26 or every operation in a
-service. An unchanged handler can still be affected by shared parsing/fault code;
-review all transitive consumers of an included helper. Public claims may not say
-“fully hardened Mock” or “all ONVIF behavior validated.”
+R01–R08 remain the bounded CLI, shared XML/auth, selected Media/Mock state,
+receipt-only operations, notification listener, dependencies and replay-integrity
+cut recorded in the [review](release-0.17-review.md) and
+[full changelog](../releases/0.17.0-changelog.md).
+The approved later scope includes manage workflow continuity, responsive lists,
+contextual settings/key help and [basic Mock Fleet](../mock-fleet.md).
+No all-service fidelity, ONVIF certification, RTSP streaming, brand emulation or
+long-duration 64/256-camera VMS stability is claimed.
 
 ## Blocking acceptance
 
-| Gate | Current disposition | Required closure |
+| Gate | Current disposition | Evidence / remaining boundary |
 | --- | --- | --- |
-| G01 Complete candidate review | BASELINE LOCAL-PASS; CURRENT DELTA OPEN | The 208-path review and recorded deltas remain accepted only for their input hashes in the [review record](release-0.17-review.md). Reconcile subsequent CLI and any included Fleet changes against the final candidate; passing tests do not extend the frozen review ledger |
-| G02 Data integrity, K27 | LOCAL-PASS | Collision buckets preserve distinct requests across record/load/save and request-aware replay; key-only ambiguity returns None; equivalent requests still replace and credential cleanup remains targeted. Report groups retain all rows. See the K27 evidence below; G05 remains separate |
-| G03 Security and response integrity | BASELINE LOCAL-PASS; CURRENT DELTA OPEN | A01–A05 remain repaired with recorded assertions. Reconcile later terminal behavior and any included Fleet LAN/control/discovery exposure; documented limits and local tests do not establish whole-candidate security acceptance |
-| G04 Local code and documents | LOCAL-PASS, Windows development batch | At B4: all-features 1,316 passed / 0 failed / 6 ignored; default 1,204 / 0 / 6. Both Clippy/strict rustdoc modes and fmt passed; [exact evidence and exclusions](mock-fleet-basic-plan.md#local-evidence). Rust 1.88/schema evidence from earlier batches is historical, not a new run. Revalidate affected gates after version changes, scope removal or merges |
-| G05 Native CI | HISTORICAL PASS; CURRENT PENDING | [Run 34672460802](https://github.com/smiti1642/oxvif/actions/runs/34672460802) passed all 27 jobs/five native targets at fed6777; it does not cover later CLI/Fleet runtime or CI-step changes. Dispatch and record the final candidate separately |
-| G06 Package and distribution | PARTIAL | Package/docs passed at fed6777: library package verification, CLI package file listing, archive controls and docs. Listing is not CLI package/install verification; final-version packages, portable installs, SBOM/checksums and non-publishing staging remain required |
-| G07 Human and Agent acceptance | PARTIAL | CLI dcbff41 Windows ConPTY covers manage discovery search/registration filters, exact selection, resize, bottom status and menu retention; B4 separately covers four-camera CLI reads/restart/cleanup. Keep remaining navigation/IME/other-platform checks and native LAN/VMS acceptance explicit; historical hardware evidence is not a fresh run |
-| G08 Versions and release links | OPEN | Update library/CLI versions together after candidate acceptance; preserve schema-v3 claims only if tests agree, resolve every draft link to the final tag, keep migration warnings visible |
-| G09 RC and approval | NOT-RUN | Publish an RC only with explicit authorization; suggested 3–7 day observation, no calendar-based automatic success; obtain final release approval |
-
-`tests/mock_replay_key_gaps.rs` now asserts retention rather than reproducing loss:
-ten collision pairs retain both requests across record/load/save, public lookup,
-reports and both replay transports. Old recordings already overwritten cannot be
-recovered; old readers can collapse the unchanged JSON shape on downgrade.
-See [storage and report migration](../replay-storage.md).
-
-A01 repairs invalid HTTP UTF-8 handling. Remaining HTTP binding and fault/field
-semantics were triaged against the included claims and retain the documented
-subset limits in the backlog. A demonstrated severe failure affecting this cut
-must still block release; local review does not waive future findings.
+| G01 Candidate review | LOCAL-PASS for bounded cut and reviewed CLI/Fleet delta | See [finalization review](release-0.17-finalization.md#delta-review); original 208-path ledger is not silently extended |
+| G02 Replay/data integrity | LOCAL-PASS | K27 collision retention and migration warnings remain; overwritten old recordings cannot be recovered |
+| G03 Security/response integrity | LOCAL-PASS for reviewed scope | A01–A05 plus CLI/Fleet delta review; documented HTTP/listener/recording limits remain |
+| G04 Local code/documents | PASS for version-preparation checks | Workspace check, strict rustdoc, package verification and version/help/link checks; previous full-suite totals remain historical |
+| G05 Native CI | Runtime baseline PASS; final 0.17 run pending | [27 jobs at d3ac1b6](https://github.com/smiti1642/oxvif/actions/runs/34809397553); final version run recorded in finalization |
+| G06 Packages/distribution | Both 0.17 packages verified locally; staging pending | Workspace packaging verifies CLI against the packaged library through Cargo's temporary local registry; native install/SBOM gates remain separate |
+| G07 Human/Agent | Scoped automated evidence plus operator-reported manual PASS | Discover/manage/resize ConPTY and schema 3/guide 8; no inferred additional OS, device or VMS coverage |
+| G08 Versions/documents | PREPARED | Both packages/dependency/lockfile 0.17.0; paired documents and tag-pinned links; release date/status intentionally pending |
+| G09 Publication approval | OPEN | Stop before cargo publish, tag or GitHub Release; no RC published |
 
 ## Publication surfaces
 
-- `docs/releases/0.17.0.md` / `_zh.md`: concise user-facing summary, consumed by
-  the existing release workflow's `--notes-file`; no workflow bypass is needed.
-- `docs/releases/0.17.0-changelog.md` / `_zh.md`: complete grouped change record,
-  breaking changes, migration examples, verification scope and limitations.
-- `CHANGELOG.md`: compact Unreleased summary linking to the full record; do not
-  rewrite published historical entries.
-- Root and CLI package READMEs: short “next release” link while developing.
-  Before publication both crates.io pages must point via absolute GitHub URLs to
-  the full record under the actual release tag. crates.io does not auto-render
-  the repository changelog.
-- Keep current install commands at published 0.16 until a releasable version is
-  prepared. Draft files retain `Status: Unreleased` so the existing release
-  contract refuses premature publication.
-- Final links use `blob/v0.17.0/...`, not master/develop or a temporary branch;
-  RC links must use their own actual RC tag.
+- Root and CLI READMEs use prepared 0.17 examples, publication warnings and
+  absolute final-tag links. Both library quick-start APIs remain.
+- Short release notes link to the full technical/migration changelog.
+- Existing English/Traditional Chinese public guide pairs describe included
+  behavior and limitations. Historical 0.16 comparisons remain intentional.
+- `Status: Unreleased` and `## [0.17.0] - Unreleased` remain publication guards.
+  Future `blob/v0.17.0` links are structurally checked locally, not claimed live.
+- See the [approval packet](release-0.17-approval.md) for remaining publication steps.
 
 ## Execution order
 
-Steps 1–3 below record the original construction order. For the current candidate,
-first decide Fleet release placement, reconcile the later G01/G03 deltas and
-use the updated [maintainer instructions](release-0.17-approval.md#maintainer-actions)
-for exact-revision CI/staging. Removing Fleet from the release also changes the
-tested input and requires affected verification; do not reuse the combined count unchanged.
-
-1. Commit the scope, paired full/summary documents and [follow-up backlog](post-0.17-backlog.md).
-2. Recheck selected contracts using existing batch suites and bounded independent
-   controls. Record failures before fixing; do not count known-gap tests as fixes.
-3. Resolve G02 and G01/G03 findings with separate cohesive fixes. Preserve original
-   contributor credit. Do not broaden this into all-service migration.
-4. Restore workflow permission or ask the maintainer to run CI on the exact
-   candidate. Do not change triggers, open a PR or switch credentials to evade 403.
-5. After local/hosted acceptance, prepare the actual RC/version and rerun affected
-   package/link/CLI-version gates; run staging with `publish=false`.
-6. Complete G07/G09, then ask for publication approval. Main-branch merge, tags,
-   crates.io publishing and system installation are not implied by a green test.
-
-The [follow-up backlog](post-0.17-backlog.md) schedules remaining work without
-marking historical PARTIAL/TODO rows complete. This cut owns release scheduling;
-the operation ledger and evidence cards remain the technical source of truth.
+1. Commit the version/document preparation on `codex/release-0.17-finalize`.
+2. Run CI and manual non-publishing release staging on the exact candidate SHA.
+3. Record results; synchronize main branches only after required gates pass.
+4. Present remaining limitations and request explicit publication authorization.
+5. Only after approval: finalize date/status, publish library before dependent
+   CLI, create the approved tag and release. Revalidate any code/tooling changes.
 
 ## Evidence
+
+The following is historical evidence, not the current gate table. Statements
+about earlier branches, versions, blocked CI or pending authorization apply only
+to their dated inputs. Current results are in [finalization](release-0.17-finalization.md).
 
 Baseline evidence is in [contributor integration](contributor-pr-integration-plan.md#execution-record):
 1,298 all-feature and 1,190 workspace-default tests passed, each with five ignored;

@@ -33,16 +33,15 @@ health diagnostics, and camera-free testing.
 
 ## Installation
 
-The next release, **0.17.0**, is in acceptance, not yet published. Its focus is
-guided CLI maintenance and stricter selected Mock contracts, with source-breaking
-migration requirements. Read the [summary](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0.md)
-or [full changelog and migration](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0-changelog.md).
+**0.17.0** adds guided CLI maintenance and stricter selected Mock contracts, with source-breaking
+migration requirements. Read the [summary](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md)
+or [full changelog and migration](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md).
 
-Add oxvif 0.16 to your application:
+This checkout prepares 0.17.0; publication is pending. After publication, add:
 
 ```toml
 [dependencies]
-oxvif = "0.16"
+oxvif = "0.17"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -102,62 +101,28 @@ authoritative method and type reference.
 
 ## Command-line interface
 
-The separately publishable `oxvif-cli` package installs an executable named
-`oxvif`. Its 0.16 ONVIF surface is intentionally read-only: operators and Agents
-can discover devices, maintain local inventory, inspect device/media/PTZ state,
-and run deterministic health and fleet diagnostics without changing camera
-configuration.
+The `oxvif-cli` package installs `oxvif`, a human- and Agent-friendly diagnostic
+tool. Its ONVIF operations are read-only; it can maintain local camera inventory,
+save snapshots, export settings and compare them without changing the camera.
 
-Install the CLI from crates.io:
+After 0.17.0 is published:
 
 ```sh
-cargo install oxvif-cli --locked
-oxvif --version
+cargo install oxvif-cli --version 0.17.0 --locked
+oxvif setup
+oxvif manage
 ```
 
-Repository contributors can install the current checkout instead:
+For this checkout, use `cargo run -p oxvif-cli -- manage`.
+The guided workspace retains discovery results and per-camera state. It offers
+search, saved/new filters, Vim-style navigation, a bottom status bar and
+`?` settings/key-binding help. Agents use the same operations through versioned
+JSON/JSONL without interactive prompts.
 
-```sh
-cargo install --path crates/oxvif-cli --locked
-oxvif --help
-oxvif setup 192.168.1.100
-oxvif list
-oxvif info
-```
-
-Passwords remain in Windows Credential Manager, macOS Keychain, or Linux
-Secret Service rather than the device registry. Private HTTPS trust anchors can
-be supplied without disabling certificate or hostname verification.
-
-Read the [complete CLI guide](docs/oxvif-cli.md) for installation, commands,
-the interactive discovery browser, security behavior, fleet workflows,
-structured output, and exit codes.
-
-The development checkout also includes snapshot downloads, layered diagnosis and
-camera-setting comparison; see [maintenance workflows](docs/cli-maintenance.md).
-These additions are not yet released and do not verify video playback or restore settings.
-Diagnosis includes interactive profile selection, concise summaries and `-v` stage
-details; automation receives the same evidence as structured reports.
-`oxvif manage` connects these operations in one guided terminal workspace, retaining
-the chosen device/profile; see the [guided workflow](docs/cli-maintenance.md#guided-workspace).
-Human screens share [Vim-style navigation](docs/cli-maintenance.md#vim-style-navigation),
-configurable line numbers (`?` settings or `--line-numbers`) and a distinct fixed-bottom
-mode/status bar, separated from key hints. Manage network results support `/`
-search and saved/new/all filters; menus retain their position on return.
-
-Discovery marks every result as `SAVED`, `NEW`, or `INCOMPLETE`; both terminal
-users and Agents can filter current scans or saved snapshots by that status.
-The terminal browser provides a scrollable `i` detail view, while `/` and the
-Agent-facing `--query` option share the same cross-field search semantics.
-
-`oxvif list` shows every saved camera using cached local identity information;
-it does not contact cameras. The canonical automation form is `oxvif device
-list --output json --non-interactive`.
-
-Native APT and Homebrew packages are published only through channels listed in
-this README after independent installation verification. Until such a channel
-is listed, use crates.io or the checksum-verified portable artifacts attached to the
-matching GitHub Release.
+See the [CLI guide](docs/oxvif-cli.md) for installation and automation, and
+[maintenance workflows](docs/cli-maintenance.md) for diagnosis, snapshots and
+configuration comparison. Snapshots do not prove video playback; exported settings
+are not restorable backups. APT/Homebrew staging is not official channel admission.
 
 ## Feature overview
 
@@ -181,7 +146,7 @@ Enable `mock` to run client tests against an in-process stateful ONVIF device:
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.16", features = ["mock"] }
+oxvif = { version = "0.17", features = ["mock"] }
 ```
 
 ```rust
@@ -199,7 +164,7 @@ async fn updates_a_mock_camera() {
 }
 ```
 
-Use `mock-server` for HTTP endpoints (loopback by default). Development source also
+Use `mock-server` for HTTP endpoints (loopback by default). Version 0.17 also
 provides a [configurable multi-camera runner](docs/mock-fleet.md) with opt-in LAN
 access and basic shared WS-Discovery. See
 the [mock device reference](docs/mock-server.md) for routing, state, supported
@@ -214,7 +179,7 @@ operations, fault injection, and limitations.
 | [CLI guide](docs/oxvif-cli.md) | Installation, commands, security, fleet workflows, structured output, and exit codes. |
 | [Implemented operations](OPERATIONS.md) | Exact per-service ONVIF coverage. |
 | [Mock device reference](docs/mock-server.md) | Complete behavior and fidelity contract for the mock. |
-| [Unreleased audio/metadata migration](docs/audio-metadata.md) | Next-minor Rust/JSON changes and mock limits. |
+| [Audio/metadata migration](docs/audio-metadata.md) | 0.17 Rust/JSON changes and mock limits. |
 | [Support boundaries](docs/support.md) | Versioned platform, security, compatibility, and commercial-claim limits. |
 | [Changelog](CHANGELOG.md) | Release history and current release changes. |
 
@@ -226,9 +191,9 @@ firmware, so compatibility claims are evidence-based rather than inferred from
 the protocol profile alone. Sanitized reports from additional real cameras are
 welcome.
 
-The 0.16 CLI is a read-only diagnostic beta with a versioned structured-output
+The 0.17 CLI is a read-only diagnostic beta with a versioned structured-output
 contract. Release verification and platform evidence are documented in the
-[0.16.0 release notes](https://github.com/smiti1642/oxvif/blob/master/docs/releases/0.16.0.md).
+[0.17.0 release notes](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md).
 
 ## Contributing and security
 

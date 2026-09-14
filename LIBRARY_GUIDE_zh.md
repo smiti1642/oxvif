@@ -110,7 +110,7 @@ async fn main() -> Result<(), OnvifError> {
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.16", features = ["mock"] }
+oxvif = { version = "0.17", features = ["mock"] }
 ```
 
 ```rust
@@ -136,7 +136,7 @@ async fn talks_to_a_mock_camera() {
 
 ```toml
 [dependencies]
-oxvif = "0.16"
+oxvif = "0.17"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -175,7 +175,7 @@ APT 與 Homebrew package 只透過專案 README 明確列出、且已完成獨�
 
 ```toml
 [dependencies]
-oxvif = { version = "0.16", features = ["serde"] }
+oxvif = { version = "0.17", features = ["serde"] }
 ```
 
 ```rust
@@ -374,7 +374,7 @@ Session wrapper 及獨立 Mock opt-in，不是 Events subscription 同步操作�
 
 Media2 是 Media1 的後繼介面，原生支援 H.265，且 encoder configuration 結構較扁平。所有方法使用 `media2_url`。
 
-尚未發布：Media2 幀率限制改用 `f32`，保留小數；已提供但無效的 rate control 會回錯誤。
+0.17 起：Media2 幀率限制改用 `f32`，保留小數；已提供但無效的 rate control 會回錯誤。
 詳見 [Rust／JSON 遷移與 Media1 mock 政策](docs/media2-frame-rate_zh.md)。
 Mock 現在原子驗證完整 encoder 寫入，並共用 options／write 限制；capacity 使用
 source configuration token。詳見 [encoder 契約](docs/mock-server_zh.md#622-encoder-configuration-契約)。
@@ -447,7 +447,7 @@ PTZ service 的 `ptz_send_auxiliary_command(ptz_url, profile_token, data)` 與 D
 
 `AudioEncoding` variant 為 `G711`、`G726`、`Aac` 與 `Other(String)`。
 
-尚未發布版本：請查詢目標 Media 服務的 codec options，不可直接互換編碼字串。
+0.17 起：請查詢目標 Media 服務的 codec options，不可直接互換編碼字串。
 音訊 options 保留全部重複 Items。Metadata 改用結構化 multicast 與必要的
 session timeout；舊 Rust／JSON 欄位須明確遷移。詳見[音訊／metadata 遷移](docs/audio-metadata_zh.md)。
 
@@ -688,7 +688,7 @@ Metamorph 可將實機的 read surface 錄製為可離線重播的 clone，也�
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.16", features = ["metamorph"] }
+oxvif = { version = "0.17", features = ["metamorph"] }
 ```
 
 ```rust

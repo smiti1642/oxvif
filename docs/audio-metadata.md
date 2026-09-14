@@ -2,7 +2,7 @@
 
 [English](audio-metadata.md) | [繁體中文](audio-metadata_zh.md)
 
-Applies to the unreleased next minor version, not the published 0.16.0 API.
+Applies to the 0.17 API. These source-breaking changes require migration from 0.16.
 
 | Section | Purpose |
 | --- | --- |

@@ -961,7 +961,7 @@ pub struct VideoEncoderConfiguration2 {
 pub struct VideoRateControl2 {
     /// Desired output frame rate, including fractional values such as `12.5`.
     ///
-    /// Changed from `u32` to `f32` for the next minor release. Integer struct
+    /// Changed from `u32` to `f32` in 0.17. Integer struct
     /// literals must become float literals (for example, `25.0`). XML reads and
     /// writes reject negative or nonfinite rates; an explicit zero is retained.
     /// Device-specific usable ranges must still be obtained from encoder options.

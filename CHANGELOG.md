@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 | Range | Releases |
 | --- | --- |
-| In development | [Unreleased](#unreleased) |
+| Prepared | [0.17.0](#0170---unreleased) |
 | Latest | [0.16.0](#0160---2026-09-04) |
 | Recent stable | [0.15.0](#0150---2026-08-03) · [0.14.0](#0140---2026-07-27) · [0.13.0](#0130---2026-07-24) · [0.12.0](#0120---2026-07-09) · [0.11.0](#0110---2026-07-03) · [0.10.0](#0100---2026-06-30) |
 | 0.9 series | [0.9.9](#099---2026-06-11) · [0.9.8](#098---2026-06-10) · [0.9.7](#097---2026-05-31) · [0.9.6](#096---2026-05-26) · [0.9.4](#094---2026-05-04) · [0.9.3](#093---2026-04-17) · [0.9.2](#092---2026-04-17) · [0.9.1](#091---2026-04-16) · [0.9.0](#090---2026-04-15) |
@@ -18,20 +18,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [0.17.0] - Unreleased
 
-Target: **0.17.0 — not yet release-ready or available on crates.io.**
+**0.17.0 release preparation. Publication remains pending; this is not yet a crates.io release.**
 
-[Release summary](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0.md) ·
-[Full changelog and migration](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0-changelog.md) ·
-[繁體中文](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/releases/0.17.0-changelog_zh.md)
+[Release summary](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md) ·
+[Full changelog and migration](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md) ·
+[繁體中文](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog_zh.md)
 
 ### Added
 
-- Development-only `mock_fleet_serve` example: validated, no-clobber TOML manifests,
+- `mock_fleet_serve` example: validated, no-clobber TOML manifests,
   persistent multi-camera HTTP serving, explicit LAN settings and basic shared
   unscoped WS-Discovery. Input state is read-only; no RTSP or production auth.
-  See the [operator guide](docs/mock-fleet.md); release placement remains pending.
+  See the [operator guide](docs/mock-fleet.md); included as basic test tooling, not a VMS stability guarantee.
 - Guided human `oxvif manage` workspace, snapshot saving, staged diagnosis,
   read-only configuration export/diff and richer profile metadata.
 - Shared counted Vim navigation, compact status lines and configurable line
@@ -106,12 +106,11 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 - Key-only fixture lookup returns `None` for collisions; use `lookup_request`.
   Keep recording backups before downgrading: older readers can collapse entries.
 
-**Local candidate/security review passed; release acceptance is still open:**
-[native CI at `fed6777`](https://github.com/smiti1642/oxvif/actions/runs/34672460802)
-passed all 27 jobs. Distribution staging, final-version package/install checks and
-remaining human/platform acceptance are required; hardware evidence remains scoped.
-See the [release cut](https://github.com/smiti1642/oxvif/blob/0aed04ceb711540956328651af54272072047705/docs/active/release-0.17-cut.md).
-These changes are not part of the published 0.16.0 artifacts.
+**Verification:** [CI at `d3ac1b6`](https://github.com/smiti1642/oxvif/actions/runs/34809397553)
+passed all 27 jobs, including five native targets, external-schema controls and
+package/docs checks. Windows terminal journeys passed and the operator reported
+manual acceptance. Final 0.17 package/install verification and publication approval
+remain separate; see the [release checklist](docs/active/release-0.17-approval.md).
 
 ## [0.16.0] - 2026-09-04
 

@@ -19,7 +19,7 @@ interactive operators and automated Agents.
 | [Groups and Views](#groups-and-views) | Static and dynamic fleet selection. |
 | [Credentials](#credentials) | Native stores, headless use, and secret-handling rules. |
 | [Read-only diagnostics](#read-only-diagnostics) | Device, media, PTZ, health, and ephemeral targets. |
-| [Maintenance workflows](#maintenance-workflows-unreleased) | Unreleased snapshot downloads, layered diagnosis and configuration comparison. |
+| [Maintenance workflows](#maintenance-workflows) | Snapshot downloads, layered diagnosis and configuration comparison. |
 | [Fleet diagnostics](#fleet-diagnostics) | Bounded concurrency and deterministic aggregation. |
 | [Agent contract](#agent-and-automation-contract) | Embedded guidance and command descriptors. |
 | [Output and exit codes](#output-formats) | JSON/JSONL schemas, completion, and process status. |
@@ -42,16 +42,16 @@ The CLI provides:
 - deterministic JSON and JSONL contracts for Agents and automation; and
 - typed errors with stable process exit codes.
 
-The 0.16 ONVIF command surface is diagnostic-only. It reads device state but
+The 0.17 ONVIF command surface is diagnostic-only. It reads device state but
 does not modify device configuration. Registry, Group, View, credential, and
 snapshot commands modify local CLI state only.
 
 ## Installation
 
-Install version 0.16 from crates.io:
+After publication, install version 0.17 from crates.io:
 
 ```sh
-cargo install oxvif-cli --locked
+cargo install oxvif-cli --version 0.17.0 --locked
 oxvif --version
 ```
 
@@ -67,7 +67,7 @@ listed in the project [`README`](../README.md#command-line-interface) after
 independent install/remove verification. Until a native channel is listed, use
 crates.io or a checksum-verified portable artifact from the matching GitHub Release. The
 platform verification evidence is recorded in the
-[0.16.0 release notes](releases/0.16.0.md#release-verification).
+[0.17 verification and limitations](releases/0.17.0-changelog.md#verification-and-limitations).
 
 Confirm the available command surface after installation:
 
@@ -113,7 +113,7 @@ version.
 | --- | --- |
 | `--output table\|json\|jsonl` | Select terminal, JSON, or newline-delimited JSON output. The default is `table`. |
 | `--json`, `--jsonl` | Human shorthands for `--output json` and `--output jsonl`. |
-| `--line-numbers absolute\|relative\|hybrid\|off` | Development builds: override interactive navigation numbers for this process; default `hybrid` unless saved. No effect on plain tables or JSON. See [line-number settings](cli-maintenance.md#line-number-settings). |
+| `--line-numbers absolute\|relative\|hybrid\|off` | Override interactive navigation numbers for this process; default `hybrid` unless saved. No effect on plain tables or JSON. See [line-number settings](cli-maintenance.md#line-number-settings). |
 | `--device <ID>` | Select one saved device by canonical ID or `group/local-alias`. |
 | `--group <ID>` | Select every explicit member of a static Group for fleet diagnostics. |
 | `--view <ID>` | Select every current match of a dynamic View for fleet diagnostics. |
@@ -274,8 +274,8 @@ terminal is shorter. Its key bindings are:
 | `j` / `k`, Down / Up | Move the selection. |
 | `h` / `l`, Page Up / Page Down | Move one page backward or forward. |
 | Ctrl+D / Ctrl+U | Move down/up half a page in the list or details (rounded down, at least one item or line). In live search, Ctrl+U still clears the query. |
-| `gg` / `G`, Home / End | Jump to the first or last match (development builds replace the old single `g`). |
-| `7j`, `3k`, `21G` / `21gg` | Counted movement or an absolute ordinal in the filtered list (development builds). |
+| `gg` / `G`, Home / End | Jump to the first or last match (0.17 replaces the old single `g`). |
+| `7j`, `3k`, `21G` / `21gg` | Counted movement or an absolute ordinal in the filtered list. |
 | `/` | Enter live search mode across identity, addressing, registration, types, and scopes. |
 | `c` | Clear the active filter. |
 | `r` | Toggle a saved-device-only view. |
@@ -285,7 +285,7 @@ terminal is shorter. Its key bindings are:
 | Enter / `a` | Onboard the selected unregistered device through secure setup. |
 | `q`, Esc, Ctrl-C | Leave the browser without changing the registry. |
 
-Development builds share relative numbering, pending-sequence handling and a compact
+Version 0.17 shares relative numbering, pending-sequence handling and a compact
 mode/status line with manage and profile selection. See [Vim-style navigation](cli-maintenance.md#vim-style-navigation)
 for the full contract, input-mode exceptions and Windows paste limitations; the new
 bindings are not part of published 0.16.0 packages.
@@ -295,7 +295,7 @@ username, and masked password. Use Tab or Up/Down to change fields, Enter to
 advance or submit, Ctrl-U to clear the active field, and Esc to return to the
 discovery list without saving.
 
-In development builds, successful setup returns to the same list for another
+In 0.17, successful setup returns to the same list for another
 addition. Verification errors are shown inline; retry retains ID/username but clears
 the submitted password. Registration labels and active filters update without a new
 scan. Manage uses Enter to select and `a` to add, without changing the global current
@@ -564,21 +564,20 @@ oxvif device info --target 192.168.1.100 --output json --non-interactive
 oxvif media profiles --target 192.168.1.100 --output json --non-interactive
 ```
 
-## Maintenance workflows (unreleased)
+## Maintenance workflows
 
 Snapshot HTTP/1.1 header compatibility and bounded Digest handling are shared
 with library health probes. Authentication is not downgraded after failure;
 non-image responses remain explicit failures. See
 [snapshot download limits](cli-maintenance.md#snapshot-download).
 
-The development checkout adds `snapshot --save` / `media snapshot-save`,
-`diagnose`, and `config export` / `config diff`. These features are not included
-in published 0.16.0 artifacts. They use the shared human/Agent application layer
+Version 0.17 provides `snapshot --save` / `media snapshot-save`,
+`diagnose`, and `config export` / `config diff`. They use the shared human/Agent application layer
 and do not modify camera configuration. See the [maintenance guide](cli-maintenance.md)
 for examples, download/authentication limits, baseline format and manual acceptance.
 Diagnosis offers a paginated name/token selector in interactive terminals and
 summary-first reports (`-v` expands stages). JSON/JSONL and redirected calls never
-prompt. The development Agent guide v8 describes additive selection reasons and
+prompt. Agent guide v8 describes additive selection reasons and
 untested-stage reasons without changing schema v3. Maintenance root selectors and
 execution options are accepted before or after the command.
 Use `oxvif manage` for a [guided workspace](cli-maintenance.md#guided-workspace)
@@ -616,7 +615,7 @@ Fleet completion is represented as follows:
 
 Fleet selection never falls back to the ambient current device.
 
-The unreleased `diagnose` workflow retains per-device reports even if all items
+The `diagnose` workflow retains per-device reports even if all items
 fail (exit `20`); the all-failed `FLEET_FAILED` rule above describes existing
 diagnostics. See the [maintenance automation contract](cli-maintenance.md#automation-contract).
 
@@ -632,7 +631,7 @@ oxvif describe --output json --non-interactive
 oxvif describe media.stream-uri --output json --non-interactive
 ```
 
-The 0.16 structured output contract uses schema version 3. Automated callers
+The 0.17 structured output contract uses schema version 3. Automated callers
 should:
 
 1. discover the installed command surface with `describe`;
@@ -651,7 +650,7 @@ oxvif agent prompt
 
 ## Output formats
 
-In the development candidate, human table reports, verbose details and errors
+In 0.17, human table reports, verbose details and errors
 render terminal control and bidirectional formatting characters as visible
 escapes, such as `\u{1b}`. Line-oriented profile menus also escape embedded
 newlines and tabs. Report layout retains newlines and tabs; this is not a
@@ -705,7 +704,7 @@ Completion generation performs no network or registry operation.
 | `6` | Fleet partial success. |
 | `10` | Configuration or registry unavailable, corrupt, or unsupported. |
 | `11` | Credential unavailable. |
-| `20` | Device connection, discovery, complete fleet failure, or incomplete maintenance checks (development). |
+| `20` | Device connection, discovery, complete fleet failure, or incomplete maintenance checks. |
 | `70` | Serialization or internal failure. |
 
 These numeric values are stable automation interfaces. Structured errors also

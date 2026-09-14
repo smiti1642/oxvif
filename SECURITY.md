@@ -4,6 +4,7 @@
 
 | Version | Security fixes |
 | --- | --- |
+| 0.17.x / oxvif-cli 0.17.x | Prepared; support starts at publication |
 | 0.16.x | Supported |
 | oxvif-cli 0.16.x | Supported |
 | 0.15.x and older | Not supported |
@@ -30,7 +31,7 @@ guaranteed service-level agreement.
 
 - The CLI never accepts passwords in URL userinfo and never stores secrets in
   `devices.toml`.
-- `oxvif-cli 0.16` uses Windows Credential Manager, macOS Keychain, or Linux
+- `oxvif-cli` uses Windows Credential Manager, macOS Keychain, or Linux
   Secret Service according to the host platform. No platform falls back to
   plaintext storage.
 - Diagnostic output and verbose stderr must not contain passwords,
