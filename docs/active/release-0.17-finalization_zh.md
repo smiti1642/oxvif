@@ -7,7 +7,8 @@
 候選：`9305f5d8c080feca6adf555d4177f10556f45db3`，以 `smiti1642` 提交及推送。
 後續僅證據文件編輯不改變其 runtime／發布工具輸入。
 準備與證據提交已 fast-forward 同步至本機／遠端 master 及 develop。
-臨時準備分支已刪除，提交仍由兩主分支保留；未建立 release tag 或對外上傳。
+臨時準備分支已刪除，提交仍由兩主分支保留；準備階段未建立 tag 或對外上傳，
+後續授權的發布行動記於下方。
 
 | 章節 | 用途 |
 | --- | --- |
@@ -66,4 +67,19 @@ registry 上傳。使用者已明確授權 v0.17.0 tag 及正式 GitHub Release�
 發布日期及防護狀態已完成；既有 workflow 以 publish=true、prerelease=false
 執行，通過關卡後發布。Release 本文使用純英文分類摘要，不使用繁中檔或完整
 技術 Changelog。本次未授權安裝至使用者系統。
-GitHub 發布結果：等待 workflow 完成。
+`smiti1642` 已建立並推送 annotated tag `v0.17.0`，指向
+`b4c203ae7adbe1d2a69513269a664010cc091f56`。已發布 library 的 registry VCS
+紀錄為 `f26336553702db46d4a1d5f9c0268386e9b72035`，與 tag 之間僅文件不同。
+本機 CLI 已對該實際 crates.io 相依完成打包驗證，未再次上傳。
+[Tag 原始碼 CI](https://github.com/smiti1642/oxvif/actions/runs/34822362829) 通過。
+[正式發布 workflow](https://github.com/smiti1642/oxvif/actions/runs/34822362983)
+以相同 tag 作為 workflow 及 source，設定 publish=true／prerelease=false。
+GitHub 發布結果：**成功**，時間為 2026-09-14 08:47:44 UTC。
+[正式 v0.17.0 Release](https://github.com/smiti1642/oxvif/releases/tag/v0.17.0)
+已公開，非草稿或 prerelease。包含發布步驟的全部 18 個 job 通過，29 個資產
+皆已上傳。公開本文與 tag 中的純英文摘要完全一致；五平台 archive、兩種 Debian
+套件、Homebrew formula／bottle、checksum 及 SPDX 清單均已確認存在。
+本機核對 Windows archive checksum，解壓執行回報 oxvif 0.17.0，未安裝至系統；
+公開資產的 GitHub digest 與受測 archive 相同。遠端 annotated tag 仍指向 b4c203a。
+Release 作者為 github-actions[bot]，由 smiti1642 啟動的 workflow 建立；tag
+署名為 smiti1642，未切換帳號。本次發布後紀錄只修改文件，不移動 release tag。

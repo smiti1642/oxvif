@@ -8,7 +8,8 @@ Candidate: `9305f5d8c080feca6adf555d4177f10556f45db3`, committed and pushed as
 `smiti1642`. Subsequent evidence-only documentation edits do not change its runtime/tooling tree.
 Preparation and evidence commits were fast-forwarded into local/remote master
 and develop. The temporary preparation branch was deleted; its commits remain
-reachable from both main branches. No release tag or public upload was created.
+reachable from both main branches. Preparation itself created no release tag or
+public upload; the subsequently authorized publication is recorded below.
 
 | Section | Purpose |
 | --- | --- |
@@ -72,4 +73,23 @@ Release dates and publication guards are finalized; the existing workflow will
 publish with publish=true and prerelease=false after its gates pass.
 Its notes input is the English-only categorized summary, not the Chinese file
 or full technical changelog. No host-system installation is authorized.
-GitHub publication outcome: pending workflow completion.
+Annotated tag `v0.17.0` was created by `smiti1642` and pushed at commit
+`b4c203ae7adbe1d2a69513269a664010cc091f56`. The published library's registry
+VCS record is `f26336553702db46d4a1d5f9c0268386e9b72035`; its difference from
+the tag is documentation only. Local CLI package verification against that
+actual crates.io dependency passed, without another upload.
+[Tag-source CI](https://github.com/smiti1642/oxvif/actions/runs/34822362829) passed.
+[Public release workflow](https://github.com/smiti1642/oxvif/actions/runs/34822362983)
+uses the tag for both workflow and source, with publish=true/prerelease=false.
+GitHub publication outcome: **SUCCESS** at 2026-09-14 08:47:44 UTC.
+[Stable v0.17.0 Release](https://github.com/smiti1642/oxvif/releases/tag/v0.17.0)
+is public, not a draft or prerelease. All 18 workflow jobs passed, including
+publication; all 29 assets are uploaded. The published body exactly matches the
+English-only tagged summary. The five native archives, both Debian packages,
+Homebrew formula/bottles, checksums and SPDX inventories are present.
+The Windows archive checksum was verified locally, and its extracted binary
+returned oxvif 0.17.0 without host installation; the public asset's GitHub digest
+matches that tested archive. The remote annotated tag still points to b4c203a.
+Release author is github-actions[bot], through the workflow dispatched by
+smiti1642; the annotated tag's identity is smiti1642. No account was switched.
+This post-publication record changes documentation only; the release tag is not moved.
