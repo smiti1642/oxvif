@@ -6,6 +6,9 @@ Updated 2026-09-14. Version preparation is authorized; public publication is not
 Prepared branch: `codex/release-0.17-finalize`, based on `d3ac1b6`.
 Candidate: `9305f5d8c080feca6adf555d4177f10556f45db3`, committed and pushed as
 `smiti1642`. Subsequent evidence-only documentation edits do not change its runtime/tooling tree.
+Preparation and evidence commits were fast-forwarded into local/remote master
+and develop. The temporary preparation branch was deleted; its commits remain
+reachable from both main branches. No release tag or public upload was created.
 
 | Section | Purpose |
 | --- | --- |

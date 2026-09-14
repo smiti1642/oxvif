@@ -53,6 +53,9 @@ long-duration 64/256-camera VMS stability is claimed.
 
 ## Execution order
 
+Steps 1–3 are complete. The preparation branch was removed after fast-forward
+integration into master/develop; the next action is publication approval.
+
 1. Commit the version/document preparation on `codex/release-0.17-finalize`.
 2. Run CI and manual non-publishing release staging on the exact candidate SHA.
 3. Record results; synchronize main branches only after required gates pass.

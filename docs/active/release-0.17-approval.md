@@ -5,7 +5,8 @@
 Updated 2026-09-14. The user authorized 0.17 version/document preparation, not
 public publication. The candidate includes the merged CLI and basic Mock Fleet;
 master/develop were both `d3ac1b6` before preparation.
-Current branch: `codex/release-0.17-finalize`.
+Preparation branch: `codex/release-0.17-finalize`, removed after fast-forward
+integration into local/remote master and develop. Maintenance resumes from develop.
 Historical evidence retains its original revision. Current gates are in the
 [cut](release-0.17-cut.md) and [finalization record](release-0.17-finalization.md).
 
@@ -101,7 +102,7 @@ Use the authorized `smiti1642` account. This runs CI and temporary Actions
 artifacts only: no tag, crates.io upload, GitHub Release or user-system install.
 
 ```powershell
-$candidateBranch = 'codex/release-0.17-finalize'
+$candidateBranch = 'develop'
 git fetch origin $candidateBranch
 if ($LASTEXITCODE -ne 0) { throw 'Fetch failed' }
 $candidate = git rev-parse "origin/$candidateBranch"

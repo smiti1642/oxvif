@@ -49,6 +49,9 @@ R01–R08 維持[審查](release-0.17-review_zh.md)及
 
 ## 施工順序
 
+第 1–3 步已完成。準備分支在 fast-forward 整合至 master／develop 後移除；
+下一步為取得對外發布核准。
+
 1. 在 `codex/release-0.17-finalize` 提交版號與文件準備。
 2. 對精確 SHA 執行 CI 及手動、不發布的 release staging。
 3. 記錄結果，必要關卡通過後才同步主分支。

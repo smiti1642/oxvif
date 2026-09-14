@@ -4,7 +4,8 @@
 
 更新日期：2026-09-14。使用者已授權準備 0.17 版號／文件，不等於對外發布授權。
 目前收錄已合併的 CLI 與基礎 Mock Fleet；master／develop 在準備前均為
-`d3ac1b6`。目前分支為 `codex/release-0.17-finalize`。
+`d3ac1b6`。準備分支 `codex/release-0.17-finalize` 已 fast-forward 整合至本機／遠端
+master 及 develop 後移除；後續維護從 develop 接續。
 本頁歷史證據保留原版本；目前關卡以[切點](release-0.17-cut_zh.md)及
 [收尾紀錄](release-0.17-finalization_zh.md)為準。
 
@@ -99,7 +100,7 @@ A01 不代表一般 HTTP binding／charset／fault status 稽核完成；僅 A02
 tag、不上傳 crates.io、不建立 GitHub Release，也不安裝至使用者系統。
 
 ```powershell
-$candidateBranch = 'codex/release-0.17-finalize'
+$candidateBranch = 'develop'
 git fetch origin $candidateBranch
 if ($LASTEXITCODE -ne 0) { throw 'Fetch failed' }
 $candidate = git rev-parse "origin/$candidateBranch"

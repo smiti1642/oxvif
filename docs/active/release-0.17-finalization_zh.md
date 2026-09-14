@@ -6,6 +6,8 @@
 準備分支：`codex/release-0.17-finalize`，基於 `d3ac1b6`。
 候選：`9305f5d8c080feca6adf555d4177f10556f45db3`，以 `smiti1642` 提交及推送。
 後續僅證據文件編輯不改變其 runtime／發布工具輸入。
+準備與證據提交已 fast-forward 同步至本機／遠端 master 及 develop。
+臨時準備分支已刪除，提交仍由兩主分支保留；未建立 release tag 或對外上傳。
 
 | 章節 | 用途 |
 | --- | --- |
