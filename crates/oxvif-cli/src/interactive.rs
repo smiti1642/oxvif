@@ -531,7 +531,86 @@ pub(crate) async fn browse_discovery(
     }
 }
 
-fn number_settings(terminal: &mut TerminalSession) -> Result<(), AppError> {
+#[derive(Clone, Copy)]
+enum HelpContext {
+    Menu,
+    SavedCameras,
+    Discovery,
+    ManageDiscovery,
+    DiscoveryDetails,
+    Report,
+}
+
+impl HelpContext {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Menu => "Menu / profile selection",
+            Self::SavedCameras => "Saved camera chooser",
+            Self::Discovery => "Discovery / onboarding",
+            Self::ManageDiscovery => "Manage discovery",
+            Self::DiscoveryDetails => "Discovery details",
+            Self::Report => "Report / text viewer",
+        }
+    }
+
+    fn text(self) -> String {
+        let common = "NAVIGATION\nj / k, Down / Up     Move down / up\ngg / G, Home / End   First / last item or line\n7j / 3k             Move by a count\n21G / 21gg          Go to ordinal 21 (not a device ID)\nPgDown / PgUp       Move one current page\nCtrl+D / Ctrl+U     Move down / up half a page\n?                   Open settings and contextual key bindings\n\nCURRENT SCREEN\n";
+        let specific = match self {
+            Self::Menu => {
+                "Enter               Select the highlighted item\ni                   Show item details\nEsc / q / Ctrl+C    Return; camera chooser exits manage\n"
+            }
+            Self::SavedCameras => {
+                "/                   Edit literal, case-insensitive search\nc                   Clear search\nEnter               Select camera or fixed action\ni                   Show saved camera details\nEsc / q / Ctrl+C    Exit manage\nSearch matches ID, name, address and tags. Fixed actions remain available.\n"
+            }
+            Self::Discovery | Self::ManageDiscovery => {
+                let action = if matches!(self, Self::ManageDiscovery) {
+                    "Enter               Select camera for this session (does not save)\na                   Verify and save an unregistered camera\nR                   Rescan network (uppercase; replaces results on success)\n"
+                } else {
+                    "Enter / a           Verify and save an unregistered camera\n"
+                };
+                return format!(
+                    "{common}/                   Edit literal, case-insensitive search\nc                   Clear text search\nr / n               Toggle saved / unregistered filter\nA                   Show all registration states; keep text search\nh / l, Left / Right Previous / next page\ni                   Show camera details\n{action}Esc / q / Ctrl+C    Leave this list\nAlready saved or addressless records cannot be added.\n\n{}",
+                    Self::search_help()
+                );
+            }
+            Self::DiscoveryDetails => {
+                "j/k and page keys    Scroll the current camera details\nh / l, Left / Right Previous / next page\ni / Esc             Return to the same discovery list\nq / Ctrl+C          Leave the discovery browser\nList search, registration filters and add/rescan are inactive here.\n"
+            }
+            Self::Report => {
+                "/                   Filter report lines by literal text\nc                   Clear text filter\nEnter / Esc / q     Return to the previous screen\nCtrl+C              Return to the previous screen\n"
+            }
+        };
+        let search = if matches!(self, Self::SavedCameras | Self::Report) {
+            Self::search_help()
+        } else {
+            ""
+        };
+        format!("{common}{specific}\n{search}")
+    }
+
+    fn search_help() -> &'static str {
+        "WHILE EDITING SEARCH\nEnter / Esc         Finish editing; keep query (does not activate or leave)\nBackspace           Remove the last character\nCtrl+U              Clear query (not half-page movement)\nCtrl+C              Leave the current viewer\nOther printable keys, including ? and Vim sequences, are literal text.\n\nSETTINGS\nTab                 Switch line numbers / key bindings\nLine numbers: Enter applies for this session; s saves the default.\nEsc / q / Ctrl+C closes settings without applying a preview."
+    }
+}
+
+fn help_frame(context: HelpContext, offset: usize, width: u16, height: u16) -> Vec<String> {
+    let lines = wrap_panel_text(&context.text(), width.saturating_sub(1) as usize);
+    let body = lines
+        .into_iter()
+        .skip(offset)
+        .take(panel_body_rows(height))
+        .collect::<Vec<_>>();
+    panel_lines(
+        &format!("Key bindings | {} | Tab: line numbers", context.title()),
+        &body,
+        "Tab line numbers | j/k gg/G PgUp/Dn ^D/^U scroll | Esc/q back",
+        "HELP | read-only; no settings changed",
+        width,
+        height,
+    )
+}
+
+fn number_settings(terminal: &mut TerminalSession, context: HelpContext) -> Result<(), AppError> {
     let initial = ui_settings::current()?;
     let mut view = Viewport {
         selected: LineNumbers::ALL
@@ -542,15 +621,39 @@ fn number_settings(terminal: &mut TerminalSession) -> Result<(), AppError> {
     };
     let mut nav = Navigation::default();
     let mut error = String::new();
+    let mut showing_help = false;
+    let mut help_offset = 0;
     loop {
         let (width, height) = terminal::size().map_err(terminal_error)?;
         view.clamp(4, panel_body_rows(height));
         let preview = LineNumbers::ALL[view.selected];
+        let help_lines = wrap_panel_text(&context.text(), width.saturating_sub(1) as usize).len();
+        help_offset = help_offset.min(help_lines.saturating_sub(panel_body_rows(height)));
         draw_changed_lines(
             terminal,
-            settings_frame(view, preview, &nav, &error, width, height),
+            if showing_help {
+                help_frame(context, help_offset, width, height)
+            } else {
+                settings_frame(view, preview, &nav, &error, width, height)
+            },
         )?;
         match event::read().map_err(terminal_error)? {
+            Event::Key(key) if key.kind != KeyEventKind::Release && key.code == KeyCode::Tab => {
+                showing_help = !showing_help;
+                nav.reset();
+            }
+            Event::Key(key) if showing_help => match navigation_key(&mut nav, key, false) {
+                Outcome::Action(motion) => {
+                    help_offset =
+                        navigation::scroll(help_offset, motion, help_lines, panel_body_rows(height))
+                }
+                Outcome::Unhandled => match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
+                    KeyCode::Char('c') if key.modifiers == KeyModifiers::CONTROL => return Ok(()),
+                    _ => {}
+                },
+                _ => {}
+            },
             Event::Key(key) => match navigation_key(&mut nav, key, false) {
                 Outcome::Action(motion) => view.apply(motion, 4, panel_body_rows(height)),
                 Outcome::Unhandled => match key.code {
@@ -612,9 +715,9 @@ fn settings_frame(
         }
     }
     panel_lines(
-        "Line numbers | preview only until applied",
+        "Line numbers | Tab: key bindings | preview only until applied",
         &body,
-        "Enter apply | s save default | Esc cancel | j/k move",
+        "Tab key bindings | Enter apply | s save default | Esc cancel | j/k move",
         &if error.is_empty() {
             format!(
                 "SETTINGS | {}{}{}",
@@ -695,7 +798,16 @@ impl Panel {
                         state.save_selection(view);
                         return Ok(DiscoverySelection::Rescan);
                     }
-                    Some(BrowserIntent::Settings) => number_settings(&mut self.0)?,
+                    Some(BrowserIntent::Settings) => number_settings(
+                        &mut self.0,
+                        if state.showing_details {
+                            HelpContext::DiscoveryDetails
+                        } else if purpose == DiscoveryPurpose::Select {
+                            HelpContext::ManageDiscovery
+                        } else {
+                            HelpContext::Discovery
+                        },
+                    )?,
                     None => {}
                 },
                 Event::Resize(_, _) => {
@@ -849,7 +961,7 @@ impl Panel {
                     Outcome::Unhandled => match key.code {
                         KeyCode::Char('?') => {
                             nav.reset();
-                            number_settings(&mut self.0)?;
+                            number_settings(&mut self.0, HelpContext::Menu)?;
                         }
                         KeyCode::Enter => return Ok(Some(view.selected)),
                         KeyCode::Esc | KeyCode::Char('q') => return Ok(None),
@@ -999,7 +1111,9 @@ impl Panel {
                             KeyCode::Enter => {
                                 return Ok(filtered.get(state.view.selected).copied());
                             }
-                            KeyCode::Char('?') => number_settings(&mut self.0)?,
+                            KeyCode::Char('?') => {
+                                number_settings(&mut self.0, HelpContext::SavedCameras)?
+                            }
                             KeyCode::Char('i') => {
                                 if let Some(index) = filtered.get(state.view.selected) {
                                     self.show("Saved camera details", &details[*index])?;
@@ -1111,7 +1225,7 @@ impl Panel {
                             }
                             KeyCode::Char('?') => {
                                 nav.reset();
-                                number_settings(&mut self.0)?;
+                                number_settings(&mut self.0, HelpContext::Report)?;
                             }
                             KeyCode::Enter | KeyCode::Esc | KeyCode::Char('q') => return Ok(()),
                             _ => {}
@@ -2211,6 +2325,46 @@ fn terminal_error(error: io::Error) -> AppError {
 mod tests {
     use super::*;
     use crate::navigation::Motion;
+
+    #[test]
+    fn contextual_key_help_matches_screen_actions_and_fits_small_terminals() {
+        let manage = HelpContext::ManageDiscovery.text();
+        let standalone = HelpContext::Discovery.text();
+        assert!(manage.contains("Rescan network") && manage.contains("does not save"));
+        assert!(!standalone.contains("Rescan network") && standalone.contains("Enter / a"));
+        assert!(
+            HelpContext::SavedCameras
+                .text()
+                .contains("ID, name, address and tags")
+        );
+        assert!(!HelpContext::Menu.text().contains("Edit literal"));
+        assert!(HelpContext::Report.text().contains("Filter report lines"));
+        assert!(!HelpContext::Report.text().contains("Toggle saved"));
+        assert!(
+            HelpContext::DiscoveryDetails
+                .text()
+                .contains("add/rescan are inactive")
+        );
+        for context in [
+            HelpContext::Menu,
+            HelpContext::SavedCameras,
+            HelpContext::Discovery,
+            HelpContext::ManageDiscovery,
+            HelpContext::DiscoveryDetails,
+            HelpContext::Report,
+        ] {
+            for (width, height) in [(140, 40), (60, 10), (12, 3), (1, 1), (0, 0)] {
+                let frame = help_frame(context, 0, width, height);
+                assert_eq!(frame.len(), usize::from(height));
+                assert!(
+                    frame
+                        .iter()
+                        .all(|line| UnicodeWidthStr::width(line.as_str())
+                            <= usize::from(width.saturating_sub(1)))
+                );
+            }
+        }
+    }
 
     #[test]
     fn saved_search_keeps_fixed_actions_and_maps_original_indices() {

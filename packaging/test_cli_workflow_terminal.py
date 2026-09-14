@@ -292,6 +292,23 @@ def resize(t):
         t.expect("item 24/80")  # 46 rows => half-page 23.
         t.key("\x1b[6~")
         t.expect("item 70/80")
+        original = t.shown()
+        t.key("?")
+        t.expect("Line numbers | Tab: key bindings")
+        t.key("\t")
+        t.expect("Key bindings |")
+        assert ("Rescan network" in t.shown()) == (title == "oxvif manage discovery")
+        t.key("G")
+        t.resize(12, 70)
+        t.expect("Key bindings")
+        t.key("\t")
+        t.expect("Line numbers")
+        t.key("\t")
+        t.expect("Key bindings")
+        t.resize(54, 160)
+        t.key("\x1b")
+        t.expect(title)
+        assert t.shown() == original, "settings/help changed the discovery viewport"
         t.key("q")
         t.expect("Choose camera")
         if title == "oxvif discovery":

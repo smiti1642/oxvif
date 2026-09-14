@@ -162,6 +162,12 @@ reciprocal language links and section-link tables for long documents.
 
 ## Progress
 
+2026-09-14 contextual-help follow-up: `?` retains line-number controls and adds a
+Tab-switched read-only key guide for six screen contexts. Binary tests: 61 passed /
+1 terminal fixture ignored; Clippy passed. The explicit resize ConPTY journey
+verified help in both discovery modes, page switching, scrolling, resizing and exact
+caller-view restoration. The normal debug executable was rebuilt successfully.
+
 2026-09-14 height follow-up: removed the discovery 12-row ceiling. Binary tests:
 60 passed / 1 opt-in fixture ignored; CLI all-target Clippy passed. The explicit
 `--mode resize` ConPTY journey passed for both standalone and manage discovery,

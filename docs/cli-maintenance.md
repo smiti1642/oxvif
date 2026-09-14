@@ -151,7 +151,7 @@ viewers share one navigation core. This is a Vim-inspired subset, not an editor.
 | PgUp / PgDown, Ctrl+U / Ctrl+D | Full/half-page movement; counts multiply the movement. |
 | Esc | Cancel a pending sequence first; otherwise return/cancel. |
 | Enter, `i`, `q` | Existing select/details/return actions when no prefix is pending. |
-| `?` | Open line-number settings when no prefix is pending. |
+| `?` | Open line-number settings and contextual key bindings when no prefix is pending. |
 
 By default, the gutter uses **hybrid relative numbers**: the selected row (`>`) has its absolute
 one-based ordinal; other rows show distance from it. A `7` below the selection can
@@ -197,6 +197,14 @@ Cargo: `rustc --edition 2024 --test crates/oxvif-cli/src/navigation.rs -o naviga
 ships inside the CLI, not as a separately published crate or stable public API.
 
 ## Line-number settings
+
+Press `?`, then Tab to switch between line numbers and key bindings for the
+originating screen. Help distinguishes menus, saved-camera search, standalone/manage
+discovery, discovery details and reports. Scroll help with j/k, Page Up/Down,
+Ctrl+D/U or gg/G; Tab returns to line numbers, and Esc/q closes the overlay without
+applying a preview. Viewing help never saves preferences, and returning retains the
+original screen's query, selection and viewport. In search/input mode, `?` remains
+literal text; finish editing before opening settings.
 
 This development-build feature applies to manage menus, standalone profile selection,
 Discovery lists/details and text results. It does not affect plain tables or JSON/JSONL.
