@@ -2,7 +2,12 @@
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-狀態：IN-PROGRESS／尚未核准。更新日期：2026-09-13。
+狀態：IN-PROGRESS／尚未核准。更新日期：2026-09-14。
+
+最新人工驗收：PASS（使用者於 2026-09-14 回報討論中的第 2 項已通過）。此紀錄
+與候選程式碼／安全審查及自動化 CI 分開；未額外指定平台、硬體或 VMS 涵蓋範圍。
+[工作流程後續紀錄](cli-workflow-continuity_zh.md#進度)記載明確選單入口驗收，
+以及 `3b940e8` 兩項 CI 失敗的本機修復。發布核准仍須等待修復後候選的託管 CI 通過。
 
 後續[工作流程連續性批次](cli-workflow-continuity_zh.md) 加入連續新增及各設備 UI
 狀態。CLI 針對性測試 193 通過、2 項預設略過；其中終端 fixture 已另以

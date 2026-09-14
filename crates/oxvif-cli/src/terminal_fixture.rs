@@ -53,6 +53,15 @@ async fn workflow_terminal_fixture() {
     let controls = tokio::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_millis(50)).await;
+            if control_directory.join("fail-handshake").is_file() {
+                control_server.inject_fault(
+                    "GetCapabilities",
+                    "s:Receiver",
+                    "fixture requires an explicit new handshake",
+                );
+                std::fs::remove_file(control_directory.join("fail-handshake")).unwrap();
+                std::fs::write(control_directory.join("handshake-armed"), b"ok").unwrap();
+            }
             if control_directory.join("clear-profiles").is_file() {
                 control_server
                     .device()

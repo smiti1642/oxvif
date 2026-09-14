@@ -28,8 +28,8 @@ W19 其餘項目仍未結案。
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 191 個直接呼叫：176 個位於頂層 test module 之前，15 個
-  位於其中。前者分布於 56 個 enclosing symbol（AM1 重新量測），**不是** 56 個有缺陷的操作。
+- 五種 reader 拼法共 195 個直接呼叫：177 個位於頂層 test module 之前，18 個
+  位於其中。前者分布於 57 個 enclosing symbol（Fleet 後重新量測），**不是** 57 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
 - W00 已完成目前字面值形式的來源核對；K06 synthetic 別名路由已於
@@ -227,7 +227,11 @@ W19 其餘項目仍未結案。
 | `src/mock/canon.rs::canonicalize` | `XmlNode::parse` | `production:1` |
 | `src/mock/discovery_responder.rs::build_probe_match_round_trips_through_the_client_parser` | `XmlNode::parse` | `test:1` |
 | `src/mock/discovery_responder.rs::probe_response` | `XmlNode::parse` | `production:1` |
+| `src/mock/discovery_responder.rs::shared_probe` | `XmlNode::parse` | `production:1` |
+| `src/mock/discovery_responder.rs::shared_probe_declines_unsupported_matching_and_preserves_correlation` | `XmlNode::parse` | `test:1` |
 | `src/mock/discovery_responder.rs::unicast_probe_round_trip` | `XmlNode::parse` | `test:1` |
+| `src/mock/fleet.rs::configured_fleet_capacity_smoke` | `XmlNode::parse` | `test:1` |
+| `src/mock/fleet.rs::shared_discovery_reaches_each_member_and_releases_listener` | `XmlNode::parse` | `test:1` |
 | `src/mock/request.rs::namespace_attribute_values_are_normalized_once` | `required_text` | `test:1` |
 | `src/mock/request.rs::read` | `required_text` | `test:1` |
 | `src/mock/services/device.rs::handle_create_users` | `extract_all_tags` | `production:3` |
@@ -314,6 +318,7 @@ W19 其餘項目仍未結案。
 | W08 | `auth::validate_ws_security`：已遷移的 scoped Username／Password／Nonce／Created 解析 | AuthResponder、豁免 selector、Device users 仍為共用消費端；索引已無 legacy auth reader site，完整安全語意仍為獨立工作 |
 | W19 | Legacy `canon::canonicalize` key DOM，加上 `request::recording_equivalent` replay 比較 | Fixture key、masking、recording、adapter、invalidation 與 synthetic routing／fault policy 分離；K27 現以 collision bucket 及 request-aware 選取保留資料，舊 key 正規化與更廣語意仍分開處理 |
 | W17 | `discovery_responder::probe_response`：DOM | UDP Probe matching、QName scope、輸入限制；不是 SOAP synthetic 入口 |
+| W17／基本 Fleet | `discovery_responder::shared_probe`：先驗證再建立 DOM | `serve_many` 限制 datagram 並拒絕無效 UTF-8；`supported_probe_xml` 於建立 DOM 前限制結構並檢查 namespace。另檢查 Header／Body 數量、Action、MessageID、anonymous ReplyTo 與限定 Types；拒絕非空 Scopes 或 MatchBy。測試 reader 用於檢查產生的回覆，不等同獨立 schema 驗證。參閱 [Fleet 證據](mock-fleet-basic-plan_zh.md#本機證據)。 |
 | W10 | 已遷移 Media profile／create／delete／binding reader 與共用 `video_source`、`video_encoder`、`audio_metadata` scoped 契約 | Media2 wrapper 共用 helper；這些已完成遷移保留作間接稽核脈絡，不是剩餘 legacy-reader site；更廣欄位／模型限制見批次工作卡 |
 | W10 | Media OSD helper、color／position attribute、巢狀 TextString、configuration options selector | Rendering／typed parser、list filter、quota／state；`_force_use_extract_all` 不是 routed behavior |
 | W10 | `media2::configuration_plan`：create／add／remove 共用 scoped 重複 Type／Token reference | 完整 value plan、選填改名與引用計數原子提交；見 [組裝批次](mock-fidelity-profile-assembly_zh.md)。VS1／VE1／AM1 另實作選定巢狀 writer；更廣欄位與實體相容性仍待完成。 |

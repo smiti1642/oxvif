@@ -162,6 +162,38 @@ reciprocal language links and section-link tables for long documents.
 
 ## Progress
 
+2026-09-14 explicit-menu acceptance follow-up (base `3b940e8`, local test-only
+delta): expanded and passed the Windows ConPTY manage journey. It explicitly
+selects Diagnose (six passing stages, zero failures, playback still unverified),
+Save snapshot (successful BMP and no-clobber), Reconnect on next operation, and
+Change device (A/B/A with profile retention and credential isolation). A queued
+GetCapabilities fault survives a cached information request, is consumed after
+explicit reconnect, and the next request succeeds. Independent System.Drawing
+decoding accepts the saved 640x360 BMP. CLI test-binary build, scoped Clippy and
+fmt pass. An initial harness assertion incorrectly expected stage details on the
+summary screen; it was corrected before the successful complete journey. No
+production behavior, native secret store, LAN camera or installed CLI was changed.
+
+Hosted CI at the base revision fails in both master/develop: the reader index
+omits `shared_probe`, and unittest discovery imports the opt-in terminal script,
+whose top-level argument parser requires `--binary`. Both failures were reproduced
+locally. The subsequent CI repair updates both source indexes (195 reader
+occurrences: one new production reader and three test readers) without changing
+the checker. The terminal script now parses arguments only in `main()` and loads
+Windows dependencies only when constructing an explicitly requested terminal.
+Inventory self-tests and the complete 26-test Python discovery batch pass locally;
+explicit discover/manage/resize ConPTY journeys also pass after the entry-point
+change. These are local repair results, not a new hosted CI pass. Artifact staging
+[34803145395](https://github.com/smiti1642/oxvif/actions/runs/34803145395) passed,
+including staged APT/Homebrew installs, with publication skipped. This is still
+0.16-valued staging, not final 0.17 package or release approval.
+
+Operator manual acceptance: PASS (user-reported, 2026-09-14). The operator stated
+that the discussed item 2 had been tested and should be treated as passing. This
+records their acceptance separately from automated evidence; no additional OS,
+camera model, VMS product or fleet size was supplied. It does not approve version
+promotion/publication or close the candidate code-review and CI gates.
+
 2026-09-14 contextual-help follow-up: `?` retains line-number controls and adds a
 Tab-switched read-only key guide for six screen contexts. Binary tests: 61 passed /
 1 terminal fixture ignored; Clippy passed. The explicit resize ConPTY journey

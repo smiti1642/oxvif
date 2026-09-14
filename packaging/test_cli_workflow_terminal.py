@@ -14,18 +14,15 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
-parser = argparse.ArgumentParser()
-parser.add_argument("--binary", required=True, type=Path)
-parser.add_argument("--deps", type=Path, default=ROOT / "target/terminal-deps")
-parser.add_argument("--mode", choices=["discover", "manage", "resize", "all"], default="all")
-args = parser.parse_args()
-sys.path.insert(0, str(args.deps))
-from winpty import PtyProcess
-import pyte
 
 
 class Terminal:
-    def __init__(self, mode):
+    def __init__(self, mode, binary, deps):
+        # Optional Windows dependencies must not load during unittest discovery.
+        sys.path.insert(0, str(deps))
+        from winpty import PtyProcess
+        import pyte
+
         self.directory = Path(tempfile.mkdtemp(prefix=f"workflow-{mode}-", dir=ROOT / "target"))
         env = {k: v for k, v in os.environ.items()
                if not k.upper().startswith(("OXVIF_", "ONVIF_"))
@@ -34,7 +31,7 @@ class Terminal:
                    OXVIF_TERMINAL_FIXTURE_MODE=mode,
                    OXVIF_CONFIG_DIR=str(self.directory), NO_PROXY="127.0.0.1,localhost")
         self.proc = PtyProcess.spawn(
-            [str(args.binary.resolve()), "--exact",
+            [str(binary.resolve()), "--exact",
              "terminal_fixture::workflow_terminal_fixture", "--ignored", "--nocapture"],
             env=env, cwd=str(ROOT), dimensions=(28, 160), backend=0)
         self.screen = pyte.Screen(160, 28)
@@ -143,6 +140,57 @@ def manage(t):
     t.expect("cam255 | Profile:")
     chosen_title = t.screen.display[0].split(" | ")[1]
     assert "not selected" not in chosen_title
+    t.menu(1)
+    t.expect("Operation finished | exit 0")
+    assert "Diagnostic complete: true | Passed: 6 | Failed: 0" in t.shown(), "diagnosis was incomplete"
+    assert "Video playback has NOT been verified" in t.shown(), "diagnosis overstated playback coverage"
+    t.key("\r")
+    t.menu(3)
+    t.expect("New output path")
+    snapshot = t.directory / "snapshot.bmp"
+    t.key(str(snapshot) + "\r")
+    t.expect("Operation finished | exit 0")
+    snapshot_bytes = snapshot.read_bytes()
+    assert snapshot_bytes.startswith(b"BM") and len(snapshot_bytes) > 54, "snapshot was not saved as a BMP"
+    t.key("\r")
+    t.menu(3)
+    t.expect("New output path")
+    t.key("\r")
+    t.expect("Choose another destination")
+    assert snapshot.read_bytes() == snapshot_bytes, "snapshot was overwritten"
+    t.key("\r\x1b")
+
+    # A cached info request must leave the queued handshake fault untouched.
+    (t.directory / "fail-handshake").write_text("fixture only", encoding="utf8")
+    end = time.monotonic() + 4
+    while not (t.directory / "handshake-armed").exists() and time.monotonic() < end:
+        t.pump()
+    assert (t.directory / "handshake-armed").is_file(), "handshake fault was not armed"
+    t.menu(7)
+    t.expect("Operation finished | exit 0")
+    t.key("\r")
+    t.menu(9)
+    t.expect("New connection needed")
+    t.menu(7)
+    t.expect("Operation failed")
+    t.key("\r")
+    t.menu(7)
+    t.expect("Operation finished | exit 0")
+    t.key("\r")
+
+    # Exercise the explicit Change device entry, not the q shortcut.
+    t.menu(10)
+    t.expect("Choose camera")
+    t.key("/\x15cam254\r\r")
+    t.expect("cam254 | Profile: not selected")
+    t.menu(7)
+    t.expect("Operation failed")
+    t.key("\r")
+    t.menu(10)
+    t.expect("Choose camera")
+    t.key("/\x15cam255\r\r")
+    t.expect("cam255 | Profile:")
+    assert chosen_title in t.screen.display[0], "explicit device switching lost the profile"
     t.menu(7)
     t.expect("Operation finished")
     t.key("\r")
@@ -317,10 +365,22 @@ def resize(t):
     t.finish()
 
 
-for mode in (["discover", "manage", "resize"] if args.mode == "all" else [args.mode]):
-    terminal = Terminal(mode)
-    try:
-        globals()[mode](terminal)
-        print(f"PASS: {mode} isolated terminal workflow")
-    finally:
-        terminal.close()
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--binary", required=True, type=Path)
+    parser.add_argument("--deps", type=Path, default=ROOT / "target/terminal-deps")
+    parser.add_argument("--mode", choices=["discover", "manage", "resize", "all"], default="all")
+    args = parser.parse_args(argv)
+    if sys.platform != "win32":
+        parser.error("the opt-in terminal workflow requires Windows ConPTY")
+    for mode in (["discover", "manage", "resize"] if args.mode == "all" else [args.mode]):
+        terminal = Terminal(mode, args.binary, args.deps)
+        try:
+            globals()[mode](terminal)
+            print(f"PASS: {mode} isolated terminal workflow")
+        finally:
+            terminal.close()
+
+
+if __name__ == "__main__":
+    main()

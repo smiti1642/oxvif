@@ -30,9 +30,9 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 191 direct occurrences of five reader spellings are indexed: 176 before
-  top-level test modules and 15 inside those modules. The former span 56
-  enclosing symbols, **not** 56 defective operations (recounted for AM1). This includes test-only
+- 195 direct occurrences of five reader spellings are indexed: 177 before
+  top-level test modules and 18 inside those modules. The former span 57
+  enclosing symbols, **not** 57 defective operations (recounted after Fleet). This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
   helper touch; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
@@ -236,7 +236,11 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/canon.rs::canonicalize` | `XmlNode::parse` | `production:1` |
 | `src/mock/discovery_responder.rs::build_probe_match_round_trips_through_the_client_parser` | `XmlNode::parse` | `test:1` |
 | `src/mock/discovery_responder.rs::probe_response` | `XmlNode::parse` | `production:1` |
+| `src/mock/discovery_responder.rs::shared_probe` | `XmlNode::parse` | `production:1` |
+| `src/mock/discovery_responder.rs::shared_probe_declines_unsupported_matching_and_preserves_correlation` | `XmlNode::parse` | `test:1` |
 | `src/mock/discovery_responder.rs::unicast_probe_round_trip` | `XmlNode::parse` | `test:1` |
+| `src/mock/fleet.rs::configured_fleet_capacity_smoke` | `XmlNode::parse` | `test:1` |
+| `src/mock/fleet.rs::shared_discovery_reaches_each_member_and_releases_listener` | `XmlNode::parse` | `test:1` |
 | `src/mock/request.rs::namespace_attribute_values_are_normalized_once` | `required_text` | `test:1` |
 | `src/mock/request.rs::read` | `required_text` | `test:1` |
 | `src/mock/services/device.rs::handle_create_users` | `extract_all_tags` | `production:3` |
@@ -323,6 +327,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | W08 | `auth::validate_ws_security`: migrated scoped Username/Password/Nonce/Created parsing | AuthResponder, exemption selector and Device user mutations remain shared consumers; no legacy auth reader site remains in this index, but full security semantics remain separate |
 | W19 | Legacy `canon::canonicalize` key DOM plus `request::recording_equivalent` replay comparison | Fixture keys, masking, recording, adapter and invalidation remain separate from synthetic routing/fault policy; K27 now retains collision buckets with request-aware selection, while legacy key normalization and broader semantics remain separate |
 | W17 | `discovery_responder::probe_response`: DOM | UDP Probe matching, QName scope and input bounds; not the SOAP synthetic entry point |
+| W17 / basic Fleet | `discovery_responder::shared_probe`: prevalidated DOM | `serve_many` bounds datagrams and rejects invalid UTF-8; `supported_probe_xml` bounds structure and checks namespaces before DOM construction. Header/body cardinality, Action, MessageID, anonymous ReplyTo and qualified Types are checked; nonempty Scopes or MatchBy are refused. Test readers inspect generated replies; they are not independent schema validation. See [Fleet evidence](mock-fleet-basic-plan.md#local-evidence). |
 | W10 | Migrated Media profile/create/delete/binding readers and shared `video_source`, `video_encoder`, `audio_metadata` scoped contracts | Media2 wrappers reuse shared helpers; these completed migrations remain transitive-review context, not remaining legacy-reader sites; broader per-field/model limitations remain in their batch cards |
 | W10 | Media OSD helpers, colour/position attributes and nested TextString; configuration option selectors | Rendering and typed parsers, list filtering, quota/state; `_force_use_extract_all` is not a routed behavior |
 | W10 | `media2::configuration_plan`: scoped repeated Type/Token references shared by create/add/remove | Complete value plan, optional rename and reference counts commit atomically; see [assembly batch](mock-fidelity-profile-assembly.md). VS1/VE1/AM1 separately implement selected nested writers; wider fields and physical compatibility remain open. |

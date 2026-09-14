@@ -2,7 +2,14 @@
 
 [English](release-0.17-approval.md) | [繁體中文](release-0.17-approval_zh.md)
 
-Status: IN-PROGRESS / NOT APPROVED. Updated 2026-09-13.
+Status: IN-PROGRESS / NOT APPROVED. Updated 2026-09-14.
+
+Latest operator manual acceptance: PASS (user-reported on 2026-09-14 for the
+discussed item 2). Record this separately from candidate/security review and
+automated CI; no additional platform, hardware or VMS coverage was specified.
+The [workflow follow-up](cli-workflow-continuity.md#progress) records explicit
+menu-path acceptance and local repairs for both CI failures at `3b940e8`.
+Hosted CI must pass on the repaired candidate before release approval.
 
 The later [workflow continuity batch](cli-workflow-continuity.md) adds continuous
 onboarding and per-camera UI state. Scoped CLI tests: 193 passed, 2 default skips;
