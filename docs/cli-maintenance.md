@@ -200,7 +200,8 @@ ships inside the CLI, not as a separately published crate or stable public API.
 
 Press `?`, then Tab to switch between line numbers and key bindings for the
 originating screen. Help distinguishes menus, saved-camera search, standalone/manage
-discovery, discovery details and reports. Scroll help with j/k, Page Up/Down,
+discovery, discovery details and reports. Both **Line numbers** and **Read key bindings**
+remain visible as top-level tabs; brackets identify the active tab. Scroll help with j/k, Page Up/Down,
 Ctrl+D/U or gg/G; Tab returns to line numbers, and Esc/q closes the overlay without
 applying a preview. Viewing help never saves preferences, and returning retains the
 original screen's query, selection and viewport. In search/input mode, `?` remains

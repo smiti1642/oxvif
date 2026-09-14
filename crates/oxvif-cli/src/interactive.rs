@@ -593,6 +593,14 @@ impl HelpContext {
     }
 }
 
+fn settings_tabs(showing_help: bool) -> &'static str {
+    if showing_help {
+        "Settings | Line numbers | [Read key bindings]"
+    } else {
+        "Settings | [Line numbers] | Read key bindings"
+    }
+}
+
 fn help_frame(context: HelpContext, offset: usize, width: u16, height: u16) -> Vec<String> {
     let lines = wrap_panel_text(&context.text(), width.saturating_sub(1) as usize);
     let body = lines
@@ -601,10 +609,13 @@ fn help_frame(context: HelpContext, offset: usize, width: u16, height: u16) -> V
         .take(panel_body_rows(height))
         .collect::<Vec<_>>();
     panel_lines(
-        &format!("Key bindings | {} | Tab: line numbers", context.title()),
+        settings_tabs(true),
         &body,
         "Tab line numbers | j/k gg/G PgUp/Dn ^D/^U scroll | Esc/q back",
-        "HELP | read-only; no settings changed",
+        &format!(
+            "HELP | {} | read-only; no settings changed",
+            context.title()
+        ),
         width,
         height,
     )
@@ -715,7 +726,7 @@ fn settings_frame(
         }
     }
     panel_lines(
-        "Line numbers | Tab: key bindings | preview only until applied",
+        settings_tabs(false),
         &body,
         "Tab key bindings | Enter apply | s save default | Esc cancel | j/k move",
         &if error.is_empty() {
@@ -2328,6 +2339,27 @@ mod tests {
 
     #[test]
     fn contextual_key_help_matches_screen_actions_and_fits_small_terminals() {
+        for showing_help in [false, true] {
+            let title = settings_tabs(showing_help);
+            assert!(title.contains("Line numbers") && title.contains("Read key bindings"));
+            assert_eq!(title.contains("[Read key bindings]"), showing_help);
+            assert_eq!(title.contains("[Line numbers]"), !showing_help);
+        }
+        assert_eq!(
+            help_frame(HelpContext::Menu, 0, 80, 24)[0],
+            settings_tabs(true)
+        );
+        assert_eq!(
+            settings_frame(
+                Viewport::default(),
+                LineNumbers::Hybrid,
+                &Navigation::default(),
+                "",
+                80,
+                24
+            )[0],
+            settings_tabs(false)
+        );
         let manage = HelpContext::ManageDiscovery.text();
         let standalone = HelpContext::Discovery.text();
         assert!(manage.contains("Rescan network") && manage.contains("does not save"));

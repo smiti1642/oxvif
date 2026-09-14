@@ -44,7 +44,8 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 ### Fixed
 
 - The human `?` overlay now includes contextual, scrollable key bindings alongside
-  line-number settings. Tab switches pages without modifying preferences or the
+  line-number settings, with both tabs prominently labelled at the top and the
+  active tab bracketed. Tab switches pages without modifying preferences or the
   originating viewport.
 
 - Discovery lists now fill available terminal height when enlarged instead of
