@@ -22,9 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Target: **0.17.0 — not yet release-ready or available on crates.io.**
 
-[Release summary](https://github.com/smiti1642/oxvif/blob/b6c87ee95fddf32cd10cfe8c817be57ec401fca7/docs/releases/0.17.0.md) ·
-[Full changelog and migration](https://github.com/smiti1642/oxvif/blob/b6c87ee95fddf32cd10cfe8c817be57ec401fca7/docs/releases/0.17.0-changelog.md) ·
-[繁體中文](https://github.com/smiti1642/oxvif/blob/b6c87ee95fddf32cd10cfe8c817be57ec401fca7/docs/releases/0.17.0-changelog_zh.md)
+[Release summary](https://github.com/smiti1642/oxvif/blob/a5f3d460dd2e75e6a6037644c62d1323284d771b/docs/releases/0.17.0.md) ·
+[Full changelog and migration](https://github.com/smiti1642/oxvif/blob/a5f3d460dd2e75e6a6037644c62d1323284d771b/docs/releases/0.17.0-changelog.md) ·
+[繁體中文](https://github.com/smiti1642/oxvif/blob/a5f3d460dd2e75e6a6037644c62d1323284d771b/docs/releases/0.17.0-changelog_zh.md)
 
 ### Added
 
@@ -105,7 +105,7 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 [native CI at `fed6777`](https://github.com/smiti1642/oxvif/actions/runs/34672460802)
 passed all 27 jobs. Distribution staging, final-version package/install checks and
 remaining human/platform acceptance are required; hardware evidence remains scoped.
-See the [release cut](https://github.com/smiti1642/oxvif/blob/b6c87ee95fddf32cd10cfe8c817be57ec401fca7/docs/active/release-0.17-cut.md).
+See the [release cut](https://github.com/smiti1642/oxvif/blob/a5f3d460dd2e75e6a6037644c62d1323284d771b/docs/active/release-0.17-cut.md).
 These changes are not part of the published 0.16.0 artifacts.
 
 ## [0.16.0] - 2026-09-04
