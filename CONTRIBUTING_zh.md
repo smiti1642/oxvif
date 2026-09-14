@@ -10,6 +10,7 @@
 | [本機驗證](#本機驗證) | 必要檢查 |
 | [測試資料與裝置回報](#測試資料與裝置回報) | 敏感資訊清理 |
 | [Pull Request](#pull-request) | 驗收條件 |
+| [Release 呈現規範](#release-呈現規範) | CLI 下載表、摘要與附件說明 |
 | [相依套件與發布工具變更](#相依套件與發布工具變更) | 額外審查關卡 |
 
 ## 提出變更前
@@ -50,6 +51,43 @@ Profile、清理後的命令、結束代碼、結構化錯誤代碼，以及預�
 
 保持變更可審查，並說明可觀察的行為契約。測試通過、文件符合行為、診斷不洩漏敏感資訊，
 且沒有無關的格式或產生檔案變動時，才具備合併條件。
+
+## Release 呈現規範
+
+0.17.0 之後的版本，GitHub Release 本文必須引導一般 CLI 使用者找到正確下載，
+不要求使用者自行辨識整份 Assets 清單。
+
+1. **GitHub Release 本文只使用英文。** 翻譯文件保留於 repository，但 release
+   workflow 使用的本文檔案不放雙語內容或語言切換列。
+2. **以使用者導向主旨開頭，接著提供 `Download CLI` 表格。** 表格置於變更分類前，
+   每個實際建置且驗證過的平台／架構各一列，欄位為 Platform、Architecture、
+   Download、SHA-256。直接連到可攜式壓縮包及其 checksum；說明一般使用者只需
+   選一個適用壓縮包，不必下載所有附件。
+3. **使用容易辨識的平台名稱。** 目前矩陣須區分 Windows Intel／AMD 64-bit、
+   Linux Intel／AMD 64-bit、Linux ARM64、macOS Intel 與 macOS Apple Silicon，
+   對應實際 x86_64／aarch64 產物。不得宣稱未驗證的額外架構或作業系統相容性。
+4. **其他安裝方式分開呈現。** Debian `.deb` 及 Homebrew formula／bottle 放在主要
+   可攜版下載表之後，說明 bottle 是供 Homebrew 使用，不是一般 macOS 壓縮包。
+   上傳附件不等於已收錄至官方 APT、Homebrew、winget 或 Chocolatey 通路；
+   只有已驗證可用的通路才提供相應安裝命令。
+5. **以有內容的分類條列說明變更。** 參照 0.15 的 Added、Fixed、Changed 及
+   Breaking／limitations 結構，依版本實際內容選用。每項重點說明新增用途或修正
+   影響，優先呈現使用者工作流程，而非內部 Mock／測試重構。保留必要遷移警告，
+   實作細節、驗證證據與貢獻者署名導向對應版本的完整 Changelog。
+6. **補上簡短的 `Other assets` 說明。** 區分 `.sha256` 完整性校驗、`.spdx.json`
+   執行檔掃描 SBOM、`.source.spdx.json` 原始碼／lockfile 清單，以及
+   `.build-tools.txt` 建置工具紀錄。說明 GitHub 的 Source code 附件是原始碼，
+   不是已編譯 CLI。這些不是一般使用者需要逐一安裝的其他程式；保留下方 SBOM
+   限制說明，不把成分清單當成安全認證。
+
+發布前，將下載表所有連結替換為實際 tag 與附件名稱，使用
+`https://github.com/smiti1642/oxvif/releases/download/` 開頭的絕對網址，
+對照已驗證 staging 的產物清單，且不得留下模板佔位文字。發布後確認連結附件
+確實存在，並符合標示的平台與 checksum。下載表不取代下列發布驗證關卡。
+
+這是呈現規範，不代表可為減少數量而刪除、重新命名或重新打包附件。保留既有
+使用者連結與驗證資料；附件配置變更須另行審查 packaging 修改。
+不得僅為套用此後續版本規範而改寫既有 Release 或移動 tag。
 
 ## 相依套件與發布工具變更
 

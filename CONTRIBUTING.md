@@ -11,6 +11,7 @@ documentation corrections, and focused pull requests are welcome.
 | [Local verification](#local-verification) | Required checks |
 | [Fixtures and device reports](#fixtures-and-device-reports) | Sanitization |
 | [Pull requests](#pull-requests) | Acceptance criteria |
+| [Release presentation](#release-presentation) | CLI download table, notes and asset explanations |
 | [Dependency and release-tooling changes](#dependency-and-release-tooling-changes) | Additional review gates |
 
 ## Before opening a change
@@ -61,6 +62,52 @@ repository's schema policy.
 Keep changes reviewable and explain the observable contract. A pull request is
 ready when its tests pass, documentation matches behavior, new diagnostics are
 secret-safe, and unrelated formatting or generated-file churn is absent.
+
+## Release presentation
+
+For releases after 0.17.0, the GitHub Release body must guide ordinary CLI users
+to the correct download without requiring them to inspect the complete Assets list.
+
+1. **Use English only in the GitHub Release body.** Keep translated documentation
+   in the repository, but omit bilingual text and language-switch rows from the
+   file consumed by the release workflow.
+2. **Lead with a user-facing headline, then a `Download CLI` table.** Put the table
+   before the change categories. Include one row for each actually built and
+   verified platform/architecture, with columns for Platform, Architecture,
+   Download and SHA-256. Link directly to the portable archive and its checksum;
+   users normally need one archive, not every attachment.
+3. **Use recognizable platform names.** For the current matrix, distinguish
+   Windows Intel/AMD 64-bit, Linux Intel/AMD 64-bit, Linux ARM64, macOS Intel and
+   macOS Apple Silicon. Map these to the actual x86_64/aarch64 artifacts. Do not
+   promise additional architectures or OS compatibility that was not verified.
+4. **Keep alternative installers separate.** Place Debian `.deb` packages and
+   Homebrew formula/bottles below the primary portable-download table. Explain
+   that bottles are Homebrew inputs, not the general macOS archive. Publishing
+   these files does not establish official APT, Homebrew, winget or Chocolatey
+   channel availability; advertise install commands only for verified channels.
+5. **Use categorized, substantive bullets.** Follow the 0.15 style: Added, Fixed,
+   Changed and Breaking/limitations as applicable. Explain what each important
+   change enables or fixes, prioritizing user-visible workflows over internal
+   Mock/test refactoring. Keep migration warnings visible and link to the complete
+   versioned changelog for implementation details, evidence and attribution.
+6. **Add a short `Other assets` explanation.** Identify `.sha256` as integrity
+   checks, `.spdx.json` as binary-scan SBOMs, `.source.spdx.json` as source/lockfile
+   inventories, and `.build-tools.txt` as build-tool records. Explain that GitHub's
+   Source code archives are source, not compiled CLI downloads. These are not
+   additional programs that ordinary users need to install. Retain the SBOM
+   limitations described below; inventories are not security certifications.
+
+Before publication, resolve every table link to the actual release tag and asset
+filename, using absolute `https://github.com/smiti1642/oxvif/releases/download/`
+URLs. Cross-check the table against the verified staging artifact set and remove
+all template placeholders. After publication, confirm the linked assets exist
+and match the intended platform/checksum. A download table does not replace the
+release gates below.
+
+This is a presentation rule, not permission to remove, rename or repackage assets
+to reduce their count. Preserve existing consumer URLs and verification material;
+changes to the asset layout require their own reviewed packaging change. Do not
+rewrite an existing release or move its tag merely to apply this future policy.
 
 ## Dependency and release-tooling changes
 
