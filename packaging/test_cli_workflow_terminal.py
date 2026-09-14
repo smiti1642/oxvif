@@ -6,6 +6,7 @@ Requires pywinpty and pyte (optional --deps directory). No native secret-store w
 """
 import argparse
 import os
+import re
 from pathlib import Path
 import select
 import sys
@@ -16,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser()
 parser.add_argument("--binary", required=True, type=Path)
 parser.add_argument("--deps", type=Path, default=ROOT / "target/terminal-deps")
-parser.add_argument("--mode", choices=["discover", "manage", "all"], default="all")
+parser.add_argument("--mode", choices=["discover", "manage", "resize", "all"], default="all")
 args = parser.parse_args()
 sys.path.insert(0, str(args.deps))
 from winpty import PtyProcess
@@ -271,7 +272,35 @@ def manage(t):
     t.finish()
 
 
-for mode in (["discover", "manage"] if args.mode == "all" else [args.mode]):
+def resize(t):
+    for title in ["oxvif discovery", "oxvif manage discovery"]:
+        t.expect(title)
+        for height in [28, 40, 16, 54]:
+            t.resize(height, 160)
+            t.expect(title)
+            rows = [line for line in t.screen.display if re.match(r"^\s*>?\s*\d+\s+\d+\s+NEW\b", line)]
+            assert len(rows) == height - 8, f"height {height} did not fill available rows"
+            assert any(line.startswith(">") for line in rows), "resize hid selection"
+            assert "NORMAL" in t.screen.display[-1], "status bar is not at the bottom"
+        t.key("G")
+        t.expect("item 80/80")
+        t.resize(24, 160)
+        t.expect("item 80/80")
+        t.resize(54, 160)
+        t.expect("item 80/80")
+        t.key("gg\x04")
+        t.expect("item 24/80")  # 46 rows => half-page 23.
+        t.key("\x1b[6~")
+        t.expect("item 70/80")
+        t.key("q")
+        t.expect("Choose camera")
+        if title == "oxvif discovery":
+            t.key("\r")
+    t.key("q")
+    t.finish()
+
+
+for mode in (["discover", "manage", "resize"] if args.mode == "all" else [args.mode]):
     terminal = Terminal(mode)
     try:
         globals()[mode](terminal)

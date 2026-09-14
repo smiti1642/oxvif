@@ -140,6 +140,15 @@
 
 ## 進度
 
+2026-09-14 高度後續修正：移除探索清單 12 筆上限。Binary 測試 60 通過／1 項
+opt-in fixture 略過，CLI 全 target Clippy 通過。明確執行 `--mode resize`
+ConPTY 流程，獨立及 manage 探索均通過 28／40／16／54 列視窗、選取可見、
+底部狀態及依目前容量整頁／半頁移動驗證；不掃描 LAN，也不寫 registry。
+第一次工具執行錯誤要求唯讀測試後存在 registry 檔案；已改成確認檔案不存在，
+重跑通過。一般 debug 執行檔因 Windows 拒絕存取而無法替換；已將新連結的
+deps 執行檔另存為 `target/debug/oxvif-resize.exe`，核對 hash 並測試版本輸出，
+未中止使用者正在執行的 CLI。下方歷史 package 計數不改，本次僅為 UI 針對性修正。
+
 - 計畫完成：已檢查上述基準與各程式責任區。
 - B1–B4 本機完成；下方明列平台／原生密碼庫／發布剩餘關卡。
 - B1 實作完成：共用 Panel 新增、manage a/add、獨立探索連續操作與本機登錄投影。

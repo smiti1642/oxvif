@@ -29,7 +29,8 @@ use crate::navigation::{self, Key as NavKey, Navigation, Outcome, Viewport};
 
 use crate::ui_settings::{self, LineNumbers};
 
-const DEFAULT_PAGE_SIZE: usize = 12;
+// Initial state only; the renderer derives the live page size from terminal height.
+const INITIAL_PAGE_SIZE: usize = 12;
 
 #[derive(Default)]
 pub(crate) struct MenuSearch {
@@ -1555,7 +1556,7 @@ impl<'a> BrowserState<'a> {
     fn for_selection(devices: &'a [DiscoveryDeviceView]) -> Self {
         Self {
             purpose: DiscoveryPurpose::Select,
-            ..Self::new(devices, DEFAULT_PAGE_SIZE, devices.len())
+            ..Self::new(devices, INITIAL_PAGE_SIZE, devices.len())
         }
     }
 
@@ -1837,7 +1838,8 @@ fn setup_field_line(
 fn discovery_rows(height: u16) -> usize {
     let rows = panel_body_rows(height);
     if rows >= 4 {
-        (rows - 3).clamp(1, DEFAULT_PAGE_SIZE)
+        // Reserve filter/header/selected-record context; use every remaining row.
+        rows - 3
     } else {
         rows
     }
@@ -2514,6 +2516,44 @@ mod tests {
             if width > 2 && height > 0 {
                 assert!(lines.iter().any(|s| s.starts_with('>')));
             }
+        }
+    }
+
+    #[test]
+    fn discovery_fills_growing_terminals_and_navigation_uses_live_capacity() {
+        let devices = (0..200)
+            .map(|n| view(&format!("192.0.2.{n}"), "Fixture", "Camera", None))
+            .collect::<Vec<_>>();
+        for purpose in [DiscoveryPurpose::Add, DiscoveryPurpose::Select] {
+            let mut state = BrowserState::for_selection(&devices);
+            state.purpose = purpose;
+            for (height, capacity) in [(24, 16), (40, 32), (16, 8), (54, 46)] {
+                state.set_page_size(discovery_rows(height));
+                assert_eq!(state.page_size, capacity);
+                let frame = discovery_frame(&state, 140, height, LineNumbers::Absolute);
+                assert_eq!(
+                    frame.iter().filter(|line| line.contains("NEW ")).count(),
+                    capacity
+                );
+                assert!(frame.iter().any(|line| line.starts_with('>')));
+                assert!(frame.last().unwrap().contains("NORMAL"));
+                let before = state.selected;
+                state.handle_key(KeyEvent::new(KeyCode::PageDown, KeyModifiers::NONE));
+                assert_eq!(state.selected, before + capacity);
+                state.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL));
+                assert_eq!(state.selected, before + capacity - capacity / 2);
+            }
+            state.handle_key(KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT));
+            state.set_page_size(discovery_rows(70));
+            assert_eq!(state.selected, 199);
+            assert_eq!(state.page_size, 62);
+            assert_eq!(
+                discovery_frame(&state, 140, 70, LineNumbers::Absolute)
+                    .iter()
+                    .filter(|line| line.contains("NEW "))
+                    .count(),
+                62
+            );
         }
     }
 

@@ -88,6 +88,29 @@ async fn workflow_terminal_fixture() {
         ..Default::default()
     };
     match mode.as_str() {
+        "resize" => {
+            let records = (0..80)
+                .map(|index| {
+                    let mut record = records[0].clone();
+                    record.record.endpoint = format!("urn:uuid:resize-{index}");
+                    record
+                })
+                .collect::<Vec<_>>();
+            let summary = DiscoveryResultSummary {
+                total_count: 80,
+                matched_count: 80,
+                saved_count: 0,
+                new_count: 80,
+                incomplete_count: 0,
+            };
+            crate::interactive::browse_discovery(&app, &options, &records, &summary)
+                .await
+                .unwrap();
+            crate::manage::run_fixture(&app, &options, records)
+                .await
+                .unwrap();
+            assert!(registry.list().unwrap().0.is_empty());
+        }
         "discover" => {
             let summary = DiscoveryResultSummary {
                 total_count: 3,
@@ -136,8 +159,15 @@ async fn workflow_terminal_fixture() {
         }
         _ => panic!("unsupported fixture mode"),
     }
-    let contents = std::fs::read_to_string(directory.join("devices.toml")).unwrap();
-    assert!(!contents.contains("wrong-password-fixture"));
+    if mode != "resize" {
+        let contents = std::fs::read_to_string(directory.join("devices.toml")).unwrap();
+        assert!(!contents.contains("wrong-password-fixture"));
+    } else {
+        assert!(
+            !directory.join("devices.toml").exists(),
+            "resize must not write registration"
+        );
+    }
     controls.abort();
     let _ = controls.await;
     Arc::try_unwrap(a).ok().unwrap().shutdown().await.unwrap();

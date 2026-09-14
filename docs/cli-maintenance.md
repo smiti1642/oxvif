@@ -72,6 +72,10 @@ In normal list mode, uppercase `R` explicitly rescans; lowercase `r` remains the
 saved-record filter. A successful scan replaces the results and resets the view;
 cancellation or failure retains the previous results. The title identifies cached
 results, which may become stale; exiting `manage` discards this cache.
+Discovery lists use the available terminal height rather than a fixed 12-row cap.
+Growing or shrinking the window adjusts the visible rows while keeping the selected
+record visible and help/status at the bottom. Full/half-page movement uses the
+current row capacity; fewer matching records naturally leave unused space.
 Both manage and standalone `discover` return to cached results after setup, allowing
 consecutive additions. Verification failures retain ID/username and clear the
 submitted password for explicit retry. Registration is reconciled locally without

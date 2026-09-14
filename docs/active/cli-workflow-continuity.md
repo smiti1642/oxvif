@@ -162,6 +162,18 @@ reciprocal language links and section-link tables for long documents.
 
 ## Progress
 
+2026-09-14 height follow-up: removed the discovery 12-row ceiling. Binary tests:
+60 passed / 1 opt-in fixture ignored; CLI all-target Clippy passed. The explicit
+`--mode resize` ConPTY journey passed for both standalone and manage discovery,
+checking 28/40/16/54-row windows, selected-record visibility, bottom status and
+live full/half-page motion. No LAN scan or registry write occurs in this journey.
+Its first harness run incorrectly required a registry file after a no-write test;
+the assertion now requires the file to remain absent, and the rerun passed.
+The normal debug executable could not be replaced (Windows access denied);
+the newly linked deps executable was copied to `target/debug/oxvif-resize.exe`,
+hash-verified and version-smoked without stopping the user's running CLI.
+Historical package totals below are unchanged; this is a scoped UI follow-up.
+
 - Planning complete: baseline and all source owners above inspected.
 - B1–B4 locally complete; remaining platform/native-store/release gates are explicit below.
 - B1 implementation complete: shared Panel onboarding, manage a/add, standalone

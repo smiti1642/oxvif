@@ -43,6 +43,9 @@ Target: **0.17.0 — not yet release-ready or available on crates.io.**
 
 ### Fixed
 
+- Discovery lists now fill available terminal height when enlarged instead of
+  stopping at 12 rows; resize and full/half-page movement share the live capacity.
+
 - Human discovery setup now supports inline retry and consecutive additions;
   manage adds explicit `a` onboarding and searchable saved-device selection.
   Per-camera temporary state survives switching, profiles restore by token,
