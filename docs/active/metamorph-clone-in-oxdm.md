@@ -1,14 +1,25 @@
 # metamorph clone-in-oxdm — design note
 
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | G1 is DONE: [record_standard_surface, record_surface and progress API](../../src/metamorph/record.rs) are public; [the example](../../examples/metamorph_record.rs) calls the library. G2 is SUPERSEDED by [the shipped network container](../done/metamorph-container-and-quirk-diff.md), not a missing transport-injection blocker. |
+| Remaining | G3 `FixtureStore::summary()` is absent. Existing [len/fixtures accessors](../../src/metamorph/fixture.rs) and [ParseReport::faulted](../../src/metamorph/parse.rs) supply related data, but are not the proposed aggregate API. Treat summary as a DEFERRED convenience/API decision, not proof that cloning cannot work. Recording privacy remains a boundary. |
+| Next step / exit criteria | Decide whether consumers need a dedicated summary; if retained, define counts by fixture versus Action, SOAP Fault versus transport failure, collision buckets and redaction. Add exact tests for that contract. Do not copy the recorder or build the superseded G2 approach. |
+
 > **Status: superseded by the container path.** The in-process approach below
 > (and its gap **G2**) is no longer the plan. Serving the clone from a bound-port
 > `MockServer` — see [`metamorph-container-and-quirk-diff.md`](../done/metamorph-container-and-quirk-diff.md),
 > now implemented — makes G2 unnecessary: oxdm runs the existing
 > `HealthCheck::new(clone_url)` against the container, and "compare" reuses the
 > existing `health::ReportDiff` (synthetic server vs clone server) or the new
-> `FixtureStore::diff_against_synthetic`. **G1** (library-ify the recorder) and
-> **G3** (`FixtureStore::summary`) are still open and independent of the pivot;
-> this note is kept for that context and the credential-scrubbing risks in §7.
+> `FixtureStore::diff_against_synthetic`. **G1** is implemented by the public recorder APIs.
+> **G3** (`FixtureStore::summary`) remains a deferred API proposal; existing accessors
+> and parse reports expose related data. This note retains that decision and the
+> privacy risks in §7.
 
 > **Original status: draft for review.** Wires Persona B (clone / replay) into
 > oxdm so a user can clone their own IP camera's behaviour and hunt its quirks —
@@ -60,18 +71,18 @@ first; M4 stays a separate track.
 
 ## 4. What oxvif must provide — the gaps to close (this repo)
 
-Everything needed already exists; it is just packaged in the wrong place. Three
-small gaps:
+Original gap analysis, reconciled against `80bcf14`:
 
 | # | Gap | Why it blocks oxdm | Size |
 |---|-----|--------------------|------|
-| **G1** | **Library-ify the standard-surface recorder.** The op list (`get_device_info` … `get_network_interfaces`) is hard-coded in `examples/metamorph_record.rs:70–89`. Expose `metamorph::record_standard_surface(&OnvifSession) -> Result<FixtureStore>` (or a `Recorder`). | oxdm must not copy-paste the op list; it needs one call. | Small (move + wrap) |
-| **G2** | **Let quirk detection run against a clone.** `health` already has `CoverageTransport` — the silent-drop / list-emptying / field-defaulting detector — but `HealthCheck::new()` hard-builds its own `HttpTransport` (`src/health/mod.rs:137`) and takes no custom transport. Add `HealthCheck::with_transport(Arc<dyn Transport>)` so oxdm can run it against a `MetamorphTransport`. | Turns the existing coverage detector into an **offline, reproducible quirk finder** over the clone. | Small |
-| **G3** | **`FixtureStore` UI summary.** Add `FixtureStore::summary()` — count, actions covered, which returned a SOAP Fault. | oxdm needs to render the clone's contents. | Small |
+| **G1 — DONE** | Public `record_standard_surface(device_url, credentials, label)`, selected-surface and progress APIs exist in `src/metamorph/record.rs`; the example calls the library. | Recorder extraction is no longer a blocker. | Delivered |
+| **G2 — SUPERSEDED** | **Original in-process transport proposal.** `health` already has `CoverageTransport` — the silent-drop / list-emptying / field-defaulting detector — but `HealthCheck::new()` hard-builds its own `HttpTransport` (`src/health/mod.rs:137`) and takes no custom transport. Add `HealthCheck::with_transport(Arc<dyn Transport>)` so oxdm can run it against a `MetamorphTransport`. | Turns the existing coverage detector into an **offline, reproducible quirk finder** over the clone. | Small |
+| **G3 — DEFERRED** | **`FixtureStore` UI summary.** Add `FixtureStore::summary()` — count, actions covered, which returned a SOAP Fault. | oxdm needs to render the clone's contents. | Small |
 
-G2 is the linchpin: after cloning, run `HealthCheck` against the replayed clone
-and it lists every place where "the camera returned data but oxvif parsed it as
-empty" — that *is* quirk-finding, and the detector is already written.
+G2 is not a current prerequisite: the shipped container supports normal network
+health checks, and structural/typed-parse reports already exist. Neither report
+proves all semantic differences from a real camera. G3 needs a concrete consumer
+contract before adding another public aggregate API.
 
 ---
 

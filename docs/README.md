@@ -54,20 +54,20 @@ evidence. The [post-0.17 backlog](active/post-0.17-backlog.md)
 ([繁體中文](active/post-0.17-backlog_zh.md)) owns follow-up scope;
 the [0.17 cut](done/release-0.17-cut.md) is now a historical release record.
 
-本次將 25 組已交付計畫／批次的 43 份 Markdown 文件，以及一份原始審查 JSON，
-移至 `done/`。下表保留 16 組仍有工作或驗收待完成的計畫與追蹤文件；
+2026-09-22 歸檔與校準合計將 26 組已交付計畫／批次的 45 份 Markdown 文件，
+以及一份原始審查 JSON 移至 `done/`。原 16 組 active 文件已逐份核對，
+相依套件分組計畫補齊 GitHub 後續週期證據後結案；下表保留 15 組：
 未執行的實機、原生終端與 VMS 驗證不會因發布或歸檔而視為通過。
 
 | Doc | Status / scope |
 | --- | --- |
-| [`post-0.17-backlog.md`](active/post-0.17-backlog.md) · [繁體中文](active/post-0.17-backlog_zh.md) | Current follow-up index: remaining F01–F12 scope after 0.17 publication; delivered slices are distinguished from unfinished acceptance. |
+| [`post-0.17-backlog.md`](active/post-0.17-backlog.md) · [繁體中文](active/post-0.17-backlog_zh.md) | Current follow-up index: remaining F01–F15 scope after 0.17 publication; delivered slices are distinguished from unfinished acceptance. |
 | [`oxvif-cli-plan.md`](active/oxvif-cli-plan.md) | CLI product roadmap. The diagnostic CLI is published; later stages, device writes and product expansion are not completed by that release. |
 | [`oxvif-cli-release-hardening-plan.md`](active/oxvif-cli-release-hardening-plan.md) | Broader reliability, security, support and commercial-pilot requirements; diagnostic-beta publication does not close the whole programme. |
 | [`oxvif-cli-three-platform-distribution-plan.md`](active/oxvif-cli-three-platform-distribution-plan.md) | Native artifacts shipped. Durable project APT/tap operations, recovery/signing ownership and official-channel graduation remain separate work. |
 | [`cli-vim-navigation-plan.md`](active/cli-vim-navigation-plan.md) · [繁體中文](active/cli-vim-navigation-plan_zh.md) | M1–M5 shipped in 0.17. M6 standalone navigation crate remains deferred; native terminal/IME evidence limits are retained. |
-| [`dependency-maintenance-plan.md`](active/dependency-maintenance-plan.md) · [繁體中文](active/dependency-maintenance-plan_zh.md) | Dependency integration and the first grouped PR are verified; a subsequent updater cycle must still be checked for duplicate routine PRs. |
-| [`metamorph.md`](active/metamorph.md) | M0–M3 and M5–M6 delivered; full M4 control plane/Persona A and M7 semantic diff remain incomplete. |
-| [`metamorph-clone-in-oxdm.md`](active/metamorph-clone-in-oxdm.md) | In-process design superseded by the shipped container path; G1 recorder library API and G3 fixture summary remain open, so retain this context. |
+| [`metamorph.md`](active/metamorph.md) | M0–M3 and M5–M6 delivered; full M4 control plane/Persona A and M7 reference-value comparison remain incomplete. Structural diff and own-parser verification already exist. |
+| [`metamorph-clone-in-oxdm.md`](active/metamorph-clone-in-oxdm.md) | In-process design superseded by the shipped container path; G1 recorder API is delivered; G2 superseded. G3 summary remains a deferred API decision with privacy context. |
 | [`mock-fleet-basic-plan.md`](active/mock-fleet-basic-plan.md) · [繁體中文](active/mock-fleet-basic-plan_zh.md) | Basic runner shipped in 0.17; actual LAN multicast/VMS and remaining native lifecycle acceptance are not established by loopback capacity smoke. |
 | [`mock-fidelity-hardening-plan.md`](active/mock-fidelity-hardening-plan.md) · [繁體中文](active/mock-fidelity-hardening-plan_zh.md) | Active parent programme. Selected shipped slices do not complete service semantics, security, capability consistency or conformance. |
 | [`mock-fidelity-execution-checklist.md`](active/mock-fidelity-execution-checklist.md) · [繁體中文](active/mock-fidelity-execution-checklist_zh.md) | Current W00–W26 work packages, operation cards, dependencies and remaining acceptance; retains PARTIAL/TODO dispositions. |
@@ -113,6 +113,7 @@ input paths and hashes; it is historical evidence, not a current file inventory.
 | [`mock-fidelity-video-source.md`](done/mock-fidelity-video-source.md) · [繁體中文](done/mock-fidelity-video-source_zh.md) | 0.17: VS1 delivered, with operation and verification limits preserved. |
 | [`mock-fidelity-video-encoder.md`](done/mock-fidelity-video-encoder.md) · [繁體中文](done/mock-fidelity-video-encoder_zh.md) | 0.17: VE1/K34 delivered, with broader encoder/fidelity work remaining active. |
 | [`mock-fidelity-audio-metadata.md`](done/mock-fidelity-audio-metadata.md) · [繁體中文](done/mock-fidelity-audio-metadata_zh.md) | 0.17: AM1/D4 and its 15 operation cards delivered; broader W10 is not closed. |
+| [`dependency-maintenance-plan.md`](done/dependency-maintenance-plan.md) · [繁體中文](done/dependency-maintenance-plan_zh.md) | Integration and subsequent grouped-update behavior verified on 2026-09-22 from GitHub runs/PR history. New PR #18 and keyring review are F13 follow-ups, not unfinished grouping setup. |
 | [`release-0.17-review.md`](done/release-0.17-review.md) · [繁體中文](done/release-0.17-review_zh.md) | Frozen candidate review and later repair evidence; companion JSON ledger is preserved byte-for-byte. |
 | [`release-0.17-approval.md`](done/release-0.17-approval.md) · [繁體中文](done/release-0.17-approval_zh.md) | Historical approval packet; publication stop satisfied and 0.17 released. |
 | [`release-0.17-cut.md`](done/release-0.17-cut.md) · [繁體中文](done/release-0.17-cut_zh.md) | Bounded 0.17 scope/acceptance record; no longer the active release gate. |

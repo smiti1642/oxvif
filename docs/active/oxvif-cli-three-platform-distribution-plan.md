@@ -1,6 +1,14 @@
 # oxvif CLI three-platform distribution plan
 
-**Status reconciliation, 2026-09-22:** The 0.17 native archives/packages and staging were published and verified as recorded in the [finalization record](../done/release-0.17-finalization.md). This plan remains active for project-channel operations and official-channel graduation; generated Release assets do not establish those milestones.
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | The 0.17 Windows archive, Debian packages, Homebrew formula/bottles, checksums and SBOMs were published; [finalization](../done/release-0.17-finalization.md) records native CI/staging. A staged APT repository with an ephemeral key and local formula install do not establish durable public channels. |
+| Remaining | Locked/denied Secret Service cases; packaging-tool provenance; commercial Windows signing; durable APT/tap ownership, keys, hosting and upgrade/downgrade recovery; official-channel admission. Public installation and downstream handoff beyond the recorded evidence remain UNVERIFIED, not known failures. |
+| Next step / exit criteria | First inventory actual project-channel URLs, owners and signed metadata read-only. Then define isolated install/upgrade/downgrade/removal checks for each target. Channel creation/publication and official submissions remain separate operations. §7–§10 own these tasks; the hardening plan only references them. |
 
 Status: Active  
 Decision date: 2026-09-01  
@@ -209,7 +217,7 @@ tap, formula, bottle, or attestation has been published.
 ### C2. Windows
 
 - [x] Build/test x86_64 on Windows and stage a versioned portable archive.
-- [ ] Publish the verified portable archive in the approved GitHub Release.
+- [x] Publish the verified portable archive: v0.17.0 Release and Windows checksum/binary verification are recorded in finalization.
 - [ ] Record the signing path required before a commercial-pilot claim.
 - [ ] Keep MSI/WinGet as follow-ups unless promoted by a later decision.
 

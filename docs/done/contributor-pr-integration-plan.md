@@ -172,7 +172,7 @@ only video I-frames. Do not infer normative Fault mappings from the old mock.
 ## B14 dependencies
 
 Status: LOCAL-PASS, included in this round and independently reviewable. See the
-[maintenance policy](../active/dependency-maintenance-plan.md); its prior acceptance covers
+[maintenance policy](dependency-maintenance-plan.md); its prior acceptance covers
 earlier PRs, not #14. Inspect the current `Cargo.lock` and
 `crates/oxvif-cli/Cargo.toml` diff against the chosen base, including transitive
 updates and already-applied versions. Do not replay an obsolete lockfile wholesale.

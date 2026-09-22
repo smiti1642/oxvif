@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-schema-preflight.md) | [繁體中文](mock-fidelity-schema-preflight_zh.md)
 
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | Scoped legacy checker and strict pinned Xerces tooling exist. The selected 160-instance/46-operation corpus was part of 0.17 native CI; [finalization](../done/release-0.17-finalization.md) supersedes the B16 pending-hosted-CI statement. No new external validator run is claimed by this calibration. |
+| Remaining | W20 QName/wildcard/unresolved accounting; W21 broader positive/negative request, response and Fault corpus; W22 coverage beyond selected operations; W23 bounded fuzz/property work. Selected success never establishes all-operation semantics. |
+| Next step / exit criteria | Choose exact additional operations/instances, capture actual client/mock exchanges, record pinned source/tool hashes and assert an intended invalid instance fails. Validate through [the external tooling](../../packaging/verify_schemas_xerces.py), preserving non-bundling and fail-closed rules. |
+
 W20/W21 checkpoint, 2026-09-10. The full programme remains in progress.
 
 Dated validation results below retain their original corpus and tool scope. Current
@@ -10,6 +20,7 @@ current candidate. See the [execution checklist](mock-fidelity-execution-checkli
 
 | Section | Purpose |
 | --- | --- |
+| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
 | [Structural checker](#structural-checker) | Delivered W20 scope |
 | [Verification evidence](#verification-evidence) | Positive and rejection controls |
 | [External validator evaluation](#external-validator-evaluation) | Tool selection and K19 |
@@ -311,9 +322,9 @@ coverage are separate from this local structural result.
 
 B16 adds six synchronization exchanges across two operations: two receipts and four
 refusals. The current exporter therefore selects 80 exchanges, 46 operations,
-59 successes and 21 Faults (160 XML instances). Historical local validation and
-the current candidate's outstanding CI are tracked in the
-[B16 evidence](../done/contributor-pr-integration-plan.md#execution-record).
+59 successes and 21 Faults (160 XML instances). Historical local validation is in [B16 evidence](../done/contributor-pr-integration-plan.md#execution-record);
+final 0.17 hosted CI and publication passed as recorded in
+[finalization](../done/release-0.17-finalization.md). Broader instance coverage remains open.
 
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
 and expand the corpus beyond the selected 46-operation batches. W21 remains PARTIAL: complete the

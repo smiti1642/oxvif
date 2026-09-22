@@ -2,19 +2,30 @@
 
 [English](mock-fidelity-hardening-plan.md) | [繁體中文](mock-fidelity-hardening-plan_zh.md)
 
-狀態：D1–D3 已於 2026-09-10 核准；第一批實作已完成本機驗證，整套計畫仍進行中。
+## 現況校準（2026-09-22）
+
+程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-hardening-plan.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+
+| 分類 | 處置與證據 |
+| --- | --- |
+| 已確認 | 選定 parser、Fault、policy、profile／video／audio／metadata 與 B16 已於 0.17 交付；D1／D2 預設及 D3 外部 CI 已在該範圍實施。舊首批 baseline 不代表目前進度。 |
+| 剩餘工作 | W01–W23 更廣語意、安全、capability、併發、replay 與 corpus 仍未完成；execution checklist 是唯一工作狀態來源，各 preflight 是證據／相依紀錄。 |
+| 下一步／完成條件 | 選 W10–W15 的一個服務子群，完成 W01 工作卡及 C01–C12 驗收。清冊完成與語意完成分開；W24／W25 僅對變更輸入與下一個實際發布範圍重驗。 |
+
+狀態：D1–D3 選定實作子群已隨 0.17.0 發布；廣泛計畫仍為 PARTIAL，以目前校準及執行清單為準。
 日期：2026-09-10。Repository 基準：`9dccf9d`。
 起因：[PR #16](https://github.com/smiti1642/oxvif/pull/16) 的 `dc69e9a`
 版本審查；本計畫不假設該貢獻已合併。
 [2026-09-11 PR 整合審查](../done/mock-fidelity-pr16-integration_zh.md) 已重查 head
 `3db6459`，記錄可重用內容、必要修正與驗證前置條件。
 
-已授權的 [0.17 發布切點](../done/release-0.17-cut_zh.md)選定有限且已實作的子群驗收；
+已完成的 [0.17 發布切點](../done/release-0.17-cut_zh.md)記錄已交付子群；
 [後續工作](post-0.17-backlog_zh.md)保留其餘計畫。排程調整不將未完成契約標記
 結案，也不延後已知資料遺失或安全阻擋。
 
 | 章節 | 用途 |
 | --- | --- |
+| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
 | [目標與邊界](#目標與邊界) | 範圍及排除事項 |
 | [證據與相依事項](#證據與相依事項) | 已觀察事實與待驗證風險 |
 | [待決策項目](#待決策項目) | 相容性、模擬政策及 schema 取得方式 |

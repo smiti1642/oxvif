@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Maintenance
 
+- Calibrate active plans against shipped APIs and release evidence, close the
+  verified Dependabot grouping plan, and separate remaining implementation,
+  acceptance and deferred decisions under F01–F15.
+
 - Archive completed plans and 0.17 release records under `docs/done`, retain
   unfinished work in `docs/active`, and reconcile the documentation index and
   cross-references. Keep archived development records out of the library package.

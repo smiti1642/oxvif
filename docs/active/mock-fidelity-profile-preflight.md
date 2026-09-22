@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-profile-preflight.md) | [繁體中文](mock-fidelity-profile-preflight_zh.md)
 
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | Scoped identity, whitespace serialization, empty-profile policy, typed adapters and PA1 assembly shipped; VS1/VE1/AM1 and B16 followed. [Archived batches](../README.md#done--completed-plans) are evidence for those slices, not work to redo. K27 storage repair is delivered. |
+| Remaining | Remaining W10 fields, configuration/binding combinations, ordinary Fault branches and cross-service effects require per-operation review. The old “not ready” status applies to broad migration, not to already delivered slices. |
+| Next step / exit criteria | Select the remaining OSD/URI/source-mode or unsupported binding subset from W10. Complete exact selectors, extensions, state-after-error and replay dependency cards before changing handlers; verify both transports and independent selected wire instances. |
+
 Work: W01/W02 for the first W10 batch. Baseline `892aa94`; investigation started
 2026-09-10. **IN-PROGRESS, NOT READY for broad handler migration.**
 Owner: current hardening branch. [Execution checklist](mock-fidelity-execution-checklist.md) ·
@@ -21,6 +31,7 @@ the replay dependency graph, HTTP binding conformance or real-device acceptance.
 
 | Section | Purpose |
 | --- | --- |
+| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
 | [Scope and identities](#scope-and-identities) | Exact 13 operation cards |
 | [Shared paths and current behavior](#shared-paths-and-current-behavior) | Inputs, effects and consumers |
 | [Reference review](#reference-review) | Checked conclusions and missing evidence |

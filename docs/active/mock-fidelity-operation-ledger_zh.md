@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-operation-ledger.md) | [繁體中文](mock-fidelity-operation-ledger_zh.md)
 
+## 現況校準（2026-09-22）
+
+程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-operation-ledger.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+
+| 分類 | 處置與證據 |
+| --- | --- |
+| 已確認 | 這是持續維護的 source inventory；checker 對照 159 路由、161 Action sites 與 reader index。B16 兩個路由已實作。 |
+| 剩餘工作 | 每列 PARTIAL 是欄位／Fault／效果等稽核覆蓋，不是功能不存在。W26 整合完成不代表模擬同步效果；更廣 Media 契約由 W10／W16／W17 負責。 |
+| 下一步／完成條件 | 改路由前開啟對應 W 工作卡；完成後同步雙語 rows、checker 與精確語意測試。清冊一致不等於協定驗收。 |
+
 初始程式碼基準：`b134f73`，2026-09-10；表列含後續具名批次。本文件是專案原始碼清冊，
 不是 ONVIF schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispatcher
 包含 B16 後的全部 **159** 個字面值路由分支；此數量不是已完整驗證的操作數，也不是 ONVIF 定義的全部操作數。
@@ -12,6 +22,7 @@
 
 | 章節 | 用途 |
 | --- | --- |
+| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
 | [追蹤契約](#追蹤契約) | 欄位意義及完成證據 |
 | [device](#device) | 38 個路由分支；W13 |
 | [device_io](#device-io) | 1 個路由分支；W13 |

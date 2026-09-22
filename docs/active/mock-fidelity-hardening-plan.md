@@ -2,21 +2,32 @@
 
 [English](mock-fidelity-hardening-plan.md) | [繁體中文](mock-fidelity-hardening-plan_zh.md)
 
-Status: D1–D3 approved on 2026-09-10; first implementation slice locally verified;
-the full programme remains in progress.
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | Selected parser, fault, policy, profile/video/audio/metadata and B16 slices shipped in 0.17; [finalization](../done/release-0.17-finalization.md) closes that release. D1/D2 defaults and D3 external CI were applied within that scope; the old first-slice baseline is not current programme status. |
+| Remaining | W01–W23 remaining operation semantics, security, capabilities, concurrency, replay and corpus work remain partial/TODO as listed in [the execution checklist](mock-fidelity-execution-checklist.md). That checklist is the sole work-status owner; preflights are evidence/dependency records, not duplicate projects. |
+| Next step / exit criteria | Choose one service subgroup from W10–W15, complete its W01 cards, then validate C01–C12 with bounded independent evidence. Keep source inventory completion distinct from semantic completion. W24/W25 repeat only for changed inputs and the next actual release scope. |
+
+Status: selected D1–D3 implementation slices shipped in 0.17.0; the wider
+programme remains PARTIAL. Use the current calibration and execution register.
 Date: 2026-09-10. Repository baseline: `9dccf9d`.
 Trigger: review of [PR #16](https://github.com/smiti1642/oxvif/pull/16)
 at `dc69e9a`; that contribution is not assumed to be merged.
 The [2026-09-11 PR integration review](../done/mock-fidelity-pr16-integration.md) rechecks
 head `3db6459` and records reuse, correction and verification prerequisites.
 
-The authorized [0.17 release cut](../done/release-0.17-cut.md) selects bounded completed
-slices for acceptance; [later work](post-0.17-backlog.md) retains the rest of this
+The completed [0.17 release cut](../done/release-0.17-cut.md) records delivered
+slices; [later work](post-0.17-backlog.md) retains the rest of this
 programme. This scheduling change does not mark unfinished contracts complete
 or defer known data-loss/security blockers.
 
 | Section | Purpose |
 | --- | --- |
+| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
 | [Objectives and boundaries](#objectives-and-boundaries) | Scope and excluded work |
 | [Evidence and dependencies](#evidence-and-dependencies) | Observations versus unverified risks |
 | [Decisions required](#decisions-required) | Compatibility, simulation policy and schema delivery |

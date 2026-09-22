@@ -1,8 +1,16 @@
 # oxvif CLI — human and Agent operation surface plan
 
-**Status reconciliation, 2026-09-22:** The diagnostic CLI has shipped through 0.17.0. This remains the broader product roadmap; later stages and device-writing workflows are not closed by publication.
+## Current calibration (2026-09-22)
 
-**Status:** active. Written 2026-08-26 from the product discussion that
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | The diagnostic product through 0.17 is delivered. `describe` and the packaged JSON schemas coexist; schema v3 and Agent guide v8 are separate contracts. Native Windows/macOS/Linux credential adapters exist in [credential.rs](../../crates/oxvif-cli/src/credential.rs) and [Cargo.toml](../../crates/oxvif-cli/Cargo.toml). The old §12 questions are resolved. |
+| Remaining | Stage 4 controlled device writes and optional Stage 5 MCP remain proposals. Project-local selection is deferred. Runtime/descriptor hardening belongs to [the hardening plan](oxvif-cli-release-hardening-plan.md), not a second diagnostic MVP implementation. |
+| Next step / exit criteria | Before Stage 4, select a bounded reversible operation and define preview/apply, authorization, cancellation, state-after-error and recovery cases. Stage 5 requires a separate product decision. Do not re-run first-publication work as an implementation task. |
+
+**Historical baseline:** written 2026-08-26 from the product discussion that
 established the package boundary, human/Agent contract, and named-device
 registry. **Stage 0 landed as `9590663` on 2026-08-27. Stage 1 was completed on
 2026-08-27, and the first Stage 2A fleet-inventory slice was completed the same
@@ -833,8 +841,12 @@ The first crates.io release is ready only when all of the following are true:
   status returned the device's typed `Optional Action Not Implemented` fault.
   The temporary native credential and isolated registry were removed.
 
-## 12. Remaining decisions
+## 12. Decisions reconciled on 2026-09-22
 
-1. Schema distribution format for `describe`: JSON Schema, the current smaller
-   internal description format, or both.
-2. Native credential backends and packaging policy for non-Windows platforms.
+1. **Resolved:** `describe` exposes command metadata and versioned JSON Schema
+   ships under `crates/oxvif-cli/schema/`; representative output is schema-tested.
+2. **Resolved for diagnostic beta:** native Credential Manager, Keychain and
+   Secret Service adapters and five-target packaging have shipped. Public channel
+   operations and official submissions remain in the distribution plan.
+3. **Deferred:** controlled writes, optional MCP and project-local current-device
+   state need their own bounded decisions; they are not missing diagnostic MVP code.

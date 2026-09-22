@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-source-audit.md) | [繁體中文](mock-fidelity-source-audit_zh.md)
 
+## 現況校準（2026-09-22）
+
+程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-source-audit.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+
+| 分類 | 處置與證據 |
+| --- | --- |
+| 已確認 | W00 literal route／Action 對照已完成並持續維護；K27 碰撞保留與 request-aware lookup 已修復。歷史覆寫重現不是目前仍存在的資料遺失。 |
+| 剩餘工作 | W02 transitive helper／field 分類仍是 PARTIAL；195 個 reader occurrences 含測試、discovery 與 canonicalization，不能視為 195 個缺陷。 |
+| 下一步／完成條件 | 對下一個服務子群追蹤全部 reader／renderer／state effects，逐項標示遷移或保留理由；跑 inventory checker，於 batch card 補欄位層級 C01–C12 證據。 |
+
 2026-09-11 K27 後續修正：碰撞儲存保留及完整請求查詢已實作，詳見
 [儲存遷移](../replay-storage_zh.md)及[發布驗證](../done/release-0.17-cut_zh.md#驗證紀錄)。
 下列較早的覆蓋重現／containment 記錄保留作為歷史證據，不代表目前仍會覆蓋；
@@ -13,6 +23,7 @@ W19 其餘項目仍未結案。
 
 | 章節 | 用途 |
 | --- | --- |
+| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
 | [結果與邊界](#結果與邊界) | 已完成與尚未完成的範圍 |
 | [Action 宣告](#action-宣告) | 完整 URI、方法及路由對應 |
 | [Reader 呼叫位置](#reader-呼叫位置) | 可重現的直接呼叫多重集合 |

@@ -2,14 +2,23 @@
 
 [English](cli-vim-navigation-plan.md) | [繁體中文](cli-vim-navigation-plan_zh.md)
 
-**Status reconciliation, 2026-09-22:** M1–M5 shipped in 0.17.0. This plan stays active for deferred M6 and the explicitly unverified native-terminal/IME acceptance; release success does not establish those checks.
+## Current calibration (2026-09-22)
 
-Status: M1–M5 implemented and locally validated, including independent Agent review; unreleased.
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | M1–M5 and line-number settings shipped. [navigation.rs](../../crates/oxvif-cli/src/navigation.rs), [the backend-free harness](../../crates/oxvif-cli/tests/navigation_core.rs) and [CLI continuity](../done/cli-workflow-continuity.md) cover the core and Windows resize/selection follow-ups. The old claim that host resize was never tested is historical. |
+| Remaining | M6 standalone crate is DEFERRED, not a release blocker. Native macOS/Linux interactive behavior and human IME composition lack specific acceptance evidence; Windows injected keys and general CI cannot close them. |
+| Next step / exit criteria | For terminal acceptance record OS, terminal, input method, resize, literal text, cancellation and restoration results. Extract a crate only after deciding name/API/version and proving reuse in a second consumer. Native evidence and M6 remain separate exit conditions. |
+
+Status: M1–M5 shipped in 0.17.0; M6 is deferred and specific native-terminal/IME evidence remains open.
 Baseline: `e7c8250`, including centered camera columns and
 Ctrl+D / Ctrl+U half-page movement. Scope: human-facing terminal navigation only.
 
 | Section | Purpose |
 | --- | --- |
+| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
 | [Objectives and boundaries](#objectives-and-boundaries) | Deliverables and exclusions |
 | [Interaction contract](#interaction-contract) | Keys, counts and pending sequences |
 | [Relative numbering and viewport](#relative-numbering-and-viewport) | Stable identity and display behavior |

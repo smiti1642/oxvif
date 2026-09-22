@@ -2,16 +2,24 @@
 
 [English](mock-fleet-basic-plan.md) | [繁體中文](mock-fleet-basic-plan_zh.md)
 
-**Status reconciliation, 2026-09-22:** The basic runner shipped in 0.17.0. This plan stays active for native LAN/multicast/VMS and remaining platform lifecycle acceptance; loopback smoke does not close those gates.
+## Current calibration (2026-09-22)
 
-Status: B1–B4 implementation and local gates complete, authorized 2026-09-12.
-The first milestone provides simple multi-camera startup/configuration and basic
-shared discovery. Local terminal and 64/256-device capacity smoke checks pass;
-native LAN/VMS acceptance, Linux/macOS lifecycle and hosted CI remain pending.
-No release inclusion or sustained 64/256-device stability result is claimed.
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | B1–B4 basic runner shipped in 0.17; [fleet.rs](../../src/mock/fleet.rs), [discovery responder](../../src/mock/discovery_responder.rs) and [finalization](../done/release-0.17-finalization.md) establish implementation and hosted release evidence. Local 64/256 smoke remains loopback-only. |
+| Remaining | Native LAN multicast/VMS onboarding, shutdown/disappearance and explicit platform network lifecycle evidence remain EVIDENCE-NEEDED. Full scopes, Hello/Bye/Resolve, mixed Metamorph and sustained load are later feature scope, not implicitly part of B1–B4. |
+| Next step / exit criteria | Use an identified authorized interface and VMS: discover four unique identities, read every advertised endpoint, change one mock member without affecting peers, stop/restart and check cleanup/stable identity. Record OS/interface/VMS/topology. Keep sustained load and streaming claims separate. |
+
+Status: B1–B4 basic startup/configuration/discovery shipped in 0.17.0, with hosted
+CI recorded in finalization. The 2026-09-12 local terminal and 64/256-device
+capacity smoke results remain bounded evidence. Native LAN/VMS and explicit
+Linux/macOS network lifecycle acceptance remain open; sustained stability is unverified.
 
 | Section | Purpose |
 | --- | --- |
+| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
 | [Scope](#scope) | First milestone and exclusions |
 | [Operator workflow](#operator-workflow) | Proposed commands and configuration |
 | [Runtime rules](#runtime-rules) | Identity, networking and failure behavior |
@@ -45,7 +53,7 @@ Add a long-running `mock_fleet_serve` example behind `mock-server`, preserving
 the existing `mock_server` and short-lived `mock_fleet` example behavior. This
 does not add mock-serving dependencies to the installed `oxvif` CLI.
 
-Development commands (not in the published 0.16.0 package):
+Commands available in the 0.17.0 source/package (absent from 0.16.0):
 
 ```sh
 cargo run --example mock_fleet_serve --features mock-server -- init lab.toml --count 4 --base-port 18080
@@ -188,9 +196,10 @@ be tested. This documentation update does not change those markers or claim a re
 
 The separately passed capacity and example configuration tests are not added to
 the 1,316 workspace total. Earlier schema/credential evidence, if any, belongs to
-its recorded commit and environment, not automatically to this batch. Native LAN
-multicast, target VMS, Linux/macOS network lifecycle and hosted CI remain pending
-outside this six-item count; these local results do not approve a release.
+its recorded commit and environment, not automatically to this batch. At that time,
+native LAN multicast, target VMS, Linux/macOS network lifecycle and hosted CI were
+pending outside this six-item count. Hosted CI is now covered by 0.17 finalization;
+the other network acceptance remains open. These local results alone do not approve a release.
 
 ## Decisions
 
@@ -200,7 +209,8 @@ implementation defaults, not promises that every VMS supports that topology.
 
 Ask again before adding multiple host IPs if the target VMS deduplicates by IP,
 implementing RTSP, enabling persistent runtime write-back, mixing Metamorph fixtures,
-or including the feature in a particular release. Confirm the authorized lab
+or expanding the scope of a future release. The basic slice is already in 0.17.
+Confirm the authorized lab
 interface and target VMS before LAN acceptance, not by editing host networking.
 
 This is the narrowed first slice of F11 in the

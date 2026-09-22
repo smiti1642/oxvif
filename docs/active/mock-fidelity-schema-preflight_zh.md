@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-schema-preflight.md) | [繁體中文](mock-fidelity-schema-preflight_zh.md)
 
+## 現況校準（2026-09-22）
+
+程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-schema-preflight.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+
+| 分類 | 處置與證據 |
+| --- | --- |
+| 已確認 | scoped checker、pinned Xerces 與選定 160-instance／46-operation corpus 已進入 0.17 CI；最終發布紀錄取代 B16 待託管 CI 的舊狀態。本次未重跑外部 validator。 |
+| 剩餘工作 | W20 QName／wildcard／未解析計數，W21 更廣正反 request／response／Fault corpus，W22 全操作覆蓋與 W23 fuzz／property 仍未完成。 |
+| 下一步／完成條件 | 明列新增操作／instance，擷取真實 client／mock exchanges，記錄來源／工具 hash，驗證錯誤控制確實失敗；維持外部資源不打包與 fail-closed 原則。 |
+
 W20／W21 檢查點，2026-09-10。完整計畫仍在執行中。
 
 下列具日期的驗證結果保留當時 corpus 與工具範圍。目前匯出內容已包含 B16；歷史通過
@@ -9,6 +19,7 @@ W20／W21 檢查點，2026-09-10。完整計畫仍在執行中。
 
 | 章節 | 用途 |
 | --- | --- |
+| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
 | [結構檢查器](#結構檢查器) | 已交付的 W20 範圍 |
 | [驗證證據](#驗證證據) | 正向與拒絕控制 |
 | [外部驗證器評估](#外部驗證器評估) | 工具選擇與 K19 |
@@ -271,8 +282,8 @@ Mock 現在逐項輸出整數，公開 parser 保留全部 Items。
 
 B16 新增兩項 synchronization 操作的六組 exchange：兩個 receipt 與四個拒絕。
 因此目前 exporter 選取 80 組 exchange、46 項操作、59 個成功及 21 個 Fault
-（160 份 XML instance）。歷史本機驗證與目前候選版本待執行的 CI 見
-[B16 證據](../done/contributor-pr-integration-plan_zh.md#執行紀錄)。
+（160 份 XML instance）。歷史本機驗證見 [B16 證據](../done/contributor-pr-integration-plan_zh.md#執行紀錄)；
+最終 0.17 託管 CI 與發布已通過，見 [收尾紀錄](../done/release-0.17-finalization_zh.md)。更廣 instance 覆蓋仍未完成。
 
 W20 仍為 PARTIAL：須核對未解析／wildcard 計數、Fault 的 QName 文字，以及擴充
 選定的 46 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、

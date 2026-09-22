@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-operation-ledger.md) | [繁體中文](mock-fidelity-operation-ledger_zh.md)
 
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | Maintained inventory, not a standalone implementation backlog. The standing checker reconciles 159 routes, 161 Action sites and the reader index. The two B16 routes are implemented; their PARTIAL columns describe broader field/fault/effect audit coverage. |
+| Remaining | Each row keeps its W owner and fidelity axes. W26 integration completion does not make actual synchronization effects modeled; broader Media work belongs to W10/W16/W17. Do not mark all PARTIAL rows DONE because the route exists. |
+| Next step / exit criteria | Before modifying a route, open its W card; after the batch update the row and both language inventories, run [the checker](check-mock-fidelity-inventory.ps1), and link exact semantic tests. Inventory equality is a maintenance gate, not conformance acceptance. |
+
 Initial source baseline: `b134f73`, 2026-09-10; rows include subsequent named batches.
 This is a project-source inventory,
 not an ONVIF schema catalogue or a claim of conformance. Including B16, it lists all **159**
@@ -14,6 +24,7 @@ Do not change a route before opening its row and the corresponding work package.
 
 | Section | Purpose |
 | --- | --- |
+| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
 | [Tracking contract](#tracking-contract) | Column meaning and completion evidence |
 | [device](#device) | 38 route arms; W13 |
 | [device_io](#device-io) | 1 route arms; W13 |

@@ -155,7 +155,7 @@ CLI discovery 或 HTTP 成功不等於該證據。
 
 ## B14 相依套件
 
-狀態：LOCAL-PASS，已納入本輪並可獨立審查。參閱[維護政策](../active/dependency-maintenance-plan_zh.md)；
+狀態：LOCAL-PASS，已納入本輪並可獨立審查。參閱[維護政策](dependency-maintenance-plan_zh.md)；
 既有驗收僅涵蓋更早的 PR，不包含 #14。對選定 base 檢查目前 `Cargo.lock` 與
 `crates/oxvif-cli/Cargo.toml` diff，包含 transitive 更新與已套用版本，不能整份
 覆蓋回過時的 lockfile。

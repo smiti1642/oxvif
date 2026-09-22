@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-pipeline-preflight.md) | [繁體中文](mock-fidelity-pipeline-preflight_zh.md)
 
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | Parsed request boundary, exact synthetic Actions, scoped auth, committed profile/catalogue effects and K27 retention are delivered; see [request.rs](../../src/mock/request.rs), [effect.rs](../../src/mock/effect.rs) and [fixture.rs](../../src/metamorph/fixture.rs). |
+| Remaining | W02 transitive paths, W06 broader error consumers, W07 full HTTP binding and W19 remaining mutation/read dependencies, standalone replay observation, concurrent visibility and any future key-format redesign remain open. |
+| Next step / exit criteria | Choose a mutation/read pair and define commit, refusal, rollback and replay visibility; test in-process, HTTP and replay paths. Preserve collision buckets and legacy loading. A current key collision is not evidence that the repaired store still overwrites requests. |
+
 2026-09-11 K27 follow-up: collision retention and request-aware lookup are
 implemented; see [storage migration](../replay-storage.md) and
 [release evidence](../done/release-0.17-cut.md#evidence). Earlier overwrite reproductions
@@ -26,6 +36,7 @@ below. No new product decision is required here.
 
 | Section | Purpose |
 | --- | --- |
+| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
 | [Entry points and ownership](#entry-points-and-ownership) | Trace inputs through shared code |
 | [Profile dependency closure](#profile-dependency-closure) | Parsing, rendering and side effects |
 | [Compatibility constraints](#compatibility-constraints) | Preserve intentional raw behavior |

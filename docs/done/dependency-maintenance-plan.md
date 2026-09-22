@@ -2,11 +2,37 @@
 
 [English](dependency-maintenance-plan.md) | [繁體中文](dependency-maintenance-plan_zh.md)
 
-Status: Implemented and integrated; first grouped PR verified, subsequent-cycle check pending.
+## Closure evidence (2026-09-22)
+
+Read-only GitHub inspection closes the outstanding grouping check:
+
+- [2026-09-09 Cargo refresh](https://github.com/smiti1642/oxvif/actions/runs/34352124838)
+  succeeded with `multi-ecosystem-update=true`, `updating-a-pull-request=true`
+  and existing group PR #14. The log explicitly defers new PR creation to reuse
+  the existing group. [Actions](https://github.com/smiti1642/oxvif/actions/runs/34352124935)
+  succeeded with nothing to update for `maintenance`.
+- [2026-09-21 scheduled Cargo cycle](https://github.com/smiti1642/oxvif/actions/runs/35550107493)
+  succeeded with existing group PR #18, on `b8e9dd9`.
+  [Actions](https://github.com/smiti1642/oxvif/actions/runs/35550108549) also
+  succeeded and reported no group updates. The complete repository PR listing
+  inspected on 2026-09-22 has one open routine Dependabot group, [#18](https://github.com/smiti1642/oxvif/pull/18),
+  created 2026-09-14 and updated 2026-09-21; no duplicate routine PR was found.
+- This verifies reuse/no-duplicate behavior for the observed cycles, not every
+  future cycle or an actual mixed Cargo-plus-Actions change (Actions had no updates).
+  #14 was closed after credited adaptation; #18 remains open and unreviewed here.
+- Integration and 0.17 publication are already recorded in
+  [finalization](release-0.17-finalization.md). The original integration/
+  grouping scope is complete. PR #18 review and the overdue keyring 4.x migration
+  investigation move explicitly to [F13](../active/post-0.17-backlog.md#calibrated-work-ownership).
+  No dependency update, PR mutation, updater rerun, installation or publication
+  was performed by this calibration. Earlier pending statements below are dated history.
+
+Status: DONE — original integration and subsequent-cycle grouping acceptance verified; archived 2026-09-22.
 Date: 2026-09-07. Review baseline: `master` at `ee0460f`.
 
 | Section | Purpose |
 | --- | --- |
+| [Closure evidence](#closure-evidence-2026-09-22) | Subsequent-cycle checks and F13 handoff |
 | [Outcome](#outcome) | Scope and completion criteria |
 | [Execution record](#execution-record) | Current results and pending gates |
 | [Review evidence](#review-evidence) | Current six PRs |
@@ -202,7 +228,7 @@ jobs; they do not establish a need to raise the minimum supported Rust version.
 - [x] Merge the configuration into the default branch and inspect the actual
   Dependabot job log and generated PR. Do not mark activation complete merely
   because local YAML parsing succeeds.
-- [ ] Check a subsequent updater execution for duplicate routine PRs while the
+- [x] Check a subsequent updater execution for duplicate routine PRs while the
   grouped PR is open. Record actual behavior and any service limitations.
 - [x] Reconcile obsolete bot PRs only after checking that their changes have landed
   or are covered by the validated replacement. Avoid blanket closure or deletion.
@@ -281,9 +307,9 @@ cargo outdated --workspace --root-deps-only
 - [x] Synchronize `develop` with integrated `master` through the existing merge policy.
 - [x] Preserve published `v0.16.0`, crate contents, and release assets. This plan
   does not publish a new version or resume APT/Homebrew publication.
-- [ ] Prepare a maintenance-release candidate only after integration; remind the
+- [x] Prepare a maintenance-release candidate only after integration; remind the
   owner before any external release action, as previously requested.
-- [ ] Move this plan and its translation to `docs/done/` and update links only when
+- [x] Move this plan and its translation to `docs/done/` and update links only when
   integration and operational grouping verification are both complete.
 
 ## References

@@ -2,15 +2,23 @@
 
 [English](mock-fleet-basic-plan.md) | [繁體中文](mock-fleet-basic-plan_zh.md)
 
-**2026-09-22 狀態整理：** 基本 runner 已隨 0.17.0 發布。本計畫保留於 active，追蹤原生 LAN／multicast／VMS 及剩餘平台生命週期驗收；loopback smoke 不代表這些關卡已通過。
+## 現況校準（2026-09-22）
 
-狀態：B1–B4 實作與本機關卡完成，2026-09-12 授權執行。首階段提供簡易多台
-啟動／設定及基本共用探索。本機終端機與 64／256 台容量基本檢查通過；原生
-LAN／VMS 驗收、Linux／macOS 生命週期及託管 CI 仍待完成。不宣稱已納入發布
-或通過 64／256 台長時間穩定性驗證。
+程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fleet-basic-plan.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+
+| 分類 | 處置與證據 |
+| --- | --- |
+| 已確認 | B1–B4 基本 runner 已隨 0.17 發布；fleet.rs、discovery_responder.rs 與最終發布紀錄有實作／託管證據。64／256 容量 smoke 仍僅為 loopback。 |
+| 剩餘工作 | 原生 LAN multicast／VMS onboarding、關閉消失與各平台網路生命週期仍缺證據；完整 scopes、Hello／Bye／Resolve、Metamorph 混合及長時間負載是後續功能範圍。 |
+| 下一步／完成條件 | 使用已指明且獲授權的 interface／VMS，驗證四個獨立 identity、每個 URL、單台狀態隔離、關閉清理與重啟 identity，記錄 OS／介面／VMS／拓樸。串流與持續負載另驗收。 |
+
+狀態：B1–B4 基本啟動／設定／探索已隨 0.17.0 發布，託管 CI 見最終紀錄。
+2026-09-12 的本機終端與 64／256 台容量 smoke 保留原驗證範圍；原生 LAN／VMS
+及具體 Linux／macOS 網路生命週期驗收仍待完成，長時間穩定性仍未驗證。
 
 | 章節 | 用途 |
 | --- | --- |
+| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
 | [範圍](#範圍) | 第一階段及排除項目 |
 | [操作流程](#操作流程) | 擬議命令與設定 |
 | [執行規則](#執行規則) | 身分、網路與失敗處理 |
@@ -40,7 +48,7 @@ HTTP 且不啟用探索；LAN HTTP 與 multicast 公告須明確設定。
 `mock_server` 及短期執行的 `mock_fleet` 範例行為，不將 Mock 服務相依套件加入
 已安裝的 `oxvif` CLI。
 
-開發版命令（尚未包含於已發布的 0.16.0 套件）：
+0.17.0 原始碼／套件可用的命令（0.16.0 未提供）：
 
 ```sh
 cargo run --example mock_fleet_serve --features mock-server -- init lab.toml --count 4 --base-port 18080
@@ -167,8 +175,9 @@ B4 Windows 全功能紀錄（`target/fleet-tests-all.log`）列出六項 `ignore
 
 另行通過的容量及範例設定測試不加計於 1,316 項 workspace 統計。先前若有
 schema／憑證驗證證據，僅適用於其記錄的提交及環境，不自動視為本批次結果。
-原生 LAN multicast、目標 VMS、Linux／macOS 網路生命週期及託管 CI 仍待完成，
-不包含於這六項統計；上述本機結果不構成發布核准。
+當時原生 LAN multicast、目標 VMS、Linux／macOS 網路生命週期及託管 CI 均待完成，
+不包含於這六項統計。託管 CI 已由 0.17 最終紀錄補齊；其餘網路驗收仍開放。
+上述本機結果本身不構成發布核准。
 
 ## 決策
 
@@ -176,7 +185,8 @@ schema／憑證驗證證據，僅適用於其記錄的提交及環境，不自�
 啟動時載入設定，是實作預設，不保證每套 VMS 均接受此網路配置。
 
 若目標 VMS 以 IP 去重，加入多主機 IP 前須再討論；RTSP、執行期間狀態回寫、
-Metamorph 混合及指定版本收錄亦須另行確認。LAN 驗收前確認經授權的實驗網卡及
+Metamorph 混合及未來版本的擴充範圍亦須另行確認；基本功能已於 0.17 發布。
+LAN 驗收前確認經授權的實驗網卡及
 目標 VMS，不以修改主機網路代替確認。
 
 本計畫為[後續清單](post-0.17-backlog_zh.md) F11 的縮小首階段，接續

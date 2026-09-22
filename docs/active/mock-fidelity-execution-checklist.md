@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-execution-checklist.md) | [繁體中文](mock-fidelity-execution-checklist_zh.md)
 
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | W00 source inventory is maintained. W26 bounded contributor integration is DONE in 0.17; this is not real media-effect acceptance. W22–W25 have 0.17 CI/document/release evidence in [finalization](../done/release-0.17-finalization.md), so their former global pending-publication language is stale. |
+| Remaining | W01–W23 broader contracts retain their individual statuses. W24/W25 are PARTIAL at programme scope: the 0.17 subset is delivered, and future changed batches still need their own feature/platform/document gates. The W26 operation ledger can retain PARTIAL fidelity axes even though integration is done. |
+| Next step / exit criteria | Use one W ID and explicit operation set per batch. Record prerequisites, remaining acceptance and evidence revision; update this register and matching operation rows together. Never infer completion from the 159-route inventory or reuse 0.17 evidence for changed code. |
+
 Planning baseline: `b134f73`, 2026-09-10. Policy: [approved main plan](mock-fidelity-hardening-plan.md).
 Scope index: [159 routed operations](mock-fidelity-operation-ledger.md).
 This document turns M0–M6 into traceable work; it does not mark those milestones
@@ -13,6 +23,7 @@ It does not mark the remaining service batches complete or authorize main-branch
 
 | Section | Purpose |
 | --- | --- |
+| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
 | [Execution rules](#execution-rules) | Resume without conversation history |
 | [Batch and verification cadence](#batch-and-verification-cadence) | Approved reduction of repeated full-suite runs |
 | [Readiness and operation card](#readiness-and-operation-card) | Required work before editing a handler |
@@ -26,9 +37,9 @@ It does not mark the remaining service batches complete or authorize main-branch
 
 ## Execution rules
 
-Release scheduling is now owned by the [0.17 cut](../done/release-0.17-cut.md) and
-[follow-up backlog](post-0.17-backlog.md). Existing PARTIAL/TODO states remain
-technical evidence, not a requirement to finish every service before 0.17.
+Current scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+The [0.17 cut](../done/release-0.17-cut.md) is completed historical scope. Existing
+PARTIAL/TODO states describe the broader programme, not unshipped 0.17 blockers.
 Known data loss and security blockers cannot be deferred.
 
 1. Read the main plan's D1–D3 decisions, this checklist, and the operation ledger.
@@ -93,7 +104,7 @@ and touched reference counts. [VS1](../done/mock-fidelity-video-source.md),
 [VE1](../done/mock-fidelity-video-encoder.md) and [AM1](../done/mock-fidelity-audio-metadata.md)
 subsequently implemented the eight source, eight encoder and fifteen audio/metadata
 operations respectively. These are completed implementation subgroups with bounded
-evidence, not W10 closure; release scheduling follows the 0.17 cut above.
+evidence, not W10 closure; future scheduling follows the current backlog above.
 Report completed/remaining subgroups and open
 blockers rather than using test counts as a completion percentage.
 
@@ -180,11 +191,11 @@ include operation-sized Fault migration after W05, not just request parsing.
 | W19 / M3,M6 / PARTIAL | W03/W09 designs | Built-in profile creation/deletion, Media1 video binding and Media2 generic binding use private committed effects; cross-service reads, HTTP, instance and chain controls | Remaining configuration writes and other mutations, standalone replay policy, full read dependencies, full normalization/key-format redesign and concurrent/callback visibility remain open (bounded K27 storage repair is recorded below); no new recording of device secrets; PA1 extends committed profile effects to reference-count and PTZ-compatible reads; VS1 adds post-commit source/profile/options invalidation while physical-source recordings remain intact; VE1 adds source-capacity and profile-encoder-options invalidation; AM1 adds audio/metadata committed effects. |
 | W20 / M5 / PARTIAL | W04/W05 corpus | `tests/mock_schema_shape.rs`: scoped resolution, Envelope/Fault inclusion and missing-resource failure implemented; see schema preflight | Seven generic controls and Fault-wrapper perturbation passed sensitivity checks; QName values, wildcard/unresolved accounting and request corpus remain open; pins unchanged |
 | W21 / M5 / PARTIAL | W20, D3 | Pinned offline tooling, 20 schema-free controls, seven independent-backend tests, and selected 46-operation Media corpus export with explicit payload anchors | 160 instances pass locally after B16, including 21 refusals (seven profile, three source, two rate, two encoder, three audio/metadata and four synchronization). Remaining operations and broader input/semantic coverage are not accepted |
-| W22 / M5 / PARTIAL | W00 for inventory; W21 for schema job | Windows/Linux inventory, Xerces qualification, official-source compilation and selected profile/source/rate/encoder/audio/metadata/synchronization instance validation gate package | Sources and corpus stay external with no uploaded artifacts. Selected corpus has 160 instances over 46 operations; hosted evidence is revision-specific in the release cut. Whole-program instance coverage and final-candidate release evidence remain open |
+| W22 / M5 / PARTIAL | W00 for inventory; W21 for schema job | Windows/Linux inventory, Xerces qualification, official-source compilation and selected profile/source/rate/encoder/audio/metadata/synchronization instance validation gate package | Sources and corpus stay external with no uploaded artifacts. Selected corpus has 160 instances over 46 operations; hosted evidence is revision-specific in the release cut. Whole-program instance coverage remains open; final 0.17 CI/publication evidence is recorded in finalization |
 | W23 / M1,M6 / TODO | Each migrated batch | All named regression suites, client fixtures and generic parser tests | Audit hollow positives/negatives and namespace-stripped or fragment probes; mutations fail at intended assertions; include all targets with `--no-fail-fast`; bounded fuzz/property campaign with seed/limits recorded |
-| W24 / M6 / TODO | Integration candidate | Cargo features/MSRV, `.github/workflows/ci.yml`, `packaging/check_xml_features.py`, docs builds | Native Windows/Linux/macOS default/all-feature runs, per-feature warning sweep, MSRV and downstream XML feature-unification checks; mark unavailable evidence blocked/not-run |
-| W25 / M6 / TODO | W00–W24 accepted for programme closure; selected release scope follows the cut | Bilingual mock/library/CLI/support docs as affected, `OPERATIONS`, README links, CHANGELOG, rustdoc, release evidence | Document D1/D2 migration with working examples; audit all current claims and historical notes without rewriting shipped facts; publish/merge/push/install follow applicable authorization |
-| W26 / IN-PROGRESS | Authorized contributor integration | PR #16 client/session port; scoped receipt-only mock, operation cards, bilingual docs and S01–S08 controls implemented | Targeted tests, inventory and 160 external instances pass; final gates/hosted CI tracked in [B16 evidence](../done/contributor-pr-integration-plan.md#execution-record). No main-branch merge or media-effect acceptance |
+| W24 / M6 / PARTIAL | Next changed integration candidate | Feature/MSRV/native-platform and downstream XML controls already ran for the 0.17 subset; see [finalization](../done/release-0.17-finalization.md) | Reuse only exact unchanged inputs. Future service batches still require their affected feature/platform matrix; this is not missing 0.17 publication evidence |
+| W25 / M6 / PARTIAL | W00–W24 for full programme closure | Bilingual 0.17 migration/support/docs and publication delivered; the broader programme remains active | For each next batch reconcile public claims, examples, changelog and rustdoc; full-programme closure waits for remaining contracts, not another 0.17 release |
+| W26 / DONE (bounded integration) | Completed 0.17 integration | Credited PR #16 client/session adaptation, scoped receipt-only mock, bilingual cards and S01–S08 controls shipped | B16 tests/corpus and final native CI/publication are in [finalization](../done/release-0.17-finalization.md). Original PR was closed after adaptation, not merged as-is; real media effects and wider ledger fidelity remain outside this delivery |
 
 ## Service batches
 

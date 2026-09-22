@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-execution-checklist.md) | [繁體中文](mock-fidelity-execution-checklist_zh.md)
 
+## 現況校準（2026-09-22）
+
+程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-execution-checklist.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+
+| 分類 | 處置與證據 |
+| --- | --- |
+| 已確認 | W00 清冊持續維護；W26 限定整合已隨 0.17 完成，不表示真實媒體效果。W22–W25 已有 0.17 CI／文件／發布紀錄。 |
+| 剩餘工作 | W01–W23 的廣泛契約維持逐項 PARTIAL／TODO；W24／W25 對整體計畫是 PARTIAL，後續變更仍需新驗收。W26 整合 DONE 與 operation ledger 的 fidelity PARTIAL 可以並存。 |
+| 下一步／完成條件 | 每批指定一個 W 編號與明確 operation 集合，記錄相依、剩餘驗收及證據 revision；同步工作表與 operation rows，不從路由數推算完成率。 |
+
 規劃基準：`b134f73`，2026-09-10。政策依據：[已核准主計畫](mock-fidelity-hardening-plan_zh.md)。
 範圍索引：[159 個路由操作](mock-fidelity-operation-ledger_zh.md)。
 本文件將 M0–M6 拆成可追蹤工作，不代表里程碑已完成；本次規劃補充不改變 runtime 行為。
@@ -12,6 +22,7 @@
 
 | 章節 | 用途 |
 | --- | --- |
+| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
 | [執行規則](#執行規則) | 不依賴對話歷史即可接續施工 |
 | [批次與驗證節奏](#批次與驗證節奏) | 已核准的全套測試重複執行減量方式 |
 | [開工條件與操作工作卡](#開工條件與操作工作卡) | 修改 handler 前必須完成的工作 |
@@ -25,8 +36,8 @@
 
 ## 執行規則
 
-發布排程改由 [0.17 切點](../done/release-0.17-cut_zh.md)及[後續清單](post-0.17-backlog_zh.md)
-管理。原本 PARTIAL／TODO 仍是技術證據，不要求 0.17 前完成全部服務；
+目前排程由[後續清單](post-0.17-backlog_zh.md)追蹤；[0.17 切點](../done/release-0.17-cut_zh.md) 已完成。
+PARTIAL／TODO 描述廣泛計畫的剩餘技術範圍，不是尚未完成的 0.17 發布阻擋；
 已知資料遺失及安全阻擋不得延後。
 
 1. 閱讀主計畫 D1–D3、本檢查表及逐操作清冊。以 `git status` 與實際 commit
@@ -83,7 +94,7 @@ preflight 的 A3。後續 [PA1 組裝批次](../done/mock-fidelity-profile-assem
 [VS1](../done/mock-fidelity-video-source_zh.md)、[VE1](../done/mock-fidelity-video-encoder_zh.md) 與
 [AM1](../done/mock-fidelity-audio-metadata_zh.md) 隨後分別實作八項 source、八項 encoder
 及十五項 audio／metadata 操作。這些子群具有限範圍證據，不代表 W10 結案；
-發布排程依上述 0.17 切點。進度回報以子群及 blocker 為主，不將測試數換算為完成率。
+後續排程依目前 backlog，0.17 切點僅作歷史證據。進度回報以子群及 blocker 為主，不將測試數換算為完成率。
 
 ## 開工條件與操作工作卡
 
@@ -163,11 +174,11 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | 其餘 configuration 寫入與 mutation、單獨 replay 政策、完整讀取依賴、完整正規化／key 格式重設計及併發／callback 可見性仍待完成（有限 K27 儲存修正記於下表）；不新增錄製設備機密；PA1 將已提交 profile effect 延伸至引用計數與 PTZ compatible read，VS1 加入成功 source 提交後的 source／profile／options 失效，保留實體來源 recording；VE1 加入 source-capacity 與 profile-encoder-options 失效；AM1 加入 audio／metadata committed effects。 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
 | W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及選定 46 操作 Media corpus 匯出與明確 payload anchor | B16 後本機 160 份 instance 通過，包含 21 個拒絕（七個 profile、三個 source、兩個 rate、兩個 encoder、三個 audio／metadata、四個 synchronization）。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
-| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source／rate／encoder／audio／metadata／synchronization instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 46 操作的 160 份 instance；託管證據依 revision 記於發布切點。全程式 instance 覆蓋及最終候選發布證據仍待完成 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source／rate／encoder／audio／metadata／synchronization instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 46 操作的 160 份 instance；託管證據依 revision 記於發布切點。全程式 instance 覆蓋仍未完成；最終 0.17 CI／發布證據已記於收尾紀錄 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
-| W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
-| W25／M6／TODO | 全案結案須 W00–W24 驗收；選定發布範圍依切點 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |
-| W26／IN-PROGRESS | 已授權社群整合 | 已移植 PR #16 client／session，實作 scoped 僅收件確認 mock、工作卡、雙語文件與 S01–S08 控制 | 針對性測試、清冊及 160 份外部 instance 通過；最終關卡／託管 CI 見 [B16 證據](../done/contributor-pr-integration-plan_zh.md#執行紀錄)。未合併主分支，未驗收實際媒體效果 |
+| W24／M6／PARTIAL | 下一個有變更的整合候選 | 0.17 子集已有 feature／MSRV／原生平台／下游 XML 控制，見[最終紀錄](../done/release-0.17-finalization_zh.md) | 僅重用輸入完全相同的證據；後續服務批次仍須受影響的平台／feature 矩陣，並非 0.17 尚未發布 |
+| W25／M6／PARTIAL | 全案結案仍需 W00–W24 | 0.17 雙語 migration／support／文件及發布已完成，廣泛計畫持續進行 | 下一批同步公開宣告、範例、changelog 與 rustdoc；全案結案等待剩餘契約，不是重發 0.17 |
+| W26／DONE（限定整合） | 已完成 0.17 整合 | 保留署名的 PR #16 client／session 移植、scoped 收件確認 mock、雙語工作卡及 S01–S08 已發布 | B16 測試／corpus 與最終原生 CI／發布見[最終紀錄](../done/release-0.17-finalization_zh.md)。原 PR 於移植後關閉，非原樣 merge；實際媒體效果與 ledger 更廣 fidelity 不在本交付範圍 |
 
 ## 服務施工批次
 

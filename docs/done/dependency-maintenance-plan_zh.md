@@ -2,11 +2,31 @@
 
 [English](dependency-maintenance-plan.md) | [繁體中文](dependency-maintenance-plan_zh.md)
 
-狀態：實作與整合完成，首個集中 PR 已驗證；後續週期檢查待完成。
+## 結案證據（2026-09-22）
+
+本次以唯讀 GitHub 查核補齊剩餘分組驗證：
+
+- [9/9 Cargo refresh](https://github.com/smiti1642/oxvif/actions/runs/34352124838)
+  成功；job 指明 multi-ecosystem、更新既有 PR #14，log 明確延後新建 PR、重用現有分組。
+  [Actions](https://github.com/smiti1642/oxvif/actions/runs/34352124935) 成功且該 group 無待更新項目。
+- [9/21 Cargo 排程](https://github.com/smiti1642/oxvif/actions/runs/35550107493)
+  在 `b8e9dd9` 成功，辨識既有分組 PR #18；
+  [Actions](https://github.com/smiti1642/oxvif/actions/runs/35550108549) 也成功且無更新。
+  9/22 完整 PR 清單只有一個開啟中的例行分組 [#18](https://github.com/smiti1642/oxvif/pull/18)，
+  9/14 建立、9/21 更新，未出現重複例行 PR。
+- 證據僅涵蓋已觀察週期的重用／不重複行為；Actions 無變更，不宣稱已實測混合兩種 ecosystem 的更新，
+  也不保證所有未來週期。#14 於保留署名的移植後關閉；#18 本次仍未審查。
+- 原整合與分組範圍已完成，0.17 發布見[最終紀錄](release-0.17-finalization_zh.md)。
+  #18 審查及已超過原訂日期的 keyring 4.x 遷移評估，明確轉到
+  [F13](../active/post-0.17-backlog_zh.md#校準後的工作歸屬)。本次未改相依套件、操作 PR、重跑 updater、安裝或發布。
+  下方原有 pending 敘述保留為當時紀錄。
+
+狀態：DONE，原整合與後續週期分組驗證均完成；2026-09-22 歸檔。
 日期：2026-09-07。審查基準：`master` 的 `ee0460f`。
 
 | 章節 | 用途 |
 | --- | --- |
+| [結案證據](#結案證據2026-09-22) | 後續週期查核及 F13 移交 |
 | [目標](#目標) | 範圍與完成條件 |
 | [執行紀錄](#執行紀錄) | 現有結果與待完成關卡 |
 | [審查證據](#審查證據) | 現有六個 PR |
@@ -172,7 +192,7 @@ fingerprint 與 XML 行為相容性。保留人工審查；分組不會啟用自
   Cargo 與 GitHub Actions 的組合。
 - [x] 將設定合併到預設分支，檢查實際 Dependabot job log 及產生的 PR；本地 YAML
   可以解析不等於服務已成功啟用。
-- [ ] 集中 PR 尚未關閉時，再確認一次更新工作的行為，檢查是否產生重複例行 PR，
+- [x] 集中 PR 尚未關閉時，再確認一次更新工作的行為，檢查是否產生重複例行 PR，
   記錄實際結果與服務限制。
 - [x] 確認變更已合併或由已驗證的替代 PR 承接後，才處理過時機器人 PR，避免批次
   關閉或刪除尚未完成的項目。
@@ -247,9 +267,9 @@ cargo outdated --workspace --root-deps-only
 - [x] 依既有合併政策將整合後的 `master` 同步回 `develop`。
 - [x] 保留已發布的 `v0.16.0`、crate 內容及 release assets。本計畫不發布新版本，
   也不恢復 APT／Homebrew 的發布工作。
-- [ ] 整合完成後才準備 maintenance release 候選版本；依先前要求，在任何對外
+- [x] 整合完成後才準備 maintenance release 候選版本；依先前要求，在任何對外
   發布動作前先提醒專案擁有者。
-- [ ] 整合與分組運作驗證皆完成後，才將本計畫及英文版移至 `docs/done/` 並更新連結。
+- [x] 整合與分組運作驗證皆完成後，才將本計畫及英文版移至 `docs/done/` 並更新連結。
 
 ## 參考資料
 

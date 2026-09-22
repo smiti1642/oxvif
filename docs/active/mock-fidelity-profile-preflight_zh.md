@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-profile-preflight.md) | [繁體中文](mock-fidelity-profile-preflight_zh.md)
 
+## 現況校準（2026-09-22）
+
+程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-profile-preflight.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+
+| 分類 | 處置與證據 |
+| --- | --- |
+| 已確認 | scoped identity、空 profile policy、typed adapter、PA1 組裝及後續 VS1／VE1／AM1／B16 已交付；K27 儲存修正也已發布，不能重列為未實作。 |
+| 剩餘工作 | W10 剩餘欄位、configuration／binding 組合、Fault 分支及跨服務效果仍需逐操作稽核。NOT READY 僅適用廣泛遷移，不抹除已交付子群。 |
+| 下一步／完成條件 | 從 W10 選 OSD／URI／source mode 或剩餘 binding 子群，先列 selector、extension、拒絕後狀態及 replay 相依，再驗證兩個 transport 與獨立 wire instances。 |
+
 工作：第一批 W10 的 W01／W02。基準 `892aa94`；2026-09-10 開始調查。
 **IN-PROGRESS，尚未符合廣泛遷移 handler 的開工條件。**
 負責者：目前 hardening 分支。[施工檢查表](mock-fidelity-execution-checklist_zh.md) ·
@@ -18,6 +28,7 @@ replay 相依圖、HTTP binding 符合性或實機驗收已完成。
 
 | 章節 | 用途 |
 | --- | --- |
+| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
 | [範圍與身分](#範圍與身分) | 確切 13 個操作工作卡 |
 | [共用路徑與目前行為](#共用路徑與目前行為) | 輸入、效果及消費端 |
 | [參考資料審閱](#參考資料審閱) | 已確認結論及尚缺證據 |

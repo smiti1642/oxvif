@@ -1,12 +1,22 @@
 # oxvif-metamorph — the shape-shifting ONVIF device server
 
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | Recorder APIs are public in [record.rs](../../src/metamorph/record.rs) and exported from [mod.rs](../../src/metamorph/mod.rs). Clone serving, structural diff and `FixtureStore::verify_parsing` exist. [fixture.rs](../../src/metamorph/fixture.rs) retains colliding legacy-key requests and provides request-aware lookup; do not restore overwrite behavior from an old design. |
+| Remaining | M4 full control plane/persona switching; M7 value comparison against a real reference, beyond structural diff or own-parser checks. [Clone integration](metamorph-clone-in-oxdm.md) retains only the G3 summary API decision and privacy context. Fleet discovery/acceptance is owned by [Fleet](mock-fleet-basic-plan.md); replay consistency by W19. |
+| Next step / exit criteria | Specify one M4 endpoint/persona transition with state/auth/persistence boundaries, or define the reference and comparison contract for M7. Test independent differences and preserved raw evidence. Neither basic Fleet nor parse success completes those milestones. |
+
 > Evolve the existing `oxvif` mock server into a **device that changes shape**.
 > One server, three personas: **synthesise** (hand-authored), **clone** (record a
 > real camera and replay its quirks verbatim), **adapt** (put an ONVIF skin on a
 > non-ONVIF device).
 
 This file is the authoritative spec a coding agent builds against. It is dev-only
-(the `docs/` directory is excluded from the published crate).
+(development plans under `docs/active/` and `docs/done/` are excluded from the published crate; public guides ship).
 
 Status: **M0–M3 + M5–M6 done** — the clone-a-camera-and-replay increment (M0–M2,
 per D7), WS-Discovery so a clone is findable on the LAN (M3), the Persona C
@@ -18,7 +28,7 @@ the **bound-port replay "container"** (`MockServerBuilder::replay`, an M4 subset
 without the control plane) and the **structural quirk diff**
 (`FixtureStore::diff_against_synthetic`, the first half of M7). The pre-work decisions in
 [§1](#1-locked-decisions) are settled; the milestone-scoped open questions in
-[§9](#9-still-open-decide-at-the-milestone-not-now) are deliberately deferred to
+[§9](#9-still-open--decide-at-the-milestone-not-now) are deliberately deferred to
 their milestone and must NOT be pre-empted.
 
 ---
@@ -255,8 +265,10 @@ existing prefix-stripping `XmlNode` (so prefixes → local names and `xmlns` dec
 drop for free), sorts attributes, collapses whitespace, and re-serialises to a
 stable non-XML string. `Masking::Key` masks class (a) only; `Masking::Value` masks
 (a) + (b). Field lists live as `const` slices in the module — extend them there.
-The prefix-strip (vs full namespace-URI resolution) is the pragmatic cut: two
-different namespaces reusing a local name collapse together, a non-issue for ONVIF.
+The legacy projection loses namespace identity: different namespaces reusing a
+local name can collide. K27 repaired storage retention with collision buckets
+and request-aware lookup; key-only lookup refuses ambiguity. This does not
+complete the broader normalization/key-format redesign tracked by W19.
 
 ### 5.2 WS-Discovery responder
 
@@ -279,9 +291,10 @@ unicast probe path in integration tests.
 
 ### 5.5 serde on public types
 
-`src/types/` has no serde derive. Parsed-struct-level diff/inspection needs opt-in
-`Serialize` first (a roadmap item, promoted to a prerequisite here). Structural
-(raw-XML) comparison is not blocked by this and can proceed.
+The optional `serde` feature and public-type derives are delivered. The original
+serialization prerequisite is closed; reference-value comparison still needs
+its own semantic contract. Structural diff and typed own-parser verification
+already exist and do not establish equivalence to a real reference device.
 
 ---
 
@@ -306,7 +319,7 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   `RecordingTransport` + `examples/metamorph_record.rs` (the recorder). Masker
   gained `wsa:To`. Integration test records a mock "camera" → replays →
   `Set → Get` round-trips. **End of the shippable increment (per D7)** — the
-  version bump + CHANGELOG for M0–M2 rides the next oxvif release.
+  original M0–M2 release work is complete; this is historical milestone evidence.
   - *0.14.0 — selectable read surface (`src/metamorph/surface.rs`).* The record
     half is now a **two-level selectable surface**: `SurfaceGroup` (seven service
     zones) and `SurfaceOp` (~50 individual `Get*` reads), with
@@ -327,6 +340,9 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   multicast). Advertises a `DiscoveredDevice` — announce and discover share one
   type. Tested via the pure path + a loopback **unicast** round-trip (multicast
   is left to real use, per the CI caveat). `<Scopes>` filter deferred.
+  This describes the original single-device path. The later shared Fleet path
+  validates known namespaces/types and declines unsupported scope filters;
+  full scope matching and LAN/VMS acceptance remain in the [Fleet plan](mock-fleet-basic-plan.md).
 - **M4 — Control plane + Persona A ([§4-A](#persona-a--synthetic--control-plane-m4))**. Grow `/admin/*`; oxdm Dioxus UI drives it.
   *Partial:* the replay slice — serving a clone over the bound port
   (`metamorph-server` feature, `MockServerBuilder::replay(FixtureStore)`) — is
@@ -348,7 +364,7 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   (mid-term) deferred — separate servers are simpler and already isolate state.
   `examples/mock_fleet.rs`.
 - **M7 (stretch) — quirk diff**. Masker-driven structural diff (baseline vs clone),
-  surfaced in oxdm; semantic diff waits on [§5.5](#55-serde-on-public-types).
+  surfaced in oxdm; serde support in [§5.5](#55-serde-on-public-types) is delivered; deeper semantic diff still needs a reference/comparison contract.
   *Partial:* the **structural** half is done —
   `FixtureStore::diff_against_synthetic` diffs each clone response's element-path
   set against the synthetic baseline and returns a serde-serialisable

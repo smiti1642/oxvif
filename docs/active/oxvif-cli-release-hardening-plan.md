@@ -1,6 +1,14 @@
 # oxvif CLI release-hardening and product-readiness plan
 
-**Status reconciliation, 2026-09-22:** The diagnostic beta has shipped through 0.17.0. This remains active for the broader unchecked reliability, support and commercial-pilot requirements; earlier first-release gates are historical.
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | 0.17 packages, five native targets, schema/credential CI and publication are recorded in [finalization](../done/release-0.17-finalization.md). [describe.rs](../../crates/oxvif-cli/src/describe.rs) already provides semantic argument text, example strings and command-ID checks; [CLI tests](../../crates/oxvif-cli/tests/cli.rs) validate representative schemas. These are partial R4 evidence, not proof of every example/error path. |
+| Remaining | R2: actual attempt accounting, service-resolution/retry-reason detail, dedicated health/enrichment contract checks, clock-skew and directory-sync policy. R3: health-detail selection. R4: per-command reachable errors, executable examples and exhaustive envelope/parser cases. R5: multi-vendor matrix, soak/resource budgets, artifact signing, recovery and sanitized support bundle. Public channels belong to [distribution](oxvif-cli-three-platform-distribution-plan.md). |
+| Next step / exit criteria | Select one R2/R3/R4 subgroup; map each unchecked requirement to its current symbol/test before changing code. Close only with exact positive/negative assertions. Commercial and channel claims require named platform/device evidence. The old release/handoff checklist is historical; no new send, publish or install action is requested by this calibration. |
 
 **Status:** active; implementation in progress. Written 2026-09-01 after a
 repository, package, runtime UX, security, and public-release audit of `develop`
@@ -289,9 +297,9 @@ no claim that depends on an unpublished artifact.
 
 ### 6.2 Package verification
 
-- [ ] Publish and verify `oxvif 0.16.0` first.
+- [x] Publish and verify the library before the CLI: 0.17 publication and package evidence are in finalization. The original 0.16 first-publication gate is historical.
 - [x] Run `cargo package -p oxvif` and rebuild the generated package.
-- [ ] Run `cargo package -p oxvif-cli` without `--no-verify`.
+- [x] Run verifying CLI packaging: both 0.17 workspace packages passed without `--no-verify`; see the finalization record.
 - [ ] Install the generated CLI package from its unpacked package directory in
   a clean environment.
 - [ ] Verify the installed executable, not the workspace target binary.
@@ -360,8 +368,7 @@ Required tests:
   structured warnings.
 - [x] Prove that credentials, WS-Security material, HTTP authorization, and URI
   userinfo never appear at either verbosity level.
-- [ ] If this cannot be completed for 0.16, remove `-v/-q` rather than ship
-  no-op semantics.
+- [x] Retire the old conditional removal gate: `-v/-q` have implemented semantics and regression tests. Richer `-vv` service/retry details remain open above.
 
 ### 7.3 Authentication and TLS compatibility
 
@@ -647,12 +654,12 @@ is skipped.
 
 ### 11.3 Release update
 
-- [ ] Publish packages in dependency order: `oxvif`, wait for index visibility,
+- [x] Publish packages in dependency order (0.17 evidence): `oxvif`, wait for index visibility,
   verify the CLI package, then publish `oxvif-cli`.
 - [ ] Verify `cargo install oxvif-cli --locked` from crates.io in a clean
   environment.
-- [ ] Create the matching git tag and GitHub Release from the verified commit.
-- [ ] Attach the declared binaries, checksums, SBOM, completions, and schemas.
+- [x] Create the matching git tag and GitHub Release: v0.17.0 publication is recorded in finalization.
+- [x] Attach the declared binaries, checksums, SBOM, completions, and schemas (0.17 Release assets).
 - [ ] Publish signed APT metadata/packages and the version-matched Homebrew
   formula/bottles only after the same release approval.
 - [ ] Verify `apt install oxvif`, `brew install oxvif`, upgrade, and uninstall

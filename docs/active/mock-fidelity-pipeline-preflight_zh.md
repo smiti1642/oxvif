@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-pipeline-preflight.md) | [繁體中文](mock-fidelity-pipeline-preflight_zh.md)
 
+## 現況校準（2026-09-22）
+
+程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-pipeline-preflight.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+
+| 分類 | 處置與證據 |
+| --- | --- |
+| 已確認 | parsed boundary、exact Action、scoped auth、profile／catalogue committed effects 與 K27 retention 已交付；可對照 request.rs、effect.rs 及 metamorph/fixture.rs。 |
+| 剩餘工作 | W02 transitive paths、W06 更多錯誤消費端、W07 完整 HTTP binding、W19 剩餘 read dependencies／獨立 replay 觀察／併發可見性及未來 key-format 重設計仍未完成。 |
+| 下一步／完成條件 | 選定一組 mutation／read，定義 commit、拒絕、rollback 與 replay 可見性；驗證 in-process／HTTP／replay。保留碰撞 bucket 與舊檔載入，不把 key 碰撞誤判為目前仍覆寫資料。 |
+
 2026-09-11 K27 後續修正：碰撞儲存保留及完整請求查詢已實作，詳見
 [儲存遷移](../replay-storage_zh.md)及[發布驗證](../done/release-0.17-cut_zh.md#驗證紀錄)。
 下列較早的覆蓋重現／containment 記錄保留作為歷史證據，不代表目前仍會覆蓋；
@@ -23,6 +33,7 @@ W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯�
 
 | 章節 | 用途 |
 | --- | --- |
+| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
 | [入口與責任](#入口與責任) | 追蹤輸入通過共用程式碼的路徑 |
 | [Profile 依賴追蹤](#profile-依賴追蹤) | 解析、輸出及副作用 |
 | [相容性約束](#相容性約束) | 保留刻意的原始資料行為 |

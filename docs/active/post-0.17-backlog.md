@@ -10,9 +10,57 @@ Their closure does not complete the broader work below or turn unperformed check
 
 | Section | Purpose |
 | --- | --- |
+| [Calibrated work ownership](#calibrated-work-ownership) | Current disposition, owner and exit criteria |
 | [Deferred batches](#deferred-batches) | Remaining scope and original IDs |
 | [Re-entry rule](#re-entry-rule) | When a finding becomes a current blocker |
 | [Preserved tracking](#preserved-tracking) | Do not lose technical work cards |
+
+## Calibrated work ownership
+
+Calibration date: 2026-09-22; source baseline `80bcf14`. This is a work inventory,
+not a commitment to put every item into 0.18. All 16 previously active document
+families were checked; dependency integration/grouping can now be archived, leaving
+15 active families. Several are registers or preflights for the same Mock programme.
+
+Use four dispositions: **implementation** (confirmed missing scope),
+**evidence needed** (implementation exists but the named acceptance is not recorded),
+**decision/deferred** (proposal awaiting a bounded product decision), and
+**maintained reference** (inventory or supporting evidence, not another feature).
+`TODO` in W12–W15 means the planned hardening audit is missing; it does not mean
+those services have no existing handlers. A route count is not a bug count.
+
+| ID | Current disposition / single owner | Next work and completion condition |
+| --- | --- | --- |
+| F01 | Implementation: W10, [execution checklist](mock-fidelity-execution-checklist.md); profile preflight is supporting evidence | Select remaining OSD/URI/source-mode/binding operations; complete field/Fault/state/replay cards and both-transport/independent-instance checks. Do not redo PA1/VS1/VE1/AM1. |
+| F02 | Implementation: W11/W12, same checklist | Finish non-profile PTZ selectors/spaces/effects and per-source Imaging/focus contracts. Verify two distinct heads/sources, limits and refusal without mutation; no physical motion guarantee. |
+| F03 | Implementation: W13/W14, same checklist | Audit Device/DeviceIO and Recording/Search/Replay state/lifetimes in bounded service groups; include cascades, timeout/termination and state-after-error. Existing handlers are the baseline, not absent functionality. |
+| F04 | Implementation: W15, same checklist | Model per-subscription identity/filter/queue and renew/expiry/unsubscribe; test isolation and controlled lifetime. Media synchronization receipts do not satisfy this. |
+| F05 | Implementation: W07–W09; [pipeline](mock-fidelity-pipeline-preflight.md) | Classify full HTTP/auth/fault-injection gaps and the notification listener separately. Require bounded read time/concurrency, malformed-input controls and exact refusal evidence; do not reimplement delivered scoped auth. |
+| F06 | Implementation: W16–W19; pipeline owns dependency detail | Choose remaining capability/mutation/read pairs; test atomic commits, refusal preservation and replay visibility. K27 storage retention is DONE; future key-format redesign is a distinct decision. |
+| F07 | Implementation/evidence: W20–W23; [schema preflight](mock-fidelity-schema-preflight.md) | Expand beyond selected 160 instances/46 operations; preserve explicit anchors, pinned external resources, negative controls and bounded fuzz/property seeds. The 0.17 selected CI gate already passed. |
+| F08 | Decision/deferred: [CLI roadmap](oxvif-cli-plan.md), [navigation](cli-vim-navigation-plan.md) owns M6 | Separate decoder/playback, batch export, controlled writes and crate extraction. Select a bounded deliverable and its interface/permission/recovery tests before implementation. None is automatically a 0.18 blocker. |
+| F09 | Evidence/operations/deferred submission: [distribution](oxvif-cli-three-platform-distribution-plan.md) | Inventory actual APT/tap URLs, signing/recovery owners and current metadata; then verify isolated install/upgrade/downgrade/removal. 0.17 artifacts/staging are DONE; official admission needs its own evidence. |
+| F10 | Evidence needed: snapshot investigation, [repair record](../done/snapshot-auth-repair.md) | Obtain a sanitized reproducible non-image/JPEG response; test bounded format handling without weakening destination/auth/TLS/size/no-clobber policies. Trailing CR/LF is a known synthetic difference, not a proven Hanwha root cause. |
+| F11 | Evidence needed: [Fleet](mock-fleet-basic-plan.md); broader discovery features are deferred | Record authorized OS/interface/VMS four-device identity, endpoint, isolation, shutdown/restart checks. Full scopes/Hello/Bye/Resolve, mixed personas and sustained load require separate implementation/acceptance. |
+| F12 | Evidence needed: navigation plan | Record native terminal and human IME composition/cancellation/restoration; Windows resize evidence exists. CI and key injection do not replace the missing platform/input-method checks. |
+| F13 | New maintenance review: [closed dependency plan](../done/dependency-maintenance-plan.md#closure-evidence-2026-09-22) is evidence only | Review open PR #18 and keyring 4.x native-store migration separately; record each update's compatibility and affected tests. Group reuse/no-duplicate verification is DONE, not a task to rerun or grounds to auto-merge. |
+| F14 | Decision/implementation: [Metamorph](metamorph.md), [clone note](metamorph-clone-in-oxdm.md) owns G3 | G1 recorder is DONE and G2 is SUPERSEDED. Decide summary counts/API for G3; separately specify M4 persona/control transitions or M7 reference-value comparisons and their tests. |
+| F15 | Implementation/evidence: [CLI hardening](oxvif-cli-release-hardening-plan.md) | Select R2 observability/retry, R3 health details or R4 descriptor-contract subgroup with exact assertions. R5 multi-vendor/soak/signing/support and recovery stay bounded separately; first package/publication is DONE. |
+
+The Mock main plan owns policy; the execution checklist owns W statuses; operation
+ledger/source audit are maintained references; profile/pipeline/schema preflights
+own supporting cards and dependency evidence. Do not create parallel work items
+for the same requirement in all seven documents. W26 is DONE for integration;
+W24/W25 remain PARTIAL for the full programme, with the 0.17 subset delivered.
+
+Calibration checks read source/tests and the recorded 0.17 finalization; no new
+camera, native-terminal, schema-resource or release validation was run. Before this
+documentation commit, fresh workspace gates passed: 1,327 all-feature / 1,215
+default tests, seven ignores each (41 suites per mode), both all-target Clippy
+configurations and formatting. The inventory checker and its rejection controls
+also passed. These do not expand the recorded hardware or external-schema scope.
+Fresh GitHub inspection for F13 is dated in the closed dependency plan. Next
+execution must recheck inputs before reuse.
 
 ## Deferred batches
 
@@ -30,6 +78,9 @@ Their closure does not complete the broader work below or turn unperformed check
 | F10 | Bounded snapshot image-compatibility investigation | Preserve A03 destination/auth/size/no-clobber policies; obtain a sanitized reproducible response before changing image acceptance |
 | F11 (basic slice shipped in 0.17) | Remaining Mock Fleet discovery and acceptance | [Basic Fleet evidence](mock-fleet-basic-plan.md) and [operator guide](../mock-fleet.md). Full scope matching, Hello/Bye/Resolve, native LAN/VMS acceptance and Metamorph mixtures remain open |
 | F12 (status bar shipped in 0.17) | Remaining native-terminal/IME acceptance | The [CLI re-entry](../done/cli-0.17-reentry.md) delivery is archived. Keep unverified platform/IME checks explicit in the [navigation plan](cli-vim-navigation-plan.md); publication adds no terminal evidence |
+| F13 | Review subsequent dependency batches and keyring migration | Grouping acceptance is complete; see calibrated ownership above |
+| F14 | Metamorph M4/M7 and optional G3 summary contract | G1 delivered, G2 superseded; do not reopen recorder extraction |
+| F15 | Remaining CLI runtime/descriptor and commercial-pilot hardening | First diagnostic release is delivered; choose bounded R2–R5 work |
 
 F10 research disposition, 2026-09-12: review of the user-provided ONVIF Device
 Manager source found GetSnapshotUri → HTTP stream download → WPF image decoding,

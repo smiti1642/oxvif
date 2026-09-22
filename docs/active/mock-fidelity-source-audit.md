@@ -2,6 +2,16 @@
 
 [English](mock-fidelity-source-audit.md) | [繁體中文](mock-fidelity-source-audit_zh.md)
 
+## Current calibration (2026-09-22)
+
+Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+
+| Category | Disposition and evidence |
+| --- | --- |
+| Confirmed | W00 literal route/Action reconciliation is complete and maintained; direct-reader indexing remains available. K27 collision retention and request-aware replay were repaired in [the migration](../replay-storage.md). Historical reproductions below are not current storage-loss defects. |
+| Remaining | W02 transitive helper/field classification and migration ownership remain partial. The 195 indexed reader occurrences include tests, discovery and canonicalization; they are not 195 bugs or a backlog of identical replacements. |
+| Next step / exit criteria | For the next selected service, trace all transitive readers/renderers/state effects and assign each to migration or intentional isolation. Re-run [the checker](check-mock-fidelity-inventory.ps1); preserve the direct index and attach field-specific C01–C12 evidence in the batch card. |
+
 2026-09-11 K27 follow-up: collision retention and request-aware lookup are
 implemented; see [storage migration](../replay-storage.md) and
 [release evidence](../done/release-0.17-cut.md#evidence). Earlier overwrite reproductions
@@ -15,6 +25,7 @@ This is measured project-source indexing, not a schema catalogue.
 
 | Section | Purpose |
 | --- | --- |
+| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
 | [Results and boundaries](#results-and-boundaries) | What is and is not complete |
 | [Action declarations](#action-declarations) | Full URI, method and route correspondence |
 | [Reader call sites](#reader-call-sites) | Reproducible direct-call multiset |
