@@ -191,3 +191,5 @@ LAN 驗收前確認經授權的實驗網卡及
 
 本計畫為[後續清單](post-0.17-backlog_zh.md) F11 的縮小首階段，接續
 [CLI 重新驗收中的 Mock 討論](../done/cli-0.17-reentry_zh.md#mock-討論)。
+
+2026-09-22 後續：[剩餘計劃驗收輸入](remaining-plan-acceptance_zh.md) 記錄新的 Windows capacity／terminal／credential 證據、離線 snapshot 探針與仍缺少的平台／產品／發行條件。它支援既有工作家族，不新增計劃群組。

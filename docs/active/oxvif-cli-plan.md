@@ -855,3 +855,5 @@ The first crates.io release is ready only when all of the following are true:
 2026-09-22 follow-up: R3 health detail selection is implemented as `health check --details`
 (and the human shortcut), with full JSON/JSONL retained. The hardening plan owns
 its acceptance; this does not implement Stage 4 writes or Stage 5 MCP.
+
+2026-09-22 follow-up: [remaining-plan acceptance inputs](remaining-plan-acceptance.md) prepare bounded write/export and M4/M7 contracts, channel ownership/signing prerequisites, and native acceptance commands/results. Proposals remain separate from implementation and external publication. Health details, RS1 and EP1 have their own completed-slice evidence; no whole-plan completion is inferred.

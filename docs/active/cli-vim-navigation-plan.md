@@ -309,3 +309,5 @@ acceptance and actual host-driven resize remain outside this local evidence.
   synchronizing `develop` and `master` after acceptance. Preserve unrelated changes
   and never force-push. Crate/Release publication, system installation and new external
   dependencies remain outside scope.
+
+2026-09-22 follow-up: [remaining-plan acceptance inputs](remaining-plan-acceptance.md) record the fresh Windows capacity/terminal/credential evidence, offline snapshot probe and exact remaining platform/product/channel prerequisites. This is a supporting register for these existing work families, not a new plan group.

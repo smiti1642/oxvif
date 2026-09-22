@@ -215,3 +215,5 @@ interface and target VMS before LAN acceptance, not by editing host networking.
 
 This is the narrowed first slice of F11 in the
 [backlog](post-0.17-backlog.md), following the [CLI re-entry discussion](../done/cli-0.17-reentry.md#mock-discussion).
+
+2026-09-22 follow-up: [remaining-plan acceptance inputs](remaining-plan-acceptance.md) record the fresh Windows capacity/terminal/credential evidence, offline snapshot probe and exact remaining platform/product/channel prerequisites. This is a supporting register for these existing work families, not a new plan group.

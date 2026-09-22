@@ -133,3 +133,5 @@ F15／R3，2026-09-22：`health check --details` 與 `health --details` 已能�
 RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。
 
 EP1（2026-09-22）：[event pull 一致性](../done/mock-fidelity-event-pull_zh.md) 對 queued IO 套用既有 lexical filter，並原子取得事件／filter。併發、reentrant 控制及四組 client capture 補充 RS1；每份 subscription 的生命週期與完整 topic 語意仍未完成。
+
+2026-09-22 後續：[剩餘計劃驗收輸入](remaining-plan-acceptance_zh.md) 記錄新的 Windows capacity／terminal／credential 證據、離線 snapshot 探針與仍缺少的平台／產品／發行條件。它支援既有工作家族，不新增計劃群組。

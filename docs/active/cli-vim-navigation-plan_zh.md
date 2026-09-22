@@ -250,3 +250,5 @@ macOS／Linux 原生互動驗收及真正由終端宿主觸發的 resize，仍�
 - 後續實作要求已授權分段 commit、小型模式／待完成輸入／位置狀態列、獨立 Agent
   測試，以及通過驗收後合併並同步 `develop` 與 `master`。保留無關變更，不強制推送。
   crates／Release 發布、系統安裝及新增外部相依仍不在範圍內。
+
+2026-09-22 後續：[剩餘計劃驗收輸入](remaining-plan-acceptance_zh.md) 記錄新的 Windows capacity／terminal／credential 證據、離線 snapshot 探針與仍缺少的平台／產品／發行條件。它支援既有工作家族，不新增計劃群組。

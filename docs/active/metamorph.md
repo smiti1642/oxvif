@@ -406,13 +406,16 @@ camera" — do not wait for the rest.
 ## 8. Gate (before every commit, per CLAUDE.md — run with `--all-features`)
 
 ```
-cargo fmt
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-features
+cargo fmt --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --all-features
+cargo test --workspace
 ```
 
-CI runs `--all-features`; the plain `--all-targets` form is red on this repo
-because `examples/conformance.rs` lacks a `required-features` declaration.
+Both feature configurations are required and pass locally. The conformance
+example now declares its required feature; the historical no-feature failure
+is resolved and is not a reason to omit the default gate.
 
 ---
 
@@ -426,3 +429,5 @@ Deferred by design; do NOT pre-empt these during M0.
    to oxdm?
 3. **serde derive scope (affects M7)**: derive across all of `src/types/` at once,
    or only the types the diff/adapter path touches?
+
+2026-09-22 follow-up: [remaining-plan acceptance inputs](remaining-plan-acceptance.md) prepare bounded write/export and M4/M7 contracts, channel ownership/signing prerequisites, and native acceptance commands/results. Proposals remain separate from implementation and external publication. Health details, RS1 and EP1 have their own completed-slice evidence; no whole-plan completion is inferred.

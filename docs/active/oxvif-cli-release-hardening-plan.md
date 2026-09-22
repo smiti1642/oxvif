@@ -810,3 +810,5 @@ Each completed stage appends a record here containing:
 Do not mark a stage complete from code inspection alone. A release, platform,
 retry, security, or compatibility claim requires executable evidence from the
 environment it names.
+
+2026-09-22 follow-up: [remaining-plan acceptance inputs](remaining-plan-acceptance.md) prepare bounded write/export and M4/M7 contracts, channel ownership/signing prerequisites, and native acceptance commands/results. Proposals remain separate from implementation and external publication. Health details, RS1 and EP1 have their own completed-slice evidence; no whole-plan completion is inferred.

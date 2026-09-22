@@ -23,3 +23,17 @@ The release workflow may be dispatched against a branch or commit only with
 requires the exact version tag and rejects release notes still marked
 unreleased. A `develop` push that changes `packaging/` also runs the same
 non-publishing staging workflow against the exact pushed commit.
+
+
+`check_keyring_migration.py --run-native` is an opt-in native credential probe.
+It writes only one fresh synthetic account using exact keyring 3.6.3/4.2.0 in a
+temporary consumer project, checks cross-version reads/updates/deletes, and cleans
+up. Production dependencies are unchanged. Run each supported OS in a disposable
+native store session; a Windows pass does not establish other platform behavior.
+See the [acceptance register](../docs/active/remaining-plan-acceptance.md).
+
+The offline `snapshot_probe` example reads a captured body and reports bounded
+signature evidence without network access, body output, decoding or source edits:
+`cargo run --example snapshot_probe --features health -- /path/to/captured-body`.
+It retains the production signature policy; diagnostic CR/LF trimming is reported
+separately and does not authorize accepting a camera response.

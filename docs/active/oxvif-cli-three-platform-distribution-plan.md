@@ -369,3 +369,5 @@ This plan moves to `docs/done/` only after the first three-platform release is
 fully published, verified, documented, and handed to downstream validation.
 Official-channel graduation remains in an active follow-up until Homebrew Core
 and Debian artifacts are accepted and verified.
+
+2026-09-22 follow-up: [remaining-plan acceptance inputs](remaining-plan-acceptance.md) prepare bounded write/export and M4/M7 contracts, channel ownership/signing prerequisites, and native acceptance commands/results. Proposals remain separate from implementation and external publication. Health details, RS1 and EP1 have their own completed-slice evidence; no whole-plan completion is inferred.
