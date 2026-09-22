@@ -279,3 +279,17 @@ Also cover missing/locked/denied/unavailable stores, reconnect after initial
 failure, generic redacted errors and cleanup. Memory-store tests and same-version
 native round trips do not establish that migration. No user credentials are read
 and no keyring dependency or store is changed by this review.
+
+
+#### Native migration probe, 2026-09-22
+
+`python -X utf8 packaging/check_keyring_migration.py --run-native` creates an
+isolated scratch consumer of exact keyring 3.6.3 and 4.2.0 (v1 facade). Windows
+Credential Manager passed both directions of synthetic Unicode create/read/update,
+rollback reads, cross-version deletion and verified final absence. The v4 Windows
+store resolved to windows-native-keyring-store 1.1.0. The unique account is under
+service `oxvif`; no existing account is enumerated or modified. The runner uses
+generic stage errors and cleanup on ordinary return. The production graph and
+lockfile retain keyring 3.6.3. This is Windows compatibility evidence only, not
+macOS/Linux, denial/lock/unavailable-store/reconnect acceptance or a decision to
+adopt the facade. See [acceptance inputs](active/remaining-plan-acceptance.md).
