@@ -62,6 +62,11 @@ also passed. These do not expand the recorded hardware or external-schema scope.
 Fresh GitHub inspection for F13 is dated in the closed dependency plan. Next
 execution must recheck inputs before reuse.
 
+F09 read-only channel inventory is complete: the proposed tap returns 404 with
+current credentials; the repository contains temporary APT staging, not a named
+production URL/key. Public ownership, signing/recovery policy and native lifecycle
+acceptance remain open in [distribution D](oxvif-cli-three-platform-distribution-plan.md#read-only-channel-inventory-2026-09-22).
+
 ## Deferred batches
 
 Near-complete items closed on 2026-09-22:

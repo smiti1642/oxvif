@@ -244,6 +244,26 @@ library, Agent-guide, and schema versions.
 
 ## 8. Workstream D — project-owned channels
 
+### Read-only channel inventory (2026-09-22)
+
+- GitHub API `repos/smiti1642/homebrew-tap` returns HTTP 404 with the current
+  credentials. This establishes that the proposed repository is not accessible
+  to this inspection; it does not distinguish absence from a private repository
+  outside these credentials' access. There is no public-tap install evidence.
+- The checked-in release workflow's `prepare-apt-repository` job builds under
+  `$RUNNER_TEMP/oxvif-apt-repository` and generates an ephemeral CI signing key.
+  `test-apt-repository` serves it at `http://127.0.0.1:18081` with an explicit
+  staging keyring. Those install/purge and signature controls are staging
+  evidence; they provide neither a durable APT URL nor a production fingerprint.
+- D1 therefore still needs a named public host, recovery owner, key custody and
+  rotation policy. D2 needs an accessible repository under the selected owner
+  and native public install/upgrade/downgrade-or-pin/removal evidence. No key
+  fingerprint or public setup command can be inferred from the CI staging data.
+
+The inventory step is complete; D1–D3 are not. Repository creation, production
+key generation, publishing and package installation were not performed by this
+read-only check. Recheck these inputs before the next channel batch.
+
 ### D1. Signed APT repository
 
 - [ ] Choose the public host and disaster-recovery owner before creation.

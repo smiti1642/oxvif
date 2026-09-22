@@ -52,6 +52,10 @@ Mock 主計畫管政策，execution checklist 管 W 狀態，operation ledger／
 inventory checker 及拒絕控制亦通過；這些檢查不擴張既有硬體或外部 schema 驗收範圍。
 F13 的新 GitHub 查核日期與連結記於已結案計畫；開工前須重核輸入。
 
+F09 唯讀渠道盤點完成：提議 tap 以目前權限查詢回傳 404；repo 只有暫存 APT
+staging，尚無具名正式 URL／金鑰。公開渠道負責者、簽章／復原政策與原生生命週期
+驗收仍列於 [distribution D](oxvif-cli-three-platform-distribution-plan.md#read-only-channel-inventory-2026-09-22)。
+
 ## 延後批次
 
 2026-09-22 完成的接近結案項目：
