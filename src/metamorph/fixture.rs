@@ -19,7 +19,7 @@
 //! set into memory. Canonical keys select buckets, not unique identities.
 //! Distinct requests survive collisions; request-aware lookups scan their bucket.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::path::Path;
 
@@ -30,6 +30,44 @@ use crate::redact::{redact_credentials, scrub_url_userinfo};
 
 /// File name of the fixture set inside a device directory.
 const FIXTURES_FILE: &str = "fixtures.json";
+
+/// Counts for one exact SOAP Action URI in a [`FixtureSummary`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FixtureActionSummary {
+    /// Exact recorded Action URI, without collapsing namespaces or local names.
+    /// Caller-supplied action strings are retained; review them before sharing.
+    pub action: String,
+    /// Stored exchanges for this Action, including faults and unreadable bodies.
+    pub fixtures: usize,
+    /// Responses with a direct `Fault` child in their parsed SOAP Body.
+    pub faults: usize,
+    /// Responses for which oxvif cannot parse XML and locate a SOAP Body.
+    pub unreadable: usize,
+}
+
+/// Offline inventory of stored exchanges, not a device-conformance verdict.
+///
+/// Counts use the current store after upserts and collision retention, not the
+/// number of network attempts. Transport failures are not stored and cannot be
+/// inferred here; use the recording [`SweepReport`](super::SweepReport).
+/// Fault detection follows oxvif's local-name SOAP parser (SOAP 1.1 and 1.2),
+/// without validating namespaces, required Fault fields, or operation payloads.
+/// A readable non-Fault response is therefore not necessarily a successful read.
+/// Raw XML, keys, device labels, Fault reasons and parsed values are omitted.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FixtureSummary {
+    /// Total stored exchanges, equal to [`FixtureStore::len`].
+    pub fixtures: usize,
+    /// Total responses whose parsed Body has a direct `Fault` child.
+    pub faults: usize,
+    /// Total responses with an XML parse error or no SOAP Body.
+    pub unreadable: usize,
+    /// Number of `(Action, canonical key)` buckets holding multiple requests.
+    /// Each retained request still counts as a fixture; none is collapsed here.
+    pub collision_buckets: usize,
+    /// Per-Action counts, sorted lexicographically by the exact Action URI.
+    pub actions: Vec<FixtureActionSummary>,
+}
 
 /// One recorded request/response exchange.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -228,6 +266,56 @@ impl FixtureStore {
         self.fixtures.is_empty()
     }
 
+    /// Summarize the clone without network access or running operation parsers.
+    ///
+    /// See [`FixtureSummary`] for counting, Fault-detection and privacy limits.
+    /// This reads the current snapshot without modifying it or its disk files.
+    ///
+    /// ```
+    /// use oxvif::metamorph::FixtureStore;
+    /// let mut store = FixtureStore::new("example");
+    /// store.record("urn:example/Get", "<Get/>", "<Envelope><Body><Result/></Body></Envelope>");
+    /// let summary = store.summary();
+    /// assert_eq!(summary.fixtures, 1);
+    /// assert_eq!(summary.actions[0].action, "urn:example/Get");
+    /// assert_eq!(summary.faults, 0);
+    /// ```
+    pub fn summary(&self) -> FixtureSummary {
+        let mut summary = FixtureSummary {
+            fixtures: self.len(),
+            collision_buckets: self
+                .index
+                .values()
+                .filter(|bucket| bucket.len() > 1)
+                .count(),
+            ..FixtureSummary::default()
+        };
+        let mut actions = BTreeMap::<&str, FixtureActionSummary>::new();
+        for fixture in &self.fixtures {
+            let counts = actions.entry(&fixture.action).or_default();
+            counts.fixtures += 1;
+            match crate::soap::parse_soap_body(&fixture.response_raw) {
+                Ok(body) if body.child("Fault").is_some() => {
+                    counts.faults += 1;
+                    summary.faults += 1;
+                }
+                Err(_) => {
+                    counts.unreadable += 1;
+                    summary.unreadable += 1;
+                }
+                Ok(_) => {}
+            }
+        }
+        summary.actions = actions
+            .into_iter()
+            .map(|(action, counts)| FixtureActionSummary {
+                action: action.to_owned(),
+                ..counts
+            })
+            .collect();
+        summary
+    }
+
     fn insert(&mut self, f: Fixture) {
         let key = (f.action.clone(), f.key_canon.clone());
         let bucket = self.index.entry(key).or_default();
@@ -252,6 +340,109 @@ mod tests {
         "<Envelope><Body><GetProfile><ProfileToken>A</ProfileToken></GetProfile></Body></Envelope>";
     const GET_PROFILE_B: &str =
         "<Envelope><Body><GetProfile><ProfileToken>B</ProfileToken></GetProfile></Body></Envelope>";
+
+    #[test]
+    fn summary_empty_and_mixed_responses_have_explicit_counting_units() {
+        let mut store = FixtureStore::new("private-device-label");
+        assert_eq!(store.summary(), FixtureSummary::default());
+        for (action, request, response) in [
+            (
+                "urn:z/Get",
+                "<A/>",
+                "<Envelope><Body><Result><Fault>nested-private-text</Fault></Result></Body></Envelope>",
+            ),
+            (
+                "urn:a/Get",
+                "<B/>",
+                "<s:Envelope xmlns:s='http://www.w3.org/2003/05/soap-envelope'><s:Body><s:Fault><s:Reason><s:Text>private-reason</s:Text></s:Reason></s:Fault></s:Body></s:Envelope>",
+            ),
+            (
+                "urn:a/Get",
+                "<C/>",
+                "<s:Envelope xmlns:s='http://schemas.xmlsoap.org/soap/envelope/'><s:Body><s:Fault><faultstring>private-reason</faultstring></s:Fault></s:Body></s:Envelope>",
+            ),
+            ("urn:a/Get", "<D/>", "<Envelope><Header/></Envelope>"),
+            ("urn:z/Get", "<E/>", "<Envelope><Body></Envelope>"),
+        ] {
+            store.record(action, request, response);
+        }
+        let summary = store.summary();
+        assert_eq!(summary.fixtures, 5);
+        assert_eq!(summary.faults, 2);
+        assert_eq!(summary.unreadable, 2);
+        assert_eq!(summary.collision_buckets, 0);
+        assert_eq!(
+            summary.actions,
+            vec![
+                FixtureActionSummary {
+                    action: "urn:a/Get".into(),
+                    fixtures: 3,
+                    faults: 2,
+                    unreadable: 1
+                },
+                FixtureActionSummary {
+                    action: "urn:z/Get".into(),
+                    fixtures: 2,
+                    faults: 0,
+                    unreadable: 1
+                },
+            ]
+        );
+        let json = serde_json::to_string(&summary).unwrap();
+        assert!(!json.contains("private-"));
+        assert!(!json.contains("Envelope"));
+        assert_eq!(
+            serde_json::from_str::<FixtureSummary>(&json).unwrap(),
+            summary
+        );
+    }
+
+    #[test]
+    fn summary_retains_collisions_counts_current_upserts_and_does_not_rewrite_disk() {
+        let mut store = FixtureStore::new("example");
+        let first = "<Get><Token> A</Token></Get>";
+        let second = "<Get><Token>A</Token></Get>";
+        store.record(
+            "urn:Get",
+            first,
+            "<Envelope><Body><Fault/></Body></Envelope>",
+        );
+        store.record(
+            "urn:Get",
+            second,
+            "<Envelope><Body><Result/></Body></Envelope>",
+        );
+        assert_eq!(store.fixtures()[0].key_canon, store.fixtures()[1].key_canon);
+        assert_eq!(store.summary().collision_buckets, 1);
+        assert_eq!(store.summary().faults, 1);
+        store.record(
+            "urn:Get",
+            first,
+            "<Envelope><Body><Result/></Body></Envelope>",
+        );
+        let expected = FixtureSummary {
+            fixtures: 2,
+            collision_buckets: 1,
+            actions: vec![FixtureActionSummary {
+                action: "urn:Get".into(),
+                fixtures: 2,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(store.summary(), expected);
+        let dir = tmp_dir("summary");
+        store.save(&dir).unwrap();
+        let path = dir.join(FIXTURES_FILE);
+        let original = std::fs::read(&path).unwrap();
+        let loaded = FixtureStore::load(&dir).unwrap();
+        assert_eq!(loaded.summary(), expected);
+        assert_eq!(loaded.summary(), expected, "repeat calls are read-only");
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        assert_eq!(loaded.fixtures().len(), 2);
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(dir).unwrap();
+    }
 
     #[test]
     fn param_aware_key_keeps_distinct_tokens_apart() {

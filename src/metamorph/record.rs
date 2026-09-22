@@ -211,6 +211,47 @@ mod tests {
     #[cfg(feature = "mock-server")]
     use crate::metamorph::SurfaceOp;
 
+    #[tokio::test]
+    async fn summary_counts_soap_faults_but_not_failed_transport_attempts() {
+        struct Reply(bool);
+        #[async_trait]
+        impl Transport for Reply {
+            async fn soap_post(
+                &self,
+                _: &str,
+                _: &str,
+                _: String,
+            ) -> Result<String, TransportError> {
+                if self.0 {
+                    Ok("<Envelope><Body><Fault/></Body></Envelope>".into())
+                } else {
+                    Err(TransportError::HttpStatus {
+                        status: 503,
+                        body: "unavailable".into(),
+                    })
+                }
+            }
+        }
+        let store = Arc::new(Mutex::new(FixtureStore::new("test")));
+        let failed = RecordingTransport::new(Arc::new(Reply(false)), store.clone());
+        assert!(
+            failed
+                .soap_post("http://unused", "urn:Get", "<Get/>".into())
+                .await
+                .is_err()
+        );
+        assert_eq!(store.lock().unwrap().summary().fixtures, 0);
+        let faulted = RecordingTransport::new(Arc::new(Reply(true)), store.clone());
+        faulted
+            .soap_post("http://unused", "urn:Get", "<Get/>".into())
+            .await
+            .unwrap();
+        let summary = store.lock().unwrap().summary();
+        assert_eq!(summary.fixtures, 1);
+        assert_eq!(summary.faults, 1);
+        assert_eq!(summary.unreadable, 0);
+    }
+
     /// The Dioxus-desktop shape: the callback is a closure that sends into a
     /// `tokio::sync::mpsc::UnboundedSender`, and the future stays `Send` so it
     /// can be spawned. The future is deliberately **never polled** — no request

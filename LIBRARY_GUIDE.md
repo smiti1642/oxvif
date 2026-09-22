@@ -1938,6 +1938,16 @@ let client = OnvifClient::new("http://replay")
 let info = client.get_device_info().await?;   // the real camera's recorded response
 ```
 
+Before replay, `store.summary()` returns serializable `FixtureSummary` totals and
+sorted per-Action `FixtureActionSummary` counts. Counts describe stored exchanges
+after upserts, including retained collisions; `collision_buckets` counts ambiguous
+Action/key buckets. `faults` counts parsed direct Body/Fault children using the
+existing local-name SOAP parser, and `unreadable` counts XML/no-Body errors. Neither
+is schema validation or a typed-operation success check. Transport failures are
+absent from the store; consult `SweepReport` for recording outcomes. The summary
+omits raw XML, keys, labels and Fault reasons, but preserves caller-supplied Action
+strings, which should be reviewed before sharing. No network or disk writes occur.
+
 Or serve the clone from a **real bound port — the "container"** (needs the
 `metamorph-server` feature). `MockServer::builder().replay(store)` splices the
 replay responder into the HTTP mock server, so *any* ONVIF client — oxdm, ONVIF

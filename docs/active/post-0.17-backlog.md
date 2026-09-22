@@ -20,7 +20,7 @@ Their closure does not complete the broader work below or turn unperformed check
 Calibration date: 2026-09-22; source baseline `80bcf14`. This is a work inventory,
 not a commitment to put every item into 0.18. All 16 previously active document
 families were checked; dependency integration/grouping can now be archived, leaving
-15 active families. Several are registers or preflights for the same Mock programme.
+15 active families at calibration; G3 closure below now leaves 14. Several are registers or preflights for the same Mock programme.
 
 Use four dispositions: **implementation** (confirmed missing scope),
 **evidence needed** (implementation exists but the named acceptance is not recorded),
@@ -44,7 +44,7 @@ those services have no existing handlers. A route count is not a bug count.
 | F11 | Evidence needed: [Fleet](mock-fleet-basic-plan.md); broader discovery features are deferred | Record authorized OS/interface/VMS four-device identity, endpoint, isolation, shutdown/restart checks. Full scopes/Hello/Bye/Resolve, mixed personas and sustained load require separate implementation/acceptance. |
 | F12 | Evidence needed: navigation plan | Record native terminal and human IME composition/cancellation/restoration; Windows resize evidence exists. CI and key injection do not replace the missing platform/input-method checks. |
 | F13 | New maintenance review: [closed dependency plan](../done/dependency-maintenance-plan.md#closure-evidence-2026-09-22) is evidence only | Review open PR #18 and keyring 4.x native-store migration separately; record each update's compatibility and affected tests. Group reuse/no-duplicate verification is DONE, not a task to rerun or grounds to auto-merge. |
-| F14 | Decision/implementation: [Metamorph](metamorph.md), [clone note](metamorph-clone-in-oxdm.md) owns G3 | G1 recorder is DONE and G2 is SUPERSEDED. Decide summary counts/API for G3; separately specify M4 persona/control transitions or M7 reference-value comparisons and their tests. |
+| F14 | Decision/implementation: [Metamorph](metamorph.md), [closed clone note](../done/metamorph-clone-in-oxdm.md) records G3 | G1/G3 are DONE and G2 is SUPERSEDED. G3 adds offline summary counts and standing regressions (unreleased). Remaining work is M4 persona/control transitions or M7 reference-value comparisons and their tests. |
 | F15 | Implementation/evidence: [CLI hardening](oxvif-cli-release-hardening-plan.md) | Select R2 observability/retry, R3 health details or R4 descriptor-contract subgroup with exact assertions. R5 multi-vendor/soak/signing/support and recovery stay bounded separately; first package/publication is DONE. |
 
 The Mock main plan owns policy; the execution checklist owns W statuses; operation
@@ -79,7 +79,7 @@ execution must recheck inputs before reuse.
 | F11 (basic slice shipped in 0.17) | Remaining Mock Fleet discovery and acceptance | [Basic Fleet evidence](mock-fleet-basic-plan.md) and [operator guide](../mock-fleet.md). Full scope matching, Hello/Bye/Resolve, native LAN/VMS acceptance and Metamorph mixtures remain open |
 | F12 (status bar shipped in 0.17) | Remaining native-terminal/IME acceptance | The [CLI re-entry](../done/cli-0.17-reentry.md) delivery is archived. Keep unverified platform/IME checks explicit in the [navigation plan](cli-vim-navigation-plan.md); publication adds no terminal evidence |
 | F13 | Review subsequent dependency batches and keyring migration | Grouping acceptance is complete; see calibrated ownership above |
-| F14 | Metamorph M4/M7 and optional G3 summary contract | G1 delivered, G2 superseded; do not reopen recorder extraction |
+| F14 | Metamorph M4/M7 | G1/G3 delivered, G2 superseded; do not reopen recorder extraction |
 | F15 | Remaining CLI runtime/descriptor and commercial-pilot hardening | First diagnostic release is delivered; choose bounded R2–R5 work |
 
 F10 research disposition, 2026-09-12: review of the user-provided ONVIF Device

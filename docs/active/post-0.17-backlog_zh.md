@@ -17,7 +17,7 @@
 ## 校準後的工作歸屬
 
 校準日期：2026-09-22；程式基準 `80bcf14`。這是工作盤點，不承諾全部納入 0.18。
-原 16 組 active 文件均已核對；相依套件整合／分組驗證可結案，剩 15 組。
+原 16 組 active 文件均已核對；相依套件整合／分組驗證結案後為 15 組；本次 G3 結案後剩 14 組。
 其中多份是同一 Mock 計畫的清冊與 preflight，不能當成獨立功能重複排程。
 
 區分四種處置：**待實作**、**待證據**（已有實作，但指定驗收未留存）、
@@ -39,7 +39,7 @@
 | F11 | 待證據：[Fleet](mock-fleet-basic-plan_zh.md)；廣泛 discovery 延後 | 記錄獲授權 OS／interface／VMS 的四台 identity、endpoint、隔離與關閉重啟。完整 scopes／Hello／Bye／Resolve、混合 persona 與持續負載另作實作／驗收。 |
 | F12 | 待證據：navigation | 補原生 terminal／人工 IME 組字、取消與復原紀錄；Windows resize 已有證據，一般 CI／注入按鍵不能取代缺少的平台／輸入法驗收。 |
 | F13 | 新維護審查：[已結案相依計畫](../done/dependency-maintenance-plan_zh.md#結案證據2026-09-22) 僅作佐證 | 另審開啟的 PR #18 與 keyring 4.x 原生 store 遷移，逐項記相容性及受影響測試。分組重用／不重複驗證已完成，不重跑舊工作、不自動 merge。 |
-| F14 | 待決策／實作：[Metamorph](metamorph.md)，[clone note](metamorph-clone-in-oxdm.md) 管 G3 | G1 recorder 已完成、G2 已被替代；決定 G3 summary 計數／API，另定 M4 persona／control transition 或 M7 reference-value 比對與驗收。 |
+| F14 | 待決策／實作：[Metamorph](metamorph.md)，[已結案 clone note](../done/metamorph-clone-in-oxdm.md) 記錄 G3 | G1／G3 已完成、G2 已被替代；G3 已補離線摘要與回歸測試，尚未發布。剩餘 M4 persona／control transition 或 M7 reference-value 比對與驗收。 |
 | F15 | 待實作／證據：[CLI hardening](oxvif-cli-release-hardening-plan.md) | 先選 R2 observability／retry、R3 health details 或 R4 descriptor 契約子群與精確斷言；R5 多廠牌／soak／簽章／支援／復原分開限定。首次 package／發布已完成。 |
 
 Mock 主計畫管政策，execution checklist 管 W 狀態，operation ledger／source audit
@@ -69,7 +69,7 @@ F13 的新 GitHub 查核日期與連結記於已結案計畫；開工前須重�
 | F11（基本功能已於 0.17 發布） | 剩餘 Mock Fleet 探索功能與驗收 | [基礎 Fleet 證據](mock-fleet-basic-plan_zh.md)與[操作指南](../mock-fleet_zh.md)。完整 scope 比對、Hello／Bye／Resolve、原生 LAN／VMS 驗收及 Metamorph 混合仍未完成 |
 | F12（狀態列已於 0.17 發布） | 剩餘原生終端／輸入法驗收 | [CLI 重新驗收](../done/cli-0.17-reentry_zh.md) 已歸檔；未驗證的平台／輸入法項目繼續留在 [導覽計畫](cli-vim-navigation-plan_zh.md)，發布不代表新增終端驗證 |
 | F13 | 後續相依批次與 keyring 遷移審查 | 分組驗收已完成，見上方校準工作歸屬 |
-| F14 | Metamorph M4／M7 與可選 G3 summary 契約 | G1 已交付、G2 已被替代，不重開 recorder 抽取 |
+| F14 | Metamorph M4／M7 | G1／G3 已交付、G2 已被替代，不重開 recorder 抽取 |
 | F15 | 剩餘 CLI runtime／descriptor 與商用試行強化 | 首次診斷版已交付，分批選定 R2–R5 工作 |
 
 F10 調查處置，2026-09-12：使用者提供的 ONVIF Device Manager 原始碼走

@@ -59,8 +59,13 @@ async fn main() {
         eprintln!("failed to write fixtures to {out_dir}: {e}");
         std::process::exit(1);
     }
+    let summary = store.summary();
     println!(
-        "recorded {} exchanges to {out_dir}/fixtures.json",
-        store.len()
+        "recorded {} exchanges across {} Actions to {out_dir}/fixtures.json ({} Faults, {} unreadable, {} collision buckets)",
+        summary.fixtures,
+        summary.actions.len(),
+        summary.faults,
+        summary.unreadable,
+        summary.collision_buckets,
     );
 }

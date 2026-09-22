@@ -1,30 +1,40 @@
 # metamorph clone-in-oxdm — design note
 
-## Current calibration (2026-09-22)
+## Closure (2026-09-22)
 
-Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+**DONE — oxvif-side integration gaps are closed; new G3 code is unreleased.**
+G1 public recorders are delivered. G2 was superseded by the shipped network
+container. G3 now provides `FixtureStore::summary()`, `FixtureSummary` and
+`FixtureActionSummary`; the recorder example consumes the totals.
 
-| Category | Disposition and evidence |
-| --- | --- |
-| Confirmed | G1 is DONE: [record_standard_surface, record_surface and progress API](../../src/metamorph/record.rs) are public; [the example](../../examples/metamorph_record.rs) calls the library. G2 is SUPERSEDED by [the shipped network container](../done/metamorph-container-and-quirk-diff.md), not a missing transport-injection blocker. |
-| Remaining | G3 `FixtureStore::summary()` is absent. Existing [len/fixtures accessors](../../src/metamorph/fixture.rs) and [ParseReport::faulted](../../src/metamorph/parse.rs) supply related data, but are not the proposed aggregate API. Treat summary as a DEFERRED convenience/API decision, not proof that cloning cannot work. Recording privacy remains a boundary. |
-| Next step / exit criteria | Decide whether consumers need a dedicated summary; if retained, define counts by fixture versus Action, SOAP Fault versus transport failure, collision buckets and redaction. Add exact tests for that contract. Do not copy the recorder or build the superseded G2 approach. |
+The summary counts current retained fixtures, exact sorted Action URIs, direct
+Body/Fault responses recognized by the existing SOAP parser, unreadable XML/body
+responses and colliding Action/key buckets. Upserts replace only equivalent
+requests; collisions remain separate. Transport errors are not stored and belong
+to `SweepReport`. This is neither schema validation nor reference-value comparison.
+Raw XML, keys, labels and Fault reasons are omitted; caller-supplied Action strings
+remain subject to review before sharing.
 
-> **Status: superseded by the container path.** The in-process approach below
-> (and its gap **G2**) is no longer the plan. Serving the clone from a bound-port
-> `MockServer` — see [`metamorph-container-and-quirk-diff.md`](../done/metamorph-container-and-quirk-diff.md),
-> now implemented — makes G2 unnecessary: oxdm runs the existing
-> `HealthCheck::new(clone_url)` against the container, and "compare" reuses the
-> existing `health::ReportDiff` (synthetic server vs clone server) or the new
-> `FixtureStore::diff_against_synthetic`. **G1** is implemented by the public recorder APIs.
-> **G3** (`FixtureStore::summary`) remains a deferred API proposal; existing accessors
-> and parse reports expose related data. This note retains that decision and the
-> privacy risks in §7.
+Standing tests cover empty/mixed stores, SOAP 1.1/1.2 Fault shapes versus a nested
+non-Fault element, malformed/missing Body responses, exact Action grouping,
+collision/upsert behavior, load/save preservation, JSON serialization and
+transport-error exclusion. The public example is also a compile-checked doctest.
+
+Closure verification: workspace all-feature tests 1,331 passed; default 1,215
+passed, each with seven ignored and 41 suites. Both all-target Clippy modes,
+the isolated `metamorph` feature, strict rustdoc in both feature modes, formatting,
+inventory controls and 1,879 local links / 812 anchors passed. No camera was used.
+
+This closes this repository's G1–G3 scope. It does not claim new oxdm UI work,
+real-camera acceptance or M4/M7 completion. Those broader features remain in
+[Metamorph](../active/metamorph.md) and [F14](../active/post-0.17-backlog.md#calibrated-work-ownership).
+The sections below preserve the original design and privacy context; their
+prospective language does not reopen the superseded transport approach.
 
 > **Original status: draft for review.** Wires Persona B (clone / replay) into
 > oxdm so a user can clone their own IP camera's behaviour and hunt its quirks —
 > without hardware after the first capture. Companion to
-> [`metamorph.md`](metamorph.md); this is the "M-clone" pre-work note.
+> [`metamorph.md`](../active/metamorph.md); this is the "M-clone" pre-work note.
 
 ---
 
@@ -77,12 +87,11 @@ Original gap analysis, reconciled against `80bcf14`:
 |---|-----|--------------------|------|
 | **G1 — DONE** | Public `record_standard_surface(device_url, credentials, label)`, selected-surface and progress APIs exist in `src/metamorph/record.rs`; the example calls the library. | Recorder extraction is no longer a blocker. | Delivered |
 | **G2 — SUPERSEDED** | **Original in-process transport proposal.** `health` already has `CoverageTransport` — the silent-drop / list-emptying / field-defaulting detector — but `HealthCheck::new()` hard-builds its own `HttpTransport` (`src/health/mod.rs:137`) and takes no custom transport. Add `HealthCheck::with_transport(Arc<dyn Transport>)` so oxdm can run it against a `MetamorphTransport`. | Turns the existing coverage detector into an **offline, reproducible quirk finder** over the clone. | Small |
-| **G3 — DEFERRED** | **`FixtureStore` UI summary.** Add `FixtureStore::summary()` — count, actions covered, which returned a SOAP Fault. | oxdm needs to render the clone's contents. | Small |
+| **G3 — DONE** | `FixtureStore::summary()` supplies current fixture totals and per-Action Fault/unreadable counts plus collision-bucket totals. | Consumers can render metadata without copying aggregation logic. | Delivered, unreleased |
 
 G2 is not a current prerequisite: the shipped container supports normal network
 health checks, and structural/typed-parse reports already exist. Neither report
-proves all semantic differences from a real camera. G3 needs a concrete consumer
-contract before adding another public aggregate API.
+proves all semantic differences from a real camera. G3 now has the bounded contract recorded in the closure above.
 
 ---
 
@@ -93,7 +102,7 @@ contract before adding another public aggregate API.
   detects it; G2 just lets it run on the clone.
 - **(b) Structural / semantic diff — this is M7.** Masker-driven diff of the
   clone's raw XML against a synthetic baseline → "your camera deviates here."
-  The semantic-diff prerequisite ([`metamorph.md` §5.5](metamorph.md)) is the
+  The semantic-diff prerequisite ([`metamorph.md` §5.5](../active/metamorph.md)) is the
   `serde` derive across `src/types/`, **now landed** — so M7 is unblocked, though
   the diff itself is still unwritten.
 

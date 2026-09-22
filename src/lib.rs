@@ -297,6 +297,9 @@
 //!   Distinct requests sharing a legacy canonical key are retained separately.
 //!   Replay uses request-aware selection; key-only fixture lookup refuses an
 //!   ambiguous bucket. Older readers can collapse these records on downgrade.
+//! - **Inspect the clone** — `metamorph::FixtureStore::summary` counts stored
+//!   exchanges by exact Action, Fault-shaped/unreadable responses and collision
+//!   buckets without network access. It is an inventory, not a conformance verdict.
 //! - **Pick what to clone** — `metamorph::SurfaceSelection` selects whole
 //!   service zones (`SurfaceGroup`) or individual operations (`SurfaceOp`).
 //!   Prerequisites are expanded for you, so selecting `GetStreamUri` still
@@ -390,7 +393,8 @@ pub use health::{CapturedExchange, HealthCheck, HealthReport};
 #[cfg(feature = "metamorph")]
 pub use metamorph::{
     AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, Fixture,
-    FixtureStore, MetamorphTransport, PtzVector, RecordingTransport, ReplayResponder,
+    FixtureActionSummary, FixtureStore, FixtureSummary, MetamorphTransport, PtzVector,
+    RecordingTransport, ReplayResponder,
 };
 pub use session::{OnvifSession, OnvifSessionBuilder};
 pub use types::{

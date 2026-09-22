@@ -20,6 +20,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Add offline `FixtureStore::summary()` with per-Action exchange, SOAP Fault,
+  unreadable-body and collision counts; the recorder example prints totals.
+  Counts describe retained recordings, not transport attempts or conformance.
+
 ### Maintenance
 
 - Calibrate active plans against shipped APIs and release evidence, close the

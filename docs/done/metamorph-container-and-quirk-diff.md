@@ -11,7 +11,7 @@ The original dated evidence and limitations below are retained; earlier planning
 > `MockServer` (the "container") so oxdm / Frigate / ODM can point at it, and add
 > a structural **quirk diff** that shows where the clone's responses deviate from
 > oxvif's synthetic (spec-ideal) mock. Supersedes the in-process approach in
-> [`metamorph-clone-in-oxdm.md`](../active/metamorph-clone-in-oxdm.md) — see §6.
+> [`metamorph-clone-in-oxdm.md`](metamorph-clone-in-oxdm.md) — see §6.
 
 ---
 
@@ -30,7 +30,7 @@ in-process, no server); the container needs a new `metamorph-server` feature.
 
 ## 2. Why the container path (not the in-process design)
 
-The earlier note ([`metamorph-clone-in-oxdm.md`](../active/metamorph-clone-in-oxdm.md) §2)
+The earlier note ([`metamorph-clone-in-oxdm.md`](metamorph-clone-in-oxdm.md) §2)
 chose in-process consumption and listed gap **G2** (`HealthCheck::with_transport`).
 Serving the clone from a bound port makes G2 unnecessary: oxdm just runs the
 existing `HealthCheck::new(clone_url)` against the container, and "compare" can
@@ -48,7 +48,7 @@ server. The container is the smaller, more reusable seam.
 | `src/metamorph/mod.rs` | `mod quirk;` + `pub use quirk::{OperationQuirk, QuirkReport};` |
 | `examples/metamorph_serve.rs` (new) | Load a fixtures dir → serve a bound replay `MockServer` → print `device_url` + a quirk summary. The oxdm-facing demo. |
 | `docs/active/metamorph.md` | Progress note: bound-server replay + structural quirk-diff (part of M4 / start of M7 — not a completion claim). |
-| `docs/active/metamorph-clone-in-oxdm.md` | Record the pivot to the container path; G2 obviated. |
+| `docs/done/metamorph-clone-in-oxdm.md` | Record the pivot to the container path; G2 obviated. |
 | `CHANGELOG.md` `[Unreleased]` | metamorph-server + replay + quirk-diff entry. |
 
 ## 4. Honest scope limits (also documented in code)

@@ -725,6 +725,14 @@ malformed XML、mixed content 或未解析 `xsi:type` 不視為等價。支援�
 
 `record_surface` 可配合 `SurfaceSelection` 只錄製指定 service group，並以 `SweepReport` 回報 recorded、failed 與 skipped operation。Replay read 會逐 byte 使用錄製 response；write 則轉入 synthetic `DeviceState`，依已提交的 profile effect 或尚未遷移的 legacy family 政策使 fixture 失效。完整依賴追蹤仍待完成。
 
+`store.summary()` 提供可序列化的 `FixtureSummary` 總數及依完整 Action URI 排序的
+`FixtureActionSummary`。計數以 upsert 後實際保存的 exchange 為單位，包含碰撞下保留的
+不同請求；`collision_buckets` 計算有多筆請求的 Action/key 群組。`faults` 沿用既有
+local-name SOAP parser，計算 Body 下直接的 Fault；`unreadable` 計算 XML／缺少 Body
+錯誤，均不代表 schema 或 typed-operation 驗證。Transport 失敗未存入 fixture，須另看
+`SweepReport`。摘要不含 raw XML、key、裝置標籤或 Fault reason，但保留呼叫端提供的
+Action 字串，分享前仍須檢查；呼叫不存取網路或寫入磁碟。
+
 `FixtureStore::diff_against_synthetic()` 比較 element-path set，結果表示與 oxvif reference mock 的結構差異，**不是 ONVIF schema conformance verdict**。`verify_parsing().await` 則使用 oxvif typed parser，將每項 fixture 分類為 `Parsed`、`Failed`、`Faulted` 或 `Unverified`；`failures()` 刻意排除裝置正常拒絕操作的 `Faulted`。
 
 長時間 sweep 可使用 `_with_progress` variant。`SweepProgress::total` 計算展開 prerequisite 後的 operation 數，而不是 HTTP request 數；每個 operation 不論執行或 skip 都只推進一次。

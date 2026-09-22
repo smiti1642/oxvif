@@ -54,9 +54,9 @@ evidence. The [post-0.17 backlog](active/post-0.17-backlog.md)
 ([繁體中文](active/post-0.17-backlog_zh.md)) owns follow-up scope;
 the [0.17 cut](done/release-0.17-cut.md) is now a historical release record.
 
-2026-09-22 歸檔與校準合計將 26 組已交付計畫／批次的 45 份 Markdown 文件，
+2026-09-22 歸檔與校準合計將 27 組已交付計畫／批次的 46 份 Markdown 文件，
 以及一份原始審查 JSON 移至 `done/`。原 16 組 active 文件已逐份核對，
-相依套件分組計畫補齊 GitHub 後續週期證據後結案；下表保留 15 組：
+相依套件分組計畫補齊 GitHub 證據、clone 計畫補齊 G3 後結案；下表保留 14 組：
 未執行的實機、原生終端與 VMS 驗證不會因發布或歸檔而視為通過。
 
 | Doc | Status / scope |
@@ -67,7 +67,6 @@ the [0.17 cut](done/release-0.17-cut.md) is now a historical release record.
 | [`oxvif-cli-three-platform-distribution-plan.md`](active/oxvif-cli-three-platform-distribution-plan.md) | Native artifacts shipped. Durable project APT/tap operations, recovery/signing ownership and official-channel graduation remain separate work. |
 | [`cli-vim-navigation-plan.md`](active/cli-vim-navigation-plan.md) · [繁體中文](active/cli-vim-navigation-plan_zh.md) | M1–M5 shipped in 0.17. M6 standalone navigation crate remains deferred; native terminal/IME evidence limits are retained. |
 | [`metamorph.md`](active/metamorph.md) | M0–M3 and M5–M6 delivered; full M4 control plane/Persona A and M7 reference-value comparison remain incomplete. Structural diff and own-parser verification already exist. |
-| [`metamorph-clone-in-oxdm.md`](active/metamorph-clone-in-oxdm.md) | In-process design superseded by the shipped container path; G1 recorder API is delivered; G2 superseded. G3 summary remains a deferred API decision with privacy context. |
 | [`mock-fleet-basic-plan.md`](active/mock-fleet-basic-plan.md) · [繁體中文](active/mock-fleet-basic-plan_zh.md) | Basic runner shipped in 0.17; actual LAN multicast/VMS and remaining native lifecycle acceptance are not established by loopback capacity smoke. |
 | [`mock-fidelity-hardening-plan.md`](active/mock-fidelity-hardening-plan.md) · [繁體中文](active/mock-fidelity-hardening-plan_zh.md) | Active parent programme. Selected shipped slices do not complete service semantics, security, capability consistency or conformance. |
 | [`mock-fidelity-execution-checklist.md`](active/mock-fidelity-execution-checklist.md) · [繁體中文](active/mock-fidelity-execution-checklist_zh.md) | Current W00–W26 work packages, operation cards, dependencies and remaining acceptance; retains PARTIAL/TODO dispositions. |
@@ -90,6 +89,7 @@ input paths and hashes; it is historical evidence, not a current file inventory.
 | --- | --- |
 | [`audit-2026-05.md`](done/audit-2026-05.md) | 0.9.8: implemented-operation audit findings resolved. |
 | [`metamorph-container-and-quirk-diff.md`](done/metamorph-container-and-quirk-diff.md) | 0.13: network clone container and structural quirk diff; broader Metamorph remains active. |
+| [`metamorph-clone-in-oxdm.md`](done/metamorph-clone-in-oxdm.md) | Oxvif G1/G3 delivered, G2 superseded; G3 summary is unreleased. Broader M4/M7 and downstream UI remain separate. |
 | [`refactor-2026-07.md`](done/refactor-2026-07.md) | 0.14: staged bug fixes and all 64 scoped coverage repairs completed. |
 | [`stage4-ledger.md`](done/stage4-ledger.md) | Historical baseline supporting the completed 0.14 Stage 4 work; not a current coverage report. |
 | [`mock-audit-2026-07.md`](done/mock-audit-2026-07.md) | 0.15: all four original audit tiers closed; later fidelity work has its own active programme. |

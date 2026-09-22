@@ -7,7 +7,7 @@ Source baseline: `80bcf14`. Use this section as the current work entry; older da
 | Category | Disposition and evidence |
 | --- | --- |
 | Confirmed | Recorder APIs are public in [record.rs](../../src/metamorph/record.rs) and exported from [mod.rs](../../src/metamorph/mod.rs). Clone serving, structural diff and `FixtureStore::verify_parsing` exist. [fixture.rs](../../src/metamorph/fixture.rs) retains colliding legacy-key requests and provides request-aware lookup; do not restore overwrite behavior from an old design. |
-| Remaining | M4 full control plane/persona switching; M7 value comparison against a real reference, beyond structural diff or own-parser checks. [Clone integration](metamorph-clone-in-oxdm.md) retains only the G3 summary API decision and privacy context. Fleet discovery/acceptance is owned by [Fleet](mock-fleet-basic-plan.md); replay consistency by W19. |
+| Remaining | M4 full control plane/persona switching; M7 value comparison against a real reference, beyond structural diff or own-parser checks. [Clone integration](../done/metamorph-clone-in-oxdm.md) is archived: G1/G3 are delivered and G2 superseded; privacy boundaries remain applicable. Fleet discovery/acceptance is owned by [Fleet](mock-fleet-basic-plan.md); replay consistency by W19. |
 | Next step / exit criteria | Specify one M4 endpoint/persona transition with state/auth/persistence boundaries, or define the reference and comparison contract for M7. Test independent differences and preserved raw evidence. Neither basic Fleet nor parse success completes those milestones. |
 
 > Evolve the existing `oxvif` mock server into a **device that changes shape**.

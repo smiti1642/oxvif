@@ -36,6 +36,11 @@
 //! The JSON shape is unchanged, but older readers can collapse entries on downgrade.
 //! Recordings overwritten by older versions cannot be recovered.
 //!
+//! [`FixtureStore::summary`] gives offline totals and sorted per-Action counts,
+//! including Fault-shaped responses, unreadable bodies and collision buckets.
+//! It omits raw payloads and does not infer transport failures or conformance;
+//! see [`FixtureSummary`] for the counting and privacy contract.
+//!
 //! # Will oxvif parse this device correctly?
 //!
 //! ```no_run
@@ -189,7 +194,7 @@ pub use adapter::{
     AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, PtzVector,
     soap_body,
 };
-pub use fixture::{Fixture, FixtureProgress, FixtureStore};
+pub use fixture::{Fixture, FixtureActionSummary, FixtureProgress, FixtureStore, FixtureSummary};
 pub use parse::{ParseReport, ParseStatus, ParseVerdict};
 pub use quirk::{ChangedQuirk, OperationDiff, OperationQuirk, QuirkDiff, QuirkReport};
 pub use record::{
