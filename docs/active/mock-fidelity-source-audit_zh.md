@@ -3,7 +3,7 @@
 [English](mock-fidelity-source-audit.md) | [繁體中文](mock-fidelity-source-audit_zh.md)
 
 2026-09-11 K27 後續修正：碰撞儲存保留及完整請求查詢已實作，詳見
-[儲存遷移](../replay-storage_zh.md)及[發布驗證](release-0.17-cut_zh.md#驗證紀錄)。
+[儲存遷移](../replay-storage_zh.md)及[發布驗證](../done/release-0.17-cut_zh.md#驗證紀錄)。
 下列較早的覆蓋重現／containment 記錄保留作為歷史證據，不代表目前仍會覆蓋；
 W19 其餘項目仍未結案。
 
@@ -42,7 +42,7 @@ W19 其餘項目仍未結案。
   ACTION 的常數，因此 request 呼叫位置也須核對。以 `rg` 交叉檢查，不把索引
   相等當成規範驗收。
 
-[0.17 切點](release-0.17-cut_zh.md) 定義 R01–R08 選定契約及發布 gate。這些數量
+[0.17 切點](../done/release-0.17-cut_zh.md) 定義 R01–R08 選定契約及發布 gate。這些數量
 不代表發布 gate、間接路徑稽核、W00–W26 全計畫工作或每個操作的欄位／Fault 語意完成。
 下方歷史執行總數僅適用於其記錄輸入，不是目前候選版本重跑的結果。
 
@@ -321,7 +321,7 @@ W19 其餘項目仍未結案。
 | W17／基本 Fleet | `discovery_responder::shared_probe`：先驗證再建立 DOM | `serve_many` 限制 datagram 並拒絕無效 UTF-8；`supported_probe_xml` 於建立 DOM 前限制結構並檢查 namespace。另檢查 Header／Body 數量、Action、MessageID、anonymous ReplyTo 與限定 Types；拒絕非空 Scopes 或 MatchBy。測試 reader 用於檢查產生的回覆，不等同獨立 schema 驗證。參閱 [Fleet 證據](mock-fleet-basic-plan_zh.md#本機證據)。 |
 | W10 | 已遷移 Media profile／create／delete／binding reader 與共用 `video_source`、`video_encoder`、`audio_metadata` scoped 契約 | Media2 wrapper 共用 helper；這些已完成遷移保留作間接稽核脈絡，不是剩餘 legacy-reader site；更廣欄位／模型限制見批次工作卡 |
 | W10 | Media OSD helper、color／position attribute、巢狀 TextString、configuration options selector | Rendering／typed parser、list filter、quota／state；`_force_use_extract_all` 不是 routed behavior |
-| W10 | `media2::configuration_plan`：create／add／remove 共用 scoped 重複 Type／Token reference | 完整 value plan、選填改名與引用計數原子提交；見 [組裝批次](mock-fidelity-profile-assembly_zh.md)。VS1／VE1／AM1 另實作選定巢狀 writer；更廣欄位與實體相容性仍待完成。 |
+| W10 | `media2::configuration_plan`：create／add／remove 共用 scoped 重複 Type／Token reference | 完整 value plan、選填改名與引用計數原子提交；見 [組裝批次](../done/mock-fidelity-profile-assembly_zh.md)。VS1／VE1／AM1 另實作選定巢狀 writer；更廣欄位與實體相容性仍待完成。 |
 | W11 | PTZ selector scalar、巢狀 operation／config／tour／space fragment、座標 attribute | Profile-to-node、`min_max`、range／vector reader、per-head slot、重複 tour spot |
 | W12 | Imaging source selector、scalar settings | Source resolution、巢狀 settings；目前 parse failure／default 行為不是目標契約 |
 | W13 | Device scalar、重複 scope／user／IP entry、storage／network／relay attribute／子樹 | 多筆驗證、auth state、IO queue、change hook；逐欄位稽核，不機械式更換 helper |
@@ -345,16 +345,16 @@ CreateProfile／DeleteProfile 路徑已改用明確的 committed effect；其他
 
 | ID | 證據 | 處置 |
 | --- | --- | --- |
-| K31–K33 — VS1 已修正選定路徑 | 舊碼重現 crop 導致 options 上限縮小及錯誤末欄位仍成功。整批擾動證實 source 選擇與拒絕後完整狀態斷言可辨識缺陷。 | W01／W10／W17–W19：完整 scoped candidate 原子提交、sensor-derived options、escaped identity 與成功後 replay 失效。兩種 transport、70 份外部 instance 及限制詳見 [VS1](mock-fidelity-video-source_zh.md)；scalar attribute、任意匯入 snapshot 與實體 routing 仍未完整建模。 |
+| K31–K33 — VS1 已修正選定路徑 | 舊碼重現 crop 導致 options 上限縮小及錯誤末欄位仍成功。整批擾動證實 source 選擇與拒絕後完整狀態斷言可辨識缺陷。 | W01／W10／W17–W19：完整 scoped candidate 原子提交、sensor-derived options、escaped identity 與成功後 replay 失效。兩種 transport、70 份外部 instance 及限制詳見 [VS1](../done/mock-fidelity-video-source_zh.md)；scalar attribute、任意匯入 snapshot 與實體 routing 仍未完整建模。 |
 | K29 — 共用 escaping 已修正 | `types::xml_escape` 處理 markup，卻在 attribute 中也直接輸出 CR／LF／tab；新增 wire／value assertion 與兩種 transport 的 profile Name 案例均在舊 helper 失敗。 | W03／W10／W06 共用表示子批次：輸出 numeric character reference，保留一般值的 borrowed 路徑與 literal Name state／read；raw renderer、token-reader 閉合、schema 欄位限制與 invalid XML character 仍為獨立項目。 |
 | K30 — 空 profile 政策已修正 | 兩種 transport 均重現 client parse failure 後已提交空 token state。明確空值的 Create／read selector 現在於 effect 前以 Sender／mock:RequestPolicy 拒絕；含空 seed 的 list 回傳 Receiver，保留 snapshot 及有效個別讀取。 | W01／W10／W06 有界 mock 政策，不是規範上的 xs:string 限制。Raw／client state、hook、配置、replay 及獨立政策 Fault 控制記於 profile preflight；其他 seed 與欄位限制仍待處理。 |
 | K27 — containment 後已修正碰撞儲存 | 早期六組 containment 檢查點已由十組碰撞控制取代，檢查不同 payload 保留、save／load、lookup、report 及兩種 replay transport。 | W19 部分完成：collision bucket 保留不同請求，key-only 歧義回傳 None；等價請求仍替換。無法恢復已遭覆蓋的舊錄製；更廣 QName／HTTP／protocol 語意仍待完成，詳見上方發布證據。 |
 | K28 | 已錄製 request 的 URL 憑證仍存於 `key_canon`，舊檔 key 載入時也未清除。虛構資料的 assertion failure 已重現兩項缺陷。 | W19：recording／replay／diff 投影與舊檔／caller lookup key 均清除 URL 帳密；載入不覆寫磁碟。K27 後續保留正規化後的不同請求，等價請求則替換。Raw envelope 仍僅針對指定格式去除憑證，並非通用秘密偵測器。 |
-| K24 | Media2 音訊編碼名稱與 Media1 不同。 | AM1: G711/PCMU, AAC/MP4A-LATM; ONVIF G726 + bitrate. [AM1](mock-fidelity-audio-metadata_zh.md) |
+| K24 | Media2 音訊編碼名稱與 Media1 不同。 | AM1: G711/PCMU, AAC/MP4A-LATM; ONVIF G726 + bitrate. [AM1](../done/mock-fidelity-audio-metadata_zh.md) |
 | K25 | AutoStart 曾由位址推測或直接寫入。 | AM1: 唯讀輸入驗證後忽略；非串流預設 false。 |
 | K26 — 選定 codec view 已修正 | VE1 涵蓋 H265 寫入／回讀及 Media1 頂層拒絕；兩種 profile renderer 共用相同可表示性防護。 | W01／W10／W17：保留 codec 身分，拒絕不相容 Media1 view；不靜默轉換或放寬 schema。詳見 VE1 證據及合成模型限制。 |
-| K34 — rate 契約已修正 | 公開 client 重現 12.5 → 0；無效幀率文字亦變成零，共用整數 mock storage 掩蓋不一致。 | 已核准下一個 minor 的 `f32` 遷移、嚴格 present rate 解析、outbound／serde 有限值防護、共用 mock rate、Media1 view 拒絕及成功後 replay 失效。詳見 [VE1 證據](mock-fidelity-video-encoder_zh.md)。 |
-| K35 — 選定 encoder 契約已修正 | 八項 VE1 路由已使用 scoped 完整 candidate／selector、共用 options／write 限制及 source-configuration capacity；移除 17 個 legacy reader 呼叫。 | [VE1 證據](mock-fidelity-video-encoder_zh.md)：原子拒絕、調整、轉義身分、option 回讀及 replay 相依性。串流、實體 routing 及全程式符合性不在此模型範圍。 |
+| K34 — rate 契約已修正 | 公開 client 重現 12.5 → 0；無效幀率文字亦變成零，共用整數 mock storage 掩蓋不一致。 | 已核准下一個 minor 的 `f32` 遷移、嚴格 present rate 解析、outbound／serde 有限值防護、共用 mock rate、Media1 view 拒絕及成功後 replay 失效。詳見 [VE1 證據](../done/mock-fidelity-video-encoder_zh.md)。 |
+| K35 — 選定 encoder 契約已修正 | 八項 VE1 路由已使用 scoped 完整 candidate／selector、共用 options／write 限制及 source-configuration capacity；移除 17 個 legacy reader 呼叫。 | [VE1 證據](../done/mock-fidelity-video-encoder_zh.md)：原子拒絕、調整、轉義身分、option 回讀及 replay 相依性。串流、實體 routing 及全程式符合性不在此模型範圍。 |
 | K36 / D4 | 2026-09-11 已核准 metadata 公開型別遷移。 | AM1: 完整 multicast 與 session timeout；修正序列化順序，明確記錄未建模欄位。 |
 | K37 | AM1 外部 corpus 08 拒絕音訊 options 的多值 Items；client 原先僅讀取第一個 Items。 | AM1: 逐一輸出整數，讀取全部 Items；corpus 09 的 148 份 XML 通過 Xerces。 |
 | K23 | Windows CI run 34471659927（`2a488be`）的 `line_number_override_is_validated_but_never_changes_agent_or_plain_output` 失敗：逐位元 JSON 比較包含各自量測的 `meta.elapsed_ms`（0 與 9）。 | W22 測試框架修正：要求耗時為數字，JSON 相等比較只排除該確切欄位；保留其他全部欄位、stderr 及純文字輸出檢查，加入確定性的耗時／資料／型別控制。不改 CLI 輸出，不遮蔽其他 metadata。 |

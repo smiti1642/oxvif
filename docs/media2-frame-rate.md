@@ -82,4 +82,4 @@ preserves a valid wire zero. Unmodeled streaming effects refuse explicitly; see 
 [encoder contract](mock-server.md#622-encoder-configuration-contract). The CLI profile
 report still uses Media1; no automatic Media2 fallback was added. Mock validation
 does not establish camera behavior or full ONVIF conformance. See the
-[encoder plan and evidence](active/mock-fidelity-video-encoder.md).
+[encoder plan and evidence](done/mock-fidelity-video-encoder.md).

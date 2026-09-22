@@ -31,7 +31,7 @@
 //! Two things in that table are worth keeping. **`AFModes` moves
 //! `UNKNOWN-CHILD`, not `UNKNOWN-NAME`** — the name is a real ONVIF element at
 //! a deeper level, so it is an `Extension`-nesting defect rather than a
-//! misspelling, and `docs/active/schema-shape-plan-2026-08.md` said otherwise
+//! misspelling, and `docs/done/schema-shape-plan-2026-08.md` said otherwise
 //! until this run measured it. And **`tr2:Audio` leaves the total at 63 while
 //! moving two kinds**, which is why [`PINS`] is per-kind: a single total would
 //! have let this release's client bug back in silently.
@@ -71,7 +71,7 @@
 //! ## Why it is `#[ignore]`d, and what that costs
 //!
 //! The ONVIF schema set is © ONVIF 2008-2025. The maintainer's decision
-//! (`docs/active/schema-shape-plan-2026-08.md` §4, D2) is that **nothing derived
+//! (`docs/done/schema-shape-plan-2026-08.md` §4, D2) is that **nothing derived
 //! from it enters this repository** — not the files, not a generated index, not
 //! a derived fixture, and **not a schema fact hardcoded here**. A
 //! `const REQUIRED: &[&str] = &["TLS1.1", …]` in this file would be the same
@@ -148,7 +148,7 @@ const SOAP_ENV: &str = "http://www.w3.org/2003/05/soap-envelope";
 /// regression raises one and the test says that too. Never edit a number to
 /// make a run green — read the diff the failure prints first.
 ///
-/// Quoted in `docs/active/mock-schema-conformance-2026-08.md` §1 and in the
+/// Quoted in `docs/done/mock-schema-conformance-2026-08.md` §1 and in the
 /// lab's `NOTES.md` (run 3). Change one here and both are wrong.
 ///
 /// Movement so far:
@@ -1887,7 +1887,7 @@ async fn mock_output_matches_the_onvif_schema() {
         PINS.to_vec(),
         "\nthe distinct finding counts moved.\n\
          Lower is a fix — update PINS in the same commit as the fix, and update \
-         `docs/active/mock-schema-conformance-2026-08.md` §1 and the lab's \
+         `docs/done/mock-schema-conformance-2026-08.md` §1 and the lab's \
          NOTES.md run 3, which both quote these numbers.\n\
          Higher is a regression — read the rows printed above before touching \
          PINS.\n\

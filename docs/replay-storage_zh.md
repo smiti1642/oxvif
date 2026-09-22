@@ -62,4 +62,4 @@ Legacy `QuirkReport` 列不含完整請求身分。`QuirkDiff` 任一側群組�
 
 本修正處理 K27 儲存遺失及相關報告 map 合併，不改 ONVIF 方法、SOAP 編碼、
 JSON 格式或 raw adapter 契約；不代表 W19、全部 replay 相依、QName 語意或
-協議相容性完成。完整發布驗收仍依[0.17 發布切點](active/release-0.17-cut_zh.md)執行。
+協議相容性完成。完整發布驗收仍依[0.17 發布切點](done/release-0.17-cut_zh.md)執行。

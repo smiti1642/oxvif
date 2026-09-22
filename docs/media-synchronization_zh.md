@@ -51,4 +51,4 @@ Opt-in 仍驗證 request identity 與唯一的 scoped profile token。缺少、�
 Client wire 測試、HTTP／in-process Mock 測試與外部 XML 驗證檢查的是請求、
 回應及政策，不是實際 media delivery。SOAP acknowledgment 本身不能證明已觀察
 到 I-frame 或 metadata refresh。真實串流驗收需要明確授權的請求與該串流觀測。
-參閱[整合驗證紀錄](active/contributor-pr-integration-plan_zh.md)。
+參閱[整合驗證紀錄](done/contributor-pr-integration-plan_zh.md)。

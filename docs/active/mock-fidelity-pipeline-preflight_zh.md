@@ -3,7 +3,7 @@
 [English](mock-fidelity-pipeline-preflight.md) | [繁體中文](mock-fidelity-pipeline-preflight_zh.md)
 
 2026-09-11 K27 後續修正：碰撞儲存保留及完整請求查詢已實作，詳見
-[儲存遷移](../replay-storage_zh.md)及[發布驗證](release-0.17-cut_zh.md#驗證紀錄)。
+[儲存遷移](../replay-storage_zh.md)及[發布驗證](../done/release-0.17-cut_zh.md#驗證紀錄)。
 下列較早的覆蓋重現／containment 記錄保留作為歷史證據，不代表目前仍會覆蓋；
 W19 其餘項目仍未結案。
 
@@ -11,8 +11,8 @@ W19 其餘項目仍未結案。
 log 與外部執行沿用為歷史證據，不是新一次 gate。目前選定 R03–R05 另包含 scoped
 auth、P2／K30 身分、PA1 profile assembly／reference count，以及 source／encoder／
 audio／metadata committed effect。下方原始三個 profile-read effect 清單不是目前
-完整清單，見 [Release 審查](release-0.17-review_zh.md)、
-[profile assembly](mock-fidelity-profile-assembly_zh.md) 及連結的服務卡。
+完整清單，見 [Release 審查](../done/release-0.17-review_zh.md)、
+[profile assembly](../done/mock-fidelity-profile-assembly_zh.md) 及連結的服務卡。
 這不代表 W00–W26、standalone 下游 commit 觀察、併發 replay 可見性、廣泛 HTTP
 符合性或實機行為已驗收。
 
@@ -38,8 +38,8 @@ W03 共用 synthetic 驗證已實作但仍為 PARTIAL，廣泛的 W06 服務錯�
 | [State hook 快照工作](#state-hook-快照工作) | W18 有界鎖定及觀察策略 |
 | [Replay key 憑證邊界](#replay-key-憑證邊界) | K28 清理、遷移與排除範圍 |
 | [Replay key 碰撞重現](#replay-key-碰撞重現) | K27 六項已知缺陷證據 |
-| [認證開工盤點](mock-fidelity-auth-preflight_zh.md) | W08 scoped 憑證、限制與驗證 |
-| [Acknowledgment 政策](mock-fidelity-ack-policy-preflight_zh.md) | W16 選定預設拒絕、opt-in 及 effect 邊界 |
+| [認證開工盤點](../done/mock-fidelity-auth-preflight_zh.md) | W08 scoped 憑證、限制與驗證 |
+| [Acknowledgment 政策](../done/mock-fidelity-ack-policy-preflight_zh.md) | W16 選定預設拒絕、opt-in 及 effect 邊界 |
 
 ## Replay key 碰撞重現
 

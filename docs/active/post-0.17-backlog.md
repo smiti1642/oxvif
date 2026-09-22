@@ -2,9 +2,11 @@
 
 [English](post-0.17-backlog.md) | [繁體中文](post-0.17-backlog_zh.md)
 
-Status: scheduled after the bounded 0.17 cut; no implementation or release date
-is promised. [Release blockers](release-0.17-cut.md#blocking-acceptance) stay in
-0.17 acceptance and cannot be moved here merely to make the checklist green.
+Status: active follow-up after 0.17.0 publication; reconciled 2026-09-22.
+No implementation or release date is promised. The completed
+[release cut](../done/release-0.17-cut.md#blocking-acceptance) and
+[publication evidence](../done/release-0.17-finalization.md) are archived.
+Their closure does not complete the broader work below or turn unperformed checks into passes.
 
 | Section | Purpose |
 | --- | --- |
@@ -26,8 +28,8 @@ is promised. [Release blockers](release-0.17-cut.md#blocking-acceptance) stay in
 | F08 | RTSP decoder/playback, batch file exports, camera-write CLI commands and standalone reusable navigation crate | Existing CLI maintenance/navigation plans; new threat model and permission UX before writes |
 | F09 | Official Homebrew Core, Debian/Ubuntu and Windows community-channel submissions | Distribution plan; current native packaging checks remain a release gate, submission is not implied by generated artifacts |
 | F10 | Bounded snapshot image-compatibility investigation | Preserve A03 destination/auth/size/no-clobber policies; obtain a sanitized reproducible response before changing image acceptance |
-| F11 (first slice implemented) | Mock Fleet startup/configuration and basic shared discovery | [Basic Fleet evidence](mock-fleet-basic-plan.md) and [operator guide](../mock-fleet.md). Full scope matching, Hello/Bye/Resolve, native LAN/VMS acceptance and Metamorph mixtures remain open; release placement requires a separate decision |
-| F12 (promoted) | Separate fixed-bottom CLI status bar | Returned to 0.17 by operator request; see [CLI re-entry](cli-0.17-reentry.md). Native-platform/IME acceptance remains required |
+| F11 (basic slice shipped in 0.17) | Remaining Mock Fleet discovery and acceptance | [Basic Fleet evidence](mock-fleet-basic-plan.md) and [operator guide](../mock-fleet.md). Full scope matching, Hello/Bye/Resolve, native LAN/VMS acceptance and Metamorph mixtures remain open |
+| F12 (status bar shipped in 0.17) | Remaining native-terminal/IME acceptance | The [CLI re-entry](../done/cli-0.17-reentry.md) delivery is archived. Keep unverified platform/IME checks explicit in the [navigation plan](cli-vim-navigation-plan.md); publication adds no terminal evidence |
 
 F10 research disposition, 2026-09-12: review of the user-provided ONVIF Device
 Manager source found GetSnapshotUri → HTTP stream download → WPF image decoding,
@@ -38,7 +40,7 @@ observed Hanwha non-image response. No GPL code was transplanted; any follow-up
 must be independently implemented. Permissive certificate acceptance, redirects,
 proxy behavior or credential-bearing URL normalization are not accepted solutions.
 The existing successful read-only snapshot/diagnose evidence remains in the
-[snapshot repair record](snapshot-auth-repair.md).
+[snapshot repair record](../done/snapshot-auth-repair.md).
 
 F05 also retains the notification listener's inherited bounded HTTP reader:
 the peer wrapper is connection metadata, not authentication. It does not add

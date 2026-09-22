@@ -509,7 +509,7 @@ sources; ProfileToken is validated. Media2 list requests support ConfigurationTo
 and ProfileToken. The mock permits source reassignment for all profiles and does not
 model physical encoder-routing conflicts. Built-in replay preserves recordings on
 refusal and retires dependent source/profile/options reads only after a commit.
-See [VS1 evidence and limits](active/mock-fidelity-video-source.md).
+See [VS1 evidence and limits](done/mock-fidelity-video-source.md).
 
 ### 6.2.2 Encoder configuration contract
 
@@ -550,7 +550,7 @@ These are synthetic capacity bounds, not usage counters or hardware performance.
 Imported source catalogues above the eight-profile model limit refuse this view.
 Source commits retire capacity recordings; profile commits retire profile-scoped
 encoder options; encoder commits retire dependent encoder/profile reads.
-See [VE1 scope and evidence](active/mock-fidelity-video-encoder.md).
+See [VE1 scope and evidence](done/mock-fidelity-video-encoder.md).
 
 ### 6.3 Profiles
 
@@ -575,7 +575,7 @@ remain explicit refusals. A rejected plan does not rename, allocate or change co
 Touched configuration `UseCount` fields are recomputed from committed references
 in the same lock, including deletion. Unrelated arbitrary seed counts are preserved.
 Full physical configuration compatibility and field validation remain under review;
-see the [assembly batch](active/mock-fidelity-profile-assembly.md).
+see the [assembly batch](done/mock-fidelity-profile-assembly.md).
 
 | Token | Name | Fixed | Source cfg | Encoder cfg | PTZ cfg | Audio cfg |
 |---|---|---|---|---|---|---|
@@ -624,7 +624,7 @@ they differ from each other, and from lens 1's, in **zoom**.
 > `ptz_absolute_move`, `ptz_relative_move` and `ptz_continuous_move` always emit
 > a `<tt:PanTilt>` element. Use `GotoPreset` to position a zoom-only head. That
 > is a gap in the *client* against real zoom-only hardware, not a mock quirk —
-> `docs/active/ptz-wiring-plan-2026-07.md` §3.5.
+> `docs/done/ptz-wiring-plan-2026-07.md` §3.5.
 
 ### 6.4.1 PTZ configurations
 
@@ -1418,7 +1418,7 @@ where a family is static, the getter never claims to reflect a write.
 ### 13.1 Declared stubs — static on both sides
 
 Pinned by a `Blind` row in `tests/mock_token_discrimination.rs`. Catalogued in
-[`active/mock-audit-2026-07.md`](active/mock-audit-2026-07.md) §5.
+[`active/mock-audit-2026-07.md`](done/mock-audit-2026-07.md) §5.
 
 **No `Static` row is left in the 49-pair `tests/mock_roundtrip.rs` table.**
 That does not cover every `Set` or effectful operation: §13.5 documents selected
@@ -1506,7 +1506,7 @@ Audit §6.
   `UnmodelledConfigType-CFG2-5542`, because `ProfileEntry` has no slot for them
   and `MediaProfile2` exposes none — so a success could never be observed.
   **`PTZ` was on that list until the PTZ family was wired**; it now binds like
-  the other four, and `docs/active/ptz-wiring-plan-2026-07.md` §6.2 records why
+  the other four, and `docs/done/ptz-wiring-plan-2026-07.md` §6.2 records why
   leaving it rejected was not an option once the slot existed.
 
 ---
@@ -1559,7 +1559,7 @@ are fixture data; they do not identify working services or completed effects.
 Capability responses remain static fixtures and may overstate modeled behavior;
 full reconciliation is tracked under W17. Remaining operation contracts and
 partially modeled effects still require review. See the
-[policy checkpoint](active/mock-fidelity-ack-policy-preflight.md) and
+[policy checkpoint](done/mock-fidelity-ack-policy-preflight.md) and
 `tests/mock_ack_policy.rs`; this is not a hardware-effect or conformance test.
 
 ## 14. Extending the mock

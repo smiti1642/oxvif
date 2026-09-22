@@ -417,7 +417,7 @@ Source options 依實體 sensor 尺寸，不再隨 crop 縮小。省略 configur
 回傳保守的 generic 範圍與可用 source；ProfileToken 會驗證存在。Media2 清單支援
 ConfigurationToken／ProfileToken。Mock 允許所有 profile 重新指定 source，未建模
 實體 encoder-routing 衝突。內建 replay 拒絕時保留 recording，成功後才淘汰相依的
-source／profile／options 讀取。詳見 [VS1 證據與限制](active/mock-fidelity-video-source_zh.md)。
+source／profile／options 讀取。詳見 [VS1 證據與限制](done/mock-fidelity-video-source_zh.md)。
 
 ### 6.2.2 Encoder configuration 契約
 
@@ -451,7 +451,7 @@ constant-bitrate 效果明確拒絕。Media2 GetVideoEncoderInstances 要求
 限制。這些是合成容量邊界，非使用量或硬體效能；匯入 source catalogue 超過八個 profile
 模型上限時拒絕此 view。Source 提交淘汰 capacity recording；profile 提交淘汰具
 profile selector 的 encoder options；encoder 提交淘汰相依的 encoder／profile 讀取。
-詳見 [VE1 範圍與證據](active/mock-fidelity-video-encoder_zh.md)。
+詳見 [VE1 範圍與證據](done/mock-fidelity-video-encoder_zh.md)。
 
 ### 6.3 Profile
 
@@ -471,7 +471,7 @@ Media2 建立會原子套用初始 configuration。AddConfiguration 可僅更新
 AudioSource、AudioEncoder 及 PTZ，其他種類仍明確拒絕。拒絕不改名、不配置 token、
 不變更計數。受影響的 configuration `UseCount` 在同一鎖中依已提交的 reference 重算，
 包含刪除；不改動無關 seed 的任意計數。完整實體 configuration 相容性及欄位驗證仍待
-完成，詳見 [組裝批次](active/mock-fidelity-profile-assembly_zh.md)。
+完成，詳見 [組裝批次](done/mock-fidelity-profile-assembly_zh.md)。
 
 | Token | Name | Fixed | Source cfg | Encoder cfg | PTZ cfg | Audio cfg |
 |---|---|---|---|---|---|---|
@@ -946,7 +946,7 @@ subscription 已驗證。Fault／auth 與呼叫端 raw adapter 回應仍保有�
 驗證 ProfileToken／欄位。Upload URI、subscription reference 與 timestamp 均為
 fixture 資料，不代表服務可用或效果已完成。Capability 回應仍為 static fixture，
 可能高估已建模行為；完整核對另列 W17。其他操作契約及部分建模效果仍須審閱。
-詳見[政策檢查點](active/mock-fidelity-ack-policy-preflight_zh.md)
+詳見[政策檢查點](done/mock-fidelity-ack-policy-preflight_zh.md)
 及 `tests/mock_ack_policy.rs`；這不是 hardware-effect 或 conformance 測試。
 
 ## 14. 擴充 mock

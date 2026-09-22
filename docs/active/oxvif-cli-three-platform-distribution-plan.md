@@ -1,5 +1,7 @@
 # oxvif CLI three-platform distribution plan
 
+**Status reconciliation, 2026-09-22:** The 0.17 native archives/packages and staging were published and verified as recorded in the [finalization record](../done/release-0.17-finalization.md). This plan remains active for project-channel operations and official-channel graduation; generated Release assets do not establish those milestones.
+
 Status: Active  
 Decision date: 2026-09-01  
 Applies to: first public `oxvif-cli` release and official-channel graduation

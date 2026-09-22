@@ -55,4 +55,4 @@ Client wire tests, HTTP/in-process mock tests and external XML validation check
 requests, replies and policy, not delivered media. A SOAP acknowledgment alone
 does not establish that an I-frame or metadata refresh was observed. Real-stream
 acceptance needs an explicitly authorized request and observation of that stream.
-See the [integration evidence](active/contributor-pr-integration-plan.md).
+See the [integration evidence](done/contributor-pr-integration-plan.md).

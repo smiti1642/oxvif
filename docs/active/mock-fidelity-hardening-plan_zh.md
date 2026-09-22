@@ -6,10 +6,10 @@
 日期：2026-09-10。Repository 基準：`9dccf9d`。
 起因：[PR #16](https://github.com/smiti1642/oxvif/pull/16) 的 `dc69e9a`
 版本審查；本計畫不假設該貢獻已合併。
-[2026-09-11 PR 整合審查](mock-fidelity-pr16-integration_zh.md) 已重查 head
+[2026-09-11 PR 整合審查](../done/mock-fidelity-pr16-integration_zh.md) 已重查 head
 `3db6459`，記錄可重用內容、必要修正與驗證前置條件。
 
-已授權的 [0.17 發布切點](release-0.17-cut_zh.md)選定有限且已實作的子群驗收；
+已授權的 [0.17 發布切點](../done/release-0.17-cut_zh.md)選定有限且已實作的子群驗收；
 [後續工作](post-0.17-backlog_zh.md)保留其餘計畫。排程調整不將未完成契約標記
 結案，也不延後已知資料遺失或安全阻擋。
 

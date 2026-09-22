@@ -74,4 +74,4 @@ This repairs K27 storage loss and the related report-map collapse without changi
 ONVIF methods, SOAP encoding, the JSON shape or raw adapter contracts. It does not
 complete W19, all replay dependencies, QName semantics or protocol conformance.
 Release-wide acceptance remains governed by the
-[0.17 release cut](active/release-0.17-cut.md).
+[0.17 release cut](done/release-0.17-cut.md).

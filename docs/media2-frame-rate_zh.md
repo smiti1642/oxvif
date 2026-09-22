@@ -75,4 +75,4 @@ client 解析仍保留有效 wire 零值。未建模串流效果明確拒絕，�
 [encoder 契約](mock-server_zh.md#622-encoder-configuration-契約)。
 CLI profile 報告仍使用 Media1，未新增自動 Media2 fallback。
 Mock 驗證不代表實機行為或完整 ONVIF 符合性。詳見
-[encoder 計畫與證據](active/mock-fidelity-video-encoder_zh.md)。
+[encoder 計畫與證據](done/mock-fidelity-video-encoder_zh.md)。

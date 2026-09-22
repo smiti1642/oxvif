@@ -10,8 +10,8 @@
 2026-09-12 證據核對：本卡保留各日期的實作檢查點，包含當時缺口、測試數量及外部
 執行紀錄，不代表新一次驗收。選定 R03–R05 目前包含 P2／K30 profile 身分與空 token
 政策、A1 typed-adapter 路由，以及 PA1 profile assembly／容量／reference effect；
-見 [profile assembly](mock-fidelity-profile-assembly_zh.md) 與
-[Release 審查](release-0.17-review_zh.md)。K27 已在本機修復：collision bucket
+見 [profile assembly](../done/mock-fidelity-profile-assembly_zh.md) 與
+[Release 審查](../done/release-0.17-review_zh.md)。K27 已在本機修復：collision bucket
 保留不同 request，replay 採 request-aware lookup；見[儲存遷移](../replay-storage_zh.md)。
 Legacy canonical key 仍可能碰撞。這些局部修正不代表 W00–W26、全部 profile 欄位、
 replay 相依圖、HTTP binding 符合性或實機驗收已完成。

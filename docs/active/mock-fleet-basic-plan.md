@@ -2,6 +2,8 @@
 
 [English](mock-fleet-basic-plan.md) | [繁體中文](mock-fleet-basic-plan_zh.md)
 
+**Status reconciliation, 2026-09-22:** The basic runner shipped in 0.17.0. This plan stays active for native LAN/multicast/VMS and remaining platform lifecycle acceptance; loopback smoke does not close those gates.
+
 Status: B1–B4 implementation and local gates complete, authorized 2026-09-12.
 The first milestone provides simple multi-camera startup/configuration and basic
 shared discovery. Local terminal and 64/256-device capacity smoke checks pass;
@@ -202,4 +204,4 @@ or including the feature in a particular release. Confirm the authorized lab
 interface and target VMS before LAN acceptance, not by editing host networking.
 
 This is the narrowed first slice of F11 in the
-[backlog](post-0.17-backlog.md), following the [CLI re-entry discussion](cli-0.17-reentry.md#mock-discussion).
+[backlog](post-0.17-backlog.md), following the [CLI re-entry discussion](../done/cli-0.17-reentry.md#mock-discussion).

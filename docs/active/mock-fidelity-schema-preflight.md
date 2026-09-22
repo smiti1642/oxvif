@@ -285,14 +285,14 @@ export has 35 exchanges: 35 requests, 25 successes and ten Faults. On 2026-09-11
 70 instances in the new external `oxvif-profile-corpus-20260911-05` directory passed
 strict Xerces XSD 1.1 on Windows; the explicitly selected legacy structural check also
 passed. Sources/corpus stay outside the checkout. This is not complete semantic or
-ONVIF certification evidence; see [VS1](mock-fidelity-video-source.md).
+ONVIF certification evidence; see [VS1](../done/mock-fidelity-video-source.md).
 
 K34 adds seven rate exchanges across three additional operations: fractional read/write,
 integral restoration, explicit Media1 view refusal and a raw negative-rate refusal.
 On 2026-09-11 the combined external `oxvif-profile-corpus-20260911-06` passed strict
 Xerces XSD 1.1: **84 instances**, 42 exchanges, 24 operations, 30 successes and
 12 Faults. The explicitly selected legacy shape check also passed. These are local
-results; this batch's hosted CI must be checked separately. See [K34](mock-fidelity-video-encoder.md).
+results; this batch's hosted CI must be checked separately. See [K34](../done/mock-fidelity-video-encoder.md).
 
 ## Next work
 
@@ -306,14 +306,14 @@ External corpus 08 failed datatype validation: audio options used multi-value It
 The mock now emits repeated integer elements; the public parser retains every item.
 Fresh corpus `oxvif-corpus-20260911-09` passes **148 strict Xerces instances**:
 74 exchanges, 44 operations, 57 successes and 17 Faults. No official resources are
-stored in the checkout. See [AM1](mock-fidelity-audio-metadata.md); CI and semantic
+stored in the checkout. See [AM1](../done/mock-fidelity-audio-metadata.md); CI and semantic
 coverage are separate from this local structural result.
 
 B16 adds six synchronization exchanges across two operations: two receipts and four
 refusals. The current exporter therefore selects 80 exchanges, 46 operations,
 59 successes and 21 Faults (160 XML instances). Historical local validation and
 the current candidate's outstanding CI are tracked in the
-[B16 evidence](contributor-pr-integration-plan.md#execution-record).
+[B16 evidence](../done/contributor-pr-integration-plan.md#execution-record).
 
 W20 remains PARTIAL: audit unresolved/wildcard accounting, QName-valued Fault text,
 and expand the corpus beyond the selected 46-operation batches. W21 remains PARTIAL: complete the

@@ -400,7 +400,7 @@ async fn empty_lens_token_is_refused_as_missing() {
 // handler read the `ProfileToken` at all (16 of its 27 dispatch arms never
 // received the request body; the other 11 read something else) — so a test
 // asserting "my code addressed the right head" passed against a mock that could
-// not tell one head from another. `docs/active/mock-audit-2026-07.md` §4.1.
+// not tell one head from another. `docs/done/mock-audit-2026-07.md` §4.1.
 //
 // The two seeded heads deliberately disagree on position, on preset count, on
 // preset names, and on whether they have tours at all.
@@ -527,7 +527,7 @@ async fn a_preset_stored_on_one_lens_is_visible_on_its_other_stream_only() {
 /// rather than `AbsoluteMove`: **oxvif's `ptz_absolute_move` always emits a
 /// `PanTilt` element**, and a zoom-only head refuses one. That is a real gap in
 /// the client against real zoom-only hardware, not a mock artefact — see
-/// `docs/active/ptz-wiring-plan-2026-07.md` §3.5.
+/// `docs/done/ptz-wiring-plan-2026-07.md` §3.5.
 #[tokio::test]
 async fn home_position_is_per_head() {
     let (_srv, s) = setup().await;
@@ -595,7 +595,7 @@ async fn preset_tours_are_per_head() {
 // request body: one node and one configuration for the whole device, whatever
 // token was asked about, and `<tt:SupportedPTZSpaces/>` — an empty element,
 // which is schema-valid and says the head supports no coordinate space at all.
-// `docs/active/ptz-wiring-plan-2026-07.md` §2.1.
+// `docs/done/ptz-wiring-plan-2026-07.md` §2.1.
 
 /// The two heads are physically different, and `GetNodes` must say so.
 #[tokio::test]

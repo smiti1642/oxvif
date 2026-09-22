@@ -1,0 +1,216 @@
+# CLI 工作流程連續性計畫
+
+[English](cli-workflow-continuity.md) | [繁體中文](cli-workflow-continuity_zh.md)
+
+**2026-09-22 歸檔：此文件的限定交付範圍已隨 0.17.0 發布。**
+結案依據見 [最終驗證與發布紀錄](release-0.17-finalization_zh.md)。下方保留各批次當時的版本、授權、待驗收項目與測試限制，並非目前發布狀態；歸檔不代表新增實機、原生終端或 VMS 驗證。尚未完成的廣泛工作由 [後續待辦](../active/post-0.17-backlog_zh.md) 與 active 主計畫繼續追蹤。
+
+狀態：2026-09-13 已授權施工。原始碼基準為
+`71f0f437f60781393db98ab58dd95eee22fc1d90`，分支 `feat/basic-mock-fleet`。
+本計畫依實際程式檢查撰寫，不以先前對話摘要代替證據。
+不包含版號變更、系統安裝、發布、啟動 CI 或合併主分支。
+
+| 章節 | 用途 |
+| --- | --- |
+| [原始碼對照](#原始碼對照) | 已確認缺口與現有基礎 |
+| [行為契約](#行為契約) | 狀態、安全與導覽決策 |
+| [施工批次](#施工批次) | 依序實作與驗收 |
+| [驗證與文件](#驗證與文件) | 關卡與交付 |
+| [進度](#進度) | 執行後填入證據 |
+
+## 原始碼對照
+
+行號指上述基準，修改後以函式名稱定位。
+
+| 缺口 | 實際程式位置 | 必要修改 |
+| --- | --- | --- |
+| Manage 無法新增探索到的設備 | [manage.rs](../../crates/oxvif-cli/src/manage.rs) 的 `choose_device`（304）；[interactive.rs](../../crates/oxvif-cli/src/interactive.rs) 的 `BrowserState::handle_key`（1331）、`DiscoverySelection` | 區分 Enter 選取與 a 明確新增 |
+| 獨立新增提交後退出，驗證失敗亦然 | [main.rs](../../crates/oxvif-cli/src/main.rs) 的 `execute_and_emit`（1115）、`setup_discovered_device`（1175）；`browse_discovery`、`SetupForm::finish` | 新增期間保留終端、可重試表單與探索結果 |
+| 切換設備丟失狀態 | `manage::run`（73–82）每次重新建立 context/profile/result/viewport | 工作階段擁有各設備工作區 |
+| 已存清單不能搜尋 | `choose_device` 呼叫不處理 query 的 `Panel::menu_with_view`（735） | 可重用且保留原始索引的篩選選單 |
+| Profile 選單回到首列 | `manage::run`（167）呼叫建立預設 viewport 的 `Panel::menu` | 每次讀取後按 token 還原位置 |
+| 直接失敗無法重看 | `manage::execute`（252）將錯誤縮成 `WorkflowOutcome::Failed` | 失敗／取消證據與最後完成結果分別保存 |
+| 位址修正丟失文字，比較無法沿用匯出 | `choose_device` 位址分支、`destination`（276）、`run` 比較分支 | 非機密輸入草稿及明確的最近匯出選項 |
+| 重開報告位置歸零且無搜尋 | `Panel::show`（792）使用區域 `offset = 0` | 呼叫端持有可搜尋文字檢視 |
+
+必須重用並保留的基礎：
+
+- [application.rs](../../crates/oxvif-cli/src/application.rs) 的
+  `Application::preflight_setup`、`CommandRequest::DeviceSetup` 執行、
+  `rollback_setup`、`discovery_devices`（UUID／正規化位址的登錄投影）。
+  現有 setup 先驗證，再同步保存本機資料，已有 rollback 證據測試；
+  不重做寫入流程或身分比對演算法。
+- [maintenance.rs](../../crates/oxvif-cli/src/maintenance.rs) 的 `ManagedDevice`、
+  `set_credentials`、`disconnect`、60 秒連線到期、`ManagedAction`、
+  輸出檔不覆寫與 `read_baseline`。
+- [interactive.rs](../../crates/oxvif-cli/src/interactive.rs) 的終端 RAII、
+  差異重繪、表單密碼遮蔽／清除、文字輸入、`DiscoverySelectionView` 及情境式 Vim 導覽。
+- 現有測試：application 的 setup 成功／驗證失敗／既有憑證衝突／競爭回復／
+  回復不完整；maintenance 的 session／不覆寫／診斷取消；interactive 的探索
+  狀態、篩選、Unicode、待完成按鍵、縮放及表單遮蔽。
+
+## 行為契約
+
+1. Manage Enter 僅選取，不儲存；`a` 明確開啟新增。獨立探索維持 Enter/a 新增。
+   成功／失敗／取消均留在同一終端。表單明示提交將驗證並保存設備與憑證；
+   manage 不修改全域目前設備，獨立探索維持既有 setup 選為目前設備的行為。
+2. 重試保留 ID、帳號，清除已提交密碼，顯示實際 application 錯誤。不自動重試
+   本機寫入、不覆寫、不略過 TLS、不改用其他憑證。提交前取消不寫入；
+   執行中取消先核對 registry 狀態再允許重試，不把不完整回復說成乾淨取消。
+3. 新增後以 registry 重新投影快取，不重播 multicast。保留 query、登錄篩選及
+   紀錄身分。在 NEW 篩選下，新存紀錄會消失；顯示成功確認，選下一個有效位置，
+   不擅自清除篩選。
+4. 各設備工作區持有 ManagedDevice、Profile、操作／Profile 位置、最後完成結果、
+   最新失敗／取消、報告檢視及非機密路徑草稿。已存設備以 ID 加正規化 target
+   識別，直接設備以正規化 target 識別；不只按 IP 共用，也不默認合併兩者憑證。
+   保留連線到期規則。最多保留 256 個 context，超過時明確要求重開，
+   不靜默逐出既有狀態。
+5. 除明確提交 setup 外，憑證僅留記憶體；切換不複製別台密碼，退出清除全部 context。
+   已存設備的 target／憑證設定變更時，重用前使舊狀態失效。外部修改原生密碼庫
+   的內容仍須重開工作區，維持既有文件規則。
+6. 已存清單以 ID、名稱、target、tags 做不分大小寫搜尋。零筆符合時，網路搜尋與
+   直接輸入仍可用。Registry 改變時按身分而非索引還原；不恢復未完成 Vim 前綴或
+   搜尋編輯模式。Query 是一般文字，不是正規表示式。
+7. Profile 仍即時讀取；讀取後還原仍存在的 token。Token 消失時清除舊選取並要求
+   明確選擇，既有單 Profile 便利行為除外；讀取失敗不擅自改用另一 token。
+8. 最後完成結果與最新失敗／取消分開列選項。報告重開保留 query／位置，新內容
+   重設檢視，標示為歷史證據而非即時狀態。
+9. 位址／路徑無效時回同一個有內容的編輯框；一般返回再進入保留非機密草稿，
+   密碼不作草稿。比較可選本設備最後成功寫出的匯出或手動路徑；執行時重新驗證，
+   不把快照路徑當設定清單。
+10. 不改 ONVIF 協議／解析／Mock 或 Agent envelope。人類新增重用 Agent 已有的
+    typed setup command。
+
+## 施工批次
+
+### B1 — 連續探索新增
+
+- [x] 將 main 中退出到 shell 的 setup 接線改為可重用同畫面流程，Panel 持有終端，
+  共用 Application setup。
+- [x] 新增 manage a/add；獨立探索每次新增後可繼續。
+- [x] 重用本機登錄投影；成功／失敗／取消／重複 ID／無效 XAddr 保留身分與篩選。
+- [x] 擴充既有 UI/application 測試，涵蓋明確寫入、密碼清除、登錄刷新、
+  待完成／搜尋按鍵不誤觸新增。
+- [x] 集中執行 CLI 相關測試後提交完整批次。
+
+### B2 — 設備工作區及可搜尋清單
+
+- [x] 將每次選取的區域變數改為有界、按身分保存的工作區；
+  已存身分／設定變更使舊資料失效，不跨設備共用。
+- [x] 可搜尋已存清單，保留固定操作列及原始索引。
+- [x] 還原 Profile token／位置；成功重新讀取後清除不存在的 token。
+- [x] 測試 A→B→A、相同 IP 不同身分、256 個 context 邊界、零符合、Vim 文字查詢、
+  registry 變更與 Profile 移除／重排。
+- [x] 集中執行 CLI 相關測試後提交。
+
+### B3 — 結果、修正與檔案流程
+
+- [x] 直接錯誤／取消與完成資料分開保存。
+- [x] 可重用、由呼叫端持有的報告文字搜尋／閱讀位置。
+- [x] 保留位址／輸出／比較草稿，輸入錯誤在同框修正。
+- [x] 確認成功匯出的檔案可選為比較基準；重新驗證刪除、格式錯誤或變更的檔案，
+  維持不覆寫規則。
+- [x] 測試舊成功／新失敗分離、取消、文字無符合／Unicode／縮放、修正輸入、
+  匯出後比較與遺失／無效基準。
+- [x] 集中執行 CLI 相關測試後提交。
+
+### B4 — 整合、文件與交付
+
+- [x] B1–B3 後集中執行一次 CLI package suite 與 CLI 全 target Clippy／fmt。
+  重用 application／maintenance 證據；除非跨入 ONVIF 核心或 Mock，
+  不重跑整套 1300 多項 Mock。
+- [x] 用隔離 registry 與 mock fixture 執行 Windows ConPTY 真實終端流程：
+  新增／修正／下一台、manage 搜尋／新增／操作／返回、A→B→A、
+  256 台清單搜尋、Profile 消失、重看失敗、匯出比較、退出與終端恢復。
+  UX 驗收不使用正式憑證或攝影機寫入。
+- [x] 分別記錄失敗／限制與通過證據；編譯不等於終端驗收。Linux/macOS
+  runtime 仍待 CI／人工。
+- [x] 更新成對 CLI 指南／維運文件、根目錄 Unreleased changelog、完整 0.17
+  changelog、active 驗收與發布切點。歷史計數及已發布 0.16 不改；
+  文件提交驗證後才刷新公開入口的固定版本連結。
+- [x] 分批 commit／push 功能分支，交付精確 commit 與人工檢查。
+  不合併、不打 tag、不發布、不安裝系統 release。
+
+## 驗證與文件
+
+每批在最近的既有測試模組新增情境測試，避免大量重複案例。網路 fixture 使用
+隔離 loopback 埠、設定及假憑證；原生密碼庫成功測試維持明確 opt-in，
+環境略過須如實記錄。先單元測試再終端流程，保留去識別且可重跑的終端工具。
+
+驗收需要狀態斷言與端到端 UI 接線：單獨證明 viewport 可以保存，不能證明
+呼叫端真的重用。新增公開行為須有成對英文／繁中文件、互相切換連結；
+長文件須有章節連結表格。
+
+## 進度
+
+2026-09-14 選單入口補充驗收（基準 `3b940e8`，本機僅修改測試）：擴充並通過
+Windows ConPTY manage 流程，明確選取診斷（六個階段通過、零失敗，仍未驗證播放）、
+快照存檔（BMP 成功且禁止覆寫）、下次操作重新連線，以及切換裝置（A/B/A 的
+Profile 保留與憑證隔離）。注入的 GetCapabilities 錯誤在快取資訊請求後仍保留，
+明確重連後才被消耗，後續請求恢復成功。另以 System.Drawing 獨立解碼確認圖片為
+640×360 BMP。CLI 測試執行檔建置、限定範圍 Clippy 與 fmt 通過。首次測試斷言
+誤將詳細頁階段欄位當成摘要頁內容，修正斷言後完整流程通過。未變更正式執行邏輯、
+原生憑證庫、區域網路攝影機或已安裝的 CLI。
+
+基準版本的 master/develop CI 均失敗：reader 索引漏列 `shared_probe`，且 unittest
+探索載入選用終端腳本時，其頂層參數解析器要求 `--binary`。兩項皆已在本機重現；
+後續 CI 修正已更新雙語來源索引（共 195 個 reader 呼叫，新增一個正式入口及
+三個測試入口），未變更檢查器。終端腳本改為僅在 `main()` 解析參數，且只在
+明確要求建立終端時載入 Windows 相依套件。盤點自我測試及完整 26 項 Python
+探索測試於本機通過；入口修正後 discover／manage／resize ConPTY 流程也全部
+通過。這是本機修復結果，不代表新的託管 CI 已通過。產物準備
+[34803145395](https://github.com/smiti1642/oxvif/actions/runs/34803145395)
+已通過，包含暫存 APT/Homebrew 安裝驗證，發布步驟略過。產物版本仍為 0.16，
+不代表最終 0.17 套件驗收或發布核准。
+
+人工驗收：PASS（使用者回報，2026-09-14）。使用者表示討論中的第 2 項已測試，
+要求視為通過。此紀錄與自動化證據分開；未額外提供作業系統、攝影機型號、VMS
+產品或 Fleet 數量，不據此推定這些細節。此回報不代表核准升版／發布，也不取代
+候選程式碼審查及 CI 關卡。
+
+2026-09-14 情境式說明後續修正：`?` 保留行號操作，新增 Tab 切換的唯讀按鍵說明，
+區分六種來源畫面。Binary 測試 61 通過／1 項終端 fixture 略過，Clippy 通過。
+明確執行 resize ConPTY 流程，驗證兩種探索模式的說明、切頁、捲動、縮放及完整
+原畫面還原。一般 debug 執行檔已成功重建。
+
+2026-09-14 高度後續修正：移除探索清單 12 筆上限。Binary 測試 60 通過／1 項
+opt-in fixture 略過，CLI 全 target Clippy 通過。明確執行 `--mode resize`
+ConPTY 流程，獨立及 manage 探索均通過 28／40／16／54 列視窗、選取可見、
+底部狀態及依目前容量整頁／半頁移動驗證；不掃描 LAN，也不寫 registry。
+第一次工具執行錯誤要求唯讀測試後存在 registry 檔案；已改成確認檔案不存在，
+重跑通過。一般 debug 執行檔因 Windows 拒絕存取而無法替換；已將新連結的
+deps 執行檔另存為 `target/debug/oxvif-resize.exe`，核對 hash 並測試版本輸出，
+未中止使用者正在執行的 CLI。下方歷史 package 計數不改，本次僅為 UI 針對性修正。
+
+- 計畫完成：已檢查上述基準與各程式責任區。
+- B1–B4 本機完成；下方明列平台／原生密碼庫／發布剩餘關卡。
+- B1 實作完成：共用 Panel 新增、manage a/add、獨立探索連續操作與本機登錄投影。
+  Binary 測試 54 通過、既有 setup application 情境 5 通過、新增本機投影測試
+  1 通過。尚不宣稱終端／原生密碼庫驗收完成，保留於 B4。
+- B2 實作完成：有界工作區、已存選單搜尋與按 token 還原 Profile。已存 ID 的
+  slot 在重用前比較完整 DeviceView（包含 target／憑證設定），任何變更均保守
+  地使該 slot 失效。Binary 測試 57 通過，涵蓋 A/B/A、同位址不同身分、
+  registry target 變更、256-slot 上限與一般文字搜尋映射。
+- B3 實作完成：獨立保存失敗／取消、可搜尋且保留位置的報告、非機密輸入草稿，
+  以及最近匯出基準選擇／共用本機 preflight。Binary 測試 59 通過，CLI 全 target
+  Clippy（警告視為錯誤）通過。B4 終端流程與最終文件仍待完成。
+- B1 `14d8b06`、B2 `36e7246`、B3 `a5342ad`；計畫 `05c0a58`。
+- B4 程式、終端工具與文件快照為 `b6c87ee`，已推送功能分支。
+  公開入口已固定指向該不可變文件快照。
+- B4 本機驗收通過：CLI package 193 通過、2 項預設略過（原生密碼庫與新增的
+  opt-in 終端 fixture）。後者已明確執行 discover／manage 兩種模式。
+  CLI 全 target Clippy（警告視為錯誤）及格式檢查通過，未改 ONVIF 核心／Mock。
+- 可重跑的[終端工具](../../packaging/test_cli_workflow_terminal.py) 以 ConPTY
+  驅動[隔離 fixture](../../crates/oxvif-cli/src/terminal_fixture.rs)。
+  先執行 `cargo test -p oxvif-cli --bin oxvif --no-run`，將印出的測試執行檔
+  路徑傳給 `python packaging/test_cli_workflow_terminal.py --binary <test-executable>`。
+  pywinpty／pyte 請裝在隔離 Python 環境，或以 `--deps` 指定。
+- 終端證據涵蓋錯誤密碼修正、連續新增、取消不儲存、本機 NEW/SAVED 更新、
+  256 列搜尋、零符合仍可操作、終端縮放、A/B/A 憑證隔離、Profile 移除、
+  報告 query／位置保存、失敗／取消、匯出比較、基準遺失、不覆寫與無效／取消位址
+  草稿。Fixture 斷言確認全域目前設備及暫存憑證的保存邊界。僅使用 loopback
+  Mock 與記憶體憑證庫；探索紀錄由 fixture 注入，不代表 multicast 或原生密碼庫
+  持久化驗收。先前 Back／重掃證據仍另行記錄。
+- B4 公開／active 雙語文件已更新。最後修正已存搜尋比對欄位值而非 JSON 欄名，
+  修正後重跑 binary 測試及兩組終端流程。不宣稱跨平台 runtime／hosted CI、
+  發布核准、系統安裝或主分支合併完成。

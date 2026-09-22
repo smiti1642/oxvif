@@ -247,7 +247,7 @@ VS1 新增 15 組 source exchange（八項操作、三個拒絕），包括 clie
 兩種服務的 raw generic options。合計 35 組 exchange：35 份 request、25 份成功回應及十份
 Fault。2026-09-11 Windows 外部新目錄 `oxvif-profile-corpus-20260911-05` 的 70 份 instance
 均通過 strict Xerces XSD 1.1；explicit legacy structural check 亦通過。來源及 corpus
-保留在 checkout 外；不代表完整語意或 ONVIF 認證。詳見 [VS1](mock-fidelity-video-source_zh.md)。
+保留在 checkout 外；不代表完整語意或 ONVIF 認證。詳見 [VS1](../done/mock-fidelity-video-source_zh.md)。
 
 ## 後續工作
 
@@ -255,7 +255,7 @@ K34 新增三項操作的七組 rate exchange：小數讀寫、恢復整數、�
 拒絕及 raw 負幀率拒絕。2026-09-11 外部 `oxvif-profile-corpus-20260911-06` 通過
 strict Xerces XSD 1.1：**84 份 instance**、42 組 exchange、24 項操作、30 個成功及
 12 個 Fault；明確選取的 legacy shape check 亦通過。以上為本機結果，該批託管 CI
-須另行確認。詳見 [K34](mock-fidelity-video-encoder_zh.md)。
+須另行確認。詳見 [K34](../done/mock-fidelity-video-encoder_zh.md)。
 
 VE1 新增 13 組 encoder exchange，涵蓋全部八項選定操作。2026-09-11 外部
 `oxvif-profile-corpus-20260911-07` 通過 strict Xerces XSD 1.1：**110 份 instance**、
@@ -267,12 +267,12 @@ AM1（2026-09-11）新增 19 組 exchange，涵蓋全部 15 項音訊／metadata
 Mock 現在逐項輸出整數，公開 parser 保留全部 Items。
 新的 `oxvif-corpus-20260911-09` 通過 **148 份 strict Xerces instance**：
 74 組 exchange、44 項操作、57 個成功及 17 個 Fault。官方資源不進入 checkout。
-詳見 [AM1](mock-fidelity-audio-metadata_zh.md)；CI 與語意覆蓋不等於本機結構驗證。
+詳見 [AM1](../done/mock-fidelity-audio-metadata_zh.md)；CI 與語意覆蓋不等於本機結構驗證。
 
 B16 新增兩項 synchronization 操作的六組 exchange：兩個 receipt 與四個拒絕。
 因此目前 exporter 選取 80 組 exchange、46 項操作、59 個成功及 21 個 Fault
 （160 份 XML instance）。歷史本機驗證與目前候選版本待執行的 CI 見
-[B16 證據](contributor-pr-integration-plan_zh.md#執行紀錄)。
+[B16 證據](../done/contributor-pr-integration-plan_zh.md#執行紀錄)。
 
 W20 仍為 PARTIAL：須核對未解析／wildcard 計數、Fault 的 QName 文字，以及擴充
 選定的 46 操作以外的 corpus。W21 仍為 PARTIAL：須以 mock corpus 的 envelope、

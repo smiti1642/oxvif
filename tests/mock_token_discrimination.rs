@@ -2,7 +2,7 @@
 //!
 //! ## Why this exists
 //!
-//! `docs/active/mock-audit-2026-07.md` §8.2, and the companion to
+//! `docs/done/mock-audit-2026-07.md` §8.2, and the companion to
 //! `tests/mock_roundtrip.rs`. That table asks *did my write land?*; this one asks
 //! **did the token I sent select the answer I got back?**
 //!
@@ -473,7 +473,7 @@ async fn every_token_taking_operation_matches_its_declared_expectation() {
         "the table's shape changed (rows, declared-Discriminates). If that was \
          deliberate, update this expectation **and** the counts in \
          docs/mock-server.md §12, docs/mock-server_zh.md §12 and \
-         docs/active/mock-audit-2026-07.md §2 in the \
+         docs/done/mock-audit-2026-07.md §2 in the \
          same commit.",
     );
 
@@ -499,7 +499,7 @@ async fn every_token_taking_operation_matches_its_declared_expectation() {
                 "{}: declared {} but {ta} and {tb} now differ.\n      \
                  If you just wired this up, move the row to \
                  `Expect::Discriminates` (and strike it from \
-                 docs/active/mock-audit-2026-07.md).\n      {ta}: {a}\n      {tb}: {b}",
+                 docs/done/mock-audit-2026-07.md).\n      {ta}: {a}\n      {tb}: {b}",
                 row.name,
                 row.expect.label(),
             )),

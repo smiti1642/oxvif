@@ -18,6 +18,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Maintenance
+
+- Archive completed plans and 0.17 release records under `docs/done`, retain
+  unfinished work in `docs/active`, and reconcile the documentation index and
+  cross-references. Keep archived development records out of the library package.
+
 ## [0.17.0] - 2026-09-14
 
 **0.17.0: continuous CLI camera maintenance, snapshot saving and settings comparison.**
@@ -112,7 +120,7 @@ package/docs checks. Windows terminal journeys passed and the operator reported
 manual acceptance. [0.17 staging](https://github.com/smiti1642/oxvif/actions/runs/34813220307) passed all
 17 verification jobs, including native artifacts, APT and Homebrew installation.
 Both packaged crates also compiled locally. Publication was authorized on 2026-09-14;
-see the [release checklist](docs/active/release-0.17-approval.md).
+see the [release checklist](docs/done/release-0.17-approval.md).
 
 ## [0.16.0] - 2026-09-04
 
@@ -346,7 +354,7 @@ two-thirds of the test suite.
   counts are now **0** (the four attribute kinds came later, and are also
   0); the movement per group is recorded in `PINS`
   (`tests/mock_schema_shape.rs`) and in
-  `docs/active/mock-schema-conformance-2026-08.md` §1, and each of the four
+  `docs/done/mock-schema-conformance-2026-08.md` §1, and each of the four
   groups was perturbed on its own.
 
 - **Release documentation audit: four wrong statements, all corrected
@@ -469,7 +477,7 @@ two-thirds of the test suite.
 - **The mock's Storage family was a single static fixture.**
   `GetStorageConfigurations` always answered one `SD_01` entry carrying a
   `LocalPath` and nothing else, and `SetStorageConfiguration` was an empty
-  success that wrote nothing (`docs/active/mock-audit-2026-07.md` §5, Tier
+  success that wrote nothing (`docs/done/mock-audit-2026-07.md` §5, Tier
   3). `DeviceState` gained `storage: Vec<StorageEntry>`; the getter renders
   it and the setter creates, updates or faults.
 

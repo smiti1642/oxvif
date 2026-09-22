@@ -2,6 +2,8 @@
 
 [English](mock-fleet-basic-plan.md) | [繁體中文](mock-fleet-basic-plan_zh.md)
 
+**2026-09-22 狀態整理：** 基本 runner 已隨 0.17.0 發布。本計畫保留於 active，追蹤原生 LAN／multicast／VMS 及剩餘平台生命週期驗收；loopback smoke 不代表這些關卡已通過。
+
 狀態：B1–B4 實作與本機關卡完成，2026-09-12 授權執行。首階段提供簡易多台
 啟動／設定及基本共用探索。本機終端機與 64／256 台容量基本檢查通過；原生
 LAN／VMS 驗收、Linux／macOS 生命週期及託管 CI 仍待完成。不宣稱已納入發布
@@ -178,4 +180,4 @@ Metamorph 混合及指定版本收錄亦須另行確認。LAN 驗收前確認經
 目標 VMS，不以修改主機網路代替確認。
 
 本計畫為[後續清單](post-0.17-backlog_zh.md) F11 的縮小首階段，接續
-[CLI 重新驗收中的 Mock 討論](cli-0.17-reentry_zh.md#mock-討論)。
+[CLI 重新驗收中的 Mock 討論](../done/cli-0.17-reentry_zh.md#mock-討論)。

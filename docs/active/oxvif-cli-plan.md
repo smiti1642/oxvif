@@ -1,5 +1,7 @@
 # oxvif CLI — human and Agent operation surface plan
 
+**Status reconciliation, 2026-09-22:** The diagnostic CLI has shipped through 0.17.0. This remains the broader product roadmap; later stages and device-writing workflows are not closed by publication.
+
 **Status:** active. Written 2026-08-26 from the product discussion that
 established the package boundary, human/Agent contract, and named-device
 registry. **Stage 0 landed as `9590663` on 2026-08-27. Stage 1 was completed on

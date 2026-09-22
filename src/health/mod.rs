@@ -950,7 +950,7 @@ mod tests {
              (`capability_cross_check`'s doc comment and the `checked` \
              assertion in `capability_cross_check_tests`), `CHANGELOG.md`'s \
              0.15.0 entry, and \
-             `docs/active/mock-schema-conformance-2026-08.md` §1.3.",
+             `docs/done/mock-schema-conformance-2026-08.md` §1.3.",
             c.detail
         );
         // …and with both sides stating them, none should be service-only.

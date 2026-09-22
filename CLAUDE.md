@@ -69,7 +69,7 @@ shape of the failure is the lesson:
   *node* token. Following it seeds an entry no read path ever reaches, silently.
 
 The two property tables already print *"update this expectation **and** the
-counts in `docs/mock-server.md` §12 and `docs/active/mock-audit-2026-07.md` §2"*
+counts in `docs/mock-server.md` §12 and `docs/done/mock-audit-2026-07.md` §2"*
 when their pin fails. Both of those files were correct. **Only `CHANGELOG.md`
 was wrong — because it was the one place the message did not name.** So: when a
 pinned number is quoted anywhere, name *every* file that quotes it in the pin's
@@ -185,7 +185,7 @@ OXVIF_ONVIF_SCHEMA=/path/to/onvif/schema \
 **This is the only thing that runs it.** `tests/mock_schema_shape.rs` is
 `#[ignore]`d and reads the ONVIF schema set at run time from a directory
 *outside* the working tree, because nothing derived from that schema may enter
-this repository (`docs/active/schema-shape-plan-2026-08.md` §4, decision D2 —
+this repository (`docs/done/schema-shape-plan-2026-08.md` §4, decision D2 —
 which covers a hardcoded schema fact in a test file just as much as the `.xsd`
 itself). So it cannot join the five gate lines: a fresh clone has nothing to
 read. **That makes it weaker than a gate line, and it is worth saying so.**
@@ -237,7 +237,7 @@ Two ways to read the result:
   total — measured: putting the Media2 defect back leaves the total at 63 while
   moving two kinds, so a single total would have let it through. Lower is a
   fix; update the pin in the same commit and also
-  `docs/active/mock-schema-conformance-2026-08.md` §1, which quotes the same
+  `docs/done/mock-schema-conformance-2026-08.md` §1, which quotes the same
   numbers. Never edit a pin to make a run green.
 
 **Both `cargo doc` forms, and both must be warning-free.** `[package.metadata.docs.rs]`

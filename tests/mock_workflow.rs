@@ -790,7 +790,7 @@ async fn auxiliary_commands_are_discoverable_and_accepted() {
 
 /// The Profile G lifecycle end to end, which could not be exercised at all
 /// before the mock grew recording state: `CreateRecording` answered `Rec_new`
-/// and `GetRecordings` never listed it. `docs/active/mock-audit-2026-07.md` §4.2.
+/// and `GetRecordings` never listed it. `docs/done/mock-audit-2026-07.md` §4.2.
 ///
 /// This matters beyond the mock. `HealthCheck::with_liveness_probes(true)`
 /// claims to "genuinely exercise Profile G" — against a facade, its Profile G

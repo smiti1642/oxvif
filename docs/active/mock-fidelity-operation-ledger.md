@@ -29,10 +29,10 @@ Do not change a route before opening its row and the corresponding work package.
 
 ## Tracking contract
 
-B16: [Media synchronization cards and evidence](mock-fidelity-pr16-integration.md),
+B16: [Media synchronization cards and evidence](../done/mock-fidelity-pr16-integration.md),
 default refusal and explicitly selected receipts, not actual streaming.
 
-K34 means the historical rate-only migration in the [VE1 plan](mock-fidelity-video-encoder.md),
+K34 means the historical rate-only migration in the [VE1 plan](../done/mock-fidelity-video-encoder.md),
 including dependent encoder/profile reads. VE1 names the later eight-operation
 encoder delivery: complete candidates, selectors/options, codec views and capacity.
 Cross-cutting programme acceptance remains separate; see the plan's dated evidence.
@@ -64,16 +64,16 @@ Cross-cutting programme acceptance remains separate; see the plan's dated eviden
 - Service implementation paths below are navigable. Locate the exact symbol
   shown in the Handler column; line numbers are intentionally not frozen.
 
-A2: first receipt-only policy and effect boundaries; see [policy checkpoint](mock-fidelity-ack-policy-preflight.md).
+A2: first receipt-only policy and effect boundaries; see [policy checkpoint](../done/mock-fidelity-ack-policy-preflight.md).
 
-A3: policy migration for eight additional effect stubs; see [batch record](mock-fidelity-ack-policy-preflight.md#remaining-effect-stub-batch).
+A3: policy migration for eight additional effect stubs; see [batch record](../done/mock-fidelity-ack-policy-preflight.md#remaining-effect-stub-batch).
 
-PA1: profile assembly, capacity and reference-count subgroup; see [batch record](mock-fidelity-profile-assembly.md). Full field/physical compatibility remains separate.
+PA1: profile assembly, capacity and reference-count subgroup; see [batch record](../done/mock-fidelity-profile-assembly.md). Full field/physical compatibility remains separate.
 
-VS1: eight source read/write/options operations; see [batch evidence and limits](mock-fidelity-video-source.md). Rows remain PARTIAL, not full schema/device-contract acceptance.
+VS1: eight source read/write/options operations; see [batch evidence and limits](../done/mock-fidelity-video-source.md). Rows remain PARTIAL, not full schema/device-contract acceptance.
 
-AM1 identifies the [15-operation audio/metadata subgroup](mock-fidelity-audio-metadata.md).
-The [0.17 cut](release-0.17-cut.md) accepts selected R01–R08 contracts separately
+AM1 identifies the [15-operation audio/metadata subgroup](../done/mock-fidelity-audio-metadata.md).
+The [0.17 cut](../done/release-0.17-cut.md) accepts selected R01–R08 contracts separately
 from whole-programme C/R/F/B/V completion; no TODO/PARTIAL row is promoted by a
 release or by matching inventory counts.
 
@@ -332,7 +332,7 @@ W00/W02/W07 cover those separate checks. The W22 source-inventory sub-slice is
 wired in `.github/workflows/ci.yml` for Windows and Linux, using PowerShell 7
 and `-SelfTest`; `package` depends on its success. External-schema CI is also wired
 for the selected corpus. Hosted results are revision-specific in the
-[release evidence](release-0.17-cut.md#evidence); this source-shape check does not
+[release evidence](../done/release-0.17-cut.md#evidence); this source-shape check does not
 establish final-candidate CI acceptance or repository required-check settings.
 
 Local W22 evidence (2026-09-10): PowerShell 7 executed the exact CI command;

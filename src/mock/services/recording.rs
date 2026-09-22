@@ -5,7 +5,7 @@
 //! an unconditional empty success that removed nothing, and
 //! `GetRecordingJobState` returned the same state for every job token. The same
 //! shape as the reported Media2 `CreateProfile` bug, in a different service —
-//! `docs/active/mock-audit-2026-07.md` §4.2.
+//! `docs/done/mock-audit-2026-07.md` §4.2.
 //!
 //! The consequence went past the mock. `HealthCheck::with_liveness_probes(true)`
 //! runs a real chain — `get_recordings` → `search_recordings` → `get_replay_uri`

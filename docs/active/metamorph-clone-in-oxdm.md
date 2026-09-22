@@ -2,7 +2,7 @@
 
 > **Status: superseded by the container path.** The in-process approach below
 > (and its gap **G2**) is no longer the plan. Serving the clone from a bound-port
-> `MockServer` — see [`metamorph-container-and-quirk-diff.md`](metamorph-container-and-quirk-diff.md),
+> `MockServer` — see [`metamorph-container-and-quirk-diff.md`](../done/metamorph-container-and-quirk-diff.md),
 > now implemented — makes G2 unnecessary: oxdm runs the existing
 > `HealthCheck::new(clone_url)` against the container, and "compare" reuses the
 > existing `health::ReportDiff` (synthetic server vs clone server) or the new

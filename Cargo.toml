@@ -72,7 +72,7 @@ metamorph = ["mock", "serde", "dep:serde_json"]
 # `MockServerBuilder::replay(FixtureStore)` splices the replay responder into the
 # HTTP server so oxdm / Frigate / ODM can drive the cloned camera over the
 # network. Just `metamorph` + `mock-server`.
-# See `docs/active/metamorph-container-and-quirk-diff.md`.
+# See `docs/done/metamorph-container-and-quirk-diff.md`.
 metamorph-server = ["metamorph", "mock-server"]
 
 [dependencies]

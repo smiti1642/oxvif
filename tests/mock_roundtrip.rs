@@ -2,7 +2,7 @@
 //!
 //! ## Why this exists
 //!
-//! `docs/active/mock-audit-2026-07.md` §8 names the one structural cause behind
+//! `docs/done/mock-audit-2026-07.md` §8 names the one structural cause behind
 //! every mock defect found so far:
 //!
 //! > **Nothing distinguishes "deliberately static" from "not wired up yet"** —
@@ -82,7 +82,7 @@ enum Expect {
     /// *still* discarded until someone fixes it.
     #[allow(dead_code)]
     Broken(&'static str),
-    /// Deliberately fixture data on both sides. `docs/active/mock-audit-2026-07.md` §5.
+    /// Deliberately fixture data on both sides. `docs/done/mock-audit-2026-07.md` §5.
     ///
     /// **No row uses this today either**, as of the audio catalogue — the last
     /// two `Static` rows were `media1/audio-encoder-config` and
@@ -1246,7 +1246,7 @@ async fn every_get_set_pair_matches_its_declared_expectation() {
         (49, 49),
         "the pair table's shape changed (rows, declared-Works). If that was \
          deliberate, update this expectation **and** the counts in \
-         docs/mock-server.md §12 and docs/active/mock-audit-2026-07.md §2 in the \
+         docs/mock-server.md §12 and docs/done/mock-audit-2026-07.md §2 in the \
          same commit — they are the two places that quote it.",
     );
 
@@ -1264,7 +1264,7 @@ async fn every_get_set_pair_matches_its_declared_expectation() {
             (Outcome::RoundTripped, false) => mismatches.push(format!(
                 "{}: declared {} but the write now round-trips.\n      \
                  If you just wired this up, move the row to `Expect::Works` \
-                 (and strike it from docs/active/mock-audit-2026-07.md).",
+                 (and strike it from docs/done/mock-audit-2026-07.md).",
                 pair.name,
                 pair.expect.label(),
             )),

@@ -2,6 +2,8 @@
 
 [English](cli-vim-navigation-plan.md) | [繁體中文](cli-vim-navigation-plan_zh.md)
 
+**Status reconciliation, 2026-09-22:** M1–M5 shipped in 0.17.0. This plan stays active for deferred M6 and the explicitly unverified native-terminal/IME acceptance; release success does not establish those checks.
+
 Status: M1–M5 implemented and locally validated, including independent Agent review; unreleased.
 Baseline: `e7c8250`, including centered camera columns and
 Ctrl+D / Ctrl+U half-page movement. Scope: human-facing terminal navigation only.
@@ -200,7 +202,7 @@ testing and distinguish agent-simulated critique from a real human study.
 Local validation on Windows x64, 2026-09-09, covers the initial implementation,
 not Release publication or three-platform terminal UX certification.
 The counts and terminal sessions below are historical observations. Current
-candidate evidence is recorded in the [0.17 review ledger](release-0.17-review.md).
+candidate evidence is recorded in the [0.17 review ledger](../done/release-0.17-review.md).
 The Cargo navigation harness includes the same source and reruns its four tests;
 it verifies a separate compilation boundary, not four additional behavioral
 contracts. Terminal restoration evidence comes from the recorded ConPTY sessions,
@@ -237,7 +239,7 @@ Remaining limitations and follow-up:
   cancelling credentials, or to the first camera after leaving the action menu.
   Preserving these positions is a low-priority follow-up; closing item details
   already preserves the selected item.
-  Update 2026-09-12: this follow-up is implemented in the [CLI re-entry](cli-0.17-reentry.md)
+  Update 2026-09-12: this follow-up is implemented in the [CLI re-entry](../done/cli-0.17-reentry.md)
   batch; the original acceptance above remains historical.
 - M6 remains deferred: the reusable core is an internal, backend-free module,
   not a separately published crate or stable public API.

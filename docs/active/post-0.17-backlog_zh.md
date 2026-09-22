@@ -2,9 +2,10 @@
 
 [English](post-0.17-backlog.md) | [繁體中文](post-0.17-backlog_zh.md)
 
-狀態：排於有限 0.17 切點之後，不承諾實作或發布日期。
-[發布阻擋](release-0.17-cut_zh.md#發布阻擋關卡) 留在 0.17 驗收，
-不得只為了清單綠燈而搬到此處。
+狀態：0.17.0 發布後的持續工作，於 2026-09-22 整理；不承諾實作或發布日期。
+已完成的 [發布切點](../done/release-0.17-cut_zh.md#發布阻擋關卡) 與
+[發布證據](../done/release-0.17-finalization_zh.md) 已歸檔。
+結案不代表下列廣泛工作已完成，也不會將未執行的檢查視為通過。
 
 | 章節 | 用途 |
 | --- | --- |
@@ -26,8 +27,8 @@
 | F08 | RTSP decoder／playback、批次檔案匯出、CLI 攝影機寫入及獨立導覽 crate | 既有 CLI 維護／導覽計畫；寫入前先建立威脅模型與權限 UX |
 | F09 | 官方 Homebrew Core、Debian／Ubuntu 與 Windows 社群套件渠道申請 | 散布計畫；目前原生包裝驗證仍是發布關卡，產出 artifact 不代表已提交申請 |
 | F10 | 有界 snapshot 圖片相容性調查 | 保留 A03 的目的地／認證／大小／不覆寫政策；取得去敏、可重現回應後才修改圖片接受條件 |
-| F11（首階段已實作） | Mock Fleet 啟動／設定及基本共用探索 | [基礎 Fleet 證據](mock-fleet-basic-plan_zh.md)與[操作指南](../mock-fleet_zh.md)。完整 scope 比對、Hello／Bye／Resolve、原生 LAN／VMS 驗收及 Metamorph 混合仍未完成；發布收錄須另行決定 |
-| F12（重新納入） | CLI 獨立固定底部狀態列 | 依使用者要求重新納入 0.17，見 [CLI 重新驗收](cli-0.17-reentry_zh.md)；仍須原生平台／輸入法驗收 |
+| F11（基本功能已於 0.17 發布） | 剩餘 Mock Fleet 探索功能與驗收 | [基礎 Fleet 證據](mock-fleet-basic-plan_zh.md)與[操作指南](../mock-fleet_zh.md)。完整 scope 比對、Hello／Bye／Resolve、原生 LAN／VMS 驗收及 Metamorph 混合仍未完成 |
+| F12（狀態列已於 0.17 發布） | 剩餘原生終端／輸入法驗收 | [CLI 重新驗收](../done/cli-0.17-reentry_zh.md) 已歸檔；未驗證的平台／輸入法項目繼續留在 [導覽計畫](cli-vim-navigation-plan_zh.md)，發布不代表新增終端驗證 |
 
 F10 調查處置，2026-09-12：使用者提供的 ONVIF Device Manager 原始碼走
 GetSnapshotUri → HTTP stream download → WPF image decode，此路徑沒有 RTSP
@@ -35,7 +36,7 @@ fallback。合成 JPEG 尾端附 CR／LF 後，獨立 Windows decoder 可以解�
 末端 EOI signature 檢查則拒絕。這證明一種相容性差異，尚未證明是觀察到的 Hanwha
 非圖片回應原因。未移植 GPL 程式；後續須獨立實作，不採用寬鬆憑證驗證、redirect、
 proxy 或含憑證 URL 正規化作為解法。既有成功的唯讀 snapshot／diagnose 證據保留於
-[快照修復紀錄](snapshot-auth-repair_zh.md)。
+[快照修復紀錄](../done/snapshot-auth-repair_zh.md)。
 
 F05 亦保留通知 listener 沿用的有界 HTTP reader 限制：peer wrapper 是連線資料，
 不是認證；未新增 TLS、chunked decoding、每連線 read deadline 或連線數上限。

@@ -300,7 +300,7 @@ pub struct PtzTour {
 /// list, one tour list for the entire device — and **no PTZ handler read the
 /// `ProfileToken`**: 16 of the 27 dispatch arms never received the request body,
 /// and the 11 that did read something else out of it. The client sent
-/// `ProfileToken` at 20 call sites. `docs/active/mock-audit-2026-07.md` §4.1.
+/// `ProfileToken` at 20 call sites. `docs/done/mock-audit-2026-07.md` §4.1.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PtzChannel {
     pub pan: f32,
@@ -376,7 +376,7 @@ impl PtzState {
 // the request body at all, so all four profiles were told about one node and
 // one configuration, `SupportedPTZSpaces` was sent as an empty element, and
 // `PtzNode::pan_tilt_spaces` / `zoom_spaces` were `Vec::new()` forever.
-// `docs/active/ptz-wiring-plan-2026-07.md` §2.1 and §2.2.
+// `docs/done/ptz-wiring-plan-2026-07.md` §2.1 and §2.2.
 
 /// Which of the eight `tt:PTZSpaces` slots a [`SpaceEntry`] fills.
 ///
@@ -504,7 +504,7 @@ pub struct PtzConfigEntry {
 // ── Audio ────────────────────────────────────────────────────────────────────
 //
 // The whole audio family was six string literals until 0.15 — the last Tier 3
-// entry in `docs/active/mock-audit-2026-07.md` §5. Two facts about it were
+// entry in `docs/done/mock-audit-2026-07.md` §5. Two facts about it were
 // invisible while it was:
 //
 // 1. **Media1 and Media2 disagreed about the same tokens.** `ASC_1` was
@@ -755,7 +755,7 @@ pub struct ProfilesState {
 // eleven Recording operations was a static fixture, so `CreateRecording`
 // answered `Rec_new` and `GetRecordings` never listed it — the identical shape
 // to the reported Media2 `CreateProfile` bug, in a different service.
-// `docs/active/mock-audit-2026-07.md` §4.2.
+// `docs/done/mock-audit-2026-07.md` §4.2.
 //
 // The consequence went past the mock — see the header of
 // `src/mock/services/recording.rs` for what the health check's Profile G

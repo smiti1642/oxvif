@@ -4,7 +4,7 @@
 
 2026-09-11 K27 follow-up: collision retention and request-aware lookup are
 implemented; see [storage migration](../replay-storage.md) and
-[release evidence](release-0.17-cut.md#evidence). Earlier overwrite reproductions
+[release evidence](../done/release-0.17-cut.md#evidence). Earlier overwrite reproductions
 and containment records below are historical evidence, not the current storage
 behavior. The remaining W19 work is not complete.
 
@@ -14,7 +14,7 @@ historical evidence, not fresh gates. Current selected R03–R05 work additional
 includes scoped auth, P2/K30 identity, PA1 profile assembly/reference counts and
 source/encoder/audio/metadata committed effects. The original three-profile-read
 effect lists below are not the complete current lists. See the
-[release review](release-0.17-review.md), [profile assembly](mock-fidelity-profile-assembly.md)
+[release review](../done/release-0.17-review.md), [profile assembly](../done/mock-fidelity-profile-assembly.md)
 and linked service cards. This does not close all W00–W26, standalone downstream
 commit observation, concurrent replay visibility, broad HTTP conformance or hardware behavior.
 
@@ -41,8 +41,8 @@ below. No new product decision is required here.
 | [State hook snapshot work](#state-hook-snapshot-work) | W18 bounded lock and observation policy |
 | [Replay key credential boundary](#replay-key-credential-boundary) | K28 cleanup, migration and exclusions |
 | [Replay key collision reproduction](#replay-key-collision-reproduction) | K27 six-case known-gap evidence |
-| [Authentication preflight](mock-fidelity-auth-preflight.md) | W08 scoped credentials, limits and verification |
-| [Acknowledgment policy](mock-fidelity-ack-policy-preflight.md) | W16 selected default refusals, opt-ins and effect boundaries |
+| [Authentication preflight](../done/mock-fidelity-auth-preflight.md) | W08 scoped credentials, limits and verification |
+| [Acknowledgment policy](../done/mock-fidelity-ack-policy-preflight.md) | W16 selected default refusals, opt-ins and effect boundaries |
 
 ## Replay key collision reproduction
 

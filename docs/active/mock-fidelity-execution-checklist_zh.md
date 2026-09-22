@@ -6,7 +6,7 @@
 範圍索引：[159 個路由操作](mock-fidelity-operation-ledger_zh.md)。
 本文件將 M0–M6 拆成可追蹤工作，不代表里程碑已完成；本次規劃補充不改變 runtime 行為。
 
-相關有限範圍工作：[社群 PR 整合計畫](contributor-pr-integration-plan_zh.md) 涵蓋
+相關有限範圍工作：[社群 PR 整合計畫](../done/contributor-pr-integration-plan_zh.md) 涵蓋
 #14 相依套件、#17 通知來源與 W26／#16 Media synchronization；不代表剩餘服務
 批次已完成，也不授權主分支合併。
 
@@ -25,7 +25,7 @@
 
 ## 執行規則
 
-發布排程改由 [0.17 切點](release-0.17-cut_zh.md)及[後續清單](post-0.17-backlog_zh.md)
+發布排程改由 [0.17 切點](../done/release-0.17-cut_zh.md)及[後續清單](post-0.17-backlog_zh.md)
 管理。原本 PARTIAL／TODO 仍是技術證據，不要求 0.17 前完成全部服務；
 已知資料遺失及安全阻擋不得延後。
 
@@ -78,10 +78,10 @@ options-to-write 檢查證明選定 mock 自洽，不代表獨立實體能力或
 Device reboot／firmware upgrade／system restore、Events subscribe／renew，以及
 Search EndSearch。其精確操作政策、mock／replay／HTTP 行為、既有 workflow 遷移
 與雙語文件視為一個一致交付範圍，不拆成八次獨立 gate／commit；實作紀錄為政策
-preflight 的 A3。後續 [PA1 組裝批次](mock-fidelity-profile-assembly_zh.md) 已實作
+preflight 的 A3。後續 [PA1 組裝批次](../done/mock-fidelity-profile-assembly_zh.md) 已實作
 初始 Configuration、選填改名／All、同 slot 衝突、容量及受影響引用計數。
-[VS1](mock-fidelity-video-source_zh.md)、[VE1](mock-fidelity-video-encoder_zh.md) 與
-[AM1](mock-fidelity-audio-metadata_zh.md) 隨後分別實作八項 source、八項 encoder
+[VS1](../done/mock-fidelity-video-source_zh.md)、[VE1](../done/mock-fidelity-video-encoder_zh.md) 與
+[AM1](../done/mock-fidelity-audio-metadata_zh.md) 隨後分別實作八項 source、八項 encoder
 及十五項 audio／metadata 操作。這些子群具有限範圍證據，不代表 W10 結案；
 發布排程依上述 0.17 切點。進度回報以子群及 blocker 為主，不將測試數換算為完成率。
 
@@ -149,7 +149,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | 結構化 auth／空 chain／選定 DeleteProfile fault，另納入已審查的 generic synthetic-boundary fault；資源／DTD 名稱明確屬 mock 自訂策略 | Expanded fault QName、typed failure、消費端及 state 控制；其他一般服務分支與 structured Detail 待完成，不概括宣稱符合規格 |
 | W06／M2／PARTIAL | 預設切換前完成 W05 設計 | 已完成第一層 subcode 的 client／health 控制，以及認證 CLI JSON／table 子程序控制；公開錯誤欄位未改變 | 服務預設切換前仍須擴充 nested／flat／vendor、transport／session 與消費端覆蓋；維持診斷及 exit-code 意義 |
 | W07／M2、M3／PARTIAL | W03／W05 設計、W06 | 已實作完整 synthetic Action 路由及共用 body identity；A01 在 responder 前拒絕無效 HTTP UTF-8 | 全來源路由及 HTTP／in-process 邊界控制；A01 檢查 HTTP 400／policy Fault、state／hook 保留、armed fault 未消耗及合法 Unicode。完整 content type／status／header 與 endpoint 政策仍待完成 |
-| W08／M3／PARTIAL | W02／W04／W05 | Scoped Header／UsernameToken 解析、明確 digest／encoding／role 政策、不反射輸入的固定錯誤及精確豁免；見[認證盤點](mock-fidelity-auth-preflight_zh.md) | 兩種 transport 的身分、拒絕、state／hook 及即時 user table 控制；保留 auth 預設／順序與普通 CLI 分類。未驗收 freshness／nonce-reuse、角色授權或完整 WSSE／HTTP 安全 |
+| W08／M3／PARTIAL | W02／W04／W05 | Scoped Header／UsernameToken 解析、明確 digest／encoding／role 政策、不反射輸入的固定錯誤及精確豁免；見[認證盤點](../done/mock-fidelity-auth-preflight_zh.md) | 兩種 transport 的身分、拒絕、state／hook 及即時 user table 控制；保留 auth 預設／順序與普通 CLI 分類。未驗收 freshness／nonce-reuse、角色授權或完整 WSSE／HTTP 安全 |
 | W09／M2／TODO | W05／W06 | `fault_injection.rs`、`responder.rs`、server admin endpoint、公開 injection builder | 分離 literal／structured 與刻意 raw 異常輸出；自訂 QName、single-shot 匹配、順序、併發、clear／reset 及相容測試 |
 | W10／M2–M4／PARTIAL | 批次 W01、W03–W06 | `services/media.rs`、`media2.rs`、共用狀態與 renderer；按下方批次施工 | 完成條件為每個 Media 列通過 C01–C12，兩種 view 狀態一致且不共用錯誤 wire shape。E1 不代表 DeleteProfile 列結案；PA1 已實作初始 binding／改名／All／容量／引用計數；VS1 已實作 scoped source 讀寫；VE1 已實作 scoped encoder candidate／options／capacity 與 committed replay；AM1 已實作選定 audio／metadata 契約，詳見批次紀錄 |
 | W11／M2–M4／PARTIAL | W01、W03–W06 | PTZ1 已涵蓋 19 個既有 profile／head 使用端的 scoped ProfileToken 身分；其他 selector、座標 attribute／space、configuration 子樹、preset／tour 與 auxiliary command 仍待完成 | 兩種 transport 與兩個不同 head；完整欄位效果／fault policy／併發仍未驗收，不虛構移動／時間保證 |
@@ -157,7 +157,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W13／M2–M4／TODO | W01、W03–W06、W08 設計 | `services/device.rs`、DeviceIO dispatch、device state | 重複 users／network entries／scopes、storage 子樹、relay token；失敗不改 state／auth／events／hooks；維護效果依 D2 分類 |
 | W14／M2–M4／TODO | W01、W03–W06 | `services/recording.rs`：分開的 Recording／Search／Replay dispatch 與狀態生命週期 | Recording／track／job 辨識及連鎖處理；search token／終止／timeout、replay 選擇；有限模擬不代表實際錄影或媒體傳送 |
 | W15／M2–M4／TODO | W01、W03–W06 | `services/events.rs`、IO event queue、subscription state | 核對 filter namespace／dialect、lifetime／renew／unsubscribe／pull 限制、queue 隔離／順序／終止；既有 Events sync 不是 PR #16 Media sync |
-| W16／M4／PARTIAL | W01 分類、W05／W06 | [A2／A3 acknowledgment 政策](mock-fidelity-ack-policy-preflight_zh.md)：11 條已分類 reset／auxiliary／maintenance／subscription／結束搜尋 route，共用 transport／server 政策 | 精確操作 opt-in、預設拒絕、不變更 state／hook／effect／replay retirement；此 stub 子群已遷移，但完整操作語意、部分建模效果及 capability 核對仍未完成 |
+| W16／M4／PARTIAL | W01 分類、W05／W06 | [A2／A3 acknowledgment 政策](../done/mock-fidelity-ack-policy-preflight_zh.md)：11 條已分類 reset／auxiliary／maintenance／subscription／結束搜尋 route，共用 transport／server 政策 | 精確操作 opt-in、預設拒絕、不變更 state／hook／effect／replay retirement；此 stub 子群已遷移，但完整操作語意、部分建模效果及 capability 核對仍未完成 |
 | W17／M4／PARTIAL | W10–W16 分類 | 全部 capability renderer、`discovery_responder.rs`、`fleet.rs`、`snapshot.rs`、`font.rs`、公開 mock 文件 | Services／XAddrs／feature／limit 與建模行為一致；核對 discovery／snapshot 側路徑；靜態 URI／圖片不證明 codec／串流輸出；PA1 已核對 profile 上限與五種 binding capability，其餘宣告待查 |
 | W18／M4／PARTIAL | W10–W16 候選行為 | K13 無碰撞配置、K16 原子 binding plan、條件式通知；K08 hook 在鎖外接收 commit 快照，profile／catalogue 讀取共用一次快照 | 選定配置、binding、reentrant 及三路徑 profile snapshot 控制；更廣泛併發寫入、instance、rollback、其他 queue／read snapshot 及 replay 待完成；公開 signature 不變，callback 排序由使用者管理 |
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | 其餘 configuration 寫入與 mutation、單獨 replay 政策、完整讀取依賴、完整正規化／key 格式重設計及併發／callback 可見性仍待完成（有限 K27 儲存修正記於下表）；不新增錄製設備機密；PA1 將已提交 profile effect 延伸至引用計數與 PTZ compatible read，VS1 加入成功 source 提交後的 source／profile／options 失效，保留實體來源 recording；VE1 加入 source-capacity 與 profile-encoder-options 失效；AM1 加入 audio／metadata committed effects。 |
@@ -167,7 +167,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／TODO | 整合候選版本 | Cargo feature／MSRV、`.github/workflows/ci.yml`、`packaging/check_xml_features.py`、文件建置 | Windows／Linux／macOS 原生 default／all-feature、per-feature warning sweep、MSRV、下游 XML feature-unification；缺乏證據明示 blocked／not-run |
 | W25／M6／TODO | 全案結案須 W00–W24 驗收；選定發布範圍依切點 | 受影響雙語 mock／library／CLI／support 文件、`OPERATIONS`、README 連結、CHANGELOG、rustdoc、release 證據 | D1／D2 遷移有可用範例；核對目前宣告及歷史註記，不改寫已發布事實；publish／merge／push／install 依授權 |
-| W26／IN-PROGRESS | 已授權社群整合 | 已移植 PR #16 client／session，實作 scoped 僅收件確認 mock、工作卡、雙語文件與 S01–S08 控制 | 針對性測試、清冊及 160 份外部 instance 通過；最終關卡／託管 CI 見 [B16 證據](contributor-pr-integration-plan_zh.md#執行紀錄)。未合併主分支，未驗收實際媒體效果 |
+| W26／IN-PROGRESS | 已授權社群整合 | 已移植 PR #16 client／session，實作 scoped 僅收件確認 mock、工作卡、雙語文件與 S01–S08 控制 | 針對性測試、清冊及 160 份外部 instance 通過；最終關卡／託管 CI 見 [B16 證據](../done/contributor-pr-integration-plan_zh.md#執行紀錄)。未合併主分支，未驗收實際媒體效果 |
 
 ## 服務施工批次
 
@@ -213,7 +213,7 @@ W02 發現新相依性時須擴充本表。
 | K02／程式碼確認 | Service handler 仍使用舊 fragment reader；auth scalar 已遷移至 scoped 邊界 | W02–W15；M3 結案時不得有未交代的一般 caller |
 | K03／選定 DeleteProfile 分支已修正 | 兩個服務對不存在／固定 profile 使用巢狀 Sender Fault；選定 corpus 的獨立驗證通過 | W05／W06；其餘操作映射仍待完成。Client 仍回報第一層而非最深層 subcode；全程式驗收尚未完成 |
 | K04／已記錄風險 | 舊 escaped 輸入經 escaping Fault helper 回顯可能重複轉義 | W05／W23；追蹤每個含插值的 reason，重現受影響路徑 |
-| K05／選定政策已實作 | Factory Reset 與 Events unsubscribe／sync 預設拒絕，僅能明確逐項 opt-in acknowledgment-only | [W16 證據](mock-fidelity-ack-policy-preflight_zh.md)；不模擬 reset／lifecycle／event 效果，其他操作契約與 effectful stub 仍未完成 |
+| K05／選定政策已實作 | Factory Reset 與 Events unsubscribe／sync 預設拒絕，僅能明確逐項 opt-in acknowledgment-only | [W16 證據](../done/mock-fidelity-ack-policy-preflight_zh.md)；不模擬 reset／lifecycle／event 效果，其他操作契約與 effectful stub 仍未完成 |
 | K06／路由與 UTF-8 子批次已修正、HTTP binding 未完成 | Synthetic Action 別名不再進入 handler；A01 在 responder 前以 400 拒絕無效 HTTP UTF-8；一般 SOAP response 保留既有 200 映射 | W03／W07；共用 body 一致性與 generic boundary fault 已實作；完整 HTTP 擷取／status 政策及 replay 語意仍為獨立工作 |
 | K07／選定 scope／Fault probe 已修正 | 已涵蓋 scoped namespace resolution 與 Envelope／Fault anchor；QName 值、wildcard／未解析計數及更廣 corpus 仍未完成 | W20–W22；保留具失敗敏感性的獨立驗證及其明示限制 |
 | K08／選定 hook 缺陷已重現並修正 | Hook 原本持有 read lock，且可能觀察介入寫入而非原 mutation；現以 owned commit 快照在鎖外執行 | W18／W19 部分完成；管線開工核對有確定性 reentrant／snapshot 控制；queue、read snapshot、廣泛寫入及 replay 可見性仍待完成 |
@@ -222,7 +222,7 @@ W02 發現新相依性時須擴充本表。
 | K11／候選已實作 | B16 保留 PR #16 client／session 貢獻署名並替換 mock | W26；最終候選證據待完成，未合併主分支 |
 | K17／內建 DeleteProfile 路徑已修正 | 內建 in-process／HTTP clone 於拒絕刪除時保留錄製結果，commit 後才淘汰選定的跨服務 profile read | W19／W03／W18 部分完成；其他 mutation、單獨 responder 政策、完整相依圖及併發／callback 可見性仍待完成；見管線開工核對 |
 | K18／選定 create／binding 依賴已修正 | 已提交的 CreateProfile 與已建模 Media binding 淘汰三個 profile-read Action；拒絕寫入保留錄製結果 | W19／W10 部分完成；兩種 transport、無關服務及獨立 instance 已測試；完整讀取相依圖與其他 mutation 仍待完成 |
-| K27／碰撞儲存已修正 | 碰撞群組、load／save 及完整請求 replay 保留不同請求；key-only 歧義回傳 None；報告保留各列 | W19 仍為部分完成；見[儲存遷移](../replay-storage_zh.md)及[發布證據](release-0.17-cut_zh.md#驗證紀錄)。無法恢復歷史遺失資料；完整 key／QName／protocol 重設計仍待完成 |
+| K27／碰撞儲存已修正 | 碰撞群組、load／save 及完整請求 replay 保留不同請求；key-only 歧義回傳 None；報告保留各列 | W19 仍為部分完成；見[儲存遷移](../replay-storage_zh.md)及[發布證據](../done/release-0.17-cut_zh.md#驗證紀錄)。無法恢復歷史遺失資料；完整 key／QName／protocol 重設計仍待完成 |
 | K28／key 中的 URL 憑證已修正 | Canonical projection 與舊檔／caller key 清除 URL 帳密；載入唯讀，明確保存才持久化清理 | W19 部分完成；虛構資料的隱私／lookup／磁碟控制，JSON 格式不變；raw envelope 僅針對指定格式去憑證；K27 儲存保留另行修正，見管線開工核對及儲存遷移 |
 | K29／共用 XML 空白保留已修正 | 共用 escaping 在 text／attribute 以 numeric reference 保留 CR／LF／tab，Fault 使用相同 helper | W03／W06／W10 部分完成；已檢查兩種 transport、共用 helper 與 34 份外部 instance；raw token／nested renderer 與欄位限制仍待完成，詳見 profile preflight |
 | K30／有界政策已修正 | 明確空 Create／read selector 在 effect 前拒絕；含無效 seed 的 list 回傳 Receiver，不修復 snapshot | W01／W10／W06；兩種 transport 的錯誤後 state 重現、raw／client payload、hook、replay 及外部政策 Fault 控制記於 profile preflight |
@@ -285,21 +285,21 @@ not-run 分開記錄；schema skip、既有 `Broken`／`Blind` 預期不算新�
 負責工作項目才能移交；接續施工以這些紀錄為準，不依賴對話歷史。
 
 目前 W00 已完成；191 個直接 reader 已索引，不表示均已驗收。
-已核准的 K34 rate 遷移記於 [VE1 計畫](mock-fidelity-video-encoder_zh.md)。
+已核准的 K34 rate 遷移記於 [VE1 計畫](../done/mock-fidelity-video-encoder_zh.md)。
 VE1 已實作 selector、options、完整 candidate、codec view 及 capacity；具日期證據
 區分本機 gate 與託管 CI（VE1 run 34579594778 已通過）。
-[AM1 audio／metadata](mock-fidelity-audio-metadata_zh.md) 已實作 15 操作子群；
+[AM1 audio／metadata](../done/mock-fidelity-audio-metadata_zh.md) 已實作 15 操作子群；
 K36／D4 遷移於 2026-09-11 核准，gate 結果見具日期證據。
 VE1 不表示 W10 或整體計畫完成。Scoped synthetic
 request／auth 邊界、選定 profile 身分／effect、13 項 acknowledgment-only 政策（A2／A3 加 B16）及
-[PA1 組裝](mock-fidelity-profile-assembly_zh.md) 及 [VS1](mock-fidelity-video-source_zh.md)
-及 [VE1 encoder configuration](mock-fidelity-video-encoder_zh.md)、
-[AM1 audio／metadata](mock-fidelity-audio-metadata_zh.md) 為已實作子群。
+[PA1 組裝](../done/mock-fidelity-profile-assembly_zh.md) 及 [VS1](../done/mock-fidelity-video-source_zh.md)
+及 [VE1 encoder configuration](../done/mock-fidelity-video-encoder_zh.md)、
+[AM1 audio／metadata](../done/mock-fidelity-audio-metadata_zh.md) 為已實作子群。
 **全案後續工作為 W10 其餘 URI／OSD／capability 收尾**，再處理其他服務；並非全部都是 0.17 前置條件。
 W07 HTTP binding、其餘 W04 typed／QName、廣泛 W06
 Fault 遷移及安全語意仍未完成。[Schema 前置檢查](mock-fidelity-schema-preflight_zh.md)
 記錄已可運作的外部工具及選定 corpus 覆蓋，不是全程式驗收。
 
-[0.17 切點](release-0.17-cut_zh.md) 管理 R01–R08 選定契約在具名候選 commit 上的
+[0.17 切點](../done/release-0.17-cut_zh.md) 管理 R01–R08 選定契約在具名候選 commit 上的
 驗收與發布 gate；不代表 M0–M6 結案，也不將 W00–W26 TODO／PARTIAL 列升級。
 發布、主分支合併及安裝依適用授權，並保留更新使用者系統上的 Release 前須先提醒的要求。

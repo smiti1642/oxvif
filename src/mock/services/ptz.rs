@@ -23,7 +23,7 @@ fn clamp(v: f32, min: f32, max: f32) -> f32 {
 /// read a preset token or a vector out of it and ignored the profile. The client
 /// sent `ProfileToken` at 20 call sites throughout. A test
 /// asserting "my code addressed the right head" passed against a mock that
-/// could not tell one head from another. `docs/active/mock-audit-2026-07.md` §4.1.
+/// could not tell one head from another. `docs/done/mock-audit-2026-07.md` §4.1.
 ///
 /// An absent or unknown token faults rather than falling back to a default
 /// profile, for the reason `CLAUDE.md` gives about token-less per-channel
@@ -495,7 +495,7 @@ pub fn handle_ptz_set_home_position(state: &SharedState, operation: &Node) -> St
 // `SupportedPTZSpaces` was sent as an empty element — schema-valid, and a claim
 // that the head supports no coordinate space at all, which contradicted the
 // same node's `HomeSupported=true` and the mock accepting `AbsoluteMove`.
-// `docs/active/ptz-wiring-plan-2026-07.md` §2.1.
+// `docs/done/ptz-wiring-plan-2026-07.md` §2.1.
 
 /// One `tt:PTZSpaces` slot. `Space2DDescription` when `y_range` is set,
 /// `Space1DDescription` when it is not — the schema fixes which per slot.

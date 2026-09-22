@@ -27,10 +27,10 @@
 
 ## 追蹤契約
 
-B16：[Media synchronization 工作卡及證據](mock-fidelity-pr16-integration_zh.md)，
+B16：[Media synchronization 工作卡及證據](../done/mock-fidelity-pr16-integration_zh.md)，
 預設拒絕及明確選定的收件確認，不代表實際串流。
 
-K34 指 [VE1 計畫](mock-fidelity-video-encoder_zh.md) 的歷史 rate 遷移，包含相依的
+K34 指 [VE1 計畫](../done/mock-fidelity-video-encoder_zh.md) 的歷史 rate 遷移，包含相依的
 encoder／profile 讀取。VE1 指後續八項操作交付：完整 candidate、selector／options、
 codec view 與 capacity。跨領域計畫驗收仍獨立追蹤，詳見計畫的具日期證據。
 
@@ -56,16 +56,16 @@ codec view 與 capacity。跨領域計畫驗收仍獨立追蹤，詳見計畫的
   known-gap 重現不代表驗收通過。
 - 下列服務實作路徑可直接開啟；以 Handler 欄的確切 symbol 搜尋定位，不固定易失效的行號。
 
-A2：首批收件政策及 effect 邊界，詳見 [政策檢查點](mock-fidelity-ack-policy-preflight_zh.md)。
+A2：首批收件政策及 effect 邊界，詳見 [政策檢查點](../done/mock-fidelity-ack-policy-preflight_zh.md)。
 
-A3：額外八項 effect stub 的政策遷移，詳見 [批次紀錄](mock-fidelity-ack-policy-preflight_zh.md#剩餘-effect-stub-批次)。
+A3：額外八項 effect stub 的政策遷移，詳見 [批次紀錄](../done/mock-fidelity-ack-policy-preflight_zh.md#剩餘-effect-stub-批次)。
 
-PA1：profile 組裝、容量及引用計數子群，詳見 [批次紀錄](mock-fidelity-profile-assembly_zh.md)。完整欄位／實體相容性仍分開驗收。
+PA1：profile 組裝、容量及引用計數子群，詳見 [批次紀錄](../done/mock-fidelity-profile-assembly_zh.md)。完整欄位／實體相容性仍分開驗收。
 
-VS1：八項 source 讀寫／options 子群，詳見 [批次證據與限制](mock-fidelity-video-source_zh.md)。列仍為 PARTIAL，不代表完整 schema／實機契約驗收。
+VS1：八項 source 讀寫／options 子群，詳見 [批次證據與限制](../done/mock-fidelity-video-source_zh.md)。列仍為 PARTIAL，不代表完整 schema／實機契約驗收。
 
-AM1 指 [15 操作 audio／metadata 子群](mock-fidelity-audio-metadata_zh.md)。
-[0.17 切點](release-0.17-cut_zh.md) 的 R01–R08 選定契約驗收與全計畫 C／R／F／B／V
+AM1 指 [15 操作 audio／metadata 子群](../done/mock-fidelity-audio-metadata_zh.md)。
+[0.17 切點](../done/release-0.17-cut_zh.md) 的 R01–R08 選定契約驗收與全計畫 C／R／F／B／V
 完成分開；不得因發布或清冊數量相等而將 TODO／PARTIAL 列升級。
 
 ## device
@@ -320,7 +320,7 @@ rtk powershell -NoProfile -File docs/active/check-mock-fidelity-inventory.ps1 -S
 相關工作分別列於 W00／W02／W07。W22 的原始碼清冊子項已接入
 `.github/workflows/ci.yml`，在 Windows 與 Linux 使用 PowerShell 7 執行
 `-SelfTest`；`package` 依賴此檢查成功。選定 corpus 亦已接入外部 schema CI。
-託管結果依 revision 記於[發布證據](release-0.17-cut_zh.md#驗證紀錄)；來源形狀檢查
+託管結果依 revision 記於[發布證據](../done/release-0.17-cut_zh.md#驗證紀錄)；來源形狀檢查
 不代表最終候選 CI 驗收或儲存庫必要狀態檢查設定已完成。
 
 W22 本機證據（2026-09-10）：PowerShell 7 執行與 CI 相同的命令，16 個拒絕

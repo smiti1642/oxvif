@@ -7,7 +7,7 @@ Scope index: [159 routed operations](mock-fidelity-operation-ledger.md).
 This document turns M0–M6 into traceable work; it does not mark those milestones
 complete. No additional runtime behavior is changed by this planning revision.
 
-Related bounded work: [contributor PR integration](contributor-pr-integration-plan.md)
+Related bounded work: [contributor PR integration](../done/contributor-pr-integration-plan.md)
 covers #14 dependencies, #17 notification origin and W26/#16 Media synchronization.
 It does not mark the remaining service batches complete or authorize main-branch merges.
 
@@ -26,7 +26,7 @@ It does not mark the remaining service batches complete or authorize main-branch
 
 ## Execution rules
 
-Release scheduling is now owned by the [0.17 cut](release-0.17-cut.md) and
+Release scheduling is now owned by the [0.17 cut](../done/release-0.17-cut.md) and
 [follow-up backlog](post-0.17-backlog.md). Existing PARTIAL/TODO states remain
 technical evidence, not a requirement to finish every service before 0.17.
 Known data loss and security blockers cannot be deferred.
@@ -87,10 +87,10 @@ PTZ auxiliary commands, Device reboot/firmware-upgrade/system-restore, Events
 subscribe/renew, and Search EndSearch. Treat their exact-operation policy,
 mock/replay/HTTP behavior, existing workflow migration and paired documentation
 as one cohesive delivery, not eight separately gated commits. Implementation is
-recorded as A3 in the policy preflight. The subsequent [PA1 assembly batch](mock-fidelity-profile-assembly.md)
+recorded as A3 in the policy preflight. The subsequent [PA1 assembly batch](../done/mock-fidelity-profile-assembly.md)
 implements initial Configuration, optional rename/All, same-slot conflicts, capacity
-and touched reference counts. [VS1](mock-fidelity-video-source.md),
-[VE1](mock-fidelity-video-encoder.md) and [AM1](mock-fidelity-audio-metadata.md)
+and touched reference counts. [VS1](../done/mock-fidelity-video-source.md),
+[VE1](../done/mock-fidelity-video-encoder.md) and [AM1](../done/mock-fidelity-audio-metadata.md)
 subsequently implemented the eight source, eight encoder and fifteen audio/metadata
 operations respectively. These are completed implementation subgroups with bounded
 evidence, not W10 closure; release scheduling follows the 0.17 cut above.
@@ -166,7 +166,7 @@ include operation-sized Fault migration after W05, not just request parsing.
 | W05 / M2 / PARTIAL | W01 for mapping; W02 for callers | Structured auth/empty-chain/selected DeleteProfile faults plus reviewed generic synthetic-boundary faults; resource/DTD policy names are explicitly mock-specific | Expanded fault QName, typed failure, consumer and state controls; other ordinary service branches and structured Detail remain open; no blanket conformance claim |
 | W06 / M2 / PARTIAL | W05 design before default switch | First-subcode client/health controls and auth CLI JSON/table subprocess controls implemented; public error fields unchanged | Broader nested/flat/vendor error, transport/session and consumer coverage still required before the service default switch; preserve diagnostics and exit-code meanings |
 | W07 / M2,M3 / PARTIAL | W03/W05 designs, W06 | Exact synthetic Action routing and common body identity implemented; A01 rejects invalid HTTP UTF-8 before responders | Source-wide routing and HTTP/in-process boundary controls; A01 checks HTTP 400/policy Fault, state/hook preservation, retained armed fault and valid Unicode. Full content type/status/header and endpoint policy remain open |
-| W08 / M3 / PARTIAL | W02/W04/W05 | Scoped Header/UsernameToken parsing, explicit digest/encoding/role policy, static non-reflecting errors and exact exemption; see [auth preflight](mock-fidelity-auth-preflight.md) | Both-transport identity, refusal, state/hook and live user-table controls; auth defaults/order and ordinary CLI classification retained. No freshness/nonce-reuse, role authorization or complete WSSE/HTTP security acceptance |
+| W08 / M3 / PARTIAL | W02/W04/W05 | Scoped Header/UsernameToken parsing, explicit digest/encoding/role policy, static non-reflecting errors and exact exemption; see [auth preflight](../done/mock-fidelity-auth-preflight.md) | Both-transport identity, refusal, state/hook and live user-table controls; auth defaults/order and ordinary CLI classification retained. No freshness/nonce-reuse, role authorization or complete WSSE/HTTP security acceptance |
 | W09 / M2 / TODO | W05/W06 | `fault_injection.rs`, `responder.rs`, server admin endpoints and public injection builders | Literal/structured versus intentionally raw malformed output separated; custom QName handling, one-shot matching, ordering, concurrency, clear/reset and compatibility tests |
 | W10 / M2–M4 / PARTIAL | W01 for batch, W03–W06 | `services/media.rs`, `media2.rs`, shared state and renderers; batches below | Completion requires every Media row to pass C01–C12 and both views to agree on state without sharing incorrect wire shapes. E1 does not close DeleteProfile rows; PA1 implements initial binding/rename/All/capacity/reference counts; VS1 implements scoped source reads/writes; VE1 implements scoped encoder candidates/options/capacity and committed replay; AM1 implements selected audio/metadata contracts; see batch records |
 | W11 / M2–M4 / PARTIAL | W01, W03–W06 | PTZ1 scoped ProfileToken identity for 19 existing profile/head consumers; other selectors, coordinate attributes/spaces, configuration subtree, presets/tours and auxiliary commands remain open | Both transports and two different heads; complete field effects/fault policy/concurrency still unaccepted, no invented movement/timing guarantees |
@@ -174,7 +174,7 @@ include operation-sized Fault migration after W05, not just request parsing.
 | W13 / M2–M4 / TODO | W01, W03–W06, W08 design | `services/device.rs`, DeviceIO dispatch, device state | Repeated users/network entries/scopes, storage subtrees and relay tokens; failure leaves state/auth/events/hooks unchanged; maintenance effects classified under D2 |
 | W14 / M2–M4 / TODO | W01, W03–W06 | `services/recording.rs`: separate Recording/Search/Replay dispatch and state lifecycles | Recording/track/job discrimination and cascades; search token/termination/timeout and replay selection audited; finite simulation, not actual recording/media delivery |
 | W15 / M2–M4 / TODO | W01, W03–W06 | `services/events.rs`, IO event queue and subscription state | Filter namespace/dialect and lifetime/renew/unsubscribe/pull limits reviewed; queue isolation/order/termination; existing Events sync is not PR #16 Media sync |
-| W16 / M4 / PARTIAL | W01 classifications, W05/W06 | [A2/A3 acknowledgment policy](mock-fidelity-ack-policy-preflight.md): 11 classified reset/auxiliary/maintenance/subscription/search-ending routes; shared transport/server policy | Exact-operation opt-in, default refusal, no state/hook/effect/replay retirement; this stub subgroup is migrated, but full operation semantics, partial effects and capability reconciliation remain open |
+| W16 / M4 / PARTIAL | W01 classifications, W05/W06 | [A2/A3 acknowledgment policy](../done/mock-fidelity-ack-policy-preflight.md): 11 classified reset/auxiliary/maintenance/subscription/search-ending routes; shared transport/server policy | Exact-operation opt-in, default refusal, no state/hook/effect/replay retirement; this stub subgroup is migrated, but full operation semantics, partial effects and capability reconciliation remain open |
 | W17 / M4 / PARTIAL | W10–W16 classifications | All capability renderers, `discovery_responder.rs`, `fleet.rs`, `snapshot.rs`, `font.rs`, public mock docs | Services/XAddrs/features/limits agree with modeled behavior; discovery/snapshot side channels checked; codec/stream rendering not claimed from static URIs or images; PA1 reconciles profile capacity and five supported binding kinds; other declarations remain open |
 | W18 / M4 / PARTIAL | W10–W16 candidate behavior | K13 collision-safe allocation; K16 atomic binding plans; conditional notifications; K08 hooks run outside locks with commit snapshots, and profile/catalogue reads share one snapshot | Selected allocation, binding, reentrant and three-path profile snapshot controls; broader concurrent writes, instances, rollback, other queue/read snapshots and replay remain open; public signatures unchanged, callback ordering caller-managed |
 | W19 / M3,M6 / PARTIAL | W03/W09 designs | Built-in profile creation/deletion, Media1 video binding and Media2 generic binding use private committed effects; cross-service reads, HTTP, instance and chain controls | Remaining configuration writes and other mutations, standalone replay policy, full read dependencies, full normalization/key-format redesign and concurrent/callback visibility remain open (bounded K27 storage repair is recorded below); no new recording of device secrets; PA1 extends committed profile effects to reference-count and PTZ-compatible reads; VS1 adds post-commit source/profile/options invalidation while physical-source recordings remain intact; VE1 adds source-capacity and profile-encoder-options invalidation; AM1 adds audio/metadata committed effects. |
@@ -184,7 +184,7 @@ include operation-sized Fault migration after W05, not just request parsing.
 | W23 / M1,M6 / TODO | Each migrated batch | All named regression suites, client fixtures and generic parser tests | Audit hollow positives/negatives and namespace-stripped or fragment probes; mutations fail at intended assertions; include all targets with `--no-fail-fast`; bounded fuzz/property campaign with seed/limits recorded |
 | W24 / M6 / TODO | Integration candidate | Cargo features/MSRV, `.github/workflows/ci.yml`, `packaging/check_xml_features.py`, docs builds | Native Windows/Linux/macOS default/all-feature runs, per-feature warning sweep, MSRV and downstream XML feature-unification checks; mark unavailable evidence blocked/not-run |
 | W25 / M6 / TODO | W00–W24 accepted for programme closure; selected release scope follows the cut | Bilingual mock/library/CLI/support docs as affected, `OPERATIONS`, README links, CHANGELOG, rustdoc, release evidence | Document D1/D2 migration with working examples; audit all current claims and historical notes without rewriting shipped facts; publish/merge/push/install follow applicable authorization |
-| W26 / IN-PROGRESS | Authorized contributor integration | PR #16 client/session port; scoped receipt-only mock, operation cards, bilingual docs and S01–S08 controls implemented | Targeted tests, inventory and 160 external instances pass; final gates/hosted CI tracked in [B16 evidence](contributor-pr-integration-plan.md#execution-record). No main-branch merge or media-effect acceptance |
+| W26 / IN-PROGRESS | Authorized contributor integration | PR #16 client/session port; scoped receipt-only mock, operation cards, bilingual docs and S01–S08 controls implemented | Targeted tests, inventory and 160 external instances pass; final gates/hosted CI tracked in [B16 evidence](../done/contributor-pr-integration-plan.md#execution-record). No main-branch merge or media-effect acceptance |
 
 ## Service batches
 
@@ -231,7 +231,7 @@ These are planning seeds, not a claim of an exhaustive defect audit.
 | K02 / source-confirmed | Legacy fragment readers remain in service handlers; auth scalar parsing has migrated to its scoped boundary | W02–W15; no ordinary unaccounted callers at M3 exit |
 | K03 / selected DeleteProfile branches fixed | Both services now use nested Sender faults for missing/fixed profiles; independent selected corpus passes | W05/W06; other operation mappings remain open. Client still exposes the first subcode, not the leaf; full-program acceptance is pending |
 | K04 / documented risk | Legacy escaped input echoed through the escaped fault helper can double-escape | W05/W23; trace every interpolated reason and reproduce affected paths |
-| K05 / selected policy implemented | Factory Reset and Events unsubscribe/sync default to refusal; individual acknowledgment-only opt-in is explicit | [W16 evidence](mock-fidelity-ack-policy-preflight.md); no reset/lifecycle/event effects modeled; remaining operation contracts and effectful stubs open |
+| K05 / selected policy implemented | Factory Reset and Events unsubscribe/sync default to refusal; individual acknowledgment-only opt-in is explicit | [W16 evidence](../done/mock-fidelity-ack-policy-preflight.md); no reset/lifecycle/event effects modeled; remaining operation contracts and effectful stubs open |
 | K06 / routing and UTF-8 slices fixed; HTTP binding open | Synthetic Action aliases no longer reach handlers; A01 rejects invalid HTTP UTF-8 with 400 before responders; ordinary SOAP responses retain the existing 200 mapping | W03/W07; common body agreement and generic boundary faults implemented; complete HTTP extraction/status policy and replay semantics remain separate |
 | K07 / selected scope/Fault probes repaired | Scoped namespace resolution and Envelope/Fault anchors are covered; QName-valued content, wildcard/unresolved accounting and wider corpus coverage remain incomplete | W20–W22; retain fail-sensitive independent validation and its stated limits |
 | K08 / selected hook defects reproduced and fixed | Hooks previously held a read lock and could observe an intervening write instead of their mutation; owned commit snapshots now run without that lock | W18/W19 partial; deterministic reentrant/snapshot controls in pipeline preflight; queues, read snapshots, broader writes and replay visibility remain open |
@@ -240,7 +240,7 @@ These are planning seeds, not a claim of an exhaustive defect audit.
 | K11 / candidate implemented | Credited PR #16 client/session port and replacement mock in B16 | W26; final candidate evidence pending, not merged to main branches |
 | K17 / built-in DeleteProfile path fixed | Built-in in-process/HTTP clones preserve recordings on rejected deletion and retire selected cross-service profile reads after commit | W19/W03/W18 partial; other mutations, standalone responder policy, full dependency graph and concurrent/callback visibility remain open; see pipeline preflight |
 | K18 / selected create/binding edges fixed | Committed CreateProfile and modeled Media bindings retire all three profile-read Actions; refused writes preserve recordings | W19/W10 partial; both transports, unrelated services and independent instances tested; full read graph and other mutations remain open |
-| K27 / collision storage repaired | Distinct requests survive collision buckets, load/save and request-aware replay; key-only ambiguity returns None; report groups retain all rows | W19 remains partial; see [storage migration](../replay-storage.md) and [release evidence](release-0.17-cut.md#evidence). Lost historical entries cannot be recovered; full key/QName/protocol redesign remains open |
+| K27 / collision storage repaired | Distinct requests survive collision buckets, load/save and request-aware replay; key-only ambiguity returns None; report groups retain all rows | W19 remains partial; see [storage migration](../replay-storage.md) and [release evidence](../done/release-0.17-cut.md#evidence). Lost historical entries cannot be recovered; full key/QName/protocol redesign remains open |
 | K28 / URL credentials in keys fixed | Canonical projections and legacy loaded/caller keys strip URL credential pairs; load is read-only and explicit save persists cleanup | W19 partial; synthetic privacy/lookup/disk controls, unchanged JSON shape; raw-envelope redaction remains targeted; K27 storage retention is repaired separately; see pipeline preflight and storage migration |
 | K29 / shared XML whitespace preservation fixed | Common escaping emits numeric references for CR/LF/tab in text and attributes; Fault serialization uses the same helper | W03/W06/W10 partial; both transports, shared helper and 34 external instances checked; raw token/nested renderers and field constraints remain open; see profile preflight |
 | K30 / bounded policy corrected | Explicit empty Create/read selectors refuse before effects; invalid seeded lists return Receiver without snapshot repair | W01/W10/W06; both-transport state-after-error reproduction, raw/client payload, hook, replay and external policy-Fault controls in profile preflight |
@@ -310,24 +310,24 @@ user decision or external prerequisite. Findings can be carried forward only
 with an ID and owner work package. Resume from those records without chat history.
 
 Current progress: W00 is complete; 191 direct readers remain indexed, not accepted.
-K34's approved rate migration is tracked in the [VE1 plan](mock-fidelity-video-encoder.md).
+K34's approved rate migration is tracked in the [VE1 plan](../done/mock-fidelity-video-encoder.md).
 VE1 now implements selectors, options, full candidates, codec views and capacity;
 its dated evidence distinguishes local gates from hosted CI (VE1 run 34579594778 passed).
-[AM1 audio/metadata](mock-fidelity-audio-metadata.md) implements the 15-operation
+[AM1 audio/metadata](../done/mock-fidelity-audio-metadata.md) implements the 15-operation
 subgroup with the K36/D4 migration approved on 2026-09-11; see its dated gates.
 VE1 does not close W10 or the overall programme.
 Scoped synthetic request/auth boundaries, selected profile identity/effects,
-13 acknowledgment-only policies (A2/A3 plus B16), [PA1 assembly](mock-fidelity-profile-assembly.md)
-and [VS1 source configuration](mock-fidelity-video-source.md)
-and [VE1 encoder configuration](mock-fidelity-video-encoder.md)
-and [AM1 audio/metadata](mock-fidelity-audio-metadata.md)
+13 acknowledgment-only policies (A2/A3 plus B16), [PA1 assembly](../done/mock-fidelity-profile-assembly.md)
+and [VS1 source configuration](../done/mock-fidelity-video-source.md)
+and [VE1 encoder configuration](../done/mock-fidelity-video-encoder.md)
+and [AM1 audio/metadata](../done/mock-fidelity-audio-metadata.md)
 are implemented subgroups. **Programme backlog: remaining W10 URI/OSD/capability closure**,
 followed by other service subgroups; these are not all prerequisites for 0.17.
 W07 HTTP binding, remaining W04 typed/QName rules, broader W06
 Fault migration and security semantics remain open. The [schema preflight](mock-fidelity-schema-preflight.md)
 records working external tooling and selected corpus coverage, not whole-programme acceptance.
 
-The [0.17 cut](release-0.17-cut.md) owns R01–R08 selected-contract acceptance and
+The [0.17 cut](../done/release-0.17-cut.md) owns R01–R08 selected-contract acceptance and
 its release gates at a recorded candidate commit. That acceptance does not close
 M0–M6 or promote W00–W26 TODO/PARTIAL rows. Publication, main-branch merge and
 installation follow the applicable authorization; notify the user before updating

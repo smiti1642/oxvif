@@ -12,8 +12,8 @@ checkpoints, including their then-current gaps, test totals and external runs.
 They are not fresh acceptance results. The selected R03–R05 implementation now
 includes P2/K30 profile identity and empty-token policy, A1 typed-adapter routing,
 and PA1 profile assembly/capacity/reference effects; see
-[profile assembly](mock-fidelity-profile-assembly.md) and the
-[release review](release-0.17-review.md). K27 is locally repaired: collision
+[profile assembly](../done/mock-fidelity-profile-assembly.md) and the
+[release review](../done/release-0.17-review.md). K27 is locally repaired: collision
 buckets retain distinct requests and replay uses request-aware lookup; see
 [storage migration](../replay-storage.md). The legacy canonical keys can still
 collide. These selected repairs do not complete W00–W26, every profile field,

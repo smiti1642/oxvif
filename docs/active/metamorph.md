@@ -13,7 +13,7 @@ per D7), WS-Discovery so a clone is findable on the LAN (M3), the Persona C
 adapter/skin template (M5, pulled ahead of M4), and the multi-device fleet (M6).
 **M4** (full control plane + Persona A) and **M7** (semantic diff) not yet
 complete, but two targeted slices have since landed (see
-[`metamorph-container-and-quirk-diff.md`](metamorph-container-and-quirk-diff.md)):
+[`metamorph-container-and-quirk-diff.md`](../done/metamorph-container-and-quirk-diff.md)):
 the **bound-port replay "container"** (`MockServerBuilder::replay`, an M4 subset
 without the control plane) and the **structural quirk diff**
 (`FixtureStore::diff_against_synthetic`, the first half of M7). The pre-work decisions in

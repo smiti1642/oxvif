@@ -1,5 +1,7 @@
 # oxvif CLI release-hardening and product-readiness plan
 
+**Status reconciliation, 2026-09-22:** The diagnostic beta has shipped through 0.17.0. This remains active for the broader unchecked reliability, support and commercial-pilot requirements; earlier first-release gates are historical.
+
 **Status:** active; implementation in progress. Written 2026-09-01 after a
 repository, package, runtime UX, security, and public-release audit of `develop`
 at `421595b`.
