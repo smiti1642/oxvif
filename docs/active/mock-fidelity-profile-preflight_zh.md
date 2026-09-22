@@ -560,3 +560,5 @@ W05／W06 Fault 設計、外部逐欄位核對，以及明確原子性／capacit
 目前未發現需要維護者新增產品決策的事項。下一範圍是完成上述設計，再將 profile
 read／create／delete 與 binding 遷移拆成獨立驗證 commit。初始來源稽核未改變 handler；
 後續選定 Fault 與 K14 通知修正已記錄於上方，不代表廣泛遷移的前置條件已完成。
+
+RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。

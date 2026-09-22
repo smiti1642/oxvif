@@ -365,3 +365,5 @@ the initial checkpoint, not current acceptance. Broad parsing, semantic migratio
 remain incomplete. B16 has since implemented the PR #16 feature with scoped,
 opt-in receipt-only Mock behavior; this does not imply merging the contributor
 PR or accepting the entire programme. Releases and installed binaries are untouched.
+
+RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.

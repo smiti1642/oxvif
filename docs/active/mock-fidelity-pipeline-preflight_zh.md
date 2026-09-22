@@ -555,3 +555,5 @@ replay 可見性邊界；未更動協定回應或官方 corpus。
 以及未改變的 159／157／258 清冊自我測試均通過。既有 HTTP／in-process
 committed-effect 與 state-hook 控制維持成功。此純狀態子批次不宣稱新的外部
 schema 驗收；前一 selector commit `c6af85b` 已通過遠端 CI 34480290494。
+
+RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。

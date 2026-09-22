@@ -1587,3 +1587,5 @@ that class reached users before the tables existed.
 Routing is enforced automatically: a client method whose action has no dispatch
 arm fails `mock_handles_every_action_the_client_can_send`. **Payload is not** —
 give the handler a plausible response, because nothing checks that for you.
+
+The candidate scopes `GetOSD`, PTZ `GetNode`/`GetConfiguration`, and Recording `GetRecordingJobState` selectors to their direct qualified operation fields. Duplicate or nested scalar selectors refuse; Header/extension decoys cannot supply identity. Existing missing/unknown operation faults remain. OSD and PTZ renderers escape stored strings; OSD text ordering/image nesting and recording-token escaping are corrected. This does not complete OSD writes, PTZ motion or recording lifetimes.

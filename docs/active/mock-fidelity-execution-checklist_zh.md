@@ -314,3 +314,5 @@ Fault 遷移及安全語意仍未完成。[Schema 前置檢查](mock-fidelity-sc
 [0.17 切點](../done/release-0.17-cut_zh.md) 管理 R01–R08 選定契約在具名候選 commit 上的
 驗收與發布 gate；不代表 M0–M6 結案，也不將 W00–W26 TODO／PARTIAL 列升級。
 發布、主分支合併及安裝依適用授權，並保留更新使用者系統上的 Release 前須先提醒的要求。
+
+RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。

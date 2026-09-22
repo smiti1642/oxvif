@@ -960,3 +960,5 @@ fixture 資料，不代表服務可用或效果已完成。Capability 回應仍�
 5. 每個接受 token 的操作都必須在 `tests/mock_token_discrimination.rs` 中宣告 `Discriminates` 或 `Blind(audit §)`，並指定兩個預載值不同的 token。
 
 第 4、5 步不可省略；`Broken` 是可接受且可追蹤的狀態，缺少 row 則不可接受。路由會由 `mock_handles_every_action_the_client_can_send` 自動檢查；payload 不會自動驗證，因此新增 handler 時仍必須提供符合規範且有針對性的 response assertion。
+
+候選版本的 `GetOSD`、PTZ `GetNode`／`GetConfiguration` 及 Recording `GetRecordingJobState` 只採用操作內直接且 namespace 正確的 selector。重複或巢狀 scalar 拒絕，Header／extension 誘餌不能提供身分；缺少／未知 token 的原操作 fault 保留。OSD／PTZ 輸出 escape 儲存字串，並修正 OSD 文字順序、圖片容器與 recording token escape。這不代表 OSD 寫入、PTZ 運動或錄影生命週期完成。

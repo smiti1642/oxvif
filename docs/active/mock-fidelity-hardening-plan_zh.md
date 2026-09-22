@@ -325,3 +325,5 @@ name 成為 markup、後筆 binding 失敗卻保留前筆寫入。這些 probe �
 外部 schema／corpus CI 亦已修改。前文描述初始檢查點，不代表目前驗收狀態。
 廣泛 parsing 與語意遷移仍未完成。B16 後續已實作 PR #16 功能，Mock 採 scoped、
 opt-in 僅收件確認；這不代表合併貢獻者 PR 或整套計畫驗收。Release 及已安裝 binary 未變動。
+
+RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。

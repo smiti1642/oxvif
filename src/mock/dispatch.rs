@@ -39,7 +39,7 @@ pub(crate) fn respond_with_effect(
         Service::Ptz => dispatch_ptz(op, state, body, operation),
         Service::Imaging => dispatch_imaging(op, state, body),
         Service::Events => dispatch_events(op, base, state, body),
-        Service::Recording => dispatch_recording(op, state, body),
+        Service::Recording => dispatch_recording(op, state, body, operation),
         Service::Search => dispatch_search(op, state),
         Service::Replay => dispatch_replay(op, state, body),
     };
@@ -275,7 +275,7 @@ fn dispatch_media(
         "GetAudioEncoderConfigurationOptions" => {
             media::resp_audio_encoder_configuration_options(state, operation)
         }
-        "GetOSD" => media::resp_osd(state, body),
+        "GetOSD" => media::resp_osd(state, operation),
         "GetOSDs" => media::resp_osds(state, body),
         "SetOSD" => media::handle_set_osd(state, body),
         "CreateOSD" => media::handle_create_osd(state, body),
@@ -388,10 +388,10 @@ fn dispatch_ptz(
         "GotoHomePosition" => ptz::handle_ptz_goto_home_position(state, operation),
         "SetHomePosition" => ptz::handle_ptz_set_home_position(state, operation),
         "GetNodes" => ptz::resp_ptz_nodes(state),
-        "GetNode" => ptz::resp_ptz_node(state, body),
+        "GetNode" => ptz::resp_ptz_node(state, operation),
         "GetConfigurations" => ptz::resp_ptz_configurations(state),
         "GetCompatibleConfigurations" => ptz::resp_ptz_compatible_configurations(state, operation),
-        "GetConfiguration" => ptz::resp_ptz_configuration(state, body),
+        "GetConfiguration" => ptz::resp_ptz_configuration(state, operation),
         "SetConfiguration" => ptz::handle_ptz_set_configuration(state, body),
         "GetConfigurationOptions" => ptz::resp_ptz_configuration_options(state, body),
         "GetPresetTours" => ptz::resp_ptz_preset_tours(state, operation),
@@ -447,7 +447,12 @@ fn dispatch_events(op: &str, base: &str, state: &SharedState, body: &str) -> Opt
 // nothing, and `GetRecordingJobState` gave the same answer for every job token.
 // Audit §4.2 — the same shape as the reported Media2 `CreateProfile` bug, in a
 // different service.
-fn dispatch_recording(op: &str, state: &SharedState, body: &str) -> Option<String> {
+fn dispatch_recording(
+    op: &str,
+    state: &SharedState,
+    body: &str,
+    operation: &crate::mock::request::Node,
+) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => recording::resp_recording_service_capabilities(),
         "GetRecordings" => recording::resp_recordings(state),
@@ -459,7 +464,7 @@ fn dispatch_recording(op: &str, state: &SharedState, body: &str) -> Option<Strin
         "CreateRecordingJob" => recording::handle_create_recording_job(state, body),
         "SetRecordingJobMode" => recording::handle_set_recording_job_mode(state, body),
         "DeleteRecordingJob" => recording::handle_delete_recording_job(state, body),
-        "GetRecordingJobState" => recording::resp_recording_job_state(state, body),
+        "GetRecordingJobState" => recording::resp_recording_job_state(state, operation),
         _ => return None,
     })
 }

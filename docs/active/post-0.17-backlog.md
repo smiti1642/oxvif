@@ -151,3 +151,5 @@ Future implementation must use the existing operation cards, batch cadence and
 paired-document requirements, not reconstruct scope from conversation memory.
 
 F15/R3, 2026-09-22: `health check --details` and `health --details` now show every check, status, reason/detail and elapsed time in human output. JSON/JSONL retain their full payload; `-v` remains diagnostic verbosity. Renderer and real-binary acceptance pass, together with both workspace Clippy/test modes (1,343 all-feature / 1,227 default; seven ignored each). Broader R3 terminal acceptance remains open.
+
+RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.

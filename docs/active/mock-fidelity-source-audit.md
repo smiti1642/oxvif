@@ -9,7 +9,7 @@ Source baseline: `80bcf14`. Use this section as the current work entry; older da
 | Category | Disposition and evidence |
 | --- | --- |
 | Confirmed | W00 literal route/Action reconciliation is complete and maintained; direct-reader indexing remains available. K27 collision retention and request-aware replay were repaired in [the migration](../replay-storage.md). Historical reproductions below are not current storage-loss defects. |
-| Remaining | W02 transitive helper/field classification and migration ownership remain partial. The 195 indexed reader occurrences include tests, discovery and canonicalization; they are not 195 bugs or a backlog of identical replacements. |
+| Remaining | W02 transitive helper/field classification and migration ownership remain partial. The 190 indexed reader occurrences include tests, discovery and canonicalization; they are not 190 bugs or a backlog of identical replacements. |
 | Next step / exit criteria | For the next selected service, trace all transitive readers/renderers/state effects and assign each to migration or intentional isolation. Re-run [the checker](check-mock-fidelity-inventory.ps1); preserve the direct index and attach field-specific C01–C12 evidence in the batch card. |
 
 2026-09-11 K27 follow-up: collision retention and request-aware lookup are
@@ -41,7 +41,7 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 195 direct occurrences of five reader spellings are indexed: 177 before
+- 190 direct occurrences of five reader spellings are indexed: 172 before
   top-level test modules and 18 inside those modules. The former span 57
   enclosing symbols, **not** 57 defective operations (recounted after Fleet). This includes test-only
   `required_text`, canonicalization, discovery and an intentionally unused
@@ -286,7 +286,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/media.rs::parse_osd_color` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::parse_osd_payload` | `extract_attr` | `production:2` |
 | `src/mock/services/media.rs::parse_osd_payload` | `extract_tag` | `production:11` |
-| `src/mock/services/media.rs::resp_osd` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/ptz.rs::apply_ptz_configuration` | `extract_attr` | `production:2` |
 | `src/mock/services/ptz.rs::apply_ptz_configuration` | `extract_tag` | `production:11` |
@@ -310,8 +309,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/ptz.rs::pan_tilt_attrs` | `extract_attr` | `production:2` |
 | `src/mock/services/ptz.rs::parse_limits` | `extract_tag` | `production:5` |
 | `src/mock/services/ptz.rs::resp_ptz_configuration_options` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::resp_ptz_configuration` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::resp_ptz_node` | `extract_tag` | `production:1` |
 | `src/mock/services/ptz.rs::resp_ptz_preset_tour` | `extract_tag` | `production:2` |
 | `src/mock/services/recording.rs::handle_create_recording_job` | `extract_tag` | `production:5` |
 | `src/mock/services/recording.rs::handle_create_recording` | `extract_tag` | `production:9` |
@@ -320,7 +317,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/recording.rs::handle_delete_recording` | `extract_tag` | `production:1` |
 | `src/mock/services/recording.rs::handle_delete_track` | `extract_tag` | `production:2` |
 | `src/mock/services/recording.rs::handle_set_recording_job_mode` | `extract_tag` | `production:2` |
-| `src/mock/services/recording.rs::resp_recording_job_state` | `extract_tag` | `production:1` |
 | `src/mock/services/recording.rs::resp_replay_uri` | `extract_tag` | `production:1` |
 | `src/mock/xml_parse.rs::extract_all` | `extract_all_tags` | `test:1` |
 | `src/mock/xml_parse.rs::extract_from_full_soap_security_header` | `extract_tag` | `test:4` |
@@ -473,3 +469,5 @@ Programme handoff: W00 DONE for literal source reconciliation; W01 IN-PROGRESS
 and W02 PARTIAL. The initial 13 cards and K13–K16 reproductions have subsequent
 bounded repairs; remaining contract/design work stays in the programme backlog,
 not an automatic prerequisite to the selected 0.17 cut.
+
+RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.

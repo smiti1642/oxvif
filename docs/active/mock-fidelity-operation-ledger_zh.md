@@ -169,7 +169,7 @@ profile token 政策，PA1 提供模型組裝／容量行為；這些批次仍�
 | `media.GetAudioEncoderConfigurations` | `media::resp_audio_encoder_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.SetAudioEncoderConfiguration` | `media::handle_set_audio_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetAudioEncoderConfigurationOptions` | `media::resp_audio_encoder_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
-| `media.GetOSD` | `media::resp_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.GetOSD` | `media::resp_osd` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
 | `media.GetOSDs` | `media::resp_osds` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.SetOSD` | `media::handle_set_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.CreateOSD` | `media::handle_create_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -232,10 +232,10 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 | `ptz.GotoHomePosition` | `ptz::handle_ptz_goto_home_position` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
 | `ptz.SetHomePosition` | `ptz::handle_ptz_set_home_position` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
 | `ptz.GetNodes` | `ptz::resp_ptz_nodes` | `state` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GetNode` | `ptz::resp_ptz_node` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
+| `ptz.GetNode` | `ptz::resp_ptz_node` | `state, operation` | W11 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
 | `ptz.GetConfigurations` | `ptz::resp_ptz_configurations` | `state` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.GetCompatibleConfigurations` | `ptz::resp_ptz_compatible_configurations` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
-| `ptz.GetConfiguration` | `ptz::resp_ptz_configuration` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
+| `ptz.GetConfiguration` | `ptz::resp_ptz_configuration` | `state, operation` | W11 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
 | `ptz.SetConfiguration` | `ptz::handle_ptz_set_configuration` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.GetConfigurationOptions` | `ptz::resp_ptz_configuration_options` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.GetPresetTours` | `ptz::resp_ptz_preset_tours` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
@@ -293,7 +293,7 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 | `recording.CreateRecordingJob` | `recording::handle_create_recording_job` | `state, body` | W14 | TODO | TODO | TODO | TODO | TODO | - |
 | `recording.SetRecordingJobMode` | `recording::handle_set_recording_job_mode` | `state, body` | W14 | TODO | TODO | TODO | TODO | TODO | - |
 | `recording.DeleteRecordingJob` | `recording::handle_delete_recording_job` | `state, body` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `recording.GetRecordingJobState` | `recording::resp_recording_job_state` | `state, body` | W14 | TODO | TODO | TODO | TODO | TODO | - |
+| `recording.GetRecordingJobState` | `recording::resp_recording_job_state` | `state, operation` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
 
 ## search
 
@@ -344,3 +344,5 @@ W22 本機證據（2026-09-10）：PowerShell 7 執行與 CI 相同的命令，1
 發現新的 helper、欄位或錯誤路徑時，即使此檢查通過，也須擴充工作卡及 W02
 來源對照。不得只為消除失敗而提高計數、標記 DONE 或移除操作列；
 移除操作須保留理由及替代 ID。
+
+RS1: [scoped read selectors](../done/mock-fidelity-read-selectors_zh.md).

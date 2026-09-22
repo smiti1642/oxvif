@@ -513,7 +513,7 @@ fn render_space(s: &SpaceEntry) -> String {
            {y}\
          </tt:{el}>",
         el = s.kind.element(),
-        uri = s.uri,
+        uri = crate::types::xml_escape(&s.uri),
         xmin = s.x_range.0,
         xmax = s.x_range.1,
     )
@@ -534,7 +534,7 @@ fn render_limits(s: &SpaceEntry, tag: &str) -> String {
            <tt:XRange><tt:Min>{xmin}</tt:Min><tt:Max>{xmax}</tt:Max></tt:XRange>\
            {y}\
          </tt:Range></tt:{tag}>",
-        uri = s.uri,
+        uri = crate::types::xml_escape(&s.uri),
         xmin = s.x_range.0,
         xmax = s.x_range.1,
     )
@@ -565,7 +565,12 @@ fn render_node(n: &PtzNodeEntry, tag: &str) -> String {
     let aux: String = n
         .aux_commands
         .iter()
-        .map(|c| format!("<tt:AuxiliaryCommands>{c}</tt:AuxiliaryCommands>"))
+        .map(|c| {
+            format!(
+                "<tt:AuxiliaryCommands>{}</tt:AuxiliaryCommands>",
+                crate::types::xml_escape(c)
+            )
+        })
         .collect();
     format!(
         r#"<tptz:{tag} token="{token}" FixedHomePosition="{fixed}">
@@ -575,9 +580,9 @@ fn render_node(n: &PtzNodeEntry, tag: &str) -> String {
           <tt:HomeSupported>{home}</tt:HomeSupported>
           {aux}
         </tptz:{tag}>"#,
-        token = n.token,
+        token = crate::types::xml_escape(&n.token),
         fixed = n.fixed_home_position,
-        name = n.name,
+        name = crate::types::xml_escape(&n.name),
         presets = n.max_presets,
         home = n.home_supported,
     )
@@ -590,7 +595,7 @@ fn render_node(n: &PtzNodeEntry, tag: &str) -> String {
 /// parser reads both spellings and writes this one.
 pub(crate) fn render_config(c: &PtzConfigEntry, qname: &str) -> String {
     let opt = |v: &Option<String>, tag: &str| match v {
-        Some(s) => format!("<tt:{tag}>{s}</tt:{tag}>"),
+        Some(s) => format!("<tt:{tag}>{}</tt:{tag}>", crate::types::xml_escape(s)),
         None => String::new(),
     };
     let speed = match (c.default_speed_pan_tilt, c.default_speed_zoom) {
@@ -612,10 +617,10 @@ pub(crate) fn render_config(c: &PtzConfigEntry, qname: &str) -> String {
           <tt:NodeToken>{node}</tt:NodeToken>
           {abs_pt}{abs_z}{rel_pt}{rel_z}{cont_pt}{cont_z}{speed}{timeout}{pt_lim}{z_lim}
         </{qname}>"#,
-        token = c.token,
-        name = c.name,
+        token = crate::types::xml_escape(&c.token),
+        name = crate::types::xml_escape(&c.name),
         use_count = c.use_count,
-        node = c.node_token,
+        node = crate::types::xml_escape(&c.node_token),
         abs_pt = opt(
             &c.abs_pan_tilt_space,
             "DefaultAbsolutePantTiltPositionSpace"
@@ -654,13 +659,18 @@ pub fn resp_ptz_nodes(state: &SharedState) -> String {
     )
 }
 
-pub fn resp_ptz_node(state: &SharedState, body: &str) -> String {
-    let Some(token) = extract_tag(body, "NodeToken").filter(|t| !t.is_empty()) else {
-        return resp_soap_fault(
-            "env:Sender",
-            "NoNodeToken-GETNODE-5615: GetNode names one head",
-        );
-    };
+pub fn resp_ptz_node(state: &SharedState, operation: &Node) -> String {
+    let token =
+        match operation.required_child_text("http://www.onvif.org/ver20/ptz/wsdl", "NodeToken") {
+            Ok(token) => token,
+            Err(RequestError::MissingField | RequestError::EmptyField) => {
+                return resp_soap_fault(
+                    "env:Sender",
+                    "NoNodeToken-GETNODE-5615: GetNode names one head",
+                );
+            }
+            Err(error) => return error.to_fault(),
+        };
     let Some(node) = state
         .read()
         .ptz_nodes
@@ -691,12 +701,19 @@ pub fn resp_ptz_configurations(state: &SharedState) -> String {
     )
 }
 
-pub fn resp_ptz_configuration(state: &SharedState, body: &str) -> String {
-    let Some(token) = extract_tag(body, "PTZConfigurationToken").filter(|t| !t.is_empty()) else {
-        return resp_soap_fault(
-            "env:Sender",
-            "NoConfigToken-GETCFG-5617: GetConfiguration names one configuration",
-        );
+pub fn resp_ptz_configuration(state: &SharedState, operation: &Node) -> String {
+    let token = match operation.required_child_text(
+        "http://www.onvif.org/ver20/ptz/wsdl",
+        "PTZConfigurationToken",
+    ) {
+        Ok(token) => token,
+        Err(RequestError::MissingField | RequestError::EmptyField) => {
+            return resp_soap_fault(
+                "env:Sender",
+                "NoConfigToken-GETCFG-5617: GetConfiguration names one configuration",
+            );
+        }
+        Err(error) => return error.to_fault(),
     };
     let Some(cfg) = state
         .read()

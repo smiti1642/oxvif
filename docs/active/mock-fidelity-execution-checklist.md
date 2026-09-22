@@ -343,3 +343,5 @@ its release gates at a recorded candidate commit. That acceptance does not close
 M0–M6 or promote W00–W26 TODO/PARTIAL rows. Publication, main-branch merge and
 installation follow the applicable authorization; notify the user before updating
 a release on their system.
+
+RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.

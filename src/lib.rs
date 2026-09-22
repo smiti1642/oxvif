@@ -238,6 +238,10 @@
 //! read-only counts and clamps positive crops to the selected sensor. Source
 //! options remain sensor-based after cropping; nonzero origins/unmodeled settings
 //! refuse explicitly. Public client/session signatures are unchanged.
+//! OSD, PTZ node/configuration and recording-job state reads use direct qualified
+//! selectors and reject duplicates/nested scalars. Stored strings are escaped;
+//! unknown-token legacy faults and broader service fidelity remain unchanged.
+//!
 //! Opt-in mock authentication uses scoped Header/UsernameToken fields and explicit
 //! PasswordDigest Type; it does not enforce freshness, nonce reuse or user permissions.
 //! Classified reset, auxiliary, reboot/maintenance, subscription and search-ending

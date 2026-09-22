@@ -1108,9 +1108,12 @@ pub fn resp_video_encoder_configuration_options(
     super::video_encoder::options(state, operation, false)
 }
 
-pub fn resp_osd(state: &SharedState, body: &str) -> String {
-    let inner = extract_tag(body, "GetOSD").unwrap_or_default();
-    let want = extract_tag(&inner, "OSDToken").unwrap_or_default();
+pub fn resp_osd(state: &SharedState, operation: &crate::mock::request::Node) -> String {
+    let want =
+        match operation.optional_child_text("http://www.onvif.org/ver10/media/wsdl", "OSDToken") {
+            Ok(token) => token.unwrap_or_default(),
+            Err(error) => return error.to_fault(),
+        };
 
     let snapshot = state.read().osd.osds.clone();
     match snapshot.iter().find(|o| o.token == want) {
@@ -1321,7 +1324,12 @@ fn render_osd_entry(o: &OsdEntry) -> String {
     let image_el = o
         .image_path
         .as_deref()
-        .map(|p| format!("<tt:ImgPath>{p}</tt:ImgPath>"))
+        .map(|p| {
+            format!(
+                "<tt:Image><tt:ImgPath>{}</tt:ImgPath></tt:Image>",
+                crate::types::xml_escape(p)
+            )
+        })
         .unwrap_or_default();
     format!(
         r#"<trt:OSDs token="{token}">
@@ -1333,10 +1341,10 @@ fn render_osd_entry(o: &OsdEntry) -> String {
           </tt:Position>
           {text_el}{image_el}
         </trt:OSDs>"#,
-        token = o.token,
-        vsc = o.video_source_config_token,
-        ty = o.osd_type,
-        pos_type = o.position_type,
+        token = crate::types::xml_escape(&o.token),
+        vsc = crate::types::xml_escape(&o.video_source_config_token),
+        ty = crate::types::xml_escape(&o.osd_type),
+        pos_type = crate::types::xml_escape(&o.position_type),
     )
 }
 
@@ -1344,17 +1352,32 @@ fn render_osd_text(t: &OsdTextEntry) -> String {
     let plain = t
         .plain_text
         .as_deref()
-        .map(|s| format!("<tt:PlainText>{s}</tt:PlainText>"))
+        .map(|s| {
+            format!(
+                "<tt:PlainText>{}</tt:PlainText>",
+                crate::types::xml_escape(s)
+            )
+        })
         .unwrap_or_default();
     let date = t
         .date_format
         .as_deref()
-        .map(|s| format!("<tt:DateFormat>{s}</tt:DateFormat>"))
+        .map(|s| {
+            format!(
+                "<tt:DateFormat>{}</tt:DateFormat>",
+                crate::types::xml_escape(s)
+            )
+        })
         .unwrap_or_default();
     let time = t
         .time_format
         .as_deref()
-        .map(|s| format!("<tt:TimeFormat>{s}</tt:TimeFormat>"))
+        .map(|s| {
+            format!(
+                "<tt:TimeFormat>{}</tt:TimeFormat>",
+                crate::types::xml_escape(s)
+            )
+        })
         .unwrap_or_default();
     let font = t
         .font_size
@@ -1367,7 +1390,7 @@ fn render_osd_text(t: &OsdTextEntry) -> String {
             let cs = c
                 .colorspace
                 .as_deref()
-                .map(|s| format!(r#" Colorspace="{s}""#))
+                .map(|s| format!(r#" Colorspace="{}""#, crate::types::xml_escape(s)))
                 .unwrap_or_default();
             let trans = c
                 .transparent
@@ -1382,8 +1405,8 @@ fn render_osd_text(t: &OsdTextEntry) -> String {
         })
         .unwrap_or_default();
     format!(
-        r#"<tt:TextString><tt:Type>{ty}</tt:Type>{plain}{date}{time}{font}{color}</tt:TextString>"#,
-        ty = t.text_type,
+        r#"<tt:TextString><tt:Type>{ty}</tt:Type>{date}{time}{font}{color}{plain}</tt:TextString>"#,
+        ty = crate::types::xml_escape(&t.text_type),
     )
 }
 

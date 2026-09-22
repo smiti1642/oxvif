@@ -29,6 +29,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   unreadable-body and collision counts; the recorder example prints totals.
   Counts describe retained recordings, not transport attempts or conformance.
 
+### Fixed
+
+- Scope OSD, PTZ node/configuration and recording-job state selectors to the requested operation; reject ambiguous selectors and preserve escaped identities. Correct OSD text/image XML and escape stored OSD/PTZ/recording strings.
+
 ### Security
 
 - Update the workspace lockfile to rustls 0.23.45 for

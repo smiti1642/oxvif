@@ -42,6 +42,10 @@
 //! Hooks receive mutation snapshots after the state lock is released. Reentrant
 //! writes must be bounded by the callback; concurrent callback order is not guaranteed.
 //!
+//! OSD, PTZ node/configuration and recording-job state reads use direct qualified
+//! selectors and reject duplicates/nested scalars. Stored strings are escaped;
+//! unknown-token legacy faults and broader service fidelity remain unchanged.
+//!
 //! # Strictness
 //!
 //! Synthetic routing matches complete Action identities, including the Events

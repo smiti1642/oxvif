@@ -252,7 +252,7 @@ The exporter preserves XML bytes, emits two XML files per exchange plus `cases.j
 explicit Envelope/Body/operation expectations for requests and success/Fault
 responses. It never reads environment credentials or overwrites existing files.
 This is a diagnostic corpus, not comprehensive per-operation acceptance.
-The current six drivers select 80 exchanges / 160 XML instances over 46 operations,
+The current seven drivers select 85 exchanges / 170 XML instances over 50 operations,
 including 21 Fault responses. This is the exporter composition, not a new validation result.
 
 ```powershell
@@ -321,7 +321,7 @@ stored in the checkout. See [AM1](../done/mock-fidelity-audio-metadata.md); CI a
 coverage are separate from this local structural result.
 
 B16 adds six synchronization exchanges across two operations: two receipts and four
-refusals. The current exporter therefore selects 80 exchanges, 46 operations,
+refusals. The B16 exporter selected 80 exchanges, 46 operations,
 59 successes and 21 Faults (160 XML instances). Historical local validation is in [B16 evidence](../done/contributor-pr-integration-plan.md#execution-record);
 final 0.17 hosted CI and publication passed as recorded in
 [finalization](../done/release-0.17-finalization.md). Broader instance coverage remains open.
@@ -340,3 +340,5 @@ escalate before weakening them. B16 replaced PR #16's permissive acknowledgment
 behavior with scoped, opt-in receipts; actual synchronization/media effects remain
 outside that implemented model. Contributor integration and release status remain in
 the execution checklist.
+
+RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.

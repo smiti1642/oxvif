@@ -669,3 +669,5 @@ Next scope is to finish these designs and split profile read/create/delete and
 binding migration into separately verified commits. The initial source audit did
 not change handlers; subsequent selected Fault and K14 notification repairs are
 recorded above and do not close the broader migration prerequisites.
+
+RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.

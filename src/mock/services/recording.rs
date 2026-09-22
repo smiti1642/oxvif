@@ -382,8 +382,16 @@ pub fn handle_delete_recording_job(state: &SharedState, body: &str) -> String {
 ///
 /// `tt:RecordingJobState/State` is `Active` / `PartiallyActive` / `Idle`, and
 /// the mock reports the job's own mode: it has no partially-started jobs.
-pub fn resp_recording_job_state(state: &SharedState, body: &str) -> String {
-    let token = extract_tag(body, "JobToken").unwrap_or_default();
+pub fn resp_recording_job_state(
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+) -> String {
+    let token = match operation
+        .optional_child_text("http://www.onvif.org/ver10/recording/wsdl", "JobToken")
+    {
+        Ok(token) => token.unwrap_or_default(),
+        Err(error) => return error.to_fault(),
+    };
     let job = state
         .read()
         .recording
@@ -403,8 +411,8 @@ pub fn resp_recording_job_state(state: &SharedState, body: &str) -> String {
                  <tt:State>{st}</tt:State>\
                </trc:State>\
              </trc:GetRecordingJobStateResponse>",
-            rt = job.recording_token,
-            st = job.mode,
+            rt = crate::types::xml_escape(&job.recording_token),
+            st = crate::types::xml_escape(&job.mode),
         ),
     )
 }

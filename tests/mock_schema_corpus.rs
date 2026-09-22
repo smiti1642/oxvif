@@ -1003,6 +1003,7 @@ async fn export_reviewed_batches_for_independent_validation() {
     exchanges.extend(encoder_exchanges().await);
     exchanges.extend(audio_metadata_exchanges().await);
     exchanges.extend(media_sync_exchanges().await);
+    exchanges.extend(read_selector_exchanges().await);
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
     eprintln!(
@@ -1235,4 +1236,70 @@ async fn captures_media_sync_receipts_and_refusals() {
         2
     );
     assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 4);
+}
+
+async fn read_selector_exchanges() -> Vec<Exchange> {
+    let capture = Capture {
+        mock: MockTransport::new(),
+        exchanges: Arc::default(),
+    };
+    capture.mock.device().modify(|s| {
+        s.osd.osds[0].token = "Corpus & OSD".into();
+        s.osd.osds[0].text.as_mut().unwrap().plain_text = Some("OSD & <text>".into());
+        s.ptz_nodes[0].token = "Corpus & node".into();
+        s.ptz_configs[0].token = "Corpus & configuration".into();
+        s.recording.jobs[0].token = "Corpus & job".into();
+        s.recording.jobs[0].recording_token = "Corpus & recording".into();
+    });
+    let c = OnvifClient::new(TARGET).with_transport(Arc::new(capture.clone()));
+    assert_eq!(
+        c.get_osd(TARGET, "Corpus & OSD").await.unwrap().token,
+        "Corpus & OSD"
+    );
+    assert_eq!(
+        c.ptz_get_node(TARGET, "Corpus & node").await.unwrap().token,
+        "Corpus & node"
+    );
+    assert_eq!(
+        c.ptz_get_configuration(TARGET, "Corpus & configuration")
+            .await
+            .unwrap()
+            .token,
+        "Corpus & configuration"
+    );
+    let job = c
+        .get_recording_job_state(TARGET, "Corpus & job")
+        .await
+        .unwrap();
+    assert_eq!(job.recording_token, "Corpus & recording");
+    assert_eq!(job.active_state, "Active");
+    capture.mock.device().modify(|s| {
+        s.osd.osds[0].osd_type = "Image".into();
+        s.osd.osds[0].text = None;
+        s.osd.osds[0].image_path = Some("https://example.invalid/image?a=1&b=2".into());
+    });
+    assert_eq!(
+        c.get_osd(TARGET, "Corpus & OSD")
+            .await
+            .unwrap()
+            .image_path
+            .as_deref(),
+        Some("https://example.invalid/image?a=1&b=2")
+    );
+    std::mem::take(&mut *capture.exchanges.lock().unwrap())
+}
+
+#[tokio::test]
+async fn captures_scoped_read_selectors() {
+    let exchanges = read_selector_exchanges().await;
+    assert_eq!(exchanges.len(), 5);
+    assert_eq!(
+        exchanges
+            .iter()
+            .map(|e| &e.action)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        4
+    );
+    assert!(exchanges.iter().all(|e| !e.expected_fault));
 }

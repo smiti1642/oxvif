@@ -9,7 +9,7 @@
 | 分類 | 處置與證據 |
 | --- | --- |
 | 已確認 | W00 literal route／Action 對照已完成並持續維護；K27 碰撞保留與 request-aware lookup 已修復。歷史覆寫重現不是目前仍存在的資料遺失。 |
-| 剩餘工作 | W02 transitive helper／field 分類仍是 PARTIAL；195 個 reader occurrences 含測試、discovery 與 canonicalization，不能視為 195 個缺陷。 |
+| 剩餘工作 | W02 transitive helper／field 分類仍是 PARTIAL；190 個 reader occurrences 含測試、discovery 與 canonicalization，不能視為 190 個缺陷。 |
 | 下一步／完成條件 | 對下一個服務子群追蹤全部 reader／renderer／state effects，逐項標示遷移或保留理由；跑 inventory checker，於 batch card 補欄位層級 C01–C12 證據。 |
 
 2026-09-11 K27 後續修正：碰撞儲存保留及完整請求查詢已實作，詳見
@@ -39,7 +39,7 @@ W19 其餘項目仍未結案。
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 195 個直接呼叫：177 個位於頂層 test module 之前，18 個
+- 五種 reader 拼法共 190 個直接呼叫：172 個位於頂層 test module 之前，18 個
   位於其中。前者分布於 57 個 enclosing symbol（Fleet 後重新量測），**不是** 57 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery 及刻意未使用的
   helper touch，不是舊 parser 正式缺陷的數量。
@@ -277,7 +277,6 @@ W19 其餘項目仍未結案。
 | `src/mock/services/media.rs::parse_osd_color` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::parse_osd_payload` | `extract_attr` | `production:2` |
 | `src/mock/services/media.rs::parse_osd_payload` | `extract_tag` | `production:11` |
-| `src/mock/services/media.rs::resp_osd` | `extract_tag` | `production:2` |
 | `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/ptz.rs::apply_ptz_configuration` | `extract_attr` | `production:2` |
 | `src/mock/services/ptz.rs::apply_ptz_configuration` | `extract_tag` | `production:11` |
@@ -301,8 +300,6 @@ W19 其餘項目仍未結案。
 | `src/mock/services/ptz.rs::pan_tilt_attrs` | `extract_attr` | `production:2` |
 | `src/mock/services/ptz.rs::parse_limits` | `extract_tag` | `production:5` |
 | `src/mock/services/ptz.rs::resp_ptz_configuration_options` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::resp_ptz_configuration` | `extract_tag` | `production:1` |
-| `src/mock/services/ptz.rs::resp_ptz_node` | `extract_tag` | `production:1` |
 | `src/mock/services/ptz.rs::resp_ptz_preset_tour` | `extract_tag` | `production:2` |
 | `src/mock/services/recording.rs::handle_create_recording_job` | `extract_tag` | `production:5` |
 | `src/mock/services/recording.rs::handle_create_recording` | `extract_tag` | `production:9` |
@@ -311,7 +308,6 @@ W19 其餘項目仍未結案。
 | `src/mock/services/recording.rs::handle_delete_recording` | `extract_tag` | `production:1` |
 | `src/mock/services/recording.rs::handle_delete_track` | `extract_tag` | `production:2` |
 | `src/mock/services/recording.rs::handle_set_recording_job_mode` | `extract_tag` | `production:2` |
-| `src/mock/services/recording.rs::resp_recording_job_state` | `extract_tag` | `production:1` |
 | `src/mock/services/recording.rs::resp_replay_uri` | `extract_tag` | `production:1` |
 | `src/mock/xml_parse.rs::extract_all` | `extract_all_tags` | `test:1` |
 | `src/mock/xml_parse.rs::extract_from_full_soap_security_header` | `extract_tag` | `test:4` |
@@ -443,3 +439,5 @@ workspace default 1,066 passed／4 ignored。總數包含四項刻意通過的 k
 全案交接：W00 字面值來源核對 DONE；W01 IN-PROGRESS、W02 PARTIAL。
 初始 13 張工作卡與 K13–K16 重現已有後續有界修正；剩餘契約／設計工作保留於
 全案後續清單，不自動成為選定 0.17 切點的前置條件。
+
+RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。

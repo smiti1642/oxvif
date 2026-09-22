@@ -179,7 +179,7 @@ modeled assembly/capacity behavior. These slices remain partial operation accept
 | `media.GetAudioEncoderConfigurations` | `media::resp_audio_encoder_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.SetAudioEncoderConfiguration` | `media::handle_set_audio_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetAudioEncoderConfigurationOptions` | `media::resp_audio_encoder_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
-| `media.GetOSD` | `media::resp_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.GetOSD` | `media::resp_osd` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
 | `media.GetOSDs` | `media::resp_osds` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.SetOSD` | `media::handle_set_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media.CreateOSD` | `media::handle_create_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
@@ -242,10 +242,10 @@ not complete operation acceptance; all other fields and full Fault policy remain
 | `ptz.GotoHomePosition` | `ptz::handle_ptz_goto_home_position` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
 | `ptz.SetHomePosition` | `ptz::handle_ptz_set_home_position` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
 | `ptz.GetNodes` | `ptz::resp_ptz_nodes` | `state` | W11 | TODO | TODO | TODO | TODO | TODO | - |
-| `ptz.GetNode` | `ptz::resp_ptz_node` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
+| `ptz.GetNode` | `ptz::resp_ptz_node` | `state, operation` | W11 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
 | `ptz.GetConfigurations` | `ptz::resp_ptz_configurations` | `state` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.GetCompatibleConfigurations` | `ptz::resp_ptz_compatible_configurations` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
-| `ptz.GetConfiguration` | `ptz::resp_ptz_configuration` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
+| `ptz.GetConfiguration` | `ptz::resp_ptz_configuration` | `state, operation` | W11 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
 | `ptz.SetConfiguration` | `ptz::handle_ptz_set_configuration` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.GetConfigurationOptions` | `ptz::resp_ptz_configuration_options` | `state, body` | W11 | TODO | TODO | TODO | TODO | TODO | - |
 | `ptz.GetPresetTours` | `ptz::resp_ptz_preset_tours` | `state, operation` | W11 | PARTIAL | PARTIAL | TODO | PARTIAL | PARTIAL | PTZ1 |
@@ -303,7 +303,7 @@ not complete operation acceptance; all other fields and full Fault policy remain
 | `recording.CreateRecordingJob` | `recording::handle_create_recording_job` | `state, body` | W14 | TODO | TODO | TODO | TODO | TODO | - |
 | `recording.SetRecordingJobMode` | `recording::handle_set_recording_job_mode` | `state, body` | W14 | TODO | TODO | TODO | TODO | TODO | - |
 | `recording.DeleteRecordingJob` | `recording::handle_delete_recording_job` | `state, body` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `recording.GetRecordingJobState` | `recording::resp_recording_job_state` | `state, body` | W14 | TODO | TODO | TODO | TODO | TODO | - |
+| `recording.GetRecordingJobState` | `recording::resp_recording_job_state` | `state, operation` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
 
 ## search
 
@@ -358,3 +358,5 @@ operation card in the same change. A newly discovered helper/field/error path
 must extend the card and W02 source map even when this check stays green.
 Do not increase a count, mark a row DONE or remove a row solely to silence a
 failure. Preserve the reason and replacement ID for removed operations.
+
+RS1: [scoped read selectors](../done/mock-fidelity-read-selectors.md).

@@ -221,7 +221,7 @@ parent 已存在**。工具拒絕空資料、含認證欄位的 request、相對
 checkout／其上層位置。匯出保留 XML bytes，每組 exchange 產生兩個 XML 檔案，另加 `cases.json`，並為
 request、成功與 Fault response 記錄明確的 Envelope／Body／operation 預期。
 不讀取環境憑證或覆寫檔案；這是診斷 corpus，不是完整逐操作驗收。
-目前六個 driver 選取 80 組 exchange／160 份 XML instance，涵蓋 46 項操作及
+目前七個 driver 選取 85 組 exchange／170 份 XML instance，涵蓋 50 項操作及
 21 個 Fault response。這是 exporter 的組成，不是新的驗證結果。
 
 ```powershell
@@ -296,3 +296,5 @@ P-B 的逐操作欄位、Fault 與語意審查。
 驗證邊界，必須先提出討論，不能弱化規則。B16 已將 PR #16 的寬鬆確認行為替換為
 限定作用域、明確選入的 receipt；實際同步／媒體效果仍不在該已實作模型內。
 貢獻整合與 release 狀態仍依施工檢查表追蹤。
+
+RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。
