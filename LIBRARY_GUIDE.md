@@ -984,6 +984,12 @@ the connection's source port, not the camera service port. NAT/proxies can hide
 the original device; this is not authenticated camera identity. The wrapper does
 not derive serde, leaving address export explicit and existing event JSON intact.
 Dropping the stream cancels owned connections; unsubscribe on the device separately.
+Both listeners allow 32 active connections and a 10-second request-read/HTTP-ack
+deadline, with 128 KiB headers and a 1 MiB UTF-8 body. HTTP/1.0 and HTTP/1.1 POST
+require one decimal `Content-Length`; duplicate lengths and `Transfer-Encoding`
+are rejected. Invalid framing gets a best-effort HTTP 400 without events; overload
+or deadline expiry closes the socket. Queue backpressure retains connection slots
+until events are consumed; delivery is outside the request deadline.
 The minimal listener does not provide TLS/authentication or full HTTP-server hardening.
 
 ### Pull-point subscriptions

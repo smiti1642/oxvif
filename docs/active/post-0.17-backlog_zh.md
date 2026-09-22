@@ -30,7 +30,7 @@
 | F02 | 待實作：W11／W12，同一 checklist | 補 PTZ 非 profile selector／space／效果及 per-source Imaging／focus 契約；測兩個不同 head／source、限制與拒絕不改狀態，不宣稱真實移動效果。 |
 | F03 | 待實作：W13／W14，同一 checklist | 分服務子群稽核 Device／DeviceIO 與 Recording／Search／Replay 生命週期，含 cascade、timeout／termination 及錯誤後狀態；沿用既有 handler 為基準。 |
 | F04 | 待實作：W15，同一 checklist | 每筆訂閱的 identity／filter／queue、renew／expiry／unsubscribe，驗證隔離與可控生命週期；Media 同步收件確認不能代替 Events。 |
-| F05 | 待實作：W07–W09；[pipeline](mock-fidelity-pipeline-preflight_zh.md) | 分別列 HTTP／auth／fault injection 與通知 listener 缺口；驗證讀取時間／併發上限、錯誤輸入及精確拒絕；不重做已交付 scoped auth。 |
+| F05 | 待實作：W07–W09；[pipeline](mock-fidelity-pipeline-preflight_zh.md) | 通知連線／期限／framing 限制已交付，見下方。其餘為較廣的 mock HTTP binding、freshness／replay、roles 及 fault injection；不重做已交付 scoped auth。 |
 | F06 | 待實作：W16–W19；pipeline 記相依 | 選剩餘 capability／mutation／read 組合，驗證 atomic commit、拒絕保留與 replay 可見性。K27 儲存保留已完成；未來 key-format 重設計另列決策。 |
 | F07 | 待實作／證據：W20–W23；[schema preflight](mock-fidelity-schema-preflight_zh.md) | 擴充選定 160 instance／46 operation 之外的 corpus；保留 anchor、固定外部資源、錯誤控制與有界 fuzz／property 種子。0.17 選定 CI 已通過。 |
 | F08 | 待決策／延後：[CLI roadmap](oxvif-cli-plan.md)；[navigation](cli-vim-navigation-plan_zh.md) 管 M6 | decoder／playback、批次匯出、controlled writes、crate 拆分分別選定有限交付與介面／權限／復原驗收；不自動成為 0.18 blocker。 |
@@ -94,10 +94,16 @@ fallback。合成 JPEG 尾端附 CR／LF 後，獨立 Windows decoder 可以解�
 proxy 或含憑證 URL 正規化作為解法。既有成功的唯讀 snapshot／diagnose 證據保留於
 [快照修復紀錄](../done/snapshot-auth-repair_zh.md)。
 
-F05 亦保留通知 listener 沿用的有界 HTTP reader 限制：peer wrapper 是連線資料，
-不是認證；未新增 TLS、chunked decoding、每連線 read deadline 或連線數上限。
-生命週期測試與 peer 斷言不證明適合不受信任的公開端點，本版也不新增網際網路暴露
-適用宣稱。
+F05 通知子群（2026-09-22）：兩種 listener API 現在限制最多 32 條活動連線、
+請求讀取／確認共用 10 秒期限、128 KiB header 與 1 MiB UTF-8 body。
+HTTP POST 必須有唯一的十進位 Content-Length；重複長度及 Transfer-Encoding
+均拒絕。佇列交付保留連線配額，且不計入請求期限。常設測試涵蓋不完整 header／body
+逾時、超量與恢復後的精確來源、錯誤 framing／UTF-8 拒絕，以及 header 大小邊界。
+Peer wrapper 仍是連線資料，不是認證。TLS、chunked decoding 與較廣的 W07–W09
+mock HTTP／auth／fault 工作仍未完成；此有界 listener 子群不證明公開端點適用性。
+驗證：14 項 listener 測試通過；移除期限或放行重複長度時，對應常設測試確實失敗。
+兩種 workspace Clippy／test 通過（全功能 1,341／預設 1,225，各 7 ignored），
+格式、strict rustdoc、inventory 控制與本地 Markdown 連結亦通過。
 
 不因 outdated 報告列出版本，就將新的相依 major 升級加入 0.17。
 安全公告修復與相容性修正仍依發布阻擋政策處理。

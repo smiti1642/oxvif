@@ -328,6 +328,13 @@ impl OnvifClient {
 /// [`notification_listener_with_peer`] for bind errors, readiness and TCP origin.
 /// Dropping either stream stops accepting and cancels its owned connections;
 /// device-side subscriptions must still be cancelled separately.
+/// Both listeners allow at most 32 active connections, with a 10-second deadline
+/// for reading a request and writing its acknowledgment. Headers are limited to
+/// 128 KiB and the UTF-8 body to 1 MiB. Only HTTP/1.0 or HTTP/1.1 POST with one
+/// decimal `Content-Length` is supported; `Transfer-Encoding` is rejected.
+/// Invalid framing gets a best-effort HTTP 400 and yields no events; overload or
+/// deadline expiry closes the socket. A full event queue holds connection slots
+/// until consumed; queue delivery is outside the request deadline.
 /// This minimal HTTP listener is not an authenticated Internet-facing server.
 ///
 /// # Example
@@ -385,7 +392,8 @@ fn legacy_notifications(
 /// that address may not identify a camera uniquely and is not authentication.
 /// Dropping the stream stops accepting and cancels owned connection tasks.
 /// Cancel the device subscription separately with [`OnvifClient::unsubscribe`].
-/// The listener retains the legacy HTTP/body limits; it does not add TLS or auth.
+/// It shares the connection, deadline and framing limits documented on
+/// [`notification_listener`]; it does not add TLS or auth.
 ///
 /// # Errors
 /// Returns the operating system's bind error (for example, address already in use).
@@ -426,6 +434,23 @@ async fn serve_notifications(
     listener: tokio::net::TcpListener,
     tx: tokio::sync::mpsc::Sender<ReceivedNotification>,
 ) {
+    serve_notifications_bounded(
+        listener,
+        tx,
+        std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_NOTIFY_CONNECTIONS)),
+        NOTIFY_REQUEST_TIMEOUT,
+    )
+    .await;
+}
+
+// Limits are private policy parameters so the same path can be exercised with
+// short deadlines and a one-connection budget without slow timing-based tests.
+async fn serve_notifications_bounded(
+    listener: tokio::net::TcpListener,
+    tx: tokio::sync::mpsc::Sender<ReceivedNotification>,
+    permits: std::sync::Arc<tokio::sync::Semaphore>,
+    request_timeout: std::time::Duration,
+) {
     let mut connections = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
@@ -434,9 +459,18 @@ async fn serve_notifications(
             _ = connections.join_next(), if !connections.is_empty() => {},
             accepted = listener.accept() => {
                 let Ok((mut conn, peer)) = accepted else { break };
+                let Ok(permit) = permits.clone().try_acquire_owned() else {
+                    // Overload closes the newly accepted socket without spawning
+                    // work or consuming another body buffer.
+                    continue;
+                };
                 let tx = tx.clone();
                 connections.spawn(async move {
-                    for message in handle_notify_connection(&mut conn).await {
+                    let _permit = permit;
+                    let Ok(messages) = tokio::time::timeout(
+                        request_timeout, handle_notify_connection(&mut conn),
+                    ).await else { return };
+                    for message in messages {
                         if tx.send(ReceivedNotification { message, peer }).await.is_err() {
                             break;
                         }
@@ -476,6 +510,57 @@ async fn handle_notify_connection(conn: &mut tokio::net::TcpStream) -> Vec<Notif
 /// are small XML documents; anything larger is almost certainly not a
 /// legitimate notification.
 const MAX_NOTIFY_BODY: usize = 1_048_576;
+const MAX_NOTIFY_HEADERS: usize = 131_072;
+const MAX_NOTIFY_CONNECTIONS: usize = 32;
+const NOTIFY_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+fn invalid_notify_request(reason: &'static str) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, reason)
+}
+
+fn notify_content_length(headers: &[u8]) -> std::io::Result<usize> {
+    let text = std::str::from_utf8(headers)
+        .map_err(|_| invalid_notify_request("invalid header encoding"))?;
+    let mut lines = text.split("\r\n");
+    let parts = lines
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .collect::<Vec<_>>();
+    if !matches!(parts.as_slice(), ["POST", _, "HTTP/1.0" | "HTTP/1.1"]) {
+        return Err(invalid_notify_request("expected HTTP POST"));
+    }
+    let mut length = None;
+    for line in lines.filter(|line| !line.is_empty()) {
+        let (name, value) = line
+            .split_once(':')
+            .ok_or_else(|| invalid_notify_request("malformed header"))?;
+        if name.is_empty() || name.bytes().any(|b| b.is_ascii_whitespace()) {
+            return Err(invalid_notify_request("malformed header name"));
+        }
+        if name.eq_ignore_ascii_case("transfer-encoding") {
+            return Err(invalid_notify_request("transfer encoding is unsupported"));
+        }
+        if name.eq_ignore_ascii_case("content-length") {
+            let value = value.trim();
+            if length.is_some() || value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(invalid_notify_request(
+                    "invalid or duplicate content length",
+                ));
+            }
+            length = Some(
+                value
+                    .parse::<usize>()
+                    .map_err(|_| invalid_notify_request("invalid content length"))?,
+            );
+        }
+    }
+    let length = length.ok_or_else(|| invalid_notify_request("missing content length"))?;
+    if length > MAX_NOTIFY_BODY {
+        return Err(invalid_notify_request("notification body too large"));
+    }
+    Ok(length)
+}
 
 async fn read_http_body(conn: &mut tokio::net::TcpStream) -> std::io::Result<String> {
     use tokio::io::AsyncReadExt;
@@ -494,9 +579,12 @@ async fn read_http_body(conn: &mut tokio::net::TcpStream) -> std::io::Result<Str
         }
         buf.extend_from_slice(&tmp[..n]);
         if let Some(pos) = find_subsequence(&buf, b"\r\n\r\n") {
+            if pos + 4 > MAX_NOTIFY_HEADERS {
+                return Err(invalid_notify_request("headers too large"));
+            }
             break pos + 4;
         }
-        if buf.len() > 131_072 {
+        if buf.len() >= MAX_NOTIFY_HEADERS {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "headers too large",
@@ -504,20 +592,7 @@ async fn read_http_body(conn: &mut tokio::net::TcpStream) -> std::io::Result<Str
         }
     };
 
-    let headers = std::str::from_utf8(&buf[..header_end]).unwrap_or("");
-    let content_length: usize = headers
-        .lines()
-        .find(|l| l.to_ascii_lowercase().starts_with("content-length:"))
-        .and_then(|l| l.split_once(':').map(|x| x.1))
-        .and_then(|v| v.trim().parse().ok())
-        .unwrap_or(0);
-
-    if content_length > MAX_NOTIFY_BODY {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "notification body too large",
-        ));
-    }
+    let content_length = notify_content_length(&buf[..header_end])?;
 
     let already_read = buf.len() - header_end;
     if content_length > already_read {
@@ -526,7 +601,8 @@ async fn read_http_body(conn: &mut tokio::net::TcpStream) -> std::io::Result<Str
             .await?;
     }
 
-    Ok(String::from_utf8_lossy(&buf[header_end..header_end + content_length]).into_owned())
+    String::from_utf8(buf[header_end..header_end + content_length].to_vec())
+        .map_err(|_| invalid_notify_request("invalid notification UTF-8"))
 }
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {

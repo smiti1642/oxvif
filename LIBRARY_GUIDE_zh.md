@@ -504,8 +504,13 @@ while let Some(received) = notifications.next().await {
 Peer 來自 TCP socket，而非 ONVIF XML 或代理 header。Port 是此連線的來源 port，
 不是攝影機服務 port。NAT／proxy 可能隱藏原始裝置，不能視為已驗證的攝影機身分。
 包裝型別不 derive serde，讓位址匯出保持明確選擇，既有事件 JSON 不變。
-Drop stream 會取消所屬連線；仍須另外取消裝置端訂閱。此最小 listener 不提供
-TLS／認證或完整 HTTP server 安全防護。
+Drop stream 會取消所屬連線；仍須另外取消裝置端訂閱。
+兩種 listener 均限制最多 32 條活動連線，讀取請求與寫入 HTTP 確認共用 10 秒期限；
+header 上限為 128 KiB，UTF-8 body 上限為 1 MiB。HTTP/1.0 與 HTTP/1.1 POST
+必須有唯一的十進位 `Content-Length`；重複長度及 `Transfer-Encoding` 均拒絕。
+無效 framing 會嘗試回傳 HTTP 400，且不產生事件；超量或逾時則關閉 socket。
+事件佇列滿載時，連線配額保留至事件被消費；佇列交付不計入請求期限。
+此最小 listener 不提供 TLS／認證或完整 HTTP server 安全防護。
 
 ### Pull-point 訂閱
 

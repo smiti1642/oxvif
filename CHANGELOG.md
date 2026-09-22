@@ -28,6 +28,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Maintenance
 
+- Bound push notification listeners to 32 active connections and a ten-second
+  request-read/ack deadline. Reject ambiguous HTTP framing and invalid UTF-8;
+  retain the 128 KiB header / 1 MiB body limits and queue backpressure.
+
 - Fix health retries after an initial connection failure and apply the same
   typed transient-transport classification as diagnostics and discovery
   enrichment. Deterministic HTTP failures no longer qualify for whole-run retry.

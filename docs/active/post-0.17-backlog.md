@@ -35,7 +35,7 @@ those services have no existing handlers. A route count is not a bug count.
 | F02 | Implementation: W11/W12, same checklist | Finish non-profile PTZ selectors/spaces/effects and per-source Imaging/focus contracts. Verify two distinct heads/sources, limits and refusal without mutation; no physical motion guarantee. |
 | F03 | Implementation: W13/W14, same checklist | Audit Device/DeviceIO and Recording/Search/Replay state/lifetimes in bounded service groups; include cascades, timeout/termination and state-after-error. Existing handlers are the baseline, not absent functionality. |
 | F04 | Implementation: W15, same checklist | Model per-subscription identity/filter/queue and renew/expiry/unsubscribe; test isolation and controlled lifetime. Media synchronization receipts do not satisfy this. |
-| F05 | Implementation: W07–W09; [pipeline](mock-fidelity-pipeline-preflight.md) | Classify full HTTP/auth/fault-injection gaps and the notification listener separately. Require bounded read time/concurrency, malformed-input controls and exact refusal evidence; do not reimplement delivered scoped auth. |
+| F05 | Implementation: W07–W09; [pipeline](mock-fidelity-pipeline-preflight.md) | Notification connection/deadline/framing limits are delivered below. Remaining work is broader mock HTTP binding, freshness/replay, roles and fault injection; do not reimplement delivered scoped auth. |
 | F06 | Implementation: W16–W19; pipeline owns dependency detail | Choose remaining capability/mutation/read pairs; test atomic commits, refusal preservation and replay visibility. K27 storage retention is DONE; future key-format redesign is a distinct decision. |
 | F07 | Implementation/evidence: W20–W23; [schema preflight](mock-fidelity-schema-preflight.md) | Expand beyond selected 160 instances/46 operations; preserve explicit anchors, pinned external resources, negative controls and bounded fuzz/property seeds. The 0.17 selected CI gate already passed. |
 | F08 | Decision/deferred: [CLI roadmap](oxvif-cli-plan.md), [navigation](cli-vim-navigation-plan.md) owns M6 | Separate decoder/playback, batch export, controlled writes and crate extraction. Select a bounded deliverable and its interface/permission/recovery tests before implementation. None is automatically a 0.18 blocker. |
@@ -108,11 +108,19 @@ proxy behavior or credential-bearing URL normalization are not accepted solution
 The existing successful read-only snapshot/diagnose evidence remains in the
 [snapshot repair record](../done/snapshot-auth-repair.md).
 
-F05 also retains the notification listener's inherited bounded HTTP reader:
-the peer wrapper is connection metadata, not authentication. It does not add
-TLS, chunked decoding, per-connection read deadlines or a connection limit.
-Listener lifecycle tests and peer assertions do not establish suitability for an
-untrusted public endpoint. No new internet-exposure claim is part of this cut.
+F05 notification slice, 2026-09-22: both listener APIs now limit active connections
+to 32, request read/ack time to ten seconds, headers to 128 KiB and UTF-8 bodies
+to 1 MiB. HTTP POST requires one decimal Content-Length; duplicate lengths and
+Transfer-Encoding are rejected. Queue delivery retains a connection slot and is
+outside the request deadline. Standing tests cover partial-header/body timeout,
+overload/recovery with exact origin, malformed framing/UTF-8 rejection and the
+header size boundary. The peer wrapper remains metadata, not authentication.
+TLS, chunked decoding and the wider W07–W09 mock HTTP/auth/fault work remain open;
+this bounded listener slice does not establish public-endpoint suitability.
+Validation: 14 listener tests pass. Disabling deadline enforcement or accepting
+duplicate lengths makes the corresponding standing test fail. Both workspace
+Clippy/test modes pass (1,341 all-feature / 1,225 default; seven ignored each),
+as do formatting, strict rustdoc, inventory controls and local Markdown links.
 
 No new dependency major upgrade enters 0.17 just because an outdated report lists
 it. Advisory remediation and compatibility fixes remain governed by the release
