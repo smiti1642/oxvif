@@ -354,7 +354,13 @@ oxvif --device front-door media snapshot-uri --profile Profile_1 --output json
 oxvif --device front-door ptz status --profile Profile_1 --output json
 oxvif --device front-door ptz presets --profile Profile_1 --output json
 oxvif --timeout 20s --device front-door health check --output json
+oxvif health front-door --details
 ```
+
+`health check --details`（亦可用 `health front-door --details`）會列出每項檢查，
+包含通過、略過、原因／細節與耗時毫秒；單台與 Group／View 均支援。
+未指定時，人類輸出保留摘要與問題清單。`-v` 仍是診斷日誌；JSON／JSONL 一律保留
+完整 Health 報告，`--details` 不改變結構化欄位或退出碼。
 
 回傳的 stream 與 snapshot URL 會移除 URI userinfo。預設 health check 不會執行 write
 round-trip、額外的影像存活抓取或 raw exchange capture。

@@ -13,6 +13,8 @@
 //! Human adapters may supply a profile picker to diagnosis without repeating the
 //! session handshake. Structured reports retain legacy error categories alongside
 //! additive selection reasons, candidates, status counts and untested reasons.
+//! Human health output can show all checks with `health check --details`;
+//! JSON/JSONL always retain the full report regardless of that presentation flag.
 
 mod agent;
 mod application;

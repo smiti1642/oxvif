@@ -29,6 +29,56 @@ fn stdout(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).expect("stdout should be UTF-8")
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn health_details_work_in_canonical_and_shortcut_commands() {
+    let server = oxvif::mock::MockServer::start().await.unwrap();
+    let config = tempfile::tempdir().unwrap();
+    let target = server.device_url();
+    let ordinary = run_isolated(
+        &["health", "check", "--target", target, "--non-interactive"],
+        config.path(),
+    );
+    assert!(!stdout(&ordinary).contains("All health checks"));
+    let verbose = run_isolated(
+        &["health", "--target", target, "-v", "--non-interactive"],
+        config.path(),
+    );
+    assert!(!stdout(&verbose).contains("All health checks"));
+    for command in [vec!["health", "check"], vec!["health"]] {
+        let mut args = command;
+        args.extend(["--target", target, "--details", "--non-interactive"]);
+        let detailed = run_isolated(&args, config.path());
+        assert_eq!(
+            detailed.status.code(),
+            ordinary.status.code(),
+            "{}",
+            stderr(&detailed)
+        );
+        assert!(
+            stdout(&detailed).contains("All health checks"),
+            "{}",
+            stdout(&detailed)
+        );
+        assert!(stdout(&detailed).contains("GetCapabilities ok"));
+        args.push("--json");
+        let machine = run_isolated(&args, config.path());
+        let value: Value = serde_json::from_slice(&machine.stdout).unwrap();
+        assert!(
+            value["data"]["result"]["report"]["checks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|check| check["id"] == "connect")
+        );
+    }
+    for name in ["health", "health.check"] {
+        let descriptor = run(&["describe", name, "--json"]);
+        assert!(stdout(&descriptor).contains("\"details\""));
+    }
+    let invalid = run_isolated(&["info", "--details", "--json"], config.path());
+    assert_eq!(invalid.status.code(), Some(2));
+}
+
 fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr should be UTF-8")
 }

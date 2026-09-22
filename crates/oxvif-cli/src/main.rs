@@ -534,6 +534,9 @@ enum PtzCommands {
 enum HealthCommands {
     /// Run the default read-only health and conformance checks.
     Check {
+        /// Show every health check, detail and timing in human output.
+        #[arg(long)]
+        details: bool,
         /// Saved device selector: a global ID or group/local-alias.
         id: Option<String>,
         #[arg(long)]
@@ -969,8 +972,10 @@ async fn run(arguments: Vec<OsString>) -> u8 {
             }),
             &options,
             format,
-            false,
-            true,
+            HumanOutput {
+                browse_after_discovery: true,
+                ..Default::default()
+            },
             &prompt,
         )
         .await;
@@ -985,6 +990,12 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         emit_error(format, &error, None);
         return error.exit_code();
     }
+    let health_details = matches!(
+        &cli.command,
+        Commands::Health {
+            command: Some(HealthCommands::Check { details: true, .. })
+        }
+    );
     let implicit_human_context = quick_command_uses_ambient_device(
         &cli.command,
         cli.device.as_deref(),
@@ -1012,11 +1023,21 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         request,
         &options,
         format,
-        implicit_human_context,
-        browse_after_discovery,
+        HumanOutput {
+            implicit_human_context,
+            browse_after_discovery,
+            health_details,
+        },
         &prompt,
     )
     .await
+}
+
+#[derive(Default)]
+struct HumanOutput {
+    implicit_human_context: bool,
+    browse_after_discovery: bool,
+    health_details: bool,
 }
 
 async fn execute_and_emit(
@@ -1024,10 +1045,14 @@ async fn execute_and_emit(
     request: CommandRequest,
     options: &ExecutionOptions,
     format: OutputFormat,
-    implicit_human_context: bool,
-    browse_after_discovery: bool,
+    human: HumanOutput,
     prompt: &dyn Prompt,
 ) -> u8 {
+    let HumanOutput {
+        implicit_human_context,
+        browse_after_discovery,
+        health_details,
+    } = human;
     let command_name = request.name();
     let started = Instant::now();
     emit_verbose_start(options, format, command_name);
@@ -1122,7 +1147,12 @@ async fn execute_and_emit(
                 }
             }
 
-            match oxvif_cli::render_success_with_details(format, &success, options.verbosity > 0) {
+            let details = if command_name == "health.check" {
+                health_details
+            } else {
+                options.verbosity > 0
+            };
+            match oxvif_cli::render_success_with_details(format, &success, details) {
                 Ok(rendered) => {
                     if format == OutputFormat::Table
                         && implicit_human_context
@@ -1588,7 +1618,7 @@ fn build_request(
             None => Ok(CommandRequest::HealthCheck(DeviceConnectRequest {
                 selector: quick_selector(selector(None), None, non_interactive)?,
             })),
-            Some(HealthCommands::Check { id, target }) => {
+            Some(HealthCommands::Check { id, target, .. }) => {
                 let selector = selector_with_positional(selector(target), id)?;
                 if non_interactive
                     && selector.device.is_none()
@@ -1932,7 +1962,7 @@ fn quick_command_uses_ambient_device(
         | Commands::Snapshot { id, .. } => id.is_none(),
         Commands::Health { command: None } => true,
         Commands::Health {
-            command: Some(HealthCommands::Check { id, target }),
+            command: Some(HealthCommands::Check { id, target, .. }),
         } => id.is_none() && target.is_none(),
         _ => false,
     }

@@ -127,3 +127,5 @@ mock HTTP／auth／fault 工作仍未完成；此有界 listener 子群不證明
 的既有證據和真實 PARTIAL／TODO 狀態。R01–R08 收錄完成子群，不代表完整里程碑。
 W00–W06 基礎及 W24／W25 發布關卡仍屬本版驗收，不整批延後。
 後續施工須沿用操作工作卡、批次節奏及雙語要求，不依賴對話記憶重建範圍。
+
+F15／R3，2026-09-22：`health check --details` 與 `health --details` 已能在人類輸出顯示所有檢查、狀態、原因／細節與耗時。JSON／JSONL 保持完整資料，`-v` 維持診斷詳細度用途。Renderer 與實際執行檔驗收通過，兩種 workspace Clippy／test 亦通過（全功能 1,343、預設 1,227，各七項 ignored）。其他 R3 終端驗收仍未完成。

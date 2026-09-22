@@ -7,7 +7,7 @@ Source baseline: `80bcf14`. Use this section as the current work entry; older da
 | Category | Disposition and evidence |
 | --- | --- |
 | Confirmed | 0.17 packages, five native targets, schema/credential CI and publication are recorded in [finalization](../done/release-0.17-finalization.md). [describe.rs](../../crates/oxvif-cli/src/describe.rs) already provides semantic argument text, example strings and command-ID checks. [CLI tests](../../crates/oxvif-cli/tests/cli.rs) now close the six-outcome JSON/JSONL matrix in §9.2; this is partial R4 evidence, not proof of every example/error path. |
-| Remaining | R2: actual attempt accounting, service-resolution/retry-reason detail, clock-skew and directory-sync policy. R3: health-detail selection. R4: per-command reachable errors, executable examples and exhaustive descriptor/parser paths beyond the completed six-outcome envelope matrix. R5: multi-vendor matrix, soak/resource budgets, artifact signing, recovery and sanitized support bundle. Public channels belong to [distribution](oxvif-cli-three-platform-distribution-plan.md). |
+| Remaining | R2: actual attempt accounting, service-resolution/retry-reason detail, clock-skew and directory-sync policy. R3 health detail selection is delivered; broader terminal acceptance remains. R4: per-command reachable errors, executable examples and exhaustive descriptor/parser paths beyond the completed six-outcome envelope matrix. R5: multi-vendor matrix, soak/resource budgets, artifact signing, recovery and sanitized support bundle. Public channels belong to [distribution](oxvif-cli-three-platform-distribution-plan.md). |
 | Next step / exit criteria | Select one R2/R3/R4 subgroup; map each unchecked requirement to its current symbol/test before changing code. Close only with exact positive/negative assertions. Commercial and channel claims require named platform/device evidence. The old release/handoff checklist is historical; no new send, publish or install action is requested by this calibration. |
 
 **Status:** active; implementation in progress. Written 2026-09-01 after a
@@ -429,10 +429,11 @@ behavior that is absent from execution.
 - [x] Render services as namespace/service URL rows.
 - [x] Render PTZ status and presets in concise tables.
 - [x] Render health as summary plus warnings/failures by default.
-- [ ] Add health detail controls such as `--details`, `--failures-only`, or a
-  category selector after locking their command spelling.
-- [ ] Keep `--json` as the full-fidelity representation; the human renderer must
-  not remove structured fields.
+- [x] Add `health check --details` (also supported by the `health` shortcut)
+  for every check, detail/reason and elapsed milliseconds, including fleet items.
+- [x] Keep JSON/JSONL as full-fidelity representations. Single/fleet renderer
+  tests assert byte-identical structured output with details on/off; real-binary
+  tests cover canonical/shortcut parsing, descriptor exposure and exit parity.
 
 ### 8.2 Terminal behavior
 

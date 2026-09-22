@@ -553,8 +553,15 @@ These commands inspect PTZ state; they do not move the camera.
 
 ```sh
 oxvif health front-door
+oxvif health front-door --details
 oxvif --timeout 20s --device front-door health check --output json
 ```
+
+`--details` shows every check, including passes and skips, its reason/detail and
+elapsed milliseconds. It works for a single camera and Group/View results.
+Without it, human output retains its compact summary and issues. `-v` remains
+diagnostic logging; JSON/JSONL always retain the complete health report, and
+`--details` changes neither their fields nor exit codes.
 
 The default health check does not perform a write round-trip, media liveness
 fetch, or raw exchange capture.

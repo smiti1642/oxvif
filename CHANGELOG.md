@@ -22,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add `health check --details` and shortcut support to show all checks and
+  timings in human output, including fleet items; structured reports stay complete.
+
 - Add offline `FixtureStore::summary()` with per-Action exchange, SOAP Fault,
   unreadable-body and collision counts; the recorder example prints totals.
   Counts describe retained recordings, not transport attempts or conformance.

@@ -850,3 +850,8 @@ The first crates.io release is ready only when all of the following are true:
    operations and official submissions remain in the distribution plan.
 3. **Deferred:** controlled writes, optional MCP and project-local current-device
    state need their own bounded decisions; they are not missing diagnostic MVP code.
+
+
+2026-09-22 follow-up: R3 health detail selection is implemented as `health check --details`
+(and the human shortcut), with full JSON/JSONL retained. The hardening plan owns
+its acceptance; this does not implement Stage 4 writes or Stage 5 MCP.

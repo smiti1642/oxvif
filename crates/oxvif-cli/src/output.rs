@@ -16,7 +16,7 @@ pub fn render_success(format: OutputFormat, success: &CommandSuccess) -> Result<
     }
 }
 
-/// Render optional human stage details without changing structured output.
+/// Render optional human workflow stages or all health checks without changing structured output.
 pub fn render_success_with_details(
     format: OutputFormat,
     success: &CommandSuccess,
@@ -41,6 +41,26 @@ pub fn render_success_with_details(
                             "\n\nDevice: {}\n{}",
                             item.device_id,
                             render_workflow_stages(result)
+                        );
+                    }
+                }
+            }
+            CommandData::DeviceDiagnostic {
+                operation, result, ..
+            } if operation == "health.check" => {
+                let _ = write!(output, "\n\n{}", render_health_checks(result));
+            }
+            CommandData::FleetDiagnostic {
+                operation, items, ..
+            } if operation == "health.check" => {
+                for item in items {
+                    if let Some(result) = &item.result {
+                        let _ = write!(
+                            output,
+                            "\n\nDevice: {}\n{}\n{}",
+                            item.device_id,
+                            render_health(result),
+                            render_health_checks(result)
                         );
                     }
                 }
@@ -924,6 +944,108 @@ fn render_ptz_presets(result: &serde_json::Value) -> String {
         );
     }
     output
+}
+
+fn render_health_checks(result: &serde_json::Value) -> String {
+    let mut output =
+        String::from("All health checks\nSTATUS | CATEGORY | CHECK | DETAIL | ELAPSED MS");
+    if let Some(checks) = result
+        .pointer("/report/checks")
+        .and_then(serde_json::Value::as_array)
+    {
+        for check in checks {
+            let kind = check
+                .pointer("/status/kind")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown")
+                .to_ascii_uppercase();
+            let reason = check.pointer("/status/reason");
+            let detail = check.get("detail");
+            let detail = match (
+                reason.and_then(serde_json::Value::as_str),
+                detail.and_then(serde_json::Value::as_str),
+            ) {
+                (Some(reason), Some(detail)) if reason != detail => format!("{reason}; {detail}"),
+                (Some(value), _) | (_, Some(value)) => value.to_owned(),
+                _ => "-".into(),
+            };
+            let _ = write!(
+                output,
+                "\n{} | {} | {} | {} | {}",
+                kind,
+                value_or_dash(check.get("category")),
+                string_field(check, "id"),
+                detail,
+                value_or_dash(check.get("elapsed_ms"))
+            );
+        }
+    }
+    output
+}
+
+#[cfg(test)]
+mod health_detail_tests {
+    use super::*;
+
+    #[test]
+    fn details_include_all_statuses_and_preserve_single_and_fleet_machine_output() {
+        let result = serde_json::json!({
+            "healthy": false,
+            "summary": {"passed": 1, "warned": 1, "failed": 1, "skipped": 1},
+            "report": {"checks": [
+                {"id": "connected", "category": "Connectivity", "status": {"kind": "pass"}, "detail": "connected safely", "elapsed_ms": 17},
+                {"id": "clock", "category": "Time", "status": {"kind": "warn", "reason": "clock skew"}, "detail": "offset 5s", "elapsed_ms": 3},
+                {"id": "profiles", "category": "Media", "status": {"kind": "fail", "reason": "SOAP fault"}},
+                {"id": "lens", "category": "Imaging", "status": {"kind": "skip", "reason": "unsupported"}, "detail": "device\u{1b}[31m"}
+            ]}
+        });
+        for data in [
+            CommandData::DeviceDiagnostic {
+                operation: "health.check".into(),
+                device_id: None,
+                target: "http://fixture".into(),
+                result: result.clone(),
+            },
+            CommandData::FleetDiagnostic {
+                operation: "health.check".into(),
+                selection_kind: "group".into(),
+                selection_id: "fixture".into(),
+                total: 1,
+                succeeded: 1,
+                failed: 0,
+                items: vec![crate::FleetDiagnosticItem {
+                    device_id: "camera-a".into(),
+                    selected_by: "fixture/a".into(),
+                    target: "http://fixture".into(),
+                    ok: true,
+                    result: Some(result.clone()),
+                    error: None,
+                    elapsed_ms: 42,
+                }],
+            },
+        ] {
+            let success = CommandSuccess {
+                data,
+                warnings: Vec::new(),
+                meta: ResultMeta::default(),
+            };
+            let ordinary = render_success(OutputFormat::Table, &success).unwrap();
+            assert!(!ordinary.contains("connected safely"));
+            let detailed =
+                render_success_with_details(OutputFormat::Table, &success, true).unwrap();
+            assert!(detailed.contains("PASS | Connectivity | connected | connected safely | 17"));
+            assert!(detailed.contains("WARN | Time | clock | clock skew; offset 5s | 3"));
+            assert!(detailed.contains("FAIL | Media | profiles | SOAP fault | -"));
+            assert!(detailed.contains("SKIP | Imaging | lens | unsupported; device"));
+            assert!(!detailed.contains('\u{1b}'));
+            for format in [OutputFormat::Json, OutputFormat::JsonLines] {
+                assert_eq!(
+                    render_success_with_details(format, &success, true).unwrap(),
+                    render_success(format, &success).unwrap()
+                );
+            }
+        }
+    }
 }
 
 fn render_health(result: &serde_json::Value) -> String {

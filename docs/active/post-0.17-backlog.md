@@ -149,3 +149,5 @@ slices, not entire milestones. W00–W06 foundations and W24/W25 release gates r
 owned by current acceptance; this document does not defer them wholesale.
 Future implementation must use the existing operation cards, batch cadence and
 paired-document requirements, not reconstruct scope from conversation memory.
+
+F15/R3, 2026-09-22: `health check --details` and `health --details` now show every check, status, reason/detail and elapsed time in human output. JSON/JSONL retain their full payload; `-v` remains diagnostic verbosity. Renderer and real-binary acceptance pass, together with both workspace Clippy/test modes (1,343 all-feature / 1,227 default; seven ignored each). Broader R3 terminal acceptance remains open.

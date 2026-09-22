@@ -567,7 +567,7 @@ fn credential_descriptor(name: &str, summary: &str) -> CommandDescriptor {
 }
 
 fn device_read_descriptor(name: &str, summary: &str) -> CommandDescriptor {
-    descriptor(
+    let mut command = descriptor(
         name,
         summary,
         RiskLevel::Read,
@@ -580,7 +580,11 @@ fn device_read_descriptor(name: &str, summary: &str) -> CommandDescriptor {
             optional("view", "dynamic View ID"),
             optional("jobs", "integer 1..64"),
         ],
-    )
+    );
+    if matches!(name, "health" | "health.check") {
+        command.arguments.push(optional("details", "boolean"));
+    }
+    command
 }
 
 fn profile_read_descriptor(name: &str, summary: &str) -> CommandDescriptor {
@@ -877,6 +881,9 @@ fn argument_description(name: &str, required: bool) -> &'static str {
         }
         "expect-plan" => "Required plan fingerprint when applying, preventing stale-plan mutation.",
         "explain" => "Include per-device View match reasoning.",
+        "details" => {
+            "Show every health check, detail and elapsed milliseconds in human output; JSON/JSONL always retain the complete report."
+        }
         "command" => "Stable dotted command name; omit it to list commands.",
         _ if required => "Required command argument; see the value type and command help.",
         _ => "Optional command argument; see the value type and command help.",
