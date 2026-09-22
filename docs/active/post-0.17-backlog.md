@@ -54,8 +54,8 @@ for the same requirement in all seven documents. W26 is DONE for integration;
 W24/W25 remain PARTIAL for the full programme, with the 0.17 subset delivered.
 
 Calibration checks read source/tests and the recorded 0.17 finalization; no new
-camera, native-terminal, schema-resource or release validation was run. Before this
-documentation commit, fresh workspace gates passed: 1,327 all-feature / 1,215
+camera, native-terminal, schema-resource or release validation was run. At the
+calibration commit `c35704f`, workspace gates passed: 1,327 all-feature / 1,215
 default tests, seven ignores each (41 suites per mode), both all-target Clippy
 configurations and formatting. The inventory checker and its rejection controls
 also passed. These do not expand the recorded hardware or external-schema scope.
@@ -63,6 +63,15 @@ Fresh GitHub inspection for F13 is dated in the closed dependency plan. Next
 execution must recheck inputs before reuse.
 
 ## Deferred batches
+
+Near-complete items closed on 2026-09-22:
+
+- **F14/G3:** offline clone summary and its standing tests are complete;
+  [the integration note](../done/metamorph-clone-in-oxdm.md) is archived in `24bf983`.
+  M4/M7 remain open; the new API has not been released.
+- **F15/R4 §9.2:** the [six-outcome envelope matrix](oxvif-cli-release-hardening-plan.md#envelope-acceptance-closed-2026-09-22)
+  verifies 12 real CLI invocations across JSON/JSONL with schema rejection controls.
+  Descriptor exhaustiveness, runtime work and commercial acceptance remain open.
 
 | ID | Scope | Original tracking / prerequisite |
 | --- | --- | --- |

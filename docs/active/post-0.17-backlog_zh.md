@@ -47,12 +47,21 @@ Mock 主計畫管政策，execution checklist 管 W 狀態，operation ledger／
 同一要求只排一次；W26 限定整合 DONE，W24／W25 全案 PARTIAL，但 0.17 子集已交付。
 
 本次核對 source／tests 與 0.17 最終紀錄，沒有新執行攝影機、原生終端、外部 schema 或發布驗證。
-本次文件提交前已重新通過 workspace gate：全功能 1,327／預設 1,215 項測試，
+校準提交 `c35704f` 已通過 workspace gate：全功能 1,327／預設 1,215 項測試，
 各 7 ignored、41 個 suites，以及兩種 all-target Clippy 與格式檢查。
 inventory checker 及拒絕控制亦通過；這些檢查不擴張既有硬體或外部 schema 驗收範圍。
 F13 的新 GitHub 查核日期與連結記於已結案計畫；開工前須重核輸入。
 
 ## 延後批次
+
+2026-09-22 完成的接近結案項目：
+
+- **F14／G3：**離線 clone 摘要與回歸測試完成；[整合計畫](../done/metamorph-clone-in-oxdm.md)
+  已於 `24bf983` 歸檔。M4／M7 仍開放，新 API 尚未發布。
+- **F15／R4 §9.2：**[六種結果的 envelope 驗證](oxvif-cli-release-hardening-plan.md#envelope-acceptance-closed-2026-09-22)
+  以 JSON／JSONL 實際執行 12 次 CLI，核對退出碼、model 值、Fleet 排序／計數、
+  result／error 邊界與 stdout／stderr，並以負向控制確認 schema 會拒絕錯誤資料。
+  描述器完整性、runtime 與商用驗收仍開放。
 
 | ID | 範圍 | 原始追蹤／前置條件 |
 | --- | --- | --- |

@@ -6,8 +6,8 @@ Source baseline: `80bcf14`. Use this section as the current work entry; older da
 
 | Category | Disposition and evidence |
 | --- | --- |
-| Confirmed | 0.17 packages, five native targets, schema/credential CI and publication are recorded in [finalization](../done/release-0.17-finalization.md). [describe.rs](../../crates/oxvif-cli/src/describe.rs) already provides semantic argument text, example strings and command-ID checks; [CLI tests](../../crates/oxvif-cli/tests/cli.rs) validate representative schemas. These are partial R4 evidence, not proof of every example/error path. |
-| Remaining | R2: actual attempt accounting, service-resolution/retry-reason detail, dedicated health/enrichment contract checks, clock-skew and directory-sync policy. R3: health-detail selection. R4: per-command reachable errors, executable examples and exhaustive envelope/parser cases. R5: multi-vendor matrix, soak/resource budgets, artifact signing, recovery and sanitized support bundle. Public channels belong to [distribution](oxvif-cli-three-platform-distribution-plan.md). |
+| Confirmed | 0.17 packages, five native targets, schema/credential CI and publication are recorded in [finalization](../done/release-0.17-finalization.md). [describe.rs](../../crates/oxvif-cli/src/describe.rs) already provides semantic argument text, example strings and command-ID checks. [CLI tests](../../crates/oxvif-cli/tests/cli.rs) now close the six-outcome JSON/JSONL matrix in §9.2; this is partial R4 evidence, not proof of every example/error path. |
+| Remaining | R2: actual attempt accounting, service-resolution/retry-reason detail, dedicated health/enrichment contract checks, clock-skew and directory-sync policy. R3: health-detail selection. R4: per-command reachable errors, executable examples and exhaustive descriptor/parser paths beyond the completed six-outcome envelope matrix. R5: multi-vendor matrix, soak/resource budgets, artifact signing, recovery and sanitized support bundle. Public channels belong to [distribution](oxvif-cli-three-platform-distribution-plan.md). |
 | Next step / exit criteria | Select one R2/R3/R4 subgroup; map each unchecked requirement to its current symbol/test before changing code. Close only with exact positive/negative assertions. Commercial and channel claims require named platform/device evidence. The old release/handoff checklist is historical; no new send, publish or install action is requested by this calibration. |
 
 **Status:** active; implementation in progress. Written 2026-09-01 after a
@@ -477,8 +477,40 @@ success. No default diagnostic view may be only a generic JSON dump.
 - [x] Validate representative JSON and JSONL output against the schemas in CI.
 - [x] Define additive versus breaking changes and when `SCHEMA_VERSION` must
   increment.
-- [ ] Add contract fixtures for single success, argument error, device error,
-  fleet success, fleet partial success, and fleet total failure.
+- [x] Add contract fixtures for single success, argument error, device error,
+  fleet success, fleet partial success, and fleet total failure: the six-outcome
+  binary matrix below runs each case in JSON and JSONL.
+
+#### Envelope acceptance closed (2026-09-22)
+
+The standing `published_envelope_contract_matrix_covers_six_outcomes_in_json_and_jsonl`
+test in [cli.rs](../../crates/oxvif-cli/tests/cli.rs) runs the real executable with
+isolated registries, a loopback mock and an authentication-refusing mock. It makes
+12 invocations and validates every emitted document against the shipped schema v3.
+No real device, credential-store write or multicast scan is involved.
+
+| Fixture case | Exit | Required output |
+| --- | --- | --- |
+| Single success | 0 | `device_information` with the mock's exact model |
+| Argument error | 2 | `INVALID_ARGUMENT`, error envelope only |
+| Device error | 20 | `DEVICE_CONNECTION_FAILED`, error envelope only |
+| Fleet success | 0 | One successful item and exact total/success/failure counts |
+| Fleet partial success | 6 | Sorted success/error items and 1/1 counts; summary `ok=false` |
+| Fleet total failure | 20 | `FLEET_FAILED`, one error envelope in both formats |
+
+For successful/partial fleet results, JSON uses `fleet_diagnostic`; JSONL emits
+one `fleet_item` per device followed by `fleet_summary`. Assertions independently
+check ordering, operation/selector identity, payload values, result/error exclusion,
+metadata, stderr separation and exits. Negative controls remove an error code or
+set a negative elapsed time and require schema rejection. The broad `commandData`
+extension point is not an exhaustive payload schema; this matrix does not close
+§9.1 descriptor coverage or the whole R4 Agent exit gate. `diagnose`'s richer
+failed-report behavior remains covered by the existing maintenance tests.
+
+Verification for this test-only closeout: workspace all-feature/default tests
+passed 1,332/1,216, each with seven ignored and 41 suites. Both all-target Clippy
+modes, formatting, whitespace and 1,884 local links / 814 anchors passed.
+The CLI payload schema and runtime behavior are unchanged.
 
 ### 9.3 Single source of truth
 

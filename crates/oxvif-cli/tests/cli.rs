@@ -1546,3 +1546,181 @@ fn device_import_cli_requires_and_applies_reviewed_fingerprint() {
     );
     assert_eq!(missing_fingerprint.status.code(), Some(2));
 }
+
+// Execute the published envelope contract through the actual binary. Schema
+// acceptance alone is insufficient: commandData intentionally allows additions,
+// so pin the exit, discriminants, values and item/error boundaries independently.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn published_envelope_contract_matrix_covers_six_outcomes_in_json_and_jsonl() {
+    let good = oxvif::mock::MockServer::start().await.unwrap();
+    let denied = oxvif::mock::MockServer::builder()
+        .enforce_auth(true)
+        .start()
+        .await
+        .unwrap();
+    let schema: Value =
+        serde_json::from_str(include_str!("../schema/oxvif-envelope.schema.json")).unwrap();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    for (case, exit, error_code, succeeded, failed) in [
+        ("single", 0, None, 1, 0),
+        ("argument", 2, Some("INVALID_ARGUMENT"), 0, 0),
+        ("device", 20, Some("DEVICE_CONNECTION_FAILED"), 0, 1),
+        ("fleet_success", 0, None, 1, 0),
+        ("fleet_partial", 6, None, 1, 1),
+        ("fleet_failure", 20, Some("FLEET_FAILED"), 0, 1),
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        let fleet = case.starts_with("fleet_");
+        if fleet {
+            let registry = RegistryStore::at(directory.path());
+            registry
+                .create_group(NewGroup {
+                    id: "fleet".into(),
+                    name: None,
+                })
+                .unwrap();
+            // Insert the failing record first: output order must follow device
+            // identity, not insertion order or parallel completion order.
+            for (id, target, enabled) in [
+                ("camera-b", denied.device_url(), failed > 0),
+                ("camera-a", good.device_url(), succeeded > 0),
+            ] {
+                if enabled {
+                    registry
+                        .add(NewDevice {
+                            id: id.into(),
+                            name: None,
+                            target: target.into(),
+                            tags: Vec::new(),
+                        })
+                        .unwrap();
+                    registry.add_group_member("fleet", id, id).unwrap();
+                }
+            }
+        }
+        for format in ["json", "jsonl"] {
+            let mut args = vec![
+                "--timeout",
+                if case == "argument" { "invalid" } else { "2s" },
+                "--retries",
+                "0",
+                "--output",
+                format,
+                "--non-interactive",
+            ];
+            if fleet {
+                args.extend(["--group", "fleet", "--jobs", "2", "device", "info"]);
+            } else {
+                args.extend([
+                    "device",
+                    "info",
+                    "--target",
+                    if case == "device" {
+                        denied.device_url()
+                    } else {
+                        good.device_url()
+                    },
+                ]);
+            }
+            let output = run_isolated(&args, directory.path());
+            assert_eq!(
+                output.status.code(),
+                Some(exit),
+                "{case}/{format}: {} {}",
+                stderr(&output),
+                stdout(&output)
+            );
+            assert!(
+                stderr(&output).is_empty(),
+                "{case}/{format}: {}",
+                stderr(&output)
+            );
+            let documents: Vec<Value> = if format == "json" {
+                vec![serde_json::from_slice(&output.stdout).unwrap()]
+            } else {
+                stdout(&output)
+                    .lines()
+                    .map(|line| serde_json::from_str(line).unwrap())
+                    .collect()
+            };
+            assert!(!documents.is_empty(), "{case}/{format}");
+            for doc in &documents {
+                assert!(validator.is_valid(doc), "{case}/{format}: {doc}");
+                assert_eq!(doc["schema_version"], "3");
+                assert!(doc["meta"]["elapsed_ms"].as_u64().is_some());
+                let mut invalid = doc.clone();
+                invalid["meta"]["elapsed_ms"] = (-1).into();
+                assert!(
+                    !validator.is_valid(&invalid),
+                    "schema must reject invalid timing"
+                );
+            }
+            if let Some(code) = error_code {
+                assert_eq!(documents.len(), 1, "{case}/{format}");
+                let doc = &documents[0];
+                assert_eq!(doc["ok"], false);
+                assert_eq!(doc["error"]["code"], code);
+                assert!(
+                    doc["error"]["message"]
+                        .as_str()
+                        .is_some_and(|s| !s.is_empty())
+                );
+                assert!(doc["error"]["retryable"].is_boolean());
+                assert!(doc.get("data").is_none());
+                let mut invalid = doc.clone();
+                invalid["error"].as_object_mut().unwrap().remove("code");
+                assert!(
+                    !validator.is_valid(&invalid),
+                    "schema must require an error code"
+                );
+                continue;
+            }
+            let last = documents.last().unwrap();
+            assert_eq!(last["ok"], failed == 0);
+            assert_eq!(last["meta"]["command"], "device.info");
+            assert!(last.get("error").is_none());
+            assert!(last["warnings"].is_array());
+            if !fleet {
+                assert_eq!(documents.len(), 1);
+                assert_eq!(last["data"]["kind"], "device_information");
+                assert_eq!(last["data"]["information"]["model"], "MockCam-1080p");
+                continue;
+            }
+            let data = &last["data"];
+            assert_eq!(data["selection_kind"], "group");
+            assert_eq!(data["selection_id"], "fleet");
+            assert_eq!(data["operation"], "device.info");
+            assert_eq!(data["total"], succeeded + failed);
+            assert_eq!(data["succeeded"], succeeded);
+            assert_eq!(data["failed"], failed);
+            let items: Vec<&Value> = if format == "json" {
+                assert_eq!(documents.len(), 1);
+                assert_eq!(data["kind"], "fleet_diagnostic");
+                data["items"].as_array().unwrap().iter().collect()
+            } else {
+                assert_eq!(data["kind"], "fleet_summary");
+                assert_eq!(documents.len(), (succeeded + failed + 1) as usize);
+                documents[..documents.len() - 1]
+                    .iter()
+                    .map(|doc| {
+                        assert_eq!(doc["data"]["kind"], "fleet_item");
+                        assert_eq!(doc["ok"], doc["data"]["item"]["ok"]);
+                        assert_eq!(doc["meta"]["device_id"], doc["data"]["item"]["device_id"]);
+                        &doc["data"]["item"]
+                    })
+                    .collect()
+            };
+            assert_eq!(items.len(), (succeeded + failed) as usize);
+            assert_eq!(items[0]["device_id"], "camera-a");
+            assert_eq!(items[0]["ok"], true);
+            assert_eq!(items[0]["result"]["model"], "MockCam-1080p");
+            assert!(items[0].get("error").is_none());
+            if failed > 0 {
+                assert_eq!(items[1]["device_id"], "camera-b");
+                assert_eq!(items[1]["ok"], false);
+                assert_eq!(items[1]["error"]["code"], "DEVICE_CONNECTION_FAILED");
+                assert!(items[1].get("result").is_none());
+            }
+        }
+    }
+}

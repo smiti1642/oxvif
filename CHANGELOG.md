@@ -28,6 +28,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Maintenance
 
+- Complete the CLI schema regression matrix for single success, argument/device
+  errors and fleet success/partial/total failure in both JSON and JSONL, checking
+  process exits, payloads and schema rejection controls.
+
 - Calibrate active plans against shipped APIs and release evidence, close the
   verified Dependabot grouping plan, and separate remaining implementation,
   acceptance and deferred decisions under F01–F15.
