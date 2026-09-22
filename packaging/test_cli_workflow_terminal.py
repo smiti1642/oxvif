@@ -53,12 +53,15 @@ class Terminal:
         return "\n".join(self.screen.display)
 
     def expect(self, text, timeout=12):
+        self.expect_condition(lambda: text in self.shown(), f"Missing screen: {text}", timeout)
+
+    def expect_condition(self, predicate, failure, timeout=12):
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             self.pump()
-            if text in self.shown():
+            if predicate():
                 return
-        raise AssertionError(f"Missing screen: {text}")
+        raise AssertionError(failure)
 
     def key(self, value):
         self.proc.write(value)
@@ -130,7 +133,9 @@ def discover(t):
 
 
 def manage(t):
-    t.expect("Choose camera")
+    # Creating 256 independent atomic registry entries precedes the first UI.
+    # Keep ordinary interaction deadlines separate from fixture startup.
+    t.expect("Choose camera", timeout=60)
     t.key("/cam255\r\r")
     t.expect("cam255 | Profile: not selected")
     t.credentials()
@@ -326,6 +331,13 @@ def resize(t):
         for height in [28, 40, 16, 54]:
             t.resize(height, 160)
             t.expect(title)
+            # The title can still belong to the previous frame. Wait for the
+            # required layout, rather than asserting against a partial repaint.
+            t.expect_condition(
+                lambda: len([line for line in t.screen.display if re.match(r"^\s*>?\s*\d+\s+\d+\s+NEW\b", line)]) == height - 8
+                and "NORMAL" in t.screen.display[-1],
+                f"height {height} did not fill available rows",
+            )
             rows = [line for line in t.screen.display if re.match(r"^\s*>?\s*\d+\s+\d+\s+NEW\b", line)]
             assert len(rows) == height - 8, f"height {height} did not fill available rows"
             assert any(line.startswith(">") for line in rows), "resize hid selection"
