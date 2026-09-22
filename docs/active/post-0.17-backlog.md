@@ -43,7 +43,7 @@ those services have no existing handlers. A route count is not a bug count.
 | F10 | Evidence needed: snapshot investigation, [repair record](../done/snapshot-auth-repair.md) | Obtain a sanitized reproducible non-image/JPEG response; test bounded format handling without weakening destination/auth/TLS/size/no-clobber policies. Trailing CR/LF is a known synthetic difference, not a proven Hanwha root cause. |
 | F11 | Evidence needed: [Fleet](mock-fleet-basic-plan.md); broader discovery features are deferred | Record authorized OS/interface/VMS four-device identity, endpoint, isolation, shutdown/restart checks. Full scopes/Hello/Bye/Resolve, mixed personas and sustained load require separate implementation/acceptance. |
 | F12 | Evidence needed: navigation plan | Record native terminal and human IME composition/cancellation/restoration; Windows resize evidence exists. CI and key injection do not replace the missing platform/input-method checks. |
-| F13 | New maintenance review: [closed dependency plan](../done/dependency-maintenance-plan.md#closure-evidence-2026-09-22) is evidence only | Review open PR #18 and keyring 4.x native-store migration separately; record each update's compatibility and affected tests. Group reuse/no-duplicate verification is DONE, not a task to rerun or grounds to auto-merge. |
+| F13 | Maintenance: [review record](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22) | Six reviewed updates plus the fresh rustls advisory fix are integrated locally and verified; publication is separate. Keyring 4.2 stays deferred pending cross-version native-store identity and recovery tests. Group reuse/no-duplicate verification is DONE. |
 | F14 | Decision/implementation: [Metamorph](metamorph.md), [closed clone note](../done/metamorph-clone-in-oxdm.md) records G3 | G1/G3 are DONE and G2 is SUPERSEDED. G3 adds offline summary counts and standing regressions (unreleased). Remaining work is M4 persona/control transitions or M7 reference-value comparisons and their tests. |
 | F15 | Implementation/evidence: [CLI hardening](oxvif-cli-release-hardening-plan.md) | Select R2 observability/retry, R3 health details or R4 descriptor-contract subgroup with exact assertions. R5 multi-vendor/soak/signing/support and recovery stay bounded separately; first package/publication is DONE. |
 
@@ -59,8 +59,9 @@ calibration commit `c35704f`, workspace gates passed: 1,327 all-feature / 1,215
 default tests, seven ignores each (41 suites per mode), both all-target Clippy
 configurations and formatting. The inventory checker and its rejection controls
 also passed. These do not expand the recorded hardware or external-schema scope.
-Fresh GitHub inspection for F13 is dated in the closed dependency plan. Next
-execution must recheck inputs before reuse.
+Fresh F13 dependency inspection and local integration evidence are recorded in
+[dependency pitfalls](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22).
+Remote checks describe the named PR revision, not these later local changes.
 
 F09 read-only channel inventory is complete: the proposed tap returns 404 with
 current credentials; the repository contains temporary APT staging, not a named

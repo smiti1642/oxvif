@@ -18,6 +18,7 @@ checked before every publish.
 | [Audit procedure](#how-to-audit-for-new-instances-run-before-each-publish) | Review steps |
 | [Audit log](#audit-log) | Version-specific findings |
 | [Current XML and digest migration](#017--quick-xml-042-and-sha2-011) | Current APIs and compatibility gates |
+| [Post-0.17 maintenance](#post-017--reviewed-maintenance-batch-2026-09-22) | Reviewed updates, rustls advisory fix and keyring migration boundary |
 
 ---
 
@@ -200,3 +201,81 @@ The 2026-09-07 audit found no known vulnerabilities across 411 dependencies.
 `cargo outdated` still reports newer packages, including keyring 4.2; these are
 not silently included in the six reviewed updates. They belong to later reviewed
 maintenance batches, particularly the platform credential migration for keyring.
+
+### Post-0.17 — reviewed maintenance batch (2026-09-22)
+
+The local batch integrates the six updates from [PR #18](https://github.com/smiti1642/oxvif/pull/18),
+reviewed at `38a193615eca7d04993d9c2f468dec59f6e0321a`. The PR title is stale;
+its commit and diff contain six updates. [CI run 34795153522](https://github.com/smiti1642/oxvif/actions/runs/34795153522)
+reports success for that exact head, including its 27 native, schema, credential,
+MSRV and packaging checks. This is upstream evidence for the PR revision, not
+native-platform acceptance of later local changes or a remote merge. The local
+batch additionally fixes the advisory discovered by the fresh audit below.
+
+| Update | Reviewed impact and compatibility evidence |
+| --- | --- |
+| reqwest 0.13.4 → 0.13.5 | SOAP, retry classification and snapshot HTTP share this client. Existing transport, auth, private-CA, timeout and snapshot tests exercise the update; no oxvif API migration is needed. |
+| tokio-rustls 0.26.4 → 0.26.5 | TLS test fixtures and reqwest's transport graph; certificate/rejection controls stay enabled. |
+| toml 1.1.5 → 1.1.6 | Fleet/config serialization and parsing; round-trip, invalid-input and no-clobber tests stay enabled. |
+| dirs 6 → 7 | Direct dev dependency used only by the mock-server example's `home_dir()`. Registry source diff changes Windows `preference_dir()` from Local to Roaming; `home_dir()` and its dirs-sys 0.5 dependency are unchanged. The production CLI uses the separate `directories` crate. |
+| ipnet 2.12.1 → 2.12.2 | Transitive reqwest network support; transport/discovery controls remain in the workspace gate. |
+| jsonschema 0.53 → 0.56 | CLI test-only dependency; `validator_for` and `is_valid` compile and run against descriptor/envelope schemas, including explicit rejection controls. Remote schema retrieval stays disabled. |
+| rustls 0.23.43 → 0.23.45 | Fresh `cargo audit` found [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285). Update the lockfile to the patched release; this is not covered by PR #18's earlier CI. |
+
+The rustls fix requires aws-lc-rs 1.18 and rustls-webpki at least 0.103.14;
+the resolved versions are aws-lc-rs 1.18.1, aws-lc-sys 0.45.0 and
+rustls-webpki 0.103.15. Their declared MSRVs and rustls's are all 1.71.
+The resolver also reuses getrandom 0.3.4 for tempfile 3.27.0's existing
+`>=0.3.0, <0.5` constraint; no tempfile version/API changes. Review the complete
+lockfile diff rather than treating a targeted update as necessarily one package.
+The fresh audit after this patch reports no known vulnerabilities in 410 locked
+packages. Downstream library consumers must update their own lockfiles; this
+workspace lockfile does not impose a rustls minimum on their resolved graph.
+
+Feature-unification review used the actual registry sources. None of the called
+APIs is removed by a newly enabled feature. jsonschema's inverse gates concern
+IDN format alternatives and arbitrary-precision error construction, neither used
+directly here; toml's map-capacity alternatives retain the same API. Existing
+quick-xml encoding-on/off downstream checks remain necessary and are rerun.
+The TLS additions retain std/no-std alternatives and backend-selection gates;
+the TLS fixture APIs used here do not disappear through feature unification.
+
+reqwest now uses base64 0.23 and enables its default `simd-unsafe` feature through
+unification. The direct oxvif declaration still disables defaults; it never
+guaranteed the workspace-wide absence of that feature. base64 0.22 remains through
+hyper-util. This is the sibling-default case documented above, not a new public
+feature promise. The locked graph and existing auth tests are checked explicitly.
+
+The declared MSRVs for reqwest/jsonschema/toml are at most 1.85, tokio-rustls is
+1.71, and dirs/ipnet publish no rust-version field in these manifests. The
+workspace stays at Rust 1.88; a locked local 1.88 check is required rather than
+assuming compatibility from absent metadata.
+
+Local acceptance after the rustls patch: format and both workspace Clippy modes
+pass; all-feature/default workspace tests pass with 1,341 / 1,225 tests and seven
+ignored in each. Rust 1.88 `cargo check --workspace --all-features --locked`
+passes. The isolated quick-xml consumer passes all three fixtures with encoding
+off and on, checks each actual feature graph and retains only locked registry
+versions. `cargo audit` reports zero known vulnerabilities; Markdown links and
+diff whitespace checks pass. Existing ignored native-store/external-resource
+tests are not counted as passes. No new PR is created; work is committed directly
+to the current branch.
+
+#### Keyring 4.2 disposition
+
+Keep keyring 3.6.3 for this batch. The inspected 4.2.0 registry source declares
+Rust 1.88, so MSRV is not the blocker. Its default `v1` facade delegates to
+keyring-core and separate native-store crates; it lacks our existing
+`windows-native`, `apple-native` and `sync-secret-service` feature names. Its
+Unix facade selects zbus Secret Service, while the existing integration selects
+the synchronous backend. Store initialization is cached once; an initialization
+failure maps to `NoDefaultStore`.
+
+A follow-up must decide explicit stores versus the v1 facade and preserve
+`service = "oxvif"` plus the existing credential reference as account identity.
+Acceptance must write synthetic credentials with 3.6.3, read/update/delete them
+with the candidate, and verify rollback with 3.6.3 on Windows, macOS and Linux.
+Also cover missing/locked/denied/unavailable stores, reconnect after initial
+failure, generic redacted errors and cleanup. Memory-store tests and same-version
+native round trips do not establish that migration. No user credentials are read
+and no keyring dependency or store is changed by this review.

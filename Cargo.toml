@@ -122,7 +122,7 @@ futures = "0.3"
 serde   = { version = "1", features = ["derive"] }
 toml    = "1"
 fs2     = "0.4"
-dirs    = "6"
+dirs    = "7"
 
 # The mock_server example is now a thin wrapper over `oxvif::mock::MockServer`.
 [[example]]

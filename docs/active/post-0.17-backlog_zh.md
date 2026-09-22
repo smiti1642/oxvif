@@ -38,7 +38,7 @@
 | F10 | 待證據：快照調查，[修復紀錄](../done/snapshot-auth-repair_zh.md) | 取得去敏且可重現的非圖片／JPEG 回應，再測有界辨識；保留目的地／認證／TLS／大小／不覆寫規則。CR／LF 僅是合成差異，尚非 Hanwha 根因。 |
 | F11 | 待證據：[Fleet](mock-fleet-basic-plan_zh.md)；廣泛 discovery 延後 | 記錄獲授權 OS／interface／VMS 的四台 identity、endpoint、隔離與關閉重啟。完整 scopes／Hello／Bye／Resolve、混合 persona 與持續負載另作實作／驗收。 |
 | F12 | 待證據：navigation | 補原生 terminal／人工 IME 組字、取消與復原紀錄；Windows resize 已有證據，一般 CI／注入按鍵不能取代缺少的平台／輸入法驗收。 |
-| F13 | 新維護審查：[已結案相依計畫](../done/dependency-maintenance-plan_zh.md#結案證據2026-09-22) 僅作佐證 | 另審開啟的 PR #18 與 keyring 4.x 原生 store 遷移，逐項記相容性及受影響測試。分組重用／不重複驗證已完成，不重跑舊工作、不自動 merge。 |
+| F13 | 相依維護：[審查紀錄](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22) | 六項已審查更新及新查出的 rustls 安全公告修補已在本地整合並驗證；發布另列。Keyring 4.2 仍等待跨版本原生 store 身分與復原測試。分組重用／不重複驗證已完成。 |
 | F14 | 待決策／實作：[Metamorph](metamorph.md)，[已結案 clone note](../done/metamorph-clone-in-oxdm.md) 記錄 G3 | G1／G3 已完成、G2 已被替代；G3 已補離線摘要與回歸測試，尚未發布。剩餘 M4 persona／control transition 或 M7 reference-value 比對與驗收。 |
 | F15 | 待實作／證據：[CLI hardening](oxvif-cli-release-hardening-plan.md) | 先選 R2 observability／retry、R3 health details 或 R4 descriptor 契約子群與精確斷言；R5 多廠牌／soak／簽章／支援／復原分開限定。首次 package／發布已完成。 |
 
@@ -50,7 +50,9 @@ Mock 主計畫管政策，execution checklist 管 W 狀態，operation ledger／
 校準提交 `c35704f` 已通過 workspace gate：全功能 1,327／預設 1,215 項測試，
 各 7 ignored、41 個 suites，以及兩種 all-target Clippy 與格式檢查。
 inventory checker 及拒絕控制亦通過；這些檢查不擴張既有硬體或外部 schema 驗收範圍。
-F13 的新 GitHub 查核日期與連結記於已結案計畫；開工前須重核輸入。
+F13 的新相依查核與本地整合證據記於
+[相依審查](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22)。
+遠端檢查僅涵蓋具名 PR revision，不代表其後本地修改的原生平台驗收。
 
 F09 唯讀渠道盤點完成：提議 tap 以目前權限查詢回傳 404；repo 只有暫存 APT
 staging，尚無具名正式 URL／金鑰。公開渠道負責者、簽章／復原政策與原生生命週期

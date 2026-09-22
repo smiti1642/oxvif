@@ -26,7 +26,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   unreadable-body and collision counts; the recorder example prints totals.
   Counts describe retained recordings, not transport attempts or conformance.
 
+### Security
+
+- Update the workspace lockfile to rustls 0.23.45 for
+  [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285), which fixes
+  acceptance of TLS 1.3 handshake messages at the wrong encryption level.
+  Library consumers with existing lockfiles should update rustls to 0.23.45 or later.
+
 ### Maintenance
+
+- Refresh reqwest, tokio-rustls, toml and ipnet, plus the dirs/jsonschema
+  development dependencies. Keep native credential storage on keyring 3.6.3
+  pending a separate migration review and cross-version store validation.
 
 - Bound push notification listeners to 32 active connections and a ten-second
   request-read/ack deadline. Reject ambiguous HTTP framing and invalid UTF-8;
