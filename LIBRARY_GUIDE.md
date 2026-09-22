@@ -1262,7 +1262,7 @@ async fn main() {
 ```
 
 `HealthCheck::run()` never returns an error — an unreachable device is a failing
-`connect` check, not an `Err`, so a batch run over a fleet cannot be derailed by
+`connect` check with a structured `CheckError`, not an `Err`, so a batch run over a fleet cannot be derailed by
 one bad camera. Checks run concurrently and are read-only unless you opt in
 below.
 

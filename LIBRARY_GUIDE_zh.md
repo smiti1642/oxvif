@@ -558,7 +558,7 @@ Recording、Search 與 Replay URL 通常由 `get_services()` 取得。
 
 ## 健康檢查（`health` feature）
 
-`HealthCheck` 會產生 Pass/Warn/Fail/Skip 報告與 Profile S/T/G verdict。預設為唯讀，且無法連線的裝置會成為 failing `connect` check，而不會使整個 fleet run 回傳 `Err`。
+`HealthCheck` 會產生 Pass/Warn/Fail/Skip 報告與 Profile S/T/G verdict。預設為唯讀，且無法連線的裝置會成為帶有結構化 `CheckError` 的 failing `connect` check，而不會使整個 fleet run 回傳 `Err`。
 
 ```bash
 cargo run --example healthcheck --features health,mock-server -- --mock

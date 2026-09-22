@@ -1,4 +1,14 @@
-use std::{collections::BTreeMap, env, future::Future, net::Ipv4Addr, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    env,
+    future::Future,
+    net::Ipv4Addr,
+    sync::{
+        Arc,
+        atomic::{AtomicU8, Ordering},
+    },
+    time::Duration,
+};
 
 use oxvif::{
     DeviceInfo, OnvifClient, OnvifError, OnvifSession,
@@ -1341,13 +1351,48 @@ impl From<serde_json::Error> for DiagnosticAttemptFailure {
 
 pub(crate) fn is_retryable_onvif_error(error: &OnvifError) -> bool {
     match error {
-        OnvifError::Transport(TransportError::Http(error)) => {
+        OnvifError::Transport(error) => is_retryable_transport_error(error),
+        OnvifError::Soap(_) | OnvifError::InvalidArgument(_) => false,
+    }
+}
+
+fn is_retryable_transport_error(error: &TransportError) -> bool {
+    match error {
+        TransportError::Http(error) => {
             error.is_timeout() || error.is_connect() || error.is_body() || error.is_request()
         }
-        OnvifError::Transport(TransportError::HttpStatus { status, .. }) => {
+        TransportError::HttpStatus { status, .. } => {
             matches!(*status, 408 | 425 | 429 | 502 | 503 | 504)
         }
-        OnvifError::Soap(_) | OnvifError::InvalidArgument(_) => false,
+    }
+}
+
+// Preserve typed transport retry decisions across HealthReport's intentionally
+// broad Http class without parsing server-controlled error strings or changing
+// the public report shape. A fresh tap belongs to each whole-health attempt.
+struct HealthRetryTransport {
+    inner: Arc<dyn Transport>,
+    failures: AtomicU8,
+}
+
+#[async_trait::async_trait]
+impl Transport for HealthRetryTransport {
+    async fn soap_post(
+        &self,
+        url: &str,
+        action: &str,
+        body: String,
+    ) -> Result<String, TransportError> {
+        let result = self.inner.soap_post(url, action, body).await;
+        if let Err(error) = &result {
+            let bit = if is_retryable_transport_error(error) {
+                1
+            } else {
+                2
+            };
+            self.failures.fetch_or(bit, Ordering::Relaxed);
+        }
+        result
     }
 }
 
@@ -1519,18 +1564,26 @@ async fn execute_health_check(
     let attempts = options.retries.saturating_add(1);
     for attempt in 0..attempts {
         let mut check = HealthCheck::new(&resolved.target);
+        let observed = Arc::new(HealthRetryTransport {
+            inner: transport.clone(),
+            failures: AtomicU8::new(0),
+        });
         if let (Some(username), Some(password)) =
             (resolved.username.as_deref(), resolved.password())
         {
             check = check.with_credentials(username, password);
         }
-        check = check.with_transport(transport.clone());
+        check = check.with_transport(observed.clone());
         check = check.with_clock_sync(should_sync_clock(
             options.clock_sync,
             resolved.password.is_some(),
         ));
         match timeout(options.timeout, check.run()).await {
-            Ok(report) if health_report_is_retryable(&report) && attempt + 1 < attempts => {
+            Ok(report)
+                if observed.failures.load(Ordering::Relaxed) == 1
+                    && health_report_is_retryable(&report)
+                    && attempt + 1 < attempts =>
+            {
                 sleep(retry_delay(attempt, &resolved.target)).await;
             }
             Ok(report) => return health_report_value(report),
@@ -1562,7 +1615,7 @@ fn health_report_is_retryable(report: &HealthReport) -> bool {
             check
                 .error
                 .as_ref()
-                .is_some_and(|error| error.class == ErrorClass::Http && !error.is_auth())
+                .is_some_and(|error| error.class == ErrorClass::Http)
         })
 }
 
@@ -2095,6 +2148,7 @@ mod tests {
         let requests = Arc::new(AtomicUsize::new(0));
         let observed = requests.clone();
         let task = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
             while let Ok((mut client, _)) = listener.accept().await {
                 let request_number = observed.fetch_add(1, Ordering::SeqCst) + 1;
                 if request_number == 1 {
@@ -2107,12 +2161,15 @@ mod tests {
                         .await;
                     continue;
                 }
-                let Ok(mut upstream) =
-                    tokio::net::TcpStream::connect((upstream_host.as_str(), upstream_port)).await
-                else {
-                    continue;
-                };
-                let _ = tokio::io::copy_bidirectional(&mut client, &mut upstream).await;
+                let host = upstream_host.clone();
+                connections.spawn(async move {
+                    if let Ok(mut upstream) =
+                        tokio::net::TcpStream::connect((host.as_str(), upstream_port)).await
+                    {
+                        let _ = tokio::io::copy_bidirectional(&mut client, &mut upstream).await;
+                    }
+                });
+                while connections.try_join_next().is_some() {}
             }
         });
         (format!("http://{address}{upstream_path}"), requests, task)
@@ -3235,6 +3292,142 @@ mod tests {
         assert!(is_retryable_onvif_error(&transient));
         assert!(!is_retryable_onvif_error(&authentication));
         assert!(!is_retryable_onvif_error(&soap_fault));
+    }
+
+    #[tokio::test]
+    async fn health_and_enrichment_recover_after_transient_connect_failure() {
+        let upstream = oxvif::mock::MockServer::start().await.unwrap();
+        for health in [false, true] {
+            let (target, requests, proxy) =
+                transient_then_proxy_server(upstream.device_url()).await;
+            let options = ExecutionOptions {
+                retries: 1,
+                timeout: Duration::from_secs(5),
+                ..Default::default()
+            };
+            if health {
+                let resolved = ResolvedTarget {
+                    target,
+                    device_id: None,
+                    selected_by: None,
+                    username: None,
+                    password: None,
+                };
+                let report = execute_health_check(&resolved, &options).await.unwrap();
+                let connect = report["report"]["checks"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|c| c["id"] == "connect")
+                    .unwrap();
+                assert!(connect.get("error").is_none());
+                assert_eq!(connect["detail"], "GetCapabilities ok");
+                assert!(requests.load(Ordering::SeqCst) >= 2);
+            } else {
+                let info = fetch_live_information(&target, None, None, &options)
+                    .await
+                    .unwrap();
+                assert_eq!(info.model, "MockCam-1080p");
+                assert_eq!(requests.load(Ordering::SeqCst), 2);
+            }
+            proxy.abort();
+            let _ = proxy.await;
+        }
+    }
+
+    #[tokio::test]
+    async fn health_and_enrichment_share_typed_retry_limits() {
+        for health in [false, true] {
+            for (status, retries, expected) in [
+                (503, 0, 1),
+                (503, 2, 3),
+                (403, 2, 1),
+                (404, 2, 1),
+                (401, 2, 1),
+            ] {
+                let (target, requests, server) = status_server(status, "fixture").await;
+                let options = ExecutionOptions {
+                    retries,
+                    timeout: Duration::from_secs(1),
+                    ..Default::default()
+                };
+                if health {
+                    let resolved = ResolvedTarget {
+                        target,
+                        device_id: None,
+                        selected_by: None,
+                        username: None,
+                        password: None,
+                    };
+                    let report = execute_health_check(&resolved, &options).await.unwrap();
+                    assert_eq!(report["healthy"], false);
+                    assert_eq!(report["report"]["checks"][0]["error"]["class"], "http");
+                } else {
+                    let error = fetch_live_information(&target, None, None, &options)
+                        .await
+                        .unwrap_err();
+                    assert_eq!(error.retryable, status == 503);
+                }
+                assert_eq!(
+                    requests.load(Ordering::SeqCst),
+                    expected,
+                    "health={health}, HTTP {status}"
+                );
+                server.abort();
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn health_and_enrichment_cancel_timed_out_connections() {
+        for health in [false, true] {
+            let (target, requests, active, server) = hanging_server().await;
+            let options = ExecutionOptions {
+                timeout: Duration::from_millis(100),
+                ..Default::default()
+            };
+            let result = if health {
+                let resolved = ResolvedTarget {
+                    target,
+                    device_id: None,
+                    selected_by: None,
+                    username: None,
+                    password: None,
+                };
+                execute_health_check(&resolved, &options).await.map(|_| ())
+            } else {
+                fetch_live_information(&target, None, None, &options)
+                    .await
+                    .map(|_| ())
+            };
+            assert!(result.is_err());
+            timeout(Duration::from_secs(2), server)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(requests.load(Ordering::SeqCst), 1);
+            assert_eq!(active.load(Ordering::SeqCst), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn successful_empty_discovery_scan_is_not_repeated_for_enrichment_retries() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        let (devices, _, warnings) = scan_selected_discovery_interfaces(
+            vec![(Ipv4Addr::LOCALHOST, "fixture".into())],
+            Duration::from_secs(1),
+            3,
+            move |_, _| {
+                seen.fetch_add(1, Ordering::SeqCst);
+                async { Ok(Vec::new()) }
+            },
+        )
+        .await
+        .unwrap();
+        assert!(devices.is_empty());
+        assert!(warnings.is_empty());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

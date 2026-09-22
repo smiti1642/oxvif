@@ -158,6 +158,10 @@ snapshot。未被索引的 `snapshots/*.json` 只會產生 `ORPHANED_SNAPSHOT_FI
 `--timeout` 是每次網路嘗試的上限。`--retries` 只會以有上限的 backoff
 重試暫時性 transport failure；認證拒絕、無效輸入、確定性的 SOAP fault、parse
 或 schema failure 不會重試。Discovery 只會重試失敗的已選介面，不會重跑已成功的介面。
+Health 僅在所有失敗 check 均為 HTTP 類且觀察到的 transport 失敗全為暫時性時，
+重試整份報告。Discovery enrichment 對每筆記錄使用相同的型別化重試政策；
+成功但沒有結果的 scan 也不重跑。預設重試次數仍為零。
+
 
 `--clock-sync auto`（預設）會在有 credential 時先讀取攝影機時間，只調整 client
 端 WS-Security timestamp offset；`always` 對所有 session 執行，`never` 則停用。

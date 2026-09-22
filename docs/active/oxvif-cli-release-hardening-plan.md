@@ -7,7 +7,7 @@ Source baseline: `80bcf14`. Use this section as the current work entry; older da
 | Category | Disposition and evidence |
 | --- | --- |
 | Confirmed | 0.17 packages, five native targets, schema/credential CI and publication are recorded in [finalization](../done/release-0.17-finalization.md). [describe.rs](../../crates/oxvif-cli/src/describe.rs) already provides semantic argument text, example strings and command-ID checks. [CLI tests](../../crates/oxvif-cli/tests/cli.rs) now close the six-outcome JSON/JSONL matrix in §9.2; this is partial R4 evidence, not proof of every example/error path. |
-| Remaining | R2: actual attempt accounting, service-resolution/retry-reason detail, dedicated health/enrichment contract checks, clock-skew and directory-sync policy. R3: health-detail selection. R4: per-command reachable errors, executable examples and exhaustive descriptor/parser paths beyond the completed six-outcome envelope matrix. R5: multi-vendor matrix, soak/resource budgets, artifact signing, recovery and sanitized support bundle. Public channels belong to [distribution](oxvif-cli-three-platform-distribution-plan.md). |
+| Remaining | R2: actual attempt accounting, service-resolution/retry-reason detail, clock-skew and directory-sync policy. R3: health-detail selection. R4: per-command reachable errors, executable examples and exhaustive descriptor/parser paths beyond the completed six-outcome envelope matrix. R5: multi-vendor matrix, soak/resource budgets, artifact signing, recovery and sanitized support bundle. Public channels belong to [distribution](oxvif-cli-three-platform-distribution-plan.md). |
 | Next step / exit criteria | Select one R2/R3/R4 subgroup; map each unchecked requirement to its current symbol/test before changing code. Close only with exact positive/negative assertions. Commercial and channel claims require named platform/device evidence. The old release/handoff checklist is historical; no new send, publish or install action is requested by this calibration. |
 
 **Status:** active; implementation in progress. Written 2026-09-01 after a
@@ -357,7 +357,23 @@ Required tests:
 - [x] timeout cancellation does not leave work running;
 - [x] fleet retries preserve deterministic device ordering;
 - [x] partial and total fleet failures retain their documented exits;
-- [ ] health and enrichment use the same policy promised by their descriptors.
+- [x] health and enrichment use the same typed transient-transport policy:
+  standing `health_and_enrichment_*` tests cover zero/two retries, HTTP
+  503 versus 401/403/404, recovery after one failure and timeout cancellation.
+  An empty successful discovery scan is not repeated by enrichment retry settings.
+
+2026-09-22 R2 follow-up: Health's initial `connect` failure now retains its
+`CheckError`; previously it silently prevented retry classification. An internal
+per-attempt transport tap preserves the typed HTTP classification without parsing
+server-controlled reason text or extending the public report shape. A health run
+retries only when every failing check is HTTP-related and all observed transport
+failures are retryable; a deterministic transport failure suppresses whole-run
+retry. The same classifier is used by ordinary diagnostics and enrichment.
+This closes the policy-test requirement, not attempt metadata, `-vv`, clock skew
+or registry durability. No live-camera or native-store evidence is added.
+Validation: workspace format, both Clippy modes and both test modes pass
+(1,336 all-feature / 1,220 default tests; seven ignored in each), together with
+strict rustdoc in both modes and local Markdown link/anchor checks.
 
 ### 7.2 Diagnostic observability
 

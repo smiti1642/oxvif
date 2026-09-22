@@ -66,6 +66,12 @@ execution must recheck inputs before reuse.
 
 Near-complete items closed on 2026-09-22:
 
+- **F15/R2 retry policy:** connection errors retain structured classification;
+  health/enrichment typed retry limits, recovery and cancellation are covered by
+  standing tests. Successful discovery scans are not repeated. Observability,
+  clock skew and registry durability remain open.
+
+
 - **F14/G3:** offline clone summary and its standing tests are complete;
   [the integration note](../done/metamorph-clone-in-oxdm.md) is archived in `24bf983`.
   M4/M7 remain open; the new API has not been released.

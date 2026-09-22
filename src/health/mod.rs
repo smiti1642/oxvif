@@ -20,7 +20,8 @@
 //! ```
 //!
 //! [`HealthCheck::run`] **never returns an error.** An unreachable or
-//! unauthenticated device is a failing `connect` check inside the report, not an
+//! unauthenticated device is a failing `connect` check with a structured
+//! [`CheckError`] inside the report, not an
 //! `Err`, so one bad camera cannot derail a batch run over a fleet. Use
 //! [`HealthReport::ok`] for the pass/fail decision and
 //! [`HealthReport::to_json`] for CI.
@@ -251,6 +252,7 @@ impl HealthCheck {
             Err(e) => {
                 // Can't reach / auth the device — report just the failure.
                 let conn = CheckResult::fail("connect", Category::Connectivity, e.to_string())
+                    .with_error(&e)
                     .with_elapsed(conn_start.elapsed());
                 return HealthReport {
                     target: self.device_url,

@@ -125,6 +125,11 @@ version.
 | `--ca-certificate <FILE>` | Add a PEM CA certificate or bundle to platform trust roots. Repeat for multiple bundles. Invalid/empty bundles and private keys are rejected; normal chain and hostname verification remain enabled. |
 | `-v`, `--verbose` | Increase diagnostic verbosity; repeat for additional detail. |
 | `-q`, `--quiet` | Suppress non-essential diagnostics. |
+Health retries the entire report only when every failing check is HTTP-related
+and every observed transport failure is transient. Discovery enrichment uses the
+same typed transport policy per record; a successful scan, including an empty
+one, is not repeated. The default retry count remains zero.
+
 
 Root selectors such as `--device`, `--group`, and `--view` are written before
 the command. An ephemeral `--target` is a command-level option and is written

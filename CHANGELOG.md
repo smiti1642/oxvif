@@ -28,6 +28,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Maintenance
 
+- Fix health retries after an initial connection failure and apply the same
+  typed transient-transport classification as diagnostics and discovery
+  enrichment. Deterministic HTTP failures no longer qualify for whole-run retry.
+  Add recovery, retry-limit, cancellation and successful-scan regression controls.
+
 - Complete the CLI schema regression matrix for single success, argument/device
   errors and fleet success/partial/total failure in both JSON and JSONL, checking
   process exits, payloads and schema rejection controls.

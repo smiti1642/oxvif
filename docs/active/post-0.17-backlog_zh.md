@@ -56,6 +56,11 @@ F13 的新 GitHub 查核日期與連結記於已結案計畫；開工前須重�
 
 2026-09-22 完成的接近結案項目：
 
+- **F15／R2 重試政策：**修正 Health 初始連線錯誤遺失結構化分類，補齊
+  Health／enrichment 重試上限、恢復與取消測試；成功 scan 不重跑。
+  Observability、clock-skew 與 registry durability 仍開放。
+
+
 - **F14／G3：**離線 clone 摘要與回歸測試完成；[整合計畫](../done/metamorph-clone-in-oxdm.md)
   已於 `24bf983` 歸檔。M4／M7 仍開放，新 API 尚未發布。
 - **F15／R4 §9.2：**[六種結果的 envelope 驗證](oxvif-cli-release-hardening-plan.md#envelope-acceptance-closed-2026-09-22)
