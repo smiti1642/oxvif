@@ -4,7 +4,7 @@
 //! `DeviceState` (`event_seq` / `event_filter`) — not in process-global
 //! statics — so two mock instances in two tests never share event state.
 //! PullMessages is deterministic and returns immediately (no pacing sleep);
-//! each call emits the next synthesized event.
+//! each call selects one queued or synthesized event using a filter snapshot.
 
 use crate::mock::helpers::soap;
 use crate::mock::state::SharedState;
@@ -130,9 +130,9 @@ pub fn resp_create_pull_point_subscription(base: &str, state: &SharedState, body
     )
 }
 
-/// Synthesize the next event. Deterministic and immediate: each call bumps the
-/// per-instance counter and emits one event (subject to the active topic
-/// filter), so a client polling in a loop sees a steadily growing log.
+/// Select the next event immediately. A queued IO event consumes one queue slot;
+/// otherwise the per-instance counter advances to synthesize an event. The
+/// captured topic filter applies to both paths and can yield an empty response.
 ///
 /// Out-of-band IO events queued by the `/mock/digital-input/...` simulator
 /// endpoints win first — they drain the queue before the synthetic motion /
@@ -140,22 +140,24 @@ pub fn resp_create_pull_point_subscription(base: &str, state: &SharedState, body
 /// and assert the exact event content without racing against the
 /// synthetic stream.
 pub fn resp_pull_messages(state: &SharedState) -> String {
-    // Drain a pending IO event if any are queued.
-    let pending = state.modify_returning(|s| {
-        if s.pending_io_events.is_empty() {
+    // Select and snapshot under one lock; rendering and callbacks run outside it.
+    let (pending, seq, filter) = state.modify_returning(|s| {
+        let pending = if s.pending_io_events.is_empty() {
+            s.event_seq = s.event_seq.wrapping_add(1);
             None
         } else {
             Some(s.pending_io_events.remove(0))
-        }
+        };
+        (pending, s.event_seq, s.event_filter.clone())
     });
     if let Some(ev) = pending {
+        let topic = format!("tns1:Device/Trigger/{}", ev.kind);
+        if is_filtered(&filter, &topic) {
+            return empty_pull_response();
+        }
         return io_event_response(&ev);
     }
 
-    let seq = state.modify_returning(|s| {
-        s.event_seq += 1;
-        s.event_seq
-    });
     let now = now_rfc3339();
 
     // Alternate motion / rule-engine events so the log shows variety.
@@ -181,26 +183,9 @@ pub fn resp_pull_messages(state: &SharedState) -> String {
         )
     };
 
-    // Apply the subscription's topic filter, if any. A filtered-out event still
-    // consumed its slot (the underlying event "fired") but returns zero
-    // messages — exactly what a real camera does with a non-matching filter.
-    let filtered_out = state
-        .read()
-        .event_filter
-        .as_ref()
-        .map(|allowed| !allowed.iter().any(|a| a == topic))
-        .unwrap_or(false);
-
-    if filtered_out {
-        return soap(
-            r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl""#,
-            &format!(
-                r#"<tev:PullMessagesResponse>
-              <tev:CurrentTime>{now}</tev:CurrentTime>
-              <tev:TerminationTime>{now}</tev:TerminationTime>
-            </tev:PullMessagesResponse>"#
-            ),
-        );
+    // A filtered event still consumes one slot in this immediate mock model.
+    if is_filtered(&filter, topic) {
+        return empty_pull_response();
     }
 
     soap(
@@ -224,6 +209,22 @@ pub fn resp_pull_messages(state: &SharedState) -> String {
             </wsnt:Message>
           </wsnt:NotificationMessage>
         </tev:PullMessagesResponse>"#
+        ),
+    )
+}
+
+fn is_filtered(filter: &Option<Vec<String>>, topic: &str) -> bool {
+    filter
+        .as_ref()
+        .is_some_and(|allowed| !allowed.iter().any(|a| a == topic))
+}
+
+fn empty_pull_response() -> String {
+    let now = now_rfc3339();
+    soap(
+        r#"xmlns:tev="http://www.onvif.org/ver10/events/wsdl""#,
+        &format!(
+            "<tev:PullMessagesResponse><tev:CurrentTime>{now}</tev:CurrentTime><tev:TerminationTime>{now}</tev:TerminationTime></tev:PullMessagesResponse>"
         ),
     )
 }
@@ -263,7 +264,8 @@ fn io_event_response(ev: &crate::mock::state::PendingIoEvent) -> String {
             </wsnt:Message>
           </wsnt:NotificationMessage>
         </tev:PullMessagesResponse>"#,
-            token = ev.token,
+            token = crate::types::xml_escape(&ev.token),
+            topic = crate::types::xml_escape(&topic),
         ),
     )
 }
@@ -330,6 +332,44 @@ pub fn resp_event_service_capabilities() -> String {
 mod tests {
     use super::*;
     use crate::mock::state::MockState;
+
+    #[test]
+    fn event_pull_keeps_filter_snapshot_across_reentrant_hook_and_counter_wrap() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        let mut state = MockState::new();
+        let changed = Arc::new(AtomicBool::new(false));
+        let observed = changed.clone();
+        let target = Arc::new(std::sync::OnceLock::<std::sync::Weak<MockState>>::new());
+        let target_in_hook = target.clone();
+        state.set_on_change(Arc::new(move |_| {
+            if !observed.swap(true, Ordering::SeqCst) {
+                target_in_hook
+                    .get()
+                    .unwrap()
+                    .upgrade()
+                    .unwrap()
+                    .modify(|s| s.event_filter = Some(vec![]));
+            }
+        }));
+        let state = Arc::new(state);
+        target.set(Arc::downgrade(&state)).unwrap();
+        let first = resp_pull_messages(&state);
+        assert!(changed.load(Ordering::SeqCst));
+        assert!(
+            first.contains("NotificationMessage"),
+            "filter belongs to the selected event snapshot"
+        );
+        assert!(!resp_pull_messages(&state).contains("NotificationMessage"));
+        state.modify(|s| {
+            s.event_seq = u64::MAX;
+            s.event_filter = None;
+        });
+        assert!(resp_pull_messages(&state).contains("NotificationMessage"));
+        assert_eq!(state.read().event_seq, 0);
+    }
 
     #[test]
     fn epoch_to_civil_known_dates() {

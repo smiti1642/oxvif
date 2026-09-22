@@ -166,15 +166,15 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W11／M2–M4／PARTIAL | W01、W03–W06 | PTZ1 已涵蓋 19 個既有 profile／head 使用端的 scoped ProfileToken 身分；其他 selector、座標 attribute／space、configuration 子樹、preset／tour 與 auxiliary command 仍待完成 | 兩種 transport 與兩個不同 head；完整欄位效果／fault policy／併發仍未驗收，不虛構移動／時間保證 |
 | W12／M2–M4／TODO | W01、W03–W06 | `services/imaging.rs`：逐 source 的 settings／options／status／move／stop | 固定／可移動鏡頭、巢狀設定及型別範圍；無全域同名欄位 fallback 或靜默部分套用 |
 | W13／M2–M4／TODO | W01、W03–W06、W08 設計 | `services/device.rs`、DeviceIO dispatch、device state | 重複 users／network entries／scopes、storage 子樹、relay token；失敗不改 state／auth／events／hooks；維護效果依 D2 分類 |
-| W14／M2–M4／TODO | W01、W03–W06 | `services/recording.rs`：分開的 Recording／Search／Replay dispatch 與狀態生命週期 | Recording／track／job 辨識及連鎖處理；search token／終止／timeout、replay 選擇；有限模擬不代表實際錄影或媒體傳送 |
-| W15／M2–M4／TODO | W01、W03–W06 | `services/events.rs`、IO event queue、subscription state | 核對 filter namespace／dialect、lifetime／renew／unsubscribe／pull 限制、queue 隔離／順序／終止；既有 Events sync 不是 PR #16 Media sync |
+| W14／M2–M4／PARTIAL | W01、W03–W06 | `services/recording.rs`：分開的 Recording／Search／Replay dispatch 與狀態生命週期 | Recording／track／job 辨識及連鎖處理；search token／終止／timeout、replay 選擇；有限模擬不代表實際錄影或媒體傳送 |
+| W15／M2–M4／PARTIAL | W01、W03–W06 | `services/events.rs`、IO event queue、subscription state | 核對 filter namespace／dialect、lifetime／renew／unsubscribe／pull 限制、queue 隔離／順序／終止；既有 Events sync 不是 PR #16 Media sync |
 | W16／M4／PARTIAL | W01 分類、W05／W06 | [A2／A3 acknowledgment 政策](../done/mock-fidelity-ack-policy-preflight_zh.md)：11 條已分類 reset／auxiliary／maintenance／subscription／結束搜尋 route，共用 transport／server 政策 | 精確操作 opt-in、預設拒絕、不變更 state／hook／effect／replay retirement；此 stub 子群已遷移，但完整操作語意、部分建模效果及 capability 核對仍未完成 |
 | W17／M4／PARTIAL | W10–W16 分類 | 全部 capability renderer、`discovery_responder.rs`、`fleet.rs`、`snapshot.rs`、`font.rs`、公開 mock 文件 | Services／XAddrs／feature／limit 與建模行為一致；核對 discovery／snapshot 側路徑；靜態 URI／圖片不證明 codec／串流輸出；PA1 已核對 profile 上限與五種 binding capability，其餘宣告待查 |
 | W18／M4／PARTIAL | W10–W16 候選行為 | K13 無碰撞配置、K16 原子 binding plan、條件式通知；K08 hook 在鎖外接收 commit 快照，profile／catalogue 讀取共用一次快照 | 選定配置、binding、reentrant 及三路徑 profile snapshot 控制；更廣泛併發寫入、instance、rollback、其他 queue／read snapshot 及 replay 待完成；公開 signature 不變，callback 排序由使用者管理 |
 | W19／M3、M6／PARTIAL | W03／W09 設計 | 內建 profile 建立／刪除、Media1 video binding 及 Media2 generic binding 使用私有 committed effect；跨服務讀取、HTTP、instance 及 chain 控制 | 其餘 configuration 寫入與 mutation、單獨 replay 政策、完整讀取依賴、完整正規化／key 格式重設計及併發／callback 可見性仍待完成（有限 K27 儲存修正記於下表）；不新增錄製設備機密；PA1 將已提交 profile effect 延伸至引用計數與 PTZ compatible read，VS1 加入成功 source 提交後的 source／profile／options 失效，保留實體來源 recording；VE1 加入 source-capacity 與 profile-encoder-options 失效；AM1 加入 audio／metadata committed effects。 |
 | W20／M5／PARTIAL | W04／W05 corpus | `tests/mock_schema_shape.rs` 已完成 scoped resolution、Envelope／Fault 納入及缺少資源即失敗；見 schema 前置檢查 | 七個一般控制與 Fault wrapper 擾動已驗證敏感度；QName 值、wildcard／未解析計數及 request corpus 仍待處理；pin 未修改 |
-| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及選定 46 操作 Media corpus 匯出與明確 payload anchor | B16 後本機 160 份 instance 通過，包含 21 個拒絕（七個 profile、三個 source、兩個 rate、兩個 encoder、三個 audio／metadata、四個 synchronization）。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
-| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source／rate／encoder／audio／metadata／synchronization instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 有 46 操作的 160 份 instance；託管證據依 revision 記於發布切點。全程式 instance 覆蓋仍未完成；最終 0.17 CI／發布證據已記於收尾紀錄 |
+| W21／M5／PARTIAL | W20、D3 | 固定來源的離線工具、20 項無官方 schema 控制、七項獨立後端測試，以及選定 51 操作 corpus 匯出與明確 payload anchor | B16 後本機 160 份 instance 通過，包含 21 個拒絕（七個 profile、三個 source、兩個 rate、兩個 encoder、三個 audio／metadata、四個 synchronization）。其餘操作及更廣的輸入／語意覆蓋尚未驗收 |
+| W22／M5／PARTIAL | 清冊需 W00；schema job 需 W21 | Windows／Linux 清冊、Xerces 選型、官方來源編譯及選定 profile／source／rate／encoder／audio／metadata／synchronization instance 驗證作為 package 前提 | 來源與 corpus 均置於外部，不上傳 artifact。選定 corpus 現有 51 操作的 178 份 instance；託管證據依 revision 記於發布切點。全程式 instance 覆蓋仍未完成；最終 0.17 CI／發布證據已記於收尾紀錄 |
 | W23／M1、M6／TODO | 各遷移批次 | 所有具名回歸 suite、client fixture、一般 parser tests | 檢查空殼正負測試及 namespace-stripped／fragment probe；擾動須在目標 assertion 失敗；以 `--no-fail-fast` 跑全部 target；有限 fuzz／property 測試記錄 seed／限制 |
 | W24／M6／PARTIAL | 下一個有變更的整合候選 | 0.17 子集已有 feature／MSRV／原生平台／下游 XML 控制，見[最終紀錄](../done/release-0.17-finalization_zh.md) | 僅重用輸入完全相同的證據；後續服務批次仍須受影響的平台／feature 矩陣，並非 0.17 尚未發布 |
 | W25／M6／PARTIAL | 全案結案仍需 W00–W24 | 0.17 雙語 migration／support／文件及發布已完成，廣泛計畫持續進行 | 下一批同步公開宣告、範例、changelog 與 rustdoc；全案結案等待剩餘契約，不是重發 0.17 |
@@ -316,3 +316,5 @@ Fault 遷移及安全語意仍未完成。[Schema 前置檢查](mock-fidelity-sc
 發布、主分支合併及安裝依適用授權，並保留更新使用者系統上的 Release 前須先提醒的要求。
 
 RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。
+
+EP1（2026-09-22）：[event pull 一致性](../done/mock-fidelity-event-pull_zh.md) 對 queued IO 套用既有 lexical filter，並原子取得事件／filter。併發、reentrant 控制及四組 client capture 補充 RS1；每份 subscription 的生命週期與完整 topic 語意仍未完成。

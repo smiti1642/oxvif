@@ -327,3 +327,5 @@ name 成為 markup、後筆 binding 失敗卻保留前筆寫入。這些 probe �
 opt-in 僅收件確認；這不代表合併貢獻者 PR 或整套計畫驗收。Release 及已安裝 binary 未變動。
 
 RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。
+
+EP1（2026-09-22）：[event pull 一致性](../done/mock-fidelity-event-pull_zh.md) 對 queued IO 套用既有 lexical filter，並原子取得事件／filter。併發、reentrant 控制及四組 client capture 補充 RS1；每份 subscription 的生命週期與完整 topic 語意仍未完成。

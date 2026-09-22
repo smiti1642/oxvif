@@ -31,6 +31,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Apply mock event filters to queued IO notifications and snapshot event selection/filter atomically; escape input tokens and avoid event-counter overflow.
+
 - Scope OSD, PTZ node/configuration and recording-job state selectors to the requested operation; reject ambiguous selectors and preserve escaped identities. Correct OSD text/image XML and escape stored OSD/PTZ/recording strings.
 
 ### Security

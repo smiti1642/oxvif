@@ -131,3 +131,5 @@ W00–W06 基礎及 W24／W25 發布關卡仍屬本版驗收，不整批延後�
 F15／R3，2026-09-22：`health check --details` 與 `health --details` 已能在人類輸出顯示所有檢查、狀態、原因／細節與耗時。JSON／JSONL 保持完整資料，`-v` 維持診斷詳細度用途。Renderer 與實際執行檔驗收通過，兩種 workspace Clippy／test 亦通過（全功能 1,343、預設 1,227，各七項 ignored）。其他 R3 終端驗收仍未完成。
 
 RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。
+
+EP1（2026-09-22）：[event pull 一致性](../done/mock-fidelity-event-pull_zh.md) 對 queued IO 套用既有 lexical filter，並原子取得事件／filter。併發、reentrant 控制及四組 client capture 補充 RS1；每份 subscription 的生命週期與完整 topic 語意仍未完成。

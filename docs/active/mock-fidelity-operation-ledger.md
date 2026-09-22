@@ -281,7 +281,7 @@ not complete operation acceptance; all other fields and full Fault policy remain
 | `events.GetServiceCapabilitiesRequest` | `events::resp_event_service_capabilities` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.GetEventPropertiesRequest` | `events::resp_event_properties` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.CreatePullPointSubscriptionRequest` | `events::resp_create_pull_point_subscription` | `base, state, body` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.PullMessagesRequest` | `events::resp_pull_messages` | `state` | W15 | TODO | TODO | TODO | TODO | TODO | - |
+| `events.PullMessagesRequest` | `events::resp_pull_messages` | `state` | W15 | PARTIAL | TODO | TODO | PARTIAL | PARTIAL | EP1 |
 | `events.SubscribeRequest` | `events::resp_subscribe` | `base` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 | `events.RenewRequest` | `events::resp_renew` | `` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 | `events.UnsubscribeRequest` | `resp_empty` | `"wsnt", "UnsubscribeResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
@@ -360,3 +360,5 @@ Do not increase a count, mark a row DONE or remove a row solely to silence a
 failure. Preserve the reason and replacement ID for removed operations.
 
 RS1: [scoped read selectors](../done/mock-fidelity-read-selectors.md).
+
+EP1: [event pull consistency](../done/mock-fidelity-event-pull.md).

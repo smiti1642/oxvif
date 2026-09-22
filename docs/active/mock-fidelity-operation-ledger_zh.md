@@ -271,7 +271,7 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 | `events.GetServiceCapabilitiesRequest` | `events::resp_event_service_capabilities` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.GetEventPropertiesRequest` | `events::resp_event_properties` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.CreatePullPointSubscriptionRequest` | `events::resp_create_pull_point_subscription` | `base, state, body` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.PullMessagesRequest` | `events::resp_pull_messages` | `state` | W15 | TODO | TODO | TODO | TODO | TODO | - |
+| `events.PullMessagesRequest` | `events::resp_pull_messages` | `state` | W15 | PARTIAL | TODO | TODO | PARTIAL | PARTIAL | EP1 |
 | `events.SubscribeRequest` | `events::resp_subscribe` | `base` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 | `events.RenewRequest` | `events::resp_renew` | `` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
 | `events.UnsubscribeRequest` | `resp_empty` | `"wsnt", "UnsubscribeResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
@@ -346,3 +346,5 @@ W22 本機證據（2026-09-10）：PowerShell 7 執行與 CI 相同的命令，1
 移除操作須保留理由及替代 ID。
 
 RS1: [scoped read selectors](../done/mock-fidelity-read-selectors_zh.md).
+
+EP1: [event pull consistency](../done/mock-fidelity-event-pull_zh.md).

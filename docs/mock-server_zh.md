@@ -858,7 +858,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 | End-to-end flow | `tests/mock_workflow.rs` |
 | XML namespace、name、cardinality 與 sequence order 符合 ONVIF schema | `tests/mock_schema_shape.rs`；限制如下 |
 
-`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 已設定使用固定版本的 Xerces 與外部 schema，驗證選定的 160 份 profile／source／rate／encoder／audio／metadata／synchronization request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
+`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 已設定使用固定版本的 Xerces 與外部 schema，驗證選定的 178 份 profile／source／rate／encoder／audio／metadata／synchronization／read-selector／event-pull request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
 
 目前 49 組 round-trip 全數為 working，無 static 或 known-broken；35 組 token row 中 30 組可區分、5 組明確標記為 blind。測試表的每個 row 都宣告意圖，避免已知限制演變成未追蹤的永久盲點。
 
@@ -962,3 +962,5 @@ fixture 資料，不代表服務可用或效果已完成。Capability 回應仍�
 第 4、5 步不可省略；`Broken` 是可接受且可追蹤的狀態，缺少 row 則不可接受。路由會由 `mock_handles_every_action_the_client_can_send` 自動檢查；payload 不會自動驗證，因此新增 handler 時仍必須提供符合規範且有針對性的 response assertion。
 
 候選版本的 `GetOSD`、PTZ `GetNode`／`GetConfiguration` 及 Recording `GetRecordingJobState` 只採用操作內直接且 namespace 正確的 selector。重複或巢狀 scalar 拒絕，Header／extension 誘餌不能提供身分；缺少／未知 token 的原操作 fault 保留。OSD／PTZ 輸出 escape 儲存字串，並修正 OSD 文字順序、圖片容器與 recording token escape。這不代表 OSD 寫入、PTZ 運動或錄影生命週期完成。
+
+PullMessages 現在以單次 state transaction 選取 queued／synthetic event 與 lexical filter 快照。被過濾的 queued event 消耗一個 slot 並回空訊息；每次 pull 觸發 hook 一次。IO token 使用 XML escape。立即回應的 per-instance 模型仍沒有獨立 subscription 生命週期或完整 topic matching。

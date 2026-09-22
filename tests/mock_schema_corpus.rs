@@ -830,6 +830,13 @@ fn export_external(
             .action
             .rsplit_once('/')
             .ok_or("invalid captured action")?;
+        let (namespace, operation) = if exchange.action
+            == "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest"
+        {
+            ("http://www.onvif.org/ver10/events/wsdl", "PullMessages")
+        } else {
+            (namespace, operation)
+        };
         for (direction, bytes) in [
             ("request", &exchange.request),
             ("response", &exchange.response),
@@ -1004,6 +1011,7 @@ async fn export_reviewed_batches_for_independent_validation() {
     exchanges.extend(audio_metadata_exchanges().await);
     exchanges.extend(media_sync_exchanges().await);
     exchanges.extend(read_selector_exchanges().await);
+    exchanges.extend(event_pull_exchanges().await);
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
     eprintln!(
@@ -1301,5 +1309,58 @@ async fn captures_scoped_read_selectors() {
             .len(),
         4
     );
+    assert!(exchanges.iter().all(|e| !e.expected_fault));
+}
+
+async fn event_pull_exchanges() -> Vec<Exchange> {
+    let capture = Capture {
+        mock: MockTransport::new(),
+        exchanges: Arc::default(),
+    };
+    let client = OnvifClient::new(TARGET).with_transport(Arc::new(capture.clone()));
+    for include in [true, false] {
+        capture.mock.device().modify(|s| {
+            s.event_filter = Some(if include {
+                vec!["tns1:Device/Trigger/DigitalInput".into()]
+            } else {
+                vec![]
+            });
+            s.pending_io_events
+                .push(oxvif::mock::state::PendingIoEvent {
+                    kind: "DigitalInput",
+                    token: "Corpus & input".into(),
+                    logical_state: "active".into(),
+                });
+        });
+        let messages = client.pull_messages(TARGET, "PT0S", 1).await.unwrap();
+        assert_eq!(messages.len(), usize::from(include));
+        if include {
+            assert_eq!(
+                messages[0].source.get("InputToken").map(String::as_str),
+                Some("Corpus & input")
+            );
+        }
+    }
+    capture.mock.device().modify(|s| {
+        s.event_filter = Some(vec!["tns1:VideoSource/MotionAlarm".into()]);
+    });
+    assert_eq!(
+        client.pull_messages(TARGET, "PT0S", 1).await.unwrap().len(),
+        1
+    );
+    assert!(
+        client
+            .pull_messages(TARGET, "PT0S", 1)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    std::mem::take(&mut *capture.exchanges.lock().unwrap())
+}
+
+#[tokio::test]
+async fn captures_event_pull_filter_paths() {
+    let exchanges = event_pull_exchanges().await;
+    assert_eq!(exchanges.len(), 4);
     assert!(exchanges.iter().all(|e| !e.expected_fault));
 }

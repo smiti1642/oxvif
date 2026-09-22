@@ -1365,7 +1365,7 @@ from that schema may enter this repository. Explicitly selecting the test now
 fails if resources are missing; the external SOAP 1.2 envelope schema is also
 required. Node-scoped namespace resolution and separate Envelope/payload checks
 include Fault structure, but do not validate all XSD values or error semantics.
-Separate Windows/Linux CI is configured to validate the selected 160 profile/source/rate/encoder/audio/metadata/synchronization request/response
+Separate Windows/Linux CI is configured to validate the selected 178 profile/source/rate/encoder/audio/metadata/synchronization/read-selector/event-pull request/response
 instances with independently pinned Xerces and external schemas. That limited
 corpus does not cover all operations or authentication; the inventory job alone
 does not validate XML. See the
@@ -1589,3 +1589,5 @@ arm fails `mock_handles_every_action_the_client_can_send`. **Payload is not** â€
 give the handler a plausible response, because nothing checks that for you.
 
 The candidate scopes `GetOSD`, PTZ `GetNode`/`GetConfiguration`, and Recording `GetRecordingJobState` selectors to their direct qualified operation fields. Duplicate or nested scalar selectors refuse; Header/extension decoys cannot supply identity. Existing missing/unknown operation faults remain. OSD and PTZ renderers escape stored strings; OSD text ordering/image nesting and recording-token escaping are corrected. This does not complete OSD writes, PTZ motion or recording lifetimes.
+
+PullMessages now selects the queued or synthetic event and its lexical filter snapshot in one state transaction. Excluded queued events consume one slot and return no message; hooks fire once per pull. IO tokens are XML-escaped. The immediate per-instance model still has no independent subscription lifetimes or full topic matching.

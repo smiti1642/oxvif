@@ -647,3 +647,5 @@ No new external schema acceptance is claimed for this state-only slice. Prior
 selector commit `c6af85b` passed hosted CI run 34480290494.
 
 RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.
+
+EP1 (2026-09-22): [event pull consistency](../done/mock-fidelity-event-pull.md) applies the active lexical filter to queued IO and snapshots selection/filter atomically. Concurrency/reentrant controls and four client captures supplement RS1; per-subscription lifecycle and full topic semantics remain open.
