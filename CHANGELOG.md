@@ -22,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add an offline `snapshot_probe` example that reports bounded signature and
+  trailing CR/LF evidence without changing image acceptance or modifying the input.
+
 - Add `health check --details` and shortcut support to show all checks and
   timings in human output, including fleet items; structured reports stay complete.
 

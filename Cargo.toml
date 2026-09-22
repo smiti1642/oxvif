@@ -142,6 +142,10 @@ required-features = ["mock-server"]
 name = "healthcheck"
 required-features = ["health"]
 
+[[example]]
+name = "snapshot_probe"
+required-features = ["health"]
+
 # Records every SOAP exchange against a real camera into
 # tests/fixtures/<vendor>-<model>/ so the rest of the test suite can replay
 # without a device.
