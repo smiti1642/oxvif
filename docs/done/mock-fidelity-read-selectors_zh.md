@@ -2,7 +2,7 @@
 
 [English](mock-fidelity-read-selectors.md) | [繁體中文](mock-fidelity-read-selectors_zh.md)
 
-狀態：有限 RS1 批次 DONE。來源基準 `4a9d0a5`，2026-09-22。這是 W04 共用解析
+狀態：有限 RS1 批次已完成（DONE）。來源基準 `4a9d0a5`，2026-09-22。這是 W04 共用解析
 遷移，對 W10／W11／W14 提供有限的 selector 證據。
 
 | 章節 | 用途 |

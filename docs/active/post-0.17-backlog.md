@@ -2,7 +2,7 @@
 
 [English](post-0.17-backlog.md) | [繁體中文](post-0.17-backlog_zh.md)
 
-Status: active follow-up after 0.17.0 publication; reconciled 2026-09-22.
+Status: PARTIAL — active follow-up after 0.17.0 publication; reconciled 2026-09-23.
 No implementation or release date is promised. The completed
 [release cut](../done/release-0.17-cut.md#blocking-acceptance) and
 [publication evidence](../done/release-0.17-finalization.md) are archived.
@@ -11,16 +11,17 @@ Their closure does not complete the broader work below or turn unperformed check
 | Section | Purpose |
 | --- | --- |
 | [Calibrated work ownership](#calibrated-work-ownership) | Current disposition, owner and exit criteria |
+| [Closure review](#closure-review-2026-09-23) | Completed batches and plans that still remain active |
 | [Deferred batches](#deferred-batches) | Remaining scope and original IDs |
 | [Re-entry rule](#re-entry-rule) | When a finding becomes a current blocker |
 | [Preserved tracking](#preserved-tracking) | Do not lose technical work cards |
 
 ## Calibrated work ownership
 
-Calibration date: 2026-09-22; source baseline `80bcf14`. This is a work inventory,
+Calibration date: 2026-09-23; reviewed through `2d430d8`. This is a work inventory,
 not a commitment to put every item into 0.18. All 16 previously active document
-families were checked; dependency integration/grouping can now be archived, leaving
-15 active families at calibration; G3 closure below now leaves 14. Several are registers or preflights for the same Mock programme.
+families were checked; dependency integration/grouping was archived, leaving
+15 active families at calibration; G3 closure below leaves 14. Several are registers or preflights for the same Mock programme.
 
 Use four dispositions: **implementation** (confirmed missing scope),
 **evidence needed** (implementation exists but the named acceptance is not recorded),
@@ -32,20 +33,20 @@ those services have no existing handlers. A route count is not a bug count.
 | ID | Current disposition / single owner | Next work and completion condition |
 | --- | --- | --- |
 | F01 | Implementation: W10, [execution checklist](mock-fidelity-execution-checklist.md); profile preflight is supporting evidence | Select remaining OSD/URI/source-mode/binding operations; complete field/Fault/state/replay cards and both-transport/independent-instance checks. Do not redo PA1/VS1/VE1/AM1. |
-| F02 | Implementation: W11/W12, same checklist | Finish non-profile PTZ selectors/spaces/effects and per-source Imaging/focus contracts. Verify two distinct heads/sources, limits and refusal without mutation; no physical motion guarantee. |
+| F02 | Implementation: W11/W12, same checklist | RS1 GetNode/GetConfiguration selectors are DONE. Finish remaining PTZ spaces/effects and per-source Imaging/focus contracts. Verify two distinct heads/sources, limits and refusal without mutation; no physical motion guarantee. |
 | F03 | Implementation: W13/W14, same checklist | Audit Device/DeviceIO and Recording/Search/Replay state/lifetimes in bounded service groups; include cascades, timeout/termination and state-after-error. Existing handlers are the baseline, not absent functionality. |
 | F04 | Implementation: W15, same checklist | Model per-subscription identity/filter/queue and renew/expiry/unsubscribe; test isolation and controlled lifetime. Media synchronization receipts do not satisfy this. |
 | F05 | Implementation: W07–W09; [pipeline](mock-fidelity-pipeline-preflight.md) | Notification connection/deadline/framing limits are delivered below. Remaining work is broader mock HTTP binding, freshness/replay, roles and fault injection; do not reimplement delivered scoped auth. |
 | F06 | Implementation: W16–W19; pipeline owns dependency detail | Choose remaining capability/mutation/read pairs; test atomic commits, refusal preservation and replay visibility. K27 storage retention is DONE; future key-format redesign is a distinct decision. |
-| F07 | Implementation/evidence: W20–W23; [schema preflight](mock-fidelity-schema-preflight.md) | Expand beyond selected 160 instances/46 operations; preserve explicit anchors, pinned external resources, negative controls and bounded fuzz/property seeds. The 0.17 selected CI gate already passed. |
+| F07 | Implementation/evidence: W20–W23; [schema preflight](mock-fidelity-schema-preflight.md) | RS1/EP1 expanded the selected corpus to 178 instances/51 operations, independently validated locally. Expand remaining coverage while preserving explicit anchors, pinned external resources, negative controls and bounded fuzz/property seeds. The 0.17 selected CI gate is separate historical evidence. |
 | F08 | Decision/deferred: [CLI roadmap](oxvif-cli-plan.md), [navigation](cli-vim-navigation-plan.md) owns M6 | Separate decoder/playback, batch export, controlled writes and crate extraction. Select a bounded deliverable and its interface/permission/recovery tests before implementation. None is automatically a 0.18 blocker. |
-| F09 | Evidence/operations/deferred submission: [distribution](oxvif-cli-three-platform-distribution-plan.md) | Inventory actual APT/tap URLs, signing/recovery owners and current metadata; then verify isolated install/upgrade/downgrade/removal. 0.17 artifacts/staging are DONE; official admission needs its own evidence. |
+| F09 | Evidence/operations/deferred submission: [distribution](oxvif-cli-three-platform-distribution-plan.md) | Read-only channel inventory is DONE and identified missing public ownership/URL/key inputs. Obtain those inputs, then verify isolated install/upgrade/downgrade/removal. 0.17 artifacts/staging are DONE; official admission needs its own evidence. |
 | F10 | Evidence needed: snapshot investigation, [repair record](../done/snapshot-auth-repair.md) | Obtain a sanitized reproducible non-image/JPEG response; test bounded format handling without weakening destination/auth/TLS/size/no-clobber policies. Trailing CR/LF is a known synthetic difference, not a proven Hanwha root cause. |
 | F11 | Evidence needed: [Fleet](mock-fleet-basic-plan.md); broader discovery features are deferred | Record authorized OS/interface/VMS four-device identity, endpoint, isolation, shutdown/restart checks. Full scopes/Hello/Bye/Resolve, mixed personas and sustained load require separate implementation/acceptance. |
 | F12 | Evidence needed: navigation plan | Record native terminal and human IME composition/cancellation/restoration; Windows resize evidence exists. CI and key injection do not replace the missing platform/input-method checks. |
-| F13 | Maintenance: [review record](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22) | Six reviewed updates plus the fresh rustls advisory fix are integrated locally and verified; publication is separate. Keyring 4.2 stays deferred pending cross-version native-store identity and recovery tests. Group reuse/no-duplicate verification is DONE. |
+| F13 | Maintenance: [review record](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22) | Reviewed dependency updates and the rustls advisory fix are integrated and verified. Windows keyring 3.6.3 ↔ 4.2.0 native compatibility probe is DONE; other OS and locked/denied/unavailable/recovery cases remain. Production stays on 3.6.3; publication is separate. Group reuse/no-duplicate verification is DONE. |
 | F14 | Decision/implementation: [Metamorph](metamorph.md), [closed clone note](../done/metamorph-clone-in-oxdm.md) records G3 | G1/G3 are DONE and G2 is SUPERSEDED. G3 adds offline summary counts and standing regressions (unreleased). Remaining work is M4 persona/control transitions or M7 reference-value comparisons and their tests. |
-| F15 | Implementation/evidence: [CLI hardening](oxvif-cli-release-hardening-plan.md) | Select R2 observability/retry, R3 health details or R4 descriptor-contract subgroup with exact assertions. R5 multi-vendor/soak/signing/support and recovery stay bounded separately; first package/publication is DONE. |
+| F15 | Implementation/evidence: [CLI hardening](oxvif-cli-release-hardening-plan.md) | R2 typed retry policy, R3 health details and R4 six-outcome envelope matrix are DONE. Remaining work includes observability/clock-skew/durability, native-terminal acceptance and descriptor reachability/executable examples. R5 multi-vendor/soak/signing/support and recovery remain open; first package/publication is DONE. |
 
 The Mock main plan owns policy; the execution checklist owns W statuses; operation
 ledger/source audit are maintained references; profile/pipeline/schema preflights
@@ -67,6 +68,22 @@ F09 read-only channel inventory is complete: the proposed tap returns 404 with
 current credentials; the repository contains temporary APT staging, not a named
 production URL/key. Public ownership, signing/recovery policy and native lifecycle
 acceptance remain open in [distribution D](oxvif-cli-three-platform-distribution-plan.md#read-only-channel-inventory-2026-09-22).
+
+## Closure review (2026-09-23)
+
+The selected local work from the previous pass is **DONE**, with commits and
+bounded verification in [the acceptance register](remaining-plan-acceptance.md).
+That register remains active because it also owns outstanding acceptance inputs;
+it is supporting material, not a fifteenth plan family.
+
+The completed dependency-maintenance plan, G3 clone integration, RS1 read-selector
+batch and EP1 event-pull batch are already in `docs/done/` with explicit DONE
+status. No additional active plan meets its whole-plan exit criteria in this
+review, so no partially completed plan is moved or marked wholly complete.
+Fleet still needs LAN/VMS evidence; navigation needs native terminal/IME evidence;
+Mock hardening, CLI runtime/descriptors, distribution and Metamorph M4/M7 retain
+the implementation, decision or acceptance work listed above. Completed slices
+must not be scheduled again merely because their parent remains active.
 
 ## Deferred batches
 

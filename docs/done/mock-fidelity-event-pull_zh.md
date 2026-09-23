@@ -2,7 +2,7 @@
 
 [English](mock-fidelity-event-pull.md) | [繁體中文](mock-fidelity-event-pull_zh.md)
 
-狀態：有限 EP1 一致性批次 DONE。基準 `cb25276`，2026-09-22。W15 與 W16 一致性。
+狀態：有限 EP1 一致性批次已完成（DONE）。基準 `cb25276`，2026-09-22。W15 與 W16 一致性。
 
 | 章節 | 用途 |
 | --- | --- |

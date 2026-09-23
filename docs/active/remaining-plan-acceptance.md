@@ -7,6 +7,10 @@ Scheduling and authoritative status remain in [the backlog](post-0.17-backlog.md
 The local repository work is committed directly to `master`; no PR, release or
 external publication is part of this work.
 
+Status reviewed 2026-09-23: the selected local delivery pass through `2d430d8`
+is **DONE**. This register remains **ACTIVE** for the outstanding inputs below;
+the parent plans are not all complete. See the [closure review](post-0.17-backlog.md#closure-review-2026-09-23).
+
 | Section | Purpose |
 | --- | --- |
 | [Work disposition](#work-disposition) | Every F family has a concrete next boundary |

@@ -2,7 +2,7 @@
 
 [English](post-0.17-backlog.md) | [繁體中文](post-0.17-backlog_zh.md)
 
-狀態：0.17.0 發布後的持續工作，於 2026-09-22 整理；不承諾實作或發布日期。
+狀態：PARTIAL（部分完成）— 0.17.0 發布後的持續工作，於 2026-09-23 核對；不承諾實作或發布日期。
 已完成的 [發布切點](../done/release-0.17-cut_zh.md#發布阻擋關卡) 與
 [發布證據](../done/release-0.17-finalization_zh.md) 已歸檔。
 結案不代表下列廣泛工作已完成，也不會將未執行的檢查視為通過。
@@ -10,13 +10,14 @@
 | 章節 | 用途 |
 | --- | --- |
 | [校準後的工作歸屬](#校準後的工作歸屬) | 目前處置、唯一負責計畫及完成條件 |
+| [結案核對](#結案核對2026-09-23) | 已完成批次與仍須保留 active 的計劃 |
 | [延後批次](#延後批次) | 剩餘範圍與原始編號 |
 | [重新納入規則](#重新納入規則) | 何時成為本版阻擋 |
 | [保留追蹤](#保留追蹤) | 不遺失技術工作卡 |
 
 ## 校準後的工作歸屬
 
-校準日期：2026-09-22；程式基準 `80bcf14`。這是工作盤點，不承諾全部納入 0.18。
+校準日期：2026-09-23；核對至 `2d430d8`。這是工作盤點，不承諾全部納入 0.18。
 原 16 組 active 文件均已核對；相依套件整合／分組驗證結案後為 15 組；本次 G3 結案後剩 14 組。
 其中多份是同一 Mock 計畫的清冊與 preflight，不能當成獨立功能重複排程。
 
@@ -27,20 +28,20 @@
 | ID | 目前處置／唯一負責計畫 | 下一步與完成條件 |
 | --- | --- | --- |
 | F01 | 待實作：W10，[execution checklist](mock-fidelity-execution-checklist_zh.md)；profile preflight 為佐證 | 選剩餘 OSD／URI／source mode／binding 操作，補 field／Fault／state／replay 工作卡與兩個 transport／獨立 instance 驗收；不重做 PA1／VS1／VE1／AM1。 |
-| F02 | 待實作：W11／W12，同一 checklist | 補 PTZ 非 profile selector／space／效果及 per-source Imaging／focus 契約；測兩個不同 head／source、限制與拒絕不改狀態，不宣稱真實移動效果。 |
+| F02 | 待實作：W11／W12，同一 checklist | RS1 GetNode／GetConfiguration selector 已完成。補其餘 PTZ space／效果及 per-source Imaging／focus 契約；測兩個不同 head／source、限制與拒絕不改狀態，不宣稱真實移動效果。 |
 | F03 | 待實作：W13／W14，同一 checklist | 分服務子群稽核 Device／DeviceIO 與 Recording／Search／Replay 生命週期，含 cascade、timeout／termination 及錯誤後狀態；沿用既有 handler 為基準。 |
 | F04 | 待實作：W15，同一 checklist | 每筆訂閱的 identity／filter／queue、renew／expiry／unsubscribe，驗證隔離與可控生命週期；Media 同步收件確認不能代替 Events。 |
 | F05 | 待實作：W07–W09；[pipeline](mock-fidelity-pipeline-preflight_zh.md) | 通知連線／期限／framing 限制已交付，見下方。其餘為較廣的 mock HTTP binding、freshness／replay、roles 及 fault injection；不重做已交付 scoped auth。 |
 | F06 | 待實作：W16–W19；pipeline 記相依 | 選剩餘 capability／mutation／read 組合，驗證 atomic commit、拒絕保留與 replay 可見性。K27 儲存保留已完成；未來 key-format 重設計另列決策。 |
-| F07 | 待實作／證據：W20–W23；[schema preflight](mock-fidelity-schema-preflight_zh.md) | 擴充選定 160 instance／46 operation 之外的 corpus；保留 anchor、固定外部資源、錯誤控制與有界 fuzz／property 種子。0.17 選定 CI 已通過。 |
+| F07 | 待實作／證據：W20–W23；[schema preflight](mock-fidelity-schema-preflight_zh.md) | RS1／EP1 已將選定 corpus 擴充至 178 instance／51 operation，並通過本機獨立驗證。繼續補其餘覆蓋，保留 anchor、固定外部資源、錯誤控制與有界 fuzz／property 種子。0.17 選定 CI 為另筆歷史證據。 |
 | F08 | 待決策／延後：[CLI roadmap](oxvif-cli-plan.md)；[navigation](cli-vim-navigation-plan_zh.md) 管 M6 | decoder／playback、批次匯出、controlled writes、crate 拆分分別選定有限交付與介面／權限／復原驗收；不自動成為 0.18 blocker。 |
-| F09 | 待營運／證據／申請：[distribution](oxvif-cli-three-platform-distribution-plan.md) | 先唯讀核對 APT／tap URL、簽章／復原負責者與 metadata，再隔離驗證 install／upgrade／downgrade／remove；0.17 artifacts／staging 已完成，官方收錄另需證據。 |
+| F09 | 待營運／證據／申請：[distribution](oxvif-cli-three-platform-distribution-plan.md) | 唯讀渠道盤點已完成，確認缺少正式 owner／URL／金鑰資料。補齊後隔離驗證 install／upgrade／downgrade／remove；0.17 artifacts／staging 已完成，官方收錄另需證據。 |
 | F10 | 待證據：快照調查，[修復紀錄](../done/snapshot-auth-repair_zh.md) | 取得去敏且可重現的非圖片／JPEG 回應，再測有界辨識；保留目的地／認證／TLS／大小／不覆寫規則。CR／LF 僅是合成差異，尚非 Hanwha 根因。 |
 | F11 | 待證據：[Fleet](mock-fleet-basic-plan_zh.md)；廣泛 discovery 延後 | 記錄獲授權 OS／interface／VMS 的四台 identity、endpoint、隔離與關閉重啟。完整 scopes／Hello／Bye／Resolve、混合 persona 與持續負載另作實作／驗收。 |
 | F12 | 待證據：navigation | 補原生 terminal／人工 IME 組字、取消與復原紀錄；Windows resize 已有證據，一般 CI／注入按鍵不能取代缺少的平台／輸入法驗收。 |
-| F13 | 相依維護：[審查紀錄](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22) | 六項已審查更新及新查出的 rustls 安全公告修補已在本地整合並驗證；發布另列。Keyring 4.2 仍等待跨版本原生 store 身分與復原測試。分組重用／不重複驗證已完成。 |
+| F13 | 相依維護：[審查紀錄](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22) | 已審查相依更新及 rustls 安全公告修補已整合並驗證。Windows keyring 3.6.3 ↔ 4.2.0 原生相容性探針已完成；其他 OS 與鎖定／拒絕／不可用／復原案例仍待驗收。正式維持 3.6.3，發布另列。分組重用／不重複驗證已完成。 |
 | F14 | 待決策／實作：[Metamorph](metamorph.md)，[已結案 clone note](../done/metamorph-clone-in-oxdm.md) 記錄 G3 | G1／G3 已完成、G2 已被替代；G3 已補離線摘要與回歸測試，尚未發布。剩餘 M4 persona／control transition 或 M7 reference-value 比對與驗收。 |
-| F15 | 待實作／證據：[CLI hardening](oxvif-cli-release-hardening-plan.md) | 先選 R2 observability／retry、R3 health details 或 R4 descriptor 契約子群與精確斷言；R5 多廠牌／soak／簽章／支援／復原分開限定。首次 package／發布已完成。 |
+| F15 | 待實作／證據：[CLI hardening](oxvif-cli-release-hardening-plan.md) | R2 型別化重試政策、R3 health details 與 R4 六種結果 envelope 矩陣已完成。剩餘 observability／clock-skew／durability、原生終端驗收及 descriptor reachability／可執行 example。R5 多廠牌／soak／簽章／支援／復原仍開放；首次 package／發布已完成。 |
 
 Mock 主計畫管政策，execution checklist 管 W 狀態，operation ledger／source audit
 是持續維護的參考，profile／pipeline／schema preflight 管工作卡與相依證據。
@@ -57,6 +58,19 @@ F13 的新相依查核與本地整合證據記於
 F09 唯讀渠道盤點完成：提議 tap 以目前權限查詢回傳 404；repo 只有暫存 APT
 staging，尚無具名正式 URL／金鑰。公開渠道負責者、簽章／復原政策與原生生命週期
 驗收仍列於 [distribution D](oxvif-cli-three-platform-distribution-plan.md#read-only-channel-inventory-2026-09-22)。
+
+## 結案核對（2026-09-23）
+
+上一輪選定的本地工作**已完成（DONE）**，提交與有限驗收見
+[驗收清單](remaining-plan-acceptance_zh.md)。該清單仍管理待補驗收輸入，
+因此保留 active；它是輔助資料，不是第十五組計劃。
+
+相依維護計劃、G3 clone 整合、RS1 read selector 與 EP1 event pull 批次
+均已位於 `docs/done/`，內容明確標示 DONE。本次沒有其他 active 計劃滿足
+整份結案條件，因此未移動部分完成的計劃，也未將其標示為全部完成。
+Fleet 仍缺 LAN／VMS 證據；導覽仍缺原生終端／IME 證據；Mock 強化、CLI
+runtime／descriptor、散布及 Metamorph M4／M7 仍有上表的實作、決策或驗收工作。
+上層計劃仍為 active，不代表要重排已完成的子項目。
 
 ## 延後批次
 
