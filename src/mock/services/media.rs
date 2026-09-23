@@ -1,11 +1,10 @@
 use crate::mock::helpers::{resp_empty, resp_soap_fault, soap};
 use crate::mock::state::{
     AudioEncoderEntry, AudioOptionEntry, AudioSourceConfigEntry, OSD_QUOTA_DATE,
-    OSD_QUOTA_DATE_AND_TIME, OSD_QUOTA_PLAIN, OSD_QUOTA_TIME, OSD_QUOTA_TOTAL, OsdColorEntry,
-    OsdEntry, OsdTextEntry, ProfileEntry, PtzConfigEntry, SharedState, VideoEncoderState,
+    OSD_QUOTA_DATE_AND_TIME, OSD_QUOTA_PLAIN, OSD_QUOTA_TIME, OSD_QUOTA_TOTAL, OsdEntry,
+    OsdTextEntry, ProfileEntry, PtzConfigEntry, SharedState, VideoEncoderState,
     VideoSourceConfigEntry,
 };
-use crate::mock::xml_parse::{extract_all_tags, extract_attr, extract_tag};
 
 /// Existing advertised synthetic capacity; imported fixtures are never truncated.
 pub(crate) const PROFILE_LIMIT: usize = 8;
@@ -1042,30 +1041,6 @@ pub fn resp_audio_encoder_configurations(
     super::audio_metadata::get(state, operation, false, "GetAudioEncoderConfigurations")
 }
 
-pub fn resp_osds(state: &SharedState, body: &str) -> String {
-    // Optional <ConfigurationToken> filter — only return OSDs attached
-    // to that VSC. Real cameras vary on whether they apply this filter
-    // strictly; we honour it when present, return all when absent.
-    let inner = extract_tag(body, "GetOSDs").unwrap_or_default();
-    let filter = extract_tag(&inner, "ConfigurationToken");
-
-    let snapshot = state.read().osd.osds.clone();
-    let items: String = snapshot
-        .iter()
-        .filter(|o| {
-            filter
-                .as_deref()
-                .is_none_or(|t| o.video_source_config_token == t)
-        })
-        .map(render_osd_entry)
-        .collect();
-
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        &format!("<trt:GetOSDsResponse>{items}</trt:GetOSDsResponse>"),
-    )
-}
-
 pub fn resp_video_source_configuration(
     state: &SharedState,
     operation: &crate::mock::request::Node,
@@ -1136,137 +1111,11 @@ pub fn resp_osd(state: &SharedState, operation: &crate::mock::request::Node) -> 
     }
 }
 
-pub fn handle_create_osd(state: &SharedState, body: &str) -> String {
-    let inner = extract_tag(body, "OSD").unwrap_or_default();
-    let parsed = match parse_osd_payload(&inner) {
-        Ok(p) => p,
-        Err(e) => return resp_soap_fault("ter:InvalidArgs", &e),
-    };
-
-    // Quota enforcement — match what GetOSDOptions advertises so the
-    // mock surfaces "DateAndTime full" the same way Genetec does.
-    if let Some(text) = parsed.text.as_ref() {
-        let snapshot = state.read().osd.osds.clone();
-        let used_total = snapshot.len() as u32;
-        let used_for_type = snapshot
-            .iter()
-            .filter(|o| {
-                o.text
-                    .as_ref()
-                    .is_some_and(|t| t.text_type == text.text_type)
-            })
-            .count() as u32;
-        let limit = match text.text_type.as_str() {
-            "Plain" => OSD_QUOTA_PLAIN,
-            "Date" => OSD_QUOTA_DATE,
-            "Time" => OSD_QUOTA_TIME,
-            "DateAndTime" => OSD_QUOTA_DATE_AND_TIME,
-            _ => OSD_QUOTA_TOTAL,
-        };
-        if used_for_type >= limit {
-            return resp_soap_fault(
-                "ter:InvalidArgs",
-                &format!(
-                    "Per-type OSD quota exceeded: {}={used_for_type}/{limit}",
-                    text.text_type
-                ),
-            );
-        }
-        if used_total >= OSD_QUOTA_TOTAL {
-            return resp_soap_fault(
-                "ter:InvalidArgs",
-                &format!("Total OSD quota exceeded: {used_total}/{OSD_QUOTA_TOTAL}"),
-            );
-        }
-    }
-
-    let token = state.modify_returning(|s| {
-        let id = s.osd.next_token_id;
-        s.osd.next_token_id += 1;
-        let token = format!("OSD_{id}");
-        let mut entry = parsed;
-        entry.token = token.clone();
-        eprintln!(
-            "    [STATE] OSD created: {token} (vsc={}, type={})",
-            entry.video_source_config_token, entry.osd_type
-        );
-        s.osd.osds.push(entry);
-        token
-    });
-
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        &format!(
-            "<trt:CreateOSDResponse><trt:OSDToken>{token}</trt:OSDToken></trt:CreateOSDResponse>"
-        ),
-    )
-}
-
-pub fn handle_set_osd(state: &SharedState, body: &str) -> String {
-    // Token sits on the outer `<trt:OSD token="...">` tag, not inside
-    // its body — so pull from `body`, not the extracted inner.
-    let token = extract_attr(body, "OSD", "token").unwrap_or_default();
-    let inner = extract_tag(body, "OSD").unwrap_or_default();
-    if token.is_empty() {
-        return resp_soap_fault("ter:InvalidArgs", "OSD token missing");
-    }
-    let parsed = match parse_osd_payload(&inner) {
-        Ok(p) => p,
-        Err(e) => return resp_soap_fault("ter:InvalidArgs", &e),
-    };
-
-    let updated = state.modify_returning(|s| {
-        if let Some(existing) = s.osd.osds.iter_mut().find(|o| o.token == token) {
-            // Token + vsc are immutable on Set; everything else is replaced.
-            let vsc = existing.video_source_config_token.clone();
-            *existing = OsdEntry {
-                token: token.clone(),
-                video_source_config_token: vsc,
-                ..parsed
-            };
-            eprintln!("    [STATE] OSD updated: {token}");
-            true
-        } else {
-            false
-        }
-    });
-
-    if !updated {
-        return resp_soap_fault("ter:InvalidArgs", &format!("OSD not found: {token}"));
-    }
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        "<trt:SetOSDResponse/>",
-    )
-}
-
-pub fn handle_delete_osd(state: &SharedState, body: &str) -> String {
-    let inner = extract_tag(body, "DeleteOSD").unwrap_or_default();
-    let token = extract_tag(&inner, "OSDToken").unwrap_or_default();
-
-    let removed = state.modify_returning(|s| {
-        let before = s.osd.osds.len();
-        s.osd.osds.retain(|o| o.token != token);
-        let removed = before > s.osd.osds.len();
-        if removed {
-            eprintln!("    [STATE] OSD deleted: {token}");
-        }
-        removed
-    });
-
-    if !removed {
-        return resp_soap_fault("ter:InvalidArgs", &format!("OSD not found: {token}"));
-    }
-    soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
-        "<trt:DeleteOSDResponse/>",
-    )
-}
-
 /// `GetOSDOptions` advertises per-text-type quotas via XML attributes
-/// on `<MaximumNumberOfOSDs>`. This is the Genetec/late-Hikvision shape;
-/// `oxvif::OnvifSession::get_osd_options` parses the attributes (the
-/// strict `OnvifClient` ignores them, by design).
+/// on `<MaximumNumberOfOSDs>`. Both client and session parse these attributes.
+/// OS1 validates the selected source before using this common option set.
+/// The image URN is a synthetic reference, not an available network resource;
+/// image requests store their URI and never fetch or decode its contents.
 ///
 /// **`PositionOption` is a repeated plain string, not a wrapper.**
 /// `tt:OSDConfigurationOptions` declares it `type="xs:string"
@@ -1307,6 +1156,7 @@ pub fn resp_osd_options() -> String {
               <tt:TimeFormat>HH:mm:ss</tt:TimeFormat>
               <tt:TimeFormat>hh:mm:ss tt</tt:TimeFormat>
             </tt:TextOption>
+            <tt:ImageOption><tt:ImagePath>urn:oxvif:mock:osd-image</tt:ImagePath></tt:ImageOption>
           </trt:OSDOptions>
         </trt:GetOSDOptionsResponse>"#
         ),
@@ -1315,7 +1165,7 @@ pub fn resp_osd_options() -> String {
 
 // ── OSD render / parse helpers ──────────────────────────────────────────────
 
-fn render_osd_entry(o: &OsdEntry) -> String {
+pub(super) fn render_osd_entry(o: &OsdEntry) -> String {
     let pos_xy = match (o.position_x, o.position_y) {
         (Some(x), Some(y)) => format!(r#"<tt:Pos x="{x}" y="{y}"/>"#),
         _ => String::new(),
@@ -1394,10 +1244,10 @@ fn render_osd_text(t: &OsdTextEntry) -> String {
                 .unwrap_or_default();
             let trans = c
                 .transparent
-                .map(|v| format!("<tt:Transparent>{v}</tt:Transparent>"))
+                .map(|v| format!(r#" Transparent="{v}""#))
                 .unwrap_or_default();
             format!(
-                r#"<tt:FontColor><tt:Color X="{x}" Y="{y}" Z="{z}"{cs}/>{trans}</tt:FontColor>"#,
+                r#"<tt:FontColor{trans}><tt:Color X="{x}" Y="{y}" Z="{z}"{cs}/></tt:FontColor>"#,
                 x = c.x,
                 y = c.y,
                 z = c.z,
@@ -1408,76 +1258,6 @@ fn render_osd_text(t: &OsdTextEntry) -> String {
         r#"<tt:TextString><tt:Type>{ty}</tt:Type>{date}{time}{font}{color}{plain}</tt:TextString>"#,
         ty = crate::types::xml_escape(&t.text_type),
     )
-}
-
-/// Parse an `<trt:OSD>` payload into an `OsdEntry`. The token is left
-/// blank — `handle_create_osd` fills it in from `next_token_id`,
-/// `handle_set_osd` keeps the existing token.
-fn parse_osd_payload(inner: &str) -> Result<OsdEntry, String> {
-    let vsc = extract_tag(inner, "VideoSourceConfigurationToken")
-        .ok_or_else(|| "VideoSourceConfigurationToken missing".to_string())?;
-    let ty = extract_tag(inner, "Type").unwrap_or_else(|| "Text".to_string());
-
-    let pos = extract_tag(inner, "Position").unwrap_or_default();
-    let position_type = extract_tag(&pos, "Type").unwrap_or_else(|| "UpperLeft".to_string());
-    let position_x = extract_attr(&pos, "Pos", "x").and_then(|s| s.parse().ok());
-    let position_y = extract_attr(&pos, "Pos", "y").and_then(|s| s.parse().ok());
-
-    let text = if ty == "Text" {
-        let ts = extract_tag(inner, "TextString").unwrap_or_default();
-        let text_type = extract_tag(&ts, "Type").unwrap_or_else(|| "Plain".to_string());
-        Some(OsdTextEntry {
-            text_type,
-            plain_text: extract_tag(&ts, "PlainText"),
-            date_format: extract_tag(&ts, "DateFormat"),
-            time_format: extract_tag(&ts, "TimeFormat"),
-            font_size: extract_tag(&ts, "FontSize").and_then(|s| s.parse().ok()),
-            font_color: parse_osd_color(&ts),
-        })
-    } else {
-        None
-    };
-
-    let image_path = if ty == "Image" {
-        extract_tag(inner, "ImgPath")
-    } else {
-        None
-    };
-
-    Ok(OsdEntry {
-        token: String::new(),
-        video_source_config_token: vsc,
-        osd_type: ty,
-        position_type,
-        position_x,
-        position_y,
-        text,
-        image_path,
-    })
-}
-
-fn parse_osd_color(text_string: &str) -> Option<OsdColorEntry> {
-    let fc = extract_tag(text_string, "FontColor")?;
-    let x: f32 = extract_attr(&fc, "Color", "X")?.parse().ok()?;
-    let y: f32 = extract_attr(&fc, "Color", "Y")?.parse().ok()?;
-    let z: f32 = extract_attr(&fc, "Color", "Z")?.parse().ok()?;
-    let colorspace = extract_attr(&fc, "Color", "Colorspace");
-    let transparent = extract_tag(&fc, "Transparent").and_then(|s| s.parse().ok());
-    Some(OsdColorEntry {
-        x,
-        y,
-        z,
-        colorspace,
-        transparent,
-    })
-}
-
-// `extract_all_tags` is currently unused but reserved for future Image-OSD
-// support that may need to read multiple `<ImgPath>` siblings. Suppress the
-// warning rather than removing the import — keeping it discoverable in tree.
-#[allow(dead_code)]
-fn _force_use_extract_all() {
-    let _ = extract_all_tags("", "");
 }
 
 pub fn resp_audio_source_configurations(

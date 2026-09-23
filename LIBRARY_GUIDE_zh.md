@@ -481,6 +481,8 @@ OSD 用於在 video stream 上疊加文字或影像，並使用 Media1 URL。
 
 `OsdConfiguration` 包含 `token`、`video_source_config_token`、`type_`、`position`、可選 `text_string` 與 `image_path`。`OsdTextString` 可設定 plain text、日期／時間格式、font size、顏色與背景。
 
+OSD 序列化採文字欄位順序及 color／persistence attribute，自訂位置座標可完整讀回。標準總量／文字類型配額可直接經 `OnvifClient` 或 `OnvifSession` 取得；舊 child 形式仍可相容讀取。
+
 ---
 
 ## Events Service 方法

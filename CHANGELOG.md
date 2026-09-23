@@ -34,6 +34,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Make modeled Media1 OSD create/set/delete atomic, with per-source quotas,
+  validated source bindings and commit-only persistence/replay updates. Unsupported
+  background color, temporary text and write extensions now refuse explicitly.
+- Correct OSD client custom-position readback, color/persistence attributes and
+  text serialization order; parse standard total/per-type quota attributes directly.
+
 - Apply mock event filters to queued IO notifications and snapshot event selection/filter atomically; escape input tokens and avoid event-counter overflow.
 
 - Scope OSD, PTZ node/configuration and recording-job state selectors to the requested operation; reject ambiguous selectors and preserve escaped identities. Correct OSD text/image XML and escape stored OSD/PTZ/recording strings.

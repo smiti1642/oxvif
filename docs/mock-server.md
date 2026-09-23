@@ -1365,7 +1365,7 @@ from that schema may enter this repository. Explicitly selecting the test now
 fails if resources are missing; the external SOAP 1.2 envelope schema is also
 required. Node-scoped namespace resolution and separate Envelope/payload checks
 include Fault structure, but do not validate all XSD values or error semantics.
-Separate Windows/Linux CI is configured to validate the selected 178 profile/source/rate/encoder/audio/metadata/synchronization/read-selector/event-pull request/response
+Separate Windows/Linux CI is configured to validate the selected 198 profile/source/rate/encoder/audio/metadata/synchronization/read-selector/event-pull/OSD-CRUD request/response
 instances with independently pinned Xerces and external schemas. That limited
 corpus does not cover all operations or authentication; the inventory job alone
 does not validate XML. See the
@@ -1428,7 +1428,7 @@ refusals and receipt-only stubs. The table below concerns static reads.
 |---|---|
 | **Media2 `GetVideoSourceModes`** | Static — one mode (`Mode_1`) for every `VideoSourceToken`. `SetVideoSourceMode` is **not** a stub: it faults, see below. |
 | **`GetStreamUri` / `GetSnapshotUri`**, both services | One canned URI for every profile. A real device gives each profile its own. |
-| **Media1 `GetOSDOptions`** | Static. |
+| **Media1 `GetOSDOptions`** | Source identity is validated; every modeled source shares the same static option values. |
 
 ### 13.2 Fidelity gaps — a parser field nothing feeds
 
@@ -1591,3 +1591,27 @@ give the handler a plausible response, because nothing checks that for you.
 The candidate scopes `GetOSD`, PTZ `GetNode`/`GetConfiguration`, and Recording `GetRecordingJobState` selectors to their direct qualified operation fields. Duplicate or nested scalar selectors refuse; Header/extension decoys cannot supply identity. Existing missing/unknown operation faults remain. OSD and PTZ renderers escape stored strings; OSD text ordering/image nesting and recording-token escaping are corrected. This does not complete OSD writes, PTZ motion or recording lifetimes.
 
 PullMessages now selects the queued or synthetic event and its lexical filter snapshot in one state transaction. Excluded queued events consume one slot and return no message; hooks fire once per pull. IO tokens are XML-escaped. The immediate per-instance model still has no independent subscription lifetimes or full topic matching.
+
+### Modeled OSD CRUD (OS1)
+
+Media1 OSD creation and replacement validate a scoped candidate and its existing
+video-source configuration. Set rejects a changed source binding. Total capacity
+is eight per source (including images); Plain/Date/Time/DateAndTime limits are
+7/1/1/1. Replacement excludes itself. Quota checks, unique token allocation and
+commit share one lock. Unknown/invalid/over-capacity writes preserve state, the
+counter and notification count. Successful writes notify once and invalidate
+built-in replay GetOSD/GetOSDs; options and unrelated recordings remain intact.
+
+Text/Image, named/custom positions, finite coordinates, font size 8–72, advertised
+date/time formats, plain text and font color are modeled. Font transparency accepts
+integer levels 0–255. Background color, temporary text and unmodeled write fields
+or extensions return an explicit mock refusal. Missing date/time formats use the
+advertised defaults. Image URIs are stored without downloading/decoding; the
+options URN is a synthetic reference. Optional persistent=true is normalized to
+the existing default state, not a separate field. The host owns durable storage
+through the change hook; this does not prove physical overlays or reboot behavior.
+
+The existing GetOSD legacy unknown-token fault remains outside OS1's fault audit.
+Client round trips now retain custom coordinates and standard color/persistence
+attributes; legacy child-form parsing remains for compatibility. Full programme
+scope and evidence: [OS1 record](done/mock-fidelity-osd-crud.md).

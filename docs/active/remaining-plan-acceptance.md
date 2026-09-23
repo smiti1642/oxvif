@@ -21,7 +21,7 @@ the parent plans are not all complete. See the [closure review](post-0.17-backlo
 
 | Family | Local work / next acceptance boundary |
 | --- | --- |
-| F01/F02/F03 | [RS1](../done/mock-fidelity-read-selectors.md) repairs four Media/PTZ/Recording selectors and shared rendering. OSD CRUD, URI/source modes, motion/Imaging, Device/DeviceIO and recording/search lifecycle remain implementation work; they are not blocked solely by hardware. Start each next subgroup with W01 cards. |
+| F01/F02/F03 | [RS1](../done/mock-fidelity-read-selectors.md) repairs four Media/PTZ/Recording selectors and shared rendering. OS1 modeled OSD CRUD is complete; URI/source modes, motion/Imaging, Device/DeviceIO and recording/search lifecycle remain implementation work; they are not blocked solely by hardware. Start each next subgroup with W01 cards. |
 | F04/F06 | [EP1](../done/mock-fidelity-event-pull.md) repairs queue filtering and atomic selection/filter snapshots. Per-subscription state and capability/replay consistency remain code work. Before endpoint identity is added, preserve the public RequestCtx construction contract or propose a compatible adapter. |
 | F05 | Listener framing/deadline limits are delivered. The next mock-auth card must distinguish digest verification from freshness/replay: fixed injectable clock, accepted skew window, bounded nonce retention, duplicate nonce atomicity, expired-entry eviction, independent per-instance caches and rejected-request state preservation. Existing permissive auth is not evidence these protections exist. |
 | F07 | RS1/EP1 add selected operation captures and external validation, with explicit payload anchors. Broader wildcard/QName/negative/fuzz coverage remains open; new independent instances must remain outside the checkout. |
@@ -139,3 +139,5 @@ Delivery commits: `4a9d0a5` health details; `cb25276` RS1; `af1489f` EP1;
 terminal runner. Larger implementation items in the table remain open; this
 register records one completed pass through every plan's feasible local work and
 prepared inputs, not completion of everything that could eventually be coded.
+
+OS1 (2026-09-23): [bounded OSD CRUD](../done/mock-fidelity-osd-crud.md) adds scoped candidates, atomic per-source quotas, binding refusal and commit-only persistence/replay. Client coordinate/color/persistence XML and quota parsing are corrected. Selected external corpus: 198 instances / 56 operations. Background color, temporary text and arbitrary write extensions refuse explicitly; URI/source-mode and wider W10 work remain open.

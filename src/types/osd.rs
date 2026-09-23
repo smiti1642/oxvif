@@ -19,7 +19,7 @@ pub struct OsdPosition {
 
 impl OsdPosition {
     fn from_xml(node: &XmlNode) -> Self {
-        let pos = node.child("Position");
+        let pos = node.child("Pos").or_else(|| node.child("Position"));
         Self {
             type_: node
                 .child("Type")
@@ -62,7 +62,9 @@ pub struct OsdColor {
     pub z: f32,
     /// Colorspace URI (e.g. `"http://www.onvif.org/ver10/colorspace/YCbCr"`).
     pub colorspace: Option<String>,
-    /// Transparency level: `0.0` = fully opaque, `1.0` = fully transparent.
+    /// Device-defined integer transparency level, carried in the Transparent attribute.
+    /// The f32 field is retained for source compatibility; use integral values
+    /// within the device-advertised range.
     pub transparent: Option<f32>,
 }
 
@@ -84,23 +86,27 @@ impl OsdColor {
                 .unwrap_or(0.0),
             colorspace: color.and_then(|c| c.attr("Colorspace")).map(str::to_string),
             transparent: node
-                .child("Transparent")
-                .and_then(|n| n.text().parse().ok()),
+                .attr("Transparent")
+                .and_then(|v| v.parse().ok())
+                .or_else(|| {
+                    node.child("Transparent")
+                        .and_then(|n| n.text().parse().ok())
+                }),
         }
     }
 
-    pub(crate) fn to_xml_body(&self) -> String {
+    fn to_xml_body(&self, tag: &str) -> String {
         let cs = self
             .colorspace
             .as_deref()
             .map(|s| format!(" Colorspace=\"{}\"", xml_escape(s)))
             .unwrap_or_default();
-        let transparent_el = self
+        let transparent = self
             .transparent
-            .map(|t| format!("<tt:Transparent>{t}</tt:Transparent>"))
+            .map(|v| format!(" Transparent=\"{v}\""))
             .unwrap_or_default();
         format!(
-            "<tt:Color X=\"{}\" Y=\"{}\" Z=\"{}\"{cs}/>{transparent_el}",
+            "<tt:{tag}{transparent}><tt:Color X=\"{}\" Y=\"{}\" Z=\"{}\"{cs}/></tt:{tag}>",
             self.x, self.y, self.z
         )
     }
@@ -144,8 +150,12 @@ impl OsdTextString {
             font_color: node.child("FontColor").map(OsdColor::from_xml),
             background_color: node.child("BackgroundColor").map(OsdColor::from_xml),
             is_persistent_text: node
-                .child("IsPersistentText")
-                .map(|n| n.text() == "true" || n.text() == "1"),
+                .attr("IsPersistentText")
+                .map(|v| v == "true" || v == "1")
+                .or_else(|| {
+                    node.child("IsPersistentText")
+                        .map(|n| n.text() == "true" || n.text() == "1")
+                }),
         }
     }
 
@@ -172,27 +182,22 @@ impl OsdTextString {
         let font_color_el = self
             .font_color
             .as_ref()
-            .map(|c| format!("<tt:FontColor>{}</tt:FontColor>", c.to_xml_body()))
+            .map(|c| c.to_xml_body("FontColor"))
             .unwrap_or_default();
         let bg_color_el = self
             .background_color
             .as_ref()
-            .map(|c| {
-                format!(
-                    "<tt:BackgroundColor>{}</tt:BackgroundColor>",
-                    c.to_xml_body()
-                )
-            })
+            .map(|c| c.to_xml_body("BackgroundColor"))
             .unwrap_or_default();
         let persistent_el = self
             .is_persistent_text
-            .map(|v| format!("<tt:IsPersistentText>{v}</tt:IsPersistentText>"))
+            .map(|v| format!(" IsPersistentText=\"{v}\""))
             .unwrap_or_default();
         format!(
-            "<tt:TextString>\
+            "<tt:TextString{persistent_el}>\
                <tt:Type>{}</tt:Type>\
-               {plain_el}{date_el}{time_el}{font_el}\
-               {font_color_el}{bg_color_el}{persistent_el}\
+               {date_el}{time_el}{font_el}\
+               {font_color_el}{bg_color_el}{plain_el}\
              </tt:TextString>",
             xml_escape(&self.type_)
         )
@@ -260,11 +265,7 @@ impl OsdConfiguration {
     /// wrong namespace as a schema validation fault even when the
     /// local name matches.
     pub(crate) fn to_xml_body(&self) -> String {
-        let token_attr = if self.token.is_empty() {
-            String::new()
-        } else {
-            format!(" token=\"{}\"", xml_escape(&self.token))
-        };
+        let token_attr = format!(" token=\"{}\"", xml_escape(&self.token));
         let text_el = self
             .text_string
             .as_ref()
@@ -309,22 +310,13 @@ impl OsdConfiguration {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct OsdOptions {
-    /// Overall maximum number of OSDs across all types.
+    /// Maximum number of OSDs across all types for the requested source configuration.
     pub max_osd: u32,
     /// Per-text-type quotas keyed by text type (e.g. `"Plain"` →7,
     /// `"DateAndTime"` →1).
     ///
-    /// **Always empty when called via [`OnvifClient::get_osd_options`].**
-    /// The ONVIF spec doesn't define per-type quotas; some cameras
-    /// (Genetec, recent Hikvision) expose them as non-standard XML
-    /// attributes on `<MaximumNumberOfOSDs>`. Parsing those attributes
-    /// is a vendor extension, so it's done by
-    /// [`OnvifSession::get_osd_options`] (the "road car" layer that
-    /// handles real-world cameras), not by `OnvifClient` (the
-    /// spec-pristine "museum engine").
-    ///
-    /// [`OnvifClient::get_osd_options`]: crate::OnvifClient::get_osd_options
-    /// [`OnvifSession::get_osd_options`]: crate::OnvifSession::get_osd_options
+    /// Parsed from standard MaximumNumberOfOSDs attributes on both the client
+    /// and session paths; absent per-type limits remain absent.
     pub max_per_text_type: std::collections::HashMap<String, u32>,
     /// Supported OSD types (e.g. `["Text", "Image"]`).
     pub types: Vec<String>,
@@ -355,8 +347,22 @@ impl OsdOptions {
                 Some((min, max))
             });
         Ok(Self {
-            max_osd: xml_u32(opts, "MaximumNumberOfOSDs").unwrap_or(0),
-            max_per_text_type: std::collections::HashMap::new(),
+            max_osd: opts
+                .child("MaximumNumberOfOSDs")
+                .and_then(|n| n.attr("Total"))
+                .and_then(|v| v.parse().ok())
+                .or_else(|| xml_u32(opts, "MaximumNumberOfOSDs"))
+                .unwrap_or(0),
+            max_per_text_type: ["Plain", "Date", "Time", "DateAndTime"]
+                .into_iter()
+                .filter_map(|name| {
+                    opts.child("MaximumNumberOfOSDs")?
+                        .attr(name)?
+                        .parse()
+                        .ok()
+                        .map(|n| (name.into(), n))
+                })
+                .collect(),
             types: opts
                 .children_named("Type")
                 .map(|n| n.text().to_string())
@@ -398,36 +404,9 @@ impl OsdOptions {
         })
     }
 
-    /// Apply vendor-extension parsing on top of the spec-strict
-    /// [`from_xml`](Self::from_xml) result.
-    ///
-    /// Called only by `OnvifSession`. Handles two real-world XML
-    /// shapes that violate (or extend beyond) the ONVIF spec:
-    ///
-    /// 1. **`<MaximumNumberOfOSDs Total="8" Plain="7" DateAndTime="1" .../>`.**
-    ///    Genetec and recent Hikvision stuff the per-type quotas
-    ///    into XML attributes; the element body may also be empty
-    ///    with the count living in `Total`. Populates
-    ///    [`max_per_text_type`](Self::max_per_text_type) and, if
-    ///    [`max_osd`](Self::max_osd) is `0`, fills it from `Total`.
-    /// 2. **A `<PositionOption>` wrapper holding nested `<Type>` children.**
-    ///    Repopulates [`position_types`](Self::position_types) when
-    ///    the strict parser found nothing.
-    ///
-    ///    **This entry said the opposite until 0.15**, and the mock and
-    ///    [`from_xml`](Self::from_xml) had both been written to agree with it:
-    ///    it called the wrapper "the spec shape" and the flat siblings a
-    ///    Genetec deviation. `tt:OSDConfigurationOptions` declares
-    ///    `PositionOption` as `type="xs:string" maxOccurs="unbounded"` — the
-    ///    repeated plain string *is* the spec shape, so
-    ///    `OnvifClient::get_osd_options` returned no positions at all from a
-    ///    conformant camera, and only `OnvifSession` recovered them, by a path
-    ///    documented as a workaround. The wrapper is kept here because a
-    ///    firmware that sends it is still a firmware someone points at this
-    ///    crate.
-    ///
-    /// Idempotent — calling twice on the same XML produces the same
-    /// result.
+    /// Session compatibility fallback for a PositionOption wrapper containing
+    /// nested Type children. Standard quota attributes are already parsed by
+    /// from_xml; reapplying them is idempotent for existing session callers.
     pub(crate) fn apply_vendor_extensions(&mut self, resp: &XmlNode) {
         let Some(opts) = resp.child("OSDOptions") else {
             return;

@@ -170,11 +170,11 @@ profile token 政策，PA1 提供模型組裝／容量行為；這些批次仍�
 | `media.SetAudioEncoderConfiguration` | `media::handle_set_audio_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetAudioEncoderConfigurationOptions` | `media::resp_audio_encoder_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetOSD` | `media::resp_osd` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
-| `media.GetOSDs` | `media::resp_osds` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.SetOSD` | `media::handle_set_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.CreateOSD` | `media::handle_create_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.DeleteOSD` | `media::handle_delete_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetOSDOptions` | `media::resp_osd_options` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.GetOSDs` | `osd::list` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.SetOSD` | `osd::set` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.CreateOSD` | `osd::create` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.DeleteOSD` | `osd::delete` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.GetOSDOptions` | `osd::options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
 
 ## media2
 
@@ -348,3 +348,5 @@ W22 本機證據（2026-09-10）：PowerShell 7 執行與 CI 相同的命令，1
 RS1: [scoped read selectors](../done/mock-fidelity-read-selectors_zh.md).
 
 EP1: [event pull consistency](../done/mock-fidelity-event-pull_zh.md).
+
+OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。

@@ -64,6 +64,7 @@ pub(super) const NO_CONFIG: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "No
 pub(super) const CONFIG_MODIFY: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "ConfigModify");
 pub(super) const PROFILE_EXISTS: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "ProfileExists");
 pub(super) const MAX_PROFILES: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "MaxNVTProfiles");
+pub(super) const MAX_OSDS: FaultQName = FaultQName::new("ter", ONVIF_ERROR, "MaxOSDs");
 pub(super) const CONFIGURATION_CONFLICT: FaultQName =
     FaultQName::new("ter", ONVIF_ERROR, "ConfigurationConflict");
 pub(super) const DELETION_OF_FIXED_PROFILE: FaultQName =

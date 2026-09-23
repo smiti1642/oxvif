@@ -241,6 +241,11 @@
 //! OSD, PTZ node/configuration and recording-job state reads use direct qualified
 //! selectors and reject duplicates/nested scalars. Stored strings are escaped;
 //! unknown-token legacy faults and broader service fidelity remain unchanged.
+//! Media1 OSD writes validate modeled fields and source bindings, enforce
+//! per-source quotas atomically, and notify persistence/replay only on commit.
+//! Unsupported background color and temporary text refuse explicitly; image
+//! URIs are stored without fetching or decoding. Client OSD round trips preserve
+//! custom coordinates, color attributes and the advertised quota attributes.
 //!
 //! Opt-in mock authentication uses scoped Header/UsernameToken fields and explicit
 //! PasswordDigest Type; it does not enforce freshness, nonce reuse or user permissions.

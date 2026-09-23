@@ -27,13 +27,13 @@
 
 | ID | 目前處置／唯一負責計畫 | 下一步與完成條件 |
 | --- | --- | --- |
-| F01 | 待實作：W10，[execution checklist](mock-fidelity-execution-checklist_zh.md)；profile preflight 為佐證 | 選剩餘 OSD／URI／source mode／binding 操作，補 field／Fault／state／replay 工作卡與兩個 transport／獨立 instance 驗收；不重做 PA1／VS1／VE1／AM1。 |
+| F01 | 待實作：W10，[execution checklist](mock-fidelity-execution-checklist_zh.md)；profile preflight 為佐證 | OS1 已建模 OSD CRUD 完成；選其餘 URI／source mode／binding 或明確擴充 OSD 範圍，補 field／Fault／state／replay 工作卡與兩個 transport／獨立 instance 驗收；不重做 PA1／VS1／VE1／AM1／OS1。 |
 | F02 | 待實作：W11／W12，同一 checklist | RS1 GetNode／GetConfiguration selector 已完成。補其餘 PTZ space／效果及 per-source Imaging／focus 契約；測兩個不同 head／source、限制與拒絕不改狀態，不宣稱真實移動效果。 |
 | F03 | 待實作：W13／W14，同一 checklist | 分服務子群稽核 Device／DeviceIO 與 Recording／Search／Replay 生命週期，含 cascade、timeout／termination 及錯誤後狀態；沿用既有 handler 為基準。 |
 | F04 | 待實作：W15，同一 checklist | 每筆訂閱的 identity／filter／queue、renew／expiry／unsubscribe，驗證隔離與可控生命週期；Media 同步收件確認不能代替 Events。 |
 | F05 | 待實作：W07–W09；[pipeline](mock-fidelity-pipeline-preflight_zh.md) | 通知連線／期限／framing 限制已交付，見下方。其餘為較廣的 mock HTTP binding、freshness／replay、roles 及 fault injection；不重做已交付 scoped auth。 |
 | F06 | 待實作：W16–W19；pipeline 記相依 | 選剩餘 capability／mutation／read 組合，驗證 atomic commit、拒絕保留與 replay 可見性。K27 儲存保留已完成；未來 key-format 重設計另列決策。 |
-| F07 | 待實作／證據：W20–W23；[schema preflight](mock-fidelity-schema-preflight_zh.md) | RS1／EP1 已將選定 corpus 擴充至 178 instance／51 operation，並通過本機獨立驗證。繼續補其餘覆蓋，保留 anchor、固定外部資源、錯誤控制與有界 fuzz／property 種子。0.17 選定 CI 為另筆歷史證據。 |
+| F07 | 待實作／證據：W20–W23；[schema preflight](mock-fidelity-schema-preflight_zh.md) | RS1／EP1／OS1 已將選定 corpus 擴充至 198 instance／56 operation，並通過本機獨立驗證。繼續補其餘覆蓋，保留 anchor、固定外部資源、錯誤控制與有界 fuzz／property 種子。0.17 選定 CI 為另筆歷史證據。 |
 | F08 | 待決策／延後：[CLI roadmap](oxvif-cli-plan.md)；[navigation](cli-vim-navigation-plan_zh.md) 管 M6 | decoder／playback、批次匯出、controlled writes、crate 拆分分別選定有限交付與介面／權限／復原驗收；不自動成為 0.18 blocker。 |
 | F09 | 待營運／證據／申請：[distribution](oxvif-cli-three-platform-distribution-plan.md) | 唯讀渠道盤點已完成，確認缺少正式 owner／URL／金鑰資料。補齊後隔離驗證 install／upgrade／downgrade／remove；0.17 artifacts／staging 已完成，官方收錄另需證據。 |
 | F10 | 待證據：快照調查，[修復紀錄](../done/snapshot-auth-repair_zh.md) | 取得去敏且可重現的非圖片／JPEG 回應，再測有界辨識；保留目的地／認證／TLS／大小／不覆寫規則。CR／LF 僅是合成差異，尚非 Hanwha 根因。 |
@@ -90,7 +90,7 @@ runtime／descriptor、散布及 Metamorph M4／M7 仍有上表的實作、決�
 
 | ID | 範圍 | 原始追蹤／前置條件 |
 | --- | --- | --- |
-| F01 | 其餘 Media OSD、URI／source mode 及不支援的 configuration／binding 語意 | W10；保留已接受 Media 子群，逐項分類其餘操作 |
+| F01 | OS1 以外的 OSD extension、URI／source mode 及不支援的 configuration／binding 語意 | W10；保留已接受 Media 子群，逐項分類其餘操作 |
 | F02 | 超出 profile identity 的 PTZ configuration／space、movement／preset／home／tour 效果；Imaging 欄位及 focus 建模 | W11／W12；不宣稱現有 profile 檢查已模擬移動 |
 | F03 | 完整 Device／DeviceIO／network／user／relay 契約與 Recording／Search／Replay 生命週期 | W13／W14；不改 host network；硬體效果另行授權 |
 | F04 | Events filter、subscription、queue 隔離、renew／expiry／termination 及傳送建模 | W15；Media sync 不等於 Events sync；保留目前僅收件確認的預設拒絕 |
@@ -149,3 +149,5 @@ RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-s
 EP1（2026-09-22）：[event pull 一致性](../done/mock-fidelity-event-pull_zh.md) 對 queued IO 套用既有 lexical filter，並原子取得事件／filter。併發、reentrant 控制及四組 client capture 補充 RS1；每份 subscription 的生命週期與完整 topic 語意仍未完成。
 
 2026-09-22 後續：[剩餘計劃驗收輸入](remaining-plan-acceptance_zh.md) 記錄新的 Windows capacity／terminal／credential 證據、離線 snapshot 探針與仍缺少的平台／產品／發行條件。它支援既有工作家族，不新增計劃群組。
+
+OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。

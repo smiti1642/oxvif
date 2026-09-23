@@ -10,7 +10,7 @@ Source baseline: `80bcf14`. Use this section as the current work entry; older da
 | --- | --- |
 | Confirmed | Scoped identity, whitespace serialization, empty-profile policy, typed adapters and PA1 assembly shipped; VS1/VE1/AM1 and B16 followed. [Archived batches](../README.md#done--completed-plans) are evidence for those slices, not work to redo. K27 storage repair is delivered. |
 | Remaining | Remaining W10 fields, configuration/binding combinations, ordinary Fault branches and cross-service effects require per-operation review. The old “not ready” status applies to broad migration, not to already delivered slices. |
-| Next step / exit criteria | Select the remaining OSD/URI/source-mode or unsupported binding subset from W10. Complete exact selectors, extensions, state-after-error and replay dependency cards before changing handlers; verify both transports and independent selected wire instances. |
+| Next step / exit criteria | After OS1, select the remaining URI/source-mode, unsupported binding or unmodeled OSD extension subset from W10. Complete exact selectors, extensions, state-after-error and replay dependency cards before changing handlers; verify both transports and independent selected wire instances. |
 
 Work: W01/W02 for the first W10 batch. Baseline `892aa94`; investigation started
 2026-09-10. **IN-PROGRESS, NOT READY for broad handler migration.**
@@ -671,3 +671,5 @@ not change handlers; subsequent selected Fault and K14 notification repairs are
 recorded above and do not close the broader migration prerequisites.
 
 RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.
+
+OS1 (2026-09-23): [bounded OSD CRUD](../done/mock-fidelity-osd-crud.md) adds scoped candidates, atomic per-source quotas, binding refusal and commit-only persistence/replay. Client coordinate/color/persistence XML and quota parsing are corrected. Selected external corpus: 198 instances / 56 operations. Background color, temporary text and arbitrary write extensions refuse explicitly; URI/source-mode and wider W10 work remain open.

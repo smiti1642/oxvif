@@ -559,7 +559,7 @@ DeviceIO 的唯一操作是 `GetDigitalInputs`，由 REST simulator 驅動。其
 
 ### 7.2 Media1（33 項操作）
 
-Profile、video source/configuration、video encoder、OSD 與 audio catalog/configuration 均由共享狀態支援。`GetStreamUri` 與 `GetSnapshotUri` 對所有 profile 回傳同一組 canned URI；`GetOSDOptions` 與 `GetServiceCapabilities` 為 static。`SetAudioEncoderConfiguration` 若缺少規範要求的 `Multicast` 或 `SessionTimeout` 會拒絕 request。
+Profile、video source/configuration、video encoder、OSD 與 audio catalog/configuration 均由共享狀態支援。`GetStreamUri` 與 `GetSnapshotUri` 對所有 profile 回傳同一組 canned URI；`GetOSDOptions` 驗證來源後提供共用 static options；`GetServiceCapabilities` 為 static。`SetAudioEncoderConfiguration` 若缺少規範要求的 `Multicast` 或 `SessionTimeout` 會拒絕 request。
 
 `SetSynchronizationPoint` 預設拒絕；Media1 須逐項 opt-in，僅回覆收件，不產生串流效果（§13.5）。
 
@@ -858,7 +858,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 | End-to-end flow | `tests/mock_workflow.rs` |
 | XML namespace、name、cardinality 與 sequence order 符合 ONVIF schema | `tests/mock_schema_shape.rs`；限制如下 |
 
-`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 已設定使用固定版本的 Xerces 與外部 schema，驗證選定的 178 份 profile／source／rate／encoder／audio／metadata／synchronization／read-selector／event-pull request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
+`tests/mock_schema_shape.rs` 標記為 `#[ignore]`，執行時由 `$OXVIF_ONVIF_SCHEMA` 讀取 repository 外的 ONVIF schema。明確選取執行時，缺少資源即失敗；現在也要求外部 SOAP 1.2 envelope schema。逐節點 namespace 解析與分別執行的 Envelope／payload 檢查涵蓋 Fault 結構，但不驗證全部 XSD 值或錯誤語意。獨立 Windows／Linux CI 已設定使用固定版本的 Xerces 與外部 schema，驗證選定的 198 份 profile／source／rate／encoder／audio／metadata／synchronization／read-selector／event-pull／OSD-CRUD request／response instance。此有限 corpus 不涵蓋所有操作或認證；清冊 job 本身不驗證 XML。詳見[驗證檢查點](active/mock-fidelity-schema-preflight_zh.md)。0.15.0 的十項計數均為 0，但這不等同於宣告 mock 已通過 ONVIF conformant 認證；`xs:any` 與全 optional child 等 schema 特性仍可能掩蓋語意錯誤。
 
 目前 49 組 round-trip 全數為 working，無 static 或 known-broken；35 組 token row 中 30 組可區分、5 組明確標記為 blind。測試表的每個 row 都宣告意圖，避免已知限制演變成未追蹤的永久盲點。
 
@@ -872,7 +872,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 
 - Media2 `GetVideoSourceModes`：所有 `VideoSourceToken` 都回傳同一個 `Mode_1`。
 - 兩種 media service 的 `GetStreamUri` / `GetSnapshotUri`：所有 profile 都回傳同一 URI。
-- Media1 `GetOSDOptions`。Media2 `GetVideoEncoderInstances` 已改為依 source configuration
+- Media1 `GetOSDOptions`：驗證來源後，各來源共用 static options。Media2 `GetVideoEncoderInstances` 已改為依 source configuration
   選擇合成容量，詳見 §6.2.2，不再列為 static stub。
 
 ### 13.2 型別真實度缺口
@@ -964,3 +964,21 @@ fixture 資料，不代表服務可用或效果已完成。Capability 回應仍�
 候選版本的 `GetOSD`、PTZ `GetNode`／`GetConfiguration` 及 Recording `GetRecordingJobState` 只採用操作內直接且 namespace 正確的 selector。重複或巢狀 scalar 拒絕，Header／extension 誘餌不能提供身分；缺少／未知 token 的原操作 fault 保留。OSD／PTZ 輸出 escape 儲存字串，並修正 OSD 文字順序、圖片容器與 recording token escape。這不代表 OSD 寫入、PTZ 運動或錄影生命週期完成。
 
 PullMessages 現在以單次 state transaction 選取 queued／synthetic event 與 lexical filter 快照。被過濾的 queued event 消耗一個 slot 並回空訊息；每次 pull 觸發 hook 一次。IO token 使用 XML escape。立即回應的 per-instance 模型仍沒有獨立 subscription 生命週期或完整 topic matching。
+
+### 已建模 OSD CRUD（OS1）
+
+Media1 OSD 建立／替換先驗證 scoped candidate 與既有來源 configuration；Set
+拒絕改變來源綁定。每來源總配額為八（包含圖片），Plain／Date／Time／DateAndTime
+分別為 7／1／1／1；替換時排除自身。配額、唯一 token 分配及 commit 同鎖完成。
+未知／無效／超額寫入不改狀態、counter 或通知次數；成功寫入通知一次，並退休
+內建 replay 的 GetOSD／GetOSDs，options 與無關錄製保留。
+
+支援 Text／Image、預設／自訂位置、有限座標、8–72 字級、宣告的日期／時間格式、
+文字及字色；透明度接受整數 0–255。背景色、暫存文字及未建模 write 欄位／extension
+明確拒絕；缺少日期／時間格式採宣告的預設值。Image URI 只儲存、不下載／解碼；
+options URN 為 synthetic reference。選用 persistent=true 正規化為既有預設狀態，
+不另存欄位。磁碟持久化由 host change hook 負責，不宣稱實體疊圖或 reboot 效果。
+
+GetOSD 未知 token 的既有 Fault 不在本批 Fault 稽核內。Client 現可保留自訂座標與
+標準 color／persistence attribute；舊 child 形式仍可相容讀取。
+範圍及證據見 [OS1 紀錄](done/mock-fidelity-osd-crud_zh.md)。

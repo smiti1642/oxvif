@@ -1,6 +1,6 @@
 use crate::mock::effect::Effect;
 use crate::mock::helpers::{resp_empty, resp_soap_fault};
-use crate::mock::services::{device, events, imaging, media, media2, ptz, recording};
+use crate::mock::services::{device, events, imaging, media, media2, osd, ptz, recording};
 use crate::mock::state::SharedState;
 
 #[cfg(any(feature = "metamorph", test))]
@@ -276,11 +276,11 @@ fn dispatch_media(
             media::resp_audio_encoder_configuration_options(state, operation)
         }
         "GetOSD" => media::resp_osd(state, operation),
-        "GetOSDs" => media::resp_osds(state, body),
-        "SetOSD" => media::handle_set_osd(state, body),
-        "CreateOSD" => media::handle_create_osd(state, body),
-        "DeleteOSD" => media::handle_delete_osd(state, body),
-        "GetOSDOptions" => media::resp_osd_options(),
+        "GetOSDs" => osd::list(state, operation),
+        "SetOSD" => osd::set(state, operation, effect),
+        "CreateOSD" => osd::create(state, operation, effect),
+        "DeleteOSD" => osd::delete(state, operation, effect),
+        "GetOSDOptions" => osd::options(state, operation),
         _ => return None,
     })
 }

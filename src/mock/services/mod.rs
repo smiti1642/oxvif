@@ -4,6 +4,7 @@ pub mod events;
 pub mod imaging;
 pub mod media;
 pub mod media2;
+pub(crate) mod osd;
 pub mod ptz;
 pub mod recording;
 pub(crate) mod video_encoder;

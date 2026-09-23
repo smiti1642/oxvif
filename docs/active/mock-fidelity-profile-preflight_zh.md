@@ -10,7 +10,7 @@
 | --- | --- |
 | 已確認 | scoped identity、空 profile policy、typed adapter、PA1 組裝及後續 VS1／VE1／AM1／B16 已交付；K27 儲存修正也已發布，不能重列為未實作。 |
 | 剩餘工作 | W10 剩餘欄位、configuration／binding 組合、Fault 分支及跨服務效果仍需逐操作稽核。NOT READY 僅適用廣泛遷移，不抹除已交付子群。 |
-| 下一步／完成條件 | 從 W10 選 OSD／URI／source mode 或剩餘 binding 子群，先列 selector、extension、拒絕後狀態及 replay 相依，再驗證兩個 transport 與獨立 wire instances。 |
+| 下一步／完成條件 | 從 W10 選 URI／source mode、剩餘 binding 或未建模 OSD extension 子群，先列 selector、extension、拒絕後狀態及 replay 相依，再驗證兩個 transport 與獨立 wire instances。 |
 
 工作：第一批 W10 的 W01／W02。基準 `892aa94`；2026-09-10 開始調查。
 **IN-PROGRESS，尚未符合廣泛遷移 handler 的開工條件。**
@@ -562,3 +562,5 @@ read／create／delete 與 binding 遷移拆成獨立驗證 commit。初始來�
 後續選定 Fault 與 K14 通知修正已記錄於上方，不代表廣泛遷移的前置條件已完成。
 
 RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。
+
+OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。

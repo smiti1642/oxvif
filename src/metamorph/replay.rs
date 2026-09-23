@@ -83,6 +83,15 @@ impl ReplayResponder {
         let invalidated = self.invalidated.clone();
         Arc::new(move |effect| {
             match effect {
+                Effect::OsdCommitted => {
+                    let mut retired = invalidated.lock().unwrap_or_else(|p| p.into_inner());
+                    for action in [
+                        "http://www.onvif.org/ver10/media/wsdl/GetOSD",
+                        "http://www.onvif.org/ver10/media/wsdl/GetOSDs",
+                    ] {
+                        retired.insert(action.to_owned());
+                    }
+                }
                 Effect::AudioEncoderCommitted | Effect::MetadataCommitted => {
                     let mut retired = invalidated.lock().unwrap_or_else(|p| p.into_inner());
                     let actions: &[&str] = if effect == Effect::MetadataCommitted {

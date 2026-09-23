@@ -252,8 +252,8 @@ The exporter preserves XML bytes, emits two XML files per exchange plus `cases.j
 explicit Envelope/Body/operation expectations for requests and success/Fault
 responses. It never reads environment credentials or overwrites existing files.
 This is a diagnostic corpus, not comprehensive per-operation acceptance.
-The current eight drivers select 89 exchanges / 178 XML instances over 51 operations,
-including 21 Fault responses. This is the exporter composition, not a new validation result.
+The current nine drivers select 99 exchanges / 198 XML instances over 56 operations,
+including 22 Fault responses. This is the exporter composition, not a new validation result.
 
 ```powershell
 $env:OXVIF_MOCK_CORPUS = 'C:/Temp/oxvif-profile-corpus-new'
@@ -344,3 +344,5 @@ the execution checklist.
 RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.
 
 EP1 (2026-09-22): [event pull consistency](../done/mock-fidelity-event-pull.md) applies the active lexical filter to queued IO and snapshots selection/filter atomically. Concurrency/reentrant controls and four client captures supplement RS1; per-subscription lifecycle and full topic semantics remain open.
+
+OS1 (2026-09-23): [bounded OSD CRUD](../done/mock-fidelity-osd-crud.md) adds scoped candidates, atomic per-source quotas, binding refusal and commit-only persistence/replay. Client coordinate/color/persistence XML and quota parsing are corrected. Selected external corpus: 198 instances / 56 operations. Background color, temporary text and arbitrary write extensions refuse explicitly; URI/source-mode and wider W10 work remain open.

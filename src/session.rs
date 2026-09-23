@@ -770,15 +770,10 @@ impl OnvifSession {
 
     /// Retrieve valid OSD configuration options.
     ///
-    /// Unlike [`OnvifClient::get_osd_options`], the returned
-    /// [`OsdOptions`] is enriched with vendor-extension data the
-    /// spec doesn't define — specifically the per-text-type quotas
-    /// some cameras stash in XML attributes on
-    /// `<MaximumNumberOfOSDs>`, and a `<PositionOption>` *wrapper*
-    /// holding nested `<Type>` children. Doing this enrichment here
-    /// keeps `OnvifClient` strictly spec-compliant while still
-    /// letting application code (UIs, validators) see the
-    /// real-world quirks.
+    /// Both this method and [`OnvifClient::get_osd_options`] parse the standard
+    /// total and per-text-type quota attributes. This wrapper additionally
+    /// accepts a vendor `<PositionOption>` wrapper holding nested `<Type>`
+    /// children when the repeated-string form is absent.
     ///
     /// **This named the wrong shape until 0.15**, calling the flat
     /// repeated `<PositionOption>` a Genetec/Dahua quirk. The schema

@@ -180,11 +180,11 @@ modeled assembly/capacity behavior. These slices remain partial operation accept
 | `media.SetAudioEncoderConfiguration` | `media::handle_set_audio_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetAudioEncoderConfigurationOptions` | `media::resp_audio_encoder_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetOSD` | `media::resp_osd` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
-| `media.GetOSDs` | `media::resp_osds` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.SetOSD` | `media::handle_set_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.CreateOSD` | `media::handle_create_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.DeleteOSD` | `media::handle_delete_osd` | `state, body` | W10 | TODO | TODO | TODO | TODO | TODO | - |
-| `media.GetOSDOptions` | `media::resp_osd_options` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media.GetOSDs` | `osd::list` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.SetOSD` | `osd::set` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.CreateOSD` | `osd::create` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.DeleteOSD` | `osd::delete` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.GetOSDOptions` | `osd::options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
 
 ## media2
 
@@ -362,3 +362,5 @@ failure. Preserve the reason and replacement ID for removed operations.
 RS1: [scoped read selectors](../done/mock-fidelity-read-selectors.md).
 
 EP1: [event pull consistency](../done/mock-fidelity-event-pull.md).
+
+OS1 (2026-09-23): [bounded OSD CRUD](../done/mock-fidelity-osd-crud.md) adds scoped candidates, atomic per-source quotas, binding refusal and commit-only persistence/replay. Client coordinate/color/persistence XML and quota parsing are corrected. Selected external corpus: 198 instances / 56 operations. Background color, temporary text and arbitrary write extensions refuse explicitly; URI/source-mode and wider W10 work remain open.

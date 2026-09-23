@@ -253,7 +253,20 @@ async fn m1_snapshot_uri(d: &Dev, t: &str) -> String {
 }
 
 async fn m1_osd_options(d: &Dev, t: &str) -> String {
-    fingerprint(d.client.get_osd_options(&d.url("media"), t).await)
+    fingerprint(
+        d.client
+            .get_osd_options(&d.url("media"), t)
+            .await
+            .map(|mut options| {
+                // Debug output of a populated HashMap has randomized order.
+                // Compare every quota in sorted order, alongside all other fields.
+                let quotas: std::collections::BTreeMap<_, _> =
+                    std::mem::take(&mut options.max_per_text_type)
+                        .into_iter()
+                        .collect();
+                (options, quotas)
+            }),
+    )
 }
 
 // ── Media2 probes ────────────────────────────────────────────────────────────

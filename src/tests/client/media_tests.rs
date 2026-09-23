@@ -1286,6 +1286,23 @@ async fn test_get_osd_parses_colors_and_persistence() {
     assert_eq!(fc.transparent, Some(0.0));
     assert!(ts.background_color.is_some());
     assert_eq!(ts.is_persistent_text, Some(true));
+
+    // Attribute values take precedence over conflicting legacy child forms.
+    let attributes = xml
+        .replace(
+            "<tt:TextString>",
+            "<tt:TextString IsPersistentText='false'>",
+        )
+        .replace("<tt:FontColor>", "<tt:FontColor Transparent='43'>");
+    let client = OnvifClient::new("http://mock").with_transport(mock(&attributes));
+    let ts = client
+        .get_osd("http://mock", "OSD_1")
+        .await
+        .unwrap()
+        .text_string
+        .unwrap();
+    assert_eq!(ts.is_persistent_text, Some(false));
+    assert_eq!(ts.font_color.unwrap().transparent, Some(43.0));
 }
 
 #[tokio::test]

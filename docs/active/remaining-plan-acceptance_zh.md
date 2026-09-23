@@ -20,7 +20,7 @@
 
 | 家族 | 本地工作／下一個驗收邊界 |
 | --- | --- |
-| F01／F02／F03 | [RS1](../done/mock-fidelity-read-selectors_zh.md) 修正四個 Media／PTZ／Recording selector 及共用輸出。OSD CRUD、URI／source mode、運動／Imaging、Device／DeviceIO、錄影／搜尋生命週期仍是可繼續實作的工作，不是都受硬體阻擋；下一批仍先做 W01 操作卡。 |
+| F01／F02／F03 | [RS1](../done/mock-fidelity-read-selectors_zh.md) 修正四個 Media／PTZ／Recording selector 及共用輸出。OS1 已建模 OSD CRUD 完成；URI／source mode、運動／Imaging、Device／DeviceIO、錄影／搜尋生命週期仍是可繼續實作的工作，不是都受硬體阻擋；下一批仍先做 W01 操作卡。 |
 | F04／F06 | [EP1](../done/mock-fidelity-event-pull_zh.md) 修正 queue 過濾與事件／filter 原子快照。每個 subscription 的狀態、capability／replay 一致性仍待實作；加入 endpoint identity 前先保留公開 RequestCtx 建構契約或提出相容 adapter。 |
 | F05 | Listener framing／deadline 限制已完成。下一張 auth 卡須區分 digest 驗證與 freshness／replay：可注入時鐘、可接受 skew、bounded nonce cache、重複 nonce 原子拒絕、到期清理、instance 隔離及拒絕後狀態不變。既有寬容 auth 不代表這些保護存在。 |
 | F07 | RS1／EP1 擴充選定操作 capture 與獨立驗證，保留 payload anchor；較廣 wildcard／QName／negative／fuzz 仍未完成，獨立資源留在 checkout 外。 |
@@ -99,3 +99,5 @@ snapshot example、178-instance 外部 corpus、native credential、ConPTY／cap
 `c747297` snapshot 探針、`6093d94` keyring 探針、`32d6f49` terminal runner。
 表中的較大實作仍未完成；本清單記錄逐份計劃的本地可行工作及輸入準備，
 不代表所有未來可寫的程式都已完成。
+
+OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。

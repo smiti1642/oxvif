@@ -1012,6 +1012,7 @@ async fn export_reviewed_batches_for_independent_validation() {
     exchanges.extend(media_sync_exchanges().await);
     exchanges.extend(read_selector_exchanges().await);
     exchanges.extend(event_pull_exchanges().await);
+    exchanges.extend(osd_crud_exchanges().await);
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
     eprintln!(
@@ -1363,4 +1364,80 @@ async fn captures_event_pull_filter_paths() {
     let exchanges = event_pull_exchanges().await;
     assert_eq!(exchanges.len(), 4);
     assert!(exchanges.iter().all(|e| !e.expected_fault));
+}
+
+async fn osd_crud_exchanges() -> Vec<Exchange> {
+    let capture = Capture {
+        mock: MockTransport::new(),
+        exchanges: Arc::default(),
+    };
+    let client = OnvifClient::new(TARGET).with_transport(Arc::new(capture.clone()));
+    let mut osd = client.get_osd(TARGET, "OSD_1").await.unwrap();
+    let options = client.get_osd_options(TARGET, "VSC_2").await.unwrap();
+    assert_eq!(options.max_osd, 8);
+    assert_eq!(options.max_per_text_type["Plain"], 7);
+    osd.token.clear();
+    osd.video_source_config_token = "VSC_2".into();
+    osd.position = oxvif::OsdPosition {
+        type_: "Custom".into(),
+        x: Some(-0.5),
+        y: Some(0.25),
+    };
+    osd.text_string = Some(oxvif::OsdTextString {
+        type_: "Plain".into(),
+        plain_text: Some("Corpus OSD & <北>".into()),
+        date_format: None,
+        time_format: None,
+        font_size: Some(31),
+        font_color: Some(oxvif::OsdColor {
+            x: 12.0,
+            y: 23.0,
+            z: 34.0,
+            colorspace: Some("urn:os1:color".into()),
+            transparent: Some(41.0),
+        }),
+        background_color: None,
+        is_persistent_text: Some(true),
+    });
+    osd.token = client.create_osd(TARGET, &osd).await.unwrap();
+    // Persistent-by-default state does not store an explicit optional true flag.
+    osd.text_string.as_mut().unwrap().is_persistent_text = None;
+    assert_eq!(client.get_osd(TARGET, &osd.token).await.unwrap(), osd);
+    osd.type_ = "Image".into();
+    osd.text_string = None;
+    osd.image_path = Some("https://example.invalid/os1?a=1&b=2".into());
+    client.set_osd(TARGET, &osd).await.unwrap();
+    assert_eq!(client.get_osd(TARGET, &osd.token).await.unwrap(), osd);
+    assert_eq!(
+        client.get_osds(TARGET, Some("VSC_2")).await.unwrap(),
+        vec![osd.clone()]
+    );
+    client.delete_osd(TARGET, &osd.token).await.unwrap();
+    assert!(
+        client
+            .get_osds(TARGET, Some("VSC_2"))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_delete_fault(
+        client.delete_osd(TARGET, &osd.token).await.unwrap_err(),
+        "ter:InvalidArgVal",
+        "OSD configuration not found: OSD_2",
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
+    std::mem::take(&mut *capture.exchanges.lock().unwrap())
+}
+
+#[tokio::test]
+async fn captures_osd_crud_lifecycle() {
+    let exchanges = osd_crud_exchanges().await;
+    assert_eq!(exchanges.len(), 10);
+    assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 1);
 }

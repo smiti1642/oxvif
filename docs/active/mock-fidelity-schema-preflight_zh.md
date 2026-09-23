@@ -221,8 +221,8 @@ parent 已存在**。工具拒絕空資料、含認證欄位的 request、相對
 checkout／其上層位置。匯出保留 XML bytes，每組 exchange 產生兩個 XML 檔案，另加 `cases.json`，並為
 request、成功與 Fault response 記錄明確的 Envelope／Body／operation 預期。
 不讀取環境憑證或覆寫檔案；這是診斷 corpus，不是完整逐操作驗收。
-目前八個 driver 選取 89 組 exchange／178 份 XML instance，涵蓋 51 項操作及
-21 個 Fault response。這是 exporter 的組成，不是新的驗證結果。
+目前九個 driver 選取 99 組 exchange／198 份 XML instance，涵蓋 56 項操作及
+22 個 Fault response。這是 exporter 的組成，不是新的驗證結果。
 
 ```powershell
 $env:OXVIF_MOCK_CORPUS = 'C:/Temp/oxvif-profile-corpus-new'
@@ -300,3 +300,5 @@ P-B 的逐操作欄位、Fault 與語意審查。
 RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。
 
 EP1（2026-09-22）：[event pull 一致性](../done/mock-fidelity-event-pull_zh.md) 對 queued IO 套用既有 lexical filter，並原子取得事件／filter。併發、reentrant 控制及四組 client capture 補充 RS1；每份 subscription 的生命週期與完整 topic 語意仍未完成。
+
+OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。

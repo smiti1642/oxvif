@@ -9,7 +9,7 @@ Source baseline: `80bcf14`. Use this section as the current work entry; older da
 | Category | Disposition and evidence |
 | --- | --- |
 | Confirmed | W00 literal route/Action reconciliation is complete and maintained; direct-reader indexing remains available. K27 collision retention and request-aware replay were repaired in [the migration](../replay-storage.md). Historical reproductions below are not current storage-loss defects. |
-| Remaining | W02 transitive helper/field classification and migration ownership remain partial. The 190 indexed reader occurrences include tests, discovery and canonicalization; they are not 190 bugs or a backlog of identical replacements. |
+| Remaining | W02 transitive helper/field classification and migration ownership remain partial. The 163 indexed reader occurrences include tests, discovery and canonicalization; they are not 163 bugs or a backlog of identical replacements. |
 | Next step / exit criteria | For the next selected service, trace all transitive readers/renderers/state effects and assign each to migration or intentional isolation. Re-run [the checker](check-mock-fidelity-inventory.ps1); preserve the direct index and attach field-specific C01–C12 evidence in the batch card. |
 
 2026-09-11 K27 follow-up: collision retention and request-aware lookup are
@@ -41,11 +41,10 @@ This is measured project-source indexing, not a schema catalogue.
   its client's URI. No source route lacks a corresponding declaration.
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
-- 190 direct occurrences of five reader spellings are indexed: 172 before
-  top-level test modules and 18 inside those modules. The former span 57
-  enclosing symbols, **not** 57 defective operations (recounted after Fleet). This includes test-only
-  `required_text`, canonicalization, discovery and an intentionally unused
-  helper touch; it is not a count of legacy production bugs.
+- 163 direct occurrences of five reader spellings are indexed: 145 before
+  top-level test modules and 18 inside those modules. The former span 50
+  enclosing symbols, **not** 50 defective operations (recounted after OS1). This includes test-only
+  `required_text`, canonicalization, discovery; it is not a count of legacy production bugs.
 - W00 source reconciliation is complete for the current literal shapes.
   K06 synthetic alias routing is now repaired in the
   [pipeline checkpoint](mock-fidelity-pipeline-preflight.md#exact-action-routing);
@@ -277,16 +276,6 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | `src/mock/services/events.rs::resp_create_pull_point_subscription` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
 | `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
-| `src/mock/services/media.rs::_force_use_extract_all` | `extract_all_tags` | `production:1` |
-| `src/mock/services/media.rs::handle_create_osd` | `extract_tag` | `production:1` |
-| `src/mock/services/media.rs::handle_delete_osd` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::handle_set_osd` | `extract_attr` | `production:1` |
-| `src/mock/services/media.rs::handle_set_osd` | `extract_tag` | `production:1` |
-| `src/mock/services/media.rs::parse_osd_color` | `extract_attr` | `production:4` |
-| `src/mock/services/media.rs::parse_osd_color` | `extract_tag` | `production:2` |
-| `src/mock/services/media.rs::parse_osd_payload` | `extract_attr` | `production:2` |
-| `src/mock/services/media.rs::parse_osd_payload` | `extract_tag` | `production:11` |
-| `src/mock/services/media.rs::resp_osds` | `extract_tag` | `production:2` |
 | `src/mock/services/ptz.rs::apply_ptz_configuration` | `extract_attr` | `production:2` |
 | `src/mock/services/ptz.rs::apply_ptz_configuration` | `extract_tag` | `production:11` |
 | `src/mock/services/ptz.rs::handle_ptz_absolute_move` | `extract_attr` | `production:3` |
@@ -336,7 +325,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | W17 | `discovery_responder::probe_response`: DOM | UDP Probe matching, QName scope and input bounds; not the SOAP synthetic entry point |
 | W17 / basic Fleet | `discovery_responder::shared_probe`: prevalidated DOM | `serve_many` bounds datagrams and rejects invalid UTF-8; `supported_probe_xml` bounds structure and checks namespaces before DOM construction. Header/body cardinality, Action, MessageID, anonymous ReplyTo and qualified Types are checked; nonempty Scopes or MatchBy are refused. Test readers inspect generated replies; they are not independent schema validation. See [Fleet evidence](mock-fleet-basic-plan.md#local-evidence). |
 | W10 | Migrated Media profile/create/delete/binding readers and shared `video_source`, `video_encoder`, `audio_metadata` scoped contracts | Media2 wrappers reuse shared helpers; these completed migrations remain transitive-review context, not remaining legacy-reader sites; broader per-field/model limitations remain in their batch cards |
-| W10 | Media OSD helpers, colour/position attributes and nested TextString; configuration option selectors | Rendering and typed parsers, list filtering, quota/state; `_force_use_extract_all` is not a routed behavior |
+| W10 | Migrated OS1 scoped OSD candidates, selectors, color/position and TextString | Shared renderer/client XML fixes, source-associated quotas and commit effects; unmodeled extensions remain explicitly refused |
 | W10 | `media2::configuration_plan`: scoped repeated Type/Token references shared by create/add/remove | Complete value plan, optional rename and reference counts commit atomically; see [assembly batch](../done/mock-fidelity-profile-assembly.md). VS1/VE1/AM1 separately implement selected nested writers; wider fields and physical compatibility remain open. |
 | W11 | PTZ selector scalars, nested operation/config/tour/space fragments and coordinate attributes | Profile-to-node resolution; `min_max`, range/vector readers, per-head slots and repeated tour spots |
 | W12 | Imaging source selector and scalar setting reads | Source resolution and nested settings; current parse-failure/default behavior is not the target contract |
@@ -345,8 +334,7 @@ Inline comments/string examples and unsupported syntax need manual inspection.
 | W15 | Event TopicExpression scalar extraction | Namespace context, dialect/filter state, subscription lifetime and queue semantics |
 | W04/W23 | Test-only strict/legacy/discovery readers | Keep lexical helper unit tests distinct from independent protocol assertions; do not use legacy extraction to prove corrected wire output |
 
-The work packages above own all indexed entries, including the non-routed
-synthetic helper touch, and retain migrated shared consumers for context. Per-field meanings and every transitive wrapper remain
+The work packages above own all indexed entries, and retain migrated shared consumers for context. Per-field meanings and every transitive wrapper remain
 W01/W02 work; the index must not be marked as a finished migration.
 
 ## New findings
@@ -471,3 +459,5 @@ bounded repairs; remaining contract/design work stays in the programme backlog,
 not an automatic prerequisite to the selected 0.17 cut.
 
 RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-selectors.md) are complete as a bounded W04 batch across Media/PTZ/Recording. Shared rendering now preserves escaped values and OSD structure; the selected corpus expands to 170 instances / 50 operations and passes local strict Xerces. Full operation, lifecycle, fault and capability coverage remains open.
+
+OS1 (2026-09-23): [bounded OSD CRUD](../done/mock-fidelity-osd-crud.md) adds scoped candidates, atomic per-source quotas, binding refusal and commit-only persistence/replay. Client coordinate/color/persistence XML and quota parsing are corrected. Selected external corpus: 198 instances / 56 operations. Background color, temporary text and arbitrary write extensions refuse explicitly; URI/source-mode and wider W10 work remain open.

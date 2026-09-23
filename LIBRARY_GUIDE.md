@@ -954,6 +954,8 @@ for o in &osds {
 
 **`OsdConfiguration` fields:** `token`, `video_source_config_token`, `type_` (`"Text"` or `"Image"`), `position` (`OsdPosition`), `text_string` (`Option<OsdTextString>`), `image_path` (`Option<String>`).
 
+OSD serialization uses ordered text members and color/persistence attributes; custom position coordinates survive readback. Standard total/per-type quota attributes are available directly through `OnvifClient`, as well as `OnvifSession`. Legacy child forms remain readable.
+
 **`OsdTextString` fields:** `type_`, `plain_text`, `date_format`, `time_format` (`Option<String>`), `font_size` (`Option<u32>`), `font_color`, `background_color` (`Option<OsdColor>`), `is_persistent_text` (`Option<bool>`). `OsdColor` carries `x`/`y`/`z` channel values, optional `colorspace` URI, and `transparent` level.
 
 **`OsdOptions` fields:** `max_osd` (`u32`), `types` (`Vec<String>`), `position_types` (`Vec<String>`), `text_types` (`Vec<String>`).
