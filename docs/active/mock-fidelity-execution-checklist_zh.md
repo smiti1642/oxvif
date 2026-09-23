@@ -160,7 +160,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | 結構化 auth／空 chain／選定 DeleteProfile fault，另納入已審查的 generic synthetic-boundary fault；資源／DTD 名稱明確屬 mock 自訂策略 | Expanded fault QName、typed failure、消費端及 state 控制；其他一般服務分支與 structured Detail 待完成，不概括宣稱符合規格 |
 | W06／M2／PARTIAL | 預設切換前完成 W05 設計 | 已完成第一層 subcode 的 client／health 控制，以及認證 CLI JSON／table 子程序控制；公開錯誤欄位未改變 | 服務預設切換前仍須擴充 nested／flat／vendor、transport／session 與消費端覆蓋；維持診斷及 exit-code 意義 |
 | W07／M2、M3／PARTIAL | W03／W05 設計、W06 | 已實作完整 synthetic Action 路由及共用 body identity；A01 在 responder 前拒絕無效 HTTP UTF-8 | 全來源路由及 HTTP／in-process 邊界控制；A01 檢查 HTTP 400／policy Fault、state／hook 保留、armed fault 未消耗及合法 Unicode。完整 content type／status／header 與 endpoint 政策仍待完成 |
-| W08／M3／PARTIAL | W02／W04／W05 | Scoped Header／UsernameToken 解析、明確 digest／encoding／role 政策、不反射輸入的固定錯誤及精確豁免；見[認證盤點](../done/mock-fidelity-auth-preflight_zh.md) | 兩種 transport 的身分、拒絕、state／hook 及即時 user table 控制；保留 auth 預設／順序與普通 CLI 分類。未驗收 freshness／nonce-reuse、角色授權或完整 WSSE／HTTP 安全 |
+| W08／M3／PARTIAL | W02／W04／W05 | Scoped Header／UsernameToken 解析、明確 digest／encoding／role 政策、不反射輸入的固定錯誤及精確豁免；見[認證盤點](../done/mock-fidelity-auth-preflight_zh.md) | 兩種 transport 的身分、拒絕、state／hook 及即時 user table 控制；保留 auth 預設／順序與普通 CLI 分類。AF1 完成有限 freshness／nonce-reuse；角色授權與完整 WSSE／HTTP 安全仍未驗收 |
 | W09／M2／TODO | W05／W06 | `fault_injection.rs`、`responder.rs`、server admin endpoint、公開 injection builder | 分離 literal／structured 與刻意 raw 異常輸出；自訂 QName、single-shot 匹配、順序、併發、clear／reset 及相容測試 |
 | W10／M2–M4／PARTIAL | 批次 W01、W03–W06 | `services/media.rs`、`media2.rs`、共用狀態與 renderer；按下方批次施工 | 完成條件為每個 Media 列通過 C01–C12，兩種 view 狀態一致且不共用錯誤 wire shape。E1 不代表 DeleteProfile 列結案；PA1 已實作初始 binding／改名／All／容量／引用計數；VS1 已實作 scoped source 讀寫；VE1 已實作 scoped encoder candidate／options／capacity 與 committed replay；AM1 已實作選定 audio／metadata 契約，詳見批次紀錄 |
 | W11／M2–M4／PARTIAL | W01、W03–W06 | PTZ1 已涵蓋 19 個既有 profile／head 使用端的 scoped ProfileToken 身分；其他 selector、座標 attribute／space、configuration 子樹、preset／tour 與 auxiliary command 仍待完成 | 兩種 transport 與兩個不同 head；完整欄位效果／fault policy／併發仍未驗收，不虛構移動／時間保證 |
@@ -322,3 +322,5 @@ EP1（2026-09-22）：[event pull 一致性](../done/mock-fidelity-event-pull_zh
 OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。
 
 EP2（2026-09-23）：[有限 pull-point 生命週期](../done/mock-fidelity-event-lifecycle_zh.md) 完成獨立 endpoint／filter／queue、原子配置、expiry／renew／unsubscribe，保留公開 RequestCtx 建構。外部 corpus 為 216 XML／59 Actions；push、property 同步、完整 topic grammar、規範 WSNT Fault detail 仍為 W15 工作。
+
+AF1（2026-09-23）：[有界認證時間／nonce 防重用](../done/mock-fidelity-auth-freshness_zh.md) 已交付；nonce 原子 admission、過期／未來／重用拒絕不觸發 hook，時鐘倒退不重開已淘汰區間。外部 corpus 224 XML／60 Actions，AF1 request Security header 去除後匯出。Roles、HTTP binding、structured／raw injection 仍為 Q02 工作。

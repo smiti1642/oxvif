@@ -32,7 +32,7 @@
 | ID | 既有負責計劃 | 狀態 | 工作與完成邊界 |
 | --- | --- | --- | --- |
 | Q01 | F04／W15 | PARTIAL：EP2 已交付 | Events 訂閱 endpoint 身分、filter／queue 隔離、有界容量、renew／expiry／unsubscribe；保留 RequestCtx 建構契約；可控時鐘／生命週期測試與獨立 wire 驗證 |
-| Q02 | F05／W07–W09 | TODO | Auth freshness、有界原子 nonce 防重用／到期；HTTP binding／status／header；structured 與刻意 raw fault injection、roles、拒絕不改狀態 |
+| Q02 | F05／W07–W09 | PARTIAL: AF1 delivered | Auth freshness、有界原子 nonce 防重用／到期；HTTP binding／status／header；structured 與刻意 raw fault injection、roles、拒絕不改狀態 |
 | Q03 | F01／W10 | TODO | Media URI／source mode／binding 契約、OS1 以外 OSD extension；明確建模／拒絕欄位與雙 view 一致性 |
 | Q04 | F02／W11–W12 | TODO | PTZ space／configuration／preset／home／tour，以及每來源 Imaging／focus 模擬效果、範圍與錯誤 |
 | Q05 | F03／W13–W14 | TODO | Device／DeviceIO user／network／scope／storage／relay，以及 Recording／Search／Replay 生命週期、終止與連鎖處理；僅 synthetic 效果 |
@@ -59,3 +59,5 @@
   每列結案前須核對，不能直接假定全部受阻。
 
 Q01 EP2 已交付：[證據](../done/mock-fidelity-event-lifecycle_zh.md)。W15 剩 push／property 同步、完整 topic matching、規範 WSNT Fault detail，不視為硬體阻礙。下一獨立批次：Q02 auth freshness／nonce replay。
+
+AF1（2026-09-23）：[有界認證時間／nonce 防重用](../done/mock-fidelity-auth-freshness_zh.md) 已交付；nonce 原子 admission、過期／未來／重用拒絕不觸發 hook，時鐘倒退不重開已淘汰區間。外部 corpus 224 XML／60 Actions，AF1 request Security header 去除後匯出。Roles、HTTP binding、structured／raw injection 仍為 Q02 工作。

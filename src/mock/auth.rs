@@ -1,13 +1,17 @@
 //! WS-Security PasswordDigest authentication for the mock server.
 //!
 //! Validates the `<wsse:Security>` header in incoming SOAP requests.
-//! Scoped PasswordDigest checking only: no freshness, nonce reuse prevention,
-//! user-level authorization or full WS-Security processing is implemented.
+//! Scoped PasswordDigest checking with bounded freshness and nonce replay
+//! protection. User-level authorization and full WS-Security are not modeled.
 //! Only `GetSystemDateAndTime` is exempt (ONVIF spec requires it to be
 //! unauthenticated so clients can sync their clock before authenticating).
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha1::{Digest, Sha1};
+use std::{
+    collections::BTreeMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::mock::request::{Node, Request};
 use crate::mock::state::SharedState;
@@ -19,6 +23,87 @@ const WSU: &str =
 const DIGEST_TYPE: &str = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest";
 const BASE64_TYPE: &str = "http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary";
 const INVALID_HEADER: &str = "Invalid WS-Security header";
+const MAX_AGE: u64 = 300;
+const FUTURE_SKEW: u64 = 60;
+const MAX_NONCE_BYTES: usize = 256;
+const MAX_NONCES: usize = 4096;
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct ReplayCache {
+    nonces: BTreeMap<Vec<u8>, u64>,
+    accepted_clock: u64,
+    #[cfg(test)]
+    now_override: Option<u64>,
+}
+
+impl ReplayCache {
+    fn now(&self) -> u64 {
+        #[cfg(test)]
+        if let Some(now) = self.now_override {
+            return now.max(self.accepted_clock);
+        }
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .max(self.accepted_clock)
+    }
+
+    fn admit(&mut self, nonce: Vec<u8>, created: u64) -> Result<(), String> {
+        let now = self.now();
+        if created < now.saturating_sub(MAX_AGE) {
+            return Err("Stale Created timestamp".into());
+        }
+        if created > now.saturating_add(FUTURE_SKEW) {
+            return Err("Future Created timestamp".into());
+        }
+        if self.nonces.get(&nonce).is_some_and(|end| *end >= now) {
+            return Err("Reused WS-Security nonce".into());
+        }
+        if self.nonces.values().filter(|end| **end >= now).count() >= MAX_NONCES {
+            return Err("WS-Security nonce cache capacity exceeded".into());
+        }
+        // All refusals precede mutation; never evict a live nonce for capacity.
+        self.nonces.retain(|_, end| *end >= now);
+        self.nonces
+            .insert(nonce, now.max(created).saturating_add(MAX_AGE));
+        self.accepted_clock = now;
+        Ok(())
+    }
+}
+
+fn created_seconds(value: &str) -> Option<u64> {
+    let value = value.trim_matches([' ', '\t', '\r', '\n']);
+    if value.len() != 20 || !value.is_ascii() {
+        return None;
+    }
+    if &value[4..5] != "-"
+        || &value[7..8] != "-"
+        || &value[10..11] != "T"
+        || &value[13..14] != ":"
+        || &value[16..17] != ":"
+        || &value[19..] != "Z"
+    {
+        return None;
+    }
+    let y = value[..4].parse::<i32>().ok()?;
+    let m = value[5..7].parse::<i32>().ok()?;
+    let d = value[8..10].parse::<i32>().ok()?;
+    let h = value[11..13].parse::<i32>().ok()?;
+    let min = value[14..16].parse::<i32>().ok()?;
+    let sec = value[17..19].parse::<i32>().ok()?;
+    if !(1970..=9999).contains(&y)
+        || !(1..=12).contains(&m)
+        || !(1..=31).contains(&d)
+        || !(0..24).contains(&h)
+        || !(0..60).contains(&min)
+        || !(0..60).contains(&sec)
+    {
+        return None;
+    }
+    let time = crate::types::civil_to_unix(y, m, d, h, min, sec);
+    (crate::soap::security::unix_secs_to_iso8601(time) == value).then_some(time as u64)
+}
 
 /// SOAP actions that do NOT require authentication.
 const AUTH_EXEMPT: &[&str] = &["http://www.onvif.org/ver10/device/wsdl/GetSystemDateAndTime"];
@@ -30,7 +115,7 @@ pub fn requires_auth(action: &str) -> bool {
 
 /// Validate scoped WS-Security credentials in the SOAP Header against the live
 /// user table. Each user has their own password; any configured user
-/// that produces a matching digest passes.
+/// that produces a matching digest, fresh timestamp and unused nonce passes.
 ///
 /// Returns `Ok(())` if valid, `Err(reason)` if invalid.
 pub fn validate_ws_security(body: &str, state: &SharedState) -> Result<(), String> {
@@ -80,6 +165,9 @@ pub fn validate_ws_security(body: &str, state: &SharedState) -> Result<(), Strin
     if nonce_raw.is_empty() {
         return Err("Invalid nonce base64".into());
     }
+    if nonce_raw.len() > MAX_NONCE_BYTES {
+        return Err("WS-Security nonce exceeds mock limit".into());
+    }
 
     let password = {
         let s = state.read();
@@ -100,11 +188,15 @@ pub fn validate_ws_security(body: &str, state: &SharedState) -> Result<(), Strin
         .decode(base64_text(digest_b64))
         .map_err(|_| "Invalid password digest base64")?;
 
-    if supplied.as_slice() == expected.as_slice() {
-        Ok(())
-    } else {
-        Err("Password digest mismatch".into())
+    if supplied.as_slice() != expected.as_slice() {
+        return Err("Password digest mismatch".into());
     }
+    let created = created_seconds(created).ok_or("Invalid Created timestamp")?;
+    state
+        .auth_replay
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .admit(nonce_raw, created)
 }
 
 fn field<'a>(
@@ -144,7 +236,182 @@ mod tests {
     use crate::mock::state::MockState;
 
     fn new_state() -> MockState {
-        MockState::for_tests()
+        let state = MockState::for_tests();
+        state.auth_replay.lock().unwrap().now_override = created_seconds("2026-04-15T00:00:00Z");
+        state
+    }
+
+    #[test]
+    fn freshness_boundaries_and_rejections_preserve_cache() {
+        let now = 1_704_067_200;
+        for delta in [-301i64, -300, 0, 60, 61] {
+            let mut cache = ReplayCache {
+                now_override: Some(now),
+                ..Default::default()
+            };
+            let before = cache.clone();
+            let result = cache.admit(vec![1], (now as i64 + delta) as u64);
+            if (-300..=60).contains(&delta) {
+                assert_eq!(result, Ok(()));
+                let committed = cache.clone();
+                assert_eq!(
+                    cache.admit(vec![1], (now as i64 + delta) as u64),
+                    Err("Reused WS-Security nonce".into())
+                );
+                assert_eq!(cache, committed);
+            } else {
+                assert_eq!(
+                    result,
+                    Err(if delta < 0 {
+                        "Stale Created timestamp"
+                    } else {
+                        "Future Created timestamp"
+                    }
+                    .into())
+                );
+                assert_eq!(cache, before);
+            }
+        }
+    }
+
+    #[test]
+    fn future_nonce_retention_and_clock_rollback_are_fail_closed() {
+        let now = 1_704_067_200;
+        let mut cache = ReplayCache {
+            now_override: Some(now),
+            ..Default::default()
+        };
+        cache.admit(vec![1], now + 60).unwrap();
+        cache.now_override = Some(now + 360);
+        assert_eq!(
+            cache.admit(vec![1], now + 60),
+            Err("Reused WS-Security nonce".into())
+        );
+        cache.now_override = Some(now + 361);
+        cache.admit(vec![2], now + 361).unwrap();
+        assert!(!cache.nonces.contains_key(&vec![1]));
+        cache.now_override = Some(now);
+        let before = cache.clone();
+        assert_eq!(
+            cache.admit(vec![1], now + 60),
+            Err("Stale Created timestamp".into())
+        );
+        assert_eq!(cache, before);
+    }
+
+    #[test]
+    fn capacity_preserves_live_nonces_and_recovers_after_expiry() {
+        let now = 1_704_067_200;
+        let mut cache = ReplayCache {
+            now_override: Some(now),
+            ..Default::default()
+        };
+        for i in 0..MAX_NONCES {
+            cache.admit(i.to_be_bytes().to_vec(), now).unwrap();
+        }
+        let before = cache.clone();
+        assert_eq!(
+            cache.admit(vec![99], now),
+            Err("WS-Security nonce cache capacity exceeded".into())
+        );
+        assert_eq!(cache, before);
+        cache.now_override = Some(now + 301);
+        cache.admit(vec![99], now + 301).unwrap();
+        assert_eq!(cache.nonces.len(), 1);
+    }
+
+    #[test]
+    fn timestamp_policy_checks_calendar_and_preserves_digest_whitespace() {
+        assert_eq!(
+            created_seconds(" \t2024-02-29T00:00:00Z\r\n"),
+            Some(1_709_164_800)
+        );
+        for value in [
+            "2023-02-29T00:00:00Z",
+            "2024-04-31T00:00:00Z",
+            "2024-01-01T24:00:00Z",
+            "2024-01-01T00:00:60Z",
+            "2024-01-01T00:00:00.1Z",
+            "2024-01-01T00:00:00+00:00",
+            "北024-01-01T00:00:00Z",
+        ] {
+            assert_eq!(created_seconds(value), None, "{value}");
+        }
+        let state = new_state();
+        let xml = build_digest_body(
+            "admin",
+            "admin",
+            " 2026-04-15T00:00:00Z ",
+            b"whitespace-nonce",
+        );
+        assert_eq!(validate_ws_security(&xml, &state), Ok(()));
+    }
+
+    #[test]
+    fn failed_credentials_never_reserve_a_nonce_and_replay_is_cross_user() {
+        let state = new_state();
+        let created = "2026-04-15T00:00:00Z";
+        let before = state.auth_replay.lock().unwrap().clone();
+        let bad = build_digest_body("admin", "wrong", created, b"same-nonce");
+        assert_eq!(
+            validate_ws_security(&bad, &state),
+            Err("Password digest mismatch".into())
+        );
+        assert_eq!(*state.auth_replay.lock().unwrap(), before);
+        let good = build_digest_body("admin", "admin", created, b"same-nonce");
+        validate_ws_security(&good, &state).unwrap();
+        let other_user = build_digest_body("operator", "operator", created, b"same-nonce");
+        assert_eq!(
+            validate_ws_security(&other_user, &state),
+            Err("Reused WS-Security nonce".into())
+        );
+        assert_eq!(validate_ws_security(&good, &new_state()), Ok(()));
+        let before = state.auth_replay.lock().unwrap().clone();
+        let oversized = build_digest_body("admin", "admin", created, &[1; MAX_NONCE_BYTES + 1]);
+        assert_eq!(
+            validate_ws_security(&oversized, &state),
+            Err("WS-Security nonce exceeds mock limit".into())
+        );
+        let invalid_time = build_digest_body("admin", "admin", "not-a-time", b"invalid-time");
+        assert_eq!(
+            validate_ws_security(&invalid_time, &state),
+            Err("Invalid Created timestamp".into())
+        );
+        assert_eq!(*state.auth_replay.lock().unwrap(), before);
+    }
+
+    #[test]
+    fn concurrent_replay_admission_accepts_exactly_one() {
+        let state = std::sync::Arc::new(new_state());
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(16));
+        let mut threads = Vec::new();
+        for _ in 0..16 {
+            let state = state.clone();
+            let barrier = barrier.clone();
+            threads.push(std::thread::spawn(move || {
+                let body = build_digest_body(
+                    "admin",
+                    "admin",
+                    "2026-04-15T00:00:00Z",
+                    b"concurrent-nonce",
+                );
+                barrier.wait();
+                validate_ws_security(&body, &state)
+            }));
+        }
+        let results = threads
+            .into_iter()
+            .map(|t| t.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|r| **r == Err("Reused WS-Security nonce".into()))
+                .count(),
+            15
+        );
+        assert_eq!(state.auth_replay.lock().unwrap().nonces.len(), 1);
     }
 
     #[test]

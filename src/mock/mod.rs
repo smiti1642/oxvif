@@ -199,8 +199,9 @@
 //! characters become U+FFFD. Credential parsing now requires unique qualified
 //! Header/UsernameToken fields, explicit PasswordDigest Type and a nonempty
 //! base64 nonce; input identities are decoded without trimming and errors do not
-//! echo credentials. Auth defaults and HTTP status are unchanged. Freshness,
-//! nonce reuse prevention and user-level authorization are not implemented.
+//! echo credentials. Auth defaults and HTTP status are unchanged. Freshness and
+//! nonce replay protection are bounded per instance; user-level authorization
+//! and full WS-Security processing remain unmodeled.
 //! Remaining shared fault output escapes text and binds known prefixes, but still
 //! uses the legacy flat code hierarchy. These changes do not claim full conformance.
 

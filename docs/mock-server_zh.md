@@ -287,10 +287,19 @@ Base64Binary，解碼後須為非空 bytes；只有 base64 解碼會忽略 lexic
 XML 不得通過認證。Role 僅支援省略或明確 SOAP ultimateReceiver。一般缺少憑證
 仍回報 `Missing Username`；其餘診斷 reason 為固定文字，不反射憑證。
 
-這是認證測試替身，不是正式環境存取控制。尚未檢查 Created freshness 或 nonce
-重用、實施 user-level authorization、支援 PasswordText 或全部 WS-Security 功能。
-重複／過期但 hash 正確的 token 仍可通過。Raw／replay 回應不繞過啟用的 auth gate；
-fault injection 仍優先處理。既有 HTTP body 上限可能在 SOAP 認證前回傳 `413`。
+現在也檢查 Created freshness 與 decoded nonce 重用。限精確 UTC 秒格式，接受
+過去 300 秒／未來 60 秒（含邊界）；時間驗證去除外側 XML 空白，digest 仍使用原始
+decoded Created。小數／offset 格式超出 mock 政策。Nonce 非空、最多 256 decoded
+bytes，每 state 快取 4096 件，同使用者群及 transport clone 共用。保留到 creation+300
+與 admission+300 秒都結束，不為容量淘汰 live entry；滿載即拒絕。最後成功時間下限
+防止系統時鐘倒退重新打開已淘汰的 freshness interval。
+
+Digest／時間／重用／容量拒絕不改 cache、不觸發 device hook。成功認證立即消耗
+nonce，後續服務拒絕不退回；停用 auth／精確免認證查時不消耗。Restart 清除 private
+volatile cache。重播 literal token 的測試，成功案例應各自產生新 nonce 與目前時間。
+
+這是認證測試替身，不是正式環境存取控制；user-level authorization、PasswordText、
+完整 WSSE 仍未建模。Raw／replay 不繞過 auth，fault injection 優先且不消耗 nonce。既有 HTTP body 上限可能在 SOAP 認證前回傳 `413`。
 公開 Fault 分類與 auth-off 預設值不變。
 
 - 預載帳號為 `admin` / `admin`（Administrator）與 `operator` / `operator`（Operator）。

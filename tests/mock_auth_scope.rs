@@ -34,6 +34,35 @@ fn envelope(username: &str, password: &str) -> String {
         .build()
 }
 
+// Preserve each positive case's lexical/namespace changes while giving it a
+// fresh independent nonce and timestamp. Digest input retains Created whitespace.
+fn fresh(body: String, password: &str) -> String {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let nonce = format!("scope-fresh-{}", NEXT.fetch_add(1, Ordering::SeqCst));
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let timestamp = oxvif::soap::security::unix_secs_to_iso8601(seconds as i64);
+    let start = body.find("<wsu:Created>").unwrap() + "<wsu:Created>".len();
+    let end = body[start..].find("</wsu:Created>").unwrap() + start;
+    let created = body[start..end].replace(CREATED, &timestamp);
+    let tree = oxvif::soap::XmlNode::parse(&body).unwrap();
+    let digest = tree
+        .path(&["Header", "Security", "UsernameToken", "Password"])
+        .unwrap()
+        .text();
+    body.replace(
+        digest,
+        &STANDARD.encode(compute_digest(nonce.as_bytes(), &created, password)),
+    )
+    .replace(
+        &STANDARD.encode(b"mock-only-nonce-583"),
+        &STANDARD.encode(nonce.as_bytes()),
+    )
+    .replace(CREATED, &timestamp)
+}
+
 fn seed(state: &MockState) {
     state.modify(|device| {
         device.users.push(MockUser {
@@ -116,7 +145,7 @@ async fn exercise(
         good.replace("<wsse:Username>", "<x:Username xmlns:x='urn:decoy'>wrong</x:Username><wsse:Username>"),
         good.replace("<wsse:Security>", "<wsse:Security s:role='http://www.w3.org/2003/05/soap-envelope/role/ultimateReceiver'>"),
     ] {
-        let xml = read(transport.as_ref(), url, body).await;
+        let xml = read(transport.as_ref(), url, fresh(body, PASSWORD)).await;
         let root = parse_soap_body(&xml).unwrap();
         assert_eq!(
             find_response(&root, "GetDeviceInformationResponse")
@@ -281,7 +310,10 @@ async fn exercise(
     let xml = read(
         transport.as_ref(),
         url,
-        envelope(USER, "rotated-password-583"),
+        fresh(
+            envelope(USER, "rotated-password-583"),
+            "rotated-password-583",
+        ),
     )
     .await;
     assert_eq!(

@@ -140,8 +140,9 @@ impl MockServerBuilder {
     /// credential-less client works out of the box.
     /// Credentials must be unique direct fields in the qualified SOAP Header
     /// UsernameToken, with explicit PasswordDigest Type and a nonempty base64
-    /// nonce. Timestamp freshness, nonce reuse and user-level permissions are
-    /// not enforced; this is a test harness, not production access control.
+    /// nonce. Timestamp freshness and nonce replay protection use a 300-second
+    /// past / 60-second future window and at most 4096 nonces of 256 decoded bytes.
+    /// User-level permissions are not enforced; this is a test harness.
     pub fn enforce_auth(mut self, yes: bool) -> Self {
         self.enforce_auth = yes;
         self

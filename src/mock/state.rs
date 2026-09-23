@@ -1898,6 +1898,7 @@ pub struct MockState {
     state: RwLock<DeviceState>,
     on_change: Option<ChangeHook>,
     pub(crate) subscriptions: std::sync::Mutex<super::services::events::lifecycle::Runtime>,
+    pub(crate) auth_replay: std::sync::Mutex<super::auth::ReplayCache>,
 }
 
 /// Internal alias so service handlers keep reading `&SharedState` unchanged.
@@ -1910,6 +1911,7 @@ impl MockState {
             state: RwLock::new(DeviceState::default()),
             on_change: None,
             subscriptions: Default::default(),
+            auth_replay: Default::default(),
         }
     }
 
@@ -1919,6 +1921,7 @@ impl MockState {
             state: RwLock::new(state),
             on_change: None,
             subscriptions: Default::default(),
+            auth_replay: Default::default(),
         }
     }
 

@@ -31,9 +31,9 @@
 | F02 | 待實作：W11／W12，同一 checklist | RS1 GetNode／GetConfiguration selector 已完成。補其餘 PTZ space／效果及 per-source Imaging／focus 契約；測兩個不同 head／source、限制與拒絕不改狀態，不宣稱真實移動效果。 |
 | F03 | 待實作：W13／W14，同一 checklist | 分服務子群稽核 Device／DeviceIO 與 Recording／Search／Replay 生命週期，含 cascade、timeout／termination 及錯誤後狀態；沿用既有 handler 為基準。 |
 | F04 | 待實作：W15，同一 checklist | EP2 已交付有限訂閱生命週期；其餘 push、property 同步、完整 topic grammar、WSNT Fault detail 待完成；立即合成 timing 限制明示。 |
-| F05 | 待實作：W07–W09；[pipeline](mock-fidelity-pipeline-preflight_zh.md) | 通知連線／期限／framing 限制已交付，見下方。其餘為較廣的 mock HTTP binding、freshness／replay、roles 及 fault injection；不重做已交付 scoped auth。 |
+| F05 | 待實作：W07–W09；[pipeline](mock-fidelity-pipeline-preflight_zh.md) | 通知連線／期限／framing 限制已交付，見下方。其餘為較廣的 mock HTTP binding、roles 及 fault injection（AF1 freshness／replay 已交付）；不重做已交付 scoped auth。 |
 | F06 | 待實作：W16–W19；pipeline 記相依 | 選剩餘 capability／mutation／read 組合，驗證 atomic commit、拒絕保留與 replay 可見性。K27 儲存保留已完成；未來 key-format 重設計另列決策。 |
-| F07 | 待實作／證據：W20–W23；[schema preflight](mock-fidelity-schema-preflight_zh.md) | RS1／EP1／OS1／EP2 已將選定 corpus 擴充至 216 instance／59 operation，並通過本機獨立驗證。繼續補其餘覆蓋，保留 anchor、固定外部資源、錯誤控制與有界 fuzz／property 種子。0.17 選定 CI 為另筆歷史證據。 |
+| F07 | 待實作／證據：W20–W23；[schema preflight](mock-fidelity-schema-preflight_zh.md) | RS1／EP1／OS1／EP2／AF1 已將選定 corpus 擴充至 224 instance／60 operation，並通過本機獨立驗證。繼續補其餘覆蓋，保留 anchor、固定外部資源、錯誤控制與有界 fuzz／property 種子。0.17 選定 CI 為另筆歷史證據。 |
 | F08 | 待決策／延後：[CLI roadmap](oxvif-cli-plan.md)；[navigation](cli-vim-navigation-plan_zh.md) 管 M6 | decoder／playback、批次匯出、controlled writes、crate 拆分分別選定有限交付與介面／權限／復原驗收；不自動成為 0.18 blocker。 |
 | F09 | 待營運／證據／申請：[distribution](oxvif-cli-three-platform-distribution-plan.md) | 唯讀渠道盤點已完成，確認缺少正式 owner／URL／金鑰資料。補齊後隔離驗證 install／upgrade／downgrade／remove；0.17 artifacts／staging 已完成，官方收錄另需證據。 |
 | F10 | 待證據：快照調查，[修復紀錄](../done/snapshot-auth-repair_zh.md) | 取得去敏且可重現的非圖片／JPEG 回應，再測有界辨識；保留目的地／認證／TLS／大小／不覆寫規則。CR／LF 僅是合成差異，尚非 Hanwha 根因。 |
@@ -94,7 +94,7 @@ runtime／descriptor、散布及 Metamorph M4／M7 仍有上表的實作、決�
 | F02 | 超出 profile identity 的 PTZ configuration／space、movement／preset／home／tour 效果；Imaging 欄位及 focus 建模 | W11／W12；不宣稱現有 profile 檢查已模擬移動 |
 | F03 | 完整 Device／DeviceIO／network／user／relay 契約與 Recording／Search／Replay 生命週期 | W13／W14；不改 host network；硬體效果另行授權 |
 | F04 | Events filter、subscription、queue 隔離、renew／expiry／termination 及傳送建模 | W15；Media sync 不等於 Events sync；保留目前僅收件確認的預設拒絕 |
-| F05 | 更完整 HTTP binding、WSSE freshness／replay protection、角色及 fault injection 重設計 | W07–W09；先完成本版安全／完整性判定；raw hook 保留明確逃生出口 |
+| F05 | 更完整 HTTP binding、角色及 fault injection 重設計；AF1 freshness／replay 已交付 | W07–W09；先完成本版安全／完整性判定；raw hook 保留明確逃生出口 |
 | F06 | 全程式 capability 一致性、併發／rollback、replay 相依及超出 K27 碰撞保留修正的 key-format 重設計 | W16–W19；K27 儲存保留已在候選修復，並未延後；見[遷移](../replay-storage_zh.md) |
 | F07 | 其餘 schema／QName／wildcard 控制、更廣 corpus 及 fuzz／property 覆蓋 | W20–W23；保留選定獨立 corpus 關卡，不宣稱全部操作覆蓋 |
 | F08 | RTSP decoder／playback、批次檔案匯出、CLI 攝影機寫入及獨立導覽 crate | 既有 CLI 維護／導覽計畫；寫入前先建立威脅模型與權限 UX |
@@ -153,3 +153,5 @@ EP1（2026-09-22）：[event pull 一致性](../done/mock-fidelity-event-pull_zh
 OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。
 
 EP2（2026-09-23）：[有限 pull-point 生命週期](../done/mock-fidelity-event-lifecycle_zh.md) 完成獨立 endpoint／filter／queue、原子配置、expiry／renew／unsubscribe，保留公開 RequestCtx 建構。外部 corpus 為 216 XML／59 Actions；push、property 同步、完整 topic grammar、規範 WSNT Fault detail 仍為 W15 工作。
+
+AF1（2026-09-23）：[有界認證時間／nonce 防重用](../done/mock-fidelity-auth-freshness_zh.md) 已交付；nonce 原子 admission、過期／未來／重用拒絕不觸發 hook，時鐘倒退不重開已淘汰區間。外部 corpus 224 XML／60 Actions，AF1 request Security header 去除後匯出。Roles、HTTP binding、structured／raw injection 仍為 Q02 工作。

@@ -1023,6 +1023,7 @@ async fn export_reviewed_batches_for_independent_validation() {
     exchanges.extend(media_sync_exchanges().await);
     exchanges.extend(read_selector_exchanges().await);
     exchanges.extend(event_pull_exchanges().await);
+    exchanges.extend(auth_freshness_exchanges().await);
     exchanges.extend(osd_crud_exchanges().await);
     export_external(Path::new(&directory), &exchanges)
         .expect("external corpus export succeeds without overwriting");
@@ -1407,6 +1408,80 @@ async fn captures_event_pull_filter_paths() {
     let exchanges = event_pull_exchanges().await;
     assert_eq!(exchanges.len(), 13);
     assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 1);
+}
+
+async fn auth_freshness_exchanges() -> Vec<Exchange> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use oxvif::soap::{SoapEnvelope, WsSecurityToken, security::compute_digest};
+    let capture = Capture {
+        mock: MockTransport::new().with_auth(),
+        exchanges: Arc::default(),
+    };
+    let client = OnvifClient::new(TARGET)
+        .with_credentials("admin", "admin")
+        .with_transport(Arc::new(capture.clone()));
+    assert_eq!(
+        client.get_device_info().await.unwrap().manufacturer,
+        "oxvif-mock"
+    );
+    let (action, recorded_request) = {
+        let exchanges = capture.exchanges.lock().unwrap();
+        (exchanges[0].action.clone(), exchanges[0].request.clone())
+    };
+    let stale = |created: &str| {
+        SoapEnvelope::new("<tds:GetDeviceInformation/>".into())
+            .with_security(WsSecurityToken::from_parts(
+                "admin",
+                STANDARD.encode(compute_digest(b"corpus-af1", created, "admin")),
+                STANDARD.encode(b"corpus-af1"),
+                created,
+            ))
+            .build()
+    };
+    for (request, reason) in [
+        (recorded_request, "Reused WS-Security nonce"),
+        (stale("2001-01-01T00:00:00Z"), "Stale Created timestamp"),
+        (stale("9999-01-01T00:00:00Z"), "Future Created timestamp"),
+    ] {
+        let xml = capture.soap_post(TARGET, &action, request).await.unwrap();
+        assert_eq!(
+            oxvif::soap::find_response(&parse_soap_body(&xml).unwrap(), "unused").unwrap_err(),
+            SoapError::Fault {
+                code: "s:Sender".into(),
+                subcode: Some("wsse:FailedAuthentication".into()),
+                reason: reason.into(),
+                detail: None
+            }
+        );
+        capture
+            .exchanges
+            .lock()
+            .unwrap()
+            .last_mut()
+            .unwrap()
+            .expected_fault = true;
+    }
+    // Keep the exporter credential-free, including synthetic UsernameTokens.
+    // Responses and service payloads are captured wire; authentication headers
+    // are omitted and are not covered by this external schema pass.
+    for exchange in capture.exchanges.lock().unwrap().iter_mut() {
+        let start = exchange.request.find("<s:Header>").unwrap();
+        let end = exchange.request.find("</s:Header>").unwrap() + "</s:Header>".len();
+        exchange.request.replace_range(start..end, "");
+    }
+    std::mem::take(&mut *capture.exchanges.lock().unwrap())
+}
+
+#[tokio::test]
+async fn captures_auth_freshness_success_and_refusals() {
+    let exchanges = auth_freshness_exchanges().await;
+    assert_eq!(exchanges.len(), 4);
+    assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 3);
+    assert!(
+        exchanges
+            .iter()
+            .all(|e| !e.request.contains("UsernameToken"))
+    );
 }
 
 async fn osd_crud_exchanges() -> Vec<Exchange> {

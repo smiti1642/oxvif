@@ -34,6 +34,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Reject stale/future timestamps and reused nonces when mock authentication is
+  enabled. Generate fresh tokens for repeated positive tests. The bounded cache
+  refuses capacity without evicting live entries, is shared by transport clones,
+  and does not persist across restarts; user-level authorization remains unmodeled.
+
 - Make modeled Media1 OSD create/set/delete atomic, with per-source quotas,
   validated source bindings and commit-only persistence/replay updates. Unsupported
   background color, temporary text and write extensions now refuse explicitly.

@@ -248,8 +248,9 @@
 //! custom coordinates, color attributes and the advertised quota attributes.
 //!
 //! Opt-in mock authentication uses scoped Header/UsernameToken fields and explicit
-//! PasswordDigest Type; it does not enforce freshness, nonce reuse or user permissions.
-//! Classified reset, auxiliary, reboot/maintenance, subscription and search-ending
+//! PasswordDigest Type, bounded freshness and nonce replay protection. User
+//! permissions remain unmodeled. Pull points have independent bounded lifecycle state.
+//! Classified reset, auxiliary, reboot/maintenance, push-subscription and search-ending
 //! stubs now refuse by default, including Events synchronization.
 //! Select individual `mock::AckOnlyOperation` values with `with_acknowledgment_only`
 //! only for receipt-only workflows; no corresponding device effects are modeled.

@@ -343,11 +343,26 @@ and malformed/bounded XML cannot authenticate. Only the absent or explicit SOAP
 ultimateReceiver role is supported. Plain missing-credential diagnostics retain
 `Missing Username`; other diagnostic reasons are static and do not echo credentials.
 
-This is an authentication test double, not production access control. It does not
-check Created freshness or nonce reuse, enforce user-level authorization, implement
-PasswordText, or process all WS-Security features. Repeated/stale correctly hashed
-tokens can pass. Raw/replay responses do not bypass an enabled auth gate; fault
-injection still precedes it. The existing HTTP body limit may return `413` before
+Authentication now also checks Created freshness and decoded nonce reuse.
+Exact UTC second timestamps must be within 300 seconds past / 60 seconds future,
+inclusive. Outer XML whitespace is ignored for time validation only; the digest
+still hashes the original decoded Created text. Fractional/offset timestamps
+are outside this mock policy. Nonces are nonempty and at most 256 decoded bytes;
+each state retains at most 4096, shared across users and transport clones.
+Entries remain through both creation+300 and admission+300 seconds. Live entries
+are never evicted for capacity; a full cache refuses. A last-accepted clock floor
+prevents wall-clock rollback from reopening evicted freshness intervals.
+
+Digest, freshness, reuse and capacity failures leave the cache unchanged and
+do not invoke device hooks. Successful authentication consumes the nonce even if
+service validation then refuses. Disabled auth and the exact clock-query exemption
+do not consume nonces. Restart clears the private volatile cache. Tests replaying
+literal tokens must now generate a fresh nonce and current timestamp per success.
+
+This is an authentication test double, not production access control. User-level
+authorization, PasswordText and full WS-Security processing remain unmodeled.
+Raw/replay responses do not bypass an enabled auth gate; fault injection still
+precedes it and does not consume a nonce. The existing HTTP body limit may return `413` before
 SOAP authentication runs. Public Fault classification and auth-off defaults are unchanged.
 
 - **Seeded credentials**: `admin` / `admin` (Administrator) and

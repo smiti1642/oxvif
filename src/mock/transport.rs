@@ -79,8 +79,9 @@ impl MockTransport {
     /// The client must supply a qualified Header/UsernameToken and matching credentials
     /// (default users: `admin`/`admin`, `operator`/`operator`).
     /// Requires explicit PasswordDigest Type and a nonempty base64 nonce.
-    /// Does not enforce timestamp freshness, nonce reuse or user-level permissions;
-    /// this is a test harness, not production access control.
+    /// Enforces bounded timestamp freshness and nonce replay protection: 300-second
+    /// past / 60-second future window, 4096 cached nonces, 256 decoded bytes each.
+    /// No user-level permissions; this is a test harness, not production access control.
     pub fn with_auth(mut self) -> Self {
         self.enforce_auth = true;
         self

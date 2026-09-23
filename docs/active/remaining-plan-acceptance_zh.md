@@ -22,7 +22,7 @@
 | --- | --- |
 | F01／F02／F03 | [RS1](../done/mock-fidelity-read-selectors_zh.md) 修正四個 Media／PTZ／Recording selector 及共用輸出。OS1 已建模 OSD CRUD 完成；URI／source mode、運動／Imaging、Device／DeviceIO、錄影／搜尋生命週期仍是可繼續實作的工作，不是都受硬體阻擋；下一批仍先做 W01 操作卡。 |
 | F04／F06 | [EP2](../done/mock-fidelity-event-lifecycle_zh.md) 以 private endpoint adapter 完成有限訂閱生命週期，保留公開 RequestCtx 建構。Push、property 同步、完整 topic grammar、規範 WSNT Fault detail 仍待實作；其餘 capability／replay 驗收保持開放。 |
-| F05 | Listener framing／deadline 限制已完成。下一張 auth 卡須區分 digest 驗證與 freshness／replay：可注入時鐘、可接受 skew、bounded nonce cache、重複 nonce 原子拒絕、到期清理、instance 隔離及拒絕後狀態不變。既有寬容 auth 不代表這些保護存在。 |
+| F05 | AF1 freshness／replay protection 已交付；HTTP binding、roles、structured／raw injection 仍需各自驗收。 |
 | F07 | RS1／EP1 擴充選定操作 capture 與獨立驗證，保留 payload anchor；較廣 wildcard／QName／negative／fuzz 仍未完成，獨立資源留在 checkout 外。 |
 | F08 | 下方已準備產品切片契約；RTSP／playback、批次檔案匯出、相機寫入、MCP、crate 拆分仍待產品決策。 |
 | F09 | 既有 artifact／staging 可驗證；下方公開 APT／tap 擁有者、簽章、復原資料尚缺，原生生命週期與上架未完成。 |
@@ -101,3 +101,5 @@ snapshot example、178-instance 外部 corpus、native credential、ConPTY／cap
 不代表所有未來可寫的程式都已完成。
 
 OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。
+
+AF1（2026-09-23）：[有界認證時間／nonce 防重用](../done/mock-fidelity-auth-freshness_zh.md) 已交付；nonce 原子 admission、過期／未來／重用拒絕不觸發 hook，時鐘倒退不重開已淘汰區間。外部 corpus 224 XML／60 Actions，AF1 request Security header 去除後匯出。Roles、HTTP binding、structured／raw injection 仍為 Q02 工作。
