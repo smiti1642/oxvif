@@ -221,6 +221,8 @@ mod request;
 pub(crate) use request::recording_equivalent;
 pub(crate) mod responder;
 mod services;
+#[cfg(feature = "metamorph")]
+pub(crate) use services::events::lifecycle::is_lifecycle as is_event_lifecycle;
 mod transport;
 mod xml_parse;
 

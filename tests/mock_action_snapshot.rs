@@ -164,10 +164,13 @@ const EXPECTED: &[(&str, &str)] = &[
     // ── Events ────────────────────────────────────────────────────────────
     ("get_event_properties", "ok"),
     ("create_pull_point_subscription", "ok"),
-    ("pull_messages", "ok"),
+    (
+        "pull_messages",
+        "soap-fault:s:Sender:Unknown or expired pull-point endpoint",
+    ),
     (
         "renew_subscription",
-        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+        "soap-fault:s:Sender:Unknown or expired pull-point endpoint",
     ),
     (
         "set_synchronization_point",
@@ -175,7 +178,7 @@ const EXPECTED: &[(&str, &str)] = &[
     ),
     (
         "unsubscribe",
-        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
+        "soap-fault:s:Sender:Unknown or expired pull-point endpoint",
     ),
     (
         "subscribe",

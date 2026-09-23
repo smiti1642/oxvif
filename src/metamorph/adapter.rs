@@ -283,7 +283,7 @@ impl AdapterTransport {
 impl Transport for AdapterTransport {
     async fn soap_post(
         &self,
-        _url: &str,
+        url: &str,
         action: &str,
         body: String,
     ) -> Result<String, TransportError> {
@@ -300,7 +300,7 @@ impl Transport for AdapterTransport {
             body: &body,
             state: &self.state,
         };
-        Ok(chain.respond(&ctx).await)
+        Ok(chain.respond_at(&ctx, Some(url)).await)
     }
 }
 

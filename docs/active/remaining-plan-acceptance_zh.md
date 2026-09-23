@@ -21,7 +21,7 @@
 | 家族 | 本地工作／下一個驗收邊界 |
 | --- | --- |
 | F01／F02／F03 | [RS1](../done/mock-fidelity-read-selectors_zh.md) 修正四個 Media／PTZ／Recording selector 及共用輸出。OS1 已建模 OSD CRUD 完成；URI／source mode、運動／Imaging、Device／DeviceIO、錄影／搜尋生命週期仍是可繼續實作的工作，不是都受硬體阻擋；下一批仍先做 W01 操作卡。 |
-| F04／F06 | [EP1](../done/mock-fidelity-event-pull_zh.md) 修正 queue 過濾與事件／filter 原子快照。每個 subscription 的狀態、capability／replay 一致性仍待實作；加入 endpoint identity 前先保留公開 RequestCtx 建構契約或提出相容 adapter。 |
+| F04／F06 | [EP2](../done/mock-fidelity-event-lifecycle_zh.md) 以 private endpoint adapter 完成有限訂閱生命週期，保留公開 RequestCtx 建構。Push、property 同步、完整 topic grammar、規範 WSNT Fault detail 仍待實作；其餘 capability／replay 驗收保持開放。 |
 | F05 | Listener framing／deadline 限制已完成。下一張 auth 卡須區分 digest 驗證與 freshness／replay：可注入時鐘、可接受 skew、bounded nonce cache、重複 nonce 原子拒絕、到期清理、instance 隔離及拒絕後狀態不變。既有寬容 auth 不代表這些保護存在。 |
 | F07 | RS1／EP1 擴充選定操作 capture 與獨立驗證，保留 payload anchor；較廣 wildcard／QName／negative／fuzz 仍未完成，獨立資源留在 checkout 外。 |
 | F08 | 下方已準備產品切片契約；RTSP／playback、批次檔案匯出、相機寫入、MCP、crate 拆分仍待產品決策。 |

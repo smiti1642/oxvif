@@ -40,7 +40,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Correct OSD client custom-position readback, color/persistence attributes and
   text serialization order; parse standard total/per-type quota attributes directly.
 
-- Apply mock event filters to queued IO notifications and snapshot event selection/filter atomically; escape input tokens and avoid event-counter overflow.
+- Give mock pull points independent endpoints, filters, bounded queues and lifetimes,
+  with live renewal/unsubscribe and atomic refusal preservation. Create a subscription
+  before emitting events and pass its returned URL to lifecycle calls; the old
+  DeviceState event_filter field no longer controls subscriptions. Delivery remains
+  immediate, without real timeout pacing. Explicit receipt opt-ins retain no-effect
+  behavior; built-in replay now defers lifecycle requests to live state.
+- Bind the client's standard `tns1` topic prefix and align mock relay notifications
+  with the advertised Relay topic; escape tokens and wrap synthetic counters safely.
 
 - Scope OSD, PTZ node/configuration and recording-job state selectors to the requested operation; reject ambiguous selectors and preserve escaped identities. Correct OSD text/image XML and escape stored OSD/PTZ/recording strings.
 

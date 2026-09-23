@@ -72,17 +72,19 @@ pub struct DeviceState {
     pub audio_outputs: Vec<AudioOutputEntry>,
     #[serde(default = "default_audio_decoders")]
     pub audio_decoders: Vec<AudioDecoderEntry>,
-    /// Monotonic event counter for the pull-point stream (per-instance,
-    /// not persisted). Replaces the former process-global `EVENT_SEQ`.
+    /// Wrapping aggregate count of synthesized pull-point events (per instance,
+    /// not persisted). Each subscription separately owns its stream sequence.
     #[serde(skip)]
     pub event_seq: u64,
-    /// Active pull-point topic filter, set by CreatePullPointSubscription
-    /// (per-instance, not persisted). `None` = emit every topic.
+    /// Legacy field retained for source compatibility; live subscriptions own
+    /// their filters privately. Changing this field does not change live filters.
     #[serde(skip)]
     pub event_filter: Option<Vec<String>>,
     /// Pending events emitted out-of-band (e.g. by the
     /// `/mock/digital-input/...` simulator endpoint) and surfaced on the
-    /// next `PullMessages` call. Per-instance, not persisted.
+    /// next successful lifecycle operation to subscriptions already alive at
+    /// that operation. New subscriptions do not receive historical ingress.
+    /// Per instance, not persisted.
     #[serde(skip)]
     pub pending_io_events: Vec<PendingIoEvent>,
 }
@@ -1895,6 +1897,7 @@ pub type ChangeHook = std::sync::Arc<dyn Fn(&DeviceState) + Send + Sync>;
 pub struct MockState {
     state: RwLock<DeviceState>,
     on_change: Option<ChangeHook>,
+    pub(crate) subscriptions: std::sync::Mutex<super::services::events::lifecycle::Runtime>,
 }
 
 /// Internal alias so service handlers keep reading `&SharedState` unchanged.
@@ -1906,6 +1909,7 @@ impl MockState {
         Self {
             state: RwLock::new(DeviceState::default()),
             on_change: None,
+            subscriptions: Default::default(),
         }
     }
 
@@ -1914,6 +1918,7 @@ impl MockState {
         Self {
             state: RwLock::new(state),
             on_change: None,
+            subscriptions: Default::default(),
         }
     }
 
@@ -3575,6 +3580,7 @@ mod tests {
     fn pull_messages_drains_pending_io_event_first() {
         use crate::mock::services::events;
         let s = new_state();
+        events::test_support::create(&s, None);
         // Seed an IO event as if the pulse endpoint fired.
         s.modify(|st| {
             st.pending_io_events.push(PendingIoEvent {
@@ -3583,13 +3589,13 @@ mod tests {
                 logical_state: "active".into(),
             });
         });
-        let xml = events::resp_pull_messages(&s);
+        let xml = events::test_support::pull(&s);
         assert!(xml.contains("tns1:Device/Trigger/DigitalInput"));
         assert!(xml.contains(r#"Name="InputToken" Value="DigitalInput_1""#));
         assert!(xml.contains(r#"Name="LogicalState" Value="true""#));
         // Queue drained; next call falls through to the synthetic stream.
         assert_eq!(s.read().pending_io_events.len(), 0);
-        let xml2 = events::resp_pull_messages(&s);
+        let xml2 = events::test_support::pull(&s);
         assert!(xml2.contains("MotionAlarm") || xml2.contains("RuleEngine"));
     }
 
@@ -3597,6 +3603,7 @@ mod tests {
     fn pull_messages_io_event_relay_uses_relay_token_source() {
         use crate::mock::services::events;
         let s = new_state();
+        events::test_support::create(&s, None);
         s.modify(|st| {
             st.pending_io_events.push(PendingIoEvent {
                 kind: "RelayOutput",
@@ -3604,8 +3611,8 @@ mod tests {
                 logical_state: "inactive".into(),
             });
         });
-        let xml = events::resp_pull_messages(&s);
-        assert!(xml.contains("tns1:Device/Trigger/RelayOutput"));
+        let xml = events::test_support::pull(&s);
+        assert!(xml.contains("tns1:Device/Trigger/Relay"));
         assert!(xml.contains(r#"Name="RelayToken" Value="RelayOutput_1""#));
         assert!(xml.contains(r#"Name="LogicalState" Value="false""#));
     }

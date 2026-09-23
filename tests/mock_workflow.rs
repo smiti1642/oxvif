@@ -547,6 +547,10 @@ async fn media2_encoder_instances_are_grouped_by_codec() {
 #[tokio::test]
 async fn io_relay_and_digital_input_flow() {
     let (srv, s) = setup().await;
+    let sub = s
+        .create_pull_point_subscription(None, Some("PT60S"))
+        .await
+        .unwrap();
 
     // Defaults: two relays, two inputs.
     let relays = s.get_relay_outputs().await.unwrap();
@@ -598,10 +602,6 @@ async fn io_relay_and_digital_input_flow() {
         .unwrap();
     assert_eq!(resp.status(), 200);
 
-    let sub = s
-        .create_pull_point_subscription(None, Some("PT60S"))
-        .await
-        .unwrap();
     let m1 = s
         .pull_messages(&sub.reference_url, "PT1S", 1)
         .await
@@ -614,7 +614,9 @@ async fn io_relay_and_digital_input_flow() {
         .pull_messages(&sub.reference_url, "PT1S", 1)
         .await
         .unwrap();
-    assert!(m1[0].topic.contains("RelayOutput"), "got {:?}", m1[0].topic);
+    assert_eq!(m1[0].topic, "tns1:Device/Trigger/Relay");
+    assert_eq!(m1[0].source["RelayToken"], "RelayOutput_1");
+    assert_eq!(m1[0].data["LogicalState"], "true");
     assert!(
         m2[0].topic.contains("DigitalInput"),
         "got {:?}",

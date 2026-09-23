@@ -7,7 +7,7 @@
 //! authentication uses the same bounded tree with a separate scoped Header
 //! projection, preserving the auth gate's precedence over raw/replay responses.
 
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
 use quick_xml::{
     NsReader, XmlVersion,
@@ -240,9 +240,28 @@ pub(super) struct Node {
     text: String,
     attributes: HashMap<(String, String), String>,
     children: Vec<Node>,
+    scope: Arc<NamespaceScope>,
+}
+
+// Share ancestors instead of copying all in-scope bindings at every node.
+// Storage remains proportional to declarations and nodes in the bounded input.
+#[derive(Debug, Default)]
+struct NamespaceScope {
+    parent: Option<Arc<NamespaceScope>>,
+    bindings: HashMap<String, String>,
 }
 
 impl Node {
+    pub(super) fn namespace_for_prefix(&self, prefix: &str) -> Option<&str> {
+        let mut scope = Some(self.scope.as_ref());
+        while let Some(current) = scope {
+            if let Some(uri) = current.bindings.get(prefix) {
+                return (!uri.is_empty()).then_some(uri.as_str());
+            }
+            scope = current.parent.as_deref();
+        }
+        None
+    }
     /// Inspect modeled-field boundaries without falling back to fragment XML.
     pub(super) fn element_children(&self) -> impl Iterator<Item = (&str, &str, &Self)> {
         self.children
@@ -444,7 +463,12 @@ fn xml_text(value: &str) -> Result<(), RequestError> {
     }
 }
 
-fn start(reader: &NsReader<&[u8]>, event: &BytesStart<'_>) -> Result<Node, RequestError> {
+fn start(
+    reader: &NsReader<&[u8]>,
+    event: &BytesStart<'_>,
+    parent: Option<&Node>,
+) -> Result<Node, RequestError> {
+    let mut bindings = HashMap::new();
     let (ns, local) = reader.resolver().resolve_element(event.name());
     let ns = namespace(ns)?;
     let mut attributes = HashMap::new();
@@ -455,6 +479,8 @@ fn start(reader: &NsReader<&[u8]>, event: &BytesStart<'_>) -> Result<Node, Reque
             .map_err(|_| RequestError::InvalidAttributeValue)?;
         xml_text(&value)?;
         if attribute.key.as_ref() == "xmlns" || attribute.key.as_ref().starts_with("xmlns:") {
+            let prefix = attribute.key.as_ref().strip_prefix("xmlns:").unwrap_or("");
+            bindings.insert(prefix.to_owned(), value.into_owned());
             continue;
         }
         let (ns, name) = reader.resolver().resolve_attribute(attribute.key);
@@ -469,6 +495,10 @@ fn start(reader: &NsReader<&[u8]>, event: &BytesStart<'_>) -> Result<Node, Reque
         text: String::new(),
         attributes,
         children: Vec::new(),
+        scope: Arc::new(NamespaceScope {
+            parent: parent.map(|n| n.scope.clone()),
+            bindings,
+        }),
     })
 }
 
@@ -516,7 +546,7 @@ fn parse(xml: &str) -> Result<Node, RequestError> {
                 if stack.len() >= MAX_DEPTH {
                     return Err(RequestError::DepthLimit);
                 }
-                stack.push(start(&reader, &event)?);
+                stack.push(start(&reader, &event, stack.last())?);
             }
             Event::Empty(event) => {
                 nodes += 1;
@@ -526,7 +556,7 @@ fn parse(xml: &str) -> Result<Node, RequestError> {
                 if stack.len() >= MAX_DEPTH {
                     return Err(RequestError::DepthLimit);
                 }
-                let node = start(&reader, &event)?;
+                let node = start(&reader, &event, stack.last())?;
                 place(&mut stack, &mut root, node)?;
             }
             Event::End(_) => {

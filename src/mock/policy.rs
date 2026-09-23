@@ -2,9 +2,12 @@
 
 use std::collections::BTreeSet;
 
-/// An unmodeled operation that can return an acknowledgment-only mock response.
+/// An operation that can explicitly return an acknowledgment-only mock response.
 ///
-/// These operations refuse by default with `s:Receiver` / `mock:UnmodeledEffect`.
+/// Unmodeled operations refuse by default with `s:Receiver` / `mock:UnmodeledEffect`.
+/// Pull-point `Renew` and `Unsubscribe` instead validate a live endpoint and
+/// perform its lifecycle change by default; selecting their receipt policy
+/// explicitly disables that effect and endpoint validation.
 /// Opting in permits a response shape for workflow tests; it does **not** reset a
 /// device, execute auxiliary commands, reboot/upgrade/restore, manage subscription
 /// or search lifetimes, generate events or prove a hardware effect. Upload URIs,
@@ -114,12 +117,21 @@ impl AckOnlyOperation {
 pub(crate) struct AckOnlyPolicy(BTreeSet<AckOnlyOperation>);
 
 impl AckOnlyPolicy {
+    pub(crate) fn enabled(&self, operation: AckOnlyOperation) -> bool {
+        self.0.contains(&operation)
+    }
     pub(crate) fn enable(&mut self, operation: AckOnlyOperation) {
         self.0.insert(operation);
     }
 
     pub(crate) fn refusal(&self, action: &str) -> Option<String> {
         let operation = AckOnlyOperation::for_action(action)?;
+        if matches!(
+            operation,
+            AckOnlyOperation::EventsRenew | AckOnlyOperation::EventsUnsubscribe
+        ) {
+            return None; // modeled pull-point handlers own default validation
+        }
         if self.0.contains(&operation) {
             return None;
         }

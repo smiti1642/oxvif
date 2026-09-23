@@ -40,6 +40,7 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("trt", "http://www.onvif.org/ver10/media/wsdl"),
     ("tr2", "http://www.onvif.org/ver20/media/wsdl"),
     ("tev", "http://www.onvif.org/ver10/events/wsdl"),
+    ("tns1", "http://www.onvif.org/ver10/topics"),
     ("tptz", "http://www.onvif.org/ver20/ptz/wsdl"),
     ("timg", "http://www.onvif.org/ver20/imaging/wsdl"),
     ("tan", "http://www.onvif.org/ver20/analytics/wsdl"),

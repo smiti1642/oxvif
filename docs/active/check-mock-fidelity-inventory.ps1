@@ -143,7 +143,9 @@ foreach ($row in $english) {
 }
 foreach ($row in $sourceRows) {
     $parts = $row.Handler -split '::'
-    $path = if ($parts.Count -eq 2) { "src/mock/services/$($parts[0]).rs" } else { 'src/mock/helpers.rs' }
+    $path = if ($parts.Count -ge 2) {
+        'src/mock/services/' + ($parts[0..($parts.Count - 2)] -join '/') + '.rs'
+    } else { 'src/mock/helpers.rs' }
     $implementation = Get-Content -LiteralPath (Join-Path $repository $path) -Encoding UTF8 -Raw
     if ($implementation -notmatch ('\bfn\s+' + [regex]::Escape($parts[-1]) + '\s*\(')) {
         throw "Handler definition not found: $($row.Handler) in $path"

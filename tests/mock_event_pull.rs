@@ -24,8 +24,13 @@ async fn exercise(
     state: &MockState,
     hooks: &AtomicUsize,
 ) {
+    let client = OnvifClient::new(url).with_transport(transport);
+    let subscription = client
+        .create_pull_point_subscription(url, Some("tns1:Device/Trigger/DigitalInput"), None)
+        .await
+        .unwrap();
+    let url = subscription.reference_url.as_str();
     state.modify(|s| {
-        s.event_filter = Some(vec!["tns1:Device/Trigger/DigitalInput".into()]);
         s.pending_io_events = vec![
             event("RelayOutput", "excluded"),
             event("DigitalInput", "input & <one> \"'"),
@@ -33,17 +38,6 @@ async fn exercise(
         s.event_seq = 12;
     });
     let before = hooks.load(Ordering::SeqCst);
-    let client = OnvifClient::new(url).with_transport(transport);
-    assert!(
-        client
-            .pull_messages(url, "PT0S", 1)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    assert_eq!(state.read().pending_io_events.len(), 1);
-    assert_eq!(state.read().event_seq, 12);
-    assert_eq!(hooks.load(Ordering::SeqCst), before + 1);
     let messages = client.pull_messages(url, "PT0S", 1).await.unwrap();
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].topic, "tns1:Device/Trigger/DigitalInput");
@@ -56,7 +50,8 @@ async fn exercise(
         Some("true")
     );
     assert!(state.read().pending_io_events.is_empty());
-    assert_eq!(hooks.load(Ordering::SeqCst), before + 2);
+    assert_eq!(state.read().event_seq, 12);
+    assert_eq!(hooks.load(Ordering::SeqCst), before + 1);
     assert!(
         client
             .pull_messages(url, "PT0S", 1)
@@ -65,13 +60,17 @@ async fn exercise(
             .is_empty()
     );
     assert_eq!(state.read().event_seq, 13);
-    assert_eq!(hooks.load(Ordering::SeqCst), before + 3);
+    assert_eq!(hooks.load(Ordering::SeqCst), before + 2);
 
     let other = MockTransport::new();
     let other_client = OnvifClient::new("http://mock").with_transport(Arc::new(other.clone()));
+    let other_subscription = other_client
+        .create_pull_point_subscription("http://mock", None, None)
+        .await
+        .unwrap();
     assert_eq!(
         other_client
-            .pull_messages("http://mock", "PT0S", 1)
+            .pull_messages(&other_subscription.reference_url, "PT0S", 1)
             .await
             .unwrap()[0]
             .topic,
@@ -117,6 +116,11 @@ async fn event_pull_filter_and_hooks_http() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn event_pull_concurrent_consumers_take_unique_queue_slots() {
     let mock = MockTransport::new();
+    let client = OnvifClient::new("http://mock").with_transport(Arc::new(mock.clone()));
+    let subscription = client
+        .create_pull_point_subscription("http://mock", None, None)
+        .await
+        .unwrap();
     mock.device().modify(|s| {
         s.pending_io_events = (0..32)
             .map(|i| event("DigitalInput", &i.to_string()))
@@ -124,10 +128,11 @@ async fn event_pull_concurrent_consumers_take_unique_queue_slots() {
     });
     let mut tasks = tokio::task::JoinSet::new();
     for _ in 0..32 {
+        let url = subscription.reference_url.clone();
         let client = OnvifClient::new("http://mock").with_transport(Arc::new(mock.clone()));
         tasks.spawn(async move {
             client
-                .pull_messages("http://mock", "PT0S", 1)
+                .pull_messages(&url, "PT0S", 1)
                 .await
                 .unwrap()
                 .remove(0)

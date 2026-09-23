@@ -52,7 +52,8 @@ conventions, and attribution/licensing.
 Reviewed 2026-09-22 against the recorded 0.17 publication and individual batch
 evidence. The [post-0.17 backlog](active/post-0.17-backlog.md)
 ([繁體中文](active/post-0.17-backlog_zh.md)) owns follow-up scope;
-the [0.17 cut](done/release-0.17-cut.md) is now a historical release record.
+The [autonomous execution queue](active/autonomous-completion-schedule.md) ([繁體中文](active/autonomous-completion-schedule_zh.md)) tracks the current continuous work.
+The [0.17 cut](done/release-0.17-cut.md) is now a historical release record.
 
 2026-09-22 歸檔與校準合計將 27 組已交付計畫／批次的 46 份 Markdown 文件，
 以及一份原始審查 JSON 移至 `done/`。原 16 組 active 文件已逐份核對，
@@ -114,6 +115,7 @@ input paths and hashes; it is historical evidence, not a current file inventory.
 | [`mock-fidelity-video-encoder.md`](done/mock-fidelity-video-encoder.md) · [繁體中文](done/mock-fidelity-video-encoder_zh.md) | 0.17: VE1/K34 delivered, with broader encoder/fidelity work remaining active. |
 | [`mock-fidelity-audio-metadata.md`](done/mock-fidelity-audio-metadata.md) · [繁體中文](done/mock-fidelity-audio-metadata_zh.md) | 0.17: AM1/D4 and its 15 operation cards delivered; broader W10 is not closed. |
 | [`mock-fidelity-osd-crud.md`](done/mock-fidelity-osd-crud.md) · [繁體中文](done/mock-fidelity-osd-crud_zh.md) | OS1 completed 2026-09-23: bounded atomic OSD CRUD, client XML repair and independent wire validation; broader W10 remains active. |
+| [`mock-fidelity-event-lifecycle.md`](done/mock-fidelity-event-lifecycle.md) · [繁體中文](done/mock-fidelity-event-lifecycle_zh.md) | EP2 completed 2026-09-23: bounded independent subscription lifecycle and external wire validation; broader W15 remains active. |
 | [`dependency-maintenance-plan.md`](done/dependency-maintenance-plan.md) · [繁體中文](done/dependency-maintenance-plan_zh.md) | Integration and subsequent grouped-update behavior verified on 2026-09-22. F13's six updates and rustls advisory fix are integrated locally; keyring migration remains separate. Current review evidence lives in [dependency pitfalls](dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22). |
 | [`release-0.17-review.md`](done/release-0.17-review.md) · [繁體中文](done/release-0.17-review_zh.md) | Frozen candidate review and later repair evidence; companion JSON ledger is preserved byte-for-byte. |
 | [`release-0.17-approval.md`](done/release-0.17-approval.md) · [繁體中文](done/release-0.17-approval_zh.md) | Historical approval packet; publication stop satisfied and 0.17 released. |

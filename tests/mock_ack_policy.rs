@@ -194,7 +194,7 @@ async fn check_selected(
         if selected.contains(&index) {
             assert_ack(&xml, index, base, &earliest);
         } else {
-            assert_refused(&xml);
+            assert_refused(&xml, index);
         }
         let mismatch = t
             .soap_post(
@@ -495,16 +495,29 @@ async fn replay_and_adapter_fallback_share_policy_without_raw_or_invalidation_ch
     }
 }
 
-fn assert_refused(xml: &str) {
-    let body = parse_soap_body(xml).unwrap();
-    assert_eq!(
-        find_response(&body, "unused").unwrap_err(),
+fn default_fault(index: usize) -> SoapError {
+    if matches!(index, 1 | 9) {
+        SoapError::Fault {
+            code: "s:Sender".into(),
+            reason: "Unknown or expired pull-point endpoint".into(),
+            subcode: Some("mock:RequestPolicy".into()),
+            detail: None,
+        }
+    } else {
         SoapError::Fault {
             code: "s:Receiver".into(),
             reason: REFUSAL.into(),
             subcode: Some("mock:UnmodeledEffect".into()),
             detail: None,
         }
+    }
+}
+
+fn assert_refused(xml: &str, index: usize) {
+    let body = parse_soap_body(xml).unwrap();
+    assert_eq!(
+        find_response(&body, "unused").unwrap_err(),
+        default_fault(index)
     );
 }
 
@@ -522,15 +535,7 @@ async fn check_default(t: &dyn Transport, url: &str, state: &MockState, hooks: &
     }
     assert_eq!(
         responses,
-        CASES
-            .iter()
-            .map(|_| SoapError::Fault {
-                code: "s:Receiver".into(),
-                reason: REFUSAL.into(),
-                subcode: Some("mock:UnmodeledEffect".into()),
-                detail: None,
-            })
-            .collect::<Vec<_>>()
+        (0..CASES.len()).map(default_fault).collect::<Vec<_>>()
     );
 }
 

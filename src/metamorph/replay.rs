@@ -190,6 +190,10 @@ impl ReplayResponder {
 #[async_trait]
 impl Responder for ReplayResponder {
     async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
+        // A recorded body has no live endpoint identity or volatile queue.
+        if self.track_commits && crate::mock::is_event_lifecycle(ctx.action) {
+            return None;
+        }
         // A classified receipt is never a committed synthetic mutation. The
         // standalone responder also leaves these caller-owned effects alone.
         if AckOnlyOperation::for_action(ctx.action).is_some() {
@@ -310,7 +314,7 @@ impl MetamorphTransport {
 impl Transport for MetamorphTransport {
     async fn soap_post(
         &self,
-        _url: &str,
+        url: &str,
         action: &str,
         body: String,
     ) -> Result<String, TransportError> {
@@ -331,7 +335,7 @@ impl Transport for MetamorphTransport {
             body: &body,
             state: &self.state,
         };
-        Ok(chain.respond(&ctx).await)
+        Ok(chain.respond_at(&ctx, Some(url)).await)
     }
 }
 

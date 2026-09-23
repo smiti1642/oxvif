@@ -9,7 +9,7 @@
 | 分類 | 處置與證據 |
 | --- | --- |
 | 已確認 | W00 literal route／Action 對照已完成並持續維護；K27 碰撞保留與 request-aware lookup 已修復。歷史覆寫重現不是目前仍存在的資料遺失。 |
-| 剩餘工作 | W02 transitive helper／field 分類仍是 PARTIAL；163 個 reader occurrences 含測試、discovery 與 canonicalization，不能視為 163 個缺陷。 |
+| 剩餘工作 | W02 transitive helper／field 分類仍是 PARTIAL；162 個 reader occurrences 含測試、discovery 與 canonicalization，不能視為 162 個缺陷。 |
 | 下一步／完成條件 | 對下一個服務子群追蹤全部 reader／renderer／state effects，逐項標示遷移或保留理由；跑 inventory checker，於 batch card 補欄位層級 C01–C12 證據。 |
 
 2026-09-11 K27 後續修正：碰撞儲存保留及完整請求查詢已實作，詳見
@@ -39,8 +39,8 @@ W19 其餘項目仍未結案。
   URI。沒有缺乏對應宣告的來源路由。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
-- 五種 reader 拼法共 163 個直接呼叫：145 個位於頂層 test module 之前，18 個
-  位於其中。前者分布於 50 個 enclosing symbol（OS1 後重新量測），**不是** 50 個有缺陷的操作。
+- 五種 reader 拼法共 162 個直接呼叫：144 個位於頂層 test module 之前，18 個
+  位於其中。前者分布於 49 個 enclosing symbol（EP2 後重新量測），**不是** 49 個有缺陷的操作。
   其中包含 test-only `required_text`、canonicalization、discovery ，不是舊 parser 正式缺陷的數量。
 - W00 已完成目前字面值形式的來源核對；K06 synthetic 別名路由已於
   [管線檢查點](mock-fidelity-pipeline-preflight_zh.md#完整-action-路由)修正；
@@ -264,7 +264,6 @@ W19 其餘項目仍未結案。
 | `src/mock/services/device.rs::handle_set_storage_configuration` | `extract_tag` | `production:3` |
 | `src/mock/services/device.rs::handle_set_system_date_and_time` | `extract_tag` | `production:2` |
 | `src/mock/services/device.rs::handle_set_user` | `extract_tag` | `production:4` |
-| `src/mock/services/events.rs::resp_create_pull_point_subscription` | `extract_tag` | `production:1` |
 | `src/mock/services/imaging.rs::handle_set_imaging_settings` | `extract_tag` | `production:11` |
 | `src/mock/services/imaging.rs::lookup` | `extract_tag` | `production:1` |
 | `src/mock/services/ptz.rs::apply_ptz_configuration` | `extract_attr` | `production:2` |
@@ -432,3 +431,5 @@ workspace default 1,066 passed／4 ignored。總數包含四項刻意通過的 k
 RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-selectors_zh.md) 的有限 W04 批次完成，涵蓋 Media／PTZ／Recording；共用輸出修正 escape 與 OSD 結構。選定 corpus 擴充至 170 instance／50 operation，本機 strict Xerces 通過。完整操作、生命週期、fault 及 capability 仍未完成。
 
 OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。
+
+EP2（2026-09-23）：[有限 pull-point 生命週期](../done/mock-fidelity-event-lifecycle_zh.md) 完成獨立 endpoint／filter／queue、原子配置、expiry／renew／unsubscribe，保留公開 RequestCtx 建構。外部 corpus 為 216 XML／59 Actions；push、property 同步、完整 topic grammar、規範 WSNT Fault detail 仍為 W15 工作。

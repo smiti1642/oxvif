@@ -54,6 +54,7 @@ pub trait Responder: Send + Sync {
 /// An ordered list of [`Responder`]s, consulted first to last.
 pub struct Chain {
     responders: Vec<Box<dyn Responder>>,
+    terminal: Option<SyntheticResponder>,
 }
 
 impl Chain {
@@ -61,7 +62,10 @@ impl Chain {
     /// be terminal (always answer); an otherwise-unhandled request falls to a
     /// defensive `s:Receiver` fault.
     pub fn new(responders: Vec<Box<dyn Responder>>) -> Self {
-        Self { responders }
+        Self {
+            responders,
+            terminal: None,
+        }
     }
 
     /// The default mock pipeline: armed fault → auth gate → synthetic dispatch.
@@ -98,16 +102,27 @@ impl Chain {
         responders.push(Box::new(FaultResponder { faults }));
         responders.push(Box::new(AuthResponder { enforce_auth }));
         responders.extend(extra);
-        responders.push(Box::new(SyntheticResponder { observer, policy }));
-        Self::new(responders)
+        Self {
+            responders,
+            terminal: Some(SyntheticResponder { observer, policy }),
+        }
     }
 
     /// Offer the request to each responder in turn; return the first answer.
     pub async fn respond(&self, ctx: &RequestCtx<'_>) -> String {
+        self.respond_at(ctx, None).await
+    }
+
+    // Transport identity is private: existing public RequestCtx literals and
+    // custom Responder implementations retain their construction contract.
+    pub(crate) async fn respond_at(&self, ctx: &RequestCtx<'_>, endpoint: Option<&str>) -> String {
         for r in &self.responders {
             if let Some(resp) = r.respond(ctx).await {
                 return resp;
             }
+        }
+        if let Some(terminal) = &self.terminal {
+            return terminal.respond_at(ctx, endpoint);
         }
         // Unreachable while a terminal responder is present; defensive fallback.
         super::fault::Fault::new(
@@ -162,12 +177,27 @@ pub(crate) struct SyntheticResponder {
 #[async_trait]
 impl Responder for SyntheticResponder {
     async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
-        let (xml, effect) =
-            respond_with_effect(ctx.action, ctx.base, ctx.state, ctx.body, &self.policy);
+        Some(self.respond_at(ctx, None))
+    }
+}
+
+impl SyntheticResponder {
+    fn respond_at(&self, ctx: &RequestCtx<'_>, endpoint: Option<&str>) -> String {
+        let (xml, effect) = match endpoint {
+            Some(endpoint) => crate::mock::dispatch::respond_at_with_effect(
+                ctx.action,
+                ctx.base,
+                ctx.state,
+                ctx.body,
+                &self.policy,
+                Some(endpoint),
+            ),
+            None => respond_with_effect(ctx.action, ctx.base, ctx.state, ctx.body, &self.policy),
+        };
         if let (Some(observer), Some(effect)) = (&self.observer, effect) {
             observer(effect);
         }
-        Some(xml)
+        xml
     }
 }
 
@@ -264,6 +294,13 @@ mod tests {
                     let node = find_response(&body, response).unwrap();
                     assert!(node.children.is_empty());
                     assert_eq!(node.text(), "");
+                } else if operation == AckOnlyOperation::EventsUnsubscribe {
+                    assert_fault(
+                        &xml,
+                        "s:Sender",
+                        "Unknown or expired pull-point endpoint",
+                        Some("mock:RequestPolicy"),
+                    );
                 } else {
                     assert_fault(
                         &xml,

@@ -507,7 +507,7 @@ pub fn resp_capabilities(base: &str) -> String {
             </tt:Device>
             <tt:Events>
               <tt:XAddr>{base}/onvif/events</tt:XAddr>
-              <tt:WSSubscriptionPolicySupport>true</tt:WSSubscriptionPolicySupport>
+              <tt:WSSubscriptionPolicySupport>false</tt:WSSubscriptionPolicySupport>
               <tt:WSPullPointSupport>true</tt:WSPullPointSupport>
               <!-- Required, fourth and last of the declared children. `false`
                    agrees with `resp_event_service_capabilities`, whose doc

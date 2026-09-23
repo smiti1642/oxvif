@@ -280,11 +280,11 @@ not complete operation acceptance; all other fields and full Fault policy remain
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `events.GetServiceCapabilitiesRequest` | `events::resp_event_service_capabilities` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.GetEventPropertiesRequest` | `events::resp_event_properties` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.CreatePullPointSubscriptionRequest` | `events::resp_create_pull_point_subscription` | `base, state, body` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.PullMessagesRequest` | `events::resp_pull_messages` | `state` | W15 | PARTIAL | TODO | TODO | PARTIAL | PARTIAL | EP1 |
+| `events.CreatePullPointSubscriptionRequest` | `events::lifecycle::create` | `base, state, operation` | W15 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | EP2 |
+| `events.PullMessagesRequest` | `events::lifecycle::pull` | `base, state, operation, endpoint` | W15 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | EP2 |
 | `events.SubscribeRequest` | `events::resp_subscribe` | `base` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
-| `events.RenewRequest` | `events::resp_renew` | `` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
-| `events.UnsubscribeRequest` | `resp_empty` | `"wsnt", "UnsubscribeResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
+| `events.RenewRequest` | `events::lifecycle::renew` | `base, state, operation, endpoint, policy` | W15 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | EP2 |
+| `events.UnsubscribeRequest` | `events::lifecycle::unsubscribe` | `base, state, operation, endpoint, policy` | W15 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | EP2 |
 | `events.SetSynchronizationPointRequest` | `resp_empty` | `"tev", "SetSynchronizationPointResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
 
 ## recording
@@ -364,3 +364,7 @@ RS1: [scoped read selectors](../done/mock-fidelity-read-selectors.md).
 EP1: [event pull consistency](../done/mock-fidelity-event-pull.md).
 
 OS1 (2026-09-23): [bounded OSD CRUD](../done/mock-fidelity-osd-crud.md) adds scoped candidates, atomic per-source quotas, binding refusal and commit-only persistence/replay. Client coordinate/color/persistence XML and quota parsing are corrected. Selected external corpus: 198 instances / 56 operations. Background color, temporary text and arbitrary write extensions refuse explicitly; URI/source-mode and wider W10 work remain open.
+
+EP2: [pull-point lifecycle](../done/mock-fidelity-event-lifecycle.md).
+
+EP2 (2026-09-23): [bounded pull-point lifecycle](../done/mock-fidelity-event-lifecycle.md) delivers independent endpoints/filters/queues, atomic allocation, expiry/renew/unsubscribe and preserved public RequestCtx construction. External corpus: 216 XML instances / 59 Actions. Push, property synchronization, complete topic grammar and normative WSNT Fault detail remain separate W15 work.

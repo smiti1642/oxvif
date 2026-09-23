@@ -270,11 +270,11 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `events.GetServiceCapabilitiesRequest` | `events::resp_event_service_capabilities` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
 | `events.GetEventPropertiesRequest` | `events::resp_event_properties` | `` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.CreatePullPointSubscriptionRequest` | `events::resp_create_pull_point_subscription` | `base, state, body` | W15 | TODO | TODO | TODO | TODO | TODO | - |
-| `events.PullMessagesRequest` | `events::resp_pull_messages` | `state` | W15 | PARTIAL | TODO | TODO | PARTIAL | PARTIAL | EP1 |
+| `events.CreatePullPointSubscriptionRequest` | `events::lifecycle::create` | `base, state, operation` | W15 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | EP2 |
+| `events.PullMessagesRequest` | `events::lifecycle::pull` | `base, state, operation, endpoint` | W15 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | EP2 |
 | `events.SubscribeRequest` | `events::resp_subscribe` | `base` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
-| `events.RenewRequest` | `events::resp_renew` | `` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
-| `events.UnsubscribeRequest` | `resp_empty` | `"wsnt", "UnsubscribeResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
+| `events.RenewRequest` | `events::lifecycle::renew` | `base, state, operation, endpoint, policy` | W15 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | EP2 |
+| `events.UnsubscribeRequest` | `events::lifecycle::unsubscribe` | `base, state, operation, endpoint, policy` | W15 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | EP2 |
 | `events.SetSynchronizationPointRequest` | `resp_empty` | `"tev", "SetSynchronizationPointResponse"` | W15 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A2 |
 
 ## recording
@@ -350,3 +350,7 @@ RS1: [scoped read selectors](../done/mock-fidelity-read-selectors_zh.md).
 EP1: [event pull consistency](../done/mock-fidelity-event-pull_zh.md).
 
 OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。
+
+EP2: [pull-point lifecycle](../done/mock-fidelity-event-lifecycle_zh.md).
+
+EP2（2026-09-23）：[有限 pull-point 生命週期](../done/mock-fidelity-event-lifecycle_zh.md) 完成獨立 endpoint／filter／queue、原子配置、expiry／renew／unsubscribe，保留公開 RequestCtx 建構。外部 corpus 為 216 XML／59 Actions；push、property 同步、完整 topic grammar、規範 WSNT Fault detail 仍為 W15 工作。

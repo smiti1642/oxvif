@@ -15,6 +15,17 @@ pub(crate) fn respond_with_effect(
     body: &str,
     policy: &crate::mock::policy::AckOnlyPolicy,
 ) -> (String, Option<Effect>) {
+    respond_at_with_effect(action, base, state, body, policy, None)
+}
+
+pub(crate) fn respond_at_with_effect(
+    action: &str,
+    base: &str,
+    state: &SharedState,
+    body: &str,
+    policy: &crate::mock::policy::AckOnlyPolicy,
+    endpoint: Option<&str>,
+) -> (String, Option<Effect>) {
     let mut effect = None;
     let Some(route) = Route::resolve(action) else {
         return (unhandled(action), None);
@@ -38,7 +49,7 @@ pub(crate) fn respond_with_effect(
         Service::Media2 => dispatch_media2(op, base, state, body, operation, &mut effect),
         Service::Ptz => dispatch_ptz(op, state, body, operation),
         Service::Imaging => dispatch_imaging(op, state, body),
-        Service::Events => dispatch_events(op, base, state, body),
+        Service::Events => dispatch_events(op, base, state, operation, endpoint, policy),
         Service::Recording => dispatch_recording(op, state, body, operation),
         Service::Search => dispatch_search(op, state),
         Service::Replay => dispatch_replay(op, state, body),
@@ -420,17 +431,24 @@ fn dispatch_imaging(op: &str, state: &SharedState, body: &str) -> Option<String>
     })
 }
 
-fn dispatch_events(op: &str, base: &str, state: &SharedState, body: &str) -> Option<String> {
+fn dispatch_events(
+    op: &str,
+    base: &str,
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+    endpoint: Option<&str>,
+    policy: &crate::mock::policy::AckOnlyPolicy,
+) -> Option<String> {
     Some(match op {
         "GetServiceCapabilitiesRequest" => events::resp_event_service_capabilities(),
         "GetEventPropertiesRequest" => events::resp_event_properties(),
-        "CreatePullPointSubscriptionRequest" => {
-            events::resp_create_pull_point_subscription(base, state, body)
-        }
-        "PullMessagesRequest" => events::resp_pull_messages(state),
+        "CreatePullPointSubscriptionRequest" => events::lifecycle::create(base, state, operation),
+        "PullMessagesRequest" => events::lifecycle::pull(base, state, operation, endpoint),
         "SubscribeRequest" => events::resp_subscribe(base),
-        "RenewRequest" => events::resp_renew(),
-        "UnsubscribeRequest" => resp_empty("wsnt", "UnsubscribeResponse"),
+        "RenewRequest" => events::lifecycle::renew(base, state, operation, endpoint, policy),
+        "UnsubscribeRequest" => {
+            events::lifecycle::unsubscribe(base, state, operation, endpoint, policy)
+        }
         "SetSynchronizationPointRequest" => resp_empty("tev", "SetSynchronizationPointResponse"),
         _ => return None,
     })

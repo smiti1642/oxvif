@@ -830,12 +830,23 @@ fn export_external(
             .action
             .rsplit_once('/')
             .ok_or("invalid captured action")?;
-        let (namespace, operation) = if exchange.action
-            == "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest"
-        {
-            ("http://www.onvif.org/ver10/events/wsdl", "PullMessages")
-        } else {
-            (namespace, operation)
+        let (namespace, operation) = match exchange.action.as_str() {
+            "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest" => {
+                ("http://www.onvif.org/ver10/events/wsdl", "PullMessages")
+            }
+            "http://www.onvif.org/ver10/events/wsdl/EventPortType/CreatePullPointSubscriptionRequest" => {
+                (
+                    "http://www.onvif.org/ver10/events/wsdl",
+                    "CreatePullPointSubscription",
+                )
+            }
+            "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest" => {
+                ("http://docs.oasis-open.org/wsn/b-2", "Renew")
+            }
+            "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/UnsubscribeRequest" => {
+                ("http://docs.oasis-open.org/wsn/b-2", "Unsubscribe")
+            }
+            _ => (namespace, operation),
         };
         for (direction, bytes) in [
             ("request", &exchange.request),
@@ -1320,12 +1331,16 @@ async fn event_pull_exchanges() -> Vec<Exchange> {
     };
     let client = OnvifClient::new(TARGET).with_transport(Arc::new(capture.clone()));
     for include in [true, false] {
+        let topic = if include {
+            "tns1:Device/Trigger/DigitalInput"
+        } else {
+            "tns1:Device/Trigger/Relay"
+        };
+        let sub = client
+            .create_pull_point_subscription(TARGET, Some(topic), Some("PT60S"))
+            .await
+            .unwrap();
         capture.mock.device().modify(|s| {
-            s.event_filter = Some(if include {
-                vec!["tns1:Device/Trigger/DigitalInput".into()]
-            } else {
-                vec![]
-            });
             s.pending_io_events
                 .push(oxvif::mock::state::PendingIoEvent {
                     kind: "DigitalInput",
@@ -1333,37 +1348,65 @@ async fn event_pull_exchanges() -> Vec<Exchange> {
                     logical_state: "active".into(),
                 });
         });
-        let messages = client.pull_messages(TARGET, "PT0S", 1).await.unwrap();
+        let messages = client
+            .pull_messages(&sub.reference_url, "PT0S", 1)
+            .await
+            .unwrap();
         assert_eq!(messages.len(), usize::from(include));
         if include {
-            assert_eq!(
-                messages[0].source.get("InputToken").map(String::as_str),
-                Some("Corpus & input")
-            );
+            assert_eq!(messages[0].source["InputToken"], "Corpus & input");
         }
+        let renewed = client
+            .renew_subscription(&sub.reference_url, "PT2M")
+            .await
+            .unwrap();
+        assert!(renewed > sub.termination_time);
+        client.unsubscribe(&sub.reference_url).await.unwrap();
     }
-    capture.mock.device().modify(|s| {
-        s.event_filter = Some(vec!["tns1:VideoSource/MotionAlarm".into()]);
-    });
+    let sub = client
+        .create_pull_point_subscription(TARGET, Some("tns1:VideoSource/MotionAlarm"), None)
+        .await
+        .unwrap();
     assert_eq!(
-        client.pull_messages(TARGET, "PT0S", 1).await.unwrap().len(),
+        client
+            .pull_messages(&sub.reference_url, "PT0S", 1)
+            .await
+            .unwrap()
+            .len(),
         1
     );
     assert!(
         client
-            .pull_messages(TARGET, "PT0S", 1)
+            .pull_messages(&sub.reference_url, "PT0S", 1)
             .await
             .unwrap()
             .is_empty()
     );
+    client.unsubscribe(&sub.reference_url).await.unwrap();
+    let err = client
+        .pull_messages(&sub.reference_url, "PT0S", 1)
+        .await
+        .unwrap_err();
+    assert_delete_fault(
+        err,
+        "mock:RequestPolicy",
+        "Unknown or expired pull-point endpoint",
+    );
+    capture
+        .exchanges
+        .lock()
+        .unwrap()
+        .last_mut()
+        .unwrap()
+        .expected_fault = true;
     std::mem::take(&mut *capture.exchanges.lock().unwrap())
 }
 
 #[tokio::test]
 async fn captures_event_pull_filter_paths() {
     let exchanges = event_pull_exchanges().await;
-    assert_eq!(exchanges.len(), 4);
-    assert!(exchanges.iter().all(|e| !e.expected_fault));
+    assert_eq!(exchanges.len(), 13);
+    assert_eq!(exchanges.iter().filter(|e| e.expected_fault).count(), 1);
 }
 
 async fn osd_crud_exchanges() -> Vec<Exchange> {

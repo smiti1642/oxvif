@@ -339,8 +339,8 @@ fault injection 仍優先處理。既有 HTTP body 上限可能在 SOAP 認證�
 | `audio_outputs` | `Vec<AudioOutputEntry>` | 1 筆 | 唯讀 |
 | `audio_decoders` | `Vec<AudioDecoderEntry>` | 1 筆 | 唯讀 |
 | `metadata` | `Vec<MetadataEntry>` | 2 筆 | `SetMetadataConfiguration` |
-| `event_seq` | `u64` | runtime | `PullMessages` |
-| `event_filter` | `Option<Vec<String>>` | runtime | `CreatePullPointSubscription` |
+| `event_seq` | `u64` | runtime | 合成事件累計，溢位循環；各訂閱另有獨立序號 |
+| `event_filter` | `Option<Vec<String>>` | runtime | 保留來源相容的舊欄位；不控制存活訂閱 |
 | `pending_io_events` | `Vec<PendingIoEvent>` | runtime | REST simulator |
 
 最後三個欄位標記為 `#[serde(skip)]`，只存在於個別 instance，不會持久化。
@@ -589,7 +589,7 @@ Configuration／preset／tour token、座標解析、完整 Fault policy、repla
 ### 7.5 Imaging、Events、Recording、Search 與 Replay
 
 - Imaging 的七項影像操作依 `VideoSourceToken` 存取狀態，`GetServiceCapabilities` 為 static。
-- Events 的 `CreatePullPointSubscriptionRequest` 會儲存 topic filter；`PullMessagesRequest` 會輸出週期性 synthetic stream 與 REST 注入的 I/O event，並遞增 `event_seq`。`SubscribeRequest`／`RenewRequest`／`UnsubscribeRequest`／`SetSynchronizationPointRequest` 預設拒絕；逐項 opt-in 只確認收件，不建立 push subscription、延長 lifetime 或送出同步事件（§13.5）。`GetServiceCapabilitiesRequest` 為 static read fixture。
+- Events 建立最多四筆各有 endpoint／filter／queue／expiry 的訂閱；Pull／Renew／Unsubscribe 以回傳的存活 URL 操作。Subscribe／SetSynchronizationPoint 仍預設拒絕；逐項 receipt opt-in 不產生生命週期或推送／同步效果（§13.5）。Capability 不再宣稱 policy／push producer 支援。
 - Recording 的 recording、track 與 job 操作均由狀態支援；刪除 recording 會一併刪除所屬 job。
 - `FindRecordings` 只提供單一 search token，不模擬 cursor；`GetRecordingSearchResults` 讀取目前 recording list。
 - `EndSearch` 預設拒絕；opt-in 僅回傳 fixture `Endpoint` timestamp，不終止搜尋（§13.5）。
@@ -963,7 +963,7 @@ fixture 資料，不代表服務可用或效果已完成。Capability 回應仍�
 
 候選版本的 `GetOSD`、PTZ `GetNode`／`GetConfiguration` 及 Recording `GetRecordingJobState` 只採用操作內直接且 namespace 正確的 selector。重複或巢狀 scalar 拒絕，Header／extension 誘餌不能提供身分；缺少／未知 token 的原操作 fault 保留。OSD／PTZ 輸出 escape 儲存字串，並修正 OSD 文字順序、圖片容器與 recording token escape。這不代表 OSD 寫入、PTZ 運動或錄影生命週期完成。
 
-PullMessages 現在以單次 state transaction 選取 queued／synthetic event 與 lexical filter 快照。被過濾的 queued event 消耗一個 slot 並回空訊息；每次 pull 觸發 hook 一次。IO token 使用 XML escape。立即回應的 per-instance 模型仍沒有獨立 subscription 生命週期或完整 topic matching。
+EP1 原本共用一份 instance filter／queue；EP2 改為獨立訂閱，詳見下方生命週期。IO token 保留 XML escape；成功操作在釋放 state／subscription 鎖後通知。
 
 ### 已建模 OSD CRUD（OS1）
 
@@ -982,3 +982,27 @@ options URN 為 synthetic reference。選用 persistent=true 正規化為既有�
 GetOSD 未知 token 的既有 Fault 不在本批 Fault 稽核內。Client 現可保留自訂座標與
 標準 color／persistence attribute；舊 child 形式仍可相容讀取。
 範圍及證據見 [OS1 紀錄](done/mock-fidelity-osd-crud_zh.md)。
+
+### Pull-point 生命週期（EP2）
+
+先建立訂閱再產生 IO 事件，PullMessages／Renew／Unsubscribe 必須使用回傳的 URL；
+服務 URL 本身不是訂閱。各訂閱有 namespace scope 正確解析的 ConcreteSet filter、
+序號及最多 128 個事件的 queue；最多四份存活訂閱。成功生命週期操作會將 IO ingress
+分送給原已存活的訂閱，新訂閱不補發歷史 ingress。慢 consumer 溢位後明確回 mock
+policy fault，需取消重建；其他訂閱仍可繼續。
+
+Lifetime 支援整數 PT 時／分／秒組合及精確 UTC YYYY-MM-DDTHH:MM:SSZ，剩餘期限
+1–3600 秒（預設 60）。Pull timeout 0–60 秒，立即回應、不真的等待期限；正整數
+MessageLimit 上限截為 128。Queue 空時選一筆合成 motion／rule 事件，filter 可能使
+回應為空；Pull 保留至少 timeout 的剩餘 lifetime。這是有限模擬模型。
+
+未知／過期 endpoint、無效時間、溢位回 Sender/mock:RequestPolicy；容量回
+Receiver/mock:RequestLimit；未支援設定回 Sender/mock:UnmodeledEffect。
+這些是 mock 政策，不宣稱完整 WS-Notification Fault。Filter 支援四個已公告 literal
+topic 及 union；完整 XPath、content filter、policy、push、sync 初始化與持久化未建模。
+Renew／Unsubscribe 的明確 receipt opt-in 保持不改狀態。
+
+內建 Metamorph chain 將生命週期交給 live state，不以錄製資料代替；公開 RequestCtx
+建構不變，transport 私下帶入 endpoint。沒有 endpoint 的直接 custom chain 不能操作
+pull point。DeviceState.event_filter 為不再使用的舊欄位；event_seq 計算合成選取次數，
+達 u64::MAX 後循環。

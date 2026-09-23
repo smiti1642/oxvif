@@ -403,8 +403,8 @@ snapshot loads and the rest falls back to the factory fixture.
 | `audio_outputs` | `Vec<AudioOutputEntry>` | 1 | — (read-only) |
 | `audio_decoders` | `Vec<AudioDecoderEntry>` | 1 | — (read-only) |
 | `metadata` | `Vec<MetadataEntry>` | 2 | `SetMetadataConfiguration` |
-| `event_seq` | `u64` | runtime | `PullMessages` |
-| `event_filter` | `Option<Vec<String>>` | runtime | `CreatePullPointSubscription` |
+| `event_seq` | `u64` | runtime | Aggregate synthetic-event count; wrapping, independent of subscription counters |
+| `event_filter` | `Option<Vec<String>>` | runtime | Legacy source-compatible field; live filters belong to subscriptions |
 | `pending_io_events` | `Vec<PendingIoEvent>` | runtime | REST simulator |
 
 The last three are `#[serde(skip)]` — per-instance, never persisted.
@@ -869,12 +869,12 @@ addresses no head at all — §6.4.
 
 | Operation | | Notes |
 |---|---|---|
-| `CreatePullPointSubscriptionRequest` | ● | Stores the topic filter. |
-| `PullMessagesRequest` | ● | Emits a periodic synthetic stream plus any pending REST-injected I/O events; `event_seq` increments per call. |
+| `CreatePullPointSubscriptionRequest` | ● | Creates a unique volatile pull point with its own filter, queue and expiry; four live points maximum. |
+| `PullMessagesRequest` | ● | Requires the returned live endpoint; drains its filtered IO queue up to MessageLimit, otherwise emits one immediate synthetic event. |
 | `GetEventPropertiesRequest` | ○ | Topic set. Declares `tns1` on the element. |
 | `GetServiceCapabilitiesRequest` | ○ | Static read fixture. |
-| `SubscribeRequest`, `RenewRequest` | — | Refuse by default; receipt-only opt-ins do not create push subscriptions or extend lifetimes (§13.5). |
-| `UnsubscribeRequest`, `SetSynchronizationPointRequest` | — | Refuse by default; explicit receipt-only opt-in, no lifecycle/event effect (§13.5). |
+| `RenewRequest`, `UnsubscribeRequest` | ● | Set expiry or remove only the addressed live pull point. Explicit receipt opt-ins disable these effects (§13.5). |
+| `SubscribeRequest`, `SetSynchronizationPointRequest` | — | Refuse by default; explicit receipt-only opt-ins do not deliver push or synchronization events (§13.5). |
 
 ### 7.7 Recording / Search / Replay — 17 operations
 
@@ -1590,7 +1590,7 @@ give the handler a plausible response, because nothing checks that for you.
 
 The candidate scopes `GetOSD`, PTZ `GetNode`/`GetConfiguration`, and Recording `GetRecordingJobState` selectors to their direct qualified operation fields. Duplicate or nested scalar selectors refuse; Header/extension decoys cannot supply identity. Existing missing/unknown operation faults remain. OSD and PTZ renderers escape stored strings; OSD text ordering/image nesting and recording-token escaping are corrected. This does not complete OSD writes, PTZ motion or recording lifetimes.
 
-PullMessages now selects the queued or synthetic event and its lexical filter snapshot in one state transaction. Excluded queued events consume one slot and return no message; hooks fire once per pull. IO tokens are XML-escaped. The immediate per-instance model still has no independent subscription lifetimes or full topic matching.
+EP1 historically shared one instance filter/queue. EP2 replaces that model with independent pull points; see the lifecycle notes below. IO tokens remain XML-escaped and successful operations notify after releasing state and subscription locks.
 
 ### Modeled OSD CRUD (OS1)
 
@@ -1615,3 +1615,34 @@ The existing GetOSD legacy unknown-token fault remains outside OS1's fault audit
 Client round trips now retain custom coordinates and standard color/persistence
 attributes; legacy child-form parsing remains for compatibility. Full programme
 scope and evidence: [OS1 record](done/mock-fidelity-osd-crud.md).
+
+### Pull-point lifecycle (EP2)
+
+Create a subscription before emitting IO events, then pass its returned URL to
+PullMessages, Renew and Unsubscribe. The service URL alone is not a subscription.
+Each subscription owns a namespace-resolved ConcreteSet filter, sequence and
+128-event queue. Four can be live concurrently. IO ingress fans out to existing
+live subscriptions during successful lifecycle operations; a newly created point
+does not receive historical ingress. Slow-consumer overflow returns an explicit
+mock policy fault until that point is removed; other points continue independently.
+
+Lifetimes support integer PT hours/minutes/seconds and exact UTC
+YYYY-MM-DDTHH:MM:SSZ, with a remaining lifetime of 1–3600 seconds (default 60).
+Pull timeout is 0–60 seconds; delivery is immediate, without actual timeout pacing.
+Positive MessageLimit values are capped at 128. Empty queues produce one
+synthetic motion/rule event, which may be filtered out. Pull preserves at least
+the requested timeout as remaining lifetime. This is a bounded simulation.
+
+Unknown/expired endpoints, invalid times and overflow return Sender/mock:RequestPolicy;
+capacity returns Receiver/mock:RequestLimit; unsupported filter/policy settings
+return Sender/mock:UnmodeledEffect. These are mock policies, not a claim of complete
+WS-Notification fault semantics. Filters support the four advertised literal
+topic paths and unions; full XPath, content filters and subscription policy are
+not modeled. Push, synchronization initialization and persistence are not implemented.
+Renew/Unsubscribe receipt opt-ins still deliberately return receipts without effects.
+
+Built-in Metamorph chains defer lifecycle operations to live state even when a
+recorded response exists. Public RequestCtx construction is unchanged; built-in
+transports carry endpoint identity privately. Direct custom chains without an
+endpoint cannot address a pull point. DeviceState.event_filter is retained as an
+unused legacy field; event_seq counts synthetic selections and wraps at u64::MAX.

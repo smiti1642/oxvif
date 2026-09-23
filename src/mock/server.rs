@@ -397,6 +397,7 @@ impl Drop for MockServer {
 
 async fn handle_soap(
     State(ctx): State<Arc<Ctx>>,
+    uri: axum::http::Uri,
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
@@ -445,7 +446,8 @@ async fn handle_soap(
         body: body_str,
         state: &ctx.state,
     };
-    let xml = chain.respond(&rctx).await;
+    let endpoint = format!("{}{}", ctx.base, uri);
+    let xml = chain.respond_at(&rctx, Some(&endpoint)).await;
     (StatusCode::OK, [(header::CONTENT_TYPE, SOAP_CT)], xml)
 }
 
