@@ -1,7 +1,7 @@
 //! Top-level error type for the oxvif library.
 //!
 //! All public async methods on [`OnvifClient`](crate::client::OnvifClient)
-//! return `Result<T, OnvifError>`. Callers can match on the two variants to
+//! return `Result<T, OnvifError>`. Callers can match on the variants to
 //! distinguish transport-level failures (network, TLS) from SOAP-level
 //! failures (malformed response, SOAP Fault from the device).
 
@@ -18,7 +18,8 @@ use crate::transport::TransportError;
 ///
 /// * [`Transport`](OnvifError::Transport) — a network or TLS error occurred
 ///   before a response was received, or the server replied with an unexpected
-///   HTTP status code (anything other than 200 or 500).
+///   HTTP status code (anything other than 200, 400 or 500), or the SOAP
+///   response exceeded the transport's configured byte limit.
 ///
 /// * [`Soap`](OnvifError::Soap) — a response was received but could not be
 ///   parsed, a required field was missing, or the device returned a

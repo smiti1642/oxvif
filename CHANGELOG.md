@@ -20,6 +20,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Configure HTTP deadlines and bounded SOAP response bodies with
+  `HttpTransportOptions` (defaults: ten seconds and 4 MiB). CA/credential
+  configuration preserves these options; CLI `--timeout` reaches the inner HTTP
+  client. Oversized bodies return non-retryable `ResponseTooLarge` without retaining
+  body text. Exhaustive matches must handle the new transport/build error variants.
+
 ### Added
 
 - Add an offline `snapshot_probe` example that reports bounded signature and

@@ -20,6 +20,7 @@
 | [Events 與 Recording](#events-service-方法) | Pull event、recording、search 與 replay |
 | [健康檢查](#健康檢查health-feature) | 診斷行為、選項與報告解讀 |
 | [錯誤處理](#錯誤處理) | Typed failure 與處理方式 |
+| [HTTP 回應限制](#http-回應限制) | Deadline、有界 body 與 custom transport |
 | [無實機測試](#不使用實機進行測試) | Mock transport、mock server 與 fault injection |
 | [Metamorph](#metamorphmetamorph--metamorph-server-feature) | Clone、replay、compare 與 adapter |
 | [內建範例](#執行內建範例) | Repository 中可執行範例的命令 |
@@ -612,6 +613,30 @@ cargo run --example conformance --features mock -- devices.txt
 ```
 
 ---
+
+## HTTP 回應限制
+
+`HttpTransport::new()` 對每個 HTTP request（包含 body 讀取）使用十秒 deadline，
+並限制累積回應為 4 MiB。Digest 認證可能發出多個 HTTP request；呼叫端可用外層
+operation timeout 限制整個交換。Byte 上限涵蓋 HTTP 200／400／500 與其他 status
+body，也涵蓋 chunked／未知長度回應，計數在 UTF-8 replacement decoding 之前。
+
+```rust,no_run
+use oxvif::transport::{HttpTransport, HttpTransportOptions};
+use std::time::Duration;
+
+let transport = HttpTransport::from_options(HttpTransportOptions {
+    timeout: Duration::from_secs(30),
+    max_response_bytes: 8 * 1024 * 1024,
+})?;
+# Ok::<(), oxvif::transport::HttpTransportBuildError>(())
+```
+
+兩項設定都必須大於零。`with_options`、credentials 與 private CA bundle 不論設定
+順序，都會保留彼此設定。超量回傳 `TransportError::ResponseTooLarge { limit }`，
+不保留 body，也不應自動重試。下游對公開 error enum 的 exhaustive match 必須
+處理新增的 resource 與 invalid-option variant。此上限是工作量設定，不是實測
+裝置最大回應或總記憶體保證；custom `Transport` 仍須自行限制網路讀取。
 
 ## 錯誤處理
 

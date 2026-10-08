@@ -130,6 +130,11 @@ and every observed transport failure is transient. Discovery enrichment uses the
 same typed transport policy per record; a successful scan, including an empty
 one, is not repeated. The default retry count remains zero.
 
+`--timeout` also configures the inner HTTP deadline, so values above ten seconds
+extend it as well as the outer attempt budget. SOAP bodies are limited to 4 MiB;
+an oversized response is a non-retryable resource refusal. JSON envelope v3 and
+the timeout scope for a whole diagnostic/Health attempt remain unchanged.
+
 
 Root selectors such as `--device`, `--group`, and `--view` are written before
 the command. An ephemeral `--target` is a command-level option and is written

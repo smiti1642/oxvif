@@ -155,6 +155,11 @@ snapshot。未被索引的 `snapshots/*.json` 只會產生 `ORPHANED_SNAPSHOT_FI
 
 ## Retry 與診斷輸出
 
+`--timeout` 也會傳入底層 HTTP deadline，因此設定超過十秒時，內層 deadline
+與外層 attempt budget 都會延長。SOAP body 上限為 4 MiB，超量屬於不可重試的
+resource refusal；JSON envelope v3 與整次 diagnostic／Health attempt 的 timeout
+範圍維持不變。
+
 `--timeout` 是每次網路嘗試的上限。`--retries` 只會以有上限的 backoff
 重試暫時性 transport failure；認證拒絕、無效輸入、確定性的 SOAP fault、parse
 或 schema failure 不會重試。Discovery 只會重試失敗的已選介面，不會重跑已成功的介面。

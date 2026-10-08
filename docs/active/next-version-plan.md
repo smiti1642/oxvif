@@ -2,10 +2,11 @@
 
 [English](next-version-plan.md) | [繁體中文](next-version-plan_zh.md)
 
-Status: PLANNED. Code walkthrough: 2026-10-08, committed baseline
+Status: IN-PROGRESS. Code walkthrough: 2026-10-08, committed baseline
 `afe37316ac60aa8c4470f8608a6eab7fa1450692` (workspace version 0.17.0).
-Candidate release: 0.18; this document does not change versions or authorize
-implementation, device writes, publication, or background scheduling.
+Candidate release: 0.18. The user authorized implementation on 2026-10-08 after
+planning commit `2bad316`; versions, device writes, publication, push and background
+scheduling remain outside this authorization.
 
 The next version should make real-device failures bounded and explainable,
 and add a limited offline reference comparison to Metamorph. Deliver the
@@ -76,8 +77,8 @@ compatibility fixtures. Source inspection is not a fresh execution result.
 
 | Package | Prerequisites | Deliverable | Status |
 | --- | --- | --- | --- |
-| P0 | None | Freeze implementation input and compatibility cases | TODO |
-| P1 | P0 | Configurable HTTP deadline and bounded SOAP bodies | TODO |
+| P0 | None | Freeze implementation input and compatibility cases | DONE |
+| P1 | P0 | Configurable HTTP deadline and bounded SOAP bodies | DONE (local); cap validation awaits P5 |
 | P2 | P0; P1 for combined network checks | Complete bounded production XML parsing | TODO |
 | P3 | P1/P2 | Report-bearing Session initialization and safe trace | TODO |
 | P4 | P1/P3 | Shared delay policy and CLI diagnostic integration | TODO |
@@ -103,6 +104,14 @@ finished runtime repairs unpublished indefinitely.
 
 Exit: an explicit implementation revision, preserved unrelated changes, and a
 consumer map covering Library, CLI, Health, record/replay and examples.
+
+Implementation input: `2bad316`, with the existing HB1 tracked diff and four
+untracked files retained separately. Consumers reviewed: Library/Health transport
+construction, CLI `build_http_transport` and typed retry classification, Health
+capture's exhaustive `TransportError` match, recording/examples, and the sibling
+oxdm Session custom transport (no exhaustive error match found). No oxdm changes.
+Public error additions require downstream exhaustive-match migration. The v3
+closed metadata schema and permissive direct XML tests remain pinned controls.
 
 ## P1 HTTP options and response bounds
 
@@ -348,7 +357,31 @@ and P6a/P6b evidence if the feature ships. Publish no broader commercial/VMS or
 all-operation conformance claim from this cut. Current publication, push and
 version changes remain outside the planning request.
 
-## Planning verification
+## Implementation evidence
+
+- P1: `HttpTransportOptions` controls each HTTP request deadline and accumulated
+  response bytes (10 s / 4 MiB defaults). CLI forwarding and Health's inner/outer
+  timeout race preserve the existing timeout outcome. Limits apply before
+  retaining successful, Fault and HTTP error bodies. UTF-8 replacement decoding
+  is explicit, independent of downstream reqwest charset feature unification.
+  Digest challenge bodies are discarded by the auth helper; the cap applies to
+  the returned response body.
+- Wire fixtures assert exact-limit payloads, one-over errors, declared/unknown/
+  chunked framing, invalid UTF-8, cancellation and connection EOF. Private-root
+  rebuilding retains options/roots; Digest retains credentials across options
+  changes with exactly one challenge and one authenticated request. CLI forwarding
+  is tested without an outer timeout.
+- Negative controls: raising the byte cap by one made three refusal tests fail
+  in an unfiltered all-feature/no-fail-fast run. That run also exposed the Health
+  timeout race above, now fixed. Restoring the fixed ten-second CLI inner timeout
+  made the focused deadline assertion fail. Both sources restored byte-for-byte.
+- No maximum real-device response has been measured. The 4 MiB default's release
+  suitability remains a P5 hardware acceptance question.
+- P1 final gate: format, both workspace/all-target Clippy modes, locked unfiltered
+  all-feature tests (1,392 passed) and default tests (1,273 passed), seven ignored
+  and 47 suites each; strict rustdoc in both feature modes. HB1 remains separate.
+
+## Original planning verification
 
 - Completed: source/control walkthrough and ownership reconciliation above.
 - Passed on the current worktree: 240 local file-link destinations, bilingual

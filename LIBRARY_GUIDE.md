@@ -23,6 +23,7 @@ and the shortest path to a working client, start with the
 | [Events and recording](#events-service-methods) | Pull events, recording, search, and replay. |
 | [Health checks](#health-check-health-feature) | Diagnostic behavior, options, and report interpretation. |
 | [Error handling](#error-handling) | Typed failures and handling patterns. |
+| [HTTP response limits](#http-response-limits) | Deadlines, bounded bodies, and custom transports. |
 | [Testing without a camera](#testing-without-a-real-camera) | Mock transport, mock server, and fault injection. |
 | [Metamorph](#metamorph-metamorph--metamorph-server-features) | Clone, replay, compare, and adapt device behavior. |
 | [Examples](#running-the-built-in-examples) | Commands for the repository's runnable examples. |
@@ -1429,6 +1430,33 @@ It points oxvif at a list of real cameras, dumps each raw SOAP response, and
 prints a parsed summary so silent-parse mismatches stand out for review.
 
 ---
+
+## HTTP response limits
+
+`HttpTransport::new()` uses a ten-second deadline per HTTP request (including
+body reads) and a 4 MiB accumulated response-byte limit. Digest authentication
+can issue multiple HTTP requests; an outer operation timeout can bound the whole
+exchange. The cap covers HTTP 200/400/500 and other status bodies, including
+chunked and unknown-length responses, before UTF-8 replacement decoding.
+
+```rust,no_run
+use oxvif::transport::{HttpTransport, HttpTransportOptions};
+use std::time::Duration;
+
+let transport = HttpTransport::from_options(HttpTransportOptions {
+    timeout: Duration::from_secs(30),
+    max_response_bytes: 8 * 1024 * 1024,
+})?;
+# Ok::<(), oxvif::transport::HttpTransportBuildError>(())
+```
+
+Both settings must be positive. `with_options`, credentials and private CA
+bundles preserve each other's settings in either order. A cap refusal returns
+`TransportError::ResponseTooLarge { limit }` without retaining the body and
+should not be retried automatically. Downstream exhaustive matches on the public
+error enums must handle the new resource and invalid-option variants. The cap
+is a workload setting, not a measured device maximum or total-memory guarantee;
+custom `Transport` implementations remain responsible for their own network reads.
 
 ## Error handling
 

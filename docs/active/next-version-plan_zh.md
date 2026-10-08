@@ -2,9 +2,10 @@
 
 [English](next-version-plan.md) | [繁體中文](next-version-plan_zh.md)
 
-狀態：PLANNED。程式走訪日期：2026-10-08；已提交基準為
+狀態：IN-PROGRESS。程式走訪日期：2026-10-08；已提交基準為
 `afe37316ac60aa8c4470f8608a6eab7fa1450692`，workspace 版本為 0.17.0。
-候選版本為 0.18；本文件不修改版本，也不授權實作、攝影機寫入、發布或背景排程。
+候選版本為 0.18。使用者於 2026-10-08 在計畫提交 `2bad316` 後授權實作；版本修改、
+攝影機寫入、發布、push 與背景排程仍不在此次授權範圍。
 
 下一版主線是讓實機失敗有界、可解釋，再加入有限的 Metamorph 離線 reference 比較。
 先交付 runtime 改善；完整 Mock fidelity 母計畫不列為本版必要前置條件。
@@ -68,8 +69,8 @@ fixture。原始碼走訪不等於這些測試已在本次重跑。
 
 | 工作包 | 前置條件 | 交付 | 狀態 |
 | --- | --- | --- | --- |
-| P0 | 無 | 固定實作輸入與相容案例 | TODO |
-| P1 | P0 | 可設定 HTTP deadline／有界 SOAP body | TODO |
+| P0 | 無 | 固定實作輸入與相容案例 | DONE |
+| P1 | P0 | 可設定 HTTP deadline／有界 SOAP body | DONE（本地）；cap 驗收待 P5 |
 | P2 | P0；整合網路檢查需 P1 | Production XML 完整有界解析 | TODO |
 | P3 | P1／P2 | Session 初始化 report／安全 trace | TODO |
 | P4 | P1／P3 | 共用 delay policy／CLI 診斷整合 | TODO |
@@ -82,6 +83,13 @@ P5 harness 可與 P1／P2 同時準備，不需要攝影機。缺少硬體輸入
 無限延後已完成 runtime 修正。
 
 ## P0 實作基準
+
+實作輸入為 `2bad316`，原有 HB1 tracked diff 與四個 untracked 檔案獨立保留。
+已走訪 Library／Health transport 建構、CLI `build_http_transport`／typed retry
+分類、Health capture 的 exhaustive `TransportError` match、recording／examples，
+以及相鄰 oxdm Session custom transport（未發現 exhaustive error match）；不修改
+oxdm。公開 error 新增 variant 需要下游 exhaustive-match 遷移；v3 封閉 metadata
+schema 與直接 XML 寬鬆相容測試維持既有契約。
 
 - 寫程式前記錄選定 commit 與 dirty worktree 處置。本次 HB1 修改 CHANGELOG、
   公開 Mock 文件、lib／mock 檔，並新增 `http_binding.rs` 與測試；仍未提交且為
@@ -295,7 +303,26 @@ MSRV、既有 schema／CLI matrix，wire shape 改變時跑獨立 qualified exte
 本切片不宣告全面商用／VMS 或所有 operation conformance。本次寫計畫不含發布、
 push 或修改版本。
 
-## 本次計畫驗證
+## 實作證據
+
+- P1：`HttpTransportOptions` 控制每個 HTTP request deadline 與累積回應 bytes，
+  預設為 10 s／4 MiB。CLI 轉送與 Health 內外層 timeout 的競態處理保留原有 timeout
+  結果；成功、Fault 與 HTTP error body 都在保留前檢查上限。明確採用 UTF-8
+  replacement decoding，不受下游 reqwest charset feature unification 影響。
+  Digest helper 丟棄 challenge body；byte cap 適用於最後回傳的 response body。
+- TCP fixture 驗證邊界 payload、超一 byte、宣告／未知／chunked 長度、無效 UTF-8、
+  取消與連線 EOF。Private root 重建保留 options／roots；先設 Digest credentials
+  再改 options 仍保留認證，精確發出一次 challenge 與一次 authenticated request。
+  CLI 轉送測試未套用外層 timeout。
+- 反向驗證：將 byte cap 放寬一個 byte，在未篩選 all-feature／no-fail-fast 執行中
+  使三個超量拒絕測試失敗；該次亦暴露上述 Health timeout 競態，現已修正。將 CLI
+  內層改回固定十秒，使 focused deadline assertion 失敗；兩個檔案都逐 byte 復原。
+- 尚未量測實機最大回應；4 MiB 預設值是否適合發布，仍需 P5 硬體驗收。
+- P1 最終 gate：format、兩種 workspace／all-target Clippy、locked 未篩選
+  all-feature tests（1,392 通過）與 default tests（1,273 通過），兩者各七個 ignored、
+  47 suites；兩種 feature mode 的嚴格 rustdoc。HB1 仍獨立保留。
+
+## 原始計畫驗證
 
 - 已完成：上述 source／control 走訪與工作歸屬核對。
 - 目前 worktree 通過：240 個 local file-link destination、雙語工作包存在檢查、

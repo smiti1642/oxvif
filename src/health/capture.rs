@@ -74,7 +74,7 @@ impl Transport for CaptureTransport {
             Err(e) => {
                 let http_status = match &e {
                     TransportError::HttpStatus { status, .. } => Some(*status),
-                    TransportError::Http(_) => None,
+                    TransportError::Http(_) | TransportError::ResponseTooLarge { .. } => None,
                 };
                 self.record(action, request, e.to_string(), http_status);
                 Err(e)

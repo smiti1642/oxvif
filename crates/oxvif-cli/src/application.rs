@@ -13,7 +13,7 @@ use std::{
 use oxvif::{
     DeviceInfo, OnvifClient, OnvifError, OnvifSession,
     health::{ErrorClass, HealthCheck, HealthReport},
-    transport::{HttpTransport, Transport, TransportError},
+    transport::{HttpTransport, HttpTransportOptions, Transport, TransportError},
 };
 use percent_encoding::percent_decode_str;
 use tokio::time::{Instant, sleep, timeout};
@@ -1364,6 +1364,7 @@ fn is_retryable_transport_error(error: &TransportError) -> bool {
         TransportError::HttpStatus { status, .. } => {
             matches!(*status, 408 | 425 | 429 | 502 | 503 | 504)
         }
+        TransportError::ResponseTooLarge { .. } => false,
     }
 }
 
@@ -1391,6 +1392,9 @@ impl Transport for HealthRetryTransport {
                 2
             };
             self.failures.fetch_or(bit, Ordering::Relaxed);
+            if matches!(error, TransportError::Http(error) if error.is_timeout()) {
+                self.failures.fetch_or(4, Ordering::Relaxed);
+            }
         }
         result
     }
@@ -1578,7 +1582,15 @@ async fn execute_health_check(
             options.clock_sync,
             resolved.password.is_some(),
         ));
-        match timeout(options.timeout, check.run()).await {
+        // An inner deadline can win the race with the whole-attempt deadline.
+        // Preserve the timeout outcome rather than returning a partial report
+        // whose only difference is scheduler ordering at the same deadline.
+        let result = match timeout(options.timeout, check.run()).await {
+            Ok(_) if observed.failures.load(Ordering::Relaxed) & 4 != 0 => Err(()),
+            Ok(report) => Ok(report),
+            Err(_) => Err(()),
+        };
+        match result {
             Ok(report)
                 if observed.failures.load(Ordering::Relaxed) == 1
                     && health_report_is_retryable(&report)
@@ -1730,7 +1742,13 @@ pub(crate) fn build_http_transport(
     username: Option<&str>,
     password: Option<&str>,
 ) -> Result<Arc<dyn Transport>, AppError> {
-    let mut transport = HttpTransport::new();
+    let mut transport = HttpTransport::from_options(HttpTransportOptions {
+        timeout: options.timeout,
+        ..HttpTransportOptions::default()
+    })
+    .map_err(|error| {
+        AppError::invalid_argument(format!("Invalid HTTP transport options: {error}"))
+    })?;
     if !options.ca_certificates.is_empty() {
         transport = transport
             .with_root_certificates_pem(&options.ca_certificates)
@@ -3292,6 +3310,56 @@ mod tests {
         assert!(is_retryable_onvif_error(&transient));
         assert!(!is_retryable_onvif_error(&authentication));
         assert!(!is_retryable_onvif_error(&soap_fault));
+        assert!(!is_retryable_onvif_error(&OnvifError::Transport(
+            TransportError::ResponseTooLarge { limit: 517 }
+        )));
+    }
+
+    #[tokio::test]
+    async fn cli_http_options_apply_the_inner_deadline_without_an_outer_timeout() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0; 1024];
+            loop {
+                let count = stream.read(&mut buffer).await.unwrap();
+                assert_ne!(count, 0);
+                request.extend_from_slice(&buffer[..count]);
+                if request.ends_with(b"<request/>") {
+                    break;
+                }
+            }
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nx")
+                .await
+                .unwrap();
+            let count = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buffer))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(count, 0);
+        });
+        let options = ExecutionOptions {
+            timeout: Duration::from_millis(100),
+            ..Default::default()
+        };
+        let transport = build_http_transport(&options, None, None).unwrap();
+        match transport
+            .soap_post(
+                &format!("http://{address}/onvif/device_service"),
+                "urn:test/deadline",
+                "<request/>".into(),
+            )
+            .await
+            .unwrap_err()
+        {
+            TransportError::Http(error) => assert!(error.is_timeout()),
+            other => panic!("unexpected error: {other}"),
+        }
+        server.await.unwrap();
     }
 
     #[tokio::test]

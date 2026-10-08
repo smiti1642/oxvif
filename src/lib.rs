@@ -11,6 +11,10 @@
 //!
 //! ## Quick navigation
 //!
+//! [`transport::HttpTransportOptions`] configures a ten-second default HTTP
+//! deadline and 4 MiB SOAP body cap. Credentials and private CA setup preserve
+//! those settings; oversized bodies return a typed resource refusal.
+//!
 //! Since 0.17, [`VideoRateControl2::frame_rate_limit`] uses `f32`
 //! to preserve fractional rates. Malformed present rate control returns an error;
 //! negative/nonfinite rates fail before writing. Ordinary integer JSON remains
