@@ -638,6 +638,17 @@ let transport = HttpTransport::from_options(HttpTransportOptions {
 處理新增的 resource 與 invalid-option variant。此上限是工作量設定，不是實測
 裝置最大回應或總記憶體保證；custom `Transport` 仍須自行限制網路讀取。
 
+Production SOAP 也在建構 DOM 前檢查完整輸入：UTF-8 text 上限 4 MiB（包含
+markup／attributes）、depth 64、65,536 elements。即使使用 custom transport
+或較大的 HTTP byte cap，`parse_soap_body` 仍執行這些限制。
+`SoapError::ResourceLimit { resource, limit }` 表示不可重試的本地拒絕；exhaustive
+error match 必須加入此 variant。格式錯誤、未閉合、多 root、DTD、錯誤 attribute
+或 reference 改為回傳 `XmlParse`。XML declaration 需為 version 1.0，encoding
+若存在需為 UTF-8。這些檢查不構成 namespace／XSD conformance 驗證。
+合法 Unicode、entity、CDATA 內容及 namespace-stripped typed parsing 仍受支援。
+`XmlNode::parse_complete` 提供同一有界入口；直接 `XmlNode::parse` 保留無資源上限
+的舊寬鬆行為，深層輸入的 recursive consumer／tree destruction 仍有風險。
+
 ## 錯誤處理
 
 所有 API 方法回傳 `Result<T, OnvifError>`：

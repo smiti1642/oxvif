@@ -71,6 +71,9 @@ fn outcome<T>(r: Result<T, OnvifError>) -> String {
         Err(OnvifError::Soap(SoapError::MissingField(f))) => format!("missing-field:{f}"),
         Err(OnvifError::Soap(SoapError::MissingBody)) => "missing-body".to_string(),
         Err(OnvifError::Soap(SoapError::XmlParse(e))) => format!("xml-parse:{e}"),
+        Err(OnvifError::Soap(SoapError::ResourceLimit { resource, limit })) => {
+            format!("xml-limit:{resource}:{limit}")
+        }
         Err(OnvifError::Soap(SoapError::InvalidValue { field, value })) => {
             format!("invalid-value:{field}={value}")
         }

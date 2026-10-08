@@ -14,6 +14,9 @@
 //! [`transport::HttpTransportOptions`] configures a ten-second default HTTP
 //! deadline and 4 MiB SOAP body cap. Credentials and private CA setup preserve
 //! those settings; oversized bodies return a typed resource refusal.
+//! Production SOAP parsing additionally requires complete XML within 4 MiB,
+//! depth 64 and 65,536 elements, including custom transport responses. Direct
+//! [`soap::XmlNode::parse`] retains its legacy permissive behavior.
 //!
 //! Since 0.17, [`VideoRateControl2::frame_rate_limit`] uses `f32`
 //! to preserve fractional rates. Malformed present rate control returns an error;

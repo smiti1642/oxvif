@@ -13,12 +13,14 @@
 //! 4. **Error types** ([`SoapError`]) — structured errors for parse failures,
 //!    missing fields, and SOAP Faults.
 
+mod complete;
 pub mod envelope;
 pub mod error;
 pub mod security;
 pub mod xml;
 
+pub use complete::{MAX_XML_BYTES, MAX_XML_DEPTH, MAX_XML_NODES};
 pub use envelope::SoapEnvelope;
-pub use error::SoapError;
+pub use error::{SoapError, XmlResource};
 pub use security::WsSecurityToken;
 pub use xml::{XmlNode, find_response, parse_soap_body};

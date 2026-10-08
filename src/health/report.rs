@@ -173,6 +173,7 @@ impl From<&OnvifError> for CheckError {
             },
             OnvifError::Soap(
                 SoapError::XmlParse(_)
+                | SoapError::ResourceLimit { .. }
                 | SoapError::MissingBody
                 | SoapError::UnexpectedResponse(_)
                 | SoapError::InvalidValue { .. },

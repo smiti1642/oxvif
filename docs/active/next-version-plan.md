@@ -79,7 +79,7 @@ compatibility fixtures. Source inspection is not a fresh execution result.
 | --- | --- | --- | --- |
 | P0 | None | Freeze implementation input and compatibility cases | DONE |
 | P1 | P0 | Configurable HTTP deadline and bounded SOAP bodies | DONE (local); cap validation awaits P5 |
-| P2 | P0; P1 for combined network checks | Complete bounded production XML parsing | TODO |
+| P2 | P0; P1 for combined network checks | Complete bounded production XML parsing | DONE (local) |
 | P3 | P1/P2 | Report-bearing Session initialization and safe trace | TODO |
 | P4 | P1/P3 | Shared delay policy and CLI diagnostic integration | TODO |
 | P5 | P0; acceptance after P1–P4 | Param-aware regression harness and device evidence | TODO |
@@ -358,6 +358,23 @@ all-operation conformance claim from this cut. Current publication, push and
 version changes remain outside the planning request.
 
 ## Implementation evidence
+
+- P2: complete validation runs before bounded DOM construction; default limits
+  are 4 MiB input, root-inclusive depth 64 and 65,536 Start/Empty elements.
+  Direct DOM compatibility remains separate. An attribute-key set avoids
+  quadratic duplicate checks in validation and the already-validated DOM pass.
+  XML 1.0 UTF-8 declarations, names/characters/references and attribute syntax
+  are checked without namespace/XSD conformance claims. Existing quick-xml
+  syntax error detail remains available to callers; resource errors retain no XML.
+  Health maps XML resource failures to its existing Parse class; CLI retry refuses
+  them. The exhaustive action-outcome test helper handles the new variant.
+- P2 acceptance: six independent syntax/payload/resource/network/recovery/wide-
+  attribute tests, plus the unchanged direct XML compatibility fixtures. Allowing
+  one extra depth level failed three tests in the unfiltered all-feature run;
+  bypassing validation failed five focused tests; changing decoded attributes
+  failed the Unicode and wide-attribute value assertions. All sources restored
+  exactly. Final format, both Clippy modes, all-feature/default tests
+  (1,398/1,279 passed; seven ignored, 48 suites each) and strict rustdoc passed.
 
 - P1: `HttpTransportOptions` controls each HTTP request deadline and accumulated
   response bytes (10 s / 4 MiB defaults). CLI forwarding and Health's inner/outer

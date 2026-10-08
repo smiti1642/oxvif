@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Require complete, bounded production SOAP XML (4 MiB, depth 64, 65,536
+  elements), including custom transport responses. Reject incomplete/multiple
+  roots, DTDs and malformed attributes/references; declarations support XML 1.0
+  UTF-8. Direct `XmlNode::parse` preserves legacy compatibility. Handle the new
+  `SoapError::ResourceLimit` variant in exhaustive matches.
+
 - Configure HTTP deadlines and bounded SOAP response bodies with
   `HttpTransportOptions` (defaults: ten seconds and 4 MiB). CA/credential
   configuration preserves these options; CLI `--timeout` reaches the inner HTTP

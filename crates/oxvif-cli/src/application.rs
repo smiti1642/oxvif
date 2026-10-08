@@ -3313,6 +3313,12 @@ mod tests {
         assert!(!is_retryable_onvif_error(&OnvifError::Transport(
             TransportError::ResponseTooLarge { limit: 517 }
         )));
+        assert!(!is_retryable_onvif_error(&OnvifError::Soap(
+            oxvif::soap::SoapError::ResourceLimit {
+                resource: oxvif::soap::XmlResource::Depth,
+                limit: 64,
+            }
+        )));
     }
 
     #[tokio::test]

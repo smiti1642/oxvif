@@ -6,12 +6,38 @@
 
 use thiserror::Error;
 
+/// Production XML resource whose workload limit was exceeded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum XmlResource {
+    /// UTF-8 input bytes, including attributes and markup.
+    Bytes,
+    /// Element depth, with the root at depth one.
+    Depth,
+    /// Total elements, including self-closing elements.
+    Nodes,
+}
+
+impl std::fmt::Display for XmlResource {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Bytes => "input byte",
+            Self::Depth => "element depth",
+            Self::Nodes => "element count",
+        })
+    }
+}
+
 /// Errors arising from SOAP response parsing or device-reported faults.
 #[derive(Debug, Error, PartialEq)]
 pub enum SoapError {
     /// The raw response bytes could not be parsed as XML.
     #[error("XML parse error: {0}")]
     XmlParse(String),
+
+    /// Complete production XML exceeded a workload limit. No response text is
+    /// retained in this error. This local refusal is not automatically retryable.
+    #[error("XML {resource} limit exceeded ({limit})")]
+    ResourceLimit { resource: XmlResource, limit: usize },
 
     /// The response did not contain a `<s:Body>` element.
     #[error("Missing <s:Body> in SOAP response")]

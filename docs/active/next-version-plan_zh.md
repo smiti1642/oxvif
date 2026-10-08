@@ -71,7 +71,7 @@ fixture。原始碼走訪不等於這些測試已在本次重跑。
 | --- | --- | --- | --- |
 | P0 | 無 | 固定實作輸入與相容案例 | DONE |
 | P1 | P0 | 可設定 HTTP deadline／有界 SOAP body | DONE（本地）；cap 驗收待 P5 |
-| P2 | P0；整合網路檢查需 P1 | Production XML 完整有界解析 | TODO |
+| P2 | P0；整合網路檢查需 P1 | Production XML 完整有界解析 | DONE（本地） |
 | P3 | P1／P2 | Session 初始化 report／安全 trace | TODO |
 | P4 | P1／P3 | 共用 delay policy／CLI 診斷整合 | TODO |
 | P5 | P0；驗收需 P1–P4 | Param-aware 回歸 harness／實機證據 | TODO |
@@ -304,6 +304,20 @@ MSRV、既有 schema／CLI matrix，wire shape 改變時跑獨立 qualified exte
 push 或修改版本。
 
 ## 實作證據
+
+- P2：完整檢查先於有界 DOM 建構，預設 4 MiB input、包含 root 的 depth 64，
+  65,536 Start／Empty elements。直接 DOM 相容入口獨立保留。Attribute key set
+  避免驗證與已驗證 DOM pass 的 duplicate check 平方成長。檢查 XML 1.0 UTF-8
+  declaration、names／characters／references 與 attribute 語法，不宣稱 namespace
+  或 XSD conformance。既有 quick-xml 語法錯誤細節仍供呼叫端使用；resource error
+  不保留 XML。Health 對應既有 Parse class；CLI 不重試；action outcome 的
+  exhaustive test helper 已加入新 variant。
+- P2 驗收：六個獨立語法／payload／resource／network／recovery／wide-attribute
+  測試，以及未修改的直接 XML 相容 fixture。深度放寬一層，在未篩選 all-feature
+  執行中使三個測試失敗；略過驗證使五個 focused test 失敗；改動 decoded attribute
+  使 Unicode／wide-attribute 值斷言失敗。原始碼皆逐 byte 復原。最終 format、兩種
+  Clippy、all-feature／default tests（1,398／1,279 通過；各七個 ignored、48 suites）
+  與嚴格 rustdoc 通過。
 
 - P1：`HttpTransportOptions` 控制每個 HTTP request deadline 與累積回應 bytes，
   預設為 10 s／4 MiB。CLI 轉送與 Health 內外層 timeout 的競態處理保留原有 timeout

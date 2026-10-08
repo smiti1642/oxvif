@@ -1,4 +1,4 @@
-//! Namespace-aware XML DOM and SOAP response helpers.
+//! Namespace-stripped XML DOM and SOAP response helpers.
 //!
 //! [`XmlNode`] is a minimal tree built with `quick-xml`. All namespace
 //! prefixes are stripped from element and attribute names on parse so that
@@ -82,9 +82,15 @@ impl XmlNode {
 impl XmlNode {
     /// Parse a UTF-8 XML string into a node tree.
     ///
-    /// Uses an explicit stack instead of recursion; will not overflow on
-    /// arbitrarily deep documents.
+    /// Legacy compatibility entry point: no workload limits, returns the first
+    /// root, and may accept incomplete documents or ignore malformed attributes.
+    /// Construction uses a stack; recursive consumers and tree destruction are
+    /// still sensitive to depth. Use [`Self::parse_complete`] for untrusted input.
     pub fn parse(xml: &str) -> Result<Self, SoapError> {
+        Self::parse_inner(xml, false)
+    }
+
+    fn parse_inner(xml: &str, complete_validated: bool) -> Result<Self, SoapError> {
         let mut reader = Reader::from_str(xml);
         // Don't trim per Text event: whitespace between entity references
         // (which arrive as separate `GeneralRef` events) would be discarded
@@ -101,12 +107,12 @@ impl XmlNode {
         loop {
             match reader.read_event() {
                 Ok(Event::Start(ref e)) => {
-                    stack.push(Self::from_bytes_start(e));
+                    stack.push(Self::from_bytes_start(e, complete_validated));
                 }
 
                 Ok(Event::Empty(ref e)) => {
                     // Self-closing tag: <Foo/>
-                    let node = Self::from_bytes_start(e);
+                    let node = Self::from_bytes_start(e, complete_validated);
                     if let Some(parent) = stack.last_mut() {
                         parent.children.push(node);
                     } else {
@@ -200,11 +206,31 @@ impl XmlNode {
         }
     }
 
-    fn from_bytes_start(e: &quick_xml::events::BytesStart<'_>) -> Self {
+    /// Parse one complete UTF-8 XML document within production workload limits.
+    ///
+    /// Checks through EOF before constructing the compatibility DOM: 4 MiB
+    /// input, depth 64 and 65,536 elements (including empty elements). Rejects
+    /// incomplete/multiple roots, outside content, malformed/duplicate attributes,
+    /// DTDs, invalid references and invalid XML characters. Only XML 1.0 UTF-8
+    /// declarations are supported. This is not namespace or XSD validation;
+    /// element/attribute local-name behavior remains unchanged.
+    ///
+    /// Bounds cover construction, recursive consumers and destruction of this
+    /// production tree; they are workload limits, not a total-memory guarantee.
+    ///
+    /// # Errors
+    /// Returns [`SoapError::XmlParse`] for rejected syntax/policy or
+    /// [`SoapError::ResourceLimit`] for a byte, depth or element-count refusal.
+    pub fn parse_complete(xml: &str) -> Result<Self, SoapError> {
+        super::complete::validate(xml)?;
+        Self::parse_inner(xml, true)
+    }
+
+    fn from_bytes_start(e: &quick_xml::events::BytesStart<'_>, complete_validated: bool) -> Self {
         let local_name = e.local_name().as_ref().to_owned();
 
         let mut attrs = HashMap::new();
-        for attr_result in e.attributes() {
+        for attr_result in e.attributes().with_checks(!complete_validated) {
             let Ok(attr) = attr_result else { continue };
 
             // Drop namespace declarations (xmlns and xmlns:prefix)
@@ -248,8 +274,11 @@ fn append_text(node: &mut XmlNode, s: &str) {
 ///
 /// The namespace prefix on `Body` is ignored, so both `s:Body` and
 /// `SOAP-ENV:Body` are accepted.
+/// Uses [`XmlNode::parse_complete`] with production byte/depth/node limits,
+/// including for responses supplied by custom transports. It does not validate
+/// namespaces or XSDs.
 pub fn parse_soap_body(xml: &str) -> Result<XmlNode, SoapError> {
-    let mut root = XmlNode::parse(xml)?;
+    let mut root = XmlNode::parse_complete(xml)?;
     let idx = root
         .children
         .iter()

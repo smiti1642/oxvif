@@ -1458,6 +1458,19 @@ error enums must handle the new resource and invalid-option variants. The cap
 is a workload setting, not a measured device maximum or total-memory guarantee;
 custom `Transport` implementations remain responsible for their own network reads.
 
+Production SOAP parsing also checks complete input before constructing a DOM:
+4 MiB UTF-8 text (including markup/attributes), depth 64 and 65,536 elements.
+`parse_soap_body` enforces these limits even with a custom transport or a larger
+HTTP byte cap. `SoapError::ResourceLimit { resource, limit }` identifies a local
+refusal and is not retried; exhaustive error matches must include it.
+Malformed/incomplete/multiple-root documents, DTDs and invalid attributes or
+references now return `XmlParse`. XML declarations must specify version 1.0 and,
+if present, UTF-8 encoding. These checks do not establish namespace/XSD conformance.
+Legal Unicode, entity and CDATA contents and namespace-stripped typed parsing
+remain supported. `XmlNode::parse_complete` exposes the same bounded entry point;
+direct `XmlNode::parse` retains permissive legacy behavior without resource bounds,
+including recursive consumer/destruction risks on deeply nested input.
+
 ## Error handling
 
 All API methods return `Result<T, OnvifError>`:
