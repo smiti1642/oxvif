@@ -8,6 +8,12 @@ No implementation or release date is promised. The completed
 [publication evidence](../done/release-0.17-finalization.md) are archived.
 Their closure does not complete the broader work below or turn unperformed checks into passes.
 
+2026-10-08: the [next-version implementation plan](next-version-plan.md)
+([繁體中文](next-version-plan_zh.md)) selects a candidate 0.18 cut from current
+source. It owns the bounded P0–P6 execution map for client limits, F15 runtime
+diagnostics/compatibility and F14 M7; this index retains the broader F01–F15
+dispositions. The plan does not complete those families or resume the autonomous queue.
+
 | Section | Purpose |
 | --- | --- |
 | [Calibrated work ownership](#calibrated-work-ownership) | Current disposition, owner and exit criteria |

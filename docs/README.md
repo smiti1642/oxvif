@@ -55,6 +55,13 @@ evidence. The [post-0.17 backlog](active/post-0.17-backlog.md)
 The [autonomous execution queue](active/autonomous-completion-schedule.md) ([繁體中文](active/autonomous-completion-schedule_zh.md)) tracks the current continuous work.
 The [0.17 cut](done/release-0.17-cut.md) is now a historical release record.
 
+The 2026-10-08 [next-version plan](active/next-version-plan.md)
+([繁體中文](active/next-version-plan_zh.md)) maps a bounded candidate 0.18 cut
+to current source: SOAP limits, initialization diagnostics, CLI execution,
+real-device regression evidence and offline reference comparison. It is a
+planning supplement; the dated inventory below remains historical, and this
+request does not resume the autonomous queue.
+
 2026-09-22 歸檔與校準合計將 27 組已交付計畫／批次的 46 份 Markdown 文件，
 以及一份原始審查 JSON 移至 `done/`。原 16 組 active 文件已逐份核對，
 相依套件分組計畫補齊 GitHub 證據、clone 計畫補齊 G3 後結案；下表保留 14 組：
