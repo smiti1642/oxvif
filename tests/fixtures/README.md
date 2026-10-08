@@ -60,10 +60,13 @@ rejected the wire shape".
 
 ## Privacy / hygiene
 
-- Strip MAC addresses, serial numbers, and any credentials that leak via
-  echoed-back URLs (the recorder does **not** auto-scrub).
-- Hostnames inside `<tt:Address>` etc. are usually fine to keep but feel
-  free to redact for shareable fixtures.
-- Never commit a `*.req.xml` containing a real password (the recorder
-  writes the body verbatim; WS-Security `UsernameToken` digests are
-  one-way but the username is plaintext).
+- The legacy recorder blanks selected WS-Security Password/Nonce fields and
+  removes literal response URL `user:pass@` pairs by default. Raw opt-ins retain
+  those values. These targeted transforms are not a general secret/PII sanitizer.
+- Keep raw device captures outside the checkout. Before sharing any fixture,
+  review usernames, serial/MAC addresses, hostnames, query tokens, custom/vendor
+  fields, returned logs and errors; remove sensitive values and confirm permission.
+- This suffix-based format overwrites responses for different tokens and can
+  conflate Media1/Media2 Actions. Use param-aware Metamorph stores for new
+  multi-profile/multi-source regression evidence. Missing files must fail explicit
+  corpus runs. Official schema resources/derived instances remain outside checkout.

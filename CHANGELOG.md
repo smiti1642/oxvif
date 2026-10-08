@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Replace raw client SOAP trace with operation/timing/byte-count/error-class
+  metadata. Use explicit captures for wire investigation and review them before
+  sharing; targeted credential redaction does not certify arbitrary device data.
+
 - Require complete, bounded production SOAP XML (4 MiB, depth 64, 65,536
   elements), including custom transport responses. Reject incomplete/multiple
   roots, DTDs and malformed attributes/references; declarations support XML 1.0
@@ -35,6 +39,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   body text. Exhaustive matches must handle the new transport/build error variants.
 
 ### Added
+
+- Add `OnvifSessionBuilder::build_with_report()` and
+  `HealthCheck::run_with_session_report()` with separate safe initialization
+  metadata, including optional fallback failures and URL provenance. Existing
+  build/run behavior, routing precedence and HealthReport fields are preserved;
+  mandatory failures retain the original typed cause.
 
 - Add an offline `snapshot_probe` example that reports bounded signature and
   trailing CR/LF evidence without changing image acceptance or modifying the input.

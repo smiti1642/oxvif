@@ -72,7 +72,7 @@ fixture。原始碼走訪不等於這些測試已在本次重跑。
 | P0 | 無 | 固定實作輸入與相容案例 | DONE |
 | P1 | P0 | 可設定 HTTP deadline／有界 SOAP body | DONE（本地）；cap 驗收待 P5 |
 | P2 | P0；整合網路檢查需 P1 | Production XML 完整有界解析 | DONE（本地） |
-| P3 | P1／P2 | Session 初始化 report／安全 trace | TODO |
+| P3 | P1／P2 | Session 初始化 report／安全 trace | DONE（本地） |
 | P4 | P1／P3 | 共用 delay policy／CLI 診斷整合 | TODO |
 | P5 | P0；驗收需 P1–P4 | Param-aware 回歸 harness／實機證據 | TODO |
 | P6a | P2／P5 synthetic corpus | 離線配對／明確 comparison outcome | TODO |
@@ -304,6 +304,27 @@ MSRV、既有 schema／CLI matrix，wire shape 改變時跑獨立 qualified exte
 push 或修改版本。
 
 ## 實作證據
+
+- P3：`build` 委派給 `build_with_report`，初始化順序、必要 clock／capabilities
+  失敗與 missing-URL fallback 優先順序維持不變。Report 僅含受控 enum／number：
+  三個 stage、可取得的 clock offset、已知 HTTP error status、十個 routing URL
+  來源（不含 URL）。Boxed 必要失敗獨立保留原始 typed cause。
+  `HealthCheck::run_with_session_report` 回傳原 HealthReport 加初始化 metadata；
+  `run` 保留原有投影。
+- Client trace 保留固定 operation Action、serialized request／returned text byte
+  counts、耗時與受控 transport error class；收到 String 不代表 SOAP 成功或已知
+  HTTP status。Trace 測試獨立執行，避免平行 client test 競爭 tracing callsite
+  註冊。Recorder 文件區分選定去敏與安全分享保證。
+- P3 驗收：八個新測試涵蓋既有流量、credentials／transport 建構順序、正／負／
+  未知時差、必要失敗立即停止、fallback 優先順序與結果、原始 Fault cause、獨立
+  Health metadata 與 trace 去敏。覆蓋 capability URL 在未篩選 all-feature run
+  使兩個測試失敗；focused controls 破壞時差／未知值、authentication／Fault 分類、
+  skipped stage 與 raw URL trace 去敏。原始碼逐 byte 還原。最終五項 gate 通過：
+  all-feature／default 各 1,406／1,287 tests，七個 ignored、50 suites。兩種
+  workspace 與無 feature Library 的嚴格 rustdoc，以及無 feature／health-only
+  Library Clippy 皆通過。
+- 實機 capture 輸入：使用者於 2026-10-08 確認目前沒有。繼續所有本地工作包；
+  P5 裝置驗收維持 WAITING FOR EVIDENCE。
 
 - P2：完整檢查先於有界 DOM 建構，預設 4 MiB input、包含 root 的 depth 64，
   65,536 Start／Empty elements。直接 DOM 相容入口獨立保留。Attribute key set

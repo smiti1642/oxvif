@@ -215,8 +215,39 @@ let uri = session.get_stream_uri(&profiles[0].token).await?;
 | `.with_clock_sync()` | 先呼叫 `GetSystemDateAndTime` 並套用 UTC offset，避免 clock skew 導致驗證失敗 |
 | `.with_transport(transport)` | 替換 HTTP transport，適合單元測試 |
 | `.build().await` | 建立連線、選擇性同步時間、取得 capabilities 並回傳 session |
+| `.build_with_report().await` | 相同初始化，回傳 `(OnvifSession, SessionBuildReport)`；失敗回傳 boxed `SessionBuildFailure`，含原始 error 與 report |
 | `session.capabilities()` | 回傳快取的 `&Capabilities`，不執行網路呼叫 |
 | `session.client()` | 存取底層 `&OnvifClient` |
+
+`build_with_report` 依序記錄 `clock_read`、`capabilities`、`services_fallback`，
+包含耗時毫秒、受控 error class、可取得的 clock offset，以及 service URL 來源
+（`configured`、`capabilities`、`services_fallback`、`missing`），不保留
+URL／body／Fault 文字。成功的 String transport result 無法辨識 HTTP status；
+已知 HTTP error status 則會記錄。Clock／capabilities 失敗仍中止；optional
+GetServices 失敗在 report 中可見，但初始化仍成功。既有 URL 不會被覆蓋。
+
+```rust,no_run
+# use oxvif::OnvifSession;
+# async fn example() {
+match OnvifSession::builder("http://camera/onvif/device_service")
+    .with_clock_sync().build_with_report().await
+{
+    Ok((session, report)) => { println!("{:?}", report); let _ = session; }
+    Err(failure) => println!("{:?}", failure.report),
+}
+# }
+```
+
+此獨立 report 在 `serde` feature 下可序列化。需要原始 typed cause 時明確檢查
+`failure.error`；其中可能包含敏感 wire 資料。`HealthCheck::run_with_session_report`
+同樣回傳 `(HealthReport, SessionBuildReport)`，不增加流量或改變既有 HealthReport
+shape；HealthReport／captures 仍保留原有診斷細節。
+
+Client trace 改為只記錄固定 operation Action、耗時、serialized request／returned
+text byte counts，以及受控 transport error class。收到 String 不代表 SOAP 成功
+或特定 HTTP status；此處計數單位是 SOAP exchange，不是 Digest HTTP request。
+明確啟用的 capture API 仍保留 wire 證據；選定 credential 去敏不是通用 secret／PII
+sanitizer。分享前需審查 capture，原始實機 capture 留在 checkout 外。
 
 ---
 

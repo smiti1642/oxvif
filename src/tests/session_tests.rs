@@ -5,6 +5,373 @@ use std::sync::{Arc, Mutex};
 use crate::tests::common::ErrorTransport;
 use crate::transport::TransportError;
 
+struct ReportScript {
+    responses: Mutex<std::collections::VecDeque<Result<String, TransportError>>>,
+    requests: Mutex<Vec<(String, String)>>,
+}
+
+impl ReportScript {
+    fn new(responses: Vec<Result<String, TransportError>>) -> Arc<Self> {
+        Arc::new(Self {
+            responses: Mutex::new(responses.into()),
+            requests: Mutex::new(Vec::new()),
+        })
+    }
+}
+
+#[async_trait]
+impl Transport for ReportScript {
+    async fn soap_post(
+        &self,
+        _: &str,
+        action: &str,
+        body: String,
+    ) -> Result<String, TransportError> {
+        self.requests.lock().unwrap().push((action.into(), body));
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        self.responses
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("unplanned initialization request")
+    }
+}
+
+fn source(report: &SessionBuildReport, service: SessionService) -> ServiceUrlSource {
+    report
+        .services
+        .iter()
+        .find(|entry| entry.service == service)
+        .unwrap()
+        .source
+}
+
+#[tokio::test]
+async fn report_build_preserves_legacy_traffic_and_records_skipped_stages() {
+    let old = ReportScript::new(vec![Ok(caps_full_xml().into())]);
+    let new = ReportScript::new(vec![Ok(caps_full_xml().into())]);
+    OnvifSession::builder("http://configured")
+        .with_transport(old.clone())
+        .build()
+        .await
+        .unwrap();
+    let (_, report) = OnvifSession::builder("http://configured")
+        .with_transport(new.clone())
+        .build_with_report()
+        .await
+        .unwrap();
+    let actions = |script: &ReportScript| {
+        script
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(action, _)| action.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(actions(&old), actions(&new));
+    assert_eq!(
+        actions(&new),
+        ["http://www.onvif.org/ver10/device/wsdl/GetCapabilities"]
+    );
+    assert_eq!(
+        report
+            .stages
+            .iter()
+            .map(|stage| stage.stage)
+            .collect::<Vec<_>>(),
+        [
+            SessionStage::ClockRead,
+            SessionStage::Capabilities,
+            SessionStage::ServicesFallback
+        ]
+    );
+    assert_eq!(
+        report
+            .stages
+            .iter()
+            .map(|stage| stage.outcome)
+            .collect::<Vec<_>>(),
+        [
+            SessionStageOutcome::Skipped,
+            SessionStageOutcome::Succeeded,
+            SessionStageOutcome::Skipped
+        ]
+    );
+    assert_eq!(report.stages[0].elapsed_ms, 0);
+    assert!(report.stages[1].elapsed_ms >= 5);
+    assert!(
+        report
+            .stages
+            .iter()
+            .all(|stage| stage.http_status.is_none() && stage.error_class.is_none())
+    );
+    assert_eq!(report.clock_offset_secs, None);
+    assert_eq!(report.services.len(), 10);
+    assert_eq!(
+        source(&report, SessionService::Device),
+        ServiceUrlSource::Configured
+    );
+    assert_eq!(
+        source(&report, SessionService::Media2),
+        ServiceUrlSource::Capabilities
+    );
+    assert!(
+        report
+            .services
+            .iter()
+            .filter(|entry| entry.service != SessionService::Device)
+            .all(|entry| entry.source == ServiceUrlSource::Capabilities)
+    );
+}
+
+#[tokio::test]
+async fn report_clock_offsets_are_applied_before_capabilities_in_either_builder_order() {
+    use crate::soap::{XmlNode, security::unix_secs_to_iso8601};
+    for (delta, transport_first) in [(-3600, false), (3600, true)] {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let device_time = now + delta;
+        let stamp = unix_secs_to_iso8601(device_time);
+        let response = format!(
+            "<Envelope><Body><GetSystemDateAndTimeResponse><SystemDateAndTime><UTCDateTime><Time><Hour>{}</Hour><Minute>{}</Minute><Second>{}</Second></Time><Date><Year>{}</Year><Month>{}</Month><Day>{}</Day></Date></UTCDateTime></SystemDateAndTime></GetSystemDateAndTimeResponse></Body></Envelope>",
+            &stamp[11..13],
+            &stamp[14..16],
+            &stamp[17..19],
+            &stamp[..4],
+            &stamp[5..7],
+            &stamp[8..10]
+        );
+        let script = ReportScript::new(vec![Ok(response), Ok(caps_full_xml().into())]);
+        let builder = OnvifSession::builder("http://configured").with_clock_sync();
+        let builder = if transport_first {
+            builder
+                .with_transport(script.clone())
+                .with_credentials("report-user", "report-password")
+        } else {
+            builder
+                .with_credentials("report-user", "report-password")
+                .with_transport(script.clone())
+        };
+        let (_, report) = builder.build_with_report().await.unwrap();
+        let after = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let offset = report.clock_offset_secs.unwrap();
+        assert!((device_time - after..=delta).contains(&offset));
+        assert_eq!(offset.signum(), delta.signum());
+        assert_eq!(report.stages[0].outcome, SessionStageOutcome::Succeeded);
+        let requests = script.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(
+            requests[0].0,
+            "http://www.onvif.org/ver10/device/wsdl/GetSystemDateAndTime"
+        );
+        assert_eq!(
+            requests[1].0,
+            "http://www.onvif.org/ver10/device/wsdl/GetCapabilities"
+        );
+        let envelope = XmlNode::parse_complete(&requests[1].1).unwrap();
+        let created = envelope
+            .path(&["Header", "Security", "UsernameToken", "Created"])
+            .unwrap()
+            .text();
+        assert!(
+            (device_time..=device_time + 2).any(|time| created == unix_secs_to_iso8601(time)),
+            "clock offset did not reach WS-Security"
+        );
+        assert_eq!(
+            envelope
+                .path(&["Header", "Security", "UsernameToken", "Username"])
+                .unwrap()
+                .text(),
+            "report-user"
+        );
+    }
+}
+
+#[tokio::test]
+async fn mandatory_report_failure_retains_original_cause_and_stops_followup_calls() {
+    for clock in [false, true] {
+        let script = ReportScript::new(vec![
+            Err(TransportError::HttpStatus {
+                status: 403,
+                body: "credential-shaped-private-body".into(),
+            }),
+            Ok(caps_full_xml().into()),
+        ]);
+        let builder = OnvifSession::builder("http://user:password@configured/?token=private")
+            .with_transport(script.clone());
+        let failure = (if clock {
+            builder.with_clock_sync()
+        } else {
+            builder
+        })
+        .build_with_report()
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(failure.to_string(), "Session initialization failed");
+        assert!(
+            matches!(failure.error, OnvifError::Transport(TransportError::HttpStatus { status: 403, ref body }) if body == "credential-shaped-private-body")
+        );
+        let failed_index = if clock { 0 } else { 1 };
+        assert_eq!(
+            failure.report.stages[failed_index].outcome,
+            SessionStageOutcome::Failed
+        );
+        assert_eq!(
+            failure.report.stages[failed_index].error_class,
+            Some(SessionErrorClass::Authentication)
+        );
+        assert_eq!(failure.report.stages[failed_index].http_status, Some(403));
+        assert!(
+            failure.report.stages[failed_index + 1..]
+                .iter()
+                .all(|stage| stage.outcome == SessionStageOutcome::NotAttempted
+                    && stage.elapsed_ms == 0)
+        );
+        assert_eq!(script.requests.lock().unwrap().len(), 1);
+        assert_eq!(script.responses.lock().unwrap().len(), 1);
+        let projection = format!("{:?}", failure.report);
+        for secret in ["password", "private-body", "configured", "token="] {
+            assert!(!projection.contains(secret));
+        }
+    }
+}
+
+#[tokio::test]
+async fn fallback_report_keeps_capability_urls_and_distinguishes_missing_services() {
+    let caps = caps_full_xml().replace(
+        "<tt:Media2>    <tt:XAddr>http://cam/onvif/media2</tt:XAddr>    </tt:Media2>",
+        "",
+    );
+    assert!(!caps.contains("/onvif/media2"));
+    let services = "<Envelope><Body><GetServicesResponse><Service><Namespace>http://www.onvif.org/ver10/recording/wsdl</Namespace><XAddr>http://different/recording</XAddr></Service><Service><Namespace>http://www.onvif.org/ver20/media/wsdl</Namespace><XAddr>http://user:pass@fallback/?query=secret</XAddr></Service></GetServicesResponse></Body></Envelope>";
+    for fallback in [
+        Ok(services.into()),
+        Ok("<Envelope><Body><GetServicesResponse/></Body></Envelope>".into()),
+        Err(TransportError::HttpStatus {
+            status: 503,
+            body: "private-fallback-error".into(),
+        }),
+    ] {
+        let succeeded = fallback.is_ok();
+        let filled = fallback
+            .as_ref()
+            .is_ok_and(|xml: &String| xml.contains("<Service>"));
+        let script = ReportScript::new(vec![Ok(caps.clone()), fallback]);
+        let (session, report) = OnvifSession::builder("http://configured")
+            .with_transport(script.clone())
+            .build_with_report()
+            .await
+            .unwrap();
+        assert_eq!(
+            session.capabilities().recording.url.as_deref(),
+            Some("http://cam/onvif/recording")
+        );
+        assert_eq!(
+            source(&report, SessionService::Recording),
+            ServiceUrlSource::Capabilities
+        );
+        assert_eq!(
+            source(&report, SessionService::Media2),
+            if filled {
+                ServiceUrlSource::ServicesFallback
+            } else {
+                ServiceUrlSource::Missing
+            }
+        );
+        assert_eq!(
+            session.capabilities().media2.url.as_deref(),
+            if filled {
+                Some("http://user:pass@fallback/?query=secret")
+            } else {
+                None
+            }
+        );
+        assert_eq!(
+            report.stages[2].outcome,
+            if succeeded {
+                SessionStageOutcome::Succeeded
+            } else {
+                SessionStageOutcome::Failed
+            }
+        );
+        assert_eq!(
+            report.stages[2].http_status,
+            if succeeded { None } else { Some(503) }
+        );
+        assert_eq!(
+            report.stages[2].error_class,
+            if succeeded {
+                None
+            } else {
+                Some(SessionErrorClass::Transport)
+            }
+        );
+        assert_eq!(script.requests.lock().unwrap().len(), 2);
+        for secret in ["user:pass", "query=", "fallback-error"] {
+            assert!(!format!("{report:?}").contains(secret));
+        }
+        #[cfg(feature = "serde")]
+        {
+            let encoded = serde_json::to_string(&report).unwrap();
+            assert_eq!(
+                serde_json::from_str::<SessionBuildReport>(&encoded).unwrap(),
+                report
+            );
+            for secret in ["user:pass", "query=", "fallback-error"] {
+                assert!(!encoded.contains(secret));
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn successful_clock_without_utc_reports_unknown_offset() {
+    let script = ReportScript::new(vec![Ok("<Envelope><Body><GetSystemDateAndTimeResponse><SystemDateAndTime/></GetSystemDateAndTimeResponse></Body></Envelope>".into()), Ok(caps_full_xml().into())]);
+    let (_, report) = OnvifSession::builder("http://configured")
+        .with_clock_sync()
+        .with_transport(script.clone())
+        .build_with_report()
+        .await
+        .unwrap();
+    assert_eq!(report.stages[0].outcome, SessionStageOutcome::Succeeded);
+    assert_eq!(report.clock_offset_secs, None);
+    assert_eq!(script.requests.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn fault_report_classifies_device_refusal_without_echoing_reason_or_http_success_status() {
+    let fault = "<Envelope><Body><Fault><Code><Value>s:Sender</Value></Code><Reason><Text>password=report-secret http://user:pass@host/?query=secret</Text></Reason></Fault></Body></Envelope>";
+    let script = ReportScript::new(vec![Ok(fault.into())]);
+    let failure = OnvifSession::builder("http://configured")
+        .with_transport(script)
+        .build_with_report()
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(
+        failure.report.stages[1].error_class,
+        Some(SessionErrorClass::DeviceFault)
+    );
+    assert_eq!(failure.report.stages[1].http_status, None);
+    assert_eq!(
+        failure.report.stages[1].outcome,
+        SessionStageOutcome::Failed
+    );
+    assert!(
+        matches!(failure.error, OnvifError::Soap(SoapError::Fault { ref reason, .. }) if reason == "password=report-secret http://user:pass@host/?query=secret")
+    );
+    for secret in ["report-secret", "user:pass", "query="] {
+        assert!(!format!("{:?}", failure.report).contains(secret));
+    }
+}
+
 #[tokio::test]
 async fn media_sync_session_routes_services_and_reports_missing_urls() {
     for media2 in [false, true] {

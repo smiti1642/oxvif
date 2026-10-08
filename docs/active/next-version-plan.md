@@ -80,7 +80,7 @@ compatibility fixtures. Source inspection is not a fresh execution result.
 | P0 | None | Freeze implementation input and compatibility cases | DONE |
 | P1 | P0 | Configurable HTTP deadline and bounded SOAP bodies | DONE (local); cap validation awaits P5 |
 | P2 | P0; P1 for combined network checks | Complete bounded production XML parsing | DONE (local) |
-| P3 | P1/P2 | Report-bearing Session initialization and safe trace | TODO |
+| P3 | P1/P2 | Report-bearing Session initialization and safe trace | DONE (local) |
 | P4 | P1/P3 | Shared delay policy and CLI diagnostic integration | TODO |
 | P5 | P0; acceptance after P1–P4 | Param-aware regression harness and device evidence | TODO |
 | P6a | P2; P5 synthetic corpus | Offline pairing and explicit comparison outcomes | TODO |
@@ -358,6 +358,31 @@ all-operation conformance claim from this cut. Current publication, push and
 version changes remain outside the planning request.
 
 ## Implementation evidence
+
+- P3: `build` delegates to `build_with_report` without changing initialization
+  order, mandatory clock/capability failures or missing-URL fallback precedence.
+  Reports use controlled enums/numbers only: three stages, clock offset when
+  available, known error HTTP status and ten routing URL sources (no URLs).
+  Boxed mandatory failures retain the original typed cause separately.
+  `HealthCheck::run_with_session_report` returns the same HealthReport plus
+  initialization metadata; `run` remains the original projection.
+- Client trace retains fixed operation Action, serialized request/returned text
+  byte counts, elapsed time and controlled transport error class. A returned
+  String is not SOAP success or a known HTTP status. An isolated trace test
+  prevents concurrent client tests from racing tracing callsite registration.
+  Recorder docs distinguish targeted redaction from a sharing guarantee.
+- P3 acceptance: eight new tests cover legacy traffic, either credential/transport
+  builder order, positive/negative/unknown clock offset, strict mandatory failure,
+  fallback precedence/outcomes, original device Fault cause, separate Health
+  metadata and trace privacy. Overwriting a capability URL failed two tests in
+  the unfiltered all-feature run; focused controls broke offset/unknown handling,
+  authentication/Fault classification, skipped stages and raw URL trace privacy.
+  Sources were restored byte-for-byte. Final five gates passed: 1,406 all-feature
+  and 1,287 default tests, each with seven ignored and 50 suites. Strict rustdoc
+  passed in both workspace modes and the no-feature Library; no-feature and
+  health-only Library Clippy also passed.
+- Hardware capture inputs: user confirmed none available on 2026-10-08. Continue
+  all local packages; P5 device acceptance remains WAITING FOR EVIDENCE.
 
 - P2: complete validation runs before bounded DOM construction; default limits
   are 4 MiB input, root-inclusive depth 64 and 65,536 Start/Empty elements.

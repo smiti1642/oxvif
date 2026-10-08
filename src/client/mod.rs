@@ -182,10 +182,11 @@ impl OnvifClient {
     }
 
     /// Build a SOAP envelope, attach a WS-Security header if credentials are
-    /// set, serialise to XML, and POST to `url`. Logs the action + body
-    /// at trace level so `RUST_LOG=oxvif=trace` reveals the exact wire
-    /// shape — invaluable for chasing schema-validation faults from
-    /// strict cameras.
+    /// set, serialise to XML, and POST to `url`. Trace records only the fixed
+    /// operation Action, elapsed time, serialized request/returned text byte
+    /// counts and controlled transport error class. An opaque returned String
+    /// is not proof of SOAP success or a particular HTTP status; use explicit
+    /// capture APIs for wire-level investigation.
     pub(crate) async fn call(
         &self,
         url: &str,
@@ -197,10 +198,22 @@ impl OnvifClient {
             envelope = envelope.with_security(token);
         }
         let xml = envelope.build();
-        tracing::trace!(action, url, body = %xml, "SOAP request");
-        let resp = self.transport().soap_post(url, action, xml).await?;
-        tracing::trace!(action, response = %resp, "SOAP response");
-        Ok(resp)
+        let request_bytes = xml.len();
+        let started = std::time::Instant::now();
+        let result = self
+            .transport()
+            .soap_post(url, action, xml)
+            .await
+            .map_err(OnvifError::from);
+        tracing::trace!(
+            action,
+            request_bytes,
+            response_bytes = ?result.as_ref().ok().map(String::len),
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            error_class = ?result.as_ref().err().map(crate::session::SessionErrorClass::from_error),
+            "SOAP exchange completed"
+        );
+        result
     }
 }
 

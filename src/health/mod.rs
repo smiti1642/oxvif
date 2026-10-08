@@ -200,11 +200,10 @@ impl HealthCheck {
     /// transport error or a SOAP Fault) into
     /// [`HealthReport::captured`](crate::health::HealthReport). Off by default.
     ///
-    /// The stored request has its WS-Security `Password`/`Nonce` blanked, so it
-    /// never carries credential-derivation material; successful (and therefore
-    /// credential-bearing) requests are not stored at all. This is the raw
-    /// evidence a maintainer needs to see *why* a specific brand rejected a
-    /// call — pair it with the structured [`CheckError`] on the failing check.
+    /// Stored requests have selected WS-Security `Password`/`Nonce` fields
+    /// blanked; responses, errors, usernames, URLs and custom fields can still
+    /// contain sensitive material. Review captures before sharing. Successful
+    /// calls are not stored. Pair this opt-in evidence with [`CheckError`].
     pub fn with_capture(mut self, enabled: bool) -> Self {
         self.capture = enabled;
         self
@@ -212,6 +211,14 @@ impl HealthCheck {
 
     /// Run the checks and produce a [`HealthReport`].
     pub async fn run(self) -> HealthReport {
+        self.run_with_session_report().await.0
+    }
+
+    /// Run the same checks and return a separate safe Session initialization
+    /// report. This adds no requests and does not change the HealthReport shape.
+    /// The initialization report contains no URL/body/Fault text; the Health
+    /// report and optional captures retain their existing diagnostic detail.
+    pub async fn run_with_session_report(self) -> (HealthReport, crate::SessionBuildReport) {
         let started = Instant::now();
 
         // 1. Connectivity — build the session (one GetCapabilities round-trip).
@@ -247,23 +254,30 @@ impl HealthCheck {
         if self.clock_sync {
             builder = builder.with_clock_sync();
         }
-        let session = match builder.build().await {
-            Ok(s) => s,
-            Err(e) => {
+        let (session, initialization) = match builder.build_with_report().await {
+            Ok(result) => result,
+            Err(failure) => {
+                let crate::SessionBuildFailure {
+                    error: e,
+                    report: initialization,
+                } = *failure;
                 // Can't reach / auth the device — report just the failure.
                 let conn = CheckResult::fail("connect", Category::Connectivity, e.to_string())
                     .with_error(&e)
                     .with_elapsed(conn_start.elapsed());
-                return HealthReport {
-                    target: self.device_url,
-                    total_elapsed: started.elapsed(),
-                    profiles: assess(std::slice::from_ref(&conn)),
-                    checks: vec![conn],
-                    clock_skew_s: None,
-                    declared_profiles: vec![],
-                    // The connect failure went through the tap — capture it too.
-                    captured: capture.map(|c| c.take()).unwrap_or_default(),
-                };
+                return (
+                    HealthReport {
+                        target: self.device_url,
+                        total_elapsed: started.elapsed(),
+                        profiles: assess(std::slice::from_ref(&conn)),
+                        checks: vec![conn],
+                        clock_skew_s: None,
+                        declared_profiles: vec![],
+                        // The connect failure went through the tap — capture it too.
+                        captured: capture.map(|c| c.take()).unwrap_or_default(),
+                    },
+                    initialization,
+                );
             }
         };
         let mut checks = vec![
@@ -359,15 +373,18 @@ impl HealthCheck {
             .ok()
             .map(|sc| declared_profiles_from_scopes(&sc))
             .unwrap_or_default();
-        HealthReport {
-            target: self.device_url,
-            total_elapsed: started.elapsed(),
-            checks,
-            profiles,
-            clock_skew_s,
-            declared_profiles,
-            captured: capture.map(|c| c.take()).unwrap_or_default(),
-        }
+        (
+            HealthReport {
+                target: self.device_url,
+                total_elapsed: started.elapsed(),
+                checks,
+                profiles,
+                clock_skew_s,
+                declared_profiles,
+                captured: capture.map(|c| c.take()).unwrap_or_default(),
+            },
+            initialization,
+        )
     }
 }
 

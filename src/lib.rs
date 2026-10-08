@@ -17,6 +17,10 @@
 //! Production SOAP parsing additionally requires complete XML within 4 MiB,
 //! depth 64 and 65,536 elements, including custom transport responses. Direct
 //! [`soap::XmlNode::parse`] retains its legacy permissive behavior.
+//! [`OnvifSessionBuilder::build_with_report`] and
+//! `health::HealthCheck::run_with_session_report` provide separate safe
+//! initialization metadata. Client trace logs metadata; explicit captures retain
+//! wire evidence and require review before sharing.
 //!
 //! Since 0.17, [`VideoRateControl2::frame_rate_limit`] uses `f32`
 //! to preserve fractional rates. Malformed present rate control returns an error;
@@ -139,8 +143,8 @@
 //!   into `tests/fixtures/<vendor>-<model>/` and replaying them in tests
 //!   without the device (see `examples/record_fixtures.rs`). Captures are
 //!   redacted as they are written — the WS-Security `Password` / `Nonce` and
-//!   any `user:pass@` in a returned URL — so a fixture directory is safe to
-//!   commit.
+//!   literal `user:pass@` in returned URLs. Other secrets/PII can remain;
+//!   review captures before sharing and keep raw device captures outside checkout.
 //! - **`metamorph`** / **`metamorph-server`** — clone a real camera into a
 //!   replayable fixture set, ask whether oxvif can parse a given device, and
 //!   diff a device's response shapes against oxvif's own reference mock. See
@@ -415,7 +419,7 @@ pub use metamorph::{
     FixtureActionSummary, FixtureStore, FixtureSummary, MetamorphTransport, PtzVector,
     RecordingTransport, ReplayResponder,
 };
-pub use session::{OnvifSession, OnvifSessionBuilder};
+pub use session::{OnvifSession, OnvifSessionBuilder, SessionBuildFailure, SessionBuildReport};
 pub use types::{
     AnalyticsCapabilities, AudioDecoderConfiguration, AudioEncoderConfiguration,
     AudioEncoderConfigurationOptions, AudioEncoderOptions, AudioEncoding, AudioOutputConfiguration,

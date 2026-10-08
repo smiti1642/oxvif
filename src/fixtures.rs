@@ -12,9 +12,10 @@
 //! An authenticated SOAP request carries a WS-Security `UsernameToken`, and a
 //! `GetStreamUri` response can carry `rtsp://user:pass@host/…`. By default
 //! `CapturingTransport` blanks the `<wsse:Password>` and `<wsse:Nonce>` of every
-//! request and strips `user:pass@` from every URL in a response, so a capture
-//! directory is safe to commit. `<wsse:Username>` and `<wsu:Created>` are kept —
-//! they are not secret and they are what makes a capture readable.
+//! request and strips literal `user:pass@` pairs from response URLs. This is
+//! targeted redaction, not a general secret/PII sanitizer. Username/Created,
+//! serial/MAC/hostname/query/vendor fields and errors can remain sensitive;
+//! review captures before sharing. Raw captures belong outside the checkout.
 //!
 //! Both transforms can be turned off — see
 //! [`with_raw_requests`](CapturingTransport::with_raw_requests) and

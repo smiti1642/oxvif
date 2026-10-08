@@ -38,6 +38,12 @@
 
 use std::sync::Arc;
 
+mod report;
+pub use report::{
+    ServiceResolution, ServiceUrlSource, SessionBuildFailure, SessionBuildReport,
+    SessionErrorClass, SessionService, SessionStage, SessionStageOutcome, SessionStageReport,
+};
+
 use crate::client::OnvifClient;
 use crate::error::OnvifError;
 use crate::soap::SoapError;
@@ -118,9 +124,34 @@ impl OnvifSessionBuilder {
     /// 2. If [`with_clock_sync`](Self::with_clock_sync) was set, call
     ///    `GetSystemDateAndTime` and apply the UTC offset.
     /// 3. Call `GetCapabilities` and cache the service URLs.
-    /// 4. If any recording/search/replay/**media2** URL is still missing, call
+    /// 4. If any recording/search/replay/**media2**/DeviceIO URL is still missing, call
     ///    `GetServices` and fill it (Media2 is a GetServices-only service).
+    ///
+    /// Shares initialization with [`Self::build_with_report`]; clock/capability
+    /// errors remain mandatory failures and GetServices remains best-effort.
     pub async fn build(self) -> Result<OnvifSession, OnvifError> {
+        self.build_with_report()
+            .await
+            .map(|(session, _)| session)
+            .map_err(|failure| failure.error)
+    }
+
+    /// Connect and return the Session plus safe initialization metadata.
+    ///
+    /// Reports the clock, capability and optional services-fallback stages,
+    /// elapsed times, known clock offset and each routing URL's source, without
+    /// retaining URL/body/Fault text. A failed optional fallback appears as a
+    /// failed stage in a successful report. Missing services stay Missing.
+    /// No extra initialization requests or alternate authentication probes run.
+    ///
+    /// # Errors
+    /// Returns a boxed [`SessionBuildFailure`] with the original typed error and
+    /// the safe report if clock sync or GetCapabilities fails. The cause may
+    /// contain sensitive wire data; use the report for routine diagnostics.
+    pub async fn build_with_report(
+        self,
+    ) -> Result<(OnvifSession, SessionBuildReport), Box<SessionBuildFailure>> {
+        let mut report = SessionBuildReport::new();
         let mut client = OnvifClient::new(&self.device_url);
 
         if let Some((user, pass)) = self.credentials {
@@ -132,11 +163,35 @@ impl OnvifSessionBuilder {
         }
 
         if self.sync_clock {
-            let dt = client.get_system_date_and_time().await?;
-            client = client.with_utc_offset(dt.utc_offset_secs());
+            let started = std::time::Instant::now();
+            match client.get_system_date_and_time().await {
+                Ok(dt) => {
+                    let offset = dt.utc_offset_secs();
+                    report.clock_offset_secs = dt.utc_unix.map(|_| offset);
+                    client = client.with_utc_offset(offset);
+                    report.stage(0, SessionStageOutcome::Succeeded, started, None);
+                }
+                Err(error) => {
+                    report.stage(0, SessionStageOutcome::Failed, started, Some(&error));
+                    return Err(Box::new(SessionBuildFailure { error, report }));
+                }
+            }
+        } else {
+            report.skip(0);
         }
 
-        let mut caps = client.get_capabilities().await?;
+        let started = std::time::Instant::now();
+        let mut caps = match client.get_capabilities().await {
+            Ok(caps) => {
+                report.stage(1, SessionStageOutcome::Succeeded, started, None);
+                caps
+            }
+            Err(error) => {
+                report.stage(1, SessionStageOutcome::Failed, started, Some(&error));
+                return Err(Box::new(SessionBuildFailure { error, report }));
+            }
+        };
+        report.update_services(&caps, ServiceUrlSource::Capabilities);
 
         // Some devices advertise Profile G and/or **Media2** only via
         // GetServices, not the legacy GetCapabilities Extension — Media2 in
@@ -144,21 +199,30 @@ impl OnvifSessionBuilder {
         // Capabilities `Media2` extension is non-standard). Fall back to
         // GetServices to fill any missing recording/search/replay/media2 URL so
         // those services work on standards-compliant cameras.
-        if (caps.recording.url.is_none()
+        if caps.recording.url.is_none()
             || caps.search.url.is_none()
             || caps.replay.url.is_none()
             || caps.media2.url.is_none()
-            || caps.device_io.url.is_none())
-            && let Ok(services) = client.get_services().await
+            || caps.device_io.url.is_none()
         {
-            fill_missing_service_urls(&mut caps, &services);
+            let started = std::time::Instant::now();
+            match client.get_services().await {
+                Ok(services) => {
+                    fill_missing_service_urls(&mut caps, &services);
+                    report.update_services(&caps, ServiceUrlSource::ServicesFallback);
+                    report.stage(2, SessionStageOutcome::Succeeded, started, None);
+                }
+                Err(error) => report.stage(2, SessionStageOutcome::Failed, started, Some(&error)),
+            }
+        } else {
+            report.skip(2);
         }
 
-        Ok(OnvifSession { client, caps })
+        Ok((OnvifSession { client, caps }, report))
     }
 }
 
-/// Fill any missing service URL (recording / search / replay / media2) in `caps`
+/// Fill any missing service URL (recording / search / replay / media2 / DeviceIO) in `caps`
 /// from a GetServices listing. Only fills `None` fields — never overrides a URL
 /// already discovered via GetCapabilities.
 fn fill_missing_service_urls(caps: &mut Capabilities, services: &[OnvifService]) {

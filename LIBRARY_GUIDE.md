@@ -280,6 +280,40 @@ async fn main() -> Result<(), OnvifError> {
 | `.with_clock_sync()` | Call `GetSystemDateAndTime` first and apply UTC offset — prevents auth failures on devices with clock skew |
 | `.with_transport(transport)` | Replace HTTP transport (for unit testing) |
 | `.build().await` | Connect, sync clock (if set), call `GetCapabilities`, return `OnvifSession` |
+| `.build_with_report().await` | Same initialization; return `(OnvifSession, SessionBuildReport)` or a boxed `SessionBuildFailure` with the original error and report |
+
+`build_with_report` records `clock_read`, `capabilities` and `services_fallback`
+in order, with elapsed milliseconds, controlled error classes, available clock
+offset, and service URL sources (`configured`, `capabilities`, `services_fallback`,
+`missing`). Reports omit URL/body/Fault text. Successful String transport results
+have unknown HTTP status; known HTTP error statuses can be reported. Clock and
+capability failures still abort; optional GetServices failure appears in the report
+while initialization succeeds. Existing URLs are never overwritten.
+
+```rust,no_run
+# use oxvif::OnvifSession;
+# async fn example() {
+match OnvifSession::builder("http://camera/onvif/device_service")
+    .with_clock_sync().build_with_report().await
+{
+    Ok((session, report)) => { println!("{:?}", report); let _ = session; }
+    Err(failure) => println!("{:?}", failure.report),
+}
+# }
+```
+
+The separate report serializes with the `serde` feature. Inspect `failure.error`
+explicitly for the original typed cause; it can contain sensitive wire information.
+`HealthCheck::run_with_session_report` similarly returns `(HealthReport,
+SessionBuildReport)` without extra traffic or changing the existing HealthReport
+shape. HealthReport/captures retain their original diagnostic detail.
+
+Client trace now emits only fixed operation Action, elapsed time, serialized
+request/returned text byte counts and a controlled transport error class. Receiving
+a String does not establish SOAP success or a particular HTTP status; these are
+SOAP exchanges, not Digest HTTP request counts. Explicit capture APIs still retain
+wire evidence. Selected credential redaction is not a general secret/PII sanitizer;
+review captures before sharing and keep raw device captures outside the checkout.
 
 ### Session accessors
 
