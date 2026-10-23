@@ -73,6 +73,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Maintenance
 
+- Review the remaining zbus-family audit warnings against the CLI's selected
+  platform features. The synchronous Linux credential backend remains unchanged;
+  see the [dated applicability review](https://github.com/smiti1642/oxvif/blob/master/docs/done/dependency-audit-2026-10-23.md).
+
 - Refresh reqwest, tokio-rustls, toml and ipnet, plus the dirs/jsonschema
   development dependencies. Keep native credential storage on keyring 3.6.3
   pending a separate migration review and cross-version store validation.
