@@ -58,10 +58,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
-- Update the workspace lockfile to rustls 0.23.45 for
-  [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285), which fixes
-  acceptance of TLS 1.3 handshake messages at the wrong encryption level.
-  Library consumers with existing lockfiles should update rustls to 0.23.45 or later.
+- Update the workspace lockfile to rustls 0.23.46, rustls-webpki 0.103.16 and
+  webpki-root-certs 1.0.10. This includes the TLS handshake fix for
+  [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285), subsequent
+  rustls security fixes, and rejection of compromised emSign intermediate keys
+  ([RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382),
+  [RUSTSEC-2026-0383](https://rustsec.org/advisories/RUSTSEC-2026-0383.html)).
+  Library consumers must update their own lockfiles to these versions or later;
+  updating this workspace does not update downstream applications. Native platform
+  verification also requires current operating-system trust and revocation data.
+- Update the reqwest dependency graph's quinn-proto to 0.11.18, fixing the
+  connection-state and datagram memory exhaustion findings reported by the
+  dependency audit (RUSTSEC-2026-0338 through RUSTSEC-2026-0342).
 
 ### Maintenance
 

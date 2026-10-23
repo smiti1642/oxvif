@@ -1342,12 +1342,10 @@ impl Panel {
                     KeyCode::Enter if !value.is_empty() => {
                         return Ok(Some(std::mem::take(&mut *value)));
                     }
-                    KeyCode::Backspace => {
-                        if cursor > 0 {
-                            let previous = previous_boundary(&value, cursor);
-                            value.drain(previous..cursor);
-                            cursor = previous;
-                        }
+                    KeyCode::Backspace if cursor > 0 => {
+                        let previous = previous_boundary(&value, cursor);
+                        value.drain(previous..cursor);
+                        cursor = previous;
                     }
                     KeyCode::Delete if cursor < value.len() => {
                         value.remove(cursor);
