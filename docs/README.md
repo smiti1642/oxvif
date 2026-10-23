@@ -32,6 +32,7 @@ with the top-level [`README.md`](../README.md), the
 | [`support.md`](support.md) | Versioned support boundaries for the Rust library and CLI beta, including OS, credential, schema, TLS, camera-evidence, and commercial-claim limits. |
 | [`support_zh.md`](support_zh.md) | **支援與相容性政策（繁體中文）** — the Traditional Chinese counterpart to the support policy. |
 | [`releases/`](releases/) | Version-specific release notes and verification evidence. Entries marked unreleased describe staging, not public availability. |
+| [0.17.1 security patch](releases/0.17.1.md) · [繁體中文](releases/0.17.1_zh.md) | Security-only release based on 0.17.0; later master features remain unreleased. |
 | [0.17 summary](releases/0.17.0.md) · [繁體中文](releases/0.17.0_zh.md) | 0.17 user-facing release notes and publication status. |
 | [0.17 full changelog](releases/0.17.0-changelog.md) · [繁體中文](releases/0.17.0-changelog_zh.md) | CLI, Library, Mock, migration, evidence and limitations. |
 

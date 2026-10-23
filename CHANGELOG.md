@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 | Range | Releases |
 | --- | --- |
-| Latest | [0.17.0](#0170---2026-09-14) |
+| Latest | [0.17.1](#0171---2026-10-23) · [0.17.0](#0170---2026-09-14) |
 | Previous | [0.16.0](#0160---2026-09-04) |
 | Recent stable | [0.15.0](#0150---2026-08-03) · [0.14.0](#0140---2026-07-27) · [0.13.0](#0130---2026-07-24) · [0.12.0](#0120---2026-07-09) · [0.11.0](#0110---2026-07-03) · [0.10.0](#0100---2026-06-30) |
 | 0.9 series | [0.9.9](#099---2026-06-11) · [0.9.8](#098---2026-06-10) · [0.9.7](#097---2026-05-31) · [0.9.6](#096---2026-05-26) · [0.9.4](#094---2026-05-04) · [0.9.3](#093---2026-04-17) · [0.9.2](#092---2026-04-17) · [0.9.1](#091---2026-04-16) · [0.9.0](#090---2026-04-15) |
@@ -56,21 +56,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Scope OSD, PTZ node/configuration and recording-job state selectors to the requested operation; reject ambiguous selectors and preserve escaped identities. Correct OSD text/image XML and escape stored OSD/PTZ/recording strings.
 
-### Security
-
-- Update the workspace lockfile to rustls 0.23.46, rustls-webpki 0.103.16 and
-  webpki-root-certs 1.0.10. This includes the TLS handshake fix for
-  [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285), subsequent
-  rustls security fixes, and rejection of compromised emSign intermediate keys
-  ([RUSTSEC-2026-0382](https://rustsec.org/advisories/RUSTSEC-2026-0382),
-  [RUSTSEC-2026-0383](https://rustsec.org/advisories/RUSTSEC-2026-0383.html)).
-  Library consumers must update their own lockfiles to these versions or later;
-  updating this workspace does not update downstream applications. Native platform
-  verification also requires current operating-system trust and revocation data.
-- Update the reqwest dependency graph's quinn-proto to 0.11.18, fixing the
-  connection-state and datagram memory exhaustion findings reported by the
-  dependency audit (RUSTSEC-2026-0338 through RUSTSEC-2026-0342).
-
 ### Maintenance
 
 - Review the remaining zbus-family audit warnings against the CLI's selected
@@ -101,6 +86,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Archive completed plans and 0.17 release records under `docs/done`, retain
   unfinished work in `docs/active`, and reconcile the documentation index and
   cross-references. Keep archived development records out of the library package.
+
+## [0.17.1] - 2026-10-23
+
+### Security
+
+- Release the 0.17.0 API and CLI with patched TLS/QUIC dependencies:
+  rustls 0.23.46, rustls-webpki 0.103.16, webpki-root-certs 1.0.10 and
+  quinn-proto 0.11.18, including required aws-lc updates. This rejects compromised
+  emSign intermediate keys and fixes the reviewed TLS/QUIC denial-of-service
+  issues. Library consumers must update their own lockfiles; native verification
+  also requires current operating-system trust and revocation data.
+- See the [security patch release notes](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1.md).
 
 ## [0.17.0] - 2026-09-14
 

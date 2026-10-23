@@ -3,7 +3,10 @@
 `oxvif-cli` is the human- and Agent-friendly command-line operation surface
 for the [`oxvif`](https://crates.io/crates/oxvif) ONVIF client library.
 
-**oxvif-cli 0.17.0.** Guided maintenance, snapshot saving,
+**oxvif-cli 0.17.1.** Security-only dependency update based on 0.17.0.
+See the [patch notes](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1.md).
+
+0.17.0 introduced Guided maintenance, snapshot saving,
 diagnostic reports and configurable Vim navigation are available in this release.
 Read the [release summary](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md)
 and [full changes, migration and limitations](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md).
@@ -16,7 +19,7 @@ The package installs an executable named `oxvif`. Install version 0.17 from
 crates.io:
 
 ```sh
-cargo install oxvif-cli --version 0.17.0 --locked
+cargo install oxvif-cli --version 0.17.1 --locked
 oxvif --version
 ```
 

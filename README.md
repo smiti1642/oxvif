@@ -33,6 +33,9 @@ health diagnostics, and camera-free testing.
 
 ## Installation
 
+**0.17.1** is a security-only dependency update based on 0.17.0.
+See the [patch release notes](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1.md).
+
 **0.17.0** adds guided CLI maintenance and stricter selected Mock contracts, with source-breaking
 migration requirements. Read the [summary](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md)
 or [full changelog and migration](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md).
@@ -108,7 +111,7 @@ save snapshots, export settings and compare them without changing the camera.
 Install the CLI from crates.io:
 
 ```sh
-cargo install oxvif-cli --version 0.17.0 --locked
+cargo install oxvif-cli --version 0.17.1 --locked
 oxvif setup
 oxvif manage
 ```
