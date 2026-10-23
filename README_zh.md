@@ -32,6 +32,9 @@ library 與命令列工具，涵蓋裝置探索、裝置管理、Media1／Media2
 
 ## 安裝
 
+**0.17.1** 以 0.17.0 為基礎，只更新安全依賴。
+參閱[修補版說明](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1_zh.md)。
+
 **0.17.0** 提供引導式 CLI 維護及選定 Mock 契約
 強化，包含原始碼不相容遷移。參閱[簡要摘要](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0_zh.md)
 或[完整變更與遷移](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog_zh.md)。
@@ -105,7 +108,7 @@ service family、錯誤處理與進階功能。產生的
 從 crates.io 安裝 CLI：
 
 ```sh
-cargo install oxvif-cli --version 0.17.0 --locked
+cargo install oxvif-cli --version 0.17.1 --locked
 oxvif setup
 oxvif manage
 ```

@@ -624,14 +624,14 @@ fn parse(xml: &str) -> Result<Node, String> {
                 place(&mut stack, &mut root, n)?;
             }
             quick_xml::events::Event::DocType(_) => return Err("DTD is not allowed".into()),
-            quick_xml::events::Event::Text(text) if stack.is_empty() => {
-                if !text
-                    .as_ref()
-                    .trim_matches([' ', '\t', '\r', '\n'])
-                    .is_empty()
-                {
-                    return Err("text outside root element".into());
-                }
+            quick_xml::events::Event::Text(text)
+                if stack.is_empty()
+                    && !text
+                        .as_ref()
+                        .trim_matches([' ', '\t', '\r', '\n'])
+                        .is_empty() =>
+            {
+                return Err("text outside root element".into());
             }
             quick_xml::events::Event::Eof => break,
             _ => {}

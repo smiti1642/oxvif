@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 | Range | Releases |
 | --- | --- |
-| Latest | [0.17.0](#0170---2026-09-14) |
+| Latest | [0.17.1](#0171---2026-10-23) · [0.17.0](#0170---2026-09-14) |
 | Previous | [0.16.0](#0160---2026-09-04) |
 | Recent stable | [0.15.0](#0150---2026-08-03) · [0.14.0](#0140---2026-07-27) · [0.13.0](#0130---2026-07-24) · [0.12.0](#0120---2026-07-09) · [0.11.0](#0110---2026-07-03) · [0.10.0](#0100---2026-06-30) |
 | 0.9 series | [0.9.9](#099---2026-06-11) · [0.9.8](#098---2026-06-10) · [0.9.7](#097---2026-05-31) · [0.9.6](#096---2026-05-26) · [0.9.4](#094---2026-05-04) · [0.9.3](#093---2026-04-17) · [0.9.2](#092---2026-04-17) · [0.9.1](#091---2026-04-16) · [0.9.0](#090---2026-04-15) |
@@ -17,6 +17,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 | 0.3–0.1 | [0.3.0](#030---2026-04-02) · [0.2.0](#020---2026-04-02) · [0.1.3](#013---2026-04-02) · [0.1.2](#012---2026-04-02) · [0.1.1](#011---2026-04-02) · [0.1.0](#010---2026-04-02) |
 
 ---
+
+## [0.17.1] - 2026-10-23
+
+### Security
+
+- Release the 0.17.0 API and CLI with patched TLS/QUIC dependencies:
+  rustls 0.23.46, rustls-webpki 0.103.16, webpki-root-certs 1.0.10 and
+  quinn-proto 0.11.18, including required aws-lc updates. This rejects compromised
+  emSign intermediate keys and fixes the reviewed TLS/QUIC denial-of-service
+  issues. Library consumers must update their own lockfiles; native verification
+  also requires current operating-system trust and revocation data.
+- See the [security patch release notes](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1.md).
 
 ## [0.17.0] - 2026-09-14
 
