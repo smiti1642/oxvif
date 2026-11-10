@@ -375,7 +375,7 @@ fn execute(
         let mut runtime = state.subscriptions.lock().unwrap_or_else(|e| e.into_inner());
         let now = runtime.now();
         let endpoint = endpoint.unwrap_or_default();
-        if action != CREATE && !runtime.subscriptions.get(endpoint).is_some_and(|s| s.expires > now) { return Err(unknown()); }
+        if action != CREATE && runtime.subscriptions.get(endpoint).is_none_or(|s| s.expires <= now) { return Err(unknown()); }
         let expires = if action == CREATE || action == RENEW { expiry(time, now)? } else { 0 };
         let mut next = runtime.clone();
         let mut synthesized = false;

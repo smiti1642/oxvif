@@ -109,6 +109,22 @@ API behind `not(feature = …)`.
 
 ## Audit log
 
+### Push integration, 2026-11-10: Tokio 1.53.1 to 1.53.3
+
+The targeted lockfile patch addresses RUSTSEC-2026-0386. The registry manifests'
+feature maps are identical. A source scan of negative feature guards and nearby
+public declarations found no disappearing public API; this repository does not
+call `AsyncFd`. Upstream's 1.53.3 changelog adds unsafe registration constructors
+and deprecates the affected safe constructors. Existing workspace tests and both
+Clippy feature modes verify the APIs used here after the patch.
+
+Compared with the merged security-release lockfile, Tokio is the only package
+whose version changes. Cargo also normalizes existing `windows-sys` dependency
+edges to already locked versions; no additional package version is upgraded.
+The remaining outdated packages, including keyring 4, stay outside this patch.
+See the [dated advisory follow-up](done/dependency-audit-2026-10-23.md#push-integration-follow-up-2026-11-10)
+for warning applicability and validation results.
+
 Record the *outcome* here, not just that an audit happened — the next audit is
 much cheaper when it can start from "these were clear last time, and why".
 

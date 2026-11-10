@@ -370,11 +370,7 @@ fn supported_probe_xml(xml: &str, types: &str) -> bool {
                     path.pop();
                 }
             }
-            Event::End(_) => {
-                if path.pop().is_none() {
-                    return false;
-                }
-            }
+            Event::End(_) if path.pop().is_none() => return false,
             Event::DocType(_) => return false,
             Event::Text(value) if path.is_empty() && !value.xml10_content().trim().is_empty() => {
                 return false;

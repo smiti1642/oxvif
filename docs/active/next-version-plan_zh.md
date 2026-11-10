@@ -5,8 +5,11 @@
 狀態：LOCAL IMPLEMENTATION COMPLETE（2026-11-10）；實機驗收 WAITING FOR EVIDENCE。
 程式走訪日期：2026-10-08；已提交基準為
 `afe37316ac60aa8c4470f8608a6eab7fa1450692`，workspace 版本為 0.17.0。
-候選版本為 0.18。使用者於 2026-10-08 在計畫提交 `2bad316` 後授權實作；版本修改、
-攝影機寫入、發布、push 與背景排程仍不在此次授權範圍。
+候選版本為 0.18。使用者於 2026-10-08 在計畫提交 `2bad316` 後授權實作，並於
+2026-11-10 額外授權執行 `cargo audit`、`cargo outdated` 及 push 七個已完成的
+commit，HB1 保持未提交。整合保留七個原始雜湊與遠端既有的 0.17.1 安全版本，
+另加入針對性的 Tokio 安全 patch。新增版本修改、攝影機寫入、發布與背景排程
+仍不在授權範圍。詳見[依賴檢查補充](../done/dependency-audit-2026-10-23.md#push-integration-follow-up-2026-11-10)。
 
 下一版主線是讓實機失敗有界、可解釋，再加入有限的 Metamorph 離線 reference 比較。
 先交付 runtime 改善；完整 Mock fidelity 母計畫不列為本版必要前置條件。
@@ -95,7 +98,8 @@ schema 與直接 XML 寬鬆相容測試維持既有契約。
 - 寫程式前記錄選定 commit 與 dirty worktree 處置。本次 HB1 修改 CHANGELOG、
   公開 Mock 文件、lib／mock 檔，並新增 `http_binding.rs` 與測試；仍未提交且為
   IN-PROGRESS。不把它們納入計畫提交，也不宣稱 HB1 完成。
-- 區分已發布、已提交但未發布、本地未提交行為。實際版本決策前，manifest 維持 0.17.0。
+- 區分已發布、已提交但未發布、本地未提交行為。走訪基準為 0.17.0；push 整合保留
+  遠端既有的 0.17.1 安全版本，並未選定下一個功能版本。
 - 新增 error／report 前列出 fixture／CLI 相容案例、enum match、schema consumer
   及下游編譯入口。
 
@@ -301,8 +305,8 @@ MSRV、既有 schema／CLI matrix，wire shape 改變時跑獨立 qualified exte
 施工時使用者的無關修改。
 
 版本驗收需 P1–P4 本地證據、明確 P5 實機處置；若交付 P6，需 P6a／P6b 證據。
-本切片不宣告全面商用／VMS 或所有 operation conformance。本次寫計畫不含發布、
-push 或修改版本。
+本切片不宣告全面商用／VMS 或所有 operation conformance。本次計畫仍不含發布或
+新增版本修改；後續的 push 授權已記錄於文件開頭。
 
 ## 實作證據
 

@@ -32,6 +32,7 @@ with the top-level [`README.md`](../README.md), the
 | [`support.md`](support.md) | Versioned support boundaries for the Rust library and CLI beta, including OS, credential, schema, TLS, camera-evidence, and commercial-claim limits. |
 | [`support_zh.md`](support_zh.md) | **支援與相容性政策（繁體中文）** — the Traditional Chinese counterpart to the support policy. |
 | [`releases/`](releases/) | Version-specific release notes and verification evidence. Entries marked unreleased describe staging, not public availability. |
+| [0.17.1 security patch](releases/0.17.1.md) · [繁體中文](releases/0.17.1_zh.md) | Security-only release based on 0.17.0; later master features remain unreleased. |
 | [0.17 summary](releases/0.17.0.md) · [繁體中文](releases/0.17.0_zh.md) | 0.17 user-facing release notes and publication status. |
 | [0.17 full changelog](releases/0.17.0-changelog.md) · [繁體中文](releases/0.17.0-changelog_zh.md) | CLI, Library, Mock, migration, evidence and limitations. |
 
@@ -129,6 +130,7 @@ input paths and hashes; it is historical evidence, not a current file inventory.
 | [`mock-fidelity-auth-freshness.md`](done/mock-fidelity-auth-freshness.md) · [繁體中文](done/mock-fidelity-auth-freshness_zh.md) | AF1 completed: bounded freshness and nonce replay protection; broader W08/HTTP/authorization remains active. |
 | [`mock-fidelity-event-lifecycle.md`](done/mock-fidelity-event-lifecycle.md) · [繁體中文](done/mock-fidelity-event-lifecycle_zh.md) | EP2 completed 2026-09-23: bounded independent subscription lifecycle and external wire validation; broader W15 remains active. |
 | [`dependency-maintenance-plan.md`](done/dependency-maintenance-plan.md) · [繁體中文](done/dependency-maintenance-plan_zh.md) | Integration and subsequent grouped-update behavior verified on 2026-09-22. F13's six updates and rustls advisory fix are integrated locally; keyring migration remains separate. Current review evidence lives in [dependency pitfalls](dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22). |
+| [`dependency-audit-2026-10-23.md`](done/dependency-audit-2026-10-23.md) | Remaining zbus-family warnings: selected CLI credential backends, inactive optional paths, reproducible checks and reassessment conditions. |
 | [`release-0.17-review.md`](done/release-0.17-review.md) · [繁體中文](done/release-0.17-review_zh.md) | Frozen candidate review and later repair evidence; companion JSON ledger is preserved byte-for-byte. |
 | [`release-0.17-approval.md`](done/release-0.17-approval.md) · [繁體中文](done/release-0.17-approval_zh.md) | Historical approval packet; publication stop satisfied and 0.17 released. |
 | [`release-0.17-cut.md`](done/release-0.17-cut.md) · [繁體中文](done/release-0.17-cut_zh.md) | Bounded 0.17 scope/acceptance record; no longer the active release gate. |

@@ -6,8 +6,12 @@ Status: LOCAL IMPLEMENTATION COMPLETE (2026-11-10); hardware acceptance WAITING
 FOR EVIDENCE. Code walkthrough: 2026-10-08, committed baseline
 `afe37316ac60aa8c4470f8608a6eab7fa1450692` (workspace version 0.17.0).
 Candidate release: 0.18. The user authorized implementation on 2026-10-08 after
-planning commit `2bad316`; versions, device writes, publication, push and background
-scheduling remain outside this authorization.
+planning commit `2bad316`. On 2026-11-10 the user additionally authorized
+`cargo audit`, `cargo outdated` and pushing the seven completed commits while
+leaving HB1 uncommitted. Integration preserves their original hashes and the
+remote's existing 0.17.1 security release, with a targeted Tokio safety patch.
+New version changes, device writes, publication and background scheduling remain
+outside this authorization. See the [dependency follow-up](../done/dependency-audit-2026-10-23.md#push-integration-follow-up-2026-11-10).
 
 The next version should make real-device failures bounded and explainable,
 and add a limited offline reference comparison to Metamorph. Deliver the
@@ -99,7 +103,8 @@ finished runtime repairs unpublished indefinitely.
   and adds `http_binding.rs` plus tests; it is uncommitted and IN-PROGRESS.
   Do not absorb those files into the planning commit or declare HB1 complete.
 - Separate known shipped, committed-unreleased and local-uncommitted behavior.
-  The manifests remain 0.17.0 until an actual release decision.
+  The original walkthrough used 0.17.0; the push integration retains the remote's
+  existing 0.17.1 security release without selecting the next feature version.
 - Capture fixture/CLI compatibility cases, enum matches, schema consumers and
   downstream compilation points before introducing new errors or reports.
 
@@ -355,8 +360,8 @@ exactly. Preserve the user's unrelated work during each batch.
 
 Release acceptance requires P1–P4 local evidence, explicit P5 device dispositions,
 and P6a/P6b evidence if the feature ships. Publish no broader commercial/VMS or
-all-operation conformance claim from this cut. Current publication, push and
-version changes remain outside the planning request.
+all-operation conformance claim from this cut. Publication and new version changes
+remain outside the planning request; the later push authorization is recorded above.
 
 ## Implementation evidence
 
