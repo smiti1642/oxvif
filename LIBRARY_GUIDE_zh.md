@@ -809,6 +809,42 @@ Action 字串，分享前仍須檢查；呼叫不存取網路或寫入磁碟。
 
 `FixtureStore::diff_against_synthetic()` 比較 element-path set，結果表示與 oxvif reference mock 的結構差異，**不是 ONVIF schema conformance verdict**。`verify_parsing().await` 則使用 oxvif typed parser，將每項 fixture 分類為 `Parsed`、`Failed`、`Faulted` 或 `Unverified`；`failures()` 刻意排除裝置正常拒絕操作的 `Faulted`。
 
+使用 `record_surface_with_evidence` 搭配 `SurfaceSelection`，可保留所有選定 profile／
+source 的 param-aware request、逐 operation 的 `SweepReport`，以及獨立、有上限的
+transport failure `RecordingEvidence`。既有 `record_surface_with_progress` 回傳
+形狀維持不變。Sweep 的 `Failed` 也可能是 SOAP／parser／service 失敗，不可直接
+當作 transport failure。Evidence 最多保留 512 次最終 transport failure 與 4 MiB
+Action／request 資料；省略或未收集會明確標示，request 去敏仍是選定欄位處理。
+
+在 capture 旁保存 `CorpusManifest`：假名裝置身分、可分享的 vendor／model／firmware、
+recording revision、provenance、分享範圍、選定完整 Action、sweep 結果、transport
+evidence，以及每個 fixture ordinal 的 `ExpectedExchange`。每筆保存凍結後的完整
+sanitized request 與人工核對的 JSON Pointer／值，例如 `/brightness: 45.0`，保留
+有意義的 channel token；不可直接複製目前 parser 輸出當作預期答案。
+
+```rust,no_run
+use oxvif::metamorph::{CorpusLimits, CorpusManifest, FixtureCorpus, verify_corpus};
+# async fn check() -> Result<(), Box<dyn std::error::Error>> {
+let limits = CorpusLimits::default();
+let corpus = FixtureCorpus::load("/private/oxvif-captures/camera-a", limits)?;
+let manifest = CorpusManifest::load("/private/oxvif-captures/camera-a/manifest.json", limits.file_bytes)?;
+let report = verify_corpus(&corpus, &manifest).await?;
+assert!(report.passed(), "接受 corpus 前先檢視保留的 disposition");
+# Ok(()) }
+```
+
+`FixtureCorpus` 保留 duplicate row／ordinal，預設每檔 32 MiB、512 fixtures、每個
+request／response 4 MiB；既有 `FixtureStore::load` 保留原 upsert 行為。
+`verify_corpus` 檢查完整 Action／fixture coverage、精確 request identity 與選定
+typed 值。Faulted／Failed／Unverified、缺少欄位斷言、不完整 sweep 或 transport
+evidence 都不能通過嚴格驗收；不能只用 `all_parsed()`，也不代表獨立 conformance。
+
+離線執行 `cargo run --features metamorph --example corpus_regression -- <corpus_dir>
+<manifest.json>`，輸出 deterministic JSON。Exit 0 表示嚴格驗收通過，1 表示保留
+失敗／不完整證據，2 表示輸入缺失、無效或超限；明確選定的 capture 缺檔必須失敗。
+原始 capture 與官方 schema 留在 checkout 外，去敏副本分享前仍須人工審查。
+實機驗收仍需另外提供 vendor／firmware capture。
+
 長時間 sweep 可使用 `_with_progress` variant。`SweepProgress::total` 計算展開 prerequisite 後的 operation 數，而不是 HTTP request 數；每個 operation 不論執行或 skip 都只推進一次。
 
 `DeviceAdapter` trait 可替 RTSP-only 等非 ONVIF 裝置提供 ONVIF skin。只需實作 `identity` 與 `stream_uri`；profile、capabilities 與 services 由 synthetic mock 補足，`continuous_move` 與 `snapshot` 為可選 hook。

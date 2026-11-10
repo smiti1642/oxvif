@@ -74,7 +74,7 @@ fixture。原始碼走訪不等於這些測試已在本次重跑。
 | P2 | P0；整合網路檢查需 P1 | Production XML 完整有界解析 | DONE（本地） |
 | P3 | P1／P2 | Session 初始化 report／安全 trace | DONE（本地） |
 | P4 | P1／P3 | 共用 delay policy／CLI 診斷整合 | DONE（本地） |
-| P5 | P0；驗收需 P1–P4 | Param-aware 回歸 harness／實機證據 | TODO |
+| P5 | P0；驗收需 P1–P4 | Param-aware 回歸 harness／實機證據 | DONE（本地 harness）；實機 WAITING FOR EVIDENCE |
 | P6a | P2／P5 synthetic corpus | 離線配對／明確 comparison outcome | TODO |
 | P6b | P6a | 選定 typed projection／可用的比較 example | TODO |
 
@@ -304,6 +304,26 @@ MSRV、既有 schema／CLI matrix，wire shape 改變時跑獨立 qualified exte
 push 或修改版本。
 
 ## 實作證據
+
+- P5 本地實作：FixtureCorpus 以實際 bytes 檢查預設 32 MiB／512 rows／每個 XML
+  4 MiB 上限，保留 duplicate ordinal，不改 FixtureStore loading／upsert。
+  CorpusManifest 保存假名身分、vendor／model／firmware、revision、provenance、
+  分享範圍、完整 Action、sweep／transport disposition，以及每筆凍結 request 的
+  人工核對 JSON Pointer 值。verify_corpus 拒絕 coverage 不完整、沒有欄位斷言、
+  非 Parsed 結果；transport failure／omission／unavailable 也不能通過。共用既有
+  私有 parse routing；opt-in RecordingEvidence 上限 512 events／4 MiB，SOAP Fault
+  仍是獨立存放的 response。
+- P5 synthetic 驗收：四個 integration tests 涵蓋 file／row／XML 邊界、duplicate
+  保留、明確缺檔失敗、所有 parse disposition、request／欄位 coverage，以及
+  transport 去敏與上限。Selected recording 保留四個 profiles、兩個 sources 的
+  獨立亮度 60／45 預期值，十筆凍結 exchange、四個完成的 sweep operations。
+  離線 example 對缺失 corpus 明確 exit 2。強制第一個 source 亮度，在未篩選
+  all-feature run 使新回歸與既有測試失敗；focused controls 偵測 file cap 放寬
+  一 byte、欄位比較反轉、錯誤分類改壞、evidence cap 放寬一 byte；原始碼皆逐 byte
+  還原。最終 format、兩種 workspace Clippy、all-feature／default tests（1,415／
+  1,292 通過，七個 ignored、51 suites）、兩種嚴格 workspace rustdoc、metamorph-only
+  Clippy 與無 feature Library rustdoc 通過；實機驗收維持 WAITING FOR EVIDENCE，沒有外部
+  vendor／firmware capture，synthetic 證據不能驗證實機 production body cap。
 
 - P4 實作：小型內部 retry module 保留 typed classification 與 delay 常數，
   maintenance stage 改用相同退避。Invocation metadata 使用 task-local scope，

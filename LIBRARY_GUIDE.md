@@ -2132,6 +2132,50 @@ than inventing a pairing. `resolved` then does not prove a defect was fixed, and
 even identical ambiguous reports may produce a nonempty diff. See the
 [report identity limits](docs/replay-storage.md#reports).
 
+### Frozen corpus regression
+
+Use `record_surface_with_evidence` with a `SurfaceSelection` to retain all selected
+profile/source requests in a param-aware store, the per-operation `SweepReport`,
+and separate bounded `RecordingEvidence` for final transport failures. The existing
+`record_surface_with_progress` return shape is unchanged. A sweep's `Failed` can
+also mean a SOAP/parser/service failure; do not relabel it as a transport failure.
+Evidence captures at most 512 transport failures and 4 MiB of Action/request data;
+omitted or unavailable evidence is explicit. Request redaction remains targeted.
+
+Freeze a `CorpusManifest` beside the capture: pseudonym, shareable vendor/model/
+firmware, recording revision, provenance, permitted sharing scope, selected full
+Actions, sweep observations, transport evidence, and one `ExpectedExchange` per
+fixture ordinal. Each expectation supplies the exact frozen sanitized request
+and reviewed JSON Pointer/value assertions, such as `/brightness: 45.0`. Keep
+meaningful source/profile/configuration tokens. Do not generate expectations by
+copying the parser's current result; independently review the selected values.
+
+```rust,no_run
+use oxvif::metamorph::{CorpusLimits, CorpusManifest, FixtureCorpus, verify_corpus};
+# async fn check() -> Result<(), Box<dyn std::error::Error>> {
+let limits = CorpusLimits::default();
+let corpus = FixtureCorpus::load("/private/oxvif-captures/camera-a", limits)?;
+let manifest = CorpusManifest::load("/private/oxvif-captures/camera-a/manifest.json", limits.file_bytes)?;
+let report = verify_corpus(&corpus, &manifest).await?;
+assert!(report.passed(), "inspect retained dispositions before accepting this corpus");
+# Ok(()) }
+```
+
+`FixtureCorpus` preserves duplicate rows and ordinals; bounded loading defaults
+to 32 MiB per file, 512 fixtures and 4 MiB per request/response. Existing
+`FixtureStore::load` keeps its original upsert behavior. `verify_corpus` checks
+complete Action/fixture coverage, exact request identity and explicit typed
+values. Faulted, Failed, Unverified, missing assertions, incomplete sweep or
+transport evidence prevent strict acceptance. `ParseReport::all_parsed()` is
+insufficient. This is parser regression evidence, not independent conformance.
+
+Run `cargo run --features metamorph --example corpus_regression -- <corpus_dir>
+<manifest.json>` offline. It emits deterministic JSON and exits 0 for strict
+acceptance, 1 for retained failure/incompleteness, 2 for invalid/missing/oversized
+input. Missing explicitly selected captures fail. Keep raw captures and official
+schemas outside the checkout; review targeted-redacted copies before sharing.
+Real-device acceptance still needs separately supplied vendor/firmware captures.
+
 ### Progress — driving a real camera takes a while
 
 A full sweep is 52 operations and more HTTP requests than that (per-token reads

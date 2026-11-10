@@ -182,11 +182,19 @@
 //!
 //! Gated on the `metamorph` feature (a superset of `mock`).
 
+//! Frozen corpus regression uses [`FixtureCorpus`] and [`CorpusManifest`] with
+//! [`verify_corpus`] to check reviewed typed values per exact request ordinal.
+//! [`record_surface_with_evidence`] retains bounded transport failures separately;
+//! Faulted/Failed/Unverified remain explicit and cannot satisfy strict regression.
+//! This is not independent namespace/schema/device conformance evidence.
+
 mod adapter;
+mod corpus;
 mod fixture;
 mod parse;
 mod quirk;
 mod record;
+mod regression;
 mod replay;
 mod surface;
 
@@ -194,11 +202,17 @@ pub use adapter::{
     AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, PtzVector,
     soap_body,
 };
+pub use corpus::{CorpusError, CorpusLimits, FixtureCorpus};
 pub use fixture::{Fixture, FixtureActionSummary, FixtureProgress, FixtureStore, FixtureSummary};
 pub use parse::{ParseReport, ParseStatus, ParseVerdict};
 pub use quirk::{ChangedQuirk, OperationDiff, OperationQuirk, QuirkDiff, QuirkReport};
 pub use record::{
-    RecordingTransport, record_standard_surface, record_surface, record_surface_with_progress,
+    RecordedTransportFailure, RecordingEvidence, RecordingTransport, record_standard_surface,
+    record_surface, record_surface_with_evidence, record_surface_with_progress,
+};
+pub use regression::{
+    CorpusIdentity, CorpusManifest, ExpectedExchange, RegressionOutcome, RegressionReport,
+    RegressionRow, SweepObservation, verify_corpus,
 };
 pub use replay::{MetamorphTransport, ReplayResponder};
 pub use surface::{

@@ -1,7 +1,7 @@
 //! Clone a real camera into a param-aware metamorph fixture set.
 //!
 //! Drives the standard read surface against a live device through
-//! [`record_standard_surface`], then writes a single `fixtures.json` keyed by the
+//! `record_surface_with_evidence`, then writes `fixtures.json` keyed by the
 //! canonical (ephemera-masked) request — so it survives per-request nonce /
 //! timestamp jitter and keeps distinct `token=` params apart. Replay the result
 //! in-process with `MetamorphTransport`, or serve it from a bound-port
@@ -10,10 +10,10 @@
 //! ```text
 //! cargo run --example metamorph_record --features metamorph -- \
 //!     http://192.168.1.100/onvif/device_service admin password \
-//!     tests/fixtures/hikvision-ds-2cd2085
+//!     /private/oxvif-captures/camera-a
 //! ```
 
-use oxvif::metamorph::record_standard_surface;
+use oxvif::metamorph::{SurfaceSelection, record_surface_with_evidence};
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +22,7 @@ async fn main() {
         eprintln!(
             "usage: metamorph_record <device_url> [user] [pass] <out_dir>\n\
              example: metamorph_record http://192.168.1.100/onvif/device_service \
-             admin secret tests/fixtures/hikvision-ds-2cd2085"
+             admin secret /private/oxvif-captures/camera-a"
         );
         std::process::exit(2);
     };
@@ -47,7 +47,20 @@ async fn main() {
         .unwrap_or("device")
         .to_string();
 
-    let store = match record_standard_surface(&device_url, cred_pair, device_label).await {
+    let (store, sweep, evidence) = match record_surface_with_evidence(
+        &device_url,
+        cred_pair,
+        device_label,
+        &SurfaceSelection::recommended(),
+        |progress| {
+            eprintln!(
+                "resolved operation {:?}: {}/{}",
+                progress.op, progress.done, progress.total
+            )
+        },
+    )
+    .await
+    {
         Ok(s) => s,
         Err(e) => {
             eprintln!("recording failed: {e}");
@@ -57,6 +70,28 @@ async fn main() {
 
     if let Err(e) = store.save(&out_dir) {
         eprintln!("failed to write fixtures to {out_dir}: {e}");
+        std::process::exit(1);
+    }
+    // Review provenance/sharing decisions and independent typed expectations
+    // before creating a CorpusManifest; recording outcomes alone cannot pass it.
+    let metadata = serde_json::json!({
+        "sweep": sweep.entries().into_iter().map(|(operation, outcome)| oxvif::metamorph::SweepObservation { operation, outcome }).collect::<Vec<_>>(),
+        "transport": evidence,
+        "selected_actions": store.summary().actions.into_iter().map(|entry| entry.action).collect::<Vec<_>>(),
+        "manifest_status": "requires reviewed identity, revision, provenance, sharing scope and typed expectations",
+    });
+    let metadata = match serde_json::to_vec_pretty(&metadata) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("cannot serialize recording outcomes: {error}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(error) = std::fs::write(
+        std::path::Path::new(&out_dir).join("recording-outcomes.json"),
+        metadata,
+    ) {
+        eprintln!("cannot save recording outcomes: {error}");
         std::process::exit(1);
     }
     let summary = store.summary();

@@ -3,12 +3,87 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 use crate::transport::{HttpTransport, Transport, TransportError};
 use crate::{OnvifError, OnvifSession};
 
 use super::fixture::FixtureStore;
 use super::surface::{SurfaceSelection, SweepProgress, drive_surface_with_progress};
+
+/// One final Transport failure, separate from a stored SOAP Fault response.
+/// Request redaction is targeted; review usernames, tokens and custom fields.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RecordedTransportFailure {
+    /// Exact full Action, retaining service identity.
+    pub action: String,
+    /// Targeted-redacted request identity, retaining meaningful channel tokens.
+    pub request_raw: String,
+    /// Controlled classification, with no raw error/body/URL text.
+    pub error_class: crate::session::SessionErrorClass,
+    /// Numeric final HTTP error status, if known.
+    pub http_status: Option<u16>,
+}
+
+/// Opt-in bounded transport evidence. This does not count Digest HTTP exchanges.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct RecordingEvidence {
+    /// Up to 512 failures and 4 MiB of retained Action/request bytes.
+    pub failures: Vec<RecordedTransportFailure>,
+    /// Events refused by the evidence budget; never silently treat them as success.
+    pub omitted: usize,
+    /// Collection was disabled or its mutex was unavailable.
+    pub unavailable: bool,
+}
+
+impl RecordingEvidence {
+    fn record(&mut self, action: &str, body: &str, error: &TransportError) {
+        const BYTES: usize = 4 * 1024 * 1024;
+        let retained = self.failures.iter().fold(0_usize, |sum, row| {
+            sum.saturating_add(row.action.len())
+                .saturating_add(row.request_raw.len())
+        });
+        if self.failures.len() >= 512
+            || retained
+                .saturating_add(action.len())
+                .saturating_add(body.len())
+                > BYTES
+        {
+            self.omitted = self.omitted.saturating_add(1);
+            return;
+        }
+        use crate::session::SessionErrorClass as Class;
+        let (error_class, http_status) = match error {
+            TransportError::HttpStatus { status, .. } => (
+                if matches!(status, 401 | 403) {
+                    Class::Authentication
+                } else {
+                    Class::Transport
+                },
+                Some(*status),
+            ),
+            TransportError::Http(error) if error.is_timeout() => (Class::Timeout, None),
+            TransportError::ResponseTooLarge { .. } => (Class::ResponseLimit, None),
+            _ => (Class::Transport, None),
+        };
+        let request_raw =
+            crate::redact::scrub_url_userinfo(&crate::redact::redact_credentials(body));
+        if retained
+            .saturating_add(action.len())
+            .saturating_add(request_raw.len())
+            > BYTES
+        {
+            self.omitted = self.omitted.saturating_add(1);
+            return;
+        }
+        self.failures.push(RecordedTransportFailure {
+            action: action.into(),
+            request_raw,
+            error_class,
+            http_status,
+        });
+    }
+}
 
 /// Wraps a real [`Transport`] and records each **successful** SOAP exchange
 /// into a shared [`FixtureStore`]. Drive a normal `OnvifSession` through it
@@ -29,18 +104,45 @@ use super::surface::{SurfaceSelection, SweepProgress, drive_surface_with_progres
 ///     .build()
 ///     .await?;
 /// session.get_device_info().await?;
-/// store.lock().unwrap().save("tests/fixtures/acme-cam")?;
+/// store.lock().unwrap().save("/private/oxvif-captures/acme-cam")?;
 /// # Ok(()) }
 /// ```
 pub struct RecordingTransport {
     inner: Arc<dyn Transport>,
     store: Arc<Mutex<FixtureStore>>,
+    evidence: Option<Mutex<RecordingEvidence>>,
 }
 
 impl RecordingTransport {
     /// Tap `inner`, recording each successful exchange into `store`.
     pub fn new(inner: Arc<dyn Transport>, store: Arc<Mutex<FixtureStore>>) -> Self {
-        Self { inner, store }
+        Self {
+            inner,
+            store,
+            evidence: None,
+        }
+    }
+
+    /// Also retain bounded typed transport failures separately from SOAP responses.
+    /// This is opt-in capture evidence, not a secret-free support bundle.
+    pub fn with_evidence(mut self) -> Self {
+        self.evidence = Some(Mutex::new(RecordingEvidence::default()));
+        self
+    }
+
+    /// Drain opt-in evidence. Disabled/unavailable collection is explicit.
+    pub fn take_evidence(&self) -> RecordingEvidence {
+        match self
+            .evidence
+            .as_ref()
+            .and_then(|evidence| evidence.lock().ok())
+        {
+            Some(mut evidence) => std::mem::take(&mut *evidence),
+            None => RecordingEvidence {
+                unavailable: true,
+                ..RecordingEvidence::default()
+            },
+        }
     }
 }
 
@@ -52,7 +154,17 @@ impl Transport for RecordingTransport {
         action: &str,
         body: String,
     ) -> Result<String, TransportError> {
-        let resp = self.inner.soap_post(url, action, body.clone()).await?;
+        let resp = match self.inner.soap_post(url, action, body.clone()).await {
+            Ok(response) => response,
+            Err(error) => {
+                if let Some(evidence) = &self.evidence
+                    && let Ok(mut evidence) = evidence.lock()
+                {
+                    evidence.record(action, &body, &error);
+                }
+                return Err(error);
+            }
+        };
         self.store.lock().unwrap().record(action, &body, &resp);
         Ok(resp)
     }
@@ -88,7 +200,8 @@ pub async fn record_standard_surface(
     credentials: Option<(&str, &str)>,
     label: impl Into<String>,
 ) -> Result<FixtureStore, OnvifError> {
-    let (store, _report) = record_into(device_url, credentials, label, None, |_| {}).await?;
+    let (store, _report, _) =
+        record_into(device_url, credentials, label, None, false, |_| {}).await?;
     Ok(store)
 }
 
@@ -165,7 +278,40 @@ pub async fn record_surface_with_progress(
     selection: &SurfaceSelection,
     progress: impl Fn(SweepProgress) + Send + Sync,
 ) -> Result<(FixtureStore, super::SweepReport), OnvifError> {
-    record_into(device_url, credentials, label, Some(selection), progress).await
+    record_into(
+        device_url,
+        credentials,
+        label,
+        Some(selection),
+        false,
+        progress,
+    )
+    .await
+    .map(|(store, report, _)| (store, report))
+}
+
+/// Record the same selected parameter-aware surface with separate bounded
+/// transport failure evidence. SOAP Fault bodies remain stored exchanges and
+/// must be classified separately by typed parsing. All selected profiles/sources
+/// are driven by the existing surface driver; no suffix-named files are used.
+/// Initial Session failures retain the original error; use a custom
+/// RecordingTransport with evidence to inspect a failed initialization capture.
+pub async fn record_surface_with_evidence(
+    device_url: &str,
+    credentials: Option<(&str, &str)>,
+    label: impl Into<String>,
+    selection: &SurfaceSelection,
+    progress: impl Fn(SweepProgress) + Send + Sync,
+) -> Result<(FixtureStore, super::SweepReport, RecordingEvidence), OnvifError> {
+    record_into(
+        device_url,
+        credentials,
+        label,
+        Some(selection),
+        true,
+        progress,
+    )
+    .await
 }
 
 /// Shared body of [`record_standard_surface`] / [`record_surface`]: build a
@@ -175,16 +321,21 @@ async fn record_into(
     credentials: Option<(&str, &str)>,
     label: impl Into<String>,
     selection: Option<&SurfaceSelection>,
+    evidence: bool,
     progress: impl Fn(SweepProgress) + Send + Sync,
-) -> Result<(FixtureStore, super::SweepReport), OnvifError> {
+) -> Result<(FixtureStore, super::SweepReport, RecordingEvidence), OnvifError> {
     let mut http = HttpTransport::new();
     if let Some((u, p)) = credentials {
         http = http.with_credentials(u.to_string(), p.to_string());
     }
     let store = Arc::new(Mutex::new(FixtureStore::new(label)));
-    let tap: Arc<dyn Transport> = Arc::new(RecordingTransport::new(Arc::new(http), store.clone()));
+    let mut tap = RecordingTransport::new(Arc::new(http), store.clone());
+    if evidence {
+        tap = tap.with_evidence();
+    }
+    let tap = Arc::new(tap);
 
-    let mut builder = OnvifSession::builder(device_url).with_transport(tap);
+    let mut builder = OnvifSession::builder(device_url).with_transport(tap.clone());
     if let Some((u, p)) = credentials {
         builder = builder.with_credentials(u.to_string(), p.to_string());
     }
@@ -198,7 +349,7 @@ async fn record_into(
     let report = drive_surface_with_progress(&session, &sel, progress).await;
 
     let recorded = store.lock().unwrap().clone();
-    Ok((recorded, report))
+    Ok((recorded, report, tap.take_evidence()))
 }
 
 #[cfg(test)]

@@ -262,7 +262,7 @@ impl Transport for SingleResponse {
 /// not an oxvif parse problem. This check is deliberately ahead of the
 /// action-to-parser routing too: "the device said no" is true whether or not
 /// oxvif happens to have a parser wired for that operation.
-async fn parse_check(
+pub(super) async fn parse_check(
     action: &str,
     response: &str,
 ) -> (ParseStatus, Option<String>, Option<serde_json::Value>) {

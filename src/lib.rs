@@ -351,6 +351,12 @@
 //! determinate progress, so a UI can show a real bar rather than freezing for
 //! the length of a 52-operation sweep.
 //!
+//! Frozen parser regression uses `FixtureCorpus`, `CorpusManifest` and
+//! `verify_corpus`: bounded ordinal-preserving inputs, exact parameter identities
+//! and reviewed typed-field expectations. `record_surface_with_evidence` keeps
+//! transport failures separate from stored SOAP Faults. Raw captures remain
+//! private evidence; these local checks do not establish device conformance.
+//!
 //! ## Health & conformance checks
 //!
 //! Enable the **`health`** feature for `health::HealthCheck` — a fast,

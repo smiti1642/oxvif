@@ -27,15 +27,38 @@ the **last URL segment of the SOAP action**, stripped to `[A-Za-z0-9_-]`:
 `*.req.xml` is what oxvif sent; `*.resp.xml` is what the camera replied.
 For replay, only the `.resp.xml` is consulted by `FixtureTransport`.
 
-## Recording a new device
+## Parameter-aware regression for new recordings
+
+Use Metamorph `record_surface_with_evidence` with a `SurfaceSelection` for new
+corpora. It drives all selected profiles/sources and retains full Actions and
+request tokens, plus separate sweep and transport evidence. Freeze a reviewed
+`CorpusManifest` beside `fixtures.json`: pseudonymous device/vendor/model/firmware,
+recording revision, provenance and sharing scope, full selected Actions, sweep
+outcomes, transport failures/omissions, exact request ordinals and JSON Pointer
+expectations for known typed fields. Do not derive expected answers from the
+parser being tested. See [the Library guide](../../LIBRARY_GUIDE.md#frozen-corpus-regression).
+
+```sh
+cargo run --features metamorph --example corpus_regression -- \
+    /private/oxvif-captures/camera-a /private/oxvif-captures/camera-a/manifest.json
+```
+
+The offline runner fails missing/oversized explicit inputs. Faulted, Failed,
+Unverified and transport failures are separate; `all_parsed()` is insufficient.
+Strict acceptance requires complete coverage and exact reviewed values. Normal CI
+uses an independently authored multi-source regression with different brightness
+values (60/45), not camera or schema-derived data. Actual hardware acceptance is
+still awaiting external captures. Keep raw inputs outside the checkout.
+
+## Legacy suffix recorder
 
 ```sh
 cargo run --example record_fixtures --features "mock health" -- \
     http://<camera-ip>/onvif/device_service <user> <pass> \
-    tests/fixtures/<vendor>-<model>
+    /private/oxvif-captures/<vendor>-<model>
 ```
 
-The recorder drives the same read surface `HealthCheck::run` exercises
+This legacy recorder drives the same read surface `HealthCheck::run` exercises
 (device info, capabilities, profiles, streams, encoders, imaging, PTZ,
 events, network, users) — enough to seed a useful fixture set for most
 service-level parser tests.

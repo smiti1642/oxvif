@@ -82,7 +82,7 @@ compatibility fixtures. Source inspection is not a fresh execution result.
 | P2 | P0; P1 for combined network checks | Complete bounded production XML parsing | DONE (local) |
 | P3 | P1/P2 | Report-bearing Session initialization and safe trace | DONE (local) |
 | P4 | P1/P3 | Shared delay policy and CLI diagnostic integration | DONE (local) |
-| P5 | P0; acceptance after P1–P4 | Param-aware regression harness and device evidence | TODO |
+| P5 | P0; acceptance after P1–P4 | Param-aware regression harness and device evidence | DONE (local harness); hardware WAITING FOR EVIDENCE |
 | P6a | P2; P5 synthetic corpus | Offline pairing and explicit comparison outcomes | TODO |
 | P6b | P6a | Selected typed projections and usable comparison example | TODO |
 
@@ -358,6 +358,32 @@ all-operation conformance claim from this cut. Current publication, push and
 version changes remain outside the planning request.
 
 ## Implementation evidence
+
+- P5 local implementation: FixtureCorpus loads actual bytes with default
+  32 MiB/512-row/4 MiB XML budgets and preserves duplicate ordinals without
+  changing FixtureStore loading/upserts. CorpusManifest records identity,
+  vendor/model/firmware, revision, provenance, sharing scope, exact full Actions,
+  sweep/transport dispositions and reviewed JSON Pointer values per frozen request.
+  verify_corpus refuses incomplete coverage, missing assertions and non-Parsed
+  dispositions; transport failure/omission/unavailability also prevents acceptance.
+  Existing parse routing is reused privately. Opt-in RecordingEvidence caps final
+  transport failures at 512 events/4 MiB; SOAP Faults remain stored responses.
+- P5 synthetic acceptance: four integration tests cover file/row/XML boundaries,
+  duplicate retention, explicit missing-file refusal, all parser dispositions,
+  exact request/field coverage and transport privacy/budgets. Selected recording
+  retains all four profiles and both sources with independent brightness 60/45
+  expectations, ten frozen exchanges and four completed sweep operations.
+  The offline example explicitly fails a missing corpus with exit 2.
+  Forcing the first source's brightness fails the new multi-source regression
+  and existing tests in an unfiltered all-feature run. Focused controls detect a
+  one-byte file-cap relaxation, inverted field comparison, wrong error class and
+  one-byte evidence-cap relaxation; every source was restored exactly.
+  Final format, both workspace Clippy modes, all-feature/default tests
+  (1,415/1,292 passed, seven ignored, 51 suites), both strict workspace rustdoc
+  modes, metamorph-only Clippy and no-feature Library rustdoc passed.
+  Hardware acceptance remains WAITING FOR
+  EVIDENCE: no external vendor/firmware captures were supplied, and synthetic
+  evidence does not validate the proposed production body cap on real devices.
 
 - P4 implementation: a small internal retry module retains typed classification
   and delay constants; maintenance stages now use that same backoff. Invocation

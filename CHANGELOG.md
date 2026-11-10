@@ -44,6 +44,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add bounded, ordinal-preserving `FixtureCorpus` loading and reviewed typed-field
+  corpus regression with explicit request/Action coverage and separate transport,
+  SOAP Fault and parser dispositions. Opt-in recording evidence and an offline
+  `corpus_regression` example preserve existing recording/store APIs.
+
 - Add `OnvifSessionBuilder::build_with_report()` and
   `HealthCheck::run_with_session_report()` with separate safe initialization
   metadata, including optional fallback failures and URL provenance. Existing

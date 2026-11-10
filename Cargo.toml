@@ -146,9 +146,8 @@ required-features = ["health"]
 name = "snapshot_probe"
 required-features = ["health"]
 
-# Records every SOAP exchange against a real camera into
-# tests/fixtures/<vendor>-<model>/ so the rest of the test suite can replay
-# without a device.
+# Legacy suffix recorder: keep raw captures outside the checkout and review
+# copies before sharing. Prefer parameter-aware Metamorph for new corpora.
 [[example]]
 name = "record_fixtures"
 required-features = ["mock", "health"]
@@ -165,6 +164,10 @@ required-features = ["mock"]
 # `fixtures.json` for in-process replay via `MetamorphTransport`.
 [[example]]
 name = "metamorph_record"
+required-features = ["metamorph"]
+
+[[example]]
+name = "corpus_regression"
 required-features = ["metamorph"]
 
 # Metamorph Persona C template: skin one fixed RTSP stream as an ONVIF device.
