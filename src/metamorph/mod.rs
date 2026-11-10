@@ -171,13 +171,15 @@
 //!   The reports share a non-unique `(action, key_canon)` grouping key. For
 //!   colliding requests, align complete per-fixture output by insertion ordinal
 //!   from the same frozen store; never join filtered rows by that pair alone.
-//! - **Progress**: each long pass has a `*_with_progress` twin taking an
+//! - **Progress**: surface, typed verification, structural diff and comparison take an
 //!   `Fn(..) + Send + Sync` callback — [`drive_surface_with_progress`],
 //!   [`record_surface_with_progress`], [`FixtureStore::verify_parsing_with_progress`]
-//!   and [`FixtureStore::diff_against_synthetic_with_progress`] — so a UI can
+//!   [`FixtureStore::diff_against_synthetic_with_progress`] and
+//!   [`compare_corpora_with_progress`] — so a UI can
 //!   drive a determinate progress bar instead of one opaque await. The sweep's
 //!   unit is a [`SurfaceOp`] ([`SweepProgress`]); the two fixture passes count
-//!   recorded exchanges ([`FixtureProgress`]). The plain forms delegate to these
+//!   recorded exchanges ([`FixtureProgress`]); comparison counts request groups
+//!   ([`ComparisonProgress`]). The plain forms delegate to these
 //!   with a no-op callback.
 //!
 //! Gated on the `metamorph` feature (a superset of `mock`).
@@ -187,11 +189,21 @@
 //! [`record_surface_with_evidence`] retains bounded transport failures separately;
 //! Faulted/Failed/Unverified remain explicit and cannot satisfy strict regression.
 //! This is not independent namespace/schema/device conformance evidence.
+//!
+//! [`compare_corpora`] is separate selected reference comparison: exact full
+//! Action plus proven bounded request identity, explicit duplicate ambiguity,
+//! namespace-guarded response projections and caller-recorded field masks.
+//! Equal covers only the declared projection; unexamined fields remain listed.
+//! Reports never copy request/response bodies or arbitrary Fault text. Review
+//! Action/path metadata before sharing. Existing replay keys and raw escape
+//! hatches retain their behavior; malformed replay alone cannot prove identity.
 
 mod adapter;
+mod compare;
 mod corpus;
 mod fixture;
 mod parse;
+mod projection;
 mod quirk;
 mod record;
 mod regression;
@@ -201,6 +213,11 @@ mod surface;
 pub use adapter::{
     AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, PtzVector,
     soap_body,
+};
+pub use compare::{
+    ComparisonError, ComparisonLimits, ComparisonMask, ComparisonOptions, ComparisonOutcome,
+    ComparisonProgress, ComparisonProjection, ComparisonReason, ComparisonReport, ComparisonRow,
+    compare_corpora, compare_corpora_with_progress,
 };
 pub use corpus::{CorpusError, CorpusLimits, FixtureCorpus};
 pub use fixture::{Fixture, FixtureActionSummary, FixtureProgress, FixtureStore, FixtureSummary};

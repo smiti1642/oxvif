@@ -44,6 +44,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add bounded offline `compare_corpora` reference comparison for six selected
+  Device/Media1/Media2 Actions, with proven request pairing, explicit ambiguity,
+  namespace-checked projections, field masks and unexamined-field reporting.
+  Equality covers selected values; it does not imply full response conformance.
+  The `reference_compare` example emits deterministic JSON without device calls.
+
 - Add bounded, ordinal-preserving `FixtureCorpus` loading and reviewed typed-field
   corpus regression with explicit request/Action coverage and separate transport,
   SOAP Fault and parser dispositions. Opt-in recording evidence and an offline

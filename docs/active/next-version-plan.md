@@ -2,7 +2,8 @@
 
 [English](next-version-plan.md) | [繁體中文](next-version-plan_zh.md)
 
-Status: IN-PROGRESS. Code walkthrough: 2026-10-08, committed baseline
+Status: LOCAL IMPLEMENTATION COMPLETE (2026-11-10); hardware acceptance WAITING
+FOR EVIDENCE. Code walkthrough: 2026-10-08, committed baseline
 `afe37316ac60aa8c4470f8608a6eab7fa1450692` (workspace version 0.17.0).
 Candidate release: 0.18. The user authorized implementation on 2026-10-08 after
 planning commit `2bad316`; versions, device writes, publication, push and background
@@ -83,8 +84,8 @@ compatibility fixtures. Source inspection is not a fresh execution result.
 | P3 | P1/P2 | Report-bearing Session initialization and safe trace | DONE (local) |
 | P4 | P1/P3 | Shared delay policy and CLI diagnostic integration | DONE (local) |
 | P5 | P0; acceptance after P1–P4 | Param-aware regression harness and device evidence | DONE (local harness); hardware WAITING FOR EVIDENCE |
-| P6a | P2; P5 synthetic corpus | Offline pairing and explicit comparison outcomes | TODO |
-| P6b | P6a | Selected typed projections and usable comparison example | TODO |
+| P6a | P2; P5 synthetic corpus | Offline pairing and explicit comparison outcomes | DONE (local) |
+| P6b | P6a | Selected typed projections and usable comparison example | DONE (local) |
 
 P5's harness can start alongside P1/P2 without a camera. Missing hardware inputs
 do not block local tests or document completion; they block the corresponding
@@ -358,6 +359,45 @@ all-operation conformance claim from this cut. Current publication, push and
 version changes remain outside the planning request.
 
 ## Implementation evidence
+
+- P6a/P6b: a separate compare_corpora API uses full Action plus complete bounded
+  request proof and decoded identity comparison; legacy keys are hints only.
+  The existing exact-raw replay shortcut remains unchanged. Duplicate candidates
+  remain Ambiguous even when present on only one side. Eight explicit outcomes
+  retain fixture ordinals, controlled reasons, projection, masks and field paths.
+  No raw request/response bodies, selected values or arbitrary Fault strings are
+  copied into reports. Comparison cannot infer reads missing from both inputs.
+- The six exact Actions use an independent bounded NsReader response guard before
+  private parse_check reuse. Profiles align by unique semantic tokens; required
+  selected fields/namespaces are guarded, unresolved xsi:type stays Unsupported,
+  and extra fields are listed as unexamined. EncoderCore additionally projects
+  namespace-checked multicast destination, including Media2's currently unmodeled
+  value. Semantic token masks are deliberately disallowed; validated nonidentity
+  masks are explicit and reported. Equality is only the declared projection,
+  without altering display masking, structural diff or CLI config.diff.
+- P6 budgets: CorpusLimits plus 1,024 request groups, 16,384 identity checks,
+  4,096 retained field paths and 256 KiB serialized report; request identity uses
+  2 MiB/depth 64/16,384 nodes. Response projection caps 16,384 nodes/attributes,
+  256 namespace declarations, 256-byte local names and 1,024-byte raw namespace
+  values, in addition to production XML bounds. Refusals never return truncated
+  Equal; paths/serialized rows are budgeted before retention. Pairing yields for
+  cancellation; progress counts groups and is provisional until the final result.
+- P6 acceptance: nine integration tests cover value/firmware/bitrate/destination
+  differences, token reorder/change/duplicates, namespace aliases/shadowing,
+  key collisions/full Actions, malformed raw escape hatches, unknown Action,
+  Fault privacy, explicit masks, exact output/work bounds and deterministic
+  summaries/progress. All six Actions also run through a recorded synthetic
+  surface with explicit unexamined fields. The offline example verifies all four
+  exit classes, missing-file refusal and byte-identical repeated JSON.
+  Removing bitrate comparison fails the new test in an unfiltered all-feature
+  run; ten focused controls detect key-only pairing, namespace blindness, lost
+  token uniqueness/order, missing request proof, skipped masks, one-byte output
+  relaxation, wrong progress, an unmapped Media2 projection and lost destination.
+  All sources were restored byte-for-byte. Final format, both workspace Clippy
+  modes, all-feature/default tests (1,424/1,292 passed, seven ignored, 52 suites)
+  and both strict workspace rustdoc modes passed, together with metamorph-only
+  Clippy and no-feature Library rustdoc. No publication, version change,
+  real-device/schema conformance claim or HB1 closeout is implied.
 
 - P5 local implementation: FixtureCorpus loads actual bytes with default
   32 MiB/512-row/4 MiB XML budgets and preserves duplicate ordinals without

@@ -809,6 +809,70 @@ Action 字串，分享前仍須檢查；呼叫不存取網路或寫入磁碟。
 
 `FixtureStore::diff_against_synthetic()` 比較 element-path set，結果表示與 oxvif reference mock 的結構差異，**不是 ONVIF schema conformance verdict**。`verify_parsing().await` 則使用 oxvif typed parser，將每項 fixture 分類為 `Parsed`、`Failed`、`Faulted` 或 `Unverified`；`failures()` 刻意排除裝置正常拒絕操作的 `Faulted`。
 
+`compare_corpora` 離線比較兩份凍結 `FixtureCorpus`，與 structural quirk diff、
+`verify_parsing`、CLI `config.diff` 分開。配對需要完整 Action 與經有界解析證明的
+request identity；canonical key 僅是候選提示。Channel token 保持有意義，Media1／
+Media2 不合併；duplicate candidate 即使只存在單側，也保留為 Ambiguous。既有
+raw replay 對 malformed request 的 exact escape hatch 不能作為比較身分證明。
+比較僅涵蓋保留的 rows，不能推斷失敗／省略的 read 或雙側都缺少的 Action；capture
+coverage 請使用 CorpusManifest 回歸驗證。
+
+初期六個完整 Actions：Device `GetDeviceInformation`／`GetHostname`，以及 Media1／
+Media2 `GetProfiles`／`GetVideoEncoderConfigurations`。
+
+| Projection | 比較值 |
+| --- | --- |
+| DeviceInformation | manufacturer、model、firmware、serial、hardware ID |
+| Hostname | 名稱與 DHCP 選擇 |
+| Profiles | 唯一 profile token、名稱、所有已建模 configuration／source token bindings |
+| EncoderCore | 唯一 config token、名稱、encoding、resolution、可選 bitrate 與 multicast destination |
+
+先以完整 XML 與獨立、有界 `NsReader` guard 檢查 SOAP 1.2 response identity 及選定
+expanded names，再共用既有 typed parse routing。支援 prefix alias／namespace
+character reference；錯誤 namespace 不會因 local-name parser 而變 Equal。選定
+scalar／binding 必須存在且不含歧義，此比較支援政策可能比 Library 相容 parser
+嚴格；QName-valued `xsi:type` 維持 Unsupported。Encoder destination 另外從經
+namespace 檢查的 address 欄位投影，包含 Media2 目前未建模的 destination。
+
+Equal 僅指宣告的投影；profile fixed、其他 encoder settings（quality、frame rate、
+GOP／profile、multicast port／TTL）、vendor extension 與其他未檢查欄位會明列，
+不能當作完整驗證。唯一 token 可對齊 reordered lists；缺 token 為 Unparseable、
+重複 token 為 Ambiguous。相同 parser 的比較不構成獨立 schema／device conformance。
+
+預設 mask 為空；firmware、semantic tokens、destination 差異保留。明確
+`ComparisonMask`（如 `/name`、`/firmware_version`、`/profiles/*/name`、
+`/configurations/*/multicast_address`）限定完整 Action，並保存在結果。
+作為 list／binding identity 的 token 不可遮罩，無效 mask 明確失敗。
+
+```rust,no_run
+use oxvif::metamorph::{ComparisonOptions, FixtureCorpus, compare_corpora};
+# async fn compare() -> Result<(), Box<dyn std::error::Error>> {
+let options = ComparisonOptions::default();
+let left = FixtureCorpus::load("/private/oxvif-captures/reference", options.limits.input)?;
+let right = FixtureCorpus::load("/private/oxvif-captures/candidate", options.limits.input)?;
+let report = compare_corpora(&left, &right, &options).await?;
+for row in &report.rows { println!("{:?}: {:?}", row.outcome, row.changed_fields); }
+# Ok(()) }
+```
+
+結果分為 Equal／Different／MissingLeft／MissingRight／Ambiguous／Unparseable／
+Unsupported／DeviceFault，保留雙側 ordinal、受控 reason、projection、mask、差異
+及未檢查路徑；不複製 request／response body、裝置值或任意 Fault reason。
+Action／path metadata 仍可能私密，分享前須審查。
+
+預設上限為 1,024 request groups、16,384 identity checks、4,096 field paths、
+256 KiB compact JSON，另受 CorpusLimits 保護。Request identity 上限 2 MiB／depth
+64／16,384 nodes；response projection 額外限制 16,384 nodes／attributes、256
+namespace declarations、256-byte names、1,024-byte raw namespace URI 值，並保留 production
+XML 上限。超限回傳明確 error，不會截斷後回報 Equal。
+`compare_corpora_with_progress` 計算完成的 request groups，最終成功前均屬暫時進度。
+
+執行 `cargo run --features metamorph --example reference_compare -- <left_dir>
+<right_dir>`，stdout 為 deterministic compact JSON，stderr 顯示進度。Exit 0 為非空
+selected equality；1 為不同／缺失 request；2 為 unresolved／Fault／empty evidence；
+3 為 usage／input／resource refusal。載入保留 duplicate，已被舊 store 覆蓋的 row
+無法恢復。
+
 使用 `record_surface_with_evidence` 搭配 `SurfaceSelection`，可保留所有選定 profile／
 source 的 param-aware request、逐 operation 的 `SweepReport`，以及獨立、有上限的
 transport failure `RecordingEvidence`。既有 `record_surface_with_progress` 回傳

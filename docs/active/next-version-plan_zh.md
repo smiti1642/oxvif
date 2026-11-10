@@ -2,7 +2,8 @@
 
 [English](next-version-plan.md) | [繁體中文](next-version-plan_zh.md)
 
-狀態：IN-PROGRESS。程式走訪日期：2026-10-08；已提交基準為
+狀態：LOCAL IMPLEMENTATION COMPLETE（2026-11-10）；實機驗收 WAITING FOR EVIDENCE。
+程式走訪日期：2026-10-08；已提交基準為
 `afe37316ac60aa8c4470f8608a6eab7fa1450692`，workspace 版本為 0.17.0。
 候選版本為 0.18。使用者於 2026-10-08 在計畫提交 `2bad316` 後授權實作；版本修改、
 攝影機寫入、發布、push 與背景排程仍不在此次授權範圍。
@@ -75,8 +76,8 @@ fixture。原始碼走訪不等於這些測試已在本次重跑。
 | P3 | P1／P2 | Session 初始化 report／安全 trace | DONE（本地） |
 | P4 | P1／P3 | 共用 delay policy／CLI 診斷整合 | DONE（本地） |
 | P5 | P0；驗收需 P1–P4 | Param-aware 回歸 harness／實機證據 | DONE（本地 harness）；實機 WAITING FOR EVIDENCE |
-| P6a | P2／P5 synthetic corpus | 離線配對／明確 comparison outcome | TODO |
-| P6b | P6a | 選定 typed projection／可用的比較 example | TODO |
+| P6a | P2／P5 synthetic corpus | 離線配對／明確 comparison outcome | DONE（本地） |
+| P6b | P6a | 選定 typed projection／可用的比較 example | DONE（本地） |
 
 P5 harness 可與 P1／P2 同時準備，不需要攝影機。缺少硬體輸入只阻擋對應相容性
 宣告，不阻擋本地程式、測試或本文件完成。P6 是獨立功能切點；不以它尚未完成為由
@@ -304,6 +305,37 @@ MSRV、既有 schema／CLI matrix，wire shape 改變時跑獨立 qualified exte
 push 或修改版本。
 
 ## 實作證據
+
+- P6a／P6b：獨立 compare_corpora API 以完整 Action、有界完整 request proof 與
+  decoded identity 配對；legacy key 只是提示。既有 exact-raw replay shortcut
+  維持原行為。單側 duplicate 也保留 Ambiguous；八種明確結果保存 fixture ordinal、
+  受控 reason、projection、mask 與欄位路徑，不複製 request／response body、裝置值
+  或任意 Fault 字串，也不能推斷雙側都缺少的 read。
+- 六個完整 Actions 先經獨立有界 NsReader response guard，再共用私有 parse_check。
+  Profiles 以唯一 semantic token 對齊；必要選定欄位／namespace 有 guard，無法解析
+  的 xsi:type 維持 Unsupported；其他欄位明列 unexamined。EncoderCore 另外投影
+  namespace-checked multicast destination，包含 Media2 尚未建模的值。Semantic
+  token 刻意不可遮罩；非 identity mask 經驗證後明確記錄。Equal 僅指宣告的投影，
+  不改既有 display masking、structural diff 或 CLI config.diff。
+- P6 上限：CorpusLimits 加上 1,024 request groups、16,384 identity checks、4,096
+  field paths、256 KiB serialized report；request proof 為 2 MiB／depth 64／16,384
+  nodes。Response projection 為 16,384 nodes／attributes、256 namespace declarations、
+  256-byte local names、1,024-byte raw namespace values，並受 production XML 上限
+  保護。超限不會截斷後回報 Equal，path／serialized row 保留前先檢查預算。
+  Pairing 主動 yield 支援取消；group progress 在最終成功前均為暫時結果。
+- P6 驗收：九個 integration tests 涵蓋值／firmware／bitrate／destination 差異、
+  token 排序／變更／重複、namespace alias／shadowing、key collision／完整 Action、
+  malformed raw escape、unknown Action、Fault 去敏、明確 mask、精確 output／work
+  邊界與 deterministic summary／progress。六個 Actions 也經 recorder synthetic
+  surface 驗證，明確保留 unexamined fields。離線 example 驗證四種 exits、缺檔拒絕
+  與重複 JSON 逐 byte 相同。移除 bitrate 比較，在未篩選 all-feature run 使新測試
+  失敗；十個 focused controls 偵測 key-only pairing、namespace blindness、token
+  uniqueness／排序遺失、略過 request proof／mask、output 放寬一 byte、錯誤進度、
+  缺 Media2 projection 與 destination 遺失。原始碼皆逐 byte 還原。最終 format、
+  兩種 workspace Clippy、all-feature／default tests（1,424／1,292 通過，各七個
+  ignored、52 suites）、兩種嚴格 workspace rustdoc、metamorph-only Clippy 與無
+  feature Library rustdoc 通過；不代表發布、版本變動、
+  實機／schema conformance 或 HB1 結案。
 
 - P5 本地實作：FixtureCorpus 以實際 bytes 檢查預設 32 MiB／512 rows／每個 XML
   4 MiB 上限，保留 duplicate ordinal，不改 FixtureStore loading／upsert。

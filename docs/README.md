@@ -58,9 +58,13 @@ The [0.17 cut](done/release-0.17-cut.md) is now a historical release record.
 The 2026-10-08 [next-version plan](active/next-version-plan.md)
 ([繁體中文](active/next-version-plan_zh.md)) maps a bounded candidate 0.18 cut
 to current source: SOAP limits, initialization diagnostics, CLI execution,
-real-device regression evidence and offline reference comparison. It is a
-planning supplement; the dated inventory below remains historical, and this
+real-device regression evidence and offline reference comparison. It is an
+implementation/evidence supplement; the dated inventory below remains historical, and this
 request does not resume the autonomous queue.
+
+2026-11-10: P0–P6 local implementation and verification are complete. The same
+plan retains missing real-device/vendor/firmware evidence explicitly; no version
+bump, publication, push or whole-family closeout is implied.
 
 2026-09-22 歸檔與校準合計將 27 組已交付計畫／批次的 46 份 Markdown 文件，
 以及一份原始審查 JSON 移至 `done/`。原 16 組 active 文件已逐份核對，

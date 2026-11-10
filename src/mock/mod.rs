@@ -219,7 +219,9 @@ pub(crate) mod helpers;
 pub(crate) mod policy;
 mod request;
 #[cfg(feature = "metamorph")]
-pub(crate) use request::recording_equivalent;
+pub(crate) use request::{
+    recording_comparable, recording_equivalent, recording_identity_supported,
+};
 pub(crate) mod responder;
 mod services;
 #[cfg(feature = "metamorph")]

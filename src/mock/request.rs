@@ -28,10 +28,35 @@ pub(crate) fn recording_equivalent(recorded: &str, incoming: &str) -> bool {
     if recorded == incoming {
         return true;
     }
+    recording_comparable(recorded, incoming)
+}
+
+/// Comparison cannot use the raw replay escape hatch as proof of identity.
+#[cfg(feature = "metamorph")]
+pub(crate) fn recording_comparable(recorded: &str, incoming: &str) -> bool {
     let (Ok(recorded), Ok(incoming)) = (Request::parse(recorded), Request::parse(incoming)) else {
         return false;
     };
     same_recorded_node(&recorded.root, &incoming.root, false, true)
+}
+
+/// Bound and validate a SOAP operation before comparison pairing. This proves
+/// request identity support, not schema/request-policy conformance.
+#[cfg(feature = "metamorph")]
+pub(crate) fn recording_identity_supported(xml: &str, action: &str) -> bool {
+    if crate::soap::XmlNode::parse_complete(xml).is_err() {
+        return false;
+    }
+    let Some((namespace, operation)) = action.rsplit_once('/') else {
+        return false;
+    };
+    let Ok(request) = Request::parse(xml) else {
+        return false;
+    };
+    request.root.ns == SOAP
+        && request.root.name == "Envelope"
+        && request.operation(namespace, operation).is_ok()
+        && same_recorded_node(&request.root, &request.root, false, true)
 }
 
 #[cfg(feature = "metamorph")]

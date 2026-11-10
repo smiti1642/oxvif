@@ -22,11 +22,13 @@ Status: **M0–M3 + M5–M6 done** — the clone-a-camera-and-replay increment (
 per D7), WS-Discovery so a clone is findable on the LAN (M3), the Persona C
 adapter/skin template (M5, pulled ahead of M4), and the multi-device fleet (M6).
 **M4** (full control plane + Persona A) and **M7** (semantic diff) not yet
-complete, but two targeted slices have since landed (see
+complete, but targeted slices have since landed (see
 [`metamorph-container-and-quirk-diff.md`](../done/metamorph-container-and-quirk-diff.md)):
 the **bound-port replay "container"** (`MockServerBuilder::replay`, an M4 subset
 without the control plane) and the **structural quirk diff**
-(`FixtureStore::diff_against_synthetic`, the first half of M7). The pre-work decisions in
+(`FixtureStore::diff_against_synthetic`, the first half of M7), followed by the
+bounded six-Action reference comparison in [next-version P6](next-version-plan.md#p6-offline-reference-comparison).
+The pre-work decisions in
 [§1](#1-locked-decisions) are settled; the milestone-scoped open questions in
 [§9](#9-still-open--decide-at-the-milestone-not-now) are deliberately deferred to
 their milestone and must NOT be pre-empted.
@@ -292,8 +294,10 @@ unicast probe path in integration tests.
 ### 5.5 serde on public types
 
 The optional `serde` feature and public-type derives are delivered. The original
-serialization prerequisite is closed; reference-value comparison still needs
-its own semantic contract. Structural diff and typed own-parser verification
+serialization prerequisite is closed. The bounded reference-value contract in
+[next-version P6](next-version-plan.md#p6-offline-reference-comparison) adds
+six exact Actions, proven request identities and declared selected projections.
+Broader projections and UI/reference policy remain separate. Structural diff and typed own-parser verification
 already exist and do not establish equivalence to a real reference device.
 
 ---
@@ -364,7 +368,9 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   (mid-term) deferred — separate servers are simpler and already isolate state.
   `examples/mock_fleet.rs`.
 - **M7 (stretch) — quirk diff**. Masker-driven structural diff (baseline vs clone),
-  surfaced in oxdm; serde support in [§5.5](#55-serde-on-public-types) is delivered; deeper semantic diff still needs a reference/comparison contract.
+  surfaced in oxdm; serde support in [§5.5](#55-serde-on-public-types) is delivered.
+  A bounded six-Action offline reference contract is delivered by next-version P6;
+  broader projections, oxdm integration and external-device evidence remain open.
   *Partial:* the **structural** half is done —
   `FixtureStore::diff_against_synthetic` diffs each clone response's element-path
   set against the synthetic baseline and returns a serde-serialisable
@@ -372,15 +378,24 @@ Each ends with: existing tests green + new tests added + CHANGELOG/feature docs 
   - *0.14.0 — parse verification (value/type half).*
     `FixtureStore::verify_parsing` runs oxvif's **own typed parser** over each
     recorded response → `ParseReport` (`Parsed` + extracted JSON / `Failed` +
-    error / `Unverified`). Baseline-free and oxvif-opinionated: it answers "will
+    error / `Faulted` / `Unverified`). Baseline-free and oxvif-opinionated: it answers "will
     oxvif choke on this device", catching value/type quirks structure can't see
     (a non-integer where an int is expected). It **complements**, not replaces,
     the structural diff — the SOAP side-by-side is retained as the oxvif-independent
-    evidence layer. Both share the `(action, key_canon)` key for a UI to join
-    (verdict badge + SOAP diff drill-down). Implemented via a single-response
+    evidence layer. Both share a nonunique `(action, key_canon)` bucket; complete
+    reports from one frozen store align by ordinal, never by that pair alone.
+    Implemented via a single-response
     transport driving the client read methods, so no parser logic is duplicated;
-    the `metamorph` feature now enables `serde` for the JSON. Deeper value diff
-    *between* clone and a real reference (not just parse/no-parse) is still open.
+    the `metamorph` feature now enables `serde` for the JSON.
+  - *2026-11-10 — bounded reference comparison (unreleased):* `compare_corpora`
+    pairs exact full Actions plus proven bounded request identities, preserves
+    duplicates as Ambiguous and compares six declared namespace-guarded projections.
+    Tokens/firmware/destinations remain significant; explicit nonidentity masks and
+    unexamined fields are reported. Inputs, work and retained output are bounded.
+    `reference_compare` provides offline deterministic JSON and documented exits.
+    This API does not redefine D4 display masking or structural diff, and Equal
+    does not establish complete response/schema/device conformance. The remaining
+    M7 work is broader projections/integration and real-reference acceptance.
 
 M0–M2 is a complete, independently deliverable "metamorph that clones a real
 camera" — do not wait for the rest.

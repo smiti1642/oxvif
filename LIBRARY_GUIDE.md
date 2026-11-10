@@ -2132,6 +2132,82 @@ than inventing a pairing. `resolved` then does not prove a defect was fixed, and
 even identical ambiguous reports may produce a nonempty diff. See the
 [report identity limits](docs/replay-storage.md#reports).
 
+### Offline reference comparison
+
+`compare_corpora` compares two frozen `FixtureCorpus` inputs without network
+access. It is separate from structural quirk diff, `verify_parsing`, and CLI
+`config.diff`. Pairing requires the exact full Action and proven bounded decoded
+request identity; the canonical key is only a candidate hint. Distinct channel
+tokens remain distinct, Media1/Media2 never merge, and duplicate candidates remain
+`Ambiguous`, including duplicates present on only one side. Raw replay's exact
+malformed-request escape hatch remains compatible but cannot prove comparability.
+Comparison covers retained rows; it cannot infer failed/omitted reads or Actions
+missing from both inputs. Use CorpusManifest regression for capture coverage.
+
+Initial support is six exact Actions: Device `GetDeviceInformation`/`GetHostname`,
+and Media1/Media2 `GetProfiles`/`GetVideoEncoderConfigurations`.
+
+| Projection | Selected values |
+| --- | --- |
+| DeviceInformation | Manufacturer, model, firmware, serial and hardware ID |
+| Hostname | Name and DHCP selection |
+| Profiles | Unique profile token, name and all modeled configuration/source token bindings |
+| EncoderCore | Unique configuration token, name, encoding, resolution, optional bitrate and multicast destination |
+
+The response first passes complete XML and an independent bounded `NsReader`
+guard for SOAP 1.2 identity and selected expanded names, then reuses oxvif's typed
+parse routing. Prefix aliases and namespace character references are supported;
+wrong selected namespaces cannot become Equal through the local-name parser.
+Required selected scalars and token bindings must be present and unambiguous;
+this support policy can be stricter than Library compatibility parsing. QName-valued
+`xsi:type` remains Unsupported. Encoder multicast destination is additionally
+projected from namespace-checked address fields, including Media2's currently
+unmodeled destination. Its type/address are retained without display normalization.
+
+`Equal` means only this declared projection. Profile fixed flags, other encoder
+settings (such as quality, frame rate, GOP/profile and multicast port/TTL), vendor
+extensions and other unexamined wire fields are listed explicitly. They are not
+fully verified. Unique tokens align reordered lists; missing tokens are
+Unparseable and duplicates are Ambiguous. This is not an independent schema or
+device-conformance verdict, and same-parser comparison cannot establish one.
+
+Default masks are empty. Firmware, semantic tokens and destination differences
+remain visible. Explicit `ComparisonMask` fields such as `/name`,
+`/firmware_version`, `/profiles/*/name` or
+`/configurations/*/multicast_address` are action-scoped and recorded in output.
+Semantic list/token identities cannot be masked; invalid masks fail explicitly.
+
+```rust,no_run
+use oxvif::metamorph::{ComparisonOptions, FixtureCorpus, compare_corpora};
+# async fn compare() -> Result<(), Box<dyn std::error::Error>> {
+let options = ComparisonOptions::default();
+let left = FixtureCorpus::load("/private/oxvif-captures/reference", options.limits.input)?;
+let right = FixtureCorpus::load("/private/oxvif-captures/candidate", options.limits.input)?;
+let report = compare_corpora(&left, &right, &options).await?;
+for row in &report.rows { println!("{:?}: {:?}", row.outcome, row.changed_fields); }
+# Ok(()) }
+```
+
+Outcomes are Equal, Different, MissingLeft, MissingRight, Ambiguous, Unparseable,
+Unsupported and DeviceFault. Rows retain input ordinals, controlled reasons,
+projection, masks and changed/unexamined field paths. They do not copy request/
+response bodies, selected device values or arbitrary Fault reasons. Action and
+path metadata can still be private; review reports before sharing.
+
+Defaults bound 1,024 request groups, 16,384 identity checks, 4,096 retained field
+paths and 256 KiB compact JSON, in addition to CorpusLimits. Request identity is
+limited to 2 MiB/depth 64/16,384 nodes. The response projection additionally caps
+16,384 nodes/attributes, 256 namespace declarations, 256-byte names and 1,024-byte
+raw namespace URI values; production XML bounds still apply. Refusal returns an explicit
+error, never a truncated Equal. `compare_corpora_with_progress` counts completed
+request groups; progress remains provisional until the final result.
+
+Run `cargo run --features metamorph --example reference_compare -- <left_dir>
+<right_dir>` for deterministic compact JSON and stderr progress. Exit 0 means
+nonempty selected equality, 1 means different/missing requests, 2 means unresolved/
+Fault/empty evidence, and 3 means usage/input/resource refusal. Loading preserves
+on-disk duplicates; older stores cannot recover rows already overwritten.
+
 ### Frozen corpus regression
 
 Use `record_surface_with_evidence` with a `SurfaceSelection` to retain all selected

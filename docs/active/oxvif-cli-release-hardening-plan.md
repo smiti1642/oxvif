@@ -7,7 +7,7 @@ Source baseline: `80bcf14`. Use this section as the current work entry; older da
 | Category | Disposition and evidence |
 | --- | --- |
 | Confirmed | 0.17 packages, five native targets, schema/credential CI and publication are recorded in [finalization](../done/release-0.17-finalization.md). [describe.rs](../../crates/oxvif-cli/src/describe.rs) already provides semantic argument text, example strings and command-ID checks. [CLI tests](../../crates/oxvif-cli/tests/cli.rs) now close the six-outcome JSON/JSONL matrix in §9.2; this is partial R4 evidence, not proof of every example/error path. |
-| Remaining | R2: actual attempt accounting, service-resolution/retry-reason detail, clock-skew and directory-sync policy. R3 health detail selection is delivered; broader terminal acceptance remains. R4: per-command reachable errors, executable examples and exhaustive descriptor/parser paths beyond the completed six-outcome envelope matrix. R5: multi-vendor matrix, soak/resource budgets, artifact signing, recovery and sanitized support bundle. Public channels belong to [distribution](oxvif-cli-three-platform-distribution-plan.md). |
+| Remaining | R2: authenticated-mock clock-skew and directory-sync policy; bounded attempt/Session/retry metadata is delivered in next-version P3/P4. R3 health detail selection is delivered; broader terminal acceptance remains. R4: per-command reachable errors, executable examples and exhaustive descriptor/parser paths beyond the completed six-outcome envelope matrix. R5: multi-vendor matrix, soak/resource budgets, artifact signing, recovery and sanitized support bundle; P5 supplies local corpus infrastructure, not hardware acceptance. Public channels belong to [distribution](oxvif-cli-three-platform-distribution-plan.md). |
 | Next step / exit criteria | Select one R2/R3/R4 subgroup; map each unchecked requirement to its current symbol/test before changing code. Close only with exact positive/negative assertions. Commercial and channel claims require named platform/device evidence. The old release/handoff checklist is historical; no new send, publish or install action is requested by this calibration. |
 
 **Status:** active; implementation in progress. Written 2026-09-01 after a
@@ -347,8 +347,9 @@ discovery enrichment, and fleet items.
   release.
 - [x] Decide discovery scan retry semantics separately from per-record
   enrichment; avoid repeating a full multicast scan accidentally.
-- [ ] Include attempt count in verbose diagnostics and structured metadata where
-  additive compatibility permits it.
+- [x] Include actual attempts in bounded `-vv` diagnostics (next-version P4).
+  Closed v3 common metadata/stdout remain unchanged; no additive common field is
+  permitted by that schema. Retry units remain distinct for each workflow.
 
 Required tests:
 
@@ -377,14 +378,23 @@ strict rustdoc in both modes and local Markdown link/anchor checks.
 
 ### 7.2 Diagnostic observability
 
-- [x] Implement `-v` as sanitized command/selector/attempt/timing diagnostics.
-- [ ] Implement `-vv` as sanitized service-resolution and retry-reason detail.
+- [x] Implement `-v` as concise sanitized command/policy/completion timing diagnostics.
+- [x] Implement `-vv` as bounded Session-stage/URL-source and actual attempt/retry
+  metadata, buffered in deterministic per-device order (next-version P3/P4).
 - [x] Keep all verbose output on stderr.
 - [x] Make `-q` suppress only non-essential human context, never command data or
   structured warnings.
 - [x] Prove that credentials, WS-Security material, HTTP authorization, and URI
   userinfo never appear at either verbosity level.
-- [x] Retire the old conditional removal gate: `-v/-q` have implemented semantics and regression tests. Richer `-vv` service/retry details remain open above.
+- [x] Retire the old conditional removal gate: `-v/-q` have implemented semantics and regression tests. Bounded `-vv` service/retry detail is now delivered.
+
+2026-11-10: [next-version P1–P5](next-version-plan.md) supplies configured inner
+HTTP deadlines, bounded production SOAP/XML, separate Session/Health reports,
+metadata-only client trace and shared bounded retry delay, including maintenance.
+Verbose metadata contains no URL/body/Fault text; original error/data payloads
+retain their existing detail. Table/JSON/JSONL and the v3 six-outcome matrix pass.
+The authenticated-mock skew checkbox and registry durability remain separate;
+custom-transport positive/negative clock-offset evidence does not close them.
 
 ### 7.3 Authentication and TLS compatibility
 

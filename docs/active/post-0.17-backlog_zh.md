@@ -12,6 +12,9 @@
 上限、F15 runtime 診斷／相容性與 F14 M7 的有限 P0–P6 施工地圖；本索引繼續管理
 廣泛 F01–F15 處置。計畫不代表這些家族完成，也不恢復自主執行佇列。
 
+2026-11-10：P0–P6 本地實作／驗證完成；P5 實機驗收維持 WAITING FOR EVIDENCE。
+不要將已交付 runtime、corpus、六個 Action 比較基礎重新排為尚未實作。
+
 | 章節 | 用途 |
 | --- | --- |
 | [校準後的工作歸屬](#校準後的工作歸屬) | 目前處置、唯一負責計畫及完成條件 |
@@ -45,8 +48,8 @@
 | F11 | 待證據：[Fleet](mock-fleet-basic-plan_zh.md)；廣泛 discovery 延後 | 記錄獲授權 OS／interface／VMS 的四台 identity、endpoint、隔離與關閉重啟。完整 scopes／Hello／Bye／Resolve、混合 persona 與持續負載另作實作／驗收。 |
 | F12 | 待證據：navigation | 補原生 terminal／人工 IME 組字、取消與復原紀錄；Windows resize 已有證據，一般 CI／注入按鍵不能取代缺少的平台／輸入法驗收。 |
 | F13 | 相依維護：[審查紀錄](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22) | 已審查相依更新及 rustls 安全公告修補已整合並驗證。Windows keyring 3.6.3 ↔ 4.2.0 原生相容性探針已完成；其他 OS 與鎖定／拒絕／不可用／復原案例仍待驗收。正式維持 3.6.3，發布另列。分組重用／不重複驗證已完成。 |
-| F14 | 待決策／實作：[Metamorph](metamorph.md)，[已結案 clone note](../done/metamorph-clone-in-oxdm.md) 記錄 G3 | G1／G3 已完成、G2 已被替代；G3 已補離線摘要與回歸測試，尚未發布。剩餘 M4 persona／control transition 或 M7 reference-value 比對與驗收。 |
-| F15 | 待實作／證據：[CLI hardening](oxvif-cli-release-hardening-plan.md) | R2 型別化重試政策、R3 health details 與 R4 六種結果 envelope 矩陣已完成。剩餘 observability／clock-skew／durability、原生終端驗收及 descriptor reachability／可執行 example。R5 多廠牌／soak／簽章／支援／復原仍開放；首次 package／發布已完成。 |
+| F14 | 待決策／實作：[Metamorph](metamorph.md)，[已結案 clone note](../done/metamorph-clone-in-oxdm.md) 記錄 G3 | G1／G3 已完成、G2 已被替代；G3 摘要與下一版 P6 六個 Action 的有界 reference API／測試已於本地交付，尚未發布。剩餘 M4 persona／control transition，以及更廣 M7 projection／整合／reference 驗收。 |
+| F15 | 待實作／證據：[CLI hardening](oxvif-cli-release-hardening-plan.md) | 型別重試、health details、六情境矩陣已交付，並完成下一版 HTTP／XML 上限、Session／clock metadata、共用 backoff 與 -vv detail。Authenticated-mock skew、durability、原生終端、descriptor reachability／可執行 example 仍待完成。P5 corpus 基礎已本地交付；R5 多廠牌／soak／簽章／支援／復原仍開放。 |
 
 Mock 主計畫管政策，execution checklist 管 W 狀態，operation ledger／source audit
 是持續維護的參考，profile／pipeline／schema preflight 管工作卡與相依證據。
@@ -108,7 +111,7 @@ runtime／descriptor、散布及 Metamorph M4／M7 仍有上表的實作、決�
 | F11（基本功能已於 0.17 發布） | 剩餘 Mock Fleet 探索功能與驗收 | [基礎 Fleet 證據](mock-fleet-basic-plan_zh.md)與[操作指南](../mock-fleet_zh.md)。完整 scope 比對、Hello／Bye／Resolve、原生 LAN／VMS 驗收及 Metamorph 混合仍未完成 |
 | F12（狀態列已於 0.17 發布） | 剩餘原生終端／輸入法驗收 | [CLI 重新驗收](../done/cli-0.17-reentry_zh.md) 已歸檔；未驗證的平台／輸入法項目繼續留在 [導覽計畫](cli-vim-navigation-plan_zh.md)，發布不代表新增終端驗證 |
 | F13 | 後續相依批次與 keyring 遷移審查 | 分組驗收已完成，見上方校準工作歸屬 |
-| F14 | Metamorph M4／M7 | G1／G3 已交付、G2 已被替代，不重開 recorder 抽取 |
+| F14 | M4 transition 與剩餘 M7 projection／整合／證據 | G1／G3 與有界 P6 API 已交付、G2 已被替代，不重開 recorder／comparison 基礎 |
 | F15 | 剩餘 CLI runtime／descriptor 與商用試行強化 | 首次診斷版已交付，分批選定 R2–R5 工作 |
 
 F10 調查處置，2026-09-12：使用者提供的 ONVIF Device Manager 原始碼走

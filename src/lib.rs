@@ -347,7 +347,7 @@
 //!   decoded profile tokens. Requests the typed API cannot represent fall back
 //!   to the original raw hook; this is not full request or device-effect validation.
 //!
-//! The four long operations have `*_with_progress` twins that report
+//! Long recording, parse-verification, structural-diff and comparison passes report
 //! determinate progress, so a UI can show a real bar rather than freezing for
 //! the length of a 52-operation sweep.
 //!
@@ -356,6 +356,10 @@
 //! and reviewed typed-field expectations. `record_surface_with_evidence` keeps
 //! transport failures separate from stored SOAP Faults. Raw captures remain
 //! private evidence; these local checks do not establish device conformance.
+//! `compare_corpora` adds a separate bounded offline reference comparison for
+//! six exact Actions. It pairs proven requests, retains ambiguity and compares
+//! declared namespace-checked projections with explicit masks/unexamined fields.
+//! Equal is selected-value evidence, not complete response or device conformance.
 //!
 //! ## Health & conformance checks
 //!

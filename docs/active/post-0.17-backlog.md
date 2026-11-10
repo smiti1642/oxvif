@@ -14,6 +14,10 @@ source. It owns the bounded P0–P6 execution map for client limits, F15 runtime
 diagnostics/compatibility and F14 M7; this index retains the broader F01–F15
 dispositions. The plan does not complete those families or resume the autonomous queue.
 
+2026-11-10: P0–P6 local implementation/verification is complete; P5 hardware
+acceptance remains WAITING FOR EVIDENCE. Do not reschedule the delivered runtime,
+corpus or six-Action comparison foundations as unimplemented work.
+
 | Section | Purpose |
 | --- | --- |
 | [Calibrated work ownership](#calibrated-work-ownership) | Current disposition, owner and exit criteria |
@@ -51,8 +55,8 @@ those services have no existing handlers. A route count is not a bug count.
 | F11 | Evidence needed: [Fleet](mock-fleet-basic-plan.md); broader discovery features are deferred | Record authorized OS/interface/VMS four-device identity, endpoint, isolation, shutdown/restart checks. Full scopes/Hello/Bye/Resolve, mixed personas and sustained load require separate implementation/acceptance. |
 | F12 | Evidence needed: navigation plan | Record native terminal and human IME composition/cancellation/restoration; Windows resize evidence exists. CI and key injection do not replace the missing platform/input-method checks. |
 | F13 | Maintenance: [review record](../dependency-pitfalls.md#post-017--reviewed-maintenance-batch-2026-09-22) | Reviewed dependency updates and the rustls advisory fix are integrated and verified. Windows keyring 3.6.3 ↔ 4.2.0 native compatibility probe is DONE; other OS and locked/denied/unavailable/recovery cases remain. Production stays on 3.6.3; publication is separate. Group reuse/no-duplicate verification is DONE. |
-| F14 | Decision/implementation: [Metamorph](metamorph.md), [closed clone note](../done/metamorph-clone-in-oxdm.md) records G3 | G1/G3 are DONE and G2 is SUPERSEDED. G3 adds offline summary counts and standing regressions (unreleased). Remaining work is M4 persona/control transitions or M7 reference-value comparisons and their tests. |
-| F15 | Implementation/evidence: [CLI hardening](oxvif-cli-release-hardening-plan.md) | R2 typed retry policy, R3 health details and R4 six-outcome envelope matrix are DONE. Remaining work includes observability/clock-skew/durability, native-terminal acceptance and descriptor reachability/executable examples. R5 multi-vendor/soak/signing/support and recovery remain open; first package/publication is DONE. |
+| F14 | Decision/implementation: [Metamorph](metamorph.md), [closed clone note](../done/metamorph-clone-in-oxdm.md) records G3 | G1/G3 are DONE and G2 is SUPERSEDED. G3 summary and next-version P6 bounded six-Action reference comparison/tests are delivered locally (unreleased). Remaining work is M4 persona/control transitions and broader M7 projections/integration/reference acceptance. |
+| F15 | Implementation/evidence: [CLI hardening](oxvif-cli-release-hardening-plan.md) | Typed retry, health details and six-outcome matrix are delivered, plus next-version bounded HTTP/XML, Session/clock metadata, shared backoff and -vv detail. Authenticated-mock skew, durability, native-terminal acceptance and descriptor reachability/executable examples remain. P5 corpus infrastructure is local; R5 multi-vendor/soak/signing/support and recovery remain open. |
 
 The Mock main plan owns policy; the execution checklist owns W statuses; operation
 ledger/source audit are maintained references; profile/pipeline/schema preflights
@@ -123,7 +127,7 @@ Near-complete items closed on 2026-09-22:
 | F11 (basic slice shipped in 0.17) | Remaining Mock Fleet discovery and acceptance | [Basic Fleet evidence](mock-fleet-basic-plan.md) and [operator guide](../mock-fleet.md). Full scope matching, Hello/Bye/Resolve, native LAN/VMS acceptance and Metamorph mixtures remain open |
 | F12 (status bar shipped in 0.17) | Remaining native-terminal/IME acceptance | The [CLI re-entry](../done/cli-0.17-reentry.md) delivery is archived. Keep unverified platform/IME checks explicit in the [navigation plan](cli-vim-navigation-plan.md); publication adds no terminal evidence |
 | F13 | Review subsequent dependency batches and keyring migration | Grouping acceptance is complete; see calibrated ownership above |
-| F14 | Metamorph M4/M7 | G1/G3 delivered, G2 superseded; do not reopen recorder extraction |
+| F14 | M4 transitions and remaining M7 projections/integration/evidence | G1/G3 and bounded P6 reference API delivered, G2 superseded; do not reopen recorder/comparison foundations |
 | F15 | Remaining CLI runtime/descriptor and commercial-pilot hardening | First diagnostic release is delivered; choose bounded R2–R5 work |
 
 F10 research disposition, 2026-09-12: review of the user-provided ONVIF Device

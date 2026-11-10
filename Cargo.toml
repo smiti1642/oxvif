@@ -170,6 +170,10 @@ required-features = ["metamorph"]
 name = "corpus_regression"
 required-features = ["metamorph"]
 
+[[example]]
+name = "reference_compare"
+required-features = ["metamorph"]
+
 # Metamorph Persona C template: skin one fixed RTSP stream as an ONVIF device.
 [[example]]
 name = "metamorph_adapter"
