@@ -22,6 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Share bounded retry backoff with maintenance stages while retaining existing
+  attempt units. CLI `-vv` adds bounded, ordered Session/attempt metadata on stderr;
+  structured stdout and envelope schema v3 remain unchanged.
+
 - Replace raw client SOAP trace with operation/timing/byte-count/error-class
   metadata. Use explicit captures for wire investigation and review them before
   sharing; targeted credential redaction does not certify arbitrary device data.

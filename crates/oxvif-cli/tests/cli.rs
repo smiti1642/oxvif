@@ -828,6 +828,7 @@ async fn fleet_jsonl_is_deterministic_and_partial_exit_is_six() {
 
     let output = run_isolated(
         &[
+            "-vv",
             "--timeout",
             "2s",
             "--group",
@@ -858,6 +859,23 @@ async fn fleet_jsonl_is_deterministic_and_partial_exit_is_six() {
     assert_eq!(lines[2]["data"]["kind"], "fleet_summary");
     assert_eq!(lines[2]["data"]["succeeded"], 1);
     assert_eq!(lines[2]["data"]["failed"], 1);
+    let diagnostics = stderr(&output);
+    let devices = diagnostics
+        .lines()
+        .filter_map(|line| {
+            line.strip_prefix("debug: device_index=")
+                .and_then(|rest| rest.split_once(' '))
+                .map(|(index, _)| index.parse::<usize>().unwrap())
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        devices.contains(&0) && devices.contains(&1),
+        "{diagnostics}"
+    );
+    assert!(devices.windows(2).all(|pair| pair[0] <= pair[1]));
+    assert!(!diagnostics.contains(server.device_url()));
+    assert!(!diagnostics.contains("camera-a"));
+    assert!(!diagnostics.contains("camera-b"));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1120,6 +1138,77 @@ fn published_schemas_validate_success_error_and_all_descriptors() {
     let mut wrong_version = success_document;
     wrong_version["schema_version"] = Value::String("999".to_owned());
     assert!(!envelope.is_valid(&wrong_version));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn detailed_diagnostics_preserve_stdout_across_formats_and_verbosity() {
+    let server = oxvif::mock::MockServer::start().await.unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let schema: Value =
+        serde_json::from_str(include_str!("../schema/oxvif-envelope.schema.json")).unwrap();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    for (operation, expected_unit) in [
+        ("info", "enrichment_read"),
+        ("capabilities", "device.capabilities"),
+    ] {
+        for format in ["table", "json", "jsonl"] {
+            for verbosity in [None, Some("--quiet"), Some("-v"), Some("-vv")] {
+                let mut arguments = Vec::new();
+                if let Some(flag) = verbosity {
+                    arguments.push(flag);
+                }
+                arguments.extend([
+                    "--clock-sync",
+                    "never",
+                    "device",
+                    operation,
+                    "--target",
+                    server.device_url(),
+                    "--output",
+                    format,
+                    "--non-interactive",
+                ]);
+                let output = run_isolated(&arguments, directory.path());
+                assert!(output.status.success(), "{}", stderr(&output));
+                let out = stdout(&output);
+                assert!(!out.is_empty());
+                if operation == "info" {
+                    assert!(out.contains("MockCam-1080p"));
+                }
+                assert!(!out.contains("debug:"));
+                if format != "table" {
+                    let documents = if format == "json" {
+                        vec![serde_json::from_str::<Value>(&out).unwrap()]
+                    } else {
+                        out.lines()
+                            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+                            .collect()
+                    };
+                    assert_eq!(documents.len(), 1);
+                    for value in documents {
+                        assert!(validator.is_valid(&value), "{value}");
+                        assert_eq!(value["schema_version"], "3");
+                        assert!(value["meta"].get("attempts").is_none());
+                    }
+                }
+                let log = stderr(&output);
+                assert_eq!(
+                    log.contains("session_stage=Capabilities"),
+                    verbosity == Some("-vv") && operation == "capabilities",
+                    "{operation} {format} {log}"
+                );
+                assert_eq!(
+                    log.contains(&format!("operation_unit={expected_unit} attempt=1")),
+                    verbosity == Some("-vv")
+                );
+                if matches!(verbosity, None | Some("--quiet")) {
+                    assert!(log.is_empty());
+                }
+                assert!(!log.contains(server.device_url()));
+                assert!(!log.contains("<s:Envelope"));
+            }
+        }
+    }
 }
 
 #[test]

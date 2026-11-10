@@ -1,3 +1,4 @@
+use crate::retry::{is_retryable_onvif_error, is_retryable_transport_error, retry_delay};
 use std::{
     collections::BTreeMap,
     env,
@@ -684,16 +685,21 @@ impl Application {
                     let username = profile.username().to_owned();
                     let password = password.clone();
                     let options = options.clone();
-                    tasks.spawn(async move {
-                        let result = fetch_live_information(
-                            &target,
-                            Some(&username),
-                            Some(password.expose_secret()),
-                            &options,
-                        )
-                        .await;
-                        (index, endpoint, result)
-                    });
+                    let context = crate::diagnostics::context();
+                    tasks.spawn(crate::diagnostics::device_scope(
+                        context,
+                        format!("{index:020}"),
+                        async move {
+                            let result = fetch_live_information(
+                                &target,
+                                Some(&username),
+                                Some(password.expose_secret()),
+                                &options,
+                            )
+                            .await;
+                            (index, endpoint, result)
+                        },
+                    ));
                 }
 
                 let mut enriched = 0usize;
@@ -720,16 +726,21 @@ impl Application {
                         let username = profile.username().to_owned();
                         let password = password.clone();
                         let options = options.clone();
-                        tasks.spawn(async move {
-                            let result = fetch_live_information(
-                                &target,
-                                Some(&username),
-                                Some(password.expose_secret()),
-                                &options,
-                            )
-                            .await;
-                            (index, endpoint, result)
-                        });
+                        let context = crate::diagnostics::context();
+                        tasks.spawn(crate::diagnostics::device_scope(
+                            context,
+                            format!("{index:020}"),
+                            async move {
+                                let result = fetch_live_information(
+                                    &target,
+                                    Some(&username),
+                                    Some(password.expose_secret()),
+                                    &options,
+                                )
+                                .await;
+                                (index, endpoint, result)
+                            },
+                        ));
                     }
                 }
                 if enriched == 0 {
@@ -1349,25 +1360,6 @@ impl From<serde_json::Error> for DiagnosticAttemptFailure {
     }
 }
 
-pub(crate) fn is_retryable_onvif_error(error: &OnvifError) -> bool {
-    match error {
-        OnvifError::Transport(error) => is_retryable_transport_error(error),
-        OnvifError::Soap(_) | OnvifError::InvalidArgument(_) => false,
-    }
-}
-
-fn is_retryable_transport_error(error: &TransportError) -> bool {
-    match error {
-        TransportError::Http(error) => {
-            error.is_timeout() || error.is_connect() || error.is_body() || error.is_request()
-        }
-        TransportError::HttpStatus { status, .. } => {
-            matches!(*status, 408 | 425 | 429 | 502 | 503 | 504)
-        }
-        TransportError::ResponseTooLarge { .. } => false,
-    }
-}
-
 // Preserve typed transport retry decisions across HealthReport's intentionally
 // broad Http class without parsing server-controlled error strings or changing
 // the public report shape. A fresh tap belongs to each whole-health attempt.
@@ -1400,16 +1392,6 @@ impl Transport for HealthRetryTransport {
     }
 }
 
-fn retry_delay(attempt: u32, discriminator: &str) -> Duration {
-    let exponent = attempt.min(4);
-    let base_ms = 100_u64.saturating_mul(1_u64 << exponent);
-    let hash = discriminator.bytes().fold(0_u64, |hash, byte| {
-        hash.wrapping_mul(31).wrapping_add(u64::from(byte))
-    });
-    let jitter_ms = hash.wrapping_add(u64::from(attempt)) % 51;
-    Duration::from_millis((base_ms + jitter_ms).min(2_000))
-}
-
 fn spawn_diagnostic_task(
     tasks: &mut tokio::task::JoinSet<crate::FleetDiagnosticItem>,
     selected_by: String,
@@ -1418,7 +1400,9 @@ fn spawn_diagnostic_task(
     options: &ExecutionOptions,
 ) {
     let options = options.clone();
-    tasks.spawn(async move {
+    let context = crate::diagnostics::context();
+    let key = resolved.device_id.clone().unwrap_or_default();
+    tasks.spawn(crate::diagnostics::device_scope(context, key, async move {
         let started = Instant::now();
         let device_id = resolved
             .device_id
@@ -1453,7 +1437,7 @@ fn spawn_diagnostic_task(
                 elapsed_ms: elapsed_millis(started),
             },
         }
-    });
+    }));
 }
 
 fn fleet_item_error(error: AppError) -> crate::FleetItemError {
@@ -1495,7 +1479,7 @@ async fn execute_diagnostic(
             if should_sync_clock(options.clock_sync, resolved.password.is_some()) {
                 builder = builder.with_clock_sync();
             }
-            let session = builder.build().await?;
+            let session = crate::diagnostics::initialize(builder).await?;
             let mut value = match &operation {
                 DiagnosticOperation::DeviceTest => {
                     let information = session.get_device_info().await?;
@@ -1533,7 +1517,10 @@ async fn execute_diagnostic(
             Ok::<_, DiagnosticAttemptFailure>(value)
         };
         match timeout(options.timeout, future).await {
-            Ok(Ok(value)) => return Ok(value),
+            Ok(Ok(value)) => {
+                crate::diagnostics::attempt(operation.name(), attempt, "succeeded", None);
+                return Ok(value);
+            }
             Ok(Err(error)) => {
                 last_retryable = error.is_retryable();
                 last_error = Some(error.to_string());
@@ -1546,11 +1533,23 @@ async fn execute_diagnostic(
                 ));
             }
         }
+        let delay = (last_retryable && attempt + 1 < attempts)
+            .then(|| retry_delay(attempt, &resolved.target));
+        crate::diagnostics::attempt(
+            operation.name(),
+            attempt,
+            if last_retryable {
+                "transient_transport_or_timeout"
+            } else {
+                "permanent_failure"
+            },
+            delay,
+        );
         if !last_retryable {
             break;
         }
-        if attempt + 1 < attempts {
-            sleep(retry_delay(attempt, &resolved.target)).await;
+        if let Some(delay) = delay {
+            sleep(delay).await;
         }
     }
     Err(AppError::device_operation_failed(
@@ -1585,9 +1584,15 @@ async fn execute_health_check(
         // An inner deadline can win the race with the whole-attempt deadline.
         // Preserve the timeout outcome rather than returning a partial report
         // whose only difference is scheduler ordering at the same deadline.
-        let result = match timeout(options.timeout, check.run()).await {
-            Ok(_) if observed.failures.load(Ordering::Relaxed) & 4 != 0 => Err(()),
-            Ok(report) => Ok(report),
+        let result = match timeout(options.timeout, check.run_with_session_report()).await {
+            Ok((report, initialization)) => {
+                crate::diagnostics::session(&initialization);
+                if observed.failures.load(Ordering::Relaxed) & 4 != 0 {
+                    Err(())
+                } else {
+                    Ok(report)
+                }
+            }
             Err(_) => Err(()),
         };
         match result {
@@ -1596,13 +1601,35 @@ async fn execute_health_check(
                     && health_report_is_retryable(&report)
                     && attempt + 1 < attempts =>
             {
-                sleep(retry_delay(attempt, &resolved.target)).await;
+                let delay = retry_delay(attempt, &resolved.target);
+                crate::diagnostics::attempt(
+                    "whole_health",
+                    attempt,
+                    "transient_transport",
+                    Some(delay),
+                );
+                sleep(delay).await;
             }
-            Ok(report) => return health_report_value(report),
+            Ok(report) => {
+                crate::diagnostics::attempt(
+                    "whole_health",
+                    attempt,
+                    if report.ok() {
+                        "succeeded"
+                    } else {
+                        "completed_with_failures"
+                    },
+                    None,
+                );
+                return health_report_value(report);
+            }
             Err(_) if attempt + 1 < attempts => {
-                sleep(retry_delay(attempt, &resolved.target)).await;
+                let delay = retry_delay(attempt, &resolved.target);
+                crate::diagnostics::attempt("whole_health", attempt, "timeout", Some(delay));
+                sleep(delay).await;
             }
             Err(_) => {
+                crate::diagnostics::attempt("whole_health", attempt, "timeout", None);
                 return Err(AppError::device_connection_failed(format!(
                     "Health check exceeded the {} ms per-attempt timeout after {} attempt(s).",
                     options.timeout.as_millis(),
@@ -1711,7 +1738,10 @@ async fn fetch_live_information(
             client.get_device_info().await
         };
         match timeout(options.timeout, request).await {
-            Ok(Ok(information)) => return Ok(live_information(information)),
+            Ok(Ok(information)) => {
+                crate::diagnostics::attempt("enrichment_read", attempt, "succeeded", None);
+                return Ok(live_information(information));
+            }
             Ok(Err(error)) => {
                 last_retryable = is_retryable_onvif_error(&error);
                 last_error = Some(error.to_string());
@@ -1724,11 +1754,23 @@ async fn fetch_live_information(
                 ));
             }
         }
+        let delay =
+            (last_retryable && attempt + 1 < attempts).then(|| retry_delay(attempt, target));
+        crate::diagnostics::attempt(
+            "enrichment_read",
+            attempt,
+            if last_retryable {
+                "transient_transport_or_timeout"
+            } else {
+                "permanent_failure"
+            },
+            delay,
+        );
         if !last_retryable {
             break;
         }
-        if attempt + 1 < attempts {
-            sleep(retry_delay(attempt, target)).await;
+        if let Some(delay) = delay {
+            sleep(delay).await;
         }
     }
     Err(AppError::device_operation_failed(
@@ -3404,6 +3446,77 @@ mod tests {
                 assert_eq!(info.model, "MockCam-1080p");
                 assert_eq!(requests.load(Ordering::SeqCst), 2);
             }
+            proxy.abort();
+            let _ = proxy.await;
+        }
+    }
+
+    #[tokio::test]
+    async fn detailed_metadata_keeps_whole_health_diagnostic_and_enrichment_units_separate() {
+        let upstream = oxvif::mock::MockServer::start().await.unwrap();
+        for unit in ["device.capabilities", "whole_health", "enrichment_read"] {
+            let (target, requests, proxy) =
+                transient_then_proxy_server(upstream.device_url()).await;
+            let resolved = ResolvedTarget {
+                target: target.clone(),
+                device_id: None,
+                selected_by: None,
+                username: None,
+                password: None,
+            };
+            let policy = ExecutionOptions {
+                retries: 1,
+                timeout: Duration::from_secs(5),
+                ..Default::default()
+            };
+            let (result, lines) = crate::capture_diagnostics(true, async {
+                match unit {
+                    "whole_health" => execute_health_check(&resolved, &policy).await.map(|_| ()),
+                    "enrichment_read" => fetch_live_information(&target, None, None, &policy)
+                        .await
+                        .map(|_| ()),
+                    _ => execute_diagnostic(&resolved, DiagnosticOperation::Capabilities, &policy)
+                        .await
+                        .map(|_| ()),
+                }
+            })
+            .await;
+            result.unwrap();
+            let attempts = lines
+                .iter()
+                .filter(|line| line.contains("operation_unit="))
+                .collect::<Vec<_>>();
+            assert_eq!(attempts.len(), 2, "{lines:?}");
+            assert!(attempts[0].contains(&format!("operation_unit={unit} attempt=1")));
+            assert!(attempts[1].contains(&format!("operation_unit={unit} attempt=2")));
+            let delay = attempts[0]
+                .rsplit('=')
+                .next()
+                .unwrap()
+                .parse::<u64>()
+                .unwrap();
+            assert!((100..=150).contains(&delay));
+            assert!(attempts[1].ends_with("retry_delay_ms=0"));
+            if unit != "enrichment_read" {
+                assert!(
+                    lines
+                        .iter()
+                        .any(|line| line.contains("session_stage=Capabilities outcome=Failed"))
+                );
+                assert!(
+                    lines
+                        .iter()
+                        .any(|line| line.contains("session_stage=Capabilities outcome=Succeeded"))
+                );
+                assert!(
+                    lines
+                        .iter()
+                        .any(|line| line.contains("service=Device url_source=Configured"))
+                );
+            } else {
+                assert_eq!(requests.load(Ordering::SeqCst), 2);
+            }
+            assert!(!lines.join("\n").contains(&target));
             proxy.abort();
             let _ = proxy.await;
         }

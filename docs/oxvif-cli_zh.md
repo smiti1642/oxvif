@@ -179,7 +179,14 @@ setup/refresh、單機診斷、health、discovery enrichment 與 fleet。格式�
 仍維持啟用，CLI 不提供 insecure bypass。`-vv` 只顯示 bundle 數量，不輸出憑證內容。
 
 `-v` 會把 sanitized command、timeout、retry policy 與完成時間寫到 stderr；`-vv`
-會再顯示最大 attempt 數與 timeout scope。JSON/JSONL stdout 不會混入 log、prompt
+會再顯示最大 attempt 數與 timeout scope，以及 Session stage、時差、service URL
+來源、實際 operation attempts、retry class 與 delay。這些是 SOAP／operation
+attempts，不是 Digest HTTP exchange 次數。診斷、整輪 Health、enrichment read
+與 maintenance stage 各自保留重試單位；maintenance 改用共用的有界指數退避與
+deterministic jitter。詳細日誌於執行完成後按裝置 identity 排序，以匿名序號顯示，
+每台最多 128 筆、最多 1,024 台，超量明確列出 omitted count；這些日誌不包含原始
+URL、body 或 Fault text。封閉的 v3 metadata schema 維持不變。
+JSON/JSONL stdout 不會混入 log、prompt
 或 color，也不會輸出 password、authorization、WS-Security material 或 URI userinfo。
 
 ## 給 Agent 的入口

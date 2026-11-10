@@ -73,7 +73,7 @@ fixture。原始碼走訪不等於這些測試已在本次重跑。
 | P1 | P0 | 可設定 HTTP deadline／有界 SOAP body | DONE（本地）；cap 驗收待 P5 |
 | P2 | P0；整合網路檢查需 P1 | Production XML 完整有界解析 | DONE（本地） |
 | P3 | P1／P2 | Session 初始化 report／安全 trace | DONE（本地） |
-| P4 | P1／P3 | 共用 delay policy／CLI 診斷整合 | TODO |
+| P4 | P1／P3 | 共用 delay policy／CLI 診斷整合 | DONE（本地） |
 | P5 | P0；驗收需 P1–P4 | Param-aware 回歸 harness／實機證據 | TODO |
 | P6a | P2／P5 synthetic corpus | 離線配對／明確 comparison outcome | TODO |
 | P6b | P6a | 選定 typed projection／可用的比較 example | TODO |
@@ -304,6 +304,22 @@ MSRV、既有 schema／CLI matrix，wire shape 改變時跑獨立 qualified exte
 push 或修改版本。
 
 ## 實作證據
+
+- P4 實作：小型內部 retry module 保留 typed classification 與 delay 常數，
+  maintenance stage 改用相同退避。Invocation metadata 使用 task-local scope，
+  Fleet／enrichment worker 明確繼承；每台最多 128 筆，保留字典排序最前的
+  1,024 個裝置 key，明確列出 omitted-event count。Worker 完成後按匿名裝置
+  序號輸出。ExecutionOptions literal、v3 ResultMeta 與 stdout schema 維持不變。
+  使用 Session report 不增加請求；單機 device-info 保留既有不建 Session 的路徑。
+  Command／capture future 置於 heap，避免 Windows main stack overflow。
+- P4 負向控制：未篩選 all-feature run 偵測 entry budget 減少；focused assertion
+  failure 偵測受排程影響的裝置保留、略過實際 backoff、隱藏 Session stage
+  （Library adapter 與 CLI），以及 Fleet scope 未傳遞。變更皆逐 byte 還原；
+  最終 format、兩種 workspace Clippy、all-feature／default tests（1,411／1,292
+  通過，七個 ignored、50 suites）與兩種嚴格 rustdoc 於 2026-11-10 通過。既有
+  六情境 v3 contract matrix、cancellation／recovery、bounded Fleet suites 仍通過。
+  五個新測試與擴充的 Fleet 斷言涵蓋有界日誌及實際 retry unit，對單次 read 與
+  Session command 執行 table／JSON／JSONL × quiet／normal／`-v`／`-vv` 矩陣。
 
 - P3：`build` 委派給 `build_with_report`，初始化順序、必要 clock／capabilities
   失敗與 missing-URL fallback 優先順序維持不變。Report 僅含受控 enum／number：

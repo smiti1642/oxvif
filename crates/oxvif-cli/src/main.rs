@@ -1104,7 +1104,8 @@ async fn execute_and_emit(
             })
             .transpose()
     };
-    let execution = async {
+    // Keep invocation wrappers small on Windows' main-thread stack.
+    let execution = Box::pin(async {
         match request {
             CommandRequest::Diagnose(request) if human_interactive => {
                 application
@@ -1113,14 +1114,21 @@ async fn execute_and_emit(
             }
             request => application.execute(request, options).await,
         }
-    };
-    let result = if show_discovery_progress {
-        await_discovery(execution).await
-    } else if show_workflow_progress {
-        interactive::await_workflow(execution, command_name).await
-    } else {
-        execution.await
-    };
+    });
+    let (result, diagnostics) =
+        oxvif_cli::capture_diagnostics(options.verbosity > 1 && !options.quiet, async {
+            if show_discovery_progress {
+                await_discovery(execution).await
+            } else if show_workflow_progress {
+                interactive::await_workflow(execution, command_name).await
+            } else {
+                execution.await
+            }
+        })
+        .await;
+    for line in diagnostics {
+        eprintln!("{line}");
+    }
 
     match result {
         Ok(success) => {

@@ -15,22 +15,29 @@
 //! additive selection reasons, candidates, status counts and untested reasons.
 //! Human health output can show all checks with `health check --details`;
 //! JSON/JSONL always retain the full report regardless of that presentation flag.
+//! `capture_diagnostics` optionally collects bounded Session/operation metadata
+//! for stderr adapters. Fleet workers inherit the invocation scope; ordered lines
+//! use anonymous device indices and preserve the closed v3 result metadata.
 
 mod agent;
 mod application;
 mod contract;
 mod credential;
 mod describe;
+mod diagnostics;
 mod error;
 mod inventory;
 mod maintenance;
 mod output;
 mod registry;
+mod retry;
 
 pub use maintenance::{
     ConfigDiffRequest, ConfigExportRequest, DiagnoseRequest, ManagedAction, ManagedDevice,
     ProfileChoice, ProfilePicker, SnapshotSaveRequest,
 };
+
+pub use diagnostics::capture_diagnostics;
 
 pub use application::{Application, ClockSyncPolicy, ExecutionOptions};
 pub use contract::{

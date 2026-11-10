@@ -587,13 +587,13 @@ async fn connect(
         {
             builder = builder.with_clock_sync();
         }
-        builder.build()
+        crate::diagnostics::initialize(builder)
     })
     .await)
 }
 
 async fn onvif_step<T, F, Fut>(
-    name: &str,
+    name: &'static str,
     options: &ExecutionOptions,
     mut operation: F,
 ) -> (Step, Option<T>)
@@ -616,6 +616,7 @@ where
                 step.error_code = None;
                 step.next_step.clear();
                 step.elapsed_ms = elapsed(start);
+                crate::diagnostics::attempt(name, attempt, "succeeded", None);
                 return (step, Some(value));
             }
             Ok(Err(error)) => {
@@ -642,10 +643,23 @@ where
                 true
             }
         };
-        if !retryable || attempt == options.retries {
+        let delay = (retryable && attempt < options.retries)
+            .then(|| crate::retry::retry_delay(attempt, name));
+        crate::diagnostics::attempt(
+            name,
+            attempt,
+            if retryable {
+                "transient_transport_or_timeout"
+            } else {
+                "permanent_failure"
+            },
+            delay,
+        );
+        if let Some(delay) = delay {
+            tokio::time::sleep(delay).await;
+        } else {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
     step.elapsed_ms = elapsed(start);
     (step, None)
@@ -689,7 +703,7 @@ fn classify(error: &OnvifError) -> (&'static str, &'static str, bool, bool) {
             "TRANSPORT_ERROR",
             "Connection, TLS or HTTP transport failed (URL/body withheld).",
             false,
-            crate::application::is_retryable_onvif_error(error),
+            crate::retry::is_retryable_onvif_error(error),
         ),
         OnvifError::InvalidArgument(_) => (
             "INVALID_OPERATION",
@@ -1973,6 +1987,97 @@ mod tests {
         };
         let (timed_out, _) = onvif_step::<(), _, _>("test", &options, std::future::pending).await;
         assert_eq!(timed_out.error_code.as_deref(), Some("TIMEOUT"));
+    }
+
+    #[tokio::test]
+    async fn metadata_reports_actual_stage_attempts_and_shared_backoff_without_fault_text() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let calls = AtomicUsize::new(0);
+        let policy = ExecutionOptions {
+            retries: 2,
+            ..options()
+        };
+        let ((step, value), lines) = crate::capture_diagnostics(
+            true,
+            onvif_step("fixture_stage", &policy, || async {
+                if calls.fetch_add(1, Ordering::SeqCst) < 2 {
+                    Err(OnvifError::Transport(
+                        oxvif::transport::TransportError::HttpStatus {
+                            status: 503,
+                            body: "private-status-body".into(),
+                        },
+                    ))
+                } else {
+                    Ok(321)
+                }
+            }),
+        )
+        .await;
+        assert_eq!(value, Some(321));
+        assert!(matches!(step.status, Status::Pass));
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+        assert_eq!(lines.len(), 3);
+        assert!(step.elapsed_ms >= 300);
+        for (index, line) in lines[..2].iter().enumerate() {
+            let expected = crate::retry::retry_delay(index as u32, "fixture_stage").as_millis();
+            assert!(line.contains(&format!(
+                "attempt={} retry_class=transient_transport_or_timeout retry_delay_ms={expected}",
+                index + 1
+            )));
+        }
+        assert!(lines[2].contains("attempt=3 retry_class=succeeded retry_delay_ms=0"));
+        for error in [
+            OnvifError::Transport(oxvif::transport::TransportError::HttpStatus {
+                status: 401,
+                body: "private-auth-body".into(),
+            }),
+            OnvifError::Transport(oxvif::transport::TransportError::HttpStatus {
+                status: 403,
+                body: "private-auth-body".into(),
+            }),
+            OnvifError::Transport(oxvif::transport::TransportError::ResponseTooLarge { limit: 1 }),
+            OnvifError::Soap(SoapError::Fault {
+                code: "s:Sender".into(),
+                reason: "private-fault-password=secret".into(),
+                subcode: None,
+                detail: None,
+            }),
+        ] {
+            let calls = AtomicUsize::new(0);
+            let ((step, value), lines) = crate::capture_diagnostics(
+                true,
+                onvif_step("refused_stage", &policy, || async {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    Err::<(), _>(match &error {
+                        OnvifError::Transport(oxvif::transport::TransportError::HttpStatus {
+                            status,
+                            body,
+                        }) => OnvifError::Transport(oxvif::transport::TransportError::HttpStatus {
+                            status: *status,
+                            body: body.clone(),
+                        }),
+                        OnvifError::Transport(
+                            oxvif::transport::TransportError::ResponseTooLarge { limit },
+                        ) => OnvifError::Transport(
+                            oxvif::transport::TransportError::ResponseTooLarge { limit: *limit },
+                        ),
+                        _ => OnvifError::Soap(SoapError::Fault {
+                            code: "s:Sender".into(),
+                            reason: "private-fault-password=secret".into(),
+                            subcode: None,
+                            detail: None,
+                        }),
+                    })
+                }),
+            )
+            .await;
+            assert!(value.is_none());
+            assert!(matches!(step.status, Status::Fail));
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            assert_eq!(lines.len(), 1);
+            assert!(lines[0].contains("attempt=1 retry_class=permanent_failure retry_delay_ms=0"));
+            assert!(!lines[0].contains("private-"));
+        }
     }
 
     #[test]

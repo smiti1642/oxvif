@@ -81,7 +81,7 @@ compatibility fixtures. Source inspection is not a fresh execution result.
 | P1 | P0 | Configurable HTTP deadline and bounded SOAP bodies | DONE (local); cap validation awaits P5 |
 | P2 | P0; P1 for combined network checks | Complete bounded production XML parsing | DONE (local) |
 | P3 | P1/P2 | Report-bearing Session initialization and safe trace | DONE (local) |
-| P4 | P1/P3 | Shared delay policy and CLI diagnostic integration | TODO |
+| P4 | P1/P3 | Shared delay policy and CLI diagnostic integration | DONE (local) |
 | P5 | P0; acceptance after P1–P4 | Param-aware regression harness and device evidence | TODO |
 | P6a | P2; P5 synthetic corpus | Offline pairing and explicit comparison outcomes | TODO |
 | P6b | P6a | Selected typed projections and usable comparison example | TODO |
@@ -358,6 +358,26 @@ all-operation conformance claim from this cut. Current publication, push and
 version changes remain outside the planning request.
 
 ## Implementation evidence
+
+- P4 implementation: a small internal retry module retains typed classification
+  and delay constants; maintenance stages now use that same backoff. Invocation
+  metadata has a task-local scope explicitly inherited by Fleet/enrichment workers,
+  capped at 128 entries per device and 1,024 lexicographically first device keys,
+  with explicit omitted-event counts. Anonymous device indices are emitted after
+  workers finish. Existing ExecutionOptions literals, v3 ResultMeta and stdout
+  schemas are unchanged. Session reports are consumed without extra requests;
+  standalone device-info reads retain their existing no-Session path.
+  Boxing the command/capture future avoids Windows main-stack overflow.
+- P4 negative controls: the unfiltered all-feature run detects reducing the entry
+  budget; focused assertion failures detect schedule-dependent device retention,
+  removed actual backoff, suppressed Session stages (Library adapter and CLI),
+  and missing Fleet scope propagation. Every mutated source was restored exactly.
+  Final format, both workspace Clippy modes, all-feature/default tests
+  (1,411/1,292 passed, seven ignored, 50 suites) and both strict rustdoc modes
+  passed on 2026-11-10. The six-outcome v3 contract matrix, cancellation/recovery
+  and bounded Fleet suites remain passing. Five new tests plus extended Fleet
+  assertions cover buffered output and actual units, with table/JSON/JSONL across
+  quiet, normal, `-v` and `-vv` for both single-read and Session-based commands.
 
 - P3: `build` delegates to `build_with_report` without changing initialization
   order, mandatory clock/capability failures or missing-URL fallback precedence.

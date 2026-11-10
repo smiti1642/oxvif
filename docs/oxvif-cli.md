@@ -150,6 +150,17 @@ diagnostics, health, discovery enrichment, and fleet items. `-vv` reports only
 the number of configured bundles; it does not print certificate contents. The
 CLI intentionally has no insecure-certificate or hostname-bypass option.
 
+`-v` retains concise command/completion metadata on stderr. `-vv` also reports
+Session stages, clock offset and service URL sources, actual operation attempts,
+retry classes and delay. These are SOAP/operation attempts, not Digest HTTP
+exchange counts. Diagnostic, whole-Health, enrichment and maintenance-stage retry
+units remain separate; maintenance now shares the bounded exponential delay and
+deterministic jitter. Detailed entries are buffered until execution finishes,
+sorted by device identity and labeled with anonymous indices. Each device retains
+at most 128 entries, and at most 1,024 devices are retained; omissions are explicit.
+Raw URLs, bodies and Fault text are excluded from these diagnostic lines.
+JSON/JSONL stdout and its closed v3 metadata schema remain unchanged.
+
 ## Quick start
 
 Securely register, authenticate, verify, and select a device in one command:
