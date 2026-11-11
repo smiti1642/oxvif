@@ -5,7 +5,9 @@ use std::time::Duration;
 pub(crate) fn is_retryable_onvif_error(error: &OnvifError) -> bool {
     match error {
         OnvifError::Transport(error) => is_retryable_transport_error(error),
-        OnvifError::Soap(_) | OnvifError::InvalidArgument(_) => false,
+        OnvifError::Soap(_)
+        | OnvifError::InvalidArgument(_)
+        | OnvifError::RecordingSearchIncomplete { .. } => false,
     }
 }
 

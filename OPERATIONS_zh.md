@@ -178,6 +178,11 @@
 | `GetRecordingSearchResults` | ✓ |
 | `EndSearch` | ✓ |
 
+`recording_search`／`search_recordings_with_report` 組合上述既有 RPC，提供有界
+owner、明確完成判定、部分結果與獨立清理證據。Vec helper 現在會拒絕未完成結果。
+這些 helper 沒有新增協議操作；限制、取消與 migration 請見
+[函式庫指南](LIBRARY_GUIDE_zh.md#search-與-replay-service-方法)。
+
 ### Replay Service
 
 | 操作 | 狀態 |

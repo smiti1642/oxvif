@@ -363,6 +363,20 @@
 //! declared namespace-checked projections with explicit masks/unexamined fields.
 //! Equal is selected-value evidence, not complete response or device conformance.
 //!
+//! ## Bounded recording search
+//!
+//! [`OnvifClient::recording_search`] and [`OnvifSession::recording_search`]
+//! construct a single-use [`RecordingSearch`] without network I/O. Its options
+//! bound elapsed time, pages, retained items and accounted bytes. `run` succeeds
+//! only on Completed, retains partial results in [`RecordingSearchFailure`], and
+//! reports the separate bounded EndSearch outcome in [`RecordingSearchCleanup`].
+//! Use the cancellation handle for cooperative cancellation. After externally
+//! dropping `run`, explicitly call `cancel_and_close` on the retained owner;
+//! Drop only signals local cancellation and never spawns a cleanup task. A lost
+//! Find reply leaves no known token and relies on the device's remote lease.
+//! The legacy Vec helper preserves original RPC errors and returns the named
+//! [`OnvifError::RecordingSearchIncomplete`] for non-completed searches.
+//!
 //! ## Health & conformance checks
 //!
 //! Enable the **`health`** feature for `health::HealthCheck` — a fast,
@@ -400,6 +414,7 @@ pub mod health;
 pub mod metamorph;
 #[cfg(feature = "mock")]
 pub mod mock;
+pub mod recording;
 #[cfg(any(feature = "mock", feature = "health"))]
 pub(crate) mod redact;
 pub mod session;
@@ -430,6 +445,10 @@ pub use metamorph::{
     AdapterResponder, AdapterResult, AdapterTransport, DeviceAdapter, DeviceIdentity, Fixture,
     FixtureActionSummary, FixtureStore, FixtureSummary, MetamorphTransport, PtzVector,
     RecordingTransport, ReplayResponder,
+};
+pub use recording::{
+    RecordingSearch, RecordingSearchCancellation, RecordingSearchCleanup, RecordingSearchFailure,
+    RecordingSearchOptions, RecordingSearchReport, RecordingSearchStopReason,
 };
 pub use session::{OnvifSession, OnvifSessionBuilder, SessionBuildFailure, SessionBuildReport};
 pub use types::{

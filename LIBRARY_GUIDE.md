@@ -1183,27 +1183,69 @@ namespace `http://www.onvif.org/ver10/search/wsdl`.
 | `find_recordings(search_url, max_matches, keep_alive)` | `String` (search token) | Start an async recording search |
 | `get_recording_search_results(search_url, token, max_results, wait_time)` | `FindRecordingResults` | Poll results (call until `search_state == "Completed"`) |
 | `end_search(search_url, token)` | `()` | Release search session on device |
+| `recording_search(search_url, options)` | `RecordingSearch` | Construct a single-use owner without I/O |
+| `search_recordings_with_report(search_url, options)` | `RecordingSearchReport` | Bounded workflow; errors retain partial results and cleanup |
+| `search_recordings(search_url, max_matches)` | `Vec<RecordingInformation>` | Default budgets; success requires Completed |
 
 ```rust
-// Find all recordings, collect results, play back the first one
-let search_url   = /* from get_services() */;
-let replay_url   = /* from get_services() */;
+use oxvif::RecordingSearchOptions;
 
-let token = client.find_recordings(&search_url, None, "PT60S").await?;
-
-let results = loop {
-    let r = client.get_recording_search_results(&search_url, &token, 100, "PT5S").await?;
-    if r.search_state == "Completed" { break r; }
-};
-client.end_search(&search_url, &token).await?;
-
-for rec in &results.recording_information {
-    println!("[{}] {} — {} to {}",
-        rec.recording_token, rec.source_name,
-        rec.earliest_recording.as_deref().unwrap_or("?"),
-        rec.latest_recording.as_deref().unwrap_or("?"));
+match client.search_recordings_with_report(search_url, RecordingSearchOptions::default()).await {
+    Ok(report) => {
+        assert_eq!(report.stop_reason(), oxvif::RecordingSearchStopReason::Completed);
+        // Inspect report.cleanup() independently before consuming the records.
+        let recordings = report.into_recordings();
+    }
+    Err(failure) => {
+        // Safe controlled summary; report/cause can contain private device data.
+        eprintln!("{failure}");
+        let (partial_report, original_cause) = failure.into_parts();
+    }
 }
 ```
+
+The same three helpers exist on `OnvifSession` without a URL argument. A report
+counts parsed pages and accepted records separately. Unknown states and pages
+that would exceed an item/byte limit fail without retaining that page; earlier
+accepted pages stay available in `RecordingSearchFailure::report()`. Record order
+and duplicate opaque recording tokens are preserved. Only Completed returns Ok;
+cleanup failure/timeout remains separate even after completion. EndSearch's optional
+`Endpoint` value is retained verbatim. No automatic RPC retries occur.
+
+| Resource | Default / boundary |
+| --- | --- |
+| Find + polling | 120 seconds total; transport may have a shorter timeout |
+| Parsed pages / retained items | 20 / 2,000; optional MaxMatches also caps items |
+| Retained result bytes | 16 MiB, charged by record struct size + decoded UTF-8 field lengths |
+| Poll request | 100 results, PT5S wait; 100 ms delay after each nonterminal reply |
+| Remote lease / cleanup | PT60S requested keepalive / separate two-second EndSearch deadline |
+| Concurrent work / retries | One RPC at a time per owner, no spawned task / zero retries |
+| Response / outbound XML | Existing production 4 MiB/depth 64/65,536-element limits; outbound serialization uses the existing RPC contract and escaped token |
+
+`RecordingSearchOptions` provides builders/getters for these workflow budgets;
+invalid positive limits and xs:int ranges fail before I/O. Accounted retained
+bytes exclude vector spare capacity, the search token and a currently decoded
+response; they are not a peak-memory guarantee. Direct Find/Poll/End RPCs remain
+available and their caller owns lifecycle and budgets.
+
+For cooperative cancellation, keep the owner and clone `owner.cancellation()`
+before awaiting `owner.run()`. Signalling that handle stops polling and runs one
+bounded cleanup attempt. If a timeout/select/abort externally drops `run`, retain
+the owner and call `owner.cancel_and_close().await`. `close` is idempotent and
+attempts EndSearch at most once; dropping its pending future caches Interrupted,
+because the remote outcome is unknown. Dropping the owner only cancels locally;
+it performs no network I/O or task spawn. A lost Find reply leaves no known token
+and relies on the device's lease expiry. Await a normal report return when both
+partial results and cleanup evidence are required.
+
+Compatibility: `search_recordings` keeps its signature, preserves original
+Find/poll errors and still discards cleanup outcomes. It now rejects incomplete
+results using `OnvifError::RecordingSearchIncomplete { reason }`. Add that arm to
+downstream exhaustive matches and use the report API for partial results. The
+new error variant is source-breaking for exhaustive consumers: this candidate
+requires a next-minor release review, not a 0.17.x patch. No version/release has
+been changed. CLI structured envelope schema v3 is unchanged; maintenance error
+classification uses SEARCH_INCOMPLETE without retrying or inventing a SOAP fault.
 
 **`FindRecordingResults` fields:** `search_state` (`"Queued"`, `"Searching"`, `"Completed"`), `recording_information` (`Vec<RecordingInformation>`).
 
@@ -1507,12 +1549,15 @@ including recursive consumer/destruction risks on deeply nested input.
 
 ## Error handling
 
-All API methods return `Result<T, OnvifError>`:
+Stateless ONVIF RPCs return `Result<T, OnvifError>`; owned recording report APIs
+return `Result<RecordingSearchReport, Box<RecordingSearchFailure>>`:
 
 ```rust
 pub enum OnvifError {
     Transport(TransportError),  // network / TLS / unexpected HTTP status
     Soap(SoapError),            // parse failure, missing field, or SOAP Fault
+    InvalidArgument(String),   // rejected before network I/O
+    RecordingSearchIncomplete { reason: oxvif::RecordingSearchStopReason },
 }
 ```
 
@@ -1527,7 +1572,7 @@ match client.get_capabilities().await {
     Err(OnvifError::Transport(TransportError::HttpStatus { status, body })) => {
         eprintln!("HTTP {status}: {body}");
     }
-    Err(OnvifError::Soap(SoapError::Fault { code, reason })) => {
+    Err(OnvifError::Soap(SoapError::Fault { code, reason, .. })) => {
         eprintln!("SOAP Fault [{code}]: {reason}");
     }
     Err(e) => eprintln!("Other: {e}"),
@@ -2442,6 +2487,7 @@ src/
 ├── transport.rs         Transport trait + HttpTransport (reqwest + rustls)
 ├── fixtures.rs          CapturingTransport / FixtureTransport — record-and-replay test seam
 ├── redact.rs            Strip WS-Security digests and URL credentials before a recorder writes to disk
+├── recording/           Bounded search owner, options, cancellation and outcome reports
 ├── soap/
 │   ├── mod.rs
 │   ├── envelope.rs      SOAP 1.2 envelope builder

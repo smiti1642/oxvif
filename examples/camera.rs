@@ -1,5 +1,7 @@
 //! oxvif — live IPCam integration tests / usage examples
 //!
+//! `recording` uses bounded search completion and reports cleanup separately.
+//!
 //! Quick start (no .env needed):
 //!
 //! ```sh
@@ -840,40 +842,17 @@ async fn full_workflow(cfg: &Config) -> Result<(), OnvifError> {
     }
 
     if let (Some(ref srch_url), Some(ref rpl_url)) = (search_url, replay_url) {
-        section("FindRecordings + GetReplayUri");
-        match client.find_recordings(srch_url, Some(5), "PT30S").await {
-            Ok(token) => {
-                println!("  Search token: {token}");
-                match client
-                    .get_recording_search_results(srch_url, &token, 5, "PT5S")
-                    .await
-                {
-                    Ok(results) => {
-                        println!(
-                            "  State={} recordings={}",
-                            results.search_state,
-                            results.recording_information.len()
-                        );
-                        if let Some(first) = results.recording_information.first() {
-                            match client
-                                .get_replay_uri(
-                                    rpl_url,
-                                    &first.recording_token,
-                                    "RTP-Unicast",
-                                    "RTSP",
-                                )
-                                .await
-                            {
-                                Ok(uri) => println!("  Replay URI: {uri}"),
-                                Err(e) => println!("  GetReplayUri skipped — {e}"),
-                            }
-                        }
-                    }
-                    Err(e) => println!("  GetRecordingSearchResults skipped — {e}"),
-                }
-                let _ = client.end_search(srch_url, &token).await;
+        section("Bounded recording search + GetReplayUri");
+        if let Some(report) = bounded_recording_search(&client, srch_url, 5).await
+            && let Some(first) = report.recordings().first()
+        {
+            match client
+                .get_replay_uri(rpl_url, &first.recording_token, "RTP-Unicast", "RTSP")
+                .await
+            {
+                Ok(uri) => println!("  Replay URI: {uri}"),
+                Err(error) => println!("  GetReplayUri skipped — {error}"),
             }
-            Err(e) => println!("  (skipped — {e})"),
         }
     }
 
@@ -2853,56 +2832,59 @@ async fn recording_example(cfg: &Config) -> Result<(), OnvifError> {
         println!("Recording service not found in GetServices response.");
     }
 
-    // ── FindRecordings → GetRecordingSearchResults → EndSearch ────────────
-    if let (Some(ref srch_url), Some(ref rpl_url)) = (search_url, replay_url) {
-        println!("\n=== FindRecordings ===");
-        match client.find_recordings(srch_url, Some(10), "PT60S").await {
-            Ok(token) => {
-                println!("  Search token: {token}");
-
-                println!("\n=== GetRecordingSearchResults ===");
+    // ── Owned search: completion, partial results and cleanup are separate ──
+    if let Some(ref srch_url) = search_url {
+        println!("\n=== Bounded recording search ===");
+        if let Some(report) = bounded_recording_search(&client, srch_url, 10).await
+            && let Some(ref rpl_url) = replay_url
+        {
+            for recording in report.recordings() {
                 match client
-                    .get_recording_search_results(srch_url, &token, 10, "PT5S")
+                    .get_replay_uri(rpl_url, &recording.recording_token, "RTP-Unicast", "RTSP")
                     .await
                 {
-                    Ok(results) => {
-                        println!("  State: {}", results.search_state);
-                        println!("  Found {} result(s)", results.recording_information.len());
-                        for ri in &results.recording_information {
-                            println!(
-                                "  [{}] '{}' {} → {}",
-                                ri.recording_token,
-                                ri.source_name,
-                                ri.earliest_recording.as_deref().unwrap_or("?"),
-                                ri.latest_recording.as_deref().unwrap_or("?")
-                            );
-
-                            println!("\n=== GetReplayUri [{}] ===", ri.recording_token);
-                            match client
-                                .get_replay_uri(rpl_url, &ri.recording_token, "RTP-Unicast", "RTSP")
-                                .await
-                            {
-                                Ok(uri) => println!("  {uri}"),
-                                Err(e) => println!("  Not supported: {e}"),
-                            }
-                        }
-                    }
-                    Err(e) => println!("  Not supported: {e}"),
-                }
-
-                println!("\n=== EndSearch ===");
-                match client.end_search(srch_url, &token).await {
-                    Ok(()) => println!("  Search session released."),
-                    Err(e) => println!("  {e}"),
+                    Ok(uri) => println!("  Replay URI: {uri}"),
+                    Err(error) => println!("  GetReplayUri skipped — {error}"),
                 }
             }
-            Err(e) => println!("  Not supported: {e}"),
         }
     } else {
-        println!("\nSearch/Replay services not found in GetServices response.");
+        println!("\nSearch service not found in GetServices response.");
     }
 
     Ok(())
+}
+
+// Report only controlled lifecycle metadata; raw errors/endpoints stay in the report.
+async fn bounded_recording_search(
+    client: &OnvifClient,
+    url: &str,
+    max_matches: u32,
+) -> Option<oxvif::RecordingSearchReport> {
+    let options = oxvif::RecordingSearchOptions::default().with_max_matches(Some(max_matches));
+    let (report, completed) = match client.search_recordings_with_report(url, options).await {
+        Ok(report) => (report, true),
+        Err(failure) => {
+            println!("  {failure}");
+            (failure.into_parts().0, false)
+        }
+    };
+    println!(
+        "  Stop={} pages={} retained={}",
+        report.stop_reason(),
+        report.pages(),
+        report.recordings().len()
+    );
+    let cleanup = match report.cleanup() {
+        oxvif::RecordingSearchCleanup::Released { .. } => "released",
+        oxvif::RecordingSearchCleanup::Failed(_) => "failed",
+        oxvif::RecordingSearchCleanup::TimedOut => "timed out",
+        oxvif::RecordingSearchCleanup::Interrupted => "interrupted",
+        oxvif::RecordingSearchCleanup::NoKnownToken => "no known token",
+        _ => "unknown disposition",
+    };
+    println!("  Cleanup: {cleanup}");
+    completed.then_some(report)
 }
 
 // ── Recording jobs example ────────────────────────────────────────────────────

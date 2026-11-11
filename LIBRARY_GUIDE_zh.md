@@ -591,7 +591,66 @@ Recording、Search 與 Replay URL 通常由 `get_services()` 取得。
 | `find_recordings(search_url, max_matches, keep_alive)` | 啟動非同步搜尋並回傳 search token |
 | `get_recording_search_results(search_url, token, max_results, wait_time)` | 輪詢至 `search_state == "Completed"` |
 | `end_search(search_url, token)` | 釋放 search session |
+| `recording_search(search_url, options)` | 不執行 I/O，建立單次使用的 `RecordingSearch` owner |
+| `search_recordings_with_report(search_url, options)` | 有界搜尋；失敗時保留部分結果及清理證據 |
+| `search_recordings(search_url, max_matches)` | 使用預設限制；只有 Completed 才回傳成功 |
 | `get_replay_uri(replay_url, recording_token, stream_type, protocol)` | 取得錄影播放 RTSP URI |
+
+以上三個 helper 也提供 `OnvifSession` 版本，省略 URL 參數。
+
+```rust
+use oxvif::RecordingSearchOptions;
+
+match client.search_recordings_with_report(search_url, RecordingSearchOptions::default()).await {
+    Ok(report) => {
+        assert_eq!(report.stop_reason(), oxvif::RecordingSearchStopReason::Completed);
+        // 消耗結果前，獨立檢視 report.cleanup()。
+        let recordings = report.into_recordings();
+    }
+    Err(failure) => {
+        // Display 僅含受控摘要；report/cause 可能包含裝置私有資料。
+        eprintln!("{failure}");
+        let (partial_report, original_cause) = failure.into_parts();
+    }
+}
+```
+
+Report 分別記錄已解析頁數與已接受的 recording。未知狀態，或加入後將超過
+item/byte 限制的整頁，都會失敗且不保留該頁；先前接受的頁面仍可從
+`RecordingSearchFailure::report()` 取得。保留裝置順序與重複 opaque token。
+只有 Completed 回傳 Ok；即使完成，清理失敗或超時仍獨立記錄，並原樣保留
+EndSearch 的可選 `Endpoint`。流程不自動重試 RPC。
+
+| 資源 | 預設值／邊界 |
+| --- | --- |
+| Find 與 polling | 總計 120 秒；transport 本身可能有更短 timeout |
+| 已解析頁數／保留項目 | 20／2,000；可選 MaxMatches 也限制保留項目 |
+| 保留結果 bytes | 16 MiB；以 record struct 大小加解碼後 UTF-8 欄位長度計算 |
+| Poll request | 100 筆、PT5S wait；每次非終態回覆後至少延遲 100 ms |
+| 遠端 lease／清理 | 要求 PT60S keepalive／另計兩秒 EndSearch deadline |
+| 同時工作／重試 | 每個 owner 一次一個 RPC，不建立 task／零次重試 |
+| 回應／送出 XML | 沿用 production 的 4 MiB、depth 64、65,536 elements 限制；送出沿用既有 RPC serialization 與 token escaping |
+
+`RecordingSearchOptions` 提供上述流程限制的 builder/getter；無效正值限制與
+xs:int 範圍在 I/O 前即拒絕。保留 bytes 不包含 vector 額外容量、search token
+及當前解碼中的 response，因此不是 peak-memory 保證。低階 Find/Poll/End
+仍可直接使用，由呼叫端管理生命週期及限制。
+
+需要協作取消時，在 await `owner.run()` 前保留 owner 並複製
+`owner.cancellation()`；發出訊號後停止 polling，再執行一次有界清理。
+若 timeout/select/abort 從外部丟棄 `run`，請保留 owner 並呼叫
+`owner.cancel_and_close().await`。`close` 具冪等性，最多嘗試一次 EndSearch；
+若 pending cleanup future 被丟棄，快取 Interrupted，因遠端結果未知。
+Drop owner 只發出本地取消，不執行網路 I/O 或建立 task。Find 回覆遺失時沒有
+已知 token，只能依賴裝置 lease 到期。若需要部分結果及清理證據，應等待正常
+report 回傳。
+
+相容性：`search_recordings` 維持原簽章及原始 Find/poll 錯誤，仍丟棄清理結果；
+未完成搜尋現在回傳 `OnvifError::RecordingSearchIncomplete { reason }`。
+下游 exhaustive match 必須新增分支，需要部分結果時改用 report API。
+這是 exhaustive consumer 的 source-breaking 變更，候選實作需經下一個 minor
+版本檢視，不適合 0.17.x patch；本批沒有調整版本或發佈。CLI structured envelope
+schema v3 不變；maintenance 以 SEARCH_INCOMPLETE 分類，不重試或偽造 SOAP fault。
 
 ---
 
@@ -682,12 +741,15 @@ error match 必須加入此 variant。格式錯誤、未閉合、多 root、DTD�
 
 ## 錯誤處理
 
-所有 API 方法回傳 `Result<T, OnvifError>`：
+無狀態 ONVIF RPC 回傳 `Result<T, OnvifError>`；錄影 report API 回傳
+`Result<RecordingSearchReport, Box<RecordingSearchFailure>>`：
 
 ```rust
 pub enum OnvifError {
     Transport(TransportError),
     Soap(SoapError),
+    InvalidArgument(String),
+    RecordingSearchIncomplete { reason: oxvif::RecordingSearchStopReason },
 }
 ```
 
@@ -698,7 +760,7 @@ match client.get_capabilities().await {
     Err(OnvifError::Transport(TransportError::HttpStatus { status, body })) => {
         eprintln!("HTTP {status}: {body}");
     }
-    Err(OnvifError::Soap(SoapError::Fault { code, reason })) => {
+    Err(OnvifError::Soap(SoapError::Fault { code, reason, .. })) => {
         eprintln!("SOAP Fault [{code}]: {reason}");
     }
     Err(e) => eprintln!("Other: {e}"),
@@ -965,6 +1027,7 @@ cargo run --example metamorph_adapter --features metamorph
 |---|---|
 | `src/client/` | Device、Media1/2、PTZ、Imaging、Events、Recording client method |
 | `src/session.rs` | 快取 service URL 的 `OnvifSession` |
+| `src/recording/` | 有界 search owner、options、取消與 outcome report |
 | `src/discovery.rs` | WS-Discovery UDP multicast probe |
 | `src/transport.rs` | `Transport` trait 與 `HttpTransport` |
 | `src/soap/` | SOAP envelope、security、XML parser 與 error |

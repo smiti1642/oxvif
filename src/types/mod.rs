@@ -95,3 +95,12 @@ pub(crate) fn xml_escape(s: &str) -> Cow<'_, str> {
 #[cfg(test)]
 #[path = "../tests/types_tests.rs"]
 mod tests;
+
+pub(crate) fn duration_xml(value: std::time::Duration) -> String {
+    if value.subsec_nanos() == 0 {
+        format!("PT{}S", value.as_secs())
+    } else {
+        let fraction = format!("{:09}", value.subsec_nanos());
+        format!("PT{}.{}S", value.as_secs(), fraction.trim_end_matches('0'))
+    }
+}

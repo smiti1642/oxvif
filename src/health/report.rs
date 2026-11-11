@@ -91,8 +91,8 @@ impl CheckStatus {
 pub enum ErrorClass {
     /// Device returned a `<s:Fault>`.
     SoapFault,
-    /// Client-side precondition unmet (e.g. a required service URL wasn't
-    /// advertised, so the call was never sent).
+    /// Client-side workflow condition unmet (e.g. a missing service URL or an
+    /// incomplete bounded recording search).
     Precondition,
     /// Response received but could not be parsed / didn't match the schema.
     Parse,
@@ -193,6 +193,13 @@ impl From<&OnvifError> for CheckError {
             },
             OnvifError::InvalidArgument(_) => CheckError {
                 class: ErrorClass::InvalidArgument,
+                fault_code: None,
+                subcode: None,
+                reason: e.to_string(),
+                detail: None,
+            },
+            OnvifError::RecordingSearchIncomplete { .. } => CheckError {
+                class: ErrorClass::Precondition,
                 fault_code: None,
                 subcode: None,
                 reason: e.to_string(),

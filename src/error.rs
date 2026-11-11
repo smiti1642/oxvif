@@ -1,7 +1,9 @@
 //! Top-level error type for the oxvif library.
 //!
-//! All public async methods on [`OnvifClient`](crate::client::OnvifClient)
-//! return `Result<T, OnvifError>`. Callers can match on the variants to
+//! Stateless RPC methods on [`OnvifClient`](crate::client::OnvifClient)
+//! return `Result<T, OnvifError>`. Owned recording searches additionally expose
+//! [`RecordingSearchFailure`](crate::RecordingSearchFailure) with partial results
+//! and cleanup evidence. Callers can match on the variants to
 //! distinguish transport-level failures (network, TLS) from SOAP-level
 //! failures (malformed response, SOAP Fault from the device).
 
@@ -29,6 +31,10 @@ use crate::transport::TransportError;
 ///   client to do something the ONVIF schema does not allow (e.g. setting an
 ///   H265 video encoder via the Media1 client, which is JPEG/MPEG4/H264 only).
 ///   No request is sent.
+///
+/// * [`RecordingSearchIncomplete`](OnvifError::RecordingSearchIncomplete) — the
+///   bounded Vec search helper stopped without Completed. The report API retains
+///   partial results and cleanup evidence in its dedicated workflow failure.
 #[derive(Debug, Error)]
 pub enum OnvifError {
     #[error(transparent)]
@@ -39,6 +45,14 @@ pub enum OnvifError {
 
     #[error("invalid argument: {0}")]
     InvalidArgument(String),
+
+    /// A bounded recording search stopped without an explicit Completed result.
+    /// Use the report API to retain partial records and cleanup evidence.
+    #[error("Recording search incomplete: {reason}")]
+    RecordingSearchIncomplete {
+        /// Controlled workflow stop reason, without device-provided text.
+        reason: crate::recording::RecordingSearchStopReason,
+    },
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

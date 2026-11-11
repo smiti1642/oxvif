@@ -1744,10 +1744,41 @@ impl OnvifSession {
             .await
     }
 
-    /// Search all recordings and return results in a single call.
+    /// Construct a bounded recording search owner using the resolved Search URL.
+    /// Construction performs no network I/O; explicitly close a suspended owner.
+    pub fn recording_search(
+        &self,
+        options: crate::recording::RecordingSearchOptions,
+    ) -> Result<crate::recording::RecordingSearch, OnvifError> {
+        self.client.recording_search(self.search_url()?, options)
+    }
+
+    /// Search within budgets and report partial results and independent cleanup.
+    /// Only an explicit Completed result returns Ok.
+    pub async fn search_recordings_with_report(
+        &self,
+        options: crate::recording::RecordingSearchOptions,
+    ) -> Result<
+        crate::recording::RecordingSearchReport,
+        Box<crate::recording::RecordingSearchFailure>,
+    > {
+        let url = self.search_url().map_err(|error| {
+            crate::recording::RecordingSearchFailure::before_start(
+                crate::recording::RecordingSearchStopReason::FindFailed,
+                error,
+            )
+        })?;
+        self.client
+            .search_recordings_with_report(url, options)
+            .await
+    }
+
+    /// Search with default bounded options; incomplete searches return an error.
     ///
     /// Combines `find_recordings`, repeated `get_recording_search_results`
-    /// polling, and `end_search` into one convenient method.
+    /// polling, and bounded `end_search` into one method. Use
+    /// [`search_recordings_with_report`](Self::search_recordings_with_report)
+    /// to retain partial records and cleanup evidence.
     pub async fn search_recordings(
         &self,
         max_matches: Option<u32>,

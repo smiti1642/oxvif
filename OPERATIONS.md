@@ -194,6 +194,12 @@ row in this file at all until 0.15.0, while the crate had implemented it since
 | `GetRecordingSearchResults` | ✓ |
 | `EndSearch` | ✓ |
 
+`recording_search` / `search_recordings_with_report` compose these existing RPCs
+into a bounded owner with explicit completion, partial results and independent
+cleanup evidence. The Vec helper now fails on incomplete results. These helpers
+add no protocol operations; see the [library guide](LIBRARY_GUIDE.md#search-service-methods)
+for limits, cancellation and migration.
+
 ### Replay Service
 
 | Operation | Status |

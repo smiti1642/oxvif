@@ -28,6 +28,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Bound `search_recordings` by explicit completion: non-Completed searches now
+  return `OnvifError::RecordingSearchIncomplete` instead of partial `Ok(Vec)`.
+  Preserve original RPC errors and attempt cleanup after polling failures.
+  This new exhaustive error variant requires downstream match updates and a
+  next-minor compatibility review; it is not intended for a 0.17.x patch release.
+
 - Share bounded retry backoff with maintenance stages while retaining existing
   attempt units. CLI `-vv` adds bounded, ordered Session/attempt metadata on stderr;
   structured stdout and envelope schema v3 remain unchanged.
@@ -56,6 +62,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   are unchanged.
 
 ### Added
+
+- Add `RecordingSearch`, `RecordingSearchOptions`, cooperative cancellation and
+  report APIs on Client/Session. Enforce total/page/item/accounted-byte budgets,
+  keep partial results and original errors, and report the independent bounded
+  cleanup attempt, including EndSearch's endpoint. Explicit close is idempotent;
+  Drop never spawns asynchronous cleanup.
 
 - Add bounded offline `compare_corpora` reference comparison for six selected
   Device/Media1/Media2 Actions, with proven request pairing, explicit ambiguity,

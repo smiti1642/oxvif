@@ -667,6 +667,12 @@ where
 
 fn classify(error: &OnvifError) -> (&'static str, &'static str, bool, bool) {
     match error {
+        OnvifError::RecordingSearchIncomplete { .. } => (
+            "SEARCH_INCOMPLETE",
+            "Recording search stopped before completion.",
+            false,
+            false,
+        ),
         OnvifError::Soap(SoapError::Fault {
             subcode: Some(code),
             ..
@@ -1120,6 +1126,26 @@ fn diff_value(path: &str, before: Option<&Value>, after: Option<&Value>, changes
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn incomplete_search_has_named_code_and_is_never_retried() {
+        let attempts = std::sync::atomic::AtomicUsize::new(0);
+        let policy = ExecutionOptions {
+            retries: 2,
+            ..options()
+        };
+        let (step, value) = onvif_step::<(), _, _>("search", &policy, || async {
+            attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Err(OnvifError::RecordingSearchIncomplete {
+                reason: oxvif::RecordingSearchStopReason::PageLimit,
+            })
+        })
+        .await;
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(value.is_none());
+        assert!(matches!(step.status, Status::Fail));
+        assert_eq!(step.error_code.as_deref(), Some("SEARCH_INCOMPLETE"));
+        assert_eq!(step.detail, "Recording search stopped before completion.");
+    }
     use super::*;
     use crate::{Application, CommandData, CommandRequest, MemoryCredentialStore, RegistryStore};
     use std::sync::Arc;

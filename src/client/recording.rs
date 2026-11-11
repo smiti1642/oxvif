@@ -337,6 +337,7 @@ impl OnvifClient {
         let resp = find_response(&body_node, "FindRecordingsResponse")?;
         resp.child("SearchToken")
             .map(|n| n.text().to_string())
+            .filter(|token| !token.is_empty())
             .ok_or_else(|| crate::soap::SoapError::missing("SearchToken").into())
     }
 
@@ -374,6 +375,16 @@ impl OnvifClient {
     /// Always call this after you have finished reading results from
     /// [`get_recording_search_results`](Self::get_recording_search_results).
     pub async fn end_search(&self, search_url: &str, search_token: &str) -> Result<(), OnvifError> {
+        self.end_search_endpoint(search_url, search_token)
+            .await
+            .map(|_| ())
+    }
+
+    pub(crate) async fn end_search_endpoint(
+        &self,
+        search_url: &str,
+        search_token: &str,
+    ) -> Result<Option<String>, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/search/wsdl/EndSearch";
         let search_token = xml_escape(search_token);
         let body = format!(
@@ -384,11 +395,44 @@ impl OnvifClient {
 
         let xml = self.call(search_url, ACTION, &body).await?;
         let body_node = parse_soap_body(&xml)?;
-        find_response(&body_node, "EndSearchResponse")?;
-        Ok(())
+        let response = find_response(&body_node, "EndSearchResponse")?;
+        Ok(response
+            .child("Endpoint")
+            .map(|node| node.text().to_owned()))
     }
 
-    /// Search all recordings and return results in a single call.
+    /// Construct a single-use, bounded recording search owner without network I/O.
+    ///
+    /// Keep the owner to explicitly close after externally dropping its run future.
+    /// Invalid budgets are rejected before any request is sent.
+    pub fn recording_search(
+        &self,
+        search_url: &str,
+        options: crate::recording::RecordingSearchOptions,
+    ) -> Result<crate::recording::RecordingSearch, OnvifError> {
+        crate::recording::RecordingSearch::new(self.clone(), search_url, options)
+    }
+
+    /// Search within explicit budgets, retaining partial results and cleanup evidence.
+    ///
+    /// Only an explicit Completed state returns Ok. A cleanup failure remains a
+    /// separate report field even on completion. For external future cancellation,
+    /// use [`recording_search`](Self::recording_search) and explicitly close its owner.
+    pub async fn search_recordings_with_report(
+        &self,
+        search_url: &str,
+        options: crate::recording::RecordingSearchOptions,
+    ) -> Result<
+        crate::recording::RecordingSearchReport,
+        Box<crate::recording::RecordingSearchFailure>,
+    > {
+        self.recording_search(search_url, options)
+            .map_err(crate::recording::RecordingSearchFailure::invalid_options)?
+            .run()
+            .await
+    }
+
+    /// Search recordings with default bounded workflow options.
     ///
     /// Combines [`find_recordings`](Self::find_recordings),
     /// repeated [`get_recording_search_results`](Self::get_recording_search_results)
@@ -396,32 +440,23 @@ impl OnvifClient {
     ///
     /// - `max_matches` — upper bound on results (`None` = device default).
     ///
-    /// Returns a flat `Vec<RecordingInformation>` with all matched recordings.
+    /// Returns records only after an explicit Completed state. Budget exhaustion,
+    /// cancellation and unknown states return [`OnvifError::RecordingSearchIncomplete`].
+    /// Original Find/poll errors are preserved. Cleanup is attempted on every
+    /// normal return with a known token; its outcome is available only through
+    /// [`search_recordings_with_report`](Self::search_recordings_with_report).
     pub async fn search_recordings(
         &self,
         search_url: &str,
         max_matches: Option<u32>,
     ) -> Result<Vec<RecordingInformation>, OnvifError> {
-        let token = self
-            .find_recordings(search_url, max_matches, "PT60S")
-            .await?;
-
-        let mut all = Vec::new();
-        // Cap polling iterations to prevent unbounded loops when a device
-        // never reports `Completed`.  20 rounds × 100 results × PT5S wait
-        // covers up to 2 000 recordings with a ~100 s worst-case wall time.
-        for _ in 0..20 {
-            let results = self
-                .get_recording_search_results(search_url, &token, 100, "PT5S")
-                .await?;
-            all.extend(results.recording_information);
-            if results.search_state == "Completed" {
-                break;
-            }
-        }
-
-        let _ = self.end_search(search_url, &token).await;
-        Ok(all)
+        self.search_recordings_with_report(
+            search_url,
+            crate::recording::RecordingSearchOptions::default().with_max_matches(max_matches),
+        )
+        .await
+        .map(crate::recording::RecordingSearchReport::into_recordings)
+        .map_err(|failure| failure.into_legacy_error())
     }
 
     // ── Replay Service ────────────────────────────────────────────────────────────

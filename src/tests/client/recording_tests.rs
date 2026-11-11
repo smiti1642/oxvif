@@ -823,28 +823,57 @@ async fn test_search_recordings_propagates_find_error() {
 
 #[tokio::test]
 async fn test_search_recordings_returns_empty_on_completed_no_results() {
-    // Single XML served for every call. find_recordings parses SearchToken;
-    // subsequent get_recording_search_results sees SearchState=Completed with
-    // no RecordingInformation children; end_search silently ignores the mismatch.
-    // The wrapper must return Ok(vec![]).
-    let xml = r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
-                     xmlns:tse="http://www.onvif.org/ver10/search/wsdl">
-         <s:Body>
-           <tse:FindRecordingsResponse>
-             <tse:SearchToken>tok_xyz</tse:SearchToken>
-           </tse:FindRecordingsResponse>
-           <tse:GetRecordingSearchResultsResponse>
-             <tse:SearchState>Completed</tse:SearchState>
-           </tse:GetRecordingSearchResultsResponse>
-         </s:Body>
-       </s:Envelope>"#;
-    let client =
-        OnvifClient::new("http://192.168.1.1/onvif/device_service").with_transport(mock(xml));
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    struct EmptySearch(AtomicUsize);
+    #[async_trait::async_trait]
+    impl crate::transport::Transport for EmptySearch {
+        async fn soap_post(
+            &self,
+            url: &str,
+            action: &str,
+            body: String,
+        ) -> Result<String, crate::transport::TransportError> {
+            assert_eq!(url, "http://192.168.1.1/onvif/search");
+            let index = self.0.fetch_add(1, Ordering::SeqCst);
+            let (operation, response) = match index {
+                0 => (
+                    "FindRecordings",
+                    "<tse:FindRecordingsResponse><tse:SearchToken>tok_xyz</tse:SearchToken></tse:FindRecordingsResponse>",
+                ),
+                1 => (
+                    "GetRecordingSearchResults",
+                    "<tse:GetRecordingSearchResultsResponse><tse:ResultList><tt:SearchState>Completed</tt:SearchState></tse:ResultList></tse:GetRecordingSearchResultsResponse>",
+                ),
+                2 => (
+                    "EndSearch",
+                    "<tse:EndSearchResponse><tse:Endpoint>2026-11-11T00:00:00Z</tse:Endpoint></tse:EndSearchResponse>",
+                ),
+                _ => panic!("unexpected RPC"),
+            };
+            assert_eq!(
+                action,
+                format!("http://www.onvif.org/ver10/search/wsdl/{operation}")
+            );
+            if index != 0 {
+                assert!(body.contains("<tse:SearchToken>tok_xyz</tse:SearchToken>"));
+            }
+            Ok(format!(
+                r#"<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:tse="http://www.onvif.org/ver10/search/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema"><s:Body>{response}</s:Body></s:Envelope>"#
+            ))
+        }
+    }
+    let transport = Arc::new(EmptySearch(AtomicUsize::new(0)));
+    let client = OnvifClient::new("http://192.168.1.1/onvif/device_service")
+        .with_transport(transport.clone());
     let results = client
         .search_recordings("http://192.168.1.1/onvif/search", None)
         .await
         .unwrap();
     assert!(results.is_empty());
+    assert_eq!(transport.0.load(Ordering::SeqCst), 3);
 }
 
 // ── recording / search / replay GetServiceCapabilities ────────────────────────

@@ -21,7 +21,7 @@ pub enum SessionErrorClass {
     XmlSyntax,
     /// Device returned a SOAP Fault.
     DeviceFault,
-    /// Required response data was missing or invalid.
+    /// Required response data was missing, invalid or incomplete.
     ResponseData,
     /// A local argument was invalid.
     InvalidArgument,
@@ -47,6 +47,7 @@ impl SessionErrorClass {
             OnvifError::Soap(SoapError::Fault { .. }) => Self::DeviceFault,
             OnvifError::Soap(_) => Self::ResponseData,
             OnvifError::InvalidArgument(_) => Self::InvalidArgument,
+            OnvifError::RecordingSearchIncomplete { .. } => Self::ResponseData,
         }
     }
 }
