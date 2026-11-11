@@ -805,6 +805,20 @@ println!("pan={:?} tilt={:?} zoom={:?} state={}",
 
 **`PtzStatus` fields:** `pan`, `tilt`, `zoom` (`Option<f32>`), `pan_tilt_status`, `zoom_status` (`String` — `"IDLE"` or `"MOVING"`), `utc_time` (`Option<String>`), `error` (`Option<String>` — device fault description if any).
 
+### Typed PTZ motion
+
+Use `ptz_motion_capabilities` to read configuration defaults and the operation
+spaces and timeout limits reported for that configuration. Pass the returned
+evidence for the selected profile to `ptz_move`. `PtzMotion` supports absolute,
+relative and continuous motion and per-axis stop. `PtzVector` contains optional
+pan/tilt and zoom groups. Only supplied groups are serialized. A caller can
+specify a coordinate space, speed override or continuous timeout.
+
+The client checks finite values and reported limits before sending a request.
+Missing limits remain unknown. The device validates coordinates in an
+unreported space. Explicit Stop and the device's operation timeout control
+physical movement.
+
 ### Preset tours
 
 A preset tour is a stored guard tour: a named sequence of stops the camera

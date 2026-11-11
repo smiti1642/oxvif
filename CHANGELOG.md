@@ -71,6 +71,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Add service-qualified media catalogues, profile handles, compatible encoder
   queries and typed stream requests. CLI `--media-service` selects the service
   for profile, URI, diagnosis and inventory reads.
+- Add typed PTZ movement with optional axis groups, coordinate spaces, speed,
+  continuous timeout and per-axis stop.
+
 - Add `RecordingSearch`, `RecordingSearchOptions`, cooperative cancellation and
   report APIs on Client/Session. Enforce total/page/item/accounted-byte budgets,
   keep partial results and original errors, and report the independent bounded

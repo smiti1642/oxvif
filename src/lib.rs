@@ -363,12 +363,13 @@
 //! declared namespace-checked projections with explicit masks/unexamined fields.
 //! Equal is selected-value evidence, not complete response or device conformance.
 //!
-//! ## Managed events and media reads
+//! ## Managed events, media reads and PTZ
 //!
 //! [events] exposes qualified endpoint references and notifications with an
 //! owned pull-point lifecycle. Await async close to attempt Unsubscribe and
 //! join the worker. [media_workflow] selects a Media1 or Media2 endpoint and
-//! carries the service identity with each profile token.
+//! carries the service identity with each profile token. [ptz_motion] provides
+//! optional axis groups, reported coordinate-space validation and explicit Stop.
 //! Select SOAP authentication with [client::AuthenticationMode] and request
 //! deadlines with [transport::SoapRequestOptions].
 //!
@@ -425,6 +426,7 @@ pub mod media_workflow;
 pub mod metamorph;
 #[cfg(feature = "mock")]
 pub mod mock;
+pub mod ptz_motion;
 pub mod recording;
 #[cfg(any(feature = "mock", feature = "health"))]
 pub(crate) mod redact;

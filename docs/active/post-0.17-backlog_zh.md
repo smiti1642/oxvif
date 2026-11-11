@@ -169,3 +169,23 @@ HB1（2026-11-10）：[有界 HTTP binding 候選](mock-fidelity-http-binding_zh
 對應，保留 malformed/raw 與判讀上限 fallback。本地驗收與 R01/R02 回歸記於該卡。
 依使用者指示，HB1 維持未提交；更廣 endpoint/WS-Addressing、roles、structured/raw
 injection 仍未完成，不代表 Q02 或 W07 結案。
+
+2026-11-11：[ONVIF 互通性計畫](onvif-interoperability-plan_zh.md)
+([English](onvif-interoperability-plan.md)) 負責 client-side I01–I10：search
+completion/cleanup、scoped EPR/events、auth/request budgets、managed subscriptions、
+共用 Media 路由，並為後續新服務定義有界架構。Source findings 區分既有 Session/
+cache/Media2/PTZ/corpus 基礎與缺少的整合；此為設計，不是實作或發布驗收。
+Mock F/W 歸屬、已交付 P0–P6 與未提交 HB1 候選均保留。
+
+I01 後續（2026-11-11）：有界錄影搜尋 owner、明確完成判定、部分結果 report 與
+獨立清理已完成本地實作／驗收。All-feature／預設 workspace 測試分別通過
+1,451／1,317 個案例；Clippy、嚴格 rustdoc、19 個預期失敗的敏感度 batch 及獨立
+無 feature core 檢查均通過。I01 與 HB1 維持未提交。新增 exhaustive
+RecordingSearchIncomplete variant 需要 consumer migration 與下一個 minor 檢視；
+不代表版本／發布動作或實機驗收。I02–I10 與既有 F/W 工作各自維持原狀態。
+
+I02–I06 後續（2026-11-11）。Qualified XML 與端點引用、SOAP 認證與期限、
+受管理事件、依服務識別的媒體讀取與型別化 PTZ 已完成本地驗收。
+Workspace 全功能／預設測試分別通過 1,471／1,337 項。
+雙語互通性計畫記錄外部 schema 與敏感度證據。HB1 和實作維持未提交，
+實機驗收留待後續。

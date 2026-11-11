@@ -67,6 +67,14 @@ request does not resume the autonomous queue.
 plan retains missing real-device/vendor/firmware evidence explicitly; no version
 bump, publication, push or whole-family closeout is implied.
 
+The [ONVIF interoperability plan](active/onvif-interoperability-plan.md)
+([繁體中文](active/onvif-interoperability-plan_zh.md)) maps the 2026-11-11 source
+walkthrough to client search ownership, scoped EPR/event data, managed subscriptions,
+auth selection and shared Media1/Media2 workflows. It also defines architecture
+and acceptance boundaries for later PTZ, streaming, OSD/masks, audio and analytics
+work. I01–I06 are locally implemented and verified. I07–I10 remain planned work.
+The implementation and HB1 are uncommitted. Real-device verification is deferred.
+
 2026-09-22 歸檔與校準合計將 27 組已交付計畫／批次的 46 份 Markdown 文件，
 以及一份原始審查 JSON 移至 `done/`。原 16 組 active 文件已逐份核對，
 相依套件分組計畫補齊 GitHub 證據、clone 計畫補齊 G3 後結案；下表保留 14 組：

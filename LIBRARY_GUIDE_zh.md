@@ -468,6 +468,16 @@ UDP unicast、UDP multicast 和 HTTP tunneling。`media_stream_uri_with_capabili
 
 ## PTZ 方法
 
+### 型別化 PTZ 移動
+
+`ptz_motion_capabilities` 讀取指定 configuration 的預設值、操作空間與 timeout
+範圍。將該 profile 對應的證據傳給 `ptz_move`。`PtzMotion` 支援絕對、相對、
+連續移動及分軸 Stop。`PtzVector` 的 PanTilt 和 Zoom 都可省略，SOAP 只會
+送出提供的軸組。可指定座標空間、速度或連續移動 timeout。
+
+Client 在送出前檢查有限數值及裝置回報的範圍。未回報的限制維持未知，由裝置
+驗證。實體移動由明確的 Stop 或裝置 timeout 控制。
+
 所有 PTZ 方法使用 `caps.ptz_url`。ONVIF normalized range 通常為 pan/tilt `[-1.0, 1.0]`、zoom `[0.0, 1.0]`。
 
 | 方法 | 說明 |

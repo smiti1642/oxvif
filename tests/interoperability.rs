@@ -16,6 +16,8 @@ mod authentication;
 mod events;
 #[path = "interoperability/media.rs"]
 mod media;
+#[path = "interoperability/ptz.rs"]
+mod ptz;
 
 const DEVICE: &str = "http://camera.test/device";
 const SOAP: &str = "http://www.w3.org/2003/05/soap-envelope";

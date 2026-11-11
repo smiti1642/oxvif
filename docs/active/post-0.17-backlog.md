@@ -197,3 +197,27 @@ Fault status mapping, with malformed/raw and inspection-limit fallbacks. Local
 acceptance and R01/R02 regressions are recorded on that card. HB1 remains
 uncommitted at the user's request; broader endpoint/WS-Addressing policy, roles
 and structured/raw injection remain open. This does not close Q02 or W07.
+
+2026-11-11: the [ONVIF interoperability plan](onvif-interoperability-plan.md)
+([繁體中文](onvif-interoperability-plan_zh.md)) owns client-side I01–I10: search
+completion/cleanup, scoped EPR/events, auth/request budgets, managed subscriptions
+and shared media routing, with bounded architecture for later service additions.
+Its source findings distinguish existing Session/cache/Media2/PTZ/corpus foundations
+from missing integration. This is design, not implementation or release acceptance;
+Mock F/W ownership, delivered P0–P6 and the uncommitted HB1 candidate are preserved.
+
+I01 follow-up (2026-11-11): bounded recording search ownership, explicit completion,
+partial-result reports and independent cleanup are locally implemented/verified.
+All-feature/default workspace tests pass 1,451/1,317 cases; Clippy, strict rustdoc,
+the 19-failure sensitivity batch and standalone no-feature core checks pass.
+I01 and HB1 remain uncommitted. The new exhaustive RecordingSearchIncomplete
+variant requires consumer migration and next-minor review; no version/release
+action or hardware acceptance is implied. I02–I10 and existing F/W owners retain
+their separate dispositions.
+
+I02–I06 follow-up (2026-11-11): qualified XML and endpoint references, SOAP auth
+and deadlines, managed events, service-qualified media reads and typed PTZ
+passed local verification. Workspace all-feature/default passed
+1,471/1,337 tests. The paired interoperability plan records
+external schema and sensitivity evidence. HB1 and the implementation are
+uncommitted. Real-device acceptance is deferred.
