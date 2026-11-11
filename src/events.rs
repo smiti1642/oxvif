@@ -209,7 +209,7 @@ fn parse_reference(
     })
 }
 
-fn notification(node: &QualifiedElement) -> Result<QualifiedNotification, SoapError> {
+pub(crate) fn notification(node: &QualifiedElement) -> Result<QualifiedNotification, SoapError> {
     let retained_bytes = node.serialized_len();
     if retained_bytes > EXTENSION_BYTES {
         return Err(qualified::invalid("notification retention limit exceeded"));

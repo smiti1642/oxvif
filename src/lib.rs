@@ -413,7 +413,10 @@
 //!
 //! [ONVIF]: https://www.onvif.org
 
+pub mod analytics;
+pub mod audio_configuration;
 pub mod client;
+pub mod configuration_write;
 pub mod discovery;
 pub mod error;
 pub mod events;

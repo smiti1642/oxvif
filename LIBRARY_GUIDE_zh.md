@@ -468,6 +468,35 @@ UDP unicast、UDP multicast 和 HTTP tunneling。`media_stream_uri_with_capabili
 
 ## PTZ 方法
 
+### 音訊設定與對講
+
+`session.audio_configurations(service)` 明確選擇 Media binding，提供音訊
+source、output 和 decoder 的設定與選項。Configuration、profile 與實體
+音訊 token 分開處理。Output level 依裝置回報的有號範圍驗證。Decoder
+codec 選項描述可接收的格式，設定本身沒有 SOAP codec 欄位。寫入保留
+裝置回報的 use count，並獨立讀回。
+
+`talkback` feature 的 `Talkback::channel` 提供 16 幀有界輸入佇列。送入
+8 kHz 單聲道、每幀 20 ms 的 PCM，待 PLAY 成功後會透過選定的 PCMU
+backchannel 依時序送出 RTP。預設上限為 1,500 幀或 30 秒，另計一秒
+TEARDOWN。首版提供單一送出軌道的按鍵對講。
+
+### Analytics 與錄影媒體
+
+`session.analytics().await` 提供 capabilities、已設定及支援的規則與模組。
+保留 QName 身分及參數順序，schema URL 只作為資料回傳。可用
+`analytics::MetadataDocument::parse` 解析完整的 MetadataStream 並保留
+通知與原始限定名稱。
+
+`session.recording_timeline()` 提供摘要、單筆錄影資訊、指定時刻的 track
+屬性及錄影事件搜尋。時間需明確帶時區。事件搜尋沿用錄影搜尋的分頁限制、
+部分結果、取消與 EndSearch 清理。
+
+`session.recording_exports()` 依裝置既有 storage configuration 啟動匯出，
+透過獨立操作讀取進度和取消。`recording-download` feature 可從另外提供的
+可信 HTTP(S) URL 有界下載，並以不覆寫方式發佈至指定路徑。SOAP 回報的
+檔名只作為遠端資料處理。
+
 ### Media2 疊加與隱私遮罩
 
 `session.media2_overlays(video_source_configuration_token)` 使用 Session 的

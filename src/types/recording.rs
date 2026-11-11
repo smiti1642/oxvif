@@ -159,7 +159,7 @@ pub struct RecordingInformation {
 }
 
 impl RecordingInformation {
-    fn from_xml(node: &XmlNode) -> Self {
+    pub(crate) fn from_xml(node: &XmlNode) -> Self {
         Self {
             recording_token: node
                 .child("RecordingToken")

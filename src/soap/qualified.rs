@@ -230,7 +230,7 @@ fn namespace(value: ResolveResult<'_>) -> Result<String, SoapError> {
     }
 }
 
-fn valid_qname(name: &str) -> bool {
+pub(crate) fn valid_qname(name: &str) -> bool {
     let ncname = |part: &str| super::complete::valid_name(part) && !part.contains(':');
     match name.split_once(':') {
         Some((prefix, local)) => ncname(prefix) && ncname(local),

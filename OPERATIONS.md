@@ -98,6 +98,7 @@ row in this file at all until 0.15.0, while the crate had implemented it since
 | `GetVideoEncoderConfigurationOptions` | ✓ |
 | `GetAudioSources` | ✓ |
 | `GetAudioSourceConfigurations` | ✓ |
+| `GetAudio{Source,Output,Decoder}Configuration` / `GetCompatibleAudio{Source,Output,Decoder}Configurations` / `SetAudio{Source,Output,Decoder}Configuration` / `GetAudio{Source,Output,Decoder}ConfigurationOptions` | ✓ via `audio_configurations` |
 | `GetAudioEncoderConfigurations` / `GetAudioEncoderConfiguration` | ✓ |
 | `SetAudioEncoderConfiguration` | ✓ |
 | `GetAudioEncoderConfigurationOptions` | ✓ |
@@ -128,10 +129,18 @@ row in this file at all until 0.15.0, while the crate had implemented it since
 | `GetAudioEncoderConfigurationOptions` | ✓ |
 | `GetAudioOutputConfigurations` | ✓ |
 | `GetAudioDecoderConfigurations` | ✓ |
+| `SetAudio{Source,Output,Decoder}Configuration` / `GetAudio{Source,Output,Decoder}ConfigurationOptions` | ✓ via `audio_configurations` |
 | `GetVideoSourceModes` / `SetVideoSourceMode` | ✓ |
 | `GetOSDs` / `GetOSDOptions` / `DeleteOSD` | ✓ via `media2_overlays` |
 | `CreateOSD` / `SetOSD` | ✓ text OSD via `media2_overlays` |
 | `GetMasks` / `GetMaskOptions` / `CreateMask` / `SetMask` / `DeleteMask` | ✓ via `media2_overlays` |
+
+### Analytics Service
+
+| Operation | Status |
+|-----------|--------|
+| `GetServiceCapabilities` / `GetRules` / `GetAnalyticsModules` | ✓ via `analytics` |
+| `GetSupportedRules` / `GetSupportedAnalyticsModules` | ✓ via `analytics` |
 
 ### PTZ Service
 
@@ -203,6 +212,11 @@ into a bounded owner with explicit completion, partial results and independent
 cleanup evidence. The Vec helper now fails on incomplete results. These helpers
 add no protocol operations; see the [library guide](LIBRARY_GUIDE.md#search-service-methods)
 for limits, cancellation and migration.
+
+`recording_timeline` adds `GetRecordingSummary`, `GetRecordingInformation`,
+`GetMediaAttributes`, `FindEvents` and `GetEventSearchResults` with owned
+`EndSearch` cleanup. `recording_exports` adds `ExportRecordedData`,
+`GetExportRecordedDataState` and `StopExportRecordedData`.
 
 ### Replay Service
 

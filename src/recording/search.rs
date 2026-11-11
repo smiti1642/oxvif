@@ -348,19 +348,7 @@ impl std::error::Error for RecordingSearchFailure {
 /// close is idempotent and attempts EndSearch at most once, even if its future is
 /// dropped. Dropping `run` leaves the owner available for `cancel_and_close`.
 /// Dropping the owner cancels locally only: it performs no async cleanup or spawn.
-pub struct RecordingSearch {
-    client: OnvifClient,
-    url: String,
-    options: RecordingSearchOptions,
-    cancellation: RecordingSearchCancellation,
-    started: bool,
-    closed: bool,
-    token: Option<String>,
-    cleanup: Option<Arc<RecordingSearchCleanup>>,
-    recordings: Vec<RecordingInformation>,
-    pages: usize,
-    retained_bytes: usize,
-}
+pub struct RecordingSearch(SearchOwner<RecordingQuery>);
 
 impl RecordingSearch {
     pub(crate) fn new(
@@ -368,10 +356,145 @@ impl RecordingSearch {
         url: &str,
         options: RecordingSearchOptions,
     ) -> Result<Self, OnvifError> {
+        SearchOwner::new(
+            RecordingQuery {
+                client,
+                url: url.into(),
+            },
+            options,
+        )
+        .map(Self)
+    }
+
+    /// Obtain a signal usable concurrently while `run` borrows this owner.
+    pub fn cancellation(&self) -> RecordingSearchCancellation {
+        self.0.cancellation()
+    }
+
+    /// Effective workflow budgets.
+    pub fn options(&self) -> &RecordingSearchOptions {
+        self.0.options()
+    }
+
+    /// Find, poll within budgets, and attempt bounded cleanup on normal return.
+    /// An externally dropped future needs explicit `cancel_and_close`.
+    pub async fn run(&mut self) -> Result<RecordingSearchReport, Box<RecordingSearchFailure>> {
+        let report = |data: SearchReportData<RecordingInformation>| RecordingSearchReport {
+            recordings: data.items,
+            pages: data.pages,
+            retained_bytes: data.retained_bytes,
+            stop_reason: data.stop_reason,
+            cleanup: data.cleanup,
+        };
+        self.0.run().await.map(report).map_err(|(data, cause)| {
+            Box::new(RecordingSearchFailure {
+                report: report(data),
+                cause,
+            })
+        })
+    }
+
+    /// End a known remote search once. Subsequent calls return the cached outcome.
+    pub async fn close(&mut self) -> Arc<RecordingSearchCleanup> {
+        self.0.close().await
+    }
+
+    /// Signal cancellation and explicitly close a suspended or dropped run.
+    pub async fn cancel_and_close(&mut self) -> Arc<RecordingSearchCleanup> {
+        self.0.cancel_and_close().await
+    }
+}
+
+pub(crate) trait SearchQuery {
+    type Item;
+
+    fn find(
+        &self,
+        max_matches: Option<u32>,
+        keep_alive: &str,
+    ) -> impl Future<Output = Result<String, OnvifError>> + Send;
+    fn page(
+        &self,
+        token: &str,
+        size: u32,
+        wait: &str,
+    ) -> impl Future<Output = Result<SearchPage<Self::Item>, OnvifError>> + Send;
+    fn end(&self, token: &str) -> impl Future<Output = Result<Option<String>, OnvifError>> + Send;
+    fn item_bytes(item: &Self::Item) -> usize;
+}
+
+pub(crate) struct SearchPage<T> {
+    pub(crate) search_state: String,
+    pub(crate) items: Vec<T>,
+}
+
+pub(crate) struct SearchReportData<T> {
+    pub(crate) items: Vec<T>,
+    pub(crate) pages: usize,
+    pub(crate) retained_bytes: usize,
+    pub(crate) stop_reason: RecordingSearchStopReason,
+    pub(crate) cleanup: Arc<RecordingSearchCleanup>,
+}
+
+type SearchOutcome<T> = Result<SearchReportData<T>, (SearchReportData<T>, Option<OnvifError>)>;
+
+struct RecordingQuery {
+    client: OnvifClient,
+    url: String,
+}
+
+impl SearchQuery for RecordingQuery {
+    type Item = RecordingInformation;
+
+    async fn find(&self, max_matches: Option<u32>, keep_alive: &str) -> Result<String, OnvifError> {
+        self.client
+            .find_recordings(&self.url, max_matches, keep_alive)
+            .await
+    }
+
+    async fn page(
+        &self,
+        token: &str,
+        size: u32,
+        wait: &str,
+    ) -> Result<SearchPage<Self::Item>, OnvifError> {
+        let page = self
+            .client
+            .get_recording_search_results(&self.url, token, size, wait)
+            .await?;
+        Ok(SearchPage {
+            search_state: page.search_state,
+            items: page.recording_information,
+        })
+    }
+
+    async fn end(&self, token: &str) -> Result<Option<String>, OnvifError> {
+        self.client.end_search_endpoint(&self.url, token).await
+    }
+
+    fn item_bytes(item: &Self::Item) -> usize {
+        record_bytes(item)
+    }
+}
+
+pub(crate) struct SearchOwner<Q: SearchQuery> {
+    query: Q,
+    options: RecordingSearchOptions,
+    cancellation: RecordingSearchCancellation,
+    started: bool,
+    closed: bool,
+    token: Option<String>,
+    cleanup: Option<Arc<RecordingSearchCleanup>>,
+    recordings: Vec<Q::Item>,
+    pages: usize,
+    retained_bytes: usize,
+}
+
+impl<Q: SearchQuery> SearchOwner<Q> {
+    pub(crate) fn new(query: Q, options: RecordingSearchOptions) -> Result<Self, OnvifError> {
         options.validate()?;
         Ok(Self {
-            client,
-            url: url.into(),
+            query,
             options,
             cancellation: RecordingSearchCancellation::default(),
             started: false,
@@ -384,11 +507,11 @@ impl RecordingSearch {
         })
     }
     /// Obtain a signal usable concurrently while `run` borrows this owner.
-    pub fn cancellation(&self) -> RecordingSearchCancellation {
+    pub(crate) fn cancellation(&self) -> RecordingSearchCancellation {
         self.cancellation.clone()
     }
     /// Effective workflow budgets.
-    pub fn options(&self) -> &RecordingSearchOptions {
+    pub(crate) fn options(&self) -> &RecordingSearchOptions {
         &self.options
     }
     /// Find, poll within budgets, and attempt bounded cleanup on normal return.
@@ -397,13 +520,13 @@ impl RecordingSearch {
     /// Returns partial results and the original error on Find/poll failure, or a
     /// controlled budget/cancellation/state reason. An externally dropped future
     /// does not execute its remaining cleanup; call `cancel_and_close` on the owner.
-    pub async fn run(&mut self) -> Result<RecordingSearchReport, Box<RecordingSearchFailure>> {
+    pub(crate) async fn run(&mut self) -> SearchOutcome<Q::Item> {
         if self.started || self.closed {
             let cleanup = self.close().await;
-            return Err(Box::new(RecordingSearchFailure {
-                report: self.take_report(RecordingSearchStopReason::AlreadyUsed, cleanup),
-                cause: None,
-            }));
+            return Err((
+                self.take_report(RecordingSearchStopReason::AlreadyUsed, cleanup),
+                None,
+            ));
         }
         self.started = true;
         let outcome = match Instant::now().checked_add(self.options.total_timeout) {
@@ -419,7 +542,7 @@ impl RecordingSearch {
         if reason == RecordingSearchStopReason::Completed {
             Ok(report)
         } else {
-            Err(Box::new(RecordingSearchFailure { report, cause }))
+            Err((report, cause))
         }
     }
     /// Close local ownership and attempt remote EndSearch once within its budget.
@@ -427,7 +550,7 @@ impl RecordingSearch {
     /// The cached outcome makes repeated calls idempotent. Cancellation cannot
     /// skip this cleanup budget. If this close future is dropped, Interrupted is
     /// cached instead of silently retrying an operation of unknown remote outcome.
-    pub async fn close(&mut self) -> Arc<RecordingSearchCleanup> {
+    pub(crate) async fn close(&mut self) -> Arc<RecordingSearchCleanup> {
         self.closed = true;
         self.cancellation.cancel();
         if let Some(outcome) = &self.cleanup {
@@ -435,12 +558,7 @@ impl RecordingSearch {
         }
         let outcome = if let Some(token) = self.token.take() {
             self.cleanup = Some(Arc::new(RecordingSearchCleanup::Interrupted));
-            match timeout(
-                self.options.cleanup_timeout,
-                self.client.end_search_endpoint(&self.url, &token),
-            )
-            .await
-            {
+            match timeout(self.options.cleanup_timeout, self.query.end(&token)).await {
                 Ok(Ok(endpoint)) => RecordingSearchCleanup::Released { endpoint },
                 Ok(Err(error)) => RecordingSearchCleanup::Failed(error),
                 Err(_) => RecordingSearchCleanup::TimedOut,
@@ -453,7 +571,7 @@ impl RecordingSearch {
         outcome
     }
     /// Signal cancellation and explicitly close a suspended/dropped run.
-    pub async fn cancel_and_close(&mut self) -> Arc<RecordingSearchCleanup> {
+    pub(crate) async fn cancel_and_close(&mut self) -> Arc<RecordingSearchCleanup> {
         self.cancellation.cancel();
         self.close().await
     }
@@ -463,8 +581,7 @@ impl RecordingSearch {
         self.token = Some(
             self.wait(
                 deadline,
-                self.client
-                    .find_recordings(&self.url, self.options.max_matches, &keep_alive),
+                self.query.find(self.options.max_matches, &keep_alive),
                 RecordingSearchStopReason::FindFailed,
             )
             .await?,
@@ -484,12 +601,7 @@ impl RecordingSearch {
             let page = self
                 .wait(
                     deadline,
-                    self.client.get_recording_search_results(
-                        &self.url,
-                        &token,
-                        self.options.page_size,
-                        &wait_time,
-                    ),
+                    self.query.page(&token, self.options.page_size, &wait_time),
                     RecordingSearchStopReason::PollFailed,
                 )
                 .await?;
@@ -500,13 +612,13 @@ impl RecordingSearch {
             ) {
                 return Err((RecordingSearchStopReason::UnknownState, None));
             }
-            if page.recording_information.len() > item_limit.saturating_sub(self.recordings.len()) {
+            if page.items.len() > item_limit.saturating_sub(self.recordings.len()) {
                 return Err((RecordingSearchStopReason::ItemLimit, None));
             }
             let cost = page
-                .recording_information
+                .items
                 .iter()
-                .fold(0usize, |sum, item| sum.saturating_add(record_bytes(item)));
+                .fold(0usize, |sum, item| sum.saturating_add(Q::item_bytes(item)));
             if cost
                 > self
                     .options
@@ -516,7 +628,7 @@ impl RecordingSearch {
                 return Err((RecordingSearchStopReason::ByteLimit, None));
             }
             self.retained_bytes += cost;
-            self.recordings.extend(page.recording_information);
+            self.recordings.extend(page.items);
             if page.search_state == "Completed" {
                 return Ok(());
             }
@@ -551,9 +663,9 @@ impl RecordingSearch {
         &mut self,
         reason: RecordingSearchStopReason,
         cleanup: Arc<RecordingSearchCleanup>,
-    ) -> RecordingSearchReport {
-        RecordingSearchReport {
-            recordings: std::mem::take(&mut self.recordings),
+    ) -> SearchReportData<Q::Item> {
+        SearchReportData {
+            items: std::mem::take(&mut self.recordings),
             pages: std::mem::take(&mut self.pages),
             retained_bytes: std::mem::take(&mut self.retained_bytes),
             stop_reason: reason,
@@ -562,7 +674,7 @@ impl RecordingSearch {
     }
 }
 
-impl Drop for RecordingSearch {
+impl<Q: SearchQuery> Drop for SearchOwner<Q> {
     fn drop(&mut self) {
         self.cancellation.cancel();
     }

@@ -16,6 +16,7 @@ pub(crate) use mask::{
     mask_body, parse_settings as parse_mask_settings, validate as validate_mask,
 };
 
+use crate::scoped_rpc::boolean;
 use crate::{
     OnvifClient, OnvifError, OnvifSession,
     media_workflow::MediaService,
@@ -25,6 +26,10 @@ use crate::{
         qualified::{QualifiedElement, invalid},
     },
     transport::EndpointPolicy,
+};
+
+pub use crate::configuration_write::{
+    ConfigurationWrite as OverlayWrite, ConfigurationWriteError as OverlayWriteError,
 };
 
 /// Media2 operations scoped to one video-source configuration.
@@ -54,31 +59,6 @@ impl OnvifSession {
             configuration,
         )
     }
-}
-
-/// Disposition of an unacknowledged overlay write.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum OverlayWriteError {
-    /// Preflight stopped before sending a write.
-    #[error("overlay preflight failed")]
-    Preflight(#[source] OnvifError),
-    /// The device returned a qualified SOAP fault.
-    #[error("device refused overlay write")]
-    Refused(#[source] OnvifError),
-    /// The reply could not establish the write's remote outcome. Reconcile by
-    /// reading the configuration before sending another write.
-    #[error("remote overlay write outcome unknown")]
-    OutcomeUnknown(#[source] OnvifError),
-}
-
-/// One acknowledged mutation and its independent read-back observation.
-#[derive(Debug)]
-pub struct OverlayWrite<T> {
-    /// Token returned by creation or targeted by update/deletion.
-    pub token: String,
-    /// Device state observed afterwards. For deletion, `true` means absent.
-    pub observed: Result<T, OnvifError>,
 }
 
 impl Media2Overlays {
@@ -126,13 +106,7 @@ impl Media2Overlays {
         self.service
             .call(op, response, body)
             .await
-            .map_err(|error| {
-                if matches!(error, OnvifError::Soap(SoapError::Fault { .. })) {
-                    OverlayWriteError::Refused(error)
-                } else {
-                    OverlayWriteError::OutcomeUnknown(error)
-                }
-            })
+            .map_err(OverlayWriteError::after_send)
     }
 
     fn created_token(
@@ -149,7 +123,7 @@ impl Media2Overlays {
 }
 
 fn preflight_error(reason: &'static str) -> OverlayWriteError {
-    OverlayWriteError::Preflight(OnvifError::InvalidArgument(reason.into()))
+    OverlayWriteError::invalid(reason)
 }
 
 fn entries<T>(
@@ -199,12 +173,4 @@ pub(crate) fn shape(
         return Err(invalid("unmodeled overlay field"));
     }
     Ok(())
-}
-
-fn boolean(value: &str) -> Result<bool, SoapError> {
-    match value.trim() {
-        "true" | "1" => Ok(true),
-        "false" | "0" => Ok(false),
-        _ => Err(invalid("invalid overlay boolean")),
-    }
 }

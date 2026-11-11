@@ -82,6 +82,7 @@
 | `GetVideoEncoderConfigurationOptions` | ✓ |
 | `GetAudioSources` | ✓ |
 | `GetAudioSourceConfigurations` | ✓ |
+| `GetAudio{Source,Output,Decoder}Configuration`／`GetCompatibleAudio{Source,Output,Decoder}Configurations`／`SetAudio{Source,Output,Decoder}Configuration`／`GetAudio{Source,Output,Decoder}ConfigurationOptions` | ✓ 透過 `audio_configurations` |
 | `GetAudioEncoderConfigurations` / `GetAudioEncoderConfiguration` | ✓ |
 | `SetAudioEncoderConfiguration` | ✓ |
 | `GetAudioEncoderConfigurationOptions` | ✓ |
@@ -112,10 +113,18 @@
 | `GetAudioEncoderConfigurationOptions` | ✓ |
 | `GetAudioOutputConfigurations` | ✓ |
 | `GetAudioDecoderConfigurations` | ✓ |
+| `SetAudio{Source,Output,Decoder}Configuration`／`GetAudio{Source,Output,Decoder}ConfigurationOptions` | ✓ 透過 `audio_configurations` |
 | `GetVideoSourceModes` / `SetVideoSourceMode` | ✓ |
 | `GetOSDs` / `GetOSDOptions` / `DeleteOSD` | ✓ 透過 `media2_overlays` |
 | `CreateOSD` / `SetOSD` | ✓ 透過 `media2_overlays` 設定文字 OSD |
 | `GetMasks` / `GetMaskOptions` / `CreateMask` / `SetMask` / `DeleteMask` | ✓ 透過 `media2_overlays` |
+
+### Analytics Service
+
+| 操作 | 狀態 |
+|-----------|--------|
+| `GetServiceCapabilities`／`GetRules`／`GetAnalyticsModules` | ✓ 透過 `analytics` |
+| `GetSupportedRules`／`GetSupportedAnalyticsModules` | ✓ 透過 `analytics` |
 
 ### PTZ Service
 
@@ -186,6 +195,11 @@
 owner、明確完成判定、部分結果與獨立清理證據。Vec helper 現在會拒絕未完成結果。
 這些 helper 沒有新增協議操作；限制、取消與 migration 請見
 [函式庫指南](LIBRARY_GUIDE_zh.md#search-與-replay-service-方法)。
+
+`recording_timeline` 新增 `GetRecordingSummary`、`GetRecordingInformation`、
+`GetMediaAttributes`、`FindEvents`、`GetEventSearchResults` 及 owner 的
+`EndSearch` 清理。`recording_exports` 新增 `ExportRecordedData`、
+`GetExportRecordedDataState` 和 `StopExportRecordedData`。
 
 ### Replay Service
 

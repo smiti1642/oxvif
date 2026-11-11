@@ -379,3 +379,114 @@ async fn ipv6_and_verified_rtsps() {
         );
     }
 }
+
+#[cfg(feature = "talkback")]
+#[tokio::test]
+async fn talkback_negotiates_send_track_paces_pcmu_and_tears_down() {
+    use oxvif::stream_probe::talkback::{InputError, Talkback, TalkbackEnd, TalkbackOptions};
+
+    let (full, _unused) = Talkback::channel();
+    for _ in 0..16 {
+        full.try_send([0; 160]).unwrap();
+    }
+    assert_eq!(full.try_send([0; 160]), Err(InputError::Full));
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let mut stream = listener.accept().await.unwrap().0;
+        let (describe, seq) = request(&mut stream, "DESCRIBE").await;
+        assert!(describe.contains("www.onvif.org/ver20/backchannel"));
+        let sdp = concat!(
+            "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=Speaker\r\nt=0 0\r\n",
+            "m=audio 0 RTP/AVP 0\r\na=recvonly\r\na=control:listen\r\n",
+            "m=audio 0 RTP/AVP 97 98\r\na=sendonly\r\na=control:talk\r\na=rtpmap:97 PCMU/8000\r\na=rtpmap:98 G726-24/8000\r\n"
+        );
+        response(
+            &mut stream,
+            seq,
+            "200 OK",
+            "Content-Type: application/sdp\r\n",
+            sdp,
+        )
+        .await;
+        let (setup, seq) = request(&mut stream, "SETUP").await;
+        assert!(setup.lines().next().unwrap().contains("/talk "));
+        assert!(setup.contains("www.onvif.org/ver20/backchannel"));
+        response(
+            &mut stream,
+            seq,
+            "200 OK",
+            "Session: talk-session\r\nTransport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n",
+            "",
+        )
+        .await;
+        let (play, seq) = request(&mut stream, "PLAY").await;
+        assert!(play.to_ascii_lowercase().contains("session: talk-session"));
+        response(&mut stream, seq, "200 OK", "", "").await;
+        let mut first = [0; 176];
+        let mut second = [0; 176];
+        stream.read_exact(&mut first).await.unwrap();
+        stream.read_exact(&mut second).await.unwrap();
+        assert_eq!(&first[..6], &[b'$', 0, 0, 172, 0x80, 0x80 | 97]);
+        assert_eq!(second[5] & 0x7f, 97);
+        assert_eq!(&first[12..16], &second[12..16]);
+        let sequence = |packet: &[u8]| u16::from_be_bytes(packet[6..8].try_into().unwrap());
+        let timestamp = |packet: &[u8]| u32::from_be_bytes(packet[8..12].try_into().unwrap());
+        assert_eq!(sequence(&second), sequence(&first).wrapping_add(1));
+        assert!(timestamp(&second).wrapping_sub(timestamp(&first)) >= 160);
+        assert_eq!(&first[16..21], &[0xff, 0x80, 0x00, 0xce, 0x4e]);
+        let (stop, seq) = request(&mut stream, "TEARDOWN").await;
+        assert!(stop.contains("www.onvif.org/ver20/backchannel"));
+        response(&mut stream, seq, "200 OK", "", "").await;
+    });
+    let (input, owner) = Talkback::channel();
+    let mut frame = [0; 160];
+    frame[..5].copy_from_slice(&[0, 32124, -32124, 1000, -1000]);
+    input.send(frame).await.unwrap();
+    input.send(frame).await.unwrap();
+    drop(input);
+    let report = owner
+        .run_until(
+            &format!("rtsp://{addr}/stream"),
+            "http://127.0.0.1/device",
+            None,
+            &TalkbackOptions::default(),
+            future::pending(),
+        )
+        .await;
+    assert!(report.negotiated);
+    assert_eq!(report.sent_frames, 2);
+    assert_eq!(report.end, TalkbackEnd::InputClosed);
+    assert_eq!(report.teardown, Outcome::Passed);
+    server.await.unwrap();
+}
+
+#[cfg(feature = "talkback")]
+#[tokio::test]
+async fn talkback_rejects_receive_only_track_without_setup() {
+    use oxvif::stream_probe::talkback::{Talkback, TalkbackEnd, TalkbackOptions};
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let mut stream = listener.accept().await.unwrap().0;
+        let (_, seq) = request(&mut stream, "DESCRIBE").await;
+        response(&mut stream, seq, "200 OK", "Content-Type: application/sdp\r\n",
+            "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=Camera\r\nt=0 0\r\nm=audio 0 RTP/AVP 0\r\na=control:listen\r\na=recvonly\r\n").await;
+        let mut byte = [0];
+        assert_eq!(stream.read(&mut byte).await.unwrap(), 0);
+    });
+    let (_input, owner) = Talkback::channel();
+    let report = owner
+        .run_until(
+            &format!("rtsp://{addr}/stream"),
+            "http://127.0.0.1/device",
+            None,
+            &TalkbackOptions::default(),
+            future::pending(),
+        )
+        .await;
+    assert!(!report.negotiated);
+    assert_eq!(report.end, TalkbackEnd::Stopped(Outcome::UnsupportedCodec));
+    assert_eq!(report.sent_frames, 0);
+    server.await.unwrap();
+}

@@ -15,6 +15,9 @@ use tokio::{
 };
 use tokio_rustls::{TlsConnector, rustls};
 
+#[cfg(feature = "talkback")]
+pub mod talkback;
+
 const HEADER_BYTES: usize = 16 * 1024;
 const BODY_BYTES: usize = 64 * 1024;
 const PACKET_LIMIT: usize = 64;
@@ -155,7 +158,7 @@ pub async fn probe_until(
     let mut connection = None;
     let mut stage = Stage::Connection;
     let run = async {
-        connection = Some(Connection::open(&uri, credentials, options).await?);
+        connection = Some(Connection::open(&uri, credentials, &options.ca_certificates).await?);
         report.connection = StreamOutcome::Passed;
         connection
             .as_mut()
@@ -277,7 +280,7 @@ impl<'a> Connection<'a> {
     async fn open(
         uri: &Url,
         credentials: Option<(&'a str, &'a str)>,
-        options: &StreamProbeOptions,
+        ca_certificates: &[Vec<u8>],
     ) -> ProbeResult<Self> {
         let host = uri
             .host_str()
@@ -290,7 +293,7 @@ impl<'a> Connection<'a> {
         let socket: Box<dyn Socket> = if tls {
             let name = rustls::pki_types::ServerName::try_from(host.to_owned())
                 .map_err(|_| StreamOutcome::Tls)?;
-            let config = tls_config(&options.ca_certificates)?;
+            let config = tls_config(ca_certificates)?;
             Box::new(
                 TlsConnector::from(Arc::new(config))
                     .connect(name, stream)
@@ -343,10 +346,7 @@ impl<'a> Connection<'a> {
         }
 
         *stage = Stage::Setup;
-        let base = response
-            .header(&headers::CONTENT_BASE)
-            .or_else(|| response.header(&headers::CONTENT_LOCATION))
-            .map_or(Ok(uri.clone()), |value| checked_join(uri, value.as_str()))?;
+        let base = description_base(&response, uri)?;
         let setup_uri = checked_join(
             &base,
             track.control.as_deref().ok_or(StreamOutcome::InvalidSdp)?,
@@ -635,7 +635,14 @@ struct VideoTrack {
     control: Option<String>,
 }
 
-fn track(response: &Response<Vec<u8>>) -> ProbeResult<VideoTrack> {
+fn description_base(response: &Response<Vec<u8>>, uri: &Url) -> ProbeResult<Url> {
+    response
+        .header(&headers::CONTENT_BASE)
+        .or_else(|| response.header(&headers::CONTENT_LOCATION))
+        .map_or(Ok(uri.clone()), |value| checked_join(uri, value.as_str()))
+}
+
+fn parse_sdp(response: &Response<Vec<u8>>) -> ProbeResult<sdp_types::Session> {
     if !response
         .header(&headers::CONTENT_TYPE)
         .is_some_and(|value| {
@@ -648,7 +655,11 @@ fn track(response: &Response<Vec<u8>>) -> ProbeResult<VideoTrack> {
     {
         return Err(StreamOutcome::InvalidSdp);
     }
-    let sdp = sdp_types::Session::parse(response.body()).map_err(|_| StreamOutcome::InvalidSdp)?;
+    sdp_types::Session::parse(response.body()).map_err(|_| StreamOutcome::InvalidSdp)
+}
+
+fn track(response: &Response<Vec<u8>>) -> ProbeResult<VideoTrack> {
+    let sdp = parse_sdp(response)?;
     for media in sdp.medias.iter().filter(|media| {
         media.media == "video" && matches!(media.proto.as_str(), "RTP/AVP" | "RTP/AVP/TCP")
     }) {

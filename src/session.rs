@@ -387,7 +387,7 @@ impl OnvifSession {
             .ok_or_else(|| SoapError::missing("Events service URL").into())
     }
 
-    fn recording_url(&self) -> Result<&str, OnvifError> {
+    pub(crate) fn recording_url(&self) -> Result<&str, OnvifError> {
         self.caps
             .recording
             .url
@@ -395,7 +395,7 @@ impl OnvifSession {
             .ok_or_else(|| SoapError::missing("Recording service URL").into())
     }
 
-    fn search_url(&self) -> Result<&str, OnvifError> {
+    pub(crate) fn search_url(&self) -> Result<&str, OnvifError> {
         self.caps
             .search
             .url

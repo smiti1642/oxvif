@@ -28,7 +28,12 @@ impl ScopedService {
             "<{operation} xmlns=\"{}\">{fields}</{operation}>",
             self.namespace
         );
-        let xml = self.client.call(self.url.as_str(), &action, &body).await?;
+        let xml = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            self.client.call(self.url.as_str(), &action, &body),
+        )
+        .await
+        .map_err(|_| crate::transport::TransportError::Deadline)??;
         qualified::response(&xml, self.namespace, response)
     }
 }
@@ -74,4 +79,12 @@ pub(crate) fn token(value: &str) -> Result<(), OnvifError> {
         ));
     }
     Ok(())
+}
+
+pub(crate) fn boolean(value: &str) -> Result<bool, SoapError> {
+    match value.trim() {
+        "true" | "1" => Ok(true),
+        "false" | "0" => Ok(false),
+        _ => Err(qualified::invalid("invalid XML boolean")),
+    }
 }

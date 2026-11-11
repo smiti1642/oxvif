@@ -805,6 +805,42 @@ println!("pan={:?} tilt={:?} zoom={:?} state={}",
 
 **`PtzStatus` fields:** `pan`, `tilt`, `zoom` (`Option<f32>`), `pan_tilt_status`, `zoom_status` (`String` — `"IDLE"` or `"MOVING"`), `utc_time` (`Option<String>`), `error` (`Option<String>` — device fault description if any).
 
+### Audio configuration and talkback
+
+`session.audio_configurations(service)` selects a Media binding. Read source,
+output and decoder configurations and options before submitting an explicit
+replacement. Configuration, profile and hardware tokens are separate. Output
+levels use the signed range returned by the device. Decoder codec options
+describe the formats the device can receive. They do not select a codec in a
+SOAP decoder configuration. Writes preserve the observed use count and return
+an independent read-back result.
+
+With the optional `talkback` feature, `stream_probe::talkback::Talkback::channel`
+creates an owner and a 16-frame input queue. Supply 20 ms mono PCM frames at
+8 kHz. The owner selects a PCMU send track and emits one paced RTP packet
+per frame after PLAY succeeds. It uses one verified RTSP(S) connection, up to
+1,500 frames or 30 seconds by default, and a separate one-second TEARDOWN
+budget. The first delivery is push-to-talk with a single outgoing track.
+
+### Analytics and recorded media
+
+`session.analytics().await` exposes capabilities and installed or supported
+rules/modules. QName type identities and parameter ordering are preserved.
+Schema locations are returned as data. `analytics::MetadataDocument::parse`
+accepts a complete, bounded MetadataStream document and retains rich events.
+
+`session.recording_timeline()` provides summary, recording information,
+attributes at a time and owned event searches. Use timezone-qualified
+`RecordingTimestamp` values. Event search reuses the recording search budgets
+and EndSearch cleanup, including partial results and explicit cancellation.
+
+`session.recording_exports()` starts an export to an existing device storage
+configuration and owns its operation token. Progress and cancellation are
+separate calls. The optional `recording-download` feature accepts a separately
+trusted HTTP(S) file URL, bounds transfer bytes and time, and publishes the
+file only if the caller's local destination is available. File names in SOAP
+are remote data. They are never used as a local path or a download URL.
+
 ### Media2 overlays
 
 `session.media2_overlays(video_source_configuration_token)` binds OSD and

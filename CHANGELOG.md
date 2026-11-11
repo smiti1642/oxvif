@@ -63,6 +63,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add service-qualified audio configuration, qualified Analytics reads and
+  metadata XML, recording timeline and event search, and bounded export jobs.
+  Optional features add PCMU talkback and no-clobber export downloads.
+
 - Add source-scoped Media2 text OSD and privacy mask workflows with typed
   options, preflight checks, explicit writes and independent read-back.
 
