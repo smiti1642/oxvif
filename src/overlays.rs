@@ -87,10 +87,15 @@ impl Media2Overlays {
     pub async fn capabilities(
         &self,
     ) -> Result<crate::types::Media2ServiceCapabilities, OnvifError> {
-        self.service
-            .client
-            .media2_get_service_capabilities(self.service.url.as_str())
-            .await
+        let response = self
+            .service
+            .call(
+                "GetServiceCapabilities",
+                "GetServiceCapabilitiesResponse",
+                "",
+            )
+            .await?;
+        crate::types::Media2ServiceCapabilities::from_xml(&response.legacy_projection(&[MEDIA2]))
     }
 
     fn configuration_field(&self) -> String {

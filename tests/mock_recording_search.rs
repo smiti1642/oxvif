@@ -37,7 +37,28 @@ fn seed(state: &MockState) {
 async fn post(transport: &dyn Transport, op: &str, fields: &str) -> String {
     let action = format!("{NS}/{op}");
     let xml = SoapEnvelope::new(format!("<q:{op} xmlns:q=\"{NS}\">{fields}</q:{op}>")).build();
-    transport.soap_post(MOCK, &action, xml).await.unwrap()
+    let response = transport
+        .soap_post(MOCK, &action, xml.clone())
+        .await
+        .unwrap();
+    if !response.contains("<s:Fault")
+        && let Some(directory) = std::env::var_os("OXVIF_SEARCH_WIRE")
+    {
+        static ORDINAL: AtomicUsize = AtomicUsize::new(0);
+        let ordinal = ORDINAL.fetch_add(1, Ordering::Relaxed);
+        let directory = std::path::Path::new(&directory);
+        std::fs::write(
+            directory.join(format!("{ordinal:03}-{op}-request.xml")),
+            xml,
+        )
+        .unwrap();
+        std::fs::write(
+            directory.join(format!("{ordinal:03}-{op}-response.xml")),
+            &response,
+        )
+        .unwrap();
+    }
+    response
 }
 
 fn fault(xml: &str) {
@@ -152,12 +173,39 @@ async fn find_scope_and_admission_and_opt_in_receipt_are_bounded() {
     )
     .await;
     assert!(reply.contains("EndSearchResponse"));
+    let state = post(
+        &transport,
+        "GetSearchState",
+        &format!("<q:SearchToken>{token}</q:SearchToken>"),
+    )
+    .await;
+    assert!(state.contains("<State>Searching</State>"));
     let page = client
         .get_recording_search_results(MOCK, token, 10, "PT0S")
         .await
         .unwrap();
     assert_eq!(page.recording_information.len(), 1);
     assert_eq!(page.recording_information[0].recording_token, "B");
+    let raw_token = client
+        .find_recordings(MOCK, Some(1), "PT60S")
+        .await
+        .unwrap();
+    let raw_poll = post(
+        &transport,
+        "GetRecordingSearchResults",
+        &format!("<q:SearchToken>{raw_token}</q:SearchToken><q:MaxResults>1</q:MaxResults>"),
+    )
+    .await;
+    assert!(raw_poll.contains("<tt:RecordingToken>A&lt;&amp;</tt:RecordingToken>"));
+    assert!(
+        post(
+            &transport,
+            "EndSearch",
+            &format!("<q:SearchToken>{raw_token}</q:SearchToken>")
+        )
+        .await
+        .contains("EndSearchResponse")
+    );
     for _ in 0..31 {
         client.find_recordings(MOCK, None, "PT60S").await.unwrap();
     }

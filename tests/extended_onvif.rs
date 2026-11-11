@@ -397,7 +397,7 @@ async fn analytics_preserves_qnames_descriptors_and_vendor_items() {
     script.done();
 }
 
-const NOTIFICATION: &str = "<n:Topic xmlns:topic=\"urn:events\">topic:RuleEngine/Motion</n:Topic><n:Message><t:Message UtcTime=\"2026-11-11T00:00:00Z\" PropertyOperation=\"Changed\"><t:Source><t:SimpleItem Name=\"Source\" Value=\"VSC_1\"/></t:Source><t:Data><t:SimpleItem Name=\"State\" Value=\"true\"/></t:Data></t:Message></n:Message>";
+const NOTIFICATION: &str = "<n:Topic xmlns:topic=\"urn:events\" Dialect=\"http://docs.oasis-open.org/wsn/t-1/TopicExpression/Concrete\">topic:RuleEngine/Motion</n:Topic><n:Message><t:Message UtcTime=\"2026-11-11T00:00:00Z\" PropertyOperation=\"Changed\"><t:Source><t:SimpleItem Name=\"Source\" Value=\"VSC_1\"/></t:Source><t:Data><t:SimpleItem Name=\"State\" Value=\"true\"/></t:Data></t:Message></n:Message>";
 
 #[test]
 fn metadata_stream_keeps_frames_and_event_order() {
@@ -415,6 +415,16 @@ fn metadata_stream_keeps_frames_and_event_order() {
         )
         .unwrap();
     }
+    if let Some(path) = std::env::var_os("OXVIF_PUBLISHED_METADATA_XML") {
+        let published = MetadataDocument::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert_eq!(published.xml.local_name(), "MetadataStream");
+        assert_eq!(
+            published.xml.namespace_for_prefix("fc"),
+            Some("http://www.onvif.org/ver20/analytics/humanface")
+        );
+        assert!(published.xml.content().iter().any(|entry| matches!(entry,
+            oxvif::events::QualifiedContent::Element(node) if node.local_name() == "VideoAnalytics")));
+    }
 }
 
 fn query() -> EventSearchRequest {
@@ -427,6 +437,68 @@ fn query() -> EventSearchRequest {
         },
         topic: Some(EventTopic::new("urn:events", "RuleEngine/Motion").unwrap()),
         include_start_state: true,
+    }
+}
+
+#[tokio::test]
+async fn decoder_writes_preserve_identity_without_serializing_codec_options() {
+    for (service, ns, op, tag, options) in [
+        (
+            MediaService::Media1,
+            MEDIA1,
+            "GetAudioDecoderConfiguration",
+            "Configuration",
+            "<v:Options/>",
+        ),
+        (
+            MediaService::Media2,
+            MEDIA2,
+            "GetAudioDecoderConfigurations",
+            "Configurations",
+            "<v:Options><t:Encoding>PCMU</t:Encoding><t:BitrateList><t:Items>64</t:Items></t:BitrateList><t:SampleRateList><t:Items>8</t:Items></t:SampleRateList></v:Options>",
+        ),
+    ] {
+        let config = |name| {
+            format!(
+                "<v:{tag} token=\"decoder\"><t:Name>{name}</t:Name><t:UseCount>7</t:UseCount></v:{tag}>"
+            )
+        };
+        let mut set = step(
+            ns,
+            "SetAudioDecoderConfiguration",
+            &[
+                "<Configuration token=\"decoder\"><tt:Name>renamed</tt:Name><tt:UseCount>7</tt:UseCount></Configuration>",
+            ],
+            "",
+        );
+        set.absent.extend(["Encoding", "SampleRate", "OutputToken"]);
+        if service == MediaService::Media1 {
+            set.required
+                .push("<ForcePersistence>true</ForcePersistence>");
+        } else {
+            set.absent.push("ForcePersistence");
+        }
+        let (script, client) = Script::client(vec![
+            step(ns, op, &["decoder"], &config("old")),
+            step(
+                ns,
+                "GetAudioDecoderConfigurationOptions",
+                &["decoder"],
+                options,
+            ),
+            set,
+            step(ns, op, &["decoder"], &config("renamed")),
+        ]);
+        let audio = client.audio_configurations(SERVICE, service).unwrap();
+        let result = audio
+            .set("decoder", "renamed", &AudioSettings::Decoder, None)
+            .await
+            .unwrap()
+            .observed
+            .unwrap();
+        assert_eq!(result.name, "renamed");
+        assert_eq!(result.use_count, 7);
+        script.done();
     }
 }
 

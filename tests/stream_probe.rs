@@ -490,3 +490,68 @@ async fn talkback_rejects_receive_only_track_without_setup() {
     assert_eq!(report.sent_frames, 0);
     server.await.unwrap();
 }
+
+#[cfg(feature = "talkback")]
+#[tokio::test]
+async fn talkback_cancellation_and_disconnect_preserve_sent_count() {
+    use oxvif::stream_probe::talkback::{Talkback, TalkbackEnd, TalkbackOptions};
+    for cancel in [true, false] {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (sent, ready) = oneshot::channel();
+        let server = tokio::spawn(async move {
+            let mut stream = listener.accept().await.unwrap().0;
+            let (_, seq) = request(&mut stream, "DESCRIBE").await;
+            response(&mut stream, seq, "200 OK", "Content-Type: application/sdp\r\n",
+                "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=Speaker\r\nt=0 0\r\nm=audio 0 RTP/AVP 0\r\na=control:talk\r\na=sendonly\r\n").await;
+            let (_, seq) = request(&mut stream, "SETUP").await;
+            response(
+                &mut stream,
+                seq,
+                "200 OK",
+                "Session: talk\r\nTransport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n",
+                "",
+            )
+            .await;
+            let (_, seq) = request(&mut stream, "PLAY").await;
+            response(&mut stream, seq, "200 OK", "", "").await;
+            let mut packet = [0; 176];
+            stream.read_exact(&mut packet).await.unwrap();
+            sent.send(()).unwrap();
+            if cancel {
+                let (_, seq) = request(&mut stream, "TEARDOWN").await;
+                response(&mut stream, seq, "200 OK", "", "").await;
+            }
+        });
+        let (input, owner) = Talkback::channel();
+        input.send([0; 160]).await.unwrap();
+        let report = owner
+            .run_until(
+                &format!("rtsp://{addr}/stream"),
+                "http://127.0.0.1/device",
+                None,
+                &TalkbackOptions::default(),
+                async move {
+                    ready.await.unwrap();
+                    if !cancel {
+                        future::pending::<()>().await;
+                    }
+                },
+            )
+            .await;
+        assert_eq!(report.sent_frames, 1);
+        assert_eq!(
+            report.end,
+            TalkbackEnd::Stopped(if cancel {
+                Outcome::Cancelled
+            } else {
+                Outcome::Io
+            })
+        );
+        assert_eq!(
+            report.teardown,
+            if cancel { Outcome::Passed } else { Outcome::Io }
+        );
+        server.await.unwrap();
+    }
+}

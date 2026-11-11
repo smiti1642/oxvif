@@ -113,3 +113,39 @@ async fn cancelling_download_does_not_publish_partial_file() {
     assert!(!dest.exists());
     assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
 }
+
+#[tokio::test]
+async fn competing_file_created_during_transfer_is_preserved() {
+    let temp = tempfile::tempdir().unwrap();
+    let destination = temp.path().join("recording.mp4");
+    let competing = destination.clone();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let mut stream = listener.accept().await.unwrap().0;
+        let mut request = Vec::new();
+        while !request.ends_with(b"\r\n\r\n") {
+            request.push(stream.read_u8().await.unwrap());
+        }
+        std::fs::write(competing, b"preserve").unwrap();
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\nnew")
+            .await
+            .unwrap();
+    });
+    let url = format!("http://{addr}/export");
+    assert_eq!(
+        download_until(
+            &url,
+            &url,
+            &destination,
+            &DownloadOptions::default(),
+            future::pending()
+        )
+        .await,
+        Err(DownloadError::Exists)
+    );
+    server.await.unwrap();
+    assert_eq!(std::fs::read(destination).unwrap(), b"preserve");
+    assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
+}

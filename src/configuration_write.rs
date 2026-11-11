@@ -24,7 +24,8 @@ impl ConfigurationWriteError {
     }
 
     pub(crate) fn after_send(error: OnvifError) -> Self {
-        if matches!(error, OnvifError::Soap(SoapError::Fault { .. })) {
+        if matches!(error, OnvifError::Soap(SoapError::Fault { ref code, .. }) if !code.trim().is_empty())
+        {
             Self::Refused(error)
         } else {
             Self::OutcomeUnknown(error)

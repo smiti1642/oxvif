@@ -19,7 +19,7 @@ pub enum RecordingSearchStopReason {
     ByteLimit,
     /// The cancellation handle was signalled.
     Cancelled,
-    /// FindRecordings failed before a usable token was acquired.
+    /// The find request failed before a usable token was acquired.
     FindFailed,
     /// A result request or its response parser failed.
     PollFailed,
@@ -40,7 +40,7 @@ impl fmt::Display for RecordingSearchStopReason {
             Self::ItemLimit => "item limit",
             Self::ByteLimit => "byte limit",
             Self::Cancelled => "cancelled",
-            Self::FindFailed => "FindRecordings failed",
+            Self::FindFailed => "find request failed",
             Self::PollFailed => "result request failed",
             Self::UnknownState => "unrecognized search state",
             Self::InvalidOptions => "invalid options",

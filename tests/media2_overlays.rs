@@ -122,6 +122,11 @@ async fn media2_overlays_are_scoped_and_reconcile_lost_replies() {
     let client = OnvifClient::new("http://mock/device").with_transport(capture.clone());
     let first = client.media2_overlays(MEDIA, "VSC_1").unwrap();
     let second = client.media2_overlays(MEDIA, "VSC_2").unwrap();
+    let capabilities = second.capabilities().await.unwrap();
+    assert_eq!(
+        (capabilities.osd, capabilities.mask),
+        (Some(true), Some(true))
+    );
     let osd_limit = second.osd_options().await.unwrap().max_per_text_type["Plain"];
     assert!(osd_limit > 0);
     let first_osds = first.osds().await.unwrap();
