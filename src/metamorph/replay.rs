@@ -88,9 +88,16 @@ impl ReplayResponder {
                     for action in [
                         "http://www.onvif.org/ver10/media/wsdl/GetOSD",
                         "http://www.onvif.org/ver10/media/wsdl/GetOSDs",
+                        "http://www.onvif.org/ver20/media/wsdl/GetOSDs",
                     ] {
                         retired.insert(action.to_owned());
                     }
+                }
+                Effect::MaskCommitted => {
+                    invalidated
+                        .lock()
+                        .unwrap_or_else(|p| p.into_inner())
+                        .insert("http://www.onvif.org/ver20/media/wsdl/GetMasks".to_owned());
                 }
                 Effect::AudioEncoderCommitted | Effect::MetadataCommitted => {
                     let mut retired = invalidated.lock().unwrap_or_else(|p| p.into_inner());

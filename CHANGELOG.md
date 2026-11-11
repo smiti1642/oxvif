@@ -63,6 +63,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add source-scoped Media2 text OSD and privacy mask workflows with typed
+  options, preflight checks, explicit writes and independent read-back.
+
 - Add optional layered RTSP diagnostics with trusted RTSPS, SDP codec
   identification and bounded interleaved RTP observation. CLI diagnosis
   opts in with `--rtsp-probe describe` or `--rtsp-probe packet`.

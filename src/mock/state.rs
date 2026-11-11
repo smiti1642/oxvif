@@ -1899,6 +1899,7 @@ pub struct MockState {
     on_change: Option<ChangeHook>,
     pub(crate) subscriptions: std::sync::Mutex<super::services::events::lifecycle::Runtime>,
     pub(crate) auth_replay: std::sync::Mutex<super::auth::ReplayCache>,
+    pub(crate) masks: std::sync::Mutex<super::services::masks::MaskState>,
 }
 
 /// Internal alias so service handlers keep reading `&SharedState` unchanged.
@@ -1912,6 +1913,7 @@ impl MockState {
             on_change: None,
             subscriptions: Default::default(),
             auth_replay: Default::default(),
+            masks: Default::default(),
         }
     }
 
@@ -1922,6 +1924,7 @@ impl MockState {
             on_change: None,
             subscriptions: Default::default(),
             auth_replay: Default::default(),
+            masks: Default::default(),
         }
     }
 

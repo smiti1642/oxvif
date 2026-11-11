@@ -805,6 +805,22 @@ println!("pan={:?} tilt={:?} zoom={:?} state={}",
 
 **`PtzStatus` fields:** `pan`, `tilt`, `zoom` (`Option<f32>`), `pan_tilt_status`, `zoom_status` (`String` — `"IDLE"` or `"MOVING"`), `utc_time` (`Option<String>`), `error` (`Option<String>` — device fault description if any).
 
+### Media2 overlays
+
+`session.media2_overlays(video_source_configuration_token)` binds OSD and
+mask operations to a resolved Media2 endpoint and one video-source
+configuration. Read `capabilities`, `osd_options` or `mask_options` before
+offering edits. Text OSD supports the standard plain/date/time fields. Images
+can be read and removed. Mask settings use normalized polygons and the
+reported effect and color options.
+
+Create, set and delete preflight the selected configuration and return the
+device's acknowledgement with an independent read-back result. A lost or
+invalid reply returns `OutcomeUnknown`. Reconcile by reading the configuration
+before attempting another write. Profiles sharing a source configuration
+can show the same overlay. On a device reporting `SingleColorOnly`, setting
+a mask color can update other masks sharing the video source.
+
 ### Typed PTZ motion
 
 Use `ptz_motion_capabilities` to read configuration defaults and the operation

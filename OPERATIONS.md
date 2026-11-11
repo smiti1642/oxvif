@@ -129,6 +129,9 @@ row in this file at all until 0.15.0, while the crate had implemented it since
 | `GetAudioOutputConfigurations` | ✓ |
 | `GetAudioDecoderConfigurations` | ✓ |
 | `GetVideoSourceModes` / `SetVideoSourceMode` | ✓ |
+| `GetOSDs` / `GetOSDOptions` / `DeleteOSD` | ✓ via `media2_overlays` |
+| `CreateOSD` / `SetOSD` | ✓ text OSD via `media2_overlays` |
+| `GetMasks` / `GetMaskOptions` / `CreateMask` / `SetMask` / `DeleteMask` | ✓ via `media2_overlays` |
 
 ### PTZ Service
 

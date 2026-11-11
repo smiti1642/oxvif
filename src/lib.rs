@@ -426,10 +426,12 @@ pub mod media_workflow;
 pub mod metamorph;
 #[cfg(feature = "mock")]
 pub mod mock;
+pub mod overlays;
 pub mod ptz_motion;
 pub mod recording;
 #[cfg(any(feature = "mock", feature = "health"))]
 pub(crate) mod redact;
+mod scoped_rpc;
 pub mod session;
 pub mod soap;
 #[cfg(feature = "stream-probe")]

@@ -266,6 +266,10 @@ impl OsdConfiguration {
     /// local name matches.
     pub(crate) fn to_xml_body(&self) -> String {
         let token_attr = format!(" token=\"{}\"", xml_escape(&self.token));
+        format!("<trt:OSD{token_attr}>{}</trt:OSD>", self.xml_contents())
+    }
+
+    pub(crate) fn xml_contents(&self) -> String {
         let text_el = self
             .text_string
             .as_ref()
@@ -282,12 +286,10 @@ impl OsdConfiguration {
             })
             .unwrap_or_default();
         format!(
-            "<trt:OSD{token_attr}>\
-               <tt:VideoSourceConfigurationToken>{vsc}</tt:VideoSourceConfigurationToken>\
+            "<tt:VideoSourceConfigurationToken>{vsc}</tt:VideoSourceConfigurationToken>\
                <tt:Type>{type_}</tt:Type>\
                {pos}\
-               {text_el}{img_el}\
-             </trt:OSD>",
+               {text_el}{img_el}",
             vsc = xml_escape(&self.video_source_config_token),
             type_ = xml_escape(&self.type_),
             pos = self.position.to_xml_body(),
@@ -356,8 +358,14 @@ impl OsdOptions {
             max_per_text_type: ["Plain", "Date", "Time", "DateAndTime"]
                 .into_iter()
                 .filter_map(|name| {
-                    opts.child("MaximumNumberOfOSDs")?
-                        .attr(name)?
+                    let maximum = opts.child("MaximumNumberOfOSDs")?;
+                    maximum
+                        .attr(name)
+                        .or_else(|| {
+                            (name == "Plain")
+                                .then(|| maximum.attr("PlainText"))
+                                .flatten()
+                        })?
                         .parse()
                         .ok()
                         .map(|n| (name.into(), n))

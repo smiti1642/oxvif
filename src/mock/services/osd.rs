@@ -14,12 +14,11 @@ use crate::mock::{
     },
 };
 
-const M: &str = "http://www.onvif.org/ver10/media/wsdl";
 const T: &str = "http://www.onvif.org/ver10/schema";
 
-fn response(op: &str, body: &str) -> String {
+fn response(ns: &str, op: &str, body: &str) -> String {
     soap(
-        &format!("xmlns:trt=\"{M}\""),
+        &format!("xmlns:trt=\"{ns}\""),
         &format!("<trt:{op}Response>{body}</trt:{op}Response>"),
     )
 }
@@ -55,7 +54,7 @@ fn unsupported() -> String {
     )
     .to_xml()
 }
-fn shape(node: &Node, ns: &str, fields: &[&str], attrs: &[&str]) -> Result<(), String> {
+pub(super) fn shape(node: &Node, ns: &str, fields: &[&str], attrs: &[&str]) -> Result<(), String> {
     if node
         .element_children()
         .any(|(uri, name, _)| uri != ns || !fields.contains(&name))
@@ -73,7 +72,7 @@ fn child<'a>(node: &'a Node, ns: &str, name: &str) -> Result<&'a Node, String> {
         .map_err(RequestError::to_fault)?
         .ok_or_else(|| RequestError::MissingField.to_fault())
 }
-fn optional(node: &Node, ns: &str, name: &str) -> Result<Option<String>, String> {
+pub(super) fn optional(node: &Node, ns: &str, name: &str) -> Result<Option<String>, String> {
     node.child(ns, name)
         .map_err(RequestError::to_fault)?
         .map(|n| {
@@ -89,7 +88,7 @@ fn optional(node: &Node, ns: &str, name: &str) -> Result<Option<String>, String>
 fn text(node: &Node, ns: &str, name: &str) -> Result<String, String> {
     optional(node, ns, name)?.ok_or_else(|| RequestError::MissingField.to_fault())
 }
-fn identity(value: &str) -> Result<(), String> {
+pub(super) fn identity(value: &str) -> Result<(), String> {
     if value.is_empty() || value.chars().count() > 64 {
         return Err(RequestError::EmptyField.to_fault());
     }
@@ -102,7 +101,7 @@ fn number(value: &str, field: &str) -> Result<f32, String> {
     }
     Ok(value)
 }
-fn source(state: &DeviceState, token: &str) -> Result<(), String> {
+pub(super) fn source(state: &DeviceState, token: &str) -> Result<(), String> {
     match state
         .video_source_configs
         .iter()
@@ -114,9 +113,14 @@ fn source(state: &DeviceState, token: &str) -> Result<(), String> {
         _ => Err(snapshot()),
     }
 }
-fn selector(operation: &Node, field: &str, required: bool) -> Result<Option<String>, String> {
-    shape(operation, M, &[field], &[])?;
-    let token = optional(operation, M, field)?;
+fn selector(
+    ns: &str,
+    operation: &Node,
+    field: &str,
+    required: bool,
+) -> Result<Option<String>, String> {
+    shape(operation, ns, &[field], &[])?;
+    let token = optional(operation, ns, field)?;
     if required && token.is_none() {
         return Err(RequestError::MissingField.to_fault());
     }
@@ -126,12 +130,31 @@ fn selector(operation: &Node, field: &str, required: bool) -> Result<Option<Stri
     Ok(token)
 }
 
-pub(crate) fn list(state: &SharedState, operation: &Node) -> String {
+pub(crate) fn list(state: &SharedState, ns: &str, operation: &Node) -> String {
     let run = || {
-        let token = selector(operation, "ConfigurationToken", false)?;
+        let osd_token = if ns == crate::scoped_rpc::MEDIA2 {
+            shape(operation, ns, &["OSDToken", "ConfigurationToken"], &[])?;
+            optional(operation, ns, "OSDToken")?
+        } else {
+            shape(operation, ns, &["ConfigurationToken"], &[])?;
+            None
+        };
+        let token = optional(operation, ns, "ConfigurationToken")?;
+        for token in osd_token.iter().chain(token.iter()) {
+            identity(token)?;
+        }
         let s = state.read();
         if let Some(token) = &token {
             source(&s, token)?;
+        }
+        if let Some(osd_token) = &osd_token {
+            let entry = &s.osd.osds[index(&s, osd_token)?];
+            if token
+                .as_ref()
+                .is_some_and(|token| *token != entry.video_source_config_token)
+            {
+                return Err(missing(osd_token));
+            }
         }
         let body = s
             .osd
@@ -142,18 +165,19 @@ pub(crate) fn list(state: &SharedState, operation: &Node) -> String {
                     .as_ref()
                     .is_none_or(|t| *t == o.video_source_config_token)
             })
+            .filter(|entry| osd_token.as_ref().is_none_or(|token| *token == entry.token))
             .map(super::media::render_osd_entry)
             .collect::<String>();
-        Ok(response("GetOSDs", &body))
+        Ok(response(ns, "GetOSDs", &body))
     };
     run().unwrap_or_else(|e: String| e)
 }
-pub(crate) fn options(state: &SharedState, operation: &Node) -> String {
+pub(crate) fn options(state: &SharedState, ns: &str, operation: &Node) -> String {
     let run = || {
-        let token = selector(operation, "ConfigurationToken", true)?
+        let token = selector(ns, operation, "ConfigurationToken", true)?
             .ok_or_else(|| RequestError::MissingField.to_fault())?;
         source(&state.read(), &token)?;
-        Ok(super::media::resp_osd_options())
+        Ok(super::media::resp_osd_options(ns))
     };
     run().unwrap_or_else(|e: String| e)
 }
@@ -187,9 +211,9 @@ fn color(node: &Node) -> Result<OsdColorEntry, String> {
     })
 }
 
-fn candidate(operation: &Node, set: bool) -> Result<OsdEntry, String> {
-    shape(operation, M, &["OSD"], &[])?;
-    let o = child(operation, M, "OSD")?;
+fn candidate(ns: &str, operation: &Node, set: bool) -> Result<OsdEntry, String> {
+    shape(operation, ns, &["OSD"], &[])?;
+    let o = child(operation, ns, "OSD")?;
     shape(
         o,
         T,
@@ -397,9 +421,14 @@ fn index(s: &DeviceState, token: &str) -> Result<usize, String> {
     }
     Ok(first)
 }
-pub(crate) fn create(state: &SharedState, operation: &Node, effect: &mut Option<Effect>) -> String {
+pub(crate) fn create(
+    state: &SharedState,
+    ns: &str,
+    operation: &Node,
+    effect: &mut Option<Effect>,
+) -> String {
     let mut run = || {
-        let mut entry = candidate(operation, false)?;
+        let mut entry = candidate(ns, operation, false)?;
         let token = state.modify_returning_if(
             |s| {
                 source(s, &entry.video_source_config_token)?;
@@ -423,15 +452,21 @@ pub(crate) fn create(state: &SharedState, operation: &Node, effect: &mut Option<
         )?;
         *effect = Some(Effect::OsdCommitted);
         Ok(response(
+            ns,
             "CreateOSD",
             &format!("<trt:OSDToken>{token}</trt:OSDToken>"),
         ))
     };
     run().unwrap_or_else(|e: String| e)
 }
-pub(crate) fn set(state: &SharedState, operation: &Node, effect: &mut Option<Effect>) -> String {
+pub(crate) fn set(
+    state: &SharedState,
+    ns: &str,
+    operation: &Node,
+    effect: &mut Option<Effect>,
+) -> String {
     let mut run = || {
-        let entry = candidate(operation, true)?;
+        let entry = candidate(ns, operation, true)?;
         state.modify_returning_if(
             |s| {
                 let i = index(s, &entry.token)?;
@@ -446,13 +481,18 @@ pub(crate) fn set(state: &SharedState, operation: &Node, effect: &mut Option<Eff
             Result::is_ok,
         )?;
         *effect = Some(Effect::OsdCommitted);
-        Ok(response("SetOSD", ""))
+        Ok(response(ns, "SetOSD", ""))
     };
     run().unwrap_or_else(|e: String| e)
 }
-pub(crate) fn delete(state: &SharedState, operation: &Node, effect: &mut Option<Effect>) -> String {
+pub(crate) fn delete(
+    state: &SharedState,
+    ns: &str,
+    operation: &Node,
+    effect: &mut Option<Effect>,
+) -> String {
     let mut run = || {
-        let token = selector(operation, "OSDToken", true)?
+        let token = selector(ns, operation, "OSDToken", true)?
             .ok_or_else(|| RequestError::MissingField.to_fault())?;
         state.modify_returning_if(
             |s| -> Result<(), String> {
@@ -463,7 +503,7 @@ pub(crate) fn delete(state: &SharedState, operation: &Node, effect: &mut Option<
             Result::is_ok,
         )?;
         *effect = Some(Effect::OsdCommitted);
-        Ok(response("DeleteOSD", ""))
+        Ok(response(ns, "DeleteOSD", ""))
     };
     run().unwrap_or_else(|e: String| e)
 }

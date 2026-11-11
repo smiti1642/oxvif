@@ -113,6 +113,9 @@
 | `GetAudioOutputConfigurations` | ✓ |
 | `GetAudioDecoderConfigurations` | ✓ |
 | `GetVideoSourceModes` / `SetVideoSourceMode` | ✓ |
+| `GetOSDs` / `GetOSDOptions` / `DeleteOSD` | ✓ 透過 `media2_overlays` |
+| `CreateOSD` / `SetOSD` | ✓ 透過 `media2_overlays` 設定文字 OSD |
+| `GetMasks` / `GetMaskOptions` / `CreateMask` / `SetMask` / `DeleteMask` | ✓ 透過 `media2_overlays` |
 
 ### PTZ Service
 

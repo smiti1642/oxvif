@@ -11,6 +11,7 @@ pub(crate) enum Effect {
     AudioEncoderCommitted,
     MetadataCommitted,
     OsdCommitted,
+    MaskCommitted,
 }
 
 pub(crate) type EffectObserver = Arc<dyn Fn(Effect) + Send + Sync>;
@@ -41,5 +42,11 @@ pub(crate) fn tracks_commit(action: &str) -> bool {
             | "http://www.onvif.org/ver10/media/wsdl/CreateOSD"
             | "http://www.onvif.org/ver10/media/wsdl/SetOSD"
             | "http://www.onvif.org/ver10/media/wsdl/DeleteOSD"
+            | "http://www.onvif.org/ver20/media/wsdl/CreateOSD"
+            | "http://www.onvif.org/ver20/media/wsdl/SetOSD"
+            | "http://www.onvif.org/ver20/media/wsdl/DeleteOSD"
+            | "http://www.onvif.org/ver20/media/wsdl/CreateMask"
+            | "http://www.onvif.org/ver20/media/wsdl/SetMask"
+            | "http://www.onvif.org/ver20/media/wsdl/DeleteMask"
     )
 }

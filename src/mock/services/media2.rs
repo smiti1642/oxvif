@@ -698,8 +698,8 @@ pub fn resp_service_capabilities_media2() -> String {
           <tr2:Capabilities SnapshotUri="true"
                             Rotation="false"
                             VideoSourceMode="true"
-                            OSD="false"
-                            Mask="false"
+                            OSD="true"
+                            Mask="true"
                             SourceMask="false"
                             WebRTC="0">
             <tr2:ProfileCapabilities MaximumNumberOfProfiles="{limit}"

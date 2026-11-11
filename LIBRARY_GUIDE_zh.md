@@ -468,6 +468,19 @@ UDP unicast、UDP multicast 和 HTTP tunneling。`media_stream_uri_with_capabili
 
 ## PTZ 方法
 
+### Media2 疊加與隱私遮罩
+
+`session.media2_overlays(video_source_configuration_token)` 使用 Session 的
+Media2 端點，並將操作綁定至指定的 video-source configuration。可先讀取
+`capabilities`、`osd_options` 或 `mask_options` 取得裝置限制。文字 OSD
+支援一般文字與日期／時間設定，影像 OSD 可讀取及移除。隱私遮罩使用
+正規化多邊形與裝置宣告的效果及色彩選項。
+
+建立、更新和刪除會先檢查指定的 configuration，再送出一次寫入並獨立
+讀回。回覆遺失或無效會回傳 `OutcomeUnknown`。再次寫入前可先讀取
+configuration 確認現況。共用 configuration 的 profiles 可能呈現相同
+overlay，宣告 `SingleColorOnly` 的裝置也可能同步更新同一來源的遮罩顏色。
+
 ### 型別化 PTZ 移動
 
 `ptz_motion_capabilities` 讀取指定 configuration 的預設值、操作空間與 timeout

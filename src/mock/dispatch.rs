@@ -2,6 +2,9 @@ use crate::mock::effect::Effect;
 use crate::mock::helpers::{resp_empty, resp_soap_fault};
 use crate::mock::services::{device, events, imaging, media, media2, osd, ptz, recording};
 use crate::mock::state::SharedState;
+use crate::scoped_rpc::MEDIA2;
+
+const MEDIA1: &str = "http://www.onvif.org/ver10/media/wsdl";
 
 #[cfg(any(feature = "metamorph", test))]
 pub fn dispatch(action: &str, base: &str, state: &SharedState, body: &str) -> String {
@@ -287,11 +290,11 @@ fn dispatch_media(
             media::resp_audio_encoder_configuration_options(state, operation)
         }
         "GetOSD" => media::resp_osd(state, operation),
-        "GetOSDs" => osd::list(state, operation),
-        "SetOSD" => osd::set(state, operation, effect),
-        "CreateOSD" => osd::create(state, operation, effect),
-        "DeleteOSD" => osd::delete(state, operation, effect),
-        "GetOSDOptions" => osd::options(state, operation),
+        "GetOSDs" => osd::list(state, MEDIA1, operation),
+        "SetOSD" => osd::set(state, MEDIA1, operation, effect),
+        "CreateOSD" => osd::create(state, MEDIA1, operation, effect),
+        "DeleteOSD" => osd::delete(state, MEDIA1, operation, effect),
+        "GetOSDOptions" => osd::options(state, MEDIA1, operation),
         _ => return None,
     })
 }
@@ -311,6 +314,14 @@ fn dispatch_media2(
         // success respectively — so Media1 and Media2 answered differently for
         // one device and never converged.
         "GetProfiles" => media2::resp_profiles_media2(state, operation),
+        "GetOSDs" => osd::list(state, MEDIA2, operation),
+        "SetOSD" => osd::set(state, MEDIA2, operation, effect),
+        "CreateOSD" => osd::create(state, MEDIA2, operation, effect),
+        "DeleteOSD" => osd::delete(state, MEDIA2, operation, effect),
+        "GetOSDOptions" => osd::options(state, MEDIA2, operation),
+        "GetMasks" | "GetMaskOptions" | "CreateMask" | "SetMask" | "DeleteMask" => {
+            crate::mock::services::masks::handle(op, state, body, operation, effect)
+        }
         "CreateProfile" => media2::handle_create_profile_media2(state, operation, effect),
         "DeleteProfile" => media2::handle_delete_profile_media2(state, operation, effect),
         // Media2's generic binding covers all five modeled profile slots;

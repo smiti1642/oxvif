@@ -311,7 +311,7 @@ impl OnvifSession {
         }
     }
 
-    fn trusted_media(&self, service: MediaService) -> Result<reqwest::Url, OnvifError> {
+    pub(crate) fn trusted_media(&self, service: MediaService) -> Result<reqwest::Url, OnvifError> {
         let url = self
             .media_route(service)
             .0

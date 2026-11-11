@@ -1127,13 +1127,18 @@ pub fn resp_osd(state: &SharedState, operation: &crate::mock::request::Node) -> 
 /// stops the walk at any child whose type is not a complex type, so the whole
 /// invented subtree was skipped rather than judged. Its `SIMPLE-TYPE-KIDS`
 /// rule is what reports it now.
-pub fn resp_osd_options() -> String {
+pub(super) fn resp_osd_options(ns: &str) -> String {
+    let plain_attr = if ns == crate::scoped_rpc::MEDIA2 {
+        "PlainText"
+    } else {
+        "Plain"
+    };
     soap(
-        r#"xmlns:trt="http://www.onvif.org/ver10/media/wsdl""#,
+        &format!(r#"xmlns:trt="{ns}""#),
         &format!(
             r#"<trt:GetOSDOptionsResponse>
           <trt:OSDOptions>
-            <tt:MaximumNumberOfOSDs Total="{OSD_QUOTA_TOTAL}" Plain="{OSD_QUOTA_PLAIN}" Date="{OSD_QUOTA_DATE}" Time="{OSD_QUOTA_TIME}" DateAndTime="{OSD_QUOTA_DATE_AND_TIME}"/>
+            <tt:MaximumNumberOfOSDs Total="{OSD_QUOTA_TOTAL}" {plain_attr}="{OSD_QUOTA_PLAIN}" Date="{OSD_QUOTA_DATE}" Time="{OSD_QUOTA_TIME}" DateAndTime="{OSD_QUOTA_DATE_AND_TIME}"/>
             <tt:Type>Text</tt:Type>
             <tt:Type>Image</tt:Type>
             <tt:PositionOption>UpperLeft</tt:PositionOption>

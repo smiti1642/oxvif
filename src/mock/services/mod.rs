@@ -2,6 +2,7 @@ pub(crate) mod audio_metadata;
 pub mod device;
 pub mod events;
 pub mod imaging;
+pub(crate) mod masks;
 pub mod media;
 pub mod media2;
 pub(crate) mod osd;
