@@ -104,7 +104,7 @@ fn required<'a>(node: &'a Node, ns: &str, name: &str) -> Result<&'a str, String>
 
 // Deliberately bounded duration subset: integer PT hours/minutes/seconds,
 // including combinations. Calendar and fractional durations are not modeled.
-fn duration(value: &str) -> Option<u64> {
+pub(crate) fn duration(value: &str) -> Option<u64> {
     let mut rest = value.strip_prefix("PT")?;
     let mut total = 0u64;
     let mut previous = 0;

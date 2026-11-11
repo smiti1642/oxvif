@@ -54,7 +54,7 @@ pub(crate) fn respond_at_with_effect(
         Service::Imaging => dispatch_imaging(op, state, body),
         Service::Events => dispatch_events(op, base, state, operation, endpoint, policy),
         Service::Recording => dispatch_recording(op, state, body, operation),
-        Service::Search => dispatch_search(op, state),
+        Service::Search => dispatch_search(op, state, operation, policy),
         Service::Replay => dispatch_replay(op, state, body),
     };
 
@@ -498,12 +498,17 @@ fn dispatch_recording(
     })
 }
 
-fn dispatch_search(op: &str, state: &SharedState) -> Option<String> {
+fn dispatch_search(
+    op: &str,
+    state: &SharedState,
+    operation: &crate::mock::request::Node,
+    policy: &crate::mock::policy::AckOnlyPolicy,
+) -> Option<String> {
     Some(match op {
         "GetServiceCapabilities" => recording::resp_search_service_capabilities(),
-        "FindRecordings" => recording::resp_find_recordings(),
-        "GetRecordingSearchResults" => recording::resp_recording_search_results(state),
-        "EndSearch" => recording::resp_end_search(),
+        "FindRecordings" | "GetRecordingSearchResults" | "GetSearchState" | "EndSearch" => {
+            recording::search::handle(op, state, operation, policy)
+        }
         _ => return None,
     })
 }

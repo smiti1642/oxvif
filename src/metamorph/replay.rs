@@ -198,7 +198,10 @@ impl ReplayResponder {
 impl Responder for ReplayResponder {
     async fn respond(&self, ctx: &RequestCtx<'_>) -> Option<String> {
         // A recorded body has no live endpoint identity or volatile queue.
-        if self.track_commits && crate::mock::is_event_lifecycle(ctx.action) {
+        if self.track_commits
+            && (crate::mock::is_event_lifecycle(ctx.action)
+                || crate::mock::is_search_lifecycle(ctx.action))
+        {
             return None;
         }
         // A classified receipt is never a committed synthetic mutation. The

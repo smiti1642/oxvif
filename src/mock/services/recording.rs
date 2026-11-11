@@ -20,6 +20,7 @@ use crate::mock::xml_parse::extract_tag;
 
 const TRC: &str = r#"xmlns:trc="http://www.onvif.org/ver10/recording/wsdl""#;
 const TSE: &str = r#"xmlns:tse="http://www.onvif.org/ver10/search/wsdl""#;
+pub(crate) mod search;
 const TRP: &str = r#"xmlns:trp="http://www.onvif.org/ver10/replay/wsdl""#;
 
 // ── Rendering ────────────────────────────────────────────────────────────────
@@ -419,69 +420,6 @@ pub fn resp_recording_job_state(
 
 // ── Search responses ─────────────────────────────────────────────────────────
 
-pub fn resp_find_recordings() -> String {
-    soap(
-        TSE,
-        r#"<tse:FindRecordingsResponse>
-          <tse:SearchToken>search_mock_001</tse:SearchToken>
-        </tse:FindRecordingsResponse>"#,
-    )
-}
-
-/// The search returns whatever recordings exist now.
-///
-/// The mock keeps no per-search cursor: `FindRecordings` hands out one token and
-/// this renders the whole list against it. That is a **declared** simplification
-/// — a real device pages and expires searches — and it is stated here rather
-/// than left to be inferred, per audit §6.
-///
-/// A recording created through `CreateRecording` has no time bounds yet, so its
-/// `Earliest`/`Latest` are omitted rather than faked; both are optional in
-/// `tt:RecordingInformation`.
-pub fn resp_recording_search_results(state: &SharedState) -> String {
-    let items: String = state
-        .read()
-        .recording
-        .recordings
-        .iter()
-        .map(|r| {
-            let bounds = if r.earliest.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    "<tt:EarliestRecording>{}</tt:EarliestRecording>\
-                     <tt:LatestRecording>{}</tt:LatestRecording>",
-                    r.earliest, r.latest
-                )
-            };
-            format!(
-                r#"<tt:RecordingInformation>
-                  <tt:RecordingToken>{token}</tt:RecordingToken>
-                  {source}
-                  {bounds}
-                  <tt:Content>{content}</tt:Content>
-                  <tt:RecordingStatus>{status}</tt:RecordingStatus>
-                </tt:RecordingInformation>"#,
-                token = r.token,
-                source = render_source(r),
-                content = r.content,
-                status = r.status,
-            )
-        })
-        .collect();
-    soap(
-        TSE,
-        &format!(
-            r#"<tse:GetRecordingSearchResultsResponse>
-          <tse:ResultList>
-            <tt:SearchState>Completed</tt:SearchState>
-            {items}
-          </tse:ResultList>
-        </tse:GetRecordingSearchResultsResponse>"#
-        ),
-    )
-}
-
 /// `EndSearchResponse` is **not** an empty response.
 ///
 /// `search.wsdl` declares one required child, `Endpoint`, an `xs:dateTime`
@@ -493,8 +431,8 @@ pub fn resp_recording_search_results(state: &SharedState) -> String {
 /// The clock is `soap::security::unix_secs_to_iso8601`, the same conversion
 /// `GetSystemDateAndTime` and `PTZStatus/UtcTime` use, so the mock has one
 /// clock rather than three.
-/// Synthetic dispatch requires explicit SearchEnd acknowledgment-only opt-in;
-/// the returned clock value is fixture data, not evidence that a search ended.
+/// FindRecordings has no defined temporal endpoint. Synthetic stateful
+/// termination and the opt-in receipt both return a schema-shaped timestamp.
 pub fn resp_end_search() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

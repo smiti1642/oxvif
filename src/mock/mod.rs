@@ -232,6 +232,8 @@ pub(crate) mod responder;
 mod services;
 #[cfg(feature = "metamorph")]
 pub(crate) use services::events::lifecycle::is_lifecycle as is_event_lifecycle;
+#[cfg(feature = "metamorph")]
+pub(crate) use services::recording::search::is_lifecycle as is_search_lifecycle;
 mod transport;
 mod xml_parse;
 

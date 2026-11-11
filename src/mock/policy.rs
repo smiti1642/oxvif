@@ -128,9 +128,11 @@ impl AckOnlyPolicy {
         let operation = AckOnlyOperation::for_action(action)?;
         if matches!(
             operation,
-            AckOnlyOperation::EventsRenew | AckOnlyOperation::EventsUnsubscribe
+            AckOnlyOperation::EventsRenew
+                | AckOnlyOperation::EventsUnsubscribe
+                | AckOnlyOperation::SearchEnd
         ) {
-            return None; // modeled pull-point handlers own default validation
+            return None; // modeled lifecycle handlers own default validation
         }
         if self.0.contains(&operation) {
             return None;

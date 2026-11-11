@@ -503,6 +503,13 @@ fn default_fault(index: usize) -> SoapError {
             subcode: Some("mock:RequestPolicy".into()),
             detail: None,
         }
+    } else if index == 10 {
+        SoapError::Fault {
+            code: "s:Sender".into(),
+            reason: "Unknown or expired recording search token".into(),
+            subcode: Some("ter:InvalidArgVal".into()),
+            detail: None,
+        }
     } else {
         SoapError::Fault {
             code: "s:Receiver".into(),

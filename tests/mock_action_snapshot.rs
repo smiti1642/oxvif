@@ -48,7 +48,6 @@ const IFACE: &str = "eth0";
 const RECORDING_TOKEN: &str = "Rec_001";
 const TRACK: &str = "VIDEO001";
 const JOB: &str = "Job_001";
-const SEARCH_TOKEN: &str = "search_mock_001";
 const VS_MODE: &str = "Mode_1";
 
 /// A client wired to a *fresh* mock device. One per probe, so a write in
@@ -297,10 +296,7 @@ const EXPECTED: &[(&str, &str)] = &[
     ("get_recording_job_state", "ok"),
     ("find_recordings", "ok"),
     ("get_recording_search_results", "ok"),
-    (
-        "end_search",
-        "soap-fault:s:Receiver:This mock does not model the requested effect; explicitly opt in to acknowledgment-only behavior",
-    ),
+    ("end_search", "ok"),
     ("get_replay_uri", "ok"),
 ];
 
@@ -954,12 +950,32 @@ async fn observed() -> Vec<(&'static str, String)> {
         "find_recordings",
         find_recordings(SEARCH, Some(10), "PT60S")
     );
-    probe!(
-        out,
-        "get_recording_search_results",
-        get_recording_search_results(SEARCH, SEARCH_TOKEN, 10, "PT5S")
-    );
-    probe!(out, "end_search", end_search(SEARCH, SEARCH_TOKEN));
+    {
+        let client = fresh();
+        let token = client
+            .find_recordings(SEARCH, Some(10), "PT60S")
+            .await
+            .unwrap();
+        out.push((
+            "get_recording_search_results",
+            outcome(
+                client
+                    .get_recording_search_results(SEARCH, &token, 10, "PT5S")
+                    .await,
+            ),
+        ));
+    }
+    {
+        let client = fresh();
+        let token = client
+            .find_recordings(SEARCH, Some(10), "PT60S")
+            .await
+            .unwrap();
+        out.push((
+            "end_search",
+            outcome(client.end_search(SEARCH, &token).await),
+        ));
+    }
     probe!(
         out,
         "get_replay_uri",
@@ -979,8 +995,8 @@ async fn observed() -> Vec<(&'static str, String)> {
 /// individually) and notification listeners (free functions returning a
 /// stream, not a single request/response).
 ///
-/// Each operation runs against its own fresh `MockTransport`, so no write
-/// leaks into the next probe and the snapshot is order-independent.
+/// Each operation runs against its own fresh `MockTransport`. Search polls
+/// and termination first acquire a token on their own transport.
 ///
 /// The pass/fail set lives in `EXPECTED` above, written out by hand. When a
 /// later stage changes what the mock answers, this test fails and the

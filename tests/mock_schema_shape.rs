@@ -1534,7 +1534,7 @@ fn body_for(op: &str) -> &'static str {
         "GetOSD" => "<OSDToken>OSD_1</OSDToken>",
         "GetRecordingJobState" => "<JobToken>Job_001</JobToken>",
         "GetReplayUri" => "<RecordingToken>Rec_001</RecordingToken>",
-        "GetRecordingSearchResults" => "<SearchToken>Search_1</SearchToken>",
+        "FindRecordings" => "<Scope/><KeepAliveTime>PT60S</KeepAliveTime>",
         _ => "",
     }
 }
@@ -1691,8 +1691,18 @@ async fn mock_output_matches_the_onvif_schema() {
                 continue;
             }
             let op = uri.rsplit('/').next().unwrap_or("");
-            let body =
-                identified_probe_request(uri, &format!("{}{}", body_for(op), extra_body(op)));
+            let fields = if matches!(op, "GetRecordingSearchResults" | "EndSearch") {
+                let client = oxvif::OnvifClient::new("http://mock")
+                    .with_transport(std::sync::Arc::new(transport.clone()));
+                let token = client
+                    .find_recordings("http://mock", None, "PT60S")
+                    .await
+                    .unwrap();
+                format!("<SearchToken>{token}</SearchToken>")
+            } else {
+                format!("{}{}", body_for(op), extra_body(op))
+            };
+            let body = identified_probe_request(uri, &fields);
             let xml = transport
                 .soap_post("http://mock", uri, body.clone())
                 .await
