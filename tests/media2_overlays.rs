@@ -2,7 +2,7 @@
 
 use std::sync::{
     Arc,
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
 use oxvif::{
@@ -18,7 +18,7 @@ const NS: &str = "http://www.onvif.org/ver20/media/wsdl";
 
 struct Capture {
     mock: MockTransport,
-    lost_creates: AtomicUsize,
+    lose_next_create: AtomicBool,
     requests: AtomicUsize,
 }
 
@@ -61,14 +61,7 @@ impl Transport for Capture {
             }
         }
         let result = self.mock.soap_post(url, action, body).await;
-        if operation == Some("CreateMask")
-            && self
-                .lost_creates
-                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
-                    value.checked_sub(1)
-                })
-                .is_ok()
-        {
+        if operation == Some("CreateMask") && self.lose_next_create.swap(false, Ordering::SeqCst) {
             return Err(TransportError::Deadline);
         }
         result
@@ -116,7 +109,7 @@ async fn media2_overlays_are_scoped_and_reconcile_lost_replies() {
     }));
     let capture = Arc::new(Capture {
         mock: MockTransport::with_state(mock),
-        lost_creates: AtomicUsize::new(0),
+        lose_next_create: AtomicBool::new(false),
         requests: AtomicUsize::new(0),
     });
     let client = OnvifClient::new("http://mock/device").with_transport(capture.clone());
@@ -213,7 +206,7 @@ async fn media2_overlays_are_scoped_and_reconcile_lost_replies() {
             .unwrap()
     );
 
-    capture.lost_creates.store(1, Ordering::SeqCst);
+    capture.lose_next_create.store(true, Ordering::SeqCst);
     assert!(matches!(
         second.create_mask(&mask()).await,
         Err(OverlayWriteError::OutcomeUnknown(_))

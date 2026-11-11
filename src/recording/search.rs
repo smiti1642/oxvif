@@ -389,7 +389,7 @@ impl RecordingSearch {
         self.0.run().await.map(report).map_err(|(data, cause)| {
             Box::new(RecordingSearchFailure {
                 report: report(data),
-                cause,
+                cause: cause.map(|error| *error),
             })
         })
     }
@@ -436,7 +436,7 @@ pub(crate) struct SearchReportData<T> {
     pub(crate) cleanup: Arc<RecordingSearchCleanup>,
 }
 
-type SearchOutcome<T> = Result<SearchReportData<T>, (SearchReportData<T>, Option<OnvifError>)>;
+type SearchOutcome<T> = Result<SearchReportData<T>, (SearchReportData<T>, Option<Box<OnvifError>>)>;
 
 struct RecordingQuery {
     client: OnvifClient,
@@ -542,7 +542,7 @@ impl<Q: SearchQuery> SearchOwner<Q> {
         if reason == RecordingSearchStopReason::Completed {
             Ok(report)
         } else {
-            Err((report, cause))
+            Err((report, cause.map(Box::new)))
         }
     }
     /// Close local ownership and attempt remote EndSearch once within its budget.

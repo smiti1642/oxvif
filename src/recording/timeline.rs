@@ -467,7 +467,7 @@ impl EventSearch {
             .map_err(|(data, cause)| {
                 Box::new(EventSearchFailure {
                     report: EventSearchReport(data),
-                    cause,
+                    cause: cause.map(|error| *error),
                 })
             })
     }
