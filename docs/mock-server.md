@@ -183,19 +183,17 @@ now checked at the common synthetic boundary described below.
 | `…/ver10/device/wsdl/` | `dispatch_device` | 38 |
 | `…/ver10/deviceio/wsdl/` | `dispatch_device_io` | 1 |
 | `…/ver10/media/wsdl/` | `dispatch_media` | 33 |
-| `…/ver20/media/wsdl/` | `dispatch_media2` | 27 |
+| `…/ver20/media/wsdl/` | `dispatch_media2` | 37 |
 | `…/ver20/ptz/wsdl/` | `dispatch_ptz` | 27 |
 | `…/ver20/imaging/wsdl/` | `dispatch_imaging` | 8 |
 | Exact ONVIF Events / OASIS WSN port paths | `dispatch_events` | 8 |
 | `…/ver10/recording/wsdl/` | `dispatch_recording` | 11 |
-| `…/ver10/search/wsdl/` | `dispatch_search` | 4 |
+| `…/ver10/search/wsdl/` | `dispatch_search` | 5 |
 | `…/ver10/replay/wsdl/` | `dispatch_replay` | 2 |
 
-**159 routes in this candidate**, including the two new Media synchronization
-operations. Version 0.15.0 had 157; its `GetDigitalInputs` moved from
-`dispatch_device` to `dispatch_device_io`, it was not added. The `deviceio`
-prefix is lowercase because that is how `deviceio.wsdl` spells its soapActions,
-while the elements it declares are in `…/ver10/deviceIO/wsdl`.
+The dispatcher handles **170 Actions**, including Media2 OSD and privacy masks
+and Search `GetSearchState`. The `deviceio` Action prefix follows the spelling
+in `deviceio.wsdl`, and its elements are in `…/ver10/deviceIO/wsdl`.
 
 Events is doubly irregular: its action URIs carry a
 portType segment *and* a `Request` suffix, so its operation names are
@@ -1388,7 +1386,7 @@ check whether it is pinned or incidental.
 
 | Guarantee | Test |
 |---|---|
-| Inventoried client Actions are routed (159 routes) | `mock_handles_every_action_the_client_can_send` (`src/mock/dispatch.rs`); routing is not complete field/effect coverage |
+| Inventoried client Actions are routed (169 routes) | [Source inventory](active/mock-fidelity-source-audit.md), dispatcher smoke tests, and [Media2 overlay tests](../tests/media2_overlays.rs) |
 | No response repeats an attribute | `no_response_declares_an_attribute_twice` |
 | No response uses an undeclared prefix | `every_response_binds_the_prefixes_it_uses` |
 | The 49 selected write/read pairs round-trip | `tests/mock_roundtrip.rs` — does not cover every effectful operation |

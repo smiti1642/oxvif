@@ -1737,7 +1737,7 @@ match client.get_capabilities().await {
 
 ## Testing without a real camera
 
-A built-in mock ONVIF device routes all 159 implemented SOAP actions. Modeled
+A built-in mock ONVIF device routes 170 SOAP actions. Modeled
 writes persist and corresponding getters reflect them; routing coverage does not
 mean every effect is modeled. Classified reset, auxiliary, maintenance,
 subscription/synchronization and search-ending stubs require individual
@@ -1919,7 +1919,7 @@ Both default to **no authentication** (frictionless tests) — call `.with_auth(
 WS-Security. State is in-memory; opt into persistence via `MockState::set_on_change`.
 
 > **Full reference: [`docs/mock-server.md`](docs/mock-server.md).** What the mock
-> answers for all 159 operations, which are state-backed and which are static,
+> answers for the routed operations, which are state-backed and which are static,
 > the complete seeded fixture, worked request/response examples, the fault
 > catalogue, and what it deliberately does not model. Essential reading if you
 > drive it from a non-Rust ONVIF client.

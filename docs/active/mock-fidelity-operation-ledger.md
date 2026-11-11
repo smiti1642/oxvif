@@ -2,21 +2,21 @@
 
 [English](mock-fidelity-operation-ledger.md) | [繁體中文](mock-fidelity-operation-ledger_zh.md)
 
-## Current calibration (2026-09-22)
+## Current calibration (2026-11-11)
 
-Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+Source baseline: `001c787`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
 
 | Category | Disposition and evidence |
 | --- | --- |
-| Confirmed | Maintained inventory, not a standalone implementation backlog. The standing checker reconciles 159 routes, 161 Action sites and the reader index. The two B16 routes are implemented; their PARTIAL columns describe broader field/fault/effect audit coverage. |
+| Confirmed | Maintained inventory, not a standalone implementation backlog. The standing checker reconciles 170 routes, 174 client Action sites and the reader index. The two B16 routes are implemented; their PARTIAL columns describe broader field/fault/effect audit coverage. |
 | Remaining | Each row keeps its W owner and fidelity axes. W26 integration completion does not make actual synchronization effects modeled; broader Media work belongs to W10/W16/W17. Do not mark all PARTIAL rows DONE because the route exists. |
 | Next step / exit criteria | Before modifying a route, open its W card; after the batch update the row and both language inventories, run [the checker](check-mock-fidelity-inventory.ps1), and link exact semantic tests. Inventory equality is a maintenance gate, not conformance acceptance. |
 
 Initial source baseline: `b134f73`, 2026-09-10; rows include subsequent named batches.
 This is a project-source inventory,
-not an ONVIF schema catalogue or a claim of conformance. Including B16, it lists all **159**
-literal route arms in the **10** production sub-dispatchers. These counts are
-not the number of fully verified operations or all operations ONVIF defines.
+not an ONVIF schema catalogue or a claim of conformance. It lists **170**
+routed Actions across **10** production sub-dispatchers. Each literal Action
+has its own row even when the dispatcher groups several Actions in one match arm.
 
 Start with the [execution checklist](mock-fidelity-execution-checklist.md);
 policy and historical evidence remain in the [main plan](mock-fidelity-hardening-plan.md).
@@ -24,12 +24,12 @@ Do not change a route before opening its row and the corresponding work package.
 
 | Section | Purpose |
 | --- | --- |
-| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
+| [Current calibration](#current-calibration-2026-11-11) | Delivered scope, remaining work and next step |
 | [Tracking contract](#tracking-contract) | Column meaning and completion evidence |
 | [device](#device) | 38 route arms; W13 |
 | [device_io](#device-io) | 1 route arms; W13 |
 | [media](#media) | 33 route arms; W10/W26 |
-| [media2](#media2) | 27 route arms; W10/W26 |
+| [media2](#media2) | 37 routed Actions; W10/W26 |
 | [ptz](#ptz) | 27 route arms; W11 |
 | [imaging](#imaging) | 8 route arms; W12 |
 | [events](#events) | 8 route arms; W15 |
@@ -180,15 +180,15 @@ modeled assembly/capacity behavior. These slices remain partial operation accept
 | `media.SetAudioEncoderConfiguration` | `media::handle_set_audio_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetAudioEncoderConfigurationOptions` | `media::resp_audio_encoder_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetOSD` | `media::resp_osd` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
-| `media.GetOSDs` | `osd::list` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
-| `media.SetOSD` | `osd::set` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
-| `media.CreateOSD` | `osd::create` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
-| `media.DeleteOSD` | `osd::delete` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
-| `media.GetOSDOptions` | `osd::options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.GetOSDs` | `osd::list` | `state, MEDIA1, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.SetOSD` | `osd::set` | `state, MEDIA1, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.CreateOSD` | `osd::create` | `state, MEDIA1, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.DeleteOSD` | `osd::delete` | `state, MEDIA1, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.GetOSDOptions` | `osd::options` | `state, MEDIA1, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
 
 ## media2
 
-[dispatch_media2](../../src/mock/dispatch.rs) · [services/media2.rs](../../src/mock/services/media2.rs)
+[dispatch_media2](../../src/mock/dispatch.rs) · [services/media2.rs](../../src/mock/services/media2.rs) · [I08 overlay evidence](onvif-interoperability-plan.md#i07i10-delivery-evidence)
 
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -219,6 +219,16 @@ modeled assembly/capacity behavior. These slices remain partial operation accept
 | `media2.GetAudioDecoderConfigurations` | `media2::resp_audio_decoder_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media2.GetVideoSourceModes` | `media2::resp_video_source_modes` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.SetVideoSourceMode` | `media2::resp_set_video_source_mode` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media2.GetOSDs` | `osd::list` | `state, MEDIA2, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.SetOSD` | `osd::set` | `state, MEDIA2, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.CreateOSD` | `osd::create` | `state, MEDIA2, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.DeleteOSD` | `osd::delete` | `state, MEDIA2, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.GetOSDOptions` | `osd::options` | `state, MEDIA2, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.GetMasks` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.GetMaskOptions` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.CreateMask` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.SetMask` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.DeleteMask` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
 
 ## ptz
 
@@ -307,14 +317,15 @@ not complete operation acceptance; all other fields and full Fault policy remain
 
 ## search
 
-[dispatch_search](../../src/mock/dispatch.rs) · [search runtime](../../src/mock/services/recording/search.rs)
+[dispatch_search](../../src/mock/dispatch.rs) · [search runtime](../../src/mock/services/recording/search.rs) · [I10 search evidence](onvif-interoperability-plan.md#i07i10-delivery-evidence)
 
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `search.GetServiceCapabilities` | `recording::resp_search_service_capabilities` | `` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `search.FindRecordings` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | [I10](onvif-interoperability-plan.md#i07i10-delivery-evidence) |
-| `search.GetRecordingSearchResults` / `search.GetSearchState` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
-| `search.EndSearch` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3, I10 |
+| `search.FindRecordings` | `recording::search::handle` | `op, state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
+| `search.GetRecordingSearchResults` | `recording::search::handle` | `op, state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
+| `search.GetSearchState` | `recording::search::handle` | `op, state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
+| `search.EndSearch` | `recording::search::handle` | `op, state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3, I10 |
 
 ## replay
 
@@ -334,7 +345,8 @@ rtk powershell -NoProfile -File docs/active/check-mock-fidelity-inventory.ps1 -S
 ```
 
 The read-only checker compares route keys, handler symbols, arguments and
-bilingual tracking, plus literal Action declarations and the five reader spellings
+bilingual tracking, plus literal Action declarations, scoped Media2 overlay calls
+and the five reader spellings
 indexed in the source audit. It rejects duplicates/empty inventories and supported
 classes of source-shape drift. Its in-memory self-tests do not edit source or use a camera.
 It is a source-shape check, not a Rust AST, call-graph or normative validator.

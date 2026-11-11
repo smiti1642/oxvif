@@ -2,19 +2,19 @@
 
 [English](mock-fidelity-operation-ledger.md) | [繁體中文](mock-fidelity-operation-ledger_zh.md)
 
-## 現況校準（2026-09-22）
+## 現況校準（2026-11-11）
 
-程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-operation-ledger.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+程式基準：`001c787`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-operation-ledger.md#current-calibration-2026-11-11)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
 
 | 分類 | 處置與證據 |
 | --- | --- |
-| 已確認 | 這是持續維護的 source inventory；checker 對照 159 路由、161 Action sites 與 reader index。B16 兩個路由已實作。 |
+| 已確認 | 這是持續維護的 source inventory；checker 對照 170 路由、174 個用戶端 Action 位置與 reader index。B16 兩個路由已實作。 |
 | 剩餘工作 | 每列 PARTIAL 是欄位／Fault／效果等稽核覆蓋，不是功能不存在。W26 整合完成不代表模擬同步效果；更廣 Media 契約由 W10／W16／W17 負責。 |
 | 下一步／完成條件 | 改路由前開啟對應 W 工作卡；完成後同步雙語 rows、checker 與精確語意測試。清冊一致不等於協定驗收。 |
 
 初始程式碼基準：`b134f73`，2026-09-10；表列含後續具名批次。本文件是專案原始碼清冊，
 不是 ONVIF schema 目錄，也不代表符合規格。它列出 **10** 個正式 sub-dispatcher
-包含 B16 後的全部 **159** 個字面值路由分支；此數量不是已完整驗證的操作數，也不是 ONVIF 定義的全部操作數。
+的 **170** 個 Action。同一個 match 分支涵蓋多個 Action 時，每個 Action 各列一筆。
 
 先閱讀[施工檢查表](mock-fidelity-execution-checklist_zh.md)；
 政策與歷史證據保留於[主計畫](mock-fidelity-hardening-plan_zh.md)。
@@ -22,12 +22,12 @@
 
 | 章節 | 用途 |
 | --- | --- |
-| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
+| [現況校準](#現況校準2026-11-11) | 已交付、剩餘工作與下一步 |
 | [追蹤契約](#追蹤契約) | 欄位意義及完成證據 |
 | [device](#device) | 38 個路由分支；W13 |
 | [device_io](#device-io) | 1 個路由分支；W13 |
 | [media](#media) | 33 個路由分支；W10/W26 |
-| [media2](#media2) | 27 個路由分支；W10/W26 |
+| [media2](#media2) | 37 個 Action；W10/W26 |
 | [ptz](#ptz) | 27 個路由分支；W11 |
 | [imaging](#imaging) | 8 個路由分支；W12 |
 | [events](#events) | 8 個路由分支；W15 |
@@ -170,15 +170,15 @@ profile token 政策，PA1 提供模型組裝／容量行為；這些批次仍�
 | `media.SetAudioEncoderConfiguration` | `media::handle_set_audio_encoder_configuration` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetAudioEncoderConfigurationOptions` | `media::resp_audio_encoder_configuration_options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media.GetOSD` | `media::resp_osd` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | RS1 |
-| `media.GetOSDs` | `osd::list` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
-| `media.SetOSD` | `osd::set` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
-| `media.CreateOSD` | `osd::create` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
-| `media.DeleteOSD` | `osd::delete` | `state, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
-| `media.GetOSDOptions` | `osd::options` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.GetOSDs` | `osd::list` | `state, MEDIA1, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.SetOSD` | `osd::set` | `state, MEDIA1, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.CreateOSD` | `osd::create` | `state, MEDIA1, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.DeleteOSD` | `osd::delete` | `state, MEDIA1, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
+| `media.GetOSDOptions` | `osd::options` | `state, MEDIA1, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | OS1 |
 
 ## media2
 
-[dispatch_media2](../../src/mock/dispatch.rs) · [services/media2.rs](../../src/mock/services/media2.rs)
+[dispatch_media2](../../src/mock/dispatch.rs) · [services/media2.rs](../../src/mock/services/media2.rs) · [I08 疊加驗收](onvif-interoperability-plan_zh.md#i07i10-交付證據)
 
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -209,6 +209,16 @@ profile token 政策，PA1 提供模型組裝／容量行為；這些批次仍�
 | `media2.GetAudioDecoderConfigurations` | `media2::resp_audio_decoder_configurations` | `state, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | AM1 |
 | `media2.GetVideoSourceModes` | `media2::resp_video_source_modes` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
 | `media2.SetVideoSourceMode` | `media2::resp_set_video_source_mode` | `` | W10 | TODO | TODO | TODO | TODO | TODO | - |
+| `media2.GetOSDs` | `osd::list` | `state, MEDIA2, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.SetOSD` | `osd::set` | `state, MEDIA2, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.CreateOSD` | `osd::create` | `state, MEDIA2, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.DeleteOSD` | `osd::delete` | `state, MEDIA2, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.GetOSDOptions` | `osd::options` | `state, MEDIA2, operation` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.GetMasks` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.GetMaskOptions` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.CreateMask` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.SetMask` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
+| `media2.DeleteMask` | `crate::mock::services::masks::handle` | `op, state, body, operation, effect` | W10 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I08 |
 
 ## ptz
 
@@ -297,14 +307,15 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 
 ## search
 
-[dispatch_search](../../src/mock/dispatch.rs) · [search runtime](../../src/mock/services/recording/search.rs)
+[dispatch_search](../../src/mock/dispatch.rs) · [search runtime](../../src/mock/services/recording/search.rs) · [I10 搜尋驗收](onvif-interoperability-plan_zh.md#i07i10-交付證據)
 
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `search.GetServiceCapabilities` | `recording::resp_search_service_capabilities` | `` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `search.FindRecordings` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | [I10](onvif-interoperability-plan_zh.md#i07i10-交付證據) |
-| `search.GetRecordingSearchResults`／`search.GetSearchState` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
-| `search.EndSearch` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3、I10 |
+| `search.FindRecordings` | `recording::search::handle` | `op, state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
+| `search.GetRecordingSearchResults` | `recording::search::handle` | `op, state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
+| `search.GetSearchState` | `recording::search::handle` | `op, state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
+| `search.EndSearch` | `recording::search::handle` | `op, state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3, I10 |
 
 ## replay
 
@@ -324,7 +335,7 @@ rtk powershell -NoProfile -File docs/active/check-mock-fidelity-inventory.ps1 -S
 ```
 
 唯讀檢查器比對路由 key、handler symbol、arguments、雙語追蹤欄位、字面值 Action
-宣告與來源稽核索引的五種 reader 拼法；拒絕重複／空清冊並偵測所支援類別的
+宣告、有範圍的 Media2 疊加呼叫與來源稽核索引的五種 reader 拼法。它會拒絕重複／空清冊並偵測所支援類別的
 原始碼形狀差異。記憶體內自我測試不修改原始碼，
 也不使用攝影機。這是原始碼形狀檢查，不是 Rust AST、call graph 或規範驗證器。
 它不稽核 handler 語意，也不證明 runtime Action URI 與 body 一致；

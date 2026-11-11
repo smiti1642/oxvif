@@ -157,15 +157,18 @@ synthetic 邊界檢查。
 | `…/ver10/device/wsdl/` | `dispatch_device` | 38 |
 | `…/ver10/deviceio/wsdl/` | `dispatch_device_io` | 1 |
 | `…/ver10/media/wsdl/` | `dispatch_media` | 33 |
-| `…/ver20/media/wsdl/` | `dispatch_media2` | 27 |
+| `…/ver20/media/wsdl/` | `dispatch_media2` | 37 |
 | `…/ver20/ptz/wsdl/` | `dispatch_ptz` | 27 |
 | `…/ver20/imaging/wsdl/` | `dispatch_imaging` | 8 |
 | 完整 ONVIF Events／OASIS WSN port path | `dispatch_events` | 8 |
 | `…/ver10/recording/wsdl/` | `dispatch_recording` | 11 |
-| `…/ver10/search/wsdl/` | `dispatch_search` | 4 |
+| `…/ver10/search/wsdl/` | `dispatch_search` | 5 |
 | `…/ver10/replay/wsdl/` | `dispatch_replay` | 2 |
 
-此候選版本共 **159 條路由**，包含兩個新增 Media synchronization 操作。0.15.0 為 157 項，當時只將 `GetDigitalInputs` 由 `dispatch_device` 移至 `dispatch_device_io`，並未增加操作數。`deviceio` action prefix 使用小寫，符合 `deviceio.wsdl`；其 element 則位於 `…/ver10/deviceIO/wsdl`。Events action URI 另含 portType segment 與 `Request` suffix，因此 operation name 為 `GetServiceCapabilitiesRequest`、`PullMessagesRequest` 等。
+分派器處理 **170 個 Action**，包含 Media2 OSD、隱私遮罩及 Search 的
+`GetSearchState`。`deviceio` Action prefix 採用 `deviceio.wsdl` 的拼法，
+其元素位於 `…/ver10/deviceIO/wsdl`。Events Action URI 包含 portType segment
+與 `Request` suffix，例如 `GetServiceCapabilitiesRequest` 和 `PullMessagesRequest`。
 
 未匹配任何分派規則的 action 會回傳：
 
@@ -874,7 +877,7 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 
 | 保證 | 測試 |
 |---|---|
-| 清冊中的 client Action 均有路由（159 條） | `mock_handles_every_action_the_client_can_send`；不代表完整欄位／效果覆蓋 |
+| 清冊中的用戶端 Action 涵蓋 169 條路由 | [來源清冊](active/mock-fidelity-source-audit_zh.md)、分派器測試與 [Media2 疊加測試](../tests/media2_overlays.rs) |
 | Response 不重複 attribute | `no_response_declares_an_attribute_twice` |
 | Response 不使用未宣告 prefix | `every_response_binds_the_prefixes_it_uses` |
 | 選定的 49 組 write／read 配對可 round-trip | `tests/mock_roundtrip.rs`；不涵蓋全部 effectful 操作 |

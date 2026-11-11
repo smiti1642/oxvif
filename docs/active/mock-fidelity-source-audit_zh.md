@@ -2,9 +2,9 @@
 
 [English](mock-fidelity-source-audit.md) | [繁體中文](mock-fidelity-source-audit_zh.md)
 
-## 現況校準（2026-09-22）
+## 現況校準（2026-11-11）
 
-程式基準：`80bcf14`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-source-audit.md#current-calibration-2026-09-22)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
+程式基準：`001c787`。本節是目前工作入口；下方舊日期的狀態與數量保留為歷史證據。歷史證據保留原驗證版本；本次新檢查彙整於後續清單；[後續清單](post-0.17-backlog_zh.md) 負責排程。 對應來源連結見 [英文版](mock-fidelity-source-audit.md#current-calibration-2026-11-11)，0.17 驗收見 [最終紀錄](../done/release-0.17-finalization_zh.md)。
 
 | 分類 | 處置與證據 |
 | --- | --- |
@@ -23,7 +23,7 @@ W19 其餘項目仍未結案。
 
 | 章節 | 用途 |
 | --- | --- |
-| [現況校準](#現況校準2026-09-22) | 已交付、剩餘工作與下一步 |
+| [現況校準](#現況校準2026-11-11) | 已交付、剩餘工作與下一步 |
 | [結果與邊界](#結果與邊界) | 已完成與尚未完成的範圍 |
 | [Action 宣告](#action-宣告) | 完整 URI、方法及路由對應 |
 | [Reader 呼叫位置](#reader-呼叫位置) | 可重現的直接呼叫多重集合 |
@@ -33,10 +33,9 @@ W19 其餘項目仍未結案。
 
 ## 結果與邊界
 
-- 包含 B16 後，`src/client/*.rs` 加上 `src/session.rs` 共 161 個字面值 `const ACTION`
-  宣告，對應 159 個不同 Action URI，涵蓋全部 159 個 dispatch key。
-  兩個 Media2 encoder 方法共用一個 URI；session `get_osd_options` 重複 client
-  URI。沒有缺乏對應宣告的來源路由。
+- `src/client/*.rs` 與 `src/session.rs` 的 161 個字面值 `const ACTION` 宣告，
+  加上 13 個有範圍的疊加呼叫，涵蓋 169 個 Mock 路由。`search.GetSearchState`
+  是 Mock SOAP 路由，由[錄影搜尋測試](../../tests/mock_recording_search.rs)以原始請求驗證。
 - Session 方法是直接 request 路徑，不只是 delegate。舊 dispatch test 註解稱它
   沒有宣告 Action，該敘述不正確。
 - 五種 reader 拼法共 162 個直接呼叫：144 個位於頂層 test module 之前，18 個
@@ -121,7 +120,7 @@ W19 其餘項目仍未結案。
 | `src/client/imaging.rs::imaging_get_status` | `http://www.onvif.org/ver20/imaging/wsdl/GetStatus` | `imaging.GetStatus` |
 | `src/client/media.rs::media_get_service_capabilities` | `http://www.onvif.org/ver10/media/wsdl/GetServiceCapabilities` | `media.GetServiceCapabilities` |
 | `src/client/media.rs::get_profiles` | `http://www.onvif.org/ver10/media/wsdl/GetProfiles` | `media.GetProfiles` |
-| `src/client/media.rs::get_stream_uri` | `http://www.onvif.org/ver10/media/wsdl/GetStreamUri` | `media.GetStreamUri` |
+| `src/client/media.rs::media1_stream_uri` | `http://www.onvif.org/ver10/media/wsdl/GetStreamUri` | `media.GetStreamUri` |
 | `src/client/media.rs::get_snapshot_uri` | `http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri` | `media.GetSnapshotUri` |
 | `src/client/media.rs::media_set_synchronization_point` | `http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint` | `media.SetSynchronizationPoint` |
 | `src/client/media.rs::create_profile` | `http://www.onvif.org/ver10/media/wsdl/CreateProfile` | `media.CreateProfile` |
@@ -154,7 +153,7 @@ W19 其餘項目仍未結案。
 | `src/client/media.rs::get_audio_encoder_configuration_options` | `http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurationOptions` | `media.GetAudioEncoderConfigurationOptions` |
 | `src/client/media2.rs::media2_get_service_capabilities` | `http://www.onvif.org/ver20/media/wsdl/GetServiceCapabilities` | `media2.GetServiceCapabilities` |
 | `src/client/media2.rs::get_profiles_media2` | `http://www.onvif.org/ver20/media/wsdl/GetProfiles` | `media2.GetProfiles` |
-| `src/client/media2.rs::get_stream_uri_media2` | `http://www.onvif.org/ver20/media/wsdl/GetStreamUri` | `media2.GetStreamUri` |
+| `src/client/media2.rs::media2_stream_uri` | `http://www.onvif.org/ver20/media/wsdl/GetStreamUri` | `media2.GetStreamUri` |
 | `src/client/media2.rs::get_snapshot_uri_media2` | `http://www.onvif.org/ver20/media/wsdl/GetSnapshotUri` | `media2.GetSnapshotUri` |
 | `src/client/media2.rs::set_synchronization_point_media2` | `http://www.onvif.org/ver20/media/wsdl/SetSynchronizationPoint` | `media2.SetSynchronizationPoint` |
 | `src/client/media2.rs::get_video_source_configurations_media2` | `http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurations` | `media2.GetVideoSourceConfigurations` |
@@ -222,9 +221,29 @@ W19 其餘項目仍未結案。
 | `src/client/recording.rs::get_recording_job_state` | `http://www.onvif.org/ver10/recording/wsdl/GetRecordingJobState` | `recording.GetRecordingJobState` |
 | `src/client/recording.rs::find_recordings` | `http://www.onvif.org/ver10/search/wsdl/FindRecordings` | `search.FindRecordings` |
 | `src/client/recording.rs::get_recording_search_results` | `http://www.onvif.org/ver10/search/wsdl/GetRecordingSearchResults` | `search.GetRecordingSearchResults` |
-| `src/client/recording.rs::end_search` | `http://www.onvif.org/ver10/search/wsdl/EndSearch` | `search.EndSearch` |
+| `src/client/recording.rs::end_search_endpoint` | `http://www.onvif.org/ver10/search/wsdl/EndSearch` | `search.EndSearch` |
 | `src/client/recording.rs::get_replay_uri` | `http://www.onvif.org/ver10/replay/wsdl/GetReplayUri` | `replay.GetReplayUri` |
 | `src/session.rs::get_osd_options` | `http://www.onvif.org/ver10/media/wsdl/GetOSDOptions` | `media.GetOSDOptions` |
+
+### 有範圍的 Media2 疊加呼叫
+
+這些呼叫由 `ScopedService` 以 Media2 namespace 和操作名稱組合 Action。
+
+| 位置 | Action | 路由 |
+| --- | --- | --- |
+| `src/overlays.rs::capabilities` | `http://www.onvif.org/ver20/media/wsdl/GetServiceCapabilities` | `media2.GetServiceCapabilities` |
+| `src/overlays/osd.rs::osd_options` | `http://www.onvif.org/ver20/media/wsdl/GetOSDOptions` | `media2.GetOSDOptions` |
+| `src/overlays/osd.rs::osds` | `http://www.onvif.org/ver20/media/wsdl/GetOSDs` | `media2.GetOSDs` |
+| `src/overlays/osd.rs::osd` | `http://www.onvif.org/ver20/media/wsdl/GetOSDs` | `media2.GetOSDs` |
+| `src/overlays/osd.rs::create_osd` | `http://www.onvif.org/ver20/media/wsdl/CreateOSD` | `media2.CreateOSD` |
+| `src/overlays/osd.rs::set_osd` | `http://www.onvif.org/ver20/media/wsdl/SetOSD` | `media2.SetOSD` |
+| `src/overlays/osd.rs::delete_osd` | `http://www.onvif.org/ver20/media/wsdl/DeleteOSD` | `media2.DeleteOSD` |
+| `src/overlays/mask.rs::mask_options` | `http://www.onvif.org/ver20/media/wsdl/GetMaskOptions` | `media2.GetMaskOptions` |
+| `src/overlays/mask.rs::masks` | `http://www.onvif.org/ver20/media/wsdl/GetMasks` | `media2.GetMasks` |
+| `src/overlays/mask.rs::mask` | `http://www.onvif.org/ver20/media/wsdl/GetMasks` | `media2.GetMasks` |
+| `src/overlays/mask.rs::create_mask` | `http://www.onvif.org/ver20/media/wsdl/CreateMask` | `media2.CreateMask` |
+| `src/overlays/mask.rs::set_mask` | `http://www.onvif.org/ver20/media/wsdl/SetMask` | `media2.SetMask` |
+| `src/overlays/mask.rs::delete_mask` | `http://www.onvif.org/ver20/media/wsdl/DeleteMask` | `media2.DeleteMask` |
 
 ## Reader 呼叫位置
 

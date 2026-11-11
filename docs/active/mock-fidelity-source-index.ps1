@@ -33,6 +33,28 @@ function Get-ActionRoute([string]$Action) {
     throw "Unmapped source Action: $Action; record an explicit routing review."
 }
 
+function Get-OverlayActionSites([string]$Source, [string]$Path, [string]$Namespace) {
+    $production = ($Source -split '#\[cfg\(test\)\]', 2)[0]
+    $production = [regex]::Replace($production, '(?m)^\s*//[^\r\n]*', '')
+    foreach ($call in [regex]::Matches($production, '\.(call|write)\s*\(\s*')) {
+        $functions = [regex]::Matches($production.Substring(0, $call.Index), '\bfn\s+(\w+)')
+        if ($functions.Count -eq 0) { throw "Overlay Action without source method: $Path" }
+        $method = $functions[$functions.Count - 1].Groups[1].Value
+        $arguments = $production.Substring($call.Index + $call.Length)
+        # The private write helper forwards the operation already indexed at its caller.
+        if ($Path -ceq 'src/overlays.rs' -and $method -ceq 'write' -and
+            $call.Groups[1].Value -ceq 'call' -and $arguments -cmatch '^op,\s*response,\s*body\s*\)') {
+            continue
+        }
+        $operation = [regex]::Match($arguments, '^"([A-Za-z0-9]+)"\s*,\s*"[A-Za-z0-9]+"\s*,')
+        if (-not $operation.Success) { throw "Unsupported overlay Action: $($Path)::$method; audit extractor." }
+        [pscustomobject]@{
+            Site = "$($Path)::$method"
+            Action = "$Namespace/$($operation.Groups[1].Value)"
+        }
+    }
+}
+
 function Get-ReaderSites([string]$Source, [string]$Path) {
     $lines = $Source -split '\r?\n'
     $symbol = '<module>'

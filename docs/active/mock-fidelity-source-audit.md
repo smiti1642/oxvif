@@ -2,13 +2,13 @@
 
 [English](mock-fidelity-source-audit.md) | [繁體中文](mock-fidelity-source-audit_zh.md)
 
-## Current calibration (2026-09-22)
+## Current calibration (2026-11-11)
 
-Source baseline: `80bcf14`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
+Source baseline: `001c787`. Use this section as the current work entry; older dated statuses/counts below remain historical evidence. Historical evidence retains its recorded revision; fresh calibration checks are summarized in the follow-up backlog. Scheduling belongs to the [follow-up backlog](post-0.17-backlog.md).
 
 | Category | Disposition and evidence |
 | --- | --- |
-| Confirmed | W00 literal route/Action reconciliation is complete and maintained; direct-reader indexing remains available. K27 collision retention and request-aware replay were repaired in [the migration](../replay-storage.md). Historical reproductions below are not current storage-loss defects. |
+| Confirmed | W00 reconciles 170 Mock routes with the dispatcher and 174 client Action sites with the source index. K27 collision retention and request-aware replay were repaired in [the migration](../replay-storage.md). |
 | Remaining | W02 transitive helper/field classification and migration ownership remain partial. The 162 indexed reader occurrences include tests, discovery and canonicalization; they are not 162 bugs or a backlog of identical replacements. |
 | Next step / exit criteria | For the next selected service, trace all transitive readers/renderers/state effects and assign each to migration or intentional isolation. Re-run [the checker](check-mock-fidelity-inventory.ps1); preserve the direct index and attach field-specific C01–C12 evidence in the batch card. |
 
@@ -25,7 +25,7 @@ This is measured project-source indexing, not a schema catalogue.
 
 | Section | Purpose |
 | --- | --- |
-| [Current calibration](#current-calibration-2026-09-22) | Delivered scope, remaining work and next step |
+| [Current calibration](#current-calibration-2026-11-11) | Delivered scope, remaining work and next step |
 | [Results and boundaries](#results-and-boundaries) | What is and is not complete |
 | [Action declarations](#action-declarations) | Full URI, method and route correspondence |
 | [Reader call sites](#reader-call-sites) | Reproducible direct-call multiset |
@@ -35,10 +35,10 @@ This is measured project-source indexing, not a schema catalogue.
 
 ## Results and boundaries
 
-- Including B16, 161 literal `const ACTION` declarations in `src/client/*.rs` plus
-  `src/session.rs` map to 159 unique Action URIs and all 159 dispatch keys.
-  Two Media2 encoder methods share one URI; session `get_osd_options` repeats
-  its client's URI. No source route lacks a corresponding declaration.
+- The 161 literal `const ACTION` declarations in `src/client/*.rs` and
+  `src/session.rs` and the 13 scoped overlay calls map to 169 Mock routes.
+  `search.GetSearchState` is a Mock SOAP route exercised by raw requests in
+  [the recording search tests](../../tests/mock_recording_search.rs).
 - The session method is a direct request path, not merely a delegate. The old
   dispatch-test comment said it declared no Action; that statement was wrong.
 - 162 direct occurrences of five reader spellings are indexed: 144 before
@@ -129,7 +129,7 @@ an unchanged last segment. This does not enforce those checks in runtime dispatc
 | `src/client/imaging.rs::imaging_get_status` | `http://www.onvif.org/ver20/imaging/wsdl/GetStatus` | `imaging.GetStatus` |
 | `src/client/media.rs::media_get_service_capabilities` | `http://www.onvif.org/ver10/media/wsdl/GetServiceCapabilities` | `media.GetServiceCapabilities` |
 | `src/client/media.rs::get_profiles` | `http://www.onvif.org/ver10/media/wsdl/GetProfiles` | `media.GetProfiles` |
-| `src/client/media.rs::get_stream_uri` | `http://www.onvif.org/ver10/media/wsdl/GetStreamUri` | `media.GetStreamUri` |
+| `src/client/media.rs::media1_stream_uri` | `http://www.onvif.org/ver10/media/wsdl/GetStreamUri` | `media.GetStreamUri` |
 | `src/client/media.rs::get_snapshot_uri` | `http://www.onvif.org/ver10/media/wsdl/GetSnapshotUri` | `media.GetSnapshotUri` |
 | `src/client/media.rs::media_set_synchronization_point` | `http://www.onvif.org/ver10/media/wsdl/SetSynchronizationPoint` | `media.SetSynchronizationPoint` |
 | `src/client/media.rs::create_profile` | `http://www.onvif.org/ver10/media/wsdl/CreateProfile` | `media.CreateProfile` |
@@ -162,7 +162,7 @@ an unchanged last segment. This does not enforce those checks in runtime dispatc
 | `src/client/media.rs::get_audio_encoder_configuration_options` | `http://www.onvif.org/ver10/media/wsdl/GetAudioEncoderConfigurationOptions` | `media.GetAudioEncoderConfigurationOptions` |
 | `src/client/media2.rs::media2_get_service_capabilities` | `http://www.onvif.org/ver20/media/wsdl/GetServiceCapabilities` | `media2.GetServiceCapabilities` |
 | `src/client/media2.rs::get_profiles_media2` | `http://www.onvif.org/ver20/media/wsdl/GetProfiles` | `media2.GetProfiles` |
-| `src/client/media2.rs::get_stream_uri_media2` | `http://www.onvif.org/ver20/media/wsdl/GetStreamUri` | `media2.GetStreamUri` |
+| `src/client/media2.rs::media2_stream_uri` | `http://www.onvif.org/ver20/media/wsdl/GetStreamUri` | `media2.GetStreamUri` |
 | `src/client/media2.rs::get_snapshot_uri_media2` | `http://www.onvif.org/ver20/media/wsdl/GetSnapshotUri` | `media2.GetSnapshotUri` |
 | `src/client/media2.rs::set_synchronization_point_media2` | `http://www.onvif.org/ver20/media/wsdl/SetSynchronizationPoint` | `media2.SetSynchronizationPoint` |
 | `src/client/media2.rs::get_video_source_configurations_media2` | `http://www.onvif.org/ver20/media/wsdl/GetVideoSourceConfigurations` | `media2.GetVideoSourceConfigurations` |
@@ -230,9 +230,29 @@ an unchanged last segment. This does not enforce those checks in runtime dispatc
 | `src/client/recording.rs::get_recording_job_state` | `http://www.onvif.org/ver10/recording/wsdl/GetRecordingJobState` | `recording.GetRecordingJobState` |
 | `src/client/recording.rs::find_recordings` | `http://www.onvif.org/ver10/search/wsdl/FindRecordings` | `search.FindRecordings` |
 | `src/client/recording.rs::get_recording_search_results` | `http://www.onvif.org/ver10/search/wsdl/GetRecordingSearchResults` | `search.GetRecordingSearchResults` |
-| `src/client/recording.rs::end_search` | `http://www.onvif.org/ver10/search/wsdl/EndSearch` | `search.EndSearch` |
+| `src/client/recording.rs::end_search_endpoint` | `http://www.onvif.org/ver10/search/wsdl/EndSearch` | `search.EndSearch` |
 | `src/client/recording.rs::get_replay_uri` | `http://www.onvif.org/ver10/replay/wsdl/GetReplayUri` | `replay.GetReplayUri` |
 | `src/session.rs::get_osd_options` | `http://www.onvif.org/ver10/media/wsdl/GetOSDOptions` | `media.GetOSDOptions` |
+
+### Scoped Media2 overlay calls
+
+These calls use the Media2 namespace and operation name to construct the Action through `ScopedService`.
+
+| Site | Action | Route |
+| --- | --- | --- |
+| `src/overlays.rs::capabilities` | `http://www.onvif.org/ver20/media/wsdl/GetServiceCapabilities` | `media2.GetServiceCapabilities` |
+| `src/overlays/osd.rs::osd_options` | `http://www.onvif.org/ver20/media/wsdl/GetOSDOptions` | `media2.GetOSDOptions` |
+| `src/overlays/osd.rs::osds` | `http://www.onvif.org/ver20/media/wsdl/GetOSDs` | `media2.GetOSDs` |
+| `src/overlays/osd.rs::osd` | `http://www.onvif.org/ver20/media/wsdl/GetOSDs` | `media2.GetOSDs` |
+| `src/overlays/osd.rs::create_osd` | `http://www.onvif.org/ver20/media/wsdl/CreateOSD` | `media2.CreateOSD` |
+| `src/overlays/osd.rs::set_osd` | `http://www.onvif.org/ver20/media/wsdl/SetOSD` | `media2.SetOSD` |
+| `src/overlays/osd.rs::delete_osd` | `http://www.onvif.org/ver20/media/wsdl/DeleteOSD` | `media2.DeleteOSD` |
+| `src/overlays/mask.rs::mask_options` | `http://www.onvif.org/ver20/media/wsdl/GetMaskOptions` | `media2.GetMaskOptions` |
+| `src/overlays/mask.rs::masks` | `http://www.onvif.org/ver20/media/wsdl/GetMasks` | `media2.GetMasks` |
+| `src/overlays/mask.rs::mask` | `http://www.onvif.org/ver20/media/wsdl/GetMasks` | `media2.GetMasks` |
+| `src/overlays/mask.rs::create_mask` | `http://www.onvif.org/ver20/media/wsdl/CreateMask` | `media2.CreateMask` |
+| `src/overlays/mask.rs::set_mask` | `http://www.onvif.org/ver20/media/wsdl/SetMask` | `media2.SetMask` |
+| `src/overlays/mask.rs::delete_mask` | `http://www.onvif.org/ver20/media/wsdl/DeleteMask` | `media2.DeleteMask` |
 
 ## Reader call sites
 
