@@ -81,6 +81,9 @@ fn outcome<T>(r: Result<T, OnvifError>) -> String {
             format!("soap-fault:{code}:{reason}")
         }
         Err(OnvifError::InvalidArgument(m)) => format!("invalid-argument:{m}"),
+        Err(OnvifError::RecordingSearchIncomplete { reason }) => {
+            format!("search-incomplete:{reason}")
+        }
         Err(OnvifError::Transport(e)) => format!("transport:{e}"),
     }
 }

@@ -25,8 +25,8 @@ use crate::mock::fault::{Code, Fault, MOCK_REQUEST_POLICY};
 use crate::mock::fault_injection::{FaultInjector, PendingFault};
 use crate::mock::policy::{AckOnlyOperation, AckOnlyPolicy};
 use crate::mock::responder::{Chain, RequestCtx};
+use crate::mock::snapshot;
 use crate::mock::state::{ChangeHook, DeviceState, MockState};
-use crate::mock::{helpers, snapshot};
 
 const SOAP_CT: &str = "application/soap+xml; charset=utf-8";
 
@@ -285,9 +285,21 @@ impl MockServerBuilder {
 
 /// A bound-port mock ONVIF server. Shuts down on drop.
 ///
+/// Requires one `application/soap+xml` Content-Type (at most 8192 bytes), with
+/// optional UTF-8 charset and optional absolute action URI. Header syntax errors
+/// return 400; unsupported media, charset or content coding returns 415, before
+/// fault injection or auth. Missing action has no Body/WS-Addressing fallback.
+/// Recognized SOAP Sender faults use HTTP 400; other standard SOAP fault codes
+/// use 500. Nonstandard legacy codes and malformed raw fixtures retain 200.
+/// Status inspection also falls back to 200 above 2 MiB, depth 64 or 16,384
+/// elements; these bounds do not truncate or rewrite the response body.
+/// Response bodies are preserved, including their SOAP Content-Type.
+///
 /// SOAP request bodies must be valid UTF-8. Invalid bytes receive HTTP 400 with
 /// `s:Sender` / `mock:RequestPolicy` before fault injection, authentication,
 /// replay or mutation. Bytes are never repaired with replacement characters.
+/// The framework buffers bodies before these adapter checks; bodies above its
+/// 2 MiB limit receive 413 even when representation headers are unsupported.
 /// This is a mock transport policy, not full HTTP/charset conformance.
 ///
 /// ```no_run
@@ -402,7 +414,21 @@ async fn handle_soap(
     headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    let action = helpers::extract_action(&headers).unwrap_or_default();
+    let action = match super::http_binding::action(&headers) {
+        Ok(action) => action,
+        Err(status) => {
+            let message = if status == StatusCode::UNSUPPORTED_MEDIA_TYPE {
+                "Unsupported mock SOAP HTTP representation.\n"
+            } else {
+                "Invalid mock SOAP HTTP headers.\n"
+            };
+            return (
+                status,
+                [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                message.to_owned(),
+            );
+        }
+    };
     let body_str = match std::str::from_utf8(&body) {
         Ok(body) => body,
         Err(_) => {
@@ -449,7 +475,11 @@ async fn handle_soap(
     };
     let endpoint = format!("{}{}", ctx.base, uri);
     let xml = chain.respond_at(&rctx, Some(&endpoint)).await;
-    (StatusCode::OK, [(header::CONTENT_TYPE, SOAP_CT)], xml)
+    (
+        super::http_binding::response_status(&xml),
+        [(header::CONTENT_TYPE, SOAP_CT)],
+        xml,
+    )
 }
 
 async fn handle_snapshot(State(ctx): State<Arc<Ctx>>) -> impl IntoResponse {

@@ -403,6 +403,14 @@ pub(super) struct Request {
 }
 
 impl Request {
+    #[cfg(feature = "mock-server")]
+    pub(super) fn envelope_operation(&self, ns: &str, name: &str) -> Result<&Node, RequestError> {
+        if self.root.ns != SOAP || self.root.name != "Envelope" {
+            return Err(RequestError::EnvelopeShape);
+        }
+        self.operation(ns, name)
+    }
+
     pub(super) fn parse(xml: &str) -> Result<Self, RequestError> {
         Ok(Self { root: parse(xml)? })
     }

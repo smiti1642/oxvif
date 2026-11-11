@@ -103,3 +103,9 @@ snapshot example、178-instance 外部 corpus、native credential、ConPTY／cap
 OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。
 
 AF1（2026-09-23）：[有界認證時間／nonce 防重用](../done/mock-fidelity-auth-freshness_zh.md) 已交付；nonce 原子 admission、過期／未來／重用拒絕不觸發 hook，時鐘倒退不重開已淘汰區間。外部 corpus 224 XML／60 Actions，AF1 request Security header 去除後匯出。Roles、HTTP binding、structured／raw injection 仍為 Q02 工作。
+
+HB1（2026-11-10）：[有界 HTTP binding 候選](mock-fidelity-http-binding_zh.md)
+已實作 representation headers、Action URI 結構驗證與 scoped SOAP Fault status
+對應，保留 malformed/raw 與判讀上限 fallback。本地驗收與 R01/R02 回歸記於該卡。
+依使用者指示，HB1 維持未提交；更廣 endpoint/WS-Addressing、roles、structured/raw
+injection 仍未完成，不代表 Q02 或 W07 結案。

@@ -1,7 +1,4 @@
-//! SOAP envelope helpers and action extraction.
-
-#[cfg(feature = "mock-server")]
-use axum::http::HeaderMap;
+//! SOAP envelope helpers.
 
 /// Wrap a body fragment in a SOAP 1.2 envelope.
 pub fn soap(extra_ns: &str, body: &str) -> String {
@@ -71,18 +68,6 @@ pub fn resp_soap_fault(code: &str, reason: &str) -> String {
             r#"<s:Fault><s:Code><s:Value>{code}</s:Value></s:Code><s:Reason><s:Text xml:lang="en">{reason}</s:Text></s:Reason></s:Fault>"#
         ),
     )
-}
-
-/// Extract the SOAPAction URI from the Content-Type header.
-///
-/// SOAP 1.2 puts the action in the Content-Type header:
-/// `application/soap+xml; charset=utf-8; action="http://..."`
-#[cfg(feature = "mock-server")]
-pub fn extract_action(headers: &HeaderMap) -> Option<String> {
-    let ct = headers.get("content-type")?.to_str().ok()?;
-    let action_part = ct.split(';').find(|s| s.trim().starts_with("action="))?;
-    let raw = action_part.trim().strip_prefix("action=")?;
-    Some(raw.trim_matches('"').to_string())
 }
 
 #[cfg(test)]

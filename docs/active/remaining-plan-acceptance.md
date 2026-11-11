@@ -143,3 +143,10 @@ prepared inputs, not completion of everything that could eventually be coded.
 OS1 (2026-09-23): [bounded OSD CRUD](../done/mock-fidelity-osd-crud.md) adds scoped candidates, atomic per-source quotas, binding refusal and commit-only persistence/replay. Client coordinate/color/persistence XML and quota parsing are corrected. Selected external corpus: 198 instances / 56 operations. Background color, temporary text and arbitrary write extensions refuse explicitly; URI/source-mode and wider W10 work remain open.
 
 AF1 (2026-09-23): [bounded auth freshness/replay](../done/mock-fidelity-auth-freshness.md) is delivered. Authenticated nonce admission is atomic and bounded, stale/future/replayed tokens refuse without device hooks, and clock rollback cannot reopen evicted intervals. External corpus: 224 XML / 60 Actions; AF1 request Security headers are removed for credential-free export. Roles, HTTP binding and structured/raw injection remain Q02 work.
+
+HB1 (2026-11-10): the [bounded HTTP binding candidate](mock-fidelity-http-binding.md)
+implements representation headers, structural Action URI checks and scoped SOAP
+Fault status mapping, with malformed/raw and inspection-limit fallbacks. Local
+acceptance and R01/R02 regressions are recorded on that card. HB1 remains
+uncommitted at the user's request; broader endpoint/WS-Addressing policy, roles
+and structured/raw injection remain open. This does not close Q02 or W07.

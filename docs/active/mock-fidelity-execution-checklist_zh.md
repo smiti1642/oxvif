@@ -159,7 +159,7 @@ W01 是下一批 handler 遷移前的必要設計工作，不是在修改測試�
 | W04／M1、M3／PARTIAL | W02 | `request.rs`：P-A private owning request、scalar／scoped attribute／subtree／repeated 存取已實作；typed field rules 與 QName-valued content 待完成 | 七個 P-A 控制已擾動並還原；C02–C04／C09 仍須涵蓋已遷移 handler、合法 extension 及欄位限制 |
 | W05／M2／PARTIAL | 映射須 W01；caller 須 W02 | 結構化 auth／空 chain／選定 DeleteProfile fault，另納入已審查的 generic synthetic-boundary fault；資源／DTD 名稱明確屬 mock 自訂策略 | Expanded fault QName、typed failure、消費端及 state 控制；其他一般服務分支與 structured Detail 待完成，不概括宣稱符合規格 |
 | W06／M2／PARTIAL | 預設切換前完成 W05 設計 | 已完成第一層 subcode 的 client／health 控制，以及認證 CLI JSON／table 子程序控制；公開錯誤欄位未改變 | 服務預設切換前仍須擴充 nested／flat／vendor、transport／session 與消費端覆蓋；維持診斷及 exit-code 意義 |
-| W07／M2、M3／PARTIAL | W03／W05 設計、W06 | 已實作完整 synthetic Action 路由及共用 body identity；A01 在 responder 前拒絕無效 HTTP UTF-8 | 全來源路由及 HTTP／in-process 邊界控制；A01 檢查 HTTP 400／policy Fault、state／hook 保留、armed fault 未消耗及合法 Unicode。完整 content type／status／header 與 endpoint 政策仍待完成 |
+| W07／M2、M3／PARTIAL | W03／W05 設計、W06 | 已實作完整 synthetic Action 路由及共用 body identity；A01 在 responder 前拒絕無效 HTTP UTF-8 | 全來源路由及 HTTP／in-process 邊界控制；A01 檢查 HTTP 400／policy Fault、state／hook 保留、armed fault 未消耗及合法 Unicode。HB1 的有界 content type／status／header 子批次已實作為未提交候選；更廣 endpoint 政策仍待完成 |
 | W08／M3／PARTIAL | W02／W04／W05 | Scoped Header／UsernameToken 解析、明確 digest／encoding／role 政策、不反射輸入的固定錯誤及精確豁免；見[認證盤點](../done/mock-fidelity-auth-preflight_zh.md) | 兩種 transport 的身分、拒絕、state／hook 及即時 user table 控制；保留 auth 預設／順序與普通 CLI 分類。AF1 完成有限 freshness／nonce-reuse；角色授權與完整 WSSE／HTTP 安全仍未驗收 |
 | W09／M2／TODO | W05／W06 | `fault_injection.rs`、`responder.rs`、server admin endpoint、公開 injection builder | 分離 literal／structured 與刻意 raw 異常輸出；自訂 QName、single-shot 匹配、順序、併發、clear／reset 及相容測試 |
 | W10／M2–M4／PARTIAL | 批次 W01、W03–W06 | `services/media.rs`、`media2.rs`、共用狀態與 renderer；按下方批次施工 | 完成條件為每個 Media 列通過 C01–C12，兩種 view 狀態一致且不共用錯誤 wire shape。E1 不代表 DeleteProfile 列結案；PA1 已實作初始 binding／改名／All／容量／引用計數；VS1 已實作 scoped source 讀寫；VE1 已實作 scoped encoder candidate／options／capacity 與 committed replay；AM1 已實作選定 audio／metadata 契約，詳見批次紀錄 |
@@ -203,7 +203,7 @@ W02 發現新相依性時須擴充本表。
 | 面向 | 既有位置 | 負責工作／證據起點 |
 | --- | --- | --- |
 | 路由與 reader | [dispatch](../../src/mock/dispatch.rs)、[舊擷取](../../src/mock/xml_parse.rs)、[request parser](../../src/mock/request.rs)、[helpers](../../src/mock/helpers.rs) | W00–W07；`tests/mock_request_identity.rs`、dispatch tests |
-| Pipeline／transport | [responder](../../src/mock/responder.rs)、[mock transport](../../src/mock/transport.rs)、[server](../../src/mock/server.rs)、[HTTP client transport](../../src/transport.rs) | W03／W06–W09；HTTP／in-process request boundary 測試已實作，HTTP binding 測試仍待完成 |
+| Pipeline／transport | [responder](../../src/mock/responder.rs)、[mock transport](../../src/mock/transport.rs)、[server](../../src/mock/server.rs)、[HTTP client transport](../../src/transport.rs) | W03／W06–W09；HTTP／in-process request boundary 測試已實作，HB1 HTTP 測試與本地驗收記於候選卡；更廣 endpoint binding 仍未完成 |
 | Auth／injection | [auth](../../src/mock/auth.rs)、[fault injection](../../src/mock/fault_injection.rs)、[SOAP security](../../src/soap/security.rs)、[envelope](../../src/soap/envelope.rs) | W08／W09；unit tests 加上無效 WSSE 的直接 HTTP 控制 |
 | Service 實作 | [services module](../../src/mock/services/mod.rs)、操作清冊所連結的各檔案 | W10–W15；對應 `src/client/*.rs`、`src/tests/client/*_tests.rs`、`src/types/*.rs` |
 | State／側路徑 | [state](../../src/mock/state.rs)、[discovery responder](../../src/mock/discovery_responder.rs)、[fleet](../../src/mock/fleet.rs)、[snapshot](../../src/mock/snapshot.rs)、[font](../../src/mock/font.rs) | W17／W18；既有 state tests、`tests/mock_multi_sensor.rs` |
@@ -225,7 +225,7 @@ W02 發現新相依性時須擴充本表。
 | K03／選定 DeleteProfile 分支已修正 | 兩個服務對不存在／固定 profile 使用巢狀 Sender Fault；選定 corpus 的獨立驗證通過 | W05／W06；其餘操作映射仍待完成。Client 仍回報第一層而非最深層 subcode；全程式驗收尚未完成 |
 | K04／已記錄風險 | 舊 escaped 輸入經 escaping Fault helper 回顯可能重複轉義 | W05／W23；追蹤每個含插值的 reason，重現受影響路徑 |
 | K05／選定政策已實作 | Factory Reset 與 Events unsubscribe／sync 預設拒絕，僅能明確逐項 opt-in acknowledgment-only | [W16 證據](../done/mock-fidelity-ack-policy-preflight_zh.md)；不模擬 reset／lifecycle／event 效果，其他操作契約與 effectful stub 仍未完成 |
-| K06／路由與 UTF-8 子批次已修正、HTTP binding 未完成 | Synthetic Action 別名不再進入 handler；A01 在 responder 前以 400 拒絕無效 HTTP UTF-8；一般 SOAP response 保留既有 200 映射 | W03／W07；共用 body 一致性與 generic boundary fault 已實作；完整 HTTP 擷取／status 政策及 replay 語意仍為獨立工作 |
+| K06／路由與 UTF-8 子批次已修正、HTTP binding 未完成 | Synthetic Action 別名不再進入 handler；A01 在 responder 前以 400 拒絕無效 HTTP UTF-8；未提交的 HB1 候選將已知 Sender／其他標準 SOAP Fault 對應 400／500，保留文件記載的 raw／legacy／超限 fallback | W03／W07；共用 body 一致性與 generic boundary fault 已實作；完整 HTTP 擷取／status 政策及 replay 語意仍為獨立工作 |
 | K07／選定 scope／Fault probe 已修正 | 已涵蓋 scoped namespace resolution 與 Envelope／Fault anchor；QName 值、wildcard／未解析計數及更廣 corpus 仍未完成 | W20–W22；保留具失敗敏感性的獨立驗證及其明示限制 |
 | K08／選定 hook 缺陷已重現並修正 | Hook 原本持有 read lock，且可能觀察介入寫入而非原 mutation；現以 owned commit 快照在鎖外執行 | W18／W19 部分完成；管線開工核對有確定性 reentrant／snapshot 控制；queue、read snapshot、廣泛寫入及 replay 可見性仍待完成 |
 | K09／未驗證 | 必填欄位／範圍／extension／capability 宣告可能與契約不符 | W01／W10–W17；實作前完成批次工作卡 |
@@ -324,3 +324,9 @@ OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) �
 EP2（2026-09-23）：[有限 pull-point 生命週期](../done/mock-fidelity-event-lifecycle_zh.md) 完成獨立 endpoint／filter／queue、原子配置、expiry／renew／unsubscribe，保留公開 RequestCtx 建構。外部 corpus 為 216 XML／59 Actions；push、property 同步、完整 topic grammar、規範 WSNT Fault detail 仍為 W15 工作。
 
 AF1（2026-09-23）：[有界認證時間／nonce 防重用](../done/mock-fidelity-auth-freshness_zh.md) 已交付；nonce 原子 admission、過期／未來／重用拒絕不觸發 hook，時鐘倒退不重開已淘汰區間。外部 corpus 224 XML／60 Actions，AF1 request Security header 去除後匯出。Roles、HTTP binding、structured／raw injection 仍為 Q02 工作。
+
+HB1（2026-11-10）：[有界 HTTP binding 候選](mock-fidelity-http-binding_zh.md)
+已實作 representation headers、Action URI 結構驗證與 scoped SOAP Fault status
+對應，保留 malformed/raw 與判讀上限 fallback。本地驗收與 R01/R02 回歸記於該卡。
+依使用者指示，HB1 維持未提交；更廣 endpoint/WS-Addressing、roles、structured/raw
+injection 仍未完成，不代表 Q02 或 W07 結案。

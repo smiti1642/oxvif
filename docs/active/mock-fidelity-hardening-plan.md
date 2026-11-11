@@ -371,3 +371,10 @@ RS1 (2026-09-22): [four scoped read selectors](../done/mock-fidelity-read-select
 EP1 (2026-09-22): [event pull consistency](../done/mock-fidelity-event-pull.md) applies the active lexical filter to queued IO and snapshots selection/filter atomically. Concurrency/reentrant controls and four client captures supplement RS1; per-subscription lifecycle and full topic semantics remain open.
 
 OS1 (2026-09-23): [bounded OSD CRUD](../done/mock-fidelity-osd-crud.md) adds scoped candidates, atomic per-source quotas, binding refusal and commit-only persistence/replay. Client coordinate/color/persistence XML and quota parsing are corrected. Selected external corpus: 198 instances / 56 operations. Background color, temporary text and arbitrary write extensions refuse explicitly; URI/source-mode and wider W10 work remain open.
+
+HB1 (2026-11-10): the [bounded HTTP binding candidate](mock-fidelity-http-binding.md)
+implements representation headers, structural Action URI checks and scoped SOAP
+Fault status mapping, with malformed/raw and inspection-limit fallbacks. Local
+acceptance and R01/R02 regressions are recorded on that card. HB1 remains
+uncommitted at the user's request; broader endpoint/WS-Addressing policy, roles
+and structured/raw injection remain open. This does not close Q02 or W07.

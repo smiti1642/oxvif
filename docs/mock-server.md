@@ -174,7 +174,7 @@ Synthetic dispatch now matches the complete supported Action URI, including
 the Events port segment. The abbreviated prefixes below are an overview, not
 substring-matching rules. Wrong hosts, inserted path segments, changed schemes
 and cross-port aliases are rejected. Existing client Actions do not change.
-HTTP header parsing and replay invalidation remain separate hardening tasks;
+HB1 validates HTTP representation headers; broader endpoint binding and replay invalidation remain separate hardening tasks;
 fault/auth/replay/custom responders retain precedence. Operation/body identity is
 now checked at the common synthetic boundary described below.
 
@@ -245,7 +245,7 @@ status. Synthetic XML is limited to 2 MiB of UTF-8 text, depth 64 and 16,384 nod
 these are mock parser limits, not camera capacity. Resource refusals use
 `mock:RequestLimit`, and unsupported DTDs use `mock:RequestPolicy`, both bound to
 `urn:oxvif:mock:error`. These reasons contain no request text. HTTP may reject a
-request before this engine; header/status/encoding policy remains under review.
+request before this engine; HB1's header/status/encoding policy is described in §9.1.
 
 This is not runtime XSD validation or complete field validation. Full WS-Security,
 must-understand/encoding policy, remaining handler readers and replay effects still
@@ -1149,10 +1149,33 @@ value; address-less metadata blocks are explicitly unrepresentable. See the
 ### 9.1 Shape
 
 SOAP 1.2 `<s:Fault>` with `Code/Value` and `Reason/Text`
-(most service handlers still use `helpers::resp_soap_fault`). Dispatcher faults
-still use HTTP **200**; invalid UTF-8 at the HTTP SOAP entry point uses **400**.
-The rest of the SOAP HTTP binding audit remains pending. Do not infer
-correct HTTP behavior from a well-formed Fault body.
+(most service handlers still use `helpers::resp_soap_fault`). HB1 resolves the
+direct Fault Code QName in its namespace scope: SOAP Sender uses HTTP **400**;
+Receiver, VersionMismatch, MustUnderstand and DataEncodingUnknown use **500**.
+Legacy nonstandard codes, malformed raw fixtures and non-Fault responses retain
+**200**. Response XML is unchanged, including SOAP Content-Type.
+Status inspection falls back to 200 above 2 MiB, depth 64 or 16,384 elements;
+these are inspection limits and do not truncate the raw response. The existing
+HttpTransport continues parsing SOAP bodies on 200/400/500. Invalid UTF-8 at the
+HTTP SOAP entry point still uses **400**.
+
+HTTP requests require exactly one `application/soap+xml` Content-Type, limited to
+8192 bytes. Media type and parameter names are case-insensitive; action values
+retain case. Quoted parameters support escapes and embedded semicolons. Duplicate
+parameters/headers, malformed syntax, oversized Content-Type and invalid supplied
+action URI syntax return **400**. Missing/unsupported media type, non-UTF-8 charset
+or content coding other than a single `identity` returns **415**. Charset and
+Content-Encoding may be omitted; well-formed unknown parameters are ignored.
+These header refusals use fixed plain-text bodies without input echoes and run
+before auth, armed faults, replay and mutation. SOAPAction is ignored. An omitted
+action remains empty for the existing router; no Body/WS-Addressing fallback is
+implied. Full endpoint mapping and broader HTTP/WS-Addressing conformance remain
+separate work.
+
+Action validation checks RFC 3986 component structure without normalizing or
+resolving the URI. The additional nonempty scheme remainder is a local mock
+policy. The framework buffers request bodies before entering the adapter;
+bodies above 2 MiB receive 413 before these header or UTF-8 checks.
 
 On the hardening branch, Media1/Media2 `DeleteProfile` missing/fixed-profile
 refusals use nested Sender faults. `SoapError::Fault.code` is `s:Sender`, and
@@ -1248,12 +1271,12 @@ subcode `wsse:FailedAuthentication`; the subcode is now bound at its Value
 element. Literal reason text is escaped once, invalid XML characters become
 U+FFFD, and a literal CR is represented by a character reference. Credential
 parsing has separately changed as described in §4; exemptions, authentication
-defaults and HTTP status are unchanged.
+defaults are unchanged. HB1 now maps the SOAP Sender code to HTTP 400.
 The client still exposes the first subcode, not the deepest nested subcode.
 
 **Remaining deviation.** Other service faults still use the legacy flat `Code/Value`
 representation. Namespace binding does not fix operation-specific code/subcode
-hierarchies or validate HTTP status behavior. That migration is still pending;
+hierarchies. HB1 separately maps recognized SOAP codes to HTTP status. The remaining service migration is still pending;
 do not interpret this correction as full SOAP/ONVIF fault conformance. Older
 unmigrated request extractors may also supply already-escaped values to a reason,
 so literal token echo correctness is only covered for the migrated paths.

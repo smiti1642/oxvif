@@ -44,7 +44,7 @@ and implementation remain; it is not a claim that the existing service is absent
 | ID | Existing owner | Status | Planned work and completion boundary |
 | --- | --- | --- | --- |
 | Q01 | F04 / W15 | PARTIAL: EP2 delivered | Events per-subscription endpoint identity, filter/queue isolation, bounded capacity, renew/expiry/unsubscribe; preserve RequestCtx construction; deterministic clock/lifecycle tests and independent wire validation |
-| Q02 | F05 / W07–W09 | PARTIAL: AF1 delivered | Auth freshness, bounded atomic nonce-reuse rejection and expiry; HTTP binding/status/header policy; structured versus deliberately raw fault injection, roles and refusal preservation |
+| Q02 | F05 / W07–W09 | PARTIAL: AF1 delivered; HB1 local candidate | Auth freshness, bounded atomic nonce-reuse rejection and expiry; HTTP binding/status/header policy; structured versus deliberately raw fault injection, roles and refusal preservation |
 | Q03 | F01 / W10 | TODO | Remaining Media URI/source-mode/binding contracts and OSD extensions beyond OS1; explicit supported/refused fields with both-view consistency |
 | Q04 | F02 / W11–W12 | TODO | PTZ spaces/configuration/presets/home/tours and Imaging/focus per-source modeled effects, limits and precise errors |
 | Q05 | F03 / W13–W14 | TODO | Device/DeviceIO users/network/scopes/storage/relay contracts and Recording/Search/Replay lifetimes, termination and cascades; synthetic effects only |
@@ -76,3 +76,10 @@ and implementation remain; it is not a claim that the existing service is absent
 Q01 EP2 is delivered: [evidence](../done/mock-fidelity-event-lifecycle.md). Remaining W15 work is push/property synchronization, full-topic matching and normative WSNT Fault detail; these are not hardware blockers. Next independent batch: Q02 auth freshness and nonce replay protection.
 
 AF1 (2026-09-23): [bounded auth freshness/replay](../done/mock-fidelity-auth-freshness.md) is delivered. Authenticated nonce admission is atomic and bounded, stale/future/replayed tokens refuse without device hooks, and clock rollback cannot reopen evicted intervals. External corpus: 224 XML / 60 Actions; AF1 request Security headers are removed for credential-free export. Roles, HTTP binding and structured/raw injection remain Q02 work.
+
+HB1 (2026-11-10): the [bounded HTTP binding candidate](mock-fidelity-http-binding.md)
+implements representation headers, structural Action URI checks and scoped SOAP
+Fault status mapping, with malformed/raw and inspection-limit fallbacks. Local
+acceptance and R01/R02 regressions are recorded on that card. HB1 remains
+uncommitted at the user's request; broader endpoint/WS-Addressing policy, roles
+and structured/raw injection remain open. This does not close Q02 or W07.

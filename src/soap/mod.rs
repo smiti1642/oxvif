@@ -19,6 +19,8 @@ pub mod error;
 pub mod security;
 pub mod xml;
 
+#[cfg(feature = "mock-server")]
+pub(crate) use complete::validate as validate_complete_xml;
 pub use complete::{MAX_XML_BYTES, MAX_XML_DEPTH, MAX_XML_NODES};
 pub use envelope::SoapEnvelope;
 pub use error::{SoapError, XmlResource};

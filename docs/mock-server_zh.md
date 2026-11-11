@@ -148,7 +148,7 @@ Content-Type: application/soap+xml; charset=utf-8; action="http://www.onvif.org/
 Synthetic dispatch 現在比對完整的受支援 Action URI，包含 Events 的 port
 segment。下表的縮寫 prefix 僅為概覽，不代表子字串匹配規則。錯誤主機、插入的
 path segment、不同 scheme 及跨 port 的別名都會遭拒；既有 client Action 不變。
-HTTP header 解析及 replay invalidation 仍為獨立強化項目；fault／auth／replay／
+HB1 已驗證 HTTP representation header；更廣端點 binding 及 replay invalidation 仍為獨立強化項目；fault／auth／replay／
 custom responder 的優先順序維持不變。Operation／body 身分已由下述共用
 synthetic 邊界檢查。
 
@@ -207,7 +207,7 @@ Malformed XML、namespace 錯誤、operation 不符及 container shape 錯誤改
 2 MiB UTF-8 text、深度 64、16,384 個 node；這些是 mock parser 限制，並非
 攝影機容量。資源拒絕使用 `mock:RequestLimit`，不支援的 DTD 使用
 `mock:RequestPolicy`，兩者均綁定 `urn:oxvif:mock:error`，reason 不包含請求
-文字。HTTP 可能在進入引擎之前拒絕請求；header／status／encoding 策略仍待審查。
+文字。HTTP 可能在進入引擎之前拒絕請求；HB1 的 header／status／encoding 策略見 §9.1。
 
 此功能不是 runtime XSD validation，也不是完整欄位驗證。完整 WS-Security、
 must-understand／encoding 策略、其他 handler reader 及 replay effect 仍需
@@ -684,7 +684,21 @@ Parser 應優先使用最深層節點，並逐層向外 fallback。不存在的�
 
 ## 9. 錯誤模型
 
-Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多數服務 handler 仍使用 `helpers::resp_soap_fault`）。Dispatcher fault 的 HTTP status 仍為 **200**；HTTP SOAP 入口的無效 UTF-8 使用 **400**。其餘 SOAP HTTP binding 稽核尚未完成。XML 結構正確不能證明 HTTP 行為正確。
+Fault 使用 SOAP 1.2 `<s:Fault>`，包含 `Code/Value` 與 `Reason/Text`（多數服務 handler 仍使用 `helpers::resp_soap_fault`）。HB1 依作用域解析直接 Fault Code QName：SOAP Sender 使用 HTTP **400**；Receiver、VersionMismatch、MustUnderstand、DataEncodingUnknown 使用 **500**。舊有非標準 code、錯誤 raw fixture 及非 Fault 回應維持 **200**。回應 XML 與 SOAP Content-Type 保持不變；既有 HttpTransport 繼續解析 200/400/500 的 SOAP 內容。HTTP SOAP 入口的無效 UTF-8 仍使用 **400**。
+
+HTTP 請求必須有唯一 `application/soap+xml` Content-Type，最多 8192 bytes。
+媒體類型與參數名不分大小寫，action 值保留大小寫；引號參數支援跳脫與內嵌分號。
+重複參數／header、錯誤語法、超長 Content-Type 或提供的 action URI 語法錯誤回 **400**。
+缺少／不支援的媒體類型、非 UTF-8 charset 或非單一 `identity` 內容編碼回 **415**。
+Charset 與 Content-Encoding 可省略；忽略語法正確的未知參數。Header 拒絕回固定
+純文字，不回顯輸入，且在 auth、已排入故障、replay、mutation 前執行。
+忽略 SOAPAction；省略 action 時由既有 router 處理空值，不代表支援 Body／
+WS-Addressing 推導。完整端點映射與更廣 HTTP／WS-Addressing 相容仍為其他工作。
+
+Action 依 RFC 3986 驗證 component 結構，不做 URI 正規化或查詢；scheme 後額外要求
+非空 remainder 屬 Mock 本地政策。Fault status 判讀上限為 2 MiB、深度 64、16,384
+元素，超限維持 200，不截斷或改寫 raw 回應。Framework 會先緩衝 request body，
+超過 2 MiB 時在 header／UTF-8 檢查前回 413。
 
 在強化分支中，Media1／Media2 `DeleteProfile` 對不存在或固定 profile 的拒絕使用
 巢狀 Sender Fault。`SoapError::Fault.code` 為 `s:Sender`，`subcode` 維持**第一層**：
@@ -761,11 +775,11 @@ NoSuchRecording-DELREC-5701: Rec_999
 serializer。認證錯誤維持 `s:Sender` 與第一層 subcode `wsse:FailedAuthentication`，
 並於其 Value element 宣告 namespace。Reason 原始文字只轉義一次；XML 不允許
 的字元改為 U+FFFD，原始 CR 使用 character reference 表示。憑證解析另依 §4
-更新；豁免項目、認證預設值及 HTTP status 不變。Client 仍只公開第一層 subcode，
+更新；豁免項目與認證預設值不變。HB1 現將 SOAP Sender 對應 HTTP 400。Client 仍只公開第一層 subcode，
 而非最深層。
 
 **仍有偏差：** 其他服務 Fault 仍採平面的 `Code/Value` 表示。Namespace binding
-修正並未完成各操作的 code／subcode 階層，也未驗證 HTTP status 行為；這些
+修正並未完成各操作的 code／subcode 階層。HB1 另將已知 SOAP code 對應 HTTP status；其餘服務
 遷移仍待完成，不得因此宣稱完整 SOAP／ONVIF Fault conformance。尚未遷移的
 request extractor 也可能將已轉義文字放入 reason，因此目前只有已遷移路徑
 具備 token 原始文字回傳正確性的驗證。

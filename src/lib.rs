@@ -238,7 +238,9 @@
 //! TOML configuration for multiple devices, explicit LAN access and optional
 //! shared, unscoped discovery. It provides no RTSP streams or production auth.
 //! Synthetic requests share bounded XML and operation-identity checks; full
-//! field fidelity and HTTP binding remain separate from that validation.
+//! field fidelity remains separate from that validation. HTTP checks SOAP
+//! Content-Type/UTF-8 representation before dispatch and maps recognized SOAP
+//! Sender/other standard fault codes to 400/500; broader binding remains partial.
 //! Empty synthetic profile identities are refused with `mock:RequestPolicy`;
 //! omit the Create token for allocation and explicitly repair empty snapshot
 //! tokens. The mock does not silently rename persisted entries.

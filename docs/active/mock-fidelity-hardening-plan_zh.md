@@ -331,3 +331,9 @@ RS1（2026-09-22）：[四個 scoped read selector](../done/mock-fidelity-read-s
 EP1（2026-09-22）：[event pull 一致性](../done/mock-fidelity-event-pull_zh.md) 對 queued IO 套用既有 lexical filter，並原子取得事件／filter。併發、reentrant 控制及四組 client capture 補充 RS1；每份 subscription 的生命週期與完整 topic 語意仍未完成。
 
 OS1（2026-09-23）：[有限 OSD CRUD](../done/mock-fidelity-osd-crud_zh.md) 完成 scoped candidate、每來源原子配額、綁定拒絕及只在 commit 後通知持久化／replay。Client 座標／顏色／persistence XML 與配額解析已修正。選定外部 corpus 為 198 instance／56 operation。背景色、暫存文字及任意 write extension 明確拒絕；URI／source mode 與其餘 W10 仍未完成。
+
+HB1（2026-11-10）：[有界 HTTP binding 候選](mock-fidelity-http-binding_zh.md)
+已實作 representation headers、Action URI 結構驗證與 scoped SOAP Fault status
+對應，保留 malformed/raw 與判讀上限 fallback。本地驗收與 R01/R02 回歸記於該卡。
+依使用者指示，HB1 維持未提交；更廣 endpoint/WS-Addressing、roles、structured/raw
+injection 仍未完成，不代表 Q02 或 W07 結案。

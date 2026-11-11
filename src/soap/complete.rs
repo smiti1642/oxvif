@@ -37,7 +37,7 @@ fn valid_name(name: &str) -> bool {
         && characters.all(|ch| name_start(ch) || matches!(ch, '-' | '.' | '0'..='9' | '\u{b7}' | '\u{300}'..='\u{36f}' | '\u{203f}'..='\u{2040}'))
 }
 
-pub(super) fn validate(xml: &str) -> Result<(), SoapError> {
+pub(crate) fn validate(xml: &str) -> Result<(), SoapError> {
     if xml.len() > MAX_XML_BYTES {
         return Err(limit(XmlResource::Bytes, MAX_XML_BYTES));
     }

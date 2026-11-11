@@ -48,6 +48,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   client. Oversized bodies return non-retryable `ResponseTooLarge` without retaining
   body text. Exhaustive matches must handle the new transport/build error variants.
 
+- Mock HTTP validates SOAP Content-Type parameters and UTF-8/content-coding
+  support before consuming auth or injected faults. SOAP Sender faults now use
+  HTTP 400 and other standard SOAP fault codes use 500; raw malformed responses
+  and legacy nonstandard codes retain 200, as do responses above the bounded
+  status-inspection limits (2 MiB, depth 64, 16,384 elements). SOAP payloads and typed client errors
+  are unchanged.
+
 ### Added
 
 - Add bounded offline `compare_corpora` reference comparison for six selected

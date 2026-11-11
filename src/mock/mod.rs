@@ -199,7 +199,11 @@
 //! characters become U+FFFD. Credential parsing now requires unique qualified
 //! Header/UsernameToken fields, explicit PasswordDigest Type and a nonempty
 //! base64 nonce; input identities are decoded without trimming and errors do not
-//! echo credentials. Auth defaults and HTTP status are unchanged. Freshness and
+//! echo credentials. Auth defaults are unchanged; the HTTP adapter maps SOAP
+//! Sender faults, including authentication refusals, to 400 while preserving
+//! their body and typed client classification. Other standard SOAP codes use
+//! 500; malformed/raw, legacy-code and inspection-limit fallbacks retain 200.
+//! Freshness and
 //! nonce replay protection are bounded per instance; user-level authorization
 //! and full WS-Security processing remain unmodeled.
 //! Remaining shared fault output escapes text and binds known prefixes, but still
@@ -216,6 +220,8 @@ pub(crate) mod effect;
 mod fault;
 pub(crate) mod fault_injection;
 pub(crate) mod helpers;
+#[cfg(feature = "mock-server")]
+mod http_binding;
 pub(crate) mod policy;
 mod request;
 #[cfg(feature = "metamorph")]
