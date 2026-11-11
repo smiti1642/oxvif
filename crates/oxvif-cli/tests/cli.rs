@@ -83,6 +83,139 @@ fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr should be UTF-8")
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn selected_media_service_reaches_cli_profiles_diagnosis_and_inventory() {
+    let server = oxvif::mock::MockServer::start().await.unwrap();
+    let config = tempfile::tempdir().unwrap();
+    let target = server.device_url();
+    let schema: Value =
+        serde_json::from_str(include_str!("../schema/oxvif-envelope.schema.json")).unwrap();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    let original = run_isolated(
+        &[
+            "media",
+            "profiles",
+            "--target",
+            target,
+            "--json",
+            "--non-interactive",
+        ],
+        config.path(),
+    );
+    assert_eq!(original.status.code(), Some(0), "{}", stderr(&original));
+    let original: Value = serde_json::from_slice(&original.stdout).unwrap();
+    assert!(original["data"]["result"].is_array());
+    let mut token = None;
+    for format in ["table", "json", "jsonl"] {
+        let output = run_isolated(
+            &[
+                "--media-service",
+                "media2",
+                "--soap-auth",
+                "digest",
+                "media",
+                "profiles",
+                "--target",
+                target,
+                "--output",
+                format,
+                "--non-interactive",
+                "-vv",
+            ],
+            config.path(),
+        );
+        assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+        assert!(stderr(&output).contains("soap_auth=Digest"));
+        if format == "table" {
+            assert!(stdout(&output).contains("Media service: media2"));
+            assert!(stdout(&output).contains("TOKEN | NAME"));
+            continue;
+        }
+        let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(validator.is_valid(&value), "{value}");
+        let result = &value["data"]["result"];
+        assert_eq!(result["media_service"], "media2");
+        assert_eq!(result["attempts"][0]["outcome"], "succeeded");
+        let profile = &result["profiles"][0];
+        assert!(
+            profile["video"]["width"]
+                .as_u64()
+                .is_some_and(|width| width > 0)
+        );
+        token = profile["token"].as_str().map(str::to_owned);
+    }
+    let token = token.unwrap();
+    let diagnose = run_isolated(
+        &[
+            "--media-service",
+            "media2",
+            "diagnose",
+            "--target",
+            target,
+            "--profile",
+            &token,
+            "--json",
+            "--non-interactive",
+        ],
+        config.path(),
+    );
+    assert_eq!(
+        diagnose.status.code(),
+        Some(0),
+        "{} {}",
+        stdout(&diagnose),
+        stderr(&diagnose)
+    );
+    let value: Value = serde_json::from_slice(&diagnose.stdout).unwrap();
+    assert!(validator.is_valid(&value));
+    let result = &value["data"]["result"];
+    assert_eq!(result["selected_profile"], token);
+    let stages = result["stages"].as_array().unwrap();
+    assert!(stages.iter().any(
+        |stage| stage["name"] == "media_profiles" && stage["data"]["media_service"] == "media2"
+    ));
+    assert!(
+        stages
+            .iter()
+            .any(|stage| stage["name"] == "stream_uri" && stage["status"] == "pass")
+    );
+    assert!(
+        stages
+            .iter()
+            .any(|stage| stage["name"] == "snapshot_uri" && stage["status"] == "pass")
+    );
+    let baseline = config.path().join("media2-inventory.json");
+    let export = run_isolated(
+        &[
+            "--media-service",
+            "media2",
+            "config",
+            "export",
+            "--target",
+            target,
+            "--save",
+            baseline.to_str().unwrap(),
+            "--json",
+            "--non-interactive",
+        ],
+        config.path(),
+    );
+    assert_eq!(
+        export.status.code(),
+        Some(0),
+        "{} {}",
+        stdout(&export),
+        stderr(&export)
+    );
+    let inventory: Value = serde_json::from_slice(&fs::read(&baseline).unwrap()).unwrap();
+    for section in ["profiles", "video_encoders"] {
+        assert_eq!(
+            inventory["sections"][section]["data"][0]["media_service"],
+            "media2"
+        );
+    }
+}
+
 // Only execution timing is nondeterministic between independent subprocesses.
 // Keep the entire remaining envelope so UI options cannot silently change it.
 fn without_elapsed_ms(mut value: Value) -> Value {

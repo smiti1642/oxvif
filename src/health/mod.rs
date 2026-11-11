@@ -96,6 +96,8 @@ use crate::OnvifSession;
 pub struct HealthCheck {
     device_url: String,
     credentials: Option<(String, String)>,
+    authentication: crate::client::AuthenticationMode,
+    media_selection: Option<crate::media_workflow::MediaSelection>,
     transport: Option<std::sync::Arc<dyn crate::transport::Transport>>,
     write_checks: bool,
     liveness_probes: bool,
@@ -111,6 +113,8 @@ impl HealthCheck {
         Self {
             device_url: device_url.into(),
             credentials: None,
+            authentication: crate::client::AuthenticationMode::default(),
+            media_selection: None,
             transport: None,
             write_checks: false,
             liveness_probes: false,
@@ -138,6 +142,21 @@ impl HealthCheck {
         password: impl Into<String>,
     ) -> Self {
         self.credentials = Some((username.into(), password.into()));
+        self
+    }
+
+    /// Select the authentication used by SOAP checks.
+    pub fn with_authentication_mode(mut self, mode: crate::client::AuthenticationMode) -> Self {
+        self.authentication = mode;
+        self
+    }
+
+    /// Use service-qualified media reads for profile, URI and encoder checks.
+    pub fn with_media_selection(
+        mut self,
+        selection: crate::media_workflow::MediaSelection,
+    ) -> Self {
+        self.media_selection = Some(selection);
         self
     }
 
@@ -230,7 +249,9 @@ impl HealthCheck {
             Some(transport) => transport,
             None => {
                 let mut http = crate::transport::HttpTransport::new();
-                if let Some((u, p)) = &self.credentials {
+                if let Some((u, p)) = &self.credentials
+                    && self.authentication.uses_digest()
+                {
                     http = http.with_credentials(u.clone(), p.clone());
                 }
                 std::sync::Arc::new(http)
@@ -247,7 +268,9 @@ impl HealthCheck {
             Some(c) => c.clone(),
             None => tap.clone(),
         };
-        let mut builder = OnvifSession::builder(&self.device_url).with_transport(transport);
+        let mut builder = OnvifSession::builder(&self.device_url)
+            .with_transport(transport)
+            .with_authentication_mode(self.authentication);
         if let Some((u, p)) = &self.credentials {
             builder = builder.with_credentials(u.clone(), p.clone());
         }
@@ -317,8 +340,17 @@ impl HealthCheck {
             let creds = self.credentials.clone();
             let url = self.device_url.clone();
             let snapshot_options = self.snapshot_options.clone();
+            let media_selection = self.media_selection;
             set.spawn(async move {
-                checks::media(&s, liveness, creds.as_ref(), &url, &snapshot_options).await
+                checks::media(
+                    &s,
+                    liveness,
+                    creds.as_ref(),
+                    &url,
+                    &snapshot_options,
+                    media_selection,
+                )
+                .await
             });
         }
         {

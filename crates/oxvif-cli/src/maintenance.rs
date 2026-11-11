@@ -15,6 +15,9 @@ use tokio::time::{Instant, timeout};
 
 use crate::application::{ResolvedTarget, build_http_transport};
 use crate::{AppError, ClockSyncPolicy, ExecutionOptions, TargetSelector};
+use oxvif::media_workflow::{
+    MediaCatalogue, MediaEncoders, MediaService, MediaUri, NativeMediaProfile, StreamRequest,
+};
 
 #[cfg(test)]
 const MAX_IMAGE_BYTES: usize = oxvif::health::snapshot::MAX_IMAGE_BYTES;
@@ -221,24 +224,79 @@ impl ManagedDevice {
     }
 }
 
+async fn read_catalogue(
+    session: &OnvifSession,
+    options: &ExecutionOptions,
+) -> Result<MediaCatalogue, OnvifError> {
+    if let Some(service) = options.media_service {
+        session
+            .media_catalogue(service)
+            .await
+            .map_err(|error| error.cause)
+    } else {
+        let profiles = session.get_profiles().await?;
+        Ok(MediaCatalogue {
+            service: MediaService::Media1,
+            endpoint_source: oxvif::session::ServiceUrlSource::Capabilities,
+            profiles: profiles
+                .into_iter()
+                .map(NativeMediaProfile::Media1)
+                .collect(),
+            attempts: Vec::new(),
+        })
+    }
+}
+
+async fn read_encoders(
+    session: &OnvifSession,
+    options: &ExecutionOptions,
+    service: MediaService,
+) -> Result<MediaEncoders, OnvifError> {
+    if options.media_service.is_some() {
+        session.media_video_encoders(service).await
+    } else {
+        session
+            .get_video_encoder_configurations()
+            .await
+            .map(MediaEncoders::Media1)
+    }
+}
+
+fn native_profile(profile: &NativeMediaProfile) -> Value {
+    match profile {
+        NativeMediaProfile::Media1(profile) => json!(profile),
+        NativeMediaProfile::Media2(profile) => json!(profile),
+        _ => Value::Null,
+    }
+}
+
 async fn profile_choices(
     session: &OnvifSession,
-    profiles: &[oxvif::MediaProfile],
+    catalogue: &MediaCatalogue,
     options: &ExecutionOptions,
 ) -> Vec<ProfileChoice> {
-    if profiles.is_empty() {
+    if catalogue.profiles.is_empty() {
         return Vec::new();
     }
     let (step, configs) = onvif_step("profile_details", options, || {
-        session.get_video_encoder_configurations()
+        read_encoders(session, options, catalogue.service)
     })
     .await;
-    profiles.iter().map(|p| {
-        let config = configs.as_ref().and_then(|configs| configs.iter().find(|c| Some(&c.token) == p.video_encoder_token.as_ref()));
-        ProfileChoice { token: p.token.clone(), name: p.name.clone(),
-            video: config.map(|c| json!({"encoding": c.encoding.to_string(), "width": c.resolution.width, "height": c.resolution.height, "fps_limit": c.rate_control.as_ref().map(|r| r.frame_rate_limit), "source": "device_configuration_not_measured"})),
-            details_status: if config.is_some() { "reported" } else if matches!(step.status, Status::Fail) { "query_failed" } else { "not_provided" }.into(),
-        }
+    catalogue.profiles.iter().map(|profile| {
+        let token = profile.encoder_token();
+        let config = match configs.as_ref() {
+            Some(MediaEncoders::Media1(configs)) => configs.iter().find(|c| Some(c.token.as_str()) == token).map(|c| json!({
+                "encoding": c.encoding.to_string(), "width": c.resolution.width, "height": c.resolution.height,
+                "fps_limit": c.rate_control.as_ref().map(|r| r.frame_rate_limit), "source": "device_configuration_not_measured",
+            })),
+            Some(MediaEncoders::Media2(configs)) => configs.iter().find(|c| Some(c.token.as_str()) == token).map(|c| json!({
+                "encoding": c.encoding.to_string(), "width": c.resolution.width, "height": c.resolution.height,
+                "fps_limit": c.rate_control.as_ref().map(|r| r.frame_rate_limit), "source": "device_configuration_not_measured",
+            })),
+            _ => None,
+        };
+        let details_status = if config.is_some() { "reported" } else if matches!(step.status, Status::Fail) { "query_failed" } else { "not_provided" };
+        ProfileChoice {token: profile.token().to_owned(), name: profile.name().to_owned(), video: config, details_status: details_status.into()}
     }).collect()
 }
 
@@ -246,21 +304,81 @@ pub(crate) async fn profile_report(
     session: &OnvifSession,
     options: &ExecutionOptions,
 ) -> Result<Value, AppError> {
-    let (step, profiles) = onvif_step("media_profiles", options, || session.get_profiles()).await;
-    let profiles = profiles.ok_or_else(|| AppError::device_operation_failed(step.detail, false))?;
-    let choices = profile_choices(session, &profiles, options).await;
-    Ok(Value::Array(
-        profiles
-            .iter()
-            .zip(choices)
-            .map(|(p, c)| {
-                let mut value = json!(p);
-                value["video"] = json!(c.video);
-                value["details_status"] = json!(c.details_status);
-                value
-            })
-            .collect(),
-    ))
+    let (step, catalogue) = onvif_step("media_profiles", options, || {
+        read_catalogue(session, options)
+    })
+    .await;
+    let catalogue =
+        catalogue.ok_or_else(|| AppError::device_operation_failed(step.detail, false))?;
+    let choices = profile_choices(session, &catalogue, options).await;
+    let profiles = catalogue
+        .profiles
+        .iter()
+        .zip(choices)
+        .map(|(p, c)| {
+            let mut value = native_profile(p);
+            value["video"] = json!(c.video);
+            value["details_status"] = json!(c.details_status);
+            value
+        })
+        .collect::<Vec<_>>();
+    Ok(if options.media_service.is_some() {
+        json!({"media_service": catalogue.service, "endpoint_source": catalogue.endpoint_source,
+            "attempts": catalogue.attempts, "profiles": profiles})
+    } else {
+        Value::Array(profiles)
+    })
+}
+
+pub(crate) async fn stream_uri_value(
+    session: &OnvifSession,
+    options: &ExecutionOptions,
+    token: &str,
+) -> Result<Value, OnvifError> {
+    if options.media_service.is_none() {
+        return Ok(json!(session.get_stream_uri(token).await?));
+    }
+    let catalogue = read_catalogue(session, options).await?;
+    let profile = catalogue.select(Some(token))?;
+    let uri = session
+        .media_stream_uri(&profile, StreamRequest::Rtsp)
+        .await?;
+    let mut value = match uri {
+        MediaUri::Media1(uri) => json!(uri),
+        MediaUri::Media2(uri) => json!({"uri": uri}),
+    };
+    value["media_service"] = json!(catalogue.service);
+    Ok(value)
+}
+
+pub(crate) async fn snapshot_uri_value(
+    session: &OnvifSession,
+    options: &ExecutionOptions,
+    token: &str,
+) -> Result<Value, OnvifError> {
+    let uri = read_snapshot_uri(session, options, token).await?;
+    let service = uri.service();
+    let mut value = match uri {
+        MediaUri::Media1(uri) => json!(uri),
+        MediaUri::Media2(uri) => json!({"uri": uri}),
+    };
+    if options.media_service.is_some() {
+        value["media_service"] = json!(service);
+    }
+    Ok(value)
+}
+
+async fn read_snapshot_uri(
+    session: &OnvifSession,
+    options: &ExecutionOptions,
+    token: &str,
+) -> Result<MediaUri<oxvif::SnapshotUri>, OnvifError> {
+    if options.media_service.is_none() {
+        return session.get_snapshot_uri(token).await.map(MediaUri::Media1);
+    }
+    let catalogue = read_catalogue(session, options).await?;
+    let profile = catalogue.select(Some(token))?;
+    session.media_snapshot_uri(&profile).await
 }
 
 pub(crate) async fn standalone_profiles(
@@ -540,11 +658,11 @@ async fn execute_connected(
                 ));
             }
             let (step, uri) = onvif_step("snapshot_uri", options, || {
-                session.get_snapshot_uri(profile)
+                read_snapshot_uri(session, options, profile)
             })
             .await;
             let uri = uri.ok_or_else(|| AppError::device_operation_failed(step.detail, false))?;
-            let (bytes, image_type) = fetch_image(&uri.uri, resolved, options).await?;
+            let (bytes, image_type) = fetch_image(uri.uri(), resolved, options).await?;
             save_new(save, &bytes)?;
             Ok(
                 json!({"saved_to": save.display().to_string(), "bytes": bytes.len(), "image_type": image_type,
@@ -578,12 +696,16 @@ async fn connect(
     let transport =
         build_http_transport(options, resolved.username.as_deref(), resolved.password())?;
     Ok(onvif_step("onvif_session", options, || {
-        let mut builder = OnvifSession::builder(&resolved.target).with_transport(transport.clone());
+        let mut builder = OnvifSession::builder(&resolved.target)
+            .with_transport(transport.clone())
+            .with_authentication_mode(options.soap_auth);
         if let (Some(user), Some(password)) = (resolved.username.as_deref(), resolved.password()) {
             builder = builder.with_credentials(user, password);
         }
         if options.clock_sync == ClockSyncPolicy::Always
-            || (options.clock_sync == ClockSyncPolicy::Auto && resolved.password.is_some())
+            || (options.clock_sync == ClockSyncPolicy::Auto
+                && resolved.password.is_some()
+                && options.soap_auth.uses_ws_security())
         {
             builder = builder.with_clock_sync();
         }
@@ -667,35 +789,38 @@ where
 
 fn classify(error: &OnvifError) -> (&'static str, &'static str, bool, bool) {
     match error {
+        OnvifError::Transport(oxvif::transport::TransportError::Deadline) => (
+            "TIMEOUT",
+            "SOAP exchange exceeded its deadline.",
+            false,
+            true,
+        ),
         OnvifError::RecordingSearchIncomplete { .. } => (
             "SEARCH_INCOMPLETE",
             "Recording search stopped before completion.",
             false,
             false,
         ),
+        OnvifError::Soap(error) if error.action_not_supported() => (
+            "UNSUPPORTED",
+            "Device explicitly reports an unsupported action.",
+            true,
+            false,
+        ),
+        OnvifError::Soap(error) if error.not_authorized() => (
+            "NOT_AUTHORIZED",
+            "Device rejected authorization.",
+            false,
+            false,
+        ),
         OnvifError::Soap(SoapError::Fault {
-            subcode: Some(code),
-            ..
-        }) => match code.rsplit(':').next() {
-            Some("ActionNotSupported" | "OptionalActionNotImplemented") => (
-                "UNSUPPORTED",
-                "Device explicitly reports an unsupported action.",
-                true,
-                false,
-            ),
-            Some("NotAuthorized") => (
-                "NOT_AUTHORIZED",
-                "Device rejected authorization.",
-                false,
-                false,
-            ),
-            _ => (
-                "SOAP_ERROR",
-                "Device returned a SOAP fault (raw details withheld).",
-                false,
-                false,
-            ),
-        },
+            subcode: Some(_), ..
+        }) => (
+            "SOAP_ERROR",
+            "Device returned a SOAP fault (raw details withheld).",
+            false,
+            false,
+        ),
         OnvifError::Transport(oxvif::transport::TransportError::HttpStatus {
             status: 401 | 403,
             ..
@@ -761,17 +886,22 @@ async fn diagnose(
     if let Some(session) = session {
         let (info, _) = onvif_step("device_info", options, || session.get_device_info()).await;
         stages.push(info);
-        let (mut profiles_step, profiles) =
-            onvif_step("media_profiles", options, || session.get_profiles()).await;
-        let candidates = if let Some(profiles) = profiles.as_ref() {
-            profile_choices(session, profiles, options).await
+        let (mut profiles_step, profiles) = onvif_step("media_profiles", options, || {
+            read_catalogue(session, options)
+        })
+        .await;
+        let candidates = if let Some(catalogue) = profiles.as_ref() {
+            profile_choices(session, catalogue, options).await
         } else {
             Vec::new()
         };
-        if let Some(profiles) = &profiles {
-            profiles_step.data = Some(
-                json!({"profiles": profiles.iter().map(|p| &p.token).collect::<Vec<_>>(), "candidates": candidates}),
-            );
+        if let Some(catalogue) = &profiles {
+            let mut data = json!({"profiles": catalogue.profiles.iter().map(NativeMediaProfile::token).collect::<Vec<_>>(), "candidates": candidates});
+            if options.media_service.is_some() {
+                data["media_service"] = json!(catalogue.service);
+                data["media_attempts"] = json!(catalogue.attempts);
+            }
+            profiles_step.data = Some(data);
         }
         stages.push(profiles_step);
         let mut reason = if profiles.is_none() {
@@ -800,25 +930,39 @@ async fn diagnose(
         }
         let selected = profiles
             .as_ref()
-            .and_then(|profiles| match profile.or(picked.as_deref()) {
-                Some(token) => profiles
-                    .iter()
-                    .find(|p| p.token == token)
-                    .map(|p| p.token.as_str()),
-                None if profiles.len() == 1 => Some(profiles[0].token.as_str()),
-                _ => None,
-            });
-        if let Some(token) = selected {
-            selected_profile = Some(token.to_owned());
-            let (stream, _) =
-                onvif_step("stream_uri", options, || session.get_stream_uri(token)).await;
+            .and_then(|catalogue| catalogue.select(profile.or(picked.as_deref())).ok());
+        if let Some(profile) = selected {
+            selected_profile = Some(profile.token().to_owned());
+            let (stream, _) = onvif_step("stream_uri", options, || async {
+                if options.media_service.is_some() {
+                    session
+                        .media_stream_uri(&profile, StreamRequest::Rtsp)
+                        .await
+                        .map(|_| ())
+                } else {
+                    session.get_stream_uri(profile.token()).await.map(|_| ())
+                }
+            })
+            .await;
             stages.push(stream);
-            let (snapshot, uri) =
-                onvif_step("snapshot_uri", options, || session.get_snapshot_uri(token)).await;
+            let (snapshot, uri) = onvif_step("snapshot_uri", options, || async {
+                if options.media_service.is_some() {
+                    session
+                        .media_snapshot_uri(&profile)
+                        .await
+                        .map(|uri| uri.uri().to_owned())
+                } else {
+                    session
+                        .get_snapshot_uri(profile.token())
+                        .await
+                        .map(|uri| uri.uri)
+                }
+            })
+            .await;
             stages.push(snapshot);
             if let Some(uri) = uri {
                 let start = Instant::now();
-                let mut step = match fetch_image(&uri.uri, resolved, options).await {
+                let mut step = match fetch_image(&uri, resolved, options).await {
                     Ok((bytes, image_type)) => {
                         let mut step = Step::new(
                             "snapshot_fetch",
@@ -999,8 +1143,54 @@ async fn collect_inventory(
     collect!("interfaces", get_network_interfaces);
     collect!("protocols", get_network_protocols);
     collect!("gateway", get_network_default_gateway);
-    collect!("profiles", get_profiles);
-    collect!("video_encoders", get_video_encoder_configurations);
+    if options.media_service.is_some() {
+        let (mut step, catalogue) =
+            onvif_step("profiles", options, || read_catalogue(session, options)).await;
+        if let Some(catalogue) = catalogue {
+            let service = catalogue.service;
+            let mut profiles = Value::Array(
+                catalogue
+                    .profiles
+                    .iter()
+                    .map(|profile| {
+                        let mut value = native_profile(profile);
+                        value["media_service"] = json!(service);
+                        value
+                    })
+                    .collect(),
+            );
+            normalize(&mut profiles);
+            step.data = Some(profiles);
+            let (mut encoder_step, encoders) = onvif_step("video_encoders", options, || {
+                read_encoders(session, options, service)
+            })
+            .await;
+            if let Some(encoders) = encoders {
+                let mut value = match encoders {
+                    MediaEncoders::Media1(values) => json!(values),
+                    MediaEncoders::Media2(values) => json!(values),
+                    _ => json!([]),
+                };
+                for encoder in value.as_array_mut().into_iter().flatten() {
+                    encoder["media_service"] = json!(service);
+                }
+                normalize(&mut value);
+                encoder_step.data = Some(value);
+            }
+            inventory
+                .sections
+                .insert("video_encoders".into(), encoder_step);
+        } else {
+            inventory.sections.insert(
+                "video_encoders".into(),
+                Step::skipped("video_encoders", "Media selection failed."),
+            );
+        }
+        inventory.sections.insert("profiles".into(), step);
+    } else {
+        collect!("profiles", get_profiles);
+        collect!("video_encoders", get_video_encoder_configurations);
+    }
     Ok(inventory)
 }
 

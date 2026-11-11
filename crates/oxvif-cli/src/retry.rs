@@ -13,6 +13,7 @@ pub(crate) fn is_retryable_onvif_error(error: &OnvifError) -> bool {
 
 pub(crate) fn is_retryable_transport_error(error: &TransportError) -> bool {
     match error {
+        TransportError::Deadline => true,
         TransportError::Http(error) => {
             error.is_timeout() || error.is_connect() || error.is_body() || error.is_request()
         }

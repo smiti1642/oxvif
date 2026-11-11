@@ -168,6 +168,14 @@ struct Cli {
     #[arg(long, value_enum, default_value_t = CliClockSyncPolicy::Auto)]
     clock_sync: CliClockSyncPolicy,
 
+    /// SOAP device authentication mechanism.
+    #[arg(long, value_enum, default_value_t = CliSoapAuth::Combined)]
+    soap_auth: CliSoapAuth,
+
+    /// Select the media service for profile, URI and maintenance reads.
+    #[arg(long, value_enum)]
+    media_service: Option<CliMediaService>,
+
     /// Add a PEM CA certificate or bundle to the platform trust roots; repeatable.
     #[arg(long = "ca-certificate", value_name = "FILE")]
     ca_certificates: Vec<PathBuf>,
@@ -830,6 +838,40 @@ impl From<CliClockSyncPolicy> for ClockSyncPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum CliSoapAuth {
+    Combined,
+    Digest,
+    WsSecurity,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum CliMediaService {
+    Media1,
+    Media2,
+    Auto,
+}
+
+impl From<CliMediaService> for oxvif::media_workflow::MediaSelection {
+    fn from(value: CliMediaService) -> Self {
+        match value {
+            CliMediaService::Media1 => Self::Media1,
+            CliMediaService::Media2 => Self::Media2,
+            CliMediaService::Auto => Self::Auto,
+        }
+    }
+}
+
+impl From<CliSoapAuth> for oxvif::client::AuthenticationMode {
+    fn from(value: CliSoapAuth) -> Self {
+        match value {
+            CliSoapAuth::Combined => Self::Combined,
+            CliSoapAuth::Digest => Self::Digest,
+            CliSoapAuth::WsSecurity => Self::WsSecurity,
+        }
+    }
+}
+
 impl From<CliOutputFormat> for OutputFormat {
     fn from(value: CliOutputFormat) -> Self {
         match value {
@@ -906,6 +948,8 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         timeout: cli.timeout,
         retries: cli.retries,
         clock_sync: cli.clock_sync.into(),
+        soap_auth: cli.soap_auth.into(),
+        media_service: cli.media_service.map(Into::into),
         ca_certificates,
         verbosity: cli.verbose,
         quiet: cli.quiet,
@@ -1221,10 +1265,11 @@ fn emit_verbose_start(options: &ExecutionOptions, format: OutputFormat, command:
     );
     if options.verbosity > 1 {
         eprintln!(
-            "debug: retry_policy=transient_transport max_attempts={} timeout_scope=per_attempt clock_sync={} custom_ca_bundles={}",
+            "debug: retry_policy=transient_transport max_attempts={} timeout_scope=per_attempt clock_sync={} custom_ca_bundles={} soap_auth={:?}",
             options.retries.saturating_add(1),
             clock_sync_name(options.clock_sync),
-            options.ca_certificates.len()
+            options.ca_certificates.len(),
+            options.soap_auth
         );
     }
 }
@@ -2025,6 +2070,7 @@ async fn choose_profile_if_needed(
     };
     let values = result
         .as_array()
+        .or_else(|| result["profiles"].as_array())
         .ok_or_else(|| AppError::internal("Media profile selection did not return an array."))?;
     let profiles = values
         .iter()

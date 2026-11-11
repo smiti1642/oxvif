@@ -22,10 +22,10 @@ use async_trait::async_trait;
 use super::report::{Category, CheckResult};
 use crate::OnvifSession;
 use crate::soap::{find_response, parse_soap_body};
-use crate::transport::{Transport, TransportError};
+use crate::transport::{SoapRequestOptions, Transport, TransportError};
 
 /// In-memory transport tap recording the latest raw response per SOAP action
-/// (keyed by the action's last URL segment, e.g. `GetProfiles`).
+/// keyed by the full Action so Media1 and Media2 replies remain distinct.
 pub(super) struct CoverageTransport {
     inner: Arc<dyn Transport>,
     seen: Mutex<HashMap<String, String>>,
@@ -39,8 +39,16 @@ impl CoverageTransport {
         }
     }
 
-    fn raw_for(&self, action_suffix: &str) -> Option<String> {
-        self.seen.lock().unwrap().get(action_suffix).cloned()
+    fn raw_for(&self, action: &str) -> Option<String> {
+        self.seen.lock().unwrap().get(action).cloned()
+    }
+
+    fn remember(&self, action: &str, resp: String) -> String {
+        self.seen
+            .lock()
+            .unwrap()
+            .insert(action.to_owned(), resp.clone());
+        resp
     }
 }
 
@@ -53,9 +61,21 @@ impl Transport for CoverageTransport {
         body: String,
     ) -> Result<String, TransportError> {
         let resp = self.inner.soap_post(url, action, body).await?;
-        let suffix = action.rsplit('/').next().unwrap_or(action).to_string();
-        self.seen.lock().unwrap().insert(suffix, resp.clone());
-        Ok(resp)
+        Ok(self.remember(action, resp))
+    }
+
+    async fn soap_post_with_options(
+        &self,
+        url: &str,
+        action: &str,
+        body: String,
+        options: SoapRequestOptions,
+    ) -> Result<String, TransportError> {
+        let resp = self
+            .inner
+            .soap_post_with_options(url, action, body, options)
+            .await?;
+        Ok(self.remember(action, resp))
     }
 }
 
@@ -83,10 +103,11 @@ fn count_items(raw: &str, response_name: &str, item_path: &[&str]) -> Option<usi
 pub(super) async fn coverage(s: &OnvifSession, tap: &CoverageTransport) -> Vec<CheckResult> {
     let mut out = Vec::new();
 
-    let mut compare = |id: &'static str, op: &str, item_path: &[&str], parsed: usize| {
-        let Some(raw) = tap.raw_for(op) else {
+    let mut compare = |id: &'static str, action: &str, item_path: &[&str], parsed: usize| {
+        let Some(raw) = tap.raw_for(action) else {
             return;
         };
+        let op = action.rsplit('/').next().expect("fixed SOAP Action");
         if let Some(m) = count_items(&raw, &format!("{op}Response"), item_path)
             && m > parsed
         {
@@ -100,29 +121,44 @@ pub(super) async fn coverage(s: &OnvifSession, tap: &CoverageTransport) -> Vec<C
     };
 
     if let Ok(v) = s.get_profiles().await {
-        compare("coverage_profiles", "GetProfiles", &["Profiles"], v.len());
+        compare(
+            "coverage_profiles",
+            "http://www.onvif.org/ver10/media/wsdl/GetProfiles",
+            &["Profiles"],
+            v.len(),
+        );
     }
     if let Ok(v) = s.get_video_encoder_configurations().await {
         compare(
             "coverage_video_encoders",
-            "GetVideoEncoderConfigurations",
+            "http://www.onvif.org/ver10/media/wsdl/GetVideoEncoderConfigurations",
             &["Configurations"],
             v.len(),
         );
     }
     if let Ok(v) = s.get_users().await {
-        compare("coverage_users", "GetUsers", &["User"], v.len());
+        compare(
+            "coverage_users",
+            "http://www.onvif.org/ver10/device/wsdl/GetUsers",
+            &["User"],
+            v.len(),
+        );
     }
     if let Ok(v) = s.get_network_interfaces().await {
         compare(
             "coverage_network_interfaces",
-            "GetNetworkInterfaces",
+            "http://www.onvif.org/ver10/device/wsdl/GetNetworkInterfaces",
             &["NetworkInterfaces"],
             v.len(),
         );
     }
     if let Ok(v) = s.ptz_get_nodes().await {
-        compare("coverage_ptz_nodes", "GetNodes", &["PTZNode"], v.len());
+        compare(
+            "coverage_ptz_nodes",
+            "http://www.onvif.org/ver20/ptz/wsdl/GetNodes",
+            &["PTZNode"],
+            v.len(),
+        );
     }
 
     out

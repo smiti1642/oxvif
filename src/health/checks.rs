@@ -790,14 +790,32 @@ pub(super) async fn media(
     creds: Option<&(String, String)>,
     device_url: &str,
     snapshot_options: &super::snapshot::SnapshotOptions,
+    selection: Option<crate::media_workflow::MediaSelection>,
 ) -> Vec<CheckResult> {
     let mut out = Vec::new();
 
     let start = Instant::now();
-    let profiles = s.get_profiles().await;
+    use crate::media_workflow::{MediaEncoders, MediaService, NativeMediaProfile, StreamRequest};
+    let profiles = match selection {
+        Some(selection) => s
+            .media_catalogue(selection)
+            .await
+            .map(|catalogue| (catalogue.service, catalogue.profiles))
+            .map_err(|error| error.cause),
+        None => s.get_profiles().await.map(|profiles| {
+            (
+                MediaService::Media1,
+                profiles
+                    .into_iter()
+                    .map(NativeMediaProfile::Media1)
+                    .collect(),
+            )
+        }),
+    };
+    let service = profiles.as_ref().ok().map(|(service, _)| *service);
     let elapsed = start.elapsed();
     let first_token = match &profiles {
-        Ok(p) if !p.is_empty() => {
+        Ok((_, p)) if !p.is_empty() => {
             out.push(
                 CheckResult::pass(
                     "get_profiles",
@@ -806,7 +824,7 @@ pub(super) async fn media(
                 )
                 .with_elapsed(elapsed),
             );
-            Some(p[0].token.clone())
+            Some(p[0].handle())
         }
         Ok(_) => {
             out.push(
@@ -828,34 +846,41 @@ pub(super) async fn media(
         }
     };
 
-    if let Some(token) = first_token {
+    if let Some(profile) = first_token {
         // Stream URI — expect rtsp://. With liveness on, also probe the RTSP
         // server (a resolved URI is no guarantee the server actually answers).
         let start = Instant::now();
-        match s.get_stream_uri(&token).await {
-            Ok(u) if u.uri.starts_with("rtsp://") => {
+        let stream = if selection.is_some() {
+            s.media_stream_uri(&profile, StreamRequest::Rtsp)
+                .await
+                .map(|u| u.uri().to_owned())
+        } else {
+            s.get_stream_uri(profile.token()).await.map(|u| u.uri)
+        };
+        match stream {
+            Ok(u) if u.starts_with("rtsp://") => {
                 let elapsed = start.elapsed();
                 let res = if liveness {
-                    match rtsp_options_probe(&u.uri).await {
+                    match rtsp_options_probe(&u).await {
                         Ok(()) => CheckResult::pass(
                             "get_stream_uri",
                             Category::Media,
-                            format!("{} (RTSP OPTIONS ok)", u.uri),
+                            format!("{} (RTSP OPTIONS ok)", u),
                         ),
                         Err(why) => CheckResult::warn(
                             "get_stream_uri",
                             Category::Media,
                             format!("RTSP not reachable: {why}"),
-                            u.uri,
+                            u,
                         ),
                     }
                 } else {
-                    CheckResult::pass("get_stream_uri", Category::Media, u.uri)
+                    CheckResult::pass("get_stream_uri", Category::Media, u)
                 };
                 out.push(res.with_elapsed(elapsed));
             }
             Ok(u) => out.push(
-                CheckResult::warn("get_stream_uri", Category::Media, "non-rtsp scheme", u.uri)
+                CheckResult::warn("get_stream_uri", Category::Media, "non-rtsp scheme", u)
                     .with_elapsed(start.elapsed()),
             ),
             Err(e) => out.push(
@@ -866,11 +891,18 @@ pub(super) async fn media(
         // Snapshot URI — expect http(s)://. With liveness on, also fetch the
         // bounded bytes and check the signature, without claiming full decode.
         let start = Instant::now();
-        match s.get_snapshot_uri(&token).await {
-            Ok(u) if u.uri.starts_with("http") => {
+        let snapshot = if selection.is_some() {
+            s.media_snapshot_uri(&profile)
+                .await
+                .map(|u| u.uri().to_owned())
+        } else {
+            s.get_snapshot_uri(profile.token()).await.map(|u| u.uri)
+        };
+        match snapshot {
+            Ok(u) if u.starts_with("http") => {
                 let elapsed = start.elapsed();
                 let res = if liveness {
-                    match fetch_snapshot(&u.uri, device_url, creds, snapshot_options).await {
+                    match fetch_snapshot(&u, device_url, creds, snapshot_options).await {
                         Ok(bytes) => CheckResult::pass(
                             "get_snapshot_uri",
                             Category::Media,
@@ -887,18 +919,13 @@ pub(super) async fn media(
                         ),
                     }
                 } else {
-                    CheckResult::pass("get_snapshot_uri", Category::Media, u.uri)
+                    CheckResult::pass("get_snapshot_uri", Category::Media, u)
                 };
                 out.push(res.with_elapsed(elapsed));
             }
             Ok(u) => out.push(
-                CheckResult::warn(
-                    "get_snapshot_uri",
-                    Category::Media,
-                    "non-http scheme",
-                    u.uri,
-                )
-                .with_elapsed(start.elapsed()),
+                CheckResult::warn("get_snapshot_uri", Category::Media, "non-http scheme", u)
+                    .with_elapsed(start.elapsed()),
             ),
             Err(e) => out.push(
                 CheckResult::fail_from("get_snapshot_uri", Category::Media, &e)
@@ -909,8 +936,18 @@ pub(super) async fn media(
 
     out.push(
         one("get_video_encoder_configurations", Category::Media, async {
-            let cfgs = s.get_video_encoder_configurations().await?;
-            Ok(format!("{} encoder config(s)", cfgs.len()))
+            let count = if selection.is_some() {
+                let service = service.ok_or_else(|| {
+                    crate::OnvifError::InvalidArgument("media selection failed".into())
+                })?;
+                match s.media_video_encoders(service).await? {
+                    MediaEncoders::Media1(cfgs) => cfgs.len(),
+                    MediaEncoders::Media2(cfgs) => cfgs.len(),
+                }
+            } else {
+                s.get_video_encoder_configurations().await?.len()
+            };
+            Ok(format!("{count} encoder config(s)"))
         })
         .await,
     );

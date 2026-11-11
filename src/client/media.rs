@@ -72,6 +72,13 @@ impl OnvifClient {
         const BODY: &str = "<trt:GetProfiles/>";
 
         let xml = self.call(media_url, ACTION, BODY).await?;
+        if self.direct_calls {
+            const NS: &str = "http://www.onvif.org/ver10/media/wsdl";
+            let response = crate::soap::qualified::response(&xml, NS, "GetProfilesResponse")?;
+            return MediaProfile::vec_from_xml(
+                &response.legacy_projection(&[NS, "http://www.onvif.org/ver10/schema"]),
+            );
+        }
         let body = parse_soap_body(&xml)?;
         let resp = find_response(&body, "GetProfilesResponse")?;
         MediaProfile::vec_from_xml(resp)
@@ -87,13 +94,24 @@ impl OnvifClient {
         media_url: &str,
         profile_token: &str,
     ) -> Result<StreamUri, OnvifError> {
+        self.media1_stream_uri(media_url, profile_token, "RTP-Unicast", "RTSP")
+            .await
+    }
+
+    pub(crate) async fn media1_stream_uri(
+        &self,
+        media_url: &str,
+        profile_token: &str,
+        stream: &str,
+        protocol: &str,
+    ) -> Result<StreamUri, OnvifError> {
         const ACTION: &str = "http://www.onvif.org/ver10/media/wsdl/GetStreamUri";
         let profile_token = xml_escape(profile_token);
         let body = format!(
             "<trt:GetStreamUri>\
                <trt:StreamSetup>\
-                 <tt:Stream>RTP-Unicast</tt:Stream>\
-                 <tt:Transport><tt:Protocol>RTSP</tt:Protocol></tt:Transport>\
+                 <tt:Stream>{stream}</tt:Stream>\
+                 <tt:Transport><tt:Protocol>{protocol}</tt:Protocol></tt:Transport>\
                </trt:StreamSetup>\
                <trt:ProfileToken>{profile_token}</trt:ProfileToken>\
              </trt:GetStreamUri>"

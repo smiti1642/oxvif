@@ -93,6 +93,7 @@ row in this file at all until 0.15.0, while the crate had implemented it since
 | `SetVideoSourceConfiguration` | ✓ |
 | `GetVideoSourceConfigurationOptions` | ✓ |
 | `GetVideoEncoderConfigurations` / `GetVideoEncoderConfiguration` | ✓ |
+| `GetCompatibleVideoEncoderConfigurations` | ✓ via `media_compatible_video_encoders` |
 | `SetVideoEncoderConfiguration` | ✓ |
 | `GetVideoEncoderConfigurationOptions` | ✓ |
 | `GetAudioSources` | ✓ |

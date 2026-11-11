@@ -62,9 +62,39 @@ impl Transport for CaptureTransport {
         action: &str,
         body: String,
     ) -> Result<String, TransportError> {
+        self.exchange(url, action, body, None).await
+    }
+
+    async fn soap_post_with_options(
+        &self,
+        url: &str,
+        action: &str,
+        body: String,
+        options: crate::transport::SoapRequestOptions,
+    ) -> Result<String, TransportError> {
+        self.exchange(url, action, body, Some(options)).await
+    }
+}
+
+impl CaptureTransport {
+    async fn exchange(
+        &self,
+        url: &str,
+        action: &str,
+        body: String,
+        options: Option<crate::transport::SoapRequestOptions>,
+    ) -> Result<String, TransportError> {
         // Redact before the move, so the stored request never holds the digest.
         let request = redact_credentials(&body);
-        match self.inner.soap_post(url, action, body).await {
+        let result = match options {
+            Some(options) => {
+                self.inner
+                    .soap_post_with_options(url, action, body, options)
+                    .await
+            }
+            None => self.inner.soap_post(url, action, body).await,
+        };
+        match result {
             Ok(resp) => {
                 if is_soap_fault(&resp) {
                     self.record(action, request, resp.clone(), None);
@@ -74,7 +104,9 @@ impl Transport for CaptureTransport {
             Err(e) => {
                 let http_status = match &e {
                     TransportError::HttpStatus { status, .. } => Some(*status),
-                    TransportError::Http(_) | TransportError::ResponseTooLarge { .. } => None,
+                    TransportError::Http(_)
+                    | TransportError::Deadline
+                    | TransportError::ResponseTooLarge { .. } => None,
                 };
                 self.record(action, request, e.to_string(), http_status);
                 Err(e)

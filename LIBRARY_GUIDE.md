@@ -728,6 +728,38 @@ limits. Capacity selects a source configuration; see the
 
 ---
 
+### Service-qualified media reads
+
+Use `OnvifSession::media_catalogue` with `MediaSelection::Media1`, `Media2`
+or `Auto`. Auto tries an advertised Media2 endpoint first. It tries Media1
+after an absent endpoint or a qualified unsupported-action Fault. The catalogue
+reports each attempt and where the selected URL came from. Authentication,
+transport, endpoint policy and malformed response errors stop selection.
+
+```rust
+use oxvif::media_workflow::{MediaSelection, StreamRequest};
+
+let catalogue = session.media_catalogue(MediaSelection::Auto).await?;
+let profile = catalogue.select(Some(profile_token))?;
+let stream = session.media_stream_uri(&profile, StreamRequest::Rtsp).await?;
+let snapshot = session.media_snapshot_uri(&profile).await?;
+let encoders = session.media_compatible_video_encoders(&profile).await?;
+```
+
+The profile handle carries the selected service and opaque token. Native
+profile and encoder types retain source and configuration identities.
+`profiles_for_source` filters by the underlying source token. Selection without
+a token requires exactly one profile. URI requests support RTSP interleaving,
+UDP unicast, UDP multicast and HTTP tunneling. Use
+`media_stream_uri_with_capabilities` to reject explicitly unavailable
+transports using the selected service's reported capabilities. URI retrieval
+establishes the device's response to the request. Playback requires its own
+observation.
+
+Service-qualified reads use the configured device origin. Use
+`OnvifSessionBuilder::with_endpoint_policy` with explicit trusted origins for
+a device whose media service listens at another origin.
+
 ## PTZ methods
 
 All PTZ methods use `ptz_url` from `caps.ptz_url`. Coordinates use the ONVIF normalised range: pan/tilt `[-1.0, 1.0]`, zoom `[0.0, 1.0]`.
@@ -1105,6 +1137,46 @@ while let Some(Ok(msg)) = stream.next().await {
 | `topics` | `Vec<String>` | Flattened topic paths (e.g. `"VideoSource/MotionAlarm"`, `"RuleEngine/Cell/Motion"`) |
 
 ---
+
+### Qualified pull points and managed subscriptions
+
+`create_referenced_pull_point` returns an address, ordered reference parameters
+and raw lease times. The referenced pull, renew and unsubscribe methods
+serialize each parameter as a qualified SOAP header and send the operation's
+WS-Addressing Action and MessageID. Qualified notifications retain topic
+bindings and dialect, ordered Source, Key and Data, and XML-valued items.
+`to_legacy` projects to the legacy structures with last-value semantics for
+duplicate simple items. That projection discards reference parameters, keys
+and XML items.
+
+```rust
+use oxvif::events::{ManagedEvent, ManagedEventOptions};
+
+let mut subscription = session.managed_events(ManagedEventOptions::default()).await?;
+if let Some(Ok(ManagedEvent::Notification(event))) = subscription.next().await {
+    let message = event.to_legacy();
+}
+let outcome = subscription.close().await;
+```
+
+The worker polls and renews the lease concurrently. Creation requires usable
+device clock and termination timestamps. The worker derives local monotonic
+deadlines from the grant. Renew may omit CurrentTime and use the last paired
+clock sample. A recovery emits a Gap because event continuity is uncertain.
+Queue overflow returns a terminal error after buffered events. Explicit
+`close().await` stops the worker and attempts bounded unsubscribe. Owner
+Drop aborts local work and leaves the remote lease to expire.
+
+Defaults are a 60-second requested lease, 15-second device pull wait, 20-second
+exchange deadline, two-second cleanup, 100 ms poll interval, 32 notifications
+per page, 128 queued entries, 1 MiB accounted queue bytes and two replacement
+subscriptions with 12 seconds each. Reference parameters and event pages each
+have a 256 KiB serialized retention cap. Namespace-expanded XML is parsed
+within the production byte, depth and element limits. Queued bytes account for
+serialized events. Parsed response and queue bookkeeping have separate costs.
+`EndpointPolicy` allows the device origin and any explicitly trusted origins.
+The built-in addressed HTTP path sends directly to the validated URL.
+Custom transports control their HTTP routing and authentication.
 
 ## Recording Service methods
 
@@ -1508,6 +1580,19 @@ prints a parsed summary so silent-parse mismatches stand out for review.
 ---
 
 ## HTTP response limits
+
+`AuthenticationMode` selects `Combined`, `Digest` or `WsSecurity`. The default
+combines HTTP Digest and a SOAP UsernameToken when credentials are supplied.
+Set the mode on Client, Session builder or HealthCheck. A supplied Transport
+controls HTTP authentication. Session's `with_auto_clock_sync` reads the clock
+when UsernameToken credentials are in use.
+
+`Transport::soap_post_with_options` accepts an explicit whole-exchange
+deadline. The built-in implementation applies it across the Digest challenge,
+retry and body read. It uses the configured trust roots and response cap.
+Custom transports implementing only `soap_post` inherit an outer deadline and
+retain their own shorter timeouts. Handle the new `TransportError::Deadline`
+arm in exhaustive matches.
 
 `HttpTransport::new()` uses a ten-second deadline per HTTP request (including
 body reads) and a 4 MiB accumulated response-byte limit. Digest authentication

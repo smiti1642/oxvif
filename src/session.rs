@@ -76,7 +76,10 @@ use crate::types::{
 pub struct OnvifSessionBuilder {
     device_url: String,
     credentials: Option<(String, String)>,
+    authentication: crate::client::AuthenticationMode,
+    endpoint_policy: crate::transport::EndpointPolicy,
     sync_clock: bool,
+    auto_clock: bool,
     transport: Option<Arc<dyn Transport>>,
 }
 
@@ -85,7 +88,10 @@ impl OnvifSessionBuilder {
         Self {
             device_url: device_url.into(),
             credentials: None,
+            authentication: crate::client::AuthenticationMode::default(),
+            endpoint_policy: crate::transport::EndpointPolicy::default(),
             sync_clock: false,
+            auto_clock: false,
             transport: None,
         }
     }
@@ -108,6 +114,25 @@ impl OnvifSessionBuilder {
     /// can cause WS-Security authentication to fail.
     pub fn with_clock_sync(mut self) -> Self {
         self.sync_clock = true;
+        self
+    }
+
+    /// Read the device clock only when using WS-Security credentials.
+    pub fn with_auto_clock_sync(mut self) -> Self {
+        self.auto_clock = true;
+        self.sync_clock = false;
+        self
+    }
+
+    /// Select SOAP and default transport authentication.
+    pub fn with_authentication_mode(mut self, mode: crate::client::AuthenticationMode) -> Self {
+        self.authentication = mode;
+        self
+    }
+
+    /// Configure trusted origins for service-qualified media workflows.
+    pub fn with_endpoint_policy(mut self, policy: crate::transport::EndpointPolicy) -> Self {
+        self.endpoint_policy = policy;
         self
     }
 
@@ -152,7 +177,12 @@ impl OnvifSessionBuilder {
         self,
     ) -> Result<(OnvifSession, SessionBuildReport), Box<SessionBuildFailure>> {
         let mut report = SessionBuildReport::new();
-        let mut client = OnvifClient::new(&self.device_url);
+        let mut client =
+            OnvifClient::new(&self.device_url).with_authentication_mode(self.authentication);
+        let sync_clock = self.sync_clock
+            || (self.auto_clock
+                && self.authentication.uses_ws_security()
+                && self.credentials.is_some());
 
         if let Some((user, pass)) = self.credentials {
             client = client.with_credentials(user, pass);
@@ -162,7 +192,7 @@ impl OnvifSessionBuilder {
             client = client.with_transport(transport);
         }
 
-        if self.sync_clock {
+        if sync_clock {
             let started = std::time::Instant::now();
             match client.get_system_date_and_time().await {
                 Ok(dt) => {
@@ -218,7 +248,26 @@ impl OnvifSessionBuilder {
             report.skip(2);
         }
 
-        Ok((OnvifSession { client, caps }, report))
+        let source = |service| {
+            report
+                .services
+                .iter()
+                .find(|entry| entry.service == service)
+                .map_or(ServiceUrlSource::Missing, |entry| entry.source)
+        };
+        let media_sources = [
+            source(SessionService::Media),
+            source(SessionService::Media2),
+        ];
+        Ok((
+            OnvifSession {
+                client,
+                caps,
+                media_sources,
+                endpoint_policy: self.endpoint_policy,
+            },
+            report,
+        ))
     }
 }
 
@@ -228,6 +277,9 @@ impl OnvifSessionBuilder {
 fn fill_missing_service_urls(caps: &mut Capabilities, services: &[OnvifService]) {
     for svc in services {
         let ns = svc.namespace.as_str();
+        if caps.media.url.is_none() && ns == "http://www.onvif.org/ver10/media/wsdl" {
+            caps.media.url = Some(svc.url.clone());
+        }
         if caps.recording.url.is_none() && ns.contains("/recording/wsdl") {
             caps.recording.url = Some(svc.url.clone());
         }
@@ -265,6 +317,8 @@ fn fill_missing_service_urls(caps: &mut Capabilities, services: &[OnvifService])
 pub struct OnvifSession {
     client: OnvifClient,
     caps: Capabilities,
+    pub(crate) media_sources: [ServiceUrlSource; 2],
+    pub(crate) endpoint_policy: crate::transport::EndpointPolicy,
 }
 
 impl OnvifSession {

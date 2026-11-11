@@ -16,6 +16,7 @@
 mod complete;
 pub mod envelope;
 pub mod error;
+pub(crate) mod qualified;
 pub mod security;
 pub mod xml;
 

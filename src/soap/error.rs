@@ -73,6 +73,39 @@ pub enum SoapError {
 }
 
 impl SoapError {
+    fn standard_subcode(&self) -> Option<&str> {
+        let Self::Fault {
+            subcode: Some(code),
+            ..
+        } = self
+        else {
+            return None;
+        };
+        if let Some(expanded) = code.strip_prefix('{') {
+            let (namespace, local) = expanded.split_once('}')?;
+            matches!(
+                namespace,
+                "http://www.onvif.org/ver10/error" | "http://www.w3.org/2005/08/addressing"
+            )
+            .then_some(local)
+        } else {
+            code.rsplit(':').next()
+        }
+    }
+
+    /// Whether the device explicitly reported an unsupported operation.
+    pub fn action_not_supported(&self) -> bool {
+        matches!(
+            self.standard_subcode(),
+            Some("ActionNotSupported" | "OptionalActionNotImplemented")
+        )
+    }
+
+    /// Whether a device fault explicitly denied authorization.
+    pub fn not_authorized(&self) -> bool {
+        self.standard_subcode() == Some("NotAuthorized")
+    }
+
     /// Convenience constructor for [`SoapError::MissingField`].
     pub fn missing(field: &'static str) -> Self {
         Self::MissingField(field)

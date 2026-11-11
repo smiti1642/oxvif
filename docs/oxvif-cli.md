@@ -121,7 +121,9 @@ version.
 | `--non-interactive` | Disable prompts and GUI interaction; fail if required input is unavailable. |
 | `--timeout <DURATION>` | Bound each network attempt. Supported units are `ms`, `s`, and `m`; the default is `10s`. |
 | `--retries <N>` | Retry transient transport failures up to `N` times with bounded backoff. Authentication rejection, invalid input, deterministic SOAP faults, and parse/schema failures are not retried. The default is zero. Discovery retries each selected interface; it does not duplicate a successful full scan. |
-| `--clock-sync <POLICY>` | WS-Security timestamp policy: `auto` (default) reads device time when credentials are present, `always` reads it for every session, and `never` disables client-side synchronization. This never changes the device clock. |
+| `--clock-sync <POLICY>` | `auto` (default) reads device time when credentials are present and the SOAP mode uses UsernameToken. `always` requests a clock read and `never` disables synchronization. Synchronization adjusts the client timestamp. |
+| `--soap-auth <MODE>` | Select `combined` (default), `digest` or `ws-security` for SOAP device requests. |
+| `--media-service <SERVICE>` | Select `media1`, `media2` or `auto` for profile, URI, diagnosis, inventory and Health media reads. Omit for the legacy Media1 workflow. |
 | `--ca-certificate <FILE>` | Add a PEM CA certificate or bundle to platform trust roots. Repeat for multiple bundles. Invalid/empty bundles and private keys are rejected; normal chain and hostname verification remain enabled. |
 | `-v`, `--verbose` | Increase diagnostic verbosity; repeat for additional detail. |
 | `-q`, `--quiet` | Suppress non-essential diagnostics. |
@@ -144,6 +146,12 @@ after the command:
 oxvif --device front-door device info --output json
 oxvif device info --target 192.168.1.100 --output json
 ```
+
+With `--media-service`, `media profiles` returns an object containing
+`media_service`, `endpoint_source`, `attempts` and `profiles`. URI results include
+`media_service` and preserve the selected service's native URI fields. Auto
+prefers advertised Media2 and falls back after an absent endpoint or explicit
+unsupported-action Fault. JSON and JSONL use envelope schema v3.
 
 `--ca-certificate` applies consistently to setup/refresh, single-device
 diagnostics, health, discovery enrichment, and fleet items. `-vv` reports only

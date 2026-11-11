@@ -63,6 +63,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Retain qualified event endpoint references and ordered notification data.
+  Managed pull points renew concurrently with polling and expose bounded
+  recovery, queue limits and async cleanup.
+- Select SOAP authentication explicitly and set whole-exchange deadlines.
+  Handle `TransportError::Deadline` in exhaustive matches.
+- Add service-qualified media catalogues, profile handles, compatible encoder
+  queries and typed stream requests. CLI `--media-service` selects the service
+  for profile, URI, diagnosis and inventory reads.
 - Add `RecordingSearch`, `RecordingSearchOptions`, cooperative cancellation and
   report APIs on Client/Session. Enforce total/page/item/accounted-byte budgets,
   keep partial results and original errors, and report the independent bounded

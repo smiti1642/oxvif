@@ -30,6 +30,7 @@ pub enum SessionErrorClass {
 impl SessionErrorClass {
     pub(crate) fn from_error(error: &OnvifError) -> Self {
         match error {
+            OnvifError::Transport(TransportError::Deadline) => Self::Timeout,
             OnvifError::Transport(TransportError::HttpStatus {
                 status: 401 | 403, ..
             }) => Self::Authentication,
@@ -40,10 +41,7 @@ impl SessionErrorClass {
             OnvifError::Transport(_) => Self::Transport,
             OnvifError::Soap(SoapError::ResourceLimit { .. }) => Self::XmlLimit,
             OnvifError::Soap(SoapError::XmlParse(_)) => Self::XmlSyntax,
-            OnvifError::Soap(SoapError::Fault {
-                subcode: Some(code),
-                ..
-            }) if code.rsplit(':').next() == Some("NotAuthorized") => Self::Authentication,
+            OnvifError::Soap(error) if error.not_authorized() => Self::Authentication,
             OnvifError::Soap(SoapError::Fault { .. }) => Self::DeviceFault,
             OnvifError::Soap(_) => Self::ResponseData,
             OnvifError::InvalidArgument(_) => Self::InvalidArgument,

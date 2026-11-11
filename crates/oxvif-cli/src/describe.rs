@@ -310,7 +310,10 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             "device.services",
             "List all ONVIF service endpoints advertised by the device.",
         ),
-        device_read_descriptor("media.profiles", "List Media1 profiles."),
+        device_read_descriptor(
+            "media.profiles",
+            "List profiles from the selected media service.",
+        ),
         profile_read_descriptor(
             "media.stream-uri",
             "Get the credential-sanitized RTSP URI for one media profile.",
@@ -583,6 +586,25 @@ fn device_read_descriptor(name: &str, summary: &str) -> CommandDescriptor {
     );
     if matches!(name, "health" | "health.check") {
         command.arguments.push(optional("details", "boolean"));
+    }
+    command
+        .arguments
+        .push(optional("soap-auth", "combined | digest | ws-security"));
+    if name.starts_with("media.")
+        || matches!(
+            name,
+            "profiles"
+                | "health"
+                | "health.check"
+                | "diagnose"
+                | "config.export"
+                | "config.diff"
+                | "snapshot"
+        )
+    {
+        command
+            .arguments
+            .push(optional("media-service", "media1 | media2 | auto"));
     }
     command
 }

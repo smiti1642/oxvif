@@ -383,6 +383,8 @@ async fn media_sync_session_routes_services_and_reports_missing_urls() {
         let session = OnvifSession {
             client: OnvifClient::new("http://device.invalid").with_transport(transport),
             caps,
+            media_sources: [ServiceUrlSource::Capabilities; 2],
+            endpoint_policy: crate::transport::EndpointPolicy::default(),
         };
         if media2 {
             session

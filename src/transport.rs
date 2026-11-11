@@ -61,6 +61,9 @@ impl Default for HttpTransportOptions {
 /// Errors produced by the transport layer before SOAP parsing begins.
 #[derive(Debug, Error)]
 pub enum TransportError {
+    /// The complete SOAP exchange exceeded its request budget.
+    #[error("SOAP request deadline elapsed")]
+    Deadline,
     /// The underlying HTTP client returned an error (connection refused, TLS
     /// handshake failure, timeout, etc.).
     #[error("HTTP request failed: {0}")]
@@ -133,6 +136,49 @@ pub trait Transport: Send + Sync {
         action: &str,
         body: String,
     ) -> Result<String, TransportError>;
+
+    /// Apply an outer deadline to the complete exchange. Custom transports
+    /// retain their own inner timeouts and own their redirect policy.
+    async fn soap_post_with_options(
+        &self,
+        url: &str,
+        action: &str,
+        body: String,
+        options: SoapRequestOptions,
+    ) -> Result<String, TransportError> {
+        let Some(timeout) = options.timeout else {
+            return self.soap_post(url, action, body).await;
+        };
+        if timeout.is_zero() {
+            return Err(TransportError::Deadline);
+        }
+        tokio::time::timeout(timeout, self.soap_post(url, action, body))
+            .await
+            .map_err(|_| TransportError::Deadline)?
+    }
+}
+
+mod endpoint;
+pub use endpoint::EndpointPolicy;
+
+/// Budget for one SOAP exchange, including authentication and response reads.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SoapRequestOptions {
+    timeout: Option<std::time::Duration>,
+}
+
+impl SoapRequestOptions {
+    /// Set an exchange deadline instead of the transport default.
+    pub fn with_timeout(timeout: std::time::Duration) -> Self {
+        Self {
+            timeout: Some(timeout),
+        }
+    }
+
+    /// Explicit exchange deadline, if one was supplied.
+    pub fn timeout(self) -> Option<std::time::Duration> {
+        self.timeout
+    }
 }
 
 // ── HttpTransport ─────────────────────────────────────────────────────────────
@@ -145,6 +191,7 @@ pub trait Transport: Send + Sync {
 /// HTTP layer in addition to WS-Security.
 pub struct HttpTransport {
     client: reqwest::Client,
+    direct_client: reqwest::Client,
     options: HttpTransportOptions,
     root_certificates: Vec<reqwest::Certificate>,
     /// Optional digest auth session that caches nonce/realm across requests.
@@ -163,7 +210,8 @@ impl HttpTransport {
     /// Returns a construction error for invalid options or HTTP client setup.
     pub fn from_options(options: HttpTransportOptions) -> Result<Self, HttpTransportBuildError> {
         Ok(Self {
-            client: build_http_client(options, &[])?,
+            client: build_http_client(options, &[], false)?,
+            direct_client: build_http_client(options, &[], true)?,
             options,
             root_certificates: Vec::new(),
             digest_session: None,
@@ -178,7 +226,8 @@ impl HttpTransport {
         mut self,
         options: HttpTransportOptions,
     ) -> Result<Self, HttpTransportBuildError> {
-        self.client = build_http_client(options, &self.root_certificates)?;
+        self.client = build_http_client(options, &self.root_certificates, false)?;
+        self.direct_client = build_http_client(options, &self.root_certificates, true)?;
         self.options = options;
         Ok(self)
     }
@@ -215,7 +264,8 @@ impl HttpTransport {
             }
             certificates.extend(parsed);
         }
-        self.client = build_http_client(self.options, &certificates)?;
+        self.client = build_http_client(self.options, &certificates, false)?;
+        self.direct_client = build_http_client(self.options, &certificates, true)?;
         self.root_certificates = certificates;
         Ok(self)
     }
@@ -239,6 +289,7 @@ impl HttpTransport {
 fn build_http_client(
     options: HttpTransportOptions,
     roots: &[reqwest::Certificate],
+    direct: bool,
 ) -> Result<reqwest::Client, HttpTransportBuildError> {
     if options.timeout.is_zero() {
         return Err(HttpTransportBuildError::InvalidTimeout);
@@ -246,11 +297,15 @@ fn build_http_client(
     if options.max_response_bytes == 0 {
         return Err(HttpTransportBuildError::InvalidResponseLimit);
     }
-    reqwest::Client::builder()
+    let mut builder = reqwest::Client::builder()
         .timeout(options.timeout)
-        .tls_certs_merge(roots.iter().cloned())
-        .build()
-        .map_err(HttpTransportBuildError::Client)
+        .tls_certs_merge(roots.iter().cloned());
+    if direct {
+        builder = builder
+            .redirect(reqwest::redirect::Policy::none())
+            .no_proxy();
+    }
+    builder.build().map_err(HttpTransportBuildError::Client)
 }
 
 fn contains_private_key_material(pem: &[u8]) -> bool {
@@ -272,6 +327,40 @@ impl Transport for HttpTransport {
         action: &str,
         body: String,
     ) -> Result<String, TransportError> {
+        self.exchange(&self.client, url, action, body, self.options.timeout)
+            .await
+    }
+
+    /// Use the supplied deadline and send only to the explicitly selected URL.
+    async fn soap_post_with_options(
+        &self,
+        url: &str,
+        action: &str,
+        body: String,
+        options: SoapRequestOptions,
+    ) -> Result<String, TransportError> {
+        let timeout = options.timeout.unwrap_or(self.options.timeout);
+        if timeout.is_zero() {
+            return Err(TransportError::Deadline);
+        }
+        tokio::time::timeout(
+            timeout,
+            self.exchange(&self.direct_client, url, action, body, timeout),
+        )
+        .await
+        .map_err(|_| TransportError::Deadline)?
+    }
+}
+
+impl HttpTransport {
+    async fn exchange(
+        &self,
+        client: &reqwest::Client,
+        url: &str,
+        action: &str,
+        body: String,
+        timeout: std::time::Duration,
+    ) -> Result<String, TransportError> {
         // ONVIF spec §5.2: the SOAPAction is carried in the Content-Type
         // parameter rather than a separate header (SOAP 1.2 style).
         let content_type = format!("application/soap+xml; charset=utf-8; action=\"{action}\"");
@@ -279,8 +368,9 @@ impl Transport for HttpTransport {
         let mut response = if let Some(ref session) = self.digest_session {
             use diqwest::WithDigestAuth as _;
 
-            self.client
+            client
                 .post(url)
+                .timeout(timeout)
                 .header("Content-Type", &content_type)
                 .header("User-Agent", concat!("oxvif/", env!("CARGO_PKG_VERSION")))
                 .body(body)
@@ -295,8 +385,9 @@ impl Transport for HttpTransport {
                 })?
         } else {
             // No credentials — plain request (WS-Security only).
-            self.client
+            client
                 .post(url)
+                .timeout(timeout)
                 .header("Content-Type", &content_type)
                 .header("User-Agent", concat!("oxvif/", env!("CARGO_PKG_VERSION")))
                 .body(body)
@@ -611,7 +702,8 @@ mod tests {
             .expect("TLS fixture should bind");
         let address = listener.local_addr().expect("TLS fixture address");
         let server = tokio::spawn(async move {
-            loop {
+            let mut responses = 0;
+            while responses < 2 {
                 let (stream, _) = listener.accept().await.expect("TLS client should connect");
                 let Ok(mut stream) = acceptor.accept(stream).await else {
                     continue;
@@ -627,7 +719,7 @@ mod tests {
                     .write_all(response.as_bytes())
                     .await
                     .expect("TLS response should write");
-                break;
+                responses += 1;
             }
         });
         let url = format!("https://localhost:{}/onvif/device_service", address.port());
@@ -658,6 +750,16 @@ mod tests {
             .soap_post(&url, ACTION, SOAP_BODY.to_owned())
             .await
             .expect("custom CA should establish HTTPS");
+        assert_eq!(response, sample_response());
+        let response = trusted
+            .soap_post_with_options(
+                &url,
+                ACTION,
+                SOAP_BODY.to_owned(),
+                SoapRequestOptions::with_timeout(std::time::Duration::from_secs(2)),
+            )
+            .await
+            .expect("per-request budget should retain custom CA");
         assert_eq!(response, sample_response());
         server.await.expect("TLS fixture should finish");
     }
@@ -884,46 +986,49 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn digest_success_body_is_capped_after_exactly_one_challenge() {
-        let mut server = mockito::Server::new_async().await;
-        let challenge = server
-            .mock("POST", "/onvif/device_service")
-            .match_header("authorization", mockito::Matcher::Missing)
-            .with_status(401)
-            .with_header(
-                "WWW-Authenticate",
-                r#"Digest realm="ONVIF", nonce="cap-8821", qop="auth""#,
-            )
-            .expect(1)
-            .create_async()
-            .await;
-        let success = server
-            .mock("POST", "/onvif/device_service")
-            .match_header("authorization", mockito::Matcher::Regex("Digest ".into()))
-            .with_status(200)
-            .with_body("privateX")
-            .expect(1)
-            .create_async()
-            .await;
-        let error = HttpTransport::new()
-            .with_credentials("admin", "password")
-            .with_options(HttpTransportOptions {
-                max_response_bytes: 7,
-                ..HttpTransportOptions::default()
-            })
-            .unwrap()
-            .soap_post(
-                &format!("{}/onvif/device_service", server.url()),
-                ACTION,
-                SOAP_BODY.into(),
-            )
-            .await
-            .unwrap_err();
-        assert!(matches!(
-            error,
-            TransportError::ResponseTooLarge { limit: 7 }
-        ));
-        challenge.assert_async().await;
-        success.assert_async().await;
+    async fn digest_response_body_is_capped_after_exactly_one_challenge() {
+        for status in [200, 500] {
+            let mut server = mockito::Server::new_async().await;
+            let challenge = server
+                .mock("POST", "/onvif/device_service")
+                .match_header("authorization", mockito::Matcher::Missing)
+                .with_status(401)
+                .with_header(
+                    "WWW-Authenticate",
+                    r#"Digest realm="ONVIF", nonce="cap-8821", qop="auth""#,
+                )
+                .expect(1)
+                .create_async()
+                .await;
+            let success = server
+                .mock("POST", "/onvif/device_service")
+                .match_header("authorization", mockito::Matcher::Regex("Digest ".into()))
+                .with_status(status)
+                .with_body("privateX")
+                .expect(1)
+                .create_async()
+                .await;
+            let error = HttpTransport::new()
+                .with_credentials("admin", "password")
+                .with_options(HttpTransportOptions {
+                    max_response_bytes: 7,
+                    ..HttpTransportOptions::default()
+                })
+                .unwrap()
+                .soap_post_with_options(
+                    &format!("{}/onvif/device_service", server.url()),
+                    ACTION,
+                    SOAP_BODY.into(),
+                    SoapRequestOptions::with_timeout(std::time::Duration::from_secs(2)),
+                )
+                .await
+                .unwrap_err();
+            assert!(matches!(
+                error,
+                TransportError::ResponseTooLarge { limit: 7 }
+            ));
+            challenge.assert_async().await;
+            success.assert_async().await;
+        }
     }
 }

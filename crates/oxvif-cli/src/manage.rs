@@ -325,6 +325,7 @@ async fn run_inner(
                     };
                     let profiles = data
                         .as_array()
+                        .or_else(|| data["profiles"].as_array())
                         .ok_or_else(|| AppError::internal("Invalid profile result."))?;
                     restore_profile(profile, profile_view, profiles);
                     if profiles.is_empty() {

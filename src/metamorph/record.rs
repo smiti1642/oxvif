@@ -63,6 +63,7 @@ impl RecordingEvidence {
                 Some(*status),
             ),
             TransportError::Http(error) if error.is_timeout() => (Class::Timeout, None),
+            TransportError::Deadline => (Class::Timeout, None),
             TransportError::ResponseTooLarge { .. } => (Class::ResponseLimit, None),
             _ => (Class::Transport, None),
         };

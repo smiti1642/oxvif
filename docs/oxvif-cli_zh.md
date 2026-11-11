@@ -168,9 +168,16 @@ Health 僅在所有失敗 check 均為 HTTP 類且觀察到的 transport 失敗�
 成功但沒有結果的 scan 也不重跑。預設重試次數仍為零。
 
 
-`--clock-sync auto`（預設）會在有 credential 時先讀取攝影機時間，只調整 client
-端 WS-Security timestamp offset；`always` 對所有 session 執行，`never` 則停用。
-任何 policy 都不會修改攝影機的時鐘。
+`--soap-auth` 可選 `combined`（預設）、`digest` 或 `ws-security`。
+`--clock-sync auto` 在使用 UsernameToken 憑證時讀取裝置時鐘。`always` 明確
+要求讀取，`never` 停用同步。同步調整 client 端的 WS-Security timestamp。
+
+`--media-service media1|media2|auto` 適用於 profiles、URI、diagnose、inventory
+和 Health 的媒體讀取。省略時沿用既有 Media1 流程。Auto 優先已宣告的
+Media2，只在缺少端點或明確不支援操作時回退至 Media1。
+明確選擇服務時，`media profiles` 的 `result` 包含 `media_service`、
+`endpoint_source`、`attempts` 和 `profiles`。URI 結果包含 `media_service`，
+Media2 依原生回覆提供 `uri`。JSON／JSONL 沿用 envelope schema v3。
 
 使用 private CA 的 HTTPS 攝影機可重複傳入 `--ca-certificate <FILE>`，每個檔案可為
 單張 PEM certificate 或 bundle。CLI 會把它們加入平台 trust roots，並一致套用於

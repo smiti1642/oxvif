@@ -28,7 +28,7 @@ use std::sync::{Arc, OnceLock};
 
 use crate::error::OnvifError;
 use crate::soap::{SoapEnvelope, WsSecurityToken};
-use crate::transport::{HttpTransport, Transport};
+use crate::transport::{HttpTransport, SoapRequestOptions, Transport};
 
 mod device;
 mod events;
@@ -71,6 +71,8 @@ pub use events::{notification_listener, notification_listener_with_peer};
 pub struct OnvifClient {
     device_url: String,
     credentials: Option<(String, String)>,
+    authentication: AuthenticationMode,
+    direct_calls: bool,
     /// Seconds to add to local UTC when generating WS-Security timestamps.
     /// Set via [`with_utc_offset`](Self::with_utc_offset) after calling
     /// `GetSystemDateAndTime` if the device clock differs from local UTC.
@@ -86,6 +88,29 @@ pub struct OnvifClient {
     default_transport: OnceLock<Arc<dyn Transport>>,
 }
 
+/// Credential mechanism used by the client and its default HTTP transport.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum AuthenticationMode {
+    /// Send UsernameToken and respond to HTTP Digest challenges.
+    #[default]
+    Combined,
+    /// Respond to HTTP Digest challenges only.
+    Digest,
+    /// Send a WS-Security UsernameToken only.
+    WsSecurity,
+}
+
+impl AuthenticationMode {
+    /// Whether this policy sends a UsernameToken with configured credentials.
+    pub fn uses_ws_security(self) -> bool {
+        self != Self::Digest
+    }
+    /// Whether this policy enables HTTP Digest on the built-in transport.
+    pub fn uses_digest(self) -> bool {
+        self != Self::WsSecurity
+    }
+}
+
 impl OnvifClient {
     /// Create a client targeting the ONVIF device service at `device_url`.
     ///
@@ -95,6 +120,8 @@ impl OnvifClient {
         Self {
             device_url: device_url.into(),
             credentials: None,
+            authentication: AuthenticationMode::default(),
+            direct_calls: false,
             utc_offset: 0,
             transport: None,
             default_transport: OnceLock::new(),
@@ -119,11 +146,33 @@ impl OnvifClient {
         username: impl Into<String>,
         password: impl Into<String>,
     ) -> Self {
-        self.credentials = Some((username.into(), password.into()));
-        // The default transport derives its Digest credentials from this field,
-        // so a previously memoised one is now stale.
-        self.default_transport = OnceLock::new();
+        let credentials = (username.into(), password.into());
+        if self.authentication.uses_digest() && self.credentials.as_ref() != Some(&credentials) {
+            self.default_transport = OnceLock::new();
+        }
+        self.credentials = Some(credentials);
         self
+    }
+
+    /// Select the mechanism independently of the credential builder order.
+    /// A custom transport continues to own HTTP authentication.
+    pub fn with_authentication_mode(mut self, mode: AuthenticationMode) -> Self {
+        if self.credentials.is_some() && self.authentication.uses_digest() != mode.uses_digest() {
+            self.default_transport = OnceLock::new();
+        }
+        self.authentication = mode;
+        self
+    }
+
+    /// Configured authentication policy, excluding credential values.
+    pub fn authentication_mode(&self) -> AuthenticationMode {
+        self.authentication
+    }
+
+    pub(crate) fn direct(&self) -> Self {
+        let mut client = self.clone();
+        client.direct_calls = true;
+        client
     }
 
     /// Adjust the `<wsu:Created>` timestamp by `offset_secs` seconds.
@@ -167,8 +216,10 @@ impl OnvifClient {
             None => self.default_transport.get_or_init(|| {
                 let http = HttpTransport::new();
                 let http = match &self.credentials {
-                    Some((user, pass)) => http.with_credentials(user, pass),
-                    None => http,
+                    Some((user, pass)) if self.authentication.uses_digest() => {
+                        http.with_credentials(user, pass)
+                    }
+                    _ => http,
                 };
                 Arc::new(http)
             }),
@@ -178,6 +229,7 @@ impl OnvifClient {
     fn security_token(&self) -> Option<WsSecurityToken> {
         self.credentials
             .as_ref()
+            .filter(|_| self.authentication.uses_ws_security())
             .map(|(user, pass)| WsSecurityToken::generate(user, pass, self.utc_offset))
     }
 
@@ -193,18 +245,55 @@ impl OnvifClient {
         action: &str,
         body: &str,
     ) -> Result<String, OnvifError> {
+        self.exchange(url, action, body, None).await
+    }
+
+    pub(crate) async fn call_addressed(
+        &self,
+        url: &str,
+        action: &str,
+        body: &str,
+        parameters: &[crate::soap::qualified::QualifiedElement],
+        options: SoapRequestOptions,
+    ) -> Result<String, OnvifError> {
+        self.exchange(url, action, body, Some((parameters, options)))
+            .await
+    }
+
+    async fn exchange(
+        &self,
+        url: &str,
+        action: &str,
+        body: &str,
+        addressing: Option<(
+            &[crate::soap::qualified::QualifiedElement],
+            SoapRequestOptions,
+        )>,
+    ) -> Result<String, OnvifError> {
         let mut envelope = SoapEnvelope::new(body.to_string()).with_wsa_to(url);
         if let Some(token) = self.security_token() {
             envelope = envelope.with_security(token);
         }
-        let xml = envelope.build();
+        let xml = match addressing {
+            Some((parameters, _)) => envelope.build_addressed(action, parameters),
+            None => envelope.build(),
+        };
         let request_bytes = xml.len();
         let started = std::time::Instant::now();
-        let result = self
-            .transport()
-            .soap_post(url, action, xml)
-            .await
-            .map_err(OnvifError::from);
+        let result = match addressing {
+            Some((_, options)) => {
+                self.transport()
+                    .soap_post_with_options(url, action, xml, options)
+                    .await
+            }
+            None if self.direct_calls => {
+                self.transport()
+                    .soap_post_with_options(url, action, xml, SoapRequestOptions::default())
+                    .await
+            }
+            None => self.transport().soap_post(url, action, xml).await,
+        }
+        .map_err(OnvifError::from);
         tracing::trace!(
             action,
             request_bytes,

@@ -799,13 +799,17 @@ fn render_workflow_stages(result: &serde_json::Value) -> String {
 }
 
 fn render_profiles(result: &serde_json::Value) -> String {
-    let Some(profiles) = result.as_array() else {
+    let Some(profiles) = result.as_array().or_else(|| result["profiles"].as_array()) else {
         return render_shape_mismatch(result);
     };
     if profiles.is_empty() {
         return "No media profiles reported.".to_owned();
     }
-    let mut output = String::from("TOKEN | NAME | FIXED | VIDEO | AUDIO | PTZ");
+    let mut output = result["media_service"]
+        .as_str()
+        .map(|service| format!("Media service: {service}\n"))
+        .unwrap_or_default();
+    output.push_str("TOKEN | NAME | FIXED | VIDEO | AUDIO | PTZ");
     for profile in profiles {
         let _ = write!(
             output,

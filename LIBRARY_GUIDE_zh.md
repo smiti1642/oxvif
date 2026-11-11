@@ -440,6 +440,32 @@ source configuration token。詳見 [encoder 契約](docs/mock-server_zh.md#622-
 
 ---
 
+### 依服務識別的媒體讀取
+
+`OnvifSession::media_catalogue` 支援 `MediaSelection::Media1`、`Media2` 與
+`Auto`。Auto 先查詢已宣告的 Media2，缺少端點或收到具正確 namespace 的
+unsupported-action Fault 時再查 Media1。Catalogue 記錄每次嘗試與端點來源。
+認證、transport、端點政策及回應解析錯誤會中止選擇。
+
+```rust
+use oxvif::media_workflow::{MediaSelection, StreamRequest};
+
+let catalogue = session.media_catalogue(MediaSelection::Auto).await?;
+let profile = catalogue.select(Some(profile_token))?;
+let stream = session.media_stream_uri(&profile, StreamRequest::Rtsp).await?;
+let snapshot = session.media_snapshot_uri(&profile).await?;
+let encoders = session.media_compatible_video_encoders(&profile).await?;
+```
+
+Profile handle 保留服務與 opaque token。Profile 和 encoder 維持各服務原生型別，
+可讀取來源及 configuration 身分。`profiles_for_source` 依底層 source token
+篩選。省略 profile token 時須有唯一 profile。URI 請求支援 RTSP interleaving、
+UDP unicast、UDP multicast 和 HTTP tunneling。`media_stream_uri_with_capabilities`
+可依選定服務明確回報的能力拒絕不支援的傳輸。播放需另行觀測。
+
+流程預設信任設定的裝置 origin。跨 origin 的媒體服務可透過
+`OnvifSessionBuilder::with_endpoint_policy` 明確加入信任。
+
 ## PTZ 方法
 
 所有 PTZ 方法使用 `caps.ptz_url`。ONVIF normalized range 通常為 pan/tilt `[-1.0, 1.0]`、zoom `[0.0, 1.0]`。
@@ -565,6 +591,39 @@ client.unsubscribe(&sub.reference_url).await?;
 `NotificationMessage` 包含 `topic`、`utc_time`、`source: HashMap<String, String>` 與 `data: HashMap<String, String>`。
 
 ---
+
+### 保留端點引用的 pull point 與受管理訂閱
+
+`create_referenced_pull_point` 保留地址、依序排列的 reference parameters 與
+原始 lease 時間。對應的 Pull、Renew、Unsubscribe 會產生有 namespace 的 SOAP
+headers，並加入 WS-Addressing Action 和 MessageID。通知保留 topic bindings、
+dialect、依序排列的 Source、Key、Data 及 XML 項目。`to_legacy` 轉換到原有
+結構，重複的 simple item 採最後一筆，轉換時會丟棄 reference parameters、
+Key 與 XML 項目。
+
+```rust
+use oxvif::events::{ManagedEvent, ManagedEventOptions};
+
+let mut subscription = session.managed_events(ManagedEventOptions::default()).await?;
+if let Some(Ok(ManagedEvent::Notification(event))) = subscription.next().await {
+    let message = event.to_legacy();
+}
+let outcome = subscription.close().await;
+```
+
+Worker 並行拉取與續租。建立時須有可用的裝置時間和到期時間，據以計算本地
+單調時鐘的期限。Renew 省略 CurrentTime 時使用最近一次配對的時鐘樣本。
+恢復會送出 Gap，表示通知可能遺失或重複。佇列超限會在已排隊的通知送出後
+回傳終止錯誤。`close().await` 停止 worker 並有界嘗試 Unsubscribe。Drop
+會中止本地工作，遠端訂閱由 lease 到期釋放。
+
+預設要求 60 秒 lease，裝置 pull 等待 15 秒，單次交換上限 20 秒，清理
+2 秒，輪詢間隔 100 ms，每頁 32 筆，佇列 128 項與 1 MiB 計量 bytes，
+最多替換訂閱兩次、每次 12 秒。Reference parameters 與單頁通知分別受
+256 KiB 序列化保留上限約束。解析沿用 production XML bytes、深度與元素
+數量限制。佇列 bytes 按序列化通知計量，解析中的回應與佇列管理有各自成本。
+`EndpointPolicy` 信任裝置 origin 與明確加入的 origins。內建 addressed
+HTTP 路徑直接送到驗證後的 URL。自訂 Transport 負責 HTTP 路由與認證。
 
 ## Recording Service 方法
 
@@ -705,6 +764,17 @@ cargo run --example conformance --features mock -- devices.txt
 ---
 
 ## HTTP 回應限制
+
+`AuthenticationMode` 支援 `Combined`、`Digest` 與 `WsSecurity`。
+提供 credential 時預設同時使用 HTTP Digest 和 SOAP UsernameToken。
+可在 Client、Session builder 或 HealthCheck 選擇模式。自訂 Transport
+自行管理 HTTP 認證。Session 的 `with_auto_clock_sync` 在使用 UsernameToken
+憑證時讀取裝置時鐘。
+
+`Transport::soap_post_with_options` 可指定整次交換期限，內建 HTTP 路徑涵蓋
+Digest challenge、重送與讀取 body，並沿用 CA trust 與 response cap。
+只實作 `soap_post` 的自訂 Transport 會取得外層 deadline，內部較短的 timeout
+仍適用。Exhaustive match 需新增 `TransportError::Deadline` 分支。
 
 `HttpTransport::new()` 對每個 HTTP request（包含 body 讀取）使用十秒 deadline，
 並限制累積回應為 4 MiB。Digest 認證可能發出多個 HTTP request；呼叫端可用外層

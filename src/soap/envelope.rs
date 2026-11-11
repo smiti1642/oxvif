@@ -101,6 +101,21 @@ impl SoapEnvelope {
 
     /// Serialise the envelope to a UTF-8 XML string.
     pub fn build(self) -> String {
+        self.build_inner(None)
+    }
+
+    pub(crate) fn build_addressed(
+        self,
+        action: &str,
+        parameters: &[super::qualified::QualifiedElement],
+    ) -> String {
+        self.build_inner(Some((action, parameters)))
+    }
+
+    fn build_inner(
+        self,
+        addressing: Option<(&str, &[super::qualified::QualifiedElement])>,
+    ) -> String {
         let mut out = String::with_capacity(2048);
 
         out.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
@@ -113,11 +128,19 @@ impl SoapEnvelope {
         out.push('>');
 
         // Header — emitted only when there is content to put inside
-        let has_header = self.security.is_some() || self.wsa_to.is_some();
+        let has_header = self.security.is_some() || self.wsa_to.is_some() || addressing.is_some();
         if has_header {
             out.push_str("<s:Header>");
             if let Some(to) = &self.wsa_to {
                 write!(out, "<wsa:To>{}</wsa:To>", xml_escape(to)).unwrap();
+            }
+            if let Some((action, parameters)) = addressing {
+                let id = format!("{:032x}", rand::random::<u128>());
+                write!(out, "<wsa:Action>{}</wsa:Action><wsa:MessageID>urn:uuid:{}-{}-{}-{}-{}</wsa:MessageID>",
+                    xml_escape(action), &id[..8], &id[8..12], &id[12..16], &id[16..20], &id[20..]).unwrap();
+                for parameter in parameters {
+                    parameter.write_reference(&mut out);
+                }
             }
             if let Some(sec) = &self.security {
                 sec.write_xml(&mut out);

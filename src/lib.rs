@@ -363,6 +363,15 @@
 //! declared namespace-checked projections with explicit masks/unexamined fields.
 //! Equal is selected-value evidence, not complete response or device conformance.
 //!
+//! ## Managed events and media reads
+//!
+//! [events] exposes qualified endpoint references and notifications with an
+//! owned pull-point lifecycle. Await async close to attempt Unsubscribe and
+//! join the worker. [media_workflow] selects a Media1 or Media2 endpoint and
+//! carries the service identity with each profile token.
+//! Select SOAP authentication with [client::AuthenticationMode] and request
+//! deadlines with [transport::SoapRequestOptions].
+//!
 //! ## Bounded recording search
 //!
 //! [`OnvifClient::recording_search`] and [`OnvifSession::recording_search`]
@@ -406,10 +415,12 @@
 pub mod client;
 pub mod discovery;
 pub mod error;
+pub mod events;
 #[cfg(feature = "mock")]
 pub mod fixtures;
 #[cfg(feature = "health")]
 pub mod health;
+pub mod media_workflow;
 #[cfg(feature = "metamorph")]
 pub mod metamorph;
 #[cfg(feature = "mock")]

@@ -46,6 +46,8 @@ pub struct ExecutionOptions {
     pub timeout: Duration,
     pub retries: u32,
     pub clock_sync: ClockSyncPolicy,
+    pub soap_auth: oxvif::client::AuthenticationMode,
+    pub media_service: Option<oxvif::media_workflow::MediaSelection>,
     pub ca_certificates: Vec<Vec<u8>>,
     pub verbosity: u8,
     pub quiet: bool,
@@ -59,6 +61,8 @@ impl Default for ExecutionOptions {
             timeout: Duration::from_secs(10),
             retries: 0,
             clock_sync: ClockSyncPolicy::Auto,
+            soap_auth: oxvif::client::AuthenticationMode::default(),
+            media_service: None,
             ca_certificates: Vec::new(),
             verbosity: 0,
             quiet: false,
@@ -1376,7 +1380,26 @@ impl Transport for HealthRetryTransport {
         action: &str,
         body: String,
     ) -> Result<String, TransportError> {
-        let result = self.inner.soap_post(url, action, body).await;
+        self.observe(self.inner.soap_post(url, action, body).await)
+    }
+
+    async fn soap_post_with_options(
+        &self,
+        url: &str,
+        action: &str,
+        body: String,
+        options: oxvif::transport::SoapRequestOptions,
+    ) -> Result<String, TransportError> {
+        self.observe(
+            self.inner
+                .soap_post_with_options(url, action, body, options)
+                .await,
+        )
+    }
+}
+
+impl HealthRetryTransport {
+    fn observe(&self, result: Result<String, TransportError>) -> Result<String, TransportError> {
         if let Err(error) = &result {
             let bit = if is_retryable_transport_error(error) {
                 1
@@ -1384,7 +1407,9 @@ impl Transport for HealthRetryTransport {
                 2
             };
             self.failures.fetch_or(bit, Ordering::Relaxed);
-            if matches!(error, TransportError::Http(error) if error.is_timeout()) {
+            if matches!(error, TransportError::Deadline)
+                || matches!(error, TransportError::Http(error) if error.is_timeout())
+            {
                 self.failures.fetch_or(4, Ordering::Relaxed);
             }
         }
@@ -1469,14 +1494,18 @@ async fn execute_diagnostic(
     let mut last_retryable = true;
     for attempt in 0..attempts {
         let future = async {
-            let mut builder = OnvifSession::builder(&resolved.target);
+            let mut builder =
+                OnvifSession::builder(&resolved.target).with_authentication_mode(options.soap_auth);
             if let (Some(username), Some(password)) =
                 (resolved.username.as_deref(), resolved.password())
             {
                 builder = builder.with_credentials(username, password);
             }
             builder = builder.with_transport(transport.clone());
-            if should_sync_clock(options.clock_sync, resolved.password.is_some()) {
+            if should_sync_clock(
+                options.clock_sync,
+                resolved.password.is_some() && options.soap_auth.uses_ws_security(),
+            ) {
                 builder = builder.with_clock_sync();
             }
             let session = crate::diagnostics::initialize(builder).await?;
@@ -1499,10 +1528,10 @@ async fn execute_diagnostic(
                     serde_json::to_value(session.get_profiles().await?)?
                 }
                 DiagnosticOperation::MediaStreamUri(profile) => {
-                    serde_json::to_value(session.get_stream_uri(profile).await?)?
+                    crate::maintenance::stream_uri_value(&session, options, profile).await?
                 }
                 DiagnosticOperation::MediaSnapshotUri(profile) => {
-                    serde_json::to_value(session.get_snapshot_uri(profile).await?)?
+                    crate::maintenance::snapshot_uri_value(&session, options, profile).await?
                 }
                 DiagnosticOperation::PtzStatus(profile) => {
                     serde_json::to_value(session.ptz_get_status(profile).await?)?
@@ -1566,7 +1595,11 @@ async fn execute_health_check(
         build_http_transport(options, resolved.username.as_deref(), resolved.password())?;
     let attempts = options.retries.saturating_add(1);
     for attempt in 0..attempts {
-        let mut check = HealthCheck::new(&resolved.target);
+        let mut check =
+            HealthCheck::new(&resolved.target).with_authentication_mode(options.soap_auth);
+        if let Some(service) = options.media_service {
+            check = check.with_media_selection(service);
+        }
         let observed = Arc::new(HealthRetryTransport {
             inner: transport.clone(),
             failures: AtomicU8::new(0),
@@ -1579,7 +1612,7 @@ async fn execute_health_check(
         check = check.with_transport(observed.clone());
         check = check.with_clock_sync(should_sync_clock(
             options.clock_sync,
-            resolved.password.is_some(),
+            resolved.password.is_some() && options.soap_auth.uses_ws_security(),
         ));
         // An inner deadline can win the race with the whole-attempt deadline.
         // Preserve the timeout outcome rather than returning a partial report
@@ -1725,13 +1758,16 @@ async fn fetch_live_information(
     let mut last_error = None;
     let mut last_retryable = true;
     for attempt in 0..attempts {
-        let mut client = OnvifClient::new(target);
+        let mut client = OnvifClient::new(target).with_authentication_mode(options.soap_auth);
         if let (Some(username), Some(password)) = (username, password) {
             client = client.with_credentials(username, password);
         }
         client = client.with_transport(transport.clone());
         let request = async {
-            if should_sync_clock(options.clock_sync, password.is_some()) {
+            if should_sync_clock(
+                options.clock_sync,
+                password.is_some() && options.soap_auth.uses_ws_security(),
+            ) {
                 let device_time = client.get_system_date_and_time().await?;
                 client = client.with_utc_offset(device_time.utc_offset_secs());
             }
@@ -1798,15 +1834,17 @@ pub(crate) fn build_http_transport(
                 AppError::invalid_argument(format!("Invalid --ca-certificate input: {error}"))
             })?;
     }
-    if let (Some(username), Some(password)) = (username, password) {
+    if let (Some(username), Some(password)) = (username, password)
+        && options.soap_auth.uses_digest()
+    {
         transport = transport.with_credentials(username, password);
     }
     Ok(Arc::new(transport))
 }
 
-fn should_sync_clock(policy: ClockSyncPolicy, has_credentials: bool) -> bool {
+pub(crate) fn should_sync_clock(policy: ClockSyncPolicy, uses_username_token: bool) -> bool {
     match policy {
-        ClockSyncPolicy::Auto => has_credentials,
+        ClockSyncPolicy::Auto => uses_username_token,
         ClockSyncPolicy::Always => true,
         ClockSyncPolicy::Never => false,
     }

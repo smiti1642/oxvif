@@ -77,6 +77,7 @@
 | `SetVideoSourceConfiguration` | ✓ |
 | `GetVideoSourceConfigurationOptions` | ✓ |
 | `GetVideoEncoderConfigurations` / `GetVideoEncoderConfiguration` | ✓ |
+| `GetCompatibleVideoEncoderConfigurations` | ✓ 透過 `media_compatible_video_encoders` |
 | `SetVideoEncoderConfiguration` | ✓ |
 | `GetVideoEncoderConfigurationOptions` | ✓ |
 | `GetAudioSources` | ✓ |
