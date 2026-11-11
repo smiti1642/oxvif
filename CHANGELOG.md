@@ -20,11 +20,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+[0.18.0 release draft](docs/releases/0.18.0.md) · [繁體中文](docs/releases/0.18.0_zh.md)
+
 ### Security
 
-- Update the workspace lockfile to Tokio 1.53.3 for RUSTSEC-2026-0386
-  (unsound safe `AsyncFd` constructors). Downstream consumers must update their
-  own lockfiles; this does not raise the library's declared Tokio minimum.
+- Lock Tokio 1.54.1, which includes the RUSTSEC-2026-0386 fix introduced
+  in 1.53.3 for unsound `AsyncFd` constructors. Downstream consumers must
+  update their own lockfiles.
 
 ### Changed
 
@@ -143,6 +145,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Scope OSD, PTZ node/configuration and recording-job state selectors to the requested operation; reject ambiguous selectors and preserve escaped identities. Correct OSD text/image XML and escape stored OSD/PTZ/recording strings.
 
 ### Maintenance
+
+- Lock `tokio-rustls 0.26.6` for transport read-error propagation and
+  `rustls-native-certs 0.8.5` for deduplicated Unix certificate loading.
 
 - Review the remaining zbus-family audit warnings against the CLI's selected
   platform features. The synchronous Linux credential backend remains unchanged;
