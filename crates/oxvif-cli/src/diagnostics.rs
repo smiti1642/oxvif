@@ -75,6 +75,16 @@ async fn capture_boxed<T>(enabled: bool, future: impl Future<Output = T>) -> (T,
 pub(crate) fn context() -> Option<Context> {
     CURRENT.try_with(Clone::clone).ok()
 }
+
+#[cfg(test)]
+pub(crate) fn contains_entry(entry: &str) -> bool {
+    let context = context().expect("diagnostics capture must be enabled");
+    let log = context.log.lock().expect("diagnostics lock");
+    log.devices
+        .get(&context.key)
+        .is_some_and(|buffer| buffer.entries.iter().any(|item| item == entry))
+}
+
 pub(crate) async fn device_scope<T>(
     context: Option<Context>,
     key: String,

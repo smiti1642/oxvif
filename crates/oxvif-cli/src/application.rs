@@ -3762,6 +3762,11 @@ mod tests {
 
     #[tokio::test]
     async fn cancelling_a_command_during_retry_backoff_prevents_the_next_attempt() {
+        use std::{
+            future::{Future, poll_fn},
+            task::Poll,
+        };
+
         let (target, requests, server) = status_server(503, "Service Unavailable").await;
         let resolved = ResolvedTarget {
             device_id: None,
@@ -3771,19 +3776,37 @@ mod tests {
             password: None,
         };
         let options = ExecutionOptions {
-            timeout: Duration::from_secs(1),
+            timeout: Duration::from_secs(5),
             retries: 2,
             ..ExecutionOptions::default()
         };
-        let future = execute_diagnostic(&resolved, DiagnosticOperation::Capabilities, &options);
-
-        assert!(
-            tokio::time::timeout(Duration::from_millis(50), future)
-                .await
-                .is_err(),
-            "parent timeout should cancel the retry backoff"
+        let operation = DiagnosticOperation::Capabilities;
+        let delay = retry_delay(0, &resolved.target);
+        let retry_entry = format!(
+            "operation_unit={} attempt=1 retry_class=transient_transport_or_timeout retry_delay_ms={}",
+            operation.name(),
+            delay.as_millis()
         );
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        crate::capture_diagnostics(true, async {
+            let mut diagnostic = Box::pin(execute_diagnostic(&resolved, operation, &options));
+            timeout(
+                Duration::from_secs(10),
+                poll_fn(|cx| {
+                    assert!(diagnostic.as_mut().poll(cx).is_pending());
+                    if crate::diagnostics::contains_entry(&retry_entry) {
+                        Poll::Ready(())
+                    } else {
+                        Poll::Pending
+                    }
+                }),
+            )
+            .await
+            .expect("first attempt should schedule a retry");
+            assert_eq!(requests.load(Ordering::SeqCst), 1);
+            drop(diagnostic);
+        })
+        .await;
+        sleep(delay + Duration::from_millis(50)).await;
         server.abort();
 
         assert_eq!(requests.load(Ordering::SeqCst), 1);
