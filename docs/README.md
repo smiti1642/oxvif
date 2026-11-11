@@ -71,9 +71,9 @@ The [ONVIF interoperability plan](active/onvif-interoperability-plan.md)
 ([繁體中文](active/onvif-interoperability-plan_zh.md)) maps the 2026-11-11 source
 walkthrough to client search ownership, scoped EPR/event data, managed subscriptions,
 auth selection and shared Media1/Media2 workflows. It also defines architecture
-and acceptance boundaries for later PTZ, streaming, OSD/masks, audio and analytics
-work. I01–I06 are locally implemented and verified. I07–I10 remain planned work.
-The implementation and HB1 are uncommitted. Real-device verification is deferred.
+and acceptance boundaries for PTZ, streaming, OSD/masks, audio, analytics
+and recording. I01–I10 and HB1 are implemented and committed by feature.
+Real-device verification is deferred.
 
 2026-09-22 歸檔與校準合計將 27 組已交付計畫／批次的 46 份 Markdown 文件，
 以及一份原始審查 JSON 移至 `done/`。原 16 組 active 文件已逐份核對，

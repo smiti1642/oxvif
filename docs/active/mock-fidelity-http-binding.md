@@ -2,9 +2,10 @@
 
 [English](mock-fidelity-http-binding.md) | [繁體中文](mock-fidelity-http-binding_zh.md)
 
-Status: IN-PROGRESS. W01 recorded before implementation, 2026-09-23, `afe3731`.
+Status: locally verified and committed in `b0be9ec`. W01 recorded before
+implementation, 2026-09-23, `afe3731`.
 Reviewed 2026-11-10 against `d777925` plus the uncommitted HB1 worktree.
-The user requested a gap review and explicitly kept HB1 uncommitted.
+HB1 was kept uncommitted during the gap review and initial verification.
 The user subsequently authorized the fixes; the local implementation and
 acceptance section below supersedes the earlier gap disposition.
 Owner: Q02 / W07; private HTTP adapter shared by all 159 existing routes.

@@ -189,3 +189,8 @@ I02–I06 後續（2026-11-11）。Qualified XML 與端點引用、SOAP 認證�
 Workspace 全功能／預設測試分別通過 1,471／1,337 項。
 雙語互通性計畫記錄外部 schema 與敏感度證據。HB1 和實作維持未提交，
 實機驗收留待後續。
+
+I07–I10 後續（2026-11-11）。RTSP 分層、Media2 疊加、音訊／Analytics／錄影擴充，
+以及 W14 Search 和 Metamorph 驗收已實作並提交。[交付證據](onvif-interoperability-plan_zh.md#i07i10-交付證據)
+記錄本地檢查和待實機的型號／韌體。HB1 及 I01–I06 也已按功能提交。
+Q02／W07 與 W14 的其餘範圍沿用原歸屬。

@@ -32,7 +32,7 @@
 | [imaging](#imaging) | 8 個路由分支；W12 |
 | [events](#events) | 8 個路由分支；W15 |
 | [recording](#recording) | 11 個路由分支；W14 |
-| [search](#search) | 4 個路由分支；W14 |
+| [search](#search) | 5 個完整 Action；W14 |
 | [replay](#replay) | 2 個路由分支；W14 |
 | [維護方式](#維護方式) | 程式碼差異及變更流程 |
 
@@ -297,14 +297,14 @@ PTZ1 指向 [scoped profile 身分](mock-fidelity-profile-preflight_zh.md#ptz-pr
 
 ## search
 
-[dispatch_search](../../src/mock/dispatch.rs) · [services/recording.rs](../../src/mock/services/recording.rs)
+[dispatch_search](../../src/mock/dispatch.rs) · [search runtime](../../src/mock/services/recording/search.rs)
 
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `search.GetServiceCapabilities` | `recording::resp_search_service_capabilities` | `` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `search.FindRecordings` | `recording::resp_find_recordings` | `` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `search.GetRecordingSearchResults` | `recording::resp_recording_search_results` | `state` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `search.EndSearch` | `recording::resp_end_search` | `` | W14 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
+| `search.FindRecordings` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | [I10](onvif-interoperability-plan_zh.md#i07i10-交付證據) |
+| `search.GetRecordingSearchResults`／`search.GetSearchState` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
+| `search.EndSearch` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3、I10 |
 
 ## replay
 

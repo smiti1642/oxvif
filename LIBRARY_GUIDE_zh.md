@@ -797,7 +797,10 @@ if !report.ok() {
 
 `report.to_json()` / `to_json_pretty()` 可供 CI 使用，`report.diff(&previous)` 可比較前次 baseline。`CheckResult::error` 提供 structured `ErrorClass`、ONVIF subcode、fault code、reason 與 detail；`ProfileAssessment` 將 genuine failure 與無法驗證區分為 `missing` 與 `unverified`。
 
-啟用 liveness probe 後，stream URI 會進行 RTSP `OPTIONS`，snapshot URI 會抓取有界圖片資料並檢查檔頭（不是完整解碼），Profile G 會執行 recording search 與 replay URI resolution。這些行為會建立額外連線，因此預設關閉。
+啟用 liveness probe 後，stream check 分別回報 RTSP OPTIONS、認證後的
+DESCRIBE 和 SDP codec。`with_stream_options` 可選擇觀察首包。Snapshot
+仍有獨立的有界下載與檔頭檢查。錄影檢查會執行 recording search 和 replay
+URI resolution。額外的 RTSP／HTTP 連線預設關閉。
 
 快照使用與 CLI 共用的 `health::snapshot` 核心：限同一設備主機，不重新導向、
 不使用 proxy、不降級 HTTPS，限制 16 MiB 及總期限。Digest 失敗不改送 Basic；
@@ -1001,8 +1004,7 @@ raw replay 對 malformed request 的 exact escape hatch 不能作為比較身分
 比較僅涵蓋保留的 rows，不能推斷失敗／省略的 read 或雙側都缺少的 Action；capture
 coverage 請使用 CorpusManifest 回歸驗證。
 
-初期六個完整 Actions：Device `GetDeviceInformation`／`GetHostname`，以及 Media1／
-Media2 `GetProfiles`／`GetVideoEncoderConfigurations`。
+支援 16 個完整 Action，涵蓋 Device、Media1／Media2、PTZ、Analytics、Search 和 Replay。
 
 | Projection | 比較值 |
 | --- | --- |
@@ -1010,13 +1012,23 @@ Media2 `GetProfiles`／`GetVideoEncoderConfigurations`。
 | Hostname | 名稱與 DHCP 選擇 |
 | Profiles | 唯一 profile token、名稱、所有已建模 configuration／source token bindings |
 | EncoderCore | 唯一 config token、名稱、encoding、resolution、可選 bitrate 與 multicast destination |
+| StreamUriScheme | RTSP 或 RTSPS，URI 的 authority、path、query 與 userinfo 保持 unexamined |
+| OsdOptions／MaskOptions | 選定的配額、效果、位置及幾何限制 |
+| AudioOutputOptions | Output token 與有號 level 範圍 |
+| AnalyticsSupport | 規則、模組、選項與 metadata capability flags |
+| RecordingSummary／PtzSpaces | 錄影數量與限定名稱的 PTZ spaces 數量 |
 
 先以完整 XML 與獨立、有界 `NsReader` guard 檢查 SOAP 1.2 response identity 及選定
-expanded names，再共用既有 typed parse routing。支援 prefix alias／namespace
+expanded names。Device、profile 和 encoder 投影另外共用 typed parse routing。
+支援 prefix alias／namespace
 character reference；錯誤 namespace 不會因 local-name parser 而變 Equal。選定
 scalar／binding 必須存在且不含歧義，此比較支援政策可能比 Library 相容 parser
 嚴格；QName-valued `xsi:type` 維持 Unsupported。Encoder destination 另外從經
 namespace 檢查的 address 欄位投影，包含 Media2 目前未建模的 destination。
+
+搜尋、pull-point 與匯出生命週期使用有順序的流程證據。`compare_event_windows`
+比較兩段明確指定的視窗內的 concrete topic、PropertyOperation 與相對時間。
+Source、Key、Data 與 XML 擴充值維持 unexamined。
 
 Equal 僅指宣告的投影；profile fixed、其他 encoder settings（quality、frame rate、
 GOP／profile、multicast port／TTL）、vendor extension 與其他未檢查欄位會明列，

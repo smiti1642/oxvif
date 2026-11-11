@@ -572,7 +572,7 @@ Profile、video source/configuration、video encoder、OSD 與 audio catalog/con
 
 `SetSynchronizationPoint` 預設拒絕；Media1 須逐項 opt-in，僅回覆收件，不產生串流效果（§13.5）。
 
-### 7.3 Media2（27 項操作）
+### 7.3 Media2
 
 `GetProfiles` 的可省略 `Token` 使用解碼後完整值，選出單一 profile 或回傳 Fault。
 省略 `Type` 時不回傳 configuration；單一 `All` 回傳全部 binding，其他 list
@@ -581,6 +581,9 @@ Profile、video source/configuration、video encoder、OSD 與 audio catalog/con
 不合法欄位順序會被拒絕；完整欄位長度／attribute 政策仍屬未完成的驗證範圍。
 
 Media2 與 Media1 共用 profile、video、audio 狀態，並另提供 metadata。AM1 的 metadata 清單與 options 使用 scoped configuration／profile selector，未知參照均回傳 Fault。`GetVideoSourceModes` 為已宣告 stub；`SetVideoSourceMode` 一律回傳 `ter:ActionNotSupported`，不會宣稱已儲存未建模的 sensor mode。
+
+Media2 OSD 與 Media1 共用狀態。隱私遮罩為獨立 runtime，每個來源 configuration
+最多四個，與 `DeviceState` 的持久化 hook 分開。
 
 `SetSynchronizationPoint` 預設拒絕；Media2 有獨立的逐項收件 opt-in，不產生串流效果（§13.5）。
 
@@ -600,8 +603,8 @@ Configuration／preset／tour token、座標解析、完整 Fault policy、repla
 - Imaging 的七項影像操作依 `VideoSourceToken` 存取狀態，`GetServiceCapabilities` 為 static。
 - Events 建立最多四筆各有 endpoint／filter／queue／expiry 的訂閱；Pull／Renew／Unsubscribe 以回傳的存活 URL 操作。Subscribe／SetSynchronizationPoint 仍預設拒絕；逐項 receipt opt-in 不產生生命週期或推送／同步效果（§13.5）。Capability 不再宣稱 policy／push producer 支援。
 - Recording 的 recording、track 與 job 操作均由狀態支援；刪除 recording 會一併刪除所屬 job。
-- `FindRecordings` 只提供單一 search token，不模擬 cursor；`GetRecordingSearchResults` 讀取目前 recording list。
-- `EndSearch` 預設拒絕；opt-in 僅回傳 fixture `Endpoint` timestamp，不終止搜尋（§13.5）。
+- `FindRecordings` 建立有界快照與有效 token，`GetRecordingSearchResults` 依 cursor 分頁，`GetSearchState` 讀取目前狀態。
+- `EndSearch` 會釋放有效 token。明確啟用 receipt-only 時保留搜尋（§13.5）。
 - `GetReplayUri` 依 recording token 回答，未知 token 會 fault。
 
 ---
@@ -906,7 +909,9 @@ Mock 契約由使用 public API、且每次使用全新 server 的 property test
 ### 13.3 已記錄的簡化
 
 - 不模擬移動時間；PTZ move 立即更新 position，`MoveStatus` 固定為 `IDLE`。Monostable relay 也不會自動還原，請使用 REST pulse hook。
-- 不模擬 search cursor；`FindRecordings` 只提供一個 token，結果一次回傳完整目前清單。
+- FindRecordings 支援全部錄影或 IncludedRecordings 子集。快照結果立即可用，
+  成功讀取會推進 cursor 並續租，完成後在期限內可 EndSearch。錄影事件、metadata
+  搜尋及實際錄影另有驗收範圍。搜尋 runtime 不觸發 DeviceState 持久化 hook。
 - Source crop 僅支援零原點；非零 `Bounds/@x`／`@y` 現在回 Fault，正值尺寸可 clamp 至所選 sensor 範圍，詳見 §6.2.1。
 - Media1 audio encoder request 缺少 required `Multicast` 或 `SessionTimeout` 時會回傳 `ter:ConfigModify` / `IncompleteAudioEncoder-SETAEC-5715`。
 - Media2 `SetAudioEncoderConfiguration` 無法表示 `SessionTimeout`，所以會保留原值；省略可選 `Multicast` 時保留共用設定，提供完整 block 時才更新。

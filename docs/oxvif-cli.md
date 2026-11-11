@@ -124,6 +124,7 @@ version.
 | `--clock-sync <POLICY>` | `auto` (default) reads device time when credentials are present and the SOAP mode uses UsernameToken. `always` requests a clock read and `never` disables synchronization. Synchronization adjusts the client timestamp. |
 | `--soap-auth <MODE>` | Select `combined` (default), `digest` or `ws-security` for SOAP device requests. |
 | `--media-service <SERVICE>` | Select `media1`, `media2` or `auto` for profile, URI, diagnosis, inventory and Health media reads. Omit for the legacy Media1 workflow. |
+| `--rtsp-probe <MODE>` | Opt in to RTSP with `diagnose`. `describe` inspects SDP and codec, and `packet` adds interleaved RTP observation and TEARDOWN. |
 | `--ca-certificate <FILE>` | Add a PEM CA certificate or bundle to platform trust roots. Repeat for multiple bundles. Invalid/empty bundles and private keys are rejected; normal chain and hostname verification remain enabled. |
 | `-v`, `--verbose` | Increase diagnostic verbosity; repeat for additional detail. |
 | `-q`, `--quiet` | Suppress non-essential diagnostics. |

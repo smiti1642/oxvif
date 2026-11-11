@@ -175,6 +175,9 @@ Health 僅在所有失敗 check 均為 HTTP 類且觀察到的 transport 失敗�
 `--media-service media1|media2|auto` 適用於 profiles、URI、diagnose、inventory
 和 Health 的媒體讀取。省略時沿用既有 Media1 流程。Auto 優先已宣告的
 Media2，只在缺少端點或明確不支援操作時回退至 Media1。
+
+`--rtsp-probe describe` 可在 `diagnose` 中檢查 RTSP 連線、OPTIONS 與 SDP codec。
+使用 `--rtsp-probe packet` 會另外觀察首個視訊 RTP 封包與 TEARDOWN。
 明確選擇服務時，`media profiles` 的 `result` 包含 `media_service`、
 `endpoint_source`、`attempts` 和 `profiles`。URI 結果包含 `media_service`，
 Media2 依原生回覆提供 `uri`。JSON／JSONL 沿用 envelope schema v3。

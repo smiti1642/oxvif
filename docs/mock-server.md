@@ -819,7 +819,7 @@ lowercase `deviceio`; the elements are in `…/ver10/deviceIO/wsdl`. Shares one
 | `GetOSDOptions`, `GetServiceCapabilities` | ○ | |
 | `SetSynchronizationPoint` | — | Refuse by default; explicit Media1 receipt-only opt-in, no stream effect (§13.5). |
 
-### 7.3 Media2 — 27 operations
+### 7.3 Media2
 
 Selector duplicate/scalar/order checks are implemented; full field-length and
 attribute policy remain part of the unfinished validation programme.
@@ -840,6 +840,8 @@ attribute policy remain part of the unfinished validation programme.
 | `GetAudioEncoderConfigurationOptions` | ● **T** | Media2's **flat** nesting — §6.5. |
 | `SetAudioEncoderConfiguration` | ● | Shares Media1's writer. Not required to carry `Multicast`, and cannot carry `SessionTimeout` — §13.3. |
 | `GetVideoSourceModes` | ○ | Declared stub — §13. |
+| `GetOSDs`, `GetOSDOptions`, `CreateOSD`, `SetOSD`, `DeleteOSD` | ● | Scoped Media2 binding over the shared Media1 OSD state. |
+| `GetMasks`, `GetMaskOptions`, `CreateMask`, `SetMask`, `DeleteMask` | ● | Independent transient masks, capped at four per video-source configuration. |
 | `SetVideoSourceMode` | — | **Always faults** (`ter:ActionNotSupported`). The mock does not model sensor modes and will not claim it does — §13.1. |
 | `SetSynchronizationPoint` | — | Refuse by default; independent Media2 receipt-only opt-in, no stream effect (§13.5). |
 
@@ -897,11 +899,11 @@ addresses no head at all — §6.4.
 |---|---|---|
 | `GetRecordings`, `CreateRecording`, `DeleteRecording`, `CreateTrack`, `DeleteTrack` | ● | Deleting a recording deletes its jobs. |
 | `GetRecordingJobs`, `CreateRecordingJob`, `SetRecordingJobMode`, `DeleteRecordingJob`, `GetRecordingJobState` | ● **T** | |
-| `GetRecordingSearchResults` | ● | |
+| `GetRecordingSearchResults` / `GetSearchState` | ● | Snapshot cursor and lease per token. |
 | `GetReplayUri` | ● **T** | Faults on a token naming no recording. |
-| `FindRecordings` | ○ | One search token; no cursor — see §13. |
+| `FindRecordings` | ● | Bounded snapshot and live token. |
 | Three × `GetServiceCapabilities` | ○ | Static capability fixtures. |
-| `EndSearch` | — | Refuses by default. Opt-in returns a fixture `Endpoint` timestamp, not a search termination (§13.5). |
+| `EndSearch` | ● | Releases a live token. The explicit receipt-only mode leaves the token live (§13.5). |
 
 ---
 
@@ -1491,9 +1493,12 @@ Audit §6.
 - **No motion model.** `AbsoluteMove` and friends update position
   instantaneously; `MoveStatus` is always `IDLE`. There is no timer, so a
   `Monostable` relay does not auto-revert either — use the REST pulse hook.
-- **No search cursor.** `FindRecordings` hands out one token and
-  `GetRecordingSearchResults` renders the whole current list against it. A real
-  device pages and expires searches.
+- **Recording search scope.** FindRecordings snapshots all recordings or an
+  IncludedRecordings subset. The mock advances a cursor and refreshes its lease
+  on a successful poll. Results are available immediately. A completed snapshot
+  stays available to EndSearch until lease expiry. Event/metadata searches and
+  actual recordings have separate evidence. Search state is transient and does
+  not fire DeviceState persistence hooks.
 - **Source crops only support zero origin.** Nonzero `Bounds/@x` or `@y` now
   faults; positive sizes may be clamped to the selected sensor. See §6.2.1.
 - **Media1 `SetAudioEncoderConfiguration` refuses a body without `Multicast` or

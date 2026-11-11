@@ -221,3 +221,9 @@ passed local verification. Workspace all-feature/default passed
 1,471/1,337 tests. The paired interoperability plan records
 external schema and sensitivity evidence. HB1 and the implementation are
 uncommitted. Real-device acceptance is deferred.
+
+I07–I10 follow-up (2026-11-11). Layered RTSP, Media2 overlays, the audio,
+analytics and recording slices, and live W14 Search with Metamorph acceptance
+are implemented and committed. The [delivery evidence](onvif-interoperability-plan.md#i07i10-delivery-evidence)
+records local checks and model-specific device cases. HB1 and I01–I06 are
+also committed by feature. Broader Q02/W07 and W14 work retain their owners.

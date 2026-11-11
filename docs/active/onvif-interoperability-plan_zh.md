@@ -2,10 +2,9 @@
 
 [English](onvif-interoperability-plan.md) | [繁體中文](onvif-interoperability-plan_zh.md)
 
-狀態為 I01–I06 本地實作及驗收完成，維持未提交。I07–I10 TODO。程式走訪日期為 2026-11-11，基準
-`d77792564f9e9032f6d41bb6614ccbda80b92eba`、workspace 0.17.1，加上既有未提交的
-HB1 候選。使用者已授權實作及本地驗收到 I06，實機驗收延後。
-HB1 與本次實作維持未提交。
+I01–I10 已實作，[交付證據](#i07i10-交付證據)記錄本地檢查和待實機項目。
+2026-11-11 的程式走訪基準為 `d77792564f9e9032f6d41bb6614ccbda80b92eba`、
+workspace 0.17.1 及當時未提交的 HB1 候選。HB1 和實作已按功能提交，實機驗收延後。
 
 第一批先改善錄影搜尋的完成判定與資源清理，建立不丟失 XML 身分的 endpoint
 reference，再提供可管理生命週期的事件訂閱。認證選用及共用 Media1/Media2
@@ -24,6 +23,7 @@ reference，再提供可管理生命週期的事件訂閱。認證選用及共�
 | [計畫檢查](#計畫檢查) | 此次文件變更的確認方式 |
 | [I01 交付證據](#i01-交付證據) | 目前契約、相容性與本地驗收 |
 | [I02–I06 交付證據](#i02i06-交付證據) | XML、認證、事件、媒體與 PTZ |
+| [I07–I10 交付證據](#i07i10-交付證據) | 串流、疊加、擴充服務及互通性覆蓋 |
 
 ## 歸屬與基準
 
@@ -38,7 +38,7 @@ reference，再提供可管理生命週期的事件訂閱。認證選用及共�
   trace、retry metadata、corpus 驗證及六個 Action 的 reference comparison。
   P5 實機證據仍是獨立驗收輸入。
 - [HB1](mock-fidelity-http-binding_zh.md)：本地驗收通過的 header/status 政策、
-  malformed/raw fallback 與拒絕保護；候選仍未提交。
+  malformed/raw fallback 與拒絕保護。HB1 後續以 `b0be9ec` 提交。
 - `ManagedDevice` 已快取 Session 60 秒，失敗及變更憑證時會失效，不再建立第二套
   CLI session cache。
 - Media2 API、服務探索、PTZ node/options 型別、snapshot 認證、replay effects、
@@ -402,7 +402,7 @@ attempt units 與產品 retry policy，不將整個 executor 複製到每個新 
 
 ## I01 交付證據
 
-2026-11-11：本地實作與驗收完成，維持未提交。S01/S11 描述 I01
+2026-11-11：本地實作與驗收完成，後續以 `4b12354` 提交。S01/S11 描述 I01
 之前的走訪；本批修正 S01 的完成判定與清理缺陷。Typed search scope/filter
 擴充及 W14 Mock search lifecycle fidelity 仍屬後續工作。
 
@@ -452,7 +452,7 @@ attempt units 與產品 retry policy，不將整個 executor 複製到每個新 
 `target/i01-*`。
 
 沒有實機 capture 或外部 schema 驗收，不宣稱通過。I02–I10 維持 TODO，既有
-F/W 狀態不變。HB1 與 I01 維持未提交。下一批為 I02 scoped XML/EPR 契約，先以
+F/W 狀態不變。當時 HB1 與 I01 維持未提交。接續的 I02 scoped XML/EPR 契約以
 獨立 namespace/reference-parameter 控制驗證，再加入 managed subscriptions。
 
 ## I02–I06 交付證據
@@ -491,4 +491,62 @@ Attribution 檢查，驗證擷取請求的 SOAP Body 操作元素。Reference he
 | 敏感度 | 一批暫改 reference marker、認證選擇、恢復 Gap、錯誤回退與省略軸組。跑到全部 54 個套件，6 個測試如預期失敗。五個檔案逐位元組還原後通過正式檢查。 |
 
 本地紀錄位於 ignored `target/i02-i06-*`。外部資源雜湊與 schema 一併存放於
-checkout 之外。實機驗收留待後續。HB1、I01 與 I02–I06 均維持未提交。
+checkout 之外。實機驗收留待後續。HB1、錄影搜尋、共用 Client 流程及 PTZ 已分別提交。
+
+## I07–I10 交付證據
+
+| 工作包 | 實作與範圍 |
+| --- | --- |
+| I07 | [RTSP 配接層](../../src/stream_probe.rs) 分別回報連線、OPTIONS、認證後的 DESCRIBE／SDP，以及選用的 SETUP、PLAY、首個視訊 RTP 封包和 TEARDOWN。CLI 用 `--rtsp-probe describe\|packet` 開啟。Health liveness 執行 description probe，snapshot 沿用獨立的策略。串流必須與裝置同 host，可不同 port。HTTPS 裝置要求 RTSPS，透過系統／額外 CA 驗證伺服器名稱。Basic 只在 TLS 上使用。MIT 授權的 `rtsp-types` 和 `sdp-types` 屬於選用的 `stream-probe` feature。 |
+| I08 | [Media2 疊加](../../src/overlays.rs) 綁定來源 configuration，分開處理 OSD 和隱私遮罩。文字 OSD 與多邊形遮罩支援選項、讀取、明確寫入與讀回。裝置擴充欄位與影像上傳有各自的範圍。回覆遺失時回傳 `OutcomeUnknown`，可讀回確認遠端狀態。Mock 的兩種 Media binding 共用 OSD，遮罩則各 instance 獨立。 |
+| I09 | [音訊設定](../../src/audio_configuration.rs) 依 Media1／Media2 的實際 binding 實作。[對講](../../src/stream_probe/talkback.rs) 選擇一條 PCMU send track，將 PCM 依時序送出。[Analytics](../../src/analytics.rs) 讀取規則、模組、支援描述與 metadata XML，保留 QName 和擴充欄位。[錄影時間軸](../../src/recording/timeline.rs) 讓事件搜尋共用 I01 owner。[匯出](../../src/recording/export.rs) 管理遠端 job，[下載](../../src/recording/download.rs) 接受明確指定的 URL 和本地目的地，以不覆寫方式發佈。 |
+| I10 | [W14 Search](../../src/mock/services/recording/search.rs) 依 token 管理獨立快照、分頁和期限。[Metamorph 投影](../../src/metamorph/projection.rs) 將支援的完整 Action 擴到 16 項，沿用 corpus 配對及 unexamined 欄位。[事件視窗](../../src/metamorph/event_window.rs) 按擷取順序比較具限定名稱的 topic、操作和相對時間。內建 replay 將 Search 與 EP2 生命週期交給 live handler，overlay 確定提交後才使對應 replay 讀取失效。 |
+
+| Owner | 資源上限與清理 |
+| --- | --- |
+| RTSP 診斷 | 一條連線、零 redirect，header 16 KiB／64 欄、SDP 64 KiB、每次回覆或首包等待至多 64 個 interleaved frames。預設總計 5 秒，其中首包最多 2 秒，另計 1 秒 TEARDOWN。每個命令最多重送一次認證。 |
+| 對講 | 單一 PCMU track，佇列 16 幀、每幀 20 ms，預設 1,500 封包或 30 秒，另計 1 秒 TEARDOWN。首版為半雙工送出，接收端解碼有獨立的範圍。 |
+| 疊加、音訊與 Analytics | Scoped SOAP 每次 10 秒，沿用 production XML 4 MiB／深度／元素上限。疊加與音訊最多 1,024 筆，遮罩最多 64 點。音訊每筆未建模資料最多保留 256 KiB，Analytics catalogue 與 metadata 各有 256 KiB 上限。一次寫入後獨立讀回。 |
+| 時間軸與匯出 | 明細讀取保留最多 256 KiB，事件搜尋沿用 I01 限制及 EndSearch 清理。匯出進度最多 512 個檔案與 256 KiB，預設最多 120 秒／120 次、每秒一次，Stop 另計 2 秒。 |
+| 匯出下載 | 一次直接 HTTP(S) 請求，預設 120 秒及 256 MiB。取消或失敗時清理暫存檔。即使其他程序在下載途中建立同名檔，發佈也會保留對方的檔案。 |
+| W14 Mock 與 Metamorph | 32 個搜尋，每個快照最多 256 筆及 512 KiB，總快照 4 MiB，lease 最長一小時。事件視窗每側 1,024 筆／4 MiB。搜尋及遮罩為 instance runtime。遮罩提交會使 replay 讀取失效，沿用既有持久化 `DeviceState` 及 hook 契約。 |
+
+| 版本 | 廠牌／型號 | 韌體或 fixture | 認證 | 服務 | 流程 | Synthetic | 外部證據 | 實機 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.17.1 開發版 | oxvif／loopback RTSP | Scripted server | Digest、TLS Basic、匿名 | RTSP／RTSPS | SDP、首包、逾時和取消 | 碎片化、錯誤 CSeq、IPv6、未信任與私有 CA | RTSP／SDP 規格查核 | 待指定型號與韌體 |
+| 0.17.1 開發版 | oxvif／雙來源 Mock | In-tree synthetic | 匿名 | Media2 及共用 Media1 OSD | Options、CRUD、配額及遺失回覆 | Scope、hook 與拒絕控制 | 固定 WSDL 請求驗證 | 待實機 |
+| 0.17.1 開發版 | oxvif／scripted camera | 獨立回應 fixtures | 匿名 | Media1、Media2、Analytics | 音訊讀寫、選項與 QName 描述 | Binding、有號範圍、擴充與拒絕 | 固定 WSDL 及 Analytics §5.4.4 範例 | 待實機 |
+| 0.17.1 開發版 | oxvif／loopback 對講 | Scripted SDP／RTP peer | 匿名 | RTSP | PCMU 半雙工對講 | 編碼、節奏、拒絕、取消和斷線 | ONVIF Streaming backchannel 規格查核 | 待實機 |
+| 0.17.1 開發版 | oxvif／錄影與 HTTP peer | Literal SOAP／loopback 檔案 | 匿名 | Search、Recording、HTTP | 時間軸、事件搜尋、匯出、下載 | 時區、EndSearch、Stop、上限與競爭時不覆寫 | 固定 WSDL 請求驗證 | 待實機 |
+| 0.17.1 開發版 | oxvif／Mock 及 Metamorph | In-tree state 與兩份 corpora | 匿名 | Search、Media2、Events | Cursor、提交後失效、離線投影 | 到期、隔離、無效請求、視窗順序、URI 保密 | W14 請求／回應和 metadata XSD | 待實機 |
+
+CLI 沿用 envelope schema v3。`playback_verified` 仍表示已驗證解碼播放，
+此診斷保持 false。以完整 struct literal 建立 `ExecutionOptions` 的呼叫端
+可加 `rtsp_probe: None` 或改用 `Default`。Metamorph 比較增加投影類別。
+Mock `SearchEnd` 仍可明確選擇 receipt-only 模式。預設 EndSearch 會釋放
+有效搜尋，未知或過期 token 會回 Fault。
+
+實機需確認音訊、解碼播放、廠牌特定的疊加效果及實際錄影儲存。首批對講
+限定單軌 PCMU，Analytics 提供標準 reads 和 metadata XML。全雙工、其他
+對講編碼、Analytics 寫入、MQTT 與儲存端 URL 探索各自需要後續驗收。
+
+| 本地檢查 | 結果 |
+| --- | --- |
+| Locked workspace 測試 | 全功能 1,496、預設功能 1,352 個測試通過，兩組各 60 個套件及 7 個既有 ignored。 |
+| 格式、Clippy 與 rustdoc | 格式檢查通過，兩種 workspace 模式均通過嚴格 all-target Clippy 與 rustdoc。純函式庫不啟用 optional feature 時通過 Clippy、rustdoc 與 25 個重點測試。Rust 1.88 在全功能及無 optional feature 模式均通過編譯檢查。 |
+| CLI 程序 | Loopback SOAP、snapshot 與 RTSP 驗證兩種 opt-in 模式。Describe 送出 OPTIONS／DESCRIBE。Packet 另送 SETUP、PLAY 和 TEARDOWN 並觀察到 RTP。兩種報告均未包含 URI 憑證或查詢值。 |
+| 外部 XML | 固定版 ONVIF schema `7dd791435c69944f6f18b9dd1e50ff189a442338` 驗證 52 份 overlay 請求、49 份擴充服務請求及 10 份 W14 請求／回應。Synthetic MetadataStream 通過外部 XSD，另以 Analytics §5.4.4 官方範例驗證解析。因官方 schema 擴充型別有歧義，.NET 驗證關閉 UPA 檢查。 |
+| 故障敏感度 | 九項暫改涵蓋 RTSP 401、遮罩配額、音訊範圍、事件 track、競爭時不覆寫、對講方向、W14 cursor、URI 投影與事件順序。全功能跑完 60 個套件，共 15 個測試如預期失敗，九個來源檔已逐位元組還原。 |
+| 依賴稽核 | `cargo audit` 未發現漏洞公告。Linux 憑證後端的 zbus_names、zvariant、zvariant_derive 仍有三項既有停止維護警告。 |
+
+本地功能提交依序為 HB1 `b0be9ec`、I01 `4b12354`、I02–I05 `79b3801`、
+I06 `ad8f5c5`、I07 `4923143`、I08 `e08057f`、I09 `470efe3`、
+W14 `943e8f3`、Metamorph `3ce1335` 及邊界驗收 `0aad03e`。
+Workspace 版本維持 0.17.1。驗收腳本與紀錄在 ignored `target/i07-i10-*`，
+外部 schema 及擷取存放於 checkout 之外。流程測試使用 synthetic 或 loopback 端點。
+
+規格查核使用 [RTSP 1.0](https://www.rfc-editor.org/rfc/rfc2326)、
+[ONVIF Streaming backchannel](https://www.onvif.org/specs/2512/ONVIF-Streaming-Spec-v2512.pdf)、
+[Media2](https://www.onvif.org/specs/srv/media/ONVIF-Media2-Service-Spec.pdf)、
+[Analytics 22.12](https://www.onvif.org/specs/2212/ONVIF-Analytics-Service-Spec-v2212.pdf)
+及 [Recording Search](https://www.onvif.org/specs/srv/rsrch/ONVIF-RecordingSearch-Service-Spec.pdf)。

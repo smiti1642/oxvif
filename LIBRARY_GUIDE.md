@@ -1527,13 +1527,14 @@ verify the results actually work:
 ```rust
 let report = HealthCheck::new(url)
     .with_credentials("admin", "password")
-    .with_liveness_probes(true)   // RTSP OPTIONS + snapshot bytes + real Profile G
+    .with_liveness_probes(true)   // RTSP description, snapshot and recording calls
     .run()
     .await;
 ```
 
-With it on, `get_stream_uri` follows the RTSP URI with a non-destructive
-`OPTIONS` reachability probe, `get_snapshot_uri` fetches bounded bytes and checks
+With it on, the stream check reports OPTIONS, authenticated DESCRIBE and the
+SDP video codec independently. Use `with_stream_options` to opt in to the
+first-packet observation. The snapshot check fetches bounded bytes and checks
 the image signature (not full decoding), and the `recording` / `search` / `replay` checks genuinely exercise
 Profile G (recording search + replay-URI resolution) instead of reporting
 advertised-only presence. Off by default because these open extra RTSP/HTTP
@@ -2340,8 +2341,8 @@ malformed-request escape hatch remains compatible but cannot prove comparability
 Comparison covers retained rows; it cannot infer failed/omitted reads or Actions
 missing from both inputs. Use CorpusManifest regression for capture coverage.
 
-Initial support is six exact Actions: Device `GetDeviceInformation`/`GetHostname`,
-and Media1/Media2 `GetProfiles`/`GetVideoEncoderConfigurations`.
+Support is scoped to 16 exact Actions across Device, Media1/Media2, PTZ,
+Analytics, Search and Replay.
 
 | Projection | Selected values |
 | --- | --- |
@@ -2349,16 +2350,26 @@ and Media1/Media2 `GetProfiles`/`GetVideoEncoderConfigurations`.
 | Hostname | Name and DHCP selection |
 | Profiles | Unique profile token, name and all modeled configuration/source token bindings |
 | EncoderCore | Unique configuration token, name, encoding, resolution, optional bitrate and multicast destination |
+| StreamUriScheme | RTSP or RTSPS. The URI authority, path, query and userinfo remain private/unexamined |
+| OsdOptions / MaskOptions | Selected quotas, effects, position and geometry flags |
+| AudioOutputOptions | Reported output tokens and signed level range |
+| AnalyticsSupport | Rule, module, options and metadata capability flags |
+| RecordingSummary / PtzSpaces | Recording count and counts of qualified PTZ spaces |
 
-The response first passes complete XML and an independent bounded `NsReader`
-guard for SOAP 1.2 identity and selected expanded names, then reuses oxvif's typed
-parse routing. Prefix aliases and namespace character references are supported;
+The response passes complete XML and a bounded `NsReader` guard for SOAP 1.2
+identity and selected expanded names. Device, profiles and encoder projections
+also reuse typed parse routing. Prefix aliases and namespace character references are supported;
 wrong selected namespaces cannot become Equal through the local-name parser.
 Required selected scalars and token bindings must be present and unambiguous;
 this support policy can be stricter than Library compatibility parsing. QName-valued
 `xsi:type` remains Unsupported. Encoder multicast destination is additionally
 projected from namespace-checked address fields, including Media2's currently
 unmodeled destination. Its type/address are retained without display normalization.
+
+Search, pull-point and export lifecycles require ordered workflow evidence.
+`compare_event_windows` compares concrete expanded topic identities,
+PropertyOperation and relative time within two explicitly supplied observation
+windows. Source, Key, Data and extension values remain unexamined.
 
 `Equal` means only this declared projection. Profile fixed flags, other encoder
 settings (such as quality, frame rate, GOP/profile and multicast port/TTL), vendor

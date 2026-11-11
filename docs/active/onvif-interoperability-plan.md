@@ -2,11 +2,11 @@
 
 [English](onvif-interoperability-plan.md) | [繁體中文](onvif-interoperability-plan_zh.md)
 
-Status: I01–I06 locally complete (uncommitted). I07–I10 TODO. Source walkthrough: 2026-11-11,
-`d77792564f9e9032f6d41bb6614ccbda80b92eba`, workspace 0.17.1, plus the existing
-uncommitted HB1 candidate. The user authorized implementation and local verification
-through I06, with real-device acceptance deferred. HB1 and the implementation
-remain uncommitted.
+I01–I10 are implemented. The [delivery evidence](#i07i10-delivery-evidence)
+records local checks and the pending device cases. Source walkthrough
+2026-11-11 used `d77792564f9e9032f6d41bb6614ccbda80b92eba`, workspace 0.17.1,
+and the then-uncommitted HB1 candidate. HB1 and the implementation are
+committed by feature. Device acceptance is deferred.
 
 The first delivery should make recording searches finish honestly, support
 endpoint references without losing XML identity, and provide managed event
@@ -26,6 +26,7 @@ entry criteria below; they are not all prerequisites for one release.
 | [Planning verification](#planning-verification) | Checks on this document change |
 | [I01 delivery evidence](#i01-delivery-evidence) | Current contract, compatibility and local acceptance |
 | [I02–I06 delivery evidence](#i02i06-delivery-evidence) | Contracts and verification for XML, auth, events, media and PTZ |
+| [I07–I10 delivery evidence](#i07i10-delivery-evidence) | Streaming, overlays, extended services and interoperability coverage |
 
 ## Ownership and baseline
 
@@ -42,7 +43,7 @@ Retain these delivered foundations:
   safe traces, retry metadata, corpus verification and six-Action reference
   comparison. P5 hardware evidence remains a separate acceptance input.
 - [HB1](mock-fidelity-http-binding.md): locally accepted header/status policy,
-  malformed/raw fallback and refusal protection; this candidate is uncommitted.
+  malformed/raw fallback and refusal protection. HB1 was later committed as `b0be9ec`.
 - `ManagedDevice` already caches a Session for 60 seconds and invalidates it
   after failures/credential changes. Do not introduce another CLI session cache.
 - Media2 methods, service discovery, PTZ node/options types, snapshot authentication,
@@ -469,7 +470,7 @@ The subsequent I01 implementation and verification are recorded separately below
 
 ## I01 delivery evidence
 
-2026-11-11: local implementation and verification complete; uncommitted.
+2026-11-11: local implementation and verification complete. I01 was later committed as `4b12354`.
 The S01/S11 rows describe the pre-I01 walkthrough; S01's completion/cleanup defects
 are addressed by this batch. Typed search scope/filter expansion and W14 Mock
 search lifecycle fidelity remain future work.
@@ -526,7 +527,7 @@ green gates; local scripts/logs are under ignored `target/i01-*`.
 
 Hardware captures/external-schema acceptance are unavailable and are not claimed.
 I02–I10 remain TODO; existing F/W dispositions are unchanged. HB1 and I01 remain
-uncommitted. The next slice is I02's scoped XML/EPR contract and independent
+uncommitted at this checkpoint. The next slice was I02's scoped XML/EPR contract and independent
 namespace/reference-parameter controls before managed subscriptions are added.
 
 ## I02–I06 delivery evidence
@@ -571,5 +572,75 @@ qualified wire assertions.
 
 The local gate and mutation logs are in ignored `target/i02-i06-*`. The
 external resource hashes are stored with the pinned schemas outside the
-checkout. Real-device verification is deferred. HB1, I01 and I02–I06 are
-uncommitted.
+checkout. Real-device verification is deferred. The locally verified changes
+were later committed in the HB1, recording search, client workflow and PTZ commits.
+
+## I07–I10 delivery evidence
+
+The local implementation covers these slices.
+
+| Work | Implementation and boundary |
+| --- | --- |
+| I07 | [RTSP adapter](../../src/stream_probe.rs) reports connection, OPTIONS, authenticated DESCRIBE/SDP and optional interleaved SETUP/PLAY, first video RTP packet and TEARDOWN. CLI `--rtsp-probe describe\|packet` is opt-in. Health liveness runs the description probe, with separate snapshot policy. Same device host is required, ports can differ, and RTSPS checks native/additional roots and the server name. HTTP-to-RTSP is allowed; HTTPS device URLs require RTSPS. Basic is restricted to TLS. The probe uses MIT-licensed `rtsp-types` and `sdp-types` codecs behind the optional `stream-probe` feature. |
+| I08 | [Media2 overlays](../../src/overlays.rs) bind source-configuration tokens and use service-qualified OSD and mask codecs. Text OSD and independent polygon mask mutations preflight and read back. Model-specific extensions and image uploads remain outside the typed write surface. A lost acknowledgement yields `OutcomeUnknown`; reads can reconcile the remote state. Mock shares OSD across both Media bindings and gives masks their own per-instance runtime. |
+| I09 | [Audio configuration](../../src/audio_configuration.rs) uses the actual Media1 and Media2 request shapes. [Talkback](../../src/stream_probe/talkback.rs) selects one PCMU send track and paces PCM frames. [Analytics](../../src/analytics.rs) reads configuration, support and metadata XML, retaining qualified extensions. [Timeline](../../src/recording/timeline.rs) shares the bounded I01 owner for event search, and [export](../../src/recording/export.rs) owns the remote operation. [Download](../../src/recording/download.rs) uses a caller-selected URL/path with atomic no-clobber publication. |
+| I10 | [W14 Search](../../src/mock/services/recording/search.rs) owns recording snapshots, paging and expiry per token. [Reference projections](../../src/metamorph/projection.rs) extend the reviewed full Actions to 16 and use the existing corpus pairing and unexamined paths. [Event windows](../../src/metamorph/event_window.rs) compare concrete QName topic, operation and relative time in capture order. Built-in replay routes Search and EP2 lifecycles through live handlers and retires overlay reads on committed effects. |
+
+| Owner | Default limits and cleanup |
+| --- | --- |
+| Stream probe | One connection, no redirects, 16 KiB and 64 headers, 64 KiB SDP, 64 interleaved frames per response wait or packet observation. Five seconds total, two seconds for packet wait within it, one additional second for TEARDOWN. At most one challenge retry per command. |
+| Talkback | One PCMU track, 16 frames of 20 ms in the queue, up to 1,500 packets or 30 seconds, one additional second for TEARDOWN. Scope is half duplex with no incoming media decode. |
+| Overlays, audio, Analytics | Ten seconds per scoped SOAP call, production 4 MiB/depth/node limits, up to 1,024 overlay/audio entries and 64 mask vertices. Audio retains up to 256 KiB per unmodeled entry within the XML cap. Analytics catalogues and metadata have a 256 KiB retention cap. Writes send one mutation, then a separate read, with no automatic write retry. |
+| Timeline and export | Timeline reads retain at most 256 KiB per detailed response. Event search uses I01's request, page, item, byte and cleanup limits. Export progress retains up to 512 files and 256 KiB per response. Defaults are 120 seconds/120 polls, one-second cadence and two seconds for one explicit Stop. |
+| Export file transfer | One direct HTTP(S) request, 120 seconds and 256 MiB by default. A temporary file is removed on failure or cancellation. Destination publication refuses replacement even if another writer wins the race. |
+| W14 Mock and Metamorph | 32 live searches, 256 rows and 512 KiB per snapshot, 4 MiB total snapshot budget, maximum lease one hour. Event windows cap each side at 1,024 events/4 MiB. Search and masks are runtime state. Mask commit effects retire replayed reads without changing the persisted `DeviceState` layout or hooks. |
+
+The capability and workflow observations below are keyed by version, implementation,
+model, firmware, authentication, binding and workflow. The device column remains
+pending until a named model and firmware have been exercised.
+
+| Version | Vendor / model | Firmware or fixture | Auth | Service | Workflow | Synthetic evidence | External evidence | Real device |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.17.1 worktree | oxvif / loopback RTSP | Scripted server | Digest, TLS Basic, anonymous | RTSP/RTSPS | Description, packet, timeout, cancellation | Fragmentation, wrong CSeq, untrusted and private CA, IPv6 | RTSP/SDP standards checked | Pending |
+| 0.17.1 worktree | oxvif / two-source Mock | In-tree synthetic | Anonymous | Media2 and shared Media1 OSD | Options, CRUD, quota, lost acknowledgement | Scope and hook/refusal controls | Pinned WSDL request instances | Pending |
+| 0.17.1 worktree | oxvif / scripted camera | Independent literal replies | Anonymous | Media1, Media2, Analytics | Audio reads/options/writes, QName catalogues | Binding, signed range, extension and refusal checks | Pinned WSDL and Analytics §5.4.4 fixture | Pending |
+| 0.17.1 worktree | oxvif / loopback backchannel | Scripted SDP and RTP peer | Anonymous | RTSP | PCMU push-to-talk | Encoded bytes, pacing, refusal, cancellation and disconnect | ONVIF Streaming backchannel contract checked | Pending |
+| 0.17.1 worktree | oxvif / scripted recording and HTTP peer | Literal SOAP and loopback file | Anonymous | Search, Recording and HTTP | Timeline, event pages, export, transfer | Offsets, EndSearch, Stop, cap and no-clobber race | Pinned WSDL request instances | Pending |
+| 0.17.1 worktree | oxvif / Mock and Metamorph | In-tree state and two corpora | Anonymous | Search, Media2, Events | Live cursor, committed replay invalidation and offline projection | Expiry, isolation, invalid request, window ordering and secret exclusion | W14 request/response instances and metadata XSD | Pending |
+
+`playback_verified` still represents decoded playback and remains false for
+this diagnostic. CLI results use envelope schema v3. Callers constructing
+`ExecutionOptions` with a complete struct literal can add `rtsp_probe: None` or
+use `Default`. Metamorph reports now include additional projection discriminants.
+`SearchEnd` remains an explicit receipt-only option; default Mock EndSearch
+releases a live token and faults for unknown or expired tokens.
+
+Actual audio/decoded video, vendor-specific overlay behavior and recording
+storage are device acceptance. This scope has one PCMU send track, standard
+Analytics and RuleEngine reads, metadata XML, and remote export jobs with an
+explicitly supplied HTTP transfer URL. Full duplex, other talkback encodings,
+Analytics writes, MQTT operation and storage-specific URL discovery have their
+own acceptance work.
+
+| Local check | Result |
+| --- | --- |
+| Locked workspace tests | 1,496 all-feature and 1,352 default-feature tests passed across 60 suites in each run. Each has seven existing ignored tests. |
+| Format, Clippy and rustdoc | Format, strict all-target Clippy and strict rustdoc passed in both workspace modes. Standalone no-optional-feature Clippy and rustdoc passed with 25 focused tests. Rust 1.88 checks passed with and without optional features. |
+| CLI process | Loopback SOAP, snapshot and RTSP verified both opt-in modes. Description sent OPTIONS and DESCRIBE. Packet added SETUP, PLAY and TEARDOWN and observed one RTP packet. Neither report contained URI credentials or query values. |
+| External XML | Pinned ONVIF schema revision `7dd791435c69944f6f18b9dd1e50ff189a442338` validated 52 overlay requests, 49 extended-service requests and 10 W14 request/response instances. A synthetic MetadataStream also passed its pinned XSD. The Analytics §5.4.4 published example passed a separate parser check. .NET UPA checking was disabled because of the schema's ambiguous extension. |
+| Fault sensitivity | Nine changes covered RTSP 401, mask quota, audio range, event track identity, no-clobber publication, backchannel direction, W14 cursor, URI projection and event ordering. The unfiltered workspace run reached all 60 suites and 15 tests failed as expected. All nine files were restored byte-for-byte. |
+| Dependency audit | No vulnerability advisories. Three existing unmaintained warnings remain for the Linux credential stack's zbus_names, zvariant and zvariant_derive. |
+
+HB1 `b0be9ec`, I01 `4b12354`, I02–I05 `79b3801`, I06 `ad8f5c5`,
+I07 `4923143`, I08 `e08057f`, I09 `470efe3`, W14 `943e8f3`,
+Metamorph `3ce1335` and local edge-case verification `0aad03e` are local
+commits. The workspace version remains 0.17.1. Evidence scripts and logs are
+under ignored `target/i07-i10-*`; pinned files and captures are outside the
+checkout. All endpoints used for local workflow acceptance were synthetic
+or loopback.
+
+References for these slices are the [RTSP 1.0 specification](https://www.rfc-editor.org/rfc/rfc2326),
+[ONVIF Streaming backchannel](https://www.onvif.org/specs/2512/ONVIF-Streaming-Spec-v2512.pdf),
+[Media2](https://www.onvif.org/specs/srv/media/ONVIF-Media2-Service-Spec.pdf),
+[Analytics 22.12](https://www.onvif.org/specs/2212/ONVIF-Analytics-Service-Spec-v2212.pdf)
+and [Recording Search](https://www.onvif.org/specs/srv/rsrch/ONVIF-RecordingSearch-Service-Spec.pdf).

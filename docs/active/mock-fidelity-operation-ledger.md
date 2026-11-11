@@ -34,7 +34,7 @@ Do not change a route before opening its row and the corresponding work package.
 | [imaging](#imaging) | 8 route arms; W12 |
 | [events](#events) | 8 route arms; W15 |
 | [recording](#recording) | 11 route arms; W14 |
-| [search](#search) | 4 route arms; W14 |
+| [search](#search) | 5 routed Actions; W14 |
 | [replay](#replay) | 2 route arms; W14 |
 | [Maintenance](#maintenance) | Source drift and change protocol |
 
@@ -307,14 +307,14 @@ not complete operation acceptance; all other fields and full Fault policy remain
 
 ## search
 
-[dispatch_search](../../src/mock/dispatch.rs) · [services/recording.rs](../../src/mock/services/recording.rs)
+[dispatch_search](../../src/mock/dispatch.rs) · [search runtime](../../src/mock/services/recording/search.rs)
 
 | ID | Handler | Arguments | Work | C | R | F | B | V | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `search.GetServiceCapabilities` | `recording::resp_search_service_capabilities` | `` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `search.FindRecordings` | `recording::resp_find_recordings` | `` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `search.GetRecordingSearchResults` | `recording::resp_recording_search_results` | `state` | W14 | TODO | TODO | TODO | TODO | TODO | - |
-| `search.EndSearch` | `recording::resp_end_search` | `` | W14 | TODO | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3 |
+| `search.FindRecordings` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | [I10](onvif-interoperability-plan.md#i07i10-delivery-evidence) |
+| `search.GetRecordingSearchResults` / `search.GetSearchState` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | I10 |
+| `search.EndSearch` | `recording::search::handle` | `state, operation, policy` | W14 | PARTIAL | PARTIAL | PARTIAL | PARTIAL | PARTIAL | A3, I10 |
 
 ## replay
 
