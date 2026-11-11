@@ -349,7 +349,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         ),
         workflow_descriptor(
             "diagnose",
-            "Run layered ONVIF/snapshot checks with retained evidence, selection reasons and candidate tokens; RTSP transport and decoding remain untested.",
+            "Run layered ONVIF/snapshot checks with retained evidence, selection reasons and candidate tokens; optionally probe RTSP via --rtsp-probe describe or packet.",
             vec![optional(
                 "profile",
                 "media profile token; a unique profile is automatic, a human terminal can select, automation receives candidates when ambiguous",

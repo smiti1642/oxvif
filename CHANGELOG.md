@@ -63,6 +63,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add optional layered RTSP diagnostics with trusted RTSPS, SDP codec
+  identification and bounded interleaved RTP observation. CLI diagnosis
+  opts in with `--rtsp-probe describe` or `--rtsp-probe packet`.
+
 - Retain qualified event endpoint references and ordered notification data.
   Managed pull points renew concurrently with polling and expose bounded
   recovery, queue limits and async cleanup.

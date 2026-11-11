@@ -883,6 +883,7 @@ async fn diagnose(
 ) -> Result<Value, AppError> {
     let mut stages = vec![connect];
     let mut selected_profile = None;
+    let mut rtsp = None;
     if let Some(session) = session {
         let (info, _) = onvif_step("device_info", options, || session.get_device_info()).await;
         stages.push(info);
@@ -933,18 +934,37 @@ async fn diagnose(
             .and_then(|catalogue| catalogue.select(profile.or(picked.as_deref())).ok());
         if let Some(profile) = selected {
             selected_profile = Some(profile.token().to_owned());
-            let (stream, _) = onvif_step("stream_uri", options, || async {
+            let (stream, uri) = onvif_step("stream_uri", options, || async {
                 if options.media_service.is_some() {
                     session
                         .media_stream_uri(&profile, StreamRequest::Rtsp)
                         .await
-                        .map(|_| ())
+                        .map(|uri| uri.uri().to_owned())
                 } else {
-                    session.get_stream_uri(profile.token()).await.map(|_| ())
+                    session
+                        .get_stream_uri(profile.token())
+                        .await
+                        .map(|uri| uri.uri)
                 }
             })
             .await;
             stages.push(stream);
+            if let Some((uri, mode)) = uri.zip(options.rtsp_probe) {
+                rtsp = Some(
+                    oxvif::stream_probe::probe(
+                        &uri,
+                        &resolved.target,
+                        resolved.username.as_deref().zip(resolved.password()),
+                        &oxvif::stream_probe::StreamProbeOptions {
+                            timeout: options.timeout,
+                            ca_certificates: options.ca_certificates.clone(),
+                            observe_packet: mode == crate::RtspProbeMode::Packet,
+                            ..Default::default()
+                        },
+                    )
+                    .await,
+                );
+            }
             let (snapshot, uri) = onvif_step("snapshot_uri", options, || async {
                 if options.media_service.is_some() {
                     session
@@ -1035,16 +1055,47 @@ async fn diagnose(
     let complete = stages
         .iter()
         .all(|stage| matches!(stage.status, Status::Pass | Status::Unsupported));
-    for name in ["rtsp_transport", "video_decode"] {
-        let mut step = Step::new(
-            name,
-            Status::NotTested,
-            "Not implemented by this diagnostic; URI retrieval does not prove playback.",
-            "Verify playback separately with a trusted RTSP client.",
+    use oxvif::stream_probe::StreamOutcome;
+    if let Some(report) = &rtsp {
+        for (name, outcome) in [
+            ("rtsp_connection", report.connection),
+            ("rtsp_options", report.options),
+            ("rtsp_describe", report.describe),
+            ("rtsp_transport", report.setup),
+            ("rtsp_play", report.play),
+            ("rtsp_first_packet", report.packet),
+            ("rtsp_teardown", report.teardown),
+        ] {
+            let status = match outcome {
+                StreamOutcome::Passed => Status::Pass,
+                StreamOutcome::AuthenticationRequired if name == "rtsp_options" => Status::Pass,
+                StreamOutcome::Skipped => Status::NotTested,
+                StreamOutcome::UnsupportedCodec | StreamOutcome::UnsupportedTransport => {
+                    Status::Unsupported
+                }
+                _ => Status::Fail,
+            };
+            let mut step = Step::new(name, status, &format!("{outcome:?}"), "");
+            step.data = Some(json!({"outcome": outcome}));
+            if name == "rtsp_describe" {
+                step.data = Some(json!({"outcome": outcome, "codec": report.codec}));
+            }
+            if outcome == StreamOutcome::Skipped {
+                step.not_tested_reason = Some("prerequisite_failed".into());
+            }
+            stages.push(step);
+        }
+    } else {
+        let mut step = Step::skipped(
+            "rtsp_transport",
+            "RTSP packet observation requires --rtsp-probe packet and a stream URI.",
         );
         step.not_tested_reason = Some("not_implemented".into());
         stages.push(step);
     }
+    let mut decode = Step::skipped("video_decode", "Video decoding requires a separate player.");
+    decode.not_tested_reason = Some("not_implemented".into());
+    stages.push(decode);
     let failed = stages
         .iter()
         .filter(|s| matches!(s.status, Status::Fail))

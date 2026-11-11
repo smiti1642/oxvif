@@ -39,7 +39,7 @@ pub use maintenance::{
 
 pub use diagnostics::capture_diagnostics;
 
-pub use application::{Application, ClockSyncPolicy, ExecutionOptions};
+pub use application::{Application, ClockSyncPolicy, ExecutionOptions, RtspProbeMode};
 pub use contract::{
     AgentGuide, ArgumentDescriptor, CommandData, CommandDescriptor, CommandId, CommandRequest,
     CommandSpec, CommandSuccess, CredentialProfileSetRequest, DescribeRequest, DeviceAddRequest,

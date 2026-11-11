@@ -176,6 +176,10 @@ struct Cli {
     #[arg(long, value_enum)]
     media_service: Option<CliMediaService>,
 
+    /// Run RTSP diagnostics for diagnose, optionally through the first video packet.
+    #[arg(long, value_enum)]
+    rtsp_probe: Option<CliRtspProbe>,
+
     /// Add a PEM CA certificate or bundle to the platform trust roots; repeatable.
     #[arg(long = "ca-certificate", value_name = "FILE")]
     ca_certificates: Vec<PathBuf>,
@@ -846,6 +850,12 @@ enum CliSoapAuth {
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
+enum CliRtspProbe {
+    Describe,
+    Packet,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum CliMediaService {
     Media1,
     Media2,
@@ -950,6 +960,10 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         clock_sync: cli.clock_sync.into(),
         soap_auth: cli.soap_auth.into(),
         media_service: cli.media_service.map(Into::into),
+        rtsp_probe: cli.rtsp_probe.map(|mode| match mode {
+            CliRtspProbe::Describe => oxvif_cli::RtspProbeMode::Describe,
+            CliRtspProbe::Packet => oxvif_cli::RtspProbeMode::Packet,
+        }),
         ca_certificates,
         verbosity: cli.verbose,
         quiet: cli.quiet,

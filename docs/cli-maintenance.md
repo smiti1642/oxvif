@@ -336,8 +336,10 @@ Human output starts with completion and status counts, followed by actionable
 failures. Use `-v` for all stages and millisecond timings. Playback limitations are
 summarized once in the compact report; they are not successful checks.
 
-`rtsp_transport` and `video_decode` remain explicitly `not_tested` and
-`playback_verified` is always `false`. URI retrieval does not establish RTSP
+Pass `--rtsp-probe describe` before `diagnose` to check RTSP connection, OPTIONS
+and DESCRIBE. `--rtsp-probe packet` also checks TCP interleaved SETUP, PLAY,
+the first video RTP packet and TEARDOWN. `video_decode` remains `not_tested`
+and `playback_verified` is always `false`. URI retrieval alone does not establish RTSP
 connectivity/authentication, packet delivery, frame rate or playback. Optional
 external-decoder integration remains deferred.
 

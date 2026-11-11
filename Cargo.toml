@@ -62,7 +62,12 @@ mock-server = ["mock", "dep:axum", "tokio/rt-multi-thread"]
 # Pure library code over OnvifSession. Pulls serde + serde_json for the
 # `HealthReport::to_json` / `to_json_pretty` outputs that drive `--json` and
 # the `--baseline` diff flow.
-health = ["dep:serde", "dep:serde_json", "dep:digest_auth"]
+health = ["dep:serde", "dep:serde_json", "dep:digest_auth", "stream-probe"]
+# Bounded RTSP/RTP observation, independent of SOAP and media decoders.
+stream-probe = [
+    "dep:digest_auth", "dep:rtsp-types", "dep:sdp-types",
+    "dep:tokio-rustls", "dep:rustls-native-certs", "tokio/io-util",
+]
 # Persona B (record / replay) of the metamorph shape-shifting device: clone a
 # real camera into a param-aware fixture set and replay it in-process without
 # hardware. A superset of `mock` — builds on its responder chain, `DeviceState`,
@@ -102,6 +107,10 @@ serde_json   = { version = "1", optional = true }
 axum         = { version = "0.8", optional = true }
 # Shared bounded snapshot downloader for health and CLI; standard Digest values.
 digest_auth  = { version = "0.3", optional = true }
+rtsp-types   = { version = "0.1.3", optional = true }
+sdp-types    = { version = "0.3.2", optional = true }
+tokio-rustls = { version = "0.26", optional = true, default-features = false, features = ["aws_lc_rs", "tls12"] }
+rustls-native-certs = { version = "0.8", optional = true }
 
 [dev-dependencies]
 # Regression guard: force `quick-xml/encoding` on for the test build via

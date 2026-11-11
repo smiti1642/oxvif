@@ -280,7 +280,9 @@ Esc／`q`／Ctrl-C 取消。沿用既有 session 與 profile 查詢；取消保�
 人類輸出先顯示完成狀態與計數，再列出可採取行動的失敗原因。使用 `-v` 展開所有
 階段及毫秒耗時。精簡報告統一說明播放驗證限制，不將尚未測試項目視為通過。
 
-`rtsp_transport` 與 `video_decode` 明確標示為 `not_tested`，`playback_verified`
+在 `diagnose` 前加上 `--rtsp-probe describe` 可檢查 RTSP 連線、OPTIONS 與
+DESCRIBE。改用 `--rtsp-probe packet` 還會檢查 TCP interleaved SETUP、PLAY、
+第一個視訊 RTP 封包及 TEARDOWN。`video_decode` 維持 `not_tested`，`playback_verified`
 固定為 `false`。取得 URI 不表示 RTSP 連線／認證、封包傳輸、影格率或播放成功；
 選用的外部解碼器整合仍列為後續工作。
 

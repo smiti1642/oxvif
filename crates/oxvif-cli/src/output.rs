@@ -720,7 +720,9 @@ fn render_workflow_summary(result: &serde_json::Value) -> String {
             }
         }
     }
-    output.push_str("\nVideo playback has NOT been verified (RTSP transport and decoding are not implemented).\nUse -v for stage details and timings.");
+    output.push_str(
+        "\nVideo playback has NOT been verified.\nUse -v for RTSP observations and stage timings.",
+    );
     output
 }
 

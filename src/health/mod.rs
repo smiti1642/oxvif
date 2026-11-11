@@ -102,6 +102,7 @@ pub struct HealthCheck {
     write_checks: bool,
     liveness_probes: bool,
     snapshot_options: snapshot::SnapshotOptions,
+    stream_options: crate::stream_probe::StreamProbeOptions,
     force_unsupported: bool,
     clock_sync: bool,
     capture: bool,
@@ -119,6 +120,7 @@ impl HealthCheck {
             write_checks: false,
             liveness_probes: false,
             snapshot_options: snapshot::SnapshotOptions::default(),
+            stream_options: crate::stream_probe::StreamProbeOptions::default(),
             force_unsupported: false,
             clock_sync: false,
             capture: false,
@@ -132,6 +134,12 @@ impl HealthCheck {
     /// with the CLI. Image signatures are checked; full decoding is not tested.
     pub fn with_snapshot_options(mut self, options: snapshot::SnapshotOptions) -> Self {
         self.snapshot_options = options;
+        self
+    }
+
+    /// Configure RTSP diagnostics when liveness probes are enabled.
+    pub fn with_stream_options(mut self, options: crate::stream_probe::StreamProbeOptions) -> Self {
+        self.stream_options = options;
         self
     }
 
@@ -182,7 +190,7 @@ impl HealthCheck {
     }
 
     /// Enable opt-in active liveness probes that go beyond the SOAP responses:
-    /// an RTSP `OPTIONS` reachability probe on the stream URI, a snapshot byte
+    /// bounded RTSP OPTIONS and DESCRIBE probes on the stream URI, a snapshot byte
     /// fetch (signature checked, not fully decoded; empty bodies and HTML error
     /// pages are rejected), and a real Profile G exercise (recording search + replay URI)
     /// instead of advertised-only presence. Off by default because these open
@@ -340,11 +348,12 @@ impl HealthCheck {
             let creds = self.credentials.clone();
             let url = self.device_url.clone();
             let snapshot_options = self.snapshot_options.clone();
+            let stream_options = liveness.then(|| self.stream_options.clone());
             let media_selection = self.media_selection;
             set.spawn(async move {
                 checks::media(
                     &s,
-                    liveness,
+                    stream_options.as_ref(),
                     creds.as_ref(),
                     &url,
                     &snapshot_options,

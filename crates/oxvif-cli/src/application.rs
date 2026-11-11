@@ -40,6 +40,15 @@ pub enum ClockSyncPolicy {
 }
 
 /// Invocation policy shared by CLI and future non-CLI adapters.
+/// Additional RTSP observations requested by diagnosis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RtspProbeMode {
+    /// Resolve SDP and identify a video codec.
+    Describe,
+    /// Additionally open one RTP-over-TCP track and wait for a packet.
+    Packet,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExecutionOptions {
     pub non_interactive: bool,
@@ -48,6 +57,7 @@ pub struct ExecutionOptions {
     pub clock_sync: ClockSyncPolicy,
     pub soap_auth: oxvif::client::AuthenticationMode,
     pub media_service: Option<oxvif::media_workflow::MediaSelection>,
+    pub rtsp_probe: Option<RtspProbeMode>,
     pub ca_certificates: Vec<Vec<u8>>,
     pub verbosity: u8,
     pub quiet: bool,
@@ -63,6 +73,7 @@ impl Default for ExecutionOptions {
             clock_sync: ClockSyncPolicy::Auto,
             soap_auth: oxvif::client::AuthenticationMode::default(),
             media_service: None,
+            rtsp_probe: None,
             ca_certificates: Vec::new(),
             verbosity: 0,
             quiet: false,

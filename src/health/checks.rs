@@ -5,11 +5,11 @@
 //! [`events`]'s pull-point round-trip subscribes / pulls / unsubscribes
 //! (self-cleaning); the opt-in [`write_roundtrip`] re-applies an unchanged
 //! configuration; and when liveness probing is enabled, [`media`] opens an
-//! RTSP `OPTIONS` connection + fetches a snapshot, and [`recording_services`]
+//! bounded RTSP diagnostics and fetches a snapshot, and [`recording_services`]
 //! exercises the real recording-search / replay operations.
 
 use std::future::Future;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use super::report::{Category, CheckError, CheckResult};
 use crate::types::{
@@ -41,60 +41,6 @@ pub(super) fn parse_skew(detail: &str) -> Option<i64> {
         .strip_suffix('s')?
         .parse()
         .ok()
-}
-
-/// Non-destructive RTSP reachability probe: open a TCP connection to the stream
-/// endpoint and send an `OPTIONS` request. A resolved stream URI is no guarantee
-/// the RTSP server actually answers; `200` is ideal and `401` still proves the
-/// server is alive (it just wants auth), so both count as reachable. Read-only —
-/// never issues `DESCRIBE` / `SETUP` / `PLAY`. IPv4/hostname authorities only.
-async fn rtsp_options_probe(rtsp_url: &str) -> Result<(), String> {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpStream;
-    use tokio::time::timeout;
-
-    let authority = rtsp_url
-        .strip_prefix("rtsp://")
-        .ok_or("not an rtsp:// url")?
-        .split('/')
-        .next()
-        .unwrap_or("");
-    // Drop any userinfo, then split host:port (default 554).
-    let hostport = authority.rsplit('@').next().unwrap_or(authority);
-    let (host, port) = match hostport.rsplit_once(':') {
-        Some((h, p)) => (h, p.parse::<u16>().unwrap_or(554)),
-        None => (hostport, 554u16),
-    };
-    if host.is_empty() {
-        return Err("empty host".to_string());
-    }
-
-    let mut stream = timeout(Duration::from_secs(5), TcpStream::connect((host, port)))
-        .await
-        .map_err(|_| "connect timed out".to_string())?
-        .map_err(|e| format!("connect failed: {e}"))?;
-
-    let req = format!(
-        "OPTIONS {rtsp_url} RTSP/1.0\r\nCSeq: 1\r\nUser-Agent: oxvif\r\nAccept: */*\r\n\r\n"
-    );
-    stream
-        .write_all(req.as_bytes())
-        .await
-        .map_err(|e| format!("write failed: {e}"))?;
-
-    let mut buf = [0u8; 256];
-    let n = timeout(Duration::from_secs(5), stream.read(&mut buf))
-        .await
-        .map_err(|_| "read timed out".to_string())?
-        .map_err(|e| format!("read failed: {e}"))?;
-
-    let head = String::from_utf8_lossy(&buf[..n]);
-    let status = head.lines().next().unwrap_or("").trim();
-    if status.contains(" 200") || status.contains(" 401") {
-        Ok(())
-    } else {
-        Err(format!("OPTIONS refused: {status}"))
-    }
 }
 
 /// Fetch a bounded snapshot through the same authenticated core as the CLI.
@@ -786,7 +732,7 @@ pub(super) async fn recording_services(
 
 pub(super) async fn media(
     s: &OnvifSession,
-    liveness: bool,
+    stream_options: Option<&crate::stream_probe::StreamProbeOptions>,
     creds: Option<&(String, String)>,
     device_url: &str,
     snapshot_options: &super::snapshot::SnapshotOptions,
@@ -847,8 +793,6 @@ pub(super) async fn media(
     };
 
     if let Some(profile) = first_token {
-        // Stream URI — expect rtsp://. With liveness on, also probe the RTSP
-        // server (a resolved URI is no guarantee the server actually answers).
         let start = Instant::now();
         let stream = if selection.is_some() {
             s.media_stream_uri(&profile, StreamRequest::Rtsp)
@@ -858,30 +802,63 @@ pub(super) async fn media(
             s.get_stream_uri(profile.token()).await.map(|u| u.uri)
         };
         match stream {
-            Ok(u) if u.starts_with("rtsp://") => {
-                let elapsed = start.elapsed();
-                let res = if liveness {
-                    match rtsp_options_probe(&u).await {
-                        Ok(()) => CheckResult::pass(
-                            "get_stream_uri",
-                            Category::Media,
-                            format!("{} (RTSP OPTIONS ok)", u),
-                        ),
-                        Err(why) => CheckResult::warn(
-                            "get_stream_uri",
-                            Category::Media,
-                            format!("RTSP not reachable: {why}"),
-                            u,
-                        ),
+            Ok(uri) if crate::stream_probe::valid_stream_uri(&uri) => {
+                out.push(
+                    CheckResult::pass("get_stream_uri", Category::Media, "RTSP(S) URI returned")
+                        .with_elapsed(start.elapsed()),
+                );
+                if let Some(options) = stream_options {
+                    let report = crate::stream_probe::probe(
+                        &uri,
+                        device_url,
+                        creds.map(|(u, p)| (u.as_str(), p.as_str())),
+                        options,
+                    )
+                    .await;
+                    use crate::stream_probe::StreamOutcome;
+                    for (id, outcome) in [
+                        ("rtsp_connection", report.connection),
+                        ("rtsp_options", report.options),
+                        ("rtsp_describe", report.describe),
+                        ("rtsp_setup", report.setup),
+                        ("rtsp_play", report.play),
+                        ("rtsp_first_packet", report.packet),
+                        ("rtsp_teardown", report.teardown),
+                    ] {
+                        let check = match outcome {
+                            StreamOutcome::Passed => CheckResult::pass(
+                                id,
+                                Category::Media,
+                                if id == "rtsp_describe" {
+                                    format!("{:?}", report.codec)
+                                } else {
+                                    "passed".into()
+                                },
+                            ),
+                            StreamOutcome::Skipped => CheckResult::skip(
+                                id,
+                                Category::Media,
+                                "Probe not requested or prerequisite unavailable",
+                            ),
+                            outcome => CheckResult::warn(
+                                id,
+                                Category::Media,
+                                format!("{outcome:?}"),
+                                "RTSP observation",
+                            ),
+                        };
+                        out.push(check);
                     }
-                } else {
-                    CheckResult::pass("get_stream_uri", Category::Media, u)
-                };
-                out.push(res.with_elapsed(elapsed));
+                }
             }
-            Ok(u) => out.push(
-                CheckResult::warn("get_stream_uri", Category::Media, "non-rtsp scheme", u)
-                    .with_elapsed(start.elapsed()),
+            Ok(_) => out.push(
+                CheckResult::warn(
+                    "get_stream_uri",
+                    Category::Media,
+                    "Invalid RTSP(S) URI",
+                    "URI withheld",
+                )
+                .with_elapsed(start.elapsed()),
             ),
             Err(e) => out.push(
                 CheckResult::fail_from("get_stream_uri", Category::Media, &e)
@@ -901,7 +878,7 @@ pub(super) async fn media(
         match snapshot {
             Ok(u) if u.starts_with("http") => {
                 let elapsed = start.elapsed();
-                let res = if liveness {
+                let res = if stream_options.is_some() {
                     match fetch_snapshot(&u, device_url, creds, snapshot_options).await {
                         Ok(bytes) => CheckResult::pass(
                             "get_snapshot_uri",
@@ -1193,14 +1170,6 @@ pub(super) async fn write_roundtrip(s: &OnvifSession) -> Vec<CheckResult> {
 #[cfg(test)]
 mod probe_tests {
     use super::*;
-
-    #[tokio::test]
-    async fn rtsp_probe_rejects_non_rtsp_url() {
-        let err = rtsp_options_probe("http://192.168.1.10/stream")
-            .await
-            .unwrap_err();
-        assert!(err.contains("not an rtsp"), "unexpected error: {err}");
-    }
 
     #[test]
     fn origin_of_extracts_scheme_host_port() {

@@ -432,6 +432,8 @@ pub mod recording;
 pub(crate) mod redact;
 pub mod session;
 pub mod soap;
+#[cfg(feature = "stream-probe")]
+pub mod stream_probe;
 pub mod transport;
 // `types` is the module API users read most — every response struct they get
 // back lands here — so its public surface is held to full documentation. A
