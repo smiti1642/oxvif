@@ -200,6 +200,12 @@
 
 mod adapter;
 mod compare;
+mod event_window;
+
+pub use event_window::{
+    EventWindow, EventWindowComparison, EventWindowDifference, EventWindowError,
+    compare_event_windows,
+};
 mod corpus;
 mod fixture;
 mod parse;

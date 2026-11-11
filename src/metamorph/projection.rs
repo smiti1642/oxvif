@@ -43,8 +43,39 @@ pub(super) fn projection(action: &str) -> Option<Projection> {
         | "http://www.onvif.org/ver20/media/wsdl/GetVideoEncoderConfigurations" => {
             Some(Projection::EncoderCore)
         }
+        "http://www.onvif.org/ver10/media/wsdl/GetStreamUri"
+        | "http://www.onvif.org/ver20/media/wsdl/GetStreamUri"
+        | "http://www.onvif.org/ver10/replay/wsdl/GetReplayUri" => {
+            Some(Projection::StreamUriScheme)
+        }
+        "http://www.onvif.org/ver20/media/wsdl/GetOSDOptions" => Some(Projection::OsdOptions),
+        "http://www.onvif.org/ver20/media/wsdl/GetMaskOptions" => Some(Projection::MaskOptions),
+        "http://www.onvif.org/ver10/media/wsdl/GetAudioOutputConfigurationOptions"
+        | "http://www.onvif.org/ver20/media/wsdl/GetAudioOutputConfigurationOptions" => {
+            Some(Projection::AudioOutputOptions)
+        }
+        "http://www.onvif.org/ver20/analytics/wsdl/GetServiceCapabilities" => {
+            Some(Projection::AnalyticsSupport)
+        }
+        "http://www.onvif.org/ver10/search/wsdl/GetRecordingSummary" => {
+            Some(Projection::RecordingSummary)
+        }
+        "http://www.onvif.org/ver20/ptz/wsdl/GetConfigurationOptions" => {
+            Some(Projection::PtzSpaces)
+        }
         _ => None,
     }
+}
+
+pub(super) fn stateful(action: &str) -> bool {
+    crate::mock::is_event_lifecycle(action)
+        || crate::mock::is_search_lifecycle(action)
+        || matches!(
+            action,
+            "http://www.onvif.org/ver10/recording/wsdl/ExportRecordedData"
+                | "http://www.onvif.org/ver10/recording/wsdl/GetExportRecordedDataState"
+                | "http://www.onvif.org/ver10/recording/wsdl/StopExportRecordedData"
+        )
 }
 
 pub(super) fn validate_masks(masks: &[ComparisonMask]) -> Result<(), Error> {
@@ -74,7 +105,7 @@ pub(super) fn validate_masks(masks: &[ComparisonMask]) -> Result<(), Error> {
                     | "/configurations/*/bitrate_limit"
                     | "/configurations/*/multicast_address"
             ),
-            None => false,
+            _ => false,
         };
         if !allowed {
             return Err(Error::InvalidMask);
@@ -339,6 +370,7 @@ struct Guarded {
     seen: Examined,
     fault: bool,
     destinations: BTreeMap<String, Value>,
+    selected: Option<Value>,
 }
 
 fn selected_mixed(node: &Node, seen: &Examined) -> bool {
@@ -371,6 +403,7 @@ fn response_guard(root: &Node, action: &str, kind: Projection) -> Checked<Guarde
             seen,
             fault: true,
             destinations: BTreeMap::new(),
+            selected: None,
         });
     }
     let (service, operation) = action.rsplit_once('/').ok_or(Issue::Invalid)?;
@@ -379,6 +412,7 @@ fn response_guard(root: &Node, action: &str, kind: Projection) -> Checked<Guarde
     }
     seen.mark(response);
     let mut destinations = BTreeMap::new();
+    let mut selected = None;
     match kind {
         Projection::DeviceInformation => {
             for field in [
@@ -520,6 +554,7 @@ fn response_guard(root: &Node, action: &str, kind: Projection) -> Checked<Guarde
                 destinations.insert(token.clone(), destination);
             }
         }
+        kind => selected = Some(selected_fields(response, service, kind, &mut seen)?),
     }
     if selected_mixed(root, &seen) {
         return Err(Issue::Invalid);
@@ -528,7 +563,176 @@ fn response_guard(root: &Node, action: &str, kind: Projection) -> Checked<Guarde
         seen,
         fault: false,
         destinations,
+        selected,
     })
+}
+
+fn selected_fields(
+    response: &Node,
+    service: &str,
+    kind: Projection,
+    seen: &mut Examined,
+) -> Checked<Value> {
+    Ok(match kind {
+        Projection::StreamUriScheme => {
+            let (node, namespace) = if service == "http://www.onvif.org/ver10/media/wsdl" {
+                (
+                    seen.child(response, service, "MediaUri", true)?
+                        .ok_or(Issue::Invalid)?,
+                    TT,
+                )
+            } else {
+                (response, service)
+            };
+            let uri = seen
+                .scalar(node, namespace, "Uri", true)?
+                .ok_or(Issue::Invalid)?;
+            let value = reqwest::Url::parse(uri.text.trim()).map_err(|_| Issue::Invalid)?;
+            if !matches!(value.scheme(), "rtsp" | "rtsps") || !value.has_host() {
+                return Err(Issue::Invalid);
+            }
+            // Only the scheme was compared. The rest remains volatile/private.
+            seen.nodes.remove(&uri.id);
+            json!({"scheme": value.scheme()})
+        }
+        Projection::OsdOptions => {
+            let options = seen
+                .child(response, service, "OSDOptions", true)?
+                .ok_or(Issue::Invalid)?;
+            let quota = seen
+                .child(options, TT, "MaximumNumberOfOSDs", true)?
+                .ok_or(Issue::Invalid)?;
+            let total = attribute(seen, quota, "Total")?
+                .ok_or(Issue::Invalid)?
+                .trim()
+                .parse::<u32>()
+                .map_err(|_| Issue::Invalid)?;
+            json!({"max_total": total,
+                "types": list(seen, options, TT, "Type")?,
+                "positions": list(seen, options, TT, "PositionOption")?,
+            })
+        }
+        Projection::MaskOptions => {
+            let options = seen
+                .child(response, service, "Options", true)?
+                .ok_or(Issue::Invalid)?;
+            json!({"max_masks": number::<u32>(seen, options, service, "MaxMasks")?,
+                "max_points": number::<u32>(seen, options, service, "MaxPoints")?,
+                "types": list(seen, options, service, "Types")?,
+                "rectangle_only": flag(seen, options, "RectangleOnly")?,
+                "single_color_only": flag(seen, options, "SingleColorOnly")?,
+            })
+        }
+        Projection::AudioOutputOptions => {
+            let options = seen
+                .child(response, service, "Options", true)?
+                .ok_or(Issue::Invalid)?;
+            let range = seen
+                .child(options, TT, "OutputLevelRange", true)?
+                .ok_or(Issue::Invalid)?;
+            let min = number::<i32>(seen, range, TT, "Min")?;
+            let max = number::<i32>(seen, range, TT, "Max")?;
+            if min > max {
+                return Err(Issue::Invalid);
+            }
+            json!({"level_range": [min, max], "output_tokens": list(seen, options, TT, "OutputTokensAvailable")?})
+        }
+        Projection::AnalyticsSupport => {
+            let caps = seen
+                .child(response, service, "Capabilities", true)?
+                .ok_or(Issue::Invalid)?;
+            json!({"rules": flag(seen, caps, "RuleSupport")?,
+                "modules": flag(seen, caps, "AnalyticsModuleSupport")?,
+                "rule_options": flag(seen, caps, "RuleOptionsSupported")?,
+                "module_options": flag(seen, caps, "AnalyticsModuleOptionsSupported")?,
+                "supported_metadata": flag(seen, caps, "SupportedMetadata")?,
+            })
+        }
+        Projection::RecordingSummary => {
+            let summary = seen
+                .child(response, service, "Summary", true)?
+                .ok_or(Issue::Invalid)?;
+            json!({"recordings": number::<u32>(seen, summary, TT, "NumberRecordings")?})
+        }
+        Projection::PtzSpaces => {
+            let options = seen
+                .child(response, service, "PTZConfigurationOptions", true)?
+                .ok_or(Issue::Invalid)?;
+            let spaces = seen
+                .child(options, TT, "Spaces", true)?
+                .ok_or(Issue::Invalid)?;
+            let mut counts = Map::new();
+            for name in [
+                "AbsolutePanTiltPositionSpace",
+                "AbsoluteZoomPositionSpace",
+                "RelativePanTiltTranslationSpace",
+                "RelativeZoomTranslationSpace",
+                "ContinuousPanTiltVelocitySpace",
+                "ContinuousZoomVelocitySpace",
+                "PanTiltSpeedSpace",
+                "ZoomSpeedSpace",
+            ] {
+                counts.insert(
+                    name.into(),
+                    json!(seen.children(spaces, TT, name, true)?.len()),
+                );
+            }
+            Value::Object(counts)
+        }
+        _ => return Err(Issue::Invalid),
+    })
+}
+
+fn number<T: std::str::FromStr>(
+    seen: &mut Examined,
+    node: &Node,
+    ns: &str,
+    name: &str,
+) -> Checked<T> {
+    seen.scalar(node, ns, name, true)?
+        .ok_or(Issue::Invalid)?
+        .text
+        .trim()
+        .parse()
+        .map_err(|_| Issue::Invalid)
+}
+
+fn list(seen: &mut Examined, node: &Node, ns: &str, name: &str) -> Checked<Vec<String>> {
+    let mut values = seen
+        .children(node, ns, name, true)?
+        .into_iter()
+        .map(|child| {
+            if !child.children.is_empty() || child.text.trim().is_empty() {
+                return Err(Issue::Invalid);
+            }
+            Ok(child.text.trim().to_owned())
+        })
+        .collect::<Checked<Vec<_>>>()?;
+    values.sort_unstable();
+    Ok(values)
+}
+
+fn attribute<'a>(seen: &mut Examined, node: &'a Node, name: &str) -> Checked<Option<&'a str>> {
+    if node
+        .attrs
+        .keys()
+        .any(|(ns, local)| local == name && !ns.is_empty())
+    {
+        return Err(Issue::Invalid);
+    }
+    let key = (String::new(), name.to_owned());
+    if let Some(value) = node.attrs.get(&key) {
+        seen.attrs.insert((node.id, key.0, key.1));
+        Ok(Some(value))
+    } else {
+        Ok(None)
+    }
+}
+
+fn flag(seen: &mut Examined, node: &Node, name: &str) -> Checked<Option<bool>> {
+    attribute(seen, node, name)?
+        .map(|value| crate::scoped_rpc::boolean(value).map_err(|_| Issue::Invalid))
+        .transpose()
 }
 
 fn reserve_path(
@@ -794,30 +998,26 @@ pub(super) async fn compare_pair(
                 return Ok(());
             }
         };
-        let (status, _, value) =
-            super::parse::parse_check(&fixture.action, &fixture.response_raw).await;
-        if guarded.fault && status == ParseStatus::Faulted {
-            row.outcome = Outcome::DeviceFault;
-            row.reason = Reason::DeviceFault;
-            return Ok(());
-        }
-        if status != ParseStatus::Parsed || guarded.fault {
-            row.outcome = Outcome::Unparseable;
-            row.reason = Reason::ResponseProjection;
-            return Ok(());
-        }
-        let Some(value) = value else {
-            row.outcome = Outcome::Unparseable;
-            row.reason = Reason::ResponseProjection;
-            return Ok(());
+        let value = if let Some(value) = guarded.selected {
+            Ok(value)
+        } else {
+            let (status, _, value) =
+                super::parse::parse_check(&fixture.action, &fixture.response_raw).await;
+            match (status, guarded.fault, value) {
+                (ParseStatus::Faulted, true, _) => Err(Reason::DeviceFault),
+                (ParseStatus::Parsed, false, Some(value)) => {
+                    typed_projection(value, kind, &guarded.destinations)
+                }
+                _ => Err(Reason::ResponseProjection),
+            }
         };
-        let value = match typed_projection(value, kind, &guarded.destinations) {
+        let value = match value {
             Ok(value) => value,
             Err(reason) => {
-                row.outcome = if reason == Reason::DuplicateTokens {
-                    Outcome::Ambiguous
-                } else {
-                    Outcome::Unparseable
+                row.outcome = match reason {
+                    Reason::DuplicateTokens => Outcome::Ambiguous,
+                    Reason::DeviceFault => Outcome::DeviceFault,
+                    _ => Outcome::Unparseable,
                 };
                 row.reason = reason;
                 return Ok(());

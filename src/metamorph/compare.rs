@@ -41,6 +41,8 @@ pub enum ComparisonReason {
     RequestIdentity,
     /// No projection is mapped for this exact full Action.
     UnmappedAction,
+    /// A volatile request requires a workflow trace instead of a static pair.
+    StatefulWorkflow,
     /// Response syntax, expanded identity, selected namespace or scalar was invalid.
     ResponseProjection,
     /// QName-valued xsi:type cannot be resolved by this comparison projection.
@@ -64,12 +66,26 @@ pub enum ComparisonProjection {
     /// Configuration token/name/encoding/resolution, optional bitrate and
     /// namespace-checked multicast destination (including Media2's unmodeled value).
     EncoderCore,
+    /// RTSP(S) scheme only. The complete URI remains unexamined.
+    StreamUriScheme,
+    /// OSD quota, types and position options.
+    OsdOptions,
+    /// Mask limits, geometry restriction, effects and shared color flag.
+    MaskOptions,
+    /// Audio output level range and port identities.
+    AudioOutputOptions,
+    /// Analytics service capability flags.
+    AnalyticsSupport,
+    /// Recording count. Timeline bounds are volatile.
+    RecordingSummary,
+    /// Counts of qualified PTZ coordinate spaces by operation/axis.
+    PtzSpaces,
 }
 
 /// Explicit selected-field mask scoped to an exact full Action.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ComparisonMask {
-    /// One of the six supported full Action URIs.
+    /// One supported full Action URI with an explicitly maskable field.
     pub action: String,
     /// Declared projection pointer (e.g. /name or /profiles/*/name).
     /// Semantic list identity tokens cannot be masked.
@@ -334,6 +350,8 @@ pub async fn compare_corpora_with_progress(
             (O::MissingLeft, R::MissingRequest)
         } else if group.right.is_empty() {
             (O::MissingRight, R::MissingRequest)
+        } else if super::projection::stateful(&group.representative.action) {
+            (O::Unsupported, R::StatefulWorkflow)
         } else {
             (O::Unsupported, R::UnmappedAction)
         };
