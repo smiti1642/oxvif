@@ -703,7 +703,12 @@ in the installed executable:
 oxvif agent guide --output json
 oxvif describe --output json --non-interactive
 oxvif describe media.stream-uri --output json --non-interactive
+oxvif describe --grammar --output json --non-interactive
 ```
+
+The opt-in `--grammar` form returns `data.kind: command_grammar`. Clients can
+check `grammar_version`, walk the command tree for completion and help, and
+use the advertised console capabilities for direct targets and watch control.
 
 The 0.17 structured output contract uses schema version 3. Automated callers
 should:

@@ -208,7 +208,11 @@ Agent 在執行裝置操作前，應先讀取目前安裝版本內建的操作�
 oxvif agent guide --output json
 oxvif describe --output json --non-interactive
 oxvif describe media.stream-uri --output json --non-interactive
+oxvif describe --grammar --output json --non-interactive
 ```
+
+`--grammar` 回傳 `data.kind: command_grammar`。應用程式可檢查
+`grammar_version`，走訪指令樹以提供補全及說明，並查詢直連與事件停止能力。
 
 0.17 的 structured output schema version 是 3。Agent 應遵守以下原則：
 

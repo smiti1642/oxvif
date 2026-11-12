@@ -25,6 +25,7 @@ use oxvif_cli::{
 };
 use tokio::time::Instant;
 
+mod grammar;
 mod interactive;
 mod manage;
 mod navigation;
@@ -303,6 +304,9 @@ enum Commands {
     Describe {
         /// Stable dotted command name, for example `device.info`.
         command: Option<String>,
+        /// Export the versioned command-line grammar as JSON.
+        #[arg(long, conflicts_with = "command")]
+        grammar: bool,
     },
     /// Manage saved devices and perform device-level operations.
     Device {
@@ -952,6 +956,9 @@ async fn run(arguments: Vec<OsString>) -> u8 {
 
     let format = selected_output(cli.output, cli.json, cli.jsonl);
     let _invoked_command_id = surface_command_id(&cli.command);
+    if let Commands::Describe { grammar: true, .. } = &cli.command {
+        return grammar::emit(format);
+    }
     if let Commands::Completion { shell } = &cli.command {
         if format.is_structured() {
             let error = AppError::invalid_argument(
@@ -1556,7 +1563,9 @@ fn build_request(
             AgentCommands::Guide => CommandRequest::AgentGuide,
             AgentCommands::Prompt => CommandRequest::AgentPrompt,
         }),
-        Commands::Describe { command } => Ok(CommandRequest::Describe(DescribeRequest { command })),
+        Commands::Describe { command, .. } => {
+            Ok(CommandRequest::Describe(DescribeRequest { command }))
+        }
         Commands::Config { command } => Ok(match command {
             ConfigCommands::Path => CommandRequest::ConfigPath,
             ConfigCommands::Validate => CommandRequest::ConfigValidate,
