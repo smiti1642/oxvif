@@ -1054,7 +1054,10 @@ impl Application {
         Ok((results, summary))
     }
 
-    fn resolve_target(&self, selector: crate::TargetSelector) -> Result<ResolvedTarget, AppError> {
+    pub(crate) fn resolve_target(
+        &self,
+        selector: crate::TargetSelector,
+    ) -> Result<ResolvedTarget, AppError> {
         if selector.group.is_some() || selector.view.is_some() {
             return Err(AppError::invalid_argument(
                 "Group/View selection requires a fleet-capable diagnostic command.",

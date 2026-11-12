@@ -330,6 +330,21 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             "ptz.presets",
             "List stored PTZ presets without moving the camera.",
         ),
+        descriptor(
+            "events.watch",
+            "Observe one camera's ONVIF events for a bounded period.",
+            RiskLevel::Read,
+            false,
+            false,
+            vec![
+                optional("id", "saved device ID"),
+                optional("device", "saved device selector"),
+                optional("target", "url | host"),
+                optional("duration", "positive duration, up to 60m, default 30s"),
+                optional("topic", "exact ONVIF topic path"),
+                optional("soap-auth", "combined | digest | ws-security"),
+            ],
+        ),
         device_read_descriptor(
             "health.check",
             "Run default read-only health and conformance checks.",
@@ -710,6 +725,10 @@ fn output_descriptor(name: &str) -> OutputDescriptor {
             "device_test | fleet_diagnostic",
             "Connectivity/authentication result for one target or deterministic fleet items and summary.",
         ),
+        "events.watch" => (
+            "event_notification | event_gap | event_watch_summary",
+            "JSONL emits notifications and gaps in order, followed by a summary. JSON emits the final summary.",
+        ),
         "health"
         | "profiles"
         | "stream"
@@ -825,6 +844,15 @@ fn possible_errors(name: &str) -> Vec<String> {
             "DISCOVERY_FAILED",
             "DEVICE_CONNECTION_FAILED",
         ]
+    } else if name == "events.watch" {
+        &[
+            "INVALID_ARGUMENT",
+            "MISSING_TARGET",
+            "DEVICE_NOT_FOUND",
+            "RESOURCE_NOT_FOUND",
+            "CREDENTIAL_UNAVAILABLE",
+            "DEVICE_CONNECTION_FAILED",
+        ]
     } else if matches!(
         name,
         "info"
@@ -883,6 +911,10 @@ fn argument_description(name: &str, required: bool) -> &'static str {
         "view" => "Dynamic View ID selecting all current matches; conflicts with device and group.",
         "jobs" => "Maximum concurrent fleet items, from 1 through 64.",
         "profile" => "Opaque media profile token returned by media.profiles.",
+        "duration" => "Observation duration after the subscription is granted.",
+        "topic" => {
+            "One exact topic in the ONVIF topics namespace, such as VideoSource/MotionAlarm."
+        }
         "username" => {
             "Credential username; the password is read from a prompt or stdin, never this argument."
         }
@@ -1038,6 +1070,9 @@ fn command_example(name: &str) -> &'static str {
         }
         "ptz.presets" => {
             "oxvif --device front-door ptz presets --profile profile-1 --output json --non-interactive"
+        }
+        "events.watch" => {
+            "oxvif --device front-door events watch --duration 30s --topic VideoSource/MotionAlarm --output jsonl --non-interactive"
         }
         "health.check" => "oxvif --device front-door health check --output json --non-interactive",
         "device.refresh" => "oxvif device refresh front-door --output json --non-interactive",

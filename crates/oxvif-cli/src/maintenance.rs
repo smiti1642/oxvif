@@ -689,6 +689,14 @@ async fn execute_connected(
     }
 }
 
+pub(crate) async fn connect_session(
+    resolved: &ResolvedTarget,
+    options: &ExecutionOptions,
+) -> Result<OnvifSession, AppError> {
+    let (step, session) = connect(resolved, options).await?;
+    session.ok_or_else(|| AppError::device_operation_failed(step.detail, false))
+}
+
 async fn connect(
     resolved: &ResolvedTarget,
     options: &ExecutionOptions,

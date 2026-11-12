@@ -65,6 +65,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add single-camera `events watch` with a bounded duration, device-side
+  topic selection, terminal counts, and live JSONL notifications, gaps and
+  cleanup summary. Backpressure pauses pulls while renewal continues.
+
 - Add service-qualified audio configuration, qualified Analytics reads and
   metadata XML, recording timeline and event search, and bounded export jobs.
   Optional features add PCMU talkback and no-clobber export downloads.

@@ -16,6 +16,7 @@
 | [Group 與 View](#用-group-與-view-管理大量攝影機) | 靜態與動態 fleet 選擇。 |
 | [唯讀診斷](#唯讀診斷) | Device、Media、PTZ 與 health。 |
 | [維運工作流程](#維運工作流程) | 快照下載、分層診斷與設定比較。 |
+| [事件監看](#事件監看) | 單機限時監看、終端摘要與逐筆 JSONL。 |
 | [Fleet 診斷](#fleet-診斷) | 有界並行、排序與彙總結果。 |
 | [輸出與 exit code](#輸出格式與-exit-code) | JSON/JSONL contract 與程序狀態。 |
 | [環境變數](#常用環境變數) | Credential 與設定路徑輸入。 |
@@ -420,6 +421,35 @@ profile 設定。
 完整的設定比較即使發現差異仍回傳 `0`，應檢查 `matches` 與 `changes`。
 檔案工作流程限單台設備。
 
+## 事件監看
+
+```sh
+oxvif --device front-door events watch --duration 30s --topic VideoSource/MotionAlarm
+oxvif --device front-door events watch --duration 1m --output jsonl --non-interactive
+```
+
+可用已儲存的裝置 ID 或 `--target` 指定一台攝影機。預設監看 30 秒，
+最長 60 分鐘，從裝置授予訂閱後開始計時。Ctrl+C 會結束監看並要求清理。
+`--topic` 選擇一個確切的 ONVIF Topic 路徑，可加 `tns1:` 前綴。
+CLI 會向攝影機要求篩選，並核對收到的事件所屬 namespace 與路徑。
+
+應用程式可用 `--control-stdin` 搭配獨立的 stdin pipe。送出一行
+`stop` 或關閉 pipe，會觸發與 Ctrl+C 相同的清理。讓限時監看自然結束時，
+請保持 pipe 開啟。依最後摘要與程序結束碼確認結果。
+
+終端約每秒更新一次累計數，最多列出 12 個 Topic 分組。加上 `--quiet`
+可省略定期更新。JSON 只輸出最後摘要。JSONL 使用 v3 envelope 依序輸出
+`event_notification`、`event_gap` 和最後的 `event_watch_summary`。
+通知包含本地序號、裝置 UTC 時間，以及保有順序的 Source、Key 和 Data。
+缺口紀錄標示從何處開始無法確認連續性。`device_loss_count: null`
+表示裝置端遺失筆數未知。
+
+每次最多拉取 32 筆，本地佇列上限為 128 筆及 1 MiB 的計量通知資料。
+輸出跟不上時會暫停拉取，續租繼續進行。每次輸出有 2 秒上限，觀察結束後
+最多再用 4 秒送完已接受的事件。輸出管線無法接收摘要時，CLI 會嘗試將結果
+寫到 stderr 並以 20 結束。結束碼 6 表示部分交付或訂閱清理未確認。
+`complete` 反映本地觀察到的缺口、停止原因及未交付事件，裝置端仍可能有未知遺失。
+
 ## Fleet 診斷
 
 `diagnose` 即使全部設備失敗（退出碼 `20`）仍保留逐台報告；既有
@@ -461,7 +491,7 @@ JSON／JSONL 保留原始值；自動化應解析結構化輸出，不應將畫�
 | `3` | command、device 或 resource 不存在 |
 | `4` | resource 衝突、已存在或 import plan 不相符 |
 | `5` | 缺少 target selector |
-| `6` | Fleet 部分成功 |
+| `6` | Fleet 部分成功，或事件監看部分交付／清理未確認 |
 | `10` | Config 或 registry 無法使用 |
 | `11` | Credential 無法使用 |
 | `20` | 裝置連線、探索、Fleet 全部失敗，或0.17維運檢查不完整 |

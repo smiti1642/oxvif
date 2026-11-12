@@ -26,6 +26,7 @@ mod credential;
 mod describe;
 mod diagnostics;
 mod error;
+mod event_watch;
 mod inventory;
 mod maintenance;
 mod output;
@@ -57,6 +58,10 @@ pub use credential::{
     credential_reference,
 };
 pub use error::{AppError, ErrorCode};
+pub use event_watch::{
+    EventWatchCounts, EventWatchEnd, EventWatchGap, EventWatchResult, EventWatchSummary,
+    EventWatchUpdate, WatchEventsRequest,
+};
 pub use inventory::{
     CredentialProfileView, DeviceFilter, DeviceFilterField, DiscoveryDeviceView, DiscoveryFilter,
     DiscoveryFilterField, DiscoveryImportOverride, DiscoveryImportOverrides, DiscoveryImportPlan,

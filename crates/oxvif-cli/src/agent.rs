@@ -17,6 +17,7 @@ pub fn guide() -> AgentGuide {
             "snapshot --save and config export write sensitive local files and never overwrite; use one explicit device and an approved destination. config.diff differences alone exit 0; inspect matches and changes.",
             "Inspect a command with `oxvif describe <command> --output json` before invoking it.",
             "Use structured output and --non-interactive for automation.",
+            "Use events watch with one explicit camera and --output jsonl for live notifications. Handle event_gap, then inspect event_watch_summary.complete and the process exit code.",
             "Select a device explicitly; never depend on the ambient current device.",
             "Treat global device IDs as canonical and group/local-alias values as selectors.",
             "Check ok, schema_version, warnings, error.code, and retryable on every result.",

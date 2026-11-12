@@ -70,6 +70,44 @@
       "required": ["kind"],
       "allOf": [
         {
+          "if": { "properties": { "kind": { "const": "event_notification" } } },
+          "then": {
+            "required": ["sequence", "event"],
+            "properties": {
+              "sequence": { "type": "integer", "minimum": 1 },
+              "event": {
+                "type": "object",
+                "required": ["topic", "topic_namespace", "topic_dialect", "utc_time", "property_operation", "source", "key", "data"],
+                "properties": {
+                  "topic": { "type": ["string", "null"] },
+                  "topic_namespace": { "type": ["string", "null"] },
+                  "topic_dialect": { "type": ["string", "null"] },
+                  "utc_time": { "type": "string" },
+                  "property_operation": { "type": "string" },
+                  "source": { "type": "array", "items": { "$ref": "#/$defs/eventItem" } },
+                  "key": { "type": "array", "items": { "$ref": "#/$defs/eventItem" } },
+                  "data": { "type": "array", "items": { "$ref": "#/$defs/eventItem" } }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "event_gap" } } },
+          "then": {
+            "required": ["after_sequence", "reason", "device_loss_count"],
+            "properties": {
+              "after_sequence": { "type": "integer", "minimum": 0 },
+              "reason": { "enum": ["subscription_recovery", "queue_full", "subscription_stopped", "undelivered_at_stop"] },
+              "device_loss_count": { "type": ["integer", "null"], "minimum": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "event_watch_summary" } } },
+          "then": { "required": ["summary"], "properties": { "summary": { "$ref": "#/$defs/eventWatchSummary" } } }
+        },
+        {
           "if": { "required": ["operation"], "properties": { "kind": { "const": "fleet_item" }, "operation": { "const": "diagnose" } } },
           "then": { "properties": { "item": { "$ref": "#/$defs/diagnoseItem" } } }
         },
@@ -96,6 +134,36 @@
       ],
       "properties": {
         "kind": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+      }
+    },
+    "eventItem": {
+      "type": "object",
+      "required": ["kind"],
+      "oneOf": [
+        { "properties": { "kind": { "const": "simple" }, "name": { "type": "string" }, "value": { "type": "string" } }, "required": ["name", "value"] },
+        { "properties": { "kind": { "const": "element" }, "xml": { "type": "string" } }, "required": ["xml"] },
+        { "properties": { "kind": { "const": "unknown" } } }
+      ]
+    },
+    "eventWatchSummary": {
+      "type": "object",
+      "required": ["reason", "complete", "counts", "known_undelivered", "recoveries", "cleanup_failed"],
+      "properties": {
+        "reason": { "enum": ["duration_elapsed", "interrupted", "queue_full", "invalid_timing", "request_failed", "recovery_exhausted", "worker_stopped", "output_timeout", "output_failed", "drain_timeout"] },
+        "complete": { "type": "boolean" },
+        "known_undelivered": { "type": "integer", "minimum": 0 },
+        "recoveries": { "type": "integer", "minimum": 0 },
+        "cleanup_failed": { "type": "boolean" },
+        "counts": {
+          "type": "object",
+          "required": ["delivered", "gaps", "topics", "other_topics"],
+          "properties": {
+            "delivered": { "type": "integer", "minimum": 0 },
+            "gaps": { "type": "integer", "minimum": 0 },
+            "topics": { "type": "object", "maxProperties": 12, "additionalProperties": { "type": "integer", "minimum": 1 } },
+            "other_topics": { "type": "integer", "minimum": 0 }
+          }
+        }
       }
     },
     "diagnoseItem": {

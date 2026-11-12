@@ -31,6 +31,7 @@ mod navigation;
 #[cfg(test)]
 mod terminal_fixture;
 mod ui_settings;
+mod watch_output;
 
 use interactive::{await_discovery, browse_discovery};
 
@@ -318,6 +319,11 @@ enum Commands {
         #[command(subcommand)]
         command: PtzCommands,
     },
+    /// Observe ONVIF events from one camera.
+    Events {
+        #[command(subcommand)]
+        command: EventsCommands,
+    },
     /// Run read-only device health diagnostics.
     Health {
         #[command(subcommand)]
@@ -543,6 +549,27 @@ enum PtzCommands {
 }
 
 #[derive(Debug, Subcommand)]
+enum EventsCommands {
+    /// Watch one camera for a bounded period.
+    Watch {
+        /// Saved device selector: a global ID or group/local-alias.
+        id: Option<String>,
+        /// Use a direct ONVIF URL, hostname, or IP without saving it.
+        #[arg(long)]
+        target: Option<String>,
+        /// Observation time after subscription. Use ms, s, or m, up to 60 minutes.
+        #[arg(long, default_value = "30s", value_parser = parse_duration)]
+        duration: Duration,
+        /// Exact ONVIF topic path, such as VideoSource/MotionAlarm.
+        #[arg(long)]
+        topic: Option<String>,
+        /// Also stop on a "stop" line or EOF on standard input.
+        #[arg(long)]
+        control_stdin: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum HealthCommands {
     /// Run the default read-only health and conformance checks.
     Check {
@@ -763,6 +790,9 @@ fn surface_command_id(command: &Commands) -> CommandId {
             PtzCommands::Status { .. } => CommandId::PtzStatus,
             PtzCommands::Presets { .. } => CommandId::PtzPresets,
         },
+        Commands::Events {
+            command: EventsCommands::Watch { .. },
+        } => CommandId::EventsWatch,
         Commands::Health { command: None } => CommandId::Health,
         Commands::Health {
             command: Some(HealthCommands::Check { .. }),
@@ -983,6 +1013,56 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         return error.exit_code();
     }
     let prompt = SystemPrompt;
+    if let Commands::Events {
+        command:
+            EventsCommands::Watch {
+                id,
+                target,
+                duration,
+                topic,
+                control_stdin,
+            },
+    } = &cli.command
+    {
+        let request = quick_selector(
+            TargetSelector {
+                device: cli.device.clone(),
+                target: target.clone(),
+                group: cli.group.clone(),
+                view: cli.view.clone(),
+            },
+            id.clone(),
+            options.non_interactive,
+        )
+        .and_then(|selector| {
+            let topic = topic
+                .as_deref()
+                .map(oxvif::events::EventTopicFilter::concrete)
+                .transpose()
+                .map_err(|error| AppError::invalid_argument(error.to_string()))?;
+            Ok(oxvif_cli::WatchEventsRequest {
+                selector,
+                duration: *duration,
+                topic,
+            })
+        });
+        return match request {
+            Ok(request) => {
+                Box::pin(watch_output::run(
+                    &application,
+                    request,
+                    &options,
+                    format,
+                    *control_stdin,
+                ))
+                .await
+            }
+            Err(error) => {
+                emit_error(format, &error, Some("events.watch"));
+                error.exit_code()
+            }
+        };
+    }
     if let Commands::Manage { id, target } = &cli.command {
         if !interactive_terminal_available(format, &options)
             || cli.group.is_some()
@@ -1354,6 +1434,9 @@ fn build_request(
     let request = match command {
         Commands::Manage { .. } => Err(AppError::invalid_argument(
             "manage is a terminal adapter; use individual typed operations for automation.",
+        )),
+        Commands::Events { .. } => Err(AppError::internal(
+            "Event watch requires the streaming command adapter.",
         )),
         Commands::Setup {
             target,

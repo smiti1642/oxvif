@@ -136,6 +136,7 @@ command_ids! {
     MediaSnapshotUri => "media.snapshot-uri",
     PtzStatus => "ptz.status",
     PtzPresets => "ptz.presets",
+    EventsWatch => "events.watch",
     HealthCheck => "health.check",
     DeviceRefresh => "device.refresh",
     MediaSnapshotSave => "media.snapshot-save",

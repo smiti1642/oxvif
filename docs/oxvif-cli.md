@@ -21,6 +21,7 @@ interactive operators and automated Agents.
 | [Read-only diagnostics](#read-only-diagnostics) | Device, media, PTZ, health, and ephemeral targets. |
 | [Maintenance workflows](#maintenance-workflows) | Snapshot downloads, layered diagnosis and configuration comparison. |
 | [Fleet diagnostics](#fleet-diagnostics) | Bounded concurrency and deterministic aggregation. |
+| [Event watch](#event-watch) | Watch one camera with a terminal summary or live JSONL. |
 | [Agent contract](#agent-and-automation-contract) | Embedded guidance and command descriptors. |
 | [Output and exit codes](#output-formats) | JSON/JSONL schemas, completion, and process status. |
 | [Environment variables](#environment-variables) | Supported automation inputs and configuration paths. |
@@ -627,6 +628,42 @@ incomplete workflows can return exit `20` with retained `data.result` and
 `ok=false`, without a top-level error. Complete configuration differences return
 exit `0`; inspect `matches` and `changes`. File workflows require one device.
 
+## Event watch
+
+```sh
+oxvif --device front-door events watch --duration 30s --topic VideoSource/MotionAlarm
+oxvif --device front-door events watch --duration 1m --output jsonl --non-interactive
+```
+
+Watch one camera by saved ID or `--target`. The observation runs for 30 seconds
+by default and accepts durations up to 60 minutes. The timer starts after the
+device grants the subscription. Ctrl+C requests cleanup and ends the watch.
+`--topic` selects one exact ONVIF topic path with an optional `tns1:` prefix.
+The CLI requests that filter from the camera and checks the qualified topic on
+received events.
+
+Applications that start the CLI with a dedicated stdin pipe can opt in to
+`--control-stdin`. Send a line containing `stop` or close the pipe to request
+the same cleanup as Ctrl+C. Keep the pipe open for a timed observation. Read
+the final summary and process exit status to confirm the outcome.
+
+The terminal prints cumulative counts about once per second for up to 12 topic
+groups. `--quiet` suppresses periodic counts. JSON prints the final summary.
+JSONL emits `event_notification`, `event_gap`, and a final
+`event_watch_summary` using envelope v3. Notifications carry a local sequence
+number, device UTC time, and ordered Source, Key and Data items. A gap identifies
+where continuity became uncertain. `device_loss_count: null` means the number
+lost on the camera is unknown.
+
+The client bounds each pull to 32 notifications and the local queue to 128
+entries and 1 MiB of accounted notification bytes. If output falls behind,
+pulling pauses while renewal continues. Output has a two-second write budget.
+At the end of the observation, up to four seconds are available for draining
+accepted events. If the output pipe cannot accept the summary, the CLI attempts
+to report the outcome on stderr and exits 20. Exit 6 indicates partial delivery or
+unconfirmed subscription cleanup. `complete` reflects locally observed gaps,
+the stop reason and undelivered events. Camera-side loss can remain unknown.
+
 ## Fleet diagnostics
 
 Use a Group or View selector to execute a diagnostic across multiple devices:
@@ -738,10 +775,10 @@ Completion generation performs no network or registry operation.
 | `3` | Command, device, or resource not found. |
 | `4` | Resource conflict, existing resource, resource in use, or import plan mismatch. |
 | `5` | Missing target selector. |
-| `6` | Fleet partial success. |
+| `6` | Fleet partial success or partial event delivery or cleanup. |
 | `10` | Configuration or registry unavailable, corrupt, or unsupported. |
 | `11` | Credential unavailable. |
-| `20` | Device connection, discovery, complete fleet failure, or incomplete maintenance checks. |
+| `20` | Device connection, discovery, complete fleet failure, incomplete maintenance checks, or event watch failure. |
 | `70` | Serialization or internal failure. |
 
 These numeric values are stable automation interfaces. Structured errors also
