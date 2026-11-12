@@ -16,6 +16,10 @@ name = "oxvif"
 path = "src/main.rs"
 doc = false
 
+[[example]]
+name = "console_mock"
+path = "tests/support/console_mock.rs"
+
 [dependencies]
 async-trait = "0.1"
 atomic-write-file = "0.3.1"
