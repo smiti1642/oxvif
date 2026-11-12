@@ -258,6 +258,44 @@ fn output_comparison_rejects_invalid_execution_time() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn direct_auth_accepts_the_cameras_configured_empty_password() {
+    let server = oxvif::mock::MockServer::builder()
+        .enforce_auth(true)
+        .start()
+        .await
+        .unwrap();
+    server.device().modify(|device| {
+        device
+            .users
+            .iter_mut()
+            .find(|user| user.username == "admin")
+            .unwrap()
+            .password
+            .clear();
+    });
+    let config = tempfile::tempdir().unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_oxvif"))
+        .args([
+            "device",
+            "info",
+            "--target",
+            server.device_url(),
+            "--json",
+            "--non-interactive",
+        ])
+        .env("OXVIF_CONFIG_DIR", config.path())
+        .env("OXVIF_USERNAME", "admin")
+        .env("OXVIF_PASSWORD", "")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn ordinary_mock_auth_fault_preserves_human_and_agent_error_contracts() {
     let server = oxvif::mock::MockServer::builder()
         .enforce_auth(true)

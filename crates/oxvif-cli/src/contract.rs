@@ -350,6 +350,11 @@ impl SecretString {
     pub fn expose_secret(&self) -> &str {
         &self.0
     }
+
+    /// Direct authentication can use a camera account with an empty password.
+    pub(crate) fn for_direct_auth(secret: String) -> Self {
+        Self(secret)
+    }
 }
 
 impl Drop for SecretString {

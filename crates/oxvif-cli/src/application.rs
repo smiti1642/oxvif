@@ -1124,11 +1124,12 @@ impl Application {
     }
 
     fn resolve_direct(&self, target: &str) -> Result<ResolvedTarget, AppError> {
-        let username = env::var("OXVIF_USERNAME").ok();
+        let username = env::var("OXVIF_USERNAME")
+            .ok()
+            .filter(|value| !value.is_empty());
         let password = env::var("OXVIF_PASSWORD")
             .ok()
-            .map(SecretString::new)
-            .transpose()?;
+            .map(SecretString::for_direct_auth);
         if password.is_some() && username.is_none() {
             return Err(AppError::credential_unavailable(
                 "OXVIF_PASSWORD is set but OXVIF_USERNAME is missing.",
