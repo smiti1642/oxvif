@@ -34,6 +34,7 @@ fn envelope(body: &str) -> String {
 
 enum Reply {
     Xml(String),
+    Gated(tokio::sync::oneshot::Receiver<String>),
     Status(u16),
     Pending,
 }
@@ -114,6 +115,7 @@ impl Transport for Script {
         assert_eq!(action, expected);
         match response {
             Reply::Xml(xml) => Ok(xml),
+            Reply::Gated(release) => Ok(release.await.expect("the test releases the reply")),
             Reply::Status(status) => Err(TransportError::HttpStatus {
                 status,
                 body: "fixture-status-body".into(),

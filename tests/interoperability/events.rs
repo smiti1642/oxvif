@@ -2,8 +2,8 @@ use super::*;
 use oxvif::{
     OnvifError,
     events::{
-        EndpointPolicy, EventItem, ManagedEvent, ManagedEventOptions, ManagedEventStop,
-        QualifiedContent,
+        EndpointPolicy, EventItem, EventTopicFilter, ManagedEvent, ManagedEventOptions,
+        ManagedEventPolicy, ManagedEventStop, QualifiedContent,
     },
     soap::SoapError,
 };
@@ -328,6 +328,94 @@ async fn managed_renewal_proceeds_during_pending_pull_and_full_queue() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn managed_backpressure_pauses_pulls_and_keeps_renewal_live() {
+    let script = Script::new(vec![
+        (CREATE, lease("backpressure")),
+        (PULL, page(&NOTICE.repeat(3))),
+        (
+            RENEW,
+            reply(
+                "<n:RenewResponse><n:TerminationTime>2050-01-01T00:00:21Z</n:TerminationTime></n:RenewResponse>",
+            ),
+        ),
+        (CLOSE, close()),
+    ]);
+    let mut subscription = script
+        .client()
+        .managed_events_with_policy(
+            URL,
+            options(),
+            ManagedEventPolicy {
+                wait_for_capacity: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    script.until_calls(3).await;
+    assert_eq!(script.calls()[2].action, RENEW);
+    assert_eq!(subscription.pending_notifications(), 2);
+    assert_eq!(subscription.close().await.stop, ManagedEventStop::Closed);
+    assert!(matches!(
+        subscription.next().await,
+        Some(Ok(ManagedEvent::Notification(_)))
+    ));
+    assert!(subscription.next().await.is_none());
+    assert_eq!(subscription.pending_notifications(), 2);
+    script.assert_done();
+}
+
+#[tokio::test(start_paused = true)]
+async fn managed_topic_filter_is_reused_and_matches_qualified_topic_identity() {
+    let matching = NOTICE
+        .replace("urn:camera:topics", "http://www.onvif.org/ver10/topics")
+        .replace(">q:Motion</", ">q:VideoSource/MotionAlarm</");
+    let wrong_namespace = NOTICE.replace(">q:Motion</", ">q:VideoSource/MotionAlarm</");
+    let script = Script::new(vec![
+        (CREATE, lease("old")),
+        (PULL, Reply::Status(503)),
+        (CLOSE, close()),
+        (CREATE, lease("replacement")),
+        (PULL, page(&format!("{wrong_namespace}{matching}"))),
+        (CLOSE, close()),
+    ]);
+    let mut subscription = script
+        .client()
+        .managed_events_with_policy(
+            URL,
+            options(),
+            ManagedEventPolicy {
+                topic: Some(EventTopicFilter::concrete("tns1:VideoSource/MotionAlarm").unwrap()),
+                wait_for_capacity: true,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        subscription.next().await,
+        Some(Ok(ManagedEvent::Gap))
+    ));
+    assert!(
+        matches!(subscription.next().await, Some(Ok(ManagedEvent::Notification(event)))
+        if event.topic.as_ref().unwrap().namespace_for_prefix("q") == Some("http://www.onvif.org/ver10/topics"))
+    );
+    assert_eq!(subscription.close().await.recoveries, 1);
+    assert!(subscription.next().await.is_none());
+    for index in [0, 3] {
+        let call = &script.calls()[index];
+        assert!(
+            call.body
+                .contains("tns1:VideoSource/MotionAlarm</wsnt:TopicExpression>")
+        );
+        assert!(
+            call.body
+                .contains("xmlns:tns1=\"http://www.onvif.org/ver10/topics\"")
+        );
+    }
+    script.assert_done();
+}
+
+#[tokio::test(start_paused = true)]
 async fn managed_recovery_announces_gap_and_replaces_reference_once() {
     let script = Script::new(vec![
         (CREATE, lease("old")),
@@ -357,6 +445,70 @@ async fn managed_recovery_announces_gap_and_replaces_reference_once() {
     assert!(calls[2].body.contains(">old</r:Route>"));
     assert!(calls[4].body.contains(">replacement</r:Route>"));
     assert!(calls[5].body.contains(">replacement</r:Route>"));
+    script.assert_done();
+}
+
+#[tokio::test(start_paused = true)]
+async fn stop_during_replacement_create_waits_for_the_reference_then_releases_it() {
+    let (release, response) = tokio::sync::oneshot::channel();
+    let script = Script::new(vec![
+        (CREATE, lease("old")),
+        (PULL, Reply::Status(503)),
+        (CLOSE, close()),
+        (CREATE, Reply::Gated(response)),
+        (CLOSE, close()),
+    ]);
+    let mut subscription = script
+        .client()
+        .managed_events(URL, options())
+        .await
+        .unwrap();
+    assert!(matches!(
+        subscription.next().await,
+        Some(Ok(ManagedEvent::Gap))
+    ));
+    script.until_calls(4).await;
+    subscription.cancellation().cancel();
+    tokio::task::yield_now().await;
+    let Reply::Xml(grant) = lease("replacement") else {
+        unreachable!()
+    };
+    release.send(grant).unwrap();
+    let report = subscription.close().await;
+    assert_eq!(report.stop, ManagedEventStop::Closed);
+    assert_eq!(report.recoveries, 1);
+    assert_eq!(report.recovery_cleanup_failures, 0);
+    assert!(report.cleanup_error.is_none());
+    assert!(script.calls()[4].body.contains(">replacement</r:Route>"));
+    script.assert_done();
+}
+
+#[tokio::test(start_paused = true)]
+async fn stop_during_replacement_create_reports_unknown_cleanup_if_the_reply_times_out() {
+    let script = Script::new(vec![
+        (CREATE, lease("old")),
+        (PULL, Reply::Status(503)),
+        (CLOSE, close()),
+        (CREATE, Reply::Pending),
+    ]);
+    let mut subscription = script
+        .client()
+        .managed_events(URL, options())
+        .await
+        .unwrap();
+    assert!(matches!(
+        subscription.next().await,
+        Some(Ok(ManagedEvent::Gap))
+    ));
+    script.until_calls(4).await;
+    let report = subscription.close().await;
+    assert_eq!(report.stop, ManagedEventStop::Closed);
+    assert_eq!(report.recoveries, 1);
+    assert_eq!(report.recovery_cleanup_failures, 1);
+    assert!(matches!(
+        report.cause,
+        Some(OnvifError::Transport(TransportError::Deadline))
+    ));
     script.assert_done();
 }
 

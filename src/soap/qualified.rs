@@ -154,10 +154,15 @@ impl QualifiedElement {
         self.write_xml(out, None, true);
     }
 
-    pub(crate) fn serialized_len(&self) -> usize {
+    /// Serialize this element with its namespace bindings as standalone XML.
+    pub fn to_xml(&self) -> String {
         let mut out = String::new();
         self.write_xml(&mut out, None, false);
-        out.len()
+        out
+    }
+
+    pub(crate) fn serialized_len(&self) -> usize {
+        self.to_xml().len()
     }
 
     fn write_xml(&self, out: &mut String, parent: Option<&Scope>, reference: bool) {

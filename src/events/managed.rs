@@ -1,4 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use tokio::{
     sync::{OwnedSemaphorePermit, Semaphore, mpsc, watch},
@@ -6,7 +12,9 @@ use tokio::{
     time::{Instant, sleep_until},
 };
 
-use super::{EndpointPolicy, EndpointReference, EventLeaseTimes, QualifiedNotification};
+use super::{
+    EndpointPolicy, EndpointReference, EventLeaseTimes, EventTopicFilter, QualifiedNotification,
+};
 use crate::{OnvifClient, OnvifError, OnvifSession, soap::SoapError, transport::TransportError};
 
 /// Budgets for a managed pull point. All durations must be positive.
@@ -87,6 +95,16 @@ impl ManagedEventOptions {
     }
 }
 
+/// Optional topic and delivery behavior for a managed pull point.
+#[derive(Clone, Debug, Default)]
+pub struct ManagedEventPolicy {
+    /// Request one exact ONVIF topic and check it on received notifications.
+    pub topic: Option<EventTopicFilter>,
+    /// Wait for queue capacity before pulling again, while continuing renewal.
+    /// The default stops with `QueueFull` when a queue limit is reached.
+    pub wait_for_capacity: bool,
+}
+
 /// Terminal outcome of a managed event subscription.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -142,7 +160,7 @@ pub struct ManagedEventReport {
     pub cleanup_error: Option<OnvifError>,
     /// Number of replacement subscriptions attempted.
     pub recoveries: u32,
-    /// Earlier unsubscribe failures encountered during recovery.
+    /// Leases whose cleanup could not be confirmed during recovery.
     pub recovery_cleanup_failures: u32,
 }
 
@@ -170,9 +188,32 @@ pub struct ManagedEventSubscription {
     task: Option<JoinHandle<ManagedEventReport>>,
     report: Option<ManagedEventReport>,
     terminal_delivered: bool,
+    pending: Arc<AtomicUsize>,
+}
+
+/// A cooperative stop handle that can be used while polling a subscription.
+#[derive(Clone)]
+pub struct ManagedEventCancellation(watch::Sender<bool>);
+
+impl ManagedEventCancellation {
+    /// Stop pulling and attempt to unsubscribe the current lease.
+    pub fn cancel(&self) {
+        self.0.send_replace(true);
+    }
 }
 
 impl ManagedEventSubscription {
+    /// Get a handle to stop the worker without borrowing the consumer.
+    pub fn cancellation(&self) -> ManagedEventCancellation {
+        ManagedEventCancellation(self.cancel.clone())
+    }
+
+    /// Notifications from the last received page that never entered the queue.
+    /// Read after close. Loss on the device or across recovery may be unknown.
+    pub fn pending_notifications(&self) -> usize {
+        self.pending.load(Ordering::Relaxed)
+    }
+
     /// Current lifecycle state.
     pub fn state(&self) -> ManagedEventState {
         *self.state.borrow()
@@ -231,6 +272,17 @@ impl OnvifClient {
         events_url: &str,
         options: ManagedEventOptions,
     ) -> Result<ManagedEventSubscription, Box<ManagedEventStartError>> {
+        self.managed_events_with_policy(events_url, options, ManagedEventPolicy::default())
+            .await
+    }
+
+    /// Acquire a managed pull point with explicit topic and delivery behavior.
+    pub async fn managed_events_with_policy(
+        &self,
+        events_url: &str,
+        options: ManagedEventOptions,
+        policy: ManagedEventPolicy,
+    ) -> Result<ManagedEventSubscription, Box<ManagedEventStartError>> {
         let wrap = |cause| {
             Box::new(ManagedEventStartError {
                 cause,
@@ -240,9 +292,10 @@ impl OnvifClient {
         options.validate().map_err(wrap)?;
         let started = Instant::now();
         let point = self
-            .create_referenced_pull_point(
+            .create_referenced_pull_point_filtered(
                 events_url,
                 &crate::types::duration_xml(options.lease),
+                policy.topic.as_ref(),
                 &options.endpoints,
                 options.request_timeout,
             )
@@ -265,10 +318,13 @@ impl OnvifClient {
         let (send, queue) = mpsc::channel(options.queue_messages);
         let (cancel, cancelled) = watch::channel(false);
         let (status, state) = watch::channel(ManagedEventState::Active);
+        let pending = Arc::new(AtomicUsize::new(0));
         let worker = Worker {
             client: self.clone(),
             url: events_url.to_owned(),
             options,
+            policy,
+            pending: pending.clone(),
             send,
             status,
             cancelled,
@@ -281,6 +337,7 @@ impl OnvifClient {
             task: Some(task),
             report: None,
             terminal_delivered: false,
+            pending,
         })
     }
 }
@@ -291,13 +348,25 @@ impl OnvifSession {
         &self,
         options: ManagedEventOptions,
     ) -> Result<ManagedEventSubscription, Box<ManagedEventStartError>> {
+        self.managed_events_with_policy(options, ManagedEventPolicy::default())
+            .await
+    }
+
+    /// Start a managed subscription with explicit topic and delivery behavior.
+    pub async fn managed_events_with_policy(
+        &self,
+        options: ManagedEventOptions,
+        policy: ManagedEventPolicy,
+    ) -> Result<ManagedEventSubscription, Box<ManagedEventStartError>> {
         let url = self.capabilities().events.url.as_deref().ok_or_else(|| {
             Box::new(ManagedEventStartError {
                 cause: SoapError::missing("Events service URL").into(),
                 cleanup_error: None,
             })
         })?;
-        self.client().managed_events(url, options).await
+        self.client()
+            .managed_events_with_policy(url, options, policy)
+            .await
     }
 }
 
@@ -395,6 +464,8 @@ struct Worker {
     client: OnvifClient,
     url: String,
     options: ManagedEventOptions,
+    policy: ManagedEventPolicy,
+    pending: Arc<AtomicUsize>,
     send: mpsc::Sender<QueuedEvent>,
     status: watch::Sender<ManagedEventState>,
     cancelled: watch::Receiver<bool>,
@@ -474,19 +545,41 @@ impl Worker {
             if started >= deadline {
                 break (ManagedEventStop::RecoveryExhausted, Some(error));
             }
-            recoveries += 1;
-            let grant = tokio::select! {
+            tokio::select! {
                 biased;
                 () = cancellation(self.cancelled.clone()) => break (ManagedEventStop::Closed, None),
-                grant = async {
-                    sleep_until(started).await;
-                    self.client.create_referenced_pull_point(&self.url, &crate::types::duration_xml(self.options.lease),
-                        &self.options.endpoints, self.options.request_timeout.min(deadline.saturating_duration_since(Instant::now()))).await
-                } => grant,
-            };
+                () = sleep_until(started) => {}
+            }
+            let started = Instant::now();
+            if started >= deadline {
+                break (ManagedEventStop::RecoveryExhausted, Some(error));
+            }
+            recoveries += 1;
+            // Once Create is sent, stopping still needs the bounded reply
+            // so it can release any lease the camera granted.
+            let grant = self
+                .client
+                .create_referenced_pull_point_filtered(
+                    &self.url,
+                    &crate::types::duration_xml(self.options.lease),
+                    self.policy.topic.as_ref(),
+                    &self.options.endpoints,
+                    self.options.request_timeout.min(deadline - started),
+                )
+                .await;
             let grant = match grant {
                 Ok(grant) => grant,
-                Err(error) => break (ManagedEventStop::RequestFailed, Some(error)),
+                Err(error) => {
+                    if !matches!(error, OnvifError::Soap(SoapError::Fault { .. })) {
+                        cleanup_failures += 1;
+                    }
+                    let stop = if *self.cancelled.borrow() {
+                        ManagedEventStop::Closed
+                    } else {
+                        ManagedEventStop::RequestFailed
+                    };
+                    break (stop, Some(error));
+                }
             };
             reference = grant.reference;
             known_reference = true;
@@ -597,8 +690,18 @@ impl Worker {
     ) -> Exit {
         let wait = crate::types::duration_xml(self.options.pull_wait);
         loop {
+            if self.policy.wait_for_capacity {
+                let Ok(slot) = self.send.reserve().await else {
+                    return Exit::Full;
+                };
+                drop(slot);
+                let Ok(byte) = budget.acquire().await else {
+                    return Exit::Full;
+                };
+                drop(byte);
+            }
             let started = Instant::now();
-            let page = match self
+            let mut page = match self
                 .client
                 .pull_referenced_messages(
                     reference,
@@ -612,6 +715,11 @@ impl Worker {
                 Ok(page) => page,
                 Err(error) => return Exit::Request(error),
             };
+            if let Some(topic) = &self.policy.topic {
+                page.notifications.retain(|event| topic.matches(event));
+            }
+            self.pending
+                .store(page.notifications.len(), Ordering::Relaxed);
             let lease = *clock.borrow();
             if started >= lease.sampled {
                 let Some(mut observed) = Lease::from_times(&page.times, started, None) else {
@@ -623,24 +731,38 @@ impl Worker {
                 clock.send_replace(observed);
             }
             for notification in page.notifications {
-                let Ok(bytes) = budget
-                    .clone()
-                    .try_acquire_many_owned(notification.retained_bytes() as u32)
-                else {
+                let size = notification.retained_bytes() as u32;
+                if size > self.options.queue_bytes {
+                    return Exit::Full;
+                }
+                let permits = if self.policy.wait_for_capacity {
+                    budget.clone().acquire_many_owned(size).await.ok()
+                } else {
+                    budget.clone().try_acquire_many_owned(size).ok()
+                };
+                let Some(bytes) = permits else {
                     return Exit::Full;
                 };
-                if self
-                    .send
-                    .try_send(QueuedEvent {
+                if !self
+                    .enqueue(QueuedEvent {
                         event: ManagedEvent::Notification(Box::new(notification)),
                         _bytes: Some(bytes),
                     })
-                    .is_err()
+                    .await
                 {
                     return Exit::Full;
                 }
+                self.pending.fetch_sub(1, Ordering::Relaxed);
             }
             tokio::time::sleep(self.options.poll_interval).await;
+        }
+    }
+
+    async fn enqueue(&self, event: QueuedEvent) -> bool {
+        if self.policy.wait_for_capacity {
+            self.send.send(event).await.is_ok()
+        } else {
+            self.send.try_send(event).is_ok()
         }
     }
 }

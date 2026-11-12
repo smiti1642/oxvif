@@ -16,8 +16,51 @@ pub use managed::*;
 const EVENTS: &str = "http://www.onvif.org/ver10/events/wsdl";
 const NOTIFICATION: &str = "http://docs.oasis-open.org/wsn/b-2";
 const SCHEMA: &str = "http://www.onvif.org/ver10/schema";
+const TOPICS: &str = "http://www.onvif.org/ver10/topics";
+const CONCRETE_SET: &str = "http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet";
 
 pub use crate::transport::EndpointPolicy;
+
+/// One exact topic path in the ONVIF topics namespace.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EventTopicFilter(String);
+
+impl EventTopicFilter {
+    /// Accept a path such as `VideoSource/MotionAlarm`, with optional `tns1:`.
+    pub fn concrete(path: &str) -> Result<Self, OnvifError> {
+        let path = path.strip_prefix("tns1:").unwrap_or(path);
+        if path.len() > 256
+            || !path.split('/').all(|part| {
+                let mut bytes = part.bytes();
+                bytes
+                    .next()
+                    .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
+                    && bytes.all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
+            })
+        {
+            return Err(OnvifError::InvalidArgument(
+                "Expected one ONVIF topic path such as VideoSource/MotionAlarm.".into(),
+            ));
+        }
+        Ok(Self(path.into()))
+    }
+
+    /// The exact path without its namespace prefix.
+    pub fn path(&self) -> &str {
+        &self.0
+    }
+
+    fn matches(&self, event: &QualifiedNotification) -> bool {
+        event.topic.as_ref().is_some_and(|topic| {
+            let Ok(text) = topic.scalar() else {
+                return false;
+            };
+            let text = text.trim();
+            let (prefix, path) = text.split_once(':').unwrap_or(("", text));
+            path == self.0 && topic.namespace_for_prefix(prefix) == Some(TOPICS)
+        })
+    }
+}
 
 /// A subscription endpoint and its ordered, qualified reference parameters.
 #[derive(Clone)]
@@ -99,6 +142,15 @@ pub struct QualifiedNotification {
 }
 
 impl QualifiedNotification {
+    /// Topic expression text, when the device sent a scalar topic.
+    pub fn topic_expression(&self) -> Option<String> {
+        self.topic
+            .as_ref()?
+            .scalar()
+            .ok()
+            .map(|text| text.trim().to_owned())
+    }
+
     /// Project to legacy simple items. Duplicate names use the last value.
     /// Keys, qualified topic identity and XML items are discarded.
     pub fn to_legacy(&self) -> NotificationMessage {
@@ -262,10 +314,34 @@ impl OnvifClient {
         policy: &EndpointPolicy,
         timeout: Duration,
     ) -> Result<ReferencedPullPoint, OnvifError> {
+        self.create_referenced_pull_point_filtered(
+            events_url,
+            initial_termination,
+            None,
+            policy,
+            timeout,
+        )
+        .await
+    }
+
+    async fn create_referenced_pull_point_filtered(
+        &self,
+        events_url: &str,
+        initial_termination: &str,
+        topic: Option<&EventTopicFilter>,
+        policy: &EndpointPolicy,
+        timeout: Duration,
+    ) -> Result<ReferencedPullPoint, OnvifError> {
         let url = policy.check(self.device_url(), events_url)?;
+        let filter = topic.map_or_else(String::new, |topic| {
+            format!(
+                "<tev:Filter><wsnt:TopicExpression xmlns:tns1=\"{TOPICS}\" Dialect=\"{CONCRETE_SET}\">tns1:{}</wsnt:TopicExpression></tev:Filter>",
+                xml_escape(topic.path())
+            )
+        });
         let xml = self.call_addressed(url.as_str(),
             "http://www.onvif.org/ver10/events/wsdl/EventPortType/CreatePullPointSubscriptionRequest",
-            &format!("<tev:CreatePullPointSubscription><tev:InitialTerminationTime>{}</tev:InitialTerminationTime></tev:CreatePullPointSubscription>", xml_escape(initial_termination)),
+            &format!("<tev:CreatePullPointSubscription>{filter}<tev:InitialTerminationTime>{}</tev:InitialTerminationTime></tev:CreatePullPointSubscription>", xml_escape(initial_termination)),
             &[], SoapRequestOptions::with_timeout(timeout)).await?;
         let node = response(&xml, EVENTS, "CreatePullPointSubscriptionResponse")?;
         Ok(ReferencedPullPoint {
