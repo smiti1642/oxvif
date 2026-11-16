@@ -24,6 +24,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
+- Lock `quinn-proto` 0.11.19 and `quinn-udp` 0.5.16 to address
+  RUSTSEC-2026-0523, RUSTSEC-2026-0524 and RUSTSEC-2026-0538. Lock `rustix`
+  1.1.6 to address RUSTSEC-2026-0486.
+
 - Lock Tokio 1.54.1, which includes the RUSTSEC-2026-0386 fix introduced
   in 1.53.3 for unsound `AsyncFd` constructors. Downstream consumers must
   update their own lockfiles.
@@ -68,6 +72,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Add single-camera `events watch` with a bounded duration, device-side
   topic selection, terminal counts, and live JSONL notifications, gaps and
   cleanup summary. Backpressure pauses pulls while renewal continues.
+
+- Add `diagnose --share` and `config validate --share` to export diagnostic
+  JSON with failure stages and follow-up checks while omitting credentials,
+  device addresses, local paths and raw responses.
+
+- Add `describe --grammar` for console help and completion, and
+  `events watch --control-stdin` for cooperative stop and cleanup.
+
+- Expose typed snapshot error categories and available HTTP status codes.
 
 - Add service-qualified audio configuration, qualified Analytics reads and
   metadata XML, recording timeline and event search, and bounded export jobs.
@@ -125,6 +138,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Counts describe retained recordings, not transport attempts or conformance.
 
 ### Fixed
+
+- Accept an explicitly empty password for direct CLI authentication with a username.
 
 - Reject stale/future timestamps and reused nonces when mock authentication is
   enabled. Generate fresh tokens for repeated positive tests. The bounded cache
