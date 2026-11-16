@@ -6,6 +6,59 @@ use oxvif::mock::{MockServer, state::PendingIoEvent};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mode = std::env::args().nth(1);
+    if mode.as_deref() == Some("--terminal-fixture") {
+        use std::io::IsTerminal;
+        let isolated = ["OXVIF_USERNAME", "OXVIF_PASSWORD", "OXVIF_DEVICE"]
+            .iter()
+            .all(|name| std::env::var_os(name).is_none());
+        let result = serde_json::json!({
+            "stdin": io::stdin().is_terminal(),
+            "stdout": io::stdout().is_terminal(),
+            "stderr": io::stderr().is_terminal(),
+            "isolated": isolated,
+            "args": std::env::args().skip(3).collect::<Vec<_>>(),
+        });
+        let destination = std::env::args_os().nth(2).expect("fixture output file");
+        std::fs::write(destination, serde_json::to_vec(&result)?)?;
+        return Ok(());
+    }
+    if mode.as_deref() == Some("--credential-pipe-fixture") {
+        use std::io::Read;
+        let mut password = zeroize::Zeroizing::new(String::new());
+        io::stdin().read_to_string(&mut password)?;
+        let username = std::env::var("OXVIF_USERNAME")?;
+        let argv = std::env::args().collect::<Vec<_>>();
+        if !argv.iter().any(|arg| arg == "--password-stdin")
+            || argv
+                .iter()
+                .any(|arg| arg.contains(username.as_str()) || arg.contains(password.as_str()))
+            || std::env::var_os("OXVIF_PASSWORD").is_some()
+            || username != "synthetic-account"
+            || password.as_str() != "synthetic-password"
+        {
+            std::process::exit(3);
+        }
+        println!("{username}");
+        eprintln!("{}", password.as_str());
+        return Ok(());
+    }
+    if mode.as_deref() == Some("--seed-import") {
+        let store = oxvif_cli::RegistryStore::system()?;
+        store.save_discovery_snapshot(
+            "console-fixture",
+            vec![oxvif_cli::DiscoveryRecord {
+                endpoint: "uuid:console-camera".into(),
+                xaddrs: vec!["http://192.0.2.120/onvif/device_service".into()],
+                types: Vec::new(),
+                scopes: Vec::new(),
+                manufacturer: None,
+                model: None,
+                firmware_version: None,
+                serial_number: None,
+            }],
+        )?;
+        return Ok(());
+    }
     if mode.as_deref() == Some("--echo-argv") {
         let arguments: Vec<_> = std::env::args().skip(2).collect();
         serde_json::to_writer(io::stdout(), &arguments)?;
