@@ -38,19 +38,58 @@ pub struct SnapshotError {
     message: String,
     invalid_argument: bool,
     retryable: bool,
+    kind: SnapshotErrorKind,
 }
+
+/// Bounded classification for diagnostic consumers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SnapshotErrorKind {
+    /// The destination could not be used under the URL policy.
+    Destination,
+    /// Local timeout or certificate configuration failed validation.
+    InvalidConfiguration,
+    /// Request construction or network I/O failed.
+    Transport,
+    /// The request or download deadline expired.
+    Timeout,
+    /// The endpoint returned a non-success HTTP status.
+    HttpStatus(u16),
+    /// An authentication challenge could not be used.
+    AuthenticationChallenge,
+    /// The image exceeded the download budget.
+    Limit,
+    /// The response had no supported image signature.
+    InvalidImage,
+}
+
 impl SnapshotError {
-    fn failed(message: impl Into<String>) -> Self {
+    fn failed(kind: SnapshotErrorKind, message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
             invalid_argument: false,
             retryable: false,
+            kind,
         }
     }
     fn invalid(message: &'static str) -> Self {
+        Self::invalid_kind(SnapshotErrorKind::InvalidConfiguration, message)
+    }
+    fn invalid_kind(kind: SnapshotErrorKind, message: &'static str) -> Self {
         Self {
             invalid_argument: true,
-            ..Self::failed(message)
+            ..Self::failed(kind, message)
+        }
+    }
+    /// Safe classification without endpoint or response text.
+    pub fn kind(&self) -> SnapshotErrorKind {
+        self.kind
+    }
+    /// HTTP status when the endpoint returned one.
+    pub fn http_status(&self) -> Option<u16> {
+        match self.kind {
+            SnapshotErrorKind::HttpStatus(status) => Some(status),
+            _ => None,
         }
     }
     /// Whether this error is invalid configuration rather than a device failure.
@@ -65,11 +104,17 @@ impl SnapshotError {
 fn http_error(e: reqwest::Error) -> SnapshotError {
     SnapshotError {
         retryable: e.is_timeout() || e.is_connect(),
-        ..SnapshotError::failed(if e.is_timeout() {
-            "Snapshot HTTP request timed out (URL withheld)."
+        ..if e.is_timeout() {
+            SnapshotError::failed(
+                SnapshotErrorKind::Timeout,
+                "Snapshot HTTP request timed out (URL withheld).",
+            )
         } else {
-            "Snapshot HTTP request failed (URL/body withheld)."
-        })
+            SnapshotError::failed(
+                SnapshotErrorKind::Transport,
+                "Snapshot HTTP request failed (URL/body withheld).",
+            )
+        }
     }
 }
 
@@ -79,10 +124,15 @@ fn http_error(e: reqwest::Error) -> SnapshotError {
 /// HTTP services. This is a product credential-boundary policy, not an ONVIF rule.
 /// Hostname resolution and HTTPS certificate validation remain the HTTP client's job.
 pub fn validate_url(uri: &str, device: &str) -> Result<Url, SnapshotError> {
-    let url =
-        Url::parse(uri).map_err(|_| SnapshotError::invalid("Invalid snapshot URL (withheld)."))?;
-    let device =
-        Url::parse(device).map_err(|_| SnapshotError::invalid("Invalid device target."))?;
+    let url = Url::parse(uri).map_err(|_| {
+        SnapshotError::invalid_kind(
+            SnapshotErrorKind::Destination,
+            "Invalid snapshot URL (withheld).",
+        )
+    })?;
+    let device = Url::parse(device).map_err(|_| {
+        SnapshotError::invalid_kind(SnapshotErrorKind::Destination, "Invalid device target.")
+    })?;
     if !matches!(device.scheme(), "http" | "https")
         || !matches!(url.scheme(), "http" | "https")
         || url.host_str().is_none()
@@ -92,7 +142,8 @@ pub fn validate_url(uri: &str, device: &str) -> Result<Url, SnapshotError> {
         || url.fragment().is_some()
         || (device.scheme() == "https" && url.scheme() != "https")
     {
-        return Err(SnapshotError::invalid(
+        return Err(SnapshotError::invalid_kind(
+            SnapshotErrorKind::Destination,
             "Snapshot URL rejected: require HTTP(S), the device host, no userinfo/fragment and no HTTPS downgrade.",
         ));
     }
@@ -144,9 +195,12 @@ pub async fn fetch(
             builder = builder.add_root_certificate(cert);
         }
     }
-    let client = builder
-        .build()
-        .map_err(|_| SnapshotError::failed("Cannot initialize snapshot HTTP client."))?;
+    let client = builder.build().map_err(|_| {
+        SnapshotError::failed(
+            SnapshotErrorKind::Transport,
+            "Cannot initialize snapshot HTTP client.",
+        )
+    })?;
     let download = async {
         let mut response = client.get(url.clone()).send().await.map_err(http_error)?;
         if response.status().as_u16() == 401
@@ -169,7 +223,10 @@ pub async fn fetch(
                             HttpMethod::GET,
                         );
                         let answer = prompt.respond(&context).map_err(|_| {
-                            SnapshotError::failed("Cannot answer snapshot Digest challenge.")
+                            SnapshotError::failed(
+                                SnapshotErrorKind::AuthenticationChallenge,
+                                "Cannot answer snapshot Digest challenge.",
+                            )
                         })?;
                         response = client
                             .get(url.clone())
@@ -209,26 +266,36 @@ pub async fn fetch(
             }
         }
         if response.status().as_u16() != 200 {
-            return Err(SnapshotError::failed(format!(
-                "Snapshot returned HTTP {}; redirects are not followed.",
-                response.status().as_u16()
-            )));
+            return Err(SnapshotError::failed(
+                SnapshotErrorKind::HttpStatus(response.status().as_u16()),
+                format!(
+                    "Snapshot returned HTTP {}; redirects are not followed.",
+                    response.status().as_u16()
+                ),
+            ));
         }
         if response
             .content_length()
             .is_some_and(|n| n > MAX_IMAGE_BYTES as u64)
         {
-            return Err(SnapshotError::failed("Snapshot exceeds 16 MiB."));
+            return Err(SnapshotError::failed(
+                SnapshotErrorKind::Limit,
+                "Snapshot exceeds 16 MiB.",
+            ));
         }
         let mut bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(http_error)? {
             if chunk.len() > MAX_IMAGE_BYTES - bytes.len() {
-                return Err(SnapshotError::failed("Snapshot exceeds 16 MiB."));
+                return Err(SnapshotError::failed(
+                    SnapshotErrorKind::Limit,
+                    "Snapshot exceeds 16 MiB.",
+                ));
             }
             bytes.extend_from_slice(&chunk);
         }
         let kind = image_type(&bytes).ok_or_else(|| {
             SnapshotError::failed(
+                SnapshotErrorKind::InvalidImage,
                 "Snapshot is empty, truncated or has no supported JPEG/PNG/BMP signature.",
             )
         })?;
@@ -238,7 +305,10 @@ pub async fn fetch(
         .await
         .map_err(|_| SnapshotError {
             retryable: true,
-            ..SnapshotError::failed("Snapshot exceeded its total download timeout.")
+            ..SnapshotError::failed(
+                SnapshotErrorKind::Timeout,
+                "Snapshot exceeded its total download timeout.",
+            )
         })?
 }
 
@@ -389,7 +459,12 @@ fn digest(parts: &[&str]) -> Option<WwwAuthenticateHeader> {
     })
 }
 fn select_challenge(headers: &header::HeaderMap) -> Result<Challenge, SnapshotError> {
-    let unsupported = || SnapshotError::failed("Unsupported snapshot authentication challenge.");
+    let unsupported = || {
+        SnapshotError::failed(
+            SnapshotErrorKind::AuthenticationChallenge,
+            "Unsupported snapshot authentication challenge.",
+        )
+    };
     let mut groups: Vec<(String, Vec<&str>)> = Vec::new();
     for value in headers.get_all(header::WWW_AUTHENTICATE) {
         let value = value.to_str().map_err(|_| unsupported())?;
