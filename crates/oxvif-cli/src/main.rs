@@ -2444,6 +2444,9 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
                 | "--timeout"
                 | "--retries"
                 | "--clock-sync"
+                | "--soap-auth"
+                | "--media-service"
+                | "--rtsp-probe"
                 | "--ca-certificate"
         ) {
             index += 2;

@@ -42,15 +42,27 @@ struct Node<'a> {
     command_id: Option<&'static str>,
     description: Option<&'a CommandDescriptor>,
     console: Option<Console>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    external_terminal: Option<&'static str>,
     arguments: Vec<Argument<'a>>,
     subcommands: Vec<Node<'a>>,
 }
 
 #[derive(Serialize)]
 struct Console {
-    target_flag: &'static str,
+    target_flag: Option<&'static str>,
     output: &'static str,
     control: Option<Control>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    share_report_version: Option<u8>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    root_options: Vec<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    excluded_options: Vec<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    workspace_change: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credential_input: Option<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -78,6 +90,10 @@ struct Argument<'a> {
     help: Option<String>,
     conflicts: Vec<&'a str>,
     value_source: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value_kind: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    help_id: Option<&'static str>,
 }
 
 fn grammar() -> serde_json::Value {
@@ -99,24 +115,7 @@ fn node<'a>(
         ["discover"] => Some(CommandId::DiscoverScan),
         _ => CommandId::from_name(&path.join(".")),
     };
-    let console = match id {
-        Some(CommandId::DeviceInfo | CommandId::MediaProfiles) => Some(Console {
-            target_flag: "--target",
-            output: "json",
-            control: None,
-        }),
-        Some(CommandId::EventsWatch) => Some(Console {
-            target_flag: "--target",
-            output: "jsonl",
-            control: Some(Control {
-                kind: "stdin_stop_v1",
-                flag: "--control-stdin",
-                // Default Create request, subscription cleanup, drain and final writes.
-                stop_grace_ms: 20_000,
-            }),
-        }),
-        _ => None,
-    };
+    let console = id.and_then(console);
     let arguments = command
         .get_arguments()
         .filter(|arg| !arg.is_hide_set() && (path.is_empty() || !arg.is_global_set()))
@@ -139,9 +138,155 @@ fn node<'a>(
         command_id: id.map(CommandId::as_str),
         description: id.and_then(|id| descriptions.get(id.as_str())),
         console,
+        external_terminal: (id == Some(CommandId::Manage)).then_some("manage_v1"),
         arguments,
         subcommands,
     }
+}
+
+fn console(id: CommandId) -> Option<Console> {
+    use CommandId::*;
+
+    let credential_input = matches!(
+        id,
+        Auth | DeviceCredentialSet | CredentialProfileSet | Setup
+    )
+    .then_some("password_stdin_v1");
+    let workspace_change = match id {
+        DeviceAdd
+        | DeviceUpdate
+        | DeviceRename
+        | DeviceRefresh
+        | DeviceCredentialUseProfile
+        | GroupCreate
+        | GroupMemberAdd
+        | ViewCreate
+        | DiscoverRefresh
+        | DiscoverEnrich
+        | Use => Some("write"),
+        DeviceRemove
+        | DeviceCredentialDelete
+        | GroupDelete
+        | GroupMemberRemove
+        | ViewDelete
+        | CredentialProfileDelete
+        | DiscoverRemove => Some("remove"),
+        _ if credential_input.is_some() => Some("write"),
+        _ => None,
+    };
+    let camera = match id {
+        DeviceTest | DeviceInfo | DeviceCapabilities | DeviceServices | MediaProfiles
+        | MediaStreamUri | MediaSnapshotUri | MediaSnapshotSave | PtzStatus | PtzPresets
+        | HealthCheck | Diagnose | ConfigExport | ConfigDiff | EventsWatch => true,
+        AgentGuide
+        | AgentPrompt
+        | List
+        | Devices
+        | Groups
+        | Views
+        | Info
+        | Test
+        | Profiles
+        | Stream
+        | Snapshot
+        | DeviceList
+        | DeviceShow
+        | DeviceImport
+        | Completion
+        | GroupList
+        | GroupShow
+        | ViewList
+        | ViewShow
+        | ViewEvaluate
+        | CredentialProfileList
+        | CredentialProfileShow
+        | DiscoverScan
+        | DiscoverList
+        | DiscoverSnapshots
+        | ConfigPath
+        | ConfigValidate
+        | Describe
+        | Current
+        | Health => false,
+        _ if workspace_change.is_some() => false,
+        _ => return None,
+    };
+    let watch = id == EventsWatch;
+    let mut root_options = Vec::new();
+    if camera {
+        root_options.extend(["clock_sync", "soap_auth", "ca_certificates"]);
+    }
+    if (camera && !watch) || matches!(id, Health | Info | Test | Profiles | Stream | Snapshot) {
+        root_options.push("device");
+    }
+    if matches!(
+        id,
+        DeviceTest
+            | DeviceInfo
+            | DeviceCapabilities
+            | DeviceServices
+            | MediaProfiles
+            | MediaStreamUri
+            | MediaSnapshotUri
+            | PtzStatus
+            | PtzPresets
+            | Health
+            | HealthCheck
+            | Diagnose
+    ) {
+        root_options.extend(["group", "view", "jobs"]);
+    }
+    if matches!(
+        id,
+        MediaProfiles
+            | MediaStreamUri
+            | MediaSnapshotUri
+            | MediaSnapshotSave
+            | Diagnose
+            | ConfigExport
+            | ConfigDiff
+            | Stream
+            | Snapshot
+            | Profiles
+    ) {
+        root_options.push("media_service");
+    }
+    if id == Diagnose {
+        root_options.push("rtsp_probe");
+    }
+    if matches!(id, DiscoverScan | DiscoverRefresh | DiscoverEnrich) {
+        root_options.push("timeout");
+    }
+    Some(Console {
+        target_flag: camera.then_some("--target"),
+        output: if watch {
+            "jsonl"
+        } else if id == Completion {
+            "table"
+        } else {
+            "json"
+        },
+        control: watch.then_some(Control {
+            kind: "stdin_stop_v1",
+            flag: "--control-stdin",
+            // Default Create request, subscription cleanup, drain and final writes.
+            stop_grace_ms: 20_000,
+        }),
+        share_report_version: matches!(id, Diagnose | ConfigValidate).then_some(1),
+        root_options,
+        // These forms write to the CLI workspace or to disk and require a dedicated flow.
+        excluded_options: match id {
+            Snapshot => vec!["save"],
+            Describe => vec!["grammar"],
+            DeviceImport => vec!["overrides_stdin"],
+            Completion => vec!["output", "json", "jsonl"],
+            // The desktop coordinates its two event surfaces by normalized ONVIF URL.
+            EventsWatch => vec!["id"],
+            _ => Vec::new(),
+        },
+        workspace_change,
+        credential_input,
+    })
 }
 
 fn argument<'a>(command: &'a Command, arg: &'a Arg, id: Option<CommandId>) -> Argument<'a> {
@@ -180,11 +325,35 @@ fn argument<'a>(command: &'a Command, arg: &'a Arg, id: Option<CommandId>) -> Ar
             .collect(),
         value_source: match (id, arg.get_id().as_str()) {
             (Some(CommandId::EventsWatch), "topic") => Some("event_topic"),
-            (Some(CommandId::MediaStreamUri | CommandId::MediaSnapshotUri), "profile") => {
-                Some("media_profile")
-            }
+            (
+                Some(
+                    CommandId::MediaStreamUri
+                    | CommandId::MediaSnapshotUri
+                    | CommandId::MediaSnapshotSave
+                    | CommandId::PtzStatus
+                    | CommandId::PtzPresets
+                    | CommandId::Diagnose,
+                ),
+                "profile",
+            ) => Some("media_profile"),
             _ => None,
         },
+        value_kind: match (id, arg.get_id().as_str()) {
+            (_, "ca_certificates" | "against" | "overrides") => Some("input_file"),
+            (
+                Some(CommandId::ConfigExport | CommandId::MediaSnapshotSave | CommandId::Snapshot),
+                "save",
+            ) => Some("output_file"),
+            (_, "duration" | "timeout") => Some("duration"),
+            (_, "jobs") => Some("concurrency"),
+            _ => None,
+        },
+        help_id: (id == Some(CommandId::DeviceImport) && arg.get_id().as_str() == "group")
+            .then_some("import_group")
+            .or_else(|| {
+                (id == Some(CommandId::DiscoverScan) && arg.get_id().as_str() == "save")
+                    .then_some("discovery_snapshot_name")
+            }),
     }
 }
 
@@ -196,13 +365,70 @@ mod tests {
 
     fn verify(node: &Value, path: &mut Vec<String>) {
         if node["console"].is_object() {
-            let args = path.iter().map(String::as_str).chain([
-                node["console"]["target_flag"].as_str().unwrap(),
-                "http://[::1]:8080/custom",
-                "--non-interactive",
-                "--output",
-                node["console"]["output"].as_str().unwrap(),
-            ]);
+            let mut args: Vec<_> = path.iter().map(String::as_str).collect();
+            if let Some(options) = node["console"]["root_options"].as_array() {
+                for option in options {
+                    assert!(matches!(
+                        option.as_str(),
+                        Some(
+                            "clock_sync"
+                                | "soap_auth"
+                                | "ca_certificates"
+                                | "media_service"
+                                | "rtsp_probe"
+                                | "device"
+                                | "group"
+                                | "view"
+                                | "jobs"
+                                | "timeout"
+                        )
+                    ));
+                }
+            }
+            if let Some(flag) = node["console"]["target_flag"].as_str() {
+                args.extend([flag, "http://[::1]:8080/custom"]);
+            }
+            let mut args = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
+            if node["command_id"] == "device.import" {
+                args.push("--plan".to_owned());
+            }
+            for argument in node["arguments"].as_array().unwrap() {
+                if argument["required"] == true {
+                    if let Some(long) = argument["long"].as_str() {
+                        args.push(format!("--{long}"));
+                        args.push(
+                            if long == "filter" {
+                                "tag=outdoor"
+                            } else {
+                                "sample"
+                            }
+                            .to_owned(),
+                        );
+                    } else {
+                        args.push(
+                            argument["values"]
+                                .as_array()
+                                .and_then(|values| values.first())
+                                .and_then(Value::as_str)
+                                .unwrap_or("sample-id")
+                                .to_owned(),
+                        );
+                    }
+                }
+            }
+            args.extend(
+                [
+                    "--non-interactive",
+                    "--output",
+                    node["console"]["output"].as_str().unwrap(),
+                ]
+                .map(str::to_owned),
+            );
+            if node["console"]["share_report_version"] == 1 {
+                let mut share_args = args.clone();
+                share_args.push("--share".to_owned());
+                assert!(Cli::try_parse_from(share_args).unwrap().share);
+            }
             let parsed = Cli::try_parse_from(args).unwrap();
             assert_eq!(
                 node["command_id"],
