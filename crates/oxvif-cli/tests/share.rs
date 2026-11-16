@@ -412,13 +412,14 @@ async fn cancelled_diagnosis_produces_a_partial_report() {
     assert_eq!(parsed["primary_issue"]["action"], "retry");
 }
 
-#[cfg(unix)]
 #[test]
-fn unwritable_stdout_reports_a_fixed_message() {
+fn closed_stdout_pipe_reports_a_fixed_message() {
     let temp = tempfile::tempdir().unwrap();
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
     let output = cli(temp.path())
         .args(["config", "validate", "--share"])
-        .stdout(fs::File::open("/dev/null").unwrap())
+        .stdout(writer)
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(70));
