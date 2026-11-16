@@ -107,6 +107,67 @@ impl Application {
         &self.registry
     }
 
+    #[doc(hidden)]
+    pub fn validate_shared_config(&self, report: &mut crate::share::Report) -> u8 {
+        self.registry
+            .validate_config(Some(report))
+            .map_or_else(|error| error.exit_code(), |_| 0)
+    }
+
+    #[doc(hidden)]
+    pub async fn diagnose_shared(
+        &self,
+        request: crate::DiagnoseRequest,
+        options: &ExecutionOptions,
+        report: &mut crate::share::Report,
+    ) -> u8 {
+        use crate::share::{Reason, Stage, Status};
+
+        let selector = request.selector;
+        if selector.group.is_some()
+            || selector.view.is_some()
+            || (selector.target.is_some() && selector.device.is_some())
+        {
+            report.fail(Stage::Target, Reason::InvalidInput);
+            report.block_camera_checks();
+            return crate::ErrorCode::InvalidArgument.exit_code();
+        }
+        let resolved = if let Some(target) = selector.target {
+            report.target(true);
+            self.resolve_direct_with_reason(&target)
+        } else if let Some(id) = selector.device {
+            report.target(false);
+            self.resolve_saved_with_reason(&id)
+        } else {
+            Err((
+                Stage::Target,
+                Reason::MissingTarget,
+                AppError::missing_target(),
+            ))
+        };
+        let resolved = match resolved {
+            Ok(resolved) => resolved,
+            Err((stage, reason, error)) => {
+                if matches!(stage, Stage::CredentialStore | Stage::Credentials) {
+                    report.check(Stage::Target, Status::Passed, None);
+                }
+                report.fail(stage, reason);
+                report.block_camera_checks();
+                return error.exit_code();
+            }
+        };
+        report.check(Stage::Target, Status::Passed, None);
+        report.check(Stage::Credentials, Status::Passed, None);
+        report.credentials(resolved.username.is_some() && resolved.password().is_some());
+        Box::pin(crate::maintenance::diagnose_shared(
+            &resolved,
+            options,
+            request.profile.as_deref(),
+            report,
+        ))
+        .await
+    }
+
     /// Resolve one target for a guided read-only maintenance context without connecting yet.
     pub fn manage_device(
         &self,
@@ -251,14 +312,8 @@ impl Application {
                 orphaned_snapshot_files: Vec::new(),
             }),
             CommandRequest::ConfigValidate => {
-                let (devices, _) = self.registry.list()?;
-                let snapshots = self.registry.list_discovery_snapshots()?;
-                for snapshot in &snapshots {
-                    self.registry.get_discovery_snapshot(&snapshot.id, &[])?;
-                }
-                let orphaned_snapshot_files = self
-                    .registry
-                    .orphaned_snapshot_files()?
+                let (devices, snapshots, orphaned) = self.registry.validate_config(None)?;
+                let orphaned_snapshot_files = orphaned
                     .into_iter()
                     .map(|path| path.display().to_string())
                     .collect::<Vec<_>>();
@@ -267,8 +322,8 @@ impl Application {
                     registry_file: self.registry.registry_path().display().to_string(),
                     snapshots_dir: self.registry.snapshots_dir().display().to_string(),
                     validated: true,
-                    device_count: Some(devices.len()),
-                    snapshot_count: Some(snapshots.len()),
+                    device_count: Some(devices),
+                    snapshot_count: Some(snapshots),
                     orphaned_snapshot_files: orphaned_snapshot_files.clone(),
                 });
                 outcome.warnings = orphaned_snapshot_files
@@ -1086,26 +1141,41 @@ impl Application {
     }
 
     fn resolve_saved(&self, id: &str) -> Result<ResolvedTarget, AppError> {
-        let canonical_id = self.registry.resolve_device_selector(id)?;
-        let stored = self.registry.get_stored(&canonical_id)?;
+        self.resolve_saved_with_reason(id)
+            .map_err(|(_, _, error)| error)
+    }
+
+    fn resolve_saved_with_reason(&self, id: &str) -> Result<ResolvedTarget, ResolutionError> {
+        use crate::share::{Reason, Stage};
+        let canonical_id = self
+            .registry
+            .resolve_device_selector(id)
+            .map_err(resolution_error)?;
+        let stored = self
+            .registry
+            .get_stored(&canonical_id)
+            .map_err(resolution_error)?;
         let profile = stored
             .credential_profile()
             .map(|profile_id| self.registry.get_stored_credential_profile(profile_id))
-            .transpose()?;
+            .transpose()
+            .map_err(resolution_error)?;
         let credential_ref = profile
             .as_ref()
             .map(|profile| profile.credential_ref())
             .or_else(|| stored.credential_ref());
         let password = match credential_ref {
-            Some(reference) => Some(self.credentials.get(reference)?.ok_or_else(|| {
-                AppError::credential_unavailable(format!(
+            Some(reference) => Some(self.credentials.get(reference).map_err(|error| {
+                (Stage::CredentialStore, Reason::CredentialStoreUnavailable, error)
+            })?.ok_or_else(|| {
+                (Stage::CredentialStore, Reason::CredentialMissing, AppError::credential_unavailable(format!(
                     "Credential `{reference}` is referenced by `{canonical_id}` but does not exist."
-                ))
+                )))
             })?),
             None => env::var("OXVIF_PASSWORD")
                 .ok()
                 .map(SecretString::new)
-                .transpose()?,
+                .transpose().map_err(|error| (Stage::Credentials, Reason::CredentialIncomplete, error))?,
         };
         let username = profile
             .as_ref()
@@ -1113,9 +1183,13 @@ impl Application {
             .or_else(|| stored.username().map(str::to_owned))
             .or_else(|| env::var("OXVIF_USERNAME").ok());
         if password.is_some() && username.is_none() {
-            return Err(AppError::credential_unavailable(format!(
-                "Device `{canonical_id}` has a password but no username."
-            )));
+            return Err((
+                Stage::Credentials,
+                Reason::CredentialIncomplete,
+                AppError::credential_unavailable(format!(
+                    "Device `{canonical_id}` has a password but no username."
+                )),
+            ));
         }
         Ok(ResolvedTarget {
             selected_by: Some(id.to_owned()),
@@ -1127,6 +1201,12 @@ impl Application {
     }
 
     fn resolve_direct(&self, target: &str) -> Result<ResolvedTarget, AppError> {
+        self.resolve_direct_with_reason(target)
+            .map_err(|(_, _, error)| error)
+    }
+
+    fn resolve_direct_with_reason(&self, target: &str) -> Result<ResolvedTarget, ResolutionError> {
+        use crate::share::{Reason, Stage};
         let username = env::var("OXVIF_USERNAME")
             .ok()
             .filter(|value| !value.is_empty());
@@ -1134,14 +1214,18 @@ impl Application {
             .ok()
             .map(SecretString::for_direct_auth);
         if password.is_some() && username.is_none() {
-            return Err(AppError::credential_unavailable(
-                "OXVIF_PASSWORD is set but OXVIF_USERNAME is missing.",
+            return Err((
+                Stage::Credentials,
+                Reason::CredentialIncomplete,
+                AppError::credential_unavailable(
+                    "OXVIF_PASSWORD is set but OXVIF_USERNAME is missing.",
+                ),
             ));
         }
         Ok(ResolvedTarget {
             device_id: None,
             selected_by: None,
-            target: normalize_target(target)?,
+            target: normalize_target(target).map_err(resolution_error)?,
             username,
             password,
         })
@@ -2125,6 +2209,18 @@ pub(crate) struct ResolvedTarget {
     pub(crate) target: String,
     pub(crate) username: Option<String>,
     pub(crate) password: Option<SecretString>,
+}
+
+type ResolutionError = (crate::share::Stage, crate::share::Reason, AppError);
+
+fn resolution_error(error: AppError) -> ResolutionError {
+    use crate::share::{Reason, Stage};
+    let reason = Reason::from_error(&error);
+    let stage = match reason {
+        Reason::RegistryIo | Reason::RegistryCorrupt | Reason::RegistryVersion => Stage::Registry,
+        _ => Stage::Target,
+    };
+    (stage, reason, error)
 }
 
 impl ResolvedTarget {

@@ -32,6 +32,8 @@ mod maintenance;
 mod output;
 mod registry;
 mod retry;
+#[doc(hidden)]
+pub mod share;
 
 pub use maintenance::{
     ConfigDiffRequest, ConfigExportRequest, DiagnoseRequest, ManagedAction, ManagedDevice,

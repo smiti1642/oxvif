@@ -425,6 +425,24 @@ profile 設定。
 完整的設定比較即使發現差異仍回傳 `0`，應檢查 `matches` 與 `changes`。
 檔案工作流程限單台設備。
 
+## 可分享的診斷報告
+
+```sh
+oxvif diagnose --device front-door --share > diagnose.json
+oxvif config validate --share > config-validation.json
+```
+
+`--share` 以非互動模式輸出一份 JSON。診斷限單台攝影機，需明確指定裝置 ID 或 `--target`。
+從 `primary_issue` 查看第一個已知失敗與 `next_step`，再從 `checks` 查看其他階段。
+`blocked` 表示先決條件未通過，`not_enabled` 表示未啟用該項檢查。
+`complete` 代表檢查進度，成功與否另外見 `outcome` 和 `exit_code`。
+例如診斷失敗仍可留下完整可讀的 JSON。使用新檔名重新導向，並在分享前確認檔案可解析。
+
+報告僅包含固定分類、檢查數值及建議，省略帳密、裝置位址、檔案路徑和裝置回應原文。
+此模式停用額外的詳細日誌，設定檢查的讀取上限為每檔 16 MiB、外部快照合計
+64 MiB，以及最多 4,096 筆索引或目錄項目。逾越上限會回報 `scan_limit`。
+報告使用 [獨立 JSON Schema](../crates/oxvif-cli/schema/shareable-diagnostic-v1.schema.json)。
+
 ## 事件監看
 
 ```sh

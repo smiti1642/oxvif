@@ -1,0 +1,472 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "oxvif shareable diagnostic report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "shareable_diagnostic"
+    },
+    "report_version": {
+      "const": 1
+    },
+    "cli_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[+-][A-Za-z0-9.+-]+)?$"
+    },
+    "os": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "architecture": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$"
+    },
+    "command": {
+      "enum": [
+        "diagnose",
+        "config_validate",
+        "unknown"
+      ]
+    },
+    "selection": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "enum": [
+            "saved_device",
+            "direct"
+          ]
+        }
+      ]
+    },
+    "credentials_configured": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        }
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "passed",
+        "failed",
+        "completed_with_warnings"
+      ]
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "exit_code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "primary_issue": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/check"
+        }
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "maxItems": 64
+    },
+    "clock_offset_secs": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "integer"
+        }
+      ]
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/service"
+      },
+      "maxItems": 16
+    },
+    "media_service": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "enum": [
+            "media1",
+            "media2"
+          ]
+        }
+      ]
+    },
+    "media_attempts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/media_attempt"
+      },
+      "maxItems": 4
+    },
+    "session_attempts": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "integer",
+          "minimum": 0
+        }
+      ]
+    },
+    "options": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/options"
+        }
+      ]
+    }
+  },
+  "required": [
+    "kind",
+    "report_version",
+    "cli_version",
+    "os",
+    "architecture",
+    "command",
+    "selection",
+    "credentials_configured",
+    "outcome",
+    "complete",
+    "exit_code",
+    "primary_issue",
+    "checks",
+    "clock_offset_secs",
+    "services",
+    "media_service",
+    "media_attempts",
+    "session_attempts",
+    "options"
+  ],
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "enum": [
+            "input",
+            "configuration",
+            "execution",
+            "registry",
+            "indexed_snapshots",
+            "orphaned_snapshots",
+            "target",
+            "credentials",
+            "credential_store",
+            "transport_setup",
+            "onvif_session",
+            "clock_read",
+            "capabilities",
+            "services_fallback",
+            "device_info",
+            "media_profiles",
+            "profile_selection",
+            "stream_uri",
+            "snapshot_uri",
+            "snapshot_destination",
+            "snapshot_fetch",
+            "snapshot_signature",
+            "rtsp_connection",
+            "rtsp_options",
+            "rtsp_describe",
+            "rtsp_transport",
+            "rtsp_play",
+            "rtsp_first_packet",
+            "rtsp_teardown",
+            "video_decode"
+          ]
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "warning",
+            "unsupported",
+            "blocked",
+            "not_enabled",
+            "not_implemented",
+            "cancelled"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "invalid_input",
+            "missing_target",
+            "target_not_found",
+            "configuration_unavailable",
+            "registry_io",
+            "registry_corrupt",
+            "registry_version",
+            "snapshot_missing",
+            "scan_limit",
+            "unindexed_snapshots",
+            "credential_store_unavailable",
+            "credential_missing",
+            "credential_incomplete",
+            "invalid_ca",
+            "transport_setup_failed",
+            "timeout",
+            "transport_failure",
+            "remote_authorization_rejected",
+            "response_limit",
+            "invalid_response",
+            "soap_fault",
+            "unsupported",
+            "no_profiles",
+            "profile_not_found",
+            "profile_required",
+            "destination_rejected",
+            "invalid_image",
+            "snapshot_http_rejected",
+            "authentication_challenge",
+            "rtsp_tls",
+            "rtsp_refused",
+            "first_packet_missing",
+            "cleanup_failed",
+            "cancelled",
+            "unknown"
+          ]
+        },
+        "next_step": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "elapsed_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "http_status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 999
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "action": {
+          "enum": [
+            "check_usage",
+            "select_target",
+            "check_config_access",
+            "check_registry_backup",
+            "check_registry_version",
+            "restore_snapshot",
+            "review_config_size",
+            "review_orphaned_snapshots",
+            "check_credential_store",
+            "set_credential",
+            "check_credential_pair",
+            "check_tls_trust",
+            "check_transport_options",
+            "check_reachability",
+            "check_remote_auth",
+            "check_device_clock",
+            "check_response_limits",
+            "check_firmware",
+            "check_service_support",
+            "select_profile",
+            "check_destination",
+            "check_snapshot_image",
+            "check_snapshot_http",
+            "check_auth_challenge",
+            "check_rtsp_service",
+            "check_rtsp_video",
+            "check_rtsp_cleanup",
+            "retry",
+            "inspect_locally"
+          ]
+        }
+      },
+      "required": [
+        "stage",
+        "status"
+      ],
+      "dependentRequired": {
+        "reason": [
+          "action",
+          "next_step"
+        ],
+        "action": [
+          "reason",
+          "next_step"
+        ],
+        "next_step": [
+          "reason",
+          "action"
+        ]
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "clock_sync": {
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ]
+        },
+        "soap_auth": {
+          "enum": [
+            "combined",
+            "digest",
+            "ws_security"
+          ]
+        },
+        "media_service": {
+          "enum": [
+            "media1",
+            "media2",
+            "auto"
+          ]
+        },
+        "rtsp_probe": {
+          "enum": [
+            "disabled",
+            "describe",
+            "packet"
+          ]
+        },
+        "custom_ca": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "timeout_ms",
+        "retries",
+        "clock_sync",
+        "soap_auth",
+        "media_service",
+        "rtsp_probe",
+        "custom_ca"
+      ]
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service": {
+          "enum": [
+            "device",
+            "media",
+            "media2",
+            "ptz",
+            "imaging",
+            "events",
+            "recording",
+            "search",
+            "replay",
+            "device_io"
+          ]
+        },
+        "source": {
+          "enum": [
+            "configured",
+            "capabilities",
+            "services_fallback",
+            "missing"
+          ]
+        }
+      },
+      "required": [
+        "service",
+        "source"
+      ]
+    },
+    "media_attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service": {
+          "enum": [
+            "media1",
+            "media2"
+          ]
+        },
+        "endpoint_source": {
+          "enum": [
+            "configured",
+            "capabilities",
+            "services_fallback",
+            "missing"
+          ]
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "enum": [
+                "not_advertised",
+                "unsupported",
+                "succeeded"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "failed": {
+                  "enum": [
+                    "authentication",
+                    "timeout",
+                    "transport",
+                    "response_limit",
+                    "xml_limit",
+                    "xml_syntax",
+                    "device_fault",
+                    "response_data",
+                    "invalid_argument"
+                  ]
+                }
+              },
+              "required": [
+                "failed"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "service",
+        "endpoint_source",
+        "outcome"
+      ]
+    }
+  }
+}

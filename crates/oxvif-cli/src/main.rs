@@ -8,7 +8,9 @@ use std::{
     time::Duration,
 };
 
-use clap::{ArgAction, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
+use clap::{
+    ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum, error::ErrorKind,
+};
 use clap_complete::{Shell, generate};
 use oxvif::transport::HttpTransport;
 use oxvif_cli::{
@@ -118,6 +120,10 @@ impl Prompt for SystemPrompt {
     after_help = AGENT_HELP
 )]
 struct Cli {
+    /// Write a safe-to-share JSON report for diagnose or config validate.
+    #[arg(long, global = true)]
+    share: bool,
+
     /// Override human-terminal line numbers for this process; does not affect JSON or plain tables.
     #[arg(long, value_enum, global = true)]
     line_numbers: Option<ui_settings::LineNumbers>,
@@ -926,17 +932,78 @@ impl From<CliOutputFormat> for OutputFormat {
     }
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    // Keep the command-dispatch future off Windows' small main-thread stack.
-    ExitCode::from(Box::pin(run(env::args_os().collect())).await)
+fn main() -> ExitCode {
+    let arguments: Vec<_> = env::args_os().collect();
+    if share_requested(&arguments) {
+        // Panic payloads and backtraces may include inputs or local paths.
+        std::panic::set_hook(Box::new(|_| {
+            eprintln!("Diagnostic report could not be completed.");
+        }));
+    }
+    if cfg!(windows) {
+        // Debug builds construct nested futures before polling them. Windows'
+        // default main-thread stack is too small for that construction.
+        let execution = std::thread::Builder::new()
+            .name("oxvif".into())
+            .stack_size(8 * 1024 * 1024)
+            .spawn(move || run_on_runtime(arguments));
+        return execution
+            .ok()
+            .and_then(|thread| thread.join().ok())
+            .unwrap_or_else(startup_error);
+    }
+    run_on_runtime(arguments)
+}
+
+fn run_on_runtime(arguments: Vec<OsString>) -> ExitCode {
+    match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => ExitCode::from(runtime.block_on(Box::pin(run(arguments)))),
+        Err(_) => startup_error(),
+    }
+}
+
+fn startup_error() -> ExitCode {
+    let _ = writeln!(io::stderr().lock(), "Could not complete the command.");
+    ExitCode::from(70)
+}
+
+fn share_requested(arguments: &[OsString]) -> bool {
+    arguments
+        .iter()
+        .skip(1)
+        .take_while(|arg| *arg != "--")
+        .any(|arg| arg == "--share" || arg.to_str().is_some_and(|arg| arg.starts_with("--share=")))
 }
 
 async fn run(arguments: Vec<OsString>) -> u8 {
+    use oxvif_cli::share::{Command, Reason, Report, Stage};
+    let share = share_requested(&arguments);
     let arguments = normalize_human_arguments(arguments);
     let requested_format = requested_output(&arguments);
-    let mut cli = match Cli::try_parse_from(&arguments) {
+    let parsed = if share {
+        Cli::command()
+            .bin_name("oxvif")
+            .try_get_matches_from(&arguments)
+            .and_then(|matches| Cli::from_arg_matches(&matches))
+    } else {
+        Cli::try_parse_from(&arguments)
+    };
+    let mut cli = match parsed {
         Ok(cli) => cli,
+        Err(error)
+            if share
+                && !matches!(
+                    error.kind(),
+                    ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+                ) =>
+        {
+            let mut report = Report::new(Command::Unknown);
+            report.fail(Stage::Input, Reason::InvalidInput);
+            return emit_share(&report, 2);
+        }
         Err(error)
             if matches!(
                 error.kind(),
@@ -954,6 +1021,9 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         }
     };
 
+    if cli.share || share {
+        return Box::pin(run_share(cli)).await;
+    }
     let format = selected_output(cli.output, cli.json, cli.jsonl);
     let _invoked_command_id = surface_command_id(&cli.command);
     if let Commands::Describe { grammar: true, .. } = &cli.command {
@@ -990,22 +1060,7 @@ async fn run(arguments: Vec<OsString>) -> u8 {
             return error.exit_code();
         }
     };
-    let options = ExecutionOptions {
-        non_interactive: cli.non_interactive,
-        timeout: cli.timeout,
-        retries: cli.retries,
-        clock_sync: cli.clock_sync.into(),
-        soap_auth: cli.soap_auth.into(),
-        media_service: cli.media_service.map(Into::into),
-        rtsp_probe: cli.rtsp_probe.map(|mode| match mode {
-            CliRtspProbe::Describe => oxvif_cli::RtspProbeMode::Describe,
-            CliRtspProbe::Packet => oxvif_cli::RtspProbeMode::Packet,
-        }),
-        ca_certificates,
-        verbosity: cli.verbose,
-        quiet: cli.quiet,
-        jobs,
-    };
+    let options = execution_options(&cli, ca_certificates, jobs);
     let application = match Application::system() {
         Ok(application) => application,
         Err(error) => {
@@ -1183,6 +1238,133 @@ struct HumanOutput {
     implicit_human_context: bool,
     browse_after_discovery: bool,
     health_details: bool,
+}
+
+fn execution_options(cli: &Cli, ca_certificates: Vec<Vec<u8>>, jobs: usize) -> ExecutionOptions {
+    ExecutionOptions {
+        non_interactive: cli.non_interactive,
+        timeout: cli.timeout,
+        retries: cli.retries,
+        clock_sync: cli.clock_sync.into(),
+        soap_auth: cli.soap_auth.into(),
+        media_service: cli.media_service.map(Into::into),
+        rtsp_probe: cli.rtsp_probe.map(|mode| match mode {
+            CliRtspProbe::Describe => oxvif_cli::RtspProbeMode::Describe,
+            CliRtspProbe::Packet => oxvif_cli::RtspProbeMode::Packet,
+        }),
+        ca_certificates,
+        verbosity: cli.verbose,
+        quiet: cli.quiet,
+        jobs,
+    }
+}
+
+fn emit_share(report: &oxvif_cli::share::Report, exit_code: u8) -> u8 {
+    if report.write(exit_code, io::stdout().lock()).is_err() {
+        let _ = writeln!(io::stderr().lock(), "Could not write diagnostic report.");
+        return 70;
+    }
+    exit_code
+}
+
+async fn run_share(cli: Cli) -> u8 {
+    use oxvif_cli::share::{Command, Report};
+    let command = match cli.command {
+        Commands::Diagnose { .. } => Command::Diagnose,
+        Commands::Config {
+            command: ConfigCommands::Validate,
+        } => Command::ConfigValidate,
+        _ => Command::Unknown,
+    };
+    let mut report = Report::new(command);
+    let exit_code = Box::pin(collect_share(cli, command, &mut report)).await;
+    emit_share(&report, exit_code)
+}
+
+async fn collect_share(
+    cli: Cli,
+    command: oxvif_cli::share::Command,
+    report: &mut oxvif_cli::share::Report,
+) -> u8 {
+    use oxvif_cli::share::{Command, Reason, Stage, Status};
+    if matches!(command, Command::Unknown)
+        || cli.jsonl
+        || cli
+            .output
+            .is_some_and(|format| format != CliOutputFormat::Json)
+        || cli.group.is_some()
+        || cli.view.is_some()
+        || cli.jobs.is_some()
+        || (matches!(command, Command::ConfigValidate)
+            && (cli.device.is_some()
+                || !cli.ca_certificates.is_empty()
+                || cli.rtsp_probe.is_some()))
+    {
+        report.fail(Stage::Input, Reason::InvalidInput);
+        return 2;
+    }
+    report.check(Stage::Input, Status::Passed, None);
+    let application = match Application::system() {
+        Ok(application) => application,
+        Err(error) => {
+            report.fail(Stage::Configuration, Reason::ConfigurationUnavailable);
+            return error.exit_code();
+        }
+    };
+    report.check(Stage::Configuration, Status::Passed, None);
+    if matches!(command, Command::ConfigValidate) {
+        return application.validate_shared_config(report);
+    }
+    let ca_certificates = match load_ca_certificates(&cli.ca_certificates) {
+        Ok(certificates) => certificates,
+        Err(error) => {
+            report.fail(Stage::TransportSetup, Reason::InvalidCa);
+            report.check(Stage::OnvifSession, Status::Blocked, None);
+            return error.exit_code();
+        }
+    };
+    let mut options = execution_options(&cli, ca_certificates, 1);
+    options.non_interactive = true;
+    options.verbosity = 0;
+    options.quiet = true;
+    report.options(&options);
+    let Commands::Diagnose {
+        id,
+        target,
+        profile,
+    } = cli.command
+    else {
+        unreachable!("share dispatch accepts only diagnose and config validate");
+    };
+    let selector = match selector_with_positional(
+        TargetSelector {
+            device: cli.device,
+            target,
+            group: None,
+            view: None,
+        },
+        id,
+    ) {
+        Ok(selector) if selector.device.is_none() || selector.target.is_none() => selector,
+        _ => {
+            report.fail(Stage::Target, Reason::InvalidInput);
+            report.check(Stage::OnvifSession, Status::Blocked, None);
+            return 2;
+        }
+    };
+    let request = oxvif_cli::DiagnoseRequest { selector, profile };
+    let (cancel, receiver) = tokio::sync::watch::channel(false);
+    report.watch_cancellation(receiver);
+    let mut diagnostic = Box::pin(application.diagnose_shared(request, &options, report));
+    tokio::select! {
+        code = &mut diagnostic => code,
+        signal = tokio::signal::ctrl_c() => {
+            if signal.is_ok() {
+                let _ = cancel.send(true);
+            }
+            diagnostic.await
+        }
+    }
 }
 
 async fn execute_and_emit(
@@ -2245,7 +2427,7 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
         let argument = arguments[index].to_string_lossy();
         if matches!(
             argument.as_ref(),
-            "--non-interactive" | "--json" | "--jsonl" | "--quiet" | "-q"
+            "--non-interactive" | "--share" | "--json" | "--jsonl" | "--quiet" | "-q"
         ) || argument.starts_with("-v")
         {
             index += 1;

@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     env,
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     net::IpAddr,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -133,8 +133,15 @@ impl RegistryStore {
     }
 
     pub fn orphaned_snapshot_files(&self) -> Result<Vec<PathBuf>, AppError> {
-        let indexed = self
-            .load_unlocked()?
+        self.scan_orphaned_snapshots(&self.load_unlocked()?, None)
+    }
+
+    fn scan_orphaned_snapshots(
+        &self,
+        registry: &RegistryFile,
+        max_entries: Option<usize>,
+    ) -> Result<Vec<PathBuf>, AppError> {
+        let indexed = registry
             .discovery_snapshots
             .keys()
             .map(|id| format!("{id}.json"))
@@ -150,7 +157,10 @@ impl RegistryStore {
             }
         };
         let mut orphaned = Vec::new();
-        for entry in entries {
+        for (index, entry) in entries.enumerate() {
+            if max_entries.is_some_and(|limit| index >= limit) {
+                return Err(validation_limit());
+            }
             let entry = entry.map_err(|error| {
                 AppError::registry_io(format!(
                     "Failed to inspect {}: {error}",
@@ -166,6 +176,91 @@ impl RegistryStore {
         }
         orphaned.sort();
         Ok(orphaned)
+    }
+
+    pub(crate) fn validate_config(
+        &self,
+        mut share: Option<&mut crate::share::Report>,
+    ) -> Result<(usize, usize, Vec<PathBuf>), AppError> {
+        use crate::share::{Reason, Stage, Status};
+        const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+        const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
+        const MAX_ENTRIES: usize = 4096;
+
+        let bounded = share.is_some();
+        let mut record = |stage, result: Result<usize, &AppError>| {
+            if let Some(report) = share.as_deref_mut() {
+                match result {
+                    Ok(count) => report.observation(
+                        stage,
+                        if matches!(stage, Stage::OrphanedSnapshots) && count > 0 {
+                            Status::Warning
+                        } else {
+                            Status::Passed
+                        },
+                        (matches!(stage, Stage::OrphanedSnapshots) && count > 0)
+                            .then_some(Reason::UnindexedSnapshots),
+                        None,
+                        None,
+                        Some(count),
+                    ),
+                    Err(error) if *error == validation_limit() => {
+                        report.fail(stage, Reason::ScanLimit)
+                    }
+                    Err(error)
+                        if matches!(stage, Stage::IndexedSnapshots)
+                            && error.message == SNAPSHOT_MISSING =>
+                    {
+                        report.fail(stage, Reason::SnapshotMissing);
+                    }
+                    Err(error) => report.error(stage, error),
+                }
+            }
+        };
+        let registry = self.load_with_limit(bounded.then_some(MAX_FILE_BYTES));
+        record(
+            Stage::Registry,
+            registry.as_ref().map(|file| file.devices.len()),
+        );
+        let indexed = registry
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|registry| {
+                if bounded && registry.discovery_snapshots.len() > MAX_ENTRIES {
+                    return Err(validation_limit());
+                }
+                let mut remaining = MAX_SNAPSHOT_BYTES;
+                for (id, entry) in &registry.discovery_snapshots {
+                    validate_resource_id("discovery snapshot", id)?;
+                    if let SnapshotEntry::External(summary) = entry {
+                        let limit = bounded.then_some(remaining.min(MAX_FILE_BYTES));
+                        let (snapshot, bytes) = self.read_snapshot_with_limit(id, limit)?;
+                        check_snapshot_index(id, summary, &snapshot)?;
+                        remaining = remaining.saturating_sub(bytes);
+                    }
+                }
+                Ok(registry.discovery_snapshots.len())
+            });
+        if registry.is_ok() {
+            record(Stage::IndexedSnapshots, indexed.as_ref().copied());
+        }
+        let orphaned = match (registry.as_ref(), &indexed) {
+            (Ok(registry), Ok(_)) => {
+                let result = self.scan_orphaned_snapshots(registry, bounded.then_some(MAX_ENTRIES));
+                record(Stage::OrphanedSnapshots, result.as_ref().map(Vec::len));
+                result?
+            }
+            _ => {
+                if let Some(report) = share {
+                    if registry.is_err() {
+                        report.check(Stage::IndexedSnapshots, Status::Blocked, None);
+                    }
+                    report.check(Stage::OrphanedSnapshots, Status::Blocked, None);
+                }
+                return Err(indexed.expect_err("index validation failed"));
+            }
+        };
+        Ok((registry?.devices.len(), indexed?, orphaned))
     }
 
     pub fn list(&self) -> Result<(Vec<DeviceView>, Option<String>), AppError> {
@@ -860,14 +955,7 @@ impl RegistryStore {
             SnapshotEntry::Embedded(snapshot) => Ok(snapshot.view(id, filters)),
             SnapshotEntry::External(summary) => {
                 let snapshot = self.read_snapshot_file(id)?;
-                if snapshot.saved_at_unix_ms != summary.saved_at_unix_ms
-                    || snapshot.generation != summary.generation
-                    || snapshot.devices.len() != summary.device_count
-                {
-                    return Err(AppError::registry_corrupt(format!(
-                        "Discovery snapshot `{id}` does not match its registry index."
-                    )));
-                }
+                check_snapshot_index(id, summary, &snapshot)?;
                 Ok(snapshot.view(id, filters))
             }
         }
@@ -1044,14 +1132,7 @@ impl RegistryStore {
             SnapshotEntry::Embedded(snapshot) => Ok(snapshot.clone()),
             SnapshotEntry::External(summary) => {
                 let snapshot = self.read_snapshot_file(id)?;
-                if snapshot.saved_at_unix_ms != summary.saved_at_unix_ms
-                    || snapshot.generation != summary.generation
-                    || snapshot.devices.len() != summary.device_count
-                {
-                    return Err(AppError::registry_corrupt(format!(
-                        "Discovery snapshot `{id}` does not match its registry index."
-                    )));
-                }
+                check_snapshot_index(id, summary, &snapshot)?;
                 Ok(snapshot)
             }
         }
@@ -1121,10 +1202,24 @@ impl RegistryStore {
     }
 
     fn read_snapshot_file(&self, id: &str) -> Result<StoredDiscoverySnapshot, AppError> {
+        self.read_snapshot_with_limit(id, None)
+            .map(|(snapshot, _)| snapshot)
+    }
+
+    fn read_snapshot_with_limit(
+        &self,
+        id: &str,
+        limit: Option<u64>,
+    ) -> Result<(StoredDiscoverySnapshot, u64), AppError> {
         let path = self.snapshot_path(id);
-        let contents = fs::read(&path).map_err(|error| {
-            AppError::registry_io(format!("Failed to read {}: {error}", path.display()))
-        })?;
+        let contents = if let Some(limit) = limit {
+            read_validation_file(&path, Some(limit))?
+                .ok_or_else(|| AppError::registry_io(SNAPSHOT_MISSING))?
+        } else {
+            fs::read(&path).map_err(|error| {
+                AppError::registry_io(format!("Failed to read {}: {error}", path.display()))
+            })?
+        };
         let document: SnapshotFile = serde_json::from_slice(&contents).map_err(|error| {
             AppError::registry_corrupt(format!("Failed to parse {}: {error}", path.display()))
         })?;
@@ -1134,28 +1229,32 @@ impl RegistryStore {
                 path.display()
             )));
         }
-        Ok(StoredDiscoverySnapshot {
-            saved_at_unix_ms: document.saved_at_unix_ms,
-            generation: document.generation,
-            interfaces: document.interfaces,
-            devices: document.devices,
-        })
+        Ok((
+            StoredDiscoverySnapshot {
+                saved_at_unix_ms: document.saved_at_unix_ms,
+                generation: document.generation,
+                interfaces: document.interfaces,
+                devices: document.devices,
+            },
+            contents.len() as u64,
+        ))
     }
 
     fn load_unlocked(&self) -> Result<RegistryFile, AppError> {
-        let contents = match fs::read_to_string(&self.registry_path) {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(RegistryFile::default());
-            }
-            Err(error) => {
-                return Err(AppError::registry_io(format!(
-                    "Failed to read {}: {error}",
-                    self.registry_path.display()
-                )));
-            }
+        self.load_with_limit(None)
+    }
+
+    fn load_with_limit(&self, limit: Option<u64>) -> Result<RegistryFile, AppError> {
+        let Some(contents) = read_validation_file(&self.registry_path, limit)? else {
+            return Ok(RegistryFile::default());
         };
-        let mut registry: RegistryFile = toml::from_str(&contents).map_err(|error| {
+        let contents = std::str::from_utf8(&contents).map_err(|error| {
+            AppError::registry_io(format!(
+                "Failed to read {}: {error}",
+                self.registry_path.display()
+            ))
+        })?;
+        let mut registry: RegistryFile = toml::from_str(contents).map_err(|error| {
             AppError::registry_corrupt(format!(
                 "Failed to parse {}: {error}",
                 self.registry_path.display()
@@ -1971,6 +2070,67 @@ fn redact_url_credentials(value: &str) -> String {
         let _ = url.set_password(None);
     }
     url.to_string()
+}
+
+const SNAPSHOT_MISSING: &str = "An indexed snapshot file is missing.";
+
+fn validation_limit() -> AppError {
+    AppError::registry_io("Configuration validation exceeded its scan budget.")
+}
+
+fn read_validation_file(path: &Path, limit: Option<u64>) -> Result<Option<Vec<u8>>, AppError> {
+    let io_error =
+        |error| AppError::registry_io(format!("Failed to read {}: {error}", path.display()));
+    if limit.is_some() {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.is_file() => {}
+            Ok(_) => {
+                return Err(AppError::registry_io(
+                    "Validation input is not a regular file.",
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(io_error(error)),
+        }
+    }
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io_error(error)),
+    };
+    let mut contents = Vec::new();
+    if let Some(limit) = limit {
+        if !file.metadata().map_err(io_error)?.is_file() {
+            return Err(AppError::registry_io(
+                "Validation input is not a regular file.",
+            ));
+        }
+        file.take(limit + 1)
+            .read_to_end(&mut contents)
+            .map_err(io_error)?;
+        if contents.len() as u64 > limit {
+            return Err(validation_limit());
+        }
+    } else {
+        (&file).read_to_end(&mut contents).map_err(io_error)?;
+    }
+    Ok(Some(contents))
+}
+
+fn check_snapshot_index(
+    id: &str,
+    summary: &SnapshotIndexEntry,
+    snapshot: &StoredDiscoverySnapshot,
+) -> Result<(), AppError> {
+    if snapshot.saved_at_unix_ms != summary.saved_at_unix_ms
+        || snapshot.generation != summary.generation
+        || snapshot.devices.len() != summary.device_count
+    {
+        return Err(AppError::registry_corrupt(format!(
+            "Discovery snapshot `{id}` does not match its registry index."
+        )));
+    }
+    Ok(())
 }
 
 fn validate_registry(registry: &RegistryFile) -> Result<(), AppError> {

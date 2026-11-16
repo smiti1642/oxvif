@@ -166,13 +166,26 @@ pub(crate) fn attempt(
 pub(crate) async fn initialize(
     builder: oxvif::session::OnvifSessionBuilder,
 ) -> Result<oxvif::OnvifSession, oxvif::OnvifError> {
+    initialize_observed(builder, None).await
+}
+
+pub(crate) async fn initialize_observed(
+    builder: oxvif::session::OnvifSessionBuilder,
+    observed: Option<&std::sync::Mutex<Option<SessionBuildReport>>>,
+) -> Result<oxvif::OnvifSession, oxvif::OnvifError> {
+    let record_report = |report| {
+        session(&report);
+        if let Some(observed) = observed {
+            *observed.lock().expect("session report lock poisoned") = Some(report);
+        }
+    };
     match builder.build_with_report().await {
         Ok((value, report)) => {
-            session(&report);
+            record_report(report);
             Ok(value)
         }
         Err(failure) => {
-            session(&failure.report);
+            record_report(failure.report);
             Err(failure.error)
         }
     }

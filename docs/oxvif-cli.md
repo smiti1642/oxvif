@@ -628,6 +628,27 @@ incomplete workflows can return exit `20` with retained `data.result` and
 `ok=false`, without a top-level error. Complete configuration differences return
 exit `0`; inspect `matches` and `changes`. File workflows require one device.
 
+## Shareable diagnostics
+
+```sh
+oxvif diagnose --device front-door --share > diagnose.json
+oxvif config validate --share > config-validation.json
+```
+
+`--share` writes one non-interactive JSON report. Diagnose one explicit
+saved device or pass `--target`. Start with `primary_issue` and its
+`next_step`, then review `checks`. A blocked check depends on an earlier
+failure. A disabled check was outside the selected probe mode.
+`complete` describes coverage, while `outcome` and `exit_code` report the
+result. A nonzero exit can still produce valid JSON. Use a new filename
+for shell redirection and check that the file parses before sharing it.
+
+The report omits credentials, addresses, local paths and raw device
+responses. Verbose logs are suppressed. Share-mode config validation
+reads up to 16 MiB per file, 64 MiB across external snapshots, and
+4,096 indexed or directory entries. It reports `scan_limit` on overflow.
+See the [report schema](../crates/oxvif-cli/schema/shareable-diagnostic-v1.schema.json).
+
 ## Event watch
 
 ```sh

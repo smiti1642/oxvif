@@ -5,6 +5,7 @@ use std::{
     future::Future,
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::Mutex,
     time::Duration,
 };
 
@@ -14,6 +15,7 @@ use serde_json::{Value, json};
 use tokio::time::{Instant, timeout};
 
 use crate::application::{ResolvedTarget, build_http_transport};
+use crate::share::{self, Reason, Stage};
 use crate::{AppError, ClockSyncPolicy, ExecutionOptions, TargetSelector};
 use oxvif::media_workflow::{
     MediaCatalogue, MediaEncoders, MediaService, MediaUri, NativeMediaProfile, StreamRequest,
@@ -472,6 +474,12 @@ struct Step {
     data: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     not_tested_reason: Option<String>,
+    #[serde(skip)]
+    share_reason: Option<Reason>,
+    #[serde(skip)]
+    http_status: Option<u16>,
+    #[serde(skip)]
+    attempts: u32,
 }
 
 impl Step {
@@ -485,6 +493,9 @@ impl Step {
             next_step: next_step.into(),
             data: None,
             not_tested_reason: None,
+            share_reason: None,
+            http_status: None,
+            attempts: 0,
         }
     }
 
@@ -645,6 +656,7 @@ async fn execute_connected(
             session,
             profile.as_deref(),
             None,
+            None,
         )
         .await;
     }
@@ -701,6 +713,14 @@ async fn connect(
     resolved: &ResolvedTarget,
     options: &ExecutionOptions,
 ) -> Result<(Step, Option<OnvifSession>), AppError> {
+    connect_observed(resolved, options, None).await
+}
+
+async fn connect_observed(
+    resolved: &ResolvedTarget,
+    options: &ExecutionOptions,
+    observed: Option<&Mutex<Option<oxvif::session::SessionBuildReport>>>,
+) -> Result<(Step, Option<OnvifSession>), AppError> {
     let transport =
         build_http_transport(options, resolved.username.as_deref(), resolved.password())?;
     Ok(onvif_step("onvif_session", options, || {
@@ -717,7 +737,12 @@ async fn connect(
         {
             builder = builder.with_clock_sync();
         }
-        crate::diagnostics::initialize(builder)
+        async move {
+            if let Some(observed) = observed {
+                *observed.lock().expect("session report lock poisoned") = None;
+            }
+            crate::diagnostics::initialize_observed(builder, observed).await
+        }
     })
     .await)
 }
@@ -739,11 +764,14 @@ where
         "Check camera connectivity and credentials.",
     );
     for attempt in 0..=options.retries {
+        step.attempts = attempt.saturating_add(1);
         let retryable = match timeout(options.timeout, operation()).await {
             Ok(Ok(value)) => {
                 step.status = Status::Pass;
                 step.detail = "Operation completed.".into();
                 step.error_code = None;
+                step.share_reason = None;
+                step.http_status = None;
                 step.next_step.clear();
                 step.elapsed_ms = elapsed(start);
                 crate::diagnostics::attempt(name, attempt, "succeeded", None);
@@ -751,6 +779,18 @@ where
             }
             Ok(Err(error)) => {
                 let (code, detail, unsupported, retryable) = classify(&error);
+                step.share_reason = Some(if unsupported {
+                    Reason::Unsupported
+                } else {
+                    share::onvif_reason(&error)
+                });
+                step.http_status = match &error {
+                    OnvifError::Transport(oxvif::transport::TransportError::HttpStatus {
+                        status,
+                        ..
+                    }) => Some(*status),
+                    _ => None,
+                };
                 step.status = if unsupported {
                     Status::Unsupported
                 } else {
@@ -769,6 +809,9 @@ where
             }
             Err(_) => {
                 step.error_code = Some("TIMEOUT".into());
+                step.status = Status::Fail;
+                step.share_reason = Some(Reason::Timeout);
+                step.http_status = None;
                 step.detail = "Stage exceeded its per-attempt timeout.".into();
                 true
             }
@@ -877,8 +920,88 @@ pub(crate) async fn diagnose_with_picker(
         session.as_ref(),
         profile,
         Some(picker),
+        None,
     )
     .await
+}
+
+pub(crate) async fn diagnose_shared(
+    resolved: &ResolvedTarget,
+    options: &ExecutionOptions,
+    profile: Option<&str>,
+    report: &mut share::Report,
+) -> u8 {
+    let observed = Mutex::new(None);
+    let cancellation = report.cancellation();
+    let result = tokio::select! {
+        biased;
+        () = wait_for_share_cancellation(cancellation.clone()) => {
+            report.cancel();
+            return 130;
+        }
+        result = connect_observed(resolved, options, Some(&observed)) => result,
+    };
+    let (connection, session) = match result {
+        Ok(result) => result,
+        Err(error) => {
+            report.fail(Stage::TransportSetup, Reason::TransportSetupFailed);
+            report.block_camera_checks();
+            return error.exit_code();
+        }
+    };
+    report.check(Stage::TransportSetup, share::Status::Passed, None);
+    report.session_attempts(connection.attempts);
+    if let Some(observed) = observed.into_inner().expect("session report lock poisoned") {
+        report.session(&observed, session.is_some());
+    }
+    let result = diagnose(
+        resolved,
+        options,
+        connection,
+        session.as_ref(),
+        profile,
+        None,
+        Some(report),
+    )
+    .await;
+    if cancellation.is_some_and(|receiver| *receiver.borrow()) {
+        report.cancel();
+        return 130;
+    }
+    match result {
+        Ok(result) if report_failed("diagnose", &result) => 20,
+        Ok(_) => 0,
+        Err(error) => {
+            report.fail(Stage::OnvifSession, Reason::Unknown);
+            error.exit_code()
+        }
+    }
+}
+
+async fn wait_for_share_cancellation(receiver: Option<tokio::sync::watch::Receiver<bool>>) {
+    if let Some(mut receiver) = receiver
+        && receiver.wait_for(|cancelled| *cancelled).await.is_ok()
+    {
+        return;
+    }
+    std::future::pending().await
+}
+
+async fn diagnostic_step<T, F, Fut>(
+    name: &'static str,
+    options: &ExecutionOptions,
+    cancellation: Option<tokio::sync::watch::Receiver<bool>>,
+    operation: F,
+) -> (Step, Option<T>)
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = Result<T, OnvifError>>,
+{
+    tokio::select! {
+        biased;
+        () = wait_for_share_cancellation(cancellation) => (Step::skipped(name, "Diagnostic was cancelled."), None),
+        result = onvif_step(name, options, operation) => result,
+    }
 }
 
 async fn diagnose(
@@ -888,23 +1011,59 @@ async fn diagnose(
     session: Option<&OnvifSession>,
     profile: Option<&str>,
     picker: Option<&ProfilePicker<'_>>,
+    mut share: Option<&mut share::Report>,
 ) -> Result<Value, AppError> {
+    let cancellation = share.as_deref().and_then(share::Report::cancellation);
     let mut stages = vec![connect];
     let mut selected_profile = None;
     let mut rtsp = None;
     if let Some(session) = session {
-        let (info, _) = onvif_step("device_info", options, || session.get_device_info()).await;
-        stages.push(info);
-        let (mut profiles_step, profiles) = onvif_step("media_profiles", options, || {
-            read_catalogue(session, options)
+        let (info, _) = diagnostic_step("device_info", options, cancellation.clone(), || {
+            session.get_device_info()
         })
         .await;
+        stages.push(info);
+        let media_attempts = Mutex::new(Vec::new());
+        let capture_media_attempts = share.is_some();
+        let (mut profiles_step, profiles) =
+            diagnostic_step("media_profiles", options, cancellation.clone(), || async {
+                if capture_media_attempts && let Some(service) = options.media_service {
+                    media_attempts
+                        .lock()
+                        .expect("media report lock poisoned")
+                        .clear();
+                    return session.media_catalogue(service).await.map_err(|error| {
+                        *media_attempts.lock().expect("media report lock poisoned") =
+                            error.attempts;
+                        error.cause
+                    });
+                }
+                read_catalogue(session, options).await
+            })
+            .await;
+        if profiles.is_none()
+            && let Some(report) = share.as_deref_mut()
+        {
+            report.media_attempts(
+                &media_attempts
+                    .into_inner()
+                    .expect("media report lock poisoned"),
+            );
+        }
         let candidates = if let Some(catalogue) = profiles.as_ref() {
-            profile_choices(session, catalogue, options).await
+            if share.is_some() {
+                // Candidate display metadata requires an extra encoder query.
+                Vec::new()
+            } else {
+                profile_choices(session, catalogue, options).await
+            }
         } else {
             Vec::new()
         };
         if let Some(catalogue) = &profiles {
+            if let Some(report) = share.as_deref_mut() {
+                report.media(catalogue);
+            }
             let mut data = json!({"profiles": catalogue.profiles.iter().map(NativeMediaProfile::token).collect::<Vec<_>>(), "candidates": candidates});
             if options.media_service.is_some() {
                 data["media_service"] = json!(catalogue.service);
@@ -915,7 +1074,10 @@ async fn diagnose(
         stages.push(profiles_step);
         let mut reason = if profiles.is_none() {
             "PROFILE_QUERY_FAILED"
-        } else if candidates.is_empty() {
+        } else if profiles
+            .as_ref()
+            .is_some_and(|catalogue| catalogue.profiles.is_empty())
+        {
             "NO_PROFILES_AVAILABLE"
         } else if profile.is_some() {
             "PROFILE_NOT_FOUND"
@@ -941,25 +1103,34 @@ async fn diagnose(
             .as_ref()
             .and_then(|catalogue| catalogue.select(profile.or(picked.as_deref())).ok());
         if let Some(profile) = selected {
+            if share.is_some() {
+                stages.push(Step::new(
+                    "profile_selection",
+                    Status::Pass,
+                    "Profile selected.",
+                    "",
+                ));
+            }
             selected_profile = Some(profile.token().to_owned());
-            let (stream, uri) = onvif_step("stream_uri", options, || async {
-                if options.media_service.is_some() {
-                    session
-                        .media_stream_uri(&profile, StreamRequest::Rtsp)
-                        .await
-                        .map(|uri| uri.uri().to_owned())
-                } else {
-                    session
-                        .get_stream_uri(profile.token())
-                        .await
-                        .map(|uri| uri.uri)
-                }
-            })
-            .await;
+            let (stream, uri) =
+                diagnostic_step("stream_uri", options, cancellation.clone(), || async {
+                    if options.media_service.is_some() {
+                        session
+                            .media_stream_uri(&profile, StreamRequest::Rtsp)
+                            .await
+                            .map(|uri| uri.uri().to_owned())
+                    } else {
+                        session
+                            .get_stream_uri(profile.token())
+                            .await
+                            .map(|uri| uri.uri)
+                    }
+                })
+                .await;
             stages.push(stream);
             if let Some((uri, mode)) = uri.zip(options.rtsp_probe) {
                 rtsp = Some(
-                    oxvif::stream_probe::probe(
+                    oxvif::stream_probe::probe_until(
                         &uri,
                         &resolved.target,
                         resolved.username.as_deref().zip(resolved.password()),
@@ -969,29 +1140,59 @@ async fn diagnose(
                             observe_packet: mode == crate::RtspProbeMode::Packet,
                             ..Default::default()
                         },
+                        wait_for_share_cancellation(cancellation.clone()),
                     )
                     .await,
                 );
             }
-            let (snapshot, uri) = onvif_step("snapshot_uri", options, || async {
-                if options.media_service.is_some() {
-                    session
-                        .media_snapshot_uri(&profile)
-                        .await
-                        .map(|uri| uri.uri().to_owned())
-                } else {
-                    session
-                        .get_snapshot_uri(profile.token())
-                        .await
-                        .map(|uri| uri.uri)
-                }
-            })
-            .await;
+            let (snapshot, uri) =
+                diagnostic_step("snapshot_uri", options, cancellation.clone(), || async {
+                    if options.media_service.is_some() {
+                        session
+                            .media_snapshot_uri(&profile)
+                            .await
+                            .map(|uri| uri.uri().to_owned())
+                    } else {
+                        session
+                            .get_snapshot_uri(profile.token())
+                            .await
+                            .map(|uri| uri.uri)
+                    }
+                })
+                .await;
             stages.push(snapshot);
             if let Some(uri) = uri {
                 let start = Instant::now();
-                let mut step = match fetch_image(&uri, resolved, options).await {
-                    Ok((bytes, image_type)) => {
+                let snapshot = tokio::select! {
+                    biased;
+                    () = wait_for_share_cancellation(cancellation.clone()) => None,
+                    result = fetch_snapshot(&uri, resolved, options) => Some(result),
+                };
+                let snapshot_reason = snapshot
+                    .as_ref()
+                    .and_then(|result| result.as_ref().err().map(share::snapshot_reason));
+                if share.is_some() {
+                    let mut destination = Step::new(
+                        "snapshot_destination",
+                        Status::Pass,
+                        "Snapshot destination accepted.",
+                        "",
+                    );
+                    match snapshot_reason {
+                        Some(Reason::DestinationRejected) => {
+                            destination.status = Status::Fail;
+                            destination.share_reason = Some(Reason::DestinationRejected);
+                        }
+                        _ if snapshot.is_none() => {
+                            destination =
+                                Step::skipped("snapshot_destination", "Diagnostic was cancelled.");
+                        }
+                        _ => {}
+                    }
+                    stages.push(destination);
+                }
+                let mut step = match snapshot {
+                    Some(Ok((bytes, image_type))) => {
                         let mut step = Step::new(
                             "snapshot_fetch",
                             Status::Pass,
@@ -1001,7 +1202,10 @@ async fn diagnose(
                         step.data = Some(json!({"bytes": bytes.len(), "image_type": image_type}));
                         step
                     }
-                    Err(error) => {
+                    Some(Err(error)) => {
+                        let reason = share::snapshot_reason(&error);
+                        let http_status = error.http_status();
+                        let error = snapshot_error(error);
                         let mut step = Step::new(
                             "snapshot_fetch",
                             Status::Fail,
@@ -1009,16 +1213,66 @@ async fn diagnose(
                             "Check snapshot service access, authentication and image response.",
                         );
                         step.error_code = Some(error.code.as_str().into());
+                        step.share_reason = Some(reason);
+                        step.http_status = http_status;
                         step
                     }
+                    None => Step::skipped("snapshot_fetch", "Diagnostic was cancelled."),
                 };
                 step.elapsed_ms = elapsed(start);
-                stages.push(step);
+                if share.is_some() {
+                    let mut signature =
+                        Step::skipped("snapshot_signature", "A snapshot body is required.");
+                    match snapshot_reason {
+                        Some(Reason::DestinationRejected) => {
+                            step = Step::skipped(
+                                "snapshot_fetch",
+                                "A valid snapshot destination is required.",
+                            );
+                        }
+                        Some(Reason::InvalidImage) => {
+                            step.status = Status::Pass;
+                            step.share_reason = None;
+                            signature = Step::new(
+                                "snapshot_signature",
+                                Status::Fail,
+                                "Image signature was not recognized.",
+                                "",
+                            );
+                            signature.share_reason = Some(Reason::InvalidImage);
+                        }
+                        None if matches!(step.status, Status::Pass) => {
+                            signature = Step::new(
+                                "snapshot_signature",
+                                Status::Pass,
+                                "Image signature recognized.",
+                                "",
+                            );
+                        }
+                        _ => {}
+                    }
+                    stages.push(step);
+                    stages.push(signature);
+                } else {
+                    stages.push(step);
+                }
             } else {
+                if share.is_some() {
+                    stages.push(Step::skipped(
+                        "snapshot_destination",
+                        "Snapshot URI was unavailable.",
+                    ));
+                }
                 stages.push(Step::skipped(
                     "snapshot_fetch",
                     "Snapshot URI was unavailable.",
                 ));
+                if share.is_some() {
+                    stages.push(Step::skipped(
+                        "snapshot_signature",
+                        "A snapshot body is required.",
+                    ));
+                }
             }
         } else {
             let mut selection = Step::new(
@@ -1028,6 +1282,13 @@ async fn diagnose(
                 "Run profiles and pass an explicit --profile token.",
             );
             selection.error_code = Some("PROFILE_SELECTION_REQUIRED".into());
+            selection.share_reason = Some(match reason {
+                "NO_PROFILES_AVAILABLE" => Reason::NoProfiles,
+                "PROFILE_NOT_FOUND" => Reason::ProfileNotFound,
+                "PROFILE_SELECTION_CANCELLED" => Reason::Cancelled,
+                "PROFILE_QUERY_FAILED" | "PROFILE_INTERACTION_FAILED" => Reason::Unknown,
+                _ => Reason::ProfileRequired,
+            });
             selection.detail = match reason {
                 "PROFILE_QUERY_FAILED" => "Profile query failed; earlier results are retained.",
                 "NO_PROFILES_AVAILABLE" => "The camera returned no media profiles.",
@@ -1044,9 +1305,22 @@ async fn diagnose(
             selection.data = Some(
                 json!({"reason_code": reason, "requested_profile": profile, "candidates": candidates}),
             );
+            if reason == "PROFILE_QUERY_FAILED" && share.is_some() {
+                selection.not_tested_reason = Some("prerequisite_failed".into());
+            }
             stages.push(selection);
             for name in ["stream_uri", "snapshot_uri", "snapshot_fetch"] {
                 stages.push(Step::skipped(name, "A matching profile is required."));
+            }
+            if share.is_some() {
+                stages.push(Step::skipped(
+                    "snapshot_destination",
+                    "A matching profile is required.",
+                ));
+                stages.push(Step::skipped(
+                    "snapshot_signature",
+                    "A matching profile is required.",
+                ));
             }
         }
     } else {
@@ -1058,6 +1332,15 @@ async fn diagnose(
             "snapshot_fetch",
         ] {
             stages.push(Step::skipped(name, "ONVIF session establishment failed."));
+        }
+        if share.is_some() {
+            for name in [
+                "profile_selection",
+                "snapshot_destination",
+                "snapshot_signature",
+            ] {
+                stages.push(Step::skipped(name, "ONVIF session establishment failed."));
+            }
         }
     }
     let complete = stages
@@ -1084,6 +1367,7 @@ async fn diagnose(
                 _ => Status::Fail,
             };
             let mut step = Step::new(name, status, &format!("{outcome:?}"), "");
+            (step.share_reason, step.http_status) = share::rtsp_reason(name, outcome);
             step.data = Some(json!({"outcome": outcome}));
             if name == "rtsp_describe" {
                 step.data = Some(json!({"outcome": outcome, "codec": report.codec}));
@@ -1104,6 +1388,65 @@ async fn diagnose(
     let mut decode = Step::skipped("video_decode", "Video decoding requires a separate player.");
     decode.not_tested_reason = Some("not_implemented".into());
     stages.push(decode);
+    if let Some(report) = share {
+        if options.rtsp_probe.is_some() && rtsp.is_none() {
+            report.check(Stage::RtspConnection, share::Status::Blocked, None);
+        }
+        for step in &stages {
+            if step.name == "rtsp_transport" && rtsp.is_none() && options.rtsp_probe.is_some() {
+                continue;
+            }
+            let (status, reason) = match step.status {
+                Status::Pass => (share::Status::Passed, None),
+                Status::Fail
+                    if step.name == "profile_selection" && step.not_tested_reason.is_some() =>
+                {
+                    (share::Status::Blocked, None)
+                }
+                Status::Fail if matches!(step.share_reason, Some(Reason::Cancelled)) => {
+                    (share::Status::Cancelled, Some(Reason::Cancelled))
+                }
+                Status::Fail => (
+                    share::Status::Failed,
+                    Some(step.share_reason.unwrap_or(Reason::Unknown)),
+                ),
+                Status::Unsupported => (share::Status::Unsupported, Some(Reason::Unsupported)),
+                Status::NotTested if step.name == "video_decode" => {
+                    (share::Status::NotImplemented, None)
+                }
+                Status::NotTested if rtsp.is_none() && step.name == "rtsp_transport" => {
+                    (share::Status::NotEnabled, None)
+                }
+                Status::NotTested if step.name == "rtsp_teardown" => {
+                    (share::Status::NotEnabled, None)
+                }
+                Status::NotTested => (share::Status::Blocked, None),
+            };
+            if let Some(stage) = Stage::workflow(&step.name) {
+                let status = if step.name.starts_with("rtsp_")
+                    && options.rtsp_probe == Some(crate::RtspProbeMode::Describe)
+                    && matches!(
+                        stage,
+                        Stage::RtspTransport
+                            | Stage::RtspPlay
+                            | Stage::RtspFirstPacket
+                            | Stage::RtspTeardown
+                    ) {
+                    share::Status::NotEnabled
+                } else {
+                    status
+                };
+                report.observation(
+                    stage,
+                    status,
+                    reason,
+                    Some(step.elapsed_ms),
+                    step.http_status,
+                    None,
+                );
+            }
+        }
+    }
     let failed = stages
         .iter()
         .filter(|s| matches!(s.status, Status::Fail))
@@ -1154,6 +1497,16 @@ async fn fetch_image(
     resolved: &ResolvedTarget,
     options: &ExecutionOptions,
 ) -> Result<(Vec<u8>, &'static str), AppError> {
+    fetch_snapshot(uri, resolved, options)
+        .await
+        .map_err(snapshot_error)
+}
+
+async fn fetch_snapshot(
+    uri: &str,
+    resolved: &ResolvedTarget,
+    options: &ExecutionOptions,
+) -> Result<(Vec<u8>, &'static str), oxvif::health::snapshot::SnapshotError> {
     oxvif::health::snapshot::fetch(
         uri,
         &resolved.target,
@@ -1164,7 +1517,6 @@ async fn fetch_image(
         },
     )
     .await
-    .map_err(snapshot_error)
 }
 
 async fn collect_inventory(
