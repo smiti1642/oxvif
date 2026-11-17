@@ -434,6 +434,8 @@ pub mod ptz_motion;
 pub mod recording;
 #[cfg(any(feature = "mock", feature = "health"))]
 pub(crate) mod redact;
+#[cfg(feature = "stream-probe")]
+mod rtsp;
 mod scoped_rpc;
 pub mod session;
 pub mod soap;

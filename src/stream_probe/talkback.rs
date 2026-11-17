@@ -13,9 +13,10 @@ use tokio::{
     time::{Instant, timeout},
 };
 
-use super::{
-    Connection, ProbeResult, StreamOutcome, checked_join, description_base, destination,
-    interleaved_transport, parse_sdp, session_id, successful,
+use super::StreamOutcome;
+use crate::rtsp::{
+    Connection, ProbeResult, checked_join, description_base, destination, interleaved_transport,
+    parse_sdp, session_id, successful,
 };
 
 const BACKCHANNEL: &str = "www.onvif.org/ver20/backchannel";
@@ -182,7 +183,7 @@ impl Talkback {
     }
 }
 
-async fn negotiate(connection: &mut Connection<'_>, uri: &Url) -> ProbeResult<u8> {
+async fn negotiate(connection: &mut Connection, uri: &Url) -> ProbeResult<u8> {
     let response = connection
         .command(
             Method::Describe,
@@ -261,7 +262,7 @@ fn backchannel_track(sdp: &sdp_types::Session) -> Option<(u8, &str)> {
 }
 
 async fn send_frames(
-    connection: &mut Connection<'_>,
+    connection: &mut Connection,
     input: &mut mpsc::Receiver<PcmFrame>,
     payload: u8,
     sent: &mut u32,
