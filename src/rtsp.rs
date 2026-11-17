@@ -66,6 +66,7 @@ pub(crate) struct Connection {
     buffer: Vec<u8>,
     sequence: u32,
     pending_sequence: Option<u32>,
+    response_message_limit: usize,
     credentials: Option<(String, String)>,
     challenge: Option<Challenge>,
     pub(crate) session: Option<String>,
@@ -109,6 +110,7 @@ impl Connection {
             buffer: Vec::new(),
             sequence: 0,
             pending_sequence: None,
+            response_message_limit: PACKET_LIMIT,
             credentials: credentials.map(|(user, password)| (user.into(), password.into())),
             challenge: None,
             session: None,
@@ -151,6 +153,16 @@ impl Connection {
         }
     }
 
+    #[cfg(feature = "recording-replay")]
+    pub(crate) fn has_pending_response(&self) -> bool {
+        self.pending_sequence.is_some()
+    }
+
+    #[cfg(feature = "recording-replay")]
+    pub(crate) fn set_response_message_limit(&mut self, limit: usize) {
+        self.response_message_limit = limit;
+    }
+
     async fn exchange<E: From<StreamOutcome>>(
         &mut self,
         method: &Method,
@@ -186,7 +198,7 @@ impl Connection {
             .write_all(&bytes)
             .await
             .map_err(|_| StreamOutcome::Io)?;
-        for _ in 0..PACKET_LIMIT {
+        for _ in 0..self.response_message_limit {
             match self.read_message().await? {
                 Message::Response(response)
                     if response.version() == Version::V1_0

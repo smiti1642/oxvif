@@ -12,6 +12,8 @@ mod timeline;
 
 #[cfg(feature = "recording-download")]
 pub mod download;
+#[cfg(feature = "recording-replay")]
+pub mod replay;
 
 pub use export::{
     ExportFileProgress, ExportJob, ExportPollError, ExportPollOptions, ExportProgress,

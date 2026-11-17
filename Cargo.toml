@@ -69,6 +69,7 @@ stream-probe = [
     "dep:tokio-rustls", "dep:rustls-native-certs", "tokio/io-util",
 ]
 recording-download = ["dep:tempfile", "tokio/fs", "tokio/io-util"]
+recording-replay = ["stream-probe"]
 talkback = ["stream-probe"]
 # Persona B (record / replay) of the metamorph shape-shifting device: clone a
 # real camera into a param-aware fixture set and replay it in-process without
