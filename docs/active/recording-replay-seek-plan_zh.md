@@ -140,3 +140,13 @@ Replay 使用不同的 interleaved data 處理。錄影缺口以 [RTP 證據](..
 - Loopback 涵蓋同 session 跳播、舊封包隔離、位置未確認、錄影缺口、傳輸中斷、
   RTSPS 信任、取消及清理。慢消費端案例在 256 個 RTP 封包早於控制回覆時仍
   確認 TEARDOWN。實機錄影與首個可解碼畫面留待 R4。
+
+## R4 實機盤點 2026-11-18
+
+- 使用測試設定中每台裝置對應的帳號，盤點 28 組主要連線和兩個另列的資料埠。
+  六組連線宣告 Recording、Search 和 Replay，候選版 SDK 也解析出這三項服務。
+- 其中五組在錄影清單、搜尋或時間軸查詢回覆 `NotAuthorized`。
+  分別以 HTTP Digest 和 WS-Security UsernameToken 重試錄影清單，仍未取得錄影。
+  另一組的 `GetRecordings` 回傳空清單，搜尋進入取結果階段時回傳 SOAP Fault。
+- 沒有取得可用的錄影 token 或可播放的時間區間。實機的 UTC 起播、同一 session
+  跳播和首張可解碼畫面時間留待取得有 H.264 錄影且允許回放的攝影機或 NVR 後驗收。
