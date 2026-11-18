@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 | Range | Releases |
 | --- | --- |
+| Candidate | [0.18.0](#0180) |
 | Latest | [0.17.1](#0171---2026-10-23) · [0.17.0](#0170---2026-09-14) |
 | Previous | [0.16.0](#0160---2026-09-04) |
 | Recent stable | [0.15.0](#0150---2026-08-03) · [0.14.0](#0140---2026-07-27) · [0.13.0](#0130---2026-07-24) · [0.12.0](#0120---2026-07-09) · [0.11.0](#0110---2026-07-03) · [0.10.0](#0100---2026-06-30) |
@@ -20,7 +21,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-[0.18.0 release draft](docs/releases/0.18.0.md) · [繁體中文](docs/releases/0.18.0_zh.md)
+## [0.18.0]
+
+[0.18.0 release notes](docs/releases/0.18.0.md) · [繁體中文](docs/releases/0.18.0_zh.md)
 
 ### Security
 
@@ -69,6 +72,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Add `inspect` to read live device information, capabilities, services, media
+  profiles, or a profile's RTSP URI by address without opening a device
+  registry or credential store. Supply a one-time password via a hidden prompt,
+  stdin, or the `--password` option.
+
 - Add single-camera `events watch` with a bounded duration, device-side
   topic selection, terminal counts, and live JSONL notifications, gaps and
   cleanup summary. Backpressure pauses pulls while renewal continues.
@@ -96,6 +104,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Retain qualified event endpoint references and ordered notification data.
   Managed pull points renew concurrently with polling and expose bounded
   recovery, queue limits and async cleanup.
+- Add opt-in event history recovery through `managed_events_recovering()`.
+  Reconnect to a replacement PullPoint, report potential event gaps, and seek
+  into persistent storage when supported. State synchronization coalesces
+  duplicate snapshots while retaining live property changes.
+- Add the optional `recording-replay` feature for UTC playback and seek within
+  one RTSP/TCP session. Expose PLAY and RTP start evidence, confirmed recording
+  gaps, and an explicit cleanup result for a single H.264 video track.
 - Select SOAP authentication explicitly and set whole-exchange deadlines.
   Handle `TransportError::Deadline` in exhaustive matches.
 - Add service-qualified media catalogues, profile handles, compatible encoder

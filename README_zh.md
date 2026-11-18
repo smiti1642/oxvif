@@ -32,6 +32,9 @@ library 與命令列工具，涵蓋裝置探索、裝置管理、Media1／Media2
 
 ## 安裝
 
+**0.18.0 候選版。** SDK 新增事件訂閱恢復與依 UTC 定位錄影回放，CLI
+新增一次性 `inspect`、事件監看和可分享的診斷報告。 [發行與升級說明](docs/releases/0.18.0_zh.md)
+
 **0.17.1** 以 0.17.0 為基礎，只更新安全依賴。
 參閱[修補版說明](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1_zh.md)。
 
@@ -39,12 +42,11 @@ library 與命令列工具，涵蓋裝置探索、裝置管理、Media1／Media2
 強化，包含原始碼不相容遷移。參閱[簡要摘要](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0_zh.md)
 或[完整變更與遷移](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog_zh.md)。
 
-在應用程式中加入 oxvif 0.17：
+在應用程式中加入已發布的 oxvif：
 
-```toml
-[dependencies]
-oxvif = "0.17"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```sh
+cargo add oxvif
+cargo add tokio --features rt-multi-thread,macros
 ```
 
 ## 快速開始
@@ -108,12 +110,14 @@ service family、錯誤處理與進階功能。產生的
 從 crates.io 安裝 CLI：
 
 ```sh
-cargo install oxvif-cli --version 0.17.1 --locked
+cargo install oxvif-cli --locked
 oxvif setup
 oxvif manage
 ```
 
-目前 checkout 可使用 `cargo run -p oxvif-cli -- manage`。
+可從目前 checkout 執行
+`cargo run -p oxvif-cli -- inspect 192.168.1.100 --username admin` 試用候選版。
+執行 `cargo run -p oxvif-cli -- manage` 可進入互動式工作區。
 引導式工作區保留探索結果及各攝影機狀態，支援搜尋、已儲存／新增篩選、
 Vim 操作、底部狀態列，以及 `?` 設定與按鍵說明。Agent 可透過版本化的
 JSON／JSONL 使用相同操作，不會出現互動提示。

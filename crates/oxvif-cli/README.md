@@ -3,23 +3,17 @@
 `oxvif-cli` is the human- and Agent-friendly command-line operation surface
 for the [`oxvif`](https://crates.io/crates/oxvif) ONVIF client library.
 
-**oxvif-cli 0.17.1.** Security-only dependency update based on 0.17.0.
-See the [patch notes](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1.md).
-
-0.17.0 introduced Guided maintenance, snapshot saving,
-diagnostic reports and configurable Vim navigation are available in this release.
-Read the [release summary](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md)
-and [full changes, migration and limitations](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md).
+**0.18.0** introduces one-shot `inspect`, single-camera `events watch` and
+shareable diagnostic reports. See the [0.18.0 release notes](https://github.com/smiti1642/oxvif/blob/master/docs/releases/0.18.0.md).
 
 For the complete operator and automation reference, read the
-[CLI guide](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/oxvif-cli.md).
-The guide provides its own language switch and documents the 0.17 command surface.
+[CLI guide](https://github.com/smiti1642/oxvif/blob/master/docs/oxvif-cli.md).
 
-The package installs an executable named `oxvif`. Install version 0.17 from
-crates.io:
+The package installs an executable named `oxvif`. Install the latest published
+version from crates.io:
 
 ```sh
-cargo install oxvif-cli --version 0.17.1 --locked
+cargo install oxvif-cli --locked
 oxvif --version
 ```
 
@@ -39,7 +33,7 @@ crates.io or a checksum-verified portable artifact from the matching GitHub Rele
 Root help includes a short Agent onboarding hint. `agent guide` returns the
 version-matched operational and security rules embedded in the installed
 binary; `agent prompt` prints a compact prompt suitable for Agent instructions.
-The structured stdout contract is schema version 3 for the 0.17 release.
+The structured stdout contract uses schema version 3.
 
 ## Quick navigation
 
@@ -88,6 +82,15 @@ oxvif info
 oxvif health
 oxvif stream
 ```
+
+For a one-time read, run `oxvif inspect 192.168.1.100 --username admin`.
+It prompts for the password in a terminal and uses no local inventory or
+credential store. Add `--read profiles`, `--read capabilities`, or
+`--read services` to change what it reads. Use `--read stream-uri --profile TOKEN`
+to get the live RTSP URL for a media profile. Add `--password EXAMPLE` to
+skip the prompt. An inline password may be visible in shell history and
+process arguments. For scripts, use
+`--password-stdin --output json --non-interactive`.
 
 `setup` suggests `front-door` as the immutable ID, then prompts for the ONVIF
 username and password. Run `oxvif setup` with no target to discover devices and

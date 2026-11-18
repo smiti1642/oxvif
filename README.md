@@ -33,6 +33,10 @@ health diagnostics, and camera-free testing.
 
 ## Installation
 
+**0.18.0 candidate.** The SDK adds managed event recovery and absolute-time
+replay. The CLI adds one-shot `inspect`, event watch and shareable diagnostics.
+See the [release notes and upgrade guide](docs/releases/0.18.0.md).
+
 **0.17.1** is a security-only dependency update based on 0.17.0.
 See the [patch release notes](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1.md).
 
@@ -40,12 +44,11 @@ See the [patch release notes](https://github.com/smiti1642/oxvif/blob/v0.17.1/do
 migration requirements. Read the [summary](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md)
 or [full changelog and migration](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md).
 
-Add oxvif 0.17 to your application:
+Add the latest published oxvif to your application:
 
-```toml
-[dependencies]
-oxvif = "0.17"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```sh
+cargo add oxvif
+cargo add tokio --features rt-multi-thread,macros
 ```
 
 ## Quick start
@@ -111,12 +114,14 @@ save snapshots, export settings and compare them without changing the camera.
 Install the CLI from crates.io:
 
 ```sh
-cargo install oxvif-cli --version 0.17.1 --locked
+cargo install oxvif-cli --locked
 oxvif setup
 oxvif manage
 ```
 
-For this checkout, use `cargo run -p oxvif-cli -- manage`.
+To try the candidate from this checkout, use
+`cargo run -p oxvif-cli -- inspect 192.168.1.100 --username admin`.
+Run `cargo run -p oxvif-cli -- manage` for the interactive workspace.
 The guided workspace retains discovery results and per-camera state. It offers
 search, saved/new filters, Vim-style navigation, a bottom status bar and
 `?` settings/key-binding help. Agents use the same operations through versioned
