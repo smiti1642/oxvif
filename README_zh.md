@@ -32,8 +32,8 @@ library 與命令列工具，涵蓋裝置探索、裝置管理、Media1／Media2
 
 ## 安裝
 
-**0.18.0 候選版。** SDK 新增事件訂閱恢復與依 UTC 定位錄影回放，CLI
-新增一次性 `inspect`、事件監看和可分享的診斷報告。 [發行與升級說明](docs/releases/0.18.0_zh.md)
+**0.18.0** 的 SDK 新增事件訂閱恢復與依 UTC 定位錄影回放，CLI
+新增一次性 `inspect`、事件監看和可分享的診斷報告。 [發行與升級說明](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/releases/0.18.0_zh.md)
 
 **0.17.1** 以 0.17.0 為基礎，只更新安全依賴。
 參閱[修補版說明](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1_zh.md)。
@@ -115,8 +115,7 @@ oxvif setup
 oxvif manage
 ```
 
-可從目前 checkout 執行
-`cargo run -p oxvif-cli -- inspect 192.168.1.100 --username admin` 試用候選版。
+要直接查詢攝影機，可執行 `oxvif inspect 192.168.1.100 --username admin`。
 執行 `cargo run -p oxvif-cli -- manage` 可進入互動式工作區。
 引導式工作區保留探索結果及各攝影機狀態，支援搜尋、已儲存／新增篩選、
 Vim 操作、底部狀態列，以及 `?` 設定與按鍵說明。Agent 可透過版本化的
@@ -148,7 +147,7 @@ operation，不會被宣稱為已實作。
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.17", features = ["mock"] }
+oxvif = { version = "0.18", features = ["mock"] }
 ```
 
 ```rust
@@ -190,9 +189,8 @@ oxvif 適合應用程式開發、診斷、互通性測試與受控 pilot。不�
 ONVIF 裝置差異很大，因此相容性宣稱以實測證據為準，不會只根據 protocol profile
 推論。歡迎提供經過敏感資料清理的其他實機報告。
 
-0.17 CLI 是唯讀診斷 beta，並提供版本化的 structured-output contract。Release
-驗證與平台證據記錄於
-[0.17.0 發布說明](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0_zh.md)。
+CLI 提供版本化的 JSON 與 JSONL 輸出。相容性變更、平台測試及實機驗證範圍見
+[0.18.0 發布說明](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/releases/0.18.0_zh.md)。
 
 ## 貢獻與安全性
 

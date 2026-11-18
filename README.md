@@ -33,9 +33,9 @@ health diagnostics, and camera-free testing.
 
 ## Installation
 
-**0.18.0 candidate.** The SDK adds managed event recovery and absolute-time
+**0.18.0** adds managed event recovery and absolute-time
 replay. The CLI adds one-shot `inspect`, event watch and shareable diagnostics.
-See the [release notes and upgrade guide](docs/releases/0.18.0.md).
+See the [release notes and upgrade guide](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/releases/0.18.0.md).
 
 **0.17.1** is a security-only dependency update based on 0.17.0.
 See the [patch release notes](https://github.com/smiti1642/oxvif/blob/v0.17.1/docs/releases/0.17.1.md).
@@ -119,8 +119,8 @@ oxvif setup
 oxvif manage
 ```
 
-To try the candidate from this checkout, use
-`cargo run -p oxvif-cli -- inspect 192.168.1.100 --username admin`.
+To query a camera without setup, use
+`oxvif inspect 192.168.1.100 --username admin`.
 Run `cargo run -p oxvif-cli -- manage` for the interactive workspace.
 The guided workspace retains discovery results and per-camera state. It offers
 search, saved/new filters, Vim-style navigation, a bottom status bar and
@@ -154,7 +154,7 @@ Enable `mock` to run client tests against an in-process stateful ONVIF device:
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.17", features = ["mock"] }
+oxvif = { version = "0.18", features = ["mock"] }
 ```
 
 ```rust
@@ -199,9 +199,9 @@ firmware, so compatibility claims are evidence-based rather than inferred from
 the protocol profile alone. Sanitized reports from additional real cameras are
 welcome.
 
-The 0.17 CLI is a read-only diagnostic beta with a versioned structured-output
-contract. Release verification and platform evidence are documented in the
-[0.17.0 release notes](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0.md).
+The CLI provides versioned JSON and JSONL output. See the
+[0.18.0 release notes](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/releases/0.18.0.md)
+for compatibility changes, platform checks and hardware coverage.
 
 ## Contributing and security
 
