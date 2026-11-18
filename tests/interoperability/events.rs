@@ -16,6 +16,11 @@ const PULL: &str =
     "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest";
 const RENEW: &str = "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/RenewRequest";
 const CLOSE: &str = "http://docs.oasis-open.org/wsn/bw-2/SubscriptionManager/UnsubscribeRequest";
+const CAPABILITIES: &str =
+    "http://www.onvif.org/ver10/events/wsdl/EventPortType/GetServiceCapabilitiesRequest";
+const SEEK: &str = "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/SeekRequest";
+const SYNC: &str =
+    "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/SetSynchronizationPointRequest";
 
 fn grant(url: &str, parameters: &str, times: &str) -> Reply {
     reply(&format!(
@@ -33,6 +38,26 @@ const NOTICE: &str = r#"<n:NotificationMessage><n:Topic xmlns:q="urn:camera:topi
 fn page(notifications: &str) -> Reply {
     reply(&format!(
         "<e:PullMessagesResponse><e:CurrentTime>2050-01-01T00:00:01Z</e:CurrentTime><e:TerminationTime>2050-01-01T00:00:12Z</e:TerminationTime>{notifications}</e:PullMessagesResponse>"
+    ))
+}
+
+fn replacement() -> Reply {
+    grant(
+        SUB,
+        "<r:Route xmlns:r=\"urn:routing\">new</r:Route>",
+        "<n:CurrentTime>2050-01-01T00:00:05Z</n:CurrentTime><n:TerminationTime>2050-01-01T00:00:17Z</n:TerminationTime>",
+    )
+}
+
+fn replacement_page(notifications: &str) -> Reply {
+    reply(&format!(
+        "<e:PullMessagesResponse><e:CurrentTime>2050-01-01T00:00:06Z</e:CurrentTime><e:TerminationTime>2050-01-01T00:00:17Z</e:TerminationTime>{notifications}</e:PullMessagesResponse>"
+    ))
+}
+
+fn storage(supported: bool) -> Reply {
+    reply(&format!(
+        "<e:GetServiceCapabilitiesResponse><e:Capabilities PersistentNotificationStorage=\"{supported}\"/></e:GetServiceCapabilitiesResponse>"
     ))
 }
 
@@ -445,6 +470,267 @@ async fn managed_recovery_announces_gap_and_replaces_reference_once() {
     assert!(calls[2].body.contains(">old</r:Route>"));
     assert!(calls[4].body.contains(">replacement</r:Route>"));
     assert!(calls[5].body.contains(">replacement</r:Route>"));
+    script.assert_done();
+}
+
+#[tokio::test(start_paused = true)]
+async fn managed_history_accounts_for_a_failed_create_and_marks_backfilled_events() {
+    let history = NOTICE.replace("00:00:01", "00:00:03");
+    let live = NOTICE.replace("00:00:01", "00:00:06");
+    let script = Script::new(vec![
+        (CREATE, lease("old")),
+        (PULL, page(NOTICE)),
+        (PULL, Reply::Status(503)),
+        (CLOSE, Reply::Status(503)),
+        (CLOSE, close()),
+        (CREATE, Reply::Status(503)),
+        (CREATE, replacement()),
+        (CAPABILITIES, storage(true)),
+        (SEEK, reply("<e:SeekResponse/>")),
+        (PULL, replacement_page(&format!("{history}{live}"))),
+        (CLOSE, close()),
+    ]);
+    let expression = "tns1:VideoSource/MotionAlarm|tns1:Device/Trigger/DigitalInput";
+    let mut subscription = script
+        .client()
+        .managed_events_recovering(URL, options(), Some(expression))
+        .await
+        .unwrap();
+    assert!(matches!(
+        subscription.next().await,
+        Some(Ok(ManagedEvent::Notification(_)))
+    ));
+    assert!(
+        matches!(subscription.next().await, Some(Ok(ManagedEvent::RecoveryGap { since }))
+        if since == "2050-01-01T00:00:01Z")
+    );
+    assert!(matches!(subscription.next().await,
+        Some(Ok(ManagedEvent::RecoveryResumed { through: Some(through) })) if through == "2050-01-01T00:00:05Z"));
+    assert!(
+        matches!(subscription.next().await, Some(Ok(ManagedEvent::Recovered(event)))
+        if event.utc_time == "2050-01-01T00:00:03Z")
+    );
+    assert!(
+        matches!(subscription.next().await, Some(Ok(ManagedEvent::Notification(event)))
+        if event.utc_time == "2050-01-01T00:00:06Z")
+    );
+    let report = subscription.close().await;
+    assert_eq!(report.recoveries, 2);
+    assert!(report.cleanup_error.is_none());
+    let calls = script.calls();
+    for index in [0, 5, 6] {
+        assert!(calls[index].body.contains(expression));
+    }
+    assert!(calls[4].body.contains(">old</r:Route>"));
+    assert!(calls[8].body.contains("2050-01-01T00:00:01Z"));
+    assert!(calls[8].body.contains(">new</r:Route>"));
+    script.assert_done();
+}
+
+#[tokio::test(start_paused = true)]
+async fn managed_history_falls_back_to_state_when_storage_or_seek_is_unavailable() {
+    for supports_history in [false, true] {
+        let initial = NOTICE
+            .replace("Changed", "Initialized")
+            .replace("00:00:01", "00:00:06");
+        let live = NOTICE.replace("00:00:01", "00:00:06");
+        let mut steps = vec![
+            (CREATE, lease("old")),
+            (PULL, Reply::Status(503)),
+            (CLOSE, close()),
+            (CREATE, replacement()),
+            (CAPABILITIES, storage(supports_history)),
+        ];
+        if supports_history {
+            steps.push((SEEK, Reply::Status(500)));
+        }
+        steps.extend([
+            (SYNC, reply("<e:SetSynchronizationPointResponse/>")),
+            (PULL, replacement_page(&format!("{initial}{live}"))),
+            (CLOSE, close()),
+        ]);
+        let script = Script::new(steps);
+        let mut subscription = script
+            .client()
+            .managed_events_recovering(URL, options(), None)
+            .await
+            .unwrap();
+        assert!(matches!(
+            subscription.next().await,
+            Some(Ok(ManagedEvent::RecoveryGap { .. }))
+        ));
+        assert!(matches!(
+            subscription.next().await,
+            Some(Ok(ManagedEvent::RecoveryResumed { .. }))
+        ));
+        assert!(
+            matches!(subscription.next().await, Some(Ok(ManagedEvent::Snapshot(event)))
+            if event.property_operation == "Initialized")
+        );
+        assert!(
+            matches!(subscription.next().await, Some(Ok(ManagedEvent::Notification(event)))
+            if event.property_operation == "Changed")
+        );
+        assert!(subscription.close().await.cleanup_error.is_none());
+        let calls = script.calls();
+        assert!(
+            calls
+                .iter()
+                .find(|call| call.action == SYNC)
+                .unwrap()
+                .body
+                .contains(">new</r:Route>")
+        );
+        script.assert_done();
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn managed_recovery_coalesces_duplicate_snapshots_only_within_one_sync() {
+    let property = |topic_prefix: &str,
+                    ns: &str,
+                    source: &str,
+                    key: &str,
+                    data: &str,
+                    operation: &str| {
+        format!(
+            r#"<n:NotificationMessage><n:Topic xmlns:{topic_prefix}="{ns}">{topic_prefix}:Motion</n:Topic><n:Message><t:Message UtcTime="2050-01-01T00:00:06Z" PropertyOperation="{operation}"><t:Source><t:SimpleItem Name="channel" Value="{source}"/><t:SimpleItem Name="input" Value="1"/></t:Source><t:Key><t:SimpleItem Name="rule" Value="{key}"/></t:Key><t:Data><t:SimpleItem Name="active" Value="{data}"/></t:Data></t:Message></n:Message></n:NotificationMessage>"#
+        )
+    };
+    let ns = "urn:camera:topics";
+    let off = property("q", ns, "front", "r1", "false", "Initialized");
+    let duplicate = property("other", ns, "front", "r1", "false", "Initialized")
+        .replace("00:00:06Z", "00:00:06.01Z")
+        .replace(
+            r#"<t:SimpleItem Name="channel" Value="front"/><t:SimpleItem Name="input" Value="1"/>"#,
+            r#"<t:SimpleItem Name="input" Value="1"/><t:SimpleItem Name="channel" Value="front"/>"#,
+        );
+    let different_key = property("q", ns, "front", "r2", "false", "Initialized");
+    let different_source = property("q", ns, "back", "r1", "false", "Initialized");
+    let different_namespace = property(
+        "q",
+        "urn:other:topics",
+        "front",
+        "r1",
+        "false",
+        "Initialized",
+    );
+    let on = property("q", ns, "front", "r1", "true", "Initialized");
+    let changed = property("q", ns, "front", "r1", "true", "Changed");
+    let changed_value = property("q", ns, "front", "r1", "false", "Changed");
+    let deleted = property("q", ns, "front", "r1", "true", "Deleted");
+    let script = Script::new(vec![
+        (CREATE, lease("old")),
+        (PULL, Reply::Status(503)),
+        (CLOSE, close()),
+        (CREATE, replacement()),
+        (CAPABILITIES, storage(false)),
+        (SYNC, reply("<e:SetSynchronizationPointResponse/>")),
+        (PULL, replacement_page(&off)),
+        (PULL, replacement_page(&duplicate)),
+        (
+            PULL,
+            replacement_page(&format!(
+                "{different_key}{different_source}{different_namespace}{on}"
+            )),
+        ),
+        (
+            PULL,
+            replacement_page(&format!(
+                "{on}{changed}{on}{changed_value}{on}{deleted}{on}"
+            )),
+        ),
+        (PULL, replacement_page("")),
+        (PULL, replacement_page(&format!("{on}{on}"))),
+        (CLOSE, close()),
+    ]);
+    let mut subscription = script
+        .client()
+        .managed_events_recovering(URL, options(), None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        subscription.next().await,
+        Some(Ok(ManagedEvent::RecoveryGap { .. }))
+    ));
+    assert!(matches!(
+        subscription.next().await,
+        Some(Ok(ManagedEvent::RecoveryResumed { .. }))
+    ));
+    for (snapshot, source, key, namespace, value, operation) in [
+        (true, "front", "r1", ns, "false", "Initialized"),
+        (true, "front", "r2", ns, "false", "Initialized"),
+        (true, "back", "r1", ns, "false", "Initialized"),
+        (
+            true,
+            "front",
+            "r1",
+            "urn:other:topics",
+            "false",
+            "Initialized",
+        ),
+        (true, "front", "r1", ns, "true", "Initialized"),
+        (false, "front", "r1", ns, "true", "Changed"),
+        (false, "front", "r1", ns, "false", "Changed"),
+        (true, "front", "r1", ns, "true", "Initialized"),
+        (false, "front", "r1", ns, "true", "Deleted"),
+        (true, "front", "r1", ns, "true", "Initialized"),
+        (false, "front", "r1", ns, "true", "Initialized"),
+        (false, "front", "r1", ns, "true", "Initialized"),
+    ] {
+        let event = match subscription.next().await {
+            Some(Ok(ManagedEvent::Snapshot(event))) if snapshot => event,
+            Some(Ok(ManagedEvent::Notification(event))) if !snapshot => event,
+            other => panic!("unexpected event: {other:?}"),
+        };
+        assert_eq!(event.to_legacy().source["channel"], source);
+        assert_eq!(
+            event.key,
+            [EventItem::Simple {
+                name: "rule".into(),
+                value: key.into()
+            }]
+        );
+        assert_eq!(
+            event.topic.as_ref().unwrap().namespace_for_prefix("q"),
+            Some(namespace)
+        );
+        assert_eq!(event.to_legacy().data["active"], value);
+        assert_eq!(event.property_operation, operation);
+    }
+    assert!(subscription.close().await.cleanup_error.is_none());
+    script.assert_done();
+}
+
+#[tokio::test(start_paused = true)]
+async fn managed_pause_keeps_the_same_subscription_renewed() {
+    let script = Script::new(vec![
+        (CREATE, lease("old")),
+        (
+            RENEW,
+            reply(
+                "<n:RenewResponse><n:TerminationTime>2050-01-01T00:00:21Z</n:TerminationTime></n:RenewResponse>",
+            ),
+        ),
+        (PULL, page(NOTICE)),
+        (CLOSE, close()),
+    ]);
+    let mut subscription = script
+        .client()
+        .managed_events_recovering(URL, options(), None)
+        .await
+        .unwrap();
+    subscription.set_paused(true);
+    script.until_calls(2).await;
+    subscription.set_paused(false);
+    assert!(matches!(
+        subscription.next().await,
+        Some(Ok(ManagedEvent::Notification(_)))
+    ));
+    assert!(subscription.close().await.cleanup_error.is_none());
+    for call in &script.calls()[1..] {
+        assert!(call.body.contains(">old</r:Route>"));
+    }
     script.assert_done();
 }
 

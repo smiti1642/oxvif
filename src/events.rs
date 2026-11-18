@@ -11,6 +11,7 @@ use crate::{
     types::xml_escape,
 };
 mod managed;
+mod snapshot;
 pub use managed::*;
 
 const EVENTS: &str = "http://www.onvif.org/ver10/events/wsdl";
@@ -306,6 +307,32 @@ pub(crate) fn notification(node: &QualifiedElement) -> Result<QualifiedNotificat
 }
 
 impl OnvifClient {
+    async fn persistent_notification_storage(
+        &self,
+        events_url: &str,
+        policy: &EndpointPolicy,
+        timeout: Duration,
+    ) -> Result<bool, OnvifError> {
+        let url = policy.check(self.device_url(), events_url)?;
+        let xml = self.call_addressed(
+            url.as_str(),
+            "http://www.onvif.org/ver10/events/wsdl/EventPortType/GetServiceCapabilitiesRequest",
+            "<tev:GetServiceCapabilities/>",
+            &[],
+            SoapRequestOptions::with_timeout(timeout),
+        ).await?;
+        let capabilities = response(&xml, EVENTS, "GetServiceCapabilitiesResponse")?;
+        Ok(capabilities
+            .one(EVENTS, "Capabilities")?
+            .is_some_and(|node| {
+                node.attributes().iter().any(|attr| {
+                    attr.namespace().is_empty()
+                        && attr.local_name() == "PersistentNotificationStorage"
+                        && matches!(attr.value().trim(), "true" | "1")
+                })
+            }))
+    }
+
     /// Create a pull point retaining WS-Addressing reference parameters.
     pub async fn create_referenced_pull_point(
         &self,
@@ -328,15 +355,15 @@ impl OnvifClient {
         &self,
         events_url: &str,
         initial_termination: &str,
-        topic: Option<&EventTopicFilter>,
+        expression: Option<&str>,
         policy: &EndpointPolicy,
         timeout: Duration,
     ) -> Result<ReferencedPullPoint, OnvifError> {
         let url = policy.check(self.device_url(), events_url)?;
-        let filter = topic.map_or_else(String::new, |topic| {
+        let filter = expression.map_or_else(String::new, |expression| {
             format!(
-                "<tev:Filter><wsnt:TopicExpression xmlns:tns1=\"{TOPICS}\" Dialect=\"{CONCRETE_SET}\">tns1:{}</wsnt:TopicExpression></tev:Filter>",
-                xml_escape(topic.path())
+                "<tev:Filter><wsnt:TopicExpression xmlns:tns1=\"{TOPICS}\" Dialect=\"{CONCRETE_SET}\">{}</wsnt:TopicExpression></tev:Filter>",
+                xml_escape(expression)
             )
         });
         let xml = self.call_addressed(url.as_str(),
@@ -442,6 +469,75 @@ impl OnvifClient {
             )
             .await?;
         response(&xml, NOTIFICATION, "UnsubscribeResponse")?;
+        Ok(())
+    }
+
+    /// Position a persistent pull point at the first retained event at or after `utc_time`.
+    pub async fn seek_referenced_pull_point(
+        &self,
+        reference: &EndpointReference,
+        utc_time: &str,
+        policy: &EndpointPolicy,
+        timeout: Duration,
+    ) -> Result<(), OnvifError> {
+        if managed::timestamp(utc_time).is_none() {
+            return Err(OnvifError::InvalidArgument(
+                "invalid event Seek UTC time".into(),
+            ));
+        }
+        self.referenced_event_command(
+            reference,
+            "Seek",
+            "SeekResponse",
+            &format!(
+                "<tev:Seek><tev:UtcTime>{}</tev:UtcTime></tev:Seek>",
+                xml_escape(utc_time.trim())
+            ),
+            policy,
+            timeout,
+        )
+        .await
+    }
+
+    /// Request current property states through this pull point, using its full reference.
+    pub async fn synchronize_referenced_pull_point(
+        &self,
+        reference: &EndpointReference,
+        policy: &EndpointPolicy,
+        timeout: Duration,
+    ) -> Result<(), OnvifError> {
+        self.referenced_event_command(
+            reference,
+            "SetSynchronizationPoint",
+            "SetSynchronizationPointResponse",
+            "<tev:SetSynchronizationPoint/>",
+            policy,
+            timeout,
+        )
+        .await
+    }
+
+    async fn referenced_event_command(
+        &self,
+        reference: &EndpointReference,
+        operation: &str,
+        expected: &'static str,
+        body: &str,
+        policy: &EndpointPolicy,
+        timeout: Duration,
+    ) -> Result<(), OnvifError> {
+        policy.check(self.device_url(), reference.address())?;
+        let action = format!("{EVENTS}/PullPointSubscription/{operation}Request");
+        let xml = self
+            .call_addressed(
+                reference.address(),
+                &action,
+                body,
+                reference.parameters(),
+                SoapRequestOptions::with_timeout(timeout),
+            )
+            .await?;
+        response(&xml, EVENTS, expected)?;
         Ok(())
     }
 }
