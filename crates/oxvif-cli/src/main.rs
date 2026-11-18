@@ -9,7 +9,9 @@ use std::{
 };
 
 use clap::{
-    ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum, error::ErrorKind,
+    ArgAction, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum,
+    builder::{StringValueParser, TypedValueParser},
+    error::ErrorKind,
 };
 use clap_complete::{Shell, generate};
 use oxvif::transport::HttpTransport;
@@ -21,9 +23,9 @@ use oxvif_cli::{
     DeviceUpdateRequest, DiscoverScanRequest, DiscoveryEnrichRequest, DiscoveryFilter,
     DiscoveryImportOverride, DiscoveryImportOverrides, DiscoveryRefreshRequest,
     DiscoverySnapshotShowRequest, ExecutionOptions, GroupCreateRequest, GroupMemberAddRequest,
-    GroupMemberRemoveRequest, ImportMode, MatchMode, NewDevice, NewGroup, NewSavedView,
-    OutputFormat, ProfileConnectRequest, ResourceIdRequest, ResultMeta, SecretString,
-    TargetSelector, ViewCreateRequest, normalize_target, render_error,
+    GroupMemberRemoveRequest, ImportMode, InspectRead, InspectRequest, MatchMode, NewDevice,
+    NewGroup, NewSavedView, OutputFormat, ProfileConnectRequest, ResourceIdRequest, ResultMeta,
+    SecretString, TargetSelector, ViewCreateRequest, normalize_target, render_error,
 };
 use tokio::time::Instant;
 
@@ -206,6 +208,29 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// Read live ONVIF data by address without setup or saved credentials.
+    #[command(
+        after_help = "Without a username or password, inspect tries anonymous access.\nUse --username or OXVIF_USERNAME for authenticated devices.\nPass --password=VALUE if the password starts with a hyphen.\nUse the hidden prompt, --password-stdin, or an injected OXVIF_PASSWORD to keep the password out of process arguments."
+    )]
+    Inspect {
+        /// Device IP address, hostname, or ONVIF device-service URL.
+        target: String,
+        /// Data to query from the device.
+        #[arg(long, value_enum, default_value = "info")]
+        read: CliInspectRead,
+        /// Media profile token required by --read stream-uri. List tokens with --read profiles.
+        #[arg(long)]
+        profile: Option<String>,
+        /// ONVIF username; defaults to OXVIF_USERNAME when set.
+        #[arg(long)]
+        username: Option<String>,
+        /// Supply a one-time password. Shell history and process arguments may expose it.
+        #[arg(long, value_name = "PASSWORD", value_parser = StringValueParser::new().map(SecretString::for_direct_auth))]
+        password: Option<SecretString>,
+        /// Read one password line from stdin.
+        #[arg(long)]
+        password_stdin: bool,
+    },
     /// Guided human workspace: choose a camera and continue maintenance without retyping IDs.
     Manage {
         /// Optional saved-device ID; otherwise choose from saved devices or discovery.
@@ -751,8 +776,45 @@ enum CredentialCommands {
     UseProfile { id: String, profile: String },
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum CliInspectRead {
+    /// Manufacturer, model, firmware, serial number and hardware ID.
+    Info,
+    /// Media profile names, tokens and configuration.
+    Profiles,
+    /// Advertised ONVIF capabilities.
+    Capabilities,
+    /// Advertised ONVIF services, versions and endpoints.
+    Services,
+    /// RTSP URI for the selected media profile.
+    StreamUri,
+}
+
+impl CliInspectRead {
+    fn with_profile(self, profile: Option<String>) -> Result<InspectRead, AppError> {
+        Ok(match (self, profile) {
+            (Self::StreamUri, Some(profile)) => InspectRead::StreamUri { profile },
+            (Self::StreamUri, None) => {
+                return Err(AppError::invalid_argument(
+                    "--read stream-uri requires --profile. Use --read profiles to list tokens.",
+                ));
+            }
+            (_, Some(_)) => {
+                return Err(AppError::invalid_argument(
+                    "Use --profile with --read stream-uri.",
+                ));
+            }
+            (Self::Info, None) => InspectRead::Info,
+            (Self::Profiles, None) => InspectRead::Profiles,
+            (Self::Capabilities, None) => InspectRead::Capabilities,
+            (Self::Services, None) => InspectRead::Services,
+        })
+    }
+}
+
 fn surface_command_id(command: &Commands) -> CommandId {
     match command {
+        Commands::Inspect { .. } => CommandId::Inspect,
         Commands::Manage { .. } => CommandId::Manage,
         Commands::Setup { .. } => CommandId::Setup,
         Commands::Auth { .. } => CommandId::Auth,
@@ -971,16 +1033,27 @@ fn startup_error() -> ExitCode {
 }
 
 fn share_requested(arguments: &[OsString]) -> bool {
+    long_option_requested(arguments, "--share")
+}
+
+fn long_option_requested(arguments: &[OsString], name: &str) -> bool {
     arguments
         .iter()
         .skip(1)
         .take_while(|arg| *arg != "--")
-        .any(|arg| arg == "--share" || arg.to_str().is_some_and(|arg| arg.starts_with("--share=")))
+        .any(|arg| {
+            arg == name
+                || arg
+                    .as_encoded_bytes()
+                    .strip_prefix(name.as_bytes())
+                    .is_some_and(|suffix| suffix.starts_with(b"="))
+        })
 }
 
 async fn run(arguments: Vec<OsString>) -> u8 {
     use oxvif_cli::share::{Command, Reason, Report, Stage};
     let share = share_requested(&arguments);
+    let has_password_argument = long_option_requested(&arguments, "--password");
     let arguments = normalize_human_arguments(arguments);
     let requested_format = requested_output(&arguments);
     let parsed = if share {
@@ -1015,7 +1088,13 @@ async fn run(arguments: Vec<OsString>) -> u8 {
             return u8::try_from(exit_code).unwrap_or(0);
         }
         Err(error) => {
-            let app_error = AppError::invalid_argument(error.to_string().trim().to_owned());
+            // Clap diagnostics can quote unexpected input, including a password on a malformed command line.
+            let message = if has_password_argument {
+                "Invalid command arguments. Run `oxvif inspect --help` for usage.".to_owned()
+            } else {
+                error.to_string().trim().to_owned()
+            };
+            let app_error = AppError::invalid_argument(message);
             emit_error(requested_format, &app_error, None);
             return app_error.exit_code();
         }
@@ -1061,6 +1140,41 @@ async fn run(arguments: Vec<OsString>) -> u8 {
         }
     };
     let options = execution_options(&cli, ca_certificates, jobs);
+    if let Commands::Inspect {
+        target,
+        read,
+        profile,
+        username,
+        password,
+        password_stdin,
+    } = &mut cli.command
+    {
+        let name = CommandId::Inspect.as_str();
+        let request = reject_root_selector(
+            cli.device.as_deref(),
+            cli.group.as_deref(),
+            cli.view.as_deref(),
+            name,
+        )
+        .and_then(|()| InspectRequest::new(target, read.with_profile(profile.take())?))
+        .and_then(|request| {
+            inspect_credentials(
+                request,
+                username.as_deref(),
+                password.take(),
+                *password_stdin,
+                interactive_terminal_available(format, &options),
+                &SystemPrompt,
+            )
+        });
+        return match request {
+            Ok(request) => Box::pin(execute_inspect(request, &options, format)).await,
+            Err(error) => {
+                emit_error(format, &error, Some(name));
+                error.exit_code()
+            }
+        };
+    }
     let application = match Application::system() {
         Ok(application) => application,
         Err(error) => {
@@ -1367,6 +1481,48 @@ async fn collect_share(
     }
 }
 
+async fn execute_inspect(
+    request: InspectRequest,
+    options: &ExecutionOptions,
+    format: OutputFormat,
+) -> u8 {
+    let name = CommandId::Inspect.as_str();
+    let started = Instant::now();
+    emit_verbose_start(options, format, name);
+    let (result, diagnostics) = oxvif_cli::capture_diagnostics(
+        options.verbosity > 1 && !options.quiet,
+        Application::inspect(request, options),
+    )
+    .await;
+    for line in diagnostics {
+        eprintln!("{line}");
+    }
+    let rendered = result.and_then(|success| {
+        oxvif_cli::render_success_with_details(format, &success, options.verbosity > 0)
+            .map(|rendered| (success, rendered))
+    });
+    match rendered {
+        Ok((success, rendered)) => {
+            println!("{rendered}");
+            emit_verbose_success(options, name, &success, started);
+            success.exit_code()
+        }
+        Err(error) => {
+            emit_verbose_error(options, name, &error, started);
+            emit_error_with_meta(
+                format,
+                &error,
+                &ResultMeta {
+                    command: Some(name.to_owned()),
+                    elapsed_ms: elapsed_millis(started),
+                    ..ResultMeta::default()
+                },
+            );
+            error.exit_code()
+        }
+    }
+}
+
 async fn execute_and_emit(
     application: &Application,
     request: CommandRequest,
@@ -1621,6 +1777,9 @@ fn build_request(
     };
 
     let request = match command {
+        Commands::Inspect { .. } => Err(AppError::internal(
+            "Inspect requires the direct command adapter.",
+        )),
         Commands::Manage { .. } => Err(AppError::invalid_argument(
             "manage is a terminal adapter; use individual typed operations for automation.",
         )),
@@ -2494,6 +2653,7 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
         root,
         Some(
             "health"
+                | "inspect"
                 | "manage"
                 | "diagnose"
                 | "snapshot"
@@ -2507,6 +2667,7 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
     ) || (root == Some("config")
         && matches!(leaf, Some("export" | "diff")));
     if supports_trailing_policy {
+        let inspect = root == Some("inspect");
         let mut moved = Vec::new();
         let mut scan = index + 1;
         while scan < arguments.len() {
@@ -2516,8 +2677,17 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
             // Never reinterpret an opaque local argument's value as a root flag.
             if matches!(
                 arguments[scan].to_str(),
-                Some("--profile" | "--target" | "--save" | "--against" | "--output")
-            ) {
+                Some(
+                    "--profile"
+                        | "--target"
+                        | "--save"
+                        | "--against"
+                        | "--output"
+                        | "--username"
+                        | "--read"
+                )
+            ) || (inspect && arguments[scan] == "--password")
+            {
                 scan += 2;
                 continue;
             }
@@ -2533,7 +2703,8 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
                         | "--retries"
                         | "--clock-sync"
                         | "--ca-certificate"
-                );
+                ) || (inspect
+                    && matches!(argument.as_ref(), "--soap-auth" | "--media-service"));
                 let inline_value = [
                     "--device=",
                     "--group=",
@@ -2545,7 +2716,10 @@ fn normalize_human_arguments(mut arguments: Vec<OsString>) -> Vec<OsString> {
                     "--ca-certificate=",
                 ]
                 .iter()
-                .any(|prefix| argument.starts_with(prefix));
+                .any(|prefix| argument.starts_with(prefix))
+                    || (inspect
+                        && (argument.starts_with("--soap-auth=")
+                            || argument.starts_with("--media-service=")));
                 (takes_value, inline_value)
             };
             if takes_value && scan + 1 < arguments.len() {
@@ -2597,6 +2771,73 @@ fn quick_selector(
     } else {
         Ok(selector)
     }
+}
+
+fn inspect_credentials(
+    request: InspectRequest,
+    username: Option<&str>,
+    password: Option<SecretString>,
+    password_stdin: bool,
+    interactive: bool,
+    prompt: &dyn Prompt,
+) -> Result<InspectRequest, AppError> {
+    if password_stdin && password.is_some() {
+        return Err(AppError::invalid_argument(
+            "--password and --password-stdin are mutually exclusive.",
+        ));
+    }
+    let username = match username {
+        Some(username) => Some(username.to_owned()),
+        None => env::var("OXVIF_USERNAME")
+            .ok()
+            .filter(|value| !value.is_empty()),
+    };
+    let Some(username) = username else {
+        return if password.is_some() || password_stdin || env::var_os("OXVIF_PASSWORD").is_some() {
+            Err(AppError::invalid_argument(
+                "Provide --username or set OXVIF_USERNAME when supplying a password.",
+            ))
+        } else {
+            Ok(request)
+        };
+    };
+    if username.trim().is_empty() {
+        return Err(AppError::invalid_argument(
+            "Inspect requires a nonempty username.",
+        ));
+    }
+    let password = if let Some(password) = password {
+        password
+    } else if password_stdin {
+        let mut password = String::new();
+        let count = io::stdin().read_line(&mut password).map_err(|error| {
+            AppError::invalid_argument(format!("Failed to read password: {error}"))
+        })?;
+        if count == 0 {
+            return Err(AppError::invalid_argument(
+                "Password stdin reached EOF before a password line was received.",
+            ));
+        }
+        if password.ends_with('\n') {
+            password.pop();
+            if password.ends_with('\r') {
+                password.pop();
+            }
+        }
+        SecretString::for_direct_auth(password)
+    } else if let Some(password) = env::var_os("OXVIF_PASSWORD") {
+        password
+            .into_string()
+            .map(SecretString::for_direct_auth)
+            .map_err(|_| AppError::invalid_argument("OXVIF_PASSWORD must be valid Unicode."))?
+    } else if interactive {
+        SecretString::for_direct_auth(prompt.password("Password: ")?)
+    } else {
+        return Err(AppError::invalid_argument(
+            "Provide a password through --password, --password-stdin, or OXVIF_PASSWORD.",
+        ));
+    };
+    request.with_credentials(username, password)
 }
 
 fn read_password_from_stdin() -> Result<String, AppError> {

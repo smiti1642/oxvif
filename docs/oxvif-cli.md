@@ -12,7 +12,7 @@ interactive operators and automated Agents.
 | [Overview](#overview) | Scope, audience, and read-only boundary. |
 | [Installation](#installation) | crates.io, source, and native-package installation guidance. |
 | [Synopsis and global options](#synopsis) | Command shape, selectors, timeouts, retries, TLS, and output flags. |
-| [Quick start](#quick-start) | Add a device, store credentials, and run the first diagnostic. |
+| [Quick start](#quick-start) | Read a device by address or set it up for repeated use. |
 | [Device inventory](#device-inventory) | Registry paths, backup, restore, and validation. |
 | [Network discovery](#network-discovery) | Scans, interfaces, snapshots, filters, and enrichment. |
 | [Bulk import](#fingerprinted-bulk-import) | Reviewable plan/apply workflow and fingerprints. |
@@ -43,20 +43,19 @@ The CLI provides:
 - deterministic JSON and JSONL contracts for Agents and automation; and
 - typed errors with stable process exit codes.
 
-The 0.17 ONVIF command surface is diagnostic-only. It reads device state but
-does not modify device configuration. Registry, Group, View, credential, and
-snapshot commands modify local CLI state only.
+The CLI reads ONVIF device state for diagnostics. Registry, Group, View,
+credential, and snapshot commands modify local CLI state.
 
 ## Installation
 
-Install version 0.17 from crates.io:
+Install the latest published version from crates.io:
 
 ```sh
-cargo install oxvif-cli --version 0.17.0 --locked
+cargo install oxvif-cli --locked
 oxvif --version
 ```
 
-Repository contributors can install the current workspace version instead:
+Install the current workspace to try 0.18.0 features before publication:
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
@@ -67,8 +66,7 @@ APT and Homebrew packages are distributed only through channels explicitly
 listed in the project [`README`](../README.md#command-line-interface) after
 independent install/remove verification. Until a native channel is listed, use
 crates.io or a checksum-verified portable artifact from the matching GitHub Release. The
-platform verification evidence is recorded in the
-[0.17 verification and limitations](releases/0.17.0-changelog.md#verification-and-limitations).
+platform verification summary is in the [0.18.0 release notes](releases/0.18.0.md#dependencies-and-verification).
 
 Confirm the available command surface after installation:
 
@@ -87,6 +85,7 @@ The primary command groups are:
 
 | Command | Purpose |
 | --- | --- |
+| `inspect` | Query an ONVIF address once with optional, temporary credentials. |
 | `setup`, `auth` | Securely onboard a device or update its native credential. |
 | `info`, `test`, `health` | Run common diagnostics against a positional or current device. |
 | `profiles`, `stream`, `snapshot` | Use common media operations without the canonical namespace. |
@@ -172,6 +171,34 @@ Raw URLs, bodies and Fault text are excluded from these diagnostic lines.
 JSON/JSONL stdout and its closed v3 metadata schema remain unchanged.
 
 ## Quick start
+
+For a one-time read by IP address, hostname, or ONVIF device-service URL, run:
+
+```sh
+oxvif inspect 192.168.1.100 --username admin
+```
+
+In a terminal, the CLI prompts for the password without echo. With no
+credentials supplied, it tries anonymous access. The default read returns
+device information. Use `--read profiles`, `--read capabilities`, or
+`--read services` for other data. The command does not open the local
+registry or use the credential store.
+
+Use `oxvif inspect 192.168.1.100 --username admin --password EXAMPLE` to
+query in one line. Use `--password=VALUE` if the password starts with a
+hyphen. An inline password may be visible in shell history and process
+arguments.
+
+To get a live RTSP URL, reuse a token returned by `--read profiles`:
+
+```sh
+oxvif inspect 192.168.1.100 --username admin --password EXAMPLE --read stream-uri --profile PROFILE_TOKEN
+```
+
+To script the same operation, pipe a password line from your secret provider
+into `oxvif inspect 192.168.1.100 --read profiles --username admin
+--password-stdin --output json --non-interactive`. You can also inject
+`OXVIF_USERNAME` and `OXVIF_PASSWORD` into the command's environment.
 
 Securely register, authenticate, verify, and select a device in one command:
 
@@ -594,8 +621,9 @@ fetch, or raw exchange capture.
 
 ### Ephemeral targets
 
-Saved registration is optional for one-shot operations. Supply credentials
-through the native store or securely injected environment variables:
+Use `inspect` for the quick-start reads. Other live commands that accept
+`--target` can also connect directly with securely injected
+`OXVIF_USERNAME` and `OXVIF_PASSWORD`:
 
 ```sh
 oxvif device info --target 192.168.1.100 --output json --non-interactive

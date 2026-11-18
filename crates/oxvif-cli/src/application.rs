@@ -21,10 +21,11 @@ use tokio::time::{Instant, sleep, timeout};
 
 use crate::inventory::discovery_view_matches;
 use crate::{
-    AppError, CommandData, CommandRequest, CommandSuccess, CredentialStore, DeviceMetadata,
-    DiscoveryDeviceView, DiscoveryResultSummary, DiscoverySnapshotResult, LiveDeviceInfo,
-    RegistryStore, ResultMeta, SecretString, SystemCredentialStore, Warning,
-    credential_profile_reference, credential_reference, describe, normalize_target,
+    AppError, CommandData, CommandId, CommandRequest, CommandSuccess, CredentialStore,
+    DeviceMetadata, DiscoveryDeviceView, DiscoveryResultSummary, DiscoverySnapshotResult,
+    InspectRead, InspectRequest, LiveDeviceInfo, RegistryStore, ResultMeta, SecretString,
+    SystemCredentialStore, Warning, credential_profile_reference, credential_reference, describe,
+    normalize_target,
 };
 
 /// Client-side WS-Security timestamp synchronization policy.
@@ -238,6 +239,36 @@ impl Application {
         })
     }
 
+    /// Query a device without opening the local registry or credential store.
+    pub async fn inspect(
+        request: InspectRequest,
+        options: &ExecutionOptions,
+    ) -> Result<CommandSuccess, AppError> {
+        let started = Instant::now();
+        let (username, password) = request.credentials.unzip();
+        let resolved = ResolvedTarget {
+            device_id: None,
+            selected_by: None,
+            target: request.target,
+            username,
+            password,
+        };
+        let operation = match request.read {
+            InspectRead::Info => {
+                return Ok(device_information_outcome(resolved, options)
+                    .await?
+                    .into_success(CommandId::Inspect.as_str(), started));
+            }
+            InspectRead::Profiles => DiagnosticOperation::MediaProfiles,
+            InspectRead::Capabilities => DiagnosticOperation::Capabilities,
+            InspectRead::Services => DiagnosticOperation::Services,
+            InspectRead::StreamUri { profile } => DiagnosticOperation::MediaStreamUri(profile),
+        };
+        Ok(diagnostic_outcome(resolved, operation, options)
+            .await?
+            .into_success(CommandId::Inspect.as_str(), started))
+    }
+
     pub async fn execute(
         &self,
         request: CommandRequest,
@@ -302,6 +333,7 @@ impl Application {
                 prompt: crate::agent::prompt(),
             }),
             CommandRequest::Describe(request) => Outcome::data(describe::execute(request)?),
+            CommandRequest::Inspect(request) => return Self::inspect(request, options).await,
             CommandRequest::ConfigPath => Outcome::data(CommandData::ConfigStatus {
                 config_dir: self.registry.config_dir().display().to_string(),
                 registry_file: self.registry.registry_path().display().to_string(),
@@ -913,18 +945,7 @@ impl Application {
                     .await?
                 } else {
                     let resolved = self.resolve_target(request.selector)?;
-                    let information = self.fetch_device_info(&resolved, options).await?;
-                    Outcome {
-                        data: CommandData::DeviceInformation {
-                            device_id: resolved.device_id.clone(),
-                            target: resolved.target.clone(),
-                            information,
-                        },
-                        warnings: Vec::new(),
-                        device_id: resolved.device_id,
-                        selected_by: resolved.selected_by,
-                        target: Some(resolved.target),
-                    }
+                    device_information_outcome(resolved, options).await?
                 }
             }
             CommandRequest::DeviceCapabilities(request) => {
@@ -1008,17 +1029,7 @@ impl Application {
             }
         };
 
-        Ok(CommandSuccess {
-            data: outcome.data,
-            warnings: outcome.warnings,
-            meta: ResultMeta {
-                command: Some(command_name.to_owned()),
-                device_id: outcome.device_id,
-                selected_by: outcome.selected_by,
-                target: outcome.target,
-                elapsed_ms: elapsed_millis(started),
-            },
-        })
+        Ok(outcome.into_success(command_name, started))
     }
 
     fn remove_device(&self, id: &str) -> Result<Outcome, AppError> {
@@ -1255,20 +1266,7 @@ impl Application {
             return self.fleet_diagnostic(selector, operation, options).await;
         }
         let resolved = self.resolve_target(selector)?;
-        let operation_name = operation.name().to_owned();
-        let result = execute_diagnostic(&resolved, operation, options).await?;
-        Ok(Outcome {
-            data: CommandData::DeviceDiagnostic {
-                operation: operation_name,
-                device_id: resolved.device_id.clone(),
-                target: resolved.target.clone(),
-                result,
-            },
-            warnings: Vec::new(),
-            device_id: resolved.device_id,
-            selected_by: resolved.selected_by,
-            target: Some(resolved.target),
-        })
+        diagnostic_outcome(resolved, operation, options).await
     }
 
     async fn fleet_diagnostic(
@@ -1570,6 +1568,51 @@ fn fleet_item_error(error: AppError) -> crate::FleetItemError {
         message: error.message,
         retryable: error.retryable,
     }
+}
+
+async fn device_information_outcome(
+    resolved: ResolvedTarget,
+    options: &ExecutionOptions,
+) -> Result<Outcome, AppError> {
+    let information = fetch_live_information(
+        &resolved.target,
+        resolved.username.as_deref(),
+        resolved.password(),
+        options,
+    )
+    .await?;
+    Ok(Outcome {
+        data: CommandData::DeviceInformation {
+            device_id: resolved.device_id.clone(),
+            target: resolved.target.clone(),
+            information,
+        },
+        warnings: Vec::new(),
+        device_id: resolved.device_id,
+        selected_by: resolved.selected_by,
+        target: Some(resolved.target),
+    })
+}
+
+async fn diagnostic_outcome(
+    resolved: ResolvedTarget,
+    operation: DiagnosticOperation,
+    options: &ExecutionOptions,
+) -> Result<Outcome, AppError> {
+    let operation_name = operation.name().to_owned();
+    let result = execute_diagnostic(&resolved, operation, options).await?;
+    Ok(Outcome {
+        data: CommandData::DeviceDiagnostic {
+            operation: operation_name,
+            device_id: resolved.device_id.clone(),
+            target: resolved.target.clone(),
+            result,
+        },
+        warnings: Vec::new(),
+        device_id: resolved.device_id,
+        selected_by: resolved.selected_by,
+        target: Some(resolved.target),
+    })
 }
 
 async fn execute_diagnostic(
@@ -2238,6 +2281,20 @@ struct Outcome {
 }
 
 impl Outcome {
+    fn into_success(self, command_name: &str, started: Instant) -> CommandSuccess {
+        CommandSuccess {
+            data: self.data,
+            warnings: self.warnings,
+            meta: ResultMeta {
+                command: Some(command_name.to_owned()),
+                device_id: self.device_id,
+                selected_by: self.selected_by,
+                target: self.target,
+                elapsed_ms: elapsed_millis(started),
+            },
+        }
+    }
+
     fn data(data: CommandData) -> Self {
         Self {
             data,

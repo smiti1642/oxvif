@@ -8,7 +8,7 @@
 | --- | --- |
 | [人類使用者快捷操作](#人類使用者快捷操作) | 最短的互動式設定與日常操作。 |
 | [安裝](#安裝) | crates.io、source 與原生 package 安裝指引。 |
-| [最短上手流程](#最短上手流程) | 建立裝置、儲存憑證與首次診斷。 |
+| [最短上手流程](#最短上手流程) | 依位址直接查詢，或設定裝置供日後使用。 |
 | [Retry 與診斷輸出](#retry-與診斷輸出) | Timeout、重試、TLS 與安全 log。 |
 | [給 Agent 的入口](#給-agent-的入口) | 內建指南、descriptor 與自動化規則。 |
 | [探索內網裝置](#探索內網裝置) | Interface、snapshot、filter 與 enrichment。 |
@@ -83,14 +83,14 @@ oxvif completion powershell
 
 ## 安裝
 
-從 crates.io 安裝 0.17：
+從 crates.io 安裝最新版：
 
 ```sh
-cargo install oxvif-cli --version 0.17.0 --locked
+cargo install oxvif-cli --locked
 oxvif --version
 ```
 
-Repository contributor 可以改為安裝目前的 workspace 版本：
+要在發布前試用 0.18.0 功能，可安裝目前的 workspace 版本：
 
 ```sh
 cargo install --path crates/oxvif-cli --locked
@@ -101,15 +101,39 @@ oxvif --help
 APT 與 Homebrew package 只透過專案
 [`README`](../README.md#command-line-interface) 明確列出、且已完成獨立安裝／移除驗證的
 channel 發布。原生 channel 尚未列出時，請使用 crates.io 或對應 GitHub Release 所附且可
-核對 checksum 的 portable artifact。平台驗證證據記錄於
-[0.17 驗證與限制](releases/0.17.0-changelog_zh.md#驗證與限制)。
+核對 checksum 的 portable artifact。 [0.18.0 平台驗證摘要](releases/0.18.0_zh.md#相依套件與驗收)
 
 套件與執行檔名稱不同是刻意的：Cargo 使用 `oxvif-cli` 避免和 library crate `oxvif` 衝突，
 使用者則只需要記住 `oxvif <command>`。
 
 ## 最短上手流程
 
-互動式終端的最短流程是：
+只需查詢一次時，可以直接指定 IP、主機名稱或 ONVIF 裝置服務 URL：
+
+```sh
+oxvif inspect 192.168.1.100 --username admin
+```
+
+互動式終端會提示輸入密碼，輸入時不會顯示。未提供帳密時會嘗試匿名存取。
+預設顯示裝置資訊，也可以用 `--read profiles`、`--read capabilities` 或
+`--read services` 查媒體設定檔、裝置能力或服務。這個指令不讀取本機裝置清冊，
+也不會使用憑證庫。
+
+若要一行查完，可執行 `oxvif inspect 192.168.1.100 --username admin --password EXAMPLE`。
+密碼若以連字號開頭，請用 `--password=VALUE`。直接輸入的密碼可能出現在
+Shell 歷史紀錄和程序參數中。
+
+要查即時串流的 RTSP 網址，請指定 `--read profiles` 回傳的 Profile Token：
+
+```sh
+oxvif inspect 192.168.1.100 --username admin --password EXAMPLE --read stream-uri --profile PROFILE_TOKEN
+```
+
+自動化時，可將密碼透過管線送進 `oxvif inspect 192.168.1.100 --read profiles
+--username admin --password-stdin --output json --non-interactive`，
+也可透過 `OXVIF_USERNAME` 與 `OXVIF_PASSWORD` 傳入帳密。
+
+若要保留裝置供日後操作，可執行：
 
 ```sh
 oxvif setup 192.168.1.100

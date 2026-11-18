@@ -81,6 +81,7 @@ command_ids! {
     Describe => "describe",
     ConfigPath => "config.path",
     ConfigValidate => "config.validate",
+    Inspect => "inspect",
     Setup => "setup",
     Auth => "auth",
     Info => "info",
@@ -154,6 +155,7 @@ pub enum CommandRequest {
     AgentPrompt,
     /// List commands or describe one command.
     Describe(DescribeRequest),
+    Inspect(InspectRequest),
     DeviceSetup(DeviceSetupRequest),
     DeviceAdd(DeviceAddRequest),
     DeviceList,
@@ -218,6 +220,7 @@ impl CommandRequest {
             Self::AgentGuide => CommandId::AgentGuide,
             Self::AgentPrompt => CommandId::AgentPrompt,
             Self::Describe(_) => CommandId::Describe,
+            Self::Inspect(_) => CommandId::Inspect,
             Self::DeviceSetup(_) => CommandId::Setup,
             Self::DeviceAdd(_) => CommandId::DeviceAdd,
             Self::DeviceList => CommandId::DeviceList,
@@ -279,6 +282,56 @@ impl CommandRequest {
 pub struct DescribeRequest {
     /// Dotted command name, or `None` to list the available commands.
     pub command: Option<String>,
+}
+
+/// The data to read from an unsaved device.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum InspectRead {
+    #[default]
+    Info,
+    Profiles,
+    Capabilities,
+    Services,
+    StreamUri {
+        profile: String,
+    },
+}
+
+/// A direct read with optional credentials held only for the request.
+#[derive(Debug, Eq, PartialEq)]
+pub struct InspectRequest {
+    pub(crate) target: String,
+    pub(crate) read: InspectRead,
+    pub(crate) credentials: Option<(String, SecretString)>,
+}
+
+impl InspectRequest {
+    pub fn new(target: &str, read: InspectRead) -> Result<Self, AppError> {
+        if matches!(&read, InspectRead::StreamUri { profile } if profile.trim().is_empty()) {
+            return Err(AppError::invalid_argument(
+                "Provide a nonempty --profile token.",
+            ));
+        }
+        Ok(Self {
+            target: crate::normalize_target(target)?,
+            read,
+            credentials: None,
+        })
+    }
+
+    pub fn with_credentials(
+        mut self,
+        username: String,
+        password: SecretString,
+    ) -> Result<Self, AppError> {
+        if username.trim().is_empty() {
+            return Err(AppError::invalid_argument(
+                "Inspect requires a nonempty username.",
+            ));
+        }
+        self.credentials = Some((username, password));
+        Ok(self)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -353,7 +406,7 @@ impl SecretString {
     }
 
     /// Direct authentication can use a camera account with an empty password.
-    pub(crate) fn for_direct_auth(secret: String) -> Self {
+    pub fn for_direct_auth(secret: String) -> Self {
         Self(secret)
     }
 }

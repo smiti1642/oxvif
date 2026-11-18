@@ -37,6 +37,26 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             "Parse and validate the registry and retained discovery snapshots.",
         ),
         descriptor(
+            "inspect",
+            "Read live ONVIF data by address without setup or saved credentials.",
+            RiskLevel::Read,
+            false,
+            false,
+            vec![
+                required("target", "url | host"),
+                argument_with_values(
+                    "read",
+                    "string",
+                    false,
+                    &["info", "profiles", "capabilities", "services", "stream-uri"],
+                ),
+                optional("profile", "string"),
+                optional("username", "string"),
+                optional("password", "string"),
+                optional("password-stdin", "boolean"),
+            ],
+        ),
+        descriptor(
             "setup",
             "Securely register, authenticate, verify, and select one device.",
             RiskLevel::Write,
@@ -664,7 +684,14 @@ fn descriptor(
             || name == "health.check"
             || matches!(
                 name,
-                "setup" | "info" | "test" | "health" | "profiles" | "stream" | "snapshot"
+                "inspect"
+                    | "setup"
+                    | "info"
+                    | "test"
+                    | "health"
+                    | "profiles"
+                    | "stream"
+                    | "snapshot"
             )
             || name == "discover.scan"
             || name == "discover.refresh",
@@ -728,6 +755,10 @@ fn output_descriptor(name: &str) -> OutputDescriptor {
         "events.watch" => (
             "event_notification | event_gap | event_watch_summary",
             "JSONL emits notifications and gaps in order, followed by a summary. JSON emits the final summary.",
+        ),
+        "inspect" => (
+            "device_information | device_diagnostic",
+            "Device information, capabilities, services, media profiles, or an RTSP URI for the supplied address.",
         ),
         "health"
         | "profiles"
@@ -853,6 +884,8 @@ fn possible_errors(name: &str) -> Vec<String> {
             "CREDENTIAL_UNAVAILABLE",
             "DEVICE_CONNECTION_FAILED",
         ]
+    } else if name == "inspect" {
+        &["INVALID_ARGUMENT", "DEVICE_CONNECTION_FAILED"]
     } else if matches!(
         name,
         "info"
@@ -911,13 +944,13 @@ fn argument_description(name: &str, required: bool) -> &'static str {
         "view" => "Dynamic View ID selecting all current matches; conflicts with device and group.",
         "jobs" => "Maximum concurrent fleet items, from 1 through 64.",
         "profile" => "Opaque media profile token returned by media.profiles.",
+        "read" => "Choose which data to read. Defaults to info.",
         "duration" => "Observation duration after the subscription is granted.",
         "topic" => {
             "One exact topic in the ONVIF topics namespace, such as VideoSource/MotionAlarm."
         }
-        "username" => {
-            "Credential username; the password is read from a prompt or stdin, never this argument."
-        }
+        "username" => "Username for ONVIF authentication.",
+        "password" => "Temporary inspect password. Use stdin or a secret provider for automation.",
         "password-stdin" => {
             "Read exactly one password line from stdin without echoing or logging it."
         }
@@ -972,6 +1005,7 @@ fn command_example(name: &str) -> &'static str {
         "agent.guide" => "oxvif agent guide --output json --non-interactive",
         "agent.prompt" => "oxvif agent prompt --output json --non-interactive",
         "describe" => "oxvif describe device.info --output json --non-interactive",
+        "inspect" => "oxvif inspect 192.0.2.10 --read profiles --output json --non-interactive",
         "setup" => "oxvif setup 192.0.2.10 --id front-door --username admin --no-verify",
         "auth" => "oxvif auth front-door --username admin",
         "info" => "oxvif info front-door --output json --non-interactive",

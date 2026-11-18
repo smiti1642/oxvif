@@ -32,6 +32,7 @@ pub fn guide() -> AgentGuide {
         recommended_workflow: vec![
             "Run `oxvif agent guide --output json` and verify its schema version.",
             "Run `oxvif describe --output json` to discover implemented commands.",
+            "For a one-shot read of an address without local setup, use `oxvif inspect TARGET --output json --non-interactive` and provide any required credentials securely.",
             "Select the target explicitly and execute one typed command.",
             "Persist canonical device IDs returned in result metadata.",
             "Use registration=saved or registration=unregistered filters to separate known and new discovery records; use --query for the same cross-field search as the human discovery browser; inspect each record's registration_status and registered_device_id.",

@@ -50,10 +50,10 @@ pub use contract::{
     DeviceIdRequest, DeviceImportRequest, DeviceRenameRequest, DeviceSetupRequest,
     DeviceUpdateRequest, DiscoverScanRequest, DiscoveryEnrichRequest, DiscoveryRefreshRequest,
     DiscoverySnapshotShowRequest, ErrorEnvelope, FleetDiagnosticItem, FleetItemError,
-    GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode,
-    LiveDeviceInfo, OutputDescriptor, OutputFormat, ProfileConnectRequest, ResourceIdRequest,
-    ResultMeta, RiskLevel, SCHEMA_VERSION, SecretString, SuccessEnvelope, TargetSelector,
-    ViewCreateRequest, ViewEvaluateRequest, Warning,
+    GroupCreateRequest, GroupMemberAddRequest, GroupMemberRemoveRequest, ImportMode, InspectRead,
+    InspectRequest, LiveDeviceInfo, OutputDescriptor, OutputFormat, ProfileConnectRequest,
+    ResourceIdRequest, ResultMeta, RiskLevel, SCHEMA_VERSION, SecretString, SuccessEnvelope,
+    TargetSelector, ViewCreateRequest, ViewEvaluateRequest, Warning,
 };
 pub use credential::{
     CredentialStore, MemoryCredentialStore, SystemCredentialStore, credential_profile_reference,

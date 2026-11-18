@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::Write,
     path::Path,
     process::{Command, Output, Stdio},
 };
@@ -15,14 +16,20 @@ fn run(arguments: &[&str]) -> Output {
 }
 
 fn run_isolated(arguments: &[&str], config_dir: &Path) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_oxvif"))
+    isolated_command(config_dir)
         .args(arguments)
+        .output()
+        .expect("oxvif binary should run")
+}
+
+fn isolated_command(config_dir: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_oxvif"));
+    command
         .env("OXVIF_CONFIG_DIR", config_dir)
         .env_remove("OXVIF_DEVICE")
         .env_remove("OXVIF_USERNAME")
-        .env_remove("OXVIF_PASSWORD")
-        .output()
-        .expect("oxvif binary should run")
+        .env_remove("OXVIF_PASSWORD");
+    command
 }
 
 fn stdout(output: &Output) -> String {
@@ -255,6 +262,283 @@ fn output_comparison_excludes_only_numeric_execution_time() {
 #[should_panic(expected = "elapsed_ms must be a nonnegative integer")]
 fn output_comparison_rejects_invalid_execution_time() {
     without_elapsed_ms(serde_json::json!({"meta": {"elapsed_ms": "9"}}));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn inspect_reads_live_data_without_opening_a_workspace() {
+    let server = oxvif::mock::MockServer::start().await.unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let unusable = directory.path().join("config-is-a-file");
+    fs::write(&unusable, "untouched").unwrap();
+    let missing = directory.path().join("missing");
+    let target = server.device_url();
+
+    for (read, operation, config, format) in [
+        (None, "device.info", &missing, "--json"),
+        (Some("profiles"), "media.profiles", &unusable, "--jsonl"),
+        (
+            Some("capabilities"),
+            "device.capabilities",
+            &unusable,
+            "--json",
+        ),
+        (Some("services"), "device.services", &unusable, "--json"),
+    ] {
+        let mut args = vec![
+            "inspect",
+            target,
+            format,
+            "--non-interactive",
+            "--timeout",
+            "2s",
+        ];
+        if let Some(read) = read {
+            args.extend(["--read", read]);
+        }
+        let output = isolated_command(config)
+            .args(args)
+            .env("OXVIF_DEVICE", "ignored-saved-device")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", stdout(&output));
+        assert!(output.stderr.is_empty(), "{}", stderr(&output));
+        let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(document["meta"]["command"], "inspect");
+        assert_eq!(document["meta"]["target"], target);
+        assert!(document["meta"]["device_id"].is_null());
+        let data = &document["data"];
+        if read.is_none() {
+            assert_eq!(data["kind"], "device_information");
+            assert!(data["information"]["manufacturer"].is_string());
+            continue;
+        }
+        assert_eq!(data["kind"], "device_diagnostic");
+        assert_eq!(data["operation"], operation);
+        let result = &data["result"];
+        match operation {
+            "device.capabilities" => assert!(result["media"].is_object()),
+            "media.profiles" => assert!(result[0]["token"].is_string()),
+            "device.services" => assert!(result[0]["namespace"].is_string()),
+            _ => unreachable!(),
+        }
+    }
+    assert!(!missing.exists());
+    assert_eq!(fs::read_to_string(unusable).unwrap(), "untouched");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn inspect_authenticates_using_argument_stdin_or_environment_without_leaking_secrets() {
+    let server = oxvif::mock::MockServer::builder()
+        .enforce_auth(true)
+        .start()
+        .await
+        .unwrap();
+    let password = "synthetic-inspect-password ";
+    server.device().modify(|device| {
+        device
+            .users
+            .iter_mut()
+            .find(|user| user.username == "admin")
+            .unwrap()
+            .password = password.into();
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let config = directory.path().join("missing");
+    let args = [
+        "inspect",
+        server.device_url(),
+        "--json",
+        "--non-interactive",
+        "-vv",
+    ];
+
+    // A received line takes precedence over the process environment.
+    let mut child = isolated_command(&config)
+        .args(args)
+        .args(["--username", "admin", "--password-stdin"])
+        .env("OXVIF_USERNAME", "wrong-user")
+        .env("OXVIF_PASSWORD", "wrong-password")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    writeln!(child.stdin.take().unwrap(), "{password}\r").unwrap();
+    let piped = child.wait_with_output().unwrap();
+    let explicit = isolated_command(&config)
+        .args(args)
+        .args([
+            "--username",
+            "admin",
+            "--password",
+            password,
+            "--timeout",
+            "2s",
+        ])
+        .env("OXVIF_USERNAME", "wrong-user")
+        .env("OXVIF_PASSWORD", "wrong-password")
+        .output()
+        .unwrap();
+    let inline = isolated_command(&config)
+        .args(args)
+        .arg(format!("--password={password}"))
+        .env("OXVIF_USERNAME", "admin")
+        .output()
+        .unwrap();
+    let stream = isolated_command(&config)
+        .args(args)
+        .args([
+            "--username",
+            "admin",
+            "--password",
+            password,
+            "--read",
+            "stream-uri",
+            "--profile",
+            "Profile_1",
+        ])
+        .output()
+        .unwrap();
+    let stream_document: Value = serde_json::from_slice(&stream.stdout).unwrap();
+    assert_eq!(stream_document["meta"]["command"], "inspect");
+    assert_eq!(stream_document["data"]["operation"], "media.stream-uri");
+    assert!(
+        stream_document["data"]["result"]["uri"]
+            .as_str()
+            .unwrap()
+            .starts_with("rtsp://")
+    );
+    let environment = isolated_command(&config)
+        .args(args)
+        .env("OXVIF_USERNAME", "admin")
+        .env("OXVIF_PASSWORD", password)
+        .output()
+        .unwrap();
+    let denied = isolated_command(&config)
+        .args(args)
+        .args([
+            "--username",
+            "admin",
+            "--password",
+            "synthetic-denied-password",
+        ])
+        .output()
+        .unwrap();
+    for (output, success) in [
+        (explicit, true),
+        (inline, true),
+        (stream, true),
+        (piped, true),
+        (environment, true),
+        (denied, false),
+    ] {
+        let stdout = stdout(&output);
+        let stderr = stderr(&output);
+        for secret in [
+            password.trim(),
+            "synthetic-denied-password",
+            "wrong-password",
+        ] {
+            assert!(!stdout.contains(secret));
+            assert!(!stderr.contains(secret));
+        }
+        assert_eq!(output.status.success(), success, "{stdout}\n{stderr}");
+        let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(document["ok"], success);
+        if !success {
+            assert_eq!(document["error"]["code"], "DEVICE_CONNECTION_FAILED");
+        }
+    }
+    for (password, flag) in [("--timeout", "--password=--timeout"), ("", "--password=")] {
+        server.device().modify(|device| {
+            device
+                .users
+                .iter_mut()
+                .find(|user| user.username == "admin")
+                .unwrap()
+                .password = password.into();
+        });
+        let output = isolated_command(&config)
+            .args(args)
+            .args(["--username", "admin", flag, "--timeout", "2s"])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", stdout(&output));
+    }
+    assert!(!config.exists());
+}
+
+#[test]
+fn inspect_validates_input_before_connecting() {
+    let directory = tempfile::tempdir().unwrap();
+    for (flags, message) in [
+        (&["--password-stdin"][..], "Provide --username"),
+        (
+            &["--password", "synthetic-inline-secret"],
+            "Provide --username",
+        ),
+        (
+            &[
+                "--username",
+                "admin",
+                "--password=synthetic-inline-secret",
+                "--password-stdin",
+            ],
+            "mutually exclusive",
+        ),
+        (&["--username", "admin"], "Provide a password"),
+        (&["--username", "admin", "--password-stdin"], "reached EOF"),
+        (&["--device", "saved"], "does not accept --device"),
+        (&["--read", "stream-uri"], "requires --profile"),
+        (
+            &["--read", "stream-uri", "--profile", ""],
+            "nonempty --profile",
+        ),
+        (
+            &["--read", "profiles", "--profile", "Profile_1"],
+            "Use --profile with",
+        ),
+    ] {
+        let mut args = vec!["inspect", "192.0.2.10", "--json", "--non-interactive"];
+        args.extend_from_slice(flags);
+        let output = run_isolated(&args, directory.path());
+        assert!(!stdout(&output).contains("synthetic-inline-secret"));
+        assert!(!stderr(&output).contains("synthetic-inline-secret"));
+        assert_eq!(output.status.code(), Some(2));
+        let document: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(document["meta"]["command"], "inspect");
+        assert_eq!(document["error"]["code"], "INVALID_ARGUMENT");
+        assert!(
+            document["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(message)
+        );
+    }
+}
+
+#[test]
+fn inspect_parse_errors_do_not_echo_password_arguments() {
+    let directory = tempfile::tempdir().unwrap();
+    let password = "synthetic-parse-secret";
+    let inline = format!("--password={password}");
+    for args in [
+        vec!["--json", &inline, "inspect", "192.0.2.10"],
+        vec!["--json", "--password", password, "inspect", "192.0.2.10"],
+        vec![
+            "inspect",
+            "192.0.2.10",
+            "--password",
+            password,
+            "--read",
+            "invalid",
+        ],
+    ] {
+        let output = run_isolated(&args, directory.path());
+        assert_eq!(output.status.code(), Some(2));
+        assert!(!stdout(&output).contains(password));
+        assert!(!stderr(&output).contains(password));
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

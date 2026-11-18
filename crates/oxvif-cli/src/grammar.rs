@@ -149,7 +149,7 @@ fn console(id: CommandId) -> Option<Console> {
 
     let credential_input = matches!(
         id,
-        Auth | DeviceCredentialSet | CredentialProfileSet | Setup
+        Auth | DeviceCredentialSet | CredentialProfileSet | Inspect | Setup
     )
     .then_some("password_stdin_v1");
     let workspace_change = match id {
@@ -163,6 +163,10 @@ fn console(id: CommandId) -> Option<Console> {
         | ViewCreate
         | DiscoverRefresh
         | DiscoverEnrich
+        | Auth
+        | DeviceCredentialSet
+        | CredentialProfileSet
+        | Setup
         | Use => Some("write"),
         DeviceRemove
         | DeviceCredentialDelete
@@ -171,7 +175,6 @@ fn console(id: CommandId) -> Option<Console> {
         | ViewDelete
         | CredentialProfileDelete
         | DiscoverRemove => Some("remove"),
-        _ if credential_input.is_some() => Some("write"),
         _ => None,
     };
     let camera = match id {
@@ -206,6 +209,7 @@ fn console(id: CommandId) -> Option<Console> {
         | ConfigPath
         | ConfigValidate
         | Describe
+        | Inspect
         | Current
         | Health => false,
         _ if workspace_change.is_some() => false,
@@ -213,7 +217,7 @@ fn console(id: CommandId) -> Option<Console> {
     };
     let watch = id == EventsWatch;
     let mut root_options = Vec::new();
-    if camera {
+    if camera || id == Inspect {
         root_options.extend(["clock_sync", "soap_auth", "ca_certificates"]);
     }
     if (camera && !watch) || matches!(id, Health | Info | Test | Profiles | Stream | Snapshot) {
@@ -248,6 +252,7 @@ fn console(id: CommandId) -> Option<Console> {
             | Stream
             | Snapshot
             | Profiles
+            | Inspect
     ) {
         root_options.push("media_service");
     }
@@ -256,6 +261,9 @@ fn console(id: CommandId) -> Option<Console> {
     }
     if matches!(id, DiscoverScan | DiscoverRefresh | DiscoverEnrich) {
         root_options.push("timeout");
+    }
+    if id == Inspect {
+        root_options.extend(["timeout", "retries"]);
     }
     Some(Console {
         target_flag: camera.then_some("--target"),
@@ -274,8 +282,9 @@ fn console(id: CommandId) -> Option<Console> {
         }),
         share_report_version: matches!(id, Diagnose | ConfigValidate).then_some(1),
         root_options,
-        // These forms write to the CLI workspace or to disk and require a dedicated flow.
+        // These options require a dedicated console flow or belong to the native CLI.
         excluded_options: match id {
+            Inspect => vec!["password"],
             Snapshot => vec!["save"],
             Describe => vec!["grammar"],
             DeviceImport => vec!["overrides_stdin"],
@@ -381,6 +390,7 @@ mod tests {
                                 | "view"
                                 | "jobs"
                                 | "timeout"
+                                | "retries"
                         )
                     ));
                 }

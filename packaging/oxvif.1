@@ -1,4 +1,4 @@
-.TH OXVIF 1 "October 2026" "oxvif-cli 0.17.1" "User Commands"
+.TH OXVIF 1 "" "oxvif-cli" "User Commands"
 .SH NAME
 oxvif \- human- and Agent-friendly ONVIF diagnostic CLI
 .SH SYNOPSIS
@@ -12,6 +12,12 @@ discovers ONVIF devices, maintains a local secret-free inventory, and runs
 read-only diagnostics against one device or a bounded Group/View fleet.
 Structured JSON and JSONL output is versioned for automation.
 .SH COMMON COMMANDS
+.TP
+.B inspect TARGET [\-\-read KIND]
+Query an ONVIF address once. The default read returns device information.
+Use \-\-read profiles, capabilities, or services for other data. For a live
+RTSP URI, use \-\-read stream-uri \-\-profile TOKEN. The local device registry
+and credential store are bypassed. See inspect \-\-help for password sources.
 .TP
 .B manage
 Open a continuous camera-maintenance workspace. Search and filter cameras,
@@ -133,8 +139,10 @@ missing resources, registry/configuration failure, credential unavailability,
 device/network failure, and internal failure. Fleet partial success has its own
 documented exit status. Use JSON/JSONL output for the structured error code.
 .SH SECURITY
-Do not put passwords in command arguments, target URIs, logs, override files,
-or version-controlled configuration. There is no insecure TLS bypass.
+Prefer the hidden prompt or a trusted secret provider. The inspect
+\-\-password option may expose the password in shell history and process
+arguments. Keep passwords out of target URIs, logs, override files, and
+version-controlled configuration. HTTPS checks certificates and hostnames.
 .SH SEE ALSO
 Full manuals and schemas are installed with the package and maintained at
 https://github.com/smiti1642/oxvif .
