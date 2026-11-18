@@ -510,6 +510,7 @@ jobs:
           brew tap-new --no-git smiti1642/oxvif-staging
           tap_repository=$(brew --repository smiti1642/oxvif-staging)
           cp Formula/oxvif.rb "$tap_repository/Formula/oxvif.rb"
+          brew trust --formula smiti1642/oxvif-staging/oxvif
           brew audit --strict smiti1642/oxvif-staging/oxvif
           LOCAL_URL="$local_url" ARCHIVE_SHA="$archive_sha" python3 - <<'PY'
           import os
