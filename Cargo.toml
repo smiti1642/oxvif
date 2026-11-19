@@ -137,6 +137,9 @@ serde   = { version = "1", features = ["derive"] }
 toml    = "1"
 fs2     = "0.4"
 dirs    = "7"
+# `tests/interoperability_corpus.rs` is gated on `metamorph` alone, so it cannot
+# rely on the optional `tempfile` that only `recording-download` turns on.
+tempfile = "3"
 
 # The mock_server example is now a thin wrapper over `oxvif::mock::MockServer`.
 [[example]]
