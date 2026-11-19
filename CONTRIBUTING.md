@@ -74,28 +74,30 @@ to the correct download without requiring them to inspect the complete Assets li
 2. **Lead with a user-facing headline, then a `Download CLI` table.** Put the table
    before the change categories. Include one row for each actually built and
    verified platform/architecture, with columns for Platform, Architecture,
-   Download and SHA-256. Link directly to the portable archive and its checksum;
-   users normally need one archive, not every attachment.
+   Download and SHA-256. Link directly to the portable archive. No separate
+   checksum file is attached; GitHub shows each asset's SHA-256 digest. Users
+   normally need one archive, not every attachment.
 3. **Use recognizable platform names.** For the current matrix, distinguish
    Windows Intel/AMD 64-bit, Linux Intel/AMD 64-bit, Linux ARM64, macOS Intel and
    macOS Apple Silicon. Map these to the actual x86_64/aarch64 artifacts. Do not
    promise additional architectures or OS compatibility that was not verified.
-4. **Keep alternative installers separate.** Place Debian `.deb` packages and
-   Homebrew formula/bottles below the primary portable-download table. Explain
-   that bottles are Homebrew inputs, not the general macOS archive. Publishing
-   these files does not establish official APT, Homebrew, winget or Chocolatey
-   channel availability; advertise install commands only for verified channels.
+4. **Keep alternative installers separate.** Place Debian `.deb` packages below
+   the primary portable-download table. The Homebrew formula and bottles are
+   staging artifacts and are not attached. Publishing these files does not
+   establish official APT, Homebrew, winget or Chocolatey channel availability;
+   advertise install commands only for verified channels.
 5. **Use categorized, substantive bullets.** Follow the 0.15 style: Added, Fixed,
    Changed and Breaking/limitations as applicable. Explain what each important
    change enables or fixes, prioritizing user-visible workflows over internal
    Mock/test refactoring. Keep migration warnings visible and link to the complete
    versioned changelog for implementation details, evidence and attribution.
-6. **Add a short `Other assets` explanation.** Identify `.sha256` as integrity
-   checks, `.spdx.json` as binary-scan SBOMs, `.source.spdx.json` as source/lockfile
-   inventories, and `.build-tools.txt` as build-tool records. Explain that GitHub's
-   Source code archives are source, not compiled CLI downloads. These are not
-   additional programs that ordinary users need to install. Retain the SBOM
-   limitations described below; inventories are not security certifications.
+6. **Add a short `Other assets` explanation.** State that the portable archives
+   and Debian packages are the only attached files, and that GitHub's Source code
+   archives are source, not compiled CLI downloads. Checksum files, `.spdx.json`
+   and `.source.spdx.json` inventories, `.build-tools.txt` records, the Homebrew
+   formula and its bottles remain artifacts of the release workflow run; they are
+   not attached to the Release. The SBOM limitations described below still apply
+   to those artifacts; inventories are not security certifications.
 
 Before publication, resolve every table link to the actual release tag and asset
 filename, using absolute `https://github.com/smiti1642/oxvif/releases/download/`
@@ -104,10 +106,12 @@ all template placeholders. After publication, confirm the linked assets exist
 and match the intended platform/checksum. A download table does not replace the
 release gates below.
 
-This is a presentation rule, not permission to remove, rename or repackage assets
-to reduce their count. Preserve existing consumer URLs and verification material;
-changes to the asset layout require their own reviewed packaging change. Do not
-rewrite an existing release or move its tag merely to apply this future policy.
+The attached set was reduced to CLI downloads on 2026-11-19, and the 0.18.0
+Release was trimmed to match by maintainer decision. That was a one-time
+packaging change, not a standing permission: do not remove, rename or repackage
+the remaining assets. Preserve existing consumer URLs; further changes to the
+asset layout require their own reviewed packaging change. Do not rewrite an
+existing release or move its tag merely to apply a later policy.
 
 ## Dependency and release-tooling changes
 

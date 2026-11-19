@@ -21,6 +21,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- GitHub Releases attach only the CLI portable archives and Debian packages.
+  Checksum files, SPDX inventories, build-tool records, the Homebrew formula and
+  its bottles remain artifacts of the release workflow run. The 0.18.0 Release
+  was trimmed to the same set; GitHub shows a SHA-256 digest for each asset.
+
 ## [0.18.0] - 2026-11-19
 
 [0.18.0 release notes](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/releases/0.18.0.md) · [繁體中文](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/releases/0.18.0_zh.md)

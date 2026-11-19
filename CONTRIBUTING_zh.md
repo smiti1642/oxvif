@@ -61,33 +61,35 @@ Profile、清理後的命令、結束代碼、結構化錯誤代碼，以及預�
    workflow 使用的本文檔案不放雙語內容或語言切換列。
 2. **以使用者導向主旨開頭，接著提供 `Download CLI` 表格。** 表格置於變更分類前，
    每個實際建置且驗證過的平台／架構各一列，欄位為 Platform、Architecture、
-   Download、SHA-256。直接連到可攜式壓縮包及其 checksum；說明一般使用者只需
-   選一個適用壓縮包，不必下載所有附件。
+   Download、SHA-256。直接連到可攜式壓縮包。Release 不另附 checksum 檔，
+   GitHub 會顯示每個附件的 SHA-256 digest。說明一般使用者只需選一個適用
+   壓縮包，不必下載所有附件。
 3. **使用容易辨識的平台名稱。** 目前矩陣須區分 Windows Intel／AMD 64-bit、
    Linux Intel／AMD 64-bit、Linux ARM64、macOS Intel 與 macOS Apple Silicon，
    對應實際 x86_64／aarch64 產物。不得宣稱未驗證的額外架構或作業系統相容性。
-4. **其他安裝方式分開呈現。** Debian `.deb` 及 Homebrew formula／bottle 放在主要
-   可攜版下載表之後，說明 bottle 是供 Homebrew 使用，不是一般 macOS 壓縮包。
+4. **其他安裝方式分開呈現。** Debian `.deb` 放在主要可攜版下載表之後。
+   Homebrew formula 與 bottle 屬於 staging 產物，不附在 Release。
    上傳附件不等於已收錄至官方 APT、Homebrew、winget 或 Chocolatey 通路；
    只有已驗證可用的通路才提供相應安裝命令。
 5. **以有內容的分類條列說明變更。** 參照 0.15 的 Added、Fixed、Changed 及
    Breaking／limitations 結構，依版本實際內容選用。每項重點說明新增用途或修正
    影響，優先呈現使用者工作流程，而非內部 Mock／測試重構。保留必要遷移警告，
    實作細節、驗證證據與貢獻者署名導向對應版本的完整 Changelog。
-6. **補上簡短的 `Other assets` 說明。** 區分 `.sha256` 完整性校驗、`.spdx.json`
-   執行檔掃描 SBOM、`.source.spdx.json` 原始碼／lockfile 清單，以及
-   `.build-tools.txt` 建置工具紀錄。說明 GitHub 的 Source code 附件是原始碼，
-   不是已編譯 CLI。這些不是一般使用者需要逐一安裝的其他程式；保留下方 SBOM
-   限制說明，不把成分清單當成安全認證。
+6. **補上簡短的 `Other assets` 說明。** 說明可攜式壓縮包與 Debian 套件是僅有
+   的附件，GitHub 的 Source code 附件是原始碼，不是已編譯 CLI。checksum 檔、
+   `.spdx.json` 與 `.source.spdx.json` 清單、`.build-tools.txt` 紀錄、Homebrew
+   formula 及 bottle 保留為 release workflow 該次執行的產物，不附在 Release。
+   下方 SBOM 限制說明仍適用於這些產物，不把成分清單當成安全認證。
 
 發布前，將下載表所有連結替換為實際 tag 與附件名稱，使用
 `https://github.com/smiti1642/oxvif/releases/download/` 開頭的絕對網址，
 對照已驗證 staging 的產物清單，且不得留下模板佔位文字。發布後確認連結附件
 確實存在，並符合標示的平台與 checksum。下載表不取代下列發布驗證關卡。
 
-這是呈現規範，不代表可為減少數量而刪除、重新命名或重新打包附件。保留既有
-使用者連結與驗證資料；附件配置變更須另行審查 packaging 修改。
-不得僅為套用此後續版本規範而改寫既有 Release 或移動 tag。
+附件範圍已於 2026-11-19 縮減為 CLI 下載檔，0.18.0 Release 也依維護者決定
+同步精簡。這是一次性的 packaging 變更，不是常態許可：不得再刪除、重新命名
+或重新打包其餘附件。保留既有使用者連結；附件配置的後續變更須另行審查
+packaging 修改。不得僅為套用後續版本規範而改寫既有 Release 或移動 tag。
 
 ## 相依套件與發布工具變更
 

@@ -711,18 +711,18 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+          # Only the CLI downloads are attached: portable archives and Debian
+          # packages. Checksums, SPDX inventories, build-tool records, the
+          # Homebrew formula and its bottles stay as artifacts of this run.
+          # Bottles also end in .tar.gz, so they are excluded by name.
           while IFS= read -r -d '' asset; do
             cp "$asset" dist/
           done < <(
             find downloads -type f \( \
               -name '*.tar.gz' -o \
               -name '*.zip' -o \
-              -name '*.deb' -o \
-              -name '*.sha256' -o \
-              -name '*.spdx.json' -o \
-              -name '*.build-tools.txt' -o \
-              -name 'oxvif.rb' \
-            \) -print0
+              -name '*.deb' \
+            \) ! -name '*.bottle*.tar.gz' -print0
           )
           test -n "$(find dist -maxdepth 1 -type f -print -quit)"
       - name: Create public release
