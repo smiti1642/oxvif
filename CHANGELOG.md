@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 | Range | Releases |
 | --- | --- |
-| Latest | [0.18.0](#0180---2026-11-18) |
+| Latest | [0.18.0](#0180---2026-11-19) |
 | 0.17 series | [0.17.1](#0171---2026-10-23) · [0.17.0](#0170---2026-09-14) |
 | Previous | [0.16.0](#0160---2026-09-04) |
 | Recent stable | [0.15.0](#0150---2026-08-03) · [0.14.0](#0140---2026-07-27) · [0.13.0](#0130---2026-07-24) · [0.12.0](#0120---2026-07-09) · [0.11.0](#0110---2026-07-03) · [0.10.0](#0100---2026-06-30) |
@@ -21,9 +21,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.18.0] - 2026-11-18
+## [0.18.0] - 2026-11-19
 
-[0.18.0 release notes](docs/releases/0.18.0.md) · [繁體中文](docs/releases/0.18.0_zh.md)
+[0.18.0 release notes](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/releases/0.18.0.md) · [繁體中文](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/releases/0.18.0_zh.md)
 
 ### Security
 
