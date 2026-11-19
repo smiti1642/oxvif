@@ -153,6 +153,19 @@
 //!   [`types`], plus the WS-Discovery result types, so a result can go straight
 //!   to a REST layer or on disk without a hand-cloned parallel struct. Pulls no
 //!   new dependency and costs nothing unless enabled.
+//! - **`stream-probe`** — the `stream_probe` module: bounded RTSP/RTP
+//!   diagnostics for a stream URI a camera returned. It reads the SDP and the
+//!   advertised video codec, and can wait for one interleaved video RTP packet.
+//!   No decoder is involved. The `health` feature enables it.
+//! - **`recording-replay`** — `recording::replay`: start ONVIF Replay at an
+//!   absolute UTC position with `OnvifSession::start_recording_replay` and seek
+//!   within the same RTSP/TCP session. One H.264 video track. Enables
+//!   `stream-probe`.
+//! - **`talkback`** — `stream_probe::talkback`: a half-duplex RTSP backchannel
+//!   that sends one PCMU audio track. Enables `stream-probe`.
+//! - **`recording-download`** — `recording::download`: bounded transfer of an
+//!   explicitly supplied recording-export URL to a local file, without
+//!   replacing an existing destination.
 //!
 //! ## Architecture
 //!
@@ -269,7 +282,7 @@
 //! only for receipt-only workflows; no corresponding device effects are modeled.
 //!
 //! ```ignore
-//! // Cargo.toml:  oxvif = { version = "0.17", features = ["mock"] }
+//! // Cargo.toml:  oxvif = { version = "0.18", features = ["mock"] }
 //! use std::sync::Arc;
 //! use oxvif::{OnvifClient, mock::MockTransport};
 //!

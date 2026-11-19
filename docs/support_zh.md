@@ -2,7 +2,7 @@
 
 [English](support.md) | **繁體中文**
 
-本政策分別說明 Rust 函式庫與 `oxvif` 命令列產品的支援範圍，適用於 oxvif 0.17.x 函式庫與 oxvif-cli 0.17.x 診斷 beta。
+本政策分別說明 Rust 函式庫與 `oxvif` 命令列產品的支援範圍，適用於 oxvif 0.18.x 函式庫與 oxvif-cli 0.18.x 診斷 beta。
 
 ## Rust 函式庫
 
@@ -13,7 +13,7 @@
 
 ## CLI 診斷 beta
 
-首個 CLI 版本定位為唯讀的裝置診斷 beta。CLI 可能變更本機 registry、Groups、Views、探索快照與憑證參照，但不提供修改裝置設定的寫入操作。
+0.18 CLI 仍定位為唯讀的裝置診斷 beta。CLI 可能變更本機 registry、Groups、Views、探索快照與憑證參照，但不提供修改裝置設定的寫入操作。
 
 | 項目 | Beta 支援狀態 |
 | --- | --- |

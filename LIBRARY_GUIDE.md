@@ -120,7 +120,7 @@ device — no network, no hardware. Ideal for unit tests.
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.17", features = ["mock"] }
+oxvif = { version = "0.18", features = ["mock"] }
 ```
 
 ```rust
@@ -147,7 +147,7 @@ See [Testing without a real camera](#testing-without-a-real-camera) for details.
 
 ```toml
 [dependencies]
-oxvif = "0.17"
+oxvif = "0.18"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -208,7 +208,7 @@ without hand-cloning parallel structs.
 
 ```toml
 [dependencies]
-oxvif = { version = "0.17", features = ["serde"] }
+oxvif = { version = "0.18", features = ["serde"] }
 ```
 
 ```rust
@@ -1456,7 +1456,7 @@ cargo run --example healthcheck --features health -- \
 
 ```toml
 [dependencies]
-oxvif = { version = "0.17", features = ["health"] }
+oxvif = { version = "0.18", features = ["health"] }
 ```
 
 ```rust
@@ -1757,7 +1757,7 @@ extensions refuse explicitly. See [source settings and selectors](docs/mock-serv
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.17", features = ["mock"] }
+oxvif = { version = "0.18", features = ["mock"] }
 ```
 
 ```rust
@@ -2067,8 +2067,8 @@ chain and `DeviceState`); everything here is opt-in and feature-gated, and
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.17", features = ["metamorph"] }         # record / replay in-process
-# oxvif = { version = "0.17", features = ["metamorph-server"] } # + serve the clone over real HTTP
+oxvif = { version = "0.18", features = ["metamorph"] }         # record / replay in-process
+# oxvif = { version = "0.18", features = ["metamorph-server"] } # + serve the clone over real HTTP
 ```
 
 ### The shortest useful thing

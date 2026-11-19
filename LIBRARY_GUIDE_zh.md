@@ -111,7 +111,7 @@ async fn main() -> Result<(), OnvifError> {
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.17", features = ["mock"] }
+oxvif = { version = "0.18", features = ["mock"] }
 ```
 
 ```rust
@@ -137,7 +137,7 @@ async fn talks_to_a_mock_camera() {
 
 ```toml
 [dependencies]
-oxvif = "0.17"
+oxvif = "0.18"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -176,7 +176,7 @@ APT 與 Homebrew package 只透過專案 README 明確列出、且已完成獨�
 
 ```toml
 [dependencies]
-oxvif = { version = "0.17", features = ["serde"] }
+oxvif = { version = "0.18", features = ["serde"] }
 ```
 
 ```rust
@@ -949,7 +949,7 @@ Metamorph 可將實機的 read surface 錄製為可離線重播的 clone，也�
 
 ```toml
 [dev-dependencies]
-oxvif = { version = "0.17", features = ["metamorph"] }
+oxvif = { version = "0.18", features = ["metamorph"] }
 ```
 
 ```rust

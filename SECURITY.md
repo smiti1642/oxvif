@@ -4,6 +4,7 @@
 
 | Version | Security fixes |
 | --- | --- |
+| 0.18.x / oxvif-cli 0.18.x | Supported |
 | 0.17.x / oxvif-cli 0.17.x | Supported |
 | 0.16.x | Supported |
 | oxvif-cli 0.16.x | Supported |

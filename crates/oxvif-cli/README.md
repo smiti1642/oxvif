@@ -49,10 +49,10 @@ The structured stdout contract uses schema version 3.
 ## Human quick start
 
 Maintenance commands: `snapshot --save`, `media snapshot-save`, `diagnose`,
-`config export`, and `config diff`. These workflows are available in 0.17.
+`config export`, and `config diff`. These workflows have been available since 0.17.
 They do not modify camera settings; diagnosis does not verify RTSP playback and
 configuration exports are not restorable backups. See the
-[maintenance guide](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/cli-maintenance.md)
+[maintenance guide](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/cli-maintenance.md)
 for file safety, retained failure reports, JSON/exit semantics and acceptance tests.
 Diagnosis provides a paginated profile selector in human terminals, summary-first
 reports and `-v` details. JSON/JSONL never prompt; Agent guide v8 documents additive
@@ -69,7 +69,7 @@ documented in the maintenance guide above.
 Camera-reported profile settings and diagnostic assessments are also available to Agents.
 Human screens share counted Vim-style navigation, configurable line numbers (`?` settings
 or `--line-numbers absolute|relative|hybrid|off`) and a fixed-bottom reverse-video
-status bar separate from key hints; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/cli-maintenance.md#vim-style-navigation).
+status bar separate from key hints; see the [navigation guide](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/cli-maintenance.md#vim-style-navigation).
 
 On Windows, macOS, or a Linux desktop session with Secret Service, onboard one
 camera with a no-echo password prompt, live verification, native credential
@@ -142,7 +142,7 @@ name, target, tags, and cached device metadata may change; the device ID does
 not. Set `OXVIF_CONFIG_DIR` to isolate the registry for tests or containers.
 Default paths and the stop-writers/copy-whole-directory backup and restore
 procedure are documented in the
-[full CLI manual](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/oxvif-cli.md#device-inventory).
+[full CLI manual](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/oxvif-cli.md#device-inventory).
 
 ```sh
 oxvif config path
@@ -258,7 +258,7 @@ override document and snapshot generation are included in the plan fingerprint.
 
 ## Read-only diagnostics
 
-The 0.17 device surface is diagnostic-only. Every command accepts a saved device
+The 0.18 device surface is diagnostic-only. Every command accepts a saved device
 through root `--device` or an ephemeral endpoint through command-level
 `--target`; credentials are resolved from the saved device/profile or the
 `OXVIF_USERNAME` and `OXVIF_PASSWORD` environment variables.
@@ -374,7 +374,7 @@ oxvif completion fish
 oxvif completion powershell
 ```
 
-See the [CLI guide](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/oxvif-cli.md)
+See the [CLI guide](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/oxvif-cli.md)
 for the supported command surface, and the
-[0.17 migration and limitations](https://github.com/smiti1642/oxvif/blob/v0.17.0/docs/releases/0.17.0-changelog.md)
+[0.18.0 release notes and upgrade guide](https://github.com/smiti1642/oxvif/blob/v0.18.0/docs/releases/0.18.0.md)
 for upgrade requirements. Listed plans are not a promise of available commands.
